@@ -1,6 +1,142 @@
 # Menu system redesign
 
-Status: plan. Waiting for implementation approval.
+Status: partially implemented. Phases 1–3 and Phase 4 graphs 1–2 are merged
+(`efa50cfa`, implementation commit `ed3a8a31`). Phase 4 graphs 3–4 and Phase 5
+are pending.
+
+## Resume here
+
+Read this section and `### Phase 4 rule-id collision` below before touching
+`source/components/input/`, `InputBox.tsx`, `InputContext.tsx`, or the
+completion hooks. The rule-id finding in particular contradicts the naive
+reading of the Phase 4 step list.
+
+### What is already done
+
+- Phase 1 kernel: `21976b1d`, `8c230aea`.
+- Phases 2–3 and Phase 4 graphs 1–2: `ed3a8a31`, merged as `efa50cfa`.
+- The kernel already implements successors, `pop-to`, `BackPolicy` restore,
+  return points, the intent host, and correlated `IntentResult` delivery.
+  `menu-controller.test.ts` already carries a settings→settings_value contract
+  test. **The remaining Phase 4 work is session and wiring work, not kernel
+  work.**
+- The trigger registry is gated to `['slash','path','skills']` at
+  `InputBox.tsx:174`. Rules for `settings`, `settings_value`, and `model` are
+  written in `triggers.ts` but disabled, so each graph still has exactly one
+  owning engine.
+- `menu-registry.tsx` is deliberately a `Partial<MenuRegistry>` while graphs
+  3–4 are unmigrated.
+
+### Measured baseline at the time of the merge
+
+- `pnpm run typecheck` — green.
+- Focused suites (`InputBox.test.tsx`, `InputContext.test.tsx`,
+  `source/components/input/`, `source/hooks/`) — 41 files, 387 tests, green
+  except one known pre-existing failure described under **Verification
+  commands**.
+
+### Step order
+
+Steps are strictly sequential. **Step 2 consumes the sessions built in Step 1,
+so Steps 1 and 2 cannot run in parallel.** Step 3 requires both graphs to be
+controller-owned. One step per worktree, merged back `--no-ff` before the next
+begins.
+
+#### Step 0 — land the uncommitted tree — DONE (`efa50cfa`)
+
+Was: commit the ~978-line working-tree blob so later graphs have a reviewable
+base. No longer outstanding.
+
+#### Step 1 — Phase 4 graph 3: settings, reset, settings value, settings-backed model
+
+In scope:
+
+- Split the colliding rules (see `### Phase 4 rule-id collision`) and enable
+  `settings`, `settings-value-child`, and `settings-model`.
+- Add `SettingsMenuSession`, `SettingsValueMenuSession`, and `ModelMenuSession`
+  to `menu-registry.tsx`. `ModelMenuSession` is built here, not in Step 2,
+  because the settings-backed model child needs it first.
+- Route `/settings reset ` as a typed `reset-setting` intent. It must never
+  push `settings_value` or rewrite the prefix to `/settings `.
+- First production use of `apply-settings` carrying the model and provider
+  changes in one intent, and of `IntentResult` field-error return.
+- Delete the `reopenSettingsMenu` + `settingsFilterRef` hack at
+  `InputBox.tsx:179-189`. It reconstructs `/settings <filter>` from a ref on
+  reset; under this design the parent settings frame stays mounted, so
+  category, filter, and selection survive without reconstruction. If the hack
+  still looks necessary after the cutover, a return-point invariant is missing
+  — find it rather than reinstating the ref.
+
+Out of scope: the direct `/model ` trigger, `/effort`, `/auto-approve`, and
+handoff. Those are Step 2.
+
+#### Step 2 — Phase 4 graph 4: direct model/effort triggers and handoff
+
+In scope:
+
+- Enable `command-model` and `direct-setting-value`.
+- Replace `use-handoff-flow.ts:108-110`
+  (`setInputAndCursor` + `setMode('model_selection')` + `setTriggerIndex`) with
+  a plain `replaceText('/model ', 7)`. The `command-model` rule then fires on
+  its own; no explicit `open` is needed, and `open`'s `UnboundFrameSpec` does
+  not accept a bound frame anyway.
+- Convert `use-handoff-flow.ts:91-97` off the legacy `mode` projection **in
+  this step, not in Step 3.** It currently detects menu close by watching
+  `mode` return to `'text'`. That survives on the compatibility projection
+  during migration and then breaks silently the moment Phase 5 deletes the
+  projection. Have it observe an empty stack, or the model acceptance intent,
+  instead.
+
+Out of scope: deleting any legacy module. That is Step 3.
+
+#### Step 3 — Phase 5: delete legacy paths
+
+In scope: `useTriggerDetection`, `useModeHandlers`, the `insertions.ts`
+helpers, `toPopupProps`, `PopupManager`'s hand-mapped prop adapter, stored
+`InputMode` and `triggerIndex` in `InputContext`, the completion branches in
+`useEscapeKey`, and `dismissedCompletionRef` / `inputRevisionRef`.
+
+Two cautions:
+
+- **Keep `determine-active-menu.ts`.** The new trigger rules import it. It is
+  not legacy.
+- `useEscapeKey` also owns the escape hint and queue cancellation, and
+  `PopupManager` is still reached from `BottomArea`. Strip the completion
+  branches; do not delete either wholesale.
+
+Close the step by making `MenuRegistry` total instead of
+`Partial<MenuRegistry>` (`menu-registry.tsx:24`). That single change makes the
+compiler prove every frame kind has been migrated, which is a stronger gate
+than any search for stale callers.
+
+### Phase 4 rule-id collision
+
+`determine-active-menu.ts` collapses graph 3 and graph 4 into shared rule ids:
+
+| Rule id | Graph 3 case | Graph 4 case |
+| --- | --- | --- |
+| `model` | `/settings agent.model ` via `MODEL_SETTING_TRIGGERS` (line 28) | `/model ` via command completion (line 26) |
+| `settings_value` | the `/settings <key> ` child (line 53) | `/effort `, `/auto-approve ` via `setting-value` completions (line 66) |
+
+Enabling either id enables both graphs at once, which violates this plan's own
+rule that a frame is never partly owned by the legacy detector and partly by
+the controller.
+
+**Split the rules; do not merge the graphs.** Use `settings-value-child` /
+`direct-setting-value` and `settings-model` / `command-model`. The frames
+already differ, and the current single rules hardcode the graph-4 shapes, which
+are wrong for the graph-3 child:
+
+- `triggers.ts:66` hardcodes `target: {type:'command'}` with
+  `back: {type:'close-clear-input'}`. The settings-backed model child needs a
+  `{type:'setting'}` target and a `restore` back policy to its mounted parent.
+- `triggers.ts:91` hardcodes `origin: {type:'direct-trigger'}` with
+  `close-clear-input`. The `/settings <key> ` child needs
+  `origin: {type:'settings-list', operation:'set', back: restore(...)}`.
+
+Splitting makes origin and `BackPolicy` properties of the rule rather than a
+runtime branch inside one session. These rules need the split regardless of how
+the steps are sequenced.
 
 ## Outcome
 
@@ -664,6 +800,11 @@ For each graph, replace its legacy detection, key mapping, acceptance helper,
 and popup prop block together. Registry sessions may keep existing render
 components.
 
+Graphs 1–2 are merged. Before starting graph 3, read
+`### Phase 4 rule-id collision` in **Resume here**: graphs 3 and 4 share rule
+ids today and must be split first, or enabling either one silently hands both
+graphs to the controller at once.
+
 Gate per graph: exactly one engine owns it, no legacy handler/helper remains
 reachable for it, and its parity cases pass.
 
@@ -748,8 +889,33 @@ The controller is already the deep module that owns the lifecycle invariant.
 
 ## Verification commands
 
-Use the repository's exact focused test command discovered at implementation
-time. The final gate must include:
+Per step, before merging back:
+
+```bash
+FORCE_COLOR=0 pnpm vitest run \
+  source/components/InputBox.test.tsx \
+  source/context/InputContext.test.tsx \
+  source/components/input/ \
+  source/hooks/
+pnpm run typecheck
+```
+
+Two measured caveats, both pre-existing and neither caused by `ed3a8a31`:
+
+- **`FORCE_COLOR=0` is required.** Two queue tests in `InputBox.test.tsx`
+  (`up enters the queued selector…`, `up past the top queued item…`) assert
+  with `toContain` on raw strings that chalk splits with colour escapes. They
+  pass at colour level 0 and fail at level 3. Without the variable you will
+  chase two phantom failures.
+- **One load-sensitive failure is expected in the combined run.** `InputBox
+  recognizes Alt+Enter when terminal input arrives in split chunks` submits
+  twice (an extra `busyMode: 'steer'` before the expected `follow_up`) when the
+  41-file suite runs in parallel; it passes deterministically in isolation.
+  `ed3a8a31` touches none of the Alt+Enter chunk-buffering code. Treat a
+  *second* failure, or a failure of this test in isolation, as a real
+  regression.
+
+The final gate must include:
 
 ```bash
 pnpm test

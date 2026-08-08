@@ -262,21 +262,35 @@ export async function runNonInteractive(
     config.sessionClientFactory ?? createCallerOwnedSessionClientFactory(config.agentClient!, config.toolOwnership!);
   const sessionId = createNonInteractiveSessionId();
   const clientHandle = clientFactory.create(sessionId, { allowBackgroundShell: false });
-  const { runtime, adapter } = createConversationRuntime({
-    sessionId,
-    agentClient: clientHandle.agentClient,
-    toolOwnership: clientHandle.toolOwnership,
-    deps: {
-      logger: config.logger,
-      settingsService: config.settingsService,
-      sessionContextService,
-    },
-    hookLifecycle: config.hookLifecycle ?? clientHandle.hookLifecycle,
-    hookEvents: config.hookEvents ?? clientHandle.hookEvents,
+  const removeBackgroundShellInterceptor = clientHandle.agentClient.addToolInterceptor(async (name, params) => {
+    if (
+      name === 'shell' &&
+      params !== null &&
+      typeof params === 'object' &&
+      !Array.isArray(params) &&
+      (params as { background?: unknown }).background === true
+    ) {
+      return 'Error: Background shell execution is unavailable in non-interactive mode.';
+    }
+    return null;
   });
 
+  let runtime: ReturnType<typeof createConversationRuntime>['runtime'] | undefined;
   let fatal = false;
   try {
+    const createdRuntime = createConversationRuntime({
+      sessionId,
+      agentClient: clientHandle.agentClient,
+      toolOwnership: clientHandle.toolOwnership,
+      deps: {
+        logger: config.logger,
+        settingsService: config.settingsService,
+        sessionContextService,
+      },
+      hookLifecycle: config.hookLifecycle ?? clientHandle.hookLifecycle,
+      hookEvents: config.hookEvents ?? clientHandle.hookEvents,
+    });
+    runtime = createdRuntime.runtime;
     if (config.hookLifecycle && clientHandle.hookEvents) {
       await config.hookLifecycle.emit(
         clientHandle.hookEvents.create('session.start', {
@@ -287,20 +301,25 @@ export async function runNonInteractive(
         }),
       );
     }
-    return await runWithSession(adapter, { ...config, agentClient: clientHandle.agentClient, sessionContextService });
+    return await runWithSession(createdRuntime.adapter, {
+      ...config,
+      agentClient: clientHandle.agentClient,
+      sessionContextService,
+    });
   } catch (error) {
     fatal = true;
     throw error;
   } finally {
+    removeBackgroundShellInterceptor();
     if (config.hookLifecycle && clientHandle.hookEvents) {
       await config.hookLifecycle.emit(
         clientHandle.hookEvents.create('session.end', {
           reason: fatal ? 'fatal_error' : 'normal',
-          sessionDuration: Math.max(0, Date.now() - Date.parse(runtime.sessionStartedAt)),
+          sessionDuration: runtime ? Math.max(0, Date.now() - Date.parse(runtime.sessionStartedAt)) : 0,
         }),
       );
     }
-    await runtime.shutdown();
+    await runtime?.shutdown();
     clientHandle.dispose();
   }
 }

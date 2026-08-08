@@ -531,6 +531,8 @@ it('with autoApprove=true: uses LLM to evaluate YELLOW commands', async () => {
 it('runNonInteractive() disposes its factory-owned client after the runtime', async () => {
   const disposed: string[] = [];
   const createOptions: unknown[] = [];
+  const toolInterceptors: Array<(name: string, params: unknown) => Promise<string | null>> = [];
+  let removedInterceptors = 0;
   const stdout = createStringWritable();
   const stderr = createStringWritable();
   const logger: any = {
@@ -568,7 +570,12 @@ it('runNonInteractive() disposes its factory-owned client after the runtime', as
           chat: async () => '',
           abort() {},
           setModel() {},
-          addToolInterceptor: () => () => {},
+          addToolInterceptor(interceptor: (name: string, params: unknown) => Promise<string | null>) {
+            toolInterceptors.push(interceptor);
+            return () => {
+              removedInterceptors += 1;
+            };
+          },
           startStream: async () => new MockStream([]),
           continueRunStream: async () => new MockStream([]),
         };
@@ -585,5 +592,68 @@ it('runNonInteractive() disposes its factory-owned client after the runtime', as
   expect(stderr.getOutput()).toBe('');
   expect(exitCode).toBe(0);
   expect(createOptions).toEqual([{ allowBackgroundShell: false }]);
+  expect(await toolInterceptors[0]?.('shell', { command: 'safe', background: true })).toBe(
+    'Error: Background shell execution is unavailable in non-interactive mode.',
+  );
+  expect(await toolInterceptors[0]?.('shell', { command: 'safe' })).toBeNull();
+  expect(removedInterceptors).toBe(1);
   expect(disposed).toEqual(['client']);
+});
+
+it('runNonInteractive() blocks background shell execution for caller-owned clients only', async () => {
+  const toolInterceptors: Array<(name: string, params: unknown) => Promise<string | null>> = [];
+  let removedInterceptors = 0;
+  const stdout = createStringWritable();
+  const stderr = createStringWritable();
+  const logger: any = {
+    info() {},
+    warn() {},
+    error() {},
+    debug() {},
+    security() {},
+    getCorrelationId() {
+      return undefined;
+    },
+    setCorrelationId() {},
+    clearCorrelationId() {},
+  };
+  const settingsService: any = {
+    get() {
+      return undefined;
+    },
+    getDynamic() {
+      return undefined;
+    },
+  };
+  const agentClient: any = {
+    chat: async () => '',
+    abort() {},
+    setModel() {},
+    addToolInterceptor(interceptor: (name: string, params: unknown) => Promise<string | null>) {
+      toolInterceptors.push(interceptor);
+      return () => {
+        removedInterceptors += 1;
+      };
+    },
+    startStream: async () => new MockStream([]),
+    continueRunStream: async () => new MockStream([]),
+  };
+
+  const exitCode = await runNonInteractive({
+    prompt: 'hello',
+    autoApprove: false,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+    logger,
+    settingsService,
+    agentClient,
+    toolOwnership: new ToolOwnershipRegistry(),
+  });
+
+  expect(exitCode).toBe(0);
+  expect(await toolInterceptors[0]?.('shell', { command: 'safe', background: true })).toBe(
+    'Error: Background shell execution is unavailable in non-interactive mode.',
+  );
+  expect(await toolInterceptors[0]?.('shell', { command: 'safe' })).toBeNull();
+  expect(removedInterceptors).toBe(1);
 });

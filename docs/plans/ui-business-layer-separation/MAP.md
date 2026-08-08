@@ -23,10 +23,13 @@ revertible milestones.
 - **Migration shape** — Use vertical behavioral slices; do not create a universal UI controller or move presentation state into services.
 - **Integration order** — Land low-overlap policy boundaries first, then workflow owners, then reassess the conversation projection seam.
 - **Conversation orchestrator role** — Treat `ConversationOrchestrator` as the current application-to-UI projection layer; thin it last instead of moving it wholesale into the business layer.
+- **Non-interactive approval policy** — Merged at `c9312f50`; the CLI now delegates RED/YELLOW/model-advisory decisions to `services/approval` while retaining I/O and continuation looping.
+- **Sandbox approval coordination** — Merged at `eae1f4b7`; FIFO, request identity, and fail-closed disposal live outside React, with a fresh coordinator per effect lifetime for StrictMode safety.
+- **Pending interaction authority** — Merged at `a8463d3c`; session-owned snapshots and interaction IDs own approval and `ask_user` progression, while React keeps only composer-entry state.
+- **Shell interaction ownership** — Merged at `d07a1149`; a non-React shell session owns eligibility, execution history, and deferred flush after in-flight commands.
 
 ## Open
 
-- **Pending interaction authority** [research] — Define the smallest session-owned contract that removes approval and `ask_user` protocol authority from React without moving focus or text editing.
 - **Submission authority** [research] — Unify guard confirmation, pending steer, queued, admitted, edited, and removed stages without duplicating the queue controller.
 - **Settings transaction** [research] — Define atomic apply/reset results and runtime side effects after menu Phase 5 removes the remaining direct `InputBox` mutation path.
 - **Handoff effects** [research] — Separate the handoff state machine from MenuController timing while preserving correlated intent ordering.
@@ -48,3 +51,7 @@ revertible milestones.
 ## Found in the territory
 
 - 2026-08-08: Active worktrees already overlap `InputBox`, `app.tsx`, `use-conversation`, `ConversationOrchestrator`, conversation events, and provider black-box infrastructure. Settings, handoff, submission, and projection milestones must wait for ownership resolution or merge from those worktrees; non-interactive approval policy is currently isolated.
+- 2026-08-08: Review found eager history export and then swallowed export failures in the non-interactive extraction. Lazy acquisition now occurs only on the configured-YELLOW path and remains outside evaluator error normalization.
+- 2026-08-08: Review found StrictMode effect replay could permanently dispose the sandbox coordinator. Coordinator lifetime is now per registration effect, while real unmount still denies active and queued requests.
+- 2026-08-08: Review found a delayed approval A could resolve approval B. Semantic UI decisions now carry the rendered interaction ID; mismatches are ignored without mutating the current interaction.
+- 2026-08-08: Review found closing Shell during slow commands stranded their output outside model context. Close now defers one complete flush until every accepted execution settles.

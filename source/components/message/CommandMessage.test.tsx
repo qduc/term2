@@ -212,6 +212,24 @@ it('CommandMessage does not duplicate parameters when they are already in comman
   }
 });
 
+it('CommandMessage shows the elapsed time for a running command', async () => {
+  vi.useFakeTimers();
+  try {
+    const { lastFrame, rerender, unmount } = await renderInAct(
+      <CommandMessage command="sleep 10" toolName="shell" status="running" />,
+    );
+
+    await advanceTimersInAct(2_000);
+    expect(stripAnsi(lastFrame() ?? '')).toContain('(2s)');
+
+    rerender(<CommandMessage command="sleep 10" toolName="shell" status="completed" success={true} output="done" />);
+    expect(stripAnsi(lastFrame() ?? '')).not.toContain('(2s)');
+    unmount();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it('CommandMessage still shows arguments for unknown tools where command is just toolName', async () => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   const props = {

@@ -1,4 +1,4 @@
-import React, { FC, useMemo } from 'react';
+import React, { FC, useEffect, useMemo, useState } from 'react';
 import { Box, Text } from 'ink';
 import { generateDiff } from '../../utils/output/diff.js';
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
@@ -34,6 +34,29 @@ const COLOR_MUTED = 'gray';
 const COLOR_CONTENT = 'white';
 const COLOR_LINK = 'blue';
 const COLOR_SPECIAL = 'magenta';
+
+const useRunningElapsedSeconds = (isRunning: boolean): number => {
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    if (!isRunning) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset timer state when the command settles
+      setElapsedSeconds(0);
+      return;
+    }
+
+    const start = Date.now();
+    const updateElapsed = () => {
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - start) / 1000)));
+    };
+
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 1000);
+    return () => clearInterval(interval);
+  }, [isRunning]);
+
+  return elapsedSeconds;
+};
 
 type Props = {
   command: string;
@@ -84,6 +107,8 @@ const CommandMessage: FC<Props> = ({
   isSubagent = false,
 }) => {
   const { isVisible, isRunning } = useCommandVisibility(status);
+  const runningElapsedSeconds = useRunningElapsedSeconds(isRunning);
+  const runningElapsedLabel = isRunning ? <Text color={COLOR_WARNING}> ({runningElapsedSeconds}s)</Text> : null;
 
   const { output, runtime } = useMemo(() => {
     const isShell = !toolName || toolName === 'shell';
@@ -305,7 +330,10 @@ const CommandMessage: FC<Props> = ({
     if (isShell) {
       return (
         <Box>
-          <Text color={headerColor}>{displayAction}</Text>
+          <Text color={headerColor}>
+            {displayAction}
+            {runningElapsedLabel}
+          </Text>
         </Box>
       );
     }
@@ -314,6 +342,7 @@ const CommandMessage: FC<Props> = ({
       <Box>
         <Text color={headerColor}>
           <Text color={COLOR_MUTED}>$</Text> {displayAction}
+          {runningElapsedLabel}
         </Text>
       </Box>
     );
@@ -380,6 +409,7 @@ const CommandMessage: FC<Props> = ({
         <Box>
           <Text wrap="truncate" color={THEME_COLOR_MUTED}>
             {statusChar} {actionText}
+            {isRunning && runningElapsedLabel}
           </Text>
         </Box>
       );
@@ -405,6 +435,7 @@ const CommandMessage: FC<Props> = ({
         <Box>
           <Text color={COLOR_WARNING}>
             <Text bold>▶</Text> {displayAction}
+            {runningElapsedLabel}
             {changeStatsElement}
           </Text>
         </Box>

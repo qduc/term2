@@ -16,6 +16,50 @@ export interface RuntimeSettingRouterDeps {
   setTemperature: (temp: number | undefined) => void;
 }
 
+export type ConversationSettingChange = Readonly<{
+  key: string;
+  value: unknown;
+  persistence: 'runtime' | 'restart';
+}>;
+
+/**
+ * Owns the application effects of conversation-related settings. Menu code
+ * only translates input into changes; this service applies the effective
+ * settings transaction and then updates the live conversation/runtime.
+ */
+export class ConversationConfigurationService {
+  readonly #deps: RuntimeSettingRouterDeps;
+
+  constructor(deps: RuntimeSettingRouterDeps) {
+    this.#deps = deps;
+  }
+
+  apply(changes: readonly ConversationSettingChange[]): { restartOnly: readonly string[] } {
+    const runtime = changes.filter((change) => change.persistence === 'runtime');
+    if (runtime.length > 0) {
+      this.#deps.settingsService.setDynamicTransaction(runtime.map(({ key, value }) => ({ key, value })));
+      for (const change of runtime) {
+        this.applyRuntimeSetting(change.key, change.value);
+      }
+    }
+    for (const change of changes.filter((item) => item.persistence === 'restart')) {
+      this.#deps.settingsService.setPersistentDynamic(change.key, change.value);
+    }
+    return { restartOnly: changes.filter((change) => change.persistence === 'restart').map((change) => change.key) };
+  }
+
+  reset(key: string): void {
+    this.#deps.settingsService.reset(key);
+    if (this.#deps.settingsService.isRuntimeModifiable(key)) {
+      this.applyRuntimeSetting(key, this.#deps.settingsService.getDynamic(key));
+    }
+  }
+
+  applyRuntimeSetting(key: string, value: unknown): void {
+    applyRuntimeSettingChange(key, value, this.#deps);
+  }
+}
+
 export function applyRuntimeSettingChange(key: string, value: unknown, deps: RuntimeSettingRouterDeps): void {
   if (key === 'agent.model') {
     deps.setModel(String(value));

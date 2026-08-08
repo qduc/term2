@@ -18,7 +18,7 @@ import type { LoggingService } from './services/logging/logging-service.js';
 import { ISSHService } from './services/service-interfaces.js';
 import { useSetting } from './hooks/use-setting.js';
 import { parseInput } from './utils/input-parser.js';
-import { useRuntimeSettings } from './hooks/use-runtime-settings.js';
+import { ConversationConfigurationService } from './services/runtime-setting-router.js';
 import { useShellMode } from './hooks/use-shell-mode.js';
 import { ShellInteractionSession, type SSHInfo } from './services/shell/shell-interaction-session.js';
 import { useAppCommands } from './hooks/use-app-commands.js';
@@ -246,13 +246,21 @@ const App: FC<AppProps> = ({
     handleClearConversationRef.current = handleClearConversation;
   }, [handleClearConversation]);
 
-  const applyRuntimeSetting = useRuntimeSettings({
-    setModel,
-    setReasoningEffort,
-    setTemperature,
-    conversationService,
-    settingsService,
-  });
+  const configurationService = useMemo(
+    () =>
+      new ConversationConfigurationService({
+        setModel,
+        setReasoningEffort,
+        setTemperature,
+        conversationService,
+        settingsService,
+      }),
+    [setModel, setReasoningEffort, setTemperature, conversationService, settingsService],
+  );
+  const applyRuntimeSetting = useCallback(
+    (key: string, value: unknown) => configurationService.applyRuntimeSetting(key, value),
+    [configurationService],
+  );
 
   const shellInteractionSession = useMemo(
     () =>
@@ -654,10 +662,18 @@ const App: FC<AppProps> = ({
     (key: string, value: any) => {
       applyRuntimeSetting(key, value);
       if (handoff.handoffState?.stage === 'selecting_effort' && key === 'agent.reasoningEffort') {
-        void handoff.completeHandoffWithEffort(value);
+        void handoff.completeHandoffWithEffort(String(value));
       }
     },
     [applyRuntimeSetting, handoff],
+  );
+  const handleConfigurationSettingChange = useCallback(
+    (key: string, value: unknown) => {
+      if (handoff.handoffState?.stage === 'selecting_effort' && key === 'agent.reasoningEffort') {
+        void handoff.completeHandoffWithEffort(String(value));
+      }
+    },
+    [handoff],
   );
 
   // The application effect host: executes typed domain intents only after
@@ -694,7 +710,8 @@ const App: FC<AppProps> = ({
       }
       return handleSettingsIntent(intentRequest, {
         settingsService,
-        onSettingChange: handleSettingChange,
+        configurationService,
+        onSettingChange: handleConfigurationSettingChange,
         onSystemMessage: addSystemMessage,
         applyRuntimeSetting,
       });

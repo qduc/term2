@@ -47,6 +47,8 @@ export class ShellInteractionSession {
   readonly #listeners = new Set<() => void>();
   #liteMode: boolean;
   #history: ShellHistoryEntry[] = [];
+  #pendingExecutions = 0;
+  #flushRequested = false;
   #snapshot: ShellInteractionSnapshot = { isShellMode: false };
 
   constructor(options: ShellInteractionSessionOptions) {
@@ -98,23 +100,42 @@ export class ShellInteractionSession {
   }
 
   async #execute(command: string): Promise<ShellHistoryEntry> {
-    const result = await executeFormattedShellCommand({
-      command,
-      settingsService: this.#settingsService,
-      sshInfo: this.#sshInfo,
-      sshService: this.#sshService,
-    });
-    const entry = {
-      command,
-      output: result.text,
-      exitCode: result.exitCode,
-      timedOut: result.timedOut,
-    };
-    this.#history.push(entry);
-    return entry;
+    this.#pendingExecutions += 1;
+    try {
+      const result = await executeFormattedShellCommand({
+        command,
+        settingsService: this.#settingsService,
+        sshInfo: this.#sshInfo,
+        sshService: this.#sshService,
+      });
+      const entry = {
+        command,
+        output: result.text,
+        exitCode: result.exitCode,
+        timedOut: result.timedOut,
+      };
+      this.#history.push(entry);
+      return entry;
+    } finally {
+      this.#pendingExecutions -= 1;
+      if (this.#pendingExecutions === 0 && this.#flushRequested) {
+        this.#flushRequested = false;
+        this.#flushCompletedHistory();
+      }
+    }
   }
 
   flushShellHistory(): void {
+    if (this.#pendingExecutions > 0) {
+      this.#flushRequested = true;
+      return;
+    }
+
+    this.#flushRequested = false;
+    this.#flushCompletedHistory();
+  }
+
+  #flushCompletedHistory(): void {
     if (this.#history.length === 0) {
       return;
     }

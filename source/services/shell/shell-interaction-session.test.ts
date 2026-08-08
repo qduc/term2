@@ -5,6 +5,16 @@ const mocks = vi.hoisted(() => ({
   executeFormattedShellCommand: vi.fn(),
 }));
 
+const deferred = <T>() => {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+};
+
 vi.mock('../../utils/shell/shell-session.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../utils/shell/shell-session.js')>()),
   executeFormattedShellCommand: (...args: unknown[]) => mocks.executeFormattedShellCommand(...args),
@@ -85,6 +95,67 @@ describe('ShellInteractionSession', () => {
 
     expect(addShellContext).toHaveBeenCalledOnce();
     expect(addShellContext).toHaveBeenCalledWith(expect.stringContaining('$ echo one'));
+  });
+
+  it('flushes a command that completes after shell mode closes', async () => {
+    const completion = deferred<{ text: string; exitCode: number | null; timedOut: boolean }>();
+    mocks.executeFormattedShellCommand.mockReturnValueOnce(completion.promise);
+    const { session, addShellContext } = createSession();
+    session.toggleShellMode();
+    const submission = session.submit('echo delayed')!;
+
+    session.toggleShellMode();
+
+    expect(addShellContext).not.toHaveBeenCalled();
+    completion.resolve({ text: 'delayed output', exitCode: 0, timedOut: false });
+    await submission.completion;
+    expect(addShellContext).toHaveBeenCalledOnce();
+    expect(addShellContext).toHaveBeenCalledWith(expect.stringContaining('$ echo delayed'));
+  });
+
+  it('waits for every accepted command before flushing one complete context block', async () => {
+    const firstCompletion = deferred<{ text: string; exitCode: number | null; timedOut: boolean }>();
+    const secondCompletion = deferred<{ text: string; exitCode: number | null; timedOut: boolean }>();
+    mocks.executeFormattedShellCommand
+      .mockReturnValueOnce(firstCompletion.promise)
+      .mockReturnValueOnce(secondCompletion.promise);
+    const { session, addShellContext } = createSession();
+    session.toggleShellMode();
+    const first = session.submit('echo first')!;
+    const second = session.submit('echo second')!;
+
+    session.toggleShellMode();
+    secondCompletion.resolve({ text: 'second output', exitCode: 0, timedOut: false });
+    await second.completion;
+    expect(addShellContext).not.toHaveBeenCalled();
+
+    firstCompletion.resolve({ text: 'first output', exitCode: 0, timedOut: false });
+    await first.completion;
+    expect(addShellContext).toHaveBeenCalledOnce();
+    expect(addShellContext.mock.calls[0]?.[0]).toContain('$ echo first');
+    expect(addShellContext.mock.calls[0]?.[0]).toContain('$ echo second');
+  });
+
+  it('does not let a failed execution strand another completed command', async () => {
+    const successfulCompletion = deferred<{ text: string; exitCode: number | null; timedOut: boolean }>();
+    const failedCompletion = deferred<{ text: string; exitCode: number | null; timedOut: boolean }>();
+    mocks.executeFormattedShellCommand
+      .mockReturnValueOnce(successfulCompletion.promise)
+      .mockReturnValueOnce(failedCompletion.promise);
+    const { session, addShellContext } = createSession();
+    session.toggleShellMode();
+    const successful = session.submit('echo kept')!;
+    const failed = session.submit('echo failed')!;
+
+    session.toggleShellMode();
+    failedCompletion.reject(new Error('execution failed'));
+    await expect(failed.completion).rejects.toThrow('execution failed');
+    expect(addShellContext).not.toHaveBeenCalled();
+
+    successfulCompletion.resolve({ text: 'kept output', exitCode: 0, timedOut: false });
+    await successful.completion;
+    expect(addShellContext).toHaveBeenCalledOnce();
+    expect(addShellContext).toHaveBeenCalledWith(expect.stringContaining('$ echo kept'));
   });
 
   it('exits and flushes when lite mode is disabled', async () => {

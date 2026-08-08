@@ -2,27 +2,17 @@ import type { ILoggingService } from '../service-interfaces.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { ApprovalState, type AbortedApprovalContext, type PendingApprovalContext } from './approval-state.js';
 import { markToolCallAsApprovalRejection } from '../../utils/streaming/extract-command-messages.js';
-import { getCallIdFromObject, getToolInfoFromInterruption } from '../interruption-info.js';
-import { parseToolCallArguments } from '../tool-call-arguments.js';
-import { createInvalidToolCallDiagnostic } from '../logging/logging-contract.js';
+import { getCallIdFromObject } from '../interruption-info.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { SessionToolTracker } from '../session/session-tool-tracker.js';
 import { GenerationGuard } from '../generation-guard.js';
 import type { ToolOwner } from './tool-owner.js';
 import { ToolOwnershipRegistry } from './tool-ownership-registry.js';
-import { getProjectAllowReadStore } from '../../utils/shell/sandbox/denied-read-stores.js';
-import {
-  isDeniedReadApproveAnswer,
-  isDockerHostControlApproveAnswer,
-  isReadFileSessionApproveAnswer,
-  supportsFolderSessionRead,
-} from '../../contracts/conversation.js';
-import { isDockerHostControlShellApproval } from './shell-sandbox-approval.js';
-import { resolveSessionReadFolder } from './session-read-grant-target.js';
 import type { SessionAccessState } from '../session/session-access-state.js';
 import type { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
 import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
+import { ApprovalDecisionExecutor, type ApprovalDecisionSource } from './approval-decision-executor.js';
 
 export interface ApprovalFlowCoordinatorDeps {
   agentClient: ConversationAgentClient;
@@ -60,9 +50,18 @@ export type ApprovalDecisionInput = {
 
 export class ApprovalFlowCoordinator {
   readonly #toolOwnership: ToolOwnershipRegistry;
+  readonly #decisionExecutor: ApprovalDecisionExecutor;
 
   constructor(private readonly deps: ApprovalFlowCoordinatorDeps) {
     this.#toolOwnership = deps.toolOwnership;
+    this.#decisionExecutor = new ApprovalDecisionExecutor({
+      logger: deps.logger,
+      sessionId: deps.sessionId,
+      sessionAccess: deps.sessionAccess,
+      nestedCompatibility: deps.nestedCompatibility,
+      hookLifecycle: deps.hookLifecycle,
+      hookEvents: deps.hookEvents,
+    });
   }
 
   /**
@@ -149,203 +148,20 @@ export class ApprovalFlowCoordinator {
   prepareContinuation(
     answer: string,
     rejectionReason: string | undefined,
-    source: 'user' | 'policy' | 'system' = 'user',
+    source: ApprovalDecisionSource = 'user',
   ): ContinuationPlan | null {
     const pendingApprovalContext = this.deps.approvalState.getPending();
     if (!pendingApprovalContext) {
       return null;
     }
 
-    const { state, interruption } = pendingApprovalContext;
-    const decisionCallId = getCallIdFromObject(interruption);
-    pendingApprovalContext.decisionsByCallId ??= new Map();
-
-    let toolStartedEvent: ConversationEvent | undefined;
-
-    // Denied-read decision values require approval (SDK resumes) plus an execution override.
-    const deniedReadDecision = isDeniedReadApproveAnswer(answer);
-    const { toolName: decisionToolName, rawArguments: decisionRawArguments } =
-      getToolInfoFromInterruption(interruption);
-    const parsedDecisionArgs = parseToolCallArguments(decisionRawArguments, {
-      callId: decisionCallId ?? String(Date.now()),
-      toolName: decisionToolName,
-      sessionId: this.deps.sessionId,
-      traceId: this.deps.logger.getCorrelationId() ?? 'trace-unknown',
-    }).arguments as { command?: unknown; cwd?: unknown } | null;
-    const dockerDecision = isDockerHostControlApproveAnswer(answer);
-    const isDockerRequest = isDockerHostControlShellApproval(
-      decisionToolName,
-      parsedDecisionArgs,
-      this.deps.sessionId,
-      this.deps.sessionAccess,
-      this.deps.nestedCompatibility,
-    );
-    // One session-scoped folder grant, shared by read_file/grep/glob: approving a
-    // folder from any of their prompts silences it for all of them.
-    const allowReadFolderForSession =
-      isReadFileSessionApproveAnswer(answer) && supportsFolderSessionRead(decisionToolName);
-    if (allowReadFolderForSession) {
-      const folder = resolveSessionReadFolder(decisionToolName, parsedDecisionArgs);
-      if (folder) {
-        if (this.deps.sessionAccess) this.deps.sessionAccess.allowReadFolder(folder);
-        else this.deps.nestedCompatibility?.readAccess.allowFolder(this.deps.sessionId, folder);
-      }
-    }
-    // Docker host control is a distinct capability: ordinary approval answers
-    // must not resume it, because resumption without a matching grant would
-    // make generic/programmatic continuation a host-access bypass.
-    const isApproved = isDockerRequest
-      ? dockerDecision
-      : answer === 'y' || deniedReadDecision || allowReadFolderForSession;
-
-    if (isApproved) {
-      // For denied-read decisions, set the execution override before the SDK resumes.
-      if (deniedReadDecision) {
-        const { rawArguments } = getToolInfoFromInterruption(interruption);
-        const parsedArgs = parseToolCallArguments(rawArguments, {
-          callId: decisionCallId ?? String(Date.now()),
-          toolName: 'shell',
-          sessionId: this.deps.sessionId,
-          traceId: this.deps.logger.getCorrelationId() ?? 'trace-unknown',
-        });
-        const shellCommand = (parsedArgs.arguments as { command?: string } | null)?.command;
-        if (typeof shellCommand === 'string') {
-          const stagedInfo = this.deps.nestedCompatibility?.deniedReads.consumeStaged(shellCommand);
-          if (stagedInfo) {
-            if (answer === 'allow-once' || answer === 'allow-remember') {
-              this.deps.nestedCompatibility?.executionOverrides.set(shellCommand, {
-                extraAllowRead: [stagedInfo.suggestedParent],
-              });
-              if (answer === 'allow-remember') {
-                getProjectAllowReadStore(process.cwd()).append(stagedInfo.suggestedParent);
-                this.deps.logger.security('Sandbox allowed-read path remembered for project', {
-                  path: stagedInfo.suggestedParent,
-                  deniedPath: stagedInfo.path,
-                  sensitive: stagedInfo.sensitive,
-                  sessionId: this.deps.sessionId,
-                });
-              }
-            } else if (answer === 'unsandboxed-once') {
-              this.deps.nestedCompatibility?.executionOverrides.set(shellCommand, { forceUnsandboxed: true });
-            }
-          }
-        }
-      }
-      if (dockerDecision && isDockerRequest && typeof parsedDecisionArgs?.command === 'string') {
-        const cwd = typeof parsedDecisionArgs.cwd === 'string' ? parsedDecisionArgs.cwd : process.cwd();
-        const scope =
-          answer === 'docker-allow-once' ? 'once' : answer === 'docker-allow-session' ? 'session' : 'project';
-        if (this.deps.sessionAccess) this.deps.sessionAccess.grantDocker(parsedDecisionArgs.command, cwd, scope);
-        else
-          this.deps.nestedCompatibility?.docker.grant({
-            command: parsedDecisionArgs.command,
-            cwd,
-            scope,
-            sessionId: this.deps.sessionId,
-          });
-        // The pending block is left in place deliberately: for an indirect
-        // invocation it is the only thing that tells `execute` this command
-        // needs host control. `execute` consumes it when it creates the control.
-      }
-
-      this.deps.logger.debug('Tool approval granted', {
-        eventType: 'approval.granted',
-        category: 'approval',
-        phase: 'approval',
-        sessionId: this.deps.sessionId,
-        traceId: this.deps.logger.getCorrelationId(),
-        ...(deniedReadDecision ? { deniedReadDecision: answer } : {}),
-      });
-
-      const { toolName, rawArguments } = getToolInfoFromInterruption(interruption);
-      const callId = decisionCallId;
-
-      const parseResult = parseToolCallArguments(rawArguments, {
-        callId: callId ?? String(Date.now()),
-        toolName,
-        sessionId: this.deps.sessionId,
-        traceId: this.deps.logger.getCorrelationId() ?? 'trace-unknown',
-      });
-
-      if (parseResult.invalidJsonDiagnostic) {
-        const diagnostic = createInvalidToolCallDiagnostic(parseResult.invalidJsonDiagnostic);
-        this.deps.logger.error('Invalid tool call argument payload', {
-          ...diagnostic,
-          sessionId: this.deps.sessionId,
-          messageId: callId ?? String(Date.now()),
-        });
-      }
-
-      const toolCallId = callId ?? String(Date.now());
-      toolStartedEvent =
-        pendingApprovalContext.owner.kind === 'subagent'
-          ? {
-              type: 'subagent_tool_started',
-              agentId: pendingApprovalContext.owner.agentId,
-              role: pendingApprovalContext.owner.role,
-              toolCallId,
-              toolName,
-              arguments: parseResult.arguments,
-            }
-          : {
-              type: 'tool_started',
-              toolCallId,
-              toolName,
-              arguments: parseResult.arguments,
-            };
-
-      state.approve?.(interruption as any);
-      if (callId) {
-        pendingApprovalContext.decisionsByCallId.set(callId, 'approved');
-      }
-    } else {
-      const expectedCallId = decisionCallId;
-      const rejectionMessage = rejectionReason
-        ? `Tool execution was not approved. User's reason: ${rejectionReason}`
-        : 'Tool execution was not approved.';
-
-      // A refused Docker request is settled: drop the pending block so the same
-      // command runs sandboxed again instead of stalling on approval forever.
-      if (isDockerRequest && typeof parsedDecisionArgs?.command === 'string') {
-        if (this.deps.sessionAccess) this.deps.sessionAccess.consumeDockerDenial(parsedDecisionArgs.command);
-        else this.deps.nestedCompatibility?.docker.consumeDenial(this.deps.sessionId, parsedDecisionArgs.command);
-      }
-
-      markToolCallAsApprovalRejection(expectedCallId);
-
-      state.reject?.(interruption as any, { message: rejectionMessage });
-      if (expectedCallId) {
-        pendingApprovalContext.decisionsByCallId.set(expectedCallId, 'rejected');
-      }
-
-      this.deps.logger.debug('Tool approval rejected', {
-        eventType: 'approval.rejected',
-        category: 'approval',
-        phase: 'approval',
-        sessionId: this.deps.sessionId,
-        traceId: this.deps.logger.getCorrelationId(),
-      });
-    }
-
-    const resolvedCallId = decisionCallId;
-    if (this.deps.hookLifecycle && this.deps.hookEvents) {
-      void this.deps.hookLifecycle.emit(
-        this.deps.hookEvents.create(
-          'approval.resolved',
-          {
-            // The public resolution payload intentionally stays small; the
-            // request event carries the normalized arguments when a prompt
-            // was shown.
-            resolution: isApproved ? (source === 'policy' ? 'auto_approved' : 'approved') : 'rejected',
-            source,
-            executionFollowed: isApproved,
-          },
-          { toolCallId: resolvedCallId },
-        ),
-      );
-    }
-
-    return { pendingApprovalContext, toolStartedEvent };
+    const result = this.#decisionExecutor.resolve({
+      pendingApprovalContext,
+      answer,
+      rejectionReason,
+      source,
+    });
+    return { pendingApprovalContext, toolStartedEvent: result.toolStartedEvent };
   }
 
   recordPending(pending: PendingApprovalContext): void {

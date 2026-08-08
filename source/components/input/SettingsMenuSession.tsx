@@ -5,6 +5,7 @@ import { SETTINGS_RESET_TRIGGER } from './triggers.js';
 import type { useSettingsCompletion } from '../../hooks/use-settings-completion.js';
 import type { MenuComponentProps } from './menu-registry.js';
 import type { EditorSnapshot, MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
+import { applyMenuEditorEvent } from './menu-editor.js';
 
 type SettingsState = ReturnType<typeof useSettingsCompletion>;
 
@@ -70,11 +71,13 @@ const pushChildEffect = (
 
 export function SettingsMenuSession({ frame, active, controller, interactions, services }: Props) {
   const settings = services.settings;
+  const keep = (): MenuEffect => ({ stack: { type: 'keep' } });
 
   const interaction = useMemo<MenuInteraction>(
     () => ({
       handle: (event) => {
         if (!('type' in event)) return;
+        if (applyMenuEditorEvent(controller, event, { horizontal: false })) return keep();
         switch (event.type) {
           case 'move':
             if (event.direction === 'up') settings.moveUp();
@@ -127,6 +130,8 @@ export function SettingsMenuSession({ frame, active, controller, interactions, s
           }
           case 'escape':
             return { stack: { type: 'close-top' } };
+          default:
+            return;
         }
       },
     }),

@@ -3,6 +3,7 @@ import SlashCommandMenu from '../menu/SlashCommandMenu.js';
 import type { useSlashCommands } from '../../hooks/use-slash-commands.js';
 import type { MenuComponentProps } from './menu-registry.js';
 import type { MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
+import { applyMenuEditorEvent } from './menu-editor.js';
 
 type Props = MenuComponentProps<Extract<MenuFrame, { kind: 'slash' }>> & {
   services: MenuComponentProps<Extract<MenuFrame, { kind: 'slash' }>>['services'] & {
@@ -11,7 +12,7 @@ type Props = MenuComponentProps<Extract<MenuFrame, { kind: 'slash' }>> & {
   };
 };
 
-export function SlashMenuSession({ frame, active, interactions, services }: Props) {
+export function SlashMenuSession({ frame, active, controller, interactions, services }: Props) {
   const slash = services.slash;
 
   const interaction = useMemo<MenuInteraction>(() => {
@@ -20,6 +21,7 @@ export function SlashMenuSession({ frame, active, interactions, services }: Prop
     return {
       handle: (event) => {
         if (!('type' in event)) return;
+        if (applyMenuEditorEvent(controller, event)) return keep();
         switch (event.type) {
           case 'move':
             if (event.direction === 'up') slash.moveUp();
@@ -41,10 +43,12 @@ export function SlashMenuSession({ frame, active, interactions, services }: Prop
             return { stack: { type: 'close-top' } };
           case 'escape':
             return { stack: { type: 'close-top' }, buffer: { type: 'clear' } };
+          default:
+            return;
         }
       },
     };
-  }, [services, slash]);
+  }, [controller, services, slash]);
 
   useEffect(() => {
     if (!active) return;

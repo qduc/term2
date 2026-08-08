@@ -1,6 +1,6 @@
 # Exclusive menu input ownership
 
-Status: plan. Waiting for implementation approval.
+Status: implemented.
 
 ## Resume here
 
@@ -10,11 +10,13 @@ legacy completion-path removal are already complete. This plan addresses the
 remaining ownership leak: `InputBox` still participates in menu composition
 and keyboard routing.
 
-Before implementation, inspect the current `ApplicationInputSurface`,
-`BottomArea`, menu router/session composition, input-owner model, and focused
-menu/input tests. Preserve the existing uncommitted changes in
-`source/components/InputBox.test.tsx` and
-`source/hooks/use-slash-commands.ts`.
+Implementation is complete. `ApplicationInputSurface` now owns the exclusive
+menu/editor cutover; `MenuSurface` owns normalized terminal input while a menu
+stack is present, and `InputBox` is editor-only. The focused suites (162 tests),
+typecheck, and changed-file formatting checks pass. The full suite reached 442
+passing test files with 16 known baseline CLI/dist and conversation-hook
+failures; the full lint command also remains blocked by pre-existing warnings
+and four unrelated formatting violations.
 
 ## Objective
 
@@ -182,4 +184,3 @@ The work is complete when:
 - ordinary keys cannot fan out across those surfaces;
 - editor text, cursor, attachments, queue-edit state, menu session state, and
   intent-result behavior survive every ownership transition exactly.
-

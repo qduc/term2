@@ -4,6 +4,7 @@ import { computePathInsertion } from './insertions.js';
 import type { PathCompletionItem } from '../../hooks/use-path-completion.js';
 import type { MenuComponentProps } from './menu-registry.js';
 import type { MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
+import { applyMenuEditorEvent } from './menu-editor.js';
 
 type PathState = ReturnType<typeof import('../../hooks/use-path-completion.js').usePathCompletion>;
 
@@ -38,10 +39,12 @@ const insertionEffect = (
 
 export function PathMenuSession({ frame, active, controller, interactions, services }: Props) {
   const path = services.path;
+  const keep = (): MenuEffect => ({ stack: { type: 'keep' } });
   const interaction = useMemo<MenuInteraction>(
     () => ({
       handle: (event) => {
         if (!('type' in event)) return;
+        if (applyMenuEditorEvent(controller, event)) return keep();
         switch (event.type) {
           case 'move':
             if (event.direction === 'up') path.moveUp();
@@ -59,6 +62,8 @@ export function PathMenuSession({ frame, active, controller, interactions, servi
             return insertionEffect(frame, path, controller, true);
           case 'escape':
             return { stack: { type: 'close-top' } };
+          default:
+            return;
         }
       },
     }),

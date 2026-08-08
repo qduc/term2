@@ -6,6 +6,7 @@ import type { useSettingsValueCompletion } from '../../hooks/use-settings-value-
 import type { SettingsService } from '../../services/settings/settings-service.js';
 import type { MenuComponentProps } from './menu-registry.js';
 import type { MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
+import { applyMenuEditorEvent } from './menu-editor.js';
 
 type SettingsValueState = ReturnType<typeof useSettingsValueCompletion>;
 
@@ -50,6 +51,8 @@ export function SettingsValueMenuSession({ frame, active, controller, interactio
           setApplyError(event.fieldErrors?.[frame.settingKey] ?? event.message);
           return keep();
         }
+
+        if (applyMenuEditorEvent(controller, event)) return keep();
 
         switch (event.type) {
           case 'move':
@@ -103,6 +106,8 @@ export function SettingsValueMenuSession({ frame, active, controller, interactio
           }
           case 'escape':
             return { stack: { type: 'close-top' } };
+          default:
+            return;
         }
       },
     };

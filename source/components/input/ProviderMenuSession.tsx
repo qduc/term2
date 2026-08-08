@@ -5,10 +5,11 @@ import type { SettingsService } from '../../services/settings/settings-service.j
 import ProviderSelectionMenu from '../menu/ProviderSelectionMenu.js';
 import type { MenuComponentProps } from './menu-registry.js';
 import type { MenuEffect, MenuEvent, MenuFrame, MenuInteraction } from './menu-types.js';
+import { applyMenuEditorEvent } from './menu-editor.js';
 
 type Props = MenuComponentProps<Extract<MenuFrame, { kind: 'providers' }>>;
 
-const getProviderWizardPromptLabel = (phase: ProviderSelectionPhase): string | undefined => {
+export const getProviderWizardPromptLabel = (phase: ProviderSelectionPhase): string | undefined => {
   if (phase === 'wizard_name') return 'Enter Provider Name: ';
   if (phase === 'wizard_url') return 'Enter Base API URL: ';
   if (phase === 'wizard_key') return 'Enter API Key: ';
@@ -20,7 +21,7 @@ const getProviderWizardPromptLabel = (phase: ProviderSelectionPhase): string | u
  * remains the owner of provider state and service policy; this component owns
  * only its lifecycle and translation from controller events.
  */
-export function ProviderMenuSession({ frame, active, interactions, services }: Props) {
+export function ProviderMenuSession({ frame, active, controller, interactions, services }: Props) {
   const { setMenuPromptLabel } = useInputContext();
   const settingsService = services.settingsService as SettingsService | undefined;
   const providers = useProviderSelection(settingsService!);
@@ -43,14 +44,25 @@ export function ProviderMenuSession({ frame, active, interactions, services }: P
       handle: (event) => {
         if (!('type' in event)) return;
 
+        const editingWizard =
+          providers.phase === 'wizard_name' || providers.phase === 'wizard_url' || providers.phase === 'wizard_key';
+        if (
+          event.type === 'input' ||
+          (event.type === 'command' && (event.command === 'left' || event.command === 'right'))
+        ) {
+          if (applyMenuEditorEvent(controller, event)) return keep();
+        }
+
         switch (event.type) {
           case 'move':
             if (event.direction === 'up') providers.moveUp();
             else if (event.direction === 'down') providers.moveDown();
             return keep();
           case 'command':
-            if (event.command === 'delete') providers.requestDelete();
-            else if (event.command === 'reorder-up') providers.moveProviderUp();
+            if (event.command === 'backspace' || event.command === 'delete') {
+              if (editingWizard) applyMenuEditorEvent(controller, event);
+              else providers.requestDelete();
+            } else if (event.command === 'reorder-up') providers.moveProviderUp();
             else if (event.command === 'reorder-down') providers.moveProviderDown();
             return keep();
           case 'accept':
@@ -67,10 +79,12 @@ export function ProviderMenuSession({ frame, active, interactions, services }: P
           case 'escape':
             providers.goBack();
             return keep();
+          default:
+            return;
         }
       },
     };
-  }, [providers]);
+  }, [controller, providers]);
 
   useEffect(() => {
     if (!active) return;

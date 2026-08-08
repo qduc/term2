@@ -10,7 +10,7 @@ import React, {
 import type { ImageRef } from 'ink-prompt';
 import { MenuControllerImpl } from '../components/input/menu-controller.js';
 import { createDefaultTriggerRegistry } from '../components/input/triggers.js';
-import type { MenuController, MenuFrame, MenuInteractionRegistry } from '../components/input/menu-types.js';
+import type { MenuController, MenuFrame, MenuInteractionRegistry, MenuState } from '../components/input/menu-types.js';
 import type { SlashCommand } from '../slash-commands.js';
 
 const DEFAULT_MENU_COMMANDS: SlashCommand[] = [
@@ -70,6 +70,7 @@ export function frameKindToLegacyMode(kind: MenuFrame['kind'] | undefined): Inpu
 
 interface InputState {
   input: string;
+  stack: MenuState['stack'];
   mode: InputMode;
   cursorOffset: number;
   triggerIndex: number | null;
@@ -106,7 +107,9 @@ export const InputProvider = ({
       new MenuControllerImpl({ triggerRegistry: createDefaultTriggerRegistry(DEFAULT_MENU_COMMANDS) }),
   );
   const interactions = controller.getInteractionRegistry();
-  const snapshot = useSyncExternalStore(controller.subscribe.bind(controller), controller.getSnapshot.bind(controller));
+  const subscribe = useCallback((listener: () => void) => controller.subscribe(listener), [controller]);
+  const getSnapshot = useCallback(() => controller.getSnapshot(), [controller]);
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
   const [images, setImages] = useState<ImageRef[]>([]);
   const [cursorOverride, setCursorOverride] = useState<number | null>(null);
@@ -150,6 +153,7 @@ export const InputProvider = ({
   const state = useMemo<InputState>(
     () => ({
       input: snapshot.editor.text,
+      stack: snapshot.stack,
       mode,
       cursorOffset,
       triggerIndex,
@@ -161,6 +165,7 @@ export const InputProvider = ({
     }),
     [
       snapshot.editor.text,
+      snapshot.stack,
       mode,
       cursorOffset,
       triggerIndex,

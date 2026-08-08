@@ -3,7 +3,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import { it, expect, vi } from 'vitest';
 import React, { useEffect, useRef, act } from 'react';
 import { Box, Text } from 'ink';
-import InputBox, { getProviderWizardPromptLabel } from './InputBox.js';
+import ApplicationInputSurface from './input/ApplicationInputSurface.js';
+import { getProviderWizardPromptLabel } from './input/ProviderMenuSession.js';
 import ModelSelectionMenu from './menu/ModelSelectionMenu.js';
 import SettingsSelectionMenu from './menu/SettingsSelectionMenu.js';
 import { computeModelInsertion } from './input/insertions.js';
@@ -24,6 +25,8 @@ import { useSettingsCompletion } from '../hooks/use-settings-completion.js';
 import { renderInAct, toVisibleText } from '../test-helpers/ink-testing.js';
 import type { UserTurn } from '../types/user-turn.js';
 import type { SubmissionMutation } from '../services/conversation/conversation-adapter.js';
+
+const InputBox = ApplicationInputSurface;
 
 vi.mock('../services/file-service.js', () => ({
   getWorkspaceEntries: vi.fn(async () => [{ path: 'mock/path', type: 'file' }]),

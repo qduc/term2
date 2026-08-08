@@ -35,6 +35,15 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 ## Active or deferred
 
 - Scheduled live provider canaries — a deferred follow-up requiring CI, secret/billing, and OAuth-storage decisions. No plan doc, and nobody is on it.
+- UI/business layer separation — active multi-session implementation tracked in
+  `docs/plans/ui-business-layer-separation/MAP.md`. The settings transaction,
+  handoff, provider management, and model catalog milestones intentionally wait
+  for menu redesign Phase 5 because they overlap `app.tsx`,
+  `use-provider-selection.ts`, and the menu intent host. The Phase 5 worktree is
+  `.worktrees/menu-redesign-phase5` at WIP commit `9a071378`. Its owner should
+  update `docs/plans/menu-system-redesign.md` with completion/test status and
+  coordinate before merging or abandoning it; do not silently supersede either
+  workstream.
 
 ## Completed — still read before touching these areas
 

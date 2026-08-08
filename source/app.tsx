@@ -19,7 +19,8 @@ import { ISSHService } from './services/service-interfaces.js';
 import { useSetting } from './hooks/use-setting.js';
 import { parseInput } from './utils/input-parser.js';
 import { useRuntimeSettings } from './hooks/use-runtime-settings.js';
-import { useShellMode, SSHInfo } from './hooks/use-shell-mode.js';
+import { useShellMode } from './hooks/use-shell-mode.js';
+import { ShellInteractionSession, type SSHInfo } from './services/shell/shell-interaction-session.js';
 import { useAppCommands } from './hooks/use-app-commands.js';
 import { useHandoffFlow } from './hooks/use-handoff-flow.js';
 import { usePendingTurnGuards } from './hooks/use-pending-turn-guards.js';
@@ -237,14 +238,23 @@ const App: FC<AppProps> = ({
     settingsService,
   });
 
+  const shellInteractionSession = useMemo(
+    () =>
+      new ShellInteractionSession({
+        settingsService,
+        conversationSink: conversationService,
+        liteMode,
+        sshInfo,
+        sshService,
+      }),
+    [conversationService, settingsService, sshInfo, sshService],
+  );
+
   const { isShellMode, toggleShellMode, handleShellSubmit } = useShellMode({
-    settingsService,
-    conversationService,
+    session: shellInteractionSession,
     addShellMessage,
     replaceInput,
     liteMode,
-    sshInfo,
-    sshService,
   });
 
   const clearConversationAndRefreshBanner = useCallback(async () => {

@@ -5,7 +5,7 @@ import { hasDockerHostControlProject } from '../../utils/shell/sandbox/docker-ho
 import { getProvider } from '../../providers/index.js';
 import { getModelContextWindow } from '../../providers/model-catalog/catalog.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
-import type { SSHInfo } from '../../hooks/use-shell-mode.js';
+import type { SSHInfo } from '../../services/shell/shell-interaction-session.js';
 import { formatContextUsage, type NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { CodexRateLimitInfo, CodexRateLimitWindow } from '../../services/conversation/conversation-events.js';
 import type { StaticCommitBlocker } from '../message/MessageList.js';

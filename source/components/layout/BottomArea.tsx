@@ -13,7 +13,7 @@ import type { SlashCommand } from '../../slash-commands.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
 import type { LoggingService } from '../../services/logging/logging-service.js';
 import type { HistoryService } from '../../services/history-service.js';
-import type { SSHInfo } from '../../hooks/use-shell-mode.js';
+import type { SSHInfo } from '../../services/shell/shell-interaction-session.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { CodexRateLimitInfo } from '../../services/conversation/conversation-events.js';
 import type { PendingApproval } from '../../contracts/conversation.js';

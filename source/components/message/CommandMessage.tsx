@@ -150,7 +150,10 @@ const CommandMessage: FC<Props> = ({
       );
     }
 
-    const argsText = toolName === 'background_subagent_notification' || !formattedArgs ? '' : ` ${formattedArgs}`;
+    const argsText =
+      toolName === 'background_subagent_notification' || toolName === 'background_shell_notification' || !formattedArgs
+        ? ''
+        : ` ${formattedArgs}`;
     const renderAction = (verb: string) => (
       <>
         <Text dimColor>{verb}</Text>
@@ -214,10 +217,14 @@ const CommandMessage: FC<Props> = ({
           return renderAction(`Background ${identity} ${status ?? 'finished'}`);
         }
         if (runs.length > 1) {
-          const failedRuns = runs.filter((run: { status?: string; error?: string }) => run.status === 'failed' || run.error);
+          const failedRuns = runs.filter(
+            (run: { status?: string; error?: string }) => run.status === 'failed' || run.error,
+          );
           if (failedRuns.length > 0) {
             const reasons = failedRuns
-              .map((run: { role?: string; error?: string }) => (run.error ? `${run.role ?? 'subagent'}: ${run.error}` : null))
+              .map((run: { role?: string; error?: string }) =>
+                run.error ? `${run.role ?? 'subagent'}: ${run.error}` : null,
+              )
               .filter(Boolean);
             if (reasons.length > 0) {
               return renderAction(`Background subagents failed: ${reasons.join('; ')}`);
@@ -230,6 +237,22 @@ const CommandMessage: FC<Props> = ({
           return renderAction(`Background subagents finished: ${roles || runs.length}`);
         }
         return renderAction('Background subagent notification');
+      }
+      case 'background_shell_notification': {
+        const jobs = Array.isArray(toolArgs?.jobs) ? toolArgs.jobs : [];
+        if (jobs.length === 1) {
+          const [{ command, status, error }] = jobs;
+          const label = command || 'job';
+          if (status === 'failed' || status === 'timed_out' || error) {
+            const reason = error ? `: ${error}` : '';
+            return renderAction(`Background shell failed: ${label}${reason}`);
+          }
+          if (status === 'cancelled' || status === 'interrupted') {
+            return renderAction(`Background shell interrupted: ${label}`);
+          }
+          return renderAction(`Background shell completed: ${label}`);
+        }
+        return renderAction(`Background shell ${jobs.length || 'job'} notification`);
       }
       case 'memory_list':
         return renderAction('Listed memories');

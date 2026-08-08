@@ -185,6 +185,38 @@ it('dispatchEventToLog accumulates turn items and logs the final assistant turn'
   ]);
 });
 
+it('dispatchEventToLog persists background shell lifecycle events without adding them to the foreground turn', () => {
+  const { logger } = makeLoggingService();
+  const sinkEvents: any[] = [];
+  const conversationLogger = new ConversationLogger({
+    turnAccumulator: new TurnItemAccumulator(),
+    logger,
+    getAssistantTurnState: () => ({ previousResponseId: null }),
+    journal: makeJournal(),
+  });
+  conversationLogger.setLogSink((event) => sinkEvents.push(event));
+
+  conversationLogger.dispatchEventToLog({ type: 'background_shell_started', jobId: 'shell-1', command: 'pnpm test' });
+  conversationLogger.dispatchEventToLog({
+    type: 'background_shell_completed',
+    jobId: 'shell-1',
+    command: 'pnpm test',
+    status: 'completed',
+    output: 'exit 0',
+  });
+
+  expect(sinkEvents).toEqual([
+    { type: 'background_shell_started', jobId: 'shell-1', command: 'pnpm test' },
+    {
+      type: 'background_shell_completed',
+      jobId: 'shell-1',
+      command: 'pnpm test',
+      status: 'completed',
+      output: 'exit 0',
+    },
+  ]);
+});
+
 it('dispatchEventToLog checkpoints accumulated turn items before logging an error', () => {
   const { logger } = makeLoggingService();
   const sinkEvents: any[] = [];

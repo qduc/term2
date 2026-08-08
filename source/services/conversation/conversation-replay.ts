@@ -79,6 +79,16 @@ interface InFlightToolCall {
   toolName: string;
 }
 
+interface ReplayedBackgroundShellJob {
+  jobId: string;
+  command: string;
+  completed?: {
+    status: 'completed' | 'failed' | 'timed_out' | 'cancelled';
+    output: string;
+    error?: string;
+  };
+}
+
 /**
  * Per-turn journal state collected during event application. Used to
  * reconstruct interrupted turns (no final `assistant_turn`) and to
@@ -152,6 +162,8 @@ interface ReplayState {
   pendingJournals: Map<string, TurnJournal>;
   /** Command messages added during streaming that may overlap with journal tool results. */
   pendingCommandMessages: SavedMessage[];
+  /** Observational lifecycle only: replay never creates a process from these records. */
+  backgroundShellJobs: Map<string, ReplayedBackgroundShellJob>;
 }
 
 const makeHistoryItemForToolCall = (item: Extract<PersistedAssistantTurnItem, { type: 'tool_call' }>): unknown =>
@@ -666,6 +678,28 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
       });
       return;
     }
+    case 'background_shell_started': {
+      if (!state.backgroundShellJobs.has(event.jobId)) {
+        state.backgroundShellJobs.set(event.jobId, { jobId: event.jobId, command: event.command });
+      }
+      return;
+    }
+    case 'background_shell_completed': {
+      const job = state.backgroundShellJobs.get(event.jobId);
+      // The registry can redeliver terminal events; the replay transcript is
+      // intentionally idempotent and only records the first terminal result.
+      if (job?.completed) return;
+      state.backgroundShellJobs.set(event.jobId, {
+        jobId: event.jobId,
+        command: event.command,
+        completed: {
+          status: event.status,
+          output: event.output,
+          ...(event.error ? { error: event.error } : {}),
+        },
+      });
+      return;
+    }
     case 'error': {
       state.messages.push({
         id: `err-${state.messages.length}`,
@@ -745,6 +779,51 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
     }
     default:
       return;
+  }
+}
+
+/**
+ * Project durable shell lifecycle records after normal transcript repair. These
+ * are deliberately terminal-only rows: they describe a process from the prior
+ * session and never attach it to the live tool ledger or start it again.
+ */
+function appendReplayedBackgroundShellJobs(state: ReplayState): void {
+  for (const job of state.backgroundShellJobs.values()) {
+    const completed = job.completed;
+    const interrupted = !completed;
+    const jobStatus = interrupted ? 'interrupted' : completed.status;
+    const output = interrupted
+      ? 'Background shell job was interrupted when the previous session ended and was not restarted.'
+      : completed.output;
+    const error = interrupted ? 'Lost on restart.' : completed.error;
+    const status =
+      interrupted || completed.status === 'cancelled'
+        ? 'aborted'
+        : completed.status === 'completed'
+        ? 'completed'
+        : 'failed';
+    state.messages.push({
+      id: `background-shell-${job.jobId}`,
+      sender: 'command',
+      status,
+      command: 'background_shell_notification',
+      output,
+      success: status === 'completed',
+      toolName: 'background_shell_notification',
+      toolArgs: {
+        jobs: [
+          {
+            jobId: job.jobId,
+            command: job.command,
+            status: jobStatus,
+            ...(error ? { error } : {}),
+          },
+        ],
+      },
+    });
+    if (interrupted) {
+      state.warnings.push(`Background shell job ${job.jobId} was interrupted by restart and was not restarted.`);
+    }
   }
 }
 
@@ -1081,6 +1160,7 @@ export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
     warnings: [],
     pendingJournals: new Map(),
     pendingCommandMessages: [],
+    backgroundShellJobs: new Map(),
   };
 
   for (const envelope of envelopes) {
@@ -1161,6 +1241,8 @@ export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
   ) {
     state.previousResponseId = null;
   }
+
+  appendReplayedBackgroundShellJobs(state);
 
   const accumulatedUsage = usage.get();
   const accumulatedSubagentUsage = subagentUsage.get();

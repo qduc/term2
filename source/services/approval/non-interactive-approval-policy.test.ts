@@ -62,7 +62,6 @@ it('rejects every tool when non-interactive auto-approval is disabled', async ()
   const decision = await createPolicy().decide({
     autoApprove: false,
     approval: createApproval('apply_patch', '{"patch":"..."}'),
-    history: [],
   });
 
   expect(decision).toEqual({
@@ -76,7 +75,6 @@ it('approves non-shell tools when non-interactive auto-approval is enabled', asy
   const decision = await createPolicy().decide({
     autoApprove: true,
     approval: createApproval('apply_patch', '{"patch":"..."}'),
-    history: [],
   });
 
   expect(decision).toEqual({ answer: 'y' });
@@ -93,7 +91,6 @@ it('fails closed for RED shell commands without consulting the evaluator', async
   }).decide({
     autoApprove: true,
     approval: createApproval('bash', 'rm -rf /'),
-    history: [],
   });
 
   expect(decision).toEqual({
@@ -109,7 +106,6 @@ it('rejects YELLOW shell commands without a configured auto-approve model', asyn
   const decision = await createPolicy().decide({
     autoApprove: true,
     approval: createApproval('bash', 'npm install'),
-    history: [],
   });
 
   expect(decision).toEqual({
@@ -127,7 +123,7 @@ it('uses the evaluator decision for YELLOW shell commands', async () => {
   }).decide({
     autoApprove: true,
     approval: createApproval('bash', 'npm install'),
-    history: [],
+    getHistory: () => [],
   });
 
   expect(decision).toEqual({
@@ -146,7 +142,7 @@ it('fails closed with the evaluator error reason for YELLOW shell commands', asy
   }).decide({
     autoApprove: true,
     approval: createApproval('bash', 'npm install'),
-    history: [],
+    getHistory: () => [],
   });
 
   expect(decision).toEqual({

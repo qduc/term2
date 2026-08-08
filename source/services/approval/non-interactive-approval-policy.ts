@@ -46,7 +46,7 @@ export class NonInteractiveApprovalPolicy {
   async decide(input: {
     autoApprove: boolean;
     approval: ApprovalDescriptor;
-    history: unknown[];
+    getHistory?: () => unknown[];
   }): Promise<NonInteractiveApprovalDecision> {
     if (!input.autoApprove) {
       return { answer: 'n', rejectionReason: NON_INTERACTIVE_REJECTION_REASON, reportRejection: false };
@@ -87,7 +87,7 @@ export class NonInteractiveApprovalPolicy {
       const callId = approval.callId || '__single__';
       const advisories = await evaluateShellAutoApprovalAdvisories({
         commands: [{ id: callId, command }],
-        history: input.history as ProviderInputItem[],
+        history: (input.getHistory?.() ?? []) as ProviderInputItem[],
         settingsService: this.deps.settingsService,
         agentClient: this.deps.agentClient!,
         logger: this.deps.logger ?? noOpLogger,

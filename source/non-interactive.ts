@@ -154,7 +154,7 @@ export async function runWithSession(session: ConversationSessionLike, config: N
       const decision = await approvalPolicy.decide({
         autoApprove: config.autoApprove,
         approval: result.approval,
-        history: session.exportState?.().history ?? [],
+        getHistory: () => session.exportState?.().history ?? [],
       });
       const rejectionReason = decision.answer === 'n' ? decision.rejectionReason : undefined;
       if (decision.answer === 'n' && decision.reportRejection) {

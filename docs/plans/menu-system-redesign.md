@@ -1,9 +1,8 @@
 # Menu system redesign
 
-Status: Phase 5 is in progress. All of Phase 4 is merged — graphs 1–2 at
+Status: Phase 5 is complete in the `menu-redesign-phase5` worktree. All of Phase 4 is merged — graphs 1–2 at
 `efa50cfa`, graph 3 at `3b4f67dd`, graph 4 at `32eabded` (implementation
-commits `ed3a8a31`, `b9ac1938`, `c05117a2` + `683be8f1`). **Phase 5 (Step 3,
-legacy deletion) is the only outstanding work.**
+commits `ed3a8a31`, `b9ac1938`, `c05117a2` + `683be8f1`).
 
 ## Resume here
 
@@ -27,7 +26,7 @@ reading of the Phase 4 step list.
 - `menu-registry.tsx` is now a total `MenuRegistry`; every frame kind has a
   mounted session.
 
-### Phase 5 progress in this worktree
+### Phase 5 completion
 
 The legacy popup paths have been removed from production wiring: trigger
 detection, mode handlers, popup prop/navigation adapters, and the completion
@@ -38,12 +37,16 @@ also been removed. The missing queue/history declarations and split-chunk
 Alt+Enter behavior were repaired while bringing the tree back to a typed,
 tested state.
 
-The remaining Phase 5 gate is the legacy `InputContext` migration. `mode` and
-`triggerIndex` are still independently stored and exposed through
-`setMode`/`setTriggerIndex`, and the completion hooks plus their direct-mode
-test harnesses still call those setters. Migrate those callers to controller
-state/transactions, then run the final full-suite, typecheck, lint, and diff
-checks before recording the phase as complete.
+The legacy `InputContext` migration is complete. `mode` and `triggerIndex` are
+derived from the active controller frame, and completion hooks plus their test
+harnesses use controller reconciliation/transactions rather than legacy
+setters. The focused menu/input suites pass (44 files, 400 tests), as does
+typecheck and `git diff --check`.
+
+The repository-wide suite still has unrelated baseline failures in app,
+provider-black-box, and CLI integration tests; lint also reports two existing
+formatting issues under `.agents/`. Those failures were not introduced by the
+Phase 5 files and remain recorded rather than being folded into this change.
 
 ### Worktree base — read before `git worktree add`
 
@@ -154,7 +157,7 @@ In scope (as originally written):
 
 Out of scope: deleting any legacy module. That is Step 3.
 
-#### Step 3 — Phase 5: delete legacy paths (in progress)
+#### Step 3 — Phase 5: delete legacy paths — DONE
 
 In scope: `useTriggerDetection`, `useModeHandlers`, the `insertions.ts`
 helpers, `toPopupProps`, `PopupManager`'s hand-mapped prop adapter, stored

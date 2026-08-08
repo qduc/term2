@@ -7,7 +7,7 @@ export { SKILLS_TRIGGER } from '../components/input/triggers.js';
 
 export const useSkillSelection = (deps: { skillsService: SkillsService }) => {
   const { skillsService } = deps;
-  const { mode, setMode, input, cursorOffset, triggerIndex, setTriggerIndex, controller } = useInputContext();
+  const { mode, input, cursorOffset, triggerIndex, controller } = useInputContext();
 
   const controllerFrame = controller.getSnapshot().stack.at(-1);
   const isControllerOpen = controllerFrame?.kind === 'skills';
@@ -53,19 +53,18 @@ export const useSkillSelection = (deps: { skillsService: SkillsService }) => {
   const open = useCallback(
     (startIndex: number) => {
       if (mode === 'skill_selection') return;
-      setMode('skill_selection');
-      setTriggerIndex(startIndex);
+      const editor = controller.getSnapshot().editor;
+      controller.replaceText(editor.text, Math.max(editor.cursor, startIndex));
       setSelectedIndex(0);
     },
-    [mode, setMode, setTriggerIndex, setSelectedIndex],
+    [mode, controller, setSelectedIndex],
   );
 
   const close = useCallback(() => {
     if (mode === 'skill_selection') {
-      setMode('text');
-      setTriggerIndex(null);
+      controller.close();
     }
-  }, [mode, setMode, setTriggerIndex]);
+  }, [mode, controller]);
 
   return {
     isOpen,

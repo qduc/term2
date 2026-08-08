@@ -79,7 +79,7 @@ export function executeSlashCommandSelection({
     setInput(nextValue);
     setCursorOverride(nextValue.length);
     // Close slash menu first so mode-changing actions (e.g. /rewind opening
-    // rewind_selection) can take effect; later setMode calls win.
+    // rewind_selection) can take effect; the controller owns the resulting frame.
     close();
     const shouldClose = command.action();
     if (shouldClose !== false) {
@@ -91,7 +91,7 @@ export function executeSlashCommandSelection({
 
   const args = extractCommandArgs(filter, command.name);
   // Close slash menu first. Mode-changing actions (e.g. /rewind opening rewind_selection)
-  // can then take effect; later setMode calls win, and we avoid post-action override.
+  // can then take effect without a second local mode transition.
   close();
   const shouldClose = command.action(args || undefined);
   if (shouldClose !== false) {
@@ -101,7 +101,7 @@ export function executeSlashCommandSelection({
 }
 
 export const useSlashCommands = ({ commands, onClose }: UseSlashCommandsOptions) => {
-  const { mode, setMode, input, setInput, setInputAndCursor, setCursorOverride } = useInputContext();
+  const { mode, controller, input, setInput, setInputAndCursor, setCursorOverride } = useInputContext();
 
   const isOpen = mode === 'slash_commands';
 
@@ -134,16 +134,16 @@ export const useSlashCommands = ({ commands, onClose }: UseSlashCommandsOptions)
     // Avoid resetting selection when already open to preserve
     // keyboard navigation (up/down arrows) state between renders.
     if (mode === 'slash_commands') return;
-    setMode('slash_commands');
+    controller.replaceText(input, input.length);
     setSelectedIndex(0);
-  }, [mode, setMode, setSelectedIndex]);
+  }, [mode, controller, input, setSelectedIndex]);
 
   const close = useCallback(() => {
     if (mode === 'slash_commands') {
-      setMode('text');
+      controller.close();
       onClose();
     }
-  }, [mode, setMode, onClose]);
+  }, [mode, controller, onClose]);
 
   // No need for updateFilter anymore, it reacts to input changes automatically
 

@@ -46,7 +46,7 @@ export {
 };
 
 export const useSettingsCompletion = (settingsService: SettingsService) => {
-  const { mode, setMode, input, cursorOffset, triggerIndex, setTriggerIndex, controller } = useInputContext();
+  const { mode, input, cursorOffset, triggerIndex, controller } = useInputContext();
 
   const controllerFrame = controller.getSnapshot().stack.at(-1);
   const isControllerOpen = controllerFrame?.kind === 'settings';
@@ -164,10 +164,8 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
 
   const open = useCallback(
     (startIndex: number, initialSelectionKey?: string) => {
-      // If already in settings mode, do not reset selection.
-      if (mode === 'settings_completion') return;
-      setMode('settings_completion');
-      setTriggerIndex(startIndex);
+      const editor = controller.getSnapshot().editor;
+      controller.replaceText(editor.text, Math.max(editor.cursor, startIndex));
       if (initialSelectionKey) {
         setActiveCategoryId(getSettingCategory(initialSelectionKey).id);
         setTargetKey(initialSelectionKey);
@@ -176,17 +174,16 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
       }
       setScrollOffset(0);
     },
-    [mode, setMode, setTriggerIndex, setSelectedIndex],
+    [controller, setSelectedIndex],
   );
 
   const close = useCallback(() => {
     if (mode === 'settings_completion') {
-      setMode('text');
-      setTriggerIndex(null);
+      controller.close();
       setSelectedIndex(0);
       setScrollOffset(0);
     }
-  }, [mode, setMode, setTriggerIndex, setSelectedIndex]);
+  }, [mode, controller, setSelectedIndex]);
 
   return {
     isOpen,

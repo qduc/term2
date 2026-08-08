@@ -83,9 +83,7 @@ it.sequential('InputProvider provides all required setter functions', async () =
 
   expect(capturedContext).toBeTruthy();
   expect(typeof capturedContext.setInput).toBe('function');
-  expect(typeof capturedContext.setMode).toBe('function');
   expect(typeof capturedContext.setCursorOffset).toBe('function');
-  expect(typeof capturedContext.setTriggerIndex).toBe('function');
 });
 
 it.sequential('setInput updates input value', async () => {
@@ -155,32 +153,6 @@ it.sequential('setInput accepts strings with special characters', async () => {
 
   expect(lastFrame()).toBeTruthy();
   expect(lastFrame()!.includes('/settings @path/to/file.ts')).toBe(true);
-});
-
-it.sequential('setMode accepts all mode values', async () => {
-  const TestUpdater = () => {
-    const { mode, setMode } = useInputContext();
-
-    useEffect(() => {
-      setMode('slash_commands');
-      setMode('path_completion');
-      setMode('settings_completion');
-      setMode('text');
-    }, [setMode]);
-
-    return <Text>{mode || 'EMPTY'}</Text>;
-  };
-
-  const { lastFrame } = await renderInAct(
-    <InputProvider>
-      <TestUpdater />
-    </InputProvider>,
-  );
-
-  await flushReactUpdates(5);
-
-  expect(lastFrame()).toBeTruthy();
-  expect(lastFrame()!.includes('text')).toBe(true);
 });
 
 it.sequential('setCursorOffset accepts positive values', async () => {
@@ -275,50 +247,6 @@ it.sequential('setCursorOffset accepts zero', async () => {
   await flushReactUpdates(5);
 
   expect(lastFrame()!.includes('0')).toBe(true);
-});
-
-it.sequential('setTriggerIndex accepts null value', async () => {
-  const TestUpdater = () => {
-    const { triggerIndex, setTriggerIndex } = useInputContext();
-
-    useEffect(() => {
-      setTriggerIndex(null);
-    }, [setTriggerIndex]);
-
-    return <Text>{triggerIndex === null ? 'NULL' : triggerIndex.toString()}</Text>;
-  };
-
-  const { lastFrame } = await renderInAct(
-    <InputProvider>
-      <TestUpdater />
-    </InputProvider>,
-  );
-
-  await flushReactUpdates(5);
-
-  expect(lastFrame()!.includes('NULL')).toBe(true);
-});
-
-it.sequential('setTriggerIndex accepts index values', async () => {
-  const TestUpdater = () => {
-    const { triggerIndex, setTriggerIndex } = useInputContext();
-
-    useEffect(() => {
-      setTriggerIndex(10);
-    }, [setTriggerIndex]);
-
-    return <Text>{triggerIndex === null ? 'NULL' : triggerIndex.toString()}</Text>;
-  };
-
-  const { lastFrame } = await renderInAct(
-    <InputProvider>
-      <TestUpdater />
-    </InputProvider>,
-  );
-
-  await flushReactUpdates(5);
-
-  expect(lastFrame()!.includes('10')).toBe(true);
 });
 
 it.sequential('Multiple components can use the context', async () => {

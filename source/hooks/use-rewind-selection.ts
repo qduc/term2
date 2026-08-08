@@ -48,7 +48,7 @@ export function getRewindScrollOffset(itemsLength: number, selectedIndex: number
 }
 
 export const useRewindSelection = (): RewindSelectionResult => {
-  const { mode, setMode } = useInputContext();
+  const { mode, controller } = useInputContext();
 
   const [items, setItems] = useState<RewindItem[]>([]);
   const [scrollOffset, setScrollOffset] = useState(0);
@@ -80,22 +80,22 @@ export const useRewindSelection = (): RewindSelectionResult => {
     (nextItems: RewindItem[], nextDisposition: RewindDisposition) => {
       setItems(nextItems);
       setDisposition(nextDisposition);
-      setMode('rewind_selection');
+      controller.open({ kind: 'rewind', items: nextItems, initialDisposition: nextDisposition });
       setScrollOffset(0);
       // Use setSelectedIndex directly because selection.moveEnd() would read the
       // stale items.length from its closure (items hasn't re-rendered yet).
       selection.setSelectedIndex(Math.max(0, nextItems.length - 1));
     },
-    [setMode, selection],
+    [controller, selection],
   );
 
   const close = useCallback(() => {
     if (mode === 'rewind_selection') {
-      setMode('text');
+      controller.close();
       setItems([]);
       setScrollOffset(0);
     }
-  }, [mode, setMode]);
+  }, [mode, controller]);
 
   const toggleDisposition = useCallback(() => {
     setDisposition((previous) => (previous === 'edit' ? 'resend' : 'edit'));

@@ -4,14 +4,35 @@ import React, {
   useMemo,
   useState,
   useCallback,
-  useRef,
-  useEffect,
   useSyncExternalStore,
   ReactNode,
 } from 'react';
 import type { ImageRef } from 'ink-prompt';
 import { MenuControllerImpl } from '../components/input/menu-controller.js';
+import { createDefaultTriggerRegistry } from '../components/input/triggers.js';
 import type { MenuController, MenuFrame, MenuInteractionRegistry } from '../components/input/menu-types.js';
+import type { SlashCommand } from '../slash-commands.js';
+
+const DEFAULT_MENU_COMMANDS: SlashCommand[] = [
+  {
+    name: '/model',
+    description: 'Select a model',
+    action: () => {},
+    completion: { type: 'model', trigger: '/model ' },
+  },
+  {
+    name: '/settings',
+    description: 'Open settings',
+    action: () => {},
+    completion: { type: 'settings', trigger: '/settings ', resetTrigger: '/settings reset ' },
+  },
+  {
+    name: '/skills',
+    description: 'Select a skill',
+    action: () => {},
+    completion: { type: 'skills', trigger: '/skills ' },
+  },
+];
 
 export type InputMode =
   | 'text'
@@ -62,9 +83,7 @@ interface InputState {
 interface InputActions {
   setInput: (value: string) => void;
   replaceInput: (value: string) => void;
-  setMode: (mode: InputMode) => void;
   setCursorOffset: (offset: number) => void;
-  setTriggerIndex: (index: number | null) => void;
   setImages: React.Dispatch<React.SetStateAction<ImageRef[]>>;
   setInputAndCursor: (value: string, cursorOffset: number, cursorOverride?: number | null) => void;
   setCursorOverride: (offset: number | null) => void;
@@ -81,28 +100,21 @@ export const InputProvider = ({
   children: ReactNode;
   controller?: MenuController;
 }) => {
-  const [controller] = useState(() => providedController ?? new MenuControllerImpl());
+  const [controller] = useState(
+    () =>
+      providedController ??
+      new MenuControllerImpl({ triggerRegistry: createDefaultTriggerRegistry(DEFAULT_MENU_COMMANDS) }),
+  );
   const interactions = controller.getInteractionRegistry();
   const snapshot = useSyncExternalStore(controller.subscribe.bind(controller), controller.getSnapshot.bind(controller));
 
-  const [legacyMode, setLegacyMode] = useState<InputMode>('text');
-  const previousControllerStackLengthRef = useRef(0);
-  const [triggerIndex, setTriggerIndex] = useState<number | null>(null);
   const [images, setImages] = useState<ImageRef[]>([]);
   const [cursorOverride, setCursorOverride] = useState<number | null>(null);
   const [menuPromptLabel, setMenuPromptLabel] = useState<string | undefined>(undefined);
 
-  useEffect(() => {
-    return controller.subscribe(() => {
-      const stackLength = controller.getSnapshot().stack.length;
-      if (previousControllerStackLengthRef.current > 0 && stackLength === 0) {
-        setLegacyMode('text');
-      }
-      previousControllerStackLengthRef.current = stackLength;
-    });
-  }, [controller]);
-
-  const mode = snapshot.stack.length > 0 ? frameKindToLegacyMode(snapshot.stack.at(-1)?.kind) : legacyMode;
+  const activeFrame = snapshot.stack.at(-1);
+  const mode = frameKindToLegacyMode(activeFrame?.kind);
+  const triggerIndex = activeFrame && 'binding' in activeFrame ? activeFrame.binding.replacement.start : null;
 
   const cursorOffset = snapshot.editor.cursor;
 
@@ -131,16 +143,6 @@ export const InputProvider = ({
   const replaceInput = useCallback(
     (value: string) => {
       controller.replaceText(value);
-    },
-    [controller],
-  );
-
-  const setMode = useCallback(
-    (newMode: InputMode) => {
-      setLegacyMode(newMode);
-      if (newMode === 'text') {
-        controller.closeAll();
-      }
     },
     [controller],
   );
@@ -174,15 +176,13 @@ export const InputProvider = ({
     () => ({
       setInput,
       replaceInput,
-      setMode,
       setCursorOffset,
-      setTriggerIndex,
       setImages,
       setInputAndCursor,
       setCursorOverride,
       setMenuPromptLabel,
     }),
-    [setInput, replaceInput, setMode, setCursorOffset, setInputAndCursor, setMenuPromptLabel],
+    [setInput, replaceInput, setCursorOffset, setInputAndCursor, setMenuPromptLabel],
   );
 
   return (

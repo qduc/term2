@@ -245,7 +245,7 @@ vi.mock('./hooks/use-terminal-focus-notifier.js', () => ({
 }));
 
 vi.mock('./hooks/use-app-keyboard-shortcuts.js', () => ({
-  useAppKeyboardShortcuts: vi.fn(),
+  useAppKeyboardShortcuts: vi.fn(() => ({ interruptConfirmVisible: false })),
 }));
 
 vi.mock('./hooks/use-handoff-flow.js', () => ({

@@ -63,6 +63,12 @@ type Props = {
   onSubmit: (v: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) => void | Promise<void>;
   slashCommands: SlashCommand[];
   waitingForRejectionReason?: boolean;
+  /**
+   * True while a turn is in flight. Escape still clears a non-empty buffer;
+   * on an empty buffer it falls through to the app-level double-Escape
+   * interrupt confirmation.
+   */
+  turnInFlight?: boolean;
   isShellMode?: boolean;
   settingsService: SettingsService;
   loggingService: LoggingService;
@@ -111,6 +117,7 @@ const InputBox: FC<Props> = ({
   settingsService,
   loggingService,
   waitingForRejectionReason = false,
+  turnInFlight = false,
   isShellMode = false,
   historyService,
   onSettingChange,
@@ -549,6 +556,7 @@ const InputBox: FC<Props> = ({
     dismissedCompletionRef,
     inputRevisionRef,
     onEscape: cancelQueueInteraction,
+    turnInFlight,
   });
 
   // When a non-text mode is active (popup menu), keep cursorOverride in sync so

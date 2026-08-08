@@ -64,6 +64,7 @@ const renderHarness = async (overrides: Partial<Parameters<typeof useAppKeyboard
     waitingForRejectionReason: false,
     setWaitingForRejectionReason: mocks.setWaitingForRejectionReason,
     inputMode: 'text',
+    inputValue: '',
     isProcessing: false,
     waitingForApproval: false,
     stopProcessing: mocks.stopProcessing,
@@ -125,13 +126,56 @@ it.sequential('clears ask-user answers on Escape', async () => {
   expect(mocks.replaceInput).toHaveBeenCalledWith('');
 });
 
-it.sequential('stops processing on Escape when waiting for approval', async () => {
+it.sequential('does not stop processing on a single Escape', async () => {
   await renderHarness({ isProcessing: true });
-  const before = mocks.stopProcessing.mock.calls.length;
 
   await fireInput('', { escape: true });
 
-  expect(mocks.stopProcessing.mock.calls.length).toBe(before + 1);
+  expect(mocks.stopProcessing).not.toHaveBeenCalled();
+});
+
+it.sequential('stops processing on a second Escape', async () => {
+  await renderHarness({ isProcessing: true });
+
+  await fireInput('', { escape: true });
+  await fireInput('', { escape: true });
+
+  expect(mocks.stopProcessing).toHaveBeenCalledTimes(1);
+});
+
+it.sequential('stops processing on double Escape while waiting for approval', async () => {
+  await renderHarness({ waitingForApproval: true });
+
+  await fireInput('', { escape: true });
+  await fireInput('', { escape: true });
+
+  expect(mocks.stopProcessing).toHaveBeenCalledTimes(1);
+});
+
+it.sequential('disarms the interrupt confirmation after the timeout window', async () => {
+  vi.useFakeTimers();
+  try {
+    await renderHarness({ isProcessing: true });
+
+    await fireInput('', { escape: true });
+    await act(async () => {
+      vi.advanceTimersByTime(2500);
+    });
+    await fireInput('', { escape: true });
+
+    expect(mocks.stopProcessing).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it.sequential('leaves Escape to the clear-input gesture while the composer has text', async () => {
+  await renderHarness({ isProcessing: true, inputValue: 'draft' });
+
+  await fireInput('', { escape: true });
+  await fireInput('', { escape: true });
+
+  expect(mocks.stopProcessing).not.toHaveBeenCalled();
 });
 
 it.sequential('does not stop processing on Escape while a slash-command menu is active', async () => {

@@ -43,6 +43,12 @@ type Options = {
   inputRevisionRef: MutableRefObject<number>;
   /** Return true when an InputBox-local surface consumed Escape. */
   onEscape?: () => boolean;
+  /**
+   * True while a turn is in flight. Clearing the buffer still wins whenever
+   * there is text to clear; only on an empty buffer does text-mode Escape defer
+   * to the app-level double-Escape interrupt confirmation.
+   */
+  turnInFlight?: boolean;
 };
 
 export const useEscapeKey = ({
@@ -58,20 +64,42 @@ export const useEscapeKey = ({
   dismissedCompletionRef,
   inputRevisionRef,
   onEscape,
+  turnInFlight = false,
 }: Options): { escHintVisible: boolean } => {
   const [escHintVisible, setEscHintVisible] = useState(false);
   const escTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onEscapeRef = useRef(onEscape);
   onEscapeRef.current = onEscape;
 
-  const stateRef = useRef({ mode, escHintVisible, value, settings, settingsValue, models, providerSelection });
-  stateRef.current = { mode, escHintVisible, value, settings, settingsValue, models, providerSelection };
+  const stateRef = useRef({
+    mode,
+    escHintVisible,
+    value,
+    settings,
+    settingsValue,
+    models,
+    providerSelection,
+    turnInFlight,
+  });
+  stateRef.current = { mode, escHintVisible, value, settings, settingsValue, models, providerSelection, turnInFlight };
 
   useEffect(() => {
     return () => {
       if (escTimeoutRef.current) clearTimeout(escTimeoutRef.current);
     };
   }, []);
+
+  // Drop a pending clear-hint once the buffer is empty mid-turn: Escape then
+  // belongs to the interrupt confirmation, so a stale hint would promise a
+  // clear that will not happen.
+  useEffect(() => {
+    if (!turnInFlight || value.length > 0) return;
+    if (escTimeoutRef.current) {
+      clearTimeout(escTimeoutRef.current);
+      escTimeoutRef.current = null;
+    }
+    setEscHintVisible(false);
+  }, [turnInFlight, value]);
 
   useInput((_input, key) => {
     if (!key.escape) return;
@@ -158,6 +186,13 @@ export const useEscapeKey = ({
       setMode('text');
       return;
     }
+
+    // With text in the buffer, double Escape clears it — that stays the
+    // meaning of the key even mid-turn. Only an already-empty buffer hands
+    // Escape to the app-level interrupt confirmation, so the two double-Escape
+    // gestures never fire off the same press. The predicate must stay
+    // byte-identical to the one in `use-app-keyboard-shortcuts.ts`.
+    if (stateRef.current.turnInFlight && currentValue.length === 0) return;
 
     // Text mode: double ESC clears.
     if (currentEscHintVisible) {

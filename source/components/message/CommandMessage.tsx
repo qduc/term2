@@ -138,6 +138,7 @@ const CommandMessage: FC<Props> = ({
   const formattedArgs = useMemo(() => {
     return toolArgs ? formatToolArgs(toolName, toolArgs, 'concise') : '';
   }, [toolName, toolArgs]);
+  const isBackgroundSubagentLaunch = toolName === 'run_subagent' && toolArgs?.execution === 'background';
 
   const displayAction = useMemo(() => {
     const isShell = !toolName || toolName === 'shell';
@@ -188,7 +189,7 @@ const CommandMessage: FC<Props> = ({
       case 'code_context_search':
         return renderAction('Searched context');
       case 'run_subagent':
-        return renderAction('Delegated');
+        return renderAction(isBackgroundSubagentLaunch ? 'Delegated async' : 'Delegated');
       case 'run_subagent_async':
         return renderAction('Delegated async');
       case 'get_subagent_result':
@@ -276,7 +277,7 @@ const CommandMessage: FC<Props> = ({
     }
     // Depend on the whole `toolArgs`, not `toolArgs?.runs`: the React Compiler infers the
     // former and refuses to preserve the memo when the declared deps are narrower.
-  }, [toolName, command, runtime, formattedArgs, toolArgs]);
+  }, [toolName, command, runtime, formattedArgs, toolArgs, isBackgroundSubagentLaunch]);
 
   const renderStandardHeader = () => {
     const headerColor = success === false ? COLOR_ERROR : isRunning ? COLOR_WARNING : COLOR_INFO;
@@ -537,6 +538,24 @@ const CommandMessage: FC<Props> = ({
     );
   }
 
+  if ((toolName === 'run_subagent_async' || isBackgroundSubagentLaunch) && success === false) {
+    let launchError = output;
+    try {
+      const parsed = JSON.parse(output);
+      launchError = parsed?.error?.message ?? parsed?.error ?? output;
+    } catch {
+      // The formatter may already have reduced the structured failure to text.
+    }
+    return (
+      <Box flexDirection="column">
+        {renderStandardHeader()}
+        <Box paddingLeft={2} marginTop={0.5}>
+          <Text color={COLOR_ERROR}>{launchError}</Text>
+        </Box>
+      </Box>
+    );
+  }
+
   // Standard mode custom tool renderers
   if (displayMode === 'standard' && success !== false && !failureReason && !isRunning) {
     if (toolName === 'read_file' || toolName === 'view_file') {
@@ -573,7 +592,7 @@ const CommandMessage: FC<Props> = ({
       }
     }
 
-    if (toolName === 'run_subagent' || toolName === 'get_subagent_result') {
+    if ((toolName === 'run_subagent' && !isBackgroundSubagentLaunch) || toolName === 'get_subagent_result') {
       const parsed = parseSubagentOutput(output, toolArgs) as any;
       if (parsed) {
         const { role: _role, status, toolsUsed, filesChanged, mainText } = parsed;
@@ -605,7 +624,7 @@ const CommandMessage: FC<Props> = ({
       }
     }
 
-    if (toolName === 'run_subagent_async') {
+    if (toolName === 'run_subagent_async' || isBackgroundSubagentLaunch) {
       let runId: string | undefined;
       try {
         const parsed = JSON.parse(output);

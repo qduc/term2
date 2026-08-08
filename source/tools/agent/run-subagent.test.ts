@@ -1,6 +1,8 @@
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
+import { z } from 'zod';
 import { createRunSubagentToolDefinition, getSubagentsRolesSection } from './run-subagent.js';
 import type { SubagentResult } from '../../services/subagents/types.js';
+import { toOpenAIStrictToolSchema } from '../../lib/openai-strict-tool-schema.js';
 
 function makeResult(overrides: Partial<SubagentResult> = {}): SubagentResult {
   return {
@@ -22,6 +24,133 @@ it('createRunSubagentToolDefinition defines the tool correctly', () => {
   expect(tool.needsApproval({ role: 'explorer', task: 'test' }, undefined)).toBe(false);
 });
 
+it('requires an explicit execution mode and dispatches foreground work to the nested runner', async () => {
+  const foreground = vi.fn(async () => makeResult({ finalText: 'Foreground result.' }));
+  const background = vi.fn(async () => ({
+    runId: 'run-background',
+    role: 'explorer' as const,
+    task: 'inspect',
+    status: 'running' as const,
+  }));
+  const tool = createRunSubagentToolDefinition({ runSubagent: foreground, runSubagentAsync: background });
+
+  expect(tool.parameters.safeParse({ role: 'explorer', task: 'inspect' }).success).toBe(false);
+  expect(tool.parameters.safeParse({ execution: 'foreground', role: 'explorer', task: 'inspect' }).success).toBe(true);
+
+  await expect(tool.execute({ execution: 'foreground', role: 'explorer', task: 'inspect' })).resolves.toContain(
+    'Foreground result.',
+  );
+  expect(foreground).toHaveBeenCalledWith({ role: 'explorer', task: 'inspect' }, undefined, undefined);
+  expect(background).not.toHaveBeenCalled();
+});
+
+it('dispatches background work to the registry callback and returns its running handle', async () => {
+  const foreground = vi.fn(async () => makeResult());
+  const background = vi.fn(async () => ({
+    runId: 'run-background',
+    role: 'mentor' as const,
+    task: 'pressure-test',
+    name: 'review',
+    status: 'running' as const,
+  }));
+  const tool = createRunSubagentToolDefinition({ runSubagent: foreground, runSubagentAsync: background });
+
+  const raw = await tool.execute({
+    execution: 'background',
+    role: 'mentor',
+    task: 'pressure-test',
+    name: 'review',
+  });
+
+  expect(raw).toBe(
+    JSON.stringify({
+      runId: 'run-background',
+      status: 'running',
+      name: 'review',
+      hint: 'Background run launched — do NOT call get_subagent_result now. End your turn; the completion notification will inline the full result.',
+    }),
+  );
+  expect(background).toHaveBeenCalledWith(
+    { role: 'mentor', task: 'pressure-test', name: 'review', continue_run_id: undefined },
+    undefined,
+    undefined,
+  );
+  expect(foreground).not.toHaveBeenCalled();
+});
+
+it('does not advertise background execution when the registry callbacks are unavailable', () => {
+  const tool = createRunSubagentToolDefinition({ runSubagent: async () => makeResult() });
+
+  expect(tool.parameters.safeParse({ execution: 'foreground', role: 'explorer', task: 'inspect' }).success).toBe(true);
+  expect(tool.parameters.safeParse({ execution: 'background', role: 'explorer', task: 'inspect' }).success).toBe(false);
+});
+
+it('does not allow foreground calls to smuggle background-only inputs', async () => {
+  const foreground = vi.fn(async () => makeResult());
+  const tool = createRunSubagentToolDefinition({
+    runSubagent: foreground,
+    runSubagentAsync: async () => ({
+      runId: 'run-background',
+      role: 'explorer',
+      task: 'inspect',
+      status: 'running',
+    }),
+  });
+
+  await expect(
+    tool.execute({ execution: 'foreground', role: 'explorer', task: 'inspect', name: 'not-allowed' }),
+  ).resolves.toContain('Background-only inputs');
+  expect(foreground).not.toHaveBeenCalled();
+});
+
+it('treats strict-provider null background fields as absent for foreground execution', async () => {
+  const foreground = vi.fn(async () => makeResult({ finalText: 'Foreground result.' }));
+  const tool = createRunSubagentToolDefinition({
+    runSubagent: foreground,
+    runSubagentAsync: async () => ({
+      runId: 'unused',
+      role: 'explorer',
+      task: 'inspect',
+      status: 'running',
+    }),
+  });
+
+  await expect(
+    tool.execute({
+      execution: 'foreground',
+      role: 'explorer',
+      task: 'inspect',
+      name: null,
+      continue_run_id: null,
+    }),
+  ).resolves.toContain('Foreground result.');
+  expect(foreground).toHaveBeenCalledOnce();
+});
+
+it('keeps the foreground interruption result model-visible', async () => {
+  const tool = createRunSubagentToolDefinition({
+    runSubagent: async () => ({ ...makeResult(), status: 'interrupted', interrupted: true }),
+  });
+
+  await expect(tool.execute({ execution: 'foreground', role: 'explorer', task: 'inspect' })).resolves.toContain(
+    'Status: interrupted',
+  );
+});
+
+it('uses a provider-compatible object schema instead of a discriminated union', () => {
+  const tool = createRunSubagentToolDefinition({
+    runSubagent: async () => makeResult(),
+    runSubagentAsync: async () => ({ runId: 'run-1', role: 'explorer', task: 'inspect', status: 'running' }),
+  });
+
+  const schema = z.toJSONSchema(toOpenAIStrictToolSchema(tool.parameters)) as {
+    anyOf?: unknown;
+    required?: string[];
+  };
+  expect(schema.anyOf).toBeUndefined();
+  expect(schema.required).toContain('execution');
+});
+
 it('describes task-specific context without requesting automatically supplied context', () => {
   const tool = createRunSubagentToolDefinition(async () => makeResult());
 
@@ -34,19 +163,21 @@ it('describes task-specific context without requesting automatically supplied co
 it('schema requires role and task', () => {
   const tool = createRunSubagentToolDefinition(async () => makeResult());
 
-  expect(tool.parameters.safeParse({ role: 'explorer', task: 'find files' }).success).toBe(true);
-  expect(tool.parameters.safeParse({ role: 'explorer' }).success).toBe(false);
-  expect(tool.parameters.safeParse({ task: 'find files' }).success).toBe(false);
+  expect(tool.parameters.safeParse({ execution: 'foreground', role: 'explorer', task: 'find files' }).success).toBe(
+    true,
+  );
+  expect(tool.parameters.safeParse({ execution: 'foreground', role: 'explorer' }).success).toBe(false);
+  expect(tool.parameters.safeParse({ execution: 'foreground', task: 'find files' }).success).toBe(false);
 });
 
 it('schema accepts delegatable roles but hides mentor behind ask_mentor', () => {
   const tool = createRunSubagentToolDefinition(async () => makeResult());
 
   for (const role of ['explorer', 'worker', 'librarian']) {
-    expect(tool.parameters.safeParse({ role, task: 'do work' }).success).toBe(true);
+    expect(tool.parameters.safeParse({ execution: 'foreground', role, task: 'do work' }).success).toBe(true);
   }
-  expect(tool.parameters.safeParse({ role: 'mentor', task: 'do work' }).success).toBe(false);
-  expect(tool.parameters.safeParse({ role: 'custom', task: 'do work' }).success).toBe(false);
+  expect(tool.parameters.safeParse({ execution: 'foreground', role: 'mentor', task: 'do work' }).success).toBe(false);
+  expect(tool.parameters.safeParse({ execution: 'foreground', role: 'custom', task: 'do work' }).success).toBe(false);
 });
 
 it('execute returns plain-text SubagentResult', async () => {
@@ -127,6 +258,27 @@ it('formatCommandMessage renders completed result', () => {
   expect(messages[0].command.includes('find files')).toBe(true);
   expect(messages[0].output.includes('Found 3 relevant files.')).toBe(true);
   expect(messages[0].success ?? true).toBe(true);
+});
+
+it('formatCommandMessage marks a rejected background launch as failed', () => {
+  const tool = createRunSubagentToolDefinition({
+    runSubagentAsync: async () => ({ runId: 'unused', role: 'explorer', task: 'inspect', status: 'running' }),
+  });
+  const item = {
+    rawItem: {
+      arguments: JSON.stringify({ execution: 'background', role: 'explorer', task: 'inspect' }),
+      output: JSON.stringify({
+        status: 'failed',
+        error: { code: 'name_in_use', message: 'Async subagent name is already active: review' },
+      }),
+    },
+  };
+
+  const [message] = tool.formatCommandMessage(item, 0, new Map());
+
+  expect(message.success).toBe(false);
+  expect(message.command).toContain('failed');
+  expect(message.output).toContain('Async subagent name is already active: review');
 });
 
 it('formatCommandMessage truncates long task in command', () => {

@@ -188,6 +188,11 @@ export class SubagentAsyncRegistry {
         );
       if (isActiveStatus(previous.status))
         throw new SubagentRegistryError('already_active', `Async subagent run ${continuation} is already active`);
+      if (previous.status !== 'completed')
+        throw new SubagentRegistryError(
+          'not_continuable',
+          `Async subagent run ${continuation} cannot be continued from status ${previous.status}`,
+        );
       if (role === 'worker')
         throw new SubagentRegistryError('worker_blocked', 'Worker runs cannot be continued asynchronously');
       if (role !== 'mentor' && role !== 'librarian' && role !== 'explorer') {
@@ -253,7 +258,7 @@ export class SubagentAsyncRegistry {
       ...(name !== undefined ? { name } : {}),
       role,
       task: request.task,
-      parentTool: request.parentTool ?? 'run_subagent_async',
+      parentTool: request.parentTool ?? 'run_subagent',
       async: true,
     });
     this.#startSegment(stored, request, request.task);

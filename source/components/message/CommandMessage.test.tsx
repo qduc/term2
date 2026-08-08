@@ -1108,6 +1108,63 @@ it('CommandMessage renders subagent card in standard mode', async () => {
   expect(output.includes('Subagent finished successfully!')).toBe(true);
 });
 
+it('CommandMessage renders a unified background launch with its run id', async () => {
+  const { lastFrame } = await renderInAct(
+    <CommandMessage
+      command="run_subagent"
+      toolName="run_subagent"
+      toolArgs={{ execution: 'background', role: 'worker', task: 'some task' }}
+      status="completed"
+      success={true}
+      displayMode="standard"
+      output={'{"runId":"background-1","status":"running"}'}
+    />,
+  );
+  const output = stripAnsi(lastFrame() ?? '');
+
+  expect(output).toContain('Delegated async');
+  expect(output).toContain('RunId: background-1');
+});
+
+it('CommandMessage renders a rejected unified background launch as an error rather than a run id', async () => {
+  const { lastFrame } = await renderInAct(
+    <CommandMessage
+      command="run_subagent [background:explorer] inspect — failed"
+      toolName="run_subagent"
+      toolArgs={{ execution: 'background', role: 'explorer', task: 'inspect' }}
+      status="failed"
+      success={false}
+      displayMode="standard"
+      output={JSON.stringify({
+        status: 'failed',
+        error: { code: 'name_in_use', message: 'Async subagent name is already active: review' },
+      })}
+    />,
+  );
+  const output = stripAnsi(lastFrame() ?? '');
+
+  expect(output).toContain('Async subagent name is already active: review');
+  expect(output).not.toContain('RunId:');
+});
+
+it('CommandMessage continues to render a legacy asynchronous launch with its run id', async () => {
+  const { lastFrame } = await renderInAct(
+    <CommandMessage
+      command="run_subagent_async"
+      toolName="run_subagent_async"
+      toolArgs={{ role: 'worker', task: 'some task' }}
+      status="completed"
+      success={true}
+      displayMode="standard"
+      output={'{"runId":"legacy-background-1","status":"running"}'}
+    />,
+  );
+  const output = stripAnsi(lastFrame() ?? '');
+
+  expect(output).toContain('Delegated async');
+  expect(output).toContain('RunId: legacy-background-1');
+});
+
 it('CommandMessage renders web_search dashboard in standard mode', async () => {
   const props = {
     command: 'web_search',

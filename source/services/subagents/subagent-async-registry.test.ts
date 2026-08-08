@@ -48,6 +48,24 @@ it('returns the exact running launch handle and executes with its owned session'
   expect(session).toBeTruthy();
 });
 
+it('labels background lifecycle events with the unified public tool name by default', () => {
+  const events: ConversationEvent[] = [];
+  const registry = new SubagentAsyncRegistry({
+    logger: createMockLogger(),
+    run: () => new Promise<SubagentResult>(() => undefined),
+    onEvent: (event) => events.push(event),
+  });
+
+  registry.startRun({ role: 'explorer', task: 'inspect' });
+
+  expect(events[0]).toMatchObject({
+    type: 'subagent_started',
+    parentTool: 'run_subagent',
+    async: true,
+  });
+  registry.dispose();
+});
+
 it('returns an active name in the handle and status snapshot', async () => {
   const registry = make(() => new Promise<SubagentResult>(() => undefined));
 
@@ -264,6 +282,17 @@ it('returns terminal failures and cancellations instead of rejecting', async () 
   const cancelledRun = cancelled.startRun({ role: 'explorer', task: 'cancel' });
   cancelled.abortRun(cancelledRun.runId);
   await expect(cancelled.getResult(cancelledRun.runId)).resolves.toMatchObject({ status: 'cancelled' });
+});
+
+it.each(['failed', 'cancelled'] as const)('rejects continuation of a %s run', async (status) => {
+  const registry = make(async ({ request }) => result(request.role, status));
+  const run = registry.startRun({ role: 'explorer', task: 'first' });
+  await registry.getResult(run.runId);
+
+  expect(() => registry.startRun({ role: 'explorer', task: 'continue', continueRunId: run.runId })).toThrowError(
+    expect.objectContaining({ code: 'not_continuable' }),
+  );
+  registry.dispose();
 });
 
 it('evicts terminal runs from an injected clock and refreshes TTL on access', async () => {

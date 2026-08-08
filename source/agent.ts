@@ -12,9 +12,8 @@ import {
 import type { BackgroundShellRegistry } from './services/shell/background-shell-registry.js';
 import { createAskMentorToolDefinition } from './tools/agent/ask-mentor.js';
 import { createAskUserToolDefinition } from './tools/agent/ask-user.js';
-import { createRunSubagentToolDefinition } from './tools/agent/run-subagent.js';
+import { createRunSubagentToolDefinition, type ForegroundRunSubagentParams } from './tools/agent/run-subagent.js';
 import {
-  createRunSubagentAsyncToolDefinition,
   createGetSubagentResultToolDefinition,
   createGetSubagentStatusToolDefinition,
   createSendMessageToolDefinition,
@@ -30,8 +29,12 @@ import {
 import { registerToolFormatters } from './tools/command-message-formatters.js';
 import { TOOL_NAME_ASK_USER } from './tools/tool-names.js';
 import type { AnyToolDefinition, ToolRegistry } from './tools/types.js';
-import type { SubagentResult, SubagentRunHandle, SubagentRunStatus } from './services/subagents/types.js';
-import type { RunSubagentParams } from './tools/agent/run-subagent.js';
+import type {
+  NestedSubagentResult,
+  SubagentResult,
+  SubagentRunHandle,
+  SubagentRunStatus,
+} from './services/subagents/types.js';
 import type {
   CancelRunParams,
   GetSubagentResultParams,
@@ -136,9 +139,9 @@ export interface AgentDefinition {
   model: string;
 }
 
-type SubagentResultLike = Pick<SubagentResult, 'finalText'> & Partial<SubagentResult>;
+type SubagentResultLike = Pick<SubagentResult, 'finalText'> & Partial<NestedSubagentResult>;
 
-function toSubagentResult(result: SubagentResultLike, role: RunSubagentParams['role']): SubagentResult {
+function toSubagentResult(result: SubagentResultLike, role: ForegroundRunSubagentParams['role']): NestedSubagentResult {
   return {
     agentId: result.agentId ?? 'unknown',
     role: result.role ?? role,
@@ -153,6 +156,7 @@ function toSubagentResult(result: SubagentResultLike, role: RunSubagentParams['r
     nestedRunResult: result.nestedRunResult,
     diffStat: result.diffStat,
     validation: result.validation,
+    interrupted: result.interrupted,
   };
 }
 
@@ -182,7 +186,11 @@ export const getAgentDefinition = (
     loggingService: ILoggingService;
     executionContext?: ExecutionContext;
     askMentor?: (question: string) => Promise<string>;
-    runSubagent?: (params: RunSubagentParams, context?: unknown, details?: unknown) => Promise<SubagentResultLike>;
+    runSubagent?: (
+      params: ForegroundRunSubagentParams,
+      context?: unknown,
+      details?: unknown,
+    ) => Promise<SubagentResultLike>;
     runSubagentAsync?: (
       params: RunSubagentAsyncParams,
       context?: unknown,
@@ -266,7 +274,8 @@ export const getAgentDefinition = (
     planMode,
     searchViaShell,
     codeContextEnabled,
-    runSubagentEnabled: orchestratorMode ? asyncSubagentEnabled : Boolean(runSubagent),
+    runSubagentEnabled: Boolean(runSubagent) || asyncSubagentEnabled,
+    runSubagentForegroundEnabled: Boolean(runSubagent),
     runSubagentAsyncEnabled: asyncSubagentEnabled,
     asyncSubagentControlsEnabled: asyncSubagentEnabled,
     sandboxEnabled,
@@ -319,7 +328,7 @@ export const getAgentDefinition = (
       );
     }
     const tools: AnyToolDefinition[] = [
-      createRunSubagentAsyncToolDefinition(runSubagentAsync),
+      createRunSubagentToolDefinition({ runSubagentAsync }),
       createGetSubagentResultToolDefinition(getSubagentResult),
       ...(getSubagentStatus ? [createGetSubagentStatusToolDefinition(getSubagentStatus)] : []),
       createSendMessageToolDefinition(sendSubagentMessage),
@@ -477,12 +486,17 @@ export const getAgentDefinition = (
       tools.push(createAskMentorToolDefinition(askMentor));
     }
 
-    // Add run_subagent tool (not in lite mode)
-    if (runSubagent) {
+    // One model-facing delegation tool selects the existing foreground nested
+    // runner or background registry callback; lifecycle ownership stays split.
+    if (runSubagent || asyncSubagentEnabled) {
       tools.push(
-        createRunSubagentToolDefinition(async (params, context, details) =>
-          toSubagentResult(await runSubagent(params, context, details), params.role),
-        ),
+        createRunSubagentToolDefinition({
+          runSubagent: runSubagent
+            ? async (params, context, details) =>
+                toSubagentResult(await runSubagent(params, context, details), params.role)
+            : undefined,
+          runSubagentAsync: asyncSubagentEnabled ? runSubagentAsync : undefined,
+        }),
       );
     }
 
@@ -490,10 +504,7 @@ export const getAgentDefinition = (
     // `asyncSubagentEnabled` spelled out so the callbacks narrow: registering any
     // of these without the rest would advertise delegation the prompt never explains.
     if (runSubagentAsync && getSubagentResult && sendSubagentMessage && cancelSubagentRun) {
-      tools.push(
-        createRunSubagentAsyncToolDefinition(runSubagentAsync),
-        createGetSubagentResultToolDefinition(getSubagentResult),
-      );
+      tools.push(createGetSubagentResultToolDefinition(getSubagentResult));
       if (getSubagentStatus) {
         tools.push(createGetSubagentStatusToolDefinition(getSubagentStatus));
       }

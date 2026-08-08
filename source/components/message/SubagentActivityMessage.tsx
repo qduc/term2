@@ -13,6 +13,7 @@ type Props = {
     task?: string;
     status?: string;
     async?: boolean;
+    parentTool?: string;
     tools?: SubagentToolEntry[];
     finalText?: string;
     error?: string;
@@ -30,10 +31,19 @@ const truncate = (value: string, maxLength: number) => {
   return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
 };
 
-const buildTitle = (role: string | undefined, task: string | undefined, async: boolean | undefined): string => {
+const buildTitle = (
+  role: string | undefined,
+  task: string | undefined,
+  async: boolean | undefined,
+  parentTool: string | undefined,
+): string => {
   const roleLabel = role ? `[${role}]` : '';
   const taskPreview = truncate(getFirstParagraph(task, 200).replace(/\s+/g, ' '), MAX_TASK_LENGTH);
-  return [async ? 'run_subagent_async' : 'run_subagent', roleLabel, taskPreview].filter(Boolean).join(' ');
+  // Old logs did not retain parentTool. Their async entries originated from the
+  // retired public tool, so preserve that title while new background runs use
+  // the unified name recorded by the logger.
+  const toolName = parentTool ?? (async ? 'run_subagent_async' : 'run_subagent');
+  return [toolName, roleLabel, taskPreview].filter(Boolean).join(' ');
 };
 
 const formatSubagentStringTool = (tool: string, activityStatus?: string): string => {
@@ -65,7 +75,7 @@ const formatSubagentStringTool = (tool: string, activityStatus?: string): string
 
 const SubagentActivityMessage: FC<Props> = ({ msg }) => {
   const tools = Array.isArray(msg.tools) ? msg.tools.slice(-3) : [];
-  const title = buildTitle(msg.role, msg.task, msg.async);
+  const title = buildTitle(msg.role, msg.task, msg.async, msg.parentTool);
   const statusSuffix =
     msg.status && msg.status !== 'running'
       ? msg.status === 'failed' && msg.error

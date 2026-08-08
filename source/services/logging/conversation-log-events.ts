@@ -170,6 +170,8 @@ export interface SubagentStartedLogEvent {
   agentId: string;
   role: string;
   task: string;
+  /** Original public delegation tool, retained only for transcript compatibility. */
+  parentTool?: string;
   async?: boolean;
 }
 

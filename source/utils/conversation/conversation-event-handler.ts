@@ -68,14 +68,17 @@ export function createConversationEventHandler(
 
   const activeRunningToolCallIds = new Set<string>();
   const pendingSubagentToolCalls = new Map<string, { role?: string; task?: string; [key: string]: unknown }>();
+  const foregroundSubagentToolCallIds = new Set<string>();
 
-  // Only the synchronous delegation tool: its call is rendered by
-  // SubagentActivityMessage, so a CommandMessage would duplicate it. Background
-  // runs (run_subagent_async) route their lifecycle to the background sink and
-  // never produce a SubagentActivityMessage here, so their tool call must be
-  // rendered as an ordinary CommandMessage.
-  const isSubagentDelegationTool = (toolName: string | undefined): boolean => {
-    return toolName === 'run_subagent';
+  // Foreground delegation is rendered by SubagentActivityMessage, so its
+  // CommandMessage would duplicate the activity row. Background delegation is
+  // an ordinary command message; its lifecycle is independently routed using
+  // the event's `async` metadata.
+  const isForegroundSubagentDelegationTool = (toolName: string | undefined, args?: unknown): boolean => {
+    return (
+      toolName === 'run_subagent' &&
+      (!args || typeof args !== 'object' || (args as Record<string, unknown>).execution !== 'background')
+    );
   };
 
   const markCurrentReasoningFinalized = () => {
@@ -262,7 +265,8 @@ export function createConversationEventHandler(
       case 'tool_started': {
         const { toolCallId, toolName, arguments: rawArgs } = event;
 
-        if (isSubagentDelegationTool(toolName)) {
+        const args = parseToolArguments(rawArgs);
+        if (isForegroundSubagentDelegationTool(toolName, args)) {
           // Flush reasoning state
           flushReasoning();
 
@@ -271,8 +275,8 @@ export function createConversationEventHandler(
           resetBotTextTracking();
           botResponseUpdater.cancel();
 
-          const args = parseToolArguments(rawArgs);
           if (toolCallId) {
+            foregroundSubagentToolCallIds.add(toolCallId);
             pendingSubagentToolCalls.set(toolCallId, args as { role?: string; task?: string; [key: string]: unknown });
           }
           return;
@@ -288,7 +292,6 @@ export function createConversationEventHandler(
 
         // Emit a "pending" command message when tool starts running
         // tool_started.arguments may be either an object or a JSON string
-        const args = parseToolArguments(rawArgs);
         const command = formatToolCommand(toolName, args as Record<string, unknown>);
 
         const pendingMessage: CommandMessage = {
@@ -316,13 +319,18 @@ export function createConversationEventHandler(
 
       case 'command_message': {
         const cmdMsg = event.message;
-        if (cmdMsg.callId) {
-          activeRunningToolCallIds.delete(cmdMsg.callId);
-        }
+        const hadPendingCommand = cmdMsg.callId !== undefined && activeRunningToolCallIds.delete(cmdMsg.callId);
 
-        // run_subagent is displayed via SubagentActivityMessage; skip the
-        // command_message so we don't create a duplicate CommandMessage.
-        if (isSubagentDelegationTool(cmdMsg.toolName)) {
+        const wasForegroundSubagent =
+          cmdMsg.callId !== undefined && foregroundSubagentToolCallIds.delete(cmdMsg.callId);
+        // Foreground run_subagent is displayed via SubagentActivityMessage;
+        // skip its completion so we do not create a duplicate CommandMessage.
+        // Calls from legacy records without a preceding tool_started are also
+        // foreground unless their arguments explicitly choose background.
+        if (
+          wasForegroundSubagent ||
+          (!hadPendingCommand && isForegroundSubagentDelegationTool(cmdMsg.toolName, cmdMsg.toolArgs))
+        ) {
           return;
         }
 
@@ -396,6 +404,7 @@ export function createConversationEventHandler(
           agentId: event.agentId,
           role: event.role,
           task: event.task,
+          ...(event.parentTool !== undefined ? { parentTool: event.parentTool } : {}),
           async: event.async,
           tools: [],
         };

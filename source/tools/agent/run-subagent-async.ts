@@ -30,7 +30,7 @@ const runSubagentAsyncSchema = z.object({
 });
 
 const getSubagentResultSchema = z.object({
-  runId: z.string().describe('The runId returned by run_subagent_async.'),
+  runId: z.string().describe('The runId returned by run_subagent with execution: "background".'),
 });
 
 const getSubagentStatusSchema = z.object({
@@ -154,6 +154,7 @@ export const formatGetSubagentResultCommandMessage: FormatCommandMessage = (item
   ];
 };
 
+/** @deprecated Historical compatibility only. New agents register the unified run_subagent tool. */
 export function createRunSubagentAsyncToolDefinition(
   runSubagentAsync: (
     params: RunSubagentAsyncParams,
@@ -206,8 +207,8 @@ export function createGetSubagentResultToolDefinition(
   return {
     name: 'get_subagent_result',
     description:
-      'Retrieve the final result of an asynchronous subagent run started with run_subagent_async. ' +
-      'Provide the runId returned by run_subagent_async. This call BLOCKS until the run completes. ' +
+      'Retrieve the final result of a background subagent run started with run_subagent using execution: "background". ' +
+      'Provide the runId returned by that background launch. This call BLOCKS until the run completes. ' +
       'Do not call it immediately after launching a subagent — that defeats async and freezes you out of doing other work. ' +
       'The completion notification already inlines the full result, so you normally will not need this tool at all; use it only if you need to re-fetch a result you already saw.',
     parameters: getSubagentResultSchema,

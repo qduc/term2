@@ -162,7 +162,7 @@ export interface SubagentStartedEvent {
   role: string;
   task: string;
   parentTool?: string;
-  /** True when this run was started via `run_subagent_async` and is still live. */
+  /** True when this run is background-owned; routing must use this rather than parentTool. */
   async?: boolean;
 }
 
@@ -201,7 +201,7 @@ export interface SubagentCommandMessageEvent {
 export interface SubagentCompletedEvent {
   type: 'subagent_completed';
   result: SubagentResult;
-  /** True when this completion finishes an async run started by `run_subagent_async`. */
+  /** True when this completion finishes a background-owned run. */
   async?: boolean;
 }
 

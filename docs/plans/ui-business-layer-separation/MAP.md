@@ -28,10 +28,10 @@ revertible milestones.
 - **Pending interaction authority** — Merged at `a8463d3c`; session-owned snapshots and interaction IDs own approval and `ask_user` progression, while React keeps only composer-entry state.
 - **Shell interaction ownership** — Merged at `d07a1149`; a non-React shell session owns eligibility, execution history, and deferred flush after in-flight commands.
 - **Rewind target ownership** — Merged at `00dd5292`; the conversation store issues opaque snapshot-scoped targets and accepts or rejects rewinds atomically, while Ink retains only post-success projection trimming and visible numbering.
+- **Submission authority** — No new extraction is warranted. The run loop already owns pending steers, `QueueController` owns queued state, `ConversationAdapter` owns ID routing and executable payloads, and the orchestrator/Ink state are projections. Add a read-only snapshot only if a second non-Ink surface later needs in-flight submission display.
 
 ## Open
 
-- **Submission authority** [research] — Unify guard confirmation, pending steer, queued, admitted, edited, and removed stages without duplicating the queue controller.
 - **Settings transaction** [research] — Define atomic apply/reset results and runtime side effects after menu Phase 5 removes the remaining direct `InputBox` mutation path.
 - **Handoff effects** [research] — Separate the handoff state machine from MenuController timing while preserving correlated intent ordering.
 - **Provider and model sessions** [research] — Move persistence, validation, credentials, catalog caching, and traversal policy while retaining list selection and scrolling in Ink.
@@ -58,3 +58,4 @@ revertible milestones.
 - 2026-08-08: Review found closing Shell during slow commands stranded their output outside model context. Close now defers one complete flush until every accepted execution settles.
 - 2026-08-08: Review found the rewind migration had dropped foreground abort and introduced command-to-hook type coupling. Abort now occurs only after the domain accepts a target, and the shared selection DTO lives outside React.
 - 2026-08-08: Review found capped UI history made store-global rewind ordinals disagree with slash-command ranges and picker labels. Both command selection and rendering now use visible 1-based positions while execution keeps the opaque domain target.
+- 2026-08-08: Submission lifecycle research found the planned boundary already exists and `queue-editing.md` had stale completion text. A new tracker would mirror the run loop, queue controller, and adapter rather than deepen their interfaces.

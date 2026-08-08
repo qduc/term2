@@ -2,13 +2,15 @@
 
 ## Resume here
 
-**Steps 1–3 (`## Build order`) are done and merged to `main`**: Steps 1–2 are
-`ccc02324` / `b5f31095`, and the re-derived Step 3 is merge commit `f1eebcc5`
-(implementation `19a3f22d`). Step 4 is still design-only. Read `## The three stages` before
-touching `ConversationOrchestrator`, `ConversationService`, or the
-`pendingQueuedMessages` reducer slice — the substrate below only closes the gap
-between the run loop and the adapter; the UI still addresses queued work by
-position until Step 3 wires it through.
+**Steps 1–4 (`## Build order`) are done and merged to `main`**: Steps 1–2 are
+`ccc02324` / `b5f31095`, the re-derived Step 3 is merge commit `f1eebcc5`
+(implementation `19a3f22d`), and Step 4's inline ID-addressed editor is
+`061427c8` (all steps are included by `a7a0d677`). Read `## The three stages`
+before touching `ConversationOrchestrator`, `ConversationService`,
+`ConversationAdapter`, `QueueController`, `PendingQueueList`, or the
+`pendingQueuedMessages` reducer slice: the run loop owns pending steers, the
+queue controller owns queued state, the adapter routes the shared submission
+ID and executable payload, and Ink owns only projection and editing UI.
 
 Interaction surface was chosen by the user: **inline selectable list above the
 input box**, entered by ↑ on an empty input. Not a modal. See `## Rejected`.

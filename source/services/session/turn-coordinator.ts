@@ -88,9 +88,11 @@ export class TurnCoordinator {
   async *continueAfterApproval({
     answer,
     rejectionReason,
+    stopAfterApprovalResolution,
   }: {
     answer: string;
     rejectionReason?: string;
+    stopAfterApprovalResolution?: boolean;
   }): AsyncIterable<ConversationEvent> {
     if (!this.deps.statusMachine.is('awaiting_approval')) {
       throw new Error('No pending approval to continue.');
@@ -102,7 +104,7 @@ export class TurnCoordinator {
     try {
       const turnOutcome = yield* this.#forwardOwned(
         this.deps.turnWorkflow.executeContinuation(
-          this.deps.approvalFlow.buildApprovalDecision(answer, rejectionReason),
+          this.deps.approvalFlow.buildApprovalDecision(answer, rejectionReason, stopAfterApprovalResolution),
         ),
         lease,
       );

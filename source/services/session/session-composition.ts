@@ -241,7 +241,11 @@ export type SessionRuntime = {
   sessionStartedAt: string;
   turns: {
     start: (input: string | UserTurn, options?: TurnStartOptions) => AsyncIterable<ConversationEvent>;
-    continueAfterApproval: (options: { answer: string; rejectionReason?: string }) => AsyncIterable<ConversationEvent>;
+    continueAfterApproval: (options: {
+      answer: string;
+      rejectionReason?: string;
+      stopAfterApprovalResolution?: boolean;
+    }) => AsyncIterable<ConversationEvent>;
     continueAfterPostExecuteApproval: () => AsyncIterable<ConversationEvent>;
     abort: () => void;
     steer: (items: readonly ProviderInputItem[], options?: { id?: string }) => Promise<SteerOutcome>;

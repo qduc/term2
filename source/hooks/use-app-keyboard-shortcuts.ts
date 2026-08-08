@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useInput } from 'ink';
 import type { MutableRefObject } from 'react';
 import type { InputMode } from '../context/InputContext.js';
@@ -10,6 +10,18 @@ type HandoffState = {
   stage: string;
 } | null;
 
+/**
+ * How long the "press Escape again to interrupt" confirmation stays armed.
+ * Matches the double-Escape window used to clear the input buffer
+ * (`use-escape-key.ts`) so both gestures feel the same.
+ */
+const INTERRUPT_CONFIRM_TIMEOUT_MS = 2000;
+
+export type UseAppKeyboardShortcutsResult = {
+  /** True while a second Escape would interrupt the in-flight turn. */
+  interruptConfirmVisible: boolean;
+};
+
 export type UseAppKeyboardShortcutsOptions = {
   exitWithUsage: () => void;
   pendingSkillRef: MutableRefObject<SkillInfo | null>;
@@ -18,6 +30,12 @@ export type UseAppKeyboardShortcutsOptions = {
   waitingForRejectionReason: boolean;
   setWaitingForRejectionReason: (value: boolean) => void;
   inputMode: InputMode;
+  /**
+   * Current composer text. Escape clears a non-empty buffer (handled by
+   * `use-escape-key.ts`), so the interrupt confirmation only claims Escape when
+   * this is empty. The emptiness predicate must match that hook's exactly.
+   */
+  inputValue: string;
   isProcessing: boolean;
   waitingForApproval: boolean;
   stopProcessing: () => void;
@@ -45,6 +63,7 @@ export const useAppKeyboardShortcuts = ({
   waitingForRejectionReason,
   setWaitingForRejectionReason,
   inputMode,
+  inputValue,
   isProcessing,
   waitingForApproval,
   stopProcessing,
@@ -57,7 +76,24 @@ export const useAppKeyboardShortcuts = ({
   replaceInput,
   onSkillActivationCancelled,
   inputOwner,
-}: UseAppKeyboardShortcutsOptions): void => {
+}: UseAppKeyboardShortcutsOptions): UseAppKeyboardShortcutsResult => {
+  // `armedRef` — not the state below — is what the key handler reads. A user can
+  // press Escape twice faster than React commits a render, so the confirmation
+  // must not depend on the re-render landing between the two presses. The state
+  // exists only to show the hint.
+  const armedRef = useRef(false);
+  const [interruptConfirmVisible, setInterruptConfirmVisible] = useState(false);
+  const interruptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const disarmInterrupt = (): void => {
+    armedRef.current = false;
+    if (interruptTimeoutRef.current) {
+      clearTimeout(interruptTimeoutRef.current);
+      interruptTimeoutRef.current = null;
+    }
+    setInterruptConfirmVisible(false);
+  };
+
   const stateRef = useRef({
     pendingSkillRef,
     waitingForAskUserAnswer,
@@ -65,6 +101,7 @@ export const useAppKeyboardShortcuts = ({
     waitingForRejectionReason,
     setWaitingForRejectionReason,
     inputMode,
+    inputValue,
     isProcessing,
     waitingForApproval,
     stopProcessing,
@@ -86,6 +123,7 @@ export const useAppKeyboardShortcuts = ({
     waitingForRejectionReason,
     setWaitingForRejectionReason,
     inputMode,
+    inputValue,
     isProcessing,
     waitingForApproval,
     stopProcessing,
@@ -145,8 +183,30 @@ export const useAppKeyboardShortcuts = ({
           return;
         }
 
-        if (current.inputMode === 'text' && (current.isProcessing || current.waitingForApproval)) {
-          current.stopProcessing();
+        if (
+          current.inputMode === 'text' &&
+          (current.isProcessing || current.waitingForApproval) &&
+          // A non-empty composer means Escape belongs to the clear-buffer
+          // gesture in `use-escape-key.ts`; interrupting only claims Escape once
+          // there is nothing left to clear.
+          current.inputValue.length === 0
+        ) {
+          // Interrupting a turn throws away real work, and Escape is easy to hit
+          // by accident (stray key, leftover terminal escape sequence). Require a
+          // second Escape inside a short window to confirm.
+          if (armedRef.current) {
+            disarmInterrupt();
+            current.stopProcessing();
+            return;
+          }
+
+          armedRef.current = true;
+          setInterruptConfirmVisible(true);
+          if (interruptTimeoutRef.current) clearTimeout(interruptTimeoutRef.current);
+          interruptTimeoutRef.current = setTimeout(() => {
+            interruptTimeoutRef.current = null;
+            disarmInterrupt();
+          }, INTERRUPT_CONFIRM_TIMEOUT_MS);
           return;
         }
 
@@ -173,4 +233,22 @@ export const useAppKeyboardShortcuts = ({
     },
     { isActive: inputOwner.kind === 'input' },
   );
+
+  // Disarm as soon as the turn ends — or as soon as the user types, since
+  // Escape then means "clear the buffer" — so an armed confirmation can never
+  // be completed by a later, unrelated Escape.
+  useEffect(() => {
+    if ((!isProcessing && !waitingForApproval) || inputValue.length > 0) {
+      disarmInterrupt();
+    }
+  }, [isProcessing, waitingForApproval, inputValue]);
+
+  useEffect(
+    () => () => {
+      if (interruptTimeoutRef.current) clearTimeout(interruptTimeoutRef.current);
+    },
+    [],
+  );
+
+  return { interruptConfirmVisible };
 };

@@ -42,6 +42,12 @@ export type HandleApprovalDecisionOptions = {
   onCommandMessage?: (message: CommandMessage) => void;
   onEvent?: (event: ConversationEvent) => void;
   approvalAnswer?: string;
+  /**
+   * End the turn once this decision's tool result is recorded, without giving
+   * the model another turn. Cancelling an `ask_user` prompt uses this so the
+   * question and its unanswered result stay in history.
+   */
+  stopAfterApprovalResolution?: boolean;
 };
 
 export type TurnFlow = Pick<SessionRuntime['turns'], 'start' | 'continueAfterApproval'> & {
@@ -757,7 +763,14 @@ export class ConversationAdapter {
   async handleApprovalDecision(
     answer: string,
     rejectionReason?: string,
-    { onTextChunk, onReasoningChunk, onCommandMessage, onEvent, approvalAnswer }: HandleApprovalDecisionOptions = {},
+    {
+      onTextChunk,
+      onReasoningChunk,
+      onCommandMessage,
+      onEvent,
+      approvalAnswer,
+      stopAfterApprovalResolution,
+    }: HandleApprovalDecisionOptions = {},
   ): Promise<ConversationTerminal | null> {
     const postExecuteApproval = this.#postExecuteApproval;
     const pendingApproval = this.#approval.getPending();
@@ -850,7 +863,11 @@ export class ConversationAdapter {
           result = await this.#collectTerminalResult(
             postExecuteApproval
               ? this.#turnFlow.continueAfterPostExecuteApproval!()
-              : this.#turnFlow.continueAfterApproval({ answer, rejectionReason }),
+              : this.#turnFlow.continueAfterApproval({
+                  answer,
+                  rejectionReason,
+                  ...(stopAfterApprovalResolution ? { stopAfterApprovalResolution: true } : {}),
+                }),
             {
               onTextChunk,
               onReasoningChunk,

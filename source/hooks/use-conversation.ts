@@ -315,9 +315,13 @@ export const useConversation = ({
     addSystemMessage('Stopped');
   }, [stopProcessing, addSystemMessage]);
 
+  // Not `stopProcessing`: aborting a paused turn discards the whole segment,
+  // so the question the model asked would vanish from history. Resolving it
+  // with a "no answer" result ends the turn *and* keeps the record.
   const cancelAskUser = useCallback(() => {
-    stopProcessing();
-  }, [stopProcessing]);
+    if (pendingInteractionId === null) return Promise.resolve();
+    return orchestrator.cancelAskUser(pendingInteractionId);
+  }, [orchestrator, pendingInteractionId]);
 
   const rewindToTarget = useCallback<
     (targetId: RewindTargetId, uiIndex: number) => { text: string; images?: UserTurn['images'] } | null

@@ -680,6 +680,7 @@ export class AgentClient {
       turnId: options.hookTurnId,
       hookScope: this.#hookScope,
       maxTurns: this.#maxTurns,
+      ...(options.stopAfterApprovalResolution ? { stopAfterApprovalResolution: true } : {}),
     });
     this.#observeCompletion(stream, state, provider, this.#agentConfig.getModel());
     return stream;

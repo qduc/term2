@@ -1,5 +1,5 @@
 import type { PendingApproval } from '../../contracts/conversation.js';
-import { ASK_USER_DECLINE_RESULT } from '../../tools/agent/ask-user-constants.js';
+import { isAskUserTerminalAnswer } from '../../tools/agent/ask-user-constants.js';
 
 export type AskUserAnswer = string | string[];
 
@@ -142,7 +142,7 @@ export class PendingInteractionState {
     if (
       current.approval.toolName === 'ask_user' &&
       request.answer === 'y' &&
-      approvalAnswer !== ASK_USER_DECLINE_RESULT
+      !isAskUserTerminalAnswer(approvalAnswer)
     ) {
       const questions = getAskUserQuestions(current.approval);
       let parsedAnswer: AskUserAnswer = approvalAnswer ?? '';

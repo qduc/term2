@@ -36,6 +36,8 @@ export type BottomAreaProps = {
   waitingForAskUserAnswer?: boolean;
   currentAskUserQuestionIndex?: number;
   isProcessing: boolean;
+  /** True while a second Escape would interrupt the in-flight turn. */
+  interruptConfirmVisible?: boolean;
   thinkingStartedAt?: number | null;
   toolCallStreamingInfo?: { toolName?: string; argumentCharCount: number } | null;
   isShellMode?: boolean;
@@ -98,6 +100,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   waitingForAskUserAnswer = false,
   currentAskUserQuestionIndex = 0,
   isProcessing,
+  interruptConfirmVisible = false,
   thinkingStartedAt = null,
   toolCallStreamingInfo = null,
   isShellMode = false,
@@ -287,6 +290,7 @@ const BottomArea: FC<BottomAreaProps> = ({
               <Text color="#64748b">processing{'.'.repeat(dotCount)}</Text>
             )}
             {foregroundTransferCandidate && <Text color="#64748b">Foreground shell running · Ctrl+B manage</Text>}
+            {interruptConfirmVisible && <Text color="#f59e0b">Press ESC again to interrupt</Text>}
             <BackgroundTasksPanel tasks={backgroundSubagentTasks} now={backgroundSubagentTasksNow} />
             {listBackgroundTaskDetails && getBackgroundTaskDetails && stopBackgroundTask && (
               <BackgroundTaskManager
@@ -320,6 +324,7 @@ const BottomArea: FC<BottomAreaProps> = ({
                 onSystemMessage={onSystemMessage}
                 onSlashTabComplete={onSlashTabComplete}
                 skillsService={skillsService}
+                turnInFlight={isProcessing}
                 pendingQueuedMessages={pendingQueuedMessages}
                 onRetractQueuedMessage={onRetractQueuedMessage}
                 onEditQueuedMessage={onEditQueuedMessage}

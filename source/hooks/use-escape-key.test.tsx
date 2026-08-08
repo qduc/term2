@@ -8,7 +8,7 @@ import { SETTINGS_TRIGGER } from '../components/input/triggers.js';
 import { Box, Text, useInput, useStdin } from 'ink';
 import { renderInAct } from '../test-helpers/ink-testing.js';
 
-const TestComponent = ({ initialValue = 'some text', initialMode = 'text' as InputMode }) => {
+const TestComponent = ({ initialValue = 'some text', initialMode = 'text' as InputMode, turnInFlight = false }) => {
   const [value, onChange] = useState(initialValue);
   const [mode, setMode] = useState<InputMode>(initialMode);
   const dismissedCompletionRef = { current: null } as any;
@@ -26,6 +26,7 @@ const TestComponent = ({ initialValue = 'some text', initialMode = 'text' as Inp
     setCursorOverride,
     dismissedCompletionRef,
     inputRevisionRef,
+    turnInFlight,
   });
 
   return (
@@ -66,6 +67,43 @@ const pressEscape = async (emitter: { emit: (event: string, input: string) => vo
 
   await flushReactUpdates(3);
 };
+
+it.sequential('clearing a non-empty buffer still wins over the interrupt gesture mid-turn', async () => {
+  let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
+
+  const TestHarness = () => {
+    useCaptureInputEmitter((emitter) => {
+      inputEmitter = emitter;
+    });
+    return <TestComponent turnInFlight />;
+  };
+
+  const { lastFrame } = await renderAndFlush(<TestHarness />);
+
+  await pressEscape(inputEmitter!);
+  expect(lastFrame()!.includes('HINT')).toBe(true);
+
+  await pressEscape(inputEmitter!);
+  expect(lastFrame()!.includes('Value: some text')).toBe(false);
+});
+
+it.sequential('ignores text-mode ESC on an empty buffer mid-turn', async () => {
+  let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
+
+  const TestHarness = () => {
+    useCaptureInputEmitter((emitter) => {
+      inputEmitter = emitter;
+    });
+    return <TestComponent initialValue="" turnInFlight />;
+  };
+
+  const { lastFrame } = await renderAndFlush(<TestHarness />);
+
+  await pressEscape(inputEmitter!);
+
+  // No hint: Escape belongs to the app-level interrupt confirmation here.
+  expect(lastFrame()!.includes('HINT')).toBe(false);
+});
 
 it.sequential('pressing ESC once shows hint, second time clears input', async () => {
   let inputEmitter: { emit: (event: string, input: string) => void } | null = null;

@@ -106,7 +106,7 @@ const App: FC<AppProps> = ({
   const { exit } = useApp();
   const { stdout } = useStdout();
   const { setInput, replaceInput, setMode, setImages } = useInputActions();
-  const { input, mode, images, controller } = useInputState();
+  const { input, mode, images: _images, controller } = useInputState();
   const [messageListEpoch, setMessageListEpoch] = useState(0);
   const [startupBannerIds, setStartupBannerIds] = useState(['startup-banner-0']);
   const liteMode = useSetting(settingsService, 'app.liteMode') ?? false;
@@ -520,7 +520,7 @@ const App: FC<AppProps> = ({
     [goToPreviousQuestion, goToNextQuestion],
   );
 
-  useAppKeyboardShortcuts({
+  const { interruptConfirmVisible } = useAppKeyboardShortcuts({
     exitWithUsage,
     pendingSkillRef,
     waitingForAskUserAnswer: effectiveWaitingForAskUserAnswer,
@@ -528,6 +528,7 @@ const App: FC<AppProps> = ({
     waitingForRejectionReason: effectiveWaitingForRejectionReason,
     setWaitingForRejectionReason,
     inputMode: mode,
+    inputValue: input,
     isProcessing: effectiveIsProcessing,
     waitingForApproval: effectiveWaitingForApproval,
     stopProcessing,
@@ -684,6 +685,7 @@ const App: FC<AppProps> = ({
             waitingForAskUserAnswer={effectiveWaitingForAskUserAnswer}
             currentAskUserQuestionIndex={currentAskUserQuestionIndex}
             isProcessing={effectiveIsProcessing}
+            interruptConfirmVisible={interruptConfirmVisible}
             thinkingStartedAt={thinkingStartedAt}
             toolCallStreamingInfo={toolCallStreamingInfo}
             isShellMode={isShellMode}

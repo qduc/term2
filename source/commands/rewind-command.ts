@@ -130,8 +130,12 @@ export function createRewindSlashCommand({
         return true;
       }
 
-      const selected = target === 'last' ? items.at(-1) : items.find((item) => item.turnNumber === target);
-      const turnNumber = target === 'last' ? items.at(-1)?.turnNumber ?? available : target;
+      // Slash-command numbers remain 1-based positions in the *visible*
+      // picker list. The displayed store turn number can be offset when the
+      // rendered transcript has been capped, so it must not address the
+      // domain target directly.
+      const selected = target === 'last' ? items.at(-1) : items[target - 1];
+      const turnNumber = target === 'last' ? available : target;
       if (!selected) {
         addSystemMessage(`No turn ${turnNumber} to rewind to. Pick a turn between 1-${available}.`);
         return true;

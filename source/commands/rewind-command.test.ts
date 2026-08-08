@@ -88,6 +88,16 @@ describe('target resolution', () => {
     expect(harness.rewindToTarget).toHaveBeenCalledWith(item(2));
   });
 
+  it('resolves explicit numbers by visible picker position when store turn numbers are offset', () => {
+    const firstVisible = item(251);
+    const secondVisible = item(252);
+    const harness = makeHarness({ getRewindItems: vi.fn(() => [firstVisible, secondVisible]) });
+
+    makeCommand(harness).action?.('1');
+
+    expect(harness.rewindToTarget).toHaveBeenCalledWith(firstVisible);
+  });
+
   it('reports the valid range when the turn number does not exist', () => {
     const harness = makeHarness({ rewindToTarget: vi.fn(() => null) });
     makeCommand(harness).action?.('9');

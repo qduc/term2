@@ -1,7 +1,34 @@
 # Peer channel dropped-reply investigation
 
-Status: deferred side investigation. Do not interrupt the current UI/business
-layer separation work to solve this.
+Status: Codex wake bridge implemented; durable logical-mailbox work remains
+deferred. Do not interrupt the current UI/business layer separation work for
+the remaining protocol redesign.
+
+## Resume here
+
+The 2026-08-08 wake-path investigation established that the generic APC helper
+only journals inbound frames; it cannot wake a harness without a harness-owned
+bridge. For Codex Desktop, the non-invasive bridge is a dedicated low-cost task
+that keeps `agent_peer.py follow` attached and forwards each record through the
+app-owned `send_message_to_thread` tool. Background subagents cannot be assumed
+to have that tool. Do not substitute private desktop IPC, `codex exec resume`,
+or a second app-server owner. `follow` now leases one record at a time and
+replays its stable delivery ID until the bridge explicitly acknowledges it
+after Codex accepts the task injection.
+
+Term2 can support native delivery later by reusing its existing active-turn
+injection boundary and the idle background-notification wake pattern. That work
+still needs an APC listener, peer provenance in the UI, deduplication, durable
+receipt semantics, and approval-boundary tests; it was not implemented as part
+of the Codex bridge work. In particular, Term2's existing background shell only
+emits a completion event when its process exits; an indefinitely running
+`follow` process therefore cannot provide per-message wake events without a new
+line/listener event source.
+
+The original dropped-reply/restart questions below remain open. The leased
+`follow` path closes the bridge's read-before-acceptance loss window and provides
+at-least-once forwarding with a stable ID. It does not make acceptance and
+acknowledgement atomic, nor turn APC v1 into a durable logical mailbox.
 
 ## Incident
 

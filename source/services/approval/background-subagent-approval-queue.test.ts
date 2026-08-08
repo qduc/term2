@@ -21,7 +21,7 @@ const enqueue = (
   queue: BackgroundSubagentApprovalQueue,
   pending: BackgroundSubagentApprovalEntry,
   callbacks: Partial<BackgroundSubagentApprovalCallbacks> = {},
-) => queue.enqueue(pending, { onResolve: vi.fn(), ...callbacks });
+) => queue.enqueue(pending, { onResolve: vi.fn(() => ({ kind: 'applied' as const })), ...callbacks });
 
 describe('BackgroundSubagentApprovalQueue', () => {
   it('publishes an immutable revisioned FIFO head and hides later runs until their turn', () => {
@@ -48,7 +48,7 @@ describe('BackgroundSubagentApprovalQueue', () => {
     const queue = new BackgroundSubagentApprovalQueue();
     const first = entry('call-a');
     const second = entry('call-b');
-    const firstResolved = vi.fn();
+    const firstResolved = vi.fn(() => ({ kind: 'applied' as const }));
     enqueue(queue, first, { onResolve: firstResolved });
     enqueue(queue, second);
 
@@ -183,6 +183,7 @@ describe('BackgroundSubagentApprovalQueue', () => {
         reason: 'identity_mismatch',
       });
       if (attempts === 1) throw new Error('lease application failed');
+      return { kind: 'applied' as const };
     });
     enqueue(queue, first, { onResolve: apply });
     enqueue(queue, second);
@@ -202,6 +203,24 @@ describe('BackgroundSubagentApprovalQueue', () => {
     });
     expect(queue.getSnapshot()).toMatchObject({ current: second, revision: beforeResolve.revision + 1 });
     expect(apply).toHaveBeenCalledTimes(2);
+  });
+
+  it('retains the same head and snapshot when the lease rejects application', () => {
+    const queue = new BackgroundSubagentApprovalQueue();
+    const first = entry('call-a');
+    const second = entry('call-b');
+    const rejectApplication = vi.fn(() => ({ kind: 'rejected' as const }));
+    enqueue(queue, first, { onResolve: rejectApplication });
+    enqueue(queue, second);
+    const snapshot = queue.getSnapshot();
+
+    expect(queue.resolve({ revision: snapshot.revision, entry: first, decision: { answer: 'y' } })).toEqual({
+      kind: 'apply_rejected',
+      entry: first,
+    });
+    expect(rejectApplication).toHaveBeenCalledWith(first, { answer: 'y' });
+    expect(queue.getSnapshot()).toBe(snapshot);
+    expect(queue.getSnapshot().current).toEqual(first);
   });
 
   it('isolates release callback failures while removing and closing entries exactly once', () => {

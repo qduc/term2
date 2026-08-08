@@ -58,10 +58,14 @@ export type BackgroundSubagentApprovalRemovalRequest = {
 };
 
 export type BackgroundSubagentApprovalRelease = { readonly kind: 'removed' | 'closed' };
+export type BackgroundSubagentApprovalApplyResult = { readonly kind: 'applied' } | { readonly kind: 'rejected' };
 
 export type BackgroundSubagentApprovalCallbacks = {
   /** Applies the raw answer while this entry still owns the visible head. */
-  readonly onResolve: (entry: BackgroundSubagentApprovalEntry, decision: BackgroundSubagentApprovalDecision) => void;
+  readonly onResolve: (
+    entry: BackgroundSubagentApprovalEntry,
+    decision: BackgroundSubagentApprovalDecision,
+  ) => BackgroundSubagentApprovalApplyResult;
   /**
    * The run owner is told that this queue no longer owns its pause. It decides
    * how to release the lease; this primitive never manufactures a rejection.
@@ -79,6 +83,7 @@ export type BackgroundSubagentApprovalResolveResult =
       readonly entry: BackgroundSubagentApprovalEntry;
       readonly decision: BackgroundSubagentApprovalDecision;
     }
+  | { readonly kind: 'apply_rejected'; readonly entry: BackgroundSubagentApprovalEntry }
   | { readonly kind: 'stale'; readonly reason: 'revision_mismatch' | 'identity_mismatch' }
   | { readonly kind: 'closed' };
 
@@ -218,11 +223,13 @@ export class BackgroundSubagentApprovalQueue {
 
     const decision = Object.freeze({ ...request.decision });
     this.#resolving = current;
+    let application: BackgroundSubagentApprovalApplyResult;
     try {
-      current.callbacks.onResolve(current.entry, decision);
+      application = current.callbacks.onResolve(current.entry, decision);
     } finally {
       this.#resolving = undefined;
     }
+    if (application.kind !== 'applied') return { kind: 'apply_rejected', entry: current.entry };
     this.#pending.shift();
     this.#changed();
     return { kind: 'resolved', entry: current.entry, decision };

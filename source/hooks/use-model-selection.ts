@@ -8,7 +8,7 @@ import { getModelSettingConfigForInput } from '../utils/ai/model-settings.js';
 
 export const useModelSelection = (deps: { loggingService: ILoggingService; settingsService: ISettingsService }) => {
   const { loggingService, settingsService } = deps;
-  const { mode, setMode, input, cursorOffset, triggerIndex, setTriggerIndex } = useInputContext();
+  const { mode, setMode, input, cursorOffset, triggerIndex, setTriggerIndex, controller } = useInputContext();
 
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -24,15 +24,26 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
   const modelsByProviderRef = useRef<Map<string, ModelInfo[]>>(new Map());
   const shouldPreselectRef = useRef(false);
 
-  const isOpen = mode === 'model_selection';
+  const controllerFrame = controller.getSnapshot().stack.at(-1);
+  const isControllerOpen = controllerFrame?.kind === 'model';
+  const isOpen = isControllerOpen || mode === 'model_selection';
+  // getModelSettingConfigForInput reads the raw composer text directly, which
+  // is authoritative whether or not the model graph is controller-owned.
   const modelSettingConfig = getModelSettingConfigForInput(input);
   const canSwitchProvider = true;
 
+  // While the model graph is controller-owned, the binding is the source of
+  // truth for both the query and the replacement start. Keep the legacy
+  // triggerIndex projection for callers that still use this hook directly.
+  const activeTriggerIndex = isControllerOpen ? controllerFrame.binding.replacement.start : triggerIndex;
+
   const query = useMemo(() => {
-    if (!isOpen || triggerIndex === null) return '';
+    if (!isOpen) return '';
+    if (isControllerOpen) return parseModelProviderArg(controllerFrame.binding.query).modelId;
+    if (triggerIndex === null) return '';
     const end = Math.min(cursorOffset, input.length);
     return parseModelProviderArg(input.slice(triggerIndex, end)).modelId;
-  }, [isOpen, triggerIndex, input, cursorOffset]);
+  }, [isOpen, isControllerOpen, controllerFrame, triggerIndex, input, cursorOffset]);
 
   const getInitialProvider = useCallback(() => {
     const raw = modelSettingConfig
@@ -262,7 +273,7 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
 
   return {
     isOpen,
-    triggerIndex,
+    triggerIndex: activeTriggerIndex, // Compatibility projection for legacy callers
     query,
     loading,
     error,

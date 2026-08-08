@@ -40,6 +40,7 @@ import { resolveSlashCommand } from './slash-commands.js';
 import type { SkillsService, SkillInfo } from './services/skills/skills-service.js';
 import { buildTerminalTitleLabel, setTerminalTitle } from './utils/output/terminal-title.js';
 import { deriveInputOwner } from './lib/input-owner.js';
+import { handleSettingsIntent } from './components/input/settings-intent-host.js';
 import {
   registerSandboxNetworkApprovalHandler,
   type NetworkApprovalAnswer,
@@ -424,15 +425,6 @@ const App: FC<AppProps> = ({
     [rewindToTurn, redrawMessageList, replaceInput, restoreTurnToInput, sendUserMessage, setImages],
   );
 
-  useEffect(() => {
-    controller.setIntentHost(({ intentRequest }) => {
-      if (intentRequest.intent.type === 'rewind') {
-        handleRewindSelect(intentRequest.intent.item, intentRequest.intent.disposition);
-      }
-    });
-    return () => controller.setIntentHost(undefined);
-  }, [controller, handleRewindSelect]);
-
   const handleApprove = useCallback(
     async (answer?: string) => {
       if (sandboxPromptRequest) {
@@ -608,6 +600,39 @@ const App: FC<AppProps> = ({
     },
     [applyRuntimeSetting, handoff],
   );
+
+  // The application effect host: executes typed domain intents only after
+  // the controller has committed the required input and stack transition.
+  // Settings/model application is the first production user of a correlated
+  // IntentResult (success or field error) delivered back to the originating
+  // frame; rewind remains fire-and-forget.
+  useEffect(() => {
+    controller.setIntentHost(({ intentRequest }) => {
+      if (intentRequest.intent.type === 'rewind') {
+        handleRewindSelect(intentRequest.intent.item, intentRequest.intent.disposition);
+        return;
+      }
+      if (intentRequest.intent.type === 'submit-prompt') {
+        void sendUserMessage({ text: intentRequest.intent.text });
+        return;
+      }
+      return handleSettingsIntent(intentRequest, {
+        settingsService,
+        onSettingChange: handleSettingChange,
+        onSystemMessage: addSystemMessage,
+        applyRuntimeSetting,
+      });
+    });
+    return () => controller.setIntentHost(undefined);
+  }, [
+    controller,
+    handleRewindSelect,
+    sendUserMessage,
+    settingsService,
+    handleSettingChange,
+    addSystemMessage,
+    applyRuntimeSetting,
+  ]);
 
   return (
     <ErrorBoundary loggingService={loggingService}>

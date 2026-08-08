@@ -43,12 +43,12 @@ it('determineActiveMenu - model triggers (priority 0)', () => {
     {
       input: '/model gpt',
       cursor: '/model gpt'.length,
-      expected: { type: 'model', startIndex: '/model '.length },
+      expected: { type: 'model', startIndex: '/model '.length, origin: 'direct-trigger' },
     },
     ...MODEL_SETTING_CONFIGS.map(({ trigger }) => ({
       input: `${trigger}model`,
       cursor: `${trigger}model`.length,
-      expected: { type: 'model' as const, startIndex: trigger.length },
+      expected: { type: 'model' as const, startIndex: trigger.length, origin: 'settings-backed' as const },
     })),
   ];
 
@@ -89,6 +89,7 @@ it('determineActiveMenu - settings_value transition (key + space)', () => {
     type: 'settings_value',
     key: 'logging.logLevel',
     startIndex: input.length,
+    origin: 'settings-list',
   });
 });
 
@@ -98,6 +99,7 @@ it('determineActiveMenu - auto-approve trigger maps to settings_value', () => {
     type: 'settings_value',
     key: 'shell.autoApproveMode',
     startIndex: input.length,
+    origin: 'direct-trigger',
   });
 });
 
@@ -151,6 +153,7 @@ it('determineActiveMenu - priority enforcement', () => {
   expect(determine(modelTrigger!, modelTrigger!.length)).toEqual({
     type: 'model',
     startIndex: modelTrigger!.length,
+    origin: 'settings-backed',
   });
 
   // Slash beats path: "/@test" stays slash.
@@ -172,6 +175,7 @@ it('determineActiveMenu - static setting-value commands come from command metada
     type: 'settings_value',
     key: 'ui.theme',
     startIndex: '/theme-mode '.length,
+    origin: 'direct-trigger',
   });
 });
 

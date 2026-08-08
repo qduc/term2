@@ -46,18 +46,27 @@ export {
 };
 
 export const useSettingsCompletion = (settingsService: SettingsService) => {
-  const { mode, setMode, input, cursorOffset, triggerIndex, setTriggerIndex } = useInputContext();
+  const { mode, setMode, input, cursorOffset, triggerIndex, setTriggerIndex, controller } = useInputContext();
 
-  const isOpen = mode === 'settings_completion';
+  const controllerFrame = controller.getSnapshot().stack.at(-1);
+  const isControllerOpen = controllerFrame?.kind === 'settings';
+  const isOpen = isControllerOpen || mode === 'settings_completion';
+
+  // While the settings graph is controller-owned, the binding is the source
+  // of truth for both the query and the replacement start. Keep the legacy
+  // triggerIndex projection for callers that still use this hook directly.
+  const activeTriggerIndex = isControllerOpen ? controllerFrame.binding.replacement.start : triggerIndex;
 
   // Derive query from input + triggerIndex
   const query = useMemo(() => {
-    if (!isOpen || triggerIndex === null) return '';
+    if (!isOpen) return '';
+    if (isControllerOpen) return controllerFrame.binding.query;
+    if (triggerIndex === null) return '';
     // triggerIndex is the end of "/settings " prefix
     if (triggerIndex > input.length) return '';
     const end = Math.min(cursorOffset, input.length);
     return input.slice(triggerIndex, end);
-  }, [isOpen, triggerIndex, input, cursorOffset]);
+  }, [isOpen, isControllerOpen, controllerFrame, triggerIndex, input, cursorOffset]);
 
   const [settingsVersion, setSettingsVersion] = useState(0);
 
@@ -181,8 +190,9 @@ export const useSettingsCompletion = (settingsService: SettingsService) => {
 
   return {
     isOpen,
-    triggerIndex,
+    triggerIndex: activeTriggerIndex, // Compatibility projection for legacy callers
     query,
+    allSettings,
     filteredEntries,
     selectedIndex,
     scrollOffset,

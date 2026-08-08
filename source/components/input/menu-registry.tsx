@@ -5,6 +5,9 @@ import { ProviderMenuSession } from './ProviderMenuSession.js';
 import { PathMenuSession } from './PathMenuSession.js';
 import { SkillsMenuSession } from './SkillsMenuSession.js';
 import { SlashMenuSession } from './SlashMenuSession.js';
+import { SettingsMenuSession } from './SettingsMenuSession.js';
+import { SettingsValueMenuSession } from './SettingsValueMenuSession.js';
+import { ModelMenuSession } from './ModelMenuSession.js';
 
 export type MenuServices = Record<string, unknown>;
 
@@ -26,6 +29,9 @@ const defaultRegistry: Partial<MenuRegistry> = {
   rewind: RewindMenuSession,
   providers: ProviderMenuSession,
   slash: SlashMenuSession as React.ComponentType<any>,
+  settings: SettingsMenuSession as React.ComponentType<any>,
+  settings_value: SettingsValueMenuSession as React.ComponentType<any>,
+  model: ModelMenuSession as React.ComponentType<any>,
 };
 
 export function registerMenuComponent<K extends MenuFrame['kind']>(

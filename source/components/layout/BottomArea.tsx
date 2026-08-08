@@ -90,6 +90,7 @@ export type BottomAreaProps = {
   getBackgroundTaskDetails?: BackgroundTaskControlPort['getDetails'];
   stopBackgroundTask?: BackgroundTaskControlPort['requestStop'];
   getForegroundTaskTransferCandidate?: BackgroundTaskControlPort['getForegroundTransferCandidate'];
+  listForegroundTaskTransferCandidates?: BackgroundTaskControlPort['listForegroundTransferCandidates'];
   moveForegroundTaskToBackground?: BackgroundTaskControlPort['moveForegroundToBackground'];
 };
 
@@ -152,6 +153,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   getBackgroundTaskDetails,
   stopBackgroundTask,
   getForegroundTaskTransferCandidate,
+  listForegroundTaskTransferCandidates,
   moveForegroundTaskToBackground,
 }) => {
   const [dotCount, setDotCount] = useState(1);
@@ -299,6 +301,7 @@ const BottomArea: FC<BottomAreaProps> = ({
                 getDetails={getBackgroundTaskDetails}
                 requestStop={stopBackgroundTask}
                 getForegroundTransferCandidate={getForegroundTaskTransferCandidate}
+                listForegroundTransferCandidates={listForegroundTaskTransferCandidates}
                 moveForegroundToBackground={moveForegroundTaskToBackground}
                 onOpenChange={setBackgroundTaskManagerOpen}
               />

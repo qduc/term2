@@ -36,6 +36,15 @@ const foregroundShell = {
   startedAt: 3_000,
 };
 
+const foregroundSubagent = {
+  kind: 'subagent' as const,
+  runId: 'child-1',
+  role: 'worker',
+  task: 'inspect the approval boundary',
+  parentTool: 'run_subagent',
+  status: 'running' as const,
+};
+
 const writeInput = async (stdin: { write: (value: string) => void }, value: string) => {
   await act(async () => {
     stdin.write(value);
@@ -153,5 +162,29 @@ it.sequential('opens for a foreground shell and requires confirmation before mov
 
   await writeInput(view.stdin, '\r');
   expect(moveForegroundToBackground).toHaveBeenCalledWith({ kind: 'shell', callId: 'call-1' });
+  expect(view.lastFrame() ?? '').toContain('Moved to background');
+});
+
+it.sequential('lists and transfers a foreground subagent through the same manager', async () => {
+  const moveForegroundToBackground = vi.fn(() => ({
+    ok: true as const,
+    details: { ...subagent, id: 'child-1', task: foregroundSubagent.task },
+  }));
+  const view = await renderInAct(
+    <BackgroundTaskManager
+      listDetails={() => []}
+      getDetails={() => null}
+      requestStop={() => ({ ok: false as const, code: 'not_active' as const })}
+      listForegroundTransferCandidates={() => [foregroundSubagent]}
+      moveForegroundToBackground={moveForegroundToBackground}
+    />,
+  );
+
+  await writeInput(view.stdin, '\x02');
+  expect(view.lastFrame() ?? '').toContain('[worker · foreground] inspect the approval boundary');
+  await writeInput(view.stdin, 'b');
+  await writeInput(view.stdin, '\r');
+
+  expect(moveForegroundToBackground).toHaveBeenCalledWith({ kind: 'subagent', runId: 'child-1' });
   expect(view.lastFrame() ?? '').toContain('Moved to background');
 });

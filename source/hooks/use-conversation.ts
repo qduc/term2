@@ -165,6 +165,10 @@ export const useConversation = ({
     () => conversationService.backgroundTaskControl.getForegroundTransferCandidate(),
     [conversationService],
   );
+  const listForegroundTaskTransferCandidates = useCallback(
+    () => conversationService.backgroundTaskControl.listForegroundTransferCandidates(),
+    [conversationService],
+  );
   const moveForegroundTaskToBackground = useCallback(
     (target: import('../services/session/background-task-control.js').ForegroundTaskControlTarget) =>
       conversationService.backgroundTaskControl.moveForegroundToBackground(target),
@@ -429,6 +433,7 @@ export const useConversation = ({
     stopBackgroundTask,
     getForegroundTaskTransferCandidate,
     moveForegroundTaskToBackground,
+    listForegroundTaskTransferCandidates,
     sendUserMessage,
     admissionConfirmation,
     submitTurnForAdmission,

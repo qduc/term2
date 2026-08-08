@@ -33,7 +33,7 @@ Users can inspect and stop individual background subagents or shell jobs, move a
 ## Open
 
 - **Direct shell mode** [research] — Does the requested foreground-shell action include commands launched from direct Shell Mode, whose current session only records completed history and exposes no process handle?
-- **Task-manager merge point** [task] — Reconcile the app-level input-owner/BottomArea integration after the active Phase 5 and double-Escape work hand off their overlapping files.
+- **Task-manager merge point** [done] — After menu Phase 5 handed off, the app-level manager now lists and transfers foreground shells and subagents through the session-owned control port.
 
 ## Fog
 
@@ -59,3 +59,4 @@ Users can inspect and stop individual background subagents or shell jobs, move a
 - 2026-08-08: Feasibility review confirmed `ApplicationRunLoop` already exposes the provider-neutral continuation primitive needed for truthful pause/resume. The missing work is lease ownership, registry adoption, approval policy/control, event routing, and Ink presentation; no provider wire-format change is required.
 - 2026-08-08: The session now installs a FIFO approval controller for adopted child leases. It applies each decision through the existing approval policy to the exact retained continuation, never the root pending-approval state; shutdown keeps the durable subagent sinks attached until adopted leases settle.
 - 2026-08-08: Foreground subagent candidates and truthful move now flow through the session-owned task-control port, including the ordinary background action notification. The task-manager presentation remains deferred behind menu Phase 5 ownership.
+- 2026-08-08: The task-manager handoff is complete: BottomArea and the conversation hook project all foreground transfer candidates, and the modal confirms transfers using the executor-specific target identity. Focused Ink coverage and typecheck are green.

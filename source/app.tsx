@@ -163,6 +163,7 @@ const App: FC<AppProps> = ({
     stopBackgroundTask,
     getForegroundTaskTransferCandidate,
     moveForegroundTaskToBackground,
+    listForegroundTaskTransferCandidates,
     sendUserMessage,
     admissionConfirmation,
     submitTurnForAdmission,
@@ -704,6 +705,7 @@ const App: FC<AppProps> = ({
             stopBackgroundTask={stopBackgroundTask}
             getForegroundTaskTransferCandidate={getForegroundTaskTransferCandidate}
             moveForegroundTaskToBackground={moveForegroundTaskToBackground}
+            listForegroundTaskTransferCandidates={listForegroundTaskTransferCandidates}
             onRetractQueuedMessage={retractPendingSubmission}
             onEditQueuedMessage={editPendingSubmission}
             onSubmit={handleSubmit}

@@ -5,6 +5,7 @@ import type {
   BackgroundTaskControlTarget,
   BackgroundTaskStopResult,
   ForegroundTaskControlDetails,
+  ForegroundTransferCandidate,
   ForegroundTaskControlTarget,
   MoveForegroundToBackgroundResult,
 } from '../../services/session/background-task-control.js';
@@ -16,6 +17,7 @@ export type BackgroundTaskManagerProps = {
   getDetails: (target: BackgroundTaskControlTarget) => BackgroundTaskControlDetails | null;
   requestStop: (target: BackgroundTaskControlTarget) => BackgroundTaskStopResult;
   getForegroundTransferCandidate?: () => ForegroundTaskControlDetails | null;
+  listForegroundTransferCandidates?: () => readonly ForegroundTransferCandidate[];
   moveForegroundToBackground?: (target: ForegroundTaskControlTarget) => MoveForegroundToBackgroundResult;
   onOpenChange?: (open: boolean) => void;
 };
@@ -79,12 +81,13 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
   getDetails,
   requestStop,
   getForegroundTransferCandidate,
+  listForegroundTransferCandidates,
   moveForegroundToBackground,
   onOpenChange,
 }) => {
   const [open, setOpen] = useState(false);
   const [tasks, setTasks] = useState<readonly BackgroundTaskControlDetails[]>([]);
-  const [foreground, setForeground] = useState<ForegroundTaskControlDetails | null>(null);
+  const [foreground, setForeground] = useState<readonly ForegroundTransferCandidate[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [detailsVisible, setDetailsVisible] = useState(false);
   const [stopArmed, setStopArmed] = useState(false);
@@ -102,8 +105,9 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
 
   const openManager = useCallback(() => {
     const next = listDetails();
-    const nextForeground = getForegroundTransferCandidate?.() ?? null;
-    if (next.length === 0 && !nextForeground) return;
+    const legacyForeground = getForegroundTransferCandidate?.() ?? null;
+    const nextForeground = listForegroundTransferCandidates?.() ?? (legacyForeground ? [legacyForeground] : []);
+    if (next.length === 0 && nextForeground.length === 0) return;
     setTasks(next);
     setForeground(nextForeground);
     setSelectedIndex(0);
@@ -113,7 +117,7 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
     setFeedback(null);
     setOpen(true);
     onOpenChange?.(true);
-  }, [getForegroundTransferCandidate, listDetails, onOpenChange]);
+  }, [getForegroundTransferCandidate, listDetails, listForegroundTransferCandidates, onOpenChange]);
 
   useEffect(() => {
     if (open && !enabled) close();
@@ -133,7 +137,7 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
 
       if (key.upArrow || key.downArrow) {
         setSelectedIndex((current) => {
-          const itemCount = tasks.length + Number(Boolean(foreground));
+          const itemCount = tasks.length + foreground.length;
           if (itemCount === 0) return 0;
           return key.upArrow ? (current - 1 + itemCount) % itemCount : (current + 1) % itemCount;
         });
@@ -144,8 +148,8 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
         return;
       }
 
-      const selectedForeground = foreground && selectedIndex === 0 ? foreground : null;
-      const taskIndex = selectedIndex - Number(Boolean(foreground));
+      const selectedForeground = foreground[selectedIndex] ?? null;
+      const taskIndex = selectedIndex - foreground.length;
       const selected = tasks[taskIndex];
       if (selectedForeground) {
         if (input.toLowerCase() === 'b' && moveForegroundToBackground) {
@@ -158,10 +162,14 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
           setDetailsVisible(true);
           return;
         }
-        const result = moveForegroundToBackground?.({ kind: 'shell', callId: selectedForeground.callId });
+        const target =
+          selectedForeground.kind === 'shell'
+            ? { kind: 'shell' as const, callId: selectedForeground.callId }
+            : { kind: 'subagent' as const, runId: selectedForeground.runId };
+        const result = moveForegroundToBackground?.(target);
         setBackgroundArmed(false);
         if (result?.ok) {
-          setForeground(null);
+          setForeground((current) => current.filter((candidate) => candidate !== selectedForeground));
           setTasks((current) => [result.details, ...current]);
           setSelectedIndex(0);
           setDetailsVisible(true);
@@ -208,21 +216,25 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
   );
 
   if (!open) return null;
-  const selectedForeground = foreground && selectedIndex === 0 ? foreground : null;
-  const selected = tasks[selectedIndex - Number(Boolean(foreground))];
+  const selectedForeground = foreground[selectedIndex] ?? null;
+  const selected = tasks[selectedIndex - foreground.length];
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor="#6366f1" paddingX={1} marginBottom={1}>
       <Text bold color="#a5b4fc">
         Manage background tasks
       </Text>
-      {foreground && (
-        <Text color={selectedIndex === 0 ? '#f8fafc' : '#64748b'}>
-          {selectedIndex === 0 ? '❯' : ' '} [Shell · foreground] {foreground.command} · running
+      {foreground.map((candidate, index) => (
+        <Text
+          key={`${candidate.kind}:${candidate.kind === 'shell' ? candidate.callId : candidate.runId}`}
+          color={index === selectedIndex ? '#f8fafc' : '#64748b'}
+        >
+          {index === selectedIndex ? '❯' : ' '} [{candidate.kind === 'shell' ? 'Shell' : candidate.role} · foreground]{' '}
+          {candidate.kind === 'shell' ? candidate.command : candidate.task} · running
         </Text>
-      )}
+      ))}
       {tasks.map((task, index) => {
-        const displayIndex = index + Number(Boolean(foreground));
+        const displayIndex = index + foreground.length;
         return (
           <Text key={`${task.kind}:${task.id}`} color={displayIndex === selectedIndex ? '#f8fafc' : '#64748b'}>
             {displayIndex === selectedIndex ? '❯' : ' '} [{task.kind === 'shell' ? 'Shell' : task.role}]{' '}
@@ -232,9 +244,15 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
       })}
       {detailsVisible && selectedForeground && (
         <Box flexDirection="column" marginTop={1} paddingLeft={2}>
-          <Text color="#c4b5fd">Call ID: {selectedForeground.callId}</Text>
+          <Text color="#c4b5fd">
+            {selectedForeground.kind === 'shell' ? 'Call ID' : 'Run ID'}:{' '}
+            {selectedForeground.kind === 'shell' ? selectedForeground.callId : selectedForeground.runId}
+          </Text>
           <Text>Status: running in foreground</Text>
-          <Text wrap="wrap">Command: {selectedForeground.command}</Text>
+          <Text wrap="wrap">
+            {selectedForeground.kind === 'shell' ? 'Command' : 'Task'}:{' '}
+            {selectedForeground.kind === 'shell' ? selectedForeground.command : selectedForeground.task}
+          </Text>
         </Box>
       )}
       {detailsVisible && selected && <BackgroundTaskDetailsView details={selected} />}
@@ -248,7 +266,8 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
         </Text>
       )}
       <Text color="#64748b">
-        ↑↓ select · Enter details{selectedForeground ? ' · [b] Put in background' : ''}
+        ↑↓ select · Enter details
+        {selectedForeground ? ' · [b] Put in background' : ''}
         {selected && isActive(selected) ? ' · [x] Force stop' : ''} · Esc close
       </Text>
     </Box>

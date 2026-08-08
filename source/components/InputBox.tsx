@@ -1,57 +1,32 @@
-import React, { FC, useEffect, useState, useRef, useCallback } from 'react';
+import React, { FC, useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Text, useInput, useStdin } from 'ink';
-import { useEscapeKey } from '../hooks/use-escape-key.js';
 import { MultilineInput } from 'ink-prompt';
 import type { ImageRef, PasteErrorReason } from 'ink-prompt';
+import { useEscapeKey } from '../hooks/use-escape-key.js';
 import { useInputContext } from '../context/InputContext.js';
-import { useSlashCommands } from '../hooks/use-slash-commands.js';
-import { usePathCompletion } from '../hooks/use-path-completion.js';
-import { useSettingsCompletion } from '../hooks/use-settings-completion.js';
-import { useSettingsValueCompletion } from '../hooks/use-settings-value-completion.js';
-import { useModelSelection } from '../hooks/use-model-selection.js';
-import { useSkillSelection } from '../hooks/use-skill-selection.js';
-import type { SkillsService } from '../services/skills/skills-service.js';
-import { MenuStackHost } from './input/MenuStackHost.js';
-import { createDefaultTriggerRegistry } from './input/triggers.js';
-import type { SlashCommand } from '../slash-commands.js';
-import type { SettingsService } from '../services/settings/settings-service.js';
-import type { LoggingService } from '../services/logging/logging-service.js';
-import type { HistoryService } from '../services/history-service.js';
 import { useInputHistory } from '../hooks/use-input-history.js';
 import { useTerminalWidth } from '../hooks/use-terminal-width.js';
 import { calculateInputWidth } from './input/input-width.js';
+import type { SlashCommand } from '../slash-commands.js';
+import type { SkillsService } from '../services/skills/skills-service.js';
+import type { SettingsService } from '../services/settings/settings-service.js';
+import type { LoggingService } from '../services/logging/logging-service.js';
+import type { HistoryService } from '../services/history-service.js';
 import type { UserTurn } from '../types/user-turn.js';
 import type { SubmissionMutation } from '../services/conversation/conversation-adapter.js';
 import PendingQueueList, { type PendingQueueMessage } from './input/PendingQueueList.js';
 
 export { calculateInputWidth };
 
-const areImagesEqual = (a: ImageRef[], b: ImageRef[]): boolean => {
-  if (a === b) return true;
-  if (a.length !== b.length) return false;
-
-  return a.every((image, index) => {
-    const other = b[index];
-    return (
-      other &&
-      image.id === other.id &&
-      image.data === other.data &&
-      image.mimeType === other.mimeType &&
-      image.byteSize === other.byteSize &&
-      image.displayNumber === other.displayNumber
-    );
-  });
-};
-
 type Props = {
-  onSubmit: (v: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) => void | Promise<void>;
-  slashCommands: SlashCommand[];
+  onSubmit: (value: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) => void | Promise<void>;
+  /** @deprecated Menu commands are consumed by ApplicationInputSurface. */
+  slashCommands?: SlashCommand[];
+  /** @deprecated Menu commands are consumed by ApplicationInputSurface. */
+  onSlashTabComplete?: (command: SlashCommand) => boolean;
+  /** @deprecated Menu sessions are mounted by ApplicationInputSurface. */
+  skillsService?: SkillsService;
   waitingForRejectionReason?: boolean;
-  /**
-   * True while a turn is in flight. Escape still clears a non-empty buffer;
-   * on an empty buffer it falls through to the app-level double-Escape
-   * interrupt confirmation.
-   */
   turnInFlight?: boolean;
   isShellMode?: boolean;
   settingsService: SettingsService;
@@ -59,123 +34,83 @@ type Props = {
   historyService: HistoryService;
   onSettingChange?: (key: string, value: any) => void;
   onSystemMessage?: (text: string) => void;
-  onSlashTabComplete?: (command: SlashCommand) => boolean;
   promptLabel?: string;
   allowEmptySubmit?: boolean;
-  skillsService?: SkillsService;
   pendingQueuedMessages?: ReadonlyArray<PendingQueueMessage>;
   onRetractQueuedMessage?: (id: string) => Promise<SubmissionMutation>;
   onEditQueuedMessage?: (id: string, turn: UserTurn) => Promise<SubmissionMutation>;
+  cursorOverride?: number | null;
 };
 
-const isFocusReportingSequence = (input: string): boolean => {
-  return input === '\x1b[I' || input === '\x1b[O' || input === '[I' || input === '[O';
+const areImagesEqual = (a: ImageRef[], b: ImageRef[]): boolean => {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  return a.every((image, index) => {
+    const other = b[index];
+    return Boolean(
+      other &&
+        image.id === other.id &&
+        image.data === other.data &&
+        image.mimeType === other.mimeType &&
+        image.byteSize === other.byteSize &&
+        image.displayNumber === other.displayNumber,
+    );
+  });
 };
 
-export const getProviderWizardPromptLabel = (
-  phase: import('../hooks/use-provider-selection.js').ProviderSelectionPhase,
-): string | undefined => {
-  if (phase === 'wizard_name') return 'Enter Provider Name: ';
-  if (phase === 'wizard_url') return 'Enter Base API URL: ';
-  if (phase === 'wizard_key') return 'Enter API Key: ';
-  return undefined;
-};
+const isFocusReportingSequence = (input: string): boolean =>
+  input === '\x1b[I' || input === '\x1b[O' || input === '[I' || input === '[O';
 
 const InputBox: FC<Props> = ({
   onSubmit,
-  slashCommands,
   settingsService,
   loggingService,
   waitingForRejectionReason = false,
   turnInFlight = false,
   isShellMode = false,
   historyService,
-  onSettingChange: _onSettingChange,
-  onSystemMessage: _onSystemMessage,
-  onSlashTabComplete,
   promptLabel,
   allowEmptySubmit = false,
-  skillsService,
   pendingQueuedMessages,
   onRetractQueuedMessage,
   onEditQueuedMessage,
+  cursorOverride: propsCursorOverride,
 }) => {
   const {
     input: value,
     setInput: onChange,
-    mode,
     cursorOffset,
     setCursorOffset,
     images,
     setImages,
-    cursorOverride,
+    cursorOverride: contextCursorOverride,
     setCursorOverride,
-    controller,
-    interactions,
-    menuPromptLabel,
   } = useInputContext();
+  const cursorOverride = propsCursorOverride ?? contextCursorOverride;
   const { stdin } = useStdin();
+  const inputValueRef = useRef(value);
+  const cursorOffsetRef = useRef(cursorOffset);
+  const suppressImagesCallbackRef = useRef(false);
   const stdinBufferRef = useRef('');
   const stdinBufferTimestampRef = useRef(0);
   const consumedAltEnterRef = useRef(false);
   const altEnterSuppressUntilRef = useRef(0);
 
-  const inputValueRef = useRef(value);
   inputValueRef.current = value;
-  const cursorOffsetRef = useRef(cursorOffset);
-  const suppressImagesCallbackRef = useRef(false);
-
-  // Hooks
-  const slash = useSlashCommands({
-    commands: slashCommands,
-    onClose: () => {
-      // Focus returns to text mode automatically via hook
-    },
-  });
-
-  useEffect(() => {
-    controller.setTriggerRegistry(
-      createDefaultTriggerRegistry(slashCommands, [
-        'slash',
-        'path',
-        'skills',
-        'settings',
-        'settings-value-child',
-        'settings-model',
-        'command-model',
-        'direct-setting-value',
-      ]),
-    );
-  }, [controller, slashCommands]);
-
-  const path = usePathCompletion({ loggingService });
-  const settings = useSettingsCompletion(settingsService);
-  // Graph 3 (`/settings <key> `) no longer reconstructs its parent frame from
-  // a ref on reset — the mounted SettingsMenuSession stays alive underneath
-  // the value child, so category/filter/selection survive without
-  // reconstruction. A Ctrl+D reset routes through SettingsValueMenuSession's
-  // typed reset-setting intent instead of this hook's legacy onReset path.
-  const settingsValue = useSettingsValueCompletion(settingsService);
-  const models = useModelSelection({
-    loggingService,
-    settingsService,
-  });
-
-  const skills = useSkillSelection(
-    skillsService ? { skillsService } : { skillsService: { getAvailableSkills: () => [] } as unknown as SkillsService },
-  );
+  cursorOffsetRef.current = cursorOffset;
 
   const [inputKey, setInputKey] = useState(0);
   const [queueSelectionIndex, setQueueSelectionIndex] = useState<number | null>(null);
   const [editingQueueItem, setEditingQueueItem] = useState<{ id: string; restoreInput: string } | null>(null);
   const [queueNotice, setQueueNotice] = useState<string | null>(null);
-  const queueSelectionIndexRef = useRef<number | null>(queueSelectionIndex);
+  const queueSelectionIndexRef = useRef<number | null>(null);
   const queueSelectionJustOpenedRef = useRef(false);
-  const editingQueueItemRef = useRef<{ id: string; restoreInput: string } | null>(editingQueueItem);
+  const editingQueueItemRef = useRef<{ id: string; restoreInput: string } | null>(null);
   const pendingQueuedMessagesRef = useRef<ReadonlyArray<PendingQueueMessage>>(pendingQueuedMessages ?? []);
   queueSelectionIndexRef.current = queueSelectionIndex;
   editingQueueItemRef.current = editingQueueItem;
   pendingQueuedMessagesRef.current = pendingQueuedMessages ?? [];
+
   const updateQueueSelection = useCallback((next: number | null) => {
     queueSelectionIndexRef.current = next;
     setQueueSelectionIndex(next);
@@ -184,71 +119,39 @@ const InputBox: FC<Props> = ({
   const editingQueueIndex = editingQueueItem
     ? pendingQueuedMessages?.findIndex((message) => message.id === editingQueueItem.id)
     : -1;
-  const activePromptLabel =
-    menuPromptLabel ?? (editingQueueItem ? `edit ${(editingQueueIndex ?? -1) + 1} ▸ ` : promptLabel);
+  const activePromptLabel = editingQueueItem ? `edit ${(editingQueueIndex ?? -1) + 1} ▸ ` : promptLabel;
   const terminalWidth = useTerminalWidth({ waitingForRejectionReason, isShellMode, promptLabel: activePromptLabel });
   const { navigateUp, navigateDown } = useInputHistory(historyService);
-  const remountInput = useCallback(() => setInputKey((prev) => prev + 1), []);
+  const remountInput = useCallback(() => setInputKey((previous) => previous + 1), []);
+
   const handleCursorChange = useCallback(
     (nextOffset: number) => {
-      if (mode !== 'text') return;
+      if (
+        propsCursorOverride !== undefined &&
+        propsCursorOverride !== null &&
+        contextCursorOverride !== null &&
+        nextOffset !== cursorOffset
+      ) {
+        return;
+      }
       cursorOffsetRef.current = nextOffset;
       setCursorOffset(nextOffset);
     },
-    [mode, setCursorOffset],
+    [contextCursorOverride, cursorOffset, propsCursorOverride, setCursorOffset],
   );
+
   const handleImagesChange = useCallback(
     (nextImages: ImageRef[]) => {
       if (suppressImagesCallbackRef.current) {
         suppressImagesCallbackRef.current = false;
         return;
       }
-      setImages((prevImages) => (areImagesEqual(prevImages, nextImages) ? prevImages : nextImages));
+      setImages((previous) => (areImagesEqual(previous, nextImages) ? previous : nextImages));
     },
     [setImages],
   );
 
-  const stateRef = useRef({
-    mode,
-    slash,
-    path,
-    skills,
-    value,
-    onChange,
-    setCursorOffset,
-    setCursorOverride,
-    remountInput,
-    menuPromptLabel,
-  });
-  useEffect(() => {
-    cursorOffsetRef.current = cursorOffset;
-    stateRef.current = {
-      mode,
-      slash,
-      path,
-      skills,
-      value,
-      onChange,
-      setCursorOffset,
-      setCursorOverride,
-      remountInput,
-      menuPromptLabel,
-    };
-  });
-
   const cancelQueueInteraction = useCallback((): boolean => {
-    if (mode === 'path_completion' || mode === 'skill_selection') {
-      controller.escape();
-      return true;
-    }
-    if (mode === 'rewind_selection') {
-      controller.escape();
-      return true;
-    }
-    if (mode === 'provider_selection') {
-      controller.escape();
-      return true;
-    }
     if (queueSelectionIndexRef.current !== null) {
       updateQueueSelection(null);
       return true;
@@ -259,7 +162,7 @@ const InputBox: FC<Props> = ({
       return true;
     }
     return false;
-  }, [controller, mode, onChange, updateQueueSelection]);
+  }, [onChange, updateQueueSelection]);
 
   const { escHintVisible } = useEscapeKey({
     value,
@@ -268,381 +171,86 @@ const InputBox: FC<Props> = ({
     turnInFlight,
   });
 
-  // When a non-text mode is active (popup menu), keep cursorOverride in sync so
-  // MultilineInput always knows the cursor position when it becomes active again.
-  useEffect(() => {
-    if (mode !== 'text' && cursorOverride !== cursorOffset) {
-      setCursorOverride(cursorOffset);
-    }
-  }, [mode, cursorOffset, cursorOverride, setCursorOverride]);
-
-  // Only clear cursorOverride in text mode to avoid losing cursor position
-  // when a popup menu handles character input and leaves MultilineInput inactive.
-  useEffect(() => {
-    if (cursorOverride !== null && cursorOverride === cursorOffset && mode === 'text') {
-      setCursorOverride(null);
-    }
-  }, [cursorOverride, cursorOffset, mode, setCursorOverride]);
-
-  // After a popup menu closes and the new value has been synced to
-  // MultilineInput, apply any pending cursor override. We intentionally defer
-  // this to a separate commit so the value-sync effect (which resets the cursor
-  // to the end) does not overwrite the override.
-  // Popup menus own input while open so MultilineInput cannot move the text cursor underneath them.
   useInput((_input, key) => {
-    const {
-      mode: currentMode,
-      slash: currentSlash,
-      path: currentPath,
-      skills: currentSkills,
-      onChange: changeInput,
-      setCursorOffset: updateCursorOffset,
-      setCursorOverride: overrideCursor,
-      remountInput: remountCurrentInput,
-      menuPromptLabel: currentMenuPromptLabel,
-    } = stateRef.current;
-    const currentValue = inputValueRef.current;
-    const currentCursor = cursorOffsetRef.current;
     const selectedQueueIndex = queueSelectionIndexRef.current;
     const currentQueuedMessages = pendingQueuedMessagesRef.current;
-    if (currentMode === 'slash_commands') {
-      if (isFocusReportingSequence(_input)) return;
-      if (key.upArrow) controller.dispatchActiveEvent({ type: 'move', direction: 'up' });
-      else if (key.downArrow) controller.dispatchActiveEvent({ type: 'move', direction: 'down' });
-      else if (key.pageUp) controller.dispatchActiveEvent({ type: 'move', direction: 'page-up' });
-      else if (key.pageDown) controller.dispatchActiveEvent({ type: 'move', direction: 'page-down' });
-      else if ((key as any).home) controller.dispatchActiveEvent({ type: 'move', direction: 'home' });
-      else if ((key as any).end) controller.dispatchActiveEvent({ type: 'move', direction: 'end' });
-      else if (key.tab && !key.shift) controller.dispatchActiveEvent({ type: 'command', command: 'tab' });
-      else if (key.return) currentSlash.executeSelected();
-      else if (key.backspace && currentCursor > 0) {
-        const nextValue = currentValue.slice(0, currentCursor - 1) + currentValue.slice(currentCursor);
-        inputValueRef.current = nextValue;
-        cursorOffsetRef.current = currentCursor - 1;
-        controller.applyEditorEdit({
-          type: 'set-text',
-          text: nextValue,
-          cursor: currentCursor - 1,
-        });
-      } else if (key.delete && currentCursor < currentValue.length) {
-        const nextValue = currentValue.slice(0, currentCursor) + currentValue.slice(currentCursor + 1);
-        inputValueRef.current = nextValue;
-        cursorOffsetRef.current = currentCursor;
-        controller.applyEditorEdit({
-          type: 'set-text',
-          text: nextValue,
-          cursor: currentCursor,
-        });
-      } else if (key.leftArrow) {
-        cursorOffsetRef.current = Math.max(0, currentCursor - 1);
-        controller.applyEditorEdit({ type: 'move-cursor', cursor: currentCursor - 1 });
-      } else if (key.rightArrow) {
-        cursorOffsetRef.current = Math.min(currentValue.length, currentCursor + 1);
-        controller.applyEditorEdit({ type: 'move-cursor', cursor: currentCursor + 1 });
-      } else if (_input && !key.ctrl && !key.meta && !key.escape && !key.tab && !key.return) {
-        const nextValue = currentValue.slice(0, currentCursor) + _input + currentValue.slice(currentCursor);
-        inputValueRef.current = nextValue;
-        cursorOffsetRef.current = currentCursor + _input.length;
-        controller.applyEditorEdit({ type: 'insert', text: _input });
-      }
+    if (selectedQueueIndex === null) return;
+    if (queueSelectionJustOpenedRef.current) {
+      queueSelectionJustOpenedRef.current = false;
       return;
     }
-    if (currentMode === 'rewind_selection') {
-      if (key.upArrow) controller.dispatchActiveEvent({ type: 'move', direction: 'up' });
-      else if (key.downArrow) controller.dispatchActiveEvent({ type: 'move', direction: 'down' });
-      else if (key.pageUp) controller.dispatchActiveEvent({ type: 'move', direction: 'page-up' });
-      else if (key.pageDown) controller.dispatchActiveEvent({ type: 'move', direction: 'page-down' });
-      else if ((key as any).home) controller.dispatchActiveEvent({ type: 'move', direction: 'home' });
-      else if ((key as any).end) controller.dispatchActiveEvent({ type: 'move', direction: 'end' });
-      else if (key.tab && !key.shift) controller.dispatchActiveEvent({ type: 'command', command: 'tab' });
-      else if (key.return)
-        controller.dispatchActiveEvent({ type: 'accept', input: { kind: 'none' }, selected: undefined });
+
+    const selectedMessage = currentQueuedMessages[selectedQueueIndex];
+    if (!selectedMessage) {
+      updateQueueSelection(null);
       return;
     }
-    if (currentMode === 'path_completion' || currentMode === 'skill_selection') {
-      const selected =
-        currentMode === 'path_completion' ? currentPath.getSelectedItem() : currentSkills.getSelectedItem();
-      if (key.upArrow) controller.dispatchActiveEvent({ type: 'move', direction: 'up' });
-      else if (key.downArrow) controller.dispatchActiveEvent({ type: 'move', direction: 'down' });
-      else if (key.pageUp) controller.dispatchActiveEvent({ type: 'move', direction: 'page-up' });
-      else if (key.pageDown) controller.dispatchActiveEvent({ type: 'move', direction: 'page-down' });
-      else if ((key as any).home) controller.dispatchActiveEvent({ type: 'move', direction: 'home' });
-      else if ((key as any).end) controller.dispatchActiveEvent({ type: 'move', direction: 'end' });
-      else if (key.tab && !key.shift) controller.dispatchActiveEvent({ type: 'command', command: 'tab' });
-      else if (key.return) {
-        controller.dispatchActiveEvent({
-          type: 'accept',
-          input: { kind: 'composer', text: currentValue, cursor: currentCursor },
-          selected,
-        });
-      } else if (key.backspace && currentCursor > 0) {
-        const nextValue = currentValue.slice(0, currentCursor - 1) + currentValue.slice(currentCursor);
-        inputValueRef.current = nextValue;
-        cursorOffsetRef.current = currentCursor - 1;
-        controller.applyEditorEdit({ type: 'set-text', text: nextValue, cursor: currentCursor - 1 });
-      } else if (key.delete && currentCursor < currentValue.length) {
-        const nextValue = currentValue.slice(0, currentCursor) + currentValue.slice(currentCursor + 1);
-        inputValueRef.current = nextValue;
-        controller.applyEditorEdit({ type: 'set-text', text: nextValue, cursor: currentCursor });
-      } else if (key.leftArrow) {
-        cursorOffsetRef.current = Math.max(0, currentCursor - 1);
-        controller.applyEditorEdit({ type: 'move-cursor', cursor: currentCursor - 1 });
-      } else if (key.rightArrow) {
-        cursorOffsetRef.current = Math.min(currentValue.length, currentCursor + 1);
-        controller.applyEditorEdit({ type: 'move-cursor', cursor: currentCursor + 1 });
-      } else if (
-        _input &&
-        !key.ctrl &&
-        !key.meta &&
-        !key.escape &&
-        !key.tab &&
-        !key.return &&
-        !key.upArrow &&
-        !key.downArrow &&
-        !key.leftArrow &&
-        !key.rightArrow
-      ) {
-        const nextValue = currentValue.slice(0, currentCursor) + _input + currentValue.slice(currentCursor);
-        inputValueRef.current = nextValue;
-        cursorOffsetRef.current = currentCursor + _input.length;
-        controller.applyEditorEdit({ type: 'insert', text: _input });
-      }
-      return;
-    }
-    if (currentMode === 'provider_selection') {
-      if (key.upArrow) controller.dispatchActiveEvent({ type: 'move', direction: 'up' });
-      else if (key.downArrow) controller.dispatchActiveEvent({ type: 'move', direction: 'down' });
-      else if (key.return) {
-        controller.dispatchActiveEvent({
-          type: 'accept',
-          input: { kind: 'transient', text: currentValue, cursor: currentCursor, sensitive: false },
-          selected: undefined,
-        });
-      } else if (key.backspace) {
-        if (currentMenuPromptLabel === undefined) {
-          controller.dispatchActiveEvent({ type: 'command', command: 'delete' });
-        } else if (currentCursor > 0) {
-          controller.applyEditorEdit({
-            type: 'set-text',
-            text: currentValue.slice(0, currentCursor - 1) + currentValue.slice(currentCursor),
-            cursor: currentCursor - 1,
-          });
-        }
-      } else if (key.delete) {
-        if (currentMenuPromptLabel === undefined) {
-          controller.dispatchActiveEvent({ type: 'command', command: 'delete' });
-        } else if (currentCursor < currentValue.length) {
-          controller.applyEditorEdit({
-            type: 'set-text',
-            text: currentValue.slice(0, currentCursor) + currentValue.slice(currentCursor + 1),
-            cursor: currentCursor,
-          });
-        }
-      } else if (_input === '[') {
-        controller.dispatchActiveEvent({ type: 'command', command: 'reorder-up' });
-      } else if (_input === ']') {
-        controller.dispatchActiveEvent({ type: 'command', command: 'reorder-down' });
-      } else if (key.leftArrow) {
-        controller.applyEditorEdit({ type: 'move-cursor', cursor: currentCursor - 1 });
-      } else if (key.rightArrow) {
-        controller.applyEditorEdit({ type: 'move-cursor', cursor: currentCursor + 1 });
-      } else if (key.pageUp) {
-        controller.dispatchActiveEvent({ type: 'move', direction: 'page-up' });
-      } else if (key.pageDown) {
-        controller.dispatchActiveEvent({ type: 'move', direction: 'page-down' });
-      } else if ((key as any).home) {
-        controller.dispatchActiveEvent({ type: 'move', direction: 'home' });
-      } else if ((key as any).end) {
-        controller.dispatchActiveEvent({ type: 'move', direction: 'end' });
-      } else if (
-        _input &&
-        !key.ctrl &&
-        !key.meta &&
-        !key.escape &&
-        !key.tab &&
-        !key.return &&
-        !key.upArrow &&
-        !key.downArrow &&
-        !key.leftArrow &&
-        !key.rightArrow
-      ) {
-        controller.applyEditorEdit({ type: 'insert', text: _input });
-      }
-      return;
-    }
-    if (
-      currentMode === 'settings_completion' ||
-      currentMode === 'settings_value_completion' ||
-      currentMode === 'model_selection'
-    ) {
-      const topFrame = controller.getSnapshot().stack.at(-1);
-      const expectedKind =
-        currentMode === 'settings_completion'
-          ? 'settings'
-          : currentMode === 'settings_value_completion'
-          ? 'settings_value'
-          : 'model';
-      // Graph 3 (settings / settings-value-child / settings-model) is
-      // controller-owned; graph 4's direct triggers (/model, /effort,
-      // /auto-approve) are not migrated until Step 2 and fall through to the
-      // legacy handler table below. The two never coexist for a given mode
-      // string — only one engine ever owns a live frame of a given kind.
-      if (topFrame?.kind === expectedKind) {
-        if (isFocusReportingSequence(_input)) return;
-        const hasCategoryOrProviderSwitch = currentMode !== 'settings_value_completion';
-        if (key.upArrow) controller.dispatchActiveEvent({ type: 'move', direction: 'up' });
-        else if (key.downArrow) controller.dispatchActiveEvent({ type: 'move', direction: 'down' });
-        else if (key.pageUp) controller.dispatchActiveEvent({ type: 'move', direction: 'page-up' });
-        else if (key.pageDown) controller.dispatchActiveEvent({ type: 'move', direction: 'page-down' });
-        else if ((key as any).home) controller.dispatchActiveEvent({ type: 'move', direction: 'home' });
-        else if ((key as any).end) controller.dispatchActiveEvent({ type: 'move', direction: 'end' });
-        else if (key.tab && !key.shift) controller.dispatchActiveEvent({ type: 'command', command: 'tab' });
-        else if (key.ctrl && _input === 'r') controller.dispatchActiveEvent({ type: 'command', command: 'refresh' });
-        else if (key.ctrl && _input === 'd') controller.dispatchActiveEvent({ type: 'command', command: 'reset' });
-        else if (key.return) {
-          controller.dispatchActiveEvent({
-            type: 'accept',
-            input: { kind: 'composer', text: currentValue, cursor: currentCursor },
-            selected: undefined,
-          });
-        } else if (hasCategoryOrProviderSwitch && key.leftArrow) {
-          controller.dispatchActiveEvent({ type: 'command', command: 'left' });
-        } else if (hasCategoryOrProviderSwitch && key.rightArrow) {
-          controller.dispatchActiveEvent({ type: 'command', command: 'right' });
-        } else if (!hasCategoryOrProviderSwitch && key.leftArrow) {
-          cursorOffsetRef.current = Math.max(0, currentCursor - 1);
-          controller.applyEditorEdit({ type: 'move-cursor', cursor: currentCursor - 1 });
-        } else if (!hasCategoryOrProviderSwitch && key.rightArrow) {
-          cursorOffsetRef.current = Math.min(currentValue.length, currentCursor + 1);
-          controller.applyEditorEdit({ type: 'move-cursor', cursor: currentCursor + 1 });
-        } else if (key.backspace && currentCursor > 0) {
-          const nextValue = currentValue.slice(0, currentCursor - 1) + currentValue.slice(currentCursor);
-          inputValueRef.current = nextValue;
-          cursorOffsetRef.current = currentCursor - 1;
-          controller.applyEditorEdit({ type: 'set-text', text: nextValue, cursor: currentCursor - 1 });
-        } else if (key.delete && currentCursor < currentValue.length) {
-          const nextValue = currentValue.slice(0, currentCursor) + currentValue.slice(currentCursor + 1);
-          inputValueRef.current = nextValue;
-          controller.applyEditorEdit({ type: 'set-text', text: nextValue, cursor: currentCursor });
-        } else if (
-          _input &&
-          !key.ctrl &&
-          !key.meta &&
-          !key.escape &&
-          !key.tab &&
-          !key.return &&
-          !key.upArrow &&
-          !key.downArrow &&
-          !key.leftArrow &&
-          !key.rightArrow
-        ) {
-          const nextValue = currentValue.slice(0, currentCursor) + _input + currentValue.slice(currentCursor);
-          inputValueRef.current = nextValue;
-          cursorOffsetRef.current = currentCursor + _input.length;
-          controller.applyEditorEdit({ type: 'insert', text: _input });
-        }
-        return;
-      }
-      // Not controller-owned (graph 4): fall through to the legacy handler
-      // table below.
-    }
-    if (currentMode === 'text' && selectedQueueIndex !== null) {
-      if (queueSelectionJustOpenedRef.current) {
-        queueSelectionJustOpenedRef.current = false;
-        return;
-      }
-      const selectedMessage = currentQueuedMessages[selectedQueueIndex];
-      if (!selectedMessage) {
+    if (key.upArrow) {
+      if (selectedQueueIndex > 0) {
+        updateQueueSelection(selectedQueueIndex - 1);
+      } else {
         updateQueueSelection(null);
-        return;
-      }
-      if (key.upArrow) {
-        if (selectedQueueIndex > 0) {
-          updateQueueSelection(selectedQueueIndex - 1);
-          return;
-        }
-        updateQueueSelection(null);
-        const previous = navigateUp({ text: currentValue, images });
+        const previous = navigateUp({ text: inputValueRef.current, images });
         if (previous !== null) {
-          changeInput(previous.text);
+          onChange(previous.text);
           suppressImagesCallbackRef.current = true;
           setImages((previousImages) =>
             areImagesEqual(previousImages, previous.images ?? []) ? previousImages : previous.images ?? [],
           );
-          remountCurrentInput();
+          remountInput();
         }
-        return;
-      }
-      if (key.downArrow) {
-        if (selectedQueueIndex < currentQueuedMessages.length - 1) {
-          updateQueueSelection(selectedQueueIndex + 1);
-        } else {
-          updateQueueSelection(null);
-        }
-        return;
-      }
-      if (_input === 'e' || key.return) {
-        setQueueNotice(null);
-        setEditingQueueItem({ id: selectedMessage.id, restoreInput: currentValue });
-        updateQueueSelection(null);
-        changeInput(selectedMessage.text);
-        updateCursorOffset(selectedMessage.text.length);
-        overrideCursor(selectedMessage.text.length);
-        return;
-      }
-      if (_input === 'd') {
-        if (!onRetractQueuedMessage) return;
-        void onRetractQueuedMessage(selectedMessage.id).then((result) => {
-          updateQueueSelection(null);
-          if (result.kind === 'too_late') setQueueNotice('already sent — the model has it');
-          else if (result.kind === 'unknown_id') setQueueNotice('queued message is no longer available');
-        });
-        return;
       }
       return;
     }
-    if (currentMode === 'text') return;
+    if (key.downArrow) {
+      updateQueueSelection(selectedQueueIndex < currentQueuedMessages.length - 1 ? selectedQueueIndex + 1 : null);
+      return;
+    }
+    if (_input === 'e' || key.return) {
+      setQueueNotice(null);
+      setEditingQueueItem({ id: selectedMessage.id, restoreInput: inputValueRef.current });
+      updateQueueSelection(null);
+      onChange(selectedMessage.text);
+      setCursorOffset(selectedMessage.text.length);
+      setCursorOverride(selectedMessage.text.length);
+      return;
+    }
+    if (_input === 'd' && onRetractQueuedMessage) {
+      void onRetractQueuedMessage(selectedMessage.id).then((result) => {
+        updateQueueSelection(null);
+        if (result.kind === 'too_late') setQueueNotice('already sent — the model has it');
+        else if (result.kind === 'unknown_id') setQueueNotice('queued message is no longer available');
+      });
+    }
   });
 
   const handleBoundaryArrow = useCallback(
     (direction: 'up' | 'down' | 'left' | 'right') => {
       if (direction !== 'up' && direction !== 'down') return;
-
-      if (mode !== 'text') {
-        controller.dispatchActiveEvent({ type: 'move', direction: direction === 'up' ? 'up' : 'down' });
-        return;
-      }
-
-      // On an empty input, up-arrow enters the inline queue selector at the
-      // bottom item. Further up-arrows walk into ordinary input history.
       if (direction === 'up' && value === '' && pendingQueuedMessages && pendingQueuedMessages.length > 0) {
         setQueueNotice(null);
         queueSelectionJustOpenedRef.current = true;
         updateQueueSelection(pendingQueuedMessages.length - 1);
         return;
       }
-
-      // In text mode, arrows traverse input history.
       const next = direction === 'up' ? navigateUp({ text: value, images }) : navigateDown();
       if (next !== null) {
         onChange(next.text);
         suppressImagesCallbackRef.current = true;
-        setImages((prevImages) => (areImagesEqual(prevImages, next.images ?? []) ? prevImages : next.images ?? []));
+        setImages((previous) => (areImagesEqual(previous, next.images ?? []) ? previous : next.images ?? []));
         remountInput();
       }
     },
     [
-      mode,
-      controller,
-      navigateUp,
-      navigateDown,
-      value,
       images,
+      navigateDown,
+      navigateUp,
       onChange,
+      pendingQueuedMessages,
       remountInput,
       setImages,
-      pendingQueuedMessages,
       updateQueueSelection,
+      value,
     ],
   );
 
@@ -651,14 +259,6 @@ const InputBox: FC<Props> = ({
       if (busyMode === 'steer' && Date.now() < altEnterSuppressUntilRef.current) {
         altEnterSuppressUntilRef.current = 0;
         consumedAltEnterRef.current = false;
-        return;
-      }
-      if (mode !== 'text') {
-        controller.dispatchActiveEvent({
-          type: 'accept',
-          input: { kind: 'composer', text: submittedValue, cursor: cursorOffset },
-          selected: undefined,
-        });
         return;
       }
       const turnImages = submittedImages ?? images;
@@ -683,31 +283,20 @@ const InputBox: FC<Props> = ({
       setImages([]);
       void onSubmit({ text: submittedValue, ...(turnImages.length ? { images: turnImages } : {}) }, { busyMode });
     },
-    [
-      mode,
-      controller,
-      cursorOffset,
-      onSubmit,
-      images,
-      allowEmptySubmit,
-      setImages,
-      editingQueueItem,
-      onEditQueuedMessage,
-    ],
+    [allowEmptySubmit, editingQueueItem, images, onEditQueuedMessage, onSubmit, setImages],
   );
 
   useEffect(() => {
-    if (!stdin || mode !== 'text') return;
-
+    if (!stdin) return;
     const onData = (chunk: Buffer | string) => {
-      const value = String(chunk);
+      const data = String(chunk);
       const isRecentEscape = Date.now() - stdinBufferTimestampRef.current < 100;
-      if (value === '\x1b\r' || (stdinBufferRef.current === '\x1b' && value === '\r' && isRecentEscape)) {
+      if (data === '\x1b\r' || (stdinBufferRef.current === '\x1b' && data === '\r' && isRecentEscape)) {
         consumedAltEnterRef.current = true;
         altEnterSuppressUntilRef.current = Date.now() + 100;
         handleWrapperSubmit(inputValueRef.current, images, 'follow_up');
       }
-      if (value.endsWith('\x1b')) {
+      if (data.endsWith('\x1b')) {
         consumedAltEnterRef.current = true;
         stdinBufferRef.current = '\x1b';
         stdinBufferTimestampRef.current = Date.now();
@@ -720,22 +309,25 @@ const InputBox: FC<Props> = ({
     return () => {
       stdin.off('data', onData);
     };
-  }, [stdin, mode, images, handleWrapperSubmit]);
+  }, [handleWrapperSubmit, images, stdin]);
+
+  useEffect(() => {
+    if (cursorOverride !== null && cursorOverride === cursorOffset) {
+      setCursorOverride(null);
+    }
+  }, [cursorOffset, cursorOverride, setCursorOverride]);
 
   const handlePasteError = useCallback(
-    (reason: PasteErrorReason) => {
-      loggingService.warn('Image paste failed', { reason });
-    },
+    (reason: PasteErrorReason) => loggingService.warn('Image paste failed', { reason }),
     [loggingService],
   );
-
-  // Wrap MultilineInput's onChange to strip terminal focus-reporting sequences
-  // (\x1b[I = focus-in, \x1b[O = focus-out) that may arrive while the terminal
-  // delivers DEC mode ?1004 events and MultilineInput doesn't recognise them.
   const handleMultilineChange = useCallback(
     (newValue: string) => {
       const filtered = newValue.replace(/\x1b\[I|\x1b\[O/g, '');
-      onChange(filtered);
+      // ink-prompt can echo the controlled value when it mounts. Treat that
+      // as synchronization, not an edit, so it cannot move a middle cursor
+      // to the end during the menu-to-editor handoff.
+      if (filtered !== inputValueRef.current) onChange(filtered);
     },
     [onChange],
   );
@@ -750,29 +342,11 @@ const InputBox: FC<Props> = ({
           notice={queueNotice}
         />
       )}
-
-      <MenuStackHost
-        stack={controller.getSnapshot().stack}
-        controller={controller}
-        interactions={interactions}
-        services={{
-          settingsService,
-          slash,
-          onSlashTabComplete,
-          path,
-          skills,
-          settings,
-          settingsValue,
-          models,
-        }}
-      />
-
       {activePromptLabel && (
         <Box>
           <Text color="#22d3ee">{activePromptLabel}</Text>
         </Box>
       )}
-
       <Box>
         {!activePromptLabel && waitingForRejectionReason ? (
           <Text color="yellow">Why? </Text>
@@ -785,7 +359,7 @@ const InputBox: FC<Props> = ({
           key={inputKey}
           value={value}
           width={terminalWidth}
-          isActive={mode === 'text' && queueSelectionIndex === null}
+          isActive={queueSelectionIndex === null}
           onChange={handleMultilineChange}
           onSubmit={handleWrapperSubmit}
           onCursorChange={handleCursorChange}
@@ -797,9 +371,7 @@ const InputBox: FC<Props> = ({
           onPasteError={handlePasteError}
           pasteThreshold={settingsService.get('ui.pasteThreshold')}
           ignoreInput={(input, key) => {
-            if (Date.now() >= altEnterSuppressUntilRef.current) {
-              consumedAltEnterRef.current = false;
-            }
+            if (Date.now() >= altEnterSuppressUntilRef.current) consumedAltEnterRef.current = false;
             if (consumedAltEnterRef.current && (input.includes('\x1b\r') || key.return)) {
               consumedAltEnterRef.current = false;
               altEnterSuppressUntilRef.current = 0;

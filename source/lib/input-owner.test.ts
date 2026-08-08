@@ -181,4 +181,39 @@ describe('deriveInputOwner', () => {
     expect(deriveInputOwner(base)).toEqual({ kind: 'background-tasks' });
     expect(deriveInputOwner({ ...base, queuePaused: true })).toEqual({ kind: 'queue-paused' });
   });
+
+  it('gives a visible menu exclusive ownership over the editor and background manager', () => {
+    expect(
+      deriveInputOwner({
+        handoffStage: null,
+        pendingSurgeTurn: null,
+        pendingLargeUncachedTurn: null,
+        waitingForApproval: false,
+        pendingApproval: null,
+        queuePaused: false,
+        backgroundTaskManagerOpen: true,
+        menuOpen: true,
+        waitingForRejectionReason: false,
+        waitingForAskUserAnswer: false,
+        isProcessing: false,
+      }),
+    ).toEqual({ kind: 'menu' });
+  });
+
+  it('lets urgent modals preempt a menu without changing the menu state', () => {
+    expect(
+      deriveInputOwner({
+        handoffStage: 'confirm_model',
+        pendingSurgeTurn: null,
+        pendingLargeUncachedTurn: null,
+        waitingForApproval: false,
+        pendingApproval: null,
+        queuePaused: false,
+        menuOpen: true,
+        waitingForRejectionReason: false,
+        waitingForAskUserAnswer: false,
+        isProcessing: false,
+      }),
+    ).toEqual({ kind: 'handoff-confirm' });
+  });
 });

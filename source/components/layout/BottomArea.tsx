@@ -1,7 +1,7 @@
 import React, { FC, useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import ApprovalPrompt from '../prompt/ApprovalPrompt.js';
-import InputBox from '../InputBox.js';
+import ApplicationInputSurface from '../input/ApplicationInputSurface.js';
 import StatusBar from './StatusBar.js';
 import HandoffConfirmationPrompt from '../prompt/HandoffConfirmationPrompt.js';
 import StandardModeConfirmationPrompt from '../prompt/StandardModeConfirmationPrompt.js';
@@ -28,6 +28,7 @@ import { deriveInputOwner } from '../../lib/input-owner.js';
 import type { SubmissionMutation } from '../../services/conversation/conversation-adapter.js';
 import type { SessionCostSummary } from '../../services/cost/model-cost.js';
 import type { BackgroundTaskControlPort } from '../../services/session/background-task-control.js';
+import { useInputState } from '../../context/InputContext.js';
 
 export type BottomAreaProps = {
   pendingApproval: PendingApproval | null;
@@ -158,6 +159,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   moveForegroundTaskToBackground,
   backgroundApprovalPendingCount = 0,
 }) => {
+  const { controller } = useInputState();
   const [dotCount, setDotCount] = useState(1);
   const [backgroundTaskManagerOpen, setBackgroundTaskManagerOpen] = useState(false);
   const [thinkingElapsedSeconds, setThinkingElapsedSeconds] = useState(() =>
@@ -209,6 +211,7 @@ const BottomArea: FC<BottomAreaProps> = ({
     queuePaused,
     isProcessing,
     backgroundTaskManagerOpen,
+    menuOpen: controller.getSnapshot().stack.length > 0,
   });
   const showHandoffConfirm = inputOwner.kind === 'handoff-confirm';
   const showStandardModeConfirm = inputOwner.kind === 'standard-mode-confirm';
@@ -218,13 +221,6 @@ const BottomArea: FC<BottomAreaProps> = ({
   const showQueuePausedPrompt = inputOwner.kind === 'queue-paused';
   const showBackgroundTaskManager = inputOwner.kind === 'background-tasks';
   const foregroundTransferCandidate = getForegroundTaskTransferCandidate?.() ?? null;
-  // InputBox owns input only when no modal prompt owns it and either no approval
-  // is pending or the user is entering a rejection reason / ask-user answer.
-  const showInput =
-    inputOwner.kind === 'input' &&
-    !queuePaused &&
-    (!waitingForApproval || waitingForRejectionReason || waitingForAskUserAnswer);
-
   useEffect(() => {
     if (
       backgroundTaskManagerOpen &&
@@ -321,39 +317,38 @@ const BottomArea: FC<BottomAreaProps> = ({
                 onDiscard={onDiscardQueue || (() => {})}
               />
             )}
-            {!showQueuePausedPrompt && !showBackgroundTaskManager && showInput && (
-              <InputBox
-                onSubmit={onSubmit}
-                slashCommands={slashCommands}
-                waitingForRejectionReason={waitingForRejectionReason}
-                isShellMode={isShellMode}
-                settingsService={settingsService}
-                loggingService={loggingService}
-                historyService={historyService}
-                onSettingChange={onSettingChange}
-                onSystemMessage={onSystemMessage}
-                onSlashTabComplete={onSlashTabComplete}
-                skillsService={skillsService}
-                turnInFlight={isProcessing}
-                pendingQueuedMessages={pendingQueuedMessages}
-                onRetractQueuedMessage={onRetractQueuedMessage}
-                onEditQueuedMessage={onEditQueuedMessage}
-                promptLabel={
-                  waitingForAskUserAnswer
-                    ? 'Answer: '
-                    : handoffState?.stage === 'entering_message'
-                    ? 'Handoff message (enter to use default message): '
-                    : handoffState?.stage === 'selecting_model'
-                    ? 'Select model for handoff: '
-                    : handoffState?.stage === 'selecting_effort'
-                    ? 'Select reasoning effort level: '
-                    : undefined
-                }
-                allowEmptySubmit={handoffState?.stage === 'entering_message' || waitingForAskUserAnswer}
-              />
-            )}
           </Box>
         )}
+        <ApplicationInputSurface
+          enabled={inputOwner.kind === 'input' || inputOwner.kind === 'menu'}
+          onSubmit={onSubmit}
+          slashCommands={slashCommands}
+          waitingForRejectionReason={waitingForRejectionReason}
+          isShellMode={isShellMode}
+          settingsService={settingsService}
+          loggingService={loggingService}
+          historyService={historyService}
+          onSettingChange={onSettingChange}
+          onSystemMessage={onSystemMessage}
+          onSlashTabComplete={onSlashTabComplete}
+          skillsService={skillsService}
+          turnInFlight={isProcessing}
+          pendingQueuedMessages={pendingQueuedMessages}
+          onRetractQueuedMessage={onRetractQueuedMessage}
+          onEditQueuedMessage={onEditQueuedMessage}
+          promptLabel={
+            waitingForAskUserAnswer
+              ? 'Answer: '
+              : handoffState?.stage === 'entering_message'
+              ? 'Handoff message (enter to use default message): '
+              : handoffState?.stage === 'selecting_model'
+              ? 'Select model for handoff: '
+              : handoffState?.stage === 'selecting_effort'
+              ? 'Select reasoning effort level: '
+              : undefined
+          }
+          allowEmptySubmit={handoffState?.stage === 'entering_message' || waitingForAskUserAnswer}
+        />
       </Box>
 
       <StatusBar

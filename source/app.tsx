@@ -107,6 +107,10 @@ const App: FC<AppProps> = ({
   const { stdout } = useStdout();
   const { setInput, replaceInput, setImages } = useInputActions();
   const { input, mode, images: _images, controller } = useInputState();
+  const menuOpen =
+    typeof (controller as { getSnapshot?: () => { stack?: readonly unknown[] } }).getSnapshot === 'function'
+      ? ((controller as { getSnapshot: () => { stack?: readonly unknown[] } }).getSnapshot().stack?.length ?? 0) > 0
+      : mode !== 'text';
   const [messageListEpoch, setMessageListEpoch] = useState(0);
   const [startupBannerIds, setStartupBannerIds] = useState(['startup-banner-0']);
   const liteMode = useSetting(settingsService, 'app.liteMode') ?? false;
@@ -555,6 +559,7 @@ const App: FC<AppProps> = ({
     pendingApproval: effectivePendingApproval,
     queuePaused,
     isProcessing: effectiveIsProcessing,
+    menuOpen,
   });
 
   useEffect(() => {

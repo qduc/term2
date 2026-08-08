@@ -6,6 +6,7 @@ import type { useModelSelection } from '../../hooks/use-model-selection.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
 import type { MenuComponentProps } from './menu-registry.js';
 import type { MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
+import { applyMenuEditorEvent } from './menu-editor.js';
 
 type ModelsState = ReturnType<typeof useModelSelection>;
 
@@ -41,6 +42,8 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
           setApplyError(event.message);
           return keep();
         }
+
+        if (applyMenuEditorEvent(controller, event, { horizontal: false })) return keep();
 
         switch (event.type) {
           case 'move':
@@ -130,6 +133,8 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
           }
           case 'escape':
             return { stack: { type: 'close-top' } };
+          default:
+            return;
         }
       },
     };

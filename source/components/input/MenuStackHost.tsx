@@ -7,9 +7,10 @@ export interface MenuStackHostProps {
   controller: MenuController;
   interactions: MenuInteractionRegistry;
   services: MenuServices;
+  enabled?: boolean;
 }
 
-export function MenuStackHost({ stack, controller, interactions, services }: MenuStackHostProps) {
+export function MenuStackHost({ stack, controller, interactions, services, enabled = true }: MenuStackHostProps) {
   const registry = getMenuRegistry();
 
   return (
@@ -24,7 +25,7 @@ export function MenuStackHost({ stack, controller, interactions, services }: Men
           <Component
             key={frame.id}
             frame={frame}
-            active={active}
+            active={active && enabled}
             controller={controller}
             interactions={interactions}
             services={services}

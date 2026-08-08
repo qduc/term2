@@ -3,7 +3,8 @@ import SkillSelectionMenu from '../menu/SkillSelectionMenu.js';
 import { computeSkillInsertion } from './insertions.js';
 import type { SkillInfo } from '../../services/skills/skills-service.js';
 import type { MenuComponentProps } from './menu-registry.js';
-import type { MenuFrame, MenuInteraction } from './menu-types.js';
+import type { MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
+import { applyMenuEditorEvent } from './menu-editor.js';
 
 type SkillsState = ReturnType<typeof import('../../hooks/use-skill-selection.js').useSkillSelection>;
 
@@ -15,10 +16,12 @@ type Props = MenuComponentProps<Extract<MenuFrame, { kind: 'skills' }>> & {
 
 export function SkillsMenuSession({ frame, active, controller, interactions, services }: Props) {
   const skills = services.skills;
+  const keep = (): MenuEffect => ({ stack: { type: 'keep' } });
   const interaction = useMemo<MenuInteraction>(
     () => ({
       handle: (event) => {
         if (!('type' in event)) return;
+        if (applyMenuEditorEvent(controller, event)) return keep();
         switch (event.type) {
           case 'move':
             if (event.direction === 'up') skills.moveUp();
@@ -48,6 +51,8 @@ export function SkillsMenuSession({ frame, active, controller, interactions, ser
           }
           case 'escape':
             return { stack: { type: 'close-top' } };
+          default:
+            return;
         }
       },
     }),

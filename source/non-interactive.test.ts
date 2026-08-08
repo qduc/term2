@@ -242,6 +242,7 @@ it('with autoApprove=false: rejects on approval_required with explanation', asyn
     },
   ]);
   expect(stdout.getOutput()).toBe('\n');
+  expect(stderr.getOutput()).toBe('');
 });
 
 it('writes parent and subagent tool summaries to stderr only', async () => {

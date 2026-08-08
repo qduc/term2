@@ -816,7 +816,10 @@ export class TurnWorkflow {
           const previousInputForSurge =
             state.inputMode === 'full_history' ? this.deps.conversationStore.getHistory() : undefined;
 
-          const cycleResult = yield* this.#executeContinuationStreamCycle(state);
+          const cycleResult = yield* this.#executeContinuationStreamCycle(
+            state,
+            init.kind === 'approval_decision' && init.stopAfterApprovalResolution === true,
+          );
 
           if (cycleResult.kind === 'stale') {
             return { kind: 'stale' };
@@ -1048,7 +1051,10 @@ export class TurnWorkflow {
     return { action: 'loop', nextPlan, isApproved: answer === 'y' };
   }
 
-  async *#executeContinuationStreamCycle(state: ContinuationState): AsyncGenerator<
+  async *#executeContinuationStreamCycle(
+    state: ContinuationState,
+    stopAfterApprovalResolution = false,
+  ): AsyncGenerator<
     ConversationEvent,
     | { kind: 'stale' }
     | {
@@ -1071,6 +1077,7 @@ export class TurnWorkflow {
       ),
       providerHistorySnapshot: this.deps.conversationStore.getProviderHistorySnapshot(),
       hookTurnId: this.#hookTurnId,
+      ...(stopAfterApprovalResolution ? { stopAfterApprovalResolution: true } : {}),
     };
     Object.defineProperty(continuationOptions, 'providerContinuityLineage', {
       value: this.deps.providerContinuity.lineage,

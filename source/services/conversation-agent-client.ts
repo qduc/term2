@@ -18,6 +18,11 @@ export type AgentClientRunOptions = {
   providerContinuityLineage?: number;
   /** Internal public-hook correlation for the logical foreground turn. */
   hookTurnId?: string;
+  /**
+   * End the continuation once the approved tool's result is recorded, without
+   * a further model call. See `ApplicationRunLoopOptions.stopAfterApprovalResolution`.
+   */
+  stopAfterApprovalResolution?: boolean;
 };
 
 export type AgentClientChatOptions = {

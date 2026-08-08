@@ -55,6 +55,7 @@ export type ApprovalDecisionInput = {
   answer: string;
   rejectionReason?: string;
   generation: number;
+  stopAfterApprovalResolution?: boolean;
 };
 
 export class ApprovalFlowCoordinator {
@@ -72,12 +73,17 @@ export class ApprovalFlowCoordinator {
     return this.#toolOwnership.ownerOf(getCallIdFromObject(interruption));
   }
 
-  buildApprovalDecision(answer: string, rejectionReason?: string): ApprovalDecisionInput {
+  buildApprovalDecision(
+    answer: string,
+    rejectionReason?: string,
+    stopAfterApprovalResolution?: boolean,
+  ): ApprovalDecisionInput {
     return {
       kind: 'approval_decision',
       answer,
       rejectionReason,
       generation: this.deps.approvalState.getPending()?.token ?? 0,
+      ...(stopAfterApprovalResolution ? { stopAfterApprovalResolution: true } : {}),
     };
   }
 

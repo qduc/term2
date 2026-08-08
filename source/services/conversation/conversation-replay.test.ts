@@ -224,6 +224,72 @@ it('replayEvents: v3 assistant_turn preserves coarse tool_result ledger and avoi
   expect(restored.replayWarnings.some((warning) => warning.includes('duplicated'))).toBe(false);
 });
 
+it('replayEvents: compact assistant_turn + ledger pairs + trailing user message keeps one call/result pair in order', () => {
+  // Regression for the 2026-08-08 HTTP 400 ("Messages with role 'tool' must
+  // be a response to a preceding message with 'tool_calls'"): a compact
+  // assistant_turn persists only the turn's last tool result, so replay used
+  // to duplicate that result and place a tool_result before its tool_call.
+  const envelopes: LogEnvelope[] = [
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run diagnostics' } }),
+    env({ type: 'tool_started', turnId: 'turn-1', toolCallId: 'call-a', toolName: 'shell', arguments: '{"command":"env"}' }),
+    env({ type: 'tool_started', turnId: 'turn-1', toolCallId: 'call-b', toolName: 'shell', arguments: '{"command":"pwd"}' }),
+    env({
+      type: 'tool_result',
+      turnId: 'turn-1',
+      callId: 'call-b',
+      toolName: 'shell',
+      status: 'completed',
+      output: '/repo',
+      historyItems: [
+        { type: 'function_call', id: 'fc_b', callId: 'call-b', name: 'shell', arguments: '{"command":"pwd"}' },
+        { type: 'function_call_result', id: 'fcr_b', callId: 'call-b', name: 'shell', output: '/repo' },
+      ],
+    }),
+    env({
+      type: 'tool_result',
+      turnId: 'turn-1',
+      callId: 'call-a',
+      toolName: 'shell',
+      status: 'completed',
+      output: 'no output',
+      historyItems: [
+        { type: 'function_call', id: 'fc_a', callId: 'call-a', name: 'shell', arguments: '{"command":"env"}' },
+        { type: 'function_call_result', id: 'fcr_a', callId: 'call-a', name: 'shell', output: 'no output' },
+      ],
+    }),
+    env({
+      type: 'assistant_turn',
+      turn: {
+        items: [
+          // Compact v3 shape: only the turn's last tool result survives.
+          { type: 'tool_result', callId: 'call-a', toolName: 'shell', status: 'completed', output: 'no output' },
+          { type: 'reasoning', text: 'no env vars' },
+          { type: 'assistant_text', text: 'Done.' },
+        ],
+      },
+      state: { previousResponseId: 'resp-v3' },
+    }),
+    // The resumed request: the trailing user message that triggers the
+    // history projection in the wild.
+    env({ type: 'user_message', message: { id: 'u2', sender: 'user', text: 'Reply with exactly: OK' } }),
+  ];
+
+  const restored = replayEvents(envelopes);
+  const toolItems = restored.history.filter(
+    (item: any) => item.callId === 'call-a' || item.callId === 'call-b',
+  );
+
+  expect(toolItems.map((item: any) => item.callId)).toEqual(['call-a', 'call-a', 'call-b', 'call-b']);
+  expect(toolItems.map((item: any) => item.type)).toEqual([
+    'function_call',
+    'function_call_result',
+    'function_call',
+    'function_call_result',
+  ]);
+  expect(restored.replayWarnings.some((warning) => warning.includes('duplicated'))).toBe(false);
+});
+
 it('replayEvents: v3 assistant_turn compact state participates in cross-model invalidation', () => {
   const envelopes: LogEnvelope[] = [
     env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z', model: 'gpt-5' }),

@@ -49,6 +49,41 @@ it('projectProviderHistory inserts completed ledger pairs once', () => {
   expect(second.warnings).toEqual([]);
 });
 
+it('projectProviderHistory replaces a lone compact tool result with the ledger pair instead of duplicating it', () => {
+  // A compact assistant_turn persists only a turn's last tool result, so
+  // replayed history can contain a lone function_call_result with no
+  // preceding function_call. Re-inserting the ledger pair must replace that
+  // fragment, not duplicate it — a duplicated result whose copy precedes its
+  // call is rejected by OpenAI-compatible providers with HTTP 400
+  // ("Messages with role 'tool' must be a response to a preceding message
+  // with 'tool_calls'").
+  const history: AgentInputItem[] = [
+    { role: 'user', type: 'message', content: 'run the tool' },
+    {
+      type: 'function_call_result',
+      id: 'fcr_1',
+      callId: 'call-read',
+      name: 'read_file',
+      output: 'contents',
+    } as AgentInputItem,
+    { role: 'assistant', type: 'message', content: 'done' },
+  ];
+
+  const projected = projectProviderHistory({ history, toolLedger: [completedLedgerEntry()] });
+
+  const toolItems = projected.history.filter(
+    (item: any) => item.type === 'function_call' || item.type === 'function_call_result',
+  );
+  expect(toolItems.map((item: any) => item.callId)).toEqual(['call-read', 'call-read']);
+  expect(toolItems.map((item: any) => item.type)).toEqual(['function_call', 'function_call_result']);
+  expect(projected.warnings).toEqual([
+    {
+      code: ProjectionWarningCode.CompletedToolHistoryInserted,
+      detail: { addedCompletedPairs: 1 },
+    },
+  ]);
+});
+
 it('projectProviderHistory does not reinsert tool pairs behind a compaction marker', () => {
   const history: AgentInputItem[] = [
     { role: 'user', type: 'message', content: 'run the tool' },

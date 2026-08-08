@@ -153,10 +153,12 @@ it.sequential('stops processing on double Escape while waiting for approval', as
 });
 
 it.sequential('disarms the interrupt confirmation after the timeout window', async () => {
+  // `renderInAct` uses a short real-time flush timer during mount. Enable fake
+  // timers only after that setup has completed, otherwise the mount itself
+  // waits forever for a timer that the test has not advanced yet.
+  await renderHarness({ isProcessing: true });
   vi.useFakeTimers();
   try {
-    await renderHarness({ isProcessing: true });
-
     await fireInput('', { escape: true });
     await act(async () => {
       vi.advanceTimersByTime(2500);

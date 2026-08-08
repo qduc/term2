@@ -386,7 +386,6 @@ const sessionContextService = new SessionContextService();
 
 // Create LoggingService instance
 const logger = new LoggingService({
-  disableLogging: false,
   sessionContextService,
 });
 

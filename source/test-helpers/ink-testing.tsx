@@ -2,6 +2,7 @@ import React, { act } from 'react';
 import { afterEach } from 'vitest';
 import { render } from 'ink-testing-library';
 import { stripVTControlCharacters } from 'node:util';
+import { setTimeout as realSetTimeout } from 'node:timers';
 
 type TeardownContext = {
   teardown: (callback: () => void | Promise<void>) => void;
@@ -35,7 +36,7 @@ export const renderInAct = async (element: React.ReactElement, context?: Teardow
 
   await act(async () => {
     result = render(element);
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await new Promise((resolve) => realSetTimeout(resolve, 10));
   });
 
   const schedule =

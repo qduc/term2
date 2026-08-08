@@ -1,6 +1,6 @@
 // @ts-expect-error IS_REACT_ACT_ENVIRONMENT is not in globalThis types
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-import { it, expect, beforeAll, afterAll } from 'vitest';
+import { it, expect, beforeAll, afterAll, vi } from 'vitest';
 import React, { act } from 'react';
 import { renderInAct, toVisibleText } from '../../test-helpers/ink-testing.js';
 import CommandMessage from './CommandMessage.js';
@@ -43,72 +43,11 @@ afterAll(() => {
   process.stderr.write = originalStderrWrite;
 });
 
-type FakeTimer = {
-  advanceBy: (ms: number) => void;
-  restore: () => void;
-};
-
-const createFakeTimerClock = (): FakeTimer => {
-  const originalSetTimeout = globalThis.setTimeout;
-  const originalClearTimeout = globalThis.clearTimeout;
-  let now = 0;
-  let nextId = 1;
-  const timers = new Map<number, { dueAt: number; callback: (...args: any[]) => void; args: any[] }>();
-
-  globalThis.setTimeout = ((callback: (...args: any[]) => void, delay = 0, ...args: any[]) => {
-    const id = nextId++;
-    timers.set(id, { dueAt: now + Math.max(0, Number(delay) || 0), callback, args });
-    return id as any;
-  }) as typeof globalThis.setTimeout;
-
-  globalThis.clearTimeout = ((timerId: number | undefined) => {
-    if (typeof timerId === 'number') {
-      timers.delete(timerId);
-    }
-  }) as typeof globalThis.clearTimeout;
-
-  const advanceBy = (ms: number) => {
-    const targetTime = now + ms;
-
-    while (true) {
-      let nextTimerId: number | null = null;
-      let nextDueAt = Number.POSITIVE_INFINITY;
-
-      for (const [id, timer] of timers) {
-        if (timer.dueAt < nextDueAt) {
-          nextDueAt = timer.dueAt;
-          nextTimerId = id;
-        }
-      }
-
-      if (nextTimerId === null || nextDueAt > targetTime) {
-        break;
-      }
-
-      now = nextDueAt;
-      const timer = timers.get(nextTimerId);
-      timers.delete(nextTimerId);
-      timer?.callback(...timer.args);
-    }
-
-    now = targetTime;
-  };
-
-  return {
-    advanceBy,
-    restore: () => {
-      globalThis.setTimeout = originalSetTimeout;
-      globalThis.clearTimeout = originalClearTimeout;
-    },
-  };
-};
-
 const stripAnsi = (text: string) => text.replaceAll(/\u001B\[[0-9;]*m/g, '');
 
-const advanceClockInAct = async (clock: FakeTimer, ms: number) => {
+const advanceTimersInAct = async (ms: number) => {
   await act(async () => {
-    clock.advanceBy(ms);
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(ms);
   });
 };
 
@@ -210,7 +149,7 @@ it('CommandMessage renders an all-runs get_subagent_status peek without leaking 
 });
 
 it('CommandMessage does not duplicate parameters when they are already in command string', async () => {
-  const clock = createFakeTimerClock();
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   const props = {
     command: 'shell: ls -la',
     toolName: 'shell',
@@ -218,13 +157,10 @@ it('CommandMessage does not duplicate parameters when they are already in comman
     status: 'running' as 'running' | 'pending' | 'completed' | 'failed',
   };
 
-  let lastFrame: (() => string | undefined) | undefined;
-
   try {
-    ({ lastFrame } = await renderInAct(<CommandMessage {...props} />));
-    await advanceClockInAct(clock, 1100);
-
-    const output = lastFrame?.() ?? '';
+    const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
+    await advanceTimersInAct(1100);
+    const output = lastFrame() ?? '';
 
     // The bug would cause "ls -la" to appear twice
     // e.g. "$ shell: ls -la ls -la"
@@ -235,12 +171,12 @@ it('CommandMessage does not duplicate parameters when they are already in comman
     // It should only appear once in the command line
     expect(count, `Expected "ls -la" to appear once, but found ${count}. Output: ${output}`).toBe(1);
   } finally {
-    clock.restore();
+    vi.useRealTimers();
   }
 });
 
 it('CommandMessage still shows arguments for unknown tools where command is just toolName', async () => {
-  const clock = createFakeTimerClock();
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   const props = {
     command: 'unknown_tool',
     toolName: 'unknown_tool',
@@ -248,18 +184,15 @@ it('CommandMessage still shows arguments for unknown tools where command is just
     status: 'running' as 'running' | 'pending' | 'completed' | 'failed',
   };
 
-  let lastFrame: (() => string | undefined) | undefined;
-
   try {
-    ({ lastFrame } = await renderInAct(<CommandMessage {...props} />));
-    await advanceClockInAct(clock, 1100);
-
-    const output = lastFrame?.() ?? '';
+    const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
+    await advanceTimersInAct(1100);
+    const output = lastFrame() ?? '';
 
     expect(output.includes('unknown_tool')).toBe(true);
     expect(output.includes('foo=bar')).toBe(true);
   } finally {
-    clock.restore();
+    vi.useRealTimers();
   }
 });
 
@@ -703,7 +636,7 @@ it('CommandMessage renders successfully completed shell command on a single line
 });
 
 it('CommandMessage renders running shell command on a single line in concise mode', async () => {
-  const clock = createFakeTimerClock();
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   const props = {
     command: 'npm run dev',
     toolName: 'shell',
@@ -712,17 +645,15 @@ it('CommandMessage renders running shell command on a single line in concise mod
     displayMode: 'concise' as const,
   };
 
-  let lastFrame: (() => string | undefined) | undefined;
   try {
-    ({ lastFrame } = await renderInAct(<CommandMessage {...props} />));
-    await advanceClockInAct(clock, 1100);
-
-    const output = toVisibleText(lastFrame?.() ?? '');
+    const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
+    await advanceTimersInAct(1100);
+    const output = toVisibleText(lastFrame() ?? '');
 
     expect(output.includes('▶')).toBe(true);
     expect(output.includes('$ npm run dev')).toBe(true);
   } finally {
-    clock.restore();
+    vi.useRealTimers();
   }
 });
 
@@ -1211,7 +1142,7 @@ it('CommandMessage renders web_fetch result in standard mode', async () => {
 });
 
 it('CommandMessage renders ask_user concise single question when running', async () => {
-  const clock = createFakeTimerClock();
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   const props = {
     command: 'ask_user',
     toolName: 'ask_user',
@@ -1222,22 +1153,20 @@ it('CommandMessage renders ask_user concise single question when running', async
     displayMode: 'concise' as const,
   };
 
-  let lastFrame: (() => string | undefined) | undefined;
   try {
-    ({ lastFrame } = await renderInAct(<CommandMessage {...props} />));
-    await advanceClockInAct(clock, 1100);
-
-    const output = stripAnsi(lastFrame?.() ?? '');
+    const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
+    await advanceTimersInAct(1100);
+    const output = stripAnsi(lastFrame() ?? '');
 
     expect(output.includes('▶')).toBe(true);
     expect(output.includes('Asked user "What is your favorite color?"')).toBe(true);
   } finally {
-    clock.restore();
+    vi.useRealTimers();
   }
 });
 
 it('CommandMessage renders ask_user concise multiple questions when running', async () => {
-  const clock = createFakeTimerClock();
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   const props = {
     command: 'ask_user',
     toolName: 'ask_user',
@@ -1248,17 +1177,15 @@ it('CommandMessage renders ask_user concise multiple questions when running', as
     displayMode: 'concise' as const,
   };
 
-  let lastFrame: (() => string | undefined) | undefined;
   try {
-    ({ lastFrame } = await renderInAct(<CommandMessage {...props} />));
-    await advanceClockInAct(clock, 1100);
-
-    const output = stripAnsi(lastFrame?.() ?? '');
+    const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
+    await advanceTimersInAct(1100);
+    const output = stripAnsi(lastFrame() ?? '');
 
     expect(output.includes('▶')).toBe(true);
     expect(output.includes('Asked user ["Color?, Name?"]')).toBe(true);
   } finally {
-    clock.restore();
+    vi.useRealTimers();
   }
 });
 

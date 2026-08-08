@@ -21,6 +21,9 @@ const mocks = vi.hoisted(() => ({
   handleApprovalDecision: vi.fn(),
   submitApprovalDecision: vi.fn(),
   submitConversationTurn: vi.fn(async () => false),
+  admissionConfirmation: null as any,
+  submitTurnForAdmission: vi.fn(() => ({ kind: 'submitted' as const, completion: Promise.resolve() })),
+  resolveAdmissionConfirmation: vi.fn<any>(),
   setWaitingForRejectionReason: vi.fn(),
   setWaitingForAskUserAnswer: vi.fn(),
   stopProcessing: vi.fn(),
@@ -40,19 +43,6 @@ const mocks = vi.hoisted(() => ({
   handleShellSubmit: vi.fn(),
   cycleAppModes: vi.fn(),
   clearConversation: vi.fn(),
-  pendingGuards: {
-    largeUncachedWarning: null,
-    pendingLargeUncachedTurn: null as import('./types/user-turn.js').UserTurn | null,
-    pendingLargeUncachedTokens: 0,
-    pendingSurgeTurn: null as import('./types/user-turn.js').UserTurn | null,
-    pendingSurgeReason: '',
-    guardTurn: vi.fn(),
-    sendGuardedTurn: vi.fn(async () => true),
-    handleLargeUncachedApprove: vi.fn(async () => {}),
-    handleLargeUncachedDecline: vi.fn(),
-    handleSurgeApprove: vi.fn(async () => {}),
-    handleSurgeDecline: vi.fn(),
-  },
   handoff: {
     handoffState: null as any,
     startHandoff: vi.fn(),
@@ -60,6 +50,7 @@ const mocks = vi.hoisted(() => ({
     declineHandoff: vi.fn(async () => {}),
     cancelHandoff: vi.fn(),
     submitHandoffInput: vi.fn(async () => false),
+    handleModelSubmitPrompt: vi.fn(() => false),
     completeHandoffWithEffort: vi.fn(async () => {}),
     confirmStandardMode: vi.fn(async () => {}),
     declineStandardMode: vi.fn(async () => {}),
@@ -158,6 +149,9 @@ vi.mock('./hooks/use-conversation.js', () => ({
     thinkingStartedAt: null,
     toolCallStreamingInfo: null,
     sendUserMessage: mocks.sendUserMessage,
+    admissionConfirmation: mocks.admissionConfirmation,
+    submitTurnForAdmission: mocks.submitTurnForAdmission,
+    resolveAdmissionConfirmation: mocks.resolveAdmissionConfirmation,
     submitConversationTurn: mocks.submitConversationTurn,
     submitApprovalDecision: mocks.submitApprovalDecision,
     handleApprovalDecision: mocks.handleApprovalDecision,
@@ -254,10 +248,6 @@ vi.mock('./hooks/use-app-keyboard-shortcuts.js', () => ({
   useAppKeyboardShortcuts: vi.fn(),
 }));
 
-vi.mock('./hooks/use-pending-turn-guards.js', () => ({
-  usePendingTurnGuards: () => mocks.pendingGuards,
-}));
-
 vi.mock('./hooks/use-handoff-flow.js', () => ({
   useHandoffFlow: () => mocks.handoff,
 }));
@@ -336,18 +326,11 @@ beforeEach(() => {
   mocks.clearConversationCallback = null;
   mocks.messageListMounts = 0;
   mocks.stdoutWrite.mockReset();
-  mocks.pendingGuards.largeUncachedWarning = null;
-  mocks.pendingGuards.pendingLargeUncachedTurn = null;
-  mocks.pendingGuards.pendingLargeUncachedTokens = 0;
-  mocks.pendingGuards.pendingSurgeTurn = null;
-  mocks.pendingGuards.pendingSurgeReason = '';
-  mocks.pendingGuards.guardTurn.mockReset();
-  mocks.pendingGuards.sendGuardedTurn.mockReset();
-  mocks.pendingGuards.sendGuardedTurn.mockResolvedValue(true);
-  mocks.pendingGuards.handleLargeUncachedApprove.mockReset();
-  mocks.pendingGuards.handleLargeUncachedDecline.mockReset();
-  mocks.pendingGuards.handleSurgeApprove.mockReset();
-  mocks.pendingGuards.handleSurgeDecline.mockReset();
+  mocks.admissionConfirmation = null;
+  mocks.submitTurnForAdmission.mockReset();
+  mocks.submitTurnForAdmission.mockReturnValue({ kind: 'submitted', completion: Promise.resolve() });
+  mocks.resolveAdmissionConfirmation.mockReset();
+  mocks.resolveAdmissionConfirmation.mockReturnValue({ kind: 'stale' });
   mocks.handoff.handoffState = null;
   mocks.handoff.startHandoff.mockReset();
   mocks.handoff.confirmHandoff.mockReset();
@@ -355,6 +338,8 @@ beforeEach(() => {
   mocks.handoff.cancelHandoff.mockReset();
   mocks.handoff.submitHandoffInput.mockReset();
   mocks.handoff.submitHandoffInput.mockResolvedValue(false);
+  mocks.handoff.handleModelSubmitPrompt.mockReset();
+  mocks.handoff.handleModelSubmitPrompt.mockReturnValue(false);
   mocks.handoff.completeHandoffWithEffort.mockReset();
   mocks.handoff.confirmStandardMode.mockReset();
   mocks.handoff.declineStandardMode.mockReset();
@@ -405,7 +390,7 @@ describe('App orchestration', () => {
     });
 
     expect(mocks.submitConversationTurn).toHaveBeenCalledWith({ text: 'hello', images: [] });
-    expect(mocks.pendingGuards.sendGuardedTurn).not.toHaveBeenCalled();
+    expect(mocks.submitTurnForAdmission).not.toHaveBeenCalled();
     expect(mocks.handleApprovalDecision).not.toHaveBeenCalled();
   });
 
@@ -506,7 +491,7 @@ describe('App orchestration', () => {
 
     expect(commandAction).toHaveBeenCalledWith('now');
     expect(mocks.replaceInput).toHaveBeenCalledWith('');
-    expect(mocks.pendingGuards.sendGuardedTurn).not.toHaveBeenCalled();
+    expect(mocks.submitTurnForAdmission).not.toHaveBeenCalled();
   });
 
   it.sequential('keeps input when a slash command explicitly returns false', async () => {
@@ -524,7 +509,7 @@ describe('App orchestration', () => {
 
     expect(commandAction).toHaveBeenCalledWith('now');
     expect(mocks.replaceInput).not.toHaveBeenCalledWith('');
-    expect(mocks.pendingGuards.sendGuardedTurn).not.toHaveBeenCalled();
+    expect(mocks.submitTurnForAdmission).not.toHaveBeenCalled();
   });
 
   it.sequential('attaches a pending skill before sending a normal message', async () => {
@@ -543,7 +528,7 @@ describe('App orchestration', () => {
       await mocks.bottomAreaProps.onSubmit({ text: 'Ship it', images: [] });
     });
 
-    expect(mocks.pendingGuards.sendGuardedTurn).toHaveBeenCalledWith({
+    expect(mocks.submitTurnForAdmission).toHaveBeenCalledWith({
       text: 'Ship it',
       images: [],
       skill: {
@@ -565,9 +550,160 @@ describe('App orchestration', () => {
       await mocks.bottomAreaProps.onSubmit({ text: '/unknown command', images: [] });
     });
 
-    expect(mocks.pendingGuards.sendGuardedTurn).toHaveBeenCalledWith({
+    expect(mocks.submitTurnForAdmission).toHaveBeenCalledWith({
       text: '/unknown command',
       images: [],
     });
+  });
+
+  it.sequential('routes a controller submit-prompt intent through admission', async () => {
+    const services = createServices();
+    await renderInAct(
+      <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+    );
+    const intentHost = mocks.menuController.setIntentHost.mock.calls
+      .map(([value]) => value)
+      .find((value) => typeof value === 'function');
+    if (typeof intentHost !== 'function') throw new Error('Expected menu intent host');
+
+    await act(async () => {
+      intentHost({ intentRequest: { intent: { type: 'submit-prompt', text: 'From menu' } } });
+      await Promise.resolve();
+    });
+
+    expect(mocks.submitTurnForAdmission).toHaveBeenCalledWith({ text: 'From menu' });
+    expect(mocks.sendUserMessage).not.toHaveBeenCalled();
+    expect(mocks.replaceInput).toHaveBeenCalledWith('');
+  });
+
+  it.sequential('restores declined confirmation text on a microtask without clearing attachments', async () => {
+    mocks.admissionConfirmation = {
+      id: 'confirm-a',
+      kind: 'large_uncached',
+      turn: { text: 'Keep this prompt', images: [] },
+      estimatedTokens: 72_000,
+      options: {},
+    };
+    mocks.resolveAdmissionConfirmation.mockReturnValue({
+      kind: 'declined',
+      turn: { text: 'Keep this prompt', images: [] },
+    });
+    const services = createServices();
+
+    await renderInAct(
+      <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+    );
+
+    await act(async () => {
+      await mocks.bottomAreaProps.onLargeUncachedDecline();
+      await Promise.resolve();
+    });
+
+    expect(mocks.resolveAdmissionConfirmation).toHaveBeenCalledWith('confirm-a', 'decline');
+    expect(mocks.replaceInput).toHaveBeenCalledWith('Keep this prompt');
+    expect(mocks.setImages).not.toHaveBeenCalled();
+  });
+
+  it.sequential('leaves composer state alone when an admission decision is stale', async () => {
+    mocks.admissionConfirmation = {
+      id: 'confirm-a',
+      kind: 'surge',
+      turn: { text: 'Old prompt', images: [] },
+      reason: 'Input surge detected',
+      options: {},
+    };
+    mocks.resolveAdmissionConfirmation.mockReturnValue({ kind: 'stale' });
+    const services = createServices();
+
+    await renderInAct(
+      <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+    );
+
+    await act(async () => {
+      await mocks.bottomAreaProps.onSurgeApprove();
+    });
+
+    expect(mocks.resolveAdmissionConfirmation).toHaveBeenCalledWith('confirm-a', 'approve');
+    expect(mocks.replaceInput).not.toHaveBeenCalled();
+    expect(mocks.setImages).not.toHaveBeenCalled();
+  });
+
+  it.sequential('clears submitted composer text before a slow admission completes', async () => {
+    let complete: (() => void) | undefined;
+    mocks.submitTurnForAdmission.mockReturnValue({
+      kind: 'submitted',
+      completion: new Promise<void>((resolve) => {
+        complete = resolve;
+      }),
+    });
+    const services = createServices();
+
+    await renderInAct(
+      <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+    );
+    const submission = mocks.bottomAreaProps.onSubmit({ text: 'Send this', images: [] });
+    let settled = false;
+    void submission.then(() => {
+      settled = true;
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mocks.replaceInput).toHaveBeenCalledWith('');
+    expect(settled).toBe(false);
+    complete?.();
+    await submission;
+  });
+
+  it.sequential('clears matched approval composer state before a slow admission completes', async () => {
+    let complete: (() => void) | undefined;
+    mocks.admissionConfirmation = {
+      id: 'confirm-a',
+      kind: 'surge',
+      turn: { text: 'Approved prompt', images: [] },
+      reason: 'Input surge detected',
+      options: {},
+    };
+    mocks.resolveAdmissionConfirmation.mockReturnValue({
+      kind: 'submitted',
+      completion: new Promise<void>((resolve) => {
+        complete = resolve;
+      }),
+    });
+    const services = createServices();
+
+    await renderInAct(
+      <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+    );
+    const approval = mocks.bottomAreaProps.onSurgeApprove();
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mocks.replaceInput).toHaveBeenCalledWith('');
+    expect(mocks.setImages).toHaveBeenCalledWith([]);
+    complete?.();
+    await approval;
+  });
+
+  it.sequential('preserves an admission completion rejection for the submit caller', async () => {
+    const failure = new Error('send failed');
+    let rejectCompletion: ((error: Error) => void) | undefined;
+    mocks.submitTurnForAdmission.mockReturnValue({
+      kind: 'submitted',
+      completion: new Promise<void>((_resolve, reject) => {
+        rejectCompletion = reject;
+      }),
+    });
+    const services = createServices();
+
+    await renderInAct(
+      <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+    );
+    const submission = mocks.bottomAreaProps.onSubmit({ text: 'Send this', images: [] });
+    rejectCompletion?.(failure);
+    await expect(submission).rejects.toThrow('send failed');
+    expect(mocks.replaceInput).toHaveBeenCalledWith('');
   });
 });

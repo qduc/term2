@@ -29,6 +29,7 @@ it.sequential('useConversation triggers onClear and resets messages/sessionId', 
     const { messages, clearConversation, sessionId } = useConversation({
       conversationService: mockConversationService,
       loggingService,
+      historyService: { addMessage() {} },
       initialMessages: [{ id: '1', sender: 'user', text: 'hello' }],
       sessionId: sessionIdState,
       onClear: async () => {
@@ -75,6 +76,7 @@ it.sequential('useConversation fallback clear resets with a fresh session id', a
     const { messages, clearConversation } = useConversation({
       conversationService: mockConversationService,
       loggingService,
+      historyService: { addMessage() {} },
       initialMessages: [{ id: '1', sender: 'user', text: 'hello' }],
     });
 
@@ -128,6 +130,7 @@ it.sequential('useConversation filters duplicate stack trace from rawEvent when 
     const { sendUserMessage } = useConversation({
       conversationService: mockConversationService,
       loggingService: loggingServiceMock,
+      historyService: { addMessage() {} },
     });
     sendMsg = sendUserMessage;
     return <Text>Harness</Text>;
@@ -172,6 +175,7 @@ it.sequential('useConversation exposes transient thinking state only while hidde
     const { sendUserMessage, thinkingStartedAt } = useConversation({
       conversationService: mockConversationService,
       loggingService,
+      historyService: { addMessage() {} },
     });
     sendMsg = sendUserMessage;
     return <Text>{thinkingStartedAt === null ? 'idle' : 'thinking'}</Text>;
@@ -215,6 +219,7 @@ it.sequential('useConversation adds a stopped message when processing is stopped
     const { stopProcessing, messages } = useConversation({
       conversationService: mockConversationService,
       loggingService,
+      historyService: { addMessage() {} },
     });
     stopFn = stopProcessing;
     return <Text>{messages.map((message) => ('text' in message ? message.text : message.sender)).join('|')}</Text>;
@@ -254,6 +259,7 @@ it.sequential('useConversation cancels running shell messages when processing is
     const { sendUserMessage, stopProcessing, messages } = useConversation({
       conversationService: mockConversationService,
       loggingService,
+      historyService: { addMessage() {} },
     });
     sendMsg = sendUserMessage;
     stopFn = stopProcessing;
@@ -303,6 +309,7 @@ it.sequential('useConversation wires the retry callback to add a system message'
     const { messages } = useConversation({
       conversationService: mockConversationService,
       loggingService,
+      historyService: { addMessage() {} },
     });
     return <Text>{messages.map((message) => ('text' in message ? message.text : message.sender)).join('|')}</Text>;
   };

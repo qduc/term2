@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from 'react';
 import type { ConversationService } from '../services/conversation/conversation-service.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
 import { useConversationMessages } from './use-conversation-messages.js';
@@ -18,6 +18,11 @@ import type { RewindTargetId } from '../services/conversation/conversation-store
 import { conversationUIReducer, createInitialUIState, getConversationUIFlags } from './conversation-ui-reducer.js';
 import type { BackgroundTask } from '../services/subagents/subagent-notification-store.js';
 import type { SessionCostAccumulator } from '../services/cost/model-cost.js';
+import {
+  ConversationAdmissionWorkflow,
+  type AdmissionOptions,
+} from '../services/conversation/conversation-admission-workflow.js';
+import type { HistoryService } from '../services/history-service.js';
 
 import type { ConversationLogWriter } from '../services/logging/conversation-log-writer.js';
 
@@ -32,6 +37,7 @@ export type {
 } from '../types/message.js';
 
 const MAX_MESSAGE_COUNT = 300;
+type ConversationTransportOptions = AdmissionOptions & { bypassInputSurgeGuard?: boolean };
 
 const getInitialLastUsage = (messages: Message[]): NormalizedUsage | null => {
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -67,6 +73,7 @@ export const useConversation = ({
   sessionId,
   onClear,
   settingsService,
+  historyService,
   replaceInput,
   onRestoreInput,
   logWriter,
@@ -81,6 +88,7 @@ export const useConversation = ({
   sessionId?: string;
   onClear?: () => void | Promise<void>;
   settingsService?: SettingsService;
+  historyService: Pick<HistoryService, 'addMessage'>;
   replaceInput?: (text: string) => void;
   /**
    * Called when a user message could not be sent (e.g. upstream error before any
@@ -229,9 +237,34 @@ export const useConversation = ({
 
   // ── Public API — all orchestration delegates to the orchestrator ─────────
   const sendUserMessage = useCallback(
-    (input: string | UserTurn, options?: { bypassInputSurgeGuard?: boolean }) =>
-      orchestrator.sendUserMessage(input, options),
+    (input: string | UserTurn, options?: ConversationTransportOptions) => orchestrator.sendUserMessage(input, options),
     [orchestrator],
+  );
+
+  const admissionWorkflowRef = useRef<ConversationAdmissionWorkflow | null>(null);
+  if (!admissionWorkflowRef.current) {
+    admissionWorkflowRef.current = new ConversationAdmissionWorkflow({
+      conversation: conversationService,
+      history: historyService,
+      logger: loggingService,
+      send: (turn, options) => sendUserMessage(turn, options),
+    });
+  }
+  const admissionWorkflow = admissionWorkflowRef.current;
+  const admissionConfirmation = useSyncExternalStore(
+    (listener) => admissionWorkflow.subscribe(listener),
+    () => admissionWorkflow.getSnapshot(),
+    () => admissionWorkflow.getSnapshot(),
+  );
+
+  const submitTurnForAdmission = useCallback(
+    (turn: UserTurn, options?: AdmissionOptions) => admissionWorkflow.submit(turn, options),
+    [admissionWorkflow],
+  );
+
+  const resolveAdmissionConfirmation = useCallback(
+    (id: string, decision: 'approve' | 'decline') => admissionWorkflow.resolve(id, decision),
+    [admissionWorkflow],
   );
 
   const handleApprovalDecision = useCallback(
@@ -357,6 +390,9 @@ export const useConversation = ({
     backgroundSubagentTasks: backgroundSubagentTaskState.tasks,
     backgroundSubagentTasksNow: backgroundSubagentTaskState.now,
     sendUserMessage,
+    admissionConfirmation,
+    submitTurnForAdmission,
+    resolveAdmissionConfirmation,
     submitConversationTurn,
     submitApprovalDecision,
     handleApprovalDecision,

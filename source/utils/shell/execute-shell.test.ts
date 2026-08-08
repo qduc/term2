@@ -159,8 +159,7 @@ it('executeShellCommand pauses sandboxed child processes while network approval 
   });
 
   const approvalPromise = requestSandboxNetworkApproval({ host: 'example.com', port: 443 });
-  await Promise.resolve();
-  await Promise.resolve();
+  await new Promise<void>((resolve) => setImmediate(resolve));
 
   expect(signals).toEqual(['SIGSTOP']);
 
@@ -170,6 +169,61 @@ it('executeShellCommand pauses sandboxed child processes while network approval 
 
   completeCommand?.('ok');
   await expect(resultPromise).resolves.toMatchObject({ stdout: 'ok', exitCode: 0 });
+
+  unregisterHandler();
+});
+
+it('serializes sandboxed executions so network approval pauses the owning child', async () => {
+  const completions = new Map<string, (stdout: string) => void>();
+  const started: string[] = [];
+  const signals: string[] = [];
+  let resolveApproval: ((allow: boolean) => void) | undefined;
+  const unregisterHandler = registerSandboxNetworkApprovalHandler(async () => {
+    return await new Promise<boolean>((resolve) => {
+      resolveApproval = resolve;
+    });
+  });
+  const makeExecution = (command: string) =>
+    executeShellCommand(command, {
+      pauseOnSandboxNetworkApproval: true,
+      execImpl: (receivedCommand, _options, callback) => {
+        started.push(receivedCommand);
+        const child = createFakeChildProcess();
+        child.kill = (signal?: NodeJS.Signals | number) => {
+          signals.push(`${receivedCommand}:${String(signal)}`);
+          return true;
+        };
+        completions.set(receivedCommand, (stdout) => callback(null, stdout, ''));
+        return child;
+      },
+    });
+
+  const first = makeExecution('first');
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const second = makeExecution('second');
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  expect(started).toEqual(['first']);
+
+  const firstApproval = requestSandboxNetworkApproval({ host: 'first.example', port: 443 });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(signals).toEqual(['first:SIGSTOP']);
+
+  resolveApproval?.(true);
+  await expect(firstApproval).resolves.toBe(true);
+  completions.get('first')?.('first complete');
+  await expect(first).resolves.toMatchObject({ stdout: 'first complete', exitCode: 0 });
+
+  expect(started).toEqual(['first', 'second']);
+
+  const secondApproval = requestSandboxNetworkApproval({ host: 'second.example', port: 443 });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(signals).toEqual(['first:SIGSTOP', 'first:SIGCONT', 'second:SIGSTOP']);
+
+  resolveApproval?.(true);
+  await expect(secondApproval).resolves.toBe(true);
+  completions.get('second')?.('second complete');
+  await expect(second).resolves.toMatchObject({ stdout: 'second complete', exitCode: 0 });
 
   unregisterHandler();
 });

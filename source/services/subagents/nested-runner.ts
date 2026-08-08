@@ -520,7 +520,26 @@ export class NestedSubagentRunner {
               }
               lease.settle();
             },
-            () => lease.settle(),
+            (error) => {
+              // The foreground tool result has already been handed off. A
+              // late loop rejection must therefore enter the durable async
+              // terminal lane; otherwise the adopted registry promise never
+              // settles and get_subagent_result hangs forever.
+              safeEmit(this.#logger, this.#onEvent, {
+                type: 'subagent_completed',
+                async: true,
+                result: {
+                  agentId,
+                  role,
+                  status: lease.signal.aborted || isAbortLike(error?.message, error) ? 'cancelled' : 'failed',
+                  finalText: '',
+                  filesChanged: [],
+                  toolsUsed: [],
+                  error: error?.message || String(error),
+                },
+              });
+              lease.settle();
+            },
           )
           .finally(() => {
             this.#foregroundLeases.delete(candidateRunId);

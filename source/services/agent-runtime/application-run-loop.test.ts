@@ -1529,6 +1529,56 @@ describe('ApplicationRunLoop', () => {
     expect(resumed.finalOutput).toBe('resumed');
   });
 
+  it('stopAfterApprovalResolution ends the segment with the tool result recorded and no further model call', async () => {
+    // Cancelling an ask_user prompt resolves the approval instead of aborting,
+    // because an aborted segment is non-terminal and its history — including
+    // the question the model asked — is never committed.
+    const tool: ToolDefinition = {
+      name: 'ask_user',
+      description: 'Requires approval',
+      parameters: z.object({}),
+      needsApproval: () => true,
+      execute: () => 'User did not provide an answer.',
+      formatCommandMessage: () => [],
+    };
+    let calls = 0;
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => {
+        calls++;
+        return calls === 1
+          ? {
+              async *stream() {
+                yield { type: 'tool_call', id: 'call-ask', name: 'ask_user', arguments: '{}' };
+                yield { type: 'completion', responseId: 'resp-pending', output: [] };
+              },
+            }
+          : textModel('should not be reached', 'resp-unexpected');
+      },
+    });
+    const stream = loop.startStream({ ...agent, tools: [tool] }, 'ask me');
+    await collect(stream);
+    expect(stream.interruptions).toHaveLength(1);
+
+    (stream.state! as any).approve?.({});
+    const resumed = loop.continueRunStream(stream.state!, { stopAfterApprovalResolution: true });
+    await collect(resumed);
+
+    // The model was never asked to continue.
+    expect(calls).toBe(1);
+    // No interruptions left, so the segment is terminal and gets committed.
+    expect(resumed.interruptions).toHaveLength(0);
+    expect(resumed.history).toContainEqual(
+      expect.objectContaining({
+        type: 'function_call_result',
+        callId: 'call-ask',
+        output: 'User did not provide an answer.',
+      }),
+    );
+    expect(resumed.history).toContainEqual(
+      expect.objectContaining({ type: 'function_call', callId: 'call-ask', name: 'ask_user' }),
+    );
+  });
+
   it('anchors an approved terminal tool call to its producing response', async () => {
     const requests: Array<Parameters<StreamedModelTurn['stream']>[0]> = [];
     let modelCalls = 0;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ASK_USER_DECLINE_RESULT } from '../../tools/agent/ask-user-constants.js';
+import { ASK_USER_DECLINE_RESULT, ASK_USER_NO_ANSWER_RESULT } from '../../tools/agent/ask-user-constants.js';
 import { PendingInteractionState } from './pending-interaction-state.js';
 
 const askUserApproval = {
@@ -56,6 +56,25 @@ describe('PendingInteractionState', () => {
       askUserAnswers: [],
       currentAskUserQuestionIndex: 1,
     });
+  });
+
+  it('resolves a cancelled ask_user prompt immediately instead of advancing to the next question', () => {
+    // Escape cancels the whole call. Folding "no answer" into the answer list
+    // would leave a two-question prompt waiting on its second question.
+    const state = new PendingInteractionState();
+    const interaction = state.present(askUserApproval);
+
+    expect(
+      state.resolve({
+        expectedInteractionId: interaction.interactionId,
+        answer: 'y',
+        approvalAnswer: ASK_USER_NO_ANSWER_RESULT,
+      }),
+    ).toMatchObject({
+      kind: 'resolved',
+      approvalAnswer: ASK_USER_NO_ANSWER_RESULT,
+    });
+    expect(state.getSnapshot()).toBeNull();
   });
 
   it('resolves a declined ask_user answer without recording an answer', () => {

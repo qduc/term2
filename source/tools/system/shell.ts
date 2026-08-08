@@ -21,6 +21,7 @@ import {
   normalizeToolArguments,
   createBaseMessage,
   getCallIdFromItem,
+  safeJsonParse,
 } from '../format-helpers.js';
 import { ExecutionContext } from '../../services/execution-context.js';
 import { ensureRtkInstalled, isRtkSupportedCommand, wrapWithRtk } from '../../services/rtk-service.js';
@@ -268,6 +269,27 @@ export const formatShellCommandMessage: FormatCommandMessage = (item, index, too
   })();
 
   const outputText = getOutputText(item);
+  const backgroundRequested =
+    args !== null && typeof args === 'object' && !Array.isArray(args) && args.background === true;
+  const launchAcknowledgement = backgroundRequested
+    ? (safeJsonParse(outputText) as { jobId?: unknown; status?: unknown } | null)
+    : null;
+
+  if (
+    launchAcknowledgement?.status === 'running' &&
+    typeof launchAcknowledgement.jobId === 'string' &&
+    launchAcknowledgement.jobId.length > 0
+  ) {
+    return [
+      createBaseMessage(item, index, 0, false, {
+        command,
+        output: `Background job ${launchAcknowledgement.jobId} is running.`,
+        success: true,
+        toolName: 'shell',
+        toolArgs: args,
+      }),
+    ];
+  }
 
   // Check if this is an error message (doesn't start with expected status formats)
   const firstLine = outputText.split('\n')[0]?.trim() || '';

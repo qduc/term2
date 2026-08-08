@@ -1,9 +1,5 @@
 import React from 'react';
-import type {
-  MenuController,
-  MenuFrame,
-  MenuInteractionRegistry,
-} from './menu-types.js';
+import type { MenuController, MenuFrame, MenuInteractionRegistry } from './menu-types.js';
 import { getMenuRegistry, type MenuServices } from './menu-registry.js';
 
 export interface MenuStackHostProps {
@@ -13,12 +9,7 @@ export interface MenuStackHostProps {
   services: MenuServices;
 }
 
-export function MenuStackHost({
-  stack,
-  controller,
-  interactions,
-  services,
-}: MenuStackHostProps) {
+export function MenuStackHost({ stack, controller, interactions, services }: MenuStackHostProps) {
   const registry = getMenuRegistry();
 
   return (

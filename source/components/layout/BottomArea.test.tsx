@@ -47,20 +47,21 @@ const baseProps: BottomAreaProps = {
   onDiscardQueue: () => {},
 };
 
-const renderBottomArea = async (props: typeof baseProps) => {
-  let result: ReturnType<typeof render>;
+const renderBottomArea = async (props: Partial<BottomAreaProps> = {}) => {
+  const fullProps: BottomAreaProps = {
+    ...baseProps,
+    settingsService: createMockSettingsService(),
+    ...props,
+  };
 
-  await act(async () => {
-    result = render(
-      <InputProvider>
-        <BottomArea {...props} />
-      </InputProvider>,
-    );
+  const result = render(
+    <InputProvider>
+      <BottomArea {...fullProps} />
+    </InputProvider>,
+  );
 
-    await Promise.resolve();
-  });
-
-  return result!;
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  return result;
 };
 
 it.sequential('BottomArea shows input when idle', async () => {

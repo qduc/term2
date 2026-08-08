@@ -36,7 +36,7 @@ import {
 import type { RewindItem } from './hooks/use-rewind-selection.js';
 import type { RewindDisposition } from './commands/rewind-command.js';
 import { buildRewindItems } from './utils/conversation/rewind-items.js';
-import { resolveSlashCommand } from './slash-commands.js';
+import { tryExecuteSlashCommand } from './utils/slash-command-dispatch.js';
 import type { SkillsService, SkillInfo } from './services/skills/skills-service.js';
 import { buildTerminalTitleLabel, setTerminalTitle } from './utils/output/terminal-title.js';
 import { deriveInputOwner } from './lib/input-owner.js';
@@ -556,16 +556,7 @@ const App: FC<AppProps> = ({
         if (hasImages) {
           break;
         }
-        // Find matching command
-        const command = resolveSlashCommand(slashCommands, parsed.commandName);
-        if (command) {
-          // Execute the command
-          const shouldClearInput = command.action(parsed.args || undefined);
-
-          // Clear input unless command returned false
-          if (shouldClearInput !== false) {
-            replaceInput('');
-          }
+        if (tryExecuteSlashCommand(value, slashCommands, replaceInput)) {
           return;
         }
         // Command not found, fall through to send as message
@@ -617,6 +608,16 @@ const App: FC<AppProps> = ({
         if (handoff.handleModelSubmitPrompt(intentRequest.intent.text)) {
           return;
         }
+        // Text composed by a controller-owned menu (e.g. accepting a direct
+        // `/model gpt-4` selection) is exactly what the user would have
+        // typed and pressed Enter on, so it goes through the same slash-
+        // command dispatch as handleSubmit before falling back to sending it
+        // as ordinary content — otherwise a resolved command like `/model`
+        // would be posted to the model as a literal chat message instead of
+        // being executed.
+        if (tryExecuteSlashCommand(intentRequest.intent.text, slashCommands, replaceInput)) {
+          return;
+        }
         void sendUserMessage({ text: intentRequest.intent.text });
         return;
       }
@@ -637,6 +638,8 @@ const App: FC<AppProps> = ({
     addSystemMessage,
     applyRuntimeSetting,
     handoff,
+    slashCommands,
+    replaceInput,
   ]);
 
   return (

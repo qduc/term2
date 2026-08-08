@@ -83,6 +83,37 @@ it('disposes the owned background shell registry with its session handle', async
   release();
 });
 
+it('withholds the background shell capability when the session disables it', () => {
+  let receivedRegistry: unknown = 'not-called';
+  let receivedAllow: boolean | undefined;
+  const factory = createOwnedSessionClientFactory(
+    createMockSettingsService(),
+    (
+      _sessionId,
+      _ownership,
+      _capability,
+      _access,
+      _mode,
+      _continuity,
+      _capture,
+      _lifecycle,
+      backgroundShellRegistry,
+      allowBackgroundShell,
+    ) => {
+      receivedRegistry = backgroundShellRegistry;
+      receivedAllow = allowBackgroundShell;
+      return client();
+    },
+  );
+
+  const handle = factory.create('non-interactive', { allowBackgroundShell: false });
+
+  expect(receivedRegistry).toBeUndefined();
+  expect(receivedAllow).toBe(false);
+  expect(handle.backgroundShellRegistry).toBeUndefined();
+  handle.dispose();
+});
+
 it('never disposes a caller-owned compatibility client', () => {
   const callerOwned = client();
   const toolOwnership = new ToolOwnershipRegistry();

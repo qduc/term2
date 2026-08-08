@@ -261,7 +261,7 @@ export async function runNonInteractive(
   const clientFactory =
     config.sessionClientFactory ?? createCallerOwnedSessionClientFactory(config.agentClient!, config.toolOwnership!);
   const sessionId = createNonInteractiveSessionId();
-  const clientHandle = clientFactory.create(sessionId);
+  const clientHandle = clientFactory.create(sessionId, { allowBackgroundShell: false });
   const { runtime, adapter } = createConversationRuntime({
     sessionId,
     agentClient: clientHandle.agentClient,

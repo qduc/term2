@@ -49,7 +49,7 @@ export type SessionClientHandle = {
 
 /** Creates the closure-bound client for one conversation session. */
 export type SessionClientFactory = {
-  create(sessionId: string): SessionClientHandle;
+  create(sessionId: string, options?: { allowBackgroundShell?: boolean }): SessionClientHandle;
 };
 
 type DisposableConversationAgentClient = ConversationAgentClient & { dispose?: () => void };
@@ -71,11 +71,12 @@ export function createOwnedSessionClientFactory(
     requestCapture: OpenAICandidateObserver,
     toolLifecycle?: ToolExecutionLifecyclePort,
     backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>,
+    allowBackgroundShell?: boolean,
   ) => DisposableConversationAgentClient,
   hookLifecycle?: HookLifecyclePort,
 ): SessionClientFactory {
   return {
-    create(sessionId) {
+    create(sessionId, options) {
       const continuationProjectionMode: ContinuationProjectionMode =
         settings.get('agent.provider') === 'openai' ? 'openai-provider' : 'legacy';
       const toolOwnership = new ToolOwnershipRegistry();
@@ -103,7 +104,10 @@ export function createOwnedSessionClientFactory(
         : undefined;
       const toolLifecycle =
         hookLifecycle && hookEvents ? createToolExecutionLifecyclePort(hookLifecycle, hookEvents) : undefined;
-      const backgroundShellRegistry = new BackgroundShellRegistry<BackgroundShellExecutionResult>();
+      const allowBackgroundShell = options?.allowBackgroundShell !== false;
+      const backgroundShellRegistry = allowBackgroundShell
+        ? new BackgroundShellRegistry<BackgroundShellExecutionResult>()
+        : undefined;
       const openAIRootFreshTurnSelectorParityObserver =
         continuationProjectionMode === 'openai-provider'
           ? new ProviderContinuityOpenAIRootSelectorParityObserver(
@@ -123,6 +127,7 @@ export function createOwnedSessionClientFactory(
         requestCapture,
         toolLifecycle,
         backgroundShellRegistry,
+        allowBackgroundShell,
       );
       let disposed = false;
       return {
@@ -143,7 +148,7 @@ export function createOwnedSessionClientFactory(
           if (disposed) return;
           disposed = true;
           agentClient.dispose?.();
-          void backgroundShellRegistry.dispose();
+          void backgroundShellRegistry?.dispose();
           postExecutePauseCapability.setActiveRunId(null);
           postExecutePending.close();
           toolOwnership.clear();

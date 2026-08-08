@@ -530,6 +530,7 @@ it('with autoApprove=true: uses LLM to evaluate YELLOW commands', async () => {
 
 it('runNonInteractive() disposes its factory-owned client after the runtime', async () => {
   const disposed: string[] = [];
+  const createOptions: unknown[] = [];
   const stdout = createStringWritable();
   const stderr = createStringWritable();
   const logger: any = {
@@ -561,7 +562,8 @@ it('runNonInteractive() disposes its factory-owned client after the runtime', as
     logger,
     settingsService,
     sessionClientFactory: {
-      create() {
+      create(_sessionId, options) {
+        createOptions.push(options);
         const agentClient: any = {
           chat: async () => '',
           abort() {},
@@ -582,5 +584,6 @@ it('runNonInteractive() disposes its factory-owned client after the runtime', as
 
   expect(stderr.getOutput()).toBe('');
   expect(exitCode).toBe(0);
+  expect(createOptions).toEqual([{ allowBackgroundShell: false }]);
   expect(disposed).toEqual(['client']);
 });

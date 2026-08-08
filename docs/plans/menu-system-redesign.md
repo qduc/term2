@@ -27,6 +27,28 @@ reading of the Phase 4 step list.
 - `menu-registry.tsx` is deliberately a `Partial<MenuRegistry>` while graphs
   3–4 are unmigrated.
 
+### Worktree base — read before `git worktree add`
+
+**Every worktree for this work must be based on local `HEAD`, never on
+`origin/main`.**
+
+At the time of writing, local `main` is 15 commits ahead of `origin/main`
+(`fee29e21`). The unpushed range is not just the recent merge — it includes the
+Phase 1 kernel (`21976b1d`, `8c230aea`) and this plan document itself
+(`845ddfdc`), alongside unrelated compaction and subagent work. A worktree cut
+from `origin/main` would therefore lose the *entire* redesign and silently
+present a tree in which none of this plan's premises hold.
+
+This is a live trap rather than a hypothetical: the `worktree.baseRef` setting
+defaults to `fresh`, which branches from `origin/<default-branch>`. Any tooling
+that honours that default must be overridden here. Verify before starting a
+step:
+
+```bash
+git rev-list --count origin/main..main   # non-zero means: do not branch from origin/main
+git merge-base --is-ancestor 21976b1d HEAD && echo "kernel present"
+```
+
 ### Measured baseline at the time of the merge
 
 - `pnpm run typecheck` — green.

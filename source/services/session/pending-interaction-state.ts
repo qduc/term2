@@ -16,6 +16,7 @@ export type PendingInteractionSnapshot = {
 };
 
 export type ResolvePendingInteractionRequest = {
+  readonly expectedInteractionId: number;
   readonly answer: string;
   readonly rejectionReason?: string;
   readonly approvalAnswer?: string;
@@ -23,6 +24,11 @@ export type ResolvePendingInteractionRequest = {
 
 export type PendingInteractionResolution =
   | { readonly kind: 'none' }
+  | {
+      readonly kind: 'stale_interaction';
+      readonly expectedInteractionId: number;
+      readonly currentInteractionId: number;
+    }
   | {
       readonly kind: 'awaiting_next_question';
       readonly interactionId: number;
@@ -124,6 +130,13 @@ export class PendingInteractionState {
   resolve(request: ResolvePendingInteractionRequest): PendingInteractionResolution {
     const current = this.#current;
     if (!current) return { kind: 'none' };
+    if (current.interactionId !== request.expectedInteractionId) {
+      return {
+        kind: 'stale_interaction',
+        expectedInteractionId: request.expectedInteractionId,
+        currentInteractionId: current.interactionId,
+      };
+    }
 
     let approvalAnswer = request.approvalAnswer;
     if (

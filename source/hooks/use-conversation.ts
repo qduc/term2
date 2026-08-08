@@ -108,6 +108,7 @@ export const useConversation = ({
   const { thinkingStartedAt, toolCallStreamingInfo, lastUsage, lastCodexRateLimit, pendingQueuedMessages } = uiState;
   const {
     isProcessing,
+    pendingInteractionId,
     waitingForApproval,
     waitingForRejectionReason,
     waitingForAskUserAnswer,
@@ -233,9 +234,11 @@ export const useConversation = ({
   );
 
   const handleApprovalDecision = useCallback(
-    (answer: string, rejectionReason?: string, approvalAnswer?: string) =>
-      orchestrator.handleApprovalDecision(answer, rejectionReason, approvalAnswer),
-    [orchestrator],
+    (answer: string, rejectionReason?: string, approvalAnswer?: string) => {
+      if (pendingInteractionId === null) return Promise.resolve();
+      return orchestrator.handleApprovalDecision(answer, rejectionReason, approvalAnswer, pendingInteractionId);
+    },
+    [orchestrator, pendingInteractionId],
   );
 
   const clearConversation = useCallback(() => orchestrator.clearConversation(), [orchestrator]);

@@ -622,13 +622,19 @@ export class ConversationOrchestrator {
     }
   }
 
-  async handleApprovalDecision(answer: string, rejectionReason?: string, approvalAnswer?: string): Promise<void> {
+  async handleApprovalDecision(
+    answer: string,
+    rejectionReason: string | undefined,
+    approvalAnswer: string | undefined,
+    expectedInteractionId: number,
+  ): Promise<void> {
     const resolution = this.config.conversationService.resolvePendingInteraction?.({
+      expectedInteractionId,
       answer,
       rejectionReason,
       approvalAnswer,
     });
-    if (!resolution || resolution.kind === 'none') {
+    if (!resolution || resolution.kind === 'none' || resolution.kind === 'stale_interaction') {
       return;
     }
     if (resolution.kind === 'awaiting_next_question') return;

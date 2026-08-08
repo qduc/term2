@@ -426,7 +426,9 @@ describe('ConversationOrchestrator background subagent notifications', () => {
     expect(h.config.ui.onApprovalRequested).toHaveBeenCalledTimes(1);
     expect(h.store.pendingCount).toBe(1);
 
-    await h.orchestrator.handleApprovalDecision('y');
+    const interactionId = h.service.getPendingInteractionSnapshot()?.interactionId;
+    expect(interactionId).toBeDefined();
+    await h.orchestrator.handleApprovalDecision('y', undefined, undefined, interactionId!);
     await settle();
 
     expect(h.service.handleApprovalDecision).toHaveBeenCalledTimes(1);

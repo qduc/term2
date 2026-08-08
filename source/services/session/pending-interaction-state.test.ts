@@ -18,9 +18,13 @@ const askUserApproval = {
 describe('PendingInteractionState', () => {
   it('owns ask_user answers and exposes an immutable snapshot', () => {
     const state = new PendingInteractionState();
-    state.present(askUserApproval);
+    const interaction = state.present(askUserApproval);
 
-    const first = state.resolve({ answer: 'y', approvalAnswer: 'one' });
+    const first = state.resolve({
+      expectedInteractionId: interaction.interactionId,
+      answer: 'y',
+      approvalAnswer: 'one',
+    });
     expect(first).toMatchObject({ kind: 'awaiting_next_question' });
     expect(state.getSnapshot()).toMatchObject({
       interactionId: 1,
@@ -29,7 +33,11 @@ describe('PendingInteractionState', () => {
       currentAskUserQuestionIndex: 1,
     });
 
-    const final = state.resolve({ answer: 'y', approvalAnswer: JSON.stringify(['two', 'three']) });
+    const final = state.resolve({
+      expectedInteractionId: interaction.interactionId,
+      answer: 'y',
+      approvalAnswer: JSON.stringify(['two', 'three']),
+    });
     expect(final).toMatchObject({
       kind: 'resolved',
       interactionId: 1,
@@ -52,12 +60,34 @@ describe('PendingInteractionState', () => {
 
   it('resolves a declined ask_user answer without recording an answer', () => {
     const state = new PendingInteractionState();
-    state.present(askUserApproval);
+    const interaction = state.present(askUserApproval);
 
-    expect(state.resolve({ answer: 'y', approvalAnswer: ASK_USER_DECLINE_RESULT })).toMatchObject({
+    expect(
+      state.resolve({
+        expectedInteractionId: interaction.interactionId,
+        answer: 'y',
+        approvalAnswer: ASK_USER_DECLINE_RESULT,
+      }),
+    ).toMatchObject({
       kind: 'resolved',
       approvalAnswer: ASK_USER_DECLINE_RESULT,
     });
     expect(state.getSnapshot()).toBeNull();
+  });
+
+  it('rejects a late decision after interaction A is replaced by interaction B', () => {
+    const state = new PendingInteractionState();
+    const interactionA = state.present({ ...askUserApproval, callId: 'ask-a' });
+    const interactionB = state.present({ ...askUserApproval, callId: 'ask-b' });
+
+    expect(state.resolve({ expectedInteractionId: interactionA.interactionId, answer: 'y' })).toEqual({
+      kind: 'stale_interaction',
+      expectedInteractionId: interactionA.interactionId,
+      currentInteractionId: interactionB.interactionId,
+    });
+    expect(state.getSnapshot()).toMatchObject({
+      interactionId: interactionB.interactionId,
+      approval: { callId: 'ask-b' },
+    });
   });
 });

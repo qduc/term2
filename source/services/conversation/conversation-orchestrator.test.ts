@@ -365,13 +365,38 @@ describe('ConversationOrchestrator', () => {
     });
 
     await orchestrator.sendUserMessage('ask');
-    await orchestrator.handleApprovalDecision('y', undefined, 'first');
+    const interactionId = cfg.conversationService.getPendingInteractionSnapshot()?.interactionId;
+    expect(interactionId).toBeDefined();
+    await orchestrator.handleApprovalDecision('y', undefined, 'first', interactionId!);
 
     expect(cfg.conversationService.getPendingInteractionSnapshot()).toMatchObject({
       askUserAnswers: ['first'],
       currentAskUserQuestionIndex: 1,
     });
     expect(cfg.conversationService.handleApprovalDecision).not.toHaveBeenCalled();
+  });
+
+  it('ignores a late approval A decision after continuation presents approval B', async () => {
+    const cfg = makeConfig();
+    const orchestrator = new ConversationOrchestrator(cfg);
+    const approvalA = {
+      agentName: 'agent',
+      toolName: 'shell',
+      argumentsText: 'A',
+      rawInterruption: null,
+      callId: 'approval-a',
+    };
+    const approvalB = { ...approvalA, argumentsText: 'B', callId: 'approval-b' };
+    const interactionA = cfg.conversationService.presentPendingInteraction(approvalA);
+    const interactionB = cfg.conversationService.presentPendingInteraction(approvalB);
+
+    await orchestrator.handleApprovalDecision('y', undefined, undefined, interactionA.interactionId);
+
+    expect(cfg.conversationService.handleApprovalDecision).not.toHaveBeenCalled();
+    expect(cfg.conversationService.getPendingInteractionSnapshot()).toMatchObject({
+      interactionId: interactionB.interactionId,
+      approval: { callId: 'approval-b' },
+    });
   });
 
   it('routes a queued message to onQueuedMessagePending instead of appending when a turn is in flight', async () => {

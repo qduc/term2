@@ -1780,11 +1780,17 @@ it('projects an adapter approval through the session-owned pending interaction f
 
   await service.sendMessage('run pending command');
 
-  expect(service.getPendingInteractionSnapshot()).toMatchObject({
+  const pendingInteraction = service.getPendingInteractionSnapshot();
+  expect(pendingInteraction).toMatchObject({
     interactionId: 1,
     approval: { toolName: 'shell', callId: 'pending-interaction-call' },
   });
-  expect(service.resolvePendingInteraction({ answer: 'y' })).toMatchObject({ kind: 'resolved', answer: 'y' });
+  expect(
+    service.resolvePendingInteraction({ expectedInteractionId: pendingInteraction!.interactionId, answer: 'y' }),
+  ).toMatchObject({
+    kind: 'resolved',
+    answer: 'y',
+  });
   expect(service.getPendingInteractionSnapshot()).toBeNull();
   await expect(service.handleApprovalDecision('y')).resolves.toMatchObject({
     type: 'response',

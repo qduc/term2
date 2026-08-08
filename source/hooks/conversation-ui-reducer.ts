@@ -52,6 +52,7 @@ export interface QueueSnapshot {
 
 export interface ConversationUIFlags {
   isProcessing: boolean;
+  pendingInteractionId: number | null;
   waitingForApproval: boolean;
   waitingForRejectionReason: boolean;
   waitingForAskUserAnswer: boolean;
@@ -251,6 +252,7 @@ export function getConversationUIFlags(state: ConversationUIState): Conversation
   if (projected) {
     return {
       isProcessing,
+      pendingInteractionId: projected.interactionId,
       waitingForApproval: true,
       waitingForRejectionReason: state.composerEntryMode === 'rejection_reason',
       waitingForAskUserAnswer:
@@ -268,6 +270,7 @@ export function getConversationUIFlags(state: ConversationUIState): Conversation
   if (!isApprovalPhase(phase)) {
     return {
       isProcessing,
+      pendingInteractionId: null,
       waitingForApproval: false,
       waitingForRejectionReason: false,
       waitingForAskUserAnswer: false,
@@ -284,6 +287,7 @@ export function getConversationUIFlags(state: ConversationUIState): Conversation
   const askUserState = getAskUserState(phase.interaction);
   return {
     isProcessing,
+    pendingInteractionId: null,
     waitingForApproval: true,
     waitingForRejectionReason: phase.interaction.kind === 'rejection_reason',
     waitingForAskUserAnswer: phase.interaction.kind === 'ask_user_answer',

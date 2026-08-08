@@ -59,7 +59,8 @@ it.sequential('StatusBar renders the compact two-row configuration and usage lay
   );
 
   const lines = (lastFrame() ?? '').split('\n');
-  expect(lines.some((line) => line.includes('Standard │ Codex/gpt-5.6-luna · high │ Auto'))).toBe(true);
+  expect(lines.some((line) => line.includes('Standard │ Codex/gpt-5.6-luna · high'))).toBe(true);
+  expect(lines.some((line) => line.includes('Auto'))).toBe(true);
   expect(lines.some((line) => line.includes('7D 78% · reset '))).toBe(true);
   expect(lines.some((line) => line.includes('Tok 11,778 in / 13 out │ Ctx 12k / 272k'))).toBe(true);
   expect(lines.some((line) => line.includes('Cache 0'))).toBe(false);
@@ -478,7 +479,7 @@ it.sequential('StatusBar renders Confirm Cache Miss using pendingLargeUncachedTo
   expect(output.includes('Confirm Cache Miss: ~20k')).toBe(true);
 });
 
-it.sequential('StatusBar shows Sandbox: ON when sandbox.enabled is true, replacing Auto: ...', async () => {
+it.sequential('StatusBar shows Sandboxed when sandbox.enabled is true, replacing Auto: ...', async () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',
     'agent.provider': 'openai',
@@ -489,7 +490,7 @@ it.sequential('StatusBar shows Sandbox: ON when sandbox.enabled is true, replaci
   const { lastFrame } = await renderInAct(<StatusBar settingsService={settingsService} />);
   const output = lastFrame() ?? '';
 
-  expect(output.includes('Sandbox ON')).toBe(true);
+  expect(output.includes('Sandboxed')).toBe(true);
   expect(output.includes('Approve:')).toBe(false);
 });
 
@@ -507,7 +508,7 @@ it.sequential('StatusBar shows compact auto approval without the model name', as
 
   expect(output.includes('Auto')).toBe(true);
   expect(output.includes('very-long-auto-approval-model-name')).toBe(false);
-  expect(output.includes('Sandbox ON')).toBe(false);
+  expect(output.includes('Sandboxed')).toBe(false);
 });
 
 it.sequential('StatusBar renders a static commit blocker warning', async () => {

@@ -50,7 +50,6 @@ const StatusBar: FC<StatusBarProps> = ({
   const reasoningEffort = useSetting(settingsService, 'agent.reasoningEffort') ?? 'default';
   const autoApproveMode = useSetting(settingsService, 'shell.autoApproveMode') ?? 'off';
   const sandboxEnabled = useSetting(settingsService, 'sandbox.enabled') ?? false;
-  const sandboxReadPolicy = useSetting(settingsService, 'sandbox.readPolicy') ?? 'standard';
   // Session-scoped grants are intentionally not process-global, so only the
   // persistent project grant is discoverable from this app-wide status bar.
   const dockerHostAccess = hasDockerHostControlProject(process.cwd()) ? 'project' : undefined;
@@ -171,7 +170,7 @@ const StatusBar: FC<StatusBarProps> = ({
   ];
   const modeLabel = modeLabels.length > 0 ? modeLabels.join(' · ') : 'Standard';
   const safetyLabel = sandboxEnabled
-    ? `Sandbox ON · ${sandboxReadPolicy}`
+    ? 'Sandboxed'
     : autoApproveMode !== 'off'
     ? autoApproveMode === 'auto'
       ? 'Auto'
@@ -180,77 +179,64 @@ const StatusBar: FC<StatusBarProps> = ({
 
   return (
     <Box marginTop={1} flexDirection="column" width="100%">
-      <Box justifyContent="space-between" width="100%" flexWrap="wrap">
-        <Box>
-          {sshInfo && (
+      <Box width="100%">
+        {sshInfo && (
+          <>
+            <Box marginRight={1}>
+              <Text color="#f97316" bold>
+                SSH
+              </Text>
+              <Text color={slate}>
+                {' '}
+                {sshInfo.user}@{sshInfo.host}:{sshInfo.remoteDir}
+              </Text>
+            </Box>
+            <Text color={slate}>│</Text>
+          </>
+        )}
+        <Box marginX={1}>
+          <Text color={modeLabel === 'Standard' ? slate : accent} bold={modeLabel !== 'Standard'}>
+            {modeLabel}
+          </Text>
+          {queueLength != null && queueLength > 0 && (
             <>
-              <Box marginRight={1}>
-                <Text color="#f97316" bold>
-                  SSH
-                </Text>
-                <Text color={slate}>
-                  {' '}
-                  {sshInfo.user}@{sshInfo.host}:{sshInfo.remoteDir}
-                </Text>
-              </Box>
-              <Text color={slate}>│</Text>
-            </>
-          )}
-          <Box marginX={1}>
-            <Text color={modeLabel === 'Standard' ? slate : accent} bold={modeLabel !== 'Standard'}>
-              {modeLabel}
-            </Text>
-            {queueLength != null && queueLength > 0 && (
-              <>
-                <Text color={slate}> │ </Text>
-                <Text color={accent}>[Q:{queueLength}]</Text>
-              </>
-            )}
-          </Box>
-
-          {model && (
-            <>
-              <Text color={slate}>│</Text>
-              <Box marginX={1}>
-                <Text color={accent}>
-                  {providerLabel}/{model}
-                </Text>
-                {reasoningEffort && reasoningEffort !== 'default' && <Text color={glow}> · {reasoningEffort}</Text>}
-              </Box>
-            </>
-          )}
-
-          {safetyLabel && (
-            <>
-              <Text color={slate}>│</Text>
-              <Box marginX={1}>
-                <Text color={sandboxEnabled || autoApproveMode === 'auto' ? '#10b981' : '#f97316'} bold>
-                  {safetyLabel}
-                </Text>
-              </Box>
-            </>
-          )}
-
-          {mentorMode && mentorModel && (
-            <>
-              <Text color={slate}>│</Text>
-              <Box marginX={1}>
-                <Text color={slate}>Mentor · </Text>
-                <Text color="#a78bfa">{mentorModel}</Text>
-              </Box>
+              <Text color={slate}> │ </Text>
+              <Text color={accent}>[Q:{queueLength}]</Text>
             </>
           )}
         </Box>
 
-        {codexRateLimitText && (
-          <Box>
-            <Text color={slate}>{codexRateLimitText}</Text>
-          </Box>
+        {model && (
+          <>
+            <Text color={slate}>│</Text>
+            <Box marginX={1}>
+              <Text color={accent}>
+                {providerLabel}/{model}
+              </Text>
+              {reasoningEffort && reasoningEffort !== 'default' && <Text color={glow}> · {reasoningEffort}</Text>}
+            </Box>
+          </>
+        )}
+
+        {mentorMode && mentorModel && (
+          <>
+            <Text color={slate}>│</Text>
+            <Box marginX={1}>
+              <Text color="#a78bfa">{mentorModel}</Text>
+            </Box>
+          </>
         )}
       </Box>
 
       <Box width="100%" flexWrap="wrap">
         <Box flexGrow={1}>
+          {safetyLabel && (
+            <Box marginRight={1}>
+              <Text color={sandboxEnabled || autoApproveMode === 'auto' ? '#10b981' : '#f97316'} bold>
+                {safetyLabel}
+              </Text>
+            </Box>
+          )}
           {warningText && (
             <Text color={hasPendingConfirmation ? warnRed : glow} bold>
               {warningText}
@@ -273,17 +259,20 @@ const StatusBar: FC<StatusBarProps> = ({
           )}
         </Box>
 
-        {(tokensText || contextText || costText) && (
-          <Box>
-            {tokensText && (
-              <Text color={usageColor} bold={Boolean(largeUncachedWarning)}>
-                {tokensText}
-              </Text>
-            )}
-            {tokensText && contextText && <Text color={slate}> │ </Text>}
-            {contextText && <Text color={slate}>{contextText}</Text>}
-            {(tokensText || contextText) && costText && <Text color={slate}> │ </Text>}
-            {costText && <Text color={costColor}>{costText}</Text>}
+        {(tokensText || contextText || costText || codexRateLimitText) && (
+          <Box flexDirection="column" alignItems="flex-end">
+            {codexRateLimitText && <Text color={slate}>{codexRateLimitText}</Text>}
+            <Box>
+              {tokensText && (
+                <Text color={usageColor} bold={Boolean(largeUncachedWarning)}>
+                  {tokensText}
+                </Text>
+              )}
+              {tokensText && contextText && <Text color={slate}> │ </Text>}
+              {contextText && <Text color={slate}>{contextText}</Text>}
+              {(tokensText || contextText) && costText && <Text color={slate}> │ </Text>}
+              {costText && <Text color={costColor}>{costText}</Text>}
+            </Box>
           </Box>
         )}
       </Box>

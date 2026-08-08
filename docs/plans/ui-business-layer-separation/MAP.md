@@ -1,5 +1,22 @@
 # UI / Business Layer Separation
 
+## Resume here
+
+The independent tranche is merged through conversation admission at
+`9a31f23b`. Submission authority and the final conversation projection were
+reassessed and intentionally closed without new runtime layers. Current main's
+focused rewind/admission suites and typecheck are green. The full suite has one
+known baseline failure at `source/cli.integration.test.ts:155`; all other 5,516
+tests passed and one was skipped.
+
+Do not start the remaining milestones until menu redesign Phase 5 hands off its
+active worktree/branch as recorded in `AGENTS.md` and
+`docs/plans/menu-system-redesign.md`. Once it merges, implement in this order:
+settings transaction and conversation configuration, handoff workflow, provider
+management session, then model catalog session. Re-run the provider black-box
+suite for the configuration milestone because it changes provider/session
+runtime mutation.
+
 ## Destination
 
 Term2's interactive and non-interactive surfaces render state and translate user
@@ -34,10 +51,10 @@ revertible milestones.
 
 ## Open
 
-- **Settings transaction** [research] — Define atomic apply/reset results and runtime side effects after menu Phase 5 removes the remaining direct `InputBox` mutation path.
-- **Handoff effects** [research] — Separate the handoff state machine from MenuController timing while preserving correlated intent ordering.
-- **Provider and model sessions** [research] — Move persistence, validation, credentials, catalog caching, and traversal policy while retaining list selection and scrolling in Ink.
-- **Application commands** [research] — Identify semantic command outcomes that can serve Ink and future surfaces without a generic command manager.
+- **Settings transaction and conversation configuration** [blocked: menu Phase 5] — Apply effective setting deltas and runtime effects behind one focused service; keep parsing/completion and correlated intent presentation in Ink.
+- **Handoff effects** [blocked: menu Phase 5] — Separate the handoff state machine from MenuController timing while preserving correlated intent ordering.
+- **Provider management session** [blocked: menu Phase 5] — Move wizard, draft, validation, persistence-result, deletion, and reorder policy while retaining list selection and scrolling in Ink.
+- **Model catalog session** [blocked: menu Phase 5] — Move provider traversal, fetch/cache/race policy, refresh, and current-model suggestion while retaining query filtering and selection in Ink.
 
 ## Fog
 

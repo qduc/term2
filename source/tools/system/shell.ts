@@ -45,6 +45,11 @@ import {
 } from '../../utils/shell/sandbox/docker-host-control.js';
 import type { SessionAccessState } from '../../services/session/session-access-state.js';
 import type { NestedToolCompatibilityState } from '../../services/session/nested-tool-compatibility-state.js';
+import {
+  type BackgroundShellJob,
+  type BackgroundShellTerminalStatus,
+  type BackgroundShellRegistry,
+} from '../../services/shell/background-shell-registry.js';
 
 const shellSandboxModeSchema = z.enum(['default', 'unsandboxed']).optional().default('default');
 
@@ -65,12 +70,18 @@ const shellParametersSchema = z.object({
   sandbox: shellSandboxModeSchema.describe(
     'Run mode. default runs inside the sandbox when available. unsandboxed requires explicit user approval.',
   ),
+  background: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe('Run locally in the background and return a job ID immediately. Defaults to false.'),
 });
 
 // Tool invocation normalizes shape but does not apply Zod defaults before
 // execute. Keep the executor input honest: `sandbox` may be absent at runtime.
-export type ShellToolParams = Omit<z.infer<typeof shellParametersSchema>, 'sandbox'> & {
+export type ShellToolParams = Omit<z.infer<typeof shellParametersSchema>, 'sandbox' | 'background'> & {
   sandbox?: 'default' | 'unsandboxed';
+  background?: boolean;
 };
 export type ShellToolDefinition = Omit<
   SchemaToolDefinition<typeof shellParametersSchema>,
@@ -89,6 +100,68 @@ interface ShellCommandResult {
   stdout: string;
   stderr: string;
   outcome: { type: 'exit'; exitCode: number | null } | { type: 'timeout' };
+}
+
+/** The registry keeps the formatted output while retaining the process outcome separately. */
+export interface BackgroundShellExecutionResult {
+  output: string;
+  status: Exclude<BackgroundShellTerminalStatus, 'cancelled'>;
+}
+
+const getBackgroundShellJobParameters = z.object({
+  job_id: z.string().min(1).describe('The background shell job ID.'),
+});
+
+export interface BackgroundShellJobToolDefinitions {
+  get: SchemaToolDefinition<typeof getBackgroundShellJobParameters>;
+  cancel: SchemaToolDefinition<typeof getBackgroundShellJobParameters>;
+}
+
+function backgroundShellJobResponse(job: BackgroundShellJob<BackgroundShellExecutionResult>) {
+  return {
+    jobId: job.id,
+    command: job.command,
+    status: job.status,
+    ...(job.result === undefined ? {} : { output: job.result.output }),
+    ...(job.error === undefined ? {} : { error: job.error }),
+  };
+}
+
+/**
+ * Root composition registers these alongside `shell` when it supplies the
+ * session-owned registry. Keeping them here makes the model contract and its
+ * shell lifecycle use the same job representation.
+ */
+export function createBackgroundShellJobToolDefinitions(
+  registry: BackgroundShellRegistry<BackgroundShellExecutionResult>,
+): BackgroundShellJobToolDefinitions {
+  return {
+    get: {
+      name: 'get_shell_job',
+      description: 'Get the non-blocking status and bounded output of a background shell job.',
+      parameters: getBackgroundShellJobParameters,
+      needsApproval: () => false,
+      execute: ({ job_id }) => {
+        const job = registry.get(job_id);
+        return JSON.stringify(job ? backgroundShellJobResponse(job) : { jobId: job_id, status: 'not_found' });
+      },
+      formatCommandMessage: () => [],
+    },
+    cancel: {
+      name: 'cancel_shell_job',
+      description: 'Request cancellation of a running background shell job without waiting for it to exit.',
+      parameters: getBackgroundShellJobParameters,
+      needsApproval: () => false,
+      execute: ({ job_id }) => {
+        const job = registry.get(job_id);
+        if (!job) return JSON.stringify({ jobId: job_id, status: 'not_found' });
+        registry.cancel(job_id);
+        const current = registry.get(job_id);
+        return JSON.stringify(backgroundShellJobResponse(current ?? job));
+      },
+      formatCommandMessage: () => [],
+    },
+  };
 }
 
 /**
@@ -270,6 +343,8 @@ export function createShellToolDefinition(deps: {
   sessionAccess?: SessionAccessState;
   /** Isolated legacy protocol for nested tools only. */
   nestedCompatibility?: NestedToolCompatibilityState;
+  /** Root session-owned lifecycle for local background shell jobs. */
+  backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
 }): ShellToolDefinition {
   const {
     loggingService,
@@ -284,6 +359,7 @@ export function createShellToolDefinition(deps: {
     postExecuteDeniedRead = false,
     sessionAccess,
     nestedCompatibility,
+    backgroundShellRegistry,
   } = deps;
   const deniedReadByCallId = new Map<string, DeniedReadInfo>();
   const overrideByCallId = new Map<string, { extraAllowRead?: string[]; forceUnsandboxed?: boolean }>();
@@ -372,7 +448,11 @@ export function createShellToolDefinition(deps: {
         return true; // fail-safe: require approval on validation errors
       }
     },
-    execute: async ({ command, timeout_ms, max_output_length, sandbox = 'default' }, _context, details) => {
+    execute: async (
+      { command, timeout_ms, max_output_length, sandbox = 'default', background = false },
+      _context,
+      details,
+    ) => {
       const toolCallId = (details as { toolCall?: { callId?: unknown } } | undefined)?.toolCall?.callId;
       const cwd = executionContext?.getCwd() || process.cwd();
       const sessionId = getConversationSessionId(_context);
@@ -398,14 +478,25 @@ export function createShellToolDefinition(deps: {
         return `Error: plan mode is read-only. Command not executed: ${command}`;
       }
       const sshService = executionContext?.getSSHService();
+      if (background && !backgroundShellRegistry) {
+        return 'Error: Background shell execution is unavailable in this session.';
+      }
+      if (background && sshService) {
+        return 'Error: Background shell execution is only available for local sessions.';
+      }
       const previousCorrelationId = loggingService.getCorrelationId();
       const correlationId = randomUUID();
       const startedAt = Date.now();
       let sandboxed = false;
       let dockerHostControl: DockerHostControl | undefined;
+      let backgroundCleanupDeferred = false;
+      const ownsCorrelationId = !background;
 
-      // Set correlation ID for tracking related operations
-      loggingService.setCorrelationId(correlationId);
+      // The logger correlation ID is process-global. A foreground command owns
+      // it for the duration of its await; a background job uses the explicit
+      // `correlationId` fields below instead so it cannot contaminate another
+      // overlapping command's logs.
+      if (ownsCorrelationId) loggingService.setCorrelationId(correlationId);
 
       try {
         // Use provided values or settings defaults or hardcoded defaults
@@ -527,133 +618,177 @@ export function createShellToolDefinition(deps: {
           }
         }
 
-        const result = await executeShellCommandImpl(commandToRun, {
-          cwd,
-          timeout,
-          maxBuffer: 1024 * 1024, // 1MB max buffer
-          env: sandboxed
-            ? createSandboxEnvironment(undefined, {
-                cwd,
-                readPolicy: settingsService.get('sandbox.readPolicy'),
-                dockerHostControl,
-              })
-            : undefined,
-          pauseOnSandboxNetworkApproval: sandboxed,
-          signal: (details as { signal?: AbortSignal } | undefined)?.signal,
-          sshService,
-        });
-
-        const stdout = result.stdout ?? '';
-        const rawStderr = stripRtkWarning(result.stderr ?? '');
-        const annotatedStderr = sandboxed ? shellSandboxRunner.annotateFailure(optimizedCommand, rawStderr) : rawStderr;
-
-        const readPolicy = settingsService.get('sandbox.readPolicy');
-        const sandboxFailure = classifySandboxFailure({
-          command: optimizedCommand,
-          rawStderr,
-          annotatedStderr,
-          sandboxed,
-          readPolicy,
-          dockerHostControlActive: Boolean(dockerHostControl),
-          exitCode: result.exitCode,
-        });
-
-        if (sandboxFailure?.type === 'docker_blocked') {
-          // Keyed by the command the model passed, because that is what the
-          // approval flow and the retry will present.
-          if (sessionAccess) sessionAccess.recordDockerDenial(command);
-          else nestedCompatibility?.docker.recordDenial(sessionId, command);
-          loggingService.security('Sandbox blocked Docker daemon access; agent retry will prompt for approval', {
-            confidence: sandboxFailure.confidence,
-            command: command.substring(0, 100),
+        const executePreparedCommand = async (
+          signal: AbortSignal | undefined,
+        ): Promise<BackgroundShellExecutionResult> => {
+          const result = await executeShellCommandImpl(commandToRun, {
             cwd,
-            correlationId,
-            sessionId,
-            // Without a session the block is unattributable, so it is not
-            // remembered and the retry will be sandboxed again.
-            denialRecorded: Boolean(sessionId),
-          });
-          return `Error: ${DOCKER_HOST_CONTROL_RETRY_INSTRUCTION}`;
-        }
-
-        if (sandboxFailure?.type === 'denied_read') {
-          if (postExecuteDeniedRead && typeof toolCallId !== 'string') {
-            throw new HarnessInvariantError('Root shell denied-read handling requires an SDK tool call ID');
-          }
-          // Keyed by the command the model passed, not `optimizedCommand`: the
-          // retry and both approval lookups (needsApproval here, and the
-          // conversation layer, which has no cwd to re-derive the stripped form)
-          // only ever see the raw string.
-          if (postExecuteDeniedRead) {
-            deniedReadByCallId.set(toolCallId as string, sandboxFailure.deniedRead);
-          } else {
-            nestedCompatibility?.deniedReads.record(command, sandboxFailure.deniedRead);
-          }
-          loggingService.security('Sandbox denied read; agent retry will prompt for approval', {
-            deniedPath: sandboxFailure.deniedRead.path,
-            suggestedParent: sandboxFailure.deniedRead.suggestedParent,
-            sensitive: sandboxFailure.deniedRead.sensitive,
-            confidence: sandboxFailure.confidence,
-            command: optimizedCommand.substring(0, 100),
-            correlationId,
-          });
-          return `Error: ${DETAILED_DENIED_READ_INSTRUCTION}`;
-        }
-
-        const stderr = sandboxFailure ? `${sandboxFailure.stderr}\n\n${SANDBOX_ESCAPE_INSTRUCTION}` : annotatedStderr;
-        const exitCode = result.exitCode ?? null;
-        const outcome: ShellCommandResult['outcome'] = result.timedOut
-          ? { type: 'timeout' }
-          : { type: 'exit', exitCode };
-
-        if (result.timedOut) {
-          loggingService.warn('Shell command timeout', {
-            command: optimizedCommand.substring(0, 100),
             timeout,
+            maxBuffer: 1024 * 1024, // 1MB max buffer
+            env: sandboxed
+              ? createSandboxEnvironment(undefined, {
+                  cwd,
+                  readPolicy: settingsService.get('sandbox.readPolicy'),
+                  dockerHostControl,
+                })
+              : undefined,
+            pauseOnSandboxNetworkApproval: sandboxed,
+            signal,
+            sshService,
           });
-        } else if (exitCode === 0) {
-          loggingService.debug('Shell command executed successfully', {
-            command: optimizedCommand.substring(0, 100),
-            exitCode: 0,
-            stdoutLength: stdout.length,
-            stderrLength: stderr.length,
+
+          const stdout = result.stdout ?? '';
+          const rawStderr = stripRtkWarning(result.stderr ?? '');
+          const annotatedStderr = sandboxed
+            ? shellSandboxRunner.annotateFailure(optimizedCommand, rawStderr)
+            : rawStderr;
+
+          const readPolicy = settingsService.get('sandbox.readPolicy');
+          const sandboxFailure = classifySandboxFailure({
+            command: optimizedCommand,
+            rawStderr,
+            annotatedStderr,
+            sandboxed,
+            readPolicy,
+            dockerHostControlActive: Boolean(dockerHostControl),
+            exitCode: result.exitCode,
           });
-        } else {
-          loggingService.debug('Shell command execution failed', {
-            command: optimizedCommand.substring(0, 100),
+
+          if (sandboxFailure?.type === 'docker_blocked') {
+            // Keyed by the command the model passed, because that is what the
+            // approval flow and the retry will present.
+            if (sessionAccess) sessionAccess.recordDockerDenial(command);
+            else nestedCompatibility?.docker.recordDenial(sessionId, command);
+            loggingService.security('Sandbox blocked Docker daemon access; agent retry will prompt for approval', {
+              confidence: sandboxFailure.confidence,
+              command: command.substring(0, 100),
+              cwd,
+              correlationId,
+              sessionId,
+              // Without a session the block is unattributable, so it is not
+              // remembered and the retry will be sandboxed again.
+              denialRecorded: Boolean(sessionId),
+            });
+            return { output: `Error: ${DOCKER_HOST_CONTROL_RETRY_INSTRUCTION}`, status: 'failed' };
+          }
+
+          if (sandboxFailure?.type === 'denied_read') {
+            if (postExecuteDeniedRead && typeof toolCallId !== 'string') {
+              throw new HarnessInvariantError('Root shell denied-read handling requires an SDK tool call ID');
+            }
+            // Keyed by the command the model passed, not `optimizedCommand`: the
+            // retry and both approval lookups (needsApproval here, and the
+            // conversation layer, which has no cwd to re-derive the stripped form)
+            // only ever see the raw string.
+            if (postExecuteDeniedRead) {
+              deniedReadByCallId.set(toolCallId as string, sandboxFailure.deniedRead);
+            } else {
+              nestedCompatibility?.deniedReads.record(command, sandboxFailure.deniedRead);
+            }
+            loggingService.security('Sandbox denied read; agent retry will prompt for approval', {
+              deniedPath: sandboxFailure.deniedRead.path,
+              suggestedParent: sandboxFailure.deniedRead.suggestedParent,
+              sensitive: sandboxFailure.deniedRead.sensitive,
+              confidence: sandboxFailure.confidence,
+              command: optimizedCommand.substring(0, 100),
+              correlationId,
+            });
+            return { output: `Error: ${DETAILED_DENIED_READ_INSTRUCTION}`, status: 'failed' };
+          }
+
+          const stderr = sandboxFailure ? `${sandboxFailure.stderr}\n\n${SANDBOX_ESCAPE_INSTRUCTION}` : annotatedStderr;
+          const exitCode = result.exitCode ?? null;
+          const outcome: ShellCommandResult['outcome'] = result.timedOut
+            ? { type: 'timeout' }
+            : { type: 'exit', exitCode };
+
+          if (result.timedOut) {
+            loggingService.warn('Shell command timeout', {
+              command: optimizedCommand.substring(0, 100),
+              timeout,
+            });
+          } else if (exitCode === 0) {
+            loggingService.debug('Shell command executed successfully', {
+              command: optimizedCommand.substring(0, 100),
+              exitCode: 0,
+              stdoutLength: stdout.length,
+              stderrLength: stderr.length,
+            });
+          } else {
+            loggingService.debug('Shell command execution failed', {
+              command: optimizedCommand.substring(0, 100),
+              exitCode,
+              stderrLength: stderr.length,
+            });
+          }
+
+          loggingService.debug('Shell command execution completed', {
+            commandCount: 1,
+            successCount: outcome.type === 'exit' && outcome.exitCode === 0 ? 1 : 0,
+            failureCount: outcome.type === 'exit' && outcome.exitCode !== 0 ? 1 : 0,
+            timeoutCount: outcome.type === 'timeout' ? 1 : 0,
+          });
+
+          const formattedOutput = await formatShellExecutionOutput({
+            command: optimizedCommand,
+            cwd,
+            stdout,
+            stderr,
             exitCode,
-            stderrLength: stderr.length,
+            timedOut: outcome.type === 'timeout',
+            maxOutputLength,
+            durationMs: Date.now() - startedAt,
           });
+
+          return {
+            output: formattedOutput.text,
+            status: result.timedOut ? 'timed_out' : exitCode === 0 ? 'completed' : 'failed',
+          };
+        };
+
+        const cleanupAfterExecution = async () => {
+          if (sandboxed) {
+            await shellSandboxRunner.cleanupAfterCommand?.();
+          }
+          dockerHostControl?.cleanup();
+          if (ownsCorrelationId) {
+            if (previousCorrelationId) {
+              loggingService.setCorrelationId(previousCorrelationId);
+            } else {
+              loggingService.clearCorrelationId();
+            }
+          }
+        };
+
+        if (background) {
+          try {
+            const job = backgroundShellRegistry!.launch({
+              command: optimizedCommand,
+              run: executePreparedCommand,
+              onSettled: cleanupAfterExecution,
+              resultToStatus: (result) => result.status,
+            });
+            backgroundCleanupDeferred = true;
+            return JSON.stringify({ jobId: job.id, status: job.status });
+          } catch (error) {
+            return `Error: ${error instanceof Error ? error.message : String(error)}`;
+          }
         }
 
-        loggingService.debug('Shell command execution completed', {
-          commandCount: 1,
-          successCount: outcome.type === 'exit' && outcome.exitCode === 0 ? 1 : 0,
-          failureCount: outcome.type === 'exit' && outcome.exitCode !== 0 ? 1 : 0,
-          timeoutCount: outcome.type === 'timeout' ? 1 : 0,
-        });
-
-        const formattedOutput = await formatShellExecutionOutput({
-          command: optimizedCommand,
-          cwd,
-          stdout,
-          stderr,
-          exitCode,
-          timedOut: outcome.type === 'timeout',
-          maxOutputLength,
-          durationMs: Date.now() - startedAt,
-        });
-
-        return formattedOutput.text;
+        return (await executePreparedCommand((details as { signal?: AbortSignal } | undefined)?.signal)).output;
       } finally {
-        if (sandboxed) {
-          await shellSandboxRunner.cleanupAfterCommand?.();
-        }
-        dockerHostControl?.cleanup();
-        if (previousCorrelationId) {
-          loggingService.setCorrelationId(previousCorrelationId);
-        } else {
-          loggingService.clearCorrelationId();
+        if (!backgroundCleanupDeferred) {
+          if (sandboxed) {
+            await shellSandboxRunner.cleanupAfterCommand?.();
+          }
+          dockerHostControl?.cleanup();
+          if (ownsCorrelationId) {
+            if (previousCorrelationId) {
+              loggingService.setCorrelationId(previousCorrelationId);
+            } else {
+              loggingService.clearCorrelationId();
+            }
+          }
         }
       }
     },

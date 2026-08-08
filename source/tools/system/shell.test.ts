@@ -2,7 +2,8 @@ import { it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { createShellToolDefinition } from './shell.js';
+import { createBackgroundShellJobToolDefinitions, createShellToolDefinition } from './shell.js';
+import { BackgroundShellRegistry } from '../../services/shell/background-shell-registry.js';
 import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
 import {
   deniedReadStore,
@@ -66,6 +67,99 @@ function createFakeRtk(): string {
   return rtkPath;
 }
 
+function createDeferred<T>() {
+  let resolve: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve: resolve! };
+}
+
+it('background shell acknowledges immediately, exposes status and cancellation, and defers sandbox cleanup', async () => {
+  const registry = new BackgroundShellRegistry<{ output: string; status: 'completed' | 'failed' | 'timed_out' }>({
+    createId: () => 'background-job',
+  });
+  const execution = createDeferred<{ stdout: string; stderr: string; exitCode: number; timedOut: boolean }>();
+  let cleanupCalls = 0;
+  let receivedSignal: AbortSignal | undefined;
+  let correlationId: string | undefined = 'foreground-command';
+  const loggingService = createNoopLogger({
+    getCorrelationId: () => correlationId,
+    setCorrelationId: (next) => {
+      correlationId = next;
+    },
+    clearCorrelationId: () => {
+      correlationId = undefined;
+    },
+  });
+  const shell = createShellToolDefinition({
+    loggingService,
+    settingsService: createMockSettingsService(),
+    backgroundShellRegistry: registry,
+    shellSandboxRunner: createFakeSandboxRunner({
+      cleanupAfterCommand: async () => {
+        cleanupCalls += 1;
+      },
+    }),
+    executeShellCommandImpl: async (_command, options) => {
+      receivedSignal = options?.signal;
+      return execution.promise;
+    },
+  });
+  const jobs = createBackgroundShellJobToolDefinitions(registry);
+
+  const acknowledgement = JSON.parse(await shell.execute({ command: 'pnpm test', background: true }));
+  expect(acknowledgement).toEqual({ jobId: 'background-job', status: 'running' });
+  expect(correlationId).toBe('foreground-command');
+  expect(cleanupCalls).toBe(0);
+  expect(JSON.parse(String(await jobs.get.execute({ job_id: 'background-job' })))).toMatchObject({ status: 'running' });
+
+  expect(JSON.parse(String(await jobs.cancel.execute({ job_id: 'background-job' })))).toMatchObject({
+    jobId: 'background-job',
+    status: 'cancelling',
+  });
+  expect(receivedSignal?.aborted).toBe(true);
+
+  execution.resolve({ stdout: 'stopped', stderr: '', exitCode: 0, timedOut: false });
+  await registry.whenSettled('background-job');
+
+  expect(cleanupCalls).toBe(1);
+  expect(correlationId).toBe('foreground-command');
+  expect(JSON.parse(String(await jobs.get.execute({ job_id: 'background-job' })))).toMatchObject({
+    status: 'cancelled',
+    output: expect.stringContaining('stopped'),
+  });
+});
+
+it('background shell reports a timeout as timed_out through the lifecycle event sink', async () => {
+  const events: unknown[] = [];
+  const registry = new BackgroundShellRegistry<{ output: string; status: 'completed' | 'failed' | 'timed_out' }>({
+    createId: () => 'timed-job',
+    onEvent: (event) => events.push(event),
+  });
+  const shell = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': false }),
+    backgroundShellRegistry: registry,
+    executeShellCommandImpl: async () => ({ stdout: '', stderr: '', exitCode: null, timedOut: true }),
+  });
+
+  expect(await shell.execute({ command: 'slow-command', background: true })).toBe(
+    JSON.stringify({ jobId: 'timed-job', status: 'running' }),
+  );
+  await registry.whenSettled('timed-job');
+
+  expect(events).toEqual([
+    { type: 'background_shell_started', jobId: 'timed-job', command: 'slow-command' },
+    expect.objectContaining({
+      type: 'background_shell_completed',
+      jobId: 'timed-job',
+      command: 'slow-command',
+      status: 'timed_out',
+    }),
+  ]);
+});
+
 it.sequential('shell execute appends spill-file guidance when output is truncated', async () => {
   const longStdout = `${'x'.repeat(6000)}FULL-ONLY-SENTINEL${'y'.repeat(6000)}`;
 
@@ -108,6 +202,7 @@ it('retains the schema sandbox default while accepting raw invocations that omit
   });
 
   expect(tool.parameters.parse({ command: 'pwd' }).sandbox).toBe('default');
+  expect(tool.parameters.parse({ command: 'pwd' }).background).toBe(false);
   await expect(tool.needsApproval({ command: 'pwd' })).resolves.toBeTypeOf('boolean');
 });
 
@@ -188,6 +283,7 @@ it('shell schema accepts omitted, default, and unsandboxed sandbox modes', () =>
   expect(tool.parameters.parse({ command: 'pwd' }).sandbox).toBe('default');
   expect(tool.parameters.parse({ command: 'pwd', sandbox: 'default' }).sandbox).toBe('default');
   expect(tool.parameters.parse({ command: 'pwd', sandbox: 'unsandboxed' }).sandbox).toBe('unsandboxed');
+  expect(tool.parameters.parse({ command: 'pwd', background: true }).background).toBe(true);
   expect(() => tool.parameters.parse({ command: 'pwd', sandbox: 'off' })).toThrow();
 });
 

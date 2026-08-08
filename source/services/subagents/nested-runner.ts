@@ -509,35 +509,41 @@ export class NestedSubagentRunner {
       if (raw === transferred) {
         transferredToBackground = true;
         const transferredSlot = childSlot;
+        const emitTransferredFailure = (error: unknown): void => {
+          // The foreground tool result has already been handed off. A late
+          // loop rejection or parse failure must therefore enter the durable
+          // async terminal lane; otherwise get_subagent_result hangs forever.
+          safeEmit(this.#logger, this.#onEvent, {
+            type: 'subagent_completed',
+            async: true,
+            result: {
+              agentId,
+              role,
+              status: lease.signal.aborted || isAbortLike((error as any)?.message, error) ? 'cancelled' : 'failed',
+              finalText: '',
+              filesChanged: [],
+              toolsUsed: [],
+              error: (error as any)?.message || String(error),
+            },
+          });
+        };
         void execution
           .then(
             (terminal) => {
-              const parsed = parseNestedSubagentResult(terminal);
-              if (transferredSlot && parsed.usage) request.executionBudget!.recordUsage(parsed.usage);
-              if (parsed.status !== 'interrupted' && parsed.status !== 'running') {
-                const completed: SubagentResult = { ...parsed, status: parsed.status };
-                safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result: completed, async: true });
+              try {
+                const parsed = parseNestedSubagentResult(terminal);
+                if (transferredSlot && parsed.usage) request.executionBudget!.recordUsage(parsed.usage);
+                if (parsed.status !== 'interrupted' && parsed.status !== 'running') {
+                  const completed: SubagentResult = { ...parsed, status: parsed.status };
+                  safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result: completed, async: true });
+                }
+              } catch (error) {
+                emitTransferredFailure(error);
               }
               lease.settle();
             },
             (error) => {
-              // The foreground tool result has already been handed off. A
-              // late loop rejection must therefore enter the durable async
-              // terminal lane; otherwise the adopted registry promise never
-              // settles and get_subagent_result hangs forever.
-              safeEmit(this.#logger, this.#onEvent, {
-                type: 'subagent_completed',
-                async: true,
-                result: {
-                  agentId,
-                  role,
-                  status: lease.signal.aborted || isAbortLike(error?.message, error) ? 'cancelled' : 'failed',
-                  finalText: '',
-                  filesChanged: [],
-                  toolsUsed: [],
-                  error: error?.message || String(error),
-                },
-              });
+              emitTransferredFailure(error);
               lease.settle();
             },
           )

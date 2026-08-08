@@ -494,6 +494,10 @@ export class SubagentAsyncRegistry {
     const replyTo = replyToParam ?? undefined;
     const run = this.#resolveActiveTarget(target);
     if (!run) return { ok: false, code: 'not_active', target };
+    // An adopted nested loop has no steering segment consumer. Do not accept
+    // guidance that cannot be delivered; a later lease control port may add
+    // that capability explicitly.
+    if (run.lease) return { ok: false, code: 'unsupported_control', target };
     if (run.role === 'mentor') return { ok: false, code: 'unsupported_control', target };
     const message = guidance.trim();
     if (message.length === 0 || message.length > MAX_STEERING_GUIDANCE_CHARACTERS) {

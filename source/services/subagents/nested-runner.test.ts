@@ -261,6 +261,33 @@ describe('NestedSubagentRunner end to end', () => {
     });
   });
 
+  it('settles an adopted run when its fulfilled tool result is an error string', async () => {
+    const events: ConversationEvent[] = [];
+    const { runner } = buildNestedRunner({ onEvent: (event) => events.push(event) });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const tool = runner.getRoleAgentTool('worker') as any;
+    tool.execute = async () => {
+      await gate;
+      return 'An error occurred while running the tool. Please try again. Error: fulfilled nested failure';
+    };
+
+    const foreground = runner.runAsTool({ role: 'worker', task: 'update notes' }, parentToolContext(), {
+      toolCall: { callId: 'transferred-fulfilled-error' },
+    });
+    const lease = runner.getForegroundLease('transferred-fulfilled-error')!;
+    lease.adopt();
+    await expect(foreground).resolves.toMatchObject({ status: 'running' });
+    release();
+
+    await vi.waitFor(() =>
+      expect(events.filter((event) => event.type === 'subagent_completed' && event.async === true)).toHaveLength(1),
+    );
+    expect(events.find((event) => event.type === 'subagent_completed' && event.async === true)).toMatchObject({
+      result: { agentId: 'transferred-fulfilled-error', status: 'failed', error: 'fulfilled nested failure' },
+    });
+  });
+
   it('runs a nested role tool, executes a tool, and returns a parseable SubagentResult with filesChanged and toolsUsed (F1 pin)', async () => {
     const { runner } = buildNestedRunner();
 

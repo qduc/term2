@@ -53,6 +53,11 @@ describe('foreground lease adoption', () => {
     expect(handle).toEqual({ runId: 'root-call', role: 'explorer', status: 'running', task: 'inspect' });
     expect(run).not.toHaveBeenCalled();
     expect(lease.adopted).toBe(true);
+    expect(registry.sendMessage('root-call', 'please inspect one more file')).toEqual({
+      ok: false,
+      code: 'unsupported_control',
+      target: 'root-call',
+    });
     registry.handleSubagentEvent({
       type: 'subagent_completed',
       async: true,

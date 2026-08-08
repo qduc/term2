@@ -7,15 +7,13 @@ import {
   type CustomProviderDraft,
   type ProviderSelectionItem,
   PROVIDER_TYPES,
-  loadProviderItems as loadProviderItemsFromService,
-  saveProvider as saveProviderToService,
-  deleteCustomProvider as deleteCustomProviderFromService,
   validateWizardName,
   validateWizardUrl,
   isProviderBuiltIn,
   getProviderLabel,
 } from '../providers/provider-service.js';
 import { resolveProviderId, resolveProviderName } from '../services/settings/custom-provider-normalization.js';
+import { ProviderManagementSession } from '../services/providers/provider-management-session.js';
 
 export type { ProviderSelectionPhase, CustomProviderDraft, ProviderSelectionItem };
 
@@ -56,6 +54,7 @@ const DELETE_CONFIRM_DEFAULT_INDEX = 1;
 
 export const useProviderSelection = (settingsService: SettingsService) => {
   const { mode, controller, setInput, replaceInput } = useInputContext();
+  const providerSession = useMemo(() => new ProviderManagementSession(settingsService), [settingsService]);
 
   const [phase, setPhase] = useState<ProviderSelectionPhase>('list');
   const [items, setItems] = useState<ProviderSelectionItem[]>([]);
@@ -175,8 +174,8 @@ export const useProviderSelection = (settingsService: SettingsService) => {
 
   // Load provider items from service
   const loadProviderList = useCallback(() => {
-    setItems(loadProviderItemsFromService(settingsService));
-  }, [settingsService]);
+    setItems(providerSession.list());
+  }, [providerSession]);
 
   // Sync list of providers on open — resets wizard state when the menu opens.
   useEffect(() => {
@@ -220,7 +219,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     setErrorMessage(null);
     setFieldErrors({});
 
-    const result = saveProviderToService(settingsService, draft, editingOriginalName);
+    const result = providerSession.save(draft, editingOriginalName);
     if (!result.success) {
       if (result.errorMessage) setErrorMessage(result.errorMessage);
       if (result.fieldErrors) setFieldErrors(result.fieldErrors);
@@ -233,7 +232,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     setDraft(null);
     setEditingOriginalName(null);
     setFieldErrors({});
-  }, [draft, editingOriginalName, settingsService, loadProviderList, setSelectedIndex]);
+  }, [draft, editingOriginalName, providerSession, loadProviderList, setSelectedIndex]);
 
   const selectItem = useCallback(() => {
     const listCount = activeItems.length;
@@ -406,7 +405,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
       }
     } else if (phase === 'reorder') {
       // Enter saves the current order
-      settingsService.setPersistent('providerOrder', reorderList);
+      providerSession.saveOrder(reorderList);
       setPhase('list');
       setSelectedIndex(0);
       setReorderList([]);
@@ -465,7 +464,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
       if (index === 0) {
         // Yes, delete
         if (editingOriginalName) {
-          deleteCustomProviderFromService(settingsService, editingOriginalName);
+          providerSession.delete(editingOriginalName);
           loadProviderList();
         }
         setPhase('list');
@@ -487,6 +486,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     editingField,
     discardFromPhase,
     settingsService,
+    providerSession,
     loadProviderList,
     setInput,
     replaceInput,
@@ -675,11 +675,11 @@ export const useProviderSelection = (settingsService: SettingsService) => {
   const getActiveItems = useCallback(() => activeItems, [activeItems]);
 
   const saveProviderOrder = useCallback(() => {
-    settingsService.setPersistent('providerOrder', reorderList);
+    providerSession.saveOrder(reorderList);
     setPhase('list');
     setSelectedIndex(0);
     setReorderList([]);
-  }, [settingsService, reorderList, setSelectedIndex]);
+  }, [providerSession, reorderList, setSelectedIndex]);
 
   const moveProviderUp = useCallback(() => {
     if (phase !== 'reorder') return;

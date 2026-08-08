@@ -398,7 +398,7 @@ export function reconcileHistoryWithToolLedger(
   history: readonly unknown[],
   ledger: readonly SavedToolExecution[] | undefined,
 ): ToolLedgerReconcileResult {
-  const next = clone([...history]);
+  let next = clone([...history]);
   const entries = Array.isArray(ledger) ? ledger : [];
   let addedCompletedPairs = 0;
   let droppedIncompleteCalls = 0;
@@ -408,6 +408,14 @@ export function reconcileHistoryWithToolLedger(
       if (hasCallPair(next, entry.callId)) {
         continue;
       }
+      // The persisted assistant_turn is compact: it keeps only a turn's last
+      // tool result, so replayed history can hold a lone call or result for
+      // this callId. Drop those fragments before inserting the authoritative
+      // ledger pair, or the result is duplicated and the pair lands after a
+      // result that precedes its call — a shape OpenAI-compatible providers
+      // reject with 400 ("tool must be a response to a preceding message with
+      // tool_calls").
+      next = next.filter((item) => callIdOf(item) !== entry.callId);
       next.splice(insertionIndexForEntry(next, entry), 0, ...clone(entry.historyItems!));
       // Count both completed and aborted pairs as injected so the warning fires
       // and replaceHistory is called. Without this, aborted pairs injected from

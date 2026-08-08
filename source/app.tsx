@@ -46,6 +46,7 @@ import {
   type NetworkApprovalAnswer,
   type SandboxNetworkAccessRequest,
 } from './utils/shell/sandbox/sandbox-network-approval.js';
+import { SandboxNetworkApprovalCoordinator } from './utils/shell/sandbox/sandbox-network-approval-coordinator.js';
 
 export {
   appendStartupBannerId,
@@ -116,64 +117,30 @@ const App: FC<AppProps> = ({
   const [sessionId, setSessionId] = useState(initialSessionId);
   const handleClearConversationRef = useRef<(() => Promise<void>) | null>(null);
   const pendingSkillRef = useRef<SkillInfo | null>(null);
+  const sandboxApprovalCoordinatorRef = useRef<SandboxNetworkApprovalCoordinator | null>(null);
   const [sandboxPromptRequest, setSandboxPromptRequest] = useState<SandboxNetworkAccessRequest | null>(null);
-  const sandboxPromptQueueRef = useRef<
-    Array<{ request: SandboxNetworkAccessRequest; resolve: (answer: NetworkApprovalAnswer) => void }>
-  >([]);
-  const activeSandboxPromptRef = useRef<{
-    request: SandboxNetworkAccessRequest;
-    resolve: (answer: NetworkApprovalAnswer) => void;
-  } | null>(null);
 
   const notifier = useTerminalFocusNotifier({ stdout, settingsService, loggingService });
 
-  const showNextSandboxPrompt = useCallback(() => {
-    if (activeSandboxPromptRef.current) {
-      return;
-    }
-    const next = sandboxPromptQueueRef.current.shift();
-    if (!next) {
-      return;
-    }
-    activeSandboxPromptRef.current = next;
-    setSandboxPromptRequest(next.request);
-  }, []);
-
-  const resolveSandboxPrompt = useCallback(
-    (answer: NetworkApprovalAnswer) => {
-      const active = activeSandboxPromptRef.current;
-      if (!active) {
-        return;
-      }
-      active.resolve(answer);
-      activeSandboxPromptRef.current = null;
-      setSandboxPromptRequest(null);
-      showNextSandboxPrompt();
-    },
-    [showNextSandboxPrompt],
-  );
-
   useEffect(() => {
+    const coordinator = new SandboxNetworkApprovalCoordinator();
+    sandboxApprovalCoordinatorRef.current = coordinator;
+    const unsubscribe = coordinator.subscribe(() => {
+      setSandboxPromptRequest(coordinator.getSnapshot().activeRequest);
+    });
     const unregister = registerSandboxNetworkApprovalHandler(async (request) => {
-      return await new Promise<NetworkApprovalAnswer>((resolve) => {
-        sandboxPromptQueueRef.current.push({ request, resolve });
-        showNextSandboxPrompt();
-      });
+      return await coordinator.request(request);
     });
 
     return () => {
       unregister();
-      const active = activeSandboxPromptRef.current;
-      if (active) {
-        active.resolve('deny');
-        activeSandboxPromptRef.current = null;
+      unsubscribe();
+      if (sandboxApprovalCoordinatorRef.current === coordinator) {
+        sandboxApprovalCoordinatorRef.current = null;
       }
-      for (const item of sandboxPromptQueueRef.current) {
-        item.resolve('deny');
-      }
-      sandboxPromptQueueRef.current = [];
+      coordinator.dispose();
     };
-  }, [showNextSandboxPrompt]);
+  }, []);
 
   const {
     messages,
@@ -425,21 +392,24 @@ const App: FC<AppProps> = ({
   const handleApprove = useCallback(
     async (answer?: string) => {
       if (sandboxPromptRequest) {
-        resolveSandboxPrompt((answer as NetworkApprovalAnswer) ?? 'allow-once');
+        sandboxApprovalCoordinatorRef.current?.resolve(
+          sandboxPromptRequest,
+          (answer as NetworkApprovalAnswer) ?? 'allow-once',
+        );
         return;
       }
       await submitApprovalDecision(answer);
     },
-    [sandboxPromptRequest, resolveSandboxPrompt, submitApprovalDecision],
+    [sandboxPromptRequest, submitApprovalDecision],
   );
 
   const handleReject = useCallback(() => {
     if (sandboxPromptRequest) {
-      resolveSandboxPrompt('deny');
+      sandboxApprovalCoordinatorRef.current?.resolve(sandboxPromptRequest, 'deny');
       return;
     }
     setWaitingForRejectionReason(true);
-  }, [sandboxPromptRequest, resolveSandboxPrompt, setWaitingForRejectionReason]);
+  }, [sandboxPromptRequest, setWaitingForRejectionReason]);
 
   const handleCancelAskUser = useCallback(() => {
     if (sandboxPromptRequest || pendingApproval?.toolName !== 'ask_user') return;

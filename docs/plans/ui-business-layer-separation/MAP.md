@@ -27,6 +27,7 @@ revertible milestones.
 - **Sandbox approval coordination** — Merged at `eae1f4b7`; FIFO, request identity, and fail-closed disposal live outside React, with a fresh coordinator per effect lifetime for StrictMode safety.
 - **Pending interaction authority** — Merged at `a8463d3c`; session-owned snapshots and interaction IDs own approval and `ask_user` progression, while React keeps only composer-entry state.
 - **Shell interaction ownership** — Merged at `d07a1149`; a non-React shell session owns eligibility, execution history, and deferred flush after in-flight commands.
+- **Rewind target ownership** — Merged at `00dd5292`; the conversation store issues opaque snapshot-scoped targets and accepts or rejects rewinds atomically, while Ink retains only post-success projection trimming and visible numbering.
 
 ## Open
 
@@ -55,3 +56,5 @@ revertible milestones.
 - 2026-08-08: Review found StrictMode effect replay could permanently dispose the sandbox coordinator. Coordinator lifetime is now per registration effect, while real unmount still denies active and queued requests.
 - 2026-08-08: Review found a delayed approval A could resolve approval B. Semantic UI decisions now carry the rendered interaction ID; mismatches are ignored without mutating the current interaction.
 - 2026-08-08: Review found closing Shell during slow commands stranded their output outside model context. Close now defers one complete flush until every accepted execution settles.
+- 2026-08-08: Review found the rewind migration had dropped foreground abort and introduced command-to-hook type coupling. Abort now occurs only after the domain accepts a target, and the shared selection DTO lives outside React.
+- 2026-08-08: Review found capped UI history made store-global rewind ordinals disagree with slash-command ranges and picker labels. Both command selection and rendering now use visible 1-based positions while execution keeps the opaque domain target.

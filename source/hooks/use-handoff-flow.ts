@@ -3,7 +3,7 @@ import { parseInput } from '../utils/input-parser.js';
 import { parseModelProviderArg } from '../utils/ai/model-provider-arg.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
 import type { UserTurn } from '../types/user-turn.js';
-import type { InputMode } from '../context/InputContext.js';
+import type { MenuController } from '../components/input/menu-types.js';
 import {
   handoffFlowReducer,
   createInitialHandoffState,
@@ -19,10 +19,7 @@ export type UseHandoffFlowOptions = {
   addSystemMessage: (text: string) => void;
   sendUserMessage: (turn: UserTurn) => Promise<void>;
   replaceInput: (value: string) => void;
-  setInputAndCursor: (value: string, cursorOffset: number, cursorOverride?: number | null) => void;
-  setMode: (mode: InputMode) => void;
-  setTriggerIndex: (index: number | null) => void;
-  mode: string;
+  controller: MenuController;
   settingsService: SettingsService;
   applyRuntimeSetting: (key: string, value: unknown) => void;
   setModel: (model: string) => void;
@@ -38,9 +35,20 @@ export type UseHandoffFlowReturn = {
   confirmStandardMode: () => Promise<void>;
   declineStandardMode: () => Promise<void>;
   completeHandoffWithEffort: (effort: string) => Promise<void>;
+  // Consumed by the application effect host's `submit-prompt` intent handler
+  // (app.tsx). The direct `/model ` trigger's accept path now closes through
+  // a correlated `submit-prompt` intent rather than a turn routed through
+  // `handleSubmit`, so this is the only place a captured model selection can
+  // still be intercepted before it would otherwise be sent to the model as a
+  // literal chat message. Returns true when the intent belonged to an
+  // in-flight handoff and has been fully handled (settings applied, input
+  // advanced to `/effort `); false when the caller should fall back to its
+  // normal submit-prompt handling.
+  handleModelSubmitPrompt: (text: string) => boolean;
 };
 
 const MODEL_TRIGGER = '/model ';
+const EFFORT_TRIGGER = '/effort ';
 
 export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowReturn => {
   const {
@@ -48,17 +56,26 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
     addSystemMessage,
     sendUserMessage,
     replaceInput,
-    setInputAndCursor,
-    setMode,
-    setTriggerIndex,
-    mode,
+    controller,
     settingsService,
     applyRuntimeSetting,
     setModel,
   } = deps;
 
   const [handoffState, dispatch] = useReducer(handoffFlowReducer, null, createInitialHandoffState);
-  const prevRef = useRef<{ mode: string; handoffState: HandoffState | null }>({ mode, handoffState });
+  const handoffStateRef = useRef<HandoffState | null>(handoffState);
+  handoffStateRef.current = handoffState;
+
+  // Tracks whether the model frame is currently on the controller's stack, so
+  // the subscription below can detect the true->false "just closed"
+  // transition rather than reacting to every stack change (typing while the
+  // menu stays open, opening a different frame, ...).
+  const hadModelFrameRef = useRef(false);
+  // Set synchronously by `handleModelSubmitPrompt` when it consumes a
+  // submit-prompt intent for the model this handoff opened. Read by the
+  // "closed" detector below to distinguish an accepted selection from an
+  // escape that closed the picker with nothing chosen.
+  const modelSelectionHandledRef = useRef(false);
 
   const sendCapturedHandoff = useCallback(
     async (state: HandoffState): Promise<boolean> => {
@@ -88,13 +105,40 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
     [handoffState, settingsService, applyRuntimeSetting, sendCapturedHandoff],
   );
 
+  // Replaces the `mode` projection this used to watch (mode returning to
+  // 'text' while still in the 'selecting_model' stage meant "the picker
+  // closed without an explicit accept"). The controller's stack is the
+  // source of truth now: a 'model' frame leaving the stack is the same
+  // event, and it fires for both an accepted selection (closed via the
+  // submit-prompt intent below) and an escape (closed with no intent).
+  //
+  // The two cases are not distinguishable at the moment this subscriber
+  // runs: `MenuControllerImpl.dispatch` calls `notify()` (which reaches this
+  // subscriber) *before* it invokes the intent host, so an accepted
+  // selection's `handleModelSubmitPrompt` call has not happened yet. The
+  // `queueMicrotask` defers the decision until the rest of that synchronous
+  // dispatch — including a synchronous `handleModelSubmitPrompt` call — has
+  // run, so `modelSelectionHandledRef` is settled before it is read. This
+  // does not depend on React's render/batching timing at all, only on plain
+  // JS microtask ordering within the same call stack.
   useEffect(() => {
-    const prev = prevRef.current;
-    prevRef.current = { mode, handoffState };
-    if (mode !== 'text' || handoffState?.stage !== 'selecting_model') return;
-    if (prev.mode === 'text' || prev.handoffState !== handoffState) return;
-    void sendCapturedHandoff(handoffState);
-  }, [handoffState, mode, sendCapturedHandoff]);
+    return controller.subscribe(() => {
+      const hasModelFrame = controller.getSnapshot().stack.some((frame) => frame.kind === 'model');
+      const hadModelFrame = hadModelFrameRef.current;
+      hadModelFrameRef.current = hasModelFrame;
+      if (!hadModelFrame || hasModelFrame) return;
+
+      queueMicrotask(() => {
+        if (modelSelectionHandledRef.current) {
+          modelSelectionHandledRef.current = false;
+          return;
+        }
+        const state = handoffStateRef.current;
+        if (state?.stage !== 'selecting_model') return;
+        void sendCapturedHandoff(state);
+      });
+    });
+  }, [controller, sendCapturedHandoff]);
 
   const startHandoff = useCallback((capturedText: string) => {
     dispatch({ type: 'handoff/started', capturedText });
@@ -105,10 +149,9 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
 
     await clearConversationAndRefreshBanner();
     dispatch({ type: 'handoff/model_confirmed' });
-    setInputAndCursor(MODEL_TRIGGER, MODEL_TRIGGER.length, MODEL_TRIGGER.length);
-    setMode('model_selection');
-    setTriggerIndex(MODEL_TRIGGER.length);
-  }, [clearConversationAndRefreshBanner, handoffState, setInputAndCursor, setMode, setTriggerIndex]);
+    modelSelectionHandledRef.current = false;
+    controller.replaceText(MODEL_TRIGGER, MODEL_TRIGGER.length);
+  }, [clearConversationAndRefreshBanner, handoffState, controller]);
 
   const declineHandoff = useCallback(async () => {
     const state = handoffState;
@@ -174,40 +217,40 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
         return true;
       }
 
-      if (state.stage === 'selecting_model') {
-        const parsedInput = parseInput(turn.text);
-        const modelArg = parsedInput.type === 'slash-command' ? parsedInput.args : turn.text;
-        const { modelId, provider } = parseModelProviderArg(modelArg);
-
-        if (modelId) {
-          settingsService.set('agent.model', modelId);
-          if (provider) {
-            settingsService.set('agent.provider', provider);
-            applyRuntimeSetting('agent.provider', provider);
-          }
-          applyRuntimeSetting('agent.model', modelId);
-          setModel(modelId);
-        }
-
-        dispatch({ type: 'handoff/model_selected' });
-        setInputAndCursor('/effort ', '/effort '.length, '/effort '.length);
-        setMode('text');
-        setTriggerIndex(null);
-        return true;
-      }
-
+      // Model selection no longer reaches here: the direct `/model ` trigger
+      // is controller-owned, so an accepted selection closes through a
+      // correlated submit-prompt intent (see `handleModelSubmitPrompt`)
+      // rather than a turn routed through the app's `handleSubmit`.
       return false;
     },
-    [
-      applyRuntimeSetting,
-      handoffState,
-      replaceInput,
-      setInputAndCursor,
-      setMode,
-      setModel,
-      setTriggerIndex,
-      settingsService,
-    ],
+    [handoffState, replaceInput],
+  );
+
+  const handleModelSubmitPrompt = useCallback(
+    (text: string): boolean => {
+      const state = handoffState;
+      if (!state || state.stage !== 'selecting_model') return false;
+
+      const parsedInput = parseInput(text);
+      const modelArg = parsedInput.type === 'slash-command' ? parsedInput.args : text;
+      const { modelId, provider } = parseModelProviderArg(modelArg);
+
+      if (modelId) {
+        settingsService.set('agent.model', modelId);
+        if (provider) {
+          settingsService.set('agent.provider', provider);
+          applyRuntimeSetting('agent.provider', provider);
+        }
+        applyRuntimeSetting('agent.model', modelId);
+        setModel(modelId);
+      }
+
+      modelSelectionHandledRef.current = true;
+      dispatch({ type: 'handoff/model_selected' });
+      controller.replaceText(EFFORT_TRIGGER, EFFORT_TRIGGER.length);
+      return true;
+    },
+    [handoffState, settingsService, applyRuntimeSetting, setModel, controller],
   );
 
   return {
@@ -220,5 +263,6 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
     confirmStandardMode,
     declineStandardMode,
     completeHandoffWithEffort,
+    handleModelSubmitPrompt,
   };
 };

@@ -11,6 +11,7 @@ import { SETTINGS_TRIGGER } from './input/triggers.js';
 import { InputProvider, useInputContext } from '../context/InputContext.js';
 import { MenuControllerImpl } from './input/menu-controller.js';
 import { handleSettingsIntent } from './input/settings-intent-host.js';
+import { tryExecuteSlashCommand } from '../utils/slash-command-dispatch.js';
 import type { SlashCommand } from '../slash-commands.js';
 import { createMockSettingsService } from '../services/settings/settings-service.mock.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
@@ -874,6 +875,88 @@ it.sequential('command-backed model selection still submits after selection', as
   clearModelCache();
   unregisterProvider(mockProviderId);
 });
+
+it.sequential(
+  'direct /model selection executes the resolved slash command instead of sending it as a chat message',
+  async () => {
+    clearModelCache();
+    const mockProviderId = `mock-provider-command-${Date.now()}-${Math.random()}`;
+    registerProvider({
+      id: mockProviderId,
+      label: 'Mock Provider Command',
+      fetchModels: async () => [{ id: 'gpt-test', name: 'GPT Test' }],
+    });
+
+    const settingsService = createMockSettingsService({
+      'agent.provider': mockProviderId,
+    });
+
+    // Named the way real commands are (`model-command.ts` registers
+    // `name: 'model'`, no leading slash) so this exercises the same
+    // `resolveSlashCommand` matching production goes through.
+    const modelAction = vi.fn((args?: string) => {
+      settingsService.set('agent.model', args?.split(' ')[0] ?? '');
+      return true;
+    });
+    const modelCommand: SlashCommand = {
+      name: 'model',
+      description: 'Select model',
+      action: modelAction,
+      completion: { type: 'model', trigger: '/model ' },
+    };
+    const slashCommands = [...mockSlashCommands, modelCommand];
+
+    // Mirrors app.tsx's application effect host: a submit-prompt intent is
+    // first offered to the shared `tryExecuteSlashCommand` dispatcher (the
+    // same function app.tsx's handleSubmit and intent host both call), and
+    // only sent to the model as a literal chat message if that dispatcher
+    // declines it.
+    const sentAsChatMessages: string[] = [];
+    const controller = new MenuControllerImpl();
+    controller.setIntentHost(({ intentRequest }) => {
+      if (intentRequest.intent.type === 'submit-prompt') {
+        const handled = tryExecuteSlashCommand(intentRequest.intent.text, slashCommands, () => {});
+        if (!handled) {
+          sentAsChatMessages.push(intentRequest.intent.text);
+        }
+      }
+      return undefined;
+    });
+
+    const { lastFrame, stdin } = await renderAndFlush(
+      <InputProvider controller={controller}>
+        <StateDisplay />
+        <InputBox {...defaultProps} settingsService={settingsService} slashCommands={slashCommands} />
+      </InputProvider>,
+    );
+
+    await writeInput(stdin, '/model ');
+    await waitFor(lastFrame, (f) => f.includes('gpt-test'), { timeoutMs: 3000 });
+
+    await writeInput(stdin, '\r');
+
+    await waitForCondition(
+      () => modelAction.mock.calls.length,
+      (count) => count === 1,
+      { timeoutMs: 3000 },
+    );
+
+    // Accepting a direct /model selection must execute the resolved slash
+    // command's action (which here sets agent.model) exactly as if the user
+    // had typed the whole command and pressed Enter without ever opening the
+    // picker — not post the literal command text to the model as a chat
+    // message.
+    expect(modelAction).toHaveBeenCalledWith(`gpt-test --provider=${mockProviderId}`);
+    expect(settingsService.get('agent.model')).toBe('gpt-test');
+    expect(sentAsChatMessages).toEqual([]);
+
+    const frame = await waitFor(lastFrame, (f) => f.includes('Mode:text'), { timeoutMs: 3000 });
+    expect(frame.includes('Input:|'), frame).toBe(true);
+
+    clearModelCache();
+    unregisterProvider(mockProviderId);
+  },
+);
 
 it.sequential('Ctrl+R refreshes the current provider model list when model selection is open', async () => {
   clearModelCache();

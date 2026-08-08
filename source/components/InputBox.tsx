@@ -178,6 +178,8 @@ const InputBox: FC<Props> = ({
         'settings',
         'settings-value-child',
         'settings-model',
+        'command-model',
+        'direct-setting-value',
       ]),
     );
   }, [controller, slashCommands]);

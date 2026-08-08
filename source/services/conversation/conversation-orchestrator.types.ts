@@ -10,8 +10,6 @@ import type { QueueStateSnapshot } from './conversation-adapter.js';
 
 import type { ConversationLogWriter } from '../logging/conversation-log-writer.js';
 
-export type AskUserAnswer = string | string[];
-
 export interface ConversationNotifier {
   approvalNeeded(): void;
   turnComplete(): void;
@@ -27,7 +25,9 @@ export interface MessagePort {
 export interface UIPort {
   onTurnStart(): void;
   onTurnEnd(): void;
+  /** @deprecated Interaction snapshots now arrive through ConversationService. */
   onApprovalRequested(approval: PendingApproval): void;
+  /** @deprecated Interaction snapshots now arrive through ConversationService. */
   onApprovalResolved(): void;
   onUsageUpdate(usage: NormalizedUsage): void;
   onRateLimitUpdate(rateLimit: CodexRateLimitInfo): void;
@@ -37,9 +37,12 @@ export interface UIPort {
   onStreamingThinkingStarted(timestamp: number): void;
   onStreamingThinkingCleared(): void;
   onStreamingToolInfo(info: { toolName?: string; argumentCharCount: number } | null): void;
-  onAskUserAnswerSubmitted(answer: AskUserAnswer): void;
+  /** @deprecated ask_user answers now live in PendingInteractionState. */
+  onAskUserAnswerSubmitted(answer: string | string[]): void;
+  /** @deprecated ask_user navigation now lives in PendingInteractionState. */
   onAskUserAdvanceToNext(nextIndex: number): void;
-  onAskUserGoBack(currentIndex: number, answers: readonly AskUserAnswer[]): void;
+  /** @deprecated ask_user navigation now lives in PendingInteractionState. */
+  onAskUserGoBack(currentIndex: number, answers: readonly (string | string[])[]): void;
   onQueueStateChange(snapshot: QueueStateSnapshot): void;
   /**
    * A user message was queued behind an in-flight turn. The orchestrator has

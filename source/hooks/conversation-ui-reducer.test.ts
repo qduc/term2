@@ -217,6 +217,30 @@ it('ask_user/set_waiting enables waiting', () => {
   expect(getConversationUIFlags(next).waitingForAskUserAnswer).toBe(true);
 });
 
+it('projects the session interaction snapshot while keeping composer entry mode local to Ink', () => {
+  const snapshot = {
+    interactionId: 7,
+    approval: askUserApprovalFixture,
+    askUserAnswers: ['first'],
+    currentAskUserQuestionIndex: 1,
+  } as const;
+  let state = conversationUIReducer(createInitialUIState(null), { type: 'interaction/snapshot', snapshot });
+  state = conversationUIReducer(state, { type: 'interaction/composer_entry', mode: 'ask_user_answer' });
+
+  expect(getConversationUIFlags(state)).toMatchObject({
+    pendingApproval: askUserApprovalFixture,
+    askUserAnswers: ['first'],
+    currentAskUserQuestionIndex: 1,
+    waitingForAskUserAnswer: true,
+  });
+
+  state = conversationUIReducer(state, {
+    type: 'interaction/snapshot',
+    snapshot: { ...snapshot, interactionId: 8, askUserAnswers: [] },
+  });
+  expect(getConversationUIFlags(state).waitingForAskUserAnswer).toBe(false);
+});
+
 it('ask_user/answer_submitted appends answer', () => {
   let prev = conversationUIReducer(createInitialUIState(null), {
     type: 'approval/requested',

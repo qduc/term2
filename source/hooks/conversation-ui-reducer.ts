@@ -16,6 +16,7 @@ import type { NormalizedUsage } from '../utils/ai/token-usage.js';
 import type { CodexRateLimitInfo } from '../services/conversation/conversation-events.js';
 import type { PendingApproval } from '../contracts/conversation.js';
 import type { QueuePauseReason } from '../services/queue/queue-controller.js';
+import type { PendingInteractionSnapshot } from '../services/session/pending-interaction-state.js';
 
 // ---------------------------------------------------------------------------
 // State shape
@@ -51,6 +52,7 @@ export interface QueueSnapshot {
 
 export interface ConversationUIFlags {
   isProcessing: boolean;
+  pendingInteractionId: number | null;
   waitingForApproval: boolean;
   waitingForRejectionReason: boolean;
   waitingForAskUserAnswer: boolean;
@@ -67,6 +69,10 @@ export interface ConversationUIFlags {
 
 export interface ConversationUIState {
   turnPhase: TurnPhase;
+  /** Read-only projection of the session-owned approval protocol. */
+  pendingInteraction: PendingInteractionSnapshot | null;
+  /** Ink-only choice to turn the composer into an answer/rejection field. */
+  composerEntryMode: 'none' | 'rejection_reason' | 'ask_user_answer';
 
   // Streaming indicators
   thinkingStartedAt: number | null;
@@ -106,6 +112,10 @@ export type ConversationUIAction =
   | { type: 'approval/requested'; approval: PendingApproval }
   /** User resolved the approval (approved or rejected). */
   | { type: 'approval/resolved' }
+  /** Replace the local projection with the session's authoritative snapshot. */
+  | { type: 'interaction/snapshot'; snapshot: PendingInteractionSnapshot | null }
+  /** Enter or leave the Ink composer mode for the current interaction. */
+  | { type: 'interaction/composer_entry'; mode: ConversationUIState['composerEntryMode'] }
   /** User clicked to start typing an ask_user answer. */
   | { type: 'ask_user/set_waiting' }
   /** Clear the ask_user waiting state without resolving approval. */
@@ -157,6 +167,8 @@ export type ConversationUIAction =
 export function createInitialUIState(initialUsage: NormalizedUsage | null): ConversationUIState {
   return {
     turnPhase: { kind: 'idle' },
+    pendingInteraction: null,
+    composerEntryMode: 'none',
     thinkingStartedAt: null,
     toolCallStreamingInfo: null,
     lastUsage: initialUsage,
@@ -236,9 +248,29 @@ export function getConversationUIFlags(state: ConversationUIState): Conversation
   const queueLength = queueSnapshot?.queueLength ?? 0;
   const isProcessing = isProcessingPhase(phase) || (queueActive && phase.kind !== 'awaiting_approval');
 
+  const projected = state.pendingInteraction;
+  if (projected) {
+    return {
+      isProcessing,
+      pendingInteractionId: projected.interactionId,
+      waitingForApproval: true,
+      waitingForRejectionReason: state.composerEntryMode === 'rejection_reason',
+      waitingForAskUserAnswer:
+        projected.approval.toolName === 'ask_user' && state.composerEntryMode === 'ask_user_answer',
+      askUserAnswers: [...projected.askUserAnswers],
+      currentAskUserQuestionIndex: projected.currentAskUserQuestionIndex,
+      pendingApproval: projected.approval,
+      queueActive,
+      queuePaused,
+      queueLength,
+      queuePauseReason: queueSnapshot?.pauseReason,
+    };
+  }
+
   if (!isApprovalPhase(phase)) {
     return {
       isProcessing,
+      pendingInteractionId: null,
       waitingForApproval: false,
       waitingForRejectionReason: false,
       waitingForAskUserAnswer: false,
@@ -255,6 +287,7 @@ export function getConversationUIFlags(state: ConversationUIState): Conversation
   const askUserState = getAskUserState(phase.interaction);
   return {
     isProcessing,
+    pendingInteractionId: null,
     waitingForApproval: true,
     waitingForRejectionReason: phase.interaction.kind === 'rejection_reason',
     waitingForAskUserAnswer: phase.interaction.kind === 'ask_user_answer',
@@ -332,6 +365,23 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
         ...state,
         turnPhase: isProcessingPhase(state.turnPhase) ? { kind: 'processing' } : { kind: 'idle' },
       };
+
+    case 'interaction/snapshot': {
+      const sameInteraction =
+        action.snapshot !== null && state.pendingInteraction?.interactionId === action.snapshot.interactionId;
+      return {
+        ...state,
+        pendingInteraction: action.snapshot,
+        composerEntryMode: sameInteraction ? state.composerEntryMode : 'none',
+      };
+    }
+
+    case 'interaction/composer_entry':
+      if (!state.pendingInteraction) return state;
+      if (action.mode === 'ask_user_answer' && state.pendingInteraction.approval.toolName !== 'ask_user') {
+        return state;
+      }
+      return { ...state, composerEntryMode: action.mode };
 
     case 'ask_user/set_waiting': {
       if (!isApprovalPhase(state.turnPhase) || state.turnPhase.approval.toolName !== 'ask_user') {
@@ -505,6 +555,8 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
       return {
         ...state,
         turnPhase: { kind: 'idle' },
+        pendingInteraction: null,
+        composerEntryMode: 'none',
         thinkingStartedAt: null,
         toolCallStreamingInfo: null,
         queueSnapshot: null,

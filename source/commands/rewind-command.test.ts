@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createRewindSlashCommand, type RewindDisposition } from './rewind-command.js';
+import type { RewindItem } from '../utils/conversation/rewind-items.js';
 
 type RewoundTurn = {
   text: string;
@@ -7,8 +8,8 @@ type RewoundTurn = {
 };
 
 type Harness = {
-  rewindToTurn: (turnNumber: number) => RewoundTurn | null;
-  countRewindableTurns: () => number;
+  getRewindItems: () => readonly RewindItem[];
+  rewindToTarget: (item: RewindItem) => RewoundTurn | null;
   sendUserMessage: (input: unknown) => Promise<void>;
   restoreTurnToInput: (turn: RewoundTurn) => void;
   addSystemMessage: (text: string) => void;
@@ -16,9 +17,21 @@ type Harness = {
   onRewind: () => void;
 };
 
+const item = (turnNumber: number): RewindItem =>
+  ({
+    targetId: `target-${turnNumber}` as RewindItem['targetId'],
+    uiIndex: turnNumber * 2,
+    turnNumber,
+    text: `turn ${turnNumber}`,
+    imageCount: 0,
+    discardedTurns: 1,
+    discardedReplies: 0,
+    discardedFiles: [],
+  } as RewindItem);
+
 const makeHarness = (overrides: Partial<Harness> = {}): Harness => ({
-  rewindToTurn: vi.fn(() => ({ text: 'restored' })),
-  countRewindableTurns: vi.fn(() => 3),
+  getRewindItems: vi.fn(() => [item(1), item(2), item(3)]),
+  rewindToTarget: vi.fn(() => ({ text: 'restored' })),
   sendUserMessage: vi.fn(async () => {}),
   restoreTurnToInput: vi.fn(),
   addSystemMessage: vi.fn(),
@@ -50,7 +63,7 @@ describe('target resolution', () => {
     makeCommand(harness).action?.('');
 
     expect(harness.openRewindMenu).toHaveBeenCalledWith('edit');
-    expect(harness.rewindToTurn).not.toHaveBeenCalled();
+    expect(harness.rewindToTarget).not.toHaveBeenCalled();
   });
 
   it('rewinds the last turn when invoked with no arguments and bareTarget is last', () => {
@@ -58,28 +71,38 @@ describe('target resolution', () => {
     makeCommand(harness, { bareTarget: 'last', defaultDisposition: 'resend' }).action?.('');
 
     expect(harness.openRewindMenu).not.toHaveBeenCalled();
-    expect(harness.rewindToTurn).toHaveBeenCalledWith(3);
+    expect(harness.rewindToTarget).toHaveBeenCalledWith(item(3));
   });
 
   it('resolves "last" to the highest turn number', () => {
-    const harness = makeHarness({ countRewindableTurns: vi.fn(() => 7) });
+    const harness = makeHarness({ getRewindItems: vi.fn(() => [item(1), item(7)]) });
     makeCommand(harness).action?.('last');
 
-    expect(harness.rewindToTurn).toHaveBeenCalledWith(7);
+    expect(harness.rewindToTarget).toHaveBeenCalledWith(item(7));
   });
 
   it('rewinds to an explicit turn number', () => {
     const harness = makeHarness();
     makeCommand(harness).action?.('2');
 
-    expect(harness.rewindToTurn).toHaveBeenCalledWith(2);
+    expect(harness.rewindToTarget).toHaveBeenCalledWith(item(2));
+  });
+
+  it('resolves explicit numbers by visible picker position when store turn numbers are offset', () => {
+    const firstVisible = item(251);
+    const secondVisible = item(252);
+    const harness = makeHarness({ getRewindItems: vi.fn(() => [firstVisible, secondVisible]) });
+
+    makeCommand(harness).action?.('1');
+
+    expect(harness.rewindToTarget).toHaveBeenCalledWith(firstVisible);
   });
 
   it('reports the valid range when the turn number does not exist', () => {
-    const harness = makeHarness({ rewindToTurn: vi.fn(() => null), countRewindableTurns: vi.fn(() => 3) });
+    const harness = makeHarness({ rewindToTarget: vi.fn(() => null) });
     makeCommand(harness).action?.('9');
 
-    expect(harness.rewindToTurn).not.toHaveBeenCalled();
+    expect(harness.rewindToTarget).not.toHaveBeenCalled();
     expect(harness.addSystemMessage).toHaveBeenCalledWith(expect.stringContaining('1-3'));
   });
 
@@ -87,20 +110,20 @@ describe('target resolution', () => {
     const harness = makeHarness();
     makeCommand(harness).action?.('0');
 
-    expect(harness.rewindToTurn).not.toHaveBeenCalled();
+    expect(harness.rewindToTarget).not.toHaveBeenCalled();
     expect(harness.addSystemMessage).toHaveBeenCalled();
   });
 
   it('reports nothing to rewind when the conversation has no turns', () => {
-    const harness = makeHarness({ countRewindableTurns: vi.fn(() => 0) });
+    const harness = makeHarness({ getRewindItems: vi.fn(() => []) });
     makeCommand(harness).action?.('last');
 
-    expect(harness.rewindToTurn).not.toHaveBeenCalled();
+    expect(harness.rewindToTarget).not.toHaveBeenCalled();
     expect(harness.addSystemMessage).toHaveBeenCalledWith('Nothing to rewind.');
   });
 
   it('opens the picker with no turns reported as nothing to rewind', () => {
-    const harness = makeHarness({ countRewindableTurns: vi.fn(() => 0) });
+    const harness = makeHarness({ getRewindItems: vi.fn(() => []) });
     makeCommand(harness).action?.('');
 
     expect(harness.openRewindMenu).not.toHaveBeenCalled();
@@ -110,7 +133,7 @@ describe('target resolution', () => {
 
 describe('disposition', () => {
   it('restores the turn to the input box when the disposition is edit', () => {
-    const harness = makeHarness({ rewindToTurn: vi.fn(() => ({ text: 'draft me' })) });
+    const harness = makeHarness({ rewindToTarget: vi.fn(() => ({ text: 'draft me' })) });
     makeCommand(harness).action?.('last');
 
     expect(harness.restoreTurnToInput).toHaveBeenCalledWith({ text: 'draft me' });
@@ -118,7 +141,7 @@ describe('disposition', () => {
   });
 
   it('resends the turn when the disposition is resend', () => {
-    const harness = makeHarness({ rewindToTurn: vi.fn(() => ({ text: 'try again' })) });
+    const harness = makeHarness({ rewindToTarget: vi.fn(() => ({ text: 'try again' })) });
     makeCommand(harness, { defaultDisposition: 'resend' }).action?.('last');
 
     expect(harness.sendUserMessage).toHaveBeenCalledWith({ text: 'try again' });
@@ -145,7 +168,7 @@ describe('disposition', () => {
     const harness = makeHarness();
     makeCommand(harness).action?.('resend 2');
 
-    expect(harness.rewindToTurn).toHaveBeenCalledWith(2);
+    expect(harness.rewindToTarget).toHaveBeenCalledWith(item(2));
     expect(harness.sendUserMessage).toHaveBeenCalled();
   });
 
@@ -158,7 +181,7 @@ describe('disposition', () => {
 
   it('preserves images so a rewound multimodal turn keeps its attachments', () => {
     const images = [{ id: 'img-1', data: 'abc', mimeType: 'image/png', byteSize: 3, displayNumber: 1 }];
-    const harness = makeHarness({ rewindToTurn: vi.fn(() => ({ text: 'look', images })) });
+    const harness = makeHarness({ rewindToTarget: vi.fn(() => ({ text: 'look', images })) });
     makeCommand(harness).action?.('last');
 
     expect(harness.restoreTurnToInput).toHaveBeenCalledWith({ text: 'look', images });
@@ -166,7 +189,7 @@ describe('disposition', () => {
 
   it('resends images alongside the text', () => {
     const images = [{ id: 'img-1', data: 'abc', mimeType: 'image/png', byteSize: 3, displayNumber: 1 }];
-    const harness = makeHarness({ rewindToTurn: vi.fn(() => ({ text: 'look', images })) });
+    const harness = makeHarness({ rewindToTarget: vi.fn(() => ({ text: 'look', images })) });
     makeCommand(harness, { defaultDisposition: 'resend' }).action?.('last');
 
     expect(harness.sendUserMessage).toHaveBeenCalledWith({ text: 'look', images });
@@ -178,7 +201,7 @@ describe('invalid input', () => {
     const harness = makeHarness();
     makeCommand(harness).action?.('sideways');
 
-    expect(harness.rewindToTurn).not.toHaveBeenCalled();
+    expect(harness.rewindToTarget).not.toHaveBeenCalled();
     expect(harness.openRewindMenu).not.toHaveBeenCalled();
     expect(harness.addSystemMessage).toHaveBeenCalledWith(expect.stringContaining('sideways'));
   });
@@ -187,7 +210,7 @@ describe('invalid input', () => {
     const harness = makeHarness();
     makeCommand(harness).action?.('2 3');
 
-    expect(harness.rewindToTurn).not.toHaveBeenCalled();
+    expect(harness.rewindToTarget).not.toHaveBeenCalled();
     expect(harness.addSystemMessage).toHaveBeenCalled();
   });
 });
@@ -198,7 +221,7 @@ describe('aliases', () => {
     makeCommand(harness, { name: 'undo', aliasOf: 'rewind' }).action?.('last');
 
     expect(harness.addSystemMessage).toHaveBeenCalledWith(expect.stringContaining('/rewind'));
-    expect(harness.rewindToTurn).toHaveBeenCalled();
+    expect(harness.rewindToTarget).toHaveBeenCalled();
   });
 
   it('does not note anything when invoked as the canonical command', () => {
@@ -218,7 +241,7 @@ describe('side effects', () => {
   });
 
   it('does not redraw when the rewind was rejected', () => {
-    const harness = makeHarness({ rewindToTurn: vi.fn(() => null) });
+    const harness = makeHarness({ rewindToTarget: vi.fn(() => null) });
     makeCommand(harness).action?.('2');
 
     expect(harness.onRewind).not.toHaveBeenCalled();

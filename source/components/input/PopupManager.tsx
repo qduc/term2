@@ -9,7 +9,7 @@ import type { SettingCompletionItem, SettingsCategory } from '../../hooks/use-se
 import type { SettingValueSuggestion } from '../../utils/value-suggestions.js';
 import type { ModelInfo } from '../../services/model-service.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
-import type { RewindItem } from '../../hooks/use-rewind-selection.js';
+import type { RewindItem } from '../../utils/conversation/rewind-items.js';
 
 interface PopupManagerProps {
   path: {

@@ -696,7 +696,7 @@ const toolCall = (name: string, args: unknown): AgentInputItem[] =>
     { type: 'function_call', name, callId: `call-${name}`, arguments: JSON.stringify(args) } as unknown,
   ] as AgentInputItem[];
 
-it('listRewindTargets() numbers turns from 1 and reports their history index', () => {
+it('listRewindTargets() numbers turns from 1 and gives each target an opaque id', () => {
   const store = new ConversationStore();
   store.addUserMessage('First');
   store.appendOutput(assistantReply('Reply 1'));
@@ -706,8 +706,48 @@ it('listRewindTargets() numbers turns from 1 and reports their history index', (
 
   expect(targets.map((t) => t.turnNumber)).toEqual([1, 2]);
   expect(targets.map((t) => t.text)).toEqual(['First', 'Second']);
-  expect(targets[0]!.index).toBe(0);
-  expect(targets[1]!.index).toBe(2);
+  expect(targets[0]!.id).not.toBe(targets[1]!.id);
+  expect(targets[0]).not.toHaveProperty('index');
+});
+
+it('rewind targets carry opaque ids instead of provider-history indices', () => {
+  const store = new ConversationStore();
+  store.addUserMessage('First');
+  store.appendOutput(assistantReply('Reply 1'));
+  store.addUserMessage('Second');
+
+  const targets = store.listRewindTargets();
+
+  expect(targets.map((target) => target.id)).toHaveLength(2);
+  expect(new Set(targets.map((target) => target.id)).size).toBe(2);
+  expect(targets[0]).not.toHaveProperty('index');
+});
+
+it('rewindToTarget() atomically removes the target turn and returns its multimodal input', () => {
+  const store = new ConversationStore();
+  const images = [{ id: 'img-1', data: 'abc', mimeType: 'image/png', byteSize: 3, displayNumber: 1 }];
+  store.addUserTurn({ text: 'First', images });
+  store.appendOutput(assistantReply('Reply 1'));
+  store.addUserMessage('Second');
+  const target = store.listRewindTargets()[0]!;
+
+  expect(store.rewindToTarget(target.id)).toMatchObject({
+    text: 'First',
+    images: [expect.objectContaining({ data: 'abc', mimeType: 'image/png' })],
+  });
+  expect(store.getHistory()).toEqual([]);
+});
+
+it('rewindToTarget() rejects stale and unknown targets without mutating history', () => {
+  const store = new ConversationStore();
+  store.addUserMessage('First');
+  const staleTarget = store.listRewindTargets()[0]!;
+  store.addUserMessage('Second');
+  const before = store.getHistory();
+
+  expect(store.rewindToTarget(staleTarget.id)).toBeNull();
+  expect(store.rewindToTarget('not-a-target' as typeof staleTarget.id)).toBeNull();
+  expect(store.getHistory()).toEqual(before);
 });
 
 it('listRewindTargets() counts assistant replies discarded from each turn to the end', () => {

@@ -1,4 +1,4 @@
-import type { RewindItem } from '../../hooks/use-rewind-selection.js';
+import type { RewindItem } from '../../utils/conversation/rewind-items.js';
 import type { RewindDisposition } from '../../commands/rewind-command.js';
 import type { CustomProviderDraft, ProviderSelectionItem } from '../../hooks/use-provider-selection.js';
 import type { SlashCommand } from '../../slash-commands.js';

@@ -185,6 +185,8 @@ it.sequential('App wires ask_user navigation into BottomArea', async () => {
     previewInputSurge: vi.fn(() => ({ action: 'allow' })),
     setRetryCallback: vi.fn(),
     abort: vi.fn(),
+    listRewindTargets: vi.fn(() => []),
+    rewindToTarget: vi.fn(),
     undoNUserTurns: vi.fn(),
     resetWithNewId: vi.fn(),
     queueModeNotice: vi.fn(),

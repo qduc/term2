@@ -1,7 +1,7 @@
 import type { UserTurn } from '../../types/user-turn.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { ISettingsService } from '../service-interfaces.js';
-import { ConversationStore, type RewindTarget } from '../conversation/conversation-store.js';
+import { ConversationStore, type RewindTarget, type RewindTargetId } from '../conversation/conversation-store.js';
 import { ConversationLogger } from '../logging/conversation-logger.js';
 import type { StateSnapshot } from '../logging/conversation-log-events.js';
 import { SessionLifecycle } from './session-lifecycle.js';
@@ -102,6 +102,18 @@ export class SessionManager {
 
   listRewindTargets(): RewindTarget[] {
     return this.#conversationStore.listRewindTargets();
+  }
+
+  /**
+   * Rewind through a snapshot-scoped domain target. This is the only target
+   * based rewind entry point: lifecycle cleanup and undo logging happen once,
+   * and only after the store accepted the target.
+   */
+  rewindToTarget(targetId: RewindTargetId): { text: string; images?: UserTurn['images'] } | null {
+    const removed = this.#conversationStore.rewindToTarget(targetId);
+    if (removed === null) return null;
+    this.#afterUndo(removed.discardedTurns);
+    return { text: removed.text, ...(removed.images ? { images: removed.images } : {}) };
   }
 
   // ── Snapshot / State ──────────────────────────────────────────────

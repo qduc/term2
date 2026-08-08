@@ -34,7 +34,7 @@ import {
   formatUsdMicros,
   type SessionCostAccumulator,
 } from './services/cost/model-cost.js';
-import type { RewindItem } from './hooks/use-rewind-selection.js';
+import type { RewindItem } from './utils/conversation/rewind-items.js';
 import type { RewindDisposition } from './commands/rewind-command.js';
 import { buildRewindItems } from './utils/conversation/rewind-items.js';
 import { tryExecuteSlashCommand } from './utils/slash-command-dispatch.js';
@@ -166,8 +166,7 @@ const App: FC<AppProps> = ({
     clearConversation,
     stopProcessing,
     cancelAskUser,
-    rewindToTurn,
-    countRewindableTurns,
+    rewindToTarget,
     retryLastToolOutput,
     getUserMessages,
     setModel,
@@ -335,7 +334,7 @@ const App: FC<AppProps> = ({
     [replaceInput, setImages],
   );
 
-  /** Rewind candidates numbered as `rewindToTurn` resolves them, with discard costs. */
+  /** Rewind candidates carry a domain target id plus a UI-only trim boundary. */
   const openRewindPickerItems = useCallback(
     () => buildRewindItems(getUserMessages(), conversationService.listRewindTargets()),
     [getUserMessages, conversationService],
@@ -366,8 +365,8 @@ const App: FC<AppProps> = ({
     exit: exitWithUsage,
     messages,
     setModel,
-    rewindToTurn,
-    countRewindableTurns,
+    getRewindItems: openRewindPickerItems,
+    rewindToTarget: (item) => rewindToTarget(item.targetId, item.uiIndex),
     restoreTurnToInput,
     retryLastToolOutput,
     onRewind: redrawMessageList,
@@ -384,7 +383,7 @@ const App: FC<AppProps> = ({
 
   const handleRewindSelect = useCallback(
     (item: RewindItem, disposition: RewindDisposition) => {
-      const rewound = rewindToTurn(item.turnNumber);
+      const rewound = rewindToTarget(item.targetId, item.uiIndex);
       if (!rewound) return;
 
       redrawMessageList();
@@ -396,7 +395,7 @@ const App: FC<AppProps> = ({
       }
       restoreTurnToInput(rewound);
     },
-    [rewindToTurn, redrawMessageList, replaceInput, restoreTurnToInput, sendUserMessage, setImages],
+    [rewindToTarget, redrawMessageList, replaceInput, restoreTurnToInput, sendUserMessage, setImages],
   );
 
   const handleApprove = useCallback(

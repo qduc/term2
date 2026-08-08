@@ -2,21 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { useInputContext } from '../context/InputContext.js';
 import { useSelection } from './use-selection.js';
 import type { RewindDisposition } from '../commands/rewind-command.js';
+import type { RewindItem } from '../utils/conversation/rewind-items.js';
+export type { RewindItem } from '../utils/conversation/rewind-items.js';
 
 /**
  * A rewind candidate as the picker shows it: the turn plus what rewinding there
  * would discard. Mirrors `RewindTarget` from the conversation store, minus the
  * provider-history index the UI has no use for.
  */
-export interface RewindItem {
-  turnNumber: number;
-  text: string;
-  imageCount: number;
-  discardedTurns: number;
-  discardedReplies: number;
-  discardedFiles: string[];
-}
-
 type RewindSelectionResult = {
   isOpen: boolean;
   items: RewindItem[];

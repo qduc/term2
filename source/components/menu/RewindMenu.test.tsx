@@ -4,9 +4,11 @@ import { it, expect } from 'vitest';
 import React from 'react';
 import { renderInAct } from '../../test-helpers/ink-testing.js';
 import RewindMenu from './RewindMenu.js';
-import type { RewindItem } from '../../hooks/use-rewind-selection.js';
+import type { RewindItem } from '../../utils/conversation/rewind-items.js';
 
 const makeItem = (overrides: Partial<RewindItem> = {}): RewindItem => ({
+  targetId: 'target-1' as RewindItem['targetId'],
+  uiIndex: 0,
   turnNumber: 1,
   text: 'do the thing',
   imageCount: 0,
@@ -31,6 +33,19 @@ it.sequential('renders each turn text', async () => {
 
   expect(output).toContain('add retry logic');
   expect(output).toContain('now make the tests pass');
+});
+
+it.sequential('labels offset store targets by their visible picker ordinal', async () => {
+  const items = [
+    makeItem({ turnNumber: 251, text: 'first visible' }),
+    makeItem({ turnNumber: 252, text: 'second visible' }),
+  ];
+  const { lastFrame } = await renderInAct(<RewindMenu items={items} selectedIndex={0} disposition="edit" />);
+  const output = lastFrame() ?? '';
+
+  expect(output).toContain(' 1. first visible');
+  expect(output).toContain(' 2. second visible');
+  expect(output).not.toContain('251. first visible');
 });
 
 it.sequential('states what a rewind would discard', async () => {

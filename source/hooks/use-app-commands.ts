@@ -18,6 +18,7 @@ import { createGuardedSettingsCommand } from '../commands/guarded-settings-comma
 import { createSkillsSlashCommand } from '../commands/skills-command.js';
 import type { SkillsService, SkillInfo } from '../services/skills/skills-service.js';
 import type { Message } from '../types/message.js';
+import type { RewindItem } from '../utils/conversation/rewind-items.js';
 
 interface UseAppCommandsProps {
   settingsService: SettingsService;
@@ -29,8 +30,8 @@ interface UseAppCommandsProps {
   exit: () => void;
   messages: Message[];
   setModel: (model: string) => void;
-  rewindToTurn: (turnNumber: number) => { text: string; images?: UserTurn['images'] } | null;
-  countRewindableTurns: () => number;
+  getRewindItems: () => readonly RewindItem[];
+  rewindToTarget: (item: RewindItem) => { text: string; images?: UserTurn['images'] } | null;
   restoreTurnToInput: (turn: { text: string; images?: UserTurn['images'] }) => void;
   openRewindMenu: (disposition: RewindDisposition) => void;
   openProvidersMenu: () => void;
@@ -58,8 +59,8 @@ export const useAppCommands = ({
   getSessionUsage,
   exit,
   messages,
-  rewindToTurn,
-  countRewindableTurns,
+  getRewindItems,
+  rewindToTarget,
   restoreTurnToInput,
   openRewindMenu,
   openProvidersMenu,
@@ -79,8 +80,8 @@ export const useAppCommands = ({
   const slashCommands = useMemo<SlashCommand[]>(() => {
     // Shared by /rewind and its two aliases so they cannot drift apart.
     const rewindDeps = {
-      rewindToTurn,
-      countRewindableTurns,
+      getRewindItems,
+      rewindToTarget,
       restoreTurnToInput,
       sendUserMessage,
       addSystemMessage,
@@ -188,8 +189,8 @@ export const useAppCommands = ({
     messages,
     replaceInput,
     settingsService,
-    rewindToTurn,
-    countRewindableTurns,
+    getRewindItems,
+    rewindToTarget,
     restoreTurnToInput,
     openRewindMenu,
     openProvidersMenu,

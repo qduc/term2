@@ -2,18 +2,21 @@ import { it, expect } from 'vitest';
 import { buildRewindItems } from './rewind-items.js';
 import type { RewindTarget } from '../../services/conversation/conversation-store.js';
 
-const target = (overrides: Partial<RewindTarget> = {}): RewindTarget => ({
-  turnNumber: 1,
-  index: 0,
-  text: 'stored',
-  imageCount: 0,
-  discardedTurns: 1,
-  discardedReplies: 0,
-  discardedFiles: [],
-  ...overrides,
-});
+const target = (overrides: Partial<RewindTarget> = {}): RewindTarget => {
+  const turnNumber = overrides.turnNumber ?? 1;
+  return {
+    id: `target-${turnNumber}` as RewindTarget['id'],
+    turnNumber,
+    text: 'stored',
+    imageCount: 0,
+    discardedTurns: 1,
+    discardedReplies: 0,
+    discardedFiles: [],
+    ...overrides,
+  };
+};
 
-it('numbers items from the UI message list so numbers match what a rewind resolves', () => {
+it('preserves store turn numbers and carries opaque target ids into the picker', () => {
   const items = buildRewindItems(
     [
       { uiIndex: 3, text: 'first' },
@@ -23,6 +26,7 @@ it('numbers items from the UI message list so numbers match what a rewind resolv
   );
 
   expect(items.map((item) => item.turnNumber)).toEqual([1, 2]);
+  expect(items.map((item) => item.targetId)).toEqual(['target-1', 'target-2']);
 });
 
 it('prefers the UI text so the picker shows what the transcript shows', () => {
@@ -58,7 +62,7 @@ it('aligns from the end when the store holds fewer turns than the UI', () => {
 
   expect(items).toHaveLength(1);
   expect(items[0]).toMatchObject({
-    turnNumber: 2,
+    turnNumber: 1,
     text: 'newest',
     discardedReplies: 9,
   });

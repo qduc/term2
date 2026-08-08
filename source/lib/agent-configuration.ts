@@ -12,6 +12,8 @@ import { SkillsService } from '../services/skills/skills-service.js';
 import type { PostExecutePauseCapability } from '../tools/types.js';
 import type { SessionAccessState } from '../services/session/session-access-state.js';
 import type { ApplicationAgent } from '../services/agent-runtime/application-run-loop.js';
+import type { BackgroundShellRegistry } from '../services/shell/background-shell-registry.js';
+import type { BackgroundShellExecutionResult } from '../tools/system/shell.js';
 
 /** Narrow capability interface consumed by chat/session clients. */
 export interface AgentSource {
@@ -34,6 +36,10 @@ export interface AgentConfigurationDeps {
   skillsService?: SkillsService;
   postExecutePauseCapability?: PostExecutePauseCapability;
   sessionAccess?: SessionAccessState;
+  /** Root-session-owned shell registry; nested clients omit it. */
+  backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
+  /** False for one-shot/non-interactive callers until their lifecycle is supported. */
+  allowBackgroundShell?: boolean;
 }
 
 export class AgentConfiguration implements AgentSource {
@@ -59,6 +65,8 @@ export class AgentConfiguration implements AgentSource {
   #skillsService?: SkillsService;
   #postExecutePauseCapability?: PostExecutePauseCapability;
   #sessionAccess?: SessionAccessState;
+  #backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
+  #allowBackgroundShell: boolean;
   #unsubscribeSettings: (() => void) | null = null;
   #isDisposed = false;
 
@@ -83,6 +91,8 @@ export class AgentConfiguration implements AgentSource {
     this.#skillsService = deps.skillsService;
     this.#postExecutePauseCapability = deps.postExecutePauseCapability;
     this.#sessionAccess = deps.sessionAccess;
+    this.#backgroundShellRegistry = deps.backgroundShellRegistry;
+    this.#allowBackgroundShell = deps.allowBackgroundShell ?? true;
 
     // Create editor
     this.#editor = createEditorImpl({
@@ -196,6 +206,8 @@ export class AgentConfiguration implements AgentSource {
       }),
       postExecutePauseCapability: this.#postExecutePauseCapability,
       sessionAccess: this.#sessionAccess,
+      backgroundShellRegistry: this.#backgroundShellRegistry,
+      allowBackgroundShell: this.#allowBackgroundShell,
     };
   }
 

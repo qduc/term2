@@ -62,6 +62,7 @@ const start = (agentId: string): ConversationEvent =>
 type Sinks = {
   turn: ((event: ConversationEvent) => void) | null;
   background: ((event: ConversationEvent) => void) | null;
+  shell: ((event: ConversationEvent) => void) | null;
 };
 
 const makeClient = (sinks: Sinks, overrides: Record<string, unknown> = {}) =>
@@ -102,11 +103,14 @@ const makeClient = (sinks: Sinks, overrides: Record<string, unknown> = {}) =>
     setBackgroundSubagentEventSink: (sink: ((event: ConversationEvent) => void) | null) => {
       sinks.background = sink;
     },
+    setBackgroundShellEventSink: (sink: ((event: ConversationEvent) => void) | null) => {
+      sinks.shell = sink;
+    },
     ...overrides,
   } as unknown as ConversationAgentClient);
 
 it('queues async background subagent completions and notifies the observer once per novel run', () => {
-  const sinks: Sinks = { turn: null, background: null };
+  const sinks: Sinks = { turn: null, background: null, shell: null };
   const runtime = createSessionRuntime({
     sessionId: 'bg-notify',
     agentClient: makeClient(sinks),
@@ -134,7 +138,7 @@ it('queues async background subagent completions and notifies the observer once 
 });
 
 it('routes async subagent questions through the background queue and observer', () => {
-  const sinks: Sinks = { turn: null, background: null };
+  const sinks: Sinks = { turn: null, background: null, shell: null };
   const runtime = createSessionRuntime({
     sessionId: 'bg-question',
     agentClient: makeClient(sinks),
@@ -163,7 +167,7 @@ it('routes async subagent questions through the background queue and observer', 
 });
 
 it('projects background starts, tool activity, and completions to task observers', () => {
-  const sinks: Sinks = { turn: null, background: null };
+  const sinks: Sinks = { turn: null, background: null, shell: null };
   const runtime = createSessionRuntime({
     sessionId: 'bg-tasks',
     agentClient: makeClient(sinks),
@@ -209,8 +213,8 @@ it('projects background starts, tool activity, and completions to task observers
   runtime.dispose();
 });
 
-it('detaches the background sink on disposal', () => {
-  const sinks: Sinks = { turn: null, background: null };
+it('detaches the background sink on disposal', async () => {
+  const sinks: Sinks = { turn: null, background: null, shell: null };
   const runtime = createSessionRuntime({
     sessionId: 'bg-dispose',
     agentClient: makeClient(sinks),
@@ -219,5 +223,70 @@ it('detaches the background sink on disposal', () => {
 
   expect(typeof sinks.background).toBe('function');
   runtime.dispose();
+  await Promise.resolve();
   expect(sinks.background).toBeNull();
+  expect(sinks.shell).toBeNull();
+});
+
+it('routes root background shell lifecycle through the persistent task and notification channels', () => {
+  const sinks: Sinks = { turn: null, background: null, shell: null };
+  const runtime = createSessionRuntime({
+    sessionId: 'bg-shell',
+    agentClient: makeClient(sinks),
+    deps: { logger: makeLogger(), sessionContextService },
+  });
+  let notifications = 0;
+  runtime.backgroundSubagentNotifications.setObserver(() => notifications++);
+
+  sinks.shell?.({ type: 'background_shell_started', jobId: 'shell-1', command: 'safe-hold' });
+  sinks.shell?.({
+    type: 'background_shell_completed',
+    jobId: 'shell-1',
+    command: 'safe-hold',
+    status: 'completed',
+    output: 'done',
+  });
+
+  expect(runtime.backgroundSubagentTasks.getSnapshot()).toEqual([
+    expect.objectContaining({ kind: 'shell', jobId: 'shell-1', status: 'completed' }),
+  ]);
+  expect(runtime.backgroundSubagentNotifications.drain()).toEqual([
+    expect.objectContaining({ kind: 'shell_completion', jobId: 'shell-1', output: 'done' }),
+  ]);
+  expect(notifications).toBe(1);
+  runtime.dispose();
+});
+
+it('disposal cancels and shutdown settles root background shell jobs', async () => {
+  const sinks: Sinks = { turn: null, background: null, shell: null };
+  let cancelCalls = 0;
+  let disposeCalls = 0;
+  let releaseSettlement!: () => void;
+  const runtime = createSessionRuntime({
+    sessionId: 'bg-shell-dispose',
+    agentClient: makeClient(sinks, {
+      cancelBackgroundShellJobs: () => cancelCalls++,
+      disposeBackgroundShellJobs: async () => {
+        disposeCalls++;
+        await new Promise<void>((resolve) => {
+          releaseSettlement = resolve;
+        });
+      },
+    }),
+    deps: { logger: makeLogger(), sessionContextService },
+  });
+
+  let settled = false;
+  const shutdown = runtime.shutdown().then(() => {
+    settled = true;
+  });
+  await Promise.resolve();
+
+  expect(cancelCalls).toBe(1);
+  expect(disposeCalls).toBe(1);
+  expect(settled).toBe(false);
+  expect(typeof sinks.shell).toBe('function');
+  releaseSettlement();
+  await shutdown;
+  expect(sinks.shell).toBeNull();
 });

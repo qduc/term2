@@ -39,9 +39,48 @@ it('creates a distinct registry and access capability for each session, then cle
   expect(first.toolOwnership.size).toBe(0);
   expect(second.toolOwnership.size).toBe(0);
   expect(first.access!.allowsRead('/outside/first/file')).toBe(false);
+  expect(first.backgroundShellRegistry).toBeDefined();
+  expect(first.backgroundShellRegistry).not.toBe(second.backgroundShellRegistry);
   expect(second.access!.allowsRead('/outside/second/file')).toBe(false);
   expect(clients[0]?.dispose).toHaveBeenCalledTimes(1);
   expect(clients[1]?.dispose).toHaveBeenCalledTimes(1);
+});
+
+it('disposes the owned background shell registry with its session handle', async () => {
+  let registry: any;
+  const factory = createOwnedSessionClientFactory(
+    createMockSettingsService(),
+    (
+      _sessionId,
+      _ownership,
+      _capability,
+      _access,
+      _mode,
+      _continuity,
+      _capture,
+      _lifecycle,
+      backgroundShellRegistry,
+    ) => {
+      registry = backgroundShellRegistry;
+      return client();
+    },
+  );
+  const handle = factory.create('shell-session');
+  let release!: () => void;
+  const launch = registry.launch({
+    command: 'safe-hold',
+    run: (signal: AbortSignal) =>
+      new Promise((resolve) => {
+        signal.addEventListener('abort', () => resolve('cancelled'), { once: true });
+        release = () => resolve('completed');
+      }),
+  });
+
+  handle.dispose();
+  await launch.settled;
+
+  expect(registry.get(launch.id)?.status).toBe('cancelled');
+  release();
 });
 
 it('never disposes a caller-owned compatibility client', () => {

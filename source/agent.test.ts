@@ -4,6 +4,7 @@ import { createMockSettingsService } from './services/settings/settings-service.
 import { ExecutionContext } from './services/execution-context.js';
 import type { SubagentResult, SubagentRunHandle } from './services/subagents/types.js';
 import os from 'os';
+import { BackgroundShellRegistry } from './services/shell/background-shell-registry.js';
 
 const mockLogger = {
   debug: () => {},
@@ -306,6 +307,35 @@ it('getAgentDefinition registers parent async controls in orchestrator and ordin
   for (const definition of [orchestrator, ordinary]) {
     expect(definition.tools.map((tool) => tool.name)).toEqual(expect.arrayContaining(['send_message', 'cancel_run']));
   }
+});
+
+it('getAgentDefinition registers root background shell controls only with its session registry', () => {
+  const registry = new BackgroundShellRegistry<any>();
+  const enabled = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
+    loggingService: mockLogger,
+    backgroundShellRegistry: registry,
+  });
+  const disabled = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
+    loggingService: mockLogger,
+  });
+  const nonInteractive = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
+    loggingService: mockLogger,
+    backgroundShellRegistry: registry,
+    allowBackgroundShell: false,
+  });
+
+  expect(enabled.tools.map((tool) => tool.name)).toEqual(
+    expect.arrayContaining(['shell', 'get_shell_job', 'cancel_shell_job']),
+  );
+  expect(disabled.tools.map((tool) => tool.name)).not.toEqual(
+    expect.arrayContaining(['get_shell_job', 'cancel_shell_job']),
+  );
+  expect(nonInteractive.tools.map((tool) => tool.name)).not.toEqual(
+    expect.arrayContaining(['get_shell_job', 'cancel_shell_job']),
+  );
 });
 
 it('getAgentDefinition registers no async delegation tools when the parent controls are absent', () => {

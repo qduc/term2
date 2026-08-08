@@ -20,6 +20,8 @@ import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import { HookEventFactory } from '../hooks/hook-event-factory.js';
 import { createToolExecutionLifecyclePort } from '../hooks/hook-tool-lifecycle.js';
 import type { ToolExecutionLifecyclePort } from '../../tools/types.js';
+import { BackgroundShellRegistry } from '../shell/background-shell-registry.js';
+import type { BackgroundShellExecutionResult } from '../../tools/system/shell.js';
 
 /** A client whose lifetime is owned by the session that requested it. */
 export type SessionClientHandle = {
@@ -39,6 +41,8 @@ export type SessionClientHandle = {
   readonly hookLifecycle?: HookLifecyclePort;
   readonly hookEvents?: HookEventFactory;
   readonly toolLifecycle?: ToolExecutionLifecyclePort;
+  /** Present only for an owned root session handle. */
+  readonly backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
   /** Idempotently release resources captured by this session's client. */
   dispose(): void;
 };
@@ -66,6 +70,7 @@ export function createOwnedSessionClientFactory(
     providerContinuity: ProviderContinuity,
     requestCapture: OpenAICandidateObserver,
     toolLifecycle?: ToolExecutionLifecyclePort,
+    backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>,
   ) => DisposableConversationAgentClient,
   hookLifecycle?: HookLifecyclePort,
 ): SessionClientFactory {
@@ -98,6 +103,7 @@ export function createOwnedSessionClientFactory(
         : undefined;
       const toolLifecycle =
         hookLifecycle && hookEvents ? createToolExecutionLifecyclePort(hookLifecycle, hookEvents) : undefined;
+      const backgroundShellRegistry = new BackgroundShellRegistry<BackgroundShellExecutionResult>();
       const openAIRootFreshTurnSelectorParityObserver =
         continuationProjectionMode === 'openai-provider'
           ? new ProviderContinuityOpenAIRootSelectorParityObserver(
@@ -116,6 +122,7 @@ export function createOwnedSessionClientFactory(
         providerContinuity,
         requestCapture,
         toolLifecycle,
+        backgroundShellRegistry,
       );
       let disposed = false;
       return {
@@ -131,10 +138,12 @@ export function createOwnedSessionClientFactory(
         hookLifecycle,
         hookEvents,
         toolLifecycle,
+        backgroundShellRegistry,
         dispose() {
           if (disposed) return;
           disposed = true;
           agentClient.dispose?.();
+          void backgroundShellRegistry.dispose();
           postExecutePauseCapability.setActiveRunId(null);
           postExecutePending.close();
           toolOwnership.clear();

@@ -589,6 +589,7 @@ const sessionClientFactory = createOwnedSessionClientFactory(
     _continuity,
     requestCapture,
     toolLifecycle,
+    backgroundShellRegistry,
   ) => {
     const agentClient = new AgentClient({
       model: settings.get('agent.model'),
@@ -608,6 +609,7 @@ const sessionClientFactory = createOwnedSessionClientFactory(
       sessionAccess: access,
       continuationProjectionMode,
       toolLifecycle,
+      backgroundShellRegistry,
     });
     installPlanModeInterceptor(agentClient, { settingsService: settings });
     return agentClient;

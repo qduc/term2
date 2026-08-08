@@ -4,7 +4,12 @@ import type { SessionAccessState } from './services/session/session-access-state
 import { createFindFilesToolDefinition } from './tools/file/glob.js';
 import { createSearchReplaceToolDefinition } from './tools/file/search-replace.js';
 import { createApplyPatchToolDefinition } from './tools/file/apply-patch.js';
-import { createShellToolDefinition } from './tools/system/shell.js';
+import {
+  createBackgroundShellJobToolDefinitions,
+  createShellToolDefinition,
+  type BackgroundShellExecutionResult,
+} from './tools/system/shell.js';
+import type { BackgroundShellRegistry } from './services/shell/background-shell-registry.js';
 import { createAskMentorToolDefinition } from './tools/agent/ask-mentor.js';
 import { createAskUserToolDefinition } from './tools/agent/ask-user.js';
 import { createRunSubagentToolDefinition } from './tools/agent/run-subagent.js';
@@ -200,6 +205,10 @@ export const getAgentDefinition = (
     agentRuntime?: Pick<AgentRuntime, 'agent'> | null;
     postExecuteDeniedRead?: boolean;
     sessionAccess?: SessionAccessState;
+    /** Root-session-only capability. Nested/subagent factories do not receive it. */
+    backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
+    /** False for one-shot/non-interactive callers until their lifecycle is supported. */
+    allowBackgroundShell?: boolean;
   },
   model?: string,
 ): AgentDefinition => {
@@ -219,6 +228,8 @@ export const getAgentDefinition = (
     agentRuntime,
     postExecuteDeniedRead = false,
     sessionAccess,
+    backgroundShellRegistry,
+    allowBackgroundShell = true,
   } = deps;
   const defaultModel = settingsService.get('agent.model');
   const resolvedModel = model?.trim() || defaultModel;
@@ -299,6 +310,8 @@ export const getAgentDefinition = (
     }
   }
 
+  const rootBackgroundShellRegistry = allowBackgroundShell ? backgroundShellRegistry : undefined;
+
   if (orchestratorMode) {
     if (!runSubagentAsync || !getSubagentResult || !sendSubagentMessage || !cancelSubagentRun) {
       throw new Error(
@@ -319,10 +332,15 @@ export const getAgentDefinition = (
         executionContext,
         orchestratorMode: true,
         searchViaShell,
+        backgroundShellRegistry: rootBackgroundShellRegistry,
       }),
       createReadFileToolDefinition({ executionContext, allowOutsideWorkspace: true, orchestratorMode: true }),
       createGrepToolDefinition({ executionContext, orchestratorMode: true, globAvailable: false }),
     );
+    if (rootBackgroundShellRegistry) {
+      const backgroundTools = createBackgroundShellJobToolDefinitions(rootBackgroundShellRegistry);
+      tools.push(backgroundTools.get, backgroundTools.cancel);
+    }
     if (codeContextEnabled) {
       tools.push(
         createReadCodeOutlineToolDefinition({ executionContext }),
@@ -355,15 +373,17 @@ export const getAgentDefinition = (
     };
   }
 
+  const shellTool = createShellToolDefinition({
+    settingsService,
+    loggingService,
+    executionContext,
+    searchViaShell,
+    postExecuteDeniedRead,
+    sessionAccess,
+    backgroundShellRegistry: rootBackgroundShellRegistry,
+  });
   const tools: AnyToolDefinition[] = [
-    createShellToolDefinition({
-      settingsService,
-      loggingService,
-      executionContext,
-      searchViaShell,
-      postExecuteDeniedRead,
-      sessionAccess,
-    }),
+    shellTool,
     createWebSearchToolDefinition({
       settingsService,
       loggingService,
@@ -373,6 +393,11 @@ export const getAgentDefinition = (
       loggingService,
     }),
   ];
+
+  if (rootBackgroundShellRegistry) {
+    const backgroundTools = createBackgroundShellJobToolDefinitions(rootBackgroundShellRegistry);
+    tools.push(backgroundTools.get, backgroundTools.cancel);
+  }
 
   tools.push(...memoryCapability.tools);
 

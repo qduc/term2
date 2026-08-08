@@ -49,6 +49,8 @@ export interface SubagentEventSinkHost {
    * background (async) subagent activity is still observed while idle.
    */
   setBackgroundSubagentEventSink?(sink: ((event: ConversationEvent) => void) | null): void;
+  /** Conversation-scoped lifecycle sink for root background shell jobs. */
+  setBackgroundShellEventSink?(sink: ((event: ConversationEvent) => void) | null): void;
   /** Optional hook to cancel live async subagent runs when the parent turn ends. */
   cancelSubagentRuns?(): void;
 }
@@ -72,6 +74,8 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   editSteer?(id: string, items: readonly ProviderInputItem[]): boolean;
   setModel(model: string): void;
   addToolInterceptor(interceptor: ToolInterceptor): () => void;
+  /** Conversation-scoped lifecycle sink for root background shell jobs. */
+  setBackgroundShellEventSink?(sink: ((event: ConversationEvent) => void) | null): void;
 
   /**
    * Cancel conversation-bound background (async) subagent runs. Only an
@@ -79,6 +83,10 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
    * ordinary turn aborts must not.
    */
   cancelBackgroundRuns?(): void;
+  /** Cancel root shell jobs without ending the conversation session. */
+  cancelBackgroundShellJobs?(): void;
+  /** Cancel and settle root shell jobs during session shutdown. */
+  disposeBackgroundShellJobs?(): Promise<void>;
 
   clearConversations?(): void;
   getProvider?(): string;

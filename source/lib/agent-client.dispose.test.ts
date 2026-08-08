@@ -4,6 +4,7 @@ import { registerProvider } from '../providers/registry.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import type { SubagentBridge } from './subagent-bridge.js';
 import { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
+import { BackgroundShellRegistry } from '../services/shell/background-shell-registry.js';
 
 // ========== Mock Utilities ==========
 
@@ -122,6 +123,54 @@ it.sequential('dispose is idempotent — calling twice has single effect on brid
   client.dispose();
 
   expect(mockBridge.dispose).toHaveBeenCalledTimes(1);
+});
+
+it.sequential('forwards root background shell events while explicit cancellation settles the job', async () => {
+  ensureProviderRegistered();
+  let release!: () => void;
+  const registry = new BackgroundShellRegistry<any>({ createId: () => 'shell-job' });
+  const client = new AgentClient({
+    agentOverride: { name: 'override', model: 'mock-model', instructions: '', tools: [] },
+    deps: {
+      logger: createMockLogger(),
+      settings: createMockSettings(),
+      sessionContextService: {
+        runWithContext: <T>(_context: unknown, fn: () => T) => fn(),
+        getContext: () => null,
+      },
+    },
+    subagentBridge: createMockBridge(),
+    toolOwnership: new ToolOwnershipRegistry(),
+    backgroundShellRegistry: registry,
+  });
+  const events: any[] = [];
+  client.setBackgroundShellEventSink((event) => events.push(event));
+  const launch = registry.launch({
+    command: 'safe-hold',
+    run: (signal) =>
+      new Promise((resolve) => {
+        signal.addEventListener('abort', () => resolve({ output: 'cancelled output', status: 'failed' }), {
+          once: true,
+        });
+        release = () => resolve({ output: 'done', status: 'completed' });
+      }),
+    resultToStatus: (result) => result.status,
+  });
+
+  client.cancelBackgroundShellJobs();
+  await launch.settled;
+
+  expect(events).toEqual([
+    { type: 'background_shell_started', jobId: 'shell-job', command: 'safe-hold' },
+    expect.objectContaining({
+      type: 'background_shell_completed',
+      jobId: 'shell-job',
+      status: 'cancelled',
+      output: 'cancelled output',
+    }),
+  ]);
+  client.dispose();
+  release();
 });
 
 it.sequential('dispose calls abort via subagentBridge', () => {

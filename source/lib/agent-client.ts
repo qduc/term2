@@ -36,6 +36,11 @@ import {
   runWithOpenAIRequestPrefixBindingScope,
 } from '../providers/openai-request-prefix-binding.js';
 import { isDeepStrictEqual } from 'node:util';
+import {
+  type BackgroundShellEvent,
+  type BackgroundShellRegistry,
+} from '../services/shell/background-shell-registry.js';
+import type { BackgroundShellExecutionResult } from '../tools/system/shell.js';
 
 type ChainedRunOptions = AgentClientRunOptions;
 
@@ -77,6 +82,7 @@ export class AgentClient {
   #isDisposed = false;
   #toolLifecycle?: ToolExecutionLifecyclePort;
   #hookScope: Term2HookScope = 'root';
+  #backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
 
   /**
    * Forward real-time subagent activity events to the active conversation
@@ -94,6 +100,13 @@ export class AgentClient {
    */
   setBackgroundSubagentEventSink(sink: ((event: ConversationEvent) => void) | null): void {
     this.#subagentBridge?.setBackgroundEventSink(sink);
+  }
+
+  /** Route root shell-job lifecycle through the durable conversation sink. */
+  setBackgroundShellEventSink(sink: ((event: ConversationEvent) => void) | null): void {
+    this.#backgroundShellRegistry?.setEventSink(
+      sink ? (event) => sink(backgroundShellEventToConversationEvent(event)) : undefined,
+    );
   }
 
   /** @deprecated Ordinary turn completion must not cancel background runs. */
@@ -119,6 +132,8 @@ export class AgentClient {
     sessionAccess,
     toolLifecycle,
     hookScope,
+    backgroundShellRegistry,
+    allowBackgroundShell = true,
     // Retained for session-factory compatibility; direct execution no longer
     // projects chained input through the legacy mode.
     continuationProjectionMode: _continuationProjectionMode = 'legacy',
@@ -149,6 +164,10 @@ export class AgentClient {
     /** Root-only observational lifecycle port; omitted for nested clients. */
     toolLifecycle?: ToolExecutionLifecyclePort;
     hookScope?: Term2HookScope;
+    /** Root-session-owned shell registry. Nested clients deliberately omit it. */
+    backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
+    /** False for one-shot/non-interactive callers until their lifecycle is supported. */
+    allowBackgroundShell?: boolean;
     continuationProjectionMode?: ContinuationProjectionMode;
   }) {
     this.#logger = deps.logger;
@@ -157,6 +176,7 @@ export class AgentClient {
     this.#sessionContextService = deps.sessionContextService;
     this.#toolLifecycle = toolLifecycle;
     this.#hookScope = hookScope ?? 'root';
+    this.#backgroundShellRegistry = allowBackgroundShell ? backgroundShellRegistry : undefined;
     this.#askUserAnswerStore = new AskUserAnswerStore();
 
     // Create AgentConfiguration (handles editor, model, provider, reasoning, etc.)
@@ -173,6 +193,8 @@ export class AgentClient {
         skillsService: deps.skillsService,
         postExecutePauseCapability,
         sessionAccess,
+        backgroundShellRegistry: this.#backgroundShellRegistry,
+        allowBackgroundShell,
         onConfigChanged: (_changedKey?: string) => {
           // Direct streamed models capture provider/settings at creation time.
           // Chat models are separately cached below.
@@ -410,12 +432,23 @@ export class AgentClient {
     this.#subagentBridge?.cancelBackgroundRuns();
   }
 
+  cancelBackgroundShellJobs(): void {
+    for (const job of this.#backgroundShellRegistry?.list() ?? []) {
+      this.#backgroundShellRegistry?.cancel(job.id);
+    }
+  }
+
+  disposeBackgroundShellJobs(): Promise<void> {
+    return this.#backgroundShellRegistry?.dispose() ?? Promise.resolve();
+  }
+
   /** End all session-bound activity and release resources held by this client. */
   dispose(): void {
     if (this.#isDisposed) return;
     this.#isDisposed = true;
 
     this.abort();
+    void this.disposeBackgroundShellJobs();
     this.#chatService.clearModelCache();
     this.#subagentBridge?.dispose();
     this.#agentConfig.dispose();
@@ -629,4 +662,20 @@ export class AgentClient {
   getSettings(): ISettingsService {
     return this.#settings;
   }
+}
+
+function backgroundShellEventToConversationEvent(
+  event: BackgroundShellEvent<BackgroundShellExecutionResult>,
+): ConversationEvent {
+  if (event.type === 'background_shell_started') {
+    return event;
+  }
+  return {
+    type: 'background_shell_completed',
+    jobId: event.jobId,
+    command: event.command,
+    status: event.status,
+    output: event.output?.output ?? event.error ?? '',
+    ...(event.error ? { error: event.error } : {}),
+  };
 }

@@ -41,16 +41,10 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   foreground-subagent transfer waits on an explicit post-transfer approval and
   continuation decision. The worktree is `.worktrees/background-task-controls`
   on branch `codex/background-task-controls`.
-- UI/business layer separation — active multi-session implementation tracked in
-  `docs/plans/ui-business-layer-separation/MAP.md`. The settings transaction,
-  handoff, provider management, and model catalog milestones intentionally wait
-  for menu redesign Phase 5 because they overlap `app.tsx`,
-  `use-provider-selection.ts`, and the menu intent host. The Phase 5 worktree is
-  `.worktrees/menu-redesign-phase5` on branch `menu-redesign-phase5`. Its owner
-  should update `docs/plans/menu-system-redesign.md` with completion/test status
-  and coordinate before merging or abandoning it; do not silently supersede
-  either workstream. Inspect the branch live rather than treating an old commit
-  hash as its current state.
+- UI/business layer separation — completed through settings transaction,
+  handoff workflow, provider management, and model catalog milestones. See
+  `docs/plans/ui-business-layer-separation/MAP.md` for the merged commits and
+  ownership boundaries.
 
 ## Completed — still read before touching these areas
 

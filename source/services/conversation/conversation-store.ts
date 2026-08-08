@@ -15,7 +15,17 @@ export type ProviderHistorySnapshot = {
 };
 
 type RemovedUserTurn = { text: string; imageCount: number; images?: UserTurn['images'] };
+export type RewoundTarget = RemovedUserTurn & { discardedTurns: number };
 type RemovedToolOutput = { index: number; callId?: string; toolName?: string; output?: unknown; itemType: string };
+
+/**
+ * An opaque, snapshot-scoped address for a rewindable user turn.
+ *
+ * It deliberately carries no provider-history position. Any transcript
+ * mutation changes the store revision, so a target collected before that
+ * mutation cannot later select a different turn by accident.
+ */
+export type RewindTargetId = string & { readonly __rewindTargetId: unique symbol };
 
 /**
  * A user turn the conversation can be rewound to, plus what rewinding there
@@ -23,10 +33,10 @@ type RemovedToolOutput = { index: number; callId?: string; toolName?: string; ou
  * so the discard counts are cumulative from the turn to the end of history.
  */
 export interface RewindTarget {
+  /** Snapshot-scoped opaque address accepted by {@link ConversationStore.rewindToTarget}. */
+  id: RewindTargetId;
   /** 1-based, user-facing turn number. The only turn identifier the UI shows. */
   turnNumber: number;
-  /** Index of this turn's item in the provider-facing history array. */
-  index: number;
   text: string;
   imageCount: number;
   /** User turns removed by rewinding here, including this one. */
@@ -312,8 +322,8 @@ export class ConversationStore {
       }
 
       return {
+        id: this.#createRewindTargetId(turn.index),
         turnNumber: position + 1,
-        index: turn.index,
         text: turn.text,
         imageCount: turn.imageCount,
         discardedTurns: turns.length - position,
@@ -321,6 +331,27 @@ export class ConversationStore {
         discardedFiles,
       };
     });
+  }
+
+  /**
+   * Atomically rewind to a previously listed target. The target is valid only
+   * for the exact store snapshot that issued it; stale or unknown targets are
+   * rejected without changing the transcript.
+   */
+  rewindToTarget(targetId: RewindTargetId): RewoundTarget | null {
+    const target = this.listRewindTargets().find((candidate) => candidate.id === targetId);
+    if (!target) return null;
+
+    const anchor = this.#findRewindTargetIndex(targetId);
+    if (anchor === -1) return null;
+
+    const message = projectConversationMessage(this.#history[anchor]);
+    if (!message || message.role !== 'user' || message.isSynthetic) return null;
+
+    const removed = ConversationStore.#extractRemovedUserTurn(message);
+    this.#history.splice(anchor);
+    this.#historyRevision++;
+    return { ...removed, discardedTurns: target.discardedTurns };
   }
 
   /**
@@ -442,6 +473,17 @@ export class ConversationStore {
     this.#history.splice(anchor);
     this.#historyRevision++;
     return removed;
+  }
+
+  #createRewindTargetId(index: number): RewindTargetId {
+    return `rewind:${this.#historyIdentity}:${this.#historyRevision}:${index}` as RewindTargetId;
+  }
+
+  #findRewindTargetIndex(targetId: RewindTargetId): number {
+    for (const turn of this.listUserTurns()) {
+      if (this.#createRewindTargetId(turn.index) === targetId) return turn.index;
+    }
+    return -1;
   }
 
   /**

@@ -680,6 +680,27 @@ it('retryLastToolOutput trims trailing assistant text and replays full history',
   expect(startCalls[0].options).toEqual(expect.objectContaining({ previousResponseId: null, sessionId: 'default' }));
 });
 
+it('forwards an opaque rewind target through the session boundary', () => {
+  const service = new ConversationService({
+    agentClient: partialClient(),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+  service.importState({
+    history: [
+      { role: 'user', type: 'message', content: 'first' },
+      { role: 'assistant', type: 'message', content: [{ type: 'output_text', text: 'reply' }] },
+      { role: 'user', type: 'message', content: 'second' },
+    ],
+    previousResponseId: null,
+    toolLedger: [],
+  });
+  const first = service.listRewindTargets()[0]!;
+
+  expect(service.rewindToTarget(first.id)).toEqual({ text: 'first' });
+  expect(service.listUserTurns()).toEqual([]);
+  expect(service.rewindToTarget(first.id)).toBeNull();
+});
+
 it('emits approval interruptions and resumes after approval', async () => {
   const interruption = {
     name: 'bash',

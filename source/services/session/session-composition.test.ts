@@ -229,6 +229,7 @@ it('createConversationSession returns stateFacade with undo/snapshot operations'
   });
   expect(typeof stateFacade.reset).toBe('function');
   expect(typeof stateFacade.undoLastUserTurn).toBe('function');
+  expect(typeof stateFacade.rewindToTarget).toBe('function');
   expect(typeof stateFacade.listUserTurns).toBe('function');
   expect(typeof stateFacade.undoNUserTurns).toBe('function');
   expect(typeof stateFacade.getCurrentSnapshot).toBe('function');

@@ -1,5 +1,6 @@
 import type { SlashCommand } from '../slash-commands.js';
 import type { UserTurn } from '../types/user-turn.js';
+import type { RewindItem } from '../utils/conversation/rewind-items.js';
 
 /** What to do with a rewound turn's content once it leaves the transcript. */
 export type RewindDisposition = 'edit' | 'resend';
@@ -18,8 +19,9 @@ interface CreateRewindSlashCommandOptions {
   bareTarget: BareTarget;
   /** Set on alias commands so the canonical spelling can be surfaced once. */
   aliasOf?: string;
-  rewindToTurn: (turnNumber: number) => RewoundTurn | null;
-  countRewindableTurns: () => number;
+  /** Current UI projection of authoritative target ids, used only to select an id. */
+  getRewindItems: () => readonly RewindItem[];
+  rewindToTarget: (item: RewindItem) => RewoundTurn | null;
   sendUserMessage: (input: string | UserTurn) => Promise<void>;
   restoreTurnToInput: (turn: RewoundTurn) => void;
   addSystemMessage: (text: string) => void;
@@ -84,8 +86,8 @@ export function createRewindSlashCommand({
   defaultDisposition,
   bareTarget,
   aliasOf,
-  rewindToTurn,
-  countRewindableTurns,
+  getRewindItems,
+  rewindToTarget,
   sendUserMessage,
   restoreTurnToInput,
   addSystemMessage,
@@ -109,7 +111,8 @@ export function createRewindSlashCommand({
       }
 
       const disposition = parsed.disposition ?? defaultDisposition;
-      const available = countRewindableTurns();
+      const items = getRewindItems();
+      const available = items.length;
 
       if (available === 0) {
         addSystemMessage('Nothing to rewind.');
@@ -127,13 +130,14 @@ export function createRewindSlashCommand({
         return true;
       }
 
-      const turnNumber = target === 'last' ? available : target;
-      if (turnNumber < 1 || turnNumber > available) {
+      const selected = target === 'last' ? items.at(-1) : items.find((item) => item.turnNumber === target);
+      const turnNumber = target === 'last' ? items.at(-1)?.turnNumber ?? available : target;
+      if (!selected) {
         addSystemMessage(`No turn ${turnNumber} to rewind to. Pick a turn between 1-${available}.`);
         return true;
       }
 
-      const rewound = rewindToTurn(turnNumber);
+      const rewound = rewindToTarget(selected);
       if (!rewound) {
         addSystemMessage('Nothing to rewind.');
         return true;

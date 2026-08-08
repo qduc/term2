@@ -4,9 +4,11 @@ import { it, expect } from 'vitest';
 import React from 'react';
 import { renderInAct } from '../../test-helpers/ink-testing.js';
 import RewindMenu from './RewindMenu.js';
-import type { RewindItem } from '../../hooks/use-rewind-selection.js';
+import type { RewindItem } from '../../utils/conversation/rewind-items.js';
 
 const makeItem = (overrides: Partial<RewindItem> = {}): RewindItem => ({
+  targetId: 'target-1' as RewindItem['targetId'],
+  uiIndex: 0,
   turnNumber: 1,
   text: 'do the thing',
   imageCount: 0,

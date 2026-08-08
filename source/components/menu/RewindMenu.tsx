@@ -1,6 +1,7 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
-import { REWIND_MENU_VISIBLE_ITEMS, type RewindItem } from '../../hooks/use-rewind-selection.js';
+import { REWIND_MENU_VISIBLE_ITEMS } from '../../hooks/use-rewind-selection.js';
+import type { RewindItem } from '../../utils/conversation/rewind-items.js';
 import type { RewindDisposition } from '../../commands/rewind-command.js';
 import { MenuContainer } from '../common/MenuContainer.js';
 
@@ -86,7 +87,7 @@ const RewindMenu: FC<Props> = ({
         const images = item.imageCount > 0 ? ` [${plural(item.imageCount, 'image')}]` : '';
         const isLast = index === items.length - 1;
         return (
-          <Box key={item.turnNumber} flexDirection="column">
+          <Box key={item.targetId} flexDirection="column">
             <Text inverse={isSelected} color={isSelected ? 'yellow' : undefined} bold={isSelected}>
               {`${isSelected ? '▸' : ' '} ${String(item.turnNumber).padStart(2)}. ${truncate(
                 item.text,

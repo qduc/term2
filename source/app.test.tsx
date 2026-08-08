@@ -268,6 +268,8 @@ const createServices = () => ({
     previewInputSurge: vi.fn(() => ({ action: 'allow' })),
     setRetryCallback: vi.fn(),
     abort: vi.fn(),
+    listRewindTargets: vi.fn(() => []),
+    rewindToTarget: vi.fn(),
     undoNUserTurns: vi.fn(),
     resetWithNewId: vi.fn(),
     queueModeNotice: vi.fn(),

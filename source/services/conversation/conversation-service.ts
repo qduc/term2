@@ -2,7 +2,7 @@ import type { ILoggingService, ISettingsService, ISessionContextService } from '
 import type { ConversationTerminal, ReasoningEffortSetting } from '../../contracts/conversation.js';
 import type { PendingApproval } from '../../contracts/conversation.js';
 import type { SavedToolExecution } from '../tool-execution-ledger.js';
-import type { RewindTarget } from './conversation-store.js';
+import type { RewindTarget, RewindTargetId } from './conversation-store.js';
 import type { LogEvent, StateSnapshot } from '../logging/conversation-log-events.js';
 import type { UserTurn } from '../../types/user-turn.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
@@ -221,6 +221,10 @@ export class ConversationService {
    */
   listRewindTargets(): RewindTarget[] {
     return this.#runtime.state.listRewindTargets();
+  }
+
+  rewindToTarget(targetId: RewindTargetId): { text: string; images?: UserTurn['images'] } | null {
+    return this.#runtime.state.rewindToTarget(targetId);
   }
 
   undoNUserTurns(n: number): { text: string; images?: UserTurn['images'] } | null {

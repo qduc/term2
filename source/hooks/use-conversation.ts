@@ -14,6 +14,7 @@ import {
 import type { Message } from '../types/message.js';
 import { isBotMessage } from '../types/message.js';
 import type { UserTurn } from '../types/user-turn.js';
+import type { RewindTargetId } from '../services/conversation/conversation-store.js';
 import { conversationUIReducer, createInitialUIState, getConversationUIFlags } from './conversation-ui-reducer.js';
 import type { BackgroundTask } from '../services/subagents/subagent-notification-store.js';
 import type { SessionCostAccumulator } from '../services/cost/model-cost.js';
@@ -254,12 +255,9 @@ export const useConversation = ({
     stopProcessing();
   }, [stopProcessing]);
 
-  const rewindToTurn = useCallback<(turnNumber: number) => { text: string; images?: UserTurn['images'] } | null>(
-    (turnNumber: number) => orchestrator.rewindToTurn(turnNumber),
-    [orchestrator],
-  );
-
-  const countRewindableTurns = useCallback<() => number>(() => orchestrator.countRewindableTurns(), [orchestrator]);
+  const rewindToTarget = useCallback<
+    (targetId: RewindTargetId, uiIndex: number) => { text: string; images?: UserTurn['images'] } | null
+  >((targetId, uiIndex) => orchestrator.rewindToTarget(targetId, uiIndex), [orchestrator]);
 
   const retryLastToolOutput = useCallback<() => Promise<boolean>>(
     () => orchestrator.retryLastToolOutput(),
@@ -366,8 +364,7 @@ export const useConversation = ({
     clearConversation,
     stopProcessing: stopProcessingWithNotice,
     cancelAskUser,
-    rewindToTurn,
-    countRewindableTurns,
+    rewindToTarget,
     retryLastToolOutput,
     getUserMessages,
     setModel,

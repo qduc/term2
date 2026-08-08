@@ -13,10 +13,8 @@ import { createStreamingSession } from '../../utils/streaming/streaming-session-
 import type { StreamingState } from '../../utils/conversation/conversation-utils.js';
 import { enhanceApiKeyError, isMaxTurnsError } from '../../utils/conversation/conversation-utils.js';
 import { clearStreamingBotMessage, computeNextMessages } from '../../utils/conversation/apply-conversation-result.js';
-import {
-  listUndoableUserMessageIndices,
-  trimTrailingAssistantMessages,
-} from '../../utils/conversation/message-utils.js';
+import { trimTrailingAssistantMessages } from '../../utils/conversation/message-utils.js';
+import type { RewindTargetId } from './conversation-store.js';
 import {
   annotateApprovedCommandMessage,
   filterPendingCommandMessagesForApproval,
@@ -300,31 +298,16 @@ export class ConversationOrchestrator {
   }
 
   /**
-   * Rewind the conversation to a 1-based user turn number, discarding that turn
-   * and everything after it, and return the turn's content so the caller can
-   * either restore it for editing or resend it. Returns null when the turn
-   * number does not identify an undoable turn.
-   *
-   * This is the single rewind path: `/rewind`, `/undo`, and `/retry` all land
-   * here, which is what keeps their reset behavior identical.
+   * Rewind through an opaque store target. `uiIndex` is used only to trim the
+   * rendered projection after the domain operation accepted the same target.
    */
-  rewindToTurn(turnNumber: number): { text: string; images?: UserTurn['images'] } | null {
-    const messages = this.config.messages.getMessages();
-    const undoableIndices = listUndoableUserMessageIndices(messages);
-    if (turnNumber < 1 || turnNumber > undoableIndices.length) {
-      return null;
-    }
+  rewindToTarget(targetId: RewindTargetId, uiIndex: number): { text: string; images?: UserTurn['images'] } | null {
+    const restored = this.config.conversationService.rewindToTarget(targetId);
+    if (restored === null) return null;
 
-    const uiIndex = undoableIndices[turnNumber - 1]!;
-    const undoCount = undoableIndices.length - (turnNumber - 1);
-
-    const selectedMessage = messages[uiIndex];
-    const uiText = isUserMessage(selectedMessage) ? selectedMessage.text : '';
-
+    // Keep rewind's historical foreground-only cancellation behavior, but do
+    // not abort an active turn for a stale picker target that the store rejects.
     this.config.conversationService.abort();
-    const removed = this.config.conversationService.undoNUserTurns(undoCount);
-    const restored = removed ?? { text: uiText };
-
     this.config.messages.setMessages((prev) => prev.slice(0, uiIndex));
     this.config.approvedContext.current = null;
     this.config.conversationService.clearPendingInteraction?.();
@@ -333,14 +316,6 @@ export class ConversationOrchestrator {
     this.#displayedBackgroundNotificationMessageIds.clear();
 
     return restored;
-  }
-
-  /**
-   * Number of user turns the conversation can currently be rewound to. Callers
-   * use this to resolve `last` without knowing the turn numbering.
-   */
-  countRewindableTurns(): number {
-    return listUndoableUserMessageIndices(this.config.messages.getMessages()).length;
   }
 
   async retractPendingSubmission(id: string): Promise<SubmissionMutation> {

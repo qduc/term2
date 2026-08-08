@@ -1,13 +1,26 @@
 import type { RewindTarget } from '../../services/conversation/conversation-store.js';
-import type { RewindItem } from '../../hooks/use-rewind-selection.js';
+
+/**
+ * UI projection of one authoritative rewind target. `uiIndex` is deliberately
+ * a display-only boundary; the domain operation receives only `targetId`.
+ */
+export interface RewindItem {
+  targetId: RewindTarget['id'];
+  uiIndex: number;
+  turnNumber: number;
+  text: string;
+  imageCount: number;
+  discardedTurns: number;
+  discardedReplies: number;
+  discardedFiles: string[];
+}
 
 /**
  * Join the rendered user messages with the store's discard statistics.
  *
- * Turn numbers come from the UI message list because that is the list
- * `ConversationOrchestrator.rewindToTurn` resolves a turn number against — the
- * picker must not invent a second numbering. Statistics come from the store,
- * which is the only place that can see assistant replies and tool calls.
+ * Target identity and turn numbers come from the store. The UI contributes
+ * only the rendered-message boundary used to trim its projection *after* a
+ * domain rewind has succeeded.
  *
  * The two lists are aligned from the newest turn backwards: the store can be
  * trimmed independently of the rendered transcript, and it is the recent turns
@@ -26,7 +39,9 @@ export function buildRewindItems(
 
     return [
       {
-        turnNumber: position + 1,
+        targetId: stats.id,
+        uiIndex: message.uiIndex,
+        turnNumber: stats.turnNumber,
         text: message.text,
         imageCount: stats.imageCount,
         discardedTurns: stats.discardedTurns,

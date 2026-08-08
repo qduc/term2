@@ -51,7 +51,7 @@ type Rewind = Movable & {
   toggleDisposition: () => void;
   confirmSelection: (
     onSelect: (
-      item: import('../hooks/use-rewind-selection.js').RewindItem,
+      item: import('../utils/conversation/rewind-items.js').RewindItem,
       disposition: import('../commands/rewind-command.js').RewindDisposition,
     ) => void,
   ) => void;
@@ -87,7 +87,7 @@ type Options = {
   onSlashCommandRemount: () => void;
   onSlashTabComplete?: (command: SlashCommand) => boolean;
   onRewindSelect?: (
-    item: import('../hooks/use-rewind-selection.js').RewindItem,
+    item: import('../utils/conversation/rewind-items.js').RewindItem,
     disposition: import('../commands/rewind-command.js').RewindDisposition,
   ) => void;
 };

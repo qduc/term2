@@ -5,10 +5,12 @@ import React, { act } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { MenuControllerImpl } from './menu-controller.js';
 import { RewindMenuSession } from './RewindMenuSession.js';
-import type { RewindItem } from '../../hooks/use-rewind-selection.js';
+import type { RewindItem } from '../../utils/conversation/rewind-items.js';
 import { renderInAct } from '../../test-helpers/ink-testing.js';
 
 const item: RewindItem = {
+  targetId: 'target-2' as RewindItem['targetId'],
+  uiIndex: 4,
   turnNumber: 2,
   text: 'try again',
   imageCount: 0,

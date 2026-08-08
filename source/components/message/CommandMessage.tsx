@@ -152,7 +152,10 @@ const CommandMessage: FC<Props> = ({
     }
 
     const argsText =
-      toolName === 'background_subagent_notification' || toolName === 'background_shell_notification' || !formattedArgs
+      toolName === 'background_subagent_notification' ||
+      toolName === 'background_shell_notification' ||
+      toolName === 'background_task_control_notification' ||
+      !formattedArgs
         ? ''
         : ` ${formattedArgs}`;
     const renderAction = (verb: string) => (
@@ -254,6 +257,22 @@ const CommandMessage: FC<Props> = ({
           return renderAction(`Background shell completed: ${label}`);
         }
         return renderAction(`Background shell ${jobs.length || 'job'} notification`);
+      }
+      case 'background_task_control_notification': {
+        const actions = Array.isArray(toolArgs?.actions) ? toolArgs.actions : [];
+        if (actions.length === 1) {
+          const [{ action, target }] = actions;
+          if (action === 'stop' && target?.kind === 'subagent') {
+            return renderAction(`Stop requested for background subagent ${target.id ?? 'run'}`);
+          }
+          if (action === 'stop' && target?.kind === 'shell') {
+            return renderAction(`Stop requested for background shell ${target.id ?? 'job'}`);
+          }
+          if (action === 'background' && target?.kind === 'shell') {
+            return renderAction(`Moved shell ${target.id ?? 'job'} to background`);
+          }
+        }
+        return renderAction('Background task control updated');
       }
       case 'memory_list':
         return renderAction('Listed memories');

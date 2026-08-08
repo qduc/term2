@@ -58,6 +58,37 @@ it('run() creates isolated sessions for each subagent call', async () => {
   expect(result1.agentId).not.toBe(result2.agentId);
 });
 
+it('refuses foreground adoption until the session installs an approval-pause sink', async () => {
+  const providerId = registerTestProvider({
+    label: 'Foreground adoption eligibility',
+    createStreamedModel: () => ({
+      async *stream() {
+        yield {
+          type: 'completion',
+          responseId: 'foreground-complete',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'done' }] }],
+        };
+      },
+    }),
+    fetchModels: async () => [{ id: 'mock-model' }],
+  });
+  const manager = new TestSubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({ 'agent.model': 'mock-model', 'agent.provider': providerId }),
+    sessionContextService: createSessionContextService() as any,
+  });
+
+  const foreground = manager.runAsTool(
+    { role: 'worker', task: 'finish immediately', parentTool: 'run_subagent' },
+    undefined,
+    { toolCall: { callId: 'foreground-call' } },
+  );
+
+  expect(manager.moveForegroundSubagent('foreground-call')).toBeUndefined();
+  await expect(foreground).resolves.toMatchObject({ agentId: 'foreground-call', status: 'completed' });
+  manager.dispose();
+});
+
 // ========== Real-time events ==========
 
 it('run() emits started and completed events', async () => {

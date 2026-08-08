@@ -35,6 +35,12 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 ## Active or deferred
 
 - Scheduled live provider canaries — a deferred follow-up requiring CI, secret/billing, and OAuth-storage decisions. No plan doc, and nobody is on it.
+- Background work controls — active implementation tracked in
+  `docs/plans/background-work-control/MAP.md`. Background inspection, per-item
+  stop, user-action notification, and root-shell transfer are implemented;
+  foreground-subagent transfer waits on an explicit post-transfer approval and
+  continuation decision. The worktree is `.worktrees/background-task-controls`
+  on branch `codex/background-task-controls`.
 - UI/business layer separation — active multi-session implementation tracked in
   `docs/plans/ui-business-layer-separation/MAP.md`. The settings transaction,
   handoff, provider management, and model catalog milestones intentionally wait

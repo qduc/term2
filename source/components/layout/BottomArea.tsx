@@ -23,9 +23,11 @@ import type { StaticCommitBlocker } from '../message/MessageList.js';
 import type { QueuePauseReason } from '../../services/queue/queue-controller.js';
 import type { BackgroundTask } from '../../services/subagents/subagent-notification-store.js';
 import BackgroundTasksPanel from './BackgroundTasksPanel.js';
+import BackgroundTaskManager from './BackgroundTaskManager.js';
 import { deriveInputOwner } from '../../lib/input-owner.js';
 import type { SubmissionMutation } from '../../services/conversation/conversation-adapter.js';
 import type { SessionCostSummary } from '../../services/cost/model-cost.js';
+import type { BackgroundTaskControlPort } from '../../services/session/background-task-control.js';
 
 export type BottomAreaProps = {
   pendingApproval: PendingApproval | null;
@@ -84,6 +86,11 @@ export type BottomAreaProps = {
   onEditQueuedMessage?: (id: string, turn: UserTurn) => Promise<SubmissionMutation>;
   backgroundSubagentTasks?: readonly BackgroundTask[];
   backgroundSubagentTasksNow?: number;
+  listBackgroundTaskDetails?: BackgroundTaskControlPort['listDetails'];
+  getBackgroundTaskDetails?: BackgroundTaskControlPort['getDetails'];
+  stopBackgroundTask?: BackgroundTaskControlPort['requestStop'];
+  getForegroundTaskTransferCandidate?: BackgroundTaskControlPort['getForegroundTransferCandidate'];
+  moveForegroundTaskToBackground?: BackgroundTaskControlPort['moveForegroundToBackground'];
 };
 
 const BottomArea: FC<BottomAreaProps> = ({
@@ -141,8 +148,14 @@ const BottomArea: FC<BottomAreaProps> = ({
   onEditQueuedMessage,
   backgroundSubagentTasks = [],
   backgroundSubagentTasksNow = Date.now(),
+  listBackgroundTaskDetails,
+  getBackgroundTaskDetails,
+  stopBackgroundTask,
+  getForegroundTaskTransferCandidate,
+  moveForegroundTaskToBackground,
 }) => {
   const [dotCount, setDotCount] = useState(1);
+  const [backgroundTaskManagerOpen, setBackgroundTaskManagerOpen] = useState(false);
   const [thinkingElapsedSeconds, setThinkingElapsedSeconds] = useState(() =>
     thinkingStartedAt == null ? 0 : Math.max(0, Math.floor((Date.now() - thinkingStartedAt) / 1000)),
   );
@@ -191,6 +204,7 @@ const BottomArea: FC<BottomAreaProps> = ({
     pendingApproval,
     queuePaused,
     isProcessing,
+    backgroundTaskManagerOpen,
   });
   const showHandoffConfirm = inputOwner.kind === 'handoff-confirm';
   const showStandardModeConfirm = inputOwner.kind === 'standard-mode-confirm';
@@ -198,12 +212,29 @@ const BottomArea: FC<BottomAreaProps> = ({
   const showLargeUncachedPrompt = inputOwner.kind === 'large-uncached';
   const showApprovalPrompt = inputOwner.kind === 'approval';
   const showQueuePausedPrompt = inputOwner.kind === 'queue-paused';
+  const showBackgroundTaskManager = inputOwner.kind === 'background-tasks';
+  const foregroundTransferCandidate = getForegroundTaskTransferCandidate?.() ?? null;
   // InputBox owns input only when no modal prompt owns it and either no approval
   // is pending or the user is entering a rejection reason / ask-user answer.
   const showInput =
     inputOwner.kind === 'input' &&
     !queuePaused &&
     (!waitingForApproval || waitingForRejectionReason || waitingForAskUserAnswer);
+
+  useEffect(() => {
+    if (
+      backgroundTaskManagerOpen &&
+      (showHandoffConfirm || showStandardModeConfirm || showSurgePrompt || showLargeUncachedPrompt)
+    ) {
+      setBackgroundTaskManagerOpen(false);
+    }
+  }, [
+    backgroundTaskManagerOpen,
+    showHandoffConfirm,
+    showLargeUncachedPrompt,
+    showStandardModeConfirm,
+    showSurgePrompt,
+  ]);
 
   return (
     <Box flexDirection="column" width="100%">
@@ -258,8 +289,20 @@ const BottomArea: FC<BottomAreaProps> = ({
             {isProcessing && !toolCallStreamingInfo && thinkingStartedAt == null && (
               <Text color="#64748b">processing{'.'.repeat(dotCount)}</Text>
             )}
+            {foregroundTransferCandidate && <Text color="#64748b">Foreground shell running · Ctrl+B manage</Text>}
             {interruptConfirmVisible && <Text color="#f59e0b">Press ESC again to interrupt</Text>}
             <BackgroundTasksPanel tasks={backgroundSubagentTasks} now={backgroundSubagentTasksNow} />
+            {listBackgroundTaskDetails && getBackgroundTaskDetails && stopBackgroundTask && (
+              <BackgroundTaskManager
+                enabled={inputOwner.kind === 'input' || showBackgroundTaskManager}
+                listDetails={listBackgroundTaskDetails}
+                getDetails={getBackgroundTaskDetails}
+                requestStop={stopBackgroundTask}
+                getForegroundTransferCandidate={getForegroundTaskTransferCandidate}
+                moveForegroundToBackground={moveForegroundTaskToBackground}
+                onOpenChange={setBackgroundTaskManagerOpen}
+              />
+            )}
             {showQueuePausedPrompt && (
               <QueuePausedPrompt
                 queueLength={queueLength}
@@ -268,7 +311,7 @@ const BottomArea: FC<BottomAreaProps> = ({
                 onDiscard={onDiscardQueue || (() => {})}
               />
             )}
-            {!showQueuePausedPrompt && showInput && (
+            {!showQueuePausedPrompt && !showBackgroundTaskManager && showInput && (
               <InputBox
                 onSubmit={onSubmit}
                 slashCommands={slashCommands}

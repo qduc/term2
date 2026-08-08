@@ -21,6 +21,7 @@ export type InputOwner =
   | { kind: 'large-uncached' }
   | { kind: 'approval' }
   | { kind: 'queue-paused' }
+  | { kind: 'background-tasks' }
   | { kind: 'input' };
 
 export type InputOwnerState = {
@@ -32,6 +33,7 @@ export type InputOwnerState = {
   waitingForAskUserAnswer: boolean;
   pendingApproval: unknown | null;
   queuePaused: boolean;
+  backgroundTaskManagerOpen?: boolean;
   /**
    * True while the agent is actively processing a turn. Mirrors the original
    * `showApprovalPrompt` guard: the approval prompt only owns input when NOT
@@ -64,5 +66,6 @@ export const deriveInputOwner = (state: InputOwnerState): InputOwner => {
     return { kind: 'approval' };
   }
   if (state.queuePaused) return { kind: 'queue-paused' };
+  if (state.backgroundTaskManagerOpen) return { kind: 'background-tasks' };
   return { kind: 'input' };
 };

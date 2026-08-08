@@ -23,6 +23,7 @@ import type {
 import type { LargeUncachedInputDecision } from '../large-uncached-input-guard.js';
 import type { InputSurgeDecision } from '../input-surge-guard.js';
 import type { SessionRuntime } from '../session/session-composition.js';
+import type { BackgroundTaskControlPort } from '../session/background-task-control.js';
 import type {
   BackgroundSubagentNotificationPort,
   BackgroundSubagentTaskPort,
@@ -143,6 +144,11 @@ export class ConversationService {
   /** Current running and briefly retained terminal background tasks. */
   get backgroundSubagentTasks(): BackgroundSubagentTaskPort {
     return this.#runtime.backgroundSubagentTasks;
+  }
+
+  /** Details and stop requests for conversation-owned background work. */
+  get backgroundTaskControl(): BackgroundTaskControlPort {
+    return this.#runtime.backgroundTaskControl;
   }
 
   get sessionId(): string {

@@ -6,6 +6,12 @@ import type { ConversationEvent } from './conversation/conversation-events.js';
 import type { AgentStream } from './agent-stream.js';
 import type { ProviderHistorySnapshot } from './conversation/conversation-store.js';
 import type { SteerOutcome } from './agent-runtime/application-run-loop.js';
+import type { SubagentCancelAcknowledgement, SubagentRunStatus } from './subagents/types.js';
+import type { BackgroundShellJob } from './shell/background-shell-registry.js';
+import type { ForegroundShellLeaseDetails, ForegroundShellTransferResult } from './shell/background-shell-registry.js';
+import type { BackgroundSubagentApprovalPauseSink } from './subagents/foreground-subagent-lease.js';
+import type { ForegroundSubagentCandidate } from './subagents/nested-runner.js';
+import type { NestedToolCompatibilityState } from './session/nested-tool-compatibility-state.js';
 
 export type AgentClientRunOptions = {
   previousResponseId?: string | null;
@@ -56,6 +62,8 @@ export interface SubagentEventSinkHost {
   setBackgroundSubagentEventSink?(sink: ((event: ConversationEvent) => void) | null): void;
   /** Conversation-scoped lifecycle sink for root background shell jobs. */
   setBackgroundShellEventSink?(sink: ((event: ConversationEvent) => void) | null): void;
+  /** Session-owned queue/control sink for adopted subagent approval pauses. */
+  setBackgroundSubagentApprovalPauseSink?(sink: BackgroundSubagentApprovalPauseSink | null): void;
   /** Optional hook to cancel live async subagent runs when the parent turn ends. */
   cancelSubagentRuns?(): void;
 }
@@ -92,6 +100,29 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   cancelBackgroundShellJobs?(): void;
   /** Cancel and settle root shell jobs during session shutdown. */
   disposeBackgroundShellJobs?(): Promise<void>;
+
+  /** Narrow background-task controls; registries remain owned by the root client. */
+  getBackgroundSubagentStatus?(runId: string): SubagentRunStatus;
+  listBackgroundSubagentStatuses?(): SubagentRunStatus[];
+  requestBackgroundSubagentStop?(runId: string): SubagentCancelAcknowledgement;
+  /** Foreground candidates that may be transferred without restarting. */
+  listForegroundSubagentCandidates?(): ForegroundSubagentCandidate[];
+  getForegroundSubagentCandidate?(runId: string): ForegroundSubagentCandidate | undefined;
+  /** Atomically adopts one foreground child into the background registry. */
+  moveForegroundSubagent?(
+    runId: string,
+  ): { runId: string; role: string; name?: string; status: 'running'; task: string } | undefined;
+  /** Exact compatibility state shared with nested execution. */
+  getNestedToolCompatibilityState?(): NestedToolCompatibilityState | undefined;
+  /** Cancel and await adopted leases before detaching background sinks. */
+  disposeBackgroundSubagents?(): Promise<void>;
+  getBackgroundShellJob?(jobId: string): BackgroundShellJob<unknown> | undefined;
+  listBackgroundShellJobs?(): BackgroundShellJob<unknown>[];
+  requestBackgroundShellStop?(jobId: string): boolean;
+  /** The currently running root shell call that can be detached from its turn. */
+  getForegroundShellTransferCandidate?(): ForegroundShellLeaseDetails | undefined;
+  /** Atomically adopts a root shell call into the session background registry. */
+  moveForegroundShellToBackground?(callId: string): ForegroundShellTransferResult | undefined;
 
   clearConversations?(): void;
   getProvider?(): string;

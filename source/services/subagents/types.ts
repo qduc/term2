@@ -181,7 +181,8 @@ export interface SubagentResult {
  * produce it, which is why it is not part of {@link SubagentResult}.
  */
 export type NestedSubagentResult = Omit<SubagentResult, 'status'> & {
-  status: SubagentResult['status'] | 'interrupted';
+  /** `running` is the one-shot foreground result after ownership transfers. */
+  status: SubagentResult['status'] | 'interrupted' | 'running';
   /** True when the run paused for an approval the parent must surface. */
   interrupted?: boolean;
 };
@@ -213,7 +214,15 @@ export interface SubagentRunStatus {
   /** Optional active-run alias retained in status snapshots. */
   name?: string;
   role: string;
-  status: 'running' | 'waiting_for_answer' | 'cancelling' | 'completed' | 'failed' | 'cancelled' | 'not_found';
+  status:
+    | 'running'
+    | 'awaiting_approval'
+    | 'waiting_for_answer'
+    | 'cancelling'
+    | 'completed'
+    | 'failed'
+    | 'cancelled'
+    | 'not_found';
   task: string;
   taskPreview: string;
   startedAt: number;

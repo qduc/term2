@@ -147,6 +147,30 @@ export const useConversation = ({
     setBackgroundSubagentTaskState(readBackgroundSubagentTasks());
   }, [readBackgroundSubagentTasks]);
 
+  const listBackgroundTaskDetails = useCallback(
+    () => conversationService.backgroundTaskControl.listDetails(),
+    [conversationService],
+  );
+  const getBackgroundTaskDetails = useCallback(
+    (target: import('../services/session/background-task-control.js').BackgroundTaskControlTarget) =>
+      conversationService.backgroundTaskControl.getDetails(target),
+    [conversationService],
+  );
+  const stopBackgroundTask = useCallback(
+    (target: import('../services/session/background-task-control.js').BackgroundTaskControlTarget) =>
+      conversationService.backgroundTaskControl.requestStop(target),
+    [conversationService],
+  );
+  const getForegroundTaskTransferCandidate = useCallback(
+    () => conversationService.backgroundTaskControl.getForegroundTransferCandidate(),
+    [conversationService],
+  );
+  const moveForegroundTaskToBackground = useCallback(
+    (target: import('../services/session/background-task-control.js').ForegroundTaskControlTarget) =>
+      conversationService.backgroundTaskControl.moveForegroundToBackground(target),
+    [conversationService],
+  );
+
   useEffect(() => {
     if (typeof conversationService.setBackgroundSubagentTaskObserver !== 'function') return;
     conversationService.setBackgroundSubagentTaskObserver(refreshBackgroundSubagentTasks);
@@ -400,6 +424,11 @@ export const useConversation = ({
     toolCallStreamingInfo,
     backgroundSubagentTasks: backgroundSubagentTaskState.tasks,
     backgroundSubagentTasksNow: backgroundSubagentTaskState.now,
+    listBackgroundTaskDetails,
+    getBackgroundTaskDetails,
+    stopBackgroundTask,
+    getForegroundTaskTransferCandidate,
+    moveForegroundTaskToBackground,
     sendUserMessage,
     admissionConfirmation,
     submitTurnForAdmission,

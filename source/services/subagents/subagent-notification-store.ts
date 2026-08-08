@@ -54,8 +54,24 @@ export interface BackgroundShellCompletionNotification {
   completedAt: number;
 }
 
+/** A user action on background work that the main agent must plan around. */
+export interface BackgroundUserControlNotification {
+  kind: 'user_control';
+  /** Stable per action and target, so repeated clicks do not repeat planning input. */
+  messageId: string;
+  action: 'stop' | 'background';
+  target: { kind: 'subagent' | 'shell'; id: string };
+  details:
+    | { kind: 'subagent'; id: string; name?: string; role: string; task: string }
+    | { kind: 'shell'; id: string; command: string };
+  requestedAt: number;
+}
+
 /** Background work is delivered through one queue regardless of its executor. */
-export type BackgroundNotification = BackgroundSubagentNotification | BackgroundShellCompletionNotification;
+export type BackgroundNotification =
+  | BackgroundSubagentNotification
+  | BackgroundShellCompletionNotification
+  | BackgroundUserControlNotification;
 
 export type BackgroundSubagentTaskStatus = 'running' | 'completed' | 'failed' | 'cancelled';
 
@@ -110,6 +126,10 @@ export interface BackgroundSubagentNotificationPort {
   readonly pendingCount: number;
   drain(): BackgroundNotification[];
   retain(notifications: readonly BackgroundNotification[]): void;
+  /** Queues one exact-once notification for a successful user control action. */
+  enqueueUserControl(
+    notification: Omit<BackgroundUserControlNotification, 'kind' | 'messageId' | 'requestedAt'>,
+  ): boolean;
 }
 
 /** Read-only lifecycle projection used by the background-tasks UI. */
@@ -155,6 +175,8 @@ export const BACKGROUND_TASK_RECENT_RETENTION_MS = 5_000;
 export class SubagentNotificationStore implements BackgroundSubagentNotificationPort {
   #pending = new Map<string, BackgroundNotification>();
   #seen = new Set<string>();
+  /** Stop requests are session-scoped and their target count is registry-bounded. */
+  #userControlMessageIds = new Set<string>();
   #tasks = new Map<string, BackgroundTask>();
   #settledTaskIds = new Set<string>();
   #lifecycleEpochs = new Map<string, number>();
@@ -354,6 +376,20 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
       this.#seen.add(notification.messageId);
     }
     for (const notification of newer) this.#pending.set(notification.messageId, notification);
+  }
+
+  enqueueUserControl(
+    notification: Omit<BackgroundUserControlNotification, 'kind' | 'messageId' | 'requestedAt'>,
+  ): boolean {
+    const lifecycleSuffix =
+      notification.target.kind === 'subagent' ? `:${this.#lifecycleEpochs.get(notification.target.id) ?? 1}` : '';
+    const messageId = `user_control:${notification.action}:${notification.target.kind}:${notification.target.id}${lifecycleSuffix}`;
+    if (this.#userControlMessageIds.has(messageId)) return false;
+    this.#pending.set(messageId, { kind: 'user_control', ...notification, messageId, requestedAt: this.#now() });
+    this.#userControlMessageIds.add(messageId);
+    this.#seen.add(messageId);
+    this.#evictOldestSeen();
+    return true;
   }
 
   /**

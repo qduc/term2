@@ -83,7 +83,7 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now }) => {
 
   return (
     <Box flexDirection="column" marginBottom={1}>
-      <Text color="#94a3b8">Background tasks · {activeCount} active</Text>
+      <Text color="#94a3b8">Background tasks · {activeCount} active · Ctrl+B manage</Text>
       {tasks.map((task) => (
         <Box key={task.kind === 'shell' ? task.jobId : task.runId} flexDirection="column">
           <Box flexDirection="row">

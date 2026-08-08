@@ -146,4 +146,164 @@ describe('BackgroundShellRegistry', () => {
 
     expect(registry.get('timed-job')?.status).toBe('timed_out');
   });
+
+  it('adopts an already-running foreground lease without restarting it', async () => {
+    let release: (() => void) | undefined;
+    let executions = 0;
+    let cleanups = 0;
+    const events: unknown[] = [];
+    const registry = new BackgroundShellRegistry<string>({
+      createId: () => 'adopted-job',
+      now: () => 123,
+      onEvent: (event) => events.push(event),
+    });
+    const lease = registry.startForeground({
+      callId: 'call-foreground',
+      command: 'long-running-command',
+      run: () =>
+        new Promise<string>((resolve) => {
+          executions += 1;
+          release = () => resolve('done');
+        }),
+      onSettled: () => {
+        cleanups += 1;
+      },
+    });
+
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    const adopted = registry.adoptForeground('call-foreground');
+
+    expect(adopted).toEqual({ jobId: 'adopted-job', status: 'running' });
+    expect(registry.getForeground('call-foreground')).toBeUndefined();
+    expect(registry.get('adopted-job')).toMatchObject({
+      id: 'adopted-job',
+      command: 'long-running-command',
+      status: 'running',
+      startedAt: 123,
+    });
+    expect(await lease.foregroundResult).toEqual(adopted);
+    expect(executions).toBe(1);
+
+    release?.();
+    await lease.settled;
+
+    expect(cleanups).toBe(1);
+    expect(events).toEqual([
+      { type: 'background_shell_started', jobId: 'adopted-job', command: 'long-running-command' },
+      {
+        type: 'background_shell_completed',
+        jobId: 'adopted-job',
+        command: 'long-running-command',
+        status: 'completed',
+        output: 'done',
+      },
+    ]);
+  });
+
+  it('keeps the foreground abort attached until adoption and detaches it after adoption', async () => {
+    let release: (() => void) | undefined;
+    let receivedSignal: AbortSignal | undefined;
+    const parent = new AbortController();
+    const registry = new BackgroundShellRegistry<string>({ createId: () => 'job-1' });
+    const lease = registry.startForeground({
+      callId: 'call-1',
+      command: 'hold',
+      parentSignal: parent.signal,
+      run: (signal) =>
+        new Promise<string>((resolve) => {
+          receivedSignal = signal;
+          release = () => resolve('done');
+        }),
+    });
+
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    registry.adoptForeground('call-1');
+    parent.abort();
+    expect(receivedSignal?.aborted).toBe(false);
+    expect(registry.cancel('job-1')).toBe(true);
+    expect(receivedSignal?.aborted).toBe(true);
+
+    release?.();
+    await lease.settled;
+    expect(registry.get('job-1')?.status).toBe('cancelled');
+  });
+
+  it('leaves a foreground lease owned by its parent when adoption cannot proceed', async () => {
+    let release: (() => void) | undefined;
+    const parent = new AbortController();
+    const registry = new BackgroundShellRegistry<string>({ maxConcurrentJobs: 1 });
+    registry.launch({ command: 'existing', run: () => new Promise<string>(() => {}) });
+    const lease = registry.startForeground({
+      callId: 'call-1',
+      command: 'hold',
+      parentSignal: parent.signal,
+      run: () =>
+        new Promise<string>((resolve) => {
+          release = () => resolve('stopped');
+        }),
+    });
+
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    expect(() => registry.adoptForeground('call-1')).toThrow(BackgroundShellRegistryCapacityError);
+    expect(registry.getForeground('call-1')).toMatchObject({ callId: 'call-1', status: 'running' });
+    parent.abort();
+    release?.();
+    await expect(lease.foregroundResult).resolves.toBe('stopped');
+  });
+
+  it('does not adopt a lease already claimed by foreground abort', async () => {
+    let release: (() => void) | undefined;
+    const parent = new AbortController();
+    const registry = new BackgroundShellRegistry<string>();
+    const lease = registry.startForeground({
+      callId: 'call-1',
+      command: 'hold',
+      parentSignal: parent.signal,
+      run: () =>
+        new Promise<string>((resolve) => {
+          release = () => resolve('cancelled');
+        }),
+    });
+
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    parent.abort();
+    expect(() => registry.adoptForeground('call-1')).toThrow('already aborting');
+    expect(registry.getForeground('call-1')).toMatchObject({ callId: 'call-1' });
+    expect(registry.list()).toEqual([]);
+    release?.();
+    await lease.settled;
+  });
+
+  it('rejects adoption after a foreground lease has settled without emitting lifecycle events', async () => {
+    const events: unknown[] = [];
+    const registry = new BackgroundShellRegistry<string>({ onEvent: (event) => events.push(event) });
+    const lease = registry.startForeground({ callId: 'call-1', command: 'fast', run: async () => 'done' });
+
+    await lease.settled;
+
+    expect(() => registry.adoptForeground('call-1')).toThrow('No running foreground');
+    expect(events).toEqual([]);
+  });
+
+  it('disposal aborts and awaits an unadopted foreground lease', async () => {
+    let release: (() => void) | undefined;
+    let receivedSignal: AbortSignal | undefined;
+    const registry = new BackgroundShellRegistry<string>();
+    const lease = registry.startForeground({
+      callId: 'call-1',
+      command: 'hold',
+      run: (signal) =>
+        new Promise<string>((resolve) => {
+          receivedSignal = signal;
+          release = () => resolve('stopped');
+        }),
+    });
+
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    const disposal = registry.dispose();
+    expect(receivedSignal?.aborted).toBe(true);
+    release?.();
+    await disposal;
+    await lease.settled;
+  });
 });

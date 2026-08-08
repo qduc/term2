@@ -298,6 +298,29 @@ it('notifies the main agent again when a continued run completes', () => {
   expect(store.drain()).toEqual([expect.objectContaining({ kind: 'completion', runId: 'run-1', status: 'completed' })]);
 });
 
+it('notifies the main agent again when the user stops a continued lifecycle with the same run id', () => {
+  let now = 1_000;
+  const store = makeStore({ now: () => now });
+  const stop = {
+    action: 'stop' as const,
+    target: { kind: 'subagent' as const, id: 'run-1' },
+    details: { kind: 'subagent' as const, id: 'run-1', role: 'explorer', task: 'inspect' },
+  };
+
+  store.recordLifecycle(started());
+  expect(store.enqueueUserControl(stop)).toBe(true);
+  expect(store.enqueueUserControl(stop)).toBe(false);
+  store.drain();
+  store.recordLifecycle(completed());
+
+  now += BACKGROUND_TASK_RECENT_RETENTION_MS;
+  store.getTaskSnapshot();
+  store.recordLifecycle(started({ task: 'continue the assessment' }));
+
+  expect(store.enqueueUserControl(stop)).toBe(true);
+  expect(store.drain()).toEqual([expect.objectContaining({ messageId: 'user_control:stop:subagent:run-1:2' })]);
+});
+
 it('still drops a replayed completion of a run that was never continued', () => {
   let now = 1_000;
   const store = makeStore({ now: () => now });

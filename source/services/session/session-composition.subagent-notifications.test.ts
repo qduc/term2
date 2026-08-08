@@ -3,6 +3,7 @@ import { createSessionRuntime as createProductionSessionRuntime } from './sessio
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import type { BackgroundSubagentApprovalPauseSink } from '../subagents/foreground-subagent-lease.js';
 
 const createSessionRuntime = (options: Omit<Parameters<typeof createProductionSessionRuntime>[0], 'toolOwnership'>) =>
   createProductionSessionRuntime({ ...options, toolOwnership: new ToolOwnershipRegistry() });
@@ -63,6 +64,7 @@ type Sinks = {
   turn: ((event: ConversationEvent) => void) | null;
   background: ((event: ConversationEvent) => void) | null;
   shell: ((event: ConversationEvent) => void) | null;
+  approval: BackgroundSubagentApprovalPauseSink | null;
 };
 
 const makeClient = (sinks: Sinks, overrides: Record<string, unknown> = {}) =>
@@ -106,11 +108,14 @@ const makeClient = (sinks: Sinks, overrides: Record<string, unknown> = {}) =>
     setBackgroundShellEventSink: (sink: ((event: ConversationEvent) => void) | null) => {
       sinks.shell = sink;
     },
+    setBackgroundSubagentApprovalPauseSink: (sink: BackgroundSubagentApprovalPauseSink | null) => {
+      sinks.approval = sink;
+    },
     ...overrides,
   } as unknown as ConversationAgentClient);
 
 it('queues async background subagent completions and notifies the observer once per novel run', () => {
-  const sinks: Sinks = { turn: null, background: null, shell: null };
+  const sinks: Sinks = { turn: null, background: null, shell: null, approval: null };
   const runtime = createSessionRuntime({
     sessionId: 'bg-notify',
     agentClient: makeClient(sinks),
@@ -138,7 +143,7 @@ it('queues async background subagent completions and notifies the observer once 
 });
 
 it('routes async subagent questions through the background queue and observer', () => {
-  const sinks: Sinks = { turn: null, background: null, shell: null };
+  const sinks: Sinks = { turn: null, background: null, shell: null, approval: null };
   const runtime = createSessionRuntime({
     sessionId: 'bg-question',
     agentClient: makeClient(sinks),
@@ -167,7 +172,7 @@ it('routes async subagent questions through the background queue and observer', 
 });
 
 it('projects background starts, tool activity, and completions to task observers', () => {
-  const sinks: Sinks = { turn: null, background: null, shell: null };
+  const sinks: Sinks = { turn: null, background: null, shell: null, approval: null };
   const runtime = createSessionRuntime({
     sessionId: 'bg-tasks',
     agentClient: makeClient(sinks),
@@ -214,7 +219,7 @@ it('projects background starts, tool activity, and completions to task observers
 });
 
 it('detaches the background sink on disposal', async () => {
-  const sinks: Sinks = { turn: null, background: null, shell: null };
+  const sinks: Sinks = { turn: null, background: null, shell: null, approval: null };
   const runtime = createSessionRuntime({
     sessionId: 'bg-dispose',
     agentClient: makeClient(sinks),
@@ -228,8 +233,46 @@ it('detaches the background sink on disposal', async () => {
   expect(sinks.shell).toBeNull();
 });
 
+it('installs a session-owned FIFO controller for adopted-child pauses', () => {
+  const sinks: Sinks = { turn: null, background: null, shell: null, approval: null };
+  const runtime = createSessionRuntime({
+    sessionId: 'bg-approval-controller',
+    agentClient: makeClient(sinks),
+    deps: { logger: makeLogger(), sessionContextService },
+  });
+  const approve = () => undefined;
+  const apply = (callback: any) => {
+    callback({
+      runId: 'child-1',
+      generation: 1,
+      handle: { approve, reject: noop },
+      interruption: { name: 'shell', callId: 'child-tool', arguments: '{"command":"pwd"}' },
+    });
+    return true;
+  };
+
+  expect(typeof sinks.approval).toBe('function');
+  sinks.approval?.({
+    runId: 'child-1',
+    generation: 1,
+    role: 'worker',
+    interruption: { name: 'shell', callId: 'child-tool', arguments: '{"command":"pwd"}' },
+    apply,
+  });
+  const snapshot = runtime.backgroundSubagentApprovals.getSnapshot();
+  expect(snapshot.current).toMatchObject({ runId: 'child-1', toolCallId: 'child-tool' });
+  expect(
+    runtime.backgroundSubagentApprovals.resolve({
+      revision: snapshot.revision,
+      entry: snapshot.current!,
+      decision: { answer: 'y' },
+    }),
+  ).toMatchObject({ kind: 'resolved' });
+  runtime.dispose();
+});
+
 it('routes root background shell lifecycle through the persistent task and notification channels', () => {
-  const sinks: Sinks = { turn: null, background: null, shell: null };
+  const sinks: Sinks = { turn: null, background: null, shell: null, approval: null };
   const runtime = createSessionRuntime({
     sessionId: 'bg-shell',
     agentClient: makeClient(sinks),
@@ -257,8 +300,90 @@ it('routes root background shell lifecycle through the persistent task and notif
   runtime.dispose();
 });
 
+it('exposes per-item background controls through the session runtime and wakes both observers on a stop request', () => {
+  const sinks: Sinks = { turn: null, background: null, shell: null, approval: null };
+  let stopCalls = 0;
+  const runtime = createSessionRuntime({
+    sessionId: 'bg-control',
+    agentClient: makeClient(sinks, {
+      getBackgroundSubagentStatus: (runId: string) => ({
+        runId,
+        name: 'scan',
+        role: 'explorer',
+        status: 'running',
+        task: 'inspect the implementation',
+        taskPreview: 'inspect the implementation',
+        startedAt: 100,
+        elapsedMs: 20,
+        toolCounts: {},
+      }),
+      requestBackgroundSubagentStop: () => {
+        stopCalls++;
+        return { ok: true, runId: 'run-1', status: 'cancelling' };
+      },
+    }),
+    deps: { logger: makeLogger(), sessionContextService },
+  });
+  let notifications = 0;
+  let taskChanges = 0;
+  runtime.backgroundSubagentNotifications.setObserver(() => notifications++);
+  runtime.backgroundSubagentTasks.setObserver(() => taskChanges++);
+
+  expect(runtime.backgroundTaskControl.requestStop({ kind: 'subagent', id: 'run-1' })).toEqual({
+    ok: true,
+    details: expect.objectContaining({ id: 'run-1', status: 'cancelling' }),
+  });
+  expect(stopCalls).toBe(1);
+  expect(notifications).toBe(1);
+  expect(taskChanges).toBe(1);
+  expect(runtime.backgroundSubagentNotifications.drain()).toEqual([
+    expect.objectContaining({ kind: 'user_control', action: 'stop', target: { kind: 'subagent', id: 'run-1' } }),
+  ]);
+  runtime.dispose();
+});
+
+it('delivers a successful foreground-shell move as planning input at the next request boundary', () => {
+  const sinks: Sinks = { turn: null, background: null, shell: null, approval: null };
+  const runtime = createSessionRuntime({
+    sessionId: 'foreground-shell-move',
+    agentClient: makeClient(sinks, {
+      getForegroundShellTransferCandidate: () => ({
+        callId: 'call-1',
+        jobId: 'shell-1',
+        command: 'pnpm test',
+        status: 'running',
+        startedAt: 100,
+      }),
+      moveForegroundShellToBackground: () => ({ jobId: 'shell-1', status: 'running' }),
+      getBackgroundShellJob: () => ({
+        id: 'shell-1',
+        command: 'pnpm test',
+        status: 'running',
+        startedAt: 100,
+      }),
+    }),
+    deps: { logger: makeLogger(), sessionContextService },
+  });
+  let notifications = 0;
+  runtime.backgroundSubagentNotifications.setObserver(() => notifications++);
+
+  expect(runtime.backgroundTaskControl.moveForegroundToBackground({ kind: 'shell', callId: 'call-1' })).toEqual({
+    ok: true,
+    details: expect.objectContaining({ id: 'shell-1', command: 'pnpm test' }),
+  });
+  expect(notifications).toBe(1);
+  expect(runtime.backgroundSubagentNotifications.drain()).toEqual([
+    expect.objectContaining({
+      kind: 'user_control',
+      action: 'background',
+      target: { kind: 'shell', id: 'shell-1' },
+    }),
+  ]);
+  runtime.dispose();
+});
+
 it('disposal cancels and shutdown settles root background shell jobs', async () => {
-  const sinks: Sinks = { turn: null, background: null, shell: null };
+  const sinks: Sinks = { turn: null, background: null, shell: null, approval: null };
   let cancelCalls = 0;
   let disposeCalls = 0;
   let releaseSettlement!: () => void;
@@ -289,4 +414,32 @@ it('disposal cancels and shutdown settles root background shell jobs', async () 
   releaseSettlement();
   await shutdown;
   expect(sinks.shell).toBeNull();
+});
+
+it('shutdown retains the subagent sinks until adopted leases settle', async () => {
+  const sinks: Sinks = { turn: null, background: null, shell: null, approval: null };
+  let release!: () => void;
+  const runtime = createSessionRuntime({
+    sessionId: 'bg-subagent-dispose',
+    agentClient: makeClient(sinks, {
+      disposeBackgroundSubagents: () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    }),
+    deps: { logger: makeLogger(), sessionContextService },
+  });
+
+  let settled = false;
+  const shutdown = runtime.shutdown().then(() => {
+    settled = true;
+  });
+  await Promise.resolve();
+  expect(settled).toBe(false);
+  expect(typeof sinks.background).toBe('function');
+  expect(typeof sinks.approval).toBe('function');
+  release();
+  await shutdown;
+  expect(sinks.background).toBeNull();
+  expect(sinks.approval).toBeNull();
 });

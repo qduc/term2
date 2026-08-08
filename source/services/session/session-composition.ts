@@ -48,6 +48,7 @@ import {
   type BackgroundSubagentNotificationPort,
   type BackgroundSubagentTaskPort,
 } from '../subagents/subagent-notification-store.js';
+import { BackgroundTaskControl, type BackgroundTaskControlPort } from './background-task-control.js';
 import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import {
   PostExecutePendingRegistry,
@@ -60,6 +61,7 @@ import type { SessionAccessState } from './session-access-state.js';
 import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import { HookEventFactory } from '../hooks/hook-event-factory.js';
 import { PendingInteractionState } from './pending-interaction-state.js';
+import { BackgroundSubagentApprovalController } from '../approval/background-subagent-approval-controller.js';
 
 const asAskUserAnswerSink = (value: unknown): AskUserAnswerSink | null =>
   value && typeof (value as AskUserAnswerSink).setAskUserAnswer === 'function' ? (value as AskUserAnswerSink) : null;
@@ -135,6 +137,10 @@ export type SessionRuntimeInternals = {
   backgroundSubagentNotifications: BackgroundSubagentNotificationChannel;
   /** Read-only lifecycle projection for background subagent UI. */
   backgroundSubagentTasks: BackgroundSubagentTaskChannel;
+  /** FIFO approval control for adopted background subagents. */
+  backgroundSubagentApprovals: BackgroundSubagentApprovalChannel;
+  /** Per-item details and stop controls for session-owned background work. */
+  backgroundTaskControl: BackgroundTaskControlPort;
   /** Session-owned fail-closed gates for post-execute policies. */
   postExecutePending: PostExecutePendingRegistry;
   /** Authoritative pending approval and ask_user protocol state. */
@@ -226,6 +232,11 @@ export type BackgroundSubagentNotificationChannel = BackgroundSubagentNotificati
 
 export type BackgroundSubagentTaskChannel = BackgroundSubagentTaskPort;
 
+export type BackgroundSubagentApprovalChannel = Pick<
+  BackgroundSubagentApprovalController,
+  'getSnapshot' | 'subscribe' | 'resolve'
+>;
+
 // ── Session Runtime (public) ───────────────────────────────────────
 
 /**
@@ -264,6 +275,10 @@ export type SessionRuntime = {
   backgroundSubagentNotifications: BackgroundSubagentNotificationChannel;
   /** Read-only lifecycle projection for background subagent UI. */
   backgroundSubagentTasks: BackgroundSubagentTaskChannel;
+  /** FIFO approval control for adopted background subagents. */
+  backgroundSubagentApprovals: BackgroundSubagentApprovalChannel;
+  /** Per-item details and stop controls for session-owned background work. */
+  backgroundTaskControl: BackgroundTaskControlPort;
   /**
    * Idempotent disposal: aborts active SDK work, invalidates the active
    * generation, unsubscribes downgrade listeners, clears per-turn state.
@@ -312,6 +327,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     },
     drain: () => notificationStore.drain(),
     retain: (notifications) => notificationStore.retain(notifications),
+    enqueueUserControl: (notification) => notificationStore.enqueueUserControl(notification),
     setObserver: (observer) => {
       notificationObserver = observer;
     },
@@ -322,6 +338,45 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
       taskObserver = observer;
     },
   };
+  const backgroundTaskControl = new BackgroundTaskControl({
+    client: agentClient,
+    notifications: notificationStore,
+    onNotification: () => {
+      try {
+        notificationObserver?.();
+      } catch (error) {
+        logger.warn('Background task control notification observer threw', {
+          eventType: 'subagent.control_notification_observer_failed',
+          category: 'subagent',
+          sessionId: id,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+      }
+    },
+    onTaskChange: () => {
+      try {
+        taskObserver?.();
+      } catch (error) {
+        logger.warn('Background task control task observer threw', {
+          eventType: 'subagent.control_task_observer_failed',
+          category: 'subagent',
+          sessionId: id,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+      }
+    },
+  });
+
+  // This controller owns background-child approval policy and FIFO ordering.
+  // It intentionally does not touch ApprovalState, which owns the root turn.
+  const backgroundSubagentApprovals = new BackgroundSubagentApprovalController({
+    logger,
+    sessionId: id,
+    nestedCompatibility: getMethod<
+      [],
+      import('./nested-tool-compatibility-state.js').NestedToolCompatibilityState | undefined
+    >(agentClient, 'getNestedToolCompatibilityState')?.call(agentClient),
+  });
 
   const generationGuard = new GenerationGuard();
   // Factory-owned handles supply this same registry to the root tool policy.
@@ -421,6 +476,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     }
   };
   resolvedSubagentEventSinkHost?.setBackgroundSubagentEventSink?.(recordBackgroundEvent);
+  resolvedSubagentEventSinkHost?.setBackgroundSubagentApprovalPauseSink?.(backgroundSubagentApprovals.publish);
   resolvedBackgroundShellEventSinkHost?.setBackgroundShellEventSink?.(recordBackgroundEvent);
 
   const approvalFlow = new ApprovalFlowCoordinator({
@@ -639,6 +695,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
 
   let disposed = false;
   let backgroundShellSettlement: Promise<void> | undefined;
+  let backgroundSubagentSettlement: Promise<void> | undefined;
   const dispose = (): void => {
     if (disposed) return;
     disposed = true;
@@ -656,7 +713,18 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     getMethod<[], void>(agentClient, 'cancelBackgroundShellJobs')?.call(agentClient);
     notificationObserver = null;
     taskObserver = null;
-    resolvedSubagentEventSinkHost?.setBackgroundSubagentEventSink?.(null);
+    const subagentDisposal = getMethod<[], Promise<void>>(agentClient, 'disposeBackgroundSubagents')?.call(agentClient);
+    backgroundSubagentSettlement = subagentDisposal
+      ? Promise.resolve(subagentDisposal).finally(() => {
+          backgroundSubagentApprovals.close();
+          resolvedSubagentEventSinkHost?.setBackgroundSubagentApprovalPauseSink?.(null);
+          resolvedSubagentEventSinkHost?.setBackgroundSubagentEventSink?.(null);
+        })
+      : Promise.resolve().then(() => {
+          backgroundSubagentApprovals.close();
+          resolvedSubagentEventSinkHost?.setBackgroundSubagentApprovalPauseSink?.(null);
+          resolvedSubagentEventSinkHost?.setBackgroundSubagentEventSink?.(null);
+        });
     const shellDisposal = getMethod<[], Promise<void>>(agentClient, 'disposeBackgroundShellJobs')?.call(agentClient);
     backgroundShellSettlement = shellDisposal
       ? Promise.resolve(shellDisposal).finally(() =>
@@ -672,6 +740,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     shutdownPromise ??= (async () => {
       dispose();
       await backgroundShellSettlement;
+      await backgroundSubagentSettlement;
       await hookLifecycle?.shutdown();
     })();
     return shutdownPromise;
@@ -712,6 +781,8 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     resolvedBackgroundShellEventSinkHost,
     backgroundSubagentNotifications,
     backgroundSubagentTasks,
+    backgroundSubagentApprovals,
+    backgroundTaskControl,
     postExecutePending,
     pendingInteraction,
   };
@@ -737,6 +808,8 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
     resolvedSubagentEventSinkHost,
     backgroundSubagentNotifications,
     backgroundSubagentTasks,
+    backgroundSubagentApprovals,
+    backgroundTaskControl,
     postExecutePending,
     pendingInteraction,
   } = internals;
@@ -790,6 +863,8 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
     },
     backgroundSubagentNotifications,
     backgroundSubagentTasks,
+    backgroundSubagentApprovals,
+    backgroundTaskControl,
     dispose,
     shutdown: internals.shutdown,
   };

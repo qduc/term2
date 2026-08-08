@@ -1,8 +1,9 @@
 # Menu system redesign
 
-Status: partially implemented. Phases 1–3 and Phase 4 graphs 1–3 are merged
-(`efa50cfa` and `3b4f67dd`; implementation commits `ed3a8a31` and `b9ac1938`).
-Phase 4 graph 4 and Phase 5 are pending.
+Status: partially implemented. All of Phase 4 is merged — graphs 1–2 at
+`efa50cfa`, graph 3 at `3b4f67dd`, graph 4 at `32eabded` (implementation
+commits `ed3a8a31`, `b9ac1938`, `c05117a2` + `683be8f1`). **Phase 5 (Step 3,
+legacy deletion) is the only outstanding work.**
 
 ## Resume here
 
@@ -110,9 +111,16 @@ Original scope, for the record:
 Out of scope: the direct `/model ` trigger, `/effort`, `/auto-approve`, and
 handoff. Those are Step 2.
 
-#### Step 2 — Phase 4 graph 4: direct model/effort triggers and handoff
+#### Step 2 — Phase 4 graph 4 — DONE (`c05117a2` + `683be8f1`, merged `32eabded`)
 
-In scope:
+The handoff conversion landed correctly: the structural gate prints nothing,
+and the falsification experiment failed exactly the two "closed without
+choosing" tests and nothing else.
+
+A regression was caught in review and fixed in `683be8f1`. See
+`### Enabling a rule makes dead branches live` for the general rule it taught.
+
+In scope (as originally written):
 
 - Enable `command-model` and `direct-setting-value`.
 - Replace `use-handoff-flow.ts:108-110`
@@ -213,6 +221,54 @@ that it is *not* sent when the picker closes without a choice. Both cases
 already exist as tests and both must survive the rewrite with their meaning
 intact. If the rewritten tests would still pass with the send-on-close signal
 removed entirely, they are pinning the mechanism and the gate has not been met.
+
+Outcome in Step 2: the gate was met. The structural grep prints nothing and
+removing the send-on-close signal failed exactly the two "closed without
+choosing" tests. The section below records what the gate did *not* cover.
+
+### Enabling a rule makes dead branches live
+
+Generalize the handoff gate above. It was scoped to one conversion; the hazard
+is structural and applies to every graph.
+
+**Enabling a trigger rule makes a previously unreachable session branch live in
+production for the first time.** A step that builds a session while its rule is
+disabled leaves that branch implemented, typechecked, and unexercised — Step 1
+did exactly this with `ModelMenuSession`'s `target.type === 'command'` accept
+path. The step that *enables* the rule inherits it.
+
+This produced a real regression in Step 2, fixed in `683be8f1`. Accepting a
+`/model gpt-4` selection posted the literal string to the model as a chat
+message instead of executing the command. The accept path closes through a
+`submit-prompt` intent whose only handler was `sendUserMessage`, bypassing the
+`parseInput` → `resolveSlashCommand` → `command.action(...)` dispatch that
+`handleSubmit` had always run.
+
+The suite stayed green because the only test covering that behavior renders a
+hand-built harness (`grep -n "ModelSelectionSubmitHarness"
+source/components/InputBox.test.tsx`) that drives the pre-migration mechanism
+and never touches the controller. It asserts only that *something* submitted,
+so it passes whether or not the controller path works.
+
+Two rules follow:
+
+- When a step enables a rule, every accept path that rule makes reachable needs
+  a test **through the controller**. Any pre-existing test of that behavior must
+  be checked for whether it bypasses the controller — if it does, it is not
+  coverage, and re-pinning it to the new mechanism does not make it coverage.
+- **A test written after a fix and never observed failing is not evidence.**
+  What resolved this was requiring the new test be seen red against the unfixed
+  code first; it produced `waitForCondition timed out after 3000ms. Last value:
+  0`. Demand the red observation, not the assertion that a test was added.
+
+The fix extracted one dispatcher with two callers rather than duplicating the
+parse: `grep -rn "tryExecuteSlashCommand" source/`. `resolveSlashCommand` now
+appears only inside `source/utils/slash-command-dispatch.ts`, so `handleSubmit`
+and the intent host cannot drift.
+
+Known remaining gap, handed to Step 3: no test pins `app.tsx`'s own call to
+`tryExecuteSlashCommand` — the covering test wires its own mirror intent host,
+so deleting that line from `app.tsx` fails nothing.
 
 ### ModelSettingConfig
 

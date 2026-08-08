@@ -23,7 +23,6 @@ import { useShellMode } from './hooks/use-shell-mode.js';
 import { ShellInteractionSession, type SSHInfo } from './services/shell/shell-interaction-session.js';
 import { useAppCommands } from './hooks/use-app-commands.js';
 import { useHandoffFlow } from './hooks/use-handoff-flow.js';
-import { usePendingTurnGuards } from './hooks/use-pending-turn-guards.js';
 import { useTerminalFocusNotifier } from './hooks/use-terminal-focus-notifier.js';
 import { useAppKeyboardShortcuts } from './hooks/use-app-keyboard-shortcuts.js';
 import { hasUserTurnContent, type UserTurn } from './types/user-turn.js';
@@ -160,6 +159,9 @@ const App: FC<AppProps> = ({
     backgroundSubagentTasks,
     backgroundSubagentTasksNow,
     sendUserMessage,
+    admissionConfirmation,
+    submitTurnForAdmission,
+    resolveAdmissionConfirmation,
     submitConversationTurn,
     submitApprovalDecision,
     onTypeAnswer,
@@ -201,6 +203,7 @@ const App: FC<AppProps> = ({
       }
     }, []),
     settingsService,
+    historyService,
     onRestoreInput: setInput,
     logWriter,
     notifier,
@@ -274,17 +277,57 @@ const App: FC<AppProps> = ({
     setModel,
   });
 
-  const pendingGuards = usePendingTurnGuards({
-    input,
-    mode,
-    images,
-    conversationService,
-    historyService,
-    loggingService,
-    sendUserMessage,
-    replaceInput,
-    setImages,
-  });
+  // The composer owns this live preview because it changes as the user types;
+  // admitted turns and confirmation state belong to ConversationAdmissionWorkflow.
+  const largeUncachedWarning = useMemo(() => {
+    if (!input || mode !== 'text' || input.startsWith('/')) return null;
+    const preview = conversationService.previewLargeUncachedInput({ text: input }, Date.now());
+    return preview.action === 'warn' ? preview : null;
+  }, [conversationService, input, mode]);
+
+  const pendingSurgeTurn = admissionConfirmation?.kind === 'surge' ? admissionConfirmation.turn : null;
+  const pendingSurgeReason = admissionConfirmation?.kind === 'surge' ? admissionConfirmation.reason : '';
+  const pendingLargeUncachedTurn = admissionConfirmation?.kind === 'large_uncached' ? admissionConfirmation.turn : null;
+  const pendingLargeUncachedTokens =
+    admissionConfirmation?.kind === 'large_uncached' ? admissionConfirmation.estimatedTokens : 0;
+
+  const resolveAdmission = useCallback(
+    async (decision: 'approve' | 'decline') => {
+      const confirmation = admissionConfirmation;
+      if (!confirmation) return;
+      const result = resolveAdmissionConfirmation(confirmation.id, decision);
+      if (result.kind === 'stale') return;
+
+      if (result.kind === 'declined') {
+        queueMicrotask(() => replaceInput(result.turn.text || ''));
+        return;
+      }
+      if (result.kind !== 'submitted') return;
+
+      // Composer attachments are presentation state, and only a decision that
+      // matched the displayed confirmation may clear them.
+      replaceInput('');
+      if (decision === 'approve') setImages([]);
+      await result.completion;
+    },
+    [admissionConfirmation, replaceInput, resolveAdmissionConfirmation, setImages],
+  );
+
+  const handleLargeUncachedApprove = useCallback(() => resolveAdmission('approve'), [resolveAdmission]);
+  const handleLargeUncachedDecline = useCallback(() => resolveAdmission('decline'), [resolveAdmission]);
+  const handleSurgeApprove = useCallback(() => resolveAdmission('approve'), [resolveAdmission]);
+  const handleSurgeDecline = useCallback(() => resolveAdmission('decline'), [resolveAdmission]);
+
+  const submitAdmittedTurn = useCallback(
+    async (turn: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) => {
+      const result = options ? submitTurnForAdmission(turn, options) : submitTurnForAdmission(turn);
+      if (result.kind === 'submitted') {
+        replaceInput('');
+        await result.completion;
+      }
+    },
+    [replaceInput, submitTurnForAdmission],
+  );
 
   const redrawMessageList = useCallback(() => {
     clearTerminalForRedraw(stdout);
@@ -447,8 +490,8 @@ const App: FC<AppProps> = ({
   // prompt is rendered (Closing the Ink fan-out coupling — see input-owner.ts).
   const inputOwner = deriveInputOwner({
     handoffStage: handoff.handoffState?.stage ?? null,
-    pendingSurgeTurn: pendingGuards.pendingSurgeTurn,
-    pendingLargeUncachedTurn: pendingGuards.pendingLargeUncachedTurn,
+    pendingSurgeTurn,
+    pendingLargeUncachedTurn,
     waitingForApproval: effectiveWaitingForApproval,
     waitingForRejectionReason: effectiveWaitingForRejectionReason,
     waitingForAskUserAnswer: effectiveWaitingForAskUserAnswer,
@@ -485,7 +528,7 @@ const App: FC<AppProps> = ({
     stopProcessing,
     handoffState: handoff.handoffState,
     cancelHandoff: handoff.cancelHandoff,
-    pendingLargeUncachedTurn: pendingGuards.pendingLargeUncachedTurn,
+    pendingLargeUncachedTurn,
     liteMode,
     toggleShellMode,
     cycleAppModes,
@@ -543,19 +586,10 @@ const App: FC<AppProps> = ({
       }
 
       case 'message':
-        if (options) {
-          await pendingGuards.sendGuardedTurn(attachPendingSkill(turn), options);
-        } else {
-          await pendingGuards.sendGuardedTurn(attachPendingSkill(turn));
-        }
-        return;
+        return await submitAdmittedTurn(attachPendingSkill(turn), options);
     }
 
-    if (options) {
-      await pendingGuards.sendGuardedTurn(attachPendingSkill(turn), options);
-    } else {
-      await pendingGuards.sendGuardedTurn(attachPendingSkill(turn));
-    }
+    await submitAdmittedTurn(attachPendingSkill(turn), options);
   };
 
   const handleSettingChange = useCallback(
@@ -597,7 +631,7 @@ const App: FC<AppProps> = ({
         if (tryExecuteSlashCommand(intentRequest.intent.text, slashCommands, replaceInput)) {
           return;
         }
-        void sendUserMessage({ text: intentRequest.intent.text });
+        void submitAdmittedTurn({ text: intentRequest.intent.text });
         return;
       }
       return handleSettingsIntent(intentRequest, {
@@ -611,7 +645,7 @@ const App: FC<AppProps> = ({
   }, [
     controller,
     handleRewindSelect,
-    sendUserMessage,
+    submitAdmittedTurn,
     settingsService,
     handleSettingChange,
     addSystemMessage,
@@ -682,15 +716,15 @@ const App: FC<AppProps> = ({
             onHandoffCancel={handoff.cancelHandoff}
             onStandardModeConfirm={handoff.confirmStandardMode}
             onStandardModeDecline={handoff.declineStandardMode}
-            largeUncachedWarning={pendingGuards.largeUncachedWarning}
-            pendingLargeUncachedTurn={pendingGuards.pendingLargeUncachedTurn}
-            pendingLargeUncachedTokens={pendingGuards.pendingLargeUncachedTokens}
-            onLargeUncachedApprove={pendingGuards.handleLargeUncachedApprove}
-            onLargeUncachedDecline={pendingGuards.handleLargeUncachedDecline}
-            pendingSurgeTurn={pendingGuards.pendingSurgeTurn}
-            pendingSurgeReason={pendingGuards.pendingSurgeReason}
-            onSurgeApprove={pendingGuards.handleSurgeApprove}
-            onSurgeDecline={pendingGuards.handleSurgeDecline}
+            largeUncachedWarning={largeUncachedWarning}
+            pendingLargeUncachedTurn={pendingLargeUncachedTurn}
+            pendingLargeUncachedTokens={pendingLargeUncachedTokens}
+            onLargeUncachedApprove={handleLargeUncachedApprove}
+            onLargeUncachedDecline={handleLargeUncachedDecline}
+            pendingSurgeTurn={pendingSurgeTurn}
+            pendingSurgeReason={pendingSurgeReason}
+            onSurgeApprove={handleSurgeApprove}
+            onSurgeDecline={handleSurgeDecline}
             onSlashTabComplete={(command) => {
               if (command.name === 'rewind' || command.name === 'undo' || command.name === 'retry') {
                 openRewindMenu(command.name === 'retry' ? 'resend' : 'edit');

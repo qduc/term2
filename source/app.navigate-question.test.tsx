@@ -87,6 +87,9 @@ vi.mock('./hooks/use-conversation.js', () => ({
     thinkingStartedAt: null,
     toolCallStreamingInfo: null,
     sendUserMessage: mocks.sendUserMessage,
+    admissionConfirmation: null,
+    submitTurnForAdmission: vi.fn(() => ({ kind: 'submitted', completion: Promise.resolve() })),
+    resolveAdmissionConfirmation: vi.fn(() => ({ kind: 'stale' })),
     submitConversationTurn: vi.fn(async () => false),
     submitApprovalDecision: vi.fn(async () => {}),
     handleApprovalDecision: mocks.handleApprovalDecision,
@@ -131,22 +134,6 @@ vi.mock('./hooks/use-app-commands.js', () => ({
     slashCommands: [],
     cycleAppModes: mocks.cycleAppModes,
     togglePlanMode: vi.fn(),
-  }),
-}));
-
-vi.mock('./hooks/use-pending-turn-guards.js', () => ({
-  usePendingTurnGuards: () => ({
-    largeUncachedWarning: null,
-    pendingLargeUncachedTurn: null,
-    pendingLargeUncachedTokens: 0,
-    pendingSurgeTurn: null,
-    pendingSurgeReason: '',
-    guardTurn: vi.fn(),
-    sendGuardedTurn: vi.fn(async () => true),
-    handleLargeUncachedApprove: vi.fn(async () => {}),
-    handleLargeUncachedDecline: vi.fn(),
-    handleSurgeApprove: vi.fn(async () => {}),
-    handleSurgeDecline: vi.fn(),
   }),
 }));
 

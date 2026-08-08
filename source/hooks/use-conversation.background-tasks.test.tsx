@@ -30,6 +30,7 @@ it.sequential('useConversation observes background task snapshots for the compos
     const { backgroundSubagentTasks } = useConversation({
       conversationService,
       loggingService,
+      historyService: { addMessage() {} },
     });
     return (
       <Text>

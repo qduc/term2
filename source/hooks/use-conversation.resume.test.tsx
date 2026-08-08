@@ -20,6 +20,7 @@ const Harness = ({ initialMessages }: { initialMessages: Message[] }) => {
   const { messages, lastUsage } = useConversation({
     conversationService,
     loggingService,
+    historyService: { addMessage() {} },
     initialMessages,
   });
 

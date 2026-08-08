@@ -174,6 +174,7 @@ it('with autoApprove=true: approves on approval_required', async () => {
   const stderr = createStringWritable();
 
   const calls: any[] = [];
+  let exportStateCalls = 0;
 
   const session: any = {
     async sendMessage(_prompt: string) {
@@ -181,14 +182,18 @@ it('with autoApprove=true: approves on approval_required', async () => {
         type: 'approval_required',
         approval: {
           agentName: 'CLI Agent',
-          toolName: 'bash',
-          argumentsText: 'echo hi',
+          toolName: 'apply_patch',
+          argumentsText: '{"patch":"..."}',
         },
       };
     },
     async handleApprovalDecision(answer: string, rejectionReason?: string) {
       calls.push({ answer, rejectionReason });
       return { type: 'response', finalText: 'done', commandMessages: [] };
+    },
+    exportState() {
+      exportStateCalls += 1;
+      return { history: [] };
     },
   };
 
@@ -201,6 +206,7 @@ it('with autoApprove=true: approves on approval_required', async () => {
 
   expect(exitCode).toBe(0);
   expect(calls).toEqual([{ answer: 'y', rejectionReason: undefined }]);
+  expect(exportStateCalls).toBe(0);
   expect(stderr.getOutput().toLowerCase().includes('auto-approve')).toBe(true);
 });
 
@@ -209,6 +215,7 @@ it('with autoApprove=false: rejects on approval_required with explanation', asyn
   const stderr = createStringWritable();
 
   const calls: any[] = [];
+  let exportStateCalls = 0;
 
   const session: any = {
     async sendMessage(_prompt: string) {
@@ -224,6 +231,10 @@ it('with autoApprove=false: rejects on approval_required with explanation', asyn
     async handleApprovalDecision(answer: string, rejectionReason?: string) {
       calls.push({ answer, rejectionReason });
       return { type: 'response', finalText: 'done', commandMessages: [] };
+    },
+    exportState() {
+      exportStateCalls += 1;
+      return { history: [] };
     },
   };
 
@@ -241,7 +252,9 @@ it('with autoApprove=false: rejects on approval_required with explanation', asyn
       rejectionReason: 'Non-interactive mode: use --auto-approve to allow tool execution',
     },
   ]);
+  expect(exportStateCalls).toBe(0);
   expect(stdout.getOutput()).toBe('\n');
+  expect(stderr.getOutput()).toBe('');
 });
 
 it('writes parent and subagent tool summaries to stderr only', async () => {
@@ -467,6 +480,64 @@ it('with autoApprove=true: rejects YELLOW command if no auto-approve model confi
   expect(calls.length).toBe(1);
   expect(calls[0].answer).toBe('n');
   expect(calls[0].rejectionReason ?? '').toMatch(/YELLOW/);
+});
+
+it('with autoApprove=true: exits without continuing when configured YELLOW history export fails', async () => {
+  const stdout = createStringWritable();
+  const stderr = createStringWritable();
+  let continuationCalls = 0;
+  let chatCalls = 0;
+
+  const session: any = {
+    async sendMessage(_prompt: string) {
+      return {
+        type: 'approval_required',
+        approval: {
+          agentName: 'CLI Agent',
+          toolName: 'bash',
+          argumentsText: 'npm install',
+          callId: 'call-yellow-history-error',
+        },
+      };
+    },
+    async handleApprovalDecision() {
+      continuationCalls += 1;
+      return { type: 'response', finalText: 'done', commandMessages: [] };
+    },
+    exportState() {
+      throw new Error('history unavailable');
+    },
+  };
+
+  const settingsService: any = {
+    get(key: string) {
+      if (key === 'agent.autoApproveModel') return 'gpt-4o-mini';
+      return undefined;
+    },
+    getDynamic() {
+      return undefined;
+    },
+  };
+  const agentClient: any = {
+    async chat() {
+      chatCalls += 1;
+      return '{"results":[{"approved":true,"reasoning":"safe"}]}';
+    },
+  };
+
+  const exitCode = await runWithSession(session, {
+    prompt: 'run',
+    autoApprove: true,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+    settingsService,
+    agentClient,
+  });
+
+  expect(exitCode).toBe(1);
+  expect(continuationCalls).toBe(0);
+  expect(chatCalls).toBe(0);
+  expect(stderr.getOutput()).toContain('error history unavailable');
 });
 
 it('with autoApprove=true: uses LLM to evaluate YELLOW commands', async () => {

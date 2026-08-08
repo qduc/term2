@@ -8,17 +8,15 @@ import {
 import type { ConversationAgentClient } from './services/conversation-agent-client.js';
 import type { ConversationEvent } from './services/conversation/conversation-events.js';
 import type { UserTurn } from './types/user-turn.js';
-import type { ApprovalDescriptor, ConversationTerminal } from './contracts/conversation.js';
+import type { ConversationTerminal } from './contracts/conversation.js';
 import type {
   SendMessageOptions,
   HandleApprovalDecisionOptions,
 } from './services/conversation/conversation-adapter.js';
 import type { SavedToolExecution } from './services/tool-execution-ledger.js';
 import { randomUUID } from 'node:crypto';
-import { classifyCommandDetailed } from './utils/shell/command-safety/index.js';
-import { SafetyStatus } from './utils/shell/command-safety/constants.js';
-import { evaluateShellAutoApprovalAdvisories } from './services/approval/shell-auto-approval-evaluator.js';
 import { ToolOwnershipRegistry } from './services/approval/tool-ownership-registry.js';
+import { NonInteractiveApprovalPolicy } from './services/approval/non-interactive-approval-policy.js';
 import type { HookLifecyclePort } from './services/hooks/hook-service.js';
 import type { HookEventFactory } from './services/hooks/hook-event-factory.js';
 
@@ -40,7 +38,7 @@ export interface NonInteractiveConfig {
   hookEvents?: HookEventFactory;
 }
 
-export const NON_INTERACTIVE_REJECTION_REASON = 'Non-interactive mode: use --auto-approve to allow tool execution';
+export { NON_INTERACTIVE_REJECTION_REASON } from './services/approval/non-interactive-approval-policy.js';
 
 export const createNonInteractiveSessionId = (): string => `non-interactive-${randomUUID()}`;
 
@@ -96,6 +94,12 @@ export async function runWithSession(session: ConversationSessionLike, config: N
   const stdout = config.stdout ?? process.stdout;
   const stderr = config.stderr ?? process.stderr;
   const sessionContextService = config.sessionContextService ?? new SessionContextService();
+  const approvalPolicy = new NonInteractiveApprovalPolicy({
+    settingsService: config.settingsService,
+    agentClient: config.agentClient,
+    logger: config.logger,
+    sessionContextService,
+  });
 
   let streamedTextLength = 0;
 
@@ -147,79 +151,18 @@ export async function runWithSession(session: ConversationSessionLike, config: N
       : await session.sendMessage(config.prompt, { onEvent } as any);
 
     while (result?.type === 'approval_required') {
-      if (config.autoApprove) {
-        const approval: ApprovalDescriptor = result.approval;
-        let shouldApprove = true;
-        let rejectionReason: string | undefined;
-
-        if (approval.toolName === 'shell' || approval.toolName === 'bash') {
-          const command = approval.argumentsText;
-          const classification = classifyCommandDetailed(command, config.logger);
-
-          if (classification.status === SafetyStatus.RED) {
-            shouldApprove = false;
-            rejectionReason = `Heuristic validation failed: command is RED (dangerous) and cannot be executed automatically: ${command}`;
-          } else if (classification.status === SafetyStatus.YELLOW) {
-            const autoApproveModel =
-              config.settingsService && config.agentClient
-                ? config.settingsService.get('agent.choreModel') ?? config.settingsService.get('agent.autoApproveModel')
-                : undefined;
-            if (!autoApproveModel) {
-              shouldApprove = false;
-              rejectionReason = `Heuristic validation failed: command is YELLOW (suspicious) and no auto-approve model is configured: ${command}`;
-            } else {
-              const history = session.exportState ? session.exportState().history : [];
-              try {
-                const advisories = await evaluateShellAutoApprovalAdvisories({
-                  commands: [{ id: approval.callId || '__single__', command }],
-                  history: history as any,
-                  settingsService: config.settingsService,
-                  agentClient: config.agentClient!,
-                  logger:
-                    config.logger ??
-                    ({
-                      debug: () => {},
-                      info: () => {},
-                      warn: () => {},
-                      error: () => {},
-                      security: () => {},
-                    } as any),
-                  sessionContextService,
-                });
-                const advisory = advisories.get(approval.callId || '__single__');
-                if (advisory?.approved) {
-                  shouldApprove = true;
-                } else {
-                  shouldApprove = false;
-                  rejectionReason = `LLM evaluation rejected the command: ${
-                    advisory?.reasoning ?? 'No reasoning provided'
-                  }`;
-                }
-              } catch (err) {
-                shouldApprove = false;
-                rejectionReason = `LLM auto-approval evaluation failed: ${
-                  err instanceof Error ? err.message : String(err)
-                }`;
-              }
-            }
-          }
-        }
-
-        if (shouldApprove) {
-          result = supportsPersistentEventSink
-            ? await session.handleApprovalDecision('y', undefined)
-            : await session.handleApprovalDecision('y', undefined, { onEvent } as any);
-        } else {
-          stderr.write(`Approval Rejected: ${rejectionReason}\n`);
-          result = supportsPersistentEventSink
-            ? await session.handleApprovalDecision('n', rejectionReason)
-            : await session.handleApprovalDecision('n', rejectionReason, { onEvent } as any);
-        }
-      } else {
-        result = supportsPersistentEventSink
-          ? await session.handleApprovalDecision('n', NON_INTERACTIVE_REJECTION_REASON)
-          : await session.handleApprovalDecision('n', NON_INTERACTIVE_REJECTION_REASON, { onEvent } as any);
+      const decision = await approvalPolicy.decide({
+        autoApprove: config.autoApprove,
+        approval: result.approval,
+        getHistory: () => session.exportState?.().history ?? [],
+      });
+      const rejectionReason = decision.answer === 'n' ? decision.rejectionReason : undefined;
+      if (decision.answer === 'n' && decision.reportRejection) {
+        stderr.write(`Approval Rejected: ${rejectionReason}\n`);
       }
+      result = supportsPersistentEventSink
+        ? await session.handleApprovalDecision(decision.answer, rejectionReason)
+        : await session.handleApprovalDecision(decision.answer, rejectionReason, { onEvent } as any);
 
       if (result === null) {
         stderr.write('error No pending approval context (unexpected in non-interactive mode).\n');

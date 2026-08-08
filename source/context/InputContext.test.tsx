@@ -185,11 +185,12 @@ it.sequential('setMode accepts all mode values', async () => {
 
 it.sequential('setCursorOffset accepts positive values', async () => {
   const TestUpdater = () => {
-    const { cursorOffset, setCursorOffset } = useInputContext();
+    const { cursorOffset, setInput, setCursorOffset } = useInputContext();
 
     useEffect(() => {
-      setCursorOffset(42);
-    }, [setCursorOffset]);
+      setInput('hello world');
+      setCursorOffset(5);
+    }, [setInput, setCursorOffset]);
 
     return <Text>{cursorOffset.toString()}</Text>;
   };
@@ -202,7 +203,56 @@ it.sequential('setCursorOffset accepts positive values', async () => {
 
   await flushReactUpdates(5);
 
-  expect(lastFrame()!.includes('42')).toBe(true);
+  expect(lastFrame()!.includes('5')).toBe(true);
+});
+
+it.sequential('commits consecutive editor updates synchronously', async () => {
+  const TestUpdater = () => {
+    const { input, cursorOffset, setInput, setCursorOffset } = useInputContext();
+
+    useEffect(() => {
+      setInput('first');
+      setInput('second');
+      setCursorOffset(3);
+    }, [setInput, setCursorOffset]);
+
+    return <Text>{`${input}:${cursorOffset}`}</Text>;
+  };
+
+  const { lastFrame } = await renderInAct(
+    <InputProvider>
+      <TestUpdater />
+    </InputProvider>,
+  );
+
+  await flushReactUpdates(5);
+
+  expect(lastFrame()).toContain('second:3');
+});
+
+it.sequential('publishes controller text and cursor after an atomic update', async () => {
+  let controller: ReturnType<typeof useInputContext>['controller'] | undefined;
+  const TestUpdater = () => {
+    const { controller: currentController, input, cursorOffset, setInputAndCursor } = useInputContext();
+    controller = currentController;
+
+    useEffect(() => {
+      setInputAndCursor('ab', 1);
+    }, [setInputAndCursor]);
+
+    return <Text>{`${input}:${cursorOffset}`}</Text>;
+  };
+
+  const { lastFrame } = await renderInAct(
+    <InputProvider>
+      <TestUpdater />
+    </InputProvider>,
+  );
+
+  await flushReactUpdates(5);
+
+  expect(lastFrame()).toContain('ab:1');
+  expect(controller?.getSnapshot().editor).toMatchObject({ text: 'ab', cursor: 1 });
 });
 
 it.sequential('setCursorOffset accepts zero', async () => {

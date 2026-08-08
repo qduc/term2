@@ -7,17 +7,22 @@ export { SKILLS_TRIGGER } from '../components/input/triggers.js';
 
 export const useSkillSelection = (deps: { skillsService: SkillsService }) => {
   const { skillsService } = deps;
-  const { mode, setMode, input, cursorOffset, triggerIndex, setTriggerIndex } = useInputContext();
+  const { mode, setMode, input, cursorOffset, triggerIndex, setTriggerIndex, controller } = useInputContext();
 
-  const isOpen = mode === 'skill_selection';
+  const controllerFrame = controller.getSnapshot().stack.at(-1);
+  const isControllerOpen = controllerFrame?.kind === 'skills';
+  const isOpen = isControllerOpen || mode === 'skill_selection';
+  const activeTriggerIndex = isControllerOpen ? controllerFrame.binding.replacement.start : triggerIndex;
 
   const allSkills = useMemo(() => skillsService.getAvailableSkills(), [skillsService]);
 
   const query = useMemo(() => {
-    if (!isOpen || triggerIndex === null) return '';
+    if (!isOpen) return '';
+    if (isControllerOpen) return controllerFrame.binding.query;
+    if (triggerIndex === null) return '';
     const end = Math.min(cursorOffset, input.length);
     return input.slice(triggerIndex, end);
-  }, [isOpen, triggerIndex, input, cursorOffset]);
+  }, [isOpen, isControllerOpen, controllerFrame, triggerIndex, input, cursorOffset]);
 
   const filteredSkills = useMemo(() => {
     if (!query) return allSkills;
@@ -67,7 +72,7 @@ export const useSkillSelection = (deps: { skillsService: SkillsService }) => {
     open,
     close,
     query,
-    triggerIndex,
+    triggerIndex: activeTriggerIndex,
     skills: filteredSkills,
     selectedIndex,
     scrollOffset,

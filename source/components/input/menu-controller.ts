@@ -1,4 +1,5 @@
 import type {
+  BackPolicy,
   EditorEdit,
   EditorSnapshot,
   ExpectedFrame,
@@ -9,6 +10,7 @@ import type {
   MenuEffect,
   MenuEvent,
   MenuFrame,
+  IntentHost,
   MenuInteraction,
   MenuInteractionRegistry,
   MenuState,
@@ -69,10 +71,6 @@ export class TriggerRuleRegistry {
   }
 }
 
-export type IntentHost = (event: {
-  intentRequest: NonNullable<MenuEffect['intent']>;
-}) => Promise<IntentResult> | IntentResult | void;
-
 export class MenuControllerImpl implements MenuController {
   private state: MenuState;
   private listeners = new Set<() => void>();
@@ -112,6 +110,18 @@ export class MenuControllerImpl implements MenuController {
     return this.state;
   }
 
+  public getInteractionRegistry(): MenuInteractionRegistry {
+    return this.interactionRegistry;
+  }
+
+  public setTriggerRegistry(registry: TriggerRuleRegistry): void {
+    this.triggerRegistry = registry;
+  }
+
+  public setIntentHost(host?: IntentHost): void {
+    this.intentHost = host;
+  }
+
   public subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
     return () => {
@@ -129,11 +139,82 @@ export class MenuControllerImpl implements MenuController {
     return `frame-${this.nextFrameId++}`;
   }
 
-  private computeBinding(
-    candidate: TriggerCandidate,
+  private backPolicyFor(frame: MenuFrame | undefined): BackPolicy | undefined {
+    if (frame?.kind === 'settings_value') return frame.origin.back;
+    if (frame?.kind === 'model') return frame.back;
+    return undefined;
+  }
+
+  private identityFromActivation(activationId: string): string {
+    const separator = activationId.lastIndexOf(':');
+    return separator === -1 ? activationId : activationId.slice(0, separator);
+  }
+
+  private refreshTopBinding(stack: MenuFrame[], editor: EditorSnapshot): void {
+    const topFrame = stack.at(-1);
+    if (!topFrame || !('binding' in topFrame)) return;
+
+    const binding = topFrame.binding;
+    stack[stack.length - 1] = {
+      ...topFrame,
+      binding: {
+        ...binding,
+        query: editor.text.slice(binding.queryStart, editor.cursor),
+        revision: editor.revision,
+      },
+    } as MenuFrame;
+  }
+
+  private closeTopTransition(
+    topFrame: MenuFrame,
     editor: EditorSnapshot,
-    activationId: string,
-  ): TextBinding {
+    stack: readonly MenuFrame[],
+  ): { editor: EditorSnapshot; stack: MenuFrame[]; candidateIdentity: string | null } {
+    let nextEditor = editor;
+    let nextStack = [...stack.slice(0, -1)];
+    const back = this.backPolicyFor(topFrame);
+
+    if (topFrame.kind === 'providers') {
+      nextEditor = {
+        ...topFrame.returnPoint.editor,
+        revision: editor.revision + 1,
+      };
+    } else if (back?.type === 'restore') {
+      nextEditor = {
+        ...back.point.editor,
+        revision: editor.revision + 1,
+      };
+    } else if (back?.type === 'close-clear-input') {
+      nextEditor = { text: '', cursor: 0, revision: editor.revision + 1 };
+      // A cleared buffer cannot continue to support a bound parent frame.
+      nextStack = nextStack.filter((frame) => !('binding' in frame));
+    }
+
+    this.refreshTopBinding(nextStack, nextEditor);
+    const nextTop = nextStack.at(-1);
+    if (nextTop && 'binding' in nextTop) {
+      return {
+        editor: nextEditor,
+        stack: nextStack,
+        candidateIdentity: this.identityFromActivation(nextTop.binding.activationId),
+      };
+    }
+
+    if (back?.type === 'close-clear-input') {
+      return { editor: nextEditor, stack: nextStack, candidateIdentity: null };
+    }
+
+    return {
+      editor: nextEditor,
+      stack: nextStack,
+      candidateIdentity:
+        topFrame && 'binding' in topFrame
+          ? this.identityFromActivation(topFrame.binding.activationId)
+          : this.state.resolvedCandidateIdentity,
+    };
+  }
+
+  private computeBinding(candidate: TriggerCandidate, editor: EditorSnapshot, activationId: string): TextBinding {
     const spec = candidate.frame.binding;
     const queryStart = spec?.queryStart ?? candidate.frame.binding?.trigger.range.start ?? 0;
     const queryEnd = 'cursor' as const;
@@ -197,7 +278,8 @@ export class MenuControllerImpl implements MenuController {
     const isSameCandidate = candidate.identity === prevCandidateIdentity;
 
     if (isSameCandidate) {
-      const currentActivationId = `${candidate.identity}:${epoch}`;
+      const currentActivationId =
+        topFrame && 'binding' in topFrame ? topFrame.binding.activationId : `${candidate.identity}:${epoch}`;
       if (currentActivationId === dismissedActivation) {
         // Dismissed activation remains closed
         const nextStack = topFrame && 'binding' in topFrame ? stack.slice(0, -1) : stack;
@@ -229,9 +311,7 @@ export class MenuControllerImpl implements MenuController {
 
     // Check successor relationship if top frame exists and has binding
     if (topFrame && 'binding' in topFrame) {
-      const topRule = this.triggerRegistry
-        .getRules()
-        .find((r) => topFrame.kind === r.id || topFrame.id.startsWith(r.id));
+      const topRule = this.triggerRegistry.getRules().find((r) => topFrame.kind === r.id);
 
       const binding = this.computeBinding(candidate, editor, activationId);
       const newFrame = {
@@ -348,21 +428,36 @@ export class MenuControllerImpl implements MenuController {
     }
 
     let { text, cursor, revision } = this.state.editor;
+    const appliesBackPolicy = effect.stack.type === 'close-top' && (!effect.buffer || effect.buffer.type === 'keep');
+    const backPolicy = appliesBackPolicy ? this.backPolicyFor(topFrame) : undefined;
+    let buffer = effect.buffer;
 
-    if (effect.buffer && effect.buffer.type !== 'keep') {
+    if (topFrame?.kind === 'providers' && appliesBackPolicy) {
+      buffer = {
+        type: 'replace',
+        text: topFrame.returnPoint.editor.text,
+        cursor: topFrame.returnPoint.editor.cursor,
+      };
+    } else if (backPolicy?.type === 'restore') {
+      buffer = { type: 'replace', text: backPolicy.point.editor.text, cursor: backPolicy.point.editor.cursor };
+    } else if (backPolicy?.type === 'close-clear-input') {
+      buffer = { type: 'clear' };
+    }
+
+    if (buffer && buffer.type !== 'keep') {
       revision += 1;
 
-      switch (effect.buffer.type) {
+      switch (buffer.type) {
         case 'clear':
           text = '';
           cursor = 0;
           break;
         case 'replace':
-          text = effect.buffer.text;
-          cursor = Math.min(Math.max(0, effect.buffer.cursor), text.length);
+          text = buffer.text;
+          cursor = Math.min(Math.max(0, buffer.cursor), text.length);
           break;
         case 'splice': {
-          const { range, text: insertText } = effect.buffer;
+          const { range, text: insertText } = buffer;
           const before = text.slice(0, range.start);
           const after = text.slice(range.end);
           text = before + insertText + after;
@@ -376,25 +471,41 @@ export class MenuControllerImpl implements MenuController {
     const nextEditor: EditorSnapshot = { text, cursor, revision };
 
     let nextStack: MenuFrame[] = [...this.state.stack];
+    let nextCandidateIdentity = this.state.resolvedCandidateIdentity;
+    let nextEpoch = this.state.activationEpoch;
 
     switch (effect.stack.type) {
       case 'keep':
         break;
       case 'close-top':
         nextStack.pop();
+        if (backPolicy?.type === 'close-clear-input') {
+          nextStack = nextStack.filter((frame) => !('binding' in frame));
+          nextCandidateIdentity = null;
+        } else {
+          const nextTop = nextStack.at(-1);
+          nextCandidateIdentity =
+            nextTop && 'binding' in nextTop
+              ? this.identityFromActivation(nextTop.binding.activationId)
+              : topFrame && 'binding' in topFrame
+              ? this.identityFromActivation(topFrame.binding.activationId)
+              : nextCandidateIdentity;
+        }
         break;
       case 'close-all':
         nextStack = [];
+        nextCandidateIdentity = effect.buffer?.type === 'clear' ? null : nextCandidateIdentity;
         break;
       case 'push': {
         const frameSpec = effect.stack.frame;
         let binding: TextBinding | undefined = undefined;
         if (frameSpec.binding) {
-          const activationId = `${this.state.resolvedCandidateIdentity ?? 'manual'}:${this.state.activationEpoch + 1}`;
-          const query = nextEditor.text.slice(
-            frameSpec.binding.queryStart,
-            nextEditor.cursor,
-          );
+          const parsed = this.triggerRegistry.parse(nextEditor);
+          const identity = parsed?.candidate.frame.kind === frameSpec.kind ? parsed.candidate.identity : frameSpec.kind;
+          nextEpoch += 1;
+          nextCandidateIdentity = identity;
+          const activationId = `${identity}:${nextEpoch}`;
+          const query = nextEditor.text.slice(frameSpec.binding.queryStart, nextEditor.cursor);
           binding = {
             ...frameSpec.binding,
             query,
@@ -415,11 +526,12 @@ export class MenuControllerImpl implements MenuController {
         const frameSpec = effect.stack.frame;
         let binding: TextBinding | undefined = undefined;
         if (frameSpec.binding) {
-          const activationId = `${this.state.resolvedCandidateIdentity ?? 'manual'}:${this.state.activationEpoch + 1}`;
-          const query = nextEditor.text.slice(
-            frameSpec.binding.queryStart,
-            nextEditor.cursor,
-          );
+          const parsed = this.triggerRegistry.parse(nextEditor);
+          const identity = parsed?.candidate.frame.kind === frameSpec.kind ? parsed.candidate.identity : frameSpec.kind;
+          nextEpoch += 1;
+          nextCandidateIdentity = identity;
+          const activationId = `${identity}:${nextEpoch}`;
+          const query = nextEditor.text.slice(frameSpec.binding.queryStart, nextEditor.cursor);
           binding = {
             ...frameSpec.binding,
             query,
@@ -440,31 +552,63 @@ export class MenuControllerImpl implements MenuController {
         const targetIndex = nextStack.findIndex((f) => f.id === targetFrameId);
         if (targetIndex !== -1) {
           nextStack = nextStack.slice(0, targetIndex + 1);
+          const nextTop = nextStack.at(-1);
+          nextCandidateIdentity =
+            nextTop && 'binding' in nextTop
+              ? this.identityFromActivation(nextTop.binding.activationId)
+              : nextCandidateIdentity;
         }
         break;
       }
     }
 
-    const reconciled = this.reconcileTriggers(
-      nextEditor,
-      nextStack,
-      this.state.resolvedCandidateIdentity,
-      this.state.activationEpoch,
-      this.state.dismissedActivation,
-    );
+    const removedActivation =
+      effect.stack.type === 'close-top' && 'binding' in topFrame ? topFrame.binding.activationId : null;
+    const dismissedActivation = removedActivation ?? this.state.dismissedActivation;
+
+    // A stack transition is already an authoritative child/parent transition.
+    // Re-running trigger reconciliation here can replace the frame just pushed.
+    if (effect.stack.type === 'keep') {
+      const reconciled = this.reconcileTriggers(
+        nextEditor,
+        nextStack,
+        nextCandidateIdentity,
+        nextEpoch,
+        this.state.dismissedActivation,
+      );
+      nextStack = [...reconciled.nextStack];
+      nextCandidateIdentity = reconciled.nextCandidateIdentity;
+      nextEpoch = reconciled.nextEpoch;
+    } else {
+      this.refreshTopBinding(nextStack, nextEditor);
+    }
 
     this.state = {
       editor: nextEditor,
-      stack: reconciled.nextStack,
-      resolvedCandidateIdentity: reconciled.nextCandidateIdentity,
-      activationEpoch: reconciled.nextEpoch,
-      dismissedActivation: reconciled.nextDismissedActivation,
+      stack: nextStack,
+      resolvedCandidateIdentity: nextCandidateIdentity,
+      activationEpoch: nextEpoch,
+      dismissedActivation,
     };
 
     this.notify();
 
     if (effect.intent && this.intentHost) {
-      Promise.resolve(this.intentHost({ intentRequest: effect.intent })).catch(() => {});
+      Promise.resolve(this.intentHost({ intentRequest: effect.intent }))
+        .then((result) => {
+          if (!result) return;
+          const sourceFrame = this.state.stack.at(-1);
+          if (!sourceFrame || sourceFrame.id !== result.sourceFrameId) return;
+
+          const interactionResult = this.interactionRegistry.dispatch(result.sourceFrameId, result);
+          if (interactionResult && typeof interactionResult === 'object' && 'stack' in interactionResult) {
+            this.dispatch(interactionResult as MenuEffect, {
+              frameId: result.sourceFrameId,
+              revision: 'binding' in sourceFrame ? sourceFrame.binding.revision : this.state.editor.revision,
+            });
+          }
+        })
+        .catch(() => {});
     }
   }
 
@@ -496,17 +640,15 @@ export class MenuControllerImpl implements MenuController {
       return;
     }
 
-    // Default escape behavior: close top frame and set dismissedActivation if text-bound
-    const dismissedActivation = 'binding' in topFrame ? topFrame.binding.activationId : this.state.dismissedActivation;
-    const nextStack = this.state.stack.slice(0, -1);
-
-    this.state = {
-      ...this.state,
-      stack: nextStack,
-      dismissedActivation,
-    };
-
-    this.notify();
+    // Default escape behavior is still a controller transition, so child
+    // BackPolicy and provider return-point behavior are applied uniformly.
+    this.dispatch(
+      { stack: { type: 'close-top' } },
+      {
+        frameId: topFrame.id,
+        revision: 'binding' in topFrame ? topFrame.binding.revision : this.state.editor.revision,
+      },
+    );
   }
 
   public open(unboundFrame: UnboundFrameSpec, options?: OpenOptions): void {
@@ -570,8 +712,14 @@ export class MenuControllerImpl implements MenuController {
 
     const frameId = this.generateFrameId();
     let binding: TextBinding | undefined = undefined;
+    let activationEpoch = this.state.activationEpoch;
+    let resolvedCandidateIdentity = this.state.resolvedCandidateIdentity;
     if (frameSpec.binding) {
-      const activationId = `${this.state.resolvedCandidateIdentity ?? 'manual'}:${this.state.activationEpoch + 1}`;
+      const parsed = this.triggerRegistry.parse(editor);
+      const identity = parsed?.candidate.frame.kind === frameSpec.kind ? parsed.candidate.identity : frameSpec.kind;
+      activationEpoch += 1;
+      resolvedCandidateIdentity = identity;
+      const activationId = `${identity}:${activationEpoch}`;
       const query = editor.text.slice(frameSpec.binding.queryStart, editor.cursor);
       binding = {
         ...frameSpec.binding,
@@ -591,6 +739,8 @@ export class MenuControllerImpl implements MenuController {
       ...this.state,
       editor,
       stack: [...this.state.stack.slice(0, -1), frame],
+      resolvedCandidateIdentity,
+      activationEpoch,
     };
 
     this.notify();
@@ -600,11 +750,15 @@ export class MenuControllerImpl implements MenuController {
     if (this.state.stack.length === 0) return;
 
     const topFrame = this.state.stack.at(-1);
-    const dismissedActivation = topFrame && 'binding' in topFrame ? topFrame.binding.activationId : this.state.dismissedActivation;
+    if (!topFrame) return;
+    const transition = this.closeTopTransition(topFrame, this.state.editor, this.state.stack);
+    const dismissedActivation = 'binding' in topFrame ? topFrame.binding.activationId : this.state.dismissedActivation;
 
     this.state = {
       ...this.state,
-      stack: this.state.stack.slice(0, -1),
+      editor: transition.editor,
+      stack: transition.stack,
+      resolvedCandidateIdentity: transition.candidateIdentity,
       dismissedActivation,
     };
 

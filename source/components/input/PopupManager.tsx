@@ -1,13 +1,8 @@
 import React, { FC } from 'react';
-import SlashCommandMenu from '../menu/SlashCommandMenu.js';
-import type { SlashCommand } from '../../slash-commands.js';
-import PathSelectionMenu from '../menu/PathSelectionMenu.js';
 import SettingsSelectionMenu from '../menu/SettingsSelectionMenu.js';
 import SettingsValueSelectionMenu from '../menu/SettingsValueSelectionMenu.js';
 import ModelSelectionMenu from '../menu/ModelSelectionMenu.js';
 import RewindMenu from '../menu/RewindMenu.js';
-import ProviderSelectionMenu from '../menu/ProviderSelectionMenu.js';
-import SkillSelectionMenu from '../menu/SkillSelectionMenu.js';
 import type { SkillInfo } from '../../services/skills/skills-service.js';
 import type { PathCompletionItem } from '../../hooks/use-path-completion.js';
 import type { SettingCompletionItem, SettingsCategory } from '../../hooks/use-settings-completion.js';
@@ -15,16 +10,8 @@ import type { SettingValueSuggestion } from '../../utils/value-suggestions.js';
 import type { ModelInfo } from '../../services/model-service.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
 import type { RewindItem } from '../../hooks/use-rewind-selection.js';
-import type { ProviderSelectionMenuItem } from '../../hooks/use-provider-selection.js';
 
 interface PopupManagerProps {
-  slash: {
-    isOpen: boolean;
-    commands: SlashCommand[];
-    selectedIndex: number;
-    scrollOffset?: number;
-    filter: string;
-  };
   path: {
     isOpen: boolean;
     items: PathCompletionItem[];
@@ -80,31 +67,10 @@ interface PopupManagerProps {
     scrollOffset?: number;
     query: string;
   };
-  providers: {
-    isOpen: boolean;
-    phase: import('../../hooks/use-provider-selection.js').ProviderSelectionPhase;
-    selectedIndex: number;
-    scrollOffset?: number;
-    activeItems: ProviderSelectionMenuItem[];
-    errorMessage: string | null;
-    fieldErrors?: Record<string, string>;
-    selectedProviderName?: string;
-    draft: import('../../hooks/use-provider-selection.js').CustomProviderDraft | null;
-  };
   settingsService: SettingsService;
 }
 
-export const PopupManager: FC<PopupManagerProps> = ({
-  slash,
-  path,
-  models,
-  settings,
-  settingsValue,
-  rewind,
-  skills,
-  providers,
-  settingsService,
-}) => {
+export const PopupManager: FC<PopupManagerProps> = ({ models, settings, settingsValue, rewind, settingsService }) => {
   return (
     <>
       {models.isOpen && (
@@ -118,25 +84,6 @@ export const PopupManager: FC<PopupManagerProps> = ({
           scrollOffset={models.scrollOffset}
           canSwitchProvider={models.canSwitchProvider}
           settingsService={settingsService}
-        />
-      )}
-      {path.isOpen && (
-        <PathSelectionMenu
-          items={path.items}
-          selectedIndex={path.selectedIndex}
-          scrollOffset={path.scrollOffset}
-          query={path.query}
-          loading={path.loading}
-          error={path.error}
-          warning={path.warning}
-        />
-      )}
-      {slash.isOpen && (
-        <SlashCommandMenu
-          commands={slash.commands}
-          selectedIndex={slash.selectedIndex}
-          filter={slash.filter}
-          scrollOffset={slash.scrollOffset}
         />
       )}
       {settings.isOpen && (
@@ -166,26 +113,6 @@ export const PopupManager: FC<PopupManagerProps> = ({
           selectedIndex={rewind.selectedIndex}
           scrollOffset={rewind.scrollOffset}
           disposition={rewind.disposition}
-        />
-      )}
-      {skills?.isOpen && (
-        <SkillSelectionMenu
-          items={skills.items}
-          selectedIndex={skills.selectedIndex}
-          scrollOffset={skills.scrollOffset}
-          query={skills.query}
-        />
-      )}
-      {providers.isOpen && (
-        <ProviderSelectionMenu
-          phase={providers.phase}
-          selectedIndex={providers.selectedIndex}
-          scrollOffset={providers.scrollOffset}
-          activeItems={providers.activeItems}
-          errorMessage={providers.errorMessage}
-          fieldErrors={providers.fieldErrors}
-          selectedProviderName={providers.selectedProviderName}
-          draft={providers.draft}
         />
       )}
     </>

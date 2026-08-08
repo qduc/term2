@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { clampIndex } from './settings-completion-logic.js';
 
-export function useSelection<T>(items: T[], options?: { isInactive?: (item: T) => boolean }) {
+export function useSelection<T>(items: T[], options?: { isInactive?: (item: T) => boolean; initialIndex?: number }) {
   const [, forceUpdate] = useReducer((n: number) => n + 1, 0);
-  const selectedIndexRef = useRef(0);
+  const selectedIndexRef = useRef(options?.initialIndex ?? 0);
 
   const isInactive = useCallback(
     (item: T): boolean => {

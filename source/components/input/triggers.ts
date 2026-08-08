@@ -37,11 +37,18 @@ export const findPathTrigger = (
   return null;
 };
 
-export function createDefaultTriggerRegistry(slashCommands: SlashCommand[] = []): TriggerRuleRegistry {
+export function createDefaultTriggerRegistry(
+  slashCommands: SlashCommand[] = [],
+  enabledRuleIds?: readonly string[],
+): TriggerRuleRegistry {
   const registry = new TriggerRuleRegistry();
+  const enabled = enabledRuleIds ? new Set(enabledRuleIds) : undefined;
+  const registerRule = (rule: Parameters<TriggerRuleRegistry['registerRule']>[0]) => {
+    if (!enabled || enabled.has(rule.id)) registry.registerRule(rule);
+  };
 
   // Priority 50: Model selection
-  registry.registerRule({
+  registerRule({
     id: 'model',
     priority: 50,
     parse: (editor) => {
@@ -69,7 +76,7 @@ export function createDefaultTriggerRegistry(slashCommands: SlashCommand[] = [])
   });
 
   // Priority 40: Settings value
-  registry.registerRule({
+  registerRule({
     id: 'settings_value',
     priority: 40,
     parse: (editor) => {
@@ -97,7 +104,7 @@ export function createDefaultTriggerRegistry(slashCommands: SlashCommand[] = [])
   });
 
   // Priority 30: Settings
-  registry.registerRule({
+  registerRule({
     id: 'settings',
     priority: 30,
     parse: (editor) => {
@@ -122,11 +129,14 @@ export function createDefaultTriggerRegistry(slashCommands: SlashCommand[] = [])
       }
       return null;
     },
-    successors: [{ ruleId: 'settings_value', operation: 'push' }, { ruleId: 'model', operation: 'push' }],
+    successors: [
+      { ruleId: 'settings_value', operation: 'push' },
+      { ruleId: 'model', operation: 'push' },
+    ],
   });
 
   // Priority 20: Skills
-  registry.registerRule({
+  registerRule({
     id: 'skills',
     priority: 20,
     parse: (editor) => {
@@ -152,7 +162,7 @@ export function createDefaultTriggerRegistry(slashCommands: SlashCommand[] = [])
   });
 
   // Priority 10: Slash
-  registry.registerRule({
+  registerRule({
     id: 'slash',
     priority: 10,
     parse: (editor) => {
@@ -178,7 +188,7 @@ export function createDefaultTriggerRegistry(slashCommands: SlashCommand[] = [])
   });
 
   // Priority 5: Path
-  registry.registerRule({
+  registerRule({
     id: 'path',
     priority: 5,
     parse: (editor) => {

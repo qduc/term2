@@ -9,6 +9,7 @@ import SettingsSelectionMenu from './menu/SettingsSelectionMenu.js';
 import { computeModelInsertion } from './input/insertions.js';
 import { SETTINGS_TRIGGER } from './input/triggers.js';
 import { InputProvider, useInputContext } from '../context/InputContext.js';
+import { MenuControllerImpl } from './input/menu-controller.js';
 import type { SlashCommand } from '../slash-commands.js';
 import { createMockSettingsService } from '../services/settings/settings-service.mock.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
@@ -52,7 +53,6 @@ type TestProps = {
   allowEmptySubmit?: boolean;
   promptLabel?: string;
   onSystemMessage?: (text: string) => void;
-  providersMenuRef?: React.MutableRefObject<{ open: () => void } | null>;
   pendingQueuedMessages?: ReadonlyArray<{ id: string; text: string; queuedAt: number }>;
   onRetractQueuedMessage?: (id: string) => Promise<SubmissionMutation>;
   onEditQueuedMessage?: (id: string, turn: UserTurn) => Promise<SubmissionMutation>;
@@ -1253,13 +1253,13 @@ it.sequential('settings value completion shows current custom settings value in 
 });
 
 it.sequential('InputBox allows backspace and delete keys to modify input in provider wizard phases', async () => {
-  const providersMenuRef = { current: null as any };
+  const controller = new MenuControllerImpl();
   const settingsService = createMockSettingsService();
 
   const { lastFrame, stdin } = await renderAndFlush(
-    <InputProvider>
+    <InputProvider controller={controller}>
       <StateDisplay />
-      <InputBox {...defaultProps} settingsService={settingsService} providersMenuRef={providersMenuRef} />
+      <InputBox {...defaultProps} settingsService={settingsService} />
     </InputProvider>,
   );
 
@@ -1274,7 +1274,7 @@ it.sequential('InputBox allows backspace and delete keys to modify input in prov
 
   // Open the providers menu
   await act(async () => {
-    providersMenuRef.current.open();
+    controller.open({ kind: 'providers' });
   });
   await flushReactUpdates(10);
 

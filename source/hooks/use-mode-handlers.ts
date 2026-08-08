@@ -76,7 +76,7 @@ type Options = {
   models: Models;
   skills: Movable;
   rewind: Rewind;
-  providers: Providers;
+  providers?: Providers;
   insertSelectedPath: (appendTrailingSpace: boolean) => boolean;
   insertSelectedSetting: () => boolean;
   insertSelectedSettingValue: (submitAfterInsert: boolean, typedValue?: string) => boolean;
@@ -244,9 +244,10 @@ export const useModeHandlers = ({
         },
       },
       provider_selection: {
-        moveUp: providers.moveUp,
-        moveDown: providers.moveDown,
+        moveUp: providers?.moveUp ?? (() => {}),
+        moveDown: providers?.moveDown ?? (() => {}),
         onSubmit: (submittedValue: string) => {
+          if (!providers) return 'fallthrough';
           if (
             providers.phase === 'wizard_name' ||
             providers.phase === 'wizard_url' ||
@@ -259,19 +260,19 @@ export const useModeHandlers = ({
           providers.selectItem();
           return 'handled';
         },
-        onReset: providers.goBack,
+        onReset: providers?.goBack,
         onDelete: () => {
-          if (providers.phase === 'list') {
+          if (providers?.phase === 'list') {
             providers.requestDelete();
           }
         },
         onMoveItemUp: () => {
-          if (providers.phase === 'reorder') {
+          if (providers?.phase === 'reorder') {
             providers.moveProviderUp();
           }
         },
         onMoveItemDown: () => {
-          if (providers.phase === 'reorder') {
+          if (providers?.phase === 'reorder') {
             providers.moveProviderDown();
           }
         },

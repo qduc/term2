@@ -2,6 +2,7 @@ import type { RewindItem } from '../../hooks/use-rewind-selection.js';
 import type { RewindDisposition } from '../../commands/rewind-command.js';
 import type { CustomProviderDraft, ProviderSelectionItem } from '../../hooks/use-provider-selection.js';
 import type { SlashCommand } from '../../slash-commands.js';
+import type { TriggerRuleRegistry } from './menu-controller.js';
 
 export type ProviderField = 'name' | 'type' | 'baseUrl' | 'apiKey';
 
@@ -159,6 +160,10 @@ export type IntentResult =
       fieldErrors?: Readonly<Record<string, string>>;
     };
 
+export type IntentHost = (event: {
+  intentRequest: NonNullable<MenuEffect['intent']>;
+}) => Promise<IntentResult> | IntentResult | void;
+
 export type MenuEffect = Readonly<{
   buffer?: BufferChange;
   stack: StackChange;
@@ -201,10 +206,7 @@ export type MenuInteraction = Readonly<{
 
 export interface MenuInteractionRegistry {
   register(frameId: FrameId, interaction: MenuInteraction): () => void;
-  dispatch(
-    frameId: FrameId,
-    event: MenuEvent | IntentResult,
-  ): ReturnType<MenuInteraction['handle']>;
+  dispatch(frameId: FrameId, event: MenuEvent | IntentResult): ReturnType<MenuInteraction['handle']>;
 }
 
 export type ProviderSessionState =
@@ -238,6 +240,10 @@ export interface MenuController extends MenuCapability {
   dispatch(effect: MenuEffect, expected: ExpectedFrame): void;
   dispatchActiveEvent(event: MenuEvent): void;
   escape(): void;
+
+  getInteractionRegistry(): MenuInteractionRegistry;
+  setTriggerRegistry(registry: TriggerRuleRegistry): void;
+  setIntentHost(host?: IntentHost): void;
 
   subscribe(listener: () => void): () => void;
 }

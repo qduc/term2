@@ -39,18 +39,27 @@ export const usePathCompletion = (deps?: UsePathCompletionDeps) => {
   const loadWorkspaceEntries = deps?.getWorkspaceEntries ?? getWorkspaceEntries;
   const reloadWorkspaceEntries = deps?.refreshWorkspaceEntries ?? refreshWorkspaceEntries;
   const loadWorkspaceEntriesMeta = deps?.getWorkspaceEntriesMeta ?? getWorkspaceEntriesMeta;
-  const { mode, setMode, input, triggerIndex, setTriggerIndex, cursorOffset } = useInputContext();
+  const { mode, setMode, input, triggerIndex, setTriggerIndex, cursorOffset, controller } = useInputContext();
 
   // Logging is a side effect only; an unstable logger reference must not cause
   // workspace loading effects to re-run on every render.
   const loggerRef = useRef(logger);
   loggerRef.current = logger;
 
-  const isOpen = mode === 'path_completion';
+  const controllerFrame = controller.getSnapshot().stack.at(-1);
+  const isControllerOpen = controllerFrame?.kind === 'path';
+  const isOpen = isControllerOpen || mode === 'path_completion';
+
+  // While the path graph is controller-owned, the binding is the source of
+  // truth for both the query and the replacement start. Keep the legacy
+  // triggerIndex projection for callers that still use this hook directly.
+  const activeTriggerIndex = isControllerOpen ? controllerFrame.binding.replacement.start : triggerIndex;
 
   // Derive query from input + triggerIndex + cursorOffset
   const query = useMemo(() => {
-    if (!isOpen || triggerIndex === null) return '';
+    if (!isOpen) return '';
+    if (isControllerOpen) return controllerFrame.binding.query;
+    if (triggerIndex === null) return '';
     // Assuming trigger is '@', the query is after that
     // Safety check to ensure we don't slice weirdly
     if (triggerIndex >= input.length) return '';
@@ -59,7 +68,7 @@ export const usePathCompletion = (deps?: UsePathCompletionDeps) => {
     // Wait, InputBox passed the query. `findPathTrigger` logic:
     // if char === '@', query = text.slice(index + 1, cursor)
     return input.slice(triggerIndex + 1, end);
-  }, [isOpen, triggerIndex, input, cursorOffset]);
+  }, [isOpen, isControllerOpen, controllerFrame, triggerIndex, input, cursorOffset]);
 
   const [entries, setEntries] = useState<PathEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -189,7 +198,7 @@ export const usePathCompletion = (deps?: UsePathCompletionDeps) => {
 
   return {
     isOpen,
-    triggerIndex, // Still needed by consumers? Yes
+    triggerIndex: activeTriggerIndex, // Compatibility projection for legacy callers
     query,
     entries,
     filteredEntries,

@@ -1,7 +1,17 @@
-import React, { createContext, useContext, useMemo, useState, useCallback, useRef, useSyncExternalStore, ReactNode } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useMemo,
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  useSyncExternalStore,
+  ReactNode,
+} from 'react';
 import type { ImageRef } from 'ink-prompt';
 import { MenuControllerImpl } from '../components/input/menu-controller.js';
-import type { MenuController, MenuFrame } from '../components/input/menu-types.js';
+import type { MenuController, MenuFrame, MenuInteractionRegistry } from '../components/input/menu-types.js';
 
 export type InputMode =
   | 'text'
@@ -45,6 +55,8 @@ interface InputState {
   images: ImageRef[];
   cursorOverride: number | null;
   controller: MenuController;
+  interactions: MenuInteractionRegistry;
+  menuPromptLabel: string | undefined;
 }
 
 interface InputActions {
@@ -56,6 +68,7 @@ interface InputActions {
   setImages: React.Dispatch<React.SetStateAction<ImageRef[]>>;
   setInputAndCursor: (value: string, cursorOffset: number, cursorOverride?: number | null) => void;
   setCursorOverride: (offset: number | null) => void;
+  setMenuPromptLabel: (label: string | undefined) => void;
 }
 
 const InputStateContext = createContext<InputState | undefined>(undefined);
@@ -69,24 +82,29 @@ export const InputProvider = ({
   controller?: MenuController;
 }) => {
   const [controller] = useState(() => providedController ?? new MenuControllerImpl());
-  const snapshot = useSyncExternalStore(
-    controller.subscribe.bind(controller),
-    controller.getSnapshot.bind(controller),
-  );
+  const interactions = controller.getInteractionRegistry();
+  const snapshot = useSyncExternalStore(controller.subscribe.bind(controller), controller.getSnapshot.bind(controller));
 
   const [legacyMode, setLegacyMode] = useState<InputMode>('text');
-  const legacyCursorOffsetRef = useRef(0);
+  const previousControllerStackLengthRef = useRef(0);
   const [triggerIndex, setTriggerIndex] = useState<number | null>(null);
   const [images, setImages] = useState<ImageRef[]>([]);
   const [cursorOverride, setCursorOverride] = useState<number | null>(null);
+  const [menuPromptLabel, setMenuPromptLabel] = useState<string | undefined>(undefined);
 
-  const mode = snapshot.stack.length > 0
-    ? frameKindToLegacyMode(snapshot.stack.at(-1)?.kind)
-    : legacyMode;
+  useEffect(() => {
+    return controller.subscribe(() => {
+      const stackLength = controller.getSnapshot().stack.length;
+      if (previousControllerStackLengthRef.current > 0 && stackLength === 0) {
+        setLegacyMode('text');
+      }
+      previousControllerStackLengthRef.current = stackLength;
+    });
+  }, [controller]);
 
-  const cursorOffset = snapshot.editor.text.length > 0
-    ? snapshot.editor.cursor
-    : legacyCursorOffsetRef.current;
+  const mode = snapshot.stack.length > 0 ? frameKindToLegacyMode(snapshot.stack.at(-1)?.kind) : legacyMode;
+
+  const cursorOffset = snapshot.editor.cursor;
 
   const setInput = useCallback(
     (value: string) => {
@@ -97,7 +115,6 @@ export const InputProvider = ({
 
   const setCursorOffset = useCallback(
     (offset: number) => {
-      legacyCursorOffsetRef.current = offset;
       controller.applyEditorEdit({ type: 'move-cursor', cursor: offset });
     },
     [controller],
@@ -105,7 +122,6 @@ export const InputProvider = ({
 
   const setInputAndCursor = useCallback(
     (value: string, offset: number, override: number | null = null) => {
-      legacyCursorOffsetRef.current = offset;
       controller.replaceText(value, offset);
       setCursorOverride(override);
     },
@@ -138,8 +154,20 @@ export const InputProvider = ({
       images,
       cursorOverride,
       controller,
+      interactions,
+      menuPromptLabel,
     }),
-    [snapshot.editor.text, mode, cursorOffset, triggerIndex, images, cursorOverride, controller],
+    [
+      snapshot.editor.text,
+      mode,
+      cursorOffset,
+      triggerIndex,
+      images,
+      cursorOverride,
+      controller,
+      interactions,
+      menuPromptLabel,
+    ],
   );
 
   const actions = useMemo<InputActions>(
@@ -152,8 +180,9 @@ export const InputProvider = ({
       setImages,
       setInputAndCursor,
       setCursorOverride,
+      setMenuPromptLabel,
     }),
-    [setInput, replaceInput, setMode, setCursorOffset, setInputAndCursor],
+    [setInput, replaceInput, setMode, setCursorOffset, setInputAndCursor, setMenuPromptLabel],
   );
 
   return (

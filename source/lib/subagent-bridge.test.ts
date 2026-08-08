@@ -527,7 +527,7 @@ it('runSubagentAsync delegates to SubagentManager.startRunAsync', async () => {
   expect(trackStartRunAsync.callCount).toBe(1);
   expect(trackStartRunAsync.lastArgs.role).toBe('explorer');
   expect(trackStartRunAsync.lastArgs.task).toBe('find files');
-  expect(trackStartRunAsync.lastArgs.parentTool).toBe('run_subagent_async');
+  expect(trackStartRunAsync.lastArgs.parentTool).toBe('run_subagent');
   expect(handle.role).toBe('explorer');
   expect(handle.task).toBe('find files');
 });

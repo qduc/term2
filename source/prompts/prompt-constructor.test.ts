@@ -132,14 +132,15 @@ it('adds persistent-memory guidance only when memory tools are enabled', () => {
   );
 });
 
-it('buildPromptSpec includes async subagent guidance when async tools are enabled', () => {
+it('buildPromptSpec includes unified background delegation guidance when background execution is enabled', () => {
   const spec = buildPromptSpec({
     model: 'gpt-4o',
     liteMode: false,
+    runSubagentEnabled: true,
     runSubagentAsyncEnabled: true,
   });
-  expect(spec.inlineSections.some((s) => s.includes('Asynchronous subagents'))).toBe(true);
-  expect(spec.inlineSections.some((s) => s.includes('run_subagent_async'))).toBe(true);
+  expect(spec.inlineSections.some((s) => s.includes('execution: "background"'))).toBe(true);
+  expect(spec.inlineSections.some((s) => s.includes('run_subagent_async'))).toBe(false);
   expect(spec.inlineSections.some((s) => s.includes('get_subagent_result'))).toBe(true);
   expect(spec.inlineSections.some((s) => s.includes('explorer'))).toBe(true);
   expect(spec.inlineSections.some((s) => s.includes('worker'))).toBe(true);
@@ -156,12 +157,12 @@ it('buildPromptSpec tells orchestrators to trust successful delegation and wait 
   });
   const guidance = spec.inlineSections.join('\n');
 
-  expect(guidance).toContain('use `run_subagent_async` for delegable work');
+  expect(guidance).toContain('`execution: "background"`');
   expect(guidance).toContain('A returned handle with `status: "running"` means delegation succeeded');
   expect(guidance).toContain('Do not duplicate or independently perform the delegated unit');
   expect(guidance.toLowerCase()).toContain('end the current turn and wait for the completion notification');
   expect(guidance).toContain('inlines the full result so you can continue directly');
-  expect(guidance).toContain('do NOT immediately call');
+  expect(guidance).toContain('Do NOT call `get_subagent_result` immediately');
   expect(guidance).toContain('blocks until completion');
   expect(guidance).not.toContain('Use `run_subagent` only');
 });

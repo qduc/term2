@@ -638,6 +638,7 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
         agentId: event.agentId,
         role: event.role,
         task: event.task,
+        ...(event.parentTool !== undefined ? { parentTool: event.parentTool } : {}),
         async: event.async,
         tools: [],
       } as SubagentActivityMessage);

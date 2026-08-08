@@ -239,6 +239,53 @@ it('subagent_started links callId from tool_started and command_message replaces
   expect(completedMsg[0].status).toBe('completed');
 });
 
+it('run_subagent background launch remains an ordinary command message', () => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'tool_started',
+    toolCallId: 'background-call-1',
+    toolName: 'run_subagent',
+    arguments: { execution: 'background', role: 'explorer', task: 'inspect' },
+  } as ConversationEvent);
+
+  expect(deps.calls.appendedMessages).toEqual([
+    [
+      expect.objectContaining({
+        sender: 'command',
+        callId: 'background-call-1',
+        toolName: 'run_subagent',
+        status: 'running',
+      }),
+    ],
+  ]);
+
+  handler({
+    type: 'command_message',
+    message: {
+      id: 'background-result-1',
+      sender: 'command',
+      status: 'completed',
+      command: 'run_subagent [explorer] inspect',
+      output: '{"runId":"run-1","status":"running"}',
+      callId: 'background-call-1',
+      toolName: 'run_subagent',
+    },
+  } as ConversationEvent);
+
+  const messages = deps.calls.setMessagesCalls[0]!(deps.calls.appendedMessages[0]!);
+  expect(messages).toEqual([
+    expect.objectContaining({
+      sender: 'command',
+      callId: 'background-call-1',
+      toolName: 'run_subagent',
+      status: 'completed',
+    }),
+  ]);
+});
+
 it('subagent_started: ignores event if parentTool is ask_mentor', () => {
   const deps = createMockDeps();
   const state = createStreamingState();

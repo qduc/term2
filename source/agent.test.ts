@@ -261,7 +261,7 @@ it('getAgentDefinition omits ask_user when getAskUserAnswer is absent', () => {
   expect(toolNames.includes('ask_user')).toBe(false);
 });
 
-it('getAgentDefinition exposes only async delegation tools in orchestrator mode', () => {
+it('getAgentDefinition exposes only background execution through the unified delegation tool in orchestrator mode', () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',
     'app.orchestratorMode': true,
@@ -274,10 +274,25 @@ it('getAgentDefinition exposes only async delegation tools in orchestrator mode'
     ...orchestratorSubagentDeps,
   });
 
-  expect(definition.tools.map((tool) => tool.name)).not.toContain('run_subagent');
+  expect(definition.tools.map((tool) => tool.name)).toContain('run_subagent');
+  expect(definition.tools.map((tool) => tool.name)).not.toContain('run_subagent_async');
   expect(definition.tools.map((tool) => tool.name)).toEqual(
-    expect.arrayContaining(['run_subagent_async', 'get_subagent_result']),
+    expect.arrayContaining(['run_subagent', 'get_subagent_result']),
   );
+  const subagentTool = definition.tools.find((tool) => tool.name === 'run_subagent');
+  const schema = subagentTool?.parameters;
+  expect(
+    schema &&
+      'safeParse' in schema &&
+      typeof schema.safeParse === 'function' &&
+      schema.safeParse({ execution: 'background', role: 'explorer', task: 'inspect' }).success,
+  ).toBe(true);
+  expect(
+    schema &&
+      'safeParse' in schema &&
+      typeof schema.safeParse === 'function' &&
+      schema.safeParse({ execution: 'foreground', role: 'explorer', task: 'inspect' }).success,
+  ).toBe(false);
   expect(definition.instructions.includes('### Delegating to subagents')).toBe(true);
 });
 
@@ -306,6 +321,28 @@ it('getAgentDefinition registers parent async controls in orchestrator and ordin
 
   for (const definition of [orchestrator, ordinary]) {
     expect(definition.tools.map((tool) => tool.name)).toEqual(expect.arrayContaining(['send_message', 'cancel_run']));
+  }
+});
+
+it('advertises one dual-mode delegation tool when standard mode has both execution strategies', () => {
+  const definition = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'app.liteMode': false }),
+    loggingService: mockLogger,
+    runSubagent: async () => makeSubagentResult(),
+    ...orchestratorSubagentDeps,
+  });
+
+  const delegationTools = definition.tools.filter((tool) => tool.name === 'run_subagent');
+  expect(delegationTools).toHaveLength(1);
+  expect(definition.tools.map((tool) => tool.name)).not.toContain('run_subagent_async');
+  const schema = delegationTools[0]?.parameters;
+  for (const execution of ['foreground', 'background']) {
+    expect(
+      schema &&
+        'safeParse' in schema &&
+        typeof schema.safeParse === 'function' &&
+        schema.safeParse({ execution, role: 'explorer', task: 'inspect' }).success,
+    ).toBe(true);
   }
 });
 
@@ -355,6 +392,30 @@ it('getAgentDefinition registers no async delegation tools when the parent contr
   expect(definition.instructions).not.toContain('### Asynchronous subagents');
 });
 
+it('does not advertise background execution beside foreground delegation when async controls are incomplete', () => {
+  const definition = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'app.liteMode': false }),
+    loggingService: mockLogger,
+    runSubagent: async () => makeSubagentResult(),
+    runSubagentAsync: async () => makeSubagentRunHandle(),
+    getSubagentResult: async () => makeSubagentResult(),
+  });
+
+  const schema = definition.tools.find((tool) => tool.name === 'run_subagent')?.parameters;
+  expect(
+    schema &&
+      'safeParse' in schema &&
+      typeof schema.safeParse === 'function' &&
+      schema.safeParse({ execution: 'foreground', role: 'explorer', task: 'inspect' }).success,
+  ).toBe(true);
+  expect(
+    schema &&
+      'safeParse' in schema &&
+      typeof schema.safeParse === 'function' &&
+      schema.safeParse({ execution: 'background', role: 'explorer', task: 'inspect' }).success,
+  ).toBe(false);
+});
+
 it('getAgentDefinition requires parent controls when orchestrator mode enables async delegation', () => {
   expect(() =>
     getAgentDefinition({
@@ -366,7 +427,7 @@ it('getAgentDefinition requires parent controls when orchestrator mode enables a
   ).toThrow(/sendSubagentMessage.*cancelSubagentRun/);
 });
 
-it('getAgentDefinition omits delegation guidance in standard mode even if runSubagent is provided', () => {
+it('getAgentDefinition includes foreground delegation guidance in standard mode when runSubagent is provided', () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',
   });
@@ -378,7 +439,7 @@ it('getAgentDefinition omits delegation guidance in standard mode even if runSub
   });
 
   expect(definition.tools.map((tool) => tool.name).includes('run_subagent')).toBe(true);
-  expect(definition.instructions.includes('### Delegating to subagents')).toBe(false);
+  expect(definition.instructions.includes('### Delegating to subagents')).toBe(true);
 });
 
 it('getAgentDefinition omits delegation guidance when runSubagent is absent', () => {
@@ -424,7 +485,7 @@ it('getAgentDefinition in orchestrator mode retains full memory authority', () =
   });
 
   expect(definition.tools.map((tool) => tool.name)).toEqual([
-    'run_subagent_async',
+    'run_subagent',
     'get_subagent_result',
     'send_message',
     'cancel_run',
@@ -490,7 +551,7 @@ it('getAgentDefinition in orchestrator mode retains full memory authority for no
 
   expect(definition.tools.map((tool) => tool.name)).toEqual(
     expect.arrayContaining([
-      'run_subagent_async',
+      'run_subagent',
       'get_subagent_result',
       'shell',
       'read_file',

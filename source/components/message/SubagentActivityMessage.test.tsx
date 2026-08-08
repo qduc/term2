@@ -23,7 +23,28 @@ it.sequential('SubagentActivityMessage renders plain string tools', async () => 
   expect(output.includes('✔ read_file "source/app.tsx"')).toBe(true);
 });
 
-it.sequential('SubagentActivityMessage labels asynchronous starts as run_subagent_async', async () => {
+it.sequential(
+  'SubagentActivityMessage preserves the legacy asynchronous tool label when its log lacks parentTool',
+  async () => {
+    const { lastFrame } = await renderInAct(
+      <SubagentActivityMessage
+        msg={{
+          role: 'explorer',
+          task: 'find x',
+          status: 'running',
+          tools: [],
+          async: true,
+        }}
+      />,
+    );
+    const output = toVisibleText(lastFrame() ?? '');
+
+    expect(output).toContain('run_subagent_async [explorer] find x');
+    expect(output).not.toContain('$ run_subagent [explorer] find x');
+  },
+);
+
+it.sequential('SubagentActivityMessage uses the unified tool label for a background start', async () => {
   const { lastFrame } = await renderInAct(
     <SubagentActivityMessage
       msg={{
@@ -32,13 +53,14 @@ it.sequential('SubagentActivityMessage labels asynchronous starts as run_subagen
         status: 'running',
         tools: [],
         async: true,
+        parentTool: 'run_subagent',
       }}
     />,
   );
   const output = toVisibleText(lastFrame() ?? '');
 
-  expect(output).toContain('run_subagent_async [explorer] find x');
-  expect(output).not.toContain('$ run_subagent [explorer] find x');
+  expect(output).toContain('run_subagent [explorer] find x');
+  expect(output).not.toContain('run_subagent_async');
 });
 
 it.sequential('SubagentActivityMessage renders write tool CommandMessage concisely', async () => {

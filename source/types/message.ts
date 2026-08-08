@@ -49,6 +49,8 @@ export interface SubagentActivityMessage {
   agentId: string;
   role: string;
   task: string;
+  /** Original public delegation tool, retained to render historical logs accurately. */
+  parentTool?: string;
   async?: boolean;
   tools: (string | CommandMessage)[];
   finalText?: string;

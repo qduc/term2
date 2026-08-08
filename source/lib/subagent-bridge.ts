@@ -324,7 +324,7 @@ export class SubagentBridge {
       task: params.task,
       ...(params.name ? { name: params.name } : {}),
       ...(params.continue_run_id ? { continueRunId: params.continue_run_id } : {}),
-      parentTool: 'run_subagent_async',
+      parentTool: 'run_subagent',
       // Conversation-scoped, not per-turn: this run must survive the turn that
       // launched it and every ordinary abort.
       signal: this.backgroundSignal,

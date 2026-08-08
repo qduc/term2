@@ -9,27 +9,102 @@ import {
   getCallIdFromItem,
   safeJsonParse,
 } from '../format-helpers.js';
-import type { SubagentResult } from '../../services/subagents/types.js';
+import type { NestedSubagentResult, SubagentResult, SubagentRunHandle } from '../../services/subagents/types.js';
+import { SUBAGENT_RUN_NAME_PATTERN, SubagentRegistryError } from '../../services/subagents/subagent-async-registry.js';
 import { isAbortLike, formatSubagentResult } from '../../services/subagents/utils.js';
 
 const RUN_SUBAGENT_DESCRIPTION =
-  'Delegate a bounded task to a specialized subagent. The subagent runs synchronously and returns a structured result. ' +
+  'Delegate a bounded task to a specialized subagent. Set execution to "foreground" when you need the structured result in this turn, ' +
+  'or "background" when the work can continue after you return control; background returns a running handle and later completion notification. ' +
   'The subagent runs in its own context and returns only a summary, preserving your context. ' +
   '(When to reach for this vs. doing it yourself is covered by the delegation guidance in your system instructions.)\n\n' +
   '## Task Requirements\n' +
   'Include the objective, task-specific scope, non-discoverable parent findings or decisions, constraints, deliverable or acceptance criteria, and validation when applicable. ' +
   'Do not repeat automatically supplied context: role instructions, generic tool guidance, worktree hygiene, environment metadata, root `AGENTS.md`, or skills catalog. ' +
   'The subagent does not see your conversation or reasoning.\n\n' +
-  'Returns a summary with status (completed, failed, or cancelled), any final text, a list of tools used, and files changed.';
+  'Foreground returns a summary with status (completed, failed, cancelled, or interrupted), any final text, a list of tools used, and files changed. ' +
+  'A background status of "running" means launch succeeded: do not duplicate the task or immediately call get_subagent_result; end the turn and wait for the completion notification.';
 
-const runSubagentSchema = z.object({
-  role: z
-    .enum(['explorer', 'worker', 'librarian'])
-    .describe('The subagent role to use: "explorer", "worker", or "librarian".'),
-  task: z.string().describe('The full task description.'),
-});
+const FOREGROUND_ROLES = ['explorer', 'worker', 'librarian'] as const;
+const BACKGROUND_ROLES = ['explorer', 'worker', 'mentor', 'librarian'] as const;
+const ALL_ROLES = ['explorer', 'worker', 'mentor', 'librarian'] as const;
 
-export type RunSubagentParams = z.infer<typeof runSubagentSchema>;
+const backgroundFields = {
+  name: z
+    .string()
+    .regex(SUBAGENT_RUN_NAME_PATTERN)
+    .optional()
+    .describe(
+      'Optional active-run alias: lowercase letter first, then up to 31 lowercase letters, digits, underscores, or hyphens. Background only.',
+    ),
+  continue_run_id: z
+    .string()
+    .optional()
+    .describe('Continue a completed background run using its runId. Background only; worker continuation is blocked.'),
+};
+
+const runSubagentSchema = z
+  .object({
+    execution: z
+      .enum(['foreground', 'background'])
+      .describe('"foreground" returns the result in this turn; "background" returns a running handle immediately.'),
+    role: z.enum(ALL_ROLES).describe('The subagent role to use.'),
+    task: z.string().describe('The full task description.'),
+    ...backgroundFields,
+  })
+  .strict();
+
+export type ForegroundRunSubagentParams = { role: (typeof FOREGROUND_ROLES)[number]; task: string };
+export type RunSubagentParams =
+  | ({ execution: 'foreground' } & ForegroundRunSubagentParams & {
+        name?: string;
+        continue_run_id?: string;
+      })
+  | {
+      execution: 'background';
+      role: (typeof BACKGROUND_ROLES)[number];
+      task: string;
+      name?: string;
+      continue_run_id?: string;
+    };
+
+export type RunSubagentToolCallbacks = {
+  runSubagent?: (
+    params: ForegroundRunSubagentParams,
+    context?: unknown,
+    details?: unknown,
+  ) => Promise<NestedSubagentResult>;
+  runSubagentAsync?: (
+    params: Pick<Extract<RunSubagentParams, { execution: 'background' }>, 'role' | 'task' | 'name' | 'continue_run_id'>,
+    context?: unknown,
+    details?: unknown,
+  ) => Promise<SubagentRunHandle>;
+};
+
+function createRunSubagentSchema({ runSubagent, runSubagentAsync }: RunSubagentToolCallbacks) {
+  if (runSubagent && !runSubagentAsync) {
+    return z
+      .object({
+        execution: z.literal('foreground').describe('Only foreground execution is available in this session.'),
+        role: z.enum(FOREGROUND_ROLES).describe('The subagent role to use.'),
+        task: z.string().describe('The full task description.'),
+      })
+      .strict();
+  }
+
+  if (!runSubagent && runSubagentAsync) {
+    return z
+      .object({
+        execution: z.literal('background').describe('Only background execution is available in this session.'),
+        role: z.enum(BACKGROUND_ROLES).describe('The subagent role to use.'),
+        task: z.string().describe('The full task description.'),
+        ...backgroundFields,
+      })
+      .strict();
+  }
+
+  return runSubagentSchema;
+}
 
 const MAX_PREVIEW_LENGTH = 300;
 
@@ -62,20 +137,55 @@ export const formatRunSubagentCommandMessage: FormatCommandMessage = (item, inde
 
   const role = args?.role ?? 'subagent';
   const rawOutput = getOutputText(item);
-  const parsed = safeJsonParse(rawOutput) as SubagentResult | null;
+  const execution = args?.execution;
+  const parsed = safeJsonParse(rawOutput) as {
+    status?: SubagentResult['status'] | 'running';
+    runId?: string;
+    name?: string;
+    finalText?: string;
+    filesChanged?: SubagentResult['filesChanged'];
+    toolsUsed?: SubagentResult['toolsUsed'];
+    error?: string | { code?: string; message?: string };
+  } | null;
 
   const taskPreview = truncatePreview(args?.task);
-  let command = taskPreview ? `run_subagent [${role}] ${taskPreview}` : `run_subagent [${role}]`;
+  let command = taskPreview
+    ? `run_subagent [${execution === 'background' ? `background:${role}` : role}] ${taskPreview}`
+    : `run_subagent [${execution === 'background' ? `background:${role}` : role}]`;
   let output = rawOutput || 'No response';
   let success = true;
 
+  if (execution === 'background') {
+    const launched = parsed?.status === 'running' && typeof parsed.runId === 'string';
+    success = launched;
+    if (launched) {
+      command += ` — runId: ${parsed.runId}`;
+      if (parsed.name) command += ` — name: ${parsed.name}`;
+    } else {
+      command += ' — failed';
+      output =
+        typeof parsed?.error === 'string'
+          ? parsed.error
+          : parsed?.error?.message ?? rawOutput ?? 'Background subagent launch failed';
+    }
+    return [
+      createBaseMessage(item, index, 0, false, {
+        command,
+        output,
+        success,
+        toolName: 'run_subagent',
+        toolArgs: args,
+      }),
+    ];
+  }
+
   if (parsed) {
     success = parsed.status === 'completed';
+    const toolsUsed = parsed.toolsUsed ?? [];
+    const filesChanged = parsed.filesChanged ?? [];
     const toolsSummary =
-      parsed.toolsUsed?.length > 0
-        ? `Tools: ${parsed.toolsUsed.map((t) => `${t.toolName}(${t.count})`).join(', ')}`
-        : '';
-    const filesSummary = parsed.filesChanged?.length > 0 ? `Files changed: ${parsed.filesChanged.join(', ')}` : '';
+      toolsUsed.length > 0 ? `Tools: ${toolsUsed.map((t) => `${t.toolName}(${t.count})`).join(', ')}` : '';
+    const filesSummary = filesChanged.length > 0 ? `Files changed: ${filesChanged.join(', ')}` : '';
 
     const outputPreview = truncatePreview(parsed.finalText || parsed.error || 'No output');
     const parts = [outputPreview];
@@ -109,7 +219,10 @@ export const formatRunSubagentCommandMessage: FormatCommandMessage = (item, inde
   ];
 };
 
-export function getSubagentsRolesSection({ includeLibrarian = true }: { includeLibrarian?: boolean } = {}): string {
+export function getSubagentsRolesSection({
+  includeLibrarian = true,
+  includeMentor = true,
+}: { includeLibrarian?: boolean; includeMentor?: boolean } = {}): string {
   let promptsDir = path.join(import.meta.dirname, '../prompts/subagents');
   if (!fs.existsSync(promptsDir)) {
     const altDir = path.join(import.meta.dirname, '../../source/prompts/subagents');
@@ -122,7 +235,7 @@ export function getSubagentsRolesSection({ includeLibrarian = true }: { includeL
     return (
       '## Roles\n' +
       '- `explorer`: read-only workspace access + web search + safe shell commands. Use for locating files, answering codebase questions, and looking up external docs or current information.\n' +
-      '- `mentor`: advisory only, no workspace access. Use for technical advice.\n' +
+      (includeMentor ? '- `mentor`: advisory only, no workspace access. Use for technical advice.\n' : '') +
       (includeLibrarian
         ? '- `librarian`: memory reasoning. Use for retrieving context from persistent memory and recommending memory maintenance.\n'
         : '') +
@@ -139,7 +252,7 @@ export function getSubagentsRolesSection({ includeLibrarian = true }: { includeL
 
     for (const file of files) {
       const roleName = path.basename(file, '.md');
-      if (roleName === 'librarian' && !includeLibrarian) continue;
+      if ((roleName === 'librarian' && !includeLibrarian) || (roleName === 'mentor' && !includeMentor)) continue;
       const content = fs.readFileSync(path.join(promptsDir, file), 'utf-8');
       const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
       let description = '';
@@ -178,7 +291,7 @@ export function getSubagentsRolesSection({ includeLibrarian = true }: { includeL
   return (
     '## Roles\n' +
     '- `explorer`: read-only workspace access + web search + safe shell commands. Use for locating files, answering codebase questions, and looking up external docs or current information.\n' +
-    '- `mentor`: advisory only, no workspace access. Use for technical advice.\n' +
+    (includeMentor ? '- `mentor`: advisory only, no workspace access. Use for technical advice.\n' : '') +
     (includeLibrarian
       ? '- `librarian`: memory reasoning. Use for retrieving context from persistent memory and recommending memory maintenance.\n'
       : '') +
@@ -186,32 +299,105 @@ export function getSubagentsRolesSection({ includeLibrarian = true }: { includeL
   );
 }
 
-export const createRunSubagentToolDefinition = (
-  runSubagent: (params: RunSubagentParams, context?: unknown, details?: unknown) => Promise<SubagentResult>,
-): ToolDefinition<typeof runSubagentSchema> => ({
-  name: 'run_subagent',
-  description: RUN_SUBAGENT_DESCRIPTION,
-  parameters: runSubagentSchema,
-  needsApproval: () => false,
-  execute: async (params, context, details) => {
-    try {
-      const result = await runSubagent(params, context, details);
-      return formatSubagentResult(result);
-    } catch (error: any) {
-      if (isAbortLike(error?.message, error)) {
-        throw error;
+function formatBackgroundHandle(handle: SubagentRunHandle): string {
+  const output: Record<string, string> = { runId: handle.runId, status: handle.status };
+  if (handle.name) output.name = handle.name;
+  output.hint =
+    'Background run launched — do NOT call get_subagent_result now. End your turn; the completion notification will inline the full result.';
+  return JSON.stringify(output);
+}
+
+function failedForegroundResult(role: string, error: unknown): string {
+  return formatSubagentResult({
+    agentId: 'error',
+    role,
+    status: 'failed',
+    finalText: '',
+    filesChanged: [],
+    toolsUsed: [],
+    error: error instanceof Error ? error.message : String(error),
+  });
+}
+
+export function createRunSubagentToolDefinition(
+  callbacks:
+    | RunSubagentToolCallbacks
+    | ((params: ForegroundRunSubagentParams, context?: unknown, details?: unknown) => Promise<NestedSubagentResult>),
+): ToolDefinition {
+  // Keep the factory's direct-test call shape temporarily compatible. The
+  // model-facing schema always requires execution; only legacy direct callers
+  // bypass schema normalization and take this foreground fallback.
+  const legacyForegroundOnly = typeof callbacks === 'function';
+  const resolvedCallbacks: RunSubagentToolCallbacks = legacyForegroundOnly ? { runSubagent: callbacks } : callbacks;
+  const parameters = createRunSubagentSchema(resolvedCallbacks);
+
+  return {
+    name: 'run_subagent',
+    description: RUN_SUBAGENT_DESCRIPTION,
+    parameters,
+    needsApproval: () => false,
+    execute: async (rawParams: unknown, context, details) => {
+      const params = rawParams as RunSubagentParams;
+      if (params.execution === 'foreground' || (legacyForegroundOnly && params.execution === undefined)) {
+        if (params.name != null || params.continue_run_id != null) {
+          return failedForegroundResult(
+            params.role,
+            'Background-only inputs name and continue_run_id cannot be used with execution: "foreground".',
+          );
+        }
+        if (!resolvedCallbacks.runSubagent) {
+          return failedForegroundResult(params.role, 'Foreground execution is unavailable in this session.');
+        }
+        if (!FOREGROUND_ROLES.includes(params.role as (typeof FOREGROUND_ROLES)[number])) {
+          return failedForegroundResult(params.role, `Role "${params.role}" is unavailable for foreground execution.`);
+        }
+        try {
+          const result = await resolvedCallbacks.runSubagent(
+            { role: params.role, task: params.task },
+            context,
+            details,
+          );
+          return formatSubagentResult(result as SubagentResult);
+        } catch (error: unknown) {
+          if (isAbortLike(error instanceof Error ? error.message : undefined, error)) {
+            throw error;
+          }
+          return failedForegroundResult(params.role, error);
+        }
       }
-      const errorResult: SubagentResult = {
-        agentId: 'error',
-        role: params.role,
-        status: 'failed',
-        finalText: '',
-        filesChanged: [],
-        toolsUsed: [],
-        error: error?.message || String(error),
-      };
-      return formatSubagentResult(errorResult);
-    }
-  },
-  formatCommandMessage: formatRunSubagentCommandMessage,
-});
+
+      if (!resolvedCallbacks.runSubagentAsync) {
+        return JSON.stringify({
+          status: 'failed',
+          error: { code: 'background_unavailable', message: 'Background execution is unavailable in this session.' },
+        });
+      }
+      try {
+        return formatBackgroundHandle(
+          await resolvedCallbacks.runSubagentAsync(
+            {
+              role: params.role,
+              task: params.task,
+              name: params.name ?? undefined,
+              continue_run_id: params.continue_run_id ?? undefined,
+            },
+            context,
+            details,
+          ),
+        );
+      } catch (error: unknown) {
+        if (isAbortLike(error instanceof Error ? error.message : undefined, error)) {
+          throw error;
+        }
+        if (error instanceof SubagentRegistryError) {
+          return JSON.stringify({ status: 'failed', error: { code: error.code, message: error.message } });
+        }
+        return JSON.stringify({
+          status: 'failed',
+          error: { code: 'execution_failed', message: error instanceof Error ? error.message : String(error) },
+        });
+      }
+    },
+    formatCommandMessage: formatRunSubagentCommandMessage,
+  };
+}

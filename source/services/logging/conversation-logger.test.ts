@@ -336,6 +336,7 @@ it('dispatchEventToLog logs event-specific records', () => {
     agentId: 'agent-1',
     role: 'worker',
     task: 'inspect',
+    parentTool: 'run_subagent',
     async: true,
   });
   conversationLogger.dispatchEventToLog({
@@ -382,7 +383,14 @@ it('dispatchEventToLog logs event-specific records', () => {
       type: 'approval_required',
       approval: { toolName: 'shell', argumentsText: 'echo hi', agentName: 'assistant', callId: 'call-1' },
     },
-    { type: 'subagent_started', agentId: 'agent-1', role: 'worker', task: 'inspect', async: true },
+    {
+      type: 'subagent_started',
+      agentId: 'agent-1',
+      role: 'worker',
+      task: 'inspect',
+      parentTool: 'run_subagent',
+      async: true,
+    },
     {
       type: 'subagent_tool_started',
       agentId: 'agent-1',

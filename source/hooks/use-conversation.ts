@@ -15,7 +15,7 @@ import type { Message } from '../types/message.js';
 import { isBotMessage } from '../types/message.js';
 import type { UserTurn } from '../types/user-turn.js';
 import { conversationUIReducer, createInitialUIState, getConversationUIFlags } from './conversation-ui-reducer.js';
-import type { BackgroundSubagentTask } from '../services/subagents/subagent-notification-store.js';
+import type { BackgroundTask } from '../services/subagents/subagent-notification-store.js';
 import type { SessionCostAccumulator } from '../services/cost/model-cost.js';
 
 import type { ConversationLogWriter } from '../services/logging/conversation-log-writer.js';
@@ -125,7 +125,7 @@ export const useConversation = ({
 
   const provider = useSetting(settingsService || dummySettingsService, 'agent.provider') ?? 'openai';
   const readBackgroundSubagentTasks = useCallback(
-    (): { tasks: readonly BackgroundSubagentTask[]; now: number } => ({
+    (): { tasks: readonly BackgroundTask[]; now: number } => ({
       tasks: conversationService.backgroundSubagentTasks?.getSnapshot?.() ?? [],
       now: Date.now(),
     }),

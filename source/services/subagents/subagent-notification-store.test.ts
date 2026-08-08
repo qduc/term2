@@ -77,8 +77,36 @@ const toolFinished = (
     ...overrides,
   } as ConversationEvent);
 
+const shellStarted = (
+  overrides: Partial<Extract<ConversationEvent, { type: 'background_shell_started' }>> = {},
+): ConversationEvent =>
+  ({
+    type: 'background_shell_started',
+    jobId: 'shell-1',
+    command: 'pnpm test',
+    ...overrides,
+  } as ConversationEvent);
+
+const shellCompleted = (
+  overrides: Partial<Extract<ConversationEvent, { type: 'background_shell_completed' }>> = {},
+): ConversationEvent =>
+  ({
+    type: 'background_shell_completed',
+    jobId: 'shell-1',
+    command: 'pnpm test',
+    status: 'completed',
+    output: 'exit 0\nall tests passed',
+    ...overrides,
+  } as ConversationEvent);
+
 const makeStore = (options: { now?: () => number; deliveredIdCap?: number } = {}) =>
   new SubagentNotificationStore({ now: () => 1_000, ...options });
+
+const firstSubagentTask = (store: SubagentNotificationStore) => {
+  const task = store.getTaskSnapshot()[0];
+  if (!task || task.kind === 'shell') throw new Error('Expected a subagent task.');
+  return task;
+};
 
 it('records one notification carrying the run identity, status and preview', () => {
   const store = makeStore({ now: () => 4_242 });
@@ -96,6 +124,39 @@ it('records one notification carrying the run identity, status and preview', () 
       formattedResult: expect.stringMatching(/^Status: completed/),
       completedAt: 4_242,
     },
+  ]);
+});
+
+it('projects a shell job and enqueues its bounded completion independently of subagent runs', () => {
+  const store = makeStore({ now: () => 4_242 });
+
+  expect(store.recordLifecycle(shellStarted())).toBe(true);
+  expect(store.getTaskSnapshot()).toEqual([
+    {
+      kind: 'shell',
+      jobId: 'shell-1',
+      command: 'pnpm test',
+      status: 'running',
+      startedAt: 4_242,
+    },
+  ]);
+
+  expect(store.recordLifecycle(shellCompleted({ status: 'failed', error: 'tests failed' }))).toBe(true);
+  expect(store.enqueue(shellCompleted({ status: 'failed', error: 'tests failed' }))).toBe(true);
+  expect(store.drain()).toEqual([
+    {
+      kind: 'shell_completion',
+      messageId: 'shell_completion:shell-1',
+      jobId: 'shell-1',
+      command: 'pnpm test',
+      status: 'failed',
+      output: 'exit 0\nall tests passed',
+      error: 'tests failed',
+      completedAt: 4_242,
+    },
+  ]);
+  expect(store.getTaskSnapshot()).toEqual([
+    expect.objectContaining({ kind: 'shell', jobId: 'shell-1', status: 'failed', completedAt: 4_242 }),
   ]);
 });
 
@@ -130,6 +191,7 @@ it('projects an async start as a running background task with role, task, and st
   expect(store.recordLifecycle(started({ name: 'code_scan' }))).toBe(true);
   expect(store.getTaskSnapshot()).toEqual([
     {
+      kind: 'subagent',
       runId: 'run-1',
       name: 'code_scan',
       role: 'explorer',
@@ -210,6 +272,7 @@ it('projects a continuation of a settled run as a live task again', () => {
   expect(store.recordLifecycle(started({ task: 'continue the assessment' }))).toBe(true);
   expect(store.getTaskSnapshot()).toEqual([
     {
+      kind: 'subagent',
       runId: 'run-1',
       role: 'explorer',
       task: 'continue the assessment',
@@ -266,7 +329,10 @@ it('projects the running tool a live background run just started', () => {
   store.recordLifecycle(started());
 
   expect(store.recordLifecycle(toolStarted())).toBe(true);
-  expect(store.getTaskSnapshot()[0]?.lastTool).toEqual({ label: 'grep "TODO" src/', state: 'running' });
+  expect(firstSubagentTask(store).lastTool).toEqual({
+    label: 'grep "TODO" src/',
+    state: 'running',
+  });
 });
 
 it('parses JSON-string tool arguments into the projected tool label', () => {
@@ -275,7 +341,10 @@ it('parses JSON-string tool arguments into the projected tool label', () => {
 
   store.recordLifecycle(toolStarted({ toolName: 'shell', arguments: '{"command":"pnpm test"}' }));
 
-  expect(store.getTaskSnapshot()[0]?.lastTool).toEqual({ label: 'pnpm test', state: 'running' });
+  expect(firstSubagentTask(store).lastTool).toEqual({
+    label: 'pnpm test',
+    state: 'running',
+  });
 });
 
 it('settles the projected tool to its outcome when the background tool call finishes', () => {
@@ -284,10 +353,16 @@ it('settles the projected tool to its outcome when the background tool call fini
   store.recordLifecycle(toolStarted());
 
   expect(store.recordLifecycle(toolFinished())).toBe(true);
-  expect(store.getTaskSnapshot()[0]?.lastTool).toEqual({ label: 'grep "TODO" src/', state: 'success' });
+  expect(firstSubagentTask(store).lastTool).toEqual({
+    label: 'grep "TODO" src/',
+    state: 'success',
+  });
 
   expect(store.recordLifecycle(toolFinished({ command: 'pnpm test', success: false, toolName: 'shell' }))).toBe(true);
-  expect(store.getTaskSnapshot()[0]?.lastTool).toEqual({ label: 'pnpm test', state: 'failed' });
+  expect(firstSubagentTask(store).lastTool).toEqual({
+    label: 'pnpm test',
+    state: 'failed',
+  });
 });
 
 it('replaces the projected tool so only the most recent background tool call is visible', () => {
@@ -298,7 +373,10 @@ it('replaces the projected tool so only the most recent background tool call is 
 
   store.recordLifecycle(toolStarted({ toolCallId: 'tool-2', toolName: 'shell', arguments: { command: 'pnpm build' } }));
 
-  expect(store.getTaskSnapshot()[0]?.lastTool).toEqual({ label: 'pnpm build', state: 'running' });
+  expect(firstSubagentTask(store).lastTool).toEqual({
+    label: 'pnpm build',
+    state: 'running',
+  });
 });
 
 it('ignores tool activity for runs that are unknown or already settled', () => {
@@ -308,7 +386,7 @@ it('ignores tool activity for runs that are unknown or already settled', () => {
 
   expect(store.recordLifecycle(toolStarted())).toBe(false);
   expect(store.recordLifecycle(toolStarted({ agentId: 'foreground-run' }))).toBe(false);
-  expect(store.getTaskSnapshot()[0]?.lastTool).toBeUndefined();
+  expect(firstSubagentTask(store).lastTool).toBeUndefined();
 });
 
 it('ignores tool activity that carries no displayable command', () => {
@@ -316,7 +394,7 @@ it('ignores tool activity that carries no displayable command', () => {
   store.recordLifecycle(started());
 
   expect(store.recordLifecycle(toolFinished({ command: undefined }))).toBe(false);
-  expect(store.getTaskSnapshot()[0]?.lastTool).toBeUndefined();
+  expect(firstSubagentTask(store).lastTool).toBeUndefined();
 });
 
 it('ignores completion events that are not async runs', () => {
@@ -400,7 +478,7 @@ it('drains every pending run in one call in completion order', () => {
   expect(store.pendingCount).toBe(2);
   const drained = store.drain();
 
-  expect(drained.map((n) => n.runId)).toEqual(['run-a', 'run-b']);
+  expect(drained.filter((n) => n.kind === 'completion').map((n) => n.runId)).toEqual(['run-a', 'run-b']);
   expect(store.pendingCount).toBe(0);
 });
 
@@ -412,7 +490,12 @@ it('retains undelivered notifications ahead of newer ones for the next drain', (
   store.enqueue(completed({ agentId: 'run-b' }));
   store.retain(undelivered);
 
-  expect(store.drain().map((n) => n.runId)).toEqual(['run-a', 'run-b']);
+  expect(
+    store
+      .drain()
+      .filter((n) => n.kind === 'completion')
+      .map((n) => n.runId),
+  ).toEqual(['run-a', 'run-b']);
   expect(store.drain()).toEqual([]);
 });
 

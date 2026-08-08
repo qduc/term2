@@ -4,12 +4,12 @@ import { expect, it } from 'vitest';
 import React, { act } from 'react';
 import { Text } from 'ink';
 import { renderInAct } from '../test-helpers/ink-testing.js';
-import type { BackgroundSubagentTask } from '../services/subagents/subagent-notification-store.js';
+import type { BackgroundTask } from '../services/subagents/subagent-notification-store.js';
 import { useConversation } from './use-conversation.js';
 
 it.sequential('useConversation observes background task snapshots for the composer UI', async () => {
   let observer: (() => void) | null = null;
-  let tasks: readonly BackgroundSubagentTask[] = [];
+  let tasks: readonly BackgroundTask[] = [];
   const conversationService = {
     sessionId: 'background-task-hook',
     backgroundSubagentTasks: {
@@ -31,7 +31,13 @@ it.sequential('useConversation observes background task snapshots for the compos
       conversationService,
       loggingService,
     });
-    return <Text>{backgroundSubagentTasks.map((task) => `${task.role}:${task.status}`).join(',') || 'empty'}</Text>;
+    return (
+      <Text>
+        {backgroundSubagentTasks
+          .map((task) => `${task.kind === 'shell' ? 'shell' : task.role}:${task.status}`)
+          .join(',') || 'empty'}
+      </Text>
+    );
   };
 
   const renderer = await renderInAct(<Harness />);

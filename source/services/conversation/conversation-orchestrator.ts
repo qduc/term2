@@ -30,6 +30,7 @@ import {
   type UserTurn,
 } from '../../types/user-turn.js';
 import type {
+  BackgroundNotification,
   BackgroundSubagentNotification,
   BackgroundSubagentNotificationPort,
 } from '../subagents/subagent-notification-store.js';
@@ -41,7 +42,7 @@ const REASONING_RESPONSE_THROTTLE_MS = 200;
  * are already capped by the notification store, so the full output is offered
  * by reference rather than inlined.
  */
-function formatBackgroundSubagentNotifications(notifications: readonly BackgroundSubagentNotification[]): string {
+function formatBackgroundSubagentNotifications(notifications: readonly BackgroundNotification[]): string {
   const completions = notifications.filter(
     (notification): notification is Extract<BackgroundSubagentNotification, { kind: 'completion' }> =>
       notification.kind === 'completion',
@@ -49,6 +50,10 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
   const questions = notifications.filter(
     (notification): notification is Extract<BackgroundSubagentNotification, { kind: 'question' }> =>
       notification.kind === 'question',
+  );
+  const shellCompletions = notifications.filter(
+    (notification): notification is Extract<BackgroundNotification, { kind: 'shell_completion' }> =>
+      notification.kind === 'shell_completion',
   );
   const sections: string[] = [];
 
@@ -98,11 +103,35 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
     );
   }
 
+  if (shellCompletions.length > 0) {
+    const noun = shellCompletions.length === 1 ? 'job' : 'jobs';
+    const entries = shellCompletions.map((notification) =>
+      [
+        `- jobId: ${notification.jobId} | command: ${notification.command} | status: ${notification.status}`,
+        ...(notification.error ? [`  error: ${notification.error}`] : []),
+        '  output:',
+        notification.output
+          .split('\n')
+          .map((line) => `    ${line}`)
+          .join('\n'),
+      ].join('\n'),
+    );
+    sections.push(
+      [
+        `Background shell ${noun} finished (${shellCompletions.length}). This is an automatic system notification, not a user message.`,
+        '',
+        ...entries,
+        '',
+        'Assess the command result against the task and continue through the next necessary steps. Tell the user concisely, in your own words, what you concluded.',
+      ].join('\n'),
+    );
+  }
+
   return sections.join('\n\n');
 }
 
 /** The user-facing companion to the model-only background notification instruction. */
-function formatBackgroundSubagentNotificationDisplay(notifications: readonly BackgroundSubagentNotification[]): string {
+function formatBackgroundSubagentNotificationDisplay(notifications: readonly BackgroundNotification[]): string {
   return notifications
     .map((notification) => {
       if (notification.kind === 'question') {
@@ -110,6 +139,13 @@ function formatBackgroundSubagentNotificationDisplay(notifications: readonly Bac
         return [
           `messageId: ${notification.messageId} | target: ${target} | runId: ${notification.runId} | role: ${notification.role}`,
           `question: ${notification.question}`,
+        ].join('\n');
+      }
+      if (notification.kind === 'shell_completion') {
+        return [
+          `- jobId: ${notification.jobId} | command: ${notification.command} | status: ${notification.status}`,
+          ...(notification.error ? [`  error: ${notification.error}`] : []),
+          ...(notification.output ? [`  output: ${notification.output}`] : []),
         ].join('\n');
       }
       const lines = [
@@ -753,7 +789,7 @@ export class ConversationOrchestrator {
    * should see a run land the moment it does, whether the report reaches the
    * agent at the next request boundary or waits for a turn of its own.
    */
-  #announceBackgroundSubagentNotifications(notifications: readonly BackgroundSubagentNotification[]): void {
+  #announceBackgroundSubagentNotifications(notifications: readonly BackgroundNotification[]): void {
     const newlyDisplayed = notifications.filter(
       (notification) => !this.#displayedBackgroundNotificationMessageIds.has(notification.messageId),
     );
@@ -761,7 +797,10 @@ export class ConversationOrchestrator {
     for (const notification of newlyDisplayed) {
       this.#displayedBackgroundNotificationMessageIds.add(notification.messageId);
     }
-    const runs = newlyDisplayed
+    const subagentNotifications = newlyDisplayed.filter(
+      (notification): notification is BackgroundSubagentNotification => notification.kind !== 'shell_completion',
+    );
+    const runs = subagentNotifications
       .filter(
         (notification): notification is Extract<BackgroundSubagentNotification, { kind: 'completion' }> =>
           notification.kind === 'completion',
@@ -772,17 +811,46 @@ export class ConversationOrchestrator {
         status,
         ...(error ? { error } : {}),
       }));
+    const shellJobs = newlyDisplayed.filter(
+      (notification): notification is Extract<BackgroundNotification, { kind: 'shell_completion' }> =>
+        notification.kind === 'shell_completion',
+    );
     this.config.messages.appendMessages([
-      {
-        id: this.createMessageId(),
-        sender: 'command',
-        status: 'completed',
-        command: 'background_subagent_notification',
-        output: formatBackgroundSubagentNotificationDisplay(newlyDisplayed),
-        success: true,
-        toolName: 'background_subagent_notification',
-        toolArgs: { runs },
-      },
+      ...(subagentNotifications.length > 0
+        ? [
+            {
+              id: this.createMessageId(),
+              sender: 'command' as const,
+              status: 'completed' as const,
+              command: 'background_subagent_notification',
+              output: formatBackgroundSubagentNotificationDisplay(subagentNotifications),
+              success: true,
+              toolName: 'background_subagent_notification',
+              toolArgs: { runs },
+            },
+          ]
+        : []),
+      ...(shellJobs.length > 0
+        ? [
+            {
+              id: this.createMessageId(),
+              sender: 'command' as const,
+              status: 'completed' as const,
+              command: 'background_shell_notification',
+              output: formatBackgroundSubagentNotificationDisplay(shellJobs),
+              success: true,
+              toolName: 'background_shell_notification',
+              toolArgs: {
+                jobs: shellJobs.map(({ jobId, command, status, error }) => ({
+                  jobId,
+                  command,
+                  status,
+                  ...(error ? { error } : {}),
+                })),
+              },
+            },
+          ]
+        : []),
     ]);
   }
 

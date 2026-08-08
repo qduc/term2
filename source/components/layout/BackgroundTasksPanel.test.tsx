@@ -3,10 +3,11 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import { expect, it } from 'vitest';
 import React from 'react';
 import { renderInAct, rerenderInAct } from '../../test-helpers/ink-testing.js';
-import type { BackgroundSubagentTask } from '../../services/subagents/subagent-notification-store.js';
+import type { BackgroundSubagentTask, BackgroundTask } from '../../services/subagents/subagent-notification-store.js';
 import BackgroundTasksPanel from './BackgroundTasksPanel.js';
 
 const runningTask = (overrides: Partial<BackgroundSubagentTask> = {}): BackgroundSubagentTask => ({
+  kind: 'subagent',
   runId: 'run-1',
   role: 'explorer',
   task: 'inspect the project for the rendering regression',
@@ -19,6 +20,24 @@ it.sequential('is absent when there are no active or recently completed backgrou
   const renderer = await renderInAct(<BackgroundTasksPanel tasks={[]} now={1_000} />);
 
   expect(renderer.lastFrame() ?? '').toBe('');
+});
+
+it.sequential('renders a shell job without assigning it a subagent role', async () => {
+  const task: BackgroundTask = {
+    kind: 'shell',
+    jobId: 'shell-1',
+    command: 'pnpm test -- source/components',
+    status: 'running',
+    startedAt: 1_000,
+  };
+  const renderer = await renderInAct(<BackgroundTasksPanel tasks={[task]} now={4_000} />);
+
+  const output = renderer.lastFrame() ?? '';
+  expect(output).toContain('Background tasks · 1 active');
+  expect(output).toContain('[Shell]');
+  expect(output).toContain('pnpm test -- source/components');
+  expect(output).toContain('Running · 3s');
+  expect(output).not.toContain('Explorer');
 });
 
 it.sequential('shows active count, short task label, role badge, status, and elapsed duration', async () => {

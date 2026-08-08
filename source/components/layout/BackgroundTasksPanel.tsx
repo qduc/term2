@@ -12,6 +12,17 @@ type Props = {
 
 const TASK_LABEL_LIMIT = 60;
 const TOOL_LABEL_LIMIT = 60;
+const NAME_LIMIT = 24;
+
+const truncate = (value: string, limit: number): string =>
+  value.length > limit ? `${value.slice(0, limit - 1)}…` : value;
+
+// Multi-line prompts are common for subagent tasks; only the first line is a label.
+const firstLine = (value: string): string =>
+  value
+    .split('\n')
+    .find((line) => line.trim())
+    ?.trim() ?? '';
 
 const formatRole = (role: string): string => {
   if (!role) return 'Agent';
@@ -20,13 +31,11 @@ const formatRole = (role: string): string => {
 
 const formatTaskLabel = (task: BackgroundTask): string => {
   if (task.kind === 'shell') {
-    const command = task.command.replaceAll(/\s+/g, ' ').trim();
-    return command.length > TASK_LABEL_LIMIT ? `${command.slice(0, TASK_LABEL_LIMIT - 1)}…` : command;
+    return truncate(firstLine(task.command).replaceAll(/\s+/g, ' '), TASK_LABEL_LIMIT);
   }
-  const normalized = task.task.replaceAll(/\s+/g, ' ').trim();
-  const fallback = `${formatRole(task.role)} background task`;
-  const label = normalized || fallback;
-  return label.length > TASK_LABEL_LIMIT ? `${label.slice(0, TASK_LABEL_LIMIT - 1)}…` : label;
+  const normalized = firstLine(task.task).replaceAll(/\s+/g, ' ');
+  const label = normalized || `${formatRole(task.role)} background task`;
+  return truncate(label, TASK_LABEL_LIMIT);
 };
 
 const formatContextTokens = (tokens: number): string => {
@@ -42,10 +51,8 @@ const TOOL_STATE_MARKER: Record<BackgroundSubagentTaskTool['state'], string> = {
   failed: '✖',
 };
 
-const formatToolLabel = (tool: BackgroundSubagentTaskTool): string => {
-  const label = tool.label.replaceAll(/\s+/g, ' ').trim();
-  return label.length > TOOL_LABEL_LIMIT ? `${label.slice(0, TOOL_LABEL_LIMIT - 1)}…` : label;
-};
+const formatToolLabel = (tool: BackgroundSubagentTaskTool): string =>
+  truncate(firstLine(tool.label).replaceAll(/\s+/g, ' '), TOOL_LABEL_LIMIT);
 
 export const formatBackgroundTaskElapsed = (elapsedMs: number): string => {
   const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1_000));
@@ -80,29 +87,34 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now }) => {
       {tasks.map((task) => (
         <Box key={task.kind === 'shell' ? task.jobId : task.runId} flexDirection="column">
           <Box flexDirection="row">
-            <Box flexGrow={1}>
-              <Text color="#64748b">• </Text>
-              <Text color="#a5b4fc">[{task.kind === 'shell' ? 'Shell' : formatRole(task.role)}]</Text>
-              {task.kind !== 'shell' && task.name && <Text color="#c4b5fd"> {task.name}</Text>}
-              <Text> {formatTaskLabel(task)}</Text>
-              <Text color="#94a3b8">
-                {' '}
-                —{' '}
+            <Box flexGrow={1} flexShrink={1} minWidth={0}>
+              <Text wrap="truncate-end">
+                <Text color="#64748b">• </Text>
+                <Text color="#a5b4fc">[{task.kind === 'shell' ? 'Shell' : formatRole(task.role)}]</Text>
+                {task.kind !== 'shell' && task.name && <Text color="#c4b5fd"> {truncate(task.name, NAME_LIMIT)}</Text>}
+                <Text> {formatTaskLabel(task)}</Text>
+              </Text>
+            </Box>
+            <Box flexShrink={0}>
+              <Text color="#94a3b8" wrap="truncate-end">
+                {'  '}
                 {task.status === 'running'
                   ? `Running · ${formatBackgroundTaskElapsed(now - task.startedAt)}`
                   : formatTerminalStatus(task)}
+                {task.kind !== 'shell' && task.usage?.prompt_tokens != null
+                  ? ` · Ctx ${formatContextTokens(task.usage.prompt_tokens)}`
+                  : ''}
               </Text>
             </Box>
-            {task.kind !== 'shell' && task.usage?.prompt_tokens != null && (
-              <Text color="#94a3b8">Ctx {formatContextTokens(task.usage.prompt_tokens)}</Text>
-            )}
           </Box>
           {task.kind !== 'shell' && task.status === 'running' && task.lastTool && (
             <Box flexDirection="row">
               <Text color="#475569">{'  └ '}</Text>
-              <Text color="#64748b">
-                {TOOL_STATE_MARKER[task.lastTool.state]} {formatToolLabel(task.lastTool)}
-              </Text>
+              <Box flexGrow={1} flexShrink={1} minWidth={0}>
+                <Text color="#64748b" wrap="truncate-end">
+                  {TOOL_STATE_MARKER[task.lastTool.state]} {formatToolLabel(task.lastTool)}
+                </Text>
+              </Box>
             </Box>
           )}
         </Box>

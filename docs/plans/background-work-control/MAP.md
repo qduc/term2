@@ -2,7 +2,7 @@
 
 ## Resume here
 
-Background details, per-item stop, action notification, and truthful root-shell transfer are implemented and verified in `.worktrees/background-task-controls`. The remaining requested capability is foreground-subagent transfer. Before implementing it, resolve **Post-transfer subagent approvals** below: the current nested runner has no continuation handle that background UI can resume. Do not implement transfer as cancel-and-restart.
+Background details, per-item stop, action notification, and truthful root-shell transfer are implemented and verified at `d17810dc`. Foreground-subagent transfer is authorized for implementation in `.worktrees/background-subagent-transfer`. Build it as an approval-capable lease adopted by the existing async registry; do not implement transfer as cancel-and-restart and do not route child approvals through the root turn's singleton approval continuation.
 
 ## Destination
 
@@ -28,18 +28,17 @@ Users can inspect and stop individual background subagents or shell jobs, move a
 - **Transfer truthfulness** — Foreground work is never represented as background unless the same live execution and its cancellation/output ownership were transferred.
 - **Shell transfer lease** — Root agent shell starts under a session-owned foreground lease that can be atomically adopted by `BackgroundShellRegistry`; the same controller, process promise, output, cleanup, and correlation survive the handoff. Direct Shell Mode is a separate lifecycle. → [detail](map/shell-transfer-lease.md)
 - **Subagent transfer lease** — A foreground subagent needs an upfront session-owned lease with a stable run ID, independent controller, detachable parent abort, traffic context, progress/evidence, and one foreground-result resolver. The existing async registry cannot truthfully adopt a nested run created outside it. → [detail](map/subagent-transfer-lease.md)
+- **Post-transfer subagent approvals** — A transferred subagent keeps its exact child continuation and pauses in a session-owned background approval queue. Ink presents one queued request at a time through a narrow control port; the decision resumes the child run directly and reuses approval policy without entering the root turn's pending-approval state. → [detail](map/background-subagent-approvals.md)
 
 ## Open
 
-- **Post-transfer subagent approvals** [grill] — Must a transferred foreground subagent remain able to pause for a new nested tool approval? Full support requires a common pause-capable lease plus a background approval/resume UI; excluding it can strand work if an approval arises later.
 - **Direct shell mode** [research] — Does the requested foreground-shell action include commands launched from direct Shell Mode, whose current session only records completed history and exposes no process handle?
 - **Task-manager merge point** [task] — Reconcile the app-level input-owner/BottomArea integration after the active Phase 5 and double-Escape work hand off their overlapping files.
 
 ## Fog
 
-- Whether transfer during an approval pause needs a separate state from transfer while an executor is already running.
-- How provider continuation and cost attribution should identify a tool call whose result becomes a background handle before execution settles.
-- Shutdown ordering when a transferred tool outlives the foreground turn but the session closes immediately afterward.
+- Whether the final approval UI should preempt the composer globally or open from the task manager while showing a persistent approval-needed alert. The backend contract is the same either way.
+- Whether shutdown should await every adopted subagent lease or use a bounded drain after cancellation; it must not report completion before the lease settles.
 
 ## Out of scope
 
@@ -57,3 +56,4 @@ Users can inspect and stop individual background subagents or shell jobs, move a
 - 2026-08-08: Implemented Ctrl+B retained details, per-item force stop, exact-once main-agent action notifications, and a same-process root-shell foreground lease adopted atomically by `BackgroundShellRegistry`.
 - 2026-08-08: Independent review caught and closed two transfer defects: move notifications no longer masquerade as stop requests, and transferred output is capped by background policy.
 - 2026-08-08: Verification passed: 305 focused tests before final review fixes, final 153-test review slice, typecheck, build, and provider black-box (18 files / 160 tests). The unrestricted provider run was required because the filesystem sandbox prevents normal PTY/log shutdown.
+- 2026-08-08: Feasibility review confirmed `ApplicationRunLoop` already exposes the provider-neutral continuation primitive needed for truthful pause/resume. The missing work is lease ownership, registry adoption, approval policy/control, event routing, and Ink presentation; no provider wire-format change is required.

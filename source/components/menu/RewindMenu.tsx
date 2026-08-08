@@ -89,7 +89,7 @@ const RewindMenu: FC<Props> = ({
         return (
           <Box key={item.targetId} flexDirection="column">
             <Text inverse={isSelected} color={isSelected ? 'yellow' : undefined} bold={isSelected}>
-              {`${isSelected ? '▸' : ' '} ${String(item.turnNumber).padStart(2)}. ${truncate(
+              {`${isSelected ? '▸' : ' '} ${String(index + 1).padStart(2)}. ${truncate(
                 item.text,
                 TRUNCATE_LENGTH,
               )}${images}`}

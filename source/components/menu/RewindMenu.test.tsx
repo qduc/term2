@@ -35,6 +35,19 @@ it.sequential('renders each turn text', async () => {
   expect(output).toContain('now make the tests pass');
 });
 
+it.sequential('labels offset store targets by their visible picker ordinal', async () => {
+  const items = [
+    makeItem({ turnNumber: 251, text: 'first visible' }),
+    makeItem({ turnNumber: 252, text: 'second visible' }),
+  ];
+  const { lastFrame } = await renderInAct(<RewindMenu items={items} selectedIndex={0} disposition="edit" />);
+  const output = lastFrame() ?? '';
+
+  expect(output).toContain(' 1. first visible');
+  expect(output).toContain(' 2. second visible');
+  expect(output).not.toContain('251. first visible');
+});
+
 it.sequential('states what a rewind would discard', async () => {
   const items = [makeItem({ discardedReplies: 3, discardedFiles: ['a.ts', 'b.ts'] })];
   const { lastFrame } = await renderInAct(<RewindMenu items={items} selectedIndex={0} disposition="edit" />);

@@ -13,6 +13,14 @@ const loggingService = {
   error() {},
 } as any;
 
+type PublicConversationSend = ReturnType<typeof useConversation>['sendUserMessage'];
+
+const assertPublicSendCannotBypassAdmission = (send: PublicConversationSend) => {
+  // @ts-expect-error The surge bypass is workflow-owned and never public UI input.
+  send({ text: 'not allowed' }, { bypassInputSurgeGuard: true });
+};
+void assertPublicSendCannotBypassAdmission;
+
 it.sequential('useConversation triggers onClear and resets messages/sessionId', async () => {
   let onClearCalled = false;
   const mockConversationService = {

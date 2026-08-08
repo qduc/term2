@@ -236,9 +236,16 @@ export const useConversation = ({
   }, [conversationService]);
 
   // ── Public API — all orchestration delegates to the orchestrator ─────────
-  const sendUserMessage = useCallback(
+  const sendThroughOrchestrator = useCallback(
     (input: string | UserTurn, options?: ConversationTransportOptions) => orchestrator.sendUserMessage(input, options),
     [orchestrator],
+  );
+
+  // Direct UI callers can send a turn but cannot manufacture a guard bypass.
+  // Admission is the only public hook API that carries busy-mode policy.
+  const sendUserMessage = useCallback(
+    (input: string | UserTurn) => sendThroughOrchestrator(input),
+    [sendThroughOrchestrator],
   );
 
   const admissionWorkflowRef = useRef<ConversationAdmissionWorkflow | null>(null);
@@ -247,7 +254,7 @@ export const useConversation = ({
       conversation: conversationService,
       history: historyService,
       logger: loggingService,
-      send: (turn, options) => sendUserMessage(turn, options),
+      send: (turn, options) => sendThroughOrchestrator(turn, options),
     });
   }
   const admissionWorkflow = admissionWorkflowRef.current;

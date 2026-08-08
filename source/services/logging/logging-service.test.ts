@@ -330,6 +330,27 @@ it.sequential('tracks correlation IDs', async () => {
   expect(log2.correlationId).toBe(undefined);
 });
 
+it.sequential('uses explicit correlation metadata instead of an overlapping process-global correlation', async () => {
+  const logDir = getTestLogDir();
+  const logger = new LoggingService({
+    logDir,
+    disableLogging: false,
+    logLevel: 'debug',
+  });
+
+  logger.setCorrelationId('foreground-trace');
+  logger.info('background completion', { correlationId: 'background-job-trace' });
+
+  await new Promise((resolve) => setTimeout(resolve, 300));
+
+  const mainLogFile = findMainLogFile(logDir);
+  expect(mainLogFile).toBeTruthy();
+  if (!mainLogFile) return;
+  const lines = fs.readFileSync(path.join(logDir, mainLogFile), 'utf8').split('\n').filter(Boolean);
+  const log = JSON.parse(lines[lines.length - 1]);
+  expect(log.correlationId).toBe('background-job-trace');
+});
+
 it.sequential('uses a stable audit file path for rotated app logs', async () => {
   const logDir = getTestLogDir();
   const logger = new LoggingService({

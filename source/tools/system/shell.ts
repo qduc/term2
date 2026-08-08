@@ -519,30 +519,40 @@ export function createShellToolDefinition(deps: {
       // `correlationId` fields below instead so it cannot contaminate another
       // overlapping command's logs.
       if (ownsCorrelationId) loggingService.setCorrelationId(correlationId);
+      const withExecutionCorrelation = (metadata: Record<string, unknown>) =>
+        background ? { ...metadata, correlationId } : metadata;
 
       try {
         // Use provided values or settings defaults or hardcoded defaults
         const timeoutValue = timeout_ms ?? settingsService.get('shell.timeout');
         const timeout = timeoutValue != null ? timeoutValue : undefined;
         const maxOutputLengthValue = max_output_length ?? settingsService.get('shell.maxOutputChars');
-        const maxOutputLength = maxOutputLengthValue != null ? maxOutputLengthValue : undefined;
+        const configuredMaxOutputLength = settingsService.get('shell.maxOutputChars');
+        const maxOutputLength =
+          background && configuredMaxOutputLength != null
+            ? Math.min(maxOutputLengthValue ?? configuredMaxOutputLength, configuredMaxOutputLength)
+            : maxOutputLengthValue != null
+            ? maxOutputLengthValue
+            : undefined;
 
-        loggingService.debug('Shell command execution started', {
-          commandCount: 1,
-          commands: [command],
-          timeout,
-          workingDirectory: cwd,
-          maxOutputLength,
-        });
+        loggingService.debug(
+          'Shell command execution started',
+          withExecutionCorrelation({
+            commandCount: 1,
+            commands: [command],
+            timeout,
+            workingDirectory: cwd,
+            maxOutputLength,
+          }),
+        );
 
         // Strip redundant 'cd <path> &&' if it targets the current directory
         const optimizedCommand = stripRedundantCd(command, cwd);
         if (optimizedCommand !== command) {
-          loggingService.debug('Stripped redundant cd command', {
-            original: command,
-            optimized: optimizedCommand,
-            cwd,
-          });
+          loggingService.debug(
+            'Stripped redundant cd command',
+            withExecutionCorrelation({ original: command, optimized: optimizedCommand, cwd }),
+          );
         }
 
         let commandToRun = optimizedCommand;
@@ -551,7 +561,10 @@ export function createShellToolDefinition(deps: {
           const rtkPath = await rtkInstaller({ loggingService });
           if (rtkPath) {
             commandToRun = wrapWithRtk(optimizedCommand, rtkPath);
-            loggingService.debug('Wrapped command with rtk', { rtkPath, original: optimizedCommand });
+            loggingService.debug(
+              'Wrapped command with rtk',
+              withExecutionCorrelation({ rtkPath, original: optimizedCommand }),
+            );
           }
         }
 
@@ -564,9 +577,10 @@ export function createShellToolDefinition(deps: {
         if (postExecuteDeniedRead && typeof toolCallId === 'string') overrideByCallId.delete(toolCallId);
         if (override?.forceUnsandboxed) {
           sandbox = 'unsandboxed';
-          loggingService.debug('Shell executing unsandboxed by approved override', {
-            command: optimizedCommand.substring(0, 100),
-          });
+          loggingService.debug(
+            'Shell executing unsandboxed by approved override',
+            withExecutionCorrelation({ command: optimizedCommand.substring(0, 100) }),
+          );
         }
         const extraAllowReadFromOverride = override?.extraAllowRead ?? [];
 
@@ -580,12 +594,14 @@ export function createShellToolDefinition(deps: {
             // later run of the same command is judged on its own.
             if (sessionAccess) sessionAccess.consumeDockerDenial(command);
             else nestedCompatibility?.docker.consumeDenial(sessionId, command);
-            loggingService.security('Docker host-control capability granted for shell command', {
-              command: optimizedCommand.substring(0, 100),
-              cwd,
-              socketPath: dockerHostControl.socketPath,
-              correlationId,
-            });
+            loggingService.security(
+              'Docker host-control capability granted for shell command',
+              withExecutionCorrelation({
+                command: optimizedCommand.substring(0, 100),
+                cwd,
+                socketPath: dockerHostControl.socketPath,
+              }),
+            );
           } catch (error) {
             return `Error: ${error instanceof Error ? error.message : String(error)}`;
           }
@@ -609,10 +625,10 @@ export function createShellToolDefinition(deps: {
                   ...extraAllowReadFromOverride,
                 ],
                 onProtectedFiltered: (filtered) => {
-                  loggingService.info('Shell sandbox removed write access to protected paths', {
-                    filtered,
-                    cwd,
-                  });
+                  loggingService.info(
+                    'Shell sandbox removed write access to protected paths',
+                    withExecutionCorrelation({ filtered, cwd }),
+                  );
                 },
               });
               const wrapped = await shellSandboxRunner.wrap(commandToRun, {
@@ -623,19 +639,26 @@ export function createShellToolDefinition(deps: {
               commandToRun = wrapped.command;
               sandboxed = true;
               if (wrapped.diagnostics?.length) {
-                loggingService.debug('Shell sandbox diagnostics', { diagnostics: wrapped.diagnostics });
+                loggingService.debug(
+                  'Shell sandbox diagnostics',
+                  withExecutionCorrelation({ diagnostics: wrapped.diagnostics }),
+                );
               }
             } catch (error) {
-              loggingService.warn('Shell sandbox initialization failed; refusing unsandboxed fallback', {
-                error: error instanceof Error ? error.message : String(error),
-              });
+              loggingService.warn(
+                'Shell sandbox initialization failed; refusing unsandboxed fallback',
+                withExecutionCorrelation({ error: error instanceof Error ? error.message : String(error) }),
+              );
               return `Error: ${SANDBOX_ESCAPE_INSTRUCTION}`;
             }
           } else {
-            loggingService.warn('Shell sandbox unavailable; refusing unsandboxed fallback', {
-              availability: sandboxAvailability.type,
-              reason: 'reason' in sandboxAvailability ? sandboxAvailability.reason : undefined,
-            });
+            loggingService.warn(
+              'Shell sandbox unavailable; refusing unsandboxed fallback',
+              withExecutionCorrelation({
+                availability: sandboxAvailability.type,
+                reason: 'reason' in sandboxAvailability ? sandboxAvailability.reason : undefined,
+              }),
+            );
             return `Error: ${SANDBOX_ESCAPE_INSTRUCTION}`;
           }
         }
@@ -681,40 +704,61 @@ export function createShellToolDefinition(deps: {
             // approval flow and the retry will present.
             if (sessionAccess) sessionAccess.recordDockerDenial(command);
             else nestedCompatibility?.docker.recordDenial(sessionId, command);
-            loggingService.security('Sandbox blocked Docker daemon access; agent retry will prompt for approval', {
-              confidence: sandboxFailure.confidence,
-              command: command.substring(0, 100),
-              cwd,
-              correlationId,
-              sessionId,
-              // Without a session the block is unattributable, so it is not
-              // remembered and the retry will be sandboxed again.
-              denialRecorded: Boolean(sessionId),
-            });
+            loggingService.security(
+              'Sandbox blocked Docker daemon access; agent retry will prompt for approval',
+              withExecutionCorrelation({
+                confidence: sandboxFailure.confidence,
+                command: command.substring(0, 100),
+                cwd,
+                sessionId,
+                // Without a session the block is unattributable, so it is not
+                // remembered and the retry will be sandboxed again.
+                denialRecorded: Boolean(sessionId),
+              }),
+            );
             return { output: `Error: ${DOCKER_HOST_CONTROL_RETRY_INSTRUCTION}`, status: 'failed' };
           }
 
           if (sandboxFailure?.type === 'denied_read') {
-            if (postExecuteDeniedRead && typeof toolCallId !== 'string') {
+            if (!background && postExecuteDeniedRead && typeof toolCallId !== 'string') {
               throw new HarnessInvariantError('Root shell denied-read handling requires an SDK tool call ID');
             }
             // Keyed by the command the model passed, not `optimizedCommand`: the
             // retry and both approval lookups (needsApproval here, and the
             // conversation layer, which has no cwd to re-derive the stripped form)
             // only ever see the raw string.
+            if (background && postExecuteDeniedRead) {
+              loggingService.security(
+                'Sandbox denied read in background shell job; foreground retry is required',
+                withExecutionCorrelation({
+                  deniedPath: sandboxFailure.deniedRead.path,
+                  suggestedParent: sandboxFailure.deniedRead.suggestedParent,
+                  sensitive: sandboxFailure.deniedRead.sensitive,
+                  confidence: sandboxFailure.confidence,
+                  command: optimizedCommand.substring(0, 100),
+                }),
+              );
+              return {
+                output:
+                  'Error: Sandbox blocked a read access. Background jobs cannot request permission after launch; rerun this command in the foreground to choose an allow option.',
+                status: 'failed',
+              };
+            }
             if (postExecuteDeniedRead) {
               deniedReadByCallId.set(toolCallId as string, sandboxFailure.deniedRead);
             } else {
               nestedCompatibility?.deniedReads.record(command, sandboxFailure.deniedRead);
             }
-            loggingService.security('Sandbox denied read; agent retry will prompt for approval', {
-              deniedPath: sandboxFailure.deniedRead.path,
-              suggestedParent: sandboxFailure.deniedRead.suggestedParent,
-              sensitive: sandboxFailure.deniedRead.sensitive,
-              confidence: sandboxFailure.confidence,
-              command: optimizedCommand.substring(0, 100),
-              correlationId,
-            });
+            loggingService.security(
+              'Sandbox denied read; agent retry will prompt for approval',
+              withExecutionCorrelation({
+                deniedPath: sandboxFailure.deniedRead.path,
+                suggestedParent: sandboxFailure.deniedRead.suggestedParent,
+                sensitive: sandboxFailure.deniedRead.sensitive,
+                confidence: sandboxFailure.confidence,
+                command: optimizedCommand.substring(0, 100),
+              }),
+            );
             return { output: `Error: ${DETAILED_DENIED_READ_INSTRUCTION}`, status: 'failed' };
           }
 
@@ -725,31 +769,40 @@ export function createShellToolDefinition(deps: {
             : { type: 'exit', exitCode };
 
           if (result.timedOut) {
-            loggingService.warn('Shell command timeout', {
-              command: optimizedCommand.substring(0, 100),
-              timeout,
-            });
+            loggingService.warn(
+              'Shell command timeout',
+              withExecutionCorrelation({ command: optimizedCommand.substring(0, 100), timeout }),
+            );
           } else if (exitCode === 0) {
-            loggingService.debug('Shell command executed successfully', {
-              command: optimizedCommand.substring(0, 100),
-              exitCode: 0,
-              stdoutLength: stdout.length,
-              stderrLength: stderr.length,
-            });
+            loggingService.debug(
+              'Shell command executed successfully',
+              withExecutionCorrelation({
+                command: optimizedCommand.substring(0, 100),
+                exitCode: 0,
+                stdoutLength: stdout.length,
+                stderrLength: stderr.length,
+              }),
+            );
           } else {
-            loggingService.debug('Shell command execution failed', {
-              command: optimizedCommand.substring(0, 100),
-              exitCode,
-              stderrLength: stderr.length,
-            });
+            loggingService.debug(
+              'Shell command execution failed',
+              withExecutionCorrelation({
+                command: optimizedCommand.substring(0, 100),
+                exitCode,
+                stderrLength: stderr.length,
+              }),
+            );
           }
 
-          loggingService.debug('Shell command execution completed', {
-            commandCount: 1,
-            successCount: outcome.type === 'exit' && outcome.exitCode === 0 ? 1 : 0,
-            failureCount: outcome.type === 'exit' && outcome.exitCode !== 0 ? 1 : 0,
-            timeoutCount: outcome.type === 'timeout' ? 1 : 0,
-          });
+          loggingService.debug(
+            'Shell command execution completed',
+            withExecutionCorrelation({
+              commandCount: 1,
+              successCount: outcome.type === 'exit' && outcome.exitCode === 0 ? 1 : 0,
+              failureCount: outcome.type === 'exit' && outcome.exitCode !== 0 ? 1 : 0,
+              timeoutCount: outcome.type === 'timeout' ? 1 : 0,
+            }),
+          );
 
           const formattedOutput = await formatShellExecutionOutput({
             command: optimizedCommand,

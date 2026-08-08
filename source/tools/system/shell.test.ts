@@ -160,6 +160,105 @@ it('background shell reports a timeout as timed_out through the lifecycle event 
   ]);
 });
 
+it('background shell clamps output to the configured session maximum even when the caller requests more', async () => {
+  const registry = new BackgroundShellRegistry<{ output: string; status: 'completed' | 'failed' | 'timed_out' }>({
+    createId: () => 'clamped-job',
+  });
+  const fullOnlySentinel = 'BACKGROUND-FULL-ONLY-SENTINEL';
+  const shell = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': false, 'shell.maxOutputChars': 80 }),
+    backgroundShellRegistry: registry,
+    executeShellCommandImpl: async () => ({
+      stdout: `${'x'.repeat(100)}${fullOnlySentinel}${'y'.repeat(100)}`,
+      stderr: '',
+      exitCode: 0,
+      timedOut: false,
+    }),
+  });
+
+  await shell.execute({ command: 'long-output', background: true, max_output_length: 10_000 });
+  const settled = await registry.whenSettled('clamped-job');
+
+  expect(settled?.result?.output).not.toContain(fullOnlySentinel);
+  expect(settled?.result?.output).toContain('Full output saved to');
+});
+
+it('background denied reads direct a foreground retry without leaving a deferred root approval', async () => {
+  const registry = new BackgroundShellRegistry<{ output: string; status: 'completed' | 'failed' | 'timed_out' }>({
+    createId: () => 'denied-job',
+  });
+  const shell = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': true, 'sandbox.readPolicy': 'strict' }),
+    backgroundShellRegistry: registry,
+    postExecuteDeniedRead: true,
+    shellSandboxRunner: createFakeSandboxRunner({
+      annotateFailure: (_command: string, stderr: string) =>
+        `${stderr}\n<sandbox_violations>\nSandbox: cat(123) deny file-read* /home/testuser/.cargo/registry/cache\n</sandbox_violations>`,
+    }),
+    executeShellCommandImpl: async () => ({
+      stdout: '',
+      stderr: 'cat: error',
+      exitCode: 1,
+      timedOut: false,
+    }),
+  });
+  const details = { toolCall: { callId: 'background-denied-read' } };
+
+  const acknowledgement = await shell.execute(
+    { command: 'cat ~/.cargo/registry/cache', background: true },
+    undefined,
+    details,
+  );
+  const settled = await registry.whenSettled('denied-job');
+
+  expect(settled?.result?.output).toContain('foreground');
+  expect(
+    shell.postExecutePause!.describe(
+      { command: 'cat ~/.cargo/registry/cache', background: true },
+      acknowledgement,
+      details,
+    ),
+  ).toBeNull();
+});
+
+it('background shell logs retain their own correlation while a foreground trace is active', async () => {
+  const execution = createDeferred<{ stdout: string; stderr: string; exitCode: number; timedOut: boolean }>();
+  const debugCalls: Array<{ message: string; meta?: Record<string, unknown> }> = [];
+  let currentCorrelationId: string | undefined = 'foreground-trace';
+  const registry = new BackgroundShellRegistry<{ output: string; status: 'completed' | 'failed' | 'timed_out' }>({
+    createId: () => 'correlated-job',
+  });
+  const shell = createShellToolDefinition({
+    loggingService: createNoopLogger({
+      debug: (message, meta) => debugCalls.push({ message, meta }),
+      getCorrelationId: () => currentCorrelationId,
+      setCorrelationId: (id) => {
+        currentCorrelationId = id;
+      },
+      clearCorrelationId: () => {
+        currentCorrelationId = undefined;
+      },
+    }),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': false }),
+    backgroundShellRegistry: registry,
+    executeShellCommandImpl: async () => execution.promise,
+  });
+
+  await shell.execute({ command: 'deferred-output', background: true });
+  execution.resolve({ stdout: 'ok', stderr: '', exitCode: 0, timedOut: false });
+  await registry.whenSettled('correlated-job');
+
+  const backgroundCorrelationIds = debugCalls
+    .filter(({ message }) => message.startsWith('Shell command'))
+    .map(({ meta }) => meta?.correlationId);
+  expect(backgroundCorrelationIds).toHaveLength(3);
+  expect(new Set(backgroundCorrelationIds).size).toBe(1);
+  expect(backgroundCorrelationIds[0]).not.toBe('foreground-trace');
+  expect(currentCorrelationId).toBe('foreground-trace');
+});
+
 it.sequential('shell execute appends spill-file guidance when output is truncated', async () => {
   const longStdout = `${'x'.repeat(6000)}FULL-ONLY-SENTINEL${'y'.repeat(6000)}`;
 

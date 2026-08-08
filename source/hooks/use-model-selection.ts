@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useInputContext } from '../context/InputContext.js';
-import { fetchModels, filterModels, clearModelCache, type ModelInfo } from '../services/model-service.js';
-import { getProviderIds, sortProvidersByOrder } from '../providers/index.js';
+import { filterModels, type ModelInfo } from '../services/model-service.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
+import { ModelCatalogSession } from '../services/models/model-catalog-session.js';
 import { parseModelProviderArg } from '../utils/ai/model-provider-arg.js';
 import { getModelSettingConfigForInput } from '../utils/ai/model-settings.js';
 
 export const useModelSelection = (deps: { loggingService: ILoggingService; settingsService: ISettingsService }) => {
   const { loggingService, settingsService } = deps;
   const { mode, input, cursorOffset, triggerIndex, controller } = useInputContext();
+  const catalogSession = useMemo(
+    () => new ModelCatalogSession({ settingsService, loggingService }),
+    [settingsService, loggingService],
+  );
 
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -17,11 +21,8 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
   const [provider, setProvider] = useState<string | null>(null);
   const [scrollOffset, setScrollOffset] = useState(0);
   const providerRef = useRef<string | null>(null);
-  const failedProvidersRef = useRef<Set<string>>(new Set());
   const isInitialLoadRef = useRef(true);
-  const loadRequestIdRef = useRef(0);
   const [refreshKey, setRefreshKey] = useState(0);
-  const modelsByProviderRef = useRef<Map<string, ModelInfo[]>>(new Map());
   const shouldPreselectRef = useRef(false);
 
   const controllerFrame = controller.getSnapshot().stack.at(-1);
@@ -63,23 +64,21 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
       if (providerRef.current === null) {
         setCurrentProvider(getInitialProvider());
       }
-      failedProvidersRef.current.clear();
+      catalogSession.begin();
       isInitialLoadRef.current = true;
       shouldPreselectRef.current = true;
     }
-  }, [isOpen, getInitialProvider, setCurrentProvider]);
+  }, [isOpen, getInitialProvider, setCurrentProvider, catalogSession]);
 
   useEffect(() => {
     if (!isOpen || !provider) return;
 
-    const requestId = ++loadRequestIdRef.current;
-    const isCurrentRequest = () => requestId === loadRequestIdRef.current;
-    const cachedModels = modelsByProviderRef.current.get(provider);
+    const cachedModels = catalogSession.getCached(provider);
 
     const load = async () => {
       // If already marked as failed, don't try again in this session
       // unless it's the only one left (covered by logic below)
-      if (failedProvidersRef.current.has(provider) && !isInitialLoadRef.current) {
+      if (!catalogSession.shouldRetry(provider, isInitialLoadRef.current)) {
         return;
       }
 
@@ -88,42 +87,36 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
       setScrollOffset(0);
       setLoading(!cachedModels);
       setError(null);
+      let stale = false;
 
       try {
-        const fetched = await fetchModels({ settingsService, loggingService }, provider);
-        if (!isCurrentRequest()) return;
-        modelsByProviderRef.current.set(provider, fetched);
-        setModels(fetched);
+        const result = await catalogSession.load(provider);
+        if (result.kind === 'stale') {
+          stale = true;
+          return;
+        }
+        setModels(result.models);
         isInitialLoadRef.current = false;
       } catch (err) {
-        if (!isCurrentRequest()) return;
         const message = err instanceof Error ? err.message : String(err);
-        loggingService.warn(`Model selection fetch failed for ${provider}`, { error: message });
-
-        failedProvidersRef.current.add(provider);
         setError(message);
       } finally {
-        if (isCurrentRequest()) {
-          setLoading(false);
-        }
+        if (!stale) setLoading(false);
       }
     };
 
     load().catch((err) => {
-      if (!isCurrentRequest()) return;
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
       setLoading(false);
     });
-  }, [isOpen, provider, settingsService, loggingService, refreshKey]);
+  }, [isOpen, provider, catalogSession, refreshKey]);
 
   const refresh = useCallback(() => {
     if (!isOpen || !provider) return;
-    failedProvidersRef.current.delete(provider);
-    modelsByProviderRef.current.delete(provider);
-    clearModelCache(provider);
+    catalogSession.refresh(provider);
     setRefreshKey((k) => k + 1);
-  }, [isOpen, provider]);
+  }, [isOpen, provider, catalogSession]);
 
   const filteredModels = useMemo(() => {
     return filterModels(models, query);
@@ -239,26 +232,12 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
 
   const toggleProvider = useCallback(
     (direction: 'next' | 'prev' = 'next') => {
-      const allProviderIds = getProviderIds();
-      const providerOrder = (settingsService.getDynamic('providerOrder') as string[] | undefined) ?? [];
-      const orderedProviderIds =
-        providerOrder.length > 0 ? sortProvidersByOrder(allProviderIds, providerOrder) : allProviderIds;
-
-      // If no providers available, stay on current
-      if (orderedProviderIds.length === 0) return;
-
-      const currentProvider = providerRef.current || getInitialProvider() || orderedProviderIds[0];
-      const currentIndex = orderedProviderIds.indexOf(currentProvider);
-      const safeCurrentIndex = currentIndex >= 0 ? currentIndex : 0;
-      const nextIndex =
-        direction === 'prev'
-          ? (safeCurrentIndex - 1 + orderedProviderIds.length) % orderedProviderIds.length
-          : (safeCurrentIndex + 1) % orderedProviderIds.length;
-      const nextProvider = orderedProviderIds[nextIndex];
-      const cachedModels = modelsByProviderRef.current.get(nextProvider);
+      const currentProvider = providerRef.current || getInitialProvider() || null;
+      const nextProvider = catalogSession.nextProvider(currentProvider, direction);
+      if (!nextProvider) return;
+      const cachedModels = catalogSession.getCached(nextProvider);
 
       // If the user manually selects it, we should allow retrying it
-      failedProvidersRef.current.delete(nextProvider);
       shouldPreselectRef.current = true;
       setModels(cachedModels ?? []);
       setSelectedIndex(0);
@@ -267,7 +246,7 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
       setError(null);
       setCurrentProvider(nextProvider);
     },
-    [getInitialProvider, setCurrentProvider, settingsService],
+    [getInitialProvider, setCurrentProvider, catalogSession],
   );
 
   return {

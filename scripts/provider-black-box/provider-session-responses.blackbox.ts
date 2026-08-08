@@ -19,10 +19,15 @@ const TOOL_CALL_ID = 'call-fixture-approval';
 const TOOL_ITEM_ID = 'item-fixture-approval';
 const TOOL_ARGUMENTS_PARTS = ['{"command":"pwd",', '"sandbox":"unsandboxed"}'] as const;
 const TOOL_ARGUMENTS = TOOL_ARGUMENTS_PARTS.join('');
+const BACKGROUND_SHELL_CALL_ID = 'call-fixture-background-shell';
+const BACKGROUND_SHELL_ITEM_ID = 'item-fixture-background-shell';
+// Harmless and deliberately short-lived: completion occurs after the launch
+// acknowledgement, while keeping this shipped-CLI fixture free of inline code.
+const BACKGROUND_SHELL_ARGUMENTS = JSON.stringify({ command: 'sleep 1', background: true });
 
 type ProviderId = 'openai' | 'codex';
 type Transport = 'http' | 'websocket';
-type FixtureMode = 'multi-turn' | 'approval' | 'native-error' | 'incomplete' | 'abnormal-close';
+type FixtureMode = 'multi-turn' | 'approval' | 'background-shell' | 'native-error' | 'incomplete' | 'abnormal-close';
 
 /** Typed lifecycle ledger consumed by the Gate C matrix-accounting test. */
 export { RESPONSES_CAPABILITY_EXECUTIONS as executedCapabilityScenarioIds } from './provider-session-capability-manifest.js';
@@ -183,6 +188,40 @@ describe('application-owned Responses lifecycle through the shipped CLI', () => 
 
     assertApprovalResume(server, providerCase, 'rejected');
     expect(child.getVisibleOutput()).toContain('fixture rejection');
+  });
+
+  it('OpenAI HTTP returns a background shell launch acknowledgement before its late completion notification', async () => {
+    const providerCase: ProviderTransportCase = { provider: 'openai', transport: 'http' };
+    const server = await startResponsesFixtureServer({ mode: 'background-shell' });
+    activeServer = server;
+    const workspace = await createWorkspace(server, providerCase);
+    activeWorkspace = workspace;
+    const child = await startCli(workspace);
+    activeChild = child;
+
+    await child.waitForVisibleOutput('❯');
+    await writePrompt(child, 'launch the background shell fixture');
+    await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 2);
+    await child.waitForVisibleOutput('BACKGROUND-LAUNCH-FINAL');
+    await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 3, 10_000);
+    await child.waitForVisibleOutput('BACKGROUND-COMPLETION-FINAL');
+
+    const requests = normalRequests(server.requests);
+    const launchContinuation = requests[1];
+    const results = toolResultItems(launchContinuation);
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ type: 'function_call_output', call_id: BACKGROUND_SHELL_CALL_ID });
+    const acknowledgement = parseFunctionResultOutput(results[0]);
+    expect(acknowledgement).toMatchObject({ jobId: expect.any(String), status: 'running' });
+
+    // A background completion is a separate notification turn, never a second
+    // function result for the original tool call.
+    expect(requests.flatMap(toolResultItems).filter((item) => item.call_id === BACKGROUND_SHELL_CALL_ID)).toHaveLength(
+      1,
+    );
+    expect(toolResultItems(requests[2])).toEqual([]);
+
+    await child.terminate({ timeoutMs: 2_000 });
   });
 });
 
@@ -398,6 +437,22 @@ function toolResultRequests(requests: readonly CapturedResponsesRequest[]): Capt
   });
 }
 
+function toolResultItems(request: CapturedResponsesRequest | undefined): Array<Record<string, unknown>> {
+  const input = request?.body.input;
+  return Array.isArray(input)
+    ? input.filter(
+        (item): item is Record<string, unknown> =>
+          isRecord(item) && (item.type === 'function_call_output' || item.type === 'function_call_result'),
+      )
+    : [];
+}
+
+function parseFunctionResultOutput(item: Record<string, unknown>): unknown {
+  const output = item.output;
+  if (typeof output !== 'string') return output;
+  return JSON.parse(output);
+}
+
 async function startResponsesFixtureServer(options: { mode: FixtureMode }): Promise<ResponsesFixtureServer> {
   const requests: CapturedResponsesRequest[] = [];
   const served: ServedResponse[] = [];
@@ -545,6 +600,18 @@ async function serveResponse(
     return;
   }
 
+  if (mode === 'background-shell') {
+    const responseId = normalIndex === 0 ? 'resp-background-tool' : `resp-background-${normalIndex}`;
+    const text = normalIndex === 1 ? 'BACKGROUND-LAUNCH-FINAL' : 'BACKGROUND-COMPLETION-FINAL';
+    const frames =
+      normalIndex === 0
+        ? backgroundShellToolCallFrames(responseId)
+        : [createdFrame(responseId), ...messageFrames(text), completedFrame(responseId, [messageOutput(text)])];
+    await sendFrames(httpResponse, webSocket, frames);
+    served.push({ request, terminalType: 'response.completed', responseId, closedAbnormally: false });
+    return;
+  }
+
   const responseId =
     mode === 'approval' ? TOOL_RESUMED_RESPONSE_ID : normalIndex === 0 ? FIRST_RESPONSE_ID : SECOND_RESPONSE_ID;
   const text =
@@ -628,6 +695,41 @@ function toolCallFrames(responseId: string): Record<string, unknown>[] {
       output_index: 0,
     },
     completedFrame(responseId, [{ ...item, status: 'completed', arguments: TOOL_ARGUMENTS }]),
+  ];
+}
+
+function backgroundShellToolCallFrames(responseId: string): Record<string, unknown>[] {
+  const item = {
+    id: BACKGROUND_SHELL_ITEM_ID,
+    type: 'function_call',
+    status: 'in_progress',
+    arguments: '',
+    call_id: BACKGROUND_SHELL_CALL_ID,
+    name: 'shell',
+  };
+  return [
+    createdFrame(responseId),
+    { type: 'response.output_item.added', item, output_index: 0 },
+    {
+      type: 'response.function_call_arguments.delta',
+      item_id: BACKGROUND_SHELL_ITEM_ID,
+      call_id: BACKGROUND_SHELL_CALL_ID,
+      delta: BACKGROUND_SHELL_ARGUMENTS,
+      output_index: 0,
+    },
+    {
+      type: 'response.function_call_arguments.done',
+      item_id: BACKGROUND_SHELL_ITEM_ID,
+      call_id: BACKGROUND_SHELL_CALL_ID,
+      arguments: BACKGROUND_SHELL_ARGUMENTS,
+      output_index: 0,
+    },
+    {
+      type: 'response.output_item.done',
+      item: { ...item, status: 'completed', arguments: BACKGROUND_SHELL_ARGUMENTS },
+      output_index: 0,
+    },
+    completedFrame(responseId, [{ ...item, status: 'completed', arguments: BACKGROUND_SHELL_ARGUMENTS }]),
   ];
 }
 

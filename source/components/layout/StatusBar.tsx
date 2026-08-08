@@ -76,10 +76,14 @@ const StatusBar: FC<StatusBarProps> = ({
 
   const tokenParts: string[] = [];
   if (lastUsage?.prompt_tokens != null) {
+    const cachePercentage =
+      usageHasCacheRead && lastUsage.prompt_tokens > 0
+        ? ((cacheReadTokens / lastUsage.prompt_tokens) * 100).toFixed(1)
+        : '';
     const cacheText = usageHasCacheRead
       ? usageHasIntegratedWarning
         ? `⚠️ ${cacheReadTokens.toLocaleString()} uncached`
-        : `${cacheReadTokens.toLocaleString()} cached`
+        : `${cachePercentage}% cached`
       : '';
     tokenParts.push(`${lastUsage.prompt_tokens.toLocaleString()} in${cacheText ? ` (${cacheText})` : ''}`);
   }

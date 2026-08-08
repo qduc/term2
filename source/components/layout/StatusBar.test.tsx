@@ -83,8 +83,22 @@ it.sequential('StatusBar renders cache usage in the footer', async () => {
 
   const output = lastFrame() ?? '';
 
-  expect(output.includes('Tok 1,200 in (900 cached) / 350 out')).toBe(true);
+  expect(output.includes('Tok 1,200 in (75.0% cached) / 350 out')).toBe(true);
   expect(output.includes('│ Cache')).toBe(false);
+});
+
+it.sequential('StatusBar renders cache usage as a percentage of prompt tokens', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+    'shell.autoApproveMode': 'off',
+  });
+
+  const { lastFrame } = await renderInAct(
+    <StatusBar settingsService={settingsService} lastUsage={{ prompt_tokens: 79_697, cache_read_tokens: 79_360 }} />,
+  );
+
+  expect(lastFrame()).toContain('Tok 79,697 in (99.6% cached)');
 });
 
 it.sequential('StatusBar renders context usage as used/window in the footer', async () => {

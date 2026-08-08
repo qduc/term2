@@ -104,9 +104,7 @@ const App: FC<AppProps> = ({
   const { exit } = useApp();
   const { stdout } = useStdout();
   const { setInput, replaceInput, setMode, setTriggerIndex, setImages, setInputAndCursor } = useInputActions();
-  const { input, mode, images } = useInputState();
-  const rewindMenuRef = useRef<{ open: (items: RewindItem[], disposition: RewindDisposition) => void } | null>(null);
-  const providersMenuRef = useRef<{ open: () => void } | null>(null);
+  const { input, mode, images, controller } = useInputState();
   const [messageListEpoch, setMessageListEpoch] = useState(0);
   const [startupBannerIds, setStartupBannerIds] = useState(['startup-banner-0']);
   const liteMode = useSetting(settingsService, 'app.liteMode') ?? false;
@@ -368,6 +366,21 @@ const App: FC<AppProps> = ({
     [getUserMessages, conversationService],
   );
 
+  const openRewindMenu = useCallback(
+    (disposition: RewindDisposition) => {
+      const items = openRewindPickerItems();
+      if (items.length === 0) {
+        addSystemMessage('Nothing to rewind.');
+        return;
+      }
+      // An external surface owns the interaction from this point; discard any
+      // text-triggered frame that was used to invoke the command.
+      setMode('text');
+      controller.open({ kind: 'rewind', items, initialDisposition: disposition });
+    },
+    [addSystemMessage, controller, openRewindPickerItems, setMode],
+  );
+
   const { slashCommands, cycleAppModes } = useAppCommands({
     settingsService,
     addSystemMessage,
@@ -383,18 +396,10 @@ const App: FC<AppProps> = ({
     restoreTurnToInput,
     retryLastToolOutput,
     onRewind: redrawMessageList,
-    openRewindMenu: (disposition: RewindDisposition) => {
-      const items = openRewindPickerItems();
-      if (items.length === 0) {
-        addSystemMessage('Nothing to rewind.');
-        return;
-      }
-      rewindMenuRef.current?.open(items, disposition);
-    },
+    openRewindMenu,
     openProvidersMenu: () => {
-      if (providersMenuRef.current) {
-        providersMenuRef.current.open();
-      }
+      setMode('text');
+      controller.open({ kind: 'providers' });
     },
     onHandoff: handoff.startHandoff,
     sendUserMessage,
@@ -418,6 +423,15 @@ const App: FC<AppProps> = ({
     },
     [rewindToTurn, redrawMessageList, replaceInput, restoreTurnToInput, sendUserMessage, setImages],
   );
+
+  useEffect(() => {
+    controller.setIntentHost(({ intentRequest }) => {
+      if (intentRequest.intent.type === 'rewind') {
+        handleRewindSelect(intentRequest.intent.item, intentRequest.intent.disposition);
+      }
+    });
+    return () => controller.setIntentHost(undefined);
+  }, [controller, handleRewindSelect]);
 
   const handleApprove = useCallback(
     async (answer?: string) => {
@@ -648,9 +662,6 @@ const App: FC<AppProps> = ({
             sshInfo={sshInfo}
             lastCodexRateLimit={lastCodexRateLimit}
             staticCommitBlocker={staticCommitBlocker}
-            rewindMenuRef={rewindMenuRef}
-            onRewindSelect={handleRewindSelect}
-            providersMenuRef={providersMenuRef}
             onSettingChange={handleSettingChange}
             onSystemMessage={addSystemMessage}
             handoffState={handoff.handoffState}
@@ -670,12 +681,7 @@ const App: FC<AppProps> = ({
             onSurgeDecline={pendingGuards.handleSurgeDecline}
             onSlashTabComplete={(command) => {
               if (command.name === 'rewind' || command.name === 'undo' || command.name === 'retry') {
-                const items = openRewindPickerItems();
-                if (items.length === 0) {
-                  addSystemMessage('Nothing to rewind.');
-                  return true;
-                }
-                rewindMenuRef.current?.open(items, command.name === 'retry' ? 'resend' : 'edit');
+                openRewindMenu(command.name === 'retry' ? 'resend' : 'edit');
                 return true;
               }
               return false;

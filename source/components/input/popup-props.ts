@@ -1,44 +1,31 @@
 import type { ComponentProps } from 'react';
 import type { PopupManager } from './PopupManager.js';
-import type { useSlashCommands } from '../../hooks/use-slash-commands.js';
 import type { usePathCompletion } from '../../hooks/use-path-completion.js';
 import type { useSettingsCompletion } from '../../hooks/use-settings-completion.js';
 import type { useSettingsValueCompletion } from '../../hooks/use-settings-value-completion.js';
 import type { useModelSelection } from '../../hooks/use-model-selection.js';
 import type { useRewindSelection } from '../../hooks/use-rewind-selection.js';
-import type { useProviderSelection } from '../../hooks/use-provider-selection.js';
 import type { useSkillSelection } from '../../hooks/use-skill-selection.js';
 
 type PopupProps = ComponentProps<typeof PopupManager>;
 
 type Sources = {
-  slash: ReturnType<typeof useSlashCommands>;
   path: ReturnType<typeof usePathCompletion>;
   settings: ReturnType<typeof useSettingsCompletion>;
   settingsValue: ReturnType<typeof useSettingsValueCompletion>;
   models: ReturnType<typeof useModelSelection>;
   skills: ReturnType<typeof useSkillSelection>;
   rewind: ReturnType<typeof useRewindSelection>;
-  providers: ReturnType<typeof useProviderSelection>;
 };
 
 export const toPopupProps = ({
-  slash,
   path,
   settings,
   settingsValue,
   models,
   skills,
   rewind,
-  providers,
 }: Sources): Omit<PopupProps, 'settingsService'> => ({
-  slash: {
-    isOpen: slash.isOpen,
-    commands: slash.filteredCommands,
-    selectedIndex: slash.selectedIndex,
-    scrollOffset: slash.scrollOffset,
-    filter: slash.filter,
-  },
   path: {
     isOpen: path.isOpen,
     items: path.filteredEntries,
@@ -91,15 +78,5 @@ export const toPopupProps = ({
     selectedIndex: skills.selectedIndex,
     scrollOffset: skills.scrollOffset,
     query: skills.query,
-  },
-  providers: {
-    isOpen: providers.isOpen,
-    phase: providers.phase,
-    selectedIndex: providers.selectedIndex,
-    scrollOffset: providers.scrollOffset,
-    activeItems: providers.getActiveItems(),
-    errorMessage: providers.errorMessage,
-    selectedProviderName: providers.selectedProviderName,
-    draft: providers.draft,
   },
 });

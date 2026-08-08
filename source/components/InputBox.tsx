@@ -11,11 +11,11 @@ import { useSettingsCompletion } from '../hooks/use-settings-completion.js';
 import { useSettingsValueCompletion } from '../hooks/use-settings-value-completion.js';
 import { useModelSelection } from '../hooks/use-model-selection.js';
 import { useRewindSelection } from '../hooks/use-rewind-selection.js';
-import { useProviderSelection } from '../hooks/use-provider-selection.js';
-import type { ProviderSelectionPhase } from '../hooks/use-provider-selection.js';
 import { useSkillSelection } from '../hooks/use-skill-selection.js';
 import type { SkillsService } from '../services/skills/skills-service.js';
 import { PopupManager } from './input/PopupManager.js';
+import { MenuStackHost } from './input/MenuStackHost.js';
+import { createDefaultTriggerRegistry } from './input/triggers.js';
 import type { SlashCommand } from '../slash-commands.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
 import type { LoggingService } from '../services/logging/logging-service.js';
@@ -37,8 +37,6 @@ import { getPopupNavigationCursor } from './input/popup-key-navigation.js';
 import { useModeHandlers } from '../hooks/use-mode-handlers.js';
 import { toPopupProps } from './input/popup-props.js';
 import type { UserTurn } from '../types/user-turn.js';
-import type { RewindItem } from '../hooks/use-rewind-selection.js';
-import type { RewindDisposition } from '../commands/rewind-command.js';
 import type { SubmissionMutation } from '../services/conversation/conversation-adapter.js';
 import PendingQueueList, { type PendingQueueMessage } from './input/PendingQueueList.js';
 
@@ -69,11 +67,6 @@ type Props = {
   settingsService: SettingsService;
   loggingService: LoggingService;
   historyService: HistoryService;
-  onRewindSelect?: (item: RewindItem, disposition: RewindDisposition) => void;
-  rewindMenuRef?: React.MutableRefObject<{
-    open: (items: RewindItem[], disposition: RewindDisposition) => void;
-  } | null>;
-  providersMenuRef?: React.MutableRefObject<{ open: () => void } | null>;
   onSettingChange?: (key: string, value: any) => void;
   onSystemMessage?: (text: string) => void;
   onSlashTabComplete?: (command: SlashCommand) => boolean;
@@ -103,7 +96,9 @@ const parseSubmittedSettingValue = (submittedValue: string, startsWithSettingsTr
   return parseSettingValue(valueParts.join(' '));
 };
 
-export const getProviderWizardPromptLabel = (phase: ProviderSelectionPhase): string | undefined => {
+export const getProviderWizardPromptLabel = (
+  phase: import('../hooks/use-provider-selection.js').ProviderSelectionPhase,
+): string | undefined => {
   if (phase === 'wizard_name') return 'Enter Provider Name: ';
   if (phase === 'wizard_url') return 'Enter Base API URL: ';
   if (phase === 'wizard_key') return 'Enter API Key: ';
@@ -118,9 +113,6 @@ const InputBox: FC<Props> = ({
   waitingForRejectionReason = false,
   isShellMode = false,
   historyService,
-  onRewindSelect,
-  rewindMenuRef,
-  providersMenuRef,
   onSettingChange,
   onSystemMessage,
   onSlashTabComplete,
@@ -142,6 +134,9 @@ const InputBox: FC<Props> = ({
     setImages,
     cursorOverride,
     setCursorOverride,
+    controller,
+    interactions,
+    menuPromptLabel,
   } = useInputContext();
   const { stdin } = useStdin();
   const stdinBufferRef = useRef('');
@@ -175,6 +170,10 @@ const InputBox: FC<Props> = ({
     },
   });
 
+  useEffect(() => {
+    controller.setTriggerRegistry(createDefaultTriggerRegistry(slashCommands, ['slash', 'path', 'skills']));
+  }, [controller, slashCommands]);
+
   const path = usePathCompletion({ loggingService });
   const settings = useSettingsCompletion(settingsService);
   const reopenSettingsMenu = useCallback(
@@ -196,7 +195,6 @@ const InputBox: FC<Props> = ({
     settingsService,
   });
   const rewind = useRewindSelection();
-  const providers = useProviderSelection(settingsService);
 
   const skills = useSkillSelection(
     skillsService ? { skillsService } : { skillsService: { getAvailableSkills: () => [] } as unknown as SkillsService },
@@ -218,37 +216,12 @@ const InputBox: FC<Props> = ({
     setQueueSelectionIndex(next);
   }, []);
 
-  const providerWizardPromptLabel = getProviderWizardPromptLabel(providers.phase);
   const editingQueueIndex = editingQueueItem
     ? pendingQueuedMessages?.findIndex((message) => message.id === editingQueueItem.id)
     : -1;
   const activePromptLabel =
-    providerWizardPromptLabel ?? (editingQueueItem ? `edit ${(editingQueueIndex ?? -1) + 1} ▸ ` : promptLabel);
+    menuPromptLabel ?? (editingQueueItem ? `edit ${(editingQueueIndex ?? -1) + 1} ▸ ` : promptLabel);
   const terminalWidth = useTerminalWidth({ waitingForRejectionReason, isShellMode, promptLabel: activePromptLabel });
-
-  // Wire up the rewind menu ref so app.tsx can open the picker
-  useEffect(() => {
-    if (rewindMenuRef) {
-      rewindMenuRef.current = { open: rewind.open };
-    }
-    return () => {
-      if (rewindMenuRef) {
-        rewindMenuRef.current = null;
-      }
-    };
-  }, [rewind.open, rewindMenuRef]);
-
-  // Wire up the providers menu ref so app.tsx can control it
-  useEffect(() => {
-    if (providersMenuRef) {
-      providersMenuRef.current = { open: providers.open };
-    }
-    return () => {
-      if (providersMenuRef) {
-        providersMenuRef.current = null;
-      }
-    };
-  }, [providers.open, providersMenuRef]);
 
   const { navigateUp, navigateDown } = useInputHistory(historyService);
 
@@ -521,7 +494,6 @@ const InputBox: FC<Props> = ({
       pageDown: skills.pageDown,
     },
     rewind,
-    providers,
     insertSelectedPath,
     insertSelectedSetting,
     insertSelectedSettingValue,
@@ -531,11 +503,13 @@ const InputBox: FC<Props> = ({
     onSubmit: submitTextOnly,
     onSlashCommandRemount: remountInput,
     onSlashTabComplete,
-    onRewindSelect,
   });
 
   const stateRef = useRef({
     mode,
+    slash,
+    path,
+    skills,
     modeHandlers,
     value,
     onChange,
@@ -543,12 +517,15 @@ const InputBox: FC<Props> = ({
     setCursorOverride,
     lockCursor,
     remountInput,
-    providersPhase: providers.phase,
+    menuPromptLabel,
   });
   useEffect(() => {
     cursorOffsetRef.current = cursorOffset;
     stateRef.current = {
       mode,
+      slash,
+      path,
+      skills,
       modeHandlers,
       value,
       onChange,
@@ -556,11 +533,23 @@ const InputBox: FC<Props> = ({
       setCursorOverride,
       lockCursor,
       remountInput,
-      providersPhase: providers.phase,
+      menuPromptLabel,
     };
   });
 
   const cancelQueueInteraction = useCallback((): boolean => {
+    if (mode === 'path_completion' || mode === 'skill_selection') {
+      controller.escape();
+      return true;
+    }
+    if (mode === 'rewind_selection') {
+      controller.escape();
+      return true;
+    }
+    if (mode === 'provider_selection') {
+      controller.escape();
+      return true;
+    }
     if (queueSelectionIndexRef.current !== null) {
       updateQueueSelection(null);
       return true;
@@ -571,7 +560,7 @@ const InputBox: FC<Props> = ({
       return true;
     }
     return false;
-  }, [onChange, updateQueueSelection]);
+  }, [controller, mode, onChange, updateQueueSelection]);
 
   const { escHintVisible } = useEscapeKey({
     mode,
@@ -581,7 +570,6 @@ const InputBox: FC<Props> = ({
     settings,
     settingsValue,
     models,
-    providerSelection: providers,
     setCursorOverride,
     dismissedCompletionRef,
     inputRevisionRef,
@@ -637,18 +625,186 @@ const InputBox: FC<Props> = ({
   useInput((_input, key) => {
     const {
       mode: currentMode,
+      slash: currentSlash,
+      path: currentPath,
+      skills: currentSkills,
       modeHandlers: currentHandlers,
       onChange: changeInput,
       setCursorOffset: updateCursorOffset,
       setCursorOverride: overrideCursor,
       lockCursor: lockCurrentCursor,
       remountInput: remountCurrentInput,
-      providersPhase,
+      menuPromptLabel: currentMenuPromptLabel,
     } = stateRef.current;
     const currentValue = inputValueRef.current;
     const currentCursor = cursorOffsetRef.current;
     const selectedQueueIndex = queueSelectionIndexRef.current;
     const currentQueuedMessages = pendingQueuedMessagesRef.current;
+    if (currentMode === 'slash_commands') {
+      if (isFocusReportingSequence(_input)) return;
+      if (key.upArrow) controller.dispatchActiveEvent({ type: 'move', direction: 'up' });
+      else if (key.downArrow) controller.dispatchActiveEvent({ type: 'move', direction: 'down' });
+      else if (key.pageUp) controller.dispatchActiveEvent({ type: 'move', direction: 'page-up' });
+      else if (key.pageDown) controller.dispatchActiveEvent({ type: 'move', direction: 'page-down' });
+      else if ((key as any).home) controller.dispatchActiveEvent({ type: 'move', direction: 'home' });
+      else if ((key as any).end) controller.dispatchActiveEvent({ type: 'move', direction: 'end' });
+      else if (key.tab && !key.shift) controller.dispatchActiveEvent({ type: 'command', command: 'tab' });
+      else if (key.return) currentSlash.executeSelected();
+      else if (key.backspace && currentCursor > 0) {
+        const nextValue = currentValue.slice(0, currentCursor - 1) + currentValue.slice(currentCursor);
+        inputValueRef.current = nextValue;
+        cursorOffsetRef.current = currentCursor - 1;
+        controller.applyEditorEdit({
+          type: 'set-text',
+          text: nextValue,
+          cursor: currentCursor - 1,
+        });
+      } else if (key.delete && currentCursor < currentValue.length) {
+        const nextValue = currentValue.slice(0, currentCursor) + currentValue.slice(currentCursor + 1);
+        inputValueRef.current = nextValue;
+        cursorOffsetRef.current = currentCursor;
+        controller.applyEditorEdit({
+          type: 'set-text',
+          text: nextValue,
+          cursor: currentCursor,
+        });
+      } else if (key.leftArrow) {
+        cursorOffsetRef.current = Math.max(0, currentCursor - 1);
+        controller.applyEditorEdit({ type: 'move-cursor', cursor: currentCursor - 1 });
+      } else if (key.rightArrow) {
+        cursorOffsetRef.current = Math.min(currentValue.length, currentCursor + 1);
+        controller.applyEditorEdit({ type: 'move-cursor', cursor: currentCursor + 1 });
+      } else if (_input && !key.ctrl && !key.meta && !key.escape && !key.tab && !key.return) {
+        const nextValue = currentValue.slice(0, currentCursor) + _input + currentValue.slice(currentCursor);
+        inputValueRef.current = nextValue;
+        cursorOffsetRef.current = currentCursor + _input.length;
+        controller.applyEditorEdit({ type: 'insert', text: _input });
+      }
+      return;
+    }
+    if (currentMode === 'rewind_selection') {
+      if (key.upArrow) controller.dispatchActiveEvent({ type: 'move', direction: 'up' });
+      else if (key.downArrow) controller.dispatchActiveEvent({ type: 'move', direction: 'down' });
+      else if (key.pageUp) controller.dispatchActiveEvent({ type: 'move', direction: 'page-up' });
+      else if (key.pageDown) controller.dispatchActiveEvent({ type: 'move', direction: 'page-down' });
+      else if ((key as any).home) controller.dispatchActiveEvent({ type: 'move', direction: 'home' });
+      else if ((key as any).end) controller.dispatchActiveEvent({ type: 'move', direction: 'end' });
+      else if (key.tab && !key.shift) controller.dispatchActiveEvent({ type: 'command', command: 'tab' });
+      else if (key.return)
+        controller.dispatchActiveEvent({ type: 'accept', input: { kind: 'none' }, selected: undefined });
+      return;
+    }
+    if (currentMode === 'path_completion' || currentMode === 'skill_selection') {
+      const selected =
+        currentMode === 'path_completion' ? currentPath.getSelectedItem() : currentSkills.getSelectedItem();
+      if (key.upArrow) controller.dispatchActiveEvent({ type: 'move', direction: 'up' });
+      else if (key.downArrow) controller.dispatchActiveEvent({ type: 'move', direction: 'down' });
+      else if (key.pageUp) controller.dispatchActiveEvent({ type: 'move', direction: 'page-up' });
+      else if (key.pageDown) controller.dispatchActiveEvent({ type: 'move', direction: 'page-down' });
+      else if ((key as any).home) controller.dispatchActiveEvent({ type: 'move', direction: 'home' });
+      else if ((key as any).end) controller.dispatchActiveEvent({ type: 'move', direction: 'end' });
+      else if (key.tab && !key.shift) controller.dispatchActiveEvent({ type: 'command', command: 'tab' });
+      else if (key.return) {
+        controller.dispatchActiveEvent({
+          type: 'accept',
+          input: { kind: 'composer', text: currentValue, cursor: currentCursor },
+          selected,
+        });
+      } else if (key.backspace && currentCursor > 0) {
+        const nextValue = currentValue.slice(0, currentCursor - 1) + currentValue.slice(currentCursor);
+        inputValueRef.current = nextValue;
+        cursorOffsetRef.current = currentCursor - 1;
+        controller.applyEditorEdit({ type: 'set-text', text: nextValue, cursor: currentCursor - 1 });
+      } else if (key.delete && currentCursor < currentValue.length) {
+        const nextValue = currentValue.slice(0, currentCursor) + currentValue.slice(currentCursor + 1);
+        inputValueRef.current = nextValue;
+        controller.applyEditorEdit({ type: 'set-text', text: nextValue, cursor: currentCursor });
+      } else if (key.leftArrow) {
+        cursorOffsetRef.current = Math.max(0, currentCursor - 1);
+        controller.applyEditorEdit({ type: 'move-cursor', cursor: currentCursor - 1 });
+      } else if (key.rightArrow) {
+        cursorOffsetRef.current = Math.min(currentValue.length, currentCursor + 1);
+        controller.applyEditorEdit({ type: 'move-cursor', cursor: currentCursor + 1 });
+      } else if (
+        _input &&
+        !key.ctrl &&
+        !key.meta &&
+        !key.escape &&
+        !key.tab &&
+        !key.return &&
+        !key.upArrow &&
+        !key.downArrow &&
+        !key.leftArrow &&
+        !key.rightArrow
+      ) {
+        const nextValue = currentValue.slice(0, currentCursor) + _input + currentValue.slice(currentCursor);
+        inputValueRef.current = nextValue;
+        cursorOffsetRef.current = currentCursor + _input.length;
+        controller.applyEditorEdit({ type: 'insert', text: _input });
+      }
+      return;
+    }
+    if (currentMode === 'provider_selection') {
+      if (key.upArrow) controller.dispatchActiveEvent({ type: 'move', direction: 'up' });
+      else if (key.downArrow) controller.dispatchActiveEvent({ type: 'move', direction: 'down' });
+      else if (key.return) {
+        controller.dispatchActiveEvent({
+          type: 'accept',
+          input: { kind: 'transient', text: currentValue, cursor: currentCursor, sensitive: false },
+          selected: undefined,
+        });
+      } else if (key.backspace) {
+        if (currentMenuPromptLabel === undefined) {
+          controller.dispatchActiveEvent({ type: 'command', command: 'delete' });
+        } else if (currentCursor > 0) {
+          controller.applyEditorEdit({
+            type: 'set-text',
+            text: currentValue.slice(0, currentCursor - 1) + currentValue.slice(currentCursor),
+            cursor: currentCursor - 1,
+          });
+        }
+      } else if (key.delete) {
+        if (currentMenuPromptLabel === undefined) {
+          controller.dispatchActiveEvent({ type: 'command', command: 'delete' });
+        } else if (currentCursor < currentValue.length) {
+          controller.applyEditorEdit({
+            type: 'set-text',
+            text: currentValue.slice(0, currentCursor) + currentValue.slice(currentCursor + 1),
+            cursor: currentCursor,
+          });
+        }
+      } else if (_input === '[') {
+        controller.dispatchActiveEvent({ type: 'command', command: 'reorder-up' });
+      } else if (_input === ']') {
+        controller.dispatchActiveEvent({ type: 'command', command: 'reorder-down' });
+      } else if (key.leftArrow) {
+        controller.applyEditorEdit({ type: 'move-cursor', cursor: currentCursor - 1 });
+      } else if (key.rightArrow) {
+        controller.applyEditorEdit({ type: 'move-cursor', cursor: currentCursor + 1 });
+      } else if (key.pageUp) {
+        controller.dispatchActiveEvent({ type: 'move', direction: 'page-up' });
+      } else if (key.pageDown) {
+        controller.dispatchActiveEvent({ type: 'move', direction: 'page-down' });
+      } else if ((key as any).home) {
+        controller.dispatchActiveEvent({ type: 'move', direction: 'home' });
+      } else if ((key as any).end) {
+        controller.dispatchActiveEvent({ type: 'move', direction: 'end' });
+      } else if (
+        _input &&
+        !key.ctrl &&
+        !key.meta &&
+        !key.escape &&
+        !key.tab &&
+        !key.return &&
+        !key.upArrow &&
+        !key.downArrow &&
+        !key.leftArrow &&
+        !key.rightArrow
+      ) {
+        controller.applyEditorEdit({ type: 'insert', text: _input });
+      }
+      return;
+    }
     if (currentMode === 'text' && selectedQueueIndex !== null) {
       if (queueSelectionJustOpenedRef.current) {
         queueSelectionJustOpenedRef.current = false;
@@ -782,13 +938,6 @@ const InputBox: FC<Props> = ({
       return;
     }
     if (key.backspace) {
-      if (currentMode === 'rewind_selection') return;
-      if (currentMode === 'provider_selection') {
-        if (providersPhase !== 'wizard_name' && providersPhase !== 'wizard_url' && providersPhase !== 'wizard_key') {
-          currentHandlers[currentMode].onDelete?.();
-          return;
-        }
-      }
       if (currentCursor <= 0) return;
       const nextValue = currentValue.slice(0, currentCursor - 1) + currentValue.slice(currentCursor);
       const nextCursor = currentCursor - 1;
@@ -801,13 +950,6 @@ const InputBox: FC<Props> = ({
       return;
     }
     if (key.delete) {
-      if (currentMode === 'rewind_selection') return;
-      if (currentMode === 'provider_selection') {
-        if (providersPhase !== 'wizard_name' && providersPhase !== 'wizard_url' && providersPhase !== 'wizard_key') {
-          currentHandlers[currentMode].onDelete?.();
-          return;
-        }
-      }
       if (currentCursor >= currentValue.length) return;
       const nextValue = currentValue.slice(0, currentCursor) + currentValue.slice(currentCursor + 1);
       inputValueRef.current = nextValue;
@@ -835,8 +977,6 @@ const InputBox: FC<Props> = ({
       !key.leftArrow &&
       !key.rightArrow
     ) {
-      // Ignore character input in rewind_selection mode
-      if (currentMode === 'rewind_selection') return;
       const nextValue = currentValue.slice(0, currentCursor) + _input + currentValue.slice(currentCursor);
       const nextCursor = currentCursor + _input.length;
       inputValueRef.current = nextValue;
@@ -973,9 +1113,25 @@ const InputBox: FC<Props> = ({
           notice={queueNotice}
         />
       )}
-      <PopupManager
-        {...toPopupProps({ slash, path, settings, settingsValue, models, skills, rewind, providers })}
-        settingsService={settingsService}
+      {controller.getSnapshot().stack.at(-1)?.kind !== 'rewind' &&
+        controller.getSnapshot().stack.at(-1)?.kind !== 'providers' &&
+        controller.getSnapshot().stack.at(-1)?.kind !== 'slash' && (
+          <PopupManager
+            {...toPopupProps({ path, settings, settingsValue, models, skills, rewind })}
+            settingsService={settingsService}
+          />
+        )}
+      <MenuStackHost
+        stack={controller.getSnapshot().stack}
+        controller={controller}
+        interactions={interactions}
+        services={{
+          settingsService,
+          slash,
+          onSlashTabComplete,
+          path,
+          skills,
+        }}
       />
 
       {activePromptLabel && (

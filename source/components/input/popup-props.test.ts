@@ -1,26 +1,8 @@
 import { it, expect } from 'vitest';
 import { toPopupProps } from './popup-props.js';
 
-it('toPopupProps forwards slash scrollOffset', () => {
+it('toPopupProps forwards path completion state', () => {
   const props = toPopupProps({
-    slash: {
-      isOpen: true,
-      filteredCommands: [],
-      selectedIndex: 0,
-      scrollOffset: 3,
-      filter: 'mod',
-      open: () => {},
-      close: () => {},
-      moveUp: () => {},
-      moveDown: () => {},
-      moveHome: () => {},
-      moveEnd: () => {},
-      pageUp: () => {},
-      pageDown: () => {},
-      getSelectedItem: () => undefined,
-      executeSelected: () => {},
-      completeSelected: () => {},
-    } as any,
     path: {
       isOpen: false,
       filteredEntries: [],
@@ -66,15 +48,6 @@ it('toPopupProps forwards slash scrollOffset', () => {
       scrollOffset: 0,
       disposition: 'edit',
     } as any,
-    providers: {
-      isOpen: false,
-      phase: 'list',
-      selectedIndex: 0,
-      getActiveItems: () => [],
-      errorMessage: null,
-      selectedProvider: null,
-      draft: null,
-    } as any,
     skills: {
       isOpen: false,
       skills: [],
@@ -84,5 +57,5 @@ it('toPopupProps forwards slash scrollOffset', () => {
     } as any,
   });
 
-  expect(props.slash.scrollOffset).toBe(3);
+  expect(props.path.scrollOffset).toBe(0);
 });

@@ -1,16 +1,10 @@
-import { useCallback, useEffect, useReducer, useRef } from 'react';
-import { parseInput } from '../utils/input-parser.js';
-import { parseModelProviderArg } from '../utils/ai/model-provider-arg.js';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SettingsService } from '../services/settings/settings-service.js';
 import type { UserTurn } from '../types/user-turn.js';
 import type { MenuController } from '../components/input/menu-types.js';
-import {
-  handoffFlowReducer,
-  createInitialHandoffState,
-  composeHandoffMessage,
-  type HandoffStage,
-  type HandoffState,
-} from './handoff-flow-reducer.js';
+import type { HandoffStage, HandoffState } from './handoff-flow-reducer.js';
+import { HandoffSession } from '../services/handoff/handoff-session.js';
+import type { ConversationConfigurationService } from '../services/runtime-setting-router.js';
 
 export type { HandoffStage, HandoffState };
 
@@ -23,6 +17,7 @@ export type UseHandoffFlowOptions = {
   settingsService: SettingsService;
   applyRuntimeSetting: (key: string, value: unknown) => void;
   setModel: (model: string) => void;
+  configurationService?: ConversationConfigurationService;
 };
 
 export type UseHandoffFlowReturn = {
@@ -60,9 +55,32 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
     settingsService,
     applyRuntimeSetting,
     setModel,
+    configurationService,
   } = deps;
 
-  const [handoffState, dispatch] = useReducer(handoffFlowReducer, null, createInitialHandoffState);
+  const handoffSession = useMemo(
+    () =>
+      new HandoffSession({
+        clearConversationAndRefreshBanner,
+        addSystemMessage,
+        sendUserMessage,
+        settingsService,
+        applyRuntimeSetting,
+        setModel,
+        configurationService,
+      }),
+    [
+      clearConversationAndRefreshBanner,
+      addSystemMessage,
+      sendUserMessage,
+      settingsService,
+      applyRuntimeSetting,
+      setModel,
+      configurationService,
+    ],
+  );
+  const [handoffState, setHandoffState] = useState<HandoffState | null>(() => handoffSession.getState());
+  useEffect(() => handoffSession.subscribe(setHandoffState), [handoffSession]);
   const handoffStateRef = useRef<HandoffState | null>(handoffState);
   handoffStateRef.current = handoffState;
 
@@ -77,32 +95,11 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
   // escape that closed the picker with nothing chosen.
   const modelSelectionHandledRef = useRef(false);
 
-  const sendCapturedHandoff = useCallback(
-    async (state: HandoffState): Promise<boolean> => {
-      if (state.stage !== 'selecting_model' && state.stage !== 'selecting_effort') return false;
-      const isPlanMode = settingsService.get('app.planMode') || false;
-      if (isPlanMode) {
-        dispatch({ type: 'handoff/standard_mode_requested' });
-        replaceInput('');
-        return true;
-      }
-      dispatch({ type: 'handoff/sent' });
-      replaceInput('');
-      await sendUserMessage({ text: composeHandoffMessage(state) });
-      return true;
-    },
-    [settingsService, sendUserMessage, replaceInput],
-  );
-
   const completeHandoffWithEffort = useCallback(
     async (effort: string) => {
-      const state = handoffState;
-      if (!state) return;
-      settingsService.set('agent.reasoningEffort', effort as any);
-      applyRuntimeSetting('agent.reasoningEffort', effort);
-      await sendCapturedHandoff(state);
+      if (await handoffSession.completeHandoffWithEffort(effort)) replaceInput('');
     },
-    [handoffState, settingsService, applyRuntimeSetting, sendCapturedHandoff],
+    [handoffSession, replaceInput],
   );
 
   // Replaces the `mode` projection this used to watch (mode returning to
@@ -135,75 +132,41 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
         }
         const state = handoffStateRef.current;
         if (state?.stage !== 'selecting_model') return;
-        void sendCapturedHandoff(state);
+        void handoffSession.sendCapturedHandoff().then((handled) => {
+          if (handled) replaceInput('');
+        });
       });
     });
-  }, [controller, sendCapturedHandoff]);
+  }, [controller, handoffSession, replaceInput]);
 
-  const startHandoff = useCallback((capturedText: string) => {
-    dispatch({ type: 'handoff/started', capturedText });
-  }, []);
+  const startHandoff = useCallback(
+    (capturedText: string) => {
+      handoffSession.startHandoff(capturedText);
+    },
+    [handoffSession],
+  );
 
   const confirmHandoff = useCallback(async () => {
-    if (!handoffState) return;
-
-    await clearConversationAndRefreshBanner();
-    dispatch({ type: 'handoff/model_confirmed' });
+    if (!(await handoffSession.confirmHandoff())) return;
     modelSelectionHandledRef.current = false;
     controller.replaceText(MODEL_TRIGGER, MODEL_TRIGGER.length);
-  }, [clearConversationAndRefreshBanner, handoffState, controller]);
+  }, [handoffSession, controller]);
 
   const declineHandoff = useCallback(async () => {
-    const state = handoffState;
-    if (!state) return;
-
-    const isPlanMode = settingsService.get('app.planMode') || false;
-    if (isPlanMode) {
-      await clearConversationAndRefreshBanner();
-      dispatch({ type: 'handoff/standard_mode_requested' });
-      replaceInput('');
-      return;
-    }
-
-    await clearConversationAndRefreshBanner();
-    dispatch({ type: 'handoff/sent' });
-    replaceInput('');
-    if (state.capturedText) {
-      await sendUserMessage({ text: composeHandoffMessage(state) });
-    }
-  }, [clearConversationAndRefreshBanner, handoffState, sendUserMessage, replaceInput, settingsService]);
+    if (await handoffSession.declineHandoff()) replaceInput('');
+  }, [handoffSession, replaceInput]);
 
   const cancelHandoff = useCallback(() => {
-    dispatch({ type: 'handoff/cancelled' });
-    replaceInput('');
-    addSystemMessage('Handoff cancelled');
-  }, [addSystemMessage, replaceInput]);
+    if (handoffSession.cancelHandoff()) replaceInput('');
+  }, [handoffSession, replaceInput]);
 
   const confirmStandardMode = useCallback(async () => {
-    const state = handoffState;
-    if (!state) return;
-
-    settingsService.set('app.planMode', false);
-    applyRuntimeSetting('app.planMode', false);
-    addSystemMessage('Plan mode disabled - switched to Standard mode');
-
-    dispatch({ type: 'handoff/sent' });
-    replaceInput('');
-    if (state.capturedText) {
-      await sendUserMessage({ text: composeHandoffMessage(state) });
-    }
-  }, [handoffState, settingsService, applyRuntimeSetting, addSystemMessage, sendUserMessage, replaceInput]);
+    if (await handoffSession.confirmStandardMode()) replaceInput('');
+  }, [handoffSession, replaceInput]);
 
   const declineStandardMode = useCallback(async () => {
-    const state = handoffState;
-    if (!state) return;
-
-    dispatch({ type: 'handoff/sent' });
-    replaceInput('');
-    if (state.capturedText) {
-      await sendUserMessage({ text: composeHandoffMessage(state) });
-    }
-  }, [handoffState, sendUserMessage, replaceInput]);
+    if (await handoffSession.declineStandardMode()) replaceInput('');
+  }, [handoffSession, replaceInput]);
 
   const submitHandoffInput = useCallback(
     async (turn: UserTurn): Promise<boolean> => {
@@ -211,10 +174,10 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
       if (!state) return false;
 
       if (state.stage === 'entering_message') {
-        const handoffMessage = turn.text.trim() || 'Implement this';
-        dispatch({ type: 'handoff/message_captured', handoffMessage });
-        replaceInput('');
-        return true;
+        if (handoffSession.captureMessage(turn.text)) {
+          replaceInput('');
+          return true;
+        }
       }
 
       // Model selection no longer reaches here: the direct `/model ` trigger
@@ -223,7 +186,7 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
       // rather than a turn routed through the app's `handleSubmit`.
       return false;
     },
-    [handoffState, replaceInput],
+    [handoffState, handoffSession, replaceInput],
   );
 
   const handleModelSubmitPrompt = useCallback(
@@ -231,26 +194,12 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
       const state = handoffState;
       if (!state || state.stage !== 'selecting_model') return false;
 
-      const parsedInput = parseInput(text);
-      const modelArg = parsedInput.type === 'slash-command' ? parsedInput.args : text;
-      const { modelId, provider } = parseModelProviderArg(modelArg);
-
-      if (modelId) {
-        settingsService.set('agent.model', modelId);
-        if (provider) {
-          settingsService.set('agent.provider', provider);
-          applyRuntimeSetting('agent.provider', provider);
-        }
-        applyRuntimeSetting('agent.model', modelId);
-        setModel(modelId);
-      }
-
+      handoffSession.selectModel(text);
       modelSelectionHandledRef.current = true;
-      dispatch({ type: 'handoff/model_selected' });
       controller.replaceText(EFFORT_TRIGGER, EFFORT_TRIGGER.length);
       return true;
     },
-    [handoffState, settingsService, applyRuntimeSetting, setModel, controller],
+    [handoffState, handoffSession, controller],
   );
 
   return {

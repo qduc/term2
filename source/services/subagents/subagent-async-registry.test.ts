@@ -9,6 +9,7 @@ import { createSubagentRuntime } from './runtime.js';
 import { SessionContextService } from '../session/session-context-service.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import { ForegroundSubagentLease } from './foreground-subagent-lease.js';
+import { createContinuationHandle } from '../../contracts/continuation-handle.js';
 import {
   createMockLogger,
   createMockSettings,
@@ -82,6 +83,40 @@ describe('foreground lease adoption', () => {
     live.cancelRun('adopted');
     expect(adopted.signal.aborted).toBe(true);
     live.dispose();
+  });
+
+  it('reports an adopted child as awaiting approval while its lease holds the exact continuation', async () => {
+    const registry = make(() => new Promise<SubagentResult>(() => undefined));
+    const lease = new ForegroundSubagentLease({ runId: 'paused-adopted' });
+    registry.adoptForegroundLease(lease, { role: 'explorer', task: 'inspect' });
+
+    const waiting = lease.waitForBackgroundApproval(createContinuationHandle({}), { callId: 'child-call' });
+    expect(registry.getRunStatus('paused-adopted')).toMatchObject({ status: 'awaiting_approval' });
+
+    lease.cancel();
+    await expect(waiting).resolves.toBe(false);
+    registry.dispose();
+  });
+
+  it('keeps an adopted settlement awaitable through disposal without emitting a late lifecycle event', async () => {
+    const events: ConversationEvent[] = [];
+    const registry = new SubagentAsyncRegistry({
+      logger: createMockLogger(),
+      run: () => new Promise<SubagentResult>(() => undefined),
+      onEvent: (event) => events.push(event),
+    });
+    const lease = new ForegroundSubagentLease({ runId: 'dispose-adopted' });
+    registry.adoptForegroundLease(lease, { role: 'explorer', task: 'inspect' });
+    const settlement = registry.disposeAndWaitForAdoptedLeases();
+
+    registry.handleSubagentEvent({
+      type: 'subagent_completed',
+      async: true,
+      result: { ...result('explorer'), agentId: 'dispose-adopted', status: 'cancelled' },
+    } as ConversationEvent);
+
+    await expect(settlement).resolves.toBeUndefined();
+    expect(events.filter((event) => event.type === 'subagent_completed')).toHaveLength(0);
   });
 });
 

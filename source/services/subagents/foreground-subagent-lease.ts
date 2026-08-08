@@ -1,13 +1,36 @@
 import type { ContinuationHandle } from '../../contracts/continuation-handle.js';
 
-/** A decision made against one queued child-tool approval. */
-export type BackgroundSubagentApprovalDecision = { kind: 'approve' } | { kind: 'reject'; message?: string };
-
 export interface BackgroundSubagentApprovalSnapshot {
   runId: string;
   generation: number;
   interruption: unknown;
 }
+
+/**
+ * The exact child continuation made available to session-owned approval
+ * policy. A caller cannot resume the child directly: it must apply its
+ * decision synchronously through {@link ForegroundSubagentLease}, which
+ * commits the single continuation only if the pause is still current.
+ */
+export interface BackgroundSubagentApprovalApplication {
+  readonly runId: string;
+  readonly generation: number;
+  readonly handle: ContinuationHandle;
+  readonly interruption: unknown;
+}
+
+/** Session-facing publication for one adopted child pause. */
+export interface BackgroundSubagentApprovalPause extends BackgroundSubagentApprovalSnapshot {
+  readonly role: string;
+  /**
+   * Atomically validates this pause, applies policy to its exact continuation,
+   * then resumes its exact child loop. Returns false when the pause is stale.
+   */
+  apply(callback: (application: BackgroundSubagentApprovalApplication) => boolean): boolean;
+}
+
+/** Session-owned queue/control boundary; it has no Ink or policy dependency. */
+export type BackgroundSubagentApprovalPauseSink = (pause: BackgroundSubagentApprovalPause) => void;
 
 /**
  * Owns the cancellation link and resumable pause of one foreground child run.
@@ -30,6 +53,7 @@ export class ForegroundSubagentLease {
         handle: ContinuationHandle;
         interruption: unknown;
         resolve: (resumed: boolean) => void;
+        reject: (error: unknown) => void;
         /**
          * The child loop is deliberately retained with the opaque handle. A
          * decision is not a resume by itself: only this closure can continue
@@ -113,20 +137,23 @@ export class ForegroundSubagentLease {
     handle: ContinuationHandle,
     interruption: unknown,
     resume: () => void,
+    onPending?: (snapshot: BackgroundSubagentApprovalSnapshot) => void,
   ): Promise<boolean> {
-    return this.#waitForBackgroundApproval(handle, interruption, resume);
+    return this.#waitForBackgroundApproval(handle, interruption, resume, onPending);
   }
 
   async #waitForBackgroundApproval(
     handle: ContinuationHandle,
     interruption: unknown,
     resume?: () => void,
+    onPending?: (snapshot: BackgroundSubagentApprovalSnapshot) => void,
   ): Promise<boolean> {
     if (!this.#adopted) return false;
     if (this.#pending) throw new Error(`Foreground subagent lease ${this.#runId} already has a pending approval.`);
-    const resumed = await new Promise<boolean>((resolve) => {
+    const resumed = await new Promise<boolean>((resolve, reject) => {
       this.#generation += 1;
-      this.#pending = { handle, interruption, resolve, ...(resume ? { resume } : {}) };
+      this.#pending = { handle, interruption, resolve, reject, ...(resume ? { resume } : {}) };
+      onPending?.({ runId: this.#runId, generation: this.#generation, interruption });
     });
     return resumed && !this.#controller.signal.aborted;
   }
@@ -136,18 +163,49 @@ export class ForegroundSubagentLease {
     return { runId: this.#runId, generation: this.#generation, interruption: this.#pending.interruption };
   }
 
-  resolveBackgroundApproval(generation: number, decision: BackgroundSubagentApprovalDecision): boolean {
+  /**
+   * Applies session policy to one exact pause, then resumes the child loop
+   * once. This deliberately accepts a callback rather than an approve/reject
+   * enum: policy owns all approval variants and is the only layer allowed to
+   * touch the opaque continuation handle.
+   *
+   * Returns false for stale, cancelled, or already-consumed pauses. A policy
+   * exception leaves the pause intact, letting its queue retain ownership.
+   */
+  applyBackgroundApproval(
+    expected: BackgroundSubagentApprovalSnapshot,
+    apply: (application: BackgroundSubagentApprovalApplication) => boolean,
+  ): boolean {
     const pending = this.#pending;
-    if (!pending || !this.#adopted || generation !== this.#generation || this.#controller.signal.aborted) return false;
-    if (decision.kind === 'approve' && !pending.handle.approve) return false;
-    if (decision.kind === 'reject' && !pending.handle.reject) return false;
+    if (
+      !pending ||
+      !this.#adopted ||
+      expected.runId !== this.#runId ||
+      expected.generation !== this.#generation ||
+      expected.interruption !== pending.interruption ||
+      this.#controller.signal.aborted
+    )
+      return false;
+
+    const applied = apply({
+      runId: this.#runId,
+      generation: this.#generation,
+      handle: pending.handle,
+      interruption: pending.interruption,
+    });
+    if (!applied) return false;
     this.#pending = undefined;
-    if (decision.kind === 'approve') pending.handle.approve!(pending.interruption);
-    else pending.handle.reject!(pending.interruption, { ...(decision.message ? { message: decision.message } : {}) });
     // Keep the loop resume paired with the handle decision. Callers must not
     // resume a sibling interruption or manufacture a new run.
-    pending.resume?.();
-    pending.resolve(true);
+    try {
+      pending.resume?.();
+      pending.resolve(true);
+    } catch (error) {
+      // The policy already decided the opaque handle. Retrying this queue head
+      // would apply that decision twice, so consume it and fail the retained
+      // child execution through its durable async terminal path instead.
+      pending.reject(error);
+    }
     return true;
   }
 

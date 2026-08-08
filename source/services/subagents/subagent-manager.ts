@@ -27,6 +27,9 @@ import type {
 } from './types.js';
 import { SubagentRegistryError } from './subagent-async-registry.js';
 import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import type { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
+import type { BackgroundSubagentApprovalPauseSink } from './foreground-subagent-lease.js';
+import type { ForegroundSubagentCandidate } from './nested-runner.js';
 
 export class SubagentManager {
   #logger: ILoggingService;
@@ -45,6 +48,8 @@ export class SubagentManager {
     createClient?: ISubagentClientFactory['createClient'];
     skillsService?: SkillsService;
     toolOwnership: ToolOwnershipRegistry;
+    nestedCompatibility?: NestedToolCompatibilityState;
+    backgroundApprovalPauseSink?: BackgroundSubagentApprovalPauseSink;
   }) {
     this.#logger = deps.logger;
     this.#settings = deps.settings;
@@ -59,6 +64,16 @@ export class SubagentManager {
 
   clearCache(): void {
     this.#runtime.nestedRunner.clearCache();
+  }
+
+  /** Exact state shared by nested-tool execution and approval policy. */
+  getNestedToolCompatibilityState(): NestedToolCompatibilityState {
+    return this.#runtime.nestedCompatibility;
+  }
+
+  /** Session-owned delivery path for approvals that arrive after adoption. */
+  setBackgroundApprovalPauseSink(sink: BackgroundSubagentApprovalPauseSink | undefined): void {
+    this.#runtime.nestedRunner.setBackgroundApprovalPauseSink(sink);
   }
 
   getRoleAgentTool(role: SupportedSubagentRole): AnyToolDefinition {
@@ -180,7 +195,15 @@ export class SubagentManager {
   moveForegroundSubagent(runId: string): SubagentRunHandle | undefined {
     const candidate = this.#runtime.nestedRunner.getForegroundCandidate(runId);
     if (!candidate) return undefined;
+    // A transferred child can request another tool approval at any later
+    // segment. Never detach foreground ownership unless the session has
+    // already installed the queue/control sink that will own that pause.
+    if (!this.#runtime.nestedRunner.hasBackgroundApprovalPauseSink()) return undefined;
     return this.#runtime.asyncRegistry.adoptForegroundLease(candidate.lease, candidate);
+  }
+
+  listForegroundSubagentCandidates(): ForegroundSubagentCandidate[] {
+    return this.#runtime.nestedRunner.listForegroundCandidates();
   }
 
   /**
@@ -228,5 +251,10 @@ export class SubagentManager {
 
   dispose(): void {
     this.#runtime.asyncRegistry.dispose();
+  }
+
+  /** Cancellation plus adopted-lease settlement for session shutdown ordering. */
+  disposeAsync(): Promise<void> {
+    return this.#runtime.asyncRegistry.disposeAndWaitForAdoptedLeases();
   }
 }

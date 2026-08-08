@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { ApplicationRunLoop, type ApplicationAgent } from '../agent-runtime/application-run-loop.js';
 import { NestedSubagentRunner } from './nested-runner.js';
+import type { BackgroundSubagentApprovalPause } from './foreground-subagent-lease.js';
 import { getSubagentRunContext, type SubagentRunContext } from './tool-policy.js';
 import { ApprovalLedger, type ToolInvocationContext } from '../agent-runtime/tool-invocation-context.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
@@ -51,6 +52,7 @@ function buildNestedRunner(
     /** Fail the exact continuation after an approved child tool. */
     failAfterApproval?: boolean;
     onEvent?: (event: ConversationEvent) => void;
+    onBackgroundApprovalPause?: (pause: BackgroundSubagentApprovalPause) => void;
   } = {},
 ) {
   let first = true;
@@ -116,6 +118,7 @@ function buildNestedRunner(
     }),
     toolOwnership: new ToolOwnershipRegistry(),
     ...(options.onEvent ? { onEvent: options.onEvent } : {}),
+    ...(options.onBackgroundApprovalPause ? { backgroundApprovalPauseSink: options.onBackgroundApprovalPause } : {}),
   });
 
   return { runner, providerId, requests };
@@ -216,6 +219,83 @@ describe('ApplicationRunLoop nested tool', () => {
 });
 
 describe('NestedSubagentRunner end to end', () => {
+  it('publishes an adopted pause through the session sink and resumes only through its application callback', async () => {
+    const pauses: BackgroundSubagentApprovalPause[] = [];
+    const events: ConversationEvent[] = [];
+    const { runner } = buildNestedRunner({
+      needsApproval: true,
+      onEvent: (event) => events.push(event),
+      onBackgroundApprovalPause: (pause) => pauses.push(pause),
+    });
+
+    const foreground = runner.runAsTool({ role: 'worker', task: 'update notes' }, parentToolContext(), {
+      toolCall: { callId: 'transferred-pause-sink' },
+    });
+    const lease = runner.getForegroundLease('transferred-pause-sink')!;
+    lease.adopt();
+    await expect(foreground).resolves.toMatchObject({ status: 'running', agentId: 'transferred-pause-sink' });
+    await vi.waitFor(() => expect(pauses).toHaveLength(1));
+
+    const [pause] = pauses;
+    expect(pause).toMatchObject({ runId: 'transferred-pause-sink', role: 'worker', generation: 1 });
+    expect(
+      pause.apply(({ handle, interruption }) => {
+        handle.approve?.(interruption);
+        return true;
+      }),
+    ).toBe(true);
+
+    await vi.waitFor(() =>
+      expect(events.find((event) => event.type === 'subagent_completed' && event.async === true)).toMatchObject({
+        result: { agentId: 'transferred-pause-sink', status: 'completed' },
+      }),
+    );
+    expect(pause.apply(() => true)).toBe(false);
+  });
+
+  it('turns a synchronous retained-loop launch failure into one durable adopted terminal without retaining the pause', async () => {
+    const pauses: BackgroundSubagentApprovalPause[] = [];
+    const events: ConversationEvent[] = [];
+    const { runner } = buildNestedRunner({
+      needsApproval: true,
+      onEvent: (event) => events.push(event),
+      onBackgroundApprovalPause: (pause) => pauses.push(pause),
+    });
+    const foreground = runner.runAsTool({ role: 'worker', task: 'update notes' }, parentToolContext(), {
+      toolCall: { callId: 'transferred-resume-throw' },
+    });
+    const lease = runner.getForegroundLease('transferred-resume-throw')!;
+    lease.adopt();
+    await expect(foreground).resolves.toMatchObject({ status: 'running' });
+    await vi.waitFor(() => expect(pauses).toHaveLength(1));
+    const resumeError = new Error('continuation launch failed');
+    const continueRunStream = vi.spyOn(ApplicationRunLoop.prototype, 'continueRunStream').mockImplementationOnce(() => {
+      throw resumeError;
+    });
+
+    expect(
+      pauses[0]!.apply(({ handle, interruption }) => {
+        handle.approve?.(interruption);
+        return true;
+      }),
+    ).toBe(true);
+    continueRunStream.mockRestore();
+    expect(lease.getPendingApproval()).toBeUndefined();
+
+    await vi.waitFor(() =>
+      expect(events.filter((event) => event.type === 'subagent_completed' && event.async === true)).toMatchObject([
+        expect.objectContaining({
+          result: expect.objectContaining({
+            agentId: 'transferred-resume-throw',
+            status: 'failed',
+            error: 'continuation launch failed',
+          }),
+        }),
+      ]),
+    );
+    expect(events.filter((event) => event.type === 'subagent_completed' && event.async === true)).toHaveLength(1);
+  });
+
   it('emits one async terminal failure when an adopted continuation rejects', async () => {
     const events: ConversationEvent[] = [];
     const { runner } = buildNestedRunner({
@@ -232,7 +312,12 @@ describe('NestedSubagentRunner end to end', () => {
     await expect(foreground).resolves.toMatchObject({ status: 'running', agentId: 'transferred-failure' });
     await vi.waitFor(() => expect(lease.getPendingApproval()).toBeDefined());
     const pending = lease.getPendingApproval()!;
-    expect(lease.resolveBackgroundApproval(pending.generation, { kind: 'approve' })).toBe(true);
+    expect(
+      lease.applyBackgroundApproval(pending, ({ handle, interruption }) => {
+        handle.approve?.(interruption);
+        return true;
+      }),
+    ).toBe(true);
 
     await vi.waitFor(() =>
       expect(events.filter((event) => event.type === 'subagent_completed' && event.async === true)).toHaveLength(1),

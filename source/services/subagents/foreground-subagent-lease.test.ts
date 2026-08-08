@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createContinuationHandle } from '../../contracts/continuation-handle.js';
 import { ForegroundSubagentLease } from './foreground-subagent-lease.js';
 
@@ -18,7 +18,7 @@ describe('ForegroundSubagentLease', () => {
     expect(after.signal.aborted).toBe(true);
   });
 
-  it('resumes the retained continuation once with a generation-checked approval', async () => {
+  it('exposes the exact retained continuation only to a generation-and-identity checked application callback', async () => {
     const lease = new ForegroundSubagentLease({ runId: 'child' });
     lease.adopt();
     const approved: unknown[] = [];
@@ -26,11 +26,27 @@ describe('ForegroundSubagentLease', () => {
     const interruption = { callId: 'call-1' };
     const waiting = lease.waitForBackgroundApproval(handle, interruption);
     const pending = lease.getPendingApproval()!;
-    expect(lease.resolveBackgroundApproval(pending.generation + 1, { kind: 'approve' })).toBe(false);
-    expect(lease.resolveBackgroundApproval(pending.generation, { kind: 'approve' })).toBe(true);
+    expect(
+      lease.applyBackgroundApproval({ ...pending, generation: pending.generation + 1 }, ({ handle, interruption }) => {
+        handle.approve?.(interruption);
+        return true;
+      }),
+    ).toBe(false);
+    expect(
+      lease.applyBackgroundApproval({ ...pending, interruption: { callId: 'call-1' } }, ({ handle, interruption }) => {
+        handle.approve?.(interruption);
+        return true;
+      }),
+    ).toBe(false);
+    expect(
+      lease.applyBackgroundApproval(pending, ({ handle, interruption: exactInterruption }) => {
+        handle.approve?.(exactInterruption);
+        return true;
+      }),
+    ).toBe(true);
     expect(await waiting).toBe(true);
     expect(approved).toEqual([interruption]);
-    expect(lease.resolveBackgroundApproval(pending.generation, { kind: 'approve' })).toBe(false);
+    expect(lease.applyBackgroundApproval(pending, () => true)).toBe(false);
   });
 
   it('applies rejection messages only through the retained continuation', async () => {
@@ -43,7 +59,10 @@ describe('ForegroundSubagentLease', () => {
     const interruption = { callId: 'call-2' };
     const waiting = lease.waitForBackgroundApproval(handle, interruption);
     const pending = lease.getPendingApproval()!;
-    lease.resolveBackgroundApproval(pending.generation, { kind: 'reject', message: 'not now' });
+    lease.applyBackgroundApproval(pending, ({ handle: exactHandle, interruption: exactInterruption }) => {
+      exactHandle.reject?.(exactInterruption, { message: 'not now' });
+      return true;
+    });
     await waiting;
     expect(rejected).toEqual([{ item: interruption, message: 'not now' }]);
   });
@@ -72,7 +91,7 @@ describe('ForegroundSubagentLease', () => {
     expect(() => lease.adopt()).toThrow(/already adopted/);
     const waiting = lease.waitForBackgroundApproval(createContinuationHandle({}), { callId: 'call-5' });
     const pending = lease.getPendingApproval()!;
-    expect(lease.resolveBackgroundApproval(pending.generation, { kind: 'approve' })).toBe(false);
+    expect(lease.applyBackgroundApproval(pending, () => true)).toBe(true);
     lease.cancel();
     await expect(waiting).resolves.toBe(false);
   });
@@ -84,13 +103,23 @@ describe('ForegroundSubagentLease', () => {
     const handle = createContinuationHandle({ approve: (item: unknown) => approved.push(item) });
     const first = lease.waitForBackgroundApproval(handle, { callId: 'one' });
     const firstPending = lease.getPendingApproval()!;
-    expect(lease.resolveBackgroundApproval(firstPending.generation, { kind: 'approve' })).toBe(true);
+    expect(
+      lease.applyBackgroundApproval(firstPending, ({ handle, interruption }) => {
+        handle.approve?.(interruption);
+        return true;
+      }),
+    ).toBe(true);
     await first;
     const second = lease.waitForBackgroundApproval(handle, { callId: 'two' });
     const secondPending = lease.getPendingApproval()!;
     expect(secondPending.generation).toBeGreaterThan(firstPending.generation);
-    expect(lease.resolveBackgroundApproval(firstPending.generation, { kind: 'approve' })).toBe(false);
-    expect(lease.resolveBackgroundApproval(secondPending.generation, { kind: 'approve' })).toBe(true);
+    expect(lease.applyBackgroundApproval(firstPending, () => true)).toBe(false);
+    expect(
+      lease.applyBackgroundApproval(secondPending, ({ handle, interruption }) => {
+        handle.approve?.(interruption);
+        return true;
+      }),
+    ).toBe(true);
     await second;
     expect(approved).toEqual([{ callId: 'one' }, { callId: 'two' }]);
   });
@@ -103,9 +132,68 @@ describe('ForegroundSubagentLease', () => {
     const handle = createContinuationHandle({ approve: (item: unknown) => approved.push(item) });
     const waiting = lease.waitForBackgroundContinuation(handle, { callId: 'one' }, () => resumed.push('exact-loop'));
     const pending = lease.getPendingApproval()!;
-    expect(lease.resolveBackgroundApproval(pending.generation, { kind: 'approve' })).toBe(true);
+    expect(
+      lease.applyBackgroundApproval(pending, ({ handle, interruption }) => {
+        handle.approve?.(interruption);
+        return true;
+      }),
+    ).toBe(true);
     await expect(waiting).resolves.toBe(true);
     expect(approved).toEqual([{ callId: 'one' }]);
     expect(resumed).toEqual(['exact-loop']);
+  });
+
+  it('does not resume or release the pause when policy application throws', async () => {
+    const lease = new ForegroundSubagentLease({ runId: 'child' });
+    lease.adopt();
+    const resumed = vi.fn();
+    const waiting = lease.waitForBackgroundContinuation(createContinuationHandle({}), { callId: 'one' }, resumed);
+    const pending = lease.getPendingApproval()!;
+
+    expect(() =>
+      lease.applyBackgroundApproval(pending, () => {
+        throw new Error('policy failed');
+      }),
+    ).toThrow('policy failed');
+    expect(lease.getPendingApproval()).toEqual(pending);
+    expect(resumed).not.toHaveBeenCalled();
+
+    lease.cancel();
+    await expect(waiting).resolves.toBe(false);
+  });
+
+  it('keeps a pause pending when policy declines to apply it', async () => {
+    const lease = new ForegroundSubagentLease({ runId: 'child' });
+    lease.adopt();
+    const waiting = lease.waitForBackgroundApproval(createContinuationHandle({}), { callId: 'one' });
+    const pending = lease.getPendingApproval()!;
+
+    expect(lease.applyBackgroundApproval(pending, () => false)).toBe(false);
+    expect(lease.getPendingApproval()).toEqual(pending);
+
+    lease.cancel();
+    await expect(waiting).resolves.toBe(false);
+  });
+
+  it('consumes a policy-applied pause when resuming the retained loop throws', async () => {
+    const lease = new ForegroundSubagentLease({ runId: 'child' });
+    lease.adopt();
+    const waiting = lease.waitForBackgroundContinuation(
+      createContinuationHandle({ approve: () => {} }),
+      { callId: 'one' },
+      () => {
+        throw new Error('continuation launch failed');
+      },
+    );
+    const pending = lease.getPendingApproval()!;
+
+    expect(
+      lease.applyBackgroundApproval(pending, ({ handle, interruption }) => {
+        handle.approve?.(interruption);
+        return true;
+      }),
+    ).toBe(true);
+    expect(lease.getPendingApproval()).toBeUndefined();
+    await expect(waiting).rejects.toThrow('continuation launch failed');
   });
 });

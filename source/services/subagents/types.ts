@@ -214,7 +214,15 @@ export interface SubagentRunStatus {
   /** Optional active-run alias retained in status snapshots. */
   name?: string;
   role: string;
-  status: 'running' | 'waiting_for_answer' | 'cancelling' | 'completed' | 'failed' | 'cancelled' | 'not_found';
+  status:
+    | 'running'
+    | 'awaiting_approval'
+    | 'waiting_for_answer'
+    | 'cancelling'
+    | 'completed'
+    | 'failed'
+    | 'cancelled'
+    | 'not_found';
   task: string;
   taskPreview: string;
   startedAt: number;

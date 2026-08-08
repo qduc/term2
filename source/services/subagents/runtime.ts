@@ -13,6 +13,7 @@ import { SubagentSession } from './subagent-session.js';
 import { loadRoleDefinition } from './role-loader.js';
 import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
+import type { BackgroundSubagentApprovalPauseSink } from './foreground-subagent-lease.js';
 
 export interface SubagentRuntimeDeps {
   logger: ILoggingService;
@@ -26,6 +27,8 @@ export interface SubagentRuntimeDeps {
   toolOwnership: ToolOwnershipRegistry;
   /** Session-owned state for nested tools' legacy approval protocol only. */
   nestedCompatibility?: NestedToolCompatibilityState;
+  /** Session-owned queue/control sink for pauses from adopted child runs. */
+  backgroundApprovalPauseSink?: BackgroundSubagentApprovalPauseSink;
 }
 
 export interface SubagentRuntime {
@@ -35,6 +38,8 @@ export interface SubagentRuntime {
   executionRunner: ExecutionSubagentRunner;
   mentorRunner: MentorRunner;
   asyncRegistry: SubagentAsyncRegistry;
+  /** The one exact compatibility state used by nested tool creation. */
+  nestedCompatibility: NestedToolCompatibilityState;
 }
 
 export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntime {
@@ -85,6 +90,7 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
     roleToolCache,
     skillsService: deps.skillsService,
     toolOwnership: deps.toolOwnership,
+    ...(deps.backgroundApprovalPauseSink ? { backgroundApprovalPauseSink: deps.backgroundApprovalPauseSink } : {}),
   });
 
   const executionRunner = new ExecutionSubagentRunner({
@@ -142,5 +148,6 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
     executionRunner,
     mentorRunner,
     asyncRegistry,
+    nestedCompatibility,
   };
 }

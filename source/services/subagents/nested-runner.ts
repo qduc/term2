@@ -37,12 +37,22 @@ import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import { getCallIdFromObject } from '../interruption-info.js';
 import { normalizeToolParameters } from '../../lib/tool-invoke.js';
-import { ForegroundSubagentLease } from './foreground-subagent-lease.js';
+import { ForegroundSubagentLease, type BackgroundSubagentApprovalPauseSink } from './foreground-subagent-lease.js';
 
 export type CachedRoleTool = {
   agent: ApplicationAgent;
   tool: AnyToolDefinition;
 };
+
+/** Observable foreground work that may be adopted without recreating it. */
+export interface ForegroundSubagentCandidate {
+  runId: string;
+  role: string;
+  task: string;
+  parentTool?: string;
+}
+
+type ForegroundLeaseCandidate = ForegroundSubagentCandidate & { lease: ForegroundSubagentLease };
 
 const AGENT_TOOL_ERROR_PREFIX = 'An error occurred while running the tool. Please try again. Error:';
 
@@ -98,10 +108,9 @@ export class NestedSubagentRunner {
   #skillsService?: SkillsService;
   #toolOwnership: ToolOwnershipRegistry;
   /** Live foreground runs, addressable by the stable root tool-call id. */
-  #foregroundLeases = new Map<
-    string,
-    { lease: ForegroundSubagentLease; role: string; task: string; parentTool?: string }
-  >();
+  #foregroundLeases = new Map<string, ForegroundLeaseCandidate>();
+  /** Session-owned publication path for pauses after a foreground run moves. */
+  #backgroundApprovalPauseSink: BackgroundSubagentApprovalPauseSink | undefined;
   /**
    * Optional resolver that overrides the default `loadRoleDefinition`.
    * When set, all role loads in `#getOrCreateRoleTool` go through this
@@ -124,6 +133,8 @@ export class NestedSubagentRunner {
     skillsService?: SkillsService;
     /** Session-owned registry where this runner records pending tool owners. */
     toolOwnership: ToolOwnershipRegistry;
+    /** Session-owned queue/control sink for approvals from adopted child runs. */
+    backgroundApprovalPauseSink?: BackgroundSubagentApprovalPauseSink;
   }) {
     this.#logger = deps.logger;
     this.#settings = deps.settings;
@@ -135,6 +146,7 @@ export class NestedSubagentRunner {
     this.#resolveRole = deps.resolveRole;
     this.#skillsService = deps.skillsService;
     this.#toolOwnership = deps.toolOwnership;
+    this.#backgroundApprovalPauseSink = deps.backgroundApprovalPauseSink;
   }
 
   clearCache(): void {
@@ -154,10 +166,23 @@ export class NestedSubagentRunner {
     return this.#foregroundLeases.get(runId)?.lease;
   }
 
-  getForegroundCandidate(
-    runId: string,
-  ): { lease: ForegroundSubagentLease; role: string; task: string; parentTool?: string } | undefined {
+  getForegroundCandidate(runId: string): ForegroundLeaseCandidate | undefined {
     return this.#foregroundLeases.get(runId);
+  }
+
+  /** Observational projection; the lease itself remains runner-owned. */
+  listForegroundCandidates(): ForegroundSubagentCandidate[] {
+    return [...this.#foregroundLeases.values()].map(({ lease: _lease, ...candidate }) => candidate);
+  }
+
+  /** Replaces the session-owned pause publication sink without rebuilding role tools. */
+  setBackgroundApprovalPauseSink(sink: BackgroundSubagentApprovalPauseSink | undefined): void {
+    this.#backgroundApprovalPauseSink = sink;
+  }
+
+  /** A move is unsafe unless a later child-tool pause has a session owner. */
+  hasBackgroundApprovalPauseSink(): boolean {
+    return this.#backgroundApprovalPauseSink !== undefined;
   }
 
   #restoreRunContext(resumeState?: string): SubagentRunContext | undefined {
@@ -378,6 +403,13 @@ export class NestedSubagentRunner {
                   )
                 : loop.continueRunStream(stream.state!);
             },
+            (snapshot) => {
+              this.#backgroundApprovalPauseSink?.({
+                ...snapshot,
+                role,
+                apply: (callback) => foregroundLease.applyBackgroundApproval(snapshot, callback),
+              });
+            },
           );
           if (!continued || !resumed) break;
           stream = resumed;
@@ -436,7 +468,13 @@ export class NestedSubagentRunner {
     const candidateRunId = detailsRecord?.toolCall?.callId ?? randomUUID();
     const parentComposite = createCompositeAbortSignal(detailsRecord?.signal, request.signal);
     const lease = new ForegroundSubagentLease({ runId: candidateRunId, parentSignal: parentComposite?.signal });
-    this.#foregroundLeases.set(candidateRunId, { lease, role, task: request.task, parentTool: request.parentTool });
+    this.#foregroundLeases.set(candidateRunId, {
+      lease,
+      runId: candidateRunId,
+      role,
+      task: request.task,
+      parentTool: request.parentTool,
+    });
     const composite = createCompositeAbortSignal(lease.signal);
     const signal = composite?.signal;
     if (signal?.aborted) {

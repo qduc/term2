@@ -15,6 +15,9 @@ import { createAbortError } from '../services/subagents/utils.js';
 import type { SkillsService } from '../services/skills/skills-service.js';
 import type { SubagentRunHandle } from '../services/subagents/types.js';
 import type { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
+import type { BackgroundSubagentApprovalPauseSink } from '../services/subagents/foreground-subagent-lease.js';
+import type { ForegroundSubagentCandidate } from '../services/subagents/nested-runner.js';
+import type { NestedToolCompatibilityState } from '../services/session/nested-tool-compatibility-state.js';
 
 export interface SubagentBridgeDeps {
   logger: ILoggingService;
@@ -32,6 +35,8 @@ export interface SubagentBridgeDeps {
   subagentManager?: SubagentManager;
   skillsService?: SkillsService;
   toolOwnership: ToolOwnershipRegistry;
+  /** Session-owned delivery path for approvals after foreground adoption. */
+  backgroundApprovalPauseSink?: BackgroundSubagentApprovalPauseSink;
 }
 
 type SubagentEventScope = 'foreground' | 'background';
@@ -71,6 +76,7 @@ export class SubagentBridge {
         createClient: deps.createClient,
         skillsService: deps.skillsService,
         toolOwnership: deps.toolOwnership,
+        ...(deps.backgroundApprovalPauseSink ? { backgroundApprovalPauseSink: deps.backgroundApprovalPauseSink } : {}),
       });
     }
   }
@@ -91,6 +97,16 @@ export class SubagentBridge {
     if (sink) this.#flushBufferedEvents('background', sink);
   }
 
+  /** Installs the session-owned adopted-subagent approval pause sink. */
+  setBackgroundApprovalPauseSink(sink: BackgroundSubagentApprovalPauseSink | null): void {
+    this.#subagentManager?.setBackgroundApprovalPauseSink(sink ?? undefined);
+  }
+
+  /** Exact nested-tool compatibility state from the manager's live runtime. */
+  getNestedToolCompatibilityState(): NestedToolCompatibilityState | undefined {
+    return this.#subagentManager?.getNestedToolCompatibilityState();
+  }
+
   /** End session-scoped subagent work and release its event sinks and caches. */
   dispose(): void {
     if (this.#isDisposed) return;
@@ -107,6 +123,14 @@ export class SubagentBridge {
     this.#backgroundEventSink = null;
     this.#backgroundRunIds.clear();
     this.#bufferedEvents = [];
+  }
+
+  /**
+   * Cancels and awaits adopted foreground leases without detaching either
+   * event sink. The caller controls sink teardown after this promise settles.
+   */
+  disposeBackgroundSubagents(): Promise<void> {
+    return this.#subagentManager?.disposeAsync() ?? Promise.resolve();
   }
 
   #flushBufferedEvents(scope: SubagentEventScope, sink: (event: ConversationEvent) => void): void {
@@ -408,6 +432,11 @@ export class SubagentBridge {
   moveForegroundSubagent(runId: string): SubagentRunHandle | undefined {
     if (!this.#subagentManager) throw new Error('Transient agent clients cannot move subagents.');
     return this.#subagentManager.moveForegroundSubagent(runId);
+  }
+
+  /** Observational candidates for foreground-to-background transfer controls. */
+  listForegroundSubagentCandidates(): ForegroundSubagentCandidate[] {
+    return this.#subagentManager?.listForegroundSubagentCandidates() ?? [];
   }
 
   abortAsyncRun = (runId: string): void => {

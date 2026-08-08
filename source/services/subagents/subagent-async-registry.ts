@@ -382,7 +382,7 @@ export class SubagentAsyncRegistry {
       runId: run.runId,
       ...(run.name !== undefined ? { name: run.name } : {}),
       role: run.role,
-      status: run.status,
+      status: run.lease?.getPendingApproval() ? 'awaiting_approval' : run.status,
       task: run.task,
       taskPreview: truncatePreview(run.task),
       startedAt: run.startedAt,
@@ -550,6 +550,19 @@ export class SubagentAsyncRegistry {
     this.#disposed = true;
     this.#clearInterval(this.#timer);
     this.reset();
+  }
+
+  /**
+   * Cancels retained adopted leases and waits for their terminal settlement.
+   * Session composition owns sink detachment and calls this before disconnecting
+   * its durable background-event and approval-pause consumers.
+   */
+  async disposeAndWaitForAdoptedLeases(): Promise<void> {
+    const adoptedSettlements = [...this.#runs.values()]
+      .filter((run) => run.lease && !run.settled)
+      .map((run) => run.promise);
+    this.dispose();
+    await Promise.all(adoptedSettlements);
   }
 
   #evictToSessionCap(): void {

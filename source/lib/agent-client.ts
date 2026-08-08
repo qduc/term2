@@ -45,6 +45,9 @@ import {
 } from '../services/shell/background-shell-registry.js';
 import type { BackgroundShellExecutionResult } from '../tools/system/shell.js';
 import type { SubagentCancelAcknowledgement, SubagentRunStatus } from '../services/subagents/types.js';
+import type { BackgroundSubagentApprovalPauseSink } from '../services/subagents/foreground-subagent-lease.js';
+import type { ForegroundSubagentCandidate } from '../services/subagents/nested-runner.js';
+import type { NestedToolCompatibilityState } from '../services/session/nested-tool-compatibility-state.js';
 
 type ChainedRunOptions = AgentClientRunOptions;
 
@@ -104,6 +107,16 @@ export class AgentClient {
    */
   setBackgroundSubagentEventSink(sink: ((event: ConversationEvent) => void) | null): void {
     this.#subagentBridge?.setBackgroundEventSink(sink);
+  }
+
+  /** Session-owned queue/control delivery for pauses from adopted child runs. */
+  setBackgroundSubagentApprovalPauseSink(sink: BackgroundSubagentApprovalPauseSink | null): void {
+    this.#subagentBridge?.setBackgroundApprovalPauseSink(sink);
+  }
+
+  /** Exact nested-tool state shared with the subagent runtime's tool factory. */
+  getNestedToolCompatibilityState(): NestedToolCompatibilityState | undefined {
+    return this.#subagentBridge?.getNestedToolCompatibilityState();
   }
 
   /** Route root shell-job lifecycle through the durable conversation sink. */
@@ -461,6 +474,15 @@ export class AgentClient {
     );
   }
 
+  /** Foreground runs that can be moved without constructing a second execution. */
+  listForegroundSubagentCandidates(): ForegroundSubagentCandidate[] {
+    return this.#subagentBridge?.listForegroundSubagentCandidates() ?? [];
+  }
+
+  getForegroundSubagentCandidate(runId: string): ForegroundSubagentCandidate | undefined {
+    return this.listForegroundSubagentCandidates().find((candidate) => candidate.runId === runId);
+  }
+
   getBackgroundShellJob(jobId: string): BackgroundShellJob<BackgroundShellExecutionResult> | undefined {
     return this.#backgroundShellRegistry?.get(jobId);
   }
@@ -491,6 +513,11 @@ export class AgentClient {
 
   disposeBackgroundShellJobs(): Promise<void> {
     return this.#backgroundShellRegistry?.dispose() ?? Promise.resolve();
+  }
+
+  /** Await adopted child-run settlement before the session detaches its sinks. */
+  disposeBackgroundSubagents(): Promise<void> {
+    return this.#subagentBridge?.disposeBackgroundSubagents() ?? Promise.resolve();
   }
 
   /** End all session-bound activity and release resources held by this client. */

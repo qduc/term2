@@ -32,12 +32,15 @@ reading of the Phase 4 step list.
 **Every worktree for this work must be based on local `HEAD`, never on
 `origin/main`.**
 
-At the time of writing, local `main` is 15 commits ahead of `origin/main`
-(`fee29e21`). The unpushed range is not just the recent merge — it includes the
-Phase 1 kernel (`21976b1d`, `8c230aea`) and this plan document itself
-(`845ddfdc`), alongside unrelated compaction and subagent work. A worktree cut
-from `origin/main` would therefore lose the *entire* redesign and silently
-present a tree in which none of this plan's premises hold.
+Local `main` is substantially ahead of `origin/main`, and the unpushed range is
+not just the most recent merge — it includes the Phase 1 kernel (`21976b1d`,
+`8c230aea`) and this plan document itself (`845ddfdc`), alongside unrelated
+compaction and subagent work. A worktree cut from `origin/main` would therefore
+lose the *entire* redesign and silently present a tree in which none of this
+plan's premises hold.
+
+Deliberately no commit count is quoted here: it goes stale on every commit,
+including the ones that record it. Run the check instead.
 
 This is a live trap rather than a hypothetical: the `worktree.baseRef` setting
 defaults to `fresh`, which branches from `origin/<default-branch>`. Any tooling

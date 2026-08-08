@@ -297,6 +297,7 @@ const App: FC<AppProps> = ({
     settingsService,
     applyRuntimeSetting,
     setModel,
+    configurationService,
   });
 
   // The composer owns this live preview because it changes as the user types;

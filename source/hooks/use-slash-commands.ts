@@ -75,12 +75,13 @@ export function executeSlashCommandSelection({
   if (!command) return;
 
   if (shouldAutocomplete(command, filter)) {
+    // Close the slash frame before writing a command prefix that activates a
+    // successor menu. The controller reconciles `setInput` synchronously, so
+    // closing afterward would dismiss that newly opened menu instead.
+    close();
     const nextValue = `/${command.name} `;
     setInput(nextValue);
     setCursorOverride(nextValue.length);
-    // Close slash menu first so mode-changing actions (e.g. /rewind opening
-    // rewind_selection) can take effect; the controller owns the resulting frame.
-    close();
     const shouldClose = command.action();
     if (shouldClose !== false) {
       setInput('');

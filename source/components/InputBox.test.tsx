@@ -409,6 +409,30 @@ it.sequential('preserves a burst of characters while the slash-command popup own
   expect(submitted).toBe(true);
 });
 
+it.sequential('opens settings completion with the first Enter after selecting /settings', async () => {
+  const settingsCommand: SlashCommand = {
+    name: 'settings',
+    description: 'Settings',
+    expectsArgs: true,
+    action: () => false,
+    completion: { type: 'settings', trigger: '/settings ', resetTrigger: '/settings reset ' },
+  };
+
+  const { lastFrame, stdin } = await renderAndFlush(
+    <InputProvider>
+      <InputCursorStateDisplay />
+      <InputBox {...defaultProps} slashCommands={[...mockSlashCommands, settingsCommand]} />
+    </InputProvider>,
+  );
+
+  await writeInput(stdin, '/settings');
+  await waitFor(lastFrame, (frame) => frame.includes('Mode:slash_commands'), { timeoutMs: 3000 });
+  await writeInput(stdin, '\r');
+
+  const frame = await waitFor(lastFrame, (value) => value.includes('Mode:settings_completion'), { timeoutMs: 3000 });
+  expect(frame).toContain('Input:/settings ');
+});
+
 it.sequential('InputBox keeps cursor fixed when left arrow switches model provider', async () => {
   const initialValue = '/model gpt-5';
   const { lastFrame, stdin } = await renderAndFlush(

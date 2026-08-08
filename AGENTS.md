@@ -34,6 +34,8 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 
 ## Active or deferred
 
+- Exclusive menu input ownership — follow-on plan tracked in
+  `docs/plans/exclusive-menu-input.md`; waiting for implementation approval.
 - Scheduled live provider canaries — a deferred follow-up requiring CI, secret/billing, and OAuth-storage decisions. No plan doc, and nobody is on it.
 - Background work controls — active implementation tracked in
   `docs/plans/background-work-control/MAP.md`. Background inspection, per-item

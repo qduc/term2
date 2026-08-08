@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import fcntl
 import hashlib
 import json
 import os
@@ -17,6 +18,7 @@ import sys
 import tempfile
 import time
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -733,39 +735,240 @@ def command_ask(arguments: argparse.Namespace) -> int:
 def command_receive(arguments: argparse.Namespace) -> int:
     state = state_for(arguments.runtime_dir, arguments.name)
     inbox = Path(state["inbox"])
-    cursor_path = arguments.runtime_dir / "cursor" / f"{name_key(arguments.name)}.txt"
-    ensure_private_dir(cursor_path.parent)
-    try:
-        offset = int(cursor_path.read_text())
-    except (OSError, ValueError):
-        offset = 0
-    deadline = time.monotonic() + arguments.wait
-    while True:
+    peer_id = state["peerId"]
+    cursor_path = inbox_cursor_path(arguments.runtime_dir, peer_id)
+    with exclusive_inbox_consumer(arguments.runtime_dir, peer_id, arguments.name):
+        if pending_delivery_path(arguments.runtime_dir, peer_id).exists():
+            raise CliError(
+                f"Inbox {arguments.name!r} has an unacknowledged follow delivery; resume follow or acknowledge it",
+                4,
+            )
+        ensure_private_dir(cursor_path.parent)
         try:
-            size = inbox.stat().st_size
-        except OSError:
-            size = 0
-        if size > offset or time.monotonic() >= deadline:
-            break
-        time.sleep(0.05)
-    if size < offset:
-        offset = 0
+            offset = int(cursor_path.read_text())
+        except (OSError, ValueError):
+            offset = 0
+        deadline = time.monotonic() + arguments.wait
+        while True:
+            try:
+                size = inbox.stat().st_size
+            except OSError:
+                size = 0
+            if size > offset or time.monotonic() >= deadline:
+                break
+            time.sleep(0.05)
+        if size < offset:
+            offset = 0
+        records, _ = read_inbox_records(inbox, cursor_path, offset, size)
+    print(json.dumps(records, ensure_ascii=False, indent=2))
+    return 0
+
+
+def inbox_cursor_path(runtime_dir: Path, peer_id: str) -> Path:
+    return runtime_dir / "cursor" / f"{name_key(peer_id)}.txt"
+
+
+def pending_delivery_path(runtime_dir: Path, peer_id: str) -> Path:
+    return runtime_dir / "pending" / f"{name_key(peer_id)}.json"
+
+
+@contextmanager
+def exclusive_inbox_consumer(runtime_dir: Path, peer_id: str, name: str):
+    lock_path = runtime_dir / "consumer" / f"{name_key(peer_id)}.lock"
+    ensure_private_dir(lock_path.parent)
+    lock = lock_path.open("a+", encoding="utf-8")
+    try:
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise CliError(f"Inbox {name!r} already has a consumer", 4) from error
+        yield
+    finally:
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+        finally:
+            lock.close()
+
+
+def read_inbox_records(
+    inbox: Path, cursor_path: Path, offset: int, size: int
+) -> tuple[list[dict[str, Any]], int]:
+    if size <= offset:
+        return [], offset
+    with inbox.open("rb") as stream:
+        stream.seek(offset)
+        data = stream.read()
+    if data and not data.endswith(b"\n"):
+        last_newline = data.rfind(b"\n")
+        if last_newline < 0:
+            data = b""
+            new_offset = offset
+        else:
+            data = data[: last_newline + 1]
+            new_offset = offset + last_newline + 1
+    else:
+        new_offset = offset + len(data)
     records: list[dict[str, Any]] = []
-    if size > offset:
-        with inbox.open("rb") as stream:
-            stream.seek(offset)
-            data = stream.read()
-            new_offset = stream.tell()
-        for line in data.splitlines():
+    for line in data.splitlines():
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            records.append(value)
+    cursor_path.write_text(str(new_offset))
+    return records, new_offset
+
+
+def read_next_inbox_record(inbox: Path, offset: int) -> tuple[dict[str, Any] | None, int]:
+    try:
+        stream = inbox.open("rb")
+    except OSError:
+        return None, offset
+    with stream:
+        stream.seek(offset)
+        while True:
+            line_offset = stream.tell()
+            line = stream.readline()
+            next_offset = stream.tell()
+            if not line:
+                return None, next_offset
+            if not line.endswith(b"\n"):
+                return None, line_offset
             try:
                 value = json.loads(line)
             except json.JSONDecodeError:
+                offset = next_offset
                 continue
             if isinstance(value, dict):
-                records.append(value)
-        cursor_path.write_text(str(new_offset))
-    print(json.dumps(records, ensure_ascii=False, indent=2))
+                return value, next_offset
+            offset = next_offset
+
+
+def load_pending_delivery(path: Path) -> dict[str, Any] | None:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, json.JSONDecodeError) as error:
+        raise CliError(f"Cannot read pending delivery {path}", 4) from error
+    if not isinstance(value, dict):
+        raise CliError(f"Invalid pending delivery {path}", 4)
+    return value
+
+
+def finalize_pending_delivery(path: Path, cursor_path: Path, pending: dict[str, Any]) -> None:
+    next_offset = pending.get("next_offset")
+    if not isinstance(next_offset, int) or next_offset < 0:
+        raise CliError(f"Invalid pending delivery {path}", 4)
+    ensure_private_dir(cursor_path.parent)
+    cursor_path.write_text(str(next_offset), encoding="utf-8")
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+
+
+def command_ack(arguments: argparse.Namespace) -> int:
+    pending_dir = arguments.runtime_dir / "pending"
+    matches: list[tuple[Path, dict[str, Any]]] = []
+    if pending_dir.exists():
+        for candidate in pending_dir.glob("*.json"):
+            pending = load_pending_delivery(candidate)
+            if (
+                pending is not None
+                and pending.get("name") == arguments.name
+                and pending.get("delivery_id") == arguments.delivery_id
+            ):
+                matches.append((candidate, pending))
+    if len(matches) != 1:
+        raise CliError(f"Delivery {arguments.delivery_id!r} is not pending", 4)
+    path, pending = matches[0]
+    peer_id = pending.get("peer_id")
+    if not isinstance(peer_id, str):
+        raise CliError(f"Invalid pending delivery {path}", 4)
+    acknowledged = {**pending, "acknowledged": True}
+    atomic_json(path, acknowledged)
+    finalize_pending_delivery(path, inbox_cursor_path(arguments.runtime_dir, peer_id), acknowledged)
+    print(json.dumps({"ok": True, "delivery_id": arguments.delivery_id}))
     return 0
+
+
+def command_follow(arguments: argparse.Namespace) -> int:
+    state = state_for(arguments.runtime_dir, arguments.name)
+    inbox = Path(state["inbox"])
+    peer_id = state["peerId"]
+    state_path = owned_path(arguments.runtime_dir, arguments.name)
+    cursor_path = inbox_cursor_path(arguments.runtime_dir, peer_id)
+    pending_path = pending_delivery_path(arguments.runtime_dir, peer_id)
+    with exclusive_inbox_consumer(arguments.runtime_dir, peer_id, arguments.name):
+        ensure_private_dir(cursor_path.parent)
+        try:
+            offset = int(cursor_path.read_text())
+        except (OSError, ValueError):
+            offset = 0
+        emitted_delivery_id: str | None = None
+        while True:
+            pending = load_pending_delivery(pending_path)
+            if pending is not None and pending.get("acknowledged") is True:
+                finalize_pending_delivery(pending_path, cursor_path, pending)
+                offset = int(pending["next_offset"])
+                emitted_delivery_id = None
+                continue
+            if pending is not None:
+                delivery_id = pending.get("delivery_id")
+                record = pending.get("record")
+                if not isinstance(delivery_id, str) or not isinstance(record, dict):
+                    raise CliError(f"Invalid pending delivery {pending_path}", 4)
+                if emitted_delivery_id != delivery_id:
+                    print(
+                        json.dumps(
+                            {**record, "delivery_id": delivery_id},
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        ),
+                        flush=True,
+                    )
+                    emitted_delivery_id = delivery_id
+                time.sleep(0.05)
+                continue
+
+            if emitted_delivery_id is not None:
+                try:
+                    offset = int(cursor_path.read_text())
+                except (OSError, ValueError):
+                    offset = 0
+                emitted_delivery_id = None
+
+            try:
+                size = inbox.stat().st_size
+            except OSError:
+                size = 0
+            if size < offset:
+                offset = 0
+                cursor_path.write_text("0", encoding="utf-8")
+            record, next_offset = read_next_inbox_record(inbox, offset)
+            if record is not None:
+                delivery_id = str(uuid.uuid4())
+                pending = {
+                    "acknowledged": False,
+                    "delivery_id": delivery_id,
+                    "name": arguments.name,
+                    "next_offset": next_offset,
+                    "peer_id": peer_id,
+                    "record": record,
+                }
+                atomic_json(pending_path, pending)
+                emitted_delivery_id = None
+                continue
+            if next_offset != offset:
+                offset = next_offset
+                cursor_path.write_text(str(offset), encoding="utf-8")
+            current_state = load_json(state_path)
+            still_current = current_state is not None and current_state.get("peerId") == peer_id
+            if not still_current and size <= offset:
+                return 0
+            time.sleep(0.05)
 
 
 def decode_reply_token(token: str) -> tuple[Path, str | None]:
@@ -833,6 +1036,15 @@ def build_parser() -> argparse.ArgumentParser:
     receive.add_argument("--name", required=True)
     receive.add_argument("--wait", type=float, default=0.0)
     receive.set_defaults(run=command_receive)
+
+    follow = commands.add_parser("follow", help="stream unread messages until the announced peer stops")
+    follow.add_argument("--name", required=True)
+    follow.set_defaults(run=command_follow)
+
+    acknowledge = commands.add_parser("ack", help="acknowledge a leased follow delivery")
+    acknowledge.add_argument("--name", required=True)
+    acknowledge.add_argument("--delivery-id", required=True)
+    acknowledge.set_defaults(run=command_ack)
 
     reply = commands.add_parser("reply", help="reply using an opaque token returned by receive")
     reply.add_argument("--token", required=True)

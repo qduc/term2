@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import os
+import select
 import socket
 import subprocess
 import sys
@@ -88,6 +90,10 @@ class AgentPeerCliTest(unittest.TestCase):
             timeout=timeout,
             env=self.environment,
         )
+
+    def peer_state(self, name):
+        key = hashlib.sha256(name.encode("utf-8")).hexdigest()[:16]
+        return json.loads((self.runtime_dir / "owned" / f"{key}.json").read_text())
 
     def write_claude_session(self, pid, name, session_id, socket_path, status="idle"):
         payload = {
@@ -177,6 +183,232 @@ class AgentPeerCliTest(unittest.TestCase):
         messages = json.loads(received.stdout)
         self.assertEqual(messages[0]["message"], "status please")
         self.assertIsNone(messages[0]["reply_token"])
+
+    def test_follow_streams_each_message_without_exiting(self):
+        started = self.run_cli("start", "--name", "codex-test")
+        self.assertEqual(started.returncode, 0, started.stderr)
+        follower = subprocess.Popen(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--runtime-dir",
+                str(self.runtime_dir),
+                "--claude-sessions-dir",
+                str(self.sessions_dir),
+                "follow",
+                "--name",
+                "codex-test",
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=self.environment,
+        )
+        try:
+            for message in ("first", "second"):
+                sent = self.run_cli("send", "--to", "codex-test", "--message", message)
+                self.assertEqual(sent.returncode, 0, sent.stderr)
+
+            readable, _, _ = select.select([follower.stdout], [], [], 2)
+            self.assertTrue(readable, "follow did not emit the first message")
+            first = json.loads(follower.stdout.readline())
+            self.assertEqual(first["message"], "first")
+            self.assertIsInstance(first["delivery_id"], str)
+            self.assertEqual(select.select([follower.stdout], [], [], 0.2)[0], [])
+
+            blocked = self.run_cli("receive", "--name", "codex-test")
+            self.assertEqual(blocked.returncode, 4)
+            self.assertIn("already has a consumer", blocked.stderr)
+
+            acknowledged = self.run_cli(
+                "ack", "--name", "codex-test", "--delivery-id", first["delivery_id"]
+            )
+            self.assertEqual(acknowledged.returncode, 0, acknowledged.stderr)
+            readable, _, _ = select.select([follower.stdout], [], [], 2)
+            self.assertTrue(readable, "follow did not emit the second message after ack")
+            second = json.loads(follower.stdout.readline())
+            self.assertEqual(second["message"], "second")
+            self.assertIsNone(follower.poll())
+        finally:
+            follower.terminate()
+            follower.communicate(timeout=2)
+
+    def test_follow_replays_an_unacknowledged_delivery_after_restart(self):
+        started = self.run_cli("start", "--name", "codex-test")
+        self.assertEqual(started.returncode, 0, started.stderr)
+
+        def start_follower():
+            return subprocess.Popen(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--runtime-dir",
+                    str(self.runtime_dir),
+                    "--claude-sessions-dir",
+                    str(self.sessions_dir),
+                    "follow",
+                    "--name",
+                    "codex-test",
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=self.environment,
+            )
+
+        sent = self.run_cli("send", "--to", "codex-test", "--message", "retry me")
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        first_follower = start_follower()
+        first = json.loads(first_follower.stdout.readline())
+        first_follower.terminate()
+        first_follower.communicate(timeout=2)
+
+        second_follower = start_follower()
+        try:
+            replay = json.loads(second_follower.stdout.readline())
+            self.assertEqual(replay["delivery_id"], first["delivery_id"])
+            self.assertEqual(replay["message"], "retry me")
+            acknowledged = self.run_cli(
+                "ack", "--name", "codex-test", "--delivery-id", replay["delivery_id"]
+            )
+            self.assertEqual(acknowledged.returncode, 0, acknowledged.stderr)
+        finally:
+            second_follower.terminate()
+            second_follower.communicate(timeout=2)
+
+    def test_follow_scopes_cursor_to_a_restarted_same_name_inbox(self):
+        self.assertEqual(self.run_cli("start", "--name", "codex-test").returncode, 0)
+        self.assertEqual(
+            self.run_cli("send", "--to", "codex-test", "--message", "seed").returncode, 0
+        )
+        self.assertEqual(self.run_cli("receive", "--name", "codex-test").returncode, 0)
+        old_peer_id = self.peer_state("codex-test")["peerId"]
+        self.assertEqual(self.run_cli("stop", "--name", "codex-test").returncode, 0)
+        self.assertEqual(self.run_cli("start", "--name", "codex-test").returncode, 0)
+        self.assertNotEqual(self.peer_state("codex-test")["peerId"], old_peer_id)
+
+        follower = subprocess.Popen(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--runtime-dir",
+                str(self.runtime_dir),
+                "--claude-sessions-dir",
+                str(self.sessions_dir),
+                "follow",
+                "--name",
+                "codex-test",
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=self.environment,
+        )
+        try:
+            message = "new inbox " + "x" * 2000
+            self.assertEqual(
+                self.run_cli("send", "--to", "codex-test", "--message", message).returncode,
+                0,
+            )
+            readable, _, _ = select.select([follower.stdout], [], [], 2)
+            self.assertTrue(readable, "follow skipped the restarted inbox message")
+            self.assertEqual(json.loads(follower.stdout.readline())["message"], message)
+        finally:
+            follower.terminate()
+            follower.communicate(timeout=2)
+
+    def test_follow_retries_an_incomplete_jsonl_record(self):
+        self.assertEqual(self.run_cli("start", "--name", "codex-test").returncode, 0)
+        inbox = Path(self.peer_state("codex-test")["inbox"])
+        record = json.dumps({"message": "split append", "message_id": "same"}).encode()
+        split = len(record) // 2
+        follower = subprocess.Popen(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--runtime-dir",
+                str(self.runtime_dir),
+                "--claude-sessions-dir",
+                str(self.sessions_dir),
+                "follow",
+                "--name",
+                "codex-test",
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=self.environment,
+        )
+        try:
+            with inbox.open("ab") as stream:
+                stream.write(record[:split])
+                stream.flush()
+            self.assertEqual(select.select([follower.stdout], [], [], 0.2)[0], [])
+            with inbox.open("ab") as stream:
+                stream.write(record[split:] + b"\n")
+                stream.flush()
+            readable, _, _ = select.select([follower.stdout], [], [], 2)
+            self.assertTrue(readable, "follow did not retry the completed JSONL record")
+            self.assertEqual(json.loads(follower.stdout.readline())["message"], "split append")
+        finally:
+            follower.terminate()
+            follower.communicate(timeout=2)
+
+    def test_receive_retries_an_incomplete_jsonl_record(self):
+        self.assertEqual(self.run_cli("start", "--name", "codex-test").returncode, 0)
+        inbox = Path(self.peer_state("codex-test")["inbox"])
+        record = json.dumps({"message": "split receive", "message_id": "one"}).encode()
+        split = len(record) // 2
+        with inbox.open("ab") as stream:
+            stream.write(record[:split])
+            stream.flush()
+        first = self.run_cli("receive", "--name", "codex-test")
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertEqual(json.loads(first.stdout), [])
+
+        with inbox.open("ab") as stream:
+            stream.write(record[split:] + b"\n")
+            stream.flush()
+        second = self.run_cli("receive", "--name", "codex-test")
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertEqual(json.loads(second.stdout)[0]["message"], "split receive")
+
+    def test_follow_delivery_ids_do_not_trust_sender_message_ids(self):
+        self.assertEqual(self.run_cli("start", "--name", "codex-test").returncode, 0)
+        inbox = Path(self.peer_state("codex-test")["inbox"])
+        with inbox.open("a", encoding="utf-8") as stream:
+            for message in ("one", "two"):
+                stream.write(json.dumps({"message": message, "message_id": "reused"}) + "\n")
+        follower = subprocess.Popen(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--runtime-dir",
+                str(self.runtime_dir),
+                "--claude-sessions-dir",
+                str(self.sessions_dir),
+                "follow",
+                "--name",
+                "codex-test",
+            ],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=self.environment,
+        )
+        try:
+            first = json.loads(follower.stdout.readline())
+            self.assertEqual(
+                self.run_cli(
+                    "ack", "--name", "codex-test", "--delivery-id", first["delivery_id"]
+                ).returncode,
+                0,
+            )
+            second = json.loads(follower.stdout.readline())
+            self.assertNotEqual(first["delivery_id"], second["delivery_id"])
+        finally:
+            follower.terminate()
+            follower.communicate(timeout=2)
 
     def test_generic_peer_replies_with_an_opaque_token(self):
         replies = []

@@ -31,6 +31,42 @@ export interface BackgroundShellLaunchOptions<TResult> {
   resultToStatus?: (result: TResult) => Exclude<BackgroundShellTerminalStatus, 'cancelled'>;
 }
 
+/** A running root-shell invocation that can be transferred to this registry. */
+export interface ForegroundShellLease<TResult> {
+  /** The original root tool call which may request the transfer. */
+  callId: string;
+  /** The preallocated background-job ID, stable across adoption. */
+  jobId: string;
+  command: string;
+  startedAt: number;
+  status: 'running';
+  /** Resolves to the normal tool result, or the adopted job handle after transfer. */
+  foregroundResult: Promise<TResult | ForegroundShellTransferResult>;
+  /** Resolves only after the one process and its cleanup have settled. */
+  settled: Promise<BackgroundShellJob<TResult>>;
+}
+
+export interface ForegroundShellLeaseOptions<TResult> extends BackgroundShellLaunchOptions<TResult> {
+  callId: string;
+  /** The foreground turn owns this signal until the lease is adopted. */
+  parentSignal?: AbortSignal;
+  /** Observational transfer hand-off, invoked before the foreground result resolves. */
+  onAdopted?: () => void;
+}
+
+export interface ForegroundShellTransferResult {
+  jobId: string;
+  status: 'running';
+}
+
+export interface ForegroundShellLeaseDetails {
+  callId: string;
+  jobId: string;
+  command: string;
+  status: 'running';
+  startedAt: number;
+}
+
 export interface BackgroundShellRegistryOptions<TResult = unknown> {
   maxConcurrentJobs?: number;
   maxRetainedJobs?: number;
@@ -73,6 +109,15 @@ interface JobRecord<TResult> {
   settled: Promise<BackgroundShellJob<TResult>>;
 }
 
+interface ForegroundRecord<TResult> extends JobRecord<TResult> {
+  callId: string;
+  detachParentAbort: () => void;
+  adopted: boolean;
+  onAdopted?: () => void;
+  resolveForegroundResult: (result: TResult | ForegroundShellTransferResult) => void;
+  rejectForegroundResult: (error: unknown) => void;
+}
+
 /**
  * Session-owned lifecycle for shell processes whose tool invocation has
  * already returned. The registry deliberately owns cancellation and retention
@@ -80,6 +125,7 @@ interface JobRecord<TResult> {
  */
 export class BackgroundShellRegistry<TResult> {
   readonly #jobs = new Map<string, JobRecord<TResult>>();
+  readonly #foreground = new Map<string, ForegroundRecord<TResult>>();
   readonly #terminalJobIds: string[] = [];
   readonly #maxConcurrentJobs: number;
   readonly #maxRetainedJobs: number;
@@ -130,6 +176,112 @@ export class BackgroundShellRegistry<TResult> {
     return { ...job, settled: record.settled };
   }
 
+  /**
+   * Starts a root shell process under a detachable foreground lease. The lease
+   * is intentionally invisible to `list()` until `adoptForeground` succeeds.
+   */
+  startForeground(options: ForegroundShellLeaseOptions<TResult>): ForegroundShellLease<TResult> {
+    if (this.#disposed) throw new BackgroundShellRegistryDisposedError();
+    if (this.#foreground.has(options.callId)) {
+      throw new Error(`Foreground shell lease already exists for tool call ${options.callId}.`);
+    }
+
+    const job: BackgroundShellJob<TResult> = {
+      id: this.#createId(),
+      command: options.command,
+      status: 'running',
+      startedAt: this.#now(),
+    };
+    const controller = new AbortController();
+    let resolveForegroundResult!: (result: TResult | ForegroundShellTransferResult) => void;
+    let rejectForegroundResult!: (error: unknown) => void;
+    const foregroundResult = new Promise<TResult | ForegroundShellTransferResult>((resolve, reject) => {
+      resolveForegroundResult = resolve;
+      rejectForegroundResult = reject;
+    });
+    const abortFromParent = () => controller.abort();
+    if (options.parentSignal?.aborted) abortFromParent();
+    else options.parentSignal?.addEventListener('abort', abortFromParent, { once: true });
+    const record: ForegroundRecord<TResult> = {
+      job,
+      controller,
+      callId: options.callId,
+      adopted: false,
+      onAdopted: options.onAdopted,
+      detachParentAbort: () => options.parentSignal?.removeEventListener('abort', abortFromParent),
+      resolveForegroundResult,
+      rejectForegroundResult,
+      settled: Promise.resolve(job),
+    };
+    record.settled = this.#settleForeground(record, options);
+    this.#foreground.set(options.callId, record);
+    return {
+      callId: record.callId,
+      jobId: job.id,
+      command: job.command,
+      startedAt: job.startedAt,
+      status: 'running',
+      foregroundResult,
+      settled: record.settled,
+    };
+  }
+
+  getForeground(callId: string): ForegroundShellLeaseDetails | undefined {
+    const record = this.#foreground.get(callId);
+    if (!record || record.job.status !== 'running') return undefined;
+    return {
+      callId: record.callId,
+      jobId: record.job.id,
+      command: record.job.command,
+      status: 'running',
+      startedAt: record.job.startedAt,
+    };
+  }
+
+  listForeground(): ForegroundShellLeaseDetails[] {
+    return [...this.#foreground.values()]
+      .filter((record) => record.job.status === 'running')
+      .map((record) => ({
+        callId: record.callId,
+        jobId: record.job.id,
+        command: record.job.command,
+        status: 'running' as const,
+        startedAt: record.job.startedAt,
+      }));
+  }
+
+  /** Atomically publishes a running foreground lease as a background job. */
+  adoptForeground(callId: string): ForegroundShellTransferResult {
+    const record = this.#foreground.get(callId);
+    if (!record || record.job.status !== 'running') {
+      throw new Error(`No running foreground shell lease exists for tool call ${callId}.`);
+    }
+    if (record.controller.signal.aborted) {
+      throw new Error(`Foreground shell lease for tool call ${callId} is already aborting.`);
+    }
+    if (this.#disposed) throw new BackgroundShellRegistryDisposedError();
+    if (this.#runningJobs >= this.#maxConcurrentJobs) {
+      throw new BackgroundShellRegistryCapacityError(this.#maxConcurrentJobs);
+    }
+
+    // All validation precedes this ownership change. JavaScript's synchronous
+    // turn makes these mutations atomic with respect to process settlement.
+    record.detachParentAbort();
+    record.adopted = true;
+    this.#foreground.delete(callId);
+    this.#jobs.set(record.job.id, record);
+    this.#runningJobs += 1;
+    const result: ForegroundShellTransferResult = { jobId: record.job.id, status: 'running' };
+    try {
+      record.onAdopted?.();
+    } catch {
+      // Lifecycle ownership has already changed; observers cannot roll it back.
+    }
+    record.resolveForegroundResult(result);
+    this.#emit({ type: 'background_shell_started', jobId: record.job.id, command: record.job.command });
+    return result;
+  }
+
   get(id: string): BackgroundShellJob<TResult> | undefined {
     const job = this.#jobs.get(id)?.job;
     return job ? { ...job } : undefined;
@@ -162,7 +314,12 @@ export class BackgroundShellRegistry<TResult> {
     for (const { job } of this.#jobs.values()) {
       this.cancel(job.id);
     }
-    this.#disposePromise = Promise.allSettled([...this.#jobs.values()].map((record) => record.settled)).then(() => {});
+    const foreground = [...this.#foreground.values()];
+    for (const record of foreground) record.controller.abort();
+    this.#disposePromise = Promise.allSettled([
+      ...[...this.#jobs.values()].map((record) => record.settled),
+      ...foreground.map((record) => record.settled),
+    ]).then(() => {});
     return this.#disposePromise;
   }
 
@@ -206,6 +363,57 @@ export class BackgroundShellRegistry<TResult> {
       ...(job.result === undefined ? {} : { output: job.result }),
       ...(job.error === undefined ? {} : { error: job.error }),
     });
+    return { ...job };
+  }
+
+  async #settleForeground(
+    record: ForegroundRecord<TResult>,
+    options: ForegroundShellLeaseOptions<TResult>,
+  ): Promise<BackgroundShellJob<TResult>> {
+    let result: TResult | undefined;
+    let failure: unknown;
+    try {
+      result = await options.run(record.controller.signal);
+    } catch (error) {
+      failure = error;
+    }
+
+    try {
+      await options.onSettled?.();
+    } catch (error) {
+      failure ??= error;
+    }
+
+    const { job } = record;
+    job.completedAt = this.#now();
+    if (record.controller.signal.aborted) {
+      job.status = 'cancelled';
+      if (result !== undefined) job.result = result;
+    } else if (failure !== undefined) {
+      job.status = 'failed';
+      job.error = errorMessage(failure);
+    } else {
+      job.status = options.resultToStatus?.(result as TResult) ?? 'completed';
+      job.result = result as TResult;
+    }
+
+    if (record.adopted) {
+      this.#runningJobs -= 1;
+      this.#retainTerminal(job.id);
+      this.#emit({
+        type: 'background_shell_completed',
+        jobId: job.id,
+        command: job.command,
+        status: job.status,
+        ...(job.result === undefined ? {} : { output: job.result }),
+        ...(job.error === undefined ? {} : { error: job.error }),
+      });
+    } else {
+      record.detachParentAbort();
+      this.#foreground.delete(record.callId);
+      if (failure !== undefined) record.rejectForegroundResult(failure);
+      else record.resolveForegroundResult(result as TResult);
+    }
     return { ...job };
   }
 

@@ -167,6 +167,43 @@ it('CommandMessage renders a settled background shell job as tool activity', asy
   unmount();
 });
 
+it('CommandMessage renders a manual background stop as concise tool activity', async () => {
+  const { lastFrame, unmount } = await renderInAct(
+    <CommandMessage
+      command="background_task_control_notification"
+      toolName="background_task_control_notification"
+      status="completed"
+      success={true}
+      toolArgs={{ actions: [{ action: 'stop', target: { kind: 'subagent', id: 'run-1' } }] }}
+      output="Stop requested: background code_scan (explorer)"
+    />,
+  );
+
+  const output = stripAnsi(lastFrame() ?? '');
+  expect(output).toContain('Stop requested for background subagent run-1');
+  expect(output).toContain('code_scan');
+  expect(output).not.toContain('[background_task_control_notification]');
+  unmount();
+});
+
+it('CommandMessage renders a foreground shell move without calling it a stop', async () => {
+  const { lastFrame, unmount } = await renderInAct(
+    <CommandMessage
+      command="background_task_control_notification"
+      toolName="background_task_control_notification"
+      status="completed"
+      success={true}
+      toolArgs={{ actions: [{ action: 'background', target: { kind: 'shell', id: 'shell-1' } }] }}
+      output="Moved to background: shell pnpm test"
+    />,
+  );
+
+  const output = stripAnsi(lastFrame() ?? '');
+  expect(output).toContain('Moved shell shell-1 to background');
+  expect(output).not.toContain('Stop requested');
+  unmount();
+});
+
 // The other half of the guard in command-message-helpers.test.ts: a tool missing from this
 // switch renders the raw `[tool_name]` header instead of a verb. Keep both lists in step.
 const TOOLS_NEEDING_A_VERB = [

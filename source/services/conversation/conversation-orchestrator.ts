@@ -52,6 +52,10 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
     (notification): notification is Extract<BackgroundNotification, { kind: 'shell_completion' }> =>
       notification.kind === 'shell_completion',
   );
+  const userControls = notifications.filter(
+    (notification): notification is Extract<BackgroundNotification, { kind: 'user_control' }> =>
+      notification.kind === 'user_control',
+  );
   const sections: string[] = [];
 
   if (completions.length > 0) {
@@ -124,6 +128,48 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
     );
   }
 
+  if (userControls.length > 0) {
+    const stopControls = userControls.filter((notification) => notification.action === 'stop');
+    const backgroundMoves = userControls.filter((notification) => notification.action === 'background');
+    const entriesFor = (notifications: typeof userControls, verb: string) =>
+      notifications.map((notification) => {
+        const details = notification.details;
+        return details.kind === 'subagent'
+          ? `- ${verb} background subagent ${details.name ?? details.id} | runId: ${details.id} | role: ${
+              details.role
+            } | task: ${details.task}`
+          : `- ${verb} background shell | jobId: ${details.id} | command: ${details.command}`;
+      });
+    if (stopControls.length > 0) {
+      sections.push(
+        [
+          `The user requested that ${
+            stopControls.length === 1 ? 'a background task be stopped' : 'background tasks be stopped'
+          }. This is an automatic user control notification, not a user message.`,
+          '',
+          ...entriesFor(stopControls, 'stop requested for'),
+          '',
+          'Plan the next step around the requested stop. The task may settle later with a cancelled completion notification; do not assume its result is available yet.',
+        ].join('\n'),
+      );
+    }
+    if (backgroundMoves.length > 0) {
+      sections.push(
+        [
+          `The user moved ${
+            backgroundMoves.length === 1
+              ? 'a foreground shell into the background'
+              : 'foreground shells into the background'
+          }. This is an automatic user control notification, not a user message.`,
+          '',
+          ...entriesFor(backgroundMoves, 'moved to'),
+          '',
+          'The same execution continues running in the background. Plan the next step without waiting for it, and do not stop or relaunch it unless the task now requires that.',
+        ].join('\n'),
+      );
+    }
+  }
+
   return sections.join('\n\n');
 }
 
@@ -144,6 +190,17 @@ function formatBackgroundSubagentNotificationDisplay(notifications: readonly Bac
           ...(notification.error ? [`  error: ${notification.error}`] : []),
           ...(notification.output ? [`  output: ${notification.output}`] : []),
         ].join('\n');
+      }
+      if (notification.kind === 'user_control') {
+        const details = notification.details;
+        if (notification.action === 'background') {
+          return details.kind === 'subagent'
+            ? `Moved to background: ${details.name ?? details.id} (${details.role})`
+            : `Moved to background: shell ${details.command}`;
+        }
+        return details.kind === 'subagent'
+          ? `Stop requested: background ${details.name ?? details.id} (${details.role})`
+          : `Stop requested: shell ${details.command}`;
       }
       const lines = [
         `- runId: ${notification.runId} | role: ${notification.role} | status: ${notification.status}`,
@@ -726,7 +783,8 @@ export class ConversationOrchestrator {
       this.#displayedBackgroundNotificationMessageIds.add(notification.messageId);
     }
     const subagentNotifications = newlyDisplayed.filter(
-      (notification): notification is BackgroundSubagentNotification => notification.kind !== 'shell_completion',
+      (notification): notification is BackgroundSubagentNotification =>
+        notification.kind === 'completion' || notification.kind === 'question',
     );
     const runs = subagentNotifications
       .filter(
@@ -742,6 +800,10 @@ export class ConversationOrchestrator {
     const shellJobs = newlyDisplayed.filter(
       (notification): notification is Extract<BackgroundNotification, { kind: 'shell_completion' }> =>
         notification.kind === 'shell_completion',
+    );
+    const userControls = newlyDisplayed.filter(
+      (notification): notification is Extract<BackgroundNotification, { kind: 'user_control' }> =>
+        notification.kind === 'user_control',
     );
     this.config.messages.appendMessages([
       ...(subagentNotifications.length > 0
@@ -775,6 +837,22 @@ export class ConversationOrchestrator {
                   status,
                   ...(error ? { error } : {}),
                 })),
+              },
+            },
+          ]
+        : []),
+      ...(userControls.length > 0
+        ? [
+            {
+              id: this.createMessageId(),
+              sender: 'command' as const,
+              status: 'completed' as const,
+              command: 'background_task_control_notification',
+              output: formatBackgroundSubagentNotificationDisplay(userControls),
+              success: true,
+              toolName: 'background_task_control_notification',
+              toolArgs: {
+                actions: userControls.map(({ action, target }) => ({ action, target })),
               },
             },
           ]

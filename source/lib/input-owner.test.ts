@@ -163,4 +163,22 @@ describe('deriveInputOwner', () => {
       }).kind,
     ).toBe('standard-mode-confirm');
   });
+
+  it('lets the background task manager own input without outranking an urgent prompt', () => {
+    const base = {
+      handoffStage: null,
+      pendingSurgeTurn: null,
+      pendingLargeUncachedTurn: null,
+      waitingForApproval: false,
+      pendingApproval: null,
+      queuePaused: false,
+      waitingForRejectionReason: false,
+      waitingForAskUserAnswer: false,
+      isProcessing: false,
+      backgroundTaskManagerOpen: true,
+    };
+
+    expect(deriveInputOwner(base)).toEqual({ kind: 'background-tasks' });
+    expect(deriveInputOwner({ ...base, queuePaused: true })).toEqual({ kind: 'queue-paused' });
+  });
 });

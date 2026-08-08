@@ -164,6 +164,29 @@ function makeHarness(options: { queueActive?: boolean; injects?: boolean } = {})
     emit(event: ConversationEvent) {
       if (store.enqueue(event)) observer?.();
     },
+    emitStop(target: { kind: 'subagent' | 'shell'; id: string }) {
+      if (
+        store.enqueueUserControl({
+          action: 'stop',
+          target,
+          details:
+            target.kind === 'subagent'
+              ? { kind: 'subagent', id: target.id, name: 'scan', role: 'explorer', task: 'inspect the implementation' }
+              : { kind: 'shell', id: target.id, command: 'pnpm test' },
+        })
+      )
+        observer?.();
+    },
+    emitBackgroundMove() {
+      if (
+        store.enqueueUserControl({
+          action: 'background',
+          target: { kind: 'shell', id: 'shell-moved' },
+          details: { kind: 'shell', id: 'shell-moved', command: 'pnpm test:provider-black-box' },
+        })
+      )
+        observer?.();
+    },
     sentTexts(): string[] {
       return service.sendMessage.mock.calls.map((call) => String((call as unknown[])[0]));
     },
@@ -179,6 +202,25 @@ function makeHarness(options: { queueActive?: boolean; injects?: boolean } = {})
 }
 
 describe('ConversationOrchestrator background subagent notifications mid-turn', () => {
+  it('hands a user-requested background stop to the active turn and renders one concise command row', async () => {
+    const h = makeHarness({ queueActive: true });
+
+    h.emitStop({ kind: 'subagent', id: 'run-1' });
+    await settle();
+
+    expect(h.service.injectIntoActiveTurn).toHaveBeenCalledTimes(1);
+    expect(h.injectedTexts()[0]).toContain('user requested');
+    expect(h.injectedTexts()[0]).toContain('runId: run-1');
+    expect(h.service.sendMessage).not.toHaveBeenCalled();
+    expect(h.config.messages.getMessages()).toContainEqual(
+      expect.objectContaining({
+        sender: 'command',
+        toolName: 'background_task_control_notification',
+        output: 'Stop requested: background scan (explorer)',
+      }),
+    );
+  });
+
   it('hands a settled shell job to the running turn at its next request boundary', async () => {
     const h = makeHarness({ queueActive: true });
 
@@ -191,6 +233,20 @@ describe('ConversationOrchestrator background subagent notifications mid-turn', 
     expect(h.service.sendMessage).not.toHaveBeenCalled();
     expect(h.config.messages.getMessages()).toContainEqual(
       expect.objectContaining({ sender: 'command', toolName: 'background_shell_notification' }),
+    );
+  });
+
+  it('tells the active turn that the same shell moved to background without requesting a stop', async () => {
+    const h = makeHarness({ queueActive: true });
+
+    h.emitBackgroundMove();
+    await settle();
+
+    expect(h.injectedTexts()[0]).toContain('moved a foreground shell into the background');
+    expect(h.injectedTexts()[0]).toContain('continues running');
+    expect(h.injectedTexts()[0]).not.toContain('requested stop');
+    expect(h.config.messages.getMessages()).toContainEqual(
+      expect.objectContaining({ output: 'Moved to background: shell pnpm test:provider-black-box' }),
     );
   });
 
@@ -255,6 +311,24 @@ describe('ConversationOrchestrator background subagent notifications mid-turn', 
 });
 
 describe('ConversationOrchestrator background subagent notifications', () => {
+  it('delivers a user-requested shell stop through an idle hidden turn', async () => {
+    const h = makeHarness();
+
+    h.emitStop({ kind: 'shell', id: 'shell-1' });
+    await settle();
+
+    expect(h.service.sendMessage).toHaveBeenCalledTimes(1);
+    expect(h.sentTexts()[0]).toContain('Plan the next step around the requested stop');
+    expect(h.sentTexts()[0]).toContain('jobId: shell-1');
+    expect(h.config.messages.getMessages()).toContainEqual(
+      expect.objectContaining({
+        sender: 'command',
+        toolName: 'background_task_control_notification',
+        output: 'Stop requested: shell pnpm test',
+      }),
+    );
+  });
+
   it('delivers a question as an idle-gated system turn with reply routing and no user message', async () => {
     const h = makeHarness();
 

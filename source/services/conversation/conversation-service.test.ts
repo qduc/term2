@@ -1693,6 +1693,22 @@ it('failed user turn is dropped from history after non-retryable provider error'
 
 // ── Background subagent cancellation scope ─────────────────────────
 
+it('exposes per-item background task controls without leaking the session runtime', () => {
+  const service = new ConversationService({
+    agentClient: partialClient({
+      getBackgroundShellJob: (jobId: string) =>
+        jobId === 'shell-1' ? { id: jobId, command: 'pnpm test', status: 'running', startedAt: 100 } : undefined,
+      listBackgroundShellJobs: () => [{ id: 'shell-1', command: 'pnpm test', status: 'running', startedAt: 100 }],
+    }),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  expect(service.backgroundTaskControl.getDetails({ kind: 'shell', id: 'shell-1' })).toEqual(
+    expect.objectContaining({ kind: 'shell', command: 'pnpm test' }),
+  );
+  expect(service.backgroundTaskControl.getDetails({ kind: 'shell', id: 'gone' })).toBeNull();
+});
+
 it('abort() aborts the turn without cancelling conversation-bound background runs', () => {
   let abortCalls = 0;
   let cancelBackgroundCalls = 0;

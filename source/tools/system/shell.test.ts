@@ -4,6 +4,7 @@ import os from 'os';
 import path from 'path';
 import { createBackgroundShellJobToolDefinitions, createShellToolDefinition } from './shell.js';
 import { BackgroundShellRegistry } from '../../services/shell/background-shell-registry.js';
+import { ApprovalLedger, type ToolInvocationContext } from '../../services/agent-runtime/tool-invocation-context.js';
 import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
 import {
   deniedReadStore,
@@ -139,7 +140,7 @@ it('background shell reports a timeout as timed_out through the lifecycle event 
   });
   const shell = createShellToolDefinition({
     loggingService: createNoopLogger(),
-    settingsService: createMockSettingsService({ 'sandbox.enabled': false }),
+    settingsService: createMockSettingsService(),
     backgroundShellRegistry: registry,
     executeShellCommandImpl: async () => ({ stdout: '', stderr: '', exitCode: null, timedOut: true }),
   });
@@ -257,6 +258,109 @@ it('background shell logs retain their own correlation while a foreground trace 
   expect(new Set(backgroundCorrelationIds).size).toBe(1);
   expect(backgroundCorrelationIds[0]).not.toBe('foreground-trace');
   expect(currentCorrelationId).toBe('foreground-trace');
+});
+
+it('moves a running root shell call into the registry without a second execution or early cleanup', async () => {
+  const registry = new BackgroundShellRegistry<{ output: string; status: 'completed' | 'failed' | 'timed_out' }>({
+    createId: () => 'moved-job',
+  });
+  const execution = createDeferred<{ stdout: string; stderr: string; exitCode: number; timedOut: boolean }>();
+  const parent = new AbortController();
+  let cleanupCalls = 0;
+  let receivedSignal: AbortSignal | undefined;
+  const shell = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService(),
+    backgroundShellRegistry: registry,
+    shellSandboxRunner: createFakeSandboxRunner({
+      cleanupAfterCommand: async () => {
+        cleanupCalls += 1;
+      },
+    }),
+    executeShellCommandImpl: async (_command, options) => {
+      receivedSignal = options?.signal;
+      return execution.promise;
+    },
+  });
+  const context: ToolInvocationContext = { context: undefined, approvals: new ApprovalLedger(), signal: parent.signal };
+  const foregroundResult = shell.execute({ command: 'long-command' }, context, { toolCall: { callId: 'call-move' } });
+
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(registry.getForeground('call-move')).toMatchObject({ jobId: 'moved-job', command: 'long-command' });
+  expect(registry.adoptForeground('call-move')).toEqual({ jobId: 'moved-job', status: 'running' });
+  await expect(foregroundResult).resolves.toBe(JSON.stringify({ jobId: 'moved-job', status: 'running' }));
+  expect(cleanupCalls).toBe(0);
+
+  parent.abort();
+  expect(receivedSignal?.aborted).toBe(false);
+  expect(registry.cancel('moved-job')).toBe(true);
+  expect(receivedSignal?.aborted).toBe(true);
+  execution.resolve({ stdout: 'stopped', stderr: '', exitCode: 0, timedOut: false });
+  await registry.whenSettled('moved-job');
+
+  expect(cleanupCalls).toBe(1);
+  expect(registry.get('moved-job')).toMatchObject({ status: 'cancelled' });
+});
+
+it('applies the configured background output cap after a foreground shell is transferred', async () => {
+  const registry = new BackgroundShellRegistry<{ output: string; status: 'completed' | 'failed' | 'timed_out' }>({
+    createId: () => 'capped-move-job',
+  });
+  const execution = createDeferred<{ stdout: string; stderr: string; exitCode: number; timedOut: boolean }>();
+  const shell = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'shell.maxOutputChars': 40 }),
+    backgroundShellRegistry: registry,
+    shellSandboxRunner: createFakeSandboxRunner(),
+    executeShellCommandImpl: async () => execution.promise,
+  });
+  const foreground = shell.execute(
+    { command: 'long-output', max_output_length: 1_000 },
+    { context: undefined, approvals: new ApprovalLedger() },
+    { toolCall: { callId: 'call-capped-move' } },
+  );
+
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  registry.adoptForeground('call-capped-move');
+  await foreground;
+  execution.resolve({ stdout: `start-${'x'.repeat(160)}-uncapped-tail`, stderr: '', exitCode: 0, timedOut: false });
+  const settled = await registry.whenSettled('capped-move-job');
+
+  expect(settled?.result?.output).not.toContain('x'.repeat(50));
+  expect(settled?.result?.output).toContain('characters trimmed');
+});
+
+it('reports a denied read after foreground transfer as a background-only failure', async () => {
+  const registry = new BackgroundShellRegistry<{ output: string; status: 'completed' | 'failed' | 'timed_out' }>({
+    createId: () => 'denied-move-job',
+  });
+  const execution = createDeferred<{ stdout: string; stderr: string; exitCode: number; timedOut: boolean }>();
+  const shell = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': true, 'sandbox.readPolicy': 'strict' }),
+    backgroundShellRegistry: registry,
+    postExecuteDeniedRead: true,
+    shellSandboxRunner: createFakeSandboxRunner({
+      annotateFailure: (_command: string, stderr: string) =>
+        `${stderr}\n<sandbox_violations>\nSandbox: cat(123) deny file-read* /home/testuser/.cache\n</sandbox_violations>`,
+    }),
+    executeShellCommandImpl: async () => execution.promise,
+  });
+  const details = { toolCall: { callId: 'call-denied-move' } };
+  const foreground = shell.execute(
+    { command: 'cat ~/.cache' },
+    { context: undefined, approvals: new ApprovalLedger() },
+    details,
+  );
+
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  registry.adoptForeground('call-denied-move');
+  const acknowledgement = await foreground;
+  execution.resolve({ stdout: '', stderr: 'cat: denied', exitCode: 1, timedOut: false });
+  const settled = await registry.whenSettled('denied-move-job');
+
+  expect(settled?.result?.output).toContain('Background jobs cannot request permission');
+  expect(shell.postExecutePause!.describe({ command: 'cat ~/.cache' }, acknowledgement, details)).toBeNull();
 });
 
 it.sequential('shell execute appends spill-file guidance when output is truncated', async () => {
@@ -776,9 +880,11 @@ it.sequential('shell execute clears correlation id when no previous correlation 
 
 it.sequential('shell execute stops a running command when the tool invocation is aborted', async () => {
   const abortController = new AbortController();
+  const registry = new BackgroundShellRegistry<{ output: string; status: 'completed' | 'failed' | 'timed_out' }>();
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService({ 'sandbox.enabled': false }),
+    backgroundShellRegistry: registry,
   });
 
   const outputPromise = tool.execute(
@@ -787,8 +893,8 @@ it.sequential('shell execute stops a running command when the tool invocation is
       timeout_ms: 60000,
       max_output_length: 10000,
     },
-    undefined,
-    { signal: abortController.signal },
+    { context: undefined, approvals: new ApprovalLedger(), signal: abortController.signal },
+    { toolCall: { callId: 'call-foreground-abort' } },
   );
 
   queueMicrotask(() => abortController.abort());

@@ -158,6 +158,11 @@ const App: FC<AppProps> = ({
     toolCallStreamingInfo,
     backgroundSubagentTasks,
     backgroundSubagentTasksNow,
+    listBackgroundTaskDetails,
+    getBackgroundTaskDetails,
+    stopBackgroundTask,
+    getForegroundTaskTransferCandidate,
+    moveForegroundTaskToBackground,
     sendUserMessage,
     admissionConfirmation,
     submitTurnForAdmission,
@@ -692,6 +697,11 @@ const App: FC<AppProps> = ({
             pendingQueuedMessages={pendingQueuedMessages}
             backgroundSubagentTasks={backgroundSubagentTasks}
             backgroundSubagentTasksNow={backgroundSubagentTasksNow}
+            listBackgroundTaskDetails={listBackgroundTaskDetails}
+            getBackgroundTaskDetails={getBackgroundTaskDetails}
+            stopBackgroundTask={stopBackgroundTask}
+            getForegroundTaskTransferCandidate={getForegroundTaskTransferCandidate}
+            moveForegroundTaskToBackground={moveForegroundTaskToBackground}
             onRetractQueuedMessage={retractPendingSubmission}
             onEditQueuedMessage={editPendingSubmission}
             onSubmit={handleSubmit}

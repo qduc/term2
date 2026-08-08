@@ -257,6 +257,88 @@ it('routes root background shell lifecycle through the persistent task and notif
   runtime.dispose();
 });
 
+it('exposes per-item background controls through the session runtime and wakes both observers on a stop request', () => {
+  const sinks: Sinks = { turn: null, background: null, shell: null };
+  let stopCalls = 0;
+  const runtime = createSessionRuntime({
+    sessionId: 'bg-control',
+    agentClient: makeClient(sinks, {
+      getBackgroundSubagentStatus: (runId: string) => ({
+        runId,
+        name: 'scan',
+        role: 'explorer',
+        status: 'running',
+        task: 'inspect the implementation',
+        taskPreview: 'inspect the implementation',
+        startedAt: 100,
+        elapsedMs: 20,
+        toolCounts: {},
+      }),
+      requestBackgroundSubagentStop: () => {
+        stopCalls++;
+        return { ok: true, runId: 'run-1', status: 'cancelling' };
+      },
+    }),
+    deps: { logger: makeLogger(), sessionContextService },
+  });
+  let notifications = 0;
+  let taskChanges = 0;
+  runtime.backgroundSubagentNotifications.setObserver(() => notifications++);
+  runtime.backgroundSubagentTasks.setObserver(() => taskChanges++);
+
+  expect(runtime.backgroundTaskControl.requestStop({ kind: 'subagent', id: 'run-1' })).toEqual({
+    ok: true,
+    details: expect.objectContaining({ id: 'run-1', status: 'cancelling' }),
+  });
+  expect(stopCalls).toBe(1);
+  expect(notifications).toBe(1);
+  expect(taskChanges).toBe(1);
+  expect(runtime.backgroundSubagentNotifications.drain()).toEqual([
+    expect.objectContaining({ kind: 'user_control', action: 'stop', target: { kind: 'subagent', id: 'run-1' } }),
+  ]);
+  runtime.dispose();
+});
+
+it('delivers a successful foreground-shell move as planning input at the next request boundary', () => {
+  const sinks: Sinks = { turn: null, background: null, shell: null };
+  const runtime = createSessionRuntime({
+    sessionId: 'foreground-shell-move',
+    agentClient: makeClient(sinks, {
+      getForegroundShellTransferCandidate: () => ({
+        callId: 'call-1',
+        jobId: 'shell-1',
+        command: 'pnpm test',
+        status: 'running',
+        startedAt: 100,
+      }),
+      moveForegroundShellToBackground: () => ({ jobId: 'shell-1', status: 'running' }),
+      getBackgroundShellJob: () => ({
+        id: 'shell-1',
+        command: 'pnpm test',
+        status: 'running',
+        startedAt: 100,
+      }),
+    }),
+    deps: { logger: makeLogger(), sessionContextService },
+  });
+  let notifications = 0;
+  runtime.backgroundSubagentNotifications.setObserver(() => notifications++);
+
+  expect(runtime.backgroundTaskControl.moveForegroundToBackground({ kind: 'shell', callId: 'call-1' })).toEqual({
+    ok: true,
+    details: expect.objectContaining({ id: 'shell-1', command: 'pnpm test' }),
+  });
+  expect(notifications).toBe(1);
+  expect(runtime.backgroundSubagentNotifications.drain()).toEqual([
+    expect.objectContaining({
+      kind: 'user_control',
+      action: 'background',
+      target: { kind: 'shell', id: 'shell-1' },
+    }),
+  ]);
+  runtime.dispose();
+});
+
 it('disposal cancels and shutdown settles root background shell jobs', async () => {
   const sinks: Sinks = { turn: null, background: null, shell: null };
   let cancelCalls = 0;

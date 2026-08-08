@@ -48,6 +48,7 @@ import {
   type BackgroundSubagentNotificationPort,
   type BackgroundSubagentTaskPort,
 } from '../subagents/subagent-notification-store.js';
+import { BackgroundTaskControl, type BackgroundTaskControlPort } from './background-task-control.js';
 import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import {
   PostExecutePendingRegistry,
@@ -135,6 +136,8 @@ export type SessionRuntimeInternals = {
   backgroundSubagentNotifications: BackgroundSubagentNotificationChannel;
   /** Read-only lifecycle projection for background subagent UI. */
   backgroundSubagentTasks: BackgroundSubagentTaskChannel;
+  /** Per-item details and stop controls for session-owned background work. */
+  backgroundTaskControl: BackgroundTaskControlPort;
   /** Session-owned fail-closed gates for post-execute policies. */
   postExecutePending: PostExecutePendingRegistry;
   /** Authoritative pending approval and ask_user protocol state. */
@@ -260,6 +263,8 @@ export type SessionRuntime = {
   backgroundSubagentNotifications: BackgroundSubagentNotificationChannel;
   /** Read-only lifecycle projection for background subagent UI. */
   backgroundSubagentTasks: BackgroundSubagentTaskChannel;
+  /** Per-item details and stop controls for session-owned background work. */
+  backgroundTaskControl: BackgroundTaskControlPort;
   /**
    * Idempotent disposal: aborts active SDK work, invalidates the active
    * generation, unsubscribes downgrade listeners, clears per-turn state.
@@ -308,6 +313,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     },
     drain: () => notificationStore.drain(),
     retain: (notifications) => notificationStore.retain(notifications),
+    enqueueUserControl: (notification) => notificationStore.enqueueUserControl(notification),
     setObserver: (observer) => {
       notificationObserver = observer;
     },
@@ -318,6 +324,34 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
       taskObserver = observer;
     },
   };
+  const backgroundTaskControl = new BackgroundTaskControl({
+    client: agentClient,
+    notifications: notificationStore,
+    onNotification: () => {
+      try {
+        notificationObserver?.();
+      } catch (error) {
+        logger.warn('Background task control notification observer threw', {
+          eventType: 'subagent.control_notification_observer_failed',
+          category: 'subagent',
+          sessionId: id,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+      }
+    },
+    onTaskChange: () => {
+      try {
+        taskObserver?.();
+      } catch (error) {
+        logger.warn('Background task control task observer threw', {
+          eventType: 'subagent.control_task_observer_failed',
+          category: 'subagent',
+          sessionId: id,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+      }
+    },
+  });
 
   const generationGuard = new GenerationGuard();
   // Factory-owned handles supply this same registry to the root tool policy.
@@ -708,6 +742,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     resolvedBackgroundShellEventSinkHost,
     backgroundSubagentNotifications,
     backgroundSubagentTasks,
+    backgroundTaskControl,
     postExecutePending,
     pendingInteraction,
   };
@@ -733,6 +768,7 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
     resolvedSubagentEventSinkHost,
     backgroundSubagentNotifications,
     backgroundSubagentTasks,
+    backgroundTaskControl,
     postExecutePending,
     pendingInteraction,
   } = internals;
@@ -786,6 +822,7 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
     },
     backgroundSubagentNotifications,
     backgroundSubagentTasks,
+    backgroundTaskControl,
     dispose,
     shutdown: internals.shutdown,
   };

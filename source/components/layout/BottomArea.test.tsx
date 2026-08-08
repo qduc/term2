@@ -99,6 +99,36 @@ it.sequential('BottomArea places active background tasks directly above the inpu
   });
 });
 
+it.sequential('BottomArea gives the background task manager exclusive input ownership after Ctrl+B', async () => {
+  const details = {
+    kind: 'subagent' as const,
+    id: 'run-worker',
+    role: 'worker',
+    task: 'implement the background overview',
+    taskPreview: 'implement the background overview',
+    status: 'running' as const,
+    startedAt: Date.now(),
+    elapsedMs: 0,
+    toolCounts: {},
+  };
+  const view = await renderBottomArea({
+    ...baseProps,
+    listBackgroundTaskDetails: () => [details],
+    getBackgroundTaskDetails: () => details,
+    stopBackgroundTask: () => ({ ok: false, code: 'not_active' }),
+  });
+
+  await act(async () => {
+    view.stdin.write('\x02');
+    await new Promise((resolve) => setImmediate(resolve));
+  });
+
+  const output = view.lastFrame() ?? '';
+  expect(output).toContain('Manage background tasks');
+  expect(output).not.toContain('❯ Type a message');
+  act(() => view.unmount());
+});
+
 it.sequential('BottomArea shows approval prompt when waiting for approval', async () => {
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
@@ -166,6 +196,24 @@ it.sequential('BottomArea shows processing indicator when busy', async () => {
   act(() => {
     unmount();
   });
+});
+
+it.sequential('BottomArea advertises the manager while a shell is transferable', async () => {
+  const { lastFrame, unmount } = await renderBottomArea({
+    ...baseProps,
+    isProcessing: true,
+    getForegroundTaskTransferCandidate: () => ({
+      kind: 'shell',
+      callId: 'call-1',
+      jobId: 'shell-1',
+      command: 'long-command',
+      status: 'running',
+      startedAt: 1_000,
+    }),
+  });
+
+  expect(lastFrame() ?? '').toContain('Foreground shell running · Ctrl+B manage');
+  act(() => unmount());
 });
 
 it.sequential('BottomArea shows InputBox while processing when queue mode is active', async () => {

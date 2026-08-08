@@ -46,6 +46,7 @@ import {
 } from '../../utils/shell/sandbox/docker-host-control.js';
 import type { SessionAccessState } from '../../services/session/session-access-state.js';
 import type { NestedToolCompatibilityState } from '../../services/session/nested-tool-compatibility-state.js';
+import type { ToolInvocationContext } from '../../services/agent-runtime/tool-invocation-context.js';
 import {
   type BackgroundShellJob,
   type BackgroundShellTerminalStatus,
@@ -476,6 +477,11 @@ export function createShellToolDefinition(deps: {
       details,
     ) => {
       const toolCallId = (details as { toolCall?: { callId?: unknown } } | undefined)?.toolCall?.callId;
+      // The application run loop owns turn cancellation on its typed context;
+      // SDK details only identify the provider tool call.
+      const toolSignal =
+        (_context as ToolInvocationContext | undefined)?.signal ??
+        (details as { signal?: AbortSignal } | undefined)?.signal;
       const cwd = executionContext?.getCwd() || process.cwd();
       const sessionId = getConversationSessionId(_context);
       const sandboxEnabled = isSandboxEnabled();
@@ -512,7 +518,18 @@ export function createShellToolDefinition(deps: {
       let sandboxed = false;
       let dockerHostControl: DockerHostControl | undefined;
       let backgroundCleanupDeferred = false;
+      let transferred = false;
       const ownsCorrelationId = !background;
+      let foregroundCorrelationRestored = false;
+      const restoreForegroundCorrelation = () => {
+        if (!ownsCorrelationId || foregroundCorrelationRestored) return;
+        foregroundCorrelationRestored = true;
+        if (previousCorrelationId) {
+          loggingService.setCorrelationId(previousCorrelationId);
+        } else {
+          loggingService.clearCorrelationId();
+        }
+      };
 
       // The logger correlation ID is process-global. A foreground command owns
       // it for the duration of its await; a background job uses the explicit
@@ -520,7 +537,7 @@ export function createShellToolDefinition(deps: {
       // overlapping command's logs.
       if (ownsCorrelationId) loggingService.setCorrelationId(correlationId);
       const withExecutionCorrelation = (metadata: Record<string, unknown>) =>
-        background ? { ...metadata, correlationId } : metadata;
+        background || transferred ? { ...metadata, correlationId } : metadata;
 
       try {
         // Use provided values or settings defaults or hardcoded defaults
@@ -528,12 +545,12 @@ export function createShellToolDefinition(deps: {
         const timeout = timeoutValue != null ? timeoutValue : undefined;
         const maxOutputLengthValue = max_output_length ?? settingsService.get('shell.maxOutputChars');
         const configuredMaxOutputLength = settingsService.get('shell.maxOutputChars');
-        const maxOutputLength =
-          background && configuredMaxOutputLength != null
-            ? Math.min(maxOutputLengthValue ?? configuredMaxOutputLength, configuredMaxOutputLength)
-            : maxOutputLengthValue != null
-            ? maxOutputLengthValue
-            : undefined;
+        const foregroundMaxOutputLength = maxOutputLengthValue != null ? maxOutputLengthValue : undefined;
+        const backgroundMaxOutputLength =
+          configuredMaxOutputLength != null
+            ? Math.min(foregroundMaxOutputLength ?? configuredMaxOutputLength, configuredMaxOutputLength)
+            : foregroundMaxOutputLength;
+        const initialMaxOutputLength = background ? backgroundMaxOutputLength : foregroundMaxOutputLength;
 
         loggingService.debug(
           'Shell command execution started',
@@ -542,7 +559,7 @@ export function createShellToolDefinition(deps: {
             commands: [command],
             timeout,
             workingDirectory: cwd,
-            maxOutputLength,
+            maxOutputLength: initialMaxOutputLength,
           }),
         );
 
@@ -634,7 +651,7 @@ export function createShellToolDefinition(deps: {
               const wrapped = await shellSandboxRunner.wrap(commandToRun, {
                 cwd,
                 config: sandboxConfig,
-                signal: (details as { signal?: AbortSignal } | undefined)?.signal,
+                signal: toolSignal,
               });
               commandToRun = wrapped.command;
               sandboxed = true;
@@ -720,14 +737,14 @@ export function createShellToolDefinition(deps: {
           }
 
           if (sandboxFailure?.type === 'denied_read') {
-            if (!background && postExecuteDeniedRead && typeof toolCallId !== 'string') {
+            if (!background && !transferred && postExecuteDeniedRead && typeof toolCallId !== 'string') {
               throw new HarnessInvariantError('Root shell denied-read handling requires an SDK tool call ID');
             }
             // Keyed by the command the model passed, not `optimizedCommand`: the
             // retry and both approval lookups (needsApproval here, and the
             // conversation layer, which has no cwd to re-derive the stripped form)
             // only ever see the raw string.
-            if (background && postExecuteDeniedRead) {
+            if ((background || transferred) && postExecuteDeniedRead) {
               loggingService.security(
                 'Sandbox denied read in background shell job; foreground retry is required',
                 withExecutionCorrelation({
@@ -811,7 +828,7 @@ export function createShellToolDefinition(deps: {
             stderr,
             exitCode,
             timedOut: outcome.type === 'timeout',
-            maxOutputLength,
+            maxOutputLength: background || transferred ? backgroundMaxOutputLength : foregroundMaxOutputLength,
             durationMs: Date.now() - startedAt,
           });
 
@@ -826,13 +843,7 @@ export function createShellToolDefinition(deps: {
             await shellSandboxRunner.cleanupAfterCommand?.();
           }
           dockerHostControl?.cleanup();
-          if (ownsCorrelationId) {
-            if (previousCorrelationId) {
-              loggingService.setCorrelationId(previousCorrelationId);
-            } else {
-              loggingService.clearCorrelationId();
-            }
-          }
+          restoreForegroundCorrelation();
         };
 
         if (background) {
@@ -850,20 +861,39 @@ export function createShellToolDefinition(deps: {
           }
         }
 
-        return (await executePreparedCommand((details as { signal?: AbortSignal } | undefined)?.signal)).output;
+        if (backgroundShellRegistry && !sshService && typeof toolCallId === 'string') {
+          const lease = backgroundShellRegistry.startForeground({
+            callId: toolCallId,
+            command: optimizedCommand,
+            parentSignal: toolSignal,
+            run: executePreparedCommand,
+            onSettled: cleanupAfterExecution,
+            resultToStatus: (result) => result.status,
+            onAdopted: () => {
+              transferred = true;
+              restoreForegroundCorrelation();
+            },
+          });
+          // Cleanup is lease-owned now, whether it stays foreground or moves.
+          backgroundCleanupDeferred = true;
+          const result = await lease.foregroundResult;
+          if ('jobId' in result) {
+            // The tool call returns now, but only the parent-turn ownership is
+            // released. Process cleanup remains deferred to lease settlement.
+            restoreForegroundCorrelation();
+            return JSON.stringify(result);
+          }
+          return result.output;
+        }
+
+        return (await executePreparedCommand(toolSignal)).output;
       } finally {
         if (!backgroundCleanupDeferred) {
           if (sandboxed) {
             await shellSandboxRunner.cleanupAfterCommand?.();
           }
           dockerHostControl?.cleanup();
-          if (ownsCorrelationId) {
-            if (previousCorrelationId) {
-              loggingService.setCorrelationId(previousCorrelationId);
-            } else {
-              loggingService.clearCorrelationId();
-            }
-          }
+          restoreForegroundCorrelation();
         }
       }
     },

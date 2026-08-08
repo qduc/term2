@@ -38,9 +38,13 @@ import {
 import { isDeepStrictEqual } from 'node:util';
 import {
   type BackgroundShellEvent,
+  type ForegroundShellLeaseDetails,
+  type ForegroundShellTransferResult,
+  type BackgroundShellJob,
   type BackgroundShellRegistry,
 } from '../services/shell/background-shell-registry.js';
 import type { BackgroundShellExecutionResult } from '../tools/system/shell.js';
+import type { SubagentCancelAcknowledgement, SubagentRunStatus } from '../services/subagents/types.js';
 
 type ChainedRunOptions = AgentClientRunOptions;
 
@@ -430,6 +434,53 @@ export class AgentClient {
    */
   cancelBackgroundRuns(): void {
     this.#subagentBridge?.cancelBackgroundRuns();
+  }
+
+  getBackgroundSubagentStatus(runId: string): SubagentRunStatus {
+    return (
+      this.#subagentBridge?.getBackgroundSubagentStatus(runId) ?? {
+        runId,
+        role: '',
+        status: 'not_found',
+        task: '',
+        taskPreview: '',
+        startedAt: 0,
+        elapsedMs: 0,
+        toolCounts: {},
+      }
+    );
+  }
+
+  listBackgroundSubagentStatuses(): SubagentRunStatus[] {
+    return this.#subagentBridge?.listBackgroundSubagentStatuses() ?? [];
+  }
+
+  requestBackgroundSubagentStop(runId: string): SubagentCancelAcknowledgement {
+    return (
+      this.#subagentBridge?.requestBackgroundSubagentStop(runId) ?? { ok: false, code: 'not_active', target: runId }
+    );
+  }
+
+  getBackgroundShellJob(jobId: string): BackgroundShellJob<BackgroundShellExecutionResult> | undefined {
+    return this.#backgroundShellRegistry?.get(jobId);
+  }
+
+  listBackgroundShellJobs(): BackgroundShellJob<BackgroundShellExecutionResult>[] {
+    return this.#backgroundShellRegistry?.list() ?? [];
+  }
+
+  requestBackgroundShellStop(jobId: string): boolean {
+    return this.#backgroundShellRegistry?.cancel(jobId) ?? false;
+  }
+
+  /** The current root shell call that can still be detached from its turn. */
+  getForegroundShellTransferCandidate(): ForegroundShellLeaseDetails | undefined {
+    return this.#backgroundShellRegistry?.listForeground()[0];
+  }
+
+  /** Atomically detaches a root shell call from its foreground turn. */
+  moveForegroundShellToBackground(callId: string): ForegroundShellTransferResult | undefined {
+    return this.#backgroundShellRegistry?.adoptForeground(callId);
   }
 
   cancelBackgroundShellJobs(): void {

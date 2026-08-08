@@ -365,6 +365,16 @@ export class SubagentBridge {
     return this.#subagentManager.getRunStatus(params.runId);
   };
 
+  /** Root-session control seam for one background run's live or retained status. */
+  getBackgroundSubagentStatus(runId: string): SubagentRunStatus {
+    return this.getSubagentStatus({ runId }) as SubagentRunStatus;
+  }
+
+  /** Root-session control seam listing registry-retained runs, live entries first. */
+  listBackgroundSubagentStatuses(): SubagentRunStatus[] {
+    return this.getSubagentStatus({}) as SubagentRunStatus[];
+  }
+
   /** Parent-only non-blocking control for active async execution runs. */
   sendSubagentMessage = (params: {
     target: string;
@@ -384,6 +394,11 @@ export class SubagentBridge {
     }
     return this.#subagentManager.cancelAsyncRun(params.target);
   };
+
+  /** Root-session control seam for stopping one canonical background run id. */
+  requestBackgroundSubagentStop(runId: string): SubagentCancelAcknowledgement {
+    return this.cancelSubagentRun({ target: runId });
+  }
 
   abortAsyncRun = (runId: string): void => {
     this.#subagentManager?.abortAsyncRun(runId);

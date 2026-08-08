@@ -6,6 +6,9 @@ import type { ConversationEvent } from './conversation/conversation-events.js';
 import type { AgentStream } from './agent-stream.js';
 import type { ProviderHistorySnapshot } from './conversation/conversation-store.js';
 import type { SteerOutcome } from './agent-runtime/application-run-loop.js';
+import type { SubagentCancelAcknowledgement, SubagentRunStatus } from './subagents/types.js';
+import type { BackgroundShellJob } from './shell/background-shell-registry.js';
+import type { ForegroundShellLeaseDetails, ForegroundShellTransferResult } from './shell/background-shell-registry.js';
 
 export type AgentClientRunOptions = {
   previousResponseId?: string | null;
@@ -87,6 +90,18 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   cancelBackgroundShellJobs?(): void;
   /** Cancel and settle root shell jobs during session shutdown. */
   disposeBackgroundShellJobs?(): Promise<void>;
+
+  /** Narrow background-task controls; registries remain owned by the root client. */
+  getBackgroundSubagentStatus?(runId: string): SubagentRunStatus;
+  listBackgroundSubagentStatuses?(): SubagentRunStatus[];
+  requestBackgroundSubagentStop?(runId: string): SubagentCancelAcknowledgement;
+  getBackgroundShellJob?(jobId: string): BackgroundShellJob<unknown> | undefined;
+  listBackgroundShellJobs?(): BackgroundShellJob<unknown>[];
+  requestBackgroundShellStop?(jobId: string): boolean;
+  /** The currently running root shell call that can be detached from its turn. */
+  getForegroundShellTransferCandidate?(): ForegroundShellLeaseDetails | undefined;
+  /** Atomically adopts a root shell call into the session background registry. */
+  moveForegroundShellToBackground?(callId: string): ForegroundShellTransferResult | undefined;
 
   clearConversations?(): void;
   getProvider?(): string;

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
   ApplicationRunLoop,
@@ -75,6 +75,272 @@ function textModel(text: string, responseId: string): StreamedModelTurn {
     },
   };
 }
+
+describe('ApplicationRunLoop generation guard', () => {
+  const guard = {
+    maxOutputCharacters: 100,
+    maxTextCharacters: 100,
+    maxReasoningCharacters: 100,
+    maxToolArgumentCharacters: 100,
+    maxCumulativeToolArgumentCharacters: 100,
+    requestDeadlineMs: 1_000,
+    repetition: {
+      minRepeatedCharacters: 12,
+      minRepetitions: 3,
+      maxPatternCharacters: 16,
+      retainedWindowCharacters: 64,
+    },
+  };
+
+  it('aborts unsafe repeated text across provider chunk boundaries before forwarding the triggering chunk', async () => {
+    let signal: AbortSignal | undefined;
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        signal = request.signal;
+        yield { type: 'text_delta' as const, text: 'loop' };
+        yield { type: 'text_delta' as const, text: 'loop' };
+        yield { type: 'text_delta' as const, text: 'loop' };
+        yield { type: 'completion' as const, responseId: 'unreachable', output: [] };
+      },
+    };
+
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'prompt', {
+      generationGuard: guard,
+    } as any);
+
+    await expect(stream.completed).rejects.toMatchObject({ code: 'repetitive_text', unsafeToReplay: true });
+    expect(signal?.aborted).toBe(true);
+    expect(stream.output).toEqual([
+      { type: 'text_delta', text: 'loop' },
+      { type: 'text_delta', text: 'loop' },
+    ]);
+  });
+
+  it('aborts unsafe repeated reasoning across provider chunk boundaries', async () => {
+    const model: StreamedModelTurn = {
+      async *stream() {
+        yield { type: 'reasoning_delta' as const, text: 'think' };
+        yield { type: 'reasoning_delta' as const, text: 'think' };
+        yield { type: 'reasoning_delta' as const, text: 'think' };
+        yield { type: 'completion' as const, responseId: 'unreachable', output: [] };
+      },
+    };
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'prompt', {
+      generationGuard: { ...guard, repetition: { ...guard.repetition, minRepeatedCharacters: 15 } },
+    } as any);
+
+    await expect(stream.completed).rejects.toMatchObject({ code: 'repetitive_reasoning', unsafeToReplay: true });
+    expect(stream.output).toEqual([
+      { type: 'reasoning_delta', text: 'think' },
+      { type: 'reasoning_delta', text: 'think' },
+    ]);
+  });
+
+  it('continues checking for repetition after the retained detector window fills', async () => {
+    const model: StreamedModelTurn = {
+      async *stream() {
+        yield { type: 'text_delta' as const, text: 'abcdefghijkl' };
+        yield { type: 'text_delta' as const, text: 'zz' };
+        yield { type: 'text_delta' as const, text: 'zz' };
+        yield { type: 'text_delta' as const, text: 'zz' };
+        yield { type: 'completion' as const, responseId: 'unreachable', output: [] };
+      },
+    };
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'prompt', {
+      generationGuard: {
+        ...guard,
+        repetition: {
+          minRepeatedCharacters: 6,
+          minRepetitions: 3,
+          maxPatternCharacters: 4,
+          retainedWindowCharacters: 12,
+        },
+      },
+    } as any);
+
+    await expect(stream.completed).rejects.toMatchObject({ code: 'repetitive_text', unsafeToReplay: true });
+  });
+
+  it('allows ordinary repeated prose below the configured repetition threshold', async () => {
+    const text = 'Please inspect the current diff. Please inspect the current diff.';
+    const model: StreamedModelTurn = {
+      async *stream() {
+        yield { type: 'text_delta' as const, text: 'Please inspect the current diff. ' };
+        yield { type: 'text_delta' as const, text: 'Please inspect the current diff.' };
+        yield {
+          type: 'completion' as const,
+          responseId: 'resp-normal-repetition',
+          output: [{ type: 'message' as const, content: [{ type: 'text' as const, text }] }],
+        };
+      },
+    };
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'prompt', {
+      generationGuard: {
+        ...guard,
+        repetition: { ...guard.repetition, minRepeatedCharacters: text.length + 1 },
+      },
+    });
+
+    await expect(collect(stream)).resolves.toEqual([
+      { type: 'text_delta', text: 'Please inspect the current diff. ' },
+      { type: 'text_delta', text: 'Please inspect the current diff.' },
+      {
+        type: 'item',
+        item: { type: 'message', role: 'assistant', content: [{ type: 'output_text', text }] },
+      },
+    ]);
+    await expect(stream.completed).resolves.toBeDefined();
+  });
+
+  it('enforces text, reasoning, and aggregate output ceilings before forwarding excess output', async () => {
+    const textModel: StreamedModelTurn = {
+      async *stream() {
+        yield { type: 'text_delta' as const, text: '12345' };
+        yield { type: 'text_delta' as const, text: '6' };
+      },
+    };
+    const textStream = new ApplicationRunLoop({ resolveModel: () => textModel }).startStream(agent, 'prompt', {
+      generationGuard: { ...guard, maxTextCharacters: 5 },
+    } as any);
+    await expect(textStream.completed).rejects.toMatchObject({ code: 'text_characters', unsafeToReplay: true });
+    expect(textStream.output).toEqual([{ type: 'text_delta', text: '12345' }]);
+
+    const reasoningModel: StreamedModelTurn = {
+      async *stream() {
+        yield { type: 'reasoning_delta' as const, text: '12345' };
+        yield { type: 'reasoning_delta' as const, text: '6' };
+      },
+    };
+    const reasoningStream = new ApplicationRunLoop({ resolveModel: () => reasoningModel }).startStream(
+      agent,
+      'prompt',
+      {
+        generationGuard: { ...guard, maxReasoningCharacters: 5 },
+      } as any,
+    );
+    await expect(reasoningStream.completed).rejects.toMatchObject({
+      code: 'reasoning_characters',
+      unsafeToReplay: true,
+    });
+    expect(reasoningStream.output).toEqual([{ type: 'reasoning_delta', text: '12345' }]);
+
+    const aggregateModel: StreamedModelTurn = {
+      async *stream() {
+        yield { type: 'text_delta' as const, text: '12345' };
+        yield { type: 'reasoning_delta' as const, text: '678901' };
+      },
+    };
+    const aggregateStream = new ApplicationRunLoop({ resolveModel: () => aggregateModel }).startStream(
+      agent,
+      'prompt',
+      {
+        generationGuard: { ...guard, maxOutputCharacters: 10 },
+      } as any,
+    );
+    await expect(aggregateStream.completed).rejects.toMatchObject({ code: 'output_characters', unsafeToReplay: true });
+    expect(aggregateStream.output).toEqual([{ type: 'text_delta', text: '12345' }]);
+  });
+
+  it('enforces observable streaming and terminal tool-argument ceilings without retaining arguments', async () => {
+    const streamingModel: StreamedModelTurn = {
+      async *stream() {
+        yield { type: 'tool_call_streaming_delta' as const, toolName: 'apply_patch', argumentCharCount: 8 };
+        yield { type: 'tool_call_streaming_delta' as const, toolName: 'apply_patch', argumentCharCount: 11 };
+      },
+    };
+    const streaming = new ApplicationRunLoop({ resolveModel: () => streamingModel }).startStream(agent, 'prompt', {
+      generationGuard: { ...guard, maxToolArgumentCharacters: 10 },
+    } as any);
+    await expect(streaming.completed).rejects.toMatchObject({ code: 'tool_argument_characters', unsafeToReplay: true });
+    expect(streaming.output).toEqual([
+      { type: 'tool_call_streaming_delta', toolName: 'apply_patch', argumentCharCount: 8 },
+    ]);
+
+    const terminalModel: StreamedModelTurn = {
+      async *stream() {
+        yield {
+          type: 'completion' as const,
+          responseId: 'resp-terminal-tool',
+          output: [{ type: 'tool_call' as const, id: 'call-1', name: 'apply_patch', arguments: '12345678901' }],
+        };
+      },
+    };
+    const terminal = new ApplicationRunLoop({ resolveModel: () => terminalModel }).startStream(agent, 'prompt', {
+      generationGuard: { ...guard, maxToolArgumentCharacters: 10 },
+    } as any);
+    await expect(terminal.completed).rejects.toMatchObject({ code: 'tool_argument_characters', unsafeToReplay: true });
+  });
+
+  it('validates completion-only text and reasoning before committing history', async () => {
+    const textOnlyModel: StreamedModelTurn = {
+      async *stream() {
+        yield {
+          type: 'completion' as const,
+          responseId: 'resp-completion-text',
+          output: [{ type: 'message' as const, content: [{ type: 'text' as const, text: '123456' }] }],
+        };
+      },
+    };
+    const textOnly = new ApplicationRunLoop({ resolveModel: () => textOnlyModel }).startStream(agent, 'prompt', {
+      generationGuard: { ...guard, maxTextCharacters: 5 },
+    } as any);
+    await expect(textOnly.completed).rejects.toMatchObject({ code: 'text_characters', unsafeToReplay: true });
+    expect(textOnly.history).toEqual([{ type: 'message', role: 'user', content: 'prompt' }]);
+
+    const reasoningOnlyModel: StreamedModelTurn = {
+      async *stream() {
+        yield {
+          type: 'completion' as const,
+          responseId: 'resp-completion-reasoning',
+          output: [{ type: 'reasoning' as const, text: '123456' }],
+        };
+      },
+    };
+    const reasoningOnly = new ApplicationRunLoop({ resolveModel: () => reasoningOnlyModel }).startStream(
+      agent,
+      'prompt',
+      {
+        generationGuard: { ...guard, maxReasoningCharacters: 5 },
+      } as any,
+    );
+    await expect(reasoningOnly.completed).rejects.toMatchObject({ code: 'reasoning_characters', unsafeToReplay: true });
+  });
+
+  it('aborts the active provider request when its total deadline expires', async () => {
+    vi.useFakeTimers();
+    try {
+      let signal: AbortSignal | undefined;
+      let started!: () => void;
+      const startedPromise = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      const model: StreamedModelTurn = {
+        async *stream(request) {
+          signal = request.signal;
+          started();
+          await new Promise<void>((resolve) =>
+            request.signal?.addEventListener('abort', () => resolve(), { once: true }),
+          );
+          yield { type: 'completion' as const, responseId: 'too-late', output: [] };
+        },
+      };
+      const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'prompt', {
+        generationGuard: { ...guard, requestDeadlineMs: 10 },
+      } as any);
+      await startedPromise;
+      const completion = expect(stream.completed).rejects.toMatchObject({
+        code: 'request_deadline',
+        unsafeToReplay: true,
+      });
+      await vi.advanceTimersByTimeAsync(10);
+
+      await completion;
+      expect(signal?.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
 
 describe('ApplicationRunLoop', () => {
   it.each(['root', 'continuation'] as const)(

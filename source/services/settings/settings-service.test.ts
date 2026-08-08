@@ -78,6 +78,9 @@ it('SettingsService initializes with defaults', async () => {
   expect(service.get('agent.reasoningEffort')).toBe('default');
   expect(service.get('agent.temperature')).toBe(undefined);
   expect(service.get('agent.maxTurns')).toBe(100);
+  expect(service.get('agent.maxOutputTokens')).toBe(32_000);
+  expect(service.get('agent.maxStreamOutputChars')).toBe(100_000);
+  expect(service.get('agent.maxModelRequestDurationMs')).toBe(300_000);
   expect(service.get('agent.retryAttempts')).toBe(2);
   expect(service.get('agent.maxParallelToolCalls')).toBe(3);
   expect(service.get('shell.timeout')).toBe(120000);
@@ -606,6 +609,9 @@ it('isRuntimeModifiable identifies correct settings', async () => {
   expect(service.isRuntimeModifiable('agent.reasoningEffort')).toBe(true);
   expect(service.isRuntimeModifiable('agent.temperature')).toBe(true);
   expect(service.isRuntimeModifiable('agent.retryAttempts')).toBe(true);
+  expect(service.isRuntimeModifiable('agent.maxOutputTokens')).toBe(true);
+  expect(service.isRuntimeModifiable('agent.maxStreamOutputChars')).toBe(true);
+  expect(service.isRuntimeModifiable('agent.maxModelRequestDurationMs')).toBe(true);
   expect(service.isRuntimeModifiable('agent.maxParallelToolCalls')).toBe(true);
   expect(service.isRuntimeModifiable('tools.editHealingModel')).toBe(true);
   expect(service.isRuntimeModifiable('tools.editHealingProvider')).toBe(true);

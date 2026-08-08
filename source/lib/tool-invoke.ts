@@ -9,6 +9,26 @@ import { isZodToolParameterSchema } from '../tools/types.js';
  * Very large payloads are returned as-is to avoid regex backtracking costs.
  */
 const MAX_REPAIR_LENGTH = 200_000;
+const MAX_VALIDATION_ISSUES = 8;
+const MAX_VALIDATION_FEEDBACK_CHARS = 2_048;
+const MAX_VALIDATION_FIELD_CHARS = 160;
+const MAX_VALIDATION_KEYS = 16;
+
+const truncateValidationText = (value: string, limit = MAX_VALIDATION_FIELD_CHARS): string =>
+  value.length <= limit ? value : `${value.slice(0, limit - 1)}…`;
+
+const describeValidationInput = (input: unknown): string => {
+  if (Array.isArray(input)) {
+    return `Received an array with ${input.length} item${input.length === 1 ? '' : 's'}.`;
+  }
+  if (input && typeof input === 'object') {
+    const keys = Object.keys(input as Record<string, unknown>).sort();
+    const displayedKeys = keys.slice(0, MAX_VALIDATION_KEYS);
+    const remainder = keys.length - displayedKeys.length;
+    return `Received keys: ${displayedKeys.join(', ')}${remainder > 0 ? `, and ${remainder} more` : ''}.`;
+  }
+  return `Received ${input === null ? 'null' : typeof input}.`;
+};
 
 const escapeRawControlCharactersInStrings = (text: string): string => {
   let result = '';
@@ -381,26 +401,18 @@ export const wrapToolInvoke = <T extends AnyToolDefinition>(
     if (zodSchema) {
       const parseResult = zodSchema.safeParse(parsedInput);
       if (!parseResult.success) {
-        const issues = parseResult.error.issues.map((issue: any) => {
-          const field = issue.path.join('.') || 'input';
-          let actualVal = parsedInput;
-          for (const segment of issue.path) {
-            if (actualVal && typeof actualVal === 'object') {
-              actualVal = (actualVal as any)[segment];
-            }
-          }
-          const valStr = typeof actualVal === 'string' ? `"${actualVal}"` : JSON.stringify(actualVal);
-          const typeStr = actualVal === null ? 'null' : typeof actualVal;
-
-          let msg = issue.message;
+        const issues = parseResult.error.issues.slice(0, MAX_VALIDATION_ISSUES).map((issue: any) => {
+          const field = truncateValidationText(issue.path.join('.') || 'input');
+          let msg = truncateValidationText(String(issue.message).replace(/\s+/g, ' '));
           if (issue.code === 'invalid_type') {
             msg = `must be ${issue.expected}`;
           }
-          return `${field} ${msg}, got ${typeStr} ${valStr}`;
+          return `${field} ${msg}`;
         });
-        return `Tool input did not match schema for ${toolName}: ${issues.join(
+        const feedback = `Tool input did not match schema for ${toolName}: ${issues.join(
           '; ',
-        )}. Retry with valid JSON arguments.`;
+        )}. ${describeValidationInput(parsedInput)} Retry with valid JSON arguments.`;
+        return truncateValidationText(feedback, MAX_VALIDATION_FEEDBACK_CHARS);
       }
     }
     return `Tool input was invalid for this tool. Retry with arguments matching the tool schema.`;

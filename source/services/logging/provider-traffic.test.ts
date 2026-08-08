@@ -846,3 +846,41 @@ it('ProviderTraffic.recordResponseReceived redacts encrypted_content from a plai
     .join('\n');
   expect(artifactText).not.toContain('plain-object-ciphertext');
 });
+
+it('ProviderTraffic records consumer-closed streams as metadata without fabricating a provider failure', () => {
+  const rootDir = makeTempDir();
+  const store = new ProviderTrafficArtifactStore({ rootDir });
+  const debug = vi.fn();
+  const error = vi.fn();
+  const traffic = new ProviderTraffic(
+    { debug, error, getCorrelationId: () => undefined },
+    NULL_SESSION_CONTEXT_SERVICE,
+    store,
+  );
+  const requestId = 'consumer-closed-req';
+
+  traffic.recordRequestStart({ requestId, provider: 'codex', model: 'gpt-5.6-luna', sentBody: { input: [] } });
+  traffic.recordResponseClosed({
+    requestId,
+    provider: 'codex',
+    model: 'gpt-5.6-luna',
+    outcome: 'consumer_closed',
+    eventCount: 2,
+  });
+
+  const dayDir = fs.readdirSync(rootDir).find((entry) => /^\d{4}-\d{2}-\d{2}$/.test(entry));
+  const sessionDir = fs.readdirSync(path.join(rootDir, dayDir!))[0];
+  const requestFile = fs.readdirSync(path.join(rootDir, dayDir!, sessionDir)).find((name) => name.endsWith('.json'))!;
+  const received = readRequestFile(path.join(rootDir, dayDir!, sessionDir, requestFile)).received as Record<
+    string,
+    unknown
+  >;
+
+  expect(received).toMatchObject({ direction: 'received', summary: { outcome: 'consumer_closed', eventCount: 2 } });
+  expect(received).not.toHaveProperty('error');
+  expect(error).not.toHaveBeenCalled();
+  expect(debug).toHaveBeenLastCalledWith(
+    'codex response closed',
+    expect.objectContaining({ eventType: 'provider.response.closed', outcome: 'consumer_closed', eventCount: 2 }),
+  );
+});

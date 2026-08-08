@@ -287,6 +287,7 @@ function makeMockProviderTraffic(loggingService: any, sessionContextService?: an
         payload: payload,
       });
     },
+    recordResponseClosed() {},
     recordRequestFailed(input) {
       const trafficContext = sessionContextService?.getContext() ?? null;
       const isEvaluator = trafficContext?.evaluator === true;

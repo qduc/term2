@@ -27,7 +27,14 @@ const BACKGROUND_SHELL_ARGUMENTS = JSON.stringify({ command: 'sleep 1', backgrou
 
 type ProviderId = 'openai' | 'codex';
 type Transport = 'http' | 'websocket';
-type FixtureMode = 'multi-turn' | 'approval' | 'background-shell' | 'native-error' | 'incomplete' | 'abnormal-close';
+type FixtureMode =
+  | 'multi-turn'
+  | 'approval'
+  | 'background-shell'
+  | 'native-error'
+  | 'incomplete'
+  | 'abnormal-close'
+  | 'runaway-output';
 
 /** Typed lifecycle ledger consumed by the Gate C matrix-accounting test. */
 export { RESPONSES_CAPABILITY_EXECUTIONS as executedCapabilityScenarioIds } from './provider-session-capability-manifest.js';
@@ -234,6 +241,10 @@ describe('application-owned Responses terminal failure lifecycle', () => {
     await runFailureScenario(providerCase, 'incomplete');
   });
 
+  it.each(providerTransportCases)('$provider $transport stops runaway streamed output', async (providerCase) => {
+    await runFailureScenario(providerCase, 'runaway-output');
+  });
+
   it.each(providerTransportCases.filter(({ transport }) => transport === 'websocket'))(
     '$provider websocket rejects an abnormal close without a fabricated completion',
     async (providerCase) => {
@@ -248,7 +259,7 @@ async function runFailureScenario(
 ) {
   const server = await startResponsesFixtureServer({ mode });
   activeServer = server;
-  const workspace = await createWorkspace(server, providerCase);
+  const workspace = await createWorkspace(server, providerCase, mode);
   activeWorkspace = workspace;
   const child = await startCli(workspace);
   activeChild = child;
@@ -265,6 +276,7 @@ async function runFailureScenario(
   expect(
     server.served.some((item) => item.request.body.generate !== false && item.terminalType === 'response.completed'),
   ).toBe(false);
+  if (mode === 'runaway-output') expect(normalRequests(server.requests)).toHaveLength(1);
 
   await child.terminate({ timeoutMs: 2_000 });
 }
@@ -307,6 +319,7 @@ function assertApprovalResume(
 async function createWorkspace(
   server: ResponsesFixtureServer,
   providerCase: ProviderTransportCase,
+  mode?: FixtureMode,
 ): Promise<IsolatedWorkspaceLease> {
   return createIsolatedWorkspaceLease({
     prefix: `term2-provider-session-${providerCase.provider}-${providerCase.transport}-`,
@@ -324,6 +337,7 @@ async function createWorkspace(
             provider: providerCase.provider,
             transport: providerCase.transport,
             retryAttempts: 0,
+            ...(mode === 'runaway-output' ? { maxStreamOutputChars: 32 } : {}),
             openai: { apiKey: 'fixture-key' },
             codex: {
               websocketFirstFrameTimeoutMs: 2_000,
@@ -590,6 +604,16 @@ async function serveResponse(
     const frames = [createdFrame(responseId), { type: 'response.output_text.delta', delta: 'PARTIAL' }];
     await sendFrames(httpResponse, webSocket, frames, mode === 'abnormal-close');
     served.push({ request, closedAbnormally: mode === 'abnormal-close' });
+    return;
+  }
+
+  if (mode === 'runaway-output') {
+    const responseId = 'resp-runaway-output';
+    await sendFrames(httpResponse, webSocket, [
+      createdFrame(responseId),
+      ...Array.from({ length: 8 }, () => ({ type: 'response.output_text.delta', delta: 'LOOPLOOP' })),
+    ]);
+    served.push({ request, responseId, closedAbnormally: false });
     return;
   }
 

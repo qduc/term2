@@ -44,9 +44,20 @@ export interface ProviderTrafficResponse {
   transport?: 'websocket';
 }
 
+export interface ProviderTrafficClosedResponse {
+  requestId: string;
+  provider: string;
+  model: string;
+  outcome: 'consumer_closed' | 'aborted';
+  eventCount: number;
+  modelClass?: string;
+  modelWrapperClass?: string;
+}
+
 export interface IProviderTraffic {
   recordRequestStart(input: ProviderTrafficRequest): void;
   recordResponseReceived(input: ProviderTrafficResponse): Promise<void>;
+  recordResponseClosed(input: ProviderTrafficClosedResponse): void;
   recordRequestFailed(input: {
     requestId: string;
     provider: string;

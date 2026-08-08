@@ -16,6 +16,7 @@ import type { ToolDefinition } from '../tools/types.js';
 import { PostExecutePendingRegistry } from '../services/session/post-execute-pending-registry.js';
 import { PostExecutePauseCapability } from '../services/session/post-execute-pause-capability.js';
 import { createReadFileToolDefinition } from '../tools/file/read-file.js';
+import { createApplyPatchToolDefinition } from '../tools/file/apply-patch.js';
 import { BackgroundShellRegistry } from '../services/shell/background-shell-registry.js';
 
 type MockLogger = ILoggingService & { debugCalls: any[][] };
@@ -342,6 +343,22 @@ it.sequential('buildAgent applies strict tool schema when provider supports it',
   expect(readFileTool.parameters.required.includes('end_line')).toBe(true);
 });
 
+it.sequential('buildAgent advertises apply_patch as operations-only to strict-schema providers', () => {
+  const { deps, logger, settings } = createDeps({ providerId: 'openai' });
+  const applyPatch = createApplyPatchToolDefinition({ loggingService: logger, settingsService: settings });
+
+  const tool = buildAgentTools({
+    toolDefinitions: [applyPatch],
+    resolvedModel: 'gpt-4o',
+    shouldUseNativePatchTool: false,
+    deps,
+  })[0] as any;
+
+  expect(tool.parameters.required).toEqual(['operations']);
+  expect(Object.keys(tool.parameters.properties)).toEqual(['operations']);
+  expect(Object.keys(tool.parameters.properties.operations.items.properties).sort()).toEqual(['diff', 'path', 'type']);
+});
+
 it.sequential('buildAgent excludes custom apply_patch when native patch tool is enabled', () => {
   const { deps } = createDeps({ providerId: 'openai' });
 
@@ -509,4 +526,34 @@ it.sequential('buildModelSettings omits reasoning when effort is default', () =>
   const result = buildAgent({ model: 'gpt-4o', reasoningEffort: 'default' }, deps);
 
   expect(result.agent.modelSettings?.reasoning).toBeFalsy();
+});
+
+it.sequential('buildModelSettings forwards generation safety limits', () => {
+  const { deps } = createDeps({
+    providerId: 'codex',
+    settingsValues: {
+      'agent.maxOutputTokens': 12_345,
+      'agent.maxStreamOutputChars': 45_678,
+      'agent.maxModelRequestDurationMs': 67_890,
+    },
+  });
+
+  const result = buildAgent({ model: 'gpt-5.6-luna' }, deps);
+
+  expect(result.agent.modelSettings).toMatchObject({
+    maxTokens: 12_345,
+    maxStreamOutputChars: 45_678,
+    maxModelRequestDurationMs: 67_890,
+  });
+});
+
+it.sequential('buildModelSettings clamps the configured token cap to the model catalog limit', () => {
+  const { deps } = createDeps({
+    providerId: 'openai',
+    settingsValues: { 'agent.maxOutputTokens': 32_000 },
+  });
+
+  const result = buildAgent({ model: 'gpt-4o' }, deps);
+
+  expect(result.agent.modelSettings?.maxTokens).toBe(16_384);
 });

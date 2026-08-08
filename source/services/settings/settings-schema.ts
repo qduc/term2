@@ -79,6 +79,9 @@ export const AgentSettingsSchema = z.object({
   // can use their own defaults when unset.
   temperature: z.number().min(0).max(2).optional(),
   maxTurns: z.number().int().positive().default(100),
+  maxOutputTokens: z.number().int().positive().default(32_000),
+  maxStreamOutputChars: z.number().int().positive().default(100_000),
+  maxModelRequestDurationMs: z.number().int().positive().default(300_000),
   retryAttempts: z.number().int().nonnegative().default(2),
   transport: z.enum(['websocket', 'http']).default('websocket'),
   maxParallelToolCalls: z
@@ -525,6 +528,9 @@ export interface SettingsWithSources {
     reasoningEffort: SettingWithSource<string>;
     temperature: SettingWithSource<number | undefined>;
     maxTurns: SettingWithSource<number>;
+    maxOutputTokens: SettingWithSource<number>;
+    maxStreamOutputChars: SettingWithSource<number>;
+    maxModelRequestDurationMs: SettingWithSource<number>;
     retryAttempts: SettingWithSource<number>;
     transport: SettingWithSource<'websocket' | 'http'>;
     maxParallelToolCalls: SettingWithSource<number>;
@@ -662,6 +668,9 @@ export const SETTING_KEYS = {
   AGENT_TEMPERATURE: 'agent.temperature',
   AGENT_PROVIDER: 'agent.provider',
   AGENT_MAX_TURNS: 'agent.maxTurns',
+  AGENT_MAX_OUTPUT_TOKENS: 'agent.maxOutputTokens',
+  AGENT_MAX_STREAM_OUTPUT_CHARS: 'agent.maxStreamOutputChars',
+  AGENT_MAX_MODEL_REQUEST_DURATION_MS: 'agent.maxModelRequestDurationMs',
   AGENT_RETRY_ATTEMPTS: 'agent.retryAttempts',
   AGENT_TRANSPORT: 'agent.transport',
   AGENT_MAX_PARALLEL_TOOL_CALLS: 'agent.maxParallelToolCalls',
@@ -773,6 +782,9 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_TEMPERATURE,
   SETTING_KEYS.AGENT_PROVIDER,
   SETTING_KEYS.AGENT_RETRY_ATTEMPTS,
+  SETTING_KEYS.AGENT_MAX_OUTPUT_TOKENS,
+  SETTING_KEYS.AGENT_MAX_STREAM_OUTPUT_CHARS,
+  SETTING_KEYS.AGENT_MAX_MODEL_REQUEST_DURATION_MS,
   SETTING_KEYS.AGENT_TRANSPORT,
   SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS,
   SETTING_KEYS.AGENT_MENTOR_MODEL,
@@ -893,6 +905,9 @@ export const DEFAULT_SETTINGS: SettingsData = {
     choreProvider: undefined,
     reasoningEffort: 'default',
     maxTurns: 100,
+    maxOutputTokens: 32_000,
+    maxStreamOutputChars: 100_000,
+    maxModelRequestDurationMs: 300_000,
     retryAttempts: 2,
     transport: 'websocket',
     maxParallelToolCalls: 3,

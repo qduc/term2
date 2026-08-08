@@ -11,6 +11,10 @@ import type { CodexRateLimitInfo, CodexRateLimitWindow } from '../../services/co
 import type { StaticCommitBlocker } from '../message/MessageList.js';
 import { formatUsdMicros, type SessionCostSummary } from '../../services/cost/model-cost.js';
 
+function formatStatusBarTokens(tokens: number): string {
+  return tokens > 1_000 ? `${(tokens / 1_000).toFixed(1)}k` : tokens.toLocaleString();
+}
+
 interface StatusBarProps {
   settingsService: SettingsService;
   isShellMode?: boolean;
@@ -82,13 +86,13 @@ const StatusBar: FC<StatusBarProps> = ({
         : '';
     const cacheText = usageHasCacheRead
       ? usageHasIntegratedWarning
-        ? `⚠️ ${cacheReadTokens.toLocaleString()} uncached`
+        ? `⚠️ ${formatStatusBarTokens(cacheReadTokens)} uncached`
         : `${cachePercentage}% cached`
       : '';
-    tokenParts.push(`${lastUsage.prompt_tokens.toLocaleString()} in${cacheText ? ` (${cacheText})` : ''}`);
+    tokenParts.push(`↑ ${formatStatusBarTokens(lastUsage.prompt_tokens)}${cacheText ? ` (${cacheText})` : ''}`);
   }
-  if (lastUsage?.completion_tokens != null) tokenParts.push(`${lastUsage.completion_tokens.toLocaleString()} out`);
-  const tokensText = tokenParts.length > 0 ? `Tok ${tokenParts.join(' / ')}` : '';
+  if (lastUsage?.completion_tokens != null) tokenParts.push(`↓ ${formatStatusBarTokens(lastUsage.completion_tokens)}`);
+  const tokensText = tokenParts.join(' / ');
   const contextText = contextUsageText ? `Ctx ${contextUsageText.replace('/', ' / ')}` : '';
   const costText =
     costSummary && costSummary.state !== 'unavailable'

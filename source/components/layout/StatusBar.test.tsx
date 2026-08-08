@@ -62,7 +62,7 @@ it.sequential('StatusBar renders the compact two-row configuration and usage lay
   expect(lines.some((line) => line.includes('Standard │ Codex/gpt-5.6-luna · high'))).toBe(true);
   expect(lines.some((line) => line.includes('Auto'))).toBe(true);
   expect(lines.some((line) => line.includes('7D 78% · reset '))).toBe(true);
-  expect(lines.some((line) => line.includes('Tok 11,778 in / 13 out │ Ctx 12k / 272k'))).toBe(true);
+  expect(lines.some((line) => line.includes('↑ 11.8k / ↓ 13 │ Ctx 12k / 272k'))).toBe(true);
   expect(lines.some((line) => line.includes('Cache 0'))).toBe(false);
   expect(lines.some((line) => line.includes('(0 cached)'))).toBe(false);
 });
@@ -83,7 +83,7 @@ it.sequential('StatusBar renders cache usage in the footer', async () => {
 
   const output = lastFrame() ?? '';
 
-  expect(output.includes('Tok 1,200 in (75.0% cached) / 350 out')).toBe(true);
+  expect(output.includes('↑ 1.2k (75.0% cached) / ↓ 350')).toBe(true);
   expect(output.includes('│ Cache')).toBe(false);
 });
 
@@ -98,7 +98,7 @@ it.sequential('StatusBar renders cache usage as a percentage of prompt tokens', 
     <StatusBar settingsService={settingsService} lastUsage={{ prompt_tokens: 79_697, cache_read_tokens: 79_360 }} />,
   );
 
-  expect(lastFrame()).toContain('Tok 79,697 in (99.6% cached)');
+  expect(lastFrame()).toContain('↑ 79.7k (99.6% cached)');
 });
 
 it.sequential('StatusBar renders context usage as used/window in the footer', async () => {
@@ -211,7 +211,7 @@ it.sequential('StatusBar places session cost beside token and context usage', as
     />,
   );
 
-  expect(lastFrame()).toContain('Tok 1,200 in / 350 out │ Ctx 1k / 272k │ Cost $0.42');
+  expect(lastFrame()).toContain('↑ 1.2k / ↓ 350 │ Ctx 1k / 272k │ Cost $0.42');
 });
 
 it.sequential('StatusBar hides context usage when the model is not in the catalog', async () => {
@@ -454,7 +454,7 @@ it.sequential('StatusBar renders large uncached prompt warning and confirmation 
     />,
   );
   const outputWarning = lastFrameWarning() ?? '';
-  expect(outputWarning.includes('Tok 63,561 in (⚠️ 62,000 uncached) / 856 out')).toBe(true);
+  expect(outputWarning.includes('↑ 63.6k (⚠️ 62.0k uncached) / ↓ 856')).toBe(true);
   expect(outputWarning.includes('Cache Miss Risk')).toBe(false);
   expect(outputWarning.includes('Confirm Cache Miss')).toBe(false);
 
@@ -468,7 +468,7 @@ it.sequential('StatusBar renders large uncached prompt warning and confirmation 
     />,
   );
   const outputConfirm = lastFrameConfirm() ?? '';
-  expect(outputConfirm.includes('Tok 63,561 in (⚠️ 62,000 uncached) / 856 out')).toBe(true);
+  expect(outputConfirm.includes('↑ 63.6k (⚠️ 62.0k uncached) / ↓ 856')).toBe(true);
   expect(outputConfirm.includes('Confirm Cache Miss')).toBe(false);
 });
 

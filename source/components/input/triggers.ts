@@ -1,6 +1,7 @@
 import type { SlashCommand } from '../../slash-commands.js';
 import { TriggerRuleRegistry } from './menu-controller.js';
 import { determineActiveMenu } from './determine-active-menu.js';
+import { getModelSettingConfigForInput } from '../../utils/ai/model-settings.js';
 
 export const STOP_CHAR_REGEX = /[\s,;:()[\]{}<>]/;
 export const SETTINGS_TRIGGER = '/settings ';
@@ -37,6 +38,18 @@ export const findPathTrigger = (
   return null;
 };
 
+// A passively-typed successor (the user typed the whole trigger themselves,
+// rather than accepting a highlighted item from a mounted settings list) has
+// no prior parent-frame state to preserve — there was never a mounted
+// `SettingsMenuSession` filtering a list for this activation. Its Back
+// therefore restores to the bare, unfiltered settings prefix rather than
+// reconstructing "what the user had typed before this". This matches the
+// pre-existing default (`settingsFilterRef` started at `''` and was only
+// ever populated by an explicit list selection).
+const settingsListRestorePoint = (revision: number) => ({
+  editor: { text: SETTINGS_TRIGGER, cursor: SETTINGS_TRIGGER.length, revision },
+});
+
 export function createDefaultTriggerRegistry(
   slashCommands: SlashCommand[] = [],
   enabledRuleIds?: readonly string[],
@@ -47,16 +60,56 @@ export function createDefaultTriggerRegistry(
     if (!enabled || enabled.has(rule.id)) registry.registerRule(rule);
   };
 
-  // Priority 50: Model selection
+  // Priority 50: settings-backed model selection (graph 3 — `/settings
+  // agent.model ` via MODEL_SETTING_TRIGGERS). Its Back target is the setting
+  // it came from, restoring the settings list rather than clearing input.
   registerRule({
-    id: 'model',
+    id: 'settings-model',
     priority: 50,
     parse: (editor) => {
       const active = determineActiveMenu(editor.text, editor.cursor, slashCommands);
-      if (active.type === 'model') {
+      if (active.type === 'model' && active.origin === 'settings-backed') {
+        const config = getModelSettingConfigForInput(editor.text);
+        if (!config) return null;
         return {
-          ruleId: 'model',
-          identity: `model:${active.startIndex}`,
+          ruleId: 'settings-model',
+          identity: `settings-model:${active.startIndex}`,
+          frame: {
+            kind: 'model',
+            target: {
+              type: 'setting',
+              config: {
+                modelKey: config.modelKey,
+                providerKey: config.providerKey,
+                fallbackProviderKey: config.fallbackProviderKey,
+              },
+            },
+            back: { type: 'restore', point: settingsListRestorePoint(editor.revision) },
+            binding: {
+              trigger: { range: { start: 0, end: active.startIndex }, text: editor.text.slice(0, active.startIndex) },
+              queryStart: active.startIndex,
+              queryEnd: 'cursor',
+              replacement: { start: active.startIndex, end: 'buffer-end' },
+            },
+          },
+        };
+      }
+      return null;
+    },
+    successors: [],
+  });
+
+  // Priority 50: direct command-backed model selection (graph 4 — `/model `).
+  // Disabled until Step 2 enables `command-model`.
+  registerRule({
+    id: 'command-model',
+    priority: 50,
+    parse: (editor) => {
+      const active = determineActiveMenu(editor.text, editor.cursor, slashCommands);
+      if (active.type === 'model' && active.origin === 'direct-trigger') {
+        return {
+          ruleId: 'command-model',
+          identity: `command-model:${active.startIndex}`,
           frame: {
             kind: 'model',
             target: { type: 'command' },
@@ -75,20 +128,27 @@ export function createDefaultTriggerRegistry(
     successors: [],
   });
 
-  // Priority 40: Settings value
+  // Priority 40: the `/settings <key> ` value child (graph 3). Reached as a
+  // declared successor of `settings` when a key selection or manually typed
+  // key completes, and also parses standalone so a fully-typed
+  // `/settings <key> ` opens directly. Its Back restores the settings list.
   registerRule({
-    id: 'settings_value',
+    id: 'settings-value-child',
     priority: 40,
     parse: (editor) => {
       const active = determineActiveMenu(editor.text, editor.cursor, slashCommands);
-      if (active.type === 'settings_value') {
+      if (active.type === 'settings_value' && active.origin === 'settings-list') {
         return {
-          ruleId: 'settings_value',
-          identity: `settings_value:${active.key}:${active.startIndex}`,
+          ruleId: 'settings-value-child',
+          identity: `settings-value-child:${active.key}:${active.startIndex}`,
           frame: {
             kind: 'settings_value',
             settingKey: active.key,
-            origin: { type: 'direct-trigger', triggerId: 'settings_value', back: { type: 'close-clear-input' } },
+            origin: {
+              type: 'settings-list',
+              operation: 'set',
+              back: { type: 'restore', point: settingsListRestorePoint(editor.revision) },
+            },
             binding: {
               trigger: { range: { start: 0, end: active.startIndex }, text: editor.text.slice(0, active.startIndex) },
               queryStart: active.startIndex,
@@ -103,7 +163,36 @@ export function createDefaultTriggerRegistry(
     successors: [],
   });
 
-  // Priority 30: Settings
+  // Priority 40: direct setting-value triggers (graph 4 — `/effort `,
+  // `/auto-approve `). Disabled until Step 2 enables `direct-setting-value`.
+  registerRule({
+    id: 'direct-setting-value',
+    priority: 40,
+    parse: (editor) => {
+      const active = determineActiveMenu(editor.text, editor.cursor, slashCommands);
+      if (active.type === 'settings_value' && active.origin === 'direct-trigger') {
+        return {
+          ruleId: 'direct-setting-value',
+          identity: `direct-setting-value:${active.key}:${active.startIndex}`,
+          frame: {
+            kind: 'settings_value',
+            settingKey: active.key,
+            origin: { type: 'direct-trigger', triggerId: active.key, back: { type: 'close-clear-input' } },
+            binding: {
+              trigger: { range: { start: 0, end: active.startIndex }, text: editor.text.slice(0, active.startIndex) },
+              queryStart: active.startIndex,
+              queryEnd: 'cursor',
+              replacement: { start: active.startIndex, end: 'cursor' },
+            },
+          },
+        };
+      }
+      return null;
+    },
+    successors: [],
+  });
+
+  // Priority 30: Settings (`/settings `, `/settings reset `).
   registerRule({
     id: 'settings',
     priority: 30,
@@ -130,8 +219,8 @@ export function createDefaultTriggerRegistry(
       return null;
     },
     successors: [
-      { ruleId: 'settings_value', operation: 'push' },
-      { ruleId: 'model', operation: 'push' },
+      { ruleId: 'settings-value-child', operation: 'push' },
+      { ruleId: 'settings-model', operation: 'push' },
     ],
   });
 

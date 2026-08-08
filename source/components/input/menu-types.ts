@@ -50,10 +50,13 @@ export type SettingsOrigin =
   | { type: 'settings-list'; operation: 'set'; back: BackPolicy }
   | { type: 'direct-trigger'; triggerId: string; back: BackPolicy };
 
+// Mirrors the fields of utils/ai/model-settings.ts's ModelSettingConfig that
+// the settings-backed model frame actually needs: enough to build one
+// `apply-settings` intent carrying both the model and provider changes.
 export type ModelSettingConfig = Readonly<{
-  settingKey: string;
-  label?: string;
-  requiresRestart?: boolean;
+  modelKey: string;
+  providerKey: string;
+  fallbackProviderKey?: string;
 }>;
 
 export type MenuFrame =

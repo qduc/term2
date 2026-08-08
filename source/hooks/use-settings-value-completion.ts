@@ -27,12 +27,26 @@ export const useSettingsValueCompletion = (
   settingsService: SettingsService,
   options?: { onReset?: (key: string) => void },
 ) => {
-  const { mode, setMode, input, cursorOffset, triggerIndex, setTriggerIndex } = useInputContext();
+  const { mode, setMode, input, cursorOffset, triggerIndex, setTriggerIndex, controller } = useInputContext();
 
-  const isOpen = mode === 'settings_value_completion';
+  const controllerFrame = controller.getSnapshot().stack.at(-1);
+  const isControllerOpen = controllerFrame?.kind === 'settings_value';
+  const isOpen = isControllerOpen || mode === 'settings_value_completion';
 
   const [settingKey, setSettingKey] = useState<string | null>(null);
   const [settingsVersion, setSettingsVersion] = useState(0);
+
+  // While the settings-value graph is controller-owned, the frame is the
+  // source of truth for the setting key. Keep the legacy `settingKey` local
+  // state (populated by the legacy `open()`) for callers that still use this
+  // hook directly for a graph 4 (still-legacy) trigger.
+  const resolvedSettingKey = isControllerOpen ? controllerFrame.settingKey : settingKey;
+
+  // While the settings-value graph is controller-owned, the binding is the
+  // source of truth for both the query and the replacement start. Keep the
+  // legacy triggerIndex projection for callers that still use this hook
+  // directly.
+  const activeTriggerIndex = isControllerOpen ? controllerFrame.binding.replacement.start : triggerIndex;
 
   // Recompute current setting value suggestions when settings change.
   // (Useful if we later want to add "current" or dynamic suggestions.)
@@ -44,18 +58,20 @@ export const useSettingsValueCompletion = (
   }, [settingsService]);
 
   const query = useMemo(() => {
-    if (!isOpen || triggerIndex === null) return '';
+    if (!isOpen) return '';
+    if (isControllerOpen) return controllerFrame.binding.query;
+    if (triggerIndex === null) return '';
     const end = Math.min(cursorOffset, input.length);
     return input.slice(triggerIndex, end);
-  }, [isOpen, triggerIndex, input, cursorOffset]);
+  }, [isOpen, isControllerOpen, controllerFrame, triggerIndex, input, cursorOffset]);
 
   const allSuggestions = useMemo(() => {
-    if (!settingKey) return [];
+    if (!resolvedSettingKey) return [];
     // settingsVersion is used to allow refresh when values change.
     void settingsVersion;
-    const suggestions = [...buildSettingValueSuggestions(settingKey)];
+    const suggestions = [...buildSettingValueSuggestions(resolvedSettingKey)];
     try {
-      const currentValue = settingsService.getDynamic(settingKey);
+      const currentValue = settingsService.getDynamic(resolvedSettingKey);
       if (currentValue !== undefined) {
         const currentValueStr = String(currentValue);
         if (!suggestions.some((s) => s.value === currentValueStr)) {
@@ -69,11 +85,11 @@ export const useSettingsValueCompletion = (
       // Ignore
     }
     return suggestions;
-  }, [settingKey, settingsVersion, settingsService]);
+  }, [resolvedSettingKey, settingsVersion, settingsService]);
 
   const filteredEntries = useMemo(() => {
-    return filterSettingValueSuggestionsByQuery(allSuggestions, query, MAX_RESULTS, settingKey ?? undefined);
-  }, [allSuggestions, query, settingKey]);
+    return filterSettingValueSuggestionsByQuery(allSuggestions, query, MAX_RESULTS, resolvedSettingKey ?? undefined);
+  }, [allSuggestions, query, resolvedSettingKey]);
 
   const { selectedIndex, setSelectedIndex, moveUp, moveDown, moveHome, moveEnd, pageUp, pageDown, getSelectedItem } =
     useSelection(filteredEntries);
@@ -134,22 +150,22 @@ export const useSettingsValueCompletion = (
   }, [settingKey, settingsService, close, options]);
 
   const isNumericSettings = useMemo(() => {
-    return settingKey ? isNumberSetting(settingKey) : false;
-  }, [settingKey]);
+    return resolvedSettingKey ? isNumberSetting(resolvedSettingKey) : false;
+  }, [resolvedSettingKey]);
 
   // Free-form string: string setting with no predefined suggestions.
   // These are settings like api keys, model names, hostnames, etc.
   // Users should type a value freely; the empty state should not show an error.
   const isFreeFormString = useMemo(() => {
-    if (!settingKey) return false;
-    if (!isStringSetting(settingKey)) return false;
-    return buildSettingValueSuggestions(settingKey).length === 0;
-  }, [settingKey]);
+    if (!resolvedSettingKey) return false;
+    if (!isStringSetting(resolvedSettingKey)) return false;
+    return buildSettingValueSuggestions(resolvedSettingKey).length === 0;
+  }, [resolvedSettingKey]);
 
   return {
     isOpen,
-    triggerIndex,
-    settingKey,
+    triggerIndex: activeTriggerIndex, // Compatibility projection for legacy callers
+    settingKey: resolvedSettingKey,
     query,
     filteredEntries,
     selectedIndex,

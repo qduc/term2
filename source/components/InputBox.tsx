@@ -149,7 +149,6 @@ const InputBox: FC<Props> = ({
   inputValueRef.current = value;
   const cursorOffsetRef = useRef(cursorOffset);
   const lockedCursorRef = useRef<number | null>(null);
-  const settingsFilterRef = useRef('');
   // Stores a cursor position that should be applied *after* a popup menu closes
   // and the new value has already been synced to MultilineInput. Updating both
   // value and cursorOverride in the same render is overwritten by ink-prompt's
@@ -171,25 +170,26 @@ const InputBox: FC<Props> = ({
   });
 
   useEffect(() => {
-    controller.setTriggerRegistry(createDefaultTriggerRegistry(slashCommands, ['slash', 'path', 'skills']));
+    controller.setTriggerRegistry(
+      createDefaultTriggerRegistry(slashCommands, [
+        'slash',
+        'path',
+        'skills',
+        'settings',
+        'settings-value-child',
+        'settings-model',
+      ]),
+    );
   }, [controller, slashCommands]);
 
   const path = usePathCompletion({ loggingService });
   const settings = useSettingsCompletion(settingsService);
-  const reopenSettingsMenu = useCallback(
-    (key: string) => {
-      const filter = settingsFilterRef.current;
-      const restoredInput = SETTINGS_TRIGGER + filter;
-      onChange(restoredInput);
-      setCursorOffset(restoredInput.length);
-      setCursorOverride(restoredInput.length);
-      settings.open(SETTINGS_TRIGGER.length, key);
-    },
-    [onChange, setCursorOffset, setCursorOverride, settings],
-  );
-  const settingsValue = useSettingsValueCompletion(settingsService, {
-    onReset: reopenSettingsMenu,
-  });
+  // Graph 3 (`/settings <key> `) no longer reconstructs its parent frame from
+  // a ref on reset — the mounted SettingsMenuSession stays alive underneath
+  // the value child, so category/filter/selection survive without
+  // reconstruction. A Ctrl+D reset routes through SettingsValueMenuSession's
+  // typed reset-setting intent instead of this hook's legacy onReset path.
+  const settingsValue = useSettingsValueCompletion(settingsService);
   const models = useModelSelection({
     loggingService,
     settingsService,
@@ -307,10 +307,13 @@ const InputBox: FC<Props> = ({
     [path, cursorOffset, value, applyAutocompleteInsertion],
   );
 
+  // `settings` frames are always controller-owned now (the `settings` rule
+  // is unconditionally enabled), so this legacy Enter-to-insert helper is
+  // unreachable in production. It stays wired into useModeHandlers because
+  // deleting legacy modules is Step 3's job, not this step's.
   const insertSelectedSetting = useCallback((): boolean => {
     const result = computeSettingInsertion({ selection: settings.getSelectedItem(), value });
     if (!result) return false;
-    settingsFilterRef.current = settings.query;
     applyAutocompleteInsertion(result);
     settings.close();
     return true;
@@ -355,14 +358,11 @@ const InputBox: FC<Props> = ({
         // Close value menu
         settingsValue.close();
 
-        // Only restore the settings completion menu when the input came from
-        // /settings. Direct triggers like /effort or /auto-approve are top-level
-        // menus — just close and clear the input after saving.
-        if (submittedValue.startsWith(SETTINGS_TRIGGER)) {
-          reopenSettingsMenu(key);
-        } else {
-          onChange('');
-        }
+        // `/settings <key> ` is controller-owned (see the settings-value-child
+        // rule), so this legacy path is only reachable for a direct (graph 4)
+        // trigger such as /effort or /auto-approve — a top-level menu with no
+        // parent settings list to return to. Just close and clear the input.
+        onChange('');
         return true;
       }
 
@@ -388,7 +388,6 @@ const InputBox: FC<Props> = ({
       settingsService,
       onSettingChange,
       onSystemMessage,
-      reopenSettingsMenu,
     ],
   );
 
@@ -409,28 +408,11 @@ const InputBox: FC<Props> = ({
       });
       if (!result) return false;
 
-      if (submitAfterInsert && models.modelSettingConfig) {
-        const modelId = resolvedModelId;
-        if (!modelId) return false;
-
-        const provider = models.provider;
-
-        settingsService.setDynamic(models.modelSettingConfig.modelKey, modelId);
-        if (provider) {
-          settingsService.setDynamic(models.modelSettingConfig.providerKey, provider);
-        }
-
-        onSettingChange?.(models.modelSettingConfig.modelKey, modelId);
-        if (provider) {
-          onSettingChange?.(models.modelSettingConfig.providerKey, provider);
-        }
-
-        models.close();
-
-        reopenSettingsMenu(models.modelSettingConfig.modelKey);
-        return true;
-      }
-
+      // A settings-backed trigger (e.g. `/settings agent.model `) is always
+      // controller-owned now (the settings-model rule is unconditionally
+      // enabled), so `models.modelSettingConfig` is never truthy on this
+      // legacy path in production; it only remains reachable for the direct
+      // `/model ` trigger below.
       if (submitAfterInsert) {
         onChange(result.nextValue);
         models.close();
@@ -442,16 +424,7 @@ const InputBox: FC<Props> = ({
       models.close();
       return true;
     },
-    [
-      models,
-      value,
-      onChange,
-      submitTextOnly,
-      settingsService,
-      onSettingChange,
-      applyAutocompleteInsertion,
-      reopenSettingsMenu,
-    ],
+    [models, value, onChange, submitTextOnly, applyAutocompleteInsertion],
   );
 
   const insertSelectedSkill = useCallback(
@@ -805,6 +778,82 @@ const InputBox: FC<Props> = ({
       }
       return;
     }
+    if (
+      currentMode === 'settings_completion' ||
+      currentMode === 'settings_value_completion' ||
+      currentMode === 'model_selection'
+    ) {
+      const topFrame = controller.getSnapshot().stack.at(-1);
+      const expectedKind =
+        currentMode === 'settings_completion'
+          ? 'settings'
+          : currentMode === 'settings_value_completion'
+          ? 'settings_value'
+          : 'model';
+      // Graph 3 (settings / settings-value-child / settings-model) is
+      // controller-owned; graph 4's direct triggers (/model, /effort,
+      // /auto-approve) are not migrated until Step 2 and fall through to the
+      // legacy handler table below. The two never coexist for a given mode
+      // string — only one engine ever owns a live frame of a given kind.
+      if (topFrame?.kind === expectedKind) {
+        if (isFocusReportingSequence(_input)) return;
+        const hasCategoryOrProviderSwitch = currentMode !== 'settings_value_completion';
+        if (key.upArrow) controller.dispatchActiveEvent({ type: 'move', direction: 'up' });
+        else if (key.downArrow) controller.dispatchActiveEvent({ type: 'move', direction: 'down' });
+        else if (key.pageUp) controller.dispatchActiveEvent({ type: 'move', direction: 'page-up' });
+        else if (key.pageDown) controller.dispatchActiveEvent({ type: 'move', direction: 'page-down' });
+        else if ((key as any).home) controller.dispatchActiveEvent({ type: 'move', direction: 'home' });
+        else if ((key as any).end) controller.dispatchActiveEvent({ type: 'move', direction: 'end' });
+        else if (key.tab && !key.shift) controller.dispatchActiveEvent({ type: 'command', command: 'tab' });
+        else if (key.ctrl && _input === 'r') controller.dispatchActiveEvent({ type: 'command', command: 'refresh' });
+        else if (key.ctrl && _input === 'd') controller.dispatchActiveEvent({ type: 'command', command: 'reset' });
+        else if (key.return) {
+          controller.dispatchActiveEvent({
+            type: 'accept',
+            input: { kind: 'composer', text: currentValue, cursor: currentCursor },
+            selected: undefined,
+          });
+        } else if (hasCategoryOrProviderSwitch && key.leftArrow) {
+          controller.dispatchActiveEvent({ type: 'command', command: 'left' });
+        } else if (hasCategoryOrProviderSwitch && key.rightArrow) {
+          controller.dispatchActiveEvent({ type: 'command', command: 'right' });
+        } else if (!hasCategoryOrProviderSwitch && key.leftArrow) {
+          cursorOffsetRef.current = Math.max(0, currentCursor - 1);
+          controller.applyEditorEdit({ type: 'move-cursor', cursor: currentCursor - 1 });
+        } else if (!hasCategoryOrProviderSwitch && key.rightArrow) {
+          cursorOffsetRef.current = Math.min(currentValue.length, currentCursor + 1);
+          controller.applyEditorEdit({ type: 'move-cursor', cursor: currentCursor + 1 });
+        } else if (key.backspace && currentCursor > 0) {
+          const nextValue = currentValue.slice(0, currentCursor - 1) + currentValue.slice(currentCursor);
+          inputValueRef.current = nextValue;
+          cursorOffsetRef.current = currentCursor - 1;
+          controller.applyEditorEdit({ type: 'set-text', text: nextValue, cursor: currentCursor - 1 });
+        } else if (key.delete && currentCursor < currentValue.length) {
+          const nextValue = currentValue.slice(0, currentCursor) + currentValue.slice(currentCursor + 1);
+          inputValueRef.current = nextValue;
+          controller.applyEditorEdit({ type: 'set-text', text: nextValue, cursor: currentCursor });
+        } else if (
+          _input &&
+          !key.ctrl &&
+          !key.meta &&
+          !key.escape &&
+          !key.tab &&
+          !key.return &&
+          !key.upArrow &&
+          !key.downArrow &&
+          !key.leftArrow &&
+          !key.rightArrow
+        ) {
+          const nextValue = currentValue.slice(0, currentCursor) + _input + currentValue.slice(currentCursor);
+          inputValueRef.current = nextValue;
+          cursorOffsetRef.current = currentCursor + _input.length;
+          controller.applyEditorEdit({ type: 'insert', text: _input });
+        }
+        return;
+      }
+      // Not controller-owned (graph 4): fall through to the legacy handler
+      // table below.
+    }
     if (currentMode === 'text' && selectedQueueIndex !== null) {
       if (queueSelectionJustOpenedRef.current) {
         queueSelectionJustOpenedRef.current = false;
@@ -1113,14 +1162,30 @@ const InputBox: FC<Props> = ({
           notice={queueNotice}
         />
       )}
-      {controller.getSnapshot().stack.at(-1)?.kind !== 'rewind' &&
-        controller.getSnapshot().stack.at(-1)?.kind !== 'providers' &&
-        controller.getSnapshot().stack.at(-1)?.kind !== 'slash' && (
-          <PopupManager
-            {...toPopupProps({ path, settings, settingsValue, models, skills, rewind })}
-            settingsService={settingsService}
-          />
-        )}
+      {(() => {
+        const topFrameKind = controller.getSnapshot().stack.at(-1)?.kind;
+        // Every kind rendered by MenuStackHost must be excluded here so the
+        // legacy popup and the controller-mounted session never render for
+        // the same frame at once. `settings` / `settings_value` / `model`
+        // frames are controller-owned in production whenever one exists on
+        // the stack, because the settings / settings-value-child /
+        // settings-model rules are unconditionally enabled.
+        const isControllerRendered =
+          topFrameKind === 'rewind' ||
+          topFrameKind === 'providers' ||
+          topFrameKind === 'slash' ||
+          topFrameKind === 'settings' ||
+          topFrameKind === 'settings_value' ||
+          topFrameKind === 'model';
+        return (
+          !isControllerRendered && (
+            <PopupManager
+              {...toPopupProps({ path, settings, settingsValue, models, skills, rewind })}
+              settingsService={settingsService}
+            />
+          )
+        );
+      })()}
       <MenuStackHost
         stack={controller.getSnapshot().stack}
         controller={controller}
@@ -1131,6 +1196,9 @@ const InputBox: FC<Props> = ({
           onSlashTabComplete,
           path,
           skills,
+          settings,
+          settingsValue,
+          models,
         }}
       />
 

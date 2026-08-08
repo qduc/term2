@@ -2,12 +2,19 @@ import { MODEL_SETTING_TRIGGERS } from '../../utils/ai/model-settings.js';
 import type { SlashCommand, SlashCommandCompletion } from '../../slash-commands.js';
 import { findPathTrigger } from './triggers.js';
 
+// `origin` distinguishes graph 3 (settings-backed, reached through the
+// mounted `/settings ` list) from graph 4 (a direct top-level trigger such as
+// `/model `, `/effort `, `/auto-approve `). Both graphs currently share this
+// detection function, but the controller may only own one graph's rule ids at
+// a time (see the Phase 4 rule-id collision note in the menu redesign plan),
+// so callers that build controller trigger rules must branch on `origin`
+// rather than merging the two graphs back together.
 export type ActiveMenu =
   | { type: 'none' }
   | { type: 'slash' }
   | { type: 'settings'; startIndex: number }
-  | { type: 'settings_value'; key: string; startIndex: number }
-  | { type: 'model'; startIndex: number }
+  | { type: 'settings_value'; key: string; startIndex: number; origin: 'settings-list' | 'direct-trigger' }
+  | { type: 'model'; startIndex: number; origin: 'settings-backed' | 'direct-trigger' }
   | { type: 'skills'; startIndex: number }
   | { type: 'path'; trigger: { start: number; query: string } };
 
@@ -21,13 +28,20 @@ export const determineActiveMenu = (value: string, cursorOffset: number, command
   const commandCompletions = getCommandCompletions(commands);
 
   // Priority 0: model selection. Settings-backed model keys stay in model-settings;
-  // command-backed model triggers are declared on slash commands.
+  // command-backed model triggers are declared on slash commands. The two
+  // loops preserve the original combined-array iteration order (settings-
+  // backed triggers win ties) while tagging which graph the match belongs to.
   const commandModelTriggers = commandCompletions
     .filter((completion) => completion.type === 'model')
     .map((completion) => completion.trigger);
-  for (const trigger of [...MODEL_SETTING_TRIGGERS, ...commandModelTriggers]) {
+  for (const trigger of MODEL_SETTING_TRIGGERS) {
     if (value.startsWith(trigger) && cursorOffset >= trigger.length) {
-      return { type: 'model', startIndex: trigger.length };
+      return { type: 'model', startIndex: trigger.length, origin: 'settings-backed' };
+    }
+  }
+  for (const trigger of commandModelTriggers) {
+    if (value.startsWith(trigger) && cursorOffset >= trigger.length) {
+      return { type: 'model', startIndex: trigger.length, origin: 'direct-trigger' };
     }
   }
 
@@ -50,7 +64,7 @@ export const determineActiveMenu = (value: string, cursorOffset: number, command
       if (keyAndSpaceMatch) {
         const key = keyAndSpaceMatch[1] ?? '';
         const startIndex = completion.trigger.length + (keyAndSpaceMatch[0]?.length ?? 0);
-        return { type: 'settings_value', key, startIndex };
+        return { type: 'settings_value', key, startIndex, origin: 'settings-list' };
       }
       if (cursorOffset >= completion.trigger.length) {
         return { type: 'settings', startIndex: completion.trigger.length };
@@ -65,6 +79,7 @@ export const determineActiveMenu = (value: string, cursorOffset: number, command
         type: 'settings_value',
         key: completion.settingKey,
         startIndex: completion.trigger.length,
+        origin: 'direct-trigger',
       };
     }
   }

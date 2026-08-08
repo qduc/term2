@@ -10,6 +10,7 @@ import { computeModelInsertion } from './input/insertions.js';
 import { SETTINGS_TRIGGER } from './input/triggers.js';
 import { InputProvider, useInputContext } from '../context/InputContext.js';
 import { MenuControllerImpl } from './input/menu-controller.js';
+import { handleSettingsIntent } from './input/settings-intent-host.js';
 import type { SlashCommand } from '../slash-commands.js';
 import { createMockSettingsService } from '../services/settings/settings-service.mock.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
@@ -77,6 +78,26 @@ const createMockHistoryService = (): HistoryService =>
     addMessage: () => {},
     clear: () => {},
   } as unknown as HistoryService);
+
+// Graph 3 (settings / settings-value-child / settings-model) applies its
+// setting changes through a correlated apply-settings/reset-setting intent,
+// handled by the application effect host — not by InputBox itself. Tests
+// that exercise that end-to-end flow need a controller wired to the same
+// handler app.tsx uses, mirroring the real composition root.
+const createSettingsBackedController = (
+  settingsService: SettingsService,
+  opts?: { onSystemMessage?: (text: string) => void },
+) => {
+  const controller = new MenuControllerImpl();
+  controller.setIntentHost(({ intentRequest }) =>
+    handleSettingsIntent(intentRequest, {
+      settingsService,
+      onSettingChange: () => {},
+      onSystemMessage: opts?.onSystemMessage,
+    }),
+  );
+  return controller;
+};
 
 // Default props for InputBox
 const defaultProps = {
@@ -925,7 +946,7 @@ it.sequential('settings-backed model selection saves a typed custom model when n
   };
 
   const { lastFrame, stdin } = await renderAndFlush(
-    <InputProvider>
+    <InputProvider controller={createSettingsBackedController(settingsService)}>
       <StateDisplay />
       <InputBox
         {...defaultProps}
@@ -1057,7 +1078,7 @@ it.sequential(
     };
 
     const { stdin } = await renderAndFlush(
-      <InputProvider>
+      <InputProvider controller={createSettingsBackedController(settingsService)}>
         <InputBox
           {...defaultProps}
           settingsService={settingsService}
@@ -1095,7 +1116,7 @@ it.sequential('settings value completion persists startup-only settings for the 
   };
 
   const { stdin } = await renderAndFlush(
-    <InputProvider>
+    <InputProvider controller={createSettingsBackedController(settingsService)}>
       <InputBox
         {...defaultProps}
         settingsService={settingsService}
@@ -1133,14 +1154,15 @@ it.sequential('settings value completion shows restart notice for startup-only s
   };
 
   const { stdin } = await renderAndFlush(
-    <InputProvider>
+    <InputProvider
+      controller={createSettingsBackedController(settingsService, {
+        onSystemMessage: (text) => systemMessages.push(text),
+      })}
+    >
       <InputBox
         {...defaultProps}
         settingsService={settingsService}
         slashCommands={[...mockSlashCommands, mockSettingsCommand]}
-        onSystemMessage={(text) => {
-          systemMessages.push(text);
-        }}
       />
     </InputProvider>,
   );
@@ -1327,7 +1349,7 @@ it.sequential('backspace works after committing a setting value and returning to
   };
 
   const { lastFrame, stdin } = await renderAndFlush(
-    <InputProvider>
+    <InputProvider controller={createSettingsBackedController(settingsService)}>
       <InputCursorStateDisplay />
       <InputBox
         {...defaultProps}
@@ -1345,9 +1367,11 @@ it.sequential('backspace works after committing a setting value and returning to
   // Wait for settings_value_completion mode
   await waitFor(lastFrame, (f) => f.includes('Mode:settings_value_completion'), { timeoutMs: 3000 });
 
-  // Press Enter to commit the currently-selected value (50).
-  // This triggers insertSelectedSettingValue → reopenSettingsMenu,
-  // restoring the input to "/settings" with settings_completion mode.
+  // Press Enter to commit the currently-selected value (50). The
+  // settings-value-child frame's Back restores the bare settings prefix
+  // (this activation was reached by passively typing the whole trigger, so
+  // there was never a mounted settings list with a live filter to return
+  // to — see the settingsListRestorePoint note in triggers.ts).
   await writeInput(stdin, '\r');
 
   // Wait for settings_completion to re-open

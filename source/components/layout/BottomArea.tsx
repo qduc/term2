@@ -92,6 +92,7 @@ export type BottomAreaProps = {
   getForegroundTaskTransferCandidate?: BackgroundTaskControlPort['getForegroundTransferCandidate'];
   listForegroundTaskTransferCandidates?: BackgroundTaskControlPort['listForegroundTransferCandidates'];
   moveForegroundTaskToBackground?: BackgroundTaskControlPort['moveForegroundToBackground'];
+  backgroundApprovalPendingCount?: number;
 };
 
 const BottomArea: FC<BottomAreaProps> = ({
@@ -155,6 +156,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   getForegroundTaskTransferCandidate,
   listForegroundTaskTransferCandidates,
   moveForegroundTaskToBackground,
+  backgroundApprovalPendingCount = 0,
 }) => {
   const [dotCount, setDotCount] = useState(1);
   const [backgroundTaskManagerOpen, setBackgroundTaskManagerOpen] = useState(false);
@@ -268,16 +270,21 @@ const BottomArea: FC<BottomAreaProps> = ({
         ) : (
           <Box flexDirection="column">
             {showApprovalPrompt && pendingApproval && (
-              <ApprovalPrompt
-                approval={pendingApproval}
-                onApprove={onApprove}
-                onReject={onReject}
-                onCancel={onCancel}
-                onTypeAnswer={onTypeAnswer}
-                onNavigateQuestion={onNavigateQuestion}
-                currentQuestionIndex={currentAskUserQuestionIndex}
-                waitingForAskUserAnswer={waitingForAskUserAnswer}
-              />
+              <Box flexDirection="column">
+                {backgroundApprovalPendingCount > 1 && (
+                  <Text color="#f59e0b">Background approval · {backgroundApprovalPendingCount - 1} queued</Text>
+                )}
+                <ApprovalPrompt
+                  approval={pendingApproval}
+                  onApprove={onApprove}
+                  onReject={onReject}
+                  onCancel={onCancel}
+                  onTypeAnswer={onTypeAnswer}
+                  onNavigateQuestion={onNavigateQuestion}
+                  currentQuestionIndex={currentAskUserQuestionIndex}
+                  waitingForAskUserAnswer={waitingForAskUserAnswer}
+                />
+              </Box>
             )}
             {isProcessing && toolCallStreamingInfo && (
               <Text color="#64748b">

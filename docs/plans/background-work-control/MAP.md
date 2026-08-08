@@ -37,7 +37,7 @@ Users can inspect and stop individual background subagents or shell jobs, move a
 
 ## Fog
 
-- Whether the final approval UI should preempt the composer globally or open from the task manager while showing a persistent approval-needed alert. The backend contract is the same either way.
+- Whether a future task-manager affordance should also link directly to the active approval; the shipped presentation uses global preemption.
 - Whether shutdown should await every adopted subagent lease or use a bounded drain after cancellation; it must not report completion before the lease settles.
 
 ## Out of scope
@@ -60,3 +60,4 @@ Users can inspect and stop individual background subagents or shell jobs, move a
 - 2026-08-08: The session now installs a FIFO approval controller for adopted child leases. It applies each decision through the existing approval policy to the exact retained continuation, never the root pending-approval state; shutdown keeps the durable subagent sinks attached until adopted leases settle.
 - 2026-08-08: Foreground subagent candidates and truthful move now flow through the session-owned task-control port, including the ordinary background action notification. The task-manager presentation remains deferred behind menu Phase 5 ownership.
 - 2026-08-08: The task-manager handoff is complete: BottomArea and the conversation hook project all foreground transfer candidates, and the modal confirms transfers using the executor-specific target identity. Focused Ink coverage and typecheck are green.
+- 2026-08-08: Adopted-subagent approvals now globally preempt the composer through the existing approval prompt. Only the FIFO head is shown; later requests remain queued and the prompt reports their count. Decisions resolve through the session approval port using the exact revision and entry identity.

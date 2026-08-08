@@ -164,6 +164,8 @@ const App: FC<AppProps> = ({
     getForegroundTaskTransferCandidate,
     moveForegroundTaskToBackground,
     listForegroundTaskTransferCandidates,
+    backgroundSubagentApproval,
+    resolveBackgroundSubagentApproval,
     sendUserMessage,
     admissionConfirmation,
     submitTurnForAdmission,
@@ -214,6 +216,12 @@ const App: FC<AppProps> = ({
     logWriter,
     notifier,
   });
+
+  // Keep older test/integration harnesses compatible while the session facade
+  // rolls out the adopted-subagent approval channel.
+  const backgroundApprovalState =
+    backgroundSubagentApproval ?? ({ revision: 0, current: null, pendingCount: 0, closed: false } as const);
+  const backgroundApprovalEntry = backgroundApprovalState.current;
 
   // Notify cli.tsx when the conversation has content so it can decide whether
   // to show the "To resume this conversation" message.
@@ -456,9 +464,23 @@ const App: FC<AppProps> = ({
         );
         return;
       }
+      if (backgroundApprovalEntry) {
+        resolveBackgroundSubagentApproval({
+          revision: backgroundApprovalState.revision,
+          entry: backgroundApprovalEntry,
+          decision: { answer: answer ?? 'yes' },
+        });
+        return;
+      }
       await submitApprovalDecision(answer);
     },
-    [sandboxPromptRequest, submitApprovalDecision],
+    [
+      backgroundApprovalEntry,
+      backgroundApprovalState.revision,
+      resolveBackgroundSubagentApproval,
+      sandboxPromptRequest,
+      submitApprovalDecision,
+    ],
   );
 
   const handleReject = useCallback(() => {
@@ -466,17 +488,37 @@ const App: FC<AppProps> = ({
       sandboxApprovalCoordinatorRef.current?.resolve(sandboxPromptRequest, 'deny');
       return;
     }
+    if (backgroundApprovalEntry) {
+      setWaitingForRejectionReason(true);
+      return;
+    }
     setWaitingForRejectionReason(true);
-  }, [sandboxPromptRequest, setWaitingForRejectionReason]);
+  }, [
+    backgroundApprovalEntry,
+    backgroundApprovalState.revision,
+    resolveBackgroundSubagentApproval,
+    sandboxPromptRequest,
+    setWaitingForRejectionReason,
+  ]);
 
   const handleCancelAskUser = useCallback(() => {
     if (sandboxPromptRequest || pendingApproval?.toolName !== 'ask_user') return;
     cancelAskUser();
   }, [cancelAskUser, pendingApproval, sandboxPromptRequest]);
 
+  const backgroundPendingApproval: import('./contracts/conversation.js').ApprovalDescriptor | null =
+    backgroundApprovalEntry
+      ? {
+          agentName: `${backgroundApprovalEntry.runId} (${backgroundApprovalEntry.toolName})`,
+          toolName: backgroundApprovalEntry.toolName,
+          argumentsText: backgroundApprovalEntry.argumentsText,
+          rawInterruption: { runId: backgroundApprovalEntry.runId },
+          callId: backgroundApprovalEntry.toolCallId,
+        }
+      : null;
   const effectivePendingApproval =
     sandboxPromptRequest === null
-      ? pendingApproval
+      ? backgroundPendingApproval ?? pendingApproval
       : {
           agentName: 'Sandbox',
           toolName: 'sandbox_network_access',
@@ -485,10 +527,10 @@ const App: FC<AppProps> = ({
           }?`,
           rawInterruption: sandboxPromptRequest,
         };
-  const effectiveWaitingForApproval = sandboxPromptRequest ? true : waitingForApproval;
+  const effectiveWaitingForApproval = sandboxPromptRequest || backgroundPendingApproval ? true : waitingForApproval;
   const effectiveWaitingForRejectionReason = sandboxPromptRequest ? false : waitingForRejectionReason;
   const effectiveWaitingForAskUserAnswer = sandboxPromptRequest ? false : waitingForAskUserAnswer;
-  const effectiveIsProcessing = sandboxPromptRequest ? false : isProcessing;
+  const effectiveIsProcessing = sandboxPromptRequest || backgroundPendingApproval ? false : isProcessing;
 
   // Single source of truth for "which surface owns keyboard input right now."
   // Computed from the same effective state passed to BottomArea so the app
@@ -545,6 +587,15 @@ const App: FC<AppProps> = ({
   });
 
   const handleSubmit = async (turn: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }): Promise<void> => {
+    if (backgroundApprovalEntry && waitingForRejectionReason) {
+      resolveBackgroundSubagentApproval({
+        revision: backgroundApprovalState.revision,
+        entry: backgroundApprovalEntry,
+        decision: { answer: 'no', rejectionReason: turn.text },
+      });
+      setWaitingForRejectionReason(false);
+      return;
+    }
     if (await submitConversationTurn(turn)) {
       return;
     }
@@ -706,6 +757,7 @@ const App: FC<AppProps> = ({
             getForegroundTaskTransferCandidate={getForegroundTaskTransferCandidate}
             moveForegroundTaskToBackground={moveForegroundTaskToBackground}
             listForegroundTaskTransferCandidates={listForegroundTaskTransferCandidates}
+            backgroundApprovalPendingCount={backgroundApprovalState.pendingCount}
             onRetractQueuedMessage={retractPendingSubmission}
             onEditQueuedMessage={editPendingSubmission}
             onSubmit={handleSubmit}

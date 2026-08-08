@@ -151,6 +151,22 @@ it.sequential('BottomArea shows approval prompt when waiting for approval', asyn
   });
 });
 
+it.sequential('BottomArea shows the FIFO count for adopted-subagent approvals', async () => {
+  const { lastFrame, unmount } = await renderBottomArea({
+    ...baseProps,
+    pendingApproval: {
+      agentName: 'run-worker (shell)',
+      toolName: 'shell',
+      argumentsText: '{"commands":"pnpm test"}',
+      rawInterruption: null,
+    },
+    waitingForApproval: true,
+    backgroundApprovalPendingCount: 3,
+  });
+  expect(lastFrame() ?? '').toContain('Background approval · 2 queued');
+  act(() => unmount());
+});
+
 it.sequential('BottomArea shows approval prompt while the queue awaits the active approval action', async () => {
   const approval = {
     agentName: 'Agent',

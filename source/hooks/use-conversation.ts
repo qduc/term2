@@ -17,6 +17,10 @@ import type { UserTurn } from '../types/user-turn.js';
 import type { RewindTargetId } from '../services/conversation/conversation-store.js';
 import { conversationUIReducer, createInitialUIState, getConversationUIFlags } from './conversation-ui-reducer.js';
 import type { BackgroundTask } from '../services/subagents/subagent-notification-store.js';
+import type {
+  BackgroundSubagentApprovalSnapshot,
+  BackgroundSubagentApprovalResolutionRequest,
+} from '../services/approval/background-subagent-approval-queue.js';
 import type { SessionCostAccumulator } from '../services/cost/model-cost.js';
 import {
   ConversationAdmissionWorkflow,
@@ -142,6 +146,11 @@ export const useConversation = ({
     [conversationService],
   );
   const [backgroundSubagentTaskState, setBackgroundSubagentTaskState] = useState(readBackgroundSubagentTasks);
+  const readBackgroundApproval = useCallback(
+    (): BackgroundSubagentApprovalSnapshot => conversationService.backgroundSubagentApprovals.getSnapshot(),
+    [conversationService],
+  );
+  const [backgroundSubagentApproval, setBackgroundSubagentApproval] = useState(readBackgroundApproval);
 
   const refreshBackgroundSubagentTasks = useCallback(() => {
     setBackgroundSubagentTaskState(readBackgroundSubagentTasks());
@@ -186,6 +195,20 @@ export const useConversation = ({
     const interval = setInterval(refreshBackgroundSubagentTasks, 1_000);
     return () => clearInterval(interval);
   }, [backgroundSubagentTaskState.tasks.length, refreshBackgroundSubagentTasks]);
+
+  useEffect(
+    () =>
+      conversationService.backgroundSubagentApprovals.subscribe(() =>
+        setBackgroundSubagentApproval(readBackgroundApproval()),
+      ),
+    [conversationService, readBackgroundApproval],
+  );
+
+  const resolveBackgroundSubagentApproval = useCallback(
+    (request: BackgroundSubagentApprovalResolutionRequest) =>
+      conversationService.backgroundSubagentApprovals.resolve(request),
+    [conversationService],
+  );
 
   useEffect(() => {
     dispatch({ type: 'rate_limit/cleared' });
@@ -434,6 +457,8 @@ export const useConversation = ({
     getForegroundTaskTransferCandidate,
     moveForegroundTaskToBackground,
     listForegroundTaskTransferCandidates,
+    backgroundSubagentApproval,
+    resolveBackgroundSubagentApproval,
     sendUserMessage,
     admissionConfirmation,
     submitTurnForAdmission,

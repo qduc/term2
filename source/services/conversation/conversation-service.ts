@@ -28,6 +28,7 @@ import type {
   BackgroundSubagentNotificationPort,
   BackgroundSubagentTaskPort,
 } from '../subagents/subagent-notification-store.js';
+import type { BackgroundSubagentApprovalChannel } from '../session/session-composition.js';
 import type { QueueStateKind, QueueStateObserver } from './conversation-adapter.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import { createConversationRuntime } from './conversation-runtime-factory.js';
@@ -149,6 +150,10 @@ export class ConversationService {
   /** Details and stop requests for conversation-owned background work. */
   get backgroundTaskControl(): BackgroundTaskControlPort {
     return this.#runtime.backgroundTaskControl;
+  }
+
+  get backgroundSubagentApprovals(): BackgroundSubagentApprovalChannel {
+    return this.#runtime.backgroundSubagentApprovals;
   }
 
   get sessionId(): string {

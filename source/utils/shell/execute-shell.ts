@@ -235,6 +235,29 @@ function signalChildProcess(child: ChildProcess, signal: NodeJS.Signals): void {
   child.kill(signal);
 }
 
+/**
+ * Children are spawned detached, so they own their process group and survive an
+ * exit of this process. Tracking them lets the CLI's exit hook take the group
+ * down with us instead of orphaning a background subagent's command.
+ */
+const liveChildren = new Set<ChildProcess>();
+
+/** Synchronously SIGKILL every live child's process group. Safe in a `process.on('exit')` hook. */
+export function killLiveShellChildren(): void {
+  for (const child of liveChildren) {
+    try {
+      if (process.platform !== 'win32' && child.pid) {
+        process.kill(-child.pid, 'SIGKILL');
+      } else {
+        child.kill('SIGKILL');
+      }
+    } catch {
+      /* already gone */
+    }
+  }
+  liveChildren.clear();
+}
+
 function stopChildProcess(child: ChildProcess): void {
   if (process.platform !== 'win32' && child.pid) {
     try {
@@ -301,6 +324,7 @@ async function executeShellCommandUnleased(
       let paused = false;
       let settled = false;
       let finalizeImpl: (() => void) | undefined;
+      let spawnedChild: ChildProcess | undefined;
 
       const clearCommandTimeout = () => {
         if (timeoutId) {
@@ -350,6 +374,7 @@ async function executeShellCommandUnleased(
       };
       const stopChild = () => beginTermination();
       const cleanupListeners = () => {
+        if (spawnedChild) liveChildren.delete(spawnedChild);
         clearCommandTimeout();
         clearTerminationTimers();
         signal?.removeEventListener('abort', stopChild);
@@ -400,6 +425,8 @@ async function executeShellCommandUnleased(
       );
 
       if (!settled) {
+        spawnedChild = child;
+        liveChildren.add(child);
         startCommandTimeout();
         if (pauseOnSandboxNetworkApproval) {
           unregisterPauseController = registerSandboxNetworkApprovalPauseController({

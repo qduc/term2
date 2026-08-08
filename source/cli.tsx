@@ -36,6 +36,7 @@ import {
   type RestoredState,
 } from './services/conversation/conversation-persistence.js';
 import { formatResumeList } from './utils/resume-list.js';
+import { killLiveShellChildren } from './utils/shell/execute-shell.js';
 import { createConversationLogWriter, LockConflictError } from './services/logging/conversation-log-writer.js';
 import { AGENT_AFFECTING_SETTINGS } from './services/logging/conversation-log-events.js';
 import { installPlanModeInterceptor } from './services/plan-mode-interceptor.js';
@@ -109,6 +110,10 @@ process.on('exit', () => {
   if (process.stdout.isTTY) {
     process.stdout.write('\x1b[?1004l');
   }
+  // Shell children are spawned detached, so nothing else takes them down with
+  // us. A background subagent's in-flight command would otherwise keep running
+  // after the CLI is gone.
+  killLiveShellChildren();
   if (activeLogWriter) {
     try {
       // Synchronous close path: the writer's close() does sync work and unlinks the lock.

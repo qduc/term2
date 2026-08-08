@@ -50,8 +50,10 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
   // eslint-disable-next-line prefer-const
   let asyncRegistry: SubagentAsyncRegistry | undefined;
   const onEventWithPeek = (event: ConversationEvent): void => {
-    deps.onEvent?.(event);
     asyncRegistry?.handleSubagentEvent(event);
+    // Registry state is updated before the bridge routes the event. This is
+    // what makes an adopted run's first terminal event background-owned.
+    deps.onEvent?.(event);
   };
 
   const toolPolicy = new SubagentToolPolicy({

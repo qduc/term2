@@ -174,6 +174,16 @@ export class SubagentManager {
   }
 
   /**
+   * Transfer one live foreground nested run into the async registry. This is
+   * a candidate lookup plus atomic registry adoption, never a restart.
+   */
+  moveForegroundSubagent(runId: string): SubagentRunHandle | undefined {
+    const candidate = this.#runtime.nestedRunner.getForegroundCandidate(runId);
+    if (!candidate) return undefined;
+    return this.#runtime.asyncRegistry.adoptForegroundLease(candidate.lease, candidate);
+  }
+
+  /**
    * Retrieve the result of a previously started asynchronous subagent run.
    */
   getRunResult(runId: string, signal?: AbortSignal): Promise<SubagentResult> {

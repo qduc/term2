@@ -8,6 +8,7 @@ import { AgentClient } from '../../lib/agent-client.js';
 import { createSubagentRuntime } from './runtime.js';
 import { SessionContextService } from '../session/session-context-service.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import { ForegroundSubagentLease } from './foreground-subagent-lease.js';
 import {
   createMockLogger,
   createMockSettings,
@@ -35,6 +36,49 @@ type RunParams = {
 };
 const make = (run: (params: RunParams) => Promise<SubagentResult> = async ({ request }) => result(request.role)) =>
   new SubagentAsyncRegistry({ logger: createMockLogger(), run });
+
+describe('foreground lease adoption', () => {
+  it('adopts the exact stable lease without starting the async runner and settles from one terminal event', async () => {
+    const events: ConversationEvent[] = [];
+    const run = vi.fn(() => Promise.resolve(result('explorer')));
+    const registry = new SubagentAsyncRegistry({
+      logger: createMockLogger(),
+      run,
+      onEvent: (event) => events.push(event),
+    });
+    const lease = new ForegroundSubagentLease({ runId: 'root-call', parentSignal: new AbortController().signal });
+
+    const handle = registry.adoptForegroundLease(lease, { role: 'explorer', task: 'inspect' });
+
+    expect(handle).toEqual({ runId: 'root-call', role: 'explorer', status: 'running', task: 'inspect' });
+    expect(run).not.toHaveBeenCalled();
+    expect(lease.adopted).toBe(true);
+    registry.handleSubagentEvent({
+      type: 'subagent_completed',
+      async: true,
+      result: { ...result('explorer'), agentId: 'root-call' },
+    } as ConversationEvent);
+    await expect(registry.getResult('root-call')).resolves.toMatchObject({ agentId: 'root-call', status: 'completed' });
+    expect(events.filter((event) => event.type === 'subagent_completed')).toHaveLength(0);
+    registry.dispose();
+  });
+
+  it('leaves foreground ownership intact when adoption is rejected and cancels an adopted lease', () => {
+    const registry = make(() => new Promise<SubagentResult>(() => undefined));
+    registry.dispose();
+    const foreground = new ForegroundSubagentLease({ runId: 'still-foreground' });
+    expect(() => registry.adoptForegroundLease(foreground, { role: 'explorer', task: 'inspect' })).toThrow(/disposed/);
+    expect(foreground.adopted).toBe(false);
+    expect(foreground.signal.aborted).toBe(false);
+
+    const live = make(() => new Promise<SubagentResult>(() => undefined));
+    const adopted = new ForegroundSubagentLease({ runId: 'adopted' });
+    live.adoptForegroundLease(adopted, { role: 'explorer', task: 'inspect' });
+    live.cancelRun('adopted');
+    expect(adopted.signal.aborted).toBe(true);
+    live.dispose();
+  });
+});
 
 it('returns the exact running launch handle and executes with its owned session', async () => {
   let session: unknown;

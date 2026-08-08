@@ -17,6 +17,7 @@ import type {
 import { SubagentRunControl } from './subagent-run-control.js';
 import { SubagentSession } from './subagent-session.js';
 import { isAbortLike, safeEmit, truncatePreview } from './utils.js';
+import { ForegroundSubagentLease } from './foreground-subagent-lease.js';
 
 export const SUBAGENT_RUN_NAME_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/;
 const MAX_STEERING_GUIDANCE_CHARACTERS = 2_000;
@@ -90,6 +91,8 @@ type StoredRun = {
    * continued turns in a different provider-side session than the first ones.
    */
   trafficContext?: SessionTrafficContext;
+  /** Present only for a foreground execution adopted without restart. */
+  lease?: ForegroundSubagentLease;
 };
 
 export interface SubagentAsyncRegistryDeps {
@@ -265,6 +268,82 @@ export class SubagentAsyncRegistry {
     return { runId, role, ...(name !== undefined ? { name } : {}), status: 'running', task: request.task };
   }
 
+  /**
+   * Atomically publishes an already-running foreground child. Unlike
+   * startRun this never constructs a session runner or dispatches provider
+   * work; the supplied lease retains the exact live execution.
+   */
+  adoptForegroundLease(
+    lease: ForegroundSubagentLease,
+    request: Pick<SubagentRequest, 'role' | 'task' | 'name' | 'parentTool'>,
+  ): SubagentRunHandle {
+    if (this.#disposed) throw new Error('Subagent async registry is disposed');
+    if (lease.adopted || lease.settled) throw new Error(`Foreground subagent lease ${lease.runId} is not adoptable.`);
+    if (this.#runs.has(lease.runId) || this.#evicted.has(lease.runId)) {
+      throw new Error(`Async subagent run id ${lease.runId} is already retained.`);
+    }
+    if (!['explorer', 'worker', 'mentor', 'librarian'].includes(request.role)) {
+      throw new SubagentRegistryError('not_continuable', `Unknown subagent role: ${request.role}`);
+    }
+    if (
+      request.name !== undefined &&
+      (this.#activeNameToRunId.has(request.name) || !SUBAGENT_RUN_NAME_PATTERN.test(request.name))
+    ) {
+      throw new SubagentRegistryError(
+        this.#activeNameToRunId.has(request.name) ? 'name_in_use' : 'invalid_name',
+        `Invalid or active async subagent name: ${request.name}`,
+      );
+    }
+    // Validate every possible rejection before changing foreground ownership.
+    this.#evictToSessionCap();
+    const session = this.#sessionForRole?.(request.role) ?? new SubagentSession(lease.runId, request.role);
+    for (const active of this.#runs.values()) {
+      if (isActiveStatus(active.status) && active.session === session) {
+        throw new SubagentRegistryError('already_active', `Session for role ${request.role} is already active`);
+      }
+    }
+    let resolve!: (result: SubagentResult) => void;
+    const promise = new Promise<SubagentResult>((r) => (resolve = r));
+    const stored: StoredRun = {
+      runId: lease.runId,
+      role: request.role,
+      task: request.task,
+      ...(request.name !== undefined ? { name: request.name } : {}),
+      session,
+      status: 'running',
+      control: new SubagentRunControl(),
+      evidence: { filesChanged: new Set(), toolsUsed: new Map(), diffStat: new Map() },
+      lastUsedAt: this.#now(),
+      resolve,
+      promise,
+      settled: false,
+      startedAt: this.#now(),
+      toolCounts: new Map(),
+      turnHistory: [],
+      pendingToolCounts: new Map(),
+      currentText: '',
+      lease,
+    };
+    this.#runs.set(lease.runId, stored);
+    if (request.name !== undefined) this.#activeNameToRunId.set(request.name, lease.runId);
+    try {
+      lease.adopt();
+    } catch (error) {
+      this.#runs.delete(lease.runId);
+      if (request.name !== undefined) this.#activeNameToRunId.delete(request.name);
+      throw error;
+    }
+    safeEmit(this.#logger, this.#onEvent, {
+      type: 'subagent_started',
+      agentId: lease.runId,
+      role: request.role,
+      task: request.task,
+      parentTool: request.parentTool ?? 'run_subagent',
+      async: true,
+    });
+    return { runId: lease.runId, role: request.role, status: 'running', task: request.task };
+  }
+
   hasActiveRunForRole(role: string): boolean {
     return [...this.#runs.values()].some((run) => run.role === role && isActiveStatus(run.status));
   }
@@ -332,6 +411,14 @@ export class SubagentAsyncRegistry {
    * the registry learns `subagent_tool_started` mid-run.
    */
   handleSubagentEvent(event: ConversationEvent): void {
+    if (event.type === 'subagent_completed') {
+      const run = this.#runs.get(event.result.agentId);
+      if (run?.lease && !run.settled) {
+        this.#accumulateEvidence(run.evidence, event.result);
+        this.#settle(run, this.#assembleTerminalResult(run, event.result), false);
+      }
+      return;
+    }
     if (
       event.type !== 'subagent_tool_started' &&
       event.type !== 'subagent_text_turn' &&
@@ -441,6 +528,7 @@ export class SubagentAsyncRegistry {
   #cancelRun(run: StoredRun): void {
     if (run.status !== 'running' && run.status !== 'waiting_for_answer') return;
     run.status = 'cancelling';
+    run.lease?.cancel();
     run.control.requestCancellation();
   }
 
@@ -585,7 +673,7 @@ export class SubagentAsyncRegistry {
     this.#settle(run, this.#assembleTerminalResult(run, result));
   }
 
-  #settle(run: StoredRun, result: SubagentResult): void {
+  #settle(run: StoredRun, result: SubagentResult, emit = true): void {
     if (run.settled) return;
     run.status = result.status;
     run.result = result;
@@ -595,9 +683,11 @@ export class SubagentAsyncRegistry {
       this.#activeNameToRunId.delete(run.name);
     }
     run.control.settle();
+    run.lease?.settle();
     run.removeParentAbortListener?.();
     run.resolve(result);
-    if (!this.#disposed) safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result, async: true });
+    if (emit && !this.#disposed)
+      safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result, async: true });
   }
 
   #askOrchestrator(run: StoredRun, question: string): Promise<string> {

@@ -400,6 +400,16 @@ export class SubagentBridge {
     return this.cancelSubagentRun({ target: runId });
   }
 
+  /**
+   * Minimal session-control seam for a later task manager. Successful moves
+   * switch event routing through the registry's async started event; no UI or
+   * approval policy is coupled here.
+   */
+  moveForegroundSubagent(runId: string): SubagentRunHandle | undefined {
+    if (!this.#subagentManager) throw new Error('Transient agent clients cannot move subagents.');
+    return this.#subagentManager.moveForegroundSubagent(runId);
+  }
+
   abortAsyncRun = (runId: string): void => {
     this.#subagentManager?.abortAsyncRun(runId);
   };

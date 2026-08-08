@@ -94,4 +94,18 @@ describe('ForegroundSubagentLease', () => {
     await second;
     expect(approved).toEqual([{ callId: 'one' }, { callId: 'two' }]);
   });
+
+  it('pairs each raw decision with the exact retained continuation closure', async () => {
+    const lease = new ForegroundSubagentLease({ runId: 'child' });
+    lease.adopt();
+    const approved: unknown[] = [];
+    const resumed: string[] = [];
+    const handle = createContinuationHandle({ approve: (item: unknown) => approved.push(item) });
+    const waiting = lease.waitForBackgroundContinuation(handle, { callId: 'one' }, () => resumed.push('exact-loop'));
+    const pending = lease.getPendingApproval()!;
+    expect(lease.resolveBackgroundApproval(pending.generation, { kind: 'approve' })).toBe(true);
+    await expect(waiting).resolves.toBe(true);
+    expect(approved).toEqual([{ callId: 'one' }]);
+    expect(resumed).toEqual(['exact-loop']);
+  });
 });

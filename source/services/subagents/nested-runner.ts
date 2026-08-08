@@ -37,6 +37,7 @@ import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import { getCallIdFromObject } from '../interruption-info.js';
 import { normalizeToolParameters } from '../../lib/tool-invoke.js';
+import { ForegroundSubagentLease } from './foreground-subagent-lease.js';
 
 export type CachedRoleTool = {
   agent: ApplicationAgent;
@@ -96,6 +97,11 @@ export class NestedSubagentRunner {
   #roleToolCache: Map<SupportedSubagentRole, CachedRoleTool>;
   #skillsService?: SkillsService;
   #toolOwnership: ToolOwnershipRegistry;
+  /** Live foreground runs, addressable by the stable root tool-call id. */
+  #foregroundLeases = new Map<
+    string,
+    { lease: ForegroundSubagentLease; role: string; task: string; parentTool?: string }
+  >();
   /**
    * Optional resolver that overrides the default `loadRoleDefinition`.
    * When set, all role loads in `#getOrCreateRoleTool` go through this
@@ -141,6 +147,17 @@ export class NestedSubagentRunner {
 
   getRoleAgent(role: SupportedSubagentRole): any {
     return this.#getOrCreateRoleTool(role).agent;
+  }
+
+  /** Candidate lookup only; ownership moves through the async registry. */
+  getForegroundLease(runId: string): ForegroundSubagentLease | undefined {
+    return this.#foregroundLeases.get(runId)?.lease;
+  }
+
+  getForegroundCandidate(
+    runId: string,
+  ): { lease: ForegroundSubagentLease; role: string; task: string; parentTool?: string } | undefined {
+    return this.#foregroundLeases.get(runId);
   }
 
   #restoreRunContext(resumeState?: string): SubagentRunContext | undefined {
@@ -304,13 +321,21 @@ export class NestedSubagentRunner {
           } satisfies SubagentRunContext);
         runContext.task = task;
 
-        const signal = (details as { signal?: AbortSignal } | undefined)?.signal;
+        const detailsRecord = details as
+          | { signal?: AbortSignal; foregroundSubagentLease?: ForegroundSubagentLease }
+          | undefined;
+        const foregroundLease = detailsRecord?.foregroundSubagentLease;
+        const signal = detailsRecord?.signal;
         const providerId = definition.provider;
         const provider = getProvider(providerId);
         if (!provider?.createStreamedModel) {
           throw new Error(`Provider '${providerId}' has no application-owned model for nested subagents`);
         }
         const createStreamedModel = provider.createStreamedModel;
+        // Continuations can be triggered later from the session's background
+        // control lane. Preserve the provider-history context captured at
+        // launch instead of inheriting that unrelated caller context.
+        const trafficContext = this.#sessionContextService.getContext();
         const loop = new ApplicationRunLoop({
           resolveModel: (model) =>
             createStreamedModel(model, {
@@ -320,7 +345,7 @@ export class NestedSubagentRunner {
             }),
         });
 
-        const stream = loop.startStream(agent, task, {
+        let stream = loop.startStream(agent, task, {
           context: runContext,
           signal,
           // The nested run's ledger was seeded with the parent's decisions by
@@ -330,31 +355,49 @@ export class NestedSubagentRunner {
           // nested run is bounded solely by the model choosing to stop.
           maxTurns: definition.maxTurns,
         });
-        const settled = await stream.completed;
-
-        // This run is the only place that knows both the pending approvals it
-        // raised and the identity that raised them. Claim them now so the
-        // parent's approval flow can attribute them.
-        this.#toolOwnership.claim(collectApprovalCallIds(stream.interruptions), {
-          kind: 'subagent',
-          agentId: runContext.agentId,
-          role,
-        });
+        let settled: unknown;
+        // A transferred run never manufactures a second execution. Each
+        // continuation resolves exactly one tool interruption, then this loop
+        // observes the next returned segment (including batched siblings).
+        for (;;) {
+          settled = await stream.completed;
+          this.#toolOwnership.claim(collectApprovalCallIds(stream.interruptions), {
+            kind: 'subagent',
+            agentId: runContext.agentId,
+            role,
+          });
+          if (!stream.interruptions?.length || !foregroundLease?.adopted || !stream.state) break;
+          let resumed: typeof stream | undefined;
+          const continued = await foregroundLease.waitForBackgroundContinuation(
+            stream.state,
+            stream.interruptions[0],
+            () => {
+              resumed = trafficContext
+                ? this.#sessionContextService.runWithContext(trafficContext, () =>
+                    loop.continueRunStream(stream.state!),
+                  )
+                : loop.continueRunStream(stream.state!);
+            },
+          );
+          if (!continued || !resumed) break;
+          stream = resumed;
+        }
 
         const interrupted = Boolean(stream.interruptions?.length);
+        const cancelled = signal?.aborted === true;
         const result: NestedSubagentResult = {
           agentId: runContext.agentId,
           role,
           // An interrupted run stopped at an approval pause with work still
           // pending; reporting it as completed told the parent model the
           // opposite of what the event stream said.
-          status: interrupted ? 'interrupted' : 'completed',
+          status: cancelled ? 'cancelled' : interrupted ? 'interrupted' : 'completed',
           finalText: extractFinalText(stream),
           filesChanged: [...new Set(runContext.filesChanged)],
           toolsUsed: aggregateContextToolUsage(runContext.toolCounts),
           usage: normalizeAgentRunUsage((settled as { usage?: unknown } | undefined)?.usage) ?? extractUsage(stream),
           costRecords: stream.runCostRecords as ModelRequestCost[] | undefined,
-          ...(interrupted ? { interrupted: true } : {}),
+          ...(interrupted && !cancelled ? { interrupted: true } : {}),
         };
         return JSON.stringify(result);
       },
@@ -387,14 +430,21 @@ export class NestedSubagentRunner {
       childSlot = slot;
     }
 
-    const composite = createCompositeAbortSignal(detailsRecord?.signal, request.signal);
+    // The lease is created before any provider work starts. Its independent
+    // controller keeps the child alive after a truthful transfer, while its
+    // detachable parent link preserves ordinary foreground abort beforehand.
+    const candidateRunId = detailsRecord?.toolCall?.callId ?? randomUUID();
+    const parentComposite = createCompositeAbortSignal(detailsRecord?.signal, request.signal);
+    const lease = new ForegroundSubagentLease({ runId: candidateRunId, parentSignal: parentComposite?.signal });
+    this.#foregroundLeases.set(candidateRunId, { lease, role, task: request.task, parentTool: request.parentTool });
+    const composite = createCompositeAbortSignal(lease.signal);
     const signal = composite?.signal;
     if (signal?.aborted) {
       childSlot?.release();
       throw createAbortError('The nested subagent run was aborted.');
     }
     const restoredContext = this.#restoreRunContext(detailsRecord?.resumeState);
-    const agentId = restoredContext?.agentId ?? detailsRecord?.toolCall?.callId ?? randomUUID();
+    const agentId = restoredContext?.agentId ?? candidateRunId;
     const runContext: SubagentRunContext = restoredContext ?? {
       agentId,
       role,
@@ -421,6 +471,7 @@ export class NestedSubagentRunner {
     // The subagent runs in its own ledger, but decisions the user already made in the
     // parent have to be carried across or the same tool call prompts twice.
     let abortListener: (() => void) | undefined;
+    let transferredToBackground = false;
     try {
       const { tool, agent: roleAgent } = this.#getOrCreateRoleTool(role);
       replayApprovals(nestedLedger, readParentApprovals(context), roleAgent);
@@ -429,7 +480,7 @@ export class NestedSubagentRunner {
         approvals: nestedLedger,
         signal,
       };
-      const effectiveDetails = signal ? { ...detailsRecord, signal } : detailsRecord;
+      const effectiveDetails = { ...detailsRecord, ...(signal ? { signal } : {}), foregroundSubagentLease: lease };
 
       const abortPromise = signal
         ? new Promise<never>((_, reject) => {
@@ -438,19 +489,53 @@ export class NestedSubagentRunner {
           })
         : null;
 
-      const promises: Array<Promise<unknown>> = [
-        Promise.resolve(
-          tool.execute(
-            normalizeToolParameters({ role, task: request.task }, tool.parameters),
-            nestedToolContext,
-            effectiveDetails,
-          ),
+      const execution = Promise.resolve(
+        tool.execute(
+          normalizeToolParameters({ role, task: request.task }, tool.parameters),
+          nestedToolContext,
+          effectiveDetails,
         ),
-      ];
+      );
+      const promises: Array<Promise<unknown>> = [execution];
       if (abortPromise) {
         promises.push(abortPromise);
       }
+      // Successful adoption resolves the foreground tool exactly once while
+      // retaining the original promise (and therefore its budget slot) until
+      // the actual child loop settles.
+      const transferred = Symbol('foreground-subagent-transferred');
+      promises.push(lease.waitForAdoption().then((adopted) => (adopted ? transferred : new Promise<never>(() => {}))));
       const raw = await Promise.race(promises);
+      if (raw === transferred) {
+        transferredToBackground = true;
+        const transferredSlot = childSlot;
+        void execution
+          .then(
+            (terminal) => {
+              const parsed = parseNestedSubagentResult(terminal);
+              if (transferredSlot && parsed.usage) request.executionBudget!.recordUsage(parsed.usage);
+              if (parsed.status !== 'interrupted' && parsed.status !== 'running') {
+                const completed: SubagentResult = { ...parsed, status: parsed.status };
+                safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result: completed, async: true });
+              }
+              lease.settle();
+            },
+            () => lease.settle(),
+          )
+          .finally(() => {
+            this.#foregroundLeases.delete(candidateRunId);
+            transferredSlot?.release();
+          });
+        childSlot = undefined;
+        return {
+          agentId,
+          role,
+          status: 'running' as NestedSubagentResult['status'],
+          finalText: '',
+          filesChanged: [],
+          toolsUsed: [],
+        };
+      }
       const parsed = parseNestedSubagentResult(raw);
       // Record usage from nested run
       if (childSlot && parsed.usage) {
@@ -459,7 +544,7 @@ export class NestedSubagentRunner {
       // An interrupted run has not finished, so it must not be announced as a
       // completion. `subagent_completed` carries a SubagentResult, which cannot
       // be `interrupted` — narrowing here keeps the event payload honest.
-      if (parsed.status !== 'interrupted') {
+      if (parsed.status !== 'interrupted' && parsed.status !== 'running') {
         const completed: SubagentResult = { ...parsed, status: parsed.status };
         safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result: completed });
       }
@@ -484,11 +569,16 @@ export class NestedSubagentRunner {
       });
       throw error;
     } finally {
-      childSlot?.release();
+      if (!transferredToBackground) {
+        lease.settle();
+        this.#foregroundLeases.delete(candidateRunId);
+        childSlot?.release();
+      }
       if (abortListener && signal) {
         signal.removeEventListener('abort', abortListener);
       }
       composite?.cleanup();
+      parentComposite?.cleanup();
     }
   }
 }

@@ -181,7 +181,8 @@ export interface SubagentResult {
  * produce it, which is why it is not part of {@link SubagentResult}.
  */
 export type NestedSubagentResult = Omit<SubagentResult, 'status'> & {
-  status: SubagentResult['status'] | 'interrupted';
+  /** `running` is the one-shot foreground result after ownership transfers. */
+  status: SubagentResult['status'] | 'interrupted' | 'running';
   /** True when the run paused for an approval the parent must surface. */
   interrupted?: boolean;
 };

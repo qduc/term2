@@ -35,7 +35,7 @@ export const renderInAct = async (element: React.ReactElement, context?: Teardow
 
   await act(async () => {
     result = render(element);
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 10));
   });
 
   const schedule =

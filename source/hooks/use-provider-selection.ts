@@ -55,7 +55,7 @@ export type ProviderSelectionMenuItem =
 const DELETE_CONFIRM_DEFAULT_INDEX = 1;
 
 export const useProviderSelection = (settingsService: SettingsService) => {
-  const { mode, setMode, setInput, replaceInput } = useInputContext();
+  const { mode, controller, setInput, replaceInput } = useInputContext();
 
   const [phase, setPhase] = useState<ProviderSelectionPhase>('list');
   const [items, setItems] = useState<ProviderSelectionItem[]>([]);
@@ -197,14 +197,14 @@ export const useProviderSelection = (settingsService: SettingsService) => {
   }, [isOpen, loadProviderList, setSelectedIndex]);
 
   const open = useCallback(() => {
-    setMode('provider_selection');
-  }, [setMode]);
+    controller.open({ kind: 'providers' });
+  }, [controller]);
 
   const close = useCallback(() => {
     if (mode === 'provider_selection') {
-      setMode('text');
+      controller.closeAll();
     }
-  }, [mode, setMode]);
+  }, [controller, mode]);
 
   // Key navigation handlers
   const moveUp = useCallback(() => {

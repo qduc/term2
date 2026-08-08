@@ -116,6 +116,20 @@ export class MenuControllerImpl implements MenuController {
 
   public setTriggerRegistry(registry: TriggerRuleRegistry): void {
     this.triggerRegistry = registry;
+    const reconciled = this.reconcileTriggers(
+      this.state.editor,
+      this.state.stack,
+      this.state.resolvedCandidateIdentity,
+      this.state.activationEpoch,
+      this.state.dismissedActivation,
+    );
+    this.state = {
+      ...this.state,
+      stack: reconciled.nextStack,
+      resolvedCandidateIdentity: reconciled.nextCandidateIdentity,
+      activationEpoch: reconciled.nextEpoch,
+      dismissedActivation: reconciled.nextDismissedActivation,
+    };
   }
 
   public setIntentHost(host?: IntentHost): void {

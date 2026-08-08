@@ -23,7 +23,7 @@ export type MenuRegistry = {
   [K in MenuFrame['kind']]: React.ComponentType<MenuComponentProps<Extract<MenuFrame, { kind: K }>>>;
 };
 
-const defaultRegistry: Partial<MenuRegistry> = {
+const defaultRegistry: MenuRegistry = {
   path: PathMenuSession as React.ComponentType<any>,
   skills: SkillsMenuSession as React.ComponentType<any>,
   rewind: RewindMenuSession,
@@ -41,6 +41,6 @@ export function registerMenuComponent<K extends MenuFrame['kind']>(
   (defaultRegistry as any)[kind] = component;
 }
 
-export function getMenuRegistry(): Partial<MenuRegistry> {
+export function getMenuRegistry(): MenuRegistry {
   return defaultRegistry;
 }

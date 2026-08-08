@@ -14,16 +14,14 @@ const settingsService = createMockSettingsService({
 });
 
 const TestComponent = ({ onResults }: { onResults: (results: any) => void }) => {
-  const { setInput, setCursorOffset, setMode, setTriggerIndex } = useInputContext();
+  const { setInput, setCursorOffset } = useInputContext();
   const settings = useSettingsCompletion(settingsService);
 
   useEffect(() => {
     const input = SETTINGS_TRIGGER;
     setInput(input);
     setCursorOffset(input.length);
-    setTriggerIndex(SETTINGS_TRIGGER.length);
-    setMode('settings_completion');
-  }, [setCursorOffset, setInput, setMode, setTriggerIndex]);
+  }, [setCursorOffset, setInput]);
 
   useEffect(() => {
     onResults(settings);
@@ -33,16 +31,14 @@ const TestComponent = ({ onResults }: { onResults: (results: any) => void }) => 
 };
 
 const SearchComponent = ({ onResults }: { onResults: (results: any) => void }) => {
-  const { setInput, setCursorOffset, setMode, setTriggerIndex } = useInputContext();
+  const { setInput, setCursorOffset } = useInputContext();
   const settings = useSettingsCompletion(settingsService);
 
   useEffect(() => {
     const input = `${SETTINGS_TRIGGER}timeout`;
     setInput(input);
     setCursorOffset(input.length);
-    setTriggerIndex(SETTINGS_TRIGGER.length);
-    setMode('settings_completion');
-  }, [setCursorOffset, setInput, setMode, setTriggerIndex]);
+  }, [setCursorOffset, setInput]);
 
   useEffect(() => {
     onResults(settings);

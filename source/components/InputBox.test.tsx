@@ -433,7 +433,7 @@ it.sequential('InputBox keeps cursor fixed when left arrow switches model provid
 });
 
 const PathCompletionHarness = () => {
-  const { setInput, setMode, setCursorOffset, setTriggerIndex, mode } = useInputContext();
+  const { setInput, setCursorOffset, mode } = useInputContext();
   const didSetupRef = useRef(false);
 
   useEffect(() => {
@@ -441,9 +441,7 @@ const PathCompletionHarness = () => {
     didSetupRef.current = true;
     setInput('before @after');
     setCursorOffset(8);
-    setTriggerIndex(7);
-    setMode('path_completion');
-  }, [setInput, setCursorOffset, setTriggerIndex, setMode]);
+  }, [setInput, setCursorOffset]);
 
   // Keep the harness rendered until insertion completes so it does not re-run setup.
   return <Text>{mode}</Text>;
@@ -476,7 +474,7 @@ it.sequential('path completion keeps cursor at end of inserted path in middle of
 });
 
 const SettingsCompletionHarness = () => {
-  const { setInput, setMode, setCursorOffset, setTriggerIndex, mode } = useInputContext();
+  const { setInput, setCursorOffset, mode } = useInputContext();
   const didSetupRef = useRef(false);
 
   useEffect(() => {
@@ -485,9 +483,7 @@ const SettingsCompletionHarness = () => {
     const initial = '/settings logging.logLevel';
     setInput(initial);
     setCursorOffset(initial.length);
-    setTriggerIndex(SETTINGS_TRIGGER.length);
-    setMode('settings_completion');
-  }, [setInput, setMode, setCursorOffset, setTriggerIndex]);
+  }, [setInput, setCursorOffset]);
 
   return <Text>{mode}</Text>;
 };
@@ -606,7 +602,7 @@ const ModelSelectionSubmitHarness = ({
   settingsService: ReturnType<typeof createMockSettingsService>;
   onSubmit?: (value: string) => void;
 }) => {
-  const { setInput, setMode, setCursorOffset, setTriggerIndex, input, mode } = useInputContext();
+  const { setInput, setCursorOffset, input, mode } = useInputContext();
   const settings = useSettingsCompletion(settingsService);
   const models = useModelSelection({
     loggingService: noopLoggingService,
@@ -617,9 +613,7 @@ const ModelSelectionSubmitHarness = ({
   useEffect(() => {
     setInput(trigger);
     setCursorOffset(trigger.length);
-    setTriggerIndex(trigger.length);
-    setMode('model_selection');
-  }, [trigger, setCursorOffset, setInput, setMode, setTriggerIndex]);
+  }, [trigger, setCursorOffset, setInput]);
 
   useEffect(() => {
     if (didCommitRef.current) return;
@@ -644,14 +638,12 @@ const ModelSelectionSubmitHarness = ({
       }
       setInput(SETTINGS_TRIGGER);
       setCursorOffset(SETTINGS_TRIGGER.length);
-      setTriggerIndex(SETTINGS_TRIGGER.length);
-      setMode('settings_completion');
       settings.open(SETTINGS_TRIGGER.length, modelKey);
       return;
     }
 
     onSubmit?.(insertion.nextValue);
-  }, [input, models, onSubmit, setCursorOffset, setInput, setMode, setTriggerIndex, settings, settingsService]);
+  }, [input, models, onSubmit, setCursorOffset, setInput, settings, settingsService]);
 
   if (mode === 'settings_completion') {
     return (
@@ -694,7 +686,7 @@ const SettingsValueCommitHarness = ({
   settingsService: ReturnType<typeof createMockSettingsService>;
   reset: boolean;
 }) => {
-  const { setInput, setMode, setCursorOffset, setTriggerIndex } = useInputContext();
+  const { setInput, setCursorOffset } = useInputContext();
   const settings = useSettingsCompletion(settingsService);
   const didCommitRef = useRef(false);
   const trigger = '/settings shell.timeout ';
@@ -703,9 +695,7 @@ const SettingsValueCommitHarness = ({
   useEffect(() => {
     setInput(trigger);
     setCursorOffset(trigger.length);
-    setTriggerIndex(SETTINGS_TRIGGER.length);
-    setMode('settings_value_completion');
-  }, [setCursorOffset, setInput, setMode, setTriggerIndex]);
+  }, [setCursorOffset, setInput]);
 
   useEffect(() => {
     if (didCommitRef.current || settings.isOpen) return;
@@ -717,10 +707,8 @@ const SettingsValueCommitHarness = ({
     }
     setInput(restoredInput);
     setCursorOffset(restoredInput.length);
-    setTriggerIndex(SETTINGS_TRIGGER.length);
-    setMode('settings_completion');
     settings.open(SETTINGS_TRIGGER.length, 'shell.timeout');
-  }, [reset, restoredInput, setCursorOffset, setInput, setMode, setTriggerIndex, settings, settingsService]);
+  }, [reset, restoredInput, setCursorOffset, setInput, settings, settingsService]);
 
   return (
     <>

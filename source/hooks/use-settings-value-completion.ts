@@ -27,7 +27,7 @@ export const useSettingsValueCompletion = (
   settingsService: SettingsService,
   options?: { onReset?: (key: string) => void },
 ) => {
-  const { mode, setMode, input, cursorOffset, triggerIndex, setTriggerIndex, controller } = useInputContext();
+  const { mode, input, cursorOffset, triggerIndex, controller } = useInputContext();
 
   const controllerFrame = controller.getSnapshot().stack.at(-1);
   const isControllerOpen = controllerFrame?.kind === 'settings_value';
@@ -96,12 +96,9 @@ export const useSettingsValueCompletion = (
 
   const open = useCallback(
     (key: string, valueStartIndex: number) => {
-      if (mode === 'settings_value_completion' && settingKey === key) {
-        return;
-      }
       setSettingKey(key);
-      setMode('settings_value_completion');
-      setTriggerIndex(valueStartIndex);
+      const editor = controller.getSnapshot().editor;
+      controller.replaceText(editor.text, Math.max(editor.cursor, valueStartIndex));
 
       // Get current value from settingsService and find it in suggestions
       try {
@@ -126,17 +123,16 @@ export const useSettingsValueCompletion = (
         setSelectedIndex(0);
       }
     },
-    [mode, setMode, setTriggerIndex, settingKey, settingsService, setSelectedIndex],
+    [controller, settingsService, setSelectedIndex],
   );
 
   const close = useCallback(() => {
     if (mode === 'settings_value_completion') {
-      setMode('text');
-      setTriggerIndex(null);
+      controller.close();
       setSelectedIndex(0);
       setSettingKey(null);
     }
-  }, [mode, setMode, setTriggerIndex, setSelectedIndex]);
+  }, [mode, controller, setSelectedIndex]);
 
   const resetCurrentSetting = useCallback(() => {
     if (settingKey) {

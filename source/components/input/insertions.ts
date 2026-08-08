@@ -1,9 +1,6 @@
 import type { PathCompletionItem } from '../../hooks/use-path-completion.js';
-import type { SettingCompletionItem } from '../../hooks/use-settings-completion.js';
-import type { SettingValueSuggestion } from '../../utils/value-suggestions.js';
 import type { ModelInfo } from '../../services/model-service.js';
 import type { SkillInfo } from '../../services/skills/skills-service.js';
-import { SETTINGS_TRIGGER, SETTINGS_RESET_TRIGGER, AUTO_APPROVE_TRIGGER, EFFORT_TRIGGER } from './triggers.js';
 
 export type Insertion = { nextValue: string; nextCursor: number };
 
@@ -23,39 +20,6 @@ export const computePathInsertion = (args: {
   const suffix = appendTrailingSpace ? ' ' : '';
   const nextValue = `${before}${displayPath}${suffix}${after}`;
   const nextCursor = before.length + displayPath.length + suffix.length;
-  return { nextValue, nextCursor };
-};
-
-export const computeSettingInsertion = (args: {
-  selection: SettingCompletionItem | undefined;
-  value: string;
-}): Insertion | null => {
-  const { selection, value } = args;
-  if (!selection) return null;
-  const isReset = value.startsWith(SETTINGS_RESET_TRIGGER);
-  const prefix = isReset ? SETTINGS_RESET_TRIGGER : SETTINGS_TRIGGER;
-  if (!value.startsWith(prefix)) return null;
-  const nextValue = prefix + selection.key + ' ';
-  return { nextValue, nextCursor: nextValue.length };
-};
-
-export const computeSettingValueInsertion = (args: {
-  suggestion: SettingValueSuggestion | undefined;
-  settingKey: string | null;
-  triggerIndex: number | null;
-  value: string;
-  cursorOffset: number;
-}): Insertion | null => {
-  const { suggestion, settingKey, triggerIndex, value, cursorOffset } = args;
-  if (!suggestion || !settingKey || triggerIndex === null) return null;
-  const startsWithKnownTrigger =
-    value.startsWith(SETTINGS_TRIGGER) || value.startsWith(AUTO_APPROVE_TRIGGER) || value.startsWith(EFFORT_TRIGGER);
-  if (!startsWithKnownTrigger) return null;
-  const safeCursor = Math.min(cursorOffset, value.length);
-  const before = value.slice(0, triggerIndex);
-  const after = value.slice(safeCursor);
-  const nextValue = `${before}${suggestion.value}${after}`;
-  const nextCursor = before.length + suggestion.value.length;
   return { nextValue, nextCursor };
 };
 

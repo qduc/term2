@@ -39,7 +39,7 @@ export const usePathCompletion = (deps?: UsePathCompletionDeps) => {
   const loadWorkspaceEntries = deps?.getWorkspaceEntries ?? getWorkspaceEntries;
   const reloadWorkspaceEntries = deps?.refreshWorkspaceEntries ?? refreshWorkspaceEntries;
   const loadWorkspaceEntriesMeta = deps?.getWorkspaceEntriesMeta ?? getWorkspaceEntriesMeta;
-  const { mode, setMode, input, triggerIndex, setTriggerIndex, cursorOffset, controller } = useInputContext();
+  const { mode, input, triggerIndex, cursorOffset, controller } = useInputContext();
 
   // Logging is a side effect only; an unstable logger reference must not cause
   // workspace loading effects to re-run on every render.
@@ -174,25 +174,24 @@ export const usePathCompletion = (deps?: UsePathCompletionDeps) => {
     (startIndex: number, _initialQuery = '') => {
       // Preserve selection when already open to avoid resetting on re-renders
       if (mode === 'path_completion') return;
-      setMode('path_completion');
-      setTriggerIndex(startIndex);
+      const editor = controller.getSnapshot().editor;
+      controller.replaceText(editor.text, Math.max(editor.cursor, startIndex + 1));
       setSelectedIndex(0);
       setScrollOffset(0);
       // initialQuery is ignored because we derive it
       // Refresh in background to avoid stale entries; don't block open
       refresh().catch(() => {});
     },
-    [mode, setMode, setTriggerIndex, setSelectedIndex, refresh],
+    [mode, controller, setSelectedIndex, refresh],
   );
 
   const close = useCallback(() => {
     if (mode === 'path_completion') {
-      setMode('text');
-      setTriggerIndex(null);
+      controller.close();
       setSelectedIndex(0);
       setScrollOffset(0);
     }
-  }, [mode, setMode, setTriggerIndex, setSelectedIndex]);
+  }, [mode, controller, setSelectedIndex]);
 
   // updateQuery removed
 

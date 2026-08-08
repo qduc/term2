@@ -41,7 +41,7 @@ const TestComponent = ({
   settingsService,
   initialInput = '/model deepseek-v4-flash --provider=opencode go',
 }: TestComponentProps) => {
-  const { setInput, setCursorOffset, setMode, setTriggerIndex } = useInputContext();
+  const { setInput, setCursorOffset } = useInputContext();
   const resolvedSettingsService = useMemo(
     () =>
       settingsService ??
@@ -61,9 +61,7 @@ const TestComponent = ({
       const spaceIdx = input.indexOf(' ', '/settings '.length);
       triggerLen = spaceIdx >= 0 ? spaceIdx + 1 : input.length;
     }
-    setTriggerIndex(triggerLen);
-    setMode('model_selection');
-  }, [initialInput, setCursorOffset, setInput, setMode, setTriggerIndex]);
+  }, [initialInput, setCursorOffset, setInput]);
 
   const models = useModelSelection({
     loggingService,

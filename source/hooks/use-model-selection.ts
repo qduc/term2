@@ -8,7 +8,7 @@ import { getModelSettingConfigForInput } from '../utils/ai/model-settings.js';
 
 export const useModelSelection = (deps: { loggingService: ILoggingService; settingsService: ISettingsService }) => {
   const { loggingService, settingsService } = deps;
-  const { mode, setMode, input, cursorOffset, triggerIndex, setTriggerIndex, controller } = useInputContext();
+  const { mode, input, cursorOffset, triggerIndex, controller } = useInputContext();
 
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -177,24 +177,23 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
     (startIndex: number) => {
       if (mode === 'model_selection') return;
       setCurrentProvider(getInitialProvider());
-      setMode('model_selection');
-      setTriggerIndex(startIndex);
+      const editor = controller.getSnapshot().editor;
+      controller.replaceText(editor.text, Math.max(editor.cursor, startIndex));
       shouldPreselectRef.current = true;
       setSelectedIndex(0);
       setScrollOffset(0);
     },
-    [mode, getInitialProvider, setCurrentProvider, setMode, setTriggerIndex],
+    [mode, controller, getInitialProvider, setCurrentProvider],
   );
 
   const close = useCallback(() => {
     if (mode === 'model_selection') {
-      setMode('text');
-      setTriggerIndex(null);
+      controller.close();
       setCurrentProvider(null);
       setSelectedIndex(0);
       setScrollOffset(0);
     }
-  }, [mode, setCurrentProvider, setMode, setTriggerIndex]);
+  }, [mode, controller, setCurrentProvider]);
 
   const moveUp = useCallback(() => {
     shouldPreselectRef.current = false;

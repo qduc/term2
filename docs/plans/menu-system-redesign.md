@@ -1,9 +1,8 @@
 # Menu system redesign
 
-Status: partially implemented. All of Phase 4 is merged — graphs 1–2 at
+Status: Phase 5 is complete in the `menu-redesign-phase5` worktree. All of Phase 4 is merged — graphs 1–2 at
 `efa50cfa`, graph 3 at `3b4f67dd`, graph 4 at `32eabded` (implementation
-commits `ed3a8a31`, `b9ac1938`, `c05117a2` + `683be8f1`). **Phase 5 (Step 3,
-legacy deletion) is the only outstanding work.**
+commits `ed3a8a31`, `b9ac1938`, `c05117a2` + `683be8f1`).
 
 ## Resume here
 
@@ -21,12 +20,33 @@ reading of the Phase 4 step list.
   `menu-controller.test.ts` already carries a settings→settings_value contract
   test. **The remaining Phase 4 work is session and wiring work, not kernel
   work.**
-- The trigger registry is gated to `['slash','path','skills']` at
-  `InputBox.tsx:174`. Rules for `settings`, `settings_value`, and `model` are
-  written in `triggers.ts` but disabled, so each graph still has exactly one
-  owning engine.
-- `menu-registry.tsx` is deliberately a `Partial<MenuRegistry>` while graphs
-  3–4 are unmigrated.
+- The trigger registry enables the controller-owned slash, path, skills,
+  settings, settings-value-child, settings-model, command-model, and
+  direct-setting-value rules in `InputBox.tsx`.
+- `menu-registry.tsx` is now a total `MenuRegistry`; every frame kind has a
+  mounted session.
+
+### Phase 5 completion
+
+The legacy popup paths have been removed from production wiring: trigger
+detection, mode handlers, popup prop/navigation adapters, and the completion
+branches in `useEscapeKey` are gone. `InputBox` now routes menu input through
+`MenuController`/`MenuStackHost`; the registry is total and trigger-registry
+replacement reconciles the active stack. The unreferenced `PopupManager` has
+also been removed. The missing queue/history declarations and split-chunk
+Alt+Enter behavior were repaired while bringing the tree back to a typed,
+tested state.
+
+The legacy `InputContext` migration is complete. `mode` and `triggerIndex` are
+derived from the active controller frame, and completion hooks plus their test
+harnesses use controller reconciliation/transactions rather than legacy
+setters. The focused menu/input suites pass (44 files, 400 tests), as does
+typecheck and `git diff --check`.
+
+The repository-wide suite still has unrelated baseline failures in app,
+provider-black-box, and CLI integration tests; lint also reports two existing
+formatting issues under `.agents/`. Those failures were not introduced by the
+Phase 5 files and remain recorded rather than being folded into this change.
 
 ### Worktree base — read before `git worktree add`
 
@@ -137,31 +157,7 @@ In scope (as originally written):
 
 Out of scope: deleting any legacy module. That is Step 3.
 
-#### Step 3 — Phase 5: delete legacy paths — IN FLIGHT
-
-Being implemented in the worktree `.worktrees/menu-redesign-phase5`. Its owner
-holds completion and test status; **this document does not assert that the step
-is done, reviewable, or safe to merge.** Ask the owner before acting on it.
-
-Two facts about that branch that are easy to misread, both verified rather than
-reported:
-
-- Its base is stale. It sits one commit past the merge-base while `main` has
-  moved well ahead, so `git diff main <branch>` is dominated by main's newer
-  work being *absent* from the branch, not by Phase 5 deletions. Do not read
-  that diffstat as this step's scope.
-- `insertions.ts` surviving the deletion pass is correct, not an oversight:
-  `ModelMenuSession`, `PathMenuSession`, and `SkillsMenuSession` still import
-  it. Only the *obsolete* helpers go.
-
-A separate workstream depends on this step: the settings-transaction, handoff,
-provider-management, and model-catalog milestones of
-`docs/plans/ui-business-layer-separation/MAP.md` are deliberately deferred
-behind it, because they overlap `app.tsx`, `use-provider-selection.ts`, and the
-menu intent host. Neither workstream may silently supersede the other. See also
-the corresponding entry in `AGENTS.md`.
-
-Original scope:
+#### Step 3 — Phase 5: delete legacy paths — DONE
 
 In scope: `useTriggerDetection`, `useModeHandlers`, the `insertions.ts`
 helpers, `toPopupProps`, `PopupManager`'s hand-mapped prop adapter, stored
@@ -1110,13 +1106,9 @@ Two measured caveats, both pre-existing and neither caused by `ed3a8a31`:
   with `toContain` on raw strings that chalk splits with colour escapes. They
   pass at colour level 0 and fail at level 3. Without the variable you will
   chase two phantom failures.
-- **One load-sensitive failure is expected in the combined run.** `InputBox
-  recognizes Alt+Enter when terminal input arrives in split chunks` submits
-  twice (an extra `busyMode: 'steer'` before the expected `follow_up`) when the
-  41-file suite runs in parallel; it passes deterministically in isolation.
-  `ed3a8a31` touches none of the Alt+Enter chunk-buffering code. Treat a
-  *second* failure, or a failure of this test in isolation, as a real
-  regression.
+- The split-chunk Alt+Enter case was repaired during this Phase 5 work. It
+  must remain covered in the focused suite and must submit exactly once as a
+  `follow_up`.
 
 The final gate must include:
 

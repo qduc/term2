@@ -105,7 +105,7 @@ const App: FC<AppProps> = ({
 }) => {
   const { exit } = useApp();
   const { stdout } = useStdout();
-  const { setInput, replaceInput, setMode, setImages } = useInputActions();
+  const { setInput, replaceInput, setImages } = useInputActions();
   const { input, mode, images: _images, controller } = useInputState();
   const [messageListEpoch, setMessageListEpoch] = useState(0);
   const [startupBannerIds, setStartupBannerIds] = useState(['startup-banner-0']);
@@ -392,10 +392,10 @@ const App: FC<AppProps> = ({
       }
       // An external surface owns the interaction from this point; discard any
       // text-triggered frame that was used to invoke the command.
-      setMode('text');
+      controller.closeAll();
       controller.open({ kind: 'rewind', items, initialDisposition: disposition });
     },
-    [addSystemMessage, controller, openRewindPickerItems, setMode],
+    [addSystemMessage, controller, openRewindPickerItems],
   );
 
   const { slashCommands, cycleAppModes } = useAppCommands({
@@ -415,7 +415,7 @@ const App: FC<AppProps> = ({
     onRewind: redrawMessageList,
     openRewindMenu,
     openProvidersMenu: () => {
-      setMode('text');
+      controller.closeAll();
       controller.open({ kind: 'providers' });
     },
     onHandoff: handoff.startHandoff,

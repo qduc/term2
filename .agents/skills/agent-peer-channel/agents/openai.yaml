@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Peer Channel"
+  short_description: "Message local agents across harnesses"
+  default_prompt: "Use $agent-peer-channel to announce this session, discover local peers, and exchange messages."

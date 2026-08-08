@@ -23,6 +23,7 @@ import {
 const DUMMY_PROVIDER_TRAFFIC: IProviderTraffic = {
   recordRequestStart() {},
   async recordResponseReceived() {},
+  recordResponseClosed() {},
   recordRequestFailed() {},
 };
 
@@ -924,20 +925,56 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     });
   }
 
+  #logTrafficClosed(
+    requestId: string,
+    requestData: Record<string, unknown>,
+    outcome: 'consumer_closed' | 'aborted',
+    eventCount: number,
+  ): void {
+    const providerTraffic = this.providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
+    const model = typeof requestData.model === 'string' ? requestData.model : this.#modelNameFallback();
+
+    providerTraffic.recordResponseClosed({
+      requestId,
+      provider: 'codex',
+      model,
+      outcome,
+      eventCount,
+      modelClass: WS_RESPONSE_MODEL_CLASS,
+      modelWrapperClass: WS_RESPONSE_WRAPPER_CLASS,
+    });
+  }
+
   async #withTrafficLogging(
     responseStream: AsyncIterable<any>,
     requestId: string,
     requestData: Record<string, unknown>,
     wireStateKey?: ChainedWireStateKey,
     wireStateToken?: ChainedRequestToken,
+    signal?: AbortSignal,
   ): Promise<AsyncIterable<any>> {
     const logReceived = this.#logTrafficReceived.bind(this);
     const logFailed = this.#logTrafficFailed.bind(this);
+    const logClosed = this.#logTrafficClosed.bind(this);
     const wireState = this.chainedWireState;
 
     async function* wrapped(): AsyncIterable<any> {
+      let sawTerminalEvent = false;
+      let sourceExhausted = false;
+      let streamFailed = false;
+      let eventCount = 0;
       try {
         for await (const event of responseStream) {
+          eventCount += 1;
+          if (
+            event &&
+            typeof event === 'object' &&
+            ((event as any).type === 'response.completed' ||
+              (event as any).type === 'response.incomplete' ||
+              (event as any).type === 'response.failed')
+          ) {
+            sawTerminalEvent = true;
+          }
           if (
             event &&
             typeof event === 'object' &&
@@ -952,13 +989,18 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
           }
           yield event;
         }
+        sourceExhausted = true;
       } catch (error) {
+        streamFailed = true;
         if (wireStateKey && !isWebSocketConnectionLimitReachedError(error)) {
           wireState.invalidate(wireStateKey);
         }
         logFailed(requestId, requestData, error);
         throw error;
       } finally {
+        if (!sawTerminalEvent && !sourceExhausted && !streamFailed) {
+          logClosed(requestId, requestData, signal?.aborted ? 'aborted' : 'consumer_closed', eventCount);
+        }
         if (wireStateKey && wireStateToken) {
           wireState.abandon(wireStateKey, wireStateToken);
         }
@@ -1515,7 +1557,14 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     try {
       const response = (await super.fetchResponse(updatedRequest, stream)) as unknown as AsyncIterable<any>;
       const patched = wrapCodexStream(watchdog.wrap(response), this.diagnosticLogger);
-      return this.#withTrafficLogging(patched, requestId, requestData, wireStateKey, wireStateToken);
+      return this.#withTrafficLogging(
+        patched,
+        requestId,
+        requestData,
+        wireStateKey,
+        wireStateToken,
+        updatedRequest.signal,
+      );
     } catch (error) {
       const timeoutError = watchdog.timeoutError();
       watchdog.close();

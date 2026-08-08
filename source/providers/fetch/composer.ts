@@ -6,6 +6,7 @@ import type { ILoggingService, IProviderTraffic } from '../../services/service-i
 const DUMMY_PROVIDER_TRAFFIC: IProviderTraffic = {
   recordRequestStart() {},
   async recordResponseReceived() {},
+  recordResponseClosed() {},
   recordRequestFailed() {},
 };
 

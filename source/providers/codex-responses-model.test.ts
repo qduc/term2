@@ -796,6 +796,7 @@ it('CodexResponsesWSModel emits traffic logs for websocket streamed responses', 
     async recordResponseReceived(input) {
       trafficCalls.push({ method: 'recordResponseReceived', args: input });
     },
+    recordResponseClosed() {},
     recordRequestFailed(input) {
       trafficCalls.push({ method: 'recordRequestFailed', args: input });
     },
@@ -866,6 +867,134 @@ it('CodexResponsesWSModel emits traffic logs for websocket streamed responses', 
   }
 });
 
+it('CodexResponsesWSModel records a metadata-only outcome when a consumer closes a live stream', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const trafficCalls: Array<{ method: string; args: any }> = [];
+  const mockProviderTraffic: IProviderTraffic = {
+    recordRequestStart(input) {
+      trafficCalls.push({ method: 'recordRequestStart', args: input });
+    },
+    async recordResponseReceived(input) {
+      trafficCalls.push({ method: 'recordResponseReceived', args: input });
+    },
+    recordRequestFailed(input) {
+      trafficCalls.push({ method: 'recordRequestFailed', args: input });
+    },
+    recordResponseClosed(input: any) {
+      trafficCalls.push({ method: 'recordResponseClosed', args: input });
+    },
+  };
+
+  transport.fetchResponse = async function () {
+    return makeStream([
+      { type: 'response.created', response: { id: 'resp_ws_closed' } },
+      { type: 'response.output_text.delta', delta: 'partial output must not be logged' },
+    ]);
+  };
+
+  const model = new CodexResponsesWSModel(
+    { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+    'gpt-5-codex',
+    { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+    undefined,
+    mockProviderTraffic,
+    undefined,
+    transport,
+  );
+  const iterator = model.stream({ input: [], tools: [] })[Symbol.asyncIterator]();
+
+  expect(await iterator.next()).toMatchObject({
+    value: { type: 'text_delta', text: 'partial output must not be logged' },
+  });
+  await iterator.return?.();
+
+  expect(trafficCalls.map(({ method }) => method)).toEqual(['recordRequestStart', 'recordResponseClosed']);
+  expect(trafficCalls[1].args).toMatchObject({ outcome: 'consumer_closed', eventCount: 2 });
+  expect(JSON.stringify(trafficCalls[1].args)).not.toContain('partial output must not be logged');
+});
+
+it('CodexResponsesWSModel labels a consumer-closed stream as aborted when its request signal is aborted', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const trafficCalls: Array<{ method: string; args: any }> = [];
+  const mockProviderTraffic: IProviderTraffic = {
+    recordRequestStart() {},
+    async recordResponseReceived(input) {
+      trafficCalls.push({ method: 'recordResponseReceived', args: input });
+    },
+    recordRequestFailed(input) {
+      trafficCalls.push({ method: 'recordRequestFailed', args: input });
+    },
+    recordResponseClosed(input: any) {
+      trafficCalls.push({ method: 'recordResponseClosed', args: input });
+    },
+  };
+
+  transport.fetchResponse = async function () {
+    return makeStream([
+      { type: 'response.created', response: { id: 'resp_ws_aborted' } },
+      { type: 'response.output_text.delta', delta: 'partial output' },
+    ]);
+  };
+
+  const controller = new AbortController();
+  const model = new CodexResponsesWSModel(
+    { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+    'gpt-5-codex',
+    { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+    undefined,
+    mockProviderTraffic,
+    undefined,
+    transport,
+  );
+  const iterator = model.stream({ input: [], tools: [], signal: controller.signal })[Symbol.asyncIterator]();
+
+  await iterator.next();
+  controller.abort();
+  await iterator.return?.();
+
+  expect(trafficCalls).toEqual([
+    expect.objectContaining({ method: 'recordResponseClosed', args: expect.objectContaining({ outcome: 'aborted' }) }),
+  ]);
+});
+
+it('CodexResponsesWSModel keeps provider stream failures on the existing failure path', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const trafficCalls: Array<{ method: string; args: any }> = [];
+  const mockProviderTraffic: IProviderTraffic = {
+    recordRequestStart(input) {
+      trafficCalls.push({ method: 'recordRequestStart', args: input });
+    },
+    async recordResponseReceived(input) {
+      trafficCalls.push({ method: 'recordResponseReceived', args: input });
+    },
+    recordResponseClosed(input) {
+      trafficCalls.push({ method: 'recordResponseClosed', args: input });
+    },
+    recordRequestFailed(input) {
+      trafficCalls.push({ method: 'recordRequestFailed', args: input });
+    },
+  };
+
+  transport.fetchResponse = async function () {
+    return makeStream([
+      { type: 'response.failed', response: { status: 'failed', error: { message: 'provider failed' } } },
+    ]);
+  };
+
+  const model = new CodexResponsesWSModel(
+    { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+    'gpt-5-codex',
+    { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+    undefined,
+    mockProviderTraffic,
+    undefined,
+    transport,
+  );
+
+  await expect(collect(model.stream({ input: [], tools: [] }))).rejects.toThrow('provider failed');
+  expect(trafficCalls.map(({ method }) => method)).toEqual(['recordRequestStart', 'recordRequestFailed']);
+});
+
 it('CodexResponsesWSModel sends only new input after a Responses-Lite prefix is established', async () => {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const trafficBodies: any[] = [];
@@ -877,6 +1006,7 @@ it('CodexResponsesWSModel sends only new input after a Responses-Lite prefix is 
       trafficBodies.push(input.sentBody);
     },
     async recordResponseReceived() {},
+    recordResponseClosed() {},
     recordRequestFailed() {},
   };
 
@@ -956,6 +1086,7 @@ it('CodexResponsesWSModel correlates Responses-Lite state across sequential stre
       trafficBodies.push(input.sentBody);
     },
     async recordResponseReceived() {},
+    recordResponseClosed() {},
     recordRequestFailed() {},
   };
 
@@ -1207,6 +1338,7 @@ it('CodexResponsesWSModel logs reasoning and tool calls in choice payload matchi
     async recordResponseReceived(input) {
       trafficCalls.push({ method: 'recordResponseReceived', args: input });
     },
+    recordResponseClosed() {},
     recordRequestFailed(input) {
       trafficCalls.push({ method: 'recordRequestFailed', args: input });
     },
@@ -2117,6 +2249,7 @@ it('CodexResponsesWSModel preserves a tool-call chain when the websocket connect
       trafficBodies.push(input.sentBody);
     },
     async recordResponseReceived() {},
+    recordResponseClosed() {},
     recordRequestFailed() {},
   };
   const continuationInput = [
@@ -2239,6 +2372,7 @@ it('CodexResponsesWSModel preserves tool output when a user steer message follow
       trafficBodies.push(input.sentBody);
     },
     async recordResponseReceived() {},
+    recordResponseClosed() {},
     recordRequestFailed() {},
   };
 
@@ -2676,6 +2810,7 @@ it('CodexResponsesWSModel unary path records Luna wire state response with corre
       trafficBodies.push(input.sentBody);
     },
     async recordResponseReceived() {},
+    recordResponseClosed() {},
     recordRequestFailed() {},
   };
 

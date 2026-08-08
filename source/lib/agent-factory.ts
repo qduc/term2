@@ -25,6 +25,7 @@ import type { AnyToolDefinition, JsonSchemaObject, PostExecutePauseCapability, T
 import type { SessionAccessState } from '../services/session/session-access-state.js';
 import type { BackgroundShellRegistry } from '../services/shell/background-shell-registry.js';
 import type { BackgroundShellExecutionResult } from '../tools/system/shell.js';
+import { getCatalogModel } from '../providers/model-catalog/catalog.js';
 
 export interface AgentFactoryDeps {
   settings: ISettingsService;
@@ -117,14 +118,15 @@ export function buildAgentTools({
   const tools: ToolRegistry = toolDefinitions
     .filter(() => true)
     .map((definition) => {
+      const providerParameters = definition.strictParameters ?? definition.parameters;
       const wrappedDefinition: AnyToolDefinition = {
         ...definition,
         parameters:
-          useStrictToolSchema && isZodToolParameterSchema(definition.parameters)
+          useStrictToolSchema && isZodToolParameterSchema(providerParameters)
             ? // Strict-schema path: `parameters` is replaced at runtime by its JSON
               // schema form (the run loop's schema guard handles that). This is
               // an honest JSON-schema substitution, not an erased Zod schema.
-              (z.toJSONSchema(toOpenAIStrictToolSchema(definition.parameters)) as JsonSchemaObject)
+              (z.toJSONSchema(toOpenAIStrictToolSchema(providerParameters)) as JsonSchemaObject)
             : definition.parameters,
         needsApproval: wrapNeedsApproval(definition, {
           checkInterceptors: (params) => deps.checkToolInterceptors(definition.name, params),
@@ -230,10 +232,12 @@ export function buildAgentTools({
 function buildModelSettings({
   reasoningEffort,
   resolvedTemperature,
+  resolvedModel,
   deps,
 }: {
   reasoningEffort?: ReasoningEffortSetting | null;
   resolvedTemperature?: number;
+  resolvedModel: string;
   deps: AgentFactoryDeps;
 }): Record<string, any> {
   // Build modelSettings only if an explicit effort value (other than
@@ -242,6 +246,17 @@ function buildModelSettings({
   const modelSettings: Record<string, any> = {
     retry: { maxRetries: deps.settings.get('agent.retryAttempts') ?? 2 },
   };
+  const maxOutputTokens = deps.settings.get('agent.maxOutputTokens');
+  const maxStreamOutputChars = deps.settings.get('agent.maxStreamOutputChars');
+  const maxModelRequestDurationMs = deps.settings.get('agent.maxModelRequestDurationMs');
+  if (typeof maxOutputTokens === 'number') {
+    const catalogLimit = getCatalogModel(deps.providerId, resolvedModel)?.maxTokens;
+    modelSettings.maxTokens = catalogLimit === undefined ? maxOutputTokens : Math.min(maxOutputTokens, catalogLimit);
+  }
+  if (typeof maxStreamOutputChars === 'number') modelSettings.maxStreamOutputChars = maxStreamOutputChars;
+  if (typeof maxModelRequestDurationMs === 'number') {
+    modelSettings.maxModelRequestDurationMs = maxModelRequestDurationMs;
+  }
   if (reasoningEffort && reasoningEffort !== 'default') {
     modelSettings.reasoning = {
       effort: reasoningEffort,
@@ -359,6 +374,7 @@ export function buildAgent(
   const modelSettings = buildModelSettings({
     reasoningEffort: effectiveReasoningEffort,
     resolvedTemperature,
+    resolvedModel,
     deps,
   });
 

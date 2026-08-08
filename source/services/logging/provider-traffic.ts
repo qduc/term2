@@ -9,6 +9,7 @@ import type {
   ILoggingService,
   ISessionContextService,
   IProviderTraffic,
+  ProviderTrafficClosedResponse,
   ProviderTrafficRequest,
   ProviderTrafficResponse,
 } from '../service-interfaces.js';
@@ -1175,6 +1176,50 @@ export class ProviderTraffic implements IProviderTraffic {
       text: responseText,
       toolCalls,
       payload: summary,
+    });
+  }
+
+  recordResponseClosed(input: ProviderTrafficClosedResponse): void {
+    const trafficContext = this.sessionContextService.getContext() ?? null;
+    const isEvaluator = trafficContext?.evaluator === true;
+    const eventPrefix = isEvaluator ? 'evaluator' : 'provider';
+    const timestamp = new Date().toISOString();
+    const sessionId = trafficContext?.sessionId ?? 'unknown';
+    const sessionStartedAt = trafficContext?.sessionStartedAt ?? timestamp;
+    const mode = trafficContext?.mode ?? 'unknown';
+    const firstUserMessagePreview = trafficContext?.firstUserMessagePreview;
+    const summary = { outcome: input.outcome, eventCount: input.eventCount };
+
+    this.store.recordRequestComplete({
+      requestId: input.requestId,
+      timestamp,
+      provider: input.provider,
+      model: input.model,
+      modelClass: input.modelClass,
+      modelWrapperClass: input.modelWrapperClass,
+      sessionId,
+      sessionStartedAt,
+      mode,
+      receivedSummary: summary,
+      evaluator: isEvaluator,
+    });
+
+    this.loggingService.debug(`${input.provider} response closed`, {
+      eventType: `${eventPrefix}.response.closed`,
+      category: 'provider',
+      phase: 'provider_response',
+      direction: 'received',
+      requestId: input.requestId,
+      traceId: trafficContext?.traceId ?? this.loggingService.getCorrelationId?.(),
+      sessionId,
+      sessionStartedAt,
+      firstUserMessagePreview,
+      mode,
+      provider: input.provider,
+      model: input.model,
+      modelClass: input.modelClass,
+      modelWrapperClass: input.modelWrapperClass,
+      ...summary,
     });
   }
 

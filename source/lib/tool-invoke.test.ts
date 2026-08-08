@@ -1,6 +1,8 @@
 import { it, expect } from 'vitest';
 import { z } from 'zod';
 import type { ToolDefinition } from '../tools/types.js';
+import { createApplyPatchToolDefinition } from '../tools/file/apply-patch.js';
+import { createMockSettingsService } from '../services/settings/settings-service.mock.js';
 import {
   repairJson,
   normalizeObjectParams,
@@ -389,8 +391,46 @@ it('wrapToolInvoke surfaces schema diagnostics as a non-fatal result for invalid
   const result = await wrappedTool.execute('{"pattern": "test", "no_ignore": "not-a-bool"}', undefined, {});
 
   expect(result).toBe(
-    'Tool input did not match schema for grep: no_ignore must be boolean, got string "not-a-bool". Retry with valid JSON arguments.',
+    'Tool input did not match schema for grep: no_ignore must be boolean. Received keys: no_ignore, pattern. Retry with valid JSON arguments.',
   );
+});
+
+it('wrapToolInvoke describes invalid apply_patch input without reflecting its diff', async () => {
+  const tool = wrapToolInvoke(
+    createApplyPatchToolDefinition({
+      loggingService: {
+        debug: () => {},
+        info: () => {},
+        warn: () => {},
+        error: () => {},
+        security: () => {},
+        setCorrelationId: () => {},
+        getCorrelationId: () => undefined,
+        clearCorrelationId: () => {},
+      },
+      settingsService: createMockSettingsService(),
+    }),
+  );
+  const largeDiff = '+private patch content\n'.repeat(1_000);
+
+  const result = await tool.execute(
+    {
+      type: 'update_file',
+      path: 'src/example.ts',
+      diff: largeDiff,
+      operations: [{ type: 'update_file', path: 'src/example.ts', diff: largeDiff }],
+    },
+    undefined,
+    {},
+  );
+
+  if (typeof result !== 'string') {
+    throw new Error(`Expected validation feedback string, received ${typeof result}`);
+  }
+  expect(result).toContain('Received keys: diff, operations, path, type.');
+  expect(result).toContain('Provide either operations or a single type/path/diff operation, not both.');
+  expect(result).not.toContain(largeDiff);
+  expect(result.length).toBeLessThan(1_000);
 });
 
 // Regression: tool output that merely *mentions* the validation error must be

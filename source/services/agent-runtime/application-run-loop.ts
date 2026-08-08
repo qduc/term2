@@ -33,6 +33,12 @@ import { ApprovalLedger, type ToolInvocationContext } from './tool-invocation-co
 import { addTokenUsage, normalizeUsage } from '../../utils/ai/token-usage.js';
 import { computeModelCost, type ModelRequestCost, type ServiceTier } from '../../services/cost/model-cost.js';
 import { getCatalogPricingVersion, getModelPricing } from '../../services/cost/pricing.js';
+import {
+  GenerationDeadline,
+  GenerationGuard,
+  GenerationGuardError,
+  type GenerationGuardOptions,
+} from './generation-guard.js';
 
 /**
  * Fields of `modelSettings` the run loop and provider adapters actually read.
@@ -44,6 +50,10 @@ export interface AgentModelSettings {
   temperature?: number;
   reasoning?: { effort?: string; summary?: string };
   maxTokens?: number;
+  /** Hard per-request stream-output budget across text, reasoning, and tool arguments. */
+  maxStreamOutputChars?: number;
+  /** Total wall-clock limit for each individual provider request. */
+  maxModelRequestDurationMs?: number;
   retry?: { maxRetries?: number };
   providerData?: Record<string, unknown>;
   codex?: { promptCacheKey?: string; include?: readonly string[] };
@@ -98,6 +108,8 @@ export interface ApplicationRunLoopOptions {
   readonly maxTurns?: number;
   /** Root-only provider request preparation, retained by continuations. */
   readonly requestPreparation?: ApplicationRequestPreparation;
+  /** Per-request output and deadline guard; model settings provide the normal runtime defaults. */
+  readonly generationGuard?: GenerationGuardOptions;
 }
 
 /**
@@ -553,7 +565,7 @@ export class ApplicationRunLoop {
     });
 
     let exitError: unknown;
-    stream.completed = this.#execute(state, stream, queue, effectiveOptions, toolContext)
+    stream.completed = this.#execute(state, stream, queue, effectiveOptions, toolContext, controller)
       .catch((error) => {
         exitError = error;
         stream.cancelled = error instanceof Error && error.name === 'AbortError';
@@ -592,6 +604,7 @@ export class ApplicationRunLoop {
     queue: EventQueue,
     options: ApplicationRunLoopOptions,
     toolContext: ToolInvocationContext,
+    requestAbortController: AbortController,
   ): Promise<unknown> {
     while (true) {
       if (options.signal?.aborted) throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
@@ -690,38 +703,69 @@ export class ApplicationRunLoop {
           : {}),
         ...(options.signal ? { signal: options.signal } : {}),
       };
+      const generationGuard = new GenerationGuard({
+        maxOutputCharacters: state.agent.modelSettings?.maxStreamOutputChars,
+        maxTextCharacters: state.agent.modelSettings?.maxStreamOutputChars,
+        maxReasoningCharacters: state.agent.modelSettings?.maxStreamOutputChars,
+        maxToolArgumentCharacters: state.agent.modelSettings?.maxStreamOutputChars,
+        maxCumulativeToolArgumentCharacters: state.agent.modelSettings?.maxStreamOutputChars,
+        requestDeadlineMs: state.agent.modelSettings?.maxModelRequestDurationMs,
+        ...options.generationGuard,
+      });
       const consume = async (): Promise<void> => {
-        for await (const event of model.stream(request)) {
-          if (event.type === 'completion') {
-            completion = event;
-            continue;
+        const deadline = new GenerationDeadline(generationGuard.requestDeadlineMs, () =>
+          requestAbortController.abort(),
+        );
+        let iterator: AsyncIterator<StreamedModelTurnEvent> | undefined;
+        let iteratorFinished = false;
+        try {
+          iterator = model.stream(request)[Symbol.asyncIterator]();
+          while (true) {
+            const next = await deadline.wait(iterator.next());
+            if (next.done) {
+              iteratorFinished = true;
+              return;
+            }
+            const event = next.value;
+            if (event.type === 'completion') {
+              generationGuard.observeCompletion(event.output);
+              completion = event;
+              continue;
+            }
+            if (event.type === 'text_delta') {
+              generationGuard.observeText(event.text);
+              outputPush(stream, queue, { type: 'text_delta', text: event.text });
+              continue;
+            }
+            if (event.type === 'codex_rate_limits') {
+              outputPush(stream, queue, { type: 'codex_rate_limits', rateLimits: event.rateLimits });
+              continue;
+            }
+            if (event.type === 'reasoning_delta') {
+              generationGuard.observeReasoning(event.text);
+              pendingNativeReasoning = appendNativeReasoning(pendingNativeReasoning, event);
+              outputPush(stream, queue, { type: 'reasoning_delta', text: event.text });
+              continue;
+            }
+            if (event.type === 'tool_call_streaming_delta') {
+              generationGuard.observeToolArgumentProgress(event.argumentCharCount);
+              outputPush(stream, queue, event);
+              continue;
+            }
+            if (event.type === 'context_compaction_started' || event.type === 'context_compaction_completed') {
+              outputPush(stream, queue, event);
+              continue;
+            }
+            if (event.type === 'tool_call') {
+              generationGuard.observeToolCall(event.arguments);
+              pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
+              sawToolCall = true;
+              await this.#handleToolCall(state, stream, queue, event, toolContext);
+            }
           }
-          if (event.type === 'text_delta') {
-            outputPush(stream, queue, { type: 'text_delta', text: event.text });
-            continue;
-          }
-          if (event.type === 'codex_rate_limits') {
-            outputPush(stream, queue, { type: 'codex_rate_limits', rateLimits: event.rateLimits });
-            continue;
-          }
-          if (event.type === 'reasoning_delta') {
-            pendingNativeReasoning = appendNativeReasoning(pendingNativeReasoning, event);
-            outputPush(stream, queue, { type: 'reasoning_delta', text: event.text });
-            continue;
-          }
-          if (event.type === 'tool_call_streaming_delta') {
-            outputPush(stream, queue, event);
-            continue;
-          }
-          if (event.type === 'context_compaction_started' || event.type === 'context_compaction_completed') {
-            outputPush(stream, queue, event);
-            continue;
-          }
-          if (event.type === 'tool_call') {
-            pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
-            sawToolCall = true;
-            await this.#handleToolCall(state, stream, queue, event, toolContext);
-          }
+        } finally {
+          deadline.dispose();
+          if (iterator && !iteratorFinished) void iterator.return?.().catch(() => undefined);
         }
       };
       const dispatch = async (): Promise<void> => {
@@ -732,6 +776,7 @@ export class ApplicationRunLoop {
         if (state.requestPreparation) await state.requestPreparation.run(dispatch);
         else await dispatch();
       } catch (error) {
+        if (error instanceof GenerationGuardError) requestAbortController.abort();
         // Dispatch began, but no terminal completion was accepted. Record an
         // unpriced marker so the summary stays honest (partial) rather than
         // appearing exact. Observational only: the error still propagates.

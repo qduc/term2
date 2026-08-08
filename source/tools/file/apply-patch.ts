@@ -60,6 +60,13 @@ const applyPatchParametersSchema = z
     }
   });
 
+// Strict tool-schema providers cannot represent the legacy single-operation
+// form's mutual exclusion with `operations`. Advertise one unambiguous shape
+// while retaining the legacy parser for existing runtime callers.
+const applyPatchStrictParametersSchema = z.object({
+  operations: z.array(applyPatchOperationSchema).min(1),
+});
+
 export type ApplyPatchToolParams = z.infer<typeof applyPatchParametersSchema>;
 type ApplyPatchOperation = z.infer<typeof applyPatchOperationSchema>;
 type ApplyPatchOutput = {
@@ -209,6 +216,7 @@ export function createApplyPatchToolDefinition(deps: {
     name: 'apply_patch',
     description: APPLY_PATCH_DESCRIPTION,
     parameters: applyPatchParametersSchema,
+    strictParameters: applyPatchStrictParametersSchema,
     needsApproval: async (params) => {
       try {
         const workspaceRoot = executionContext?.getCwd() || process.cwd();

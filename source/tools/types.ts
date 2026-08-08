@@ -98,6 +98,8 @@ export interface SchemaToolDefinition<TSchema extends ZodTypeAny> {
   name: string;
   description: string;
   parameters: TSchema;
+  /** Optional provider-facing schema when a strict transport cannot express the runtime contract. */
+  strictParameters?: ZodTypeAny;
   argumentParsing?: 'repair' | 'strict';
   approvalPresentation?: ApprovalPresentationCapability;
   needsApproval: (params: z.infer<TSchema>, context?: unknown) => Promise<boolean> | boolean;
@@ -143,6 +145,7 @@ export interface AnyToolDefinition {
   name: string;
   description: string;
   parameters: ToolParameterSchema;
+  strictParameters?: ZodTypeAny;
   argumentParsing?: 'repair' | 'strict';
   approvalPresentation?: ApprovalPresentationCapability;
   needsApproval(params: unknown, context?: unknown): Promise<boolean> | boolean;

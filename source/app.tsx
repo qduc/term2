@@ -1,4 +1,4 @@
-import React, { FC, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useInputActions, useInputState } from './context/InputContext.js';
 import { clearTerminalForRedraw, messagesHaveNonSystemContent } from './app-helpers.js';
 
@@ -44,6 +44,7 @@ import { handleSettingsIntent } from './components/input/settings-intent-host.js
 import {
   registerSandboxNetworkApprovalHandler,
   type NetworkApprovalAnswer,
+  type SandboxNetworkAccessRequest,
 } from './utils/shell/sandbox/sandbox-network-approval.js';
 import { SandboxNetworkApprovalCoordinator } from './utils/shell/sandbox/sandbox-network-approval-coordinator.js';
 
@@ -116,32 +117,30 @@ const App: FC<AppProps> = ({
   const [sessionId, setSessionId] = useState(initialSessionId);
   const handleClearConversationRef = useRef<(() => Promise<void>) | null>(null);
   const pendingSkillRef = useRef<SkillInfo | null>(null);
-  const [sandboxApprovalCoordinator] = useState(() => new SandboxNetworkApprovalCoordinator());
-  const subscribeToSandboxNetworkApproval = useCallback(
-    (listener: () => void) => sandboxApprovalCoordinator.subscribe(listener),
-    [sandboxApprovalCoordinator],
-  );
-  const getSandboxNetworkApprovalSnapshot = useCallback(
-    () => sandboxApprovalCoordinator.getSnapshot().activeRequest,
-    [sandboxApprovalCoordinator],
-  );
-  const sandboxPromptRequest = useSyncExternalStore(
-    subscribeToSandboxNetworkApproval,
-    getSandboxNetworkApprovalSnapshot,
-  );
+  const sandboxApprovalCoordinatorRef = useRef<SandboxNetworkApprovalCoordinator | null>(null);
+  const [sandboxPromptRequest, setSandboxPromptRequest] = useState<SandboxNetworkAccessRequest | null>(null);
 
   const notifier = useTerminalFocusNotifier({ stdout, settingsService, loggingService });
 
   useEffect(() => {
+    const coordinator = new SandboxNetworkApprovalCoordinator();
+    sandboxApprovalCoordinatorRef.current = coordinator;
+    const unsubscribe = coordinator.subscribe(() => {
+      setSandboxPromptRequest(coordinator.getSnapshot().activeRequest);
+    });
     const unregister = registerSandboxNetworkApprovalHandler(async (request) => {
-      return await sandboxApprovalCoordinator.request(request);
+      return await coordinator.request(request);
     });
 
     return () => {
       unregister();
-      sandboxApprovalCoordinator.dispose();
+      unsubscribe();
+      if (sandboxApprovalCoordinatorRef.current === coordinator) {
+        sandboxApprovalCoordinatorRef.current = null;
+      }
+      coordinator.dispose();
     };
-  }, [sandboxApprovalCoordinator]);
+  }, []);
 
   const {
     messages,
@@ -393,21 +392,24 @@ const App: FC<AppProps> = ({
   const handleApprove = useCallback(
     async (answer?: string) => {
       if (sandboxPromptRequest) {
-        sandboxApprovalCoordinator.resolve(sandboxPromptRequest, (answer as NetworkApprovalAnswer) ?? 'allow-once');
+        sandboxApprovalCoordinatorRef.current?.resolve(
+          sandboxPromptRequest,
+          (answer as NetworkApprovalAnswer) ?? 'allow-once',
+        );
         return;
       }
       await submitApprovalDecision(answer);
     },
-    [sandboxApprovalCoordinator, sandboxPromptRequest, submitApprovalDecision],
+    [sandboxPromptRequest, submitApprovalDecision],
   );
 
   const handleReject = useCallback(() => {
     if (sandboxPromptRequest) {
-      sandboxApprovalCoordinator.resolve(sandboxPromptRequest, 'deny');
+      sandboxApprovalCoordinatorRef.current?.resolve(sandboxPromptRequest, 'deny');
       return;
     }
     setWaitingForRejectionReason(true);
-  }, [sandboxApprovalCoordinator, sandboxPromptRequest, setWaitingForRejectionReason]);
+  }, [sandboxPromptRequest, setWaitingForRejectionReason]);
 
   const handleCancelAskUser = useCallback(() => {
     if (sandboxPromptRequest || pendingApproval?.toolName !== 'ask_user') return;

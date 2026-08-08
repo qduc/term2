@@ -3,6 +3,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import React from 'react';
 import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createNode } from '../node_modules/ink/build/dom.js';
+import reconciler from '../node_modules/ink/build/reconciler.js';
 import App from './app.js';
 import { renderInAct } from './test-helpers/ink-testing.js';
 
@@ -68,6 +70,12 @@ const mocks = vi.hoisted(() => ({
   messageListMounts: 0,
   stdoutWrite: vi.fn(),
   selectedSkill: null as any,
+  sandboxNetworkHandler: null as null | ((request: { host: string; port?: number }) => Promise<unknown>),
+  registerSandboxNetworkApprovalHandler: vi.fn(),
+  menuController: {
+    open: vi.fn(),
+    setIntentHost: vi.fn(),
+  },
   conversationState: {
     waitingForApproval: false,
     waitingForRejectionReason: false,
@@ -75,6 +83,10 @@ const mocks = vi.hoisted(() => ({
     isProcessing: false,
   },
 }));
+
+// Ink's public test renderer uses a legacy, non-strict root. Build the same
+// Ink host root in concurrent strict mode so React actually replays effects.
+const CONCURRENT_REACT_ROOT = 1;
 
 vi.mock('ink', () => ({
   Box: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -126,6 +138,7 @@ vi.mock('./context/InputContext.js', () => ({
     cursorOffset: 0,
     triggerIndex: null,
     images: [],
+    controller: mocks.menuController,
   }),
 }));
 
@@ -177,6 +190,17 @@ vi.mock('./hooks/use-conversation.js', () => ({
 vi.mock('./hooks/use-setting.js', () => ({
   useSetting: () => false,
 }));
+
+vi.mock('./utils/shell/sandbox/sandbox-network-approval.js', () => ({
+  registerSandboxNetworkApprovalHandler: mocks.registerSandboxNetworkApprovalHandler,
+}));
+
+mocks.registerSandboxNetworkApprovalHandler.mockImplementation((handler) => {
+  mocks.sandboxNetworkHandler = handler;
+  return () => {
+    if (mocks.sandboxNetworkHandler === handler) mocks.sandboxNetworkHandler = null;
+  };
+});
 
 vi.mock('./hooks/use-runtime-settings.js', () => ({
   useRuntimeSettings: () => mocks.applyRuntimeSetting,
@@ -335,6 +359,10 @@ beforeEach(() => {
   mocks.slashCommands = [];
   mocks.slashActionReturnValue = undefined;
   mocks.selectedSkill = null;
+  mocks.sandboxNetworkHandler = null;
+  mocks.registerSandboxNetworkApprovalHandler.mockClear();
+  mocks.menuController.open.mockReset();
+  mocks.menuController.setIntentHost.mockReset();
   mocks.conversationState.waitingForApproval = false;
   mocks.conversationState.waitingForRejectionReason = false;
   mocks.conversationState.waitingForAskUserAnswer = false;
@@ -377,6 +405,69 @@ describe('App orchestration', () => {
     expect(mocks.submitConversationTurn).toHaveBeenCalledWith({ text: 'hello', images: [] });
     expect(mocks.pendingGuards.sendGuardedTurn).not.toHaveBeenCalled();
     expect(mocks.handleApprovalDecision).not.toHaveBeenCalled();
+  });
+
+  it.sequential('keeps sandbox network approval live after StrictMode replays effects', async () => {
+    const services = createServices();
+    const root = createNode('ink-root');
+    const container = reconciler.createContainer(
+      root,
+      CONCURRENT_REACT_ROOT,
+      null,
+      true,
+      null,
+      'strict-app-test',
+      () => {},
+      () => {},
+      () => {},
+      () => {},
+    );
+
+    await act(async () => {
+      reconciler.updateContainer(
+        <React.StrictMode>
+          <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />
+        </React.StrictMode>,
+        container,
+        null,
+        () => {},
+      );
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    });
+
+    expect(mocks.registerSandboxNetworkApprovalHandler).toHaveBeenCalledTimes(2);
+    expect(mocks.sandboxNetworkHandler).toEqual(expect.any(Function));
+    let request: Promise<unknown> | undefined;
+    await act(async () => {
+      request = mocks.sandboxNetworkHandler?.({ host: 'api.example.com', port: 443 });
+      await Promise.resolve();
+    });
+
+    expect(mocks.bottomAreaProps.pendingApproval).toMatchObject({
+      toolName: 'sandbox_network_access',
+      argumentsText: 'Allow network access to api.example.com:443?',
+    });
+
+    await act(async () => {
+      await mocks.bottomAreaProps.onApprove('allow-once');
+    });
+    await expect(request).resolves.toBe('allow-once');
+
+    let pendingOnUnmount: Promise<unknown> | undefined;
+    await act(async () => {
+      pendingOnUnmount = mocks.sandboxNetworkHandler?.({ host: 'shutdown.example.com' });
+      await Promise.resolve();
+    });
+    expect(mocks.bottomAreaProps.pendingApproval).toMatchObject({
+      argumentsText: 'Allow network access to shutdown.example.com?',
+    });
+
+    await act(async () => {
+      reconciler.updateContainer(null, container, null, () => {});
+      await Promise.resolve();
+    });
+    await expect(pendingOnUnmount).resolves.toBe('deny');
+    expect(mocks.sandboxNetworkHandler).toBeNull();
   });
 
   it.sequential('routes rejection-reason submit through useConversation', async () => {

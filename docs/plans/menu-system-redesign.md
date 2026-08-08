@@ -181,6 +181,39 @@ The implementation of each case is commented at its site: the passive case in
 `triggers.ts` (`settingsListRestorePoint`), the explicit case in
 `SettingsMenuSession.tsx` (`pushChildEffect`).
 
+### Gate: the handoff conversion fails silently
+
+The handoff conversion in Step 2 is the one change in this migration whose
+failure mode is silence. Nothing throws, no existing test necessarily fails,
+and a diffstat plus a green suite look identical whether it was done correctly
+or not. It surfaces only in Step 3, when Phase 5 deletes the `mode` projection
+and the handoff stops sending. Verify it directly rather than inferring it from
+a passing report.
+
+**Structural check** — must print nothing once Step 2 is done:
+
+```bash
+grep -nE "^\s*(mode|setMode|setTriggerIndex)\b" source/hooks/use-handoff-flow.ts
+```
+
+It targets the hook's declared options and destructured parameters, so it is
+not confused by the unrelated `standard_mode_requested` action or the "Standard
+mode" message text. Before Step 2 it prints 12 lines.
+
+**Behavioral check — the part that is easy to get wrong.** The existing tests
+in `use-handoff-flow.test.tsx` are coupled to the legacy projection: the
+harness owns `mode` in its own `useState`, and assertions read
+`getSnapshot().mode` and `getSnapshot().triggerIndex` directly. Step 2 must
+rewrite them, and a rewrite can be made to pass by re-pinning whatever the new
+implementation happens to do.
+
+The replacement must pin the **observable behavior**, not the new mechanism:
+that the captured handoff is sent after model selection closes the menu, and
+that it is *not* sent when the picker closes without a choice. Both cases
+already exist as tests and both must survive the rewrite with their meaning
+intact. If the rewritten tests would still pass with the send-on-close signal
+removed entirely, they are pinning the mechanism and the gate has not been met.
+
 ### ModelSettingConfig
 
 This plan referenced `ModelSettingConfig` in the `model` frame without ever

@@ -528,6 +528,56 @@ export class SettingsService {
   }
 
   /**
+   * Validate all runtime changes before applying any of them. This is the
+   * transaction boundary used by conversation configuration: a multi-field
+   * model/provider selection must not leave settings half-applied when one
+   * field is invalid.
+   */
+  setDynamicTransaction(changes: readonly { key: string; value: unknown }[]): void {
+    if (changes.length === 0) return;
+
+    const candidate = structuredClone(this.settings) as SettingsData;
+    for (const change of changes) {
+      if (this.isSensitive(change.key)) {
+        throw new Error(
+          `Cannot modify '${change.key}' - it is a sensitive setting that can only be configured via environment variables.`,
+        );
+      }
+      if (!this.isRuntimeModifiable(change.key)) {
+        throw new Error(`Cannot modify '${change.key}' at runtime. Requires restart.`);
+      }
+      setSettingValue(candidate as unknown as Record<string, any>, change.key, change.value);
+      if (
+        change.key.startsWith('app.') &&
+        (change.key === 'app.orchestratorMode' ||
+          change.key === 'app.liteMode' ||
+          change.key === 'app.planMode' ||
+          change.key === 'app.mentorMode') &&
+        change.value === true
+      ) {
+        candidate.app = {
+          ...candidate.app,
+          orchestratorMode: change.key === 'app.orchestratorMode',
+          liteMode: change.key === 'app.liteMode',
+          planMode: change.key === 'app.planMode',
+          mentorMode: change.key === 'app.mentorMode',
+        };
+      }
+    }
+
+    const result = SettingsSchema.safeParse(candidate);
+    if (!result.success) {
+      const issue = result.error.issues[0];
+      const issuePath = issue?.path.join('.') || changes[0]!.key;
+      throw new Error(`Invalid value for '${issuePath}': ${issue?.message || 'Invalid setting value'}`);
+    }
+
+    for (const change of changes) {
+      this.setDynamic(change.key, change.value);
+    }
+  }
+
+  /**
    * Persist a setting even if it only takes effect after restart.
    * This still validates against the full schema and updates in-memory state
    * so the settings UI reflects the saved value immediately.

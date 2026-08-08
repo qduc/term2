@@ -1,4 +1,8 @@
 import type { SettingsService } from '../../services/settings/settings-service.js';
+import type {
+  ConversationConfigurationService,
+  ConversationSettingChange,
+} from '../../services/runtime-setting-router.js';
 import type { IntentRequest, IntentResult } from './menu-types.js';
 
 export type SettingsIntentHostDeps = {
@@ -6,6 +10,7 @@ export type SettingsIntentHostDeps = {
   onSettingChange?: (key: string, value: unknown) => void;
   onSystemMessage?: (text: string) => void;
   applyRuntimeSetting?: (key: string, value: unknown) => void;
+  configurationService?: ConversationConfigurationService;
 };
 
 /**
@@ -19,23 +24,26 @@ export type SettingsIntentHostDeps = {
  * that mount `InputBox` without the rest of the application shell.
  */
 export function handleSettingsIntent(request: IntentRequest, deps: SettingsIntentHostDeps): IntentResult | undefined {
-  const { settingsService, onSettingChange, onSystemMessage, applyRuntimeSetting } = deps;
+  const { settingsService, onSettingChange, onSystemMessage, applyRuntimeSetting, configurationService } = deps;
   const { id, sourceFrameId, intent } = request;
 
   if (intent.type === 'apply-settings') {
     const fieldErrors: Record<string, string> = {};
-    for (const change of intent.changes) {
-      try {
-        if (change.persistence === 'runtime') {
-          settingsService.setDynamic(change.key, change.value);
-          onSettingChange?.(change.key, change.value);
-        } else {
-          settingsService.setPersistentDynamic(change.key, change.value);
-          onSystemMessage?.(`Saved ${change.key} = ${change.value}. This setting applies after restart.`);
+    try {
+      if (configurationService) {
+        configurationService.apply(intent.changes as readonly ConversationSettingChange[]);
+      } else {
+        for (const change of intent.changes) {
+          if (change.persistence === 'runtime') settingsService.setDynamic(change.key, change.value);
+          else settingsService.setPersistentDynamic(change.key, change.value);
         }
-      } catch (err) {
-        fieldErrors[change.key] = err instanceof Error ? err.message : String(err);
       }
+      for (const change of intent.changes) {
+        if (change.persistence === 'runtime') onSettingChange?.(change.key, change.value);
+        else onSystemMessage?.(`Saved ${change.key} = ${change.value}. This setting applies after restart.`);
+      }
+    } catch (err) {
+      for (const change of intent.changes) fieldErrors[change.key] = err instanceof Error ? err.message : String(err);
     }
     if (Object.keys(fieldErrors).length > 0) {
       return {
@@ -51,9 +59,10 @@ export function handleSettingsIntent(request: IntentRequest, deps: SettingsInten
 
   if (intent.type === 'reset-setting') {
     try {
-      settingsService.reset(intent.key);
+      if (configurationService) configurationService.reset(intent.key);
+      else settingsService.reset(intent.key);
       onSystemMessage?.(`Reset ${intent.key} to default`);
-      if (applyRuntimeSetting && settingsService.isRuntimeModifiable(intent.key)) {
+      if (!configurationService && applyRuntimeSetting && settingsService.isRuntimeModifiable(intent.key)) {
         applyRuntimeSetting(intent.key, settingsService.getDynamic(intent.key));
       }
       return { id, sourceFrameId, ok: true };

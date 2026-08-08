@@ -1,8 +1,8 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { RuntimeSettingRouterConversationService } from '../services/runtime-setting-router.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
-import { applyRuntimeSettingChange } from '../services/runtime-setting-router.js';
+import { ConversationConfigurationService } from '../services/runtime-setting-router.js';
 
 interface UseRuntimeSettingsProps {
   setModel: (model: string) => void;
@@ -19,9 +19,9 @@ export const useRuntimeSettings = ({
   conversationService,
   settingsService,
 }: UseRuntimeSettingsProps) => {
-  return useCallback(
-    (key: string, value: unknown) =>
-      applyRuntimeSettingChange(key, value, {
+  const configurationService = useMemo(
+    () =>
+      new ConversationConfigurationService({
         conversationService,
         settingsService,
         setModel,
@@ -29,5 +29,9 @@ export const useRuntimeSettings = ({
         setTemperature,
       }),
     [setModel, setReasoningEffort, setTemperature, conversationService, settingsService],
+  );
+  return useCallback(
+    (key: string, value: unknown) => configurationService.applyRuntimeSetting(key, value),
+    [configurationService],
   );
 };

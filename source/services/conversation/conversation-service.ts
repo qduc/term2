@@ -291,6 +291,7 @@ export class ConversationService {
   interruptFromUser(): void {
     this.#adapter.abort();
     this.#clientHandle.agentClient.cancelBackgroundRuns?.();
+    this.#clientHandle.agentClient.cancelBackgroundShellJobs?.();
   }
 
   /** Release the current runtime and, when factory-owned, its session client. */

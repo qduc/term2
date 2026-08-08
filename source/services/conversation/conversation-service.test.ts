@@ -1695,6 +1695,18 @@ it('abort() aborts the turn without cancelling conversation-bound background run
   expect(cancelBackgroundCalls).toBe(0);
 });
 
+it('abort() leaves root background shell jobs running', () => {
+  let cancelShellCalls = 0;
+  const service = new ConversationService({
+    agentClient: partialClient({ cancelBackgroundShellJobs: () => cancelShellCalls++ }),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  service.abort();
+
+  expect(cancelShellCalls).toBe(0);
+});
+
 it('interruptFromUser() aborts the turn and cancels conversation-bound background runs', () => {
   let abortCalls = 0;
   let cancelBackgroundCalls = 0;
@@ -1716,6 +1728,18 @@ it('interruptFromUser() aborts the turn and cancels conversation-bound backgroun
 
   expect(abortCalls).toBe(1);
   expect(cancelBackgroundCalls).toBe(1);
+});
+
+it('interruptFromUser() also cancels root background shell jobs', () => {
+  let cancelShellCalls = 0;
+  const service = new ConversationService({
+    agentClient: partialClient({ cancelBackgroundShellJobs: () => cancelShellCalls++ }),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  service.interruptFromUser();
+
+  expect(cancelShellCalls).toBe(1);
 });
 
 it('interruptFromUser() works with clients that cannot cancel background runs', () => {

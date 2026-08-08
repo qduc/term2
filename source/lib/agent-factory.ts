@@ -23,6 +23,8 @@ import { isZodToolParameterSchema } from '../tools/types.js';
 import { isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../tools/utils.js';
 import type { AnyToolDefinition, JsonSchemaObject, PostExecutePauseCapability, ToolRegistry } from '../tools/types.js';
 import type { SessionAccessState } from '../services/session/session-access-state.js';
+import type { BackgroundShellRegistry } from '../services/shell/background-shell-registry.js';
+import type { BackgroundShellExecutionResult } from '../tools/system/shell.js';
 
 export interface AgentFactoryDeps {
   settings: ISettingsService;
@@ -47,6 +49,10 @@ export interface AgentFactoryDeps {
   postExecutePauseCapability?: PostExecutePauseCapability;
   /** Handle-owned state for root read and Docker capabilities. */
   sessionAccess?: SessionAccessState;
+  /** Root-session-owned background shell capability. */
+  backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
+  /** False for one-shot/non-interactive callers until their lifecycle is supported. */
+  allowBackgroundShell?: boolean;
 }
 
 export interface AgentBuildResult {
@@ -318,6 +324,8 @@ export function buildAgent(
       agentRuntime: deps.getAgentRuntime?.() ?? null,
       postExecuteDeniedRead: Boolean(deps.postExecutePauseCapability),
       sessionAccess: deps.sessionAccess,
+      backgroundShellRegistry: deps.backgroundShellRegistry,
+      allowBackgroundShell: deps.allowBackgroundShell,
     },
     resolvedModel,
   );

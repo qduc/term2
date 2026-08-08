@@ -16,6 +16,7 @@ import type { ToolDefinition } from '../tools/types.js';
 import { PostExecutePendingRegistry } from '../services/session/post-execute-pending-registry.js';
 import { PostExecutePauseCapability } from '../services/session/post-execute-pause-capability.js';
 import { createReadFileToolDefinition } from '../tools/file/read-file.js';
+import { BackgroundShellRegistry } from '../services/shell/background-shell-registry.js';
 
 type MockLogger = ILoggingService & { debugCalls: any[][] };
 
@@ -90,6 +91,8 @@ const createDeps = (
       getAskUserAnswer: overrides.getAskUserAnswer ?? (() => undefined),
       checkToolInterceptors: overrides.checkToolInterceptors ?? (async () => null),
       postExecutePauseCapability: overrides.postExecutePauseCapability,
+      backgroundShellRegistry: overrides.backgroundShellRegistry,
+      allowBackgroundShell: overrides.allowBackgroundShell,
     },
   };
 };
@@ -177,6 +180,17 @@ it.sequential('tools without a post-execute policy return their ordinary result'
 
   expect(result).toBe('original:unchanged');
   expect(pending.snapshot().entries).toEqual([]);
+});
+
+it.sequential('buildAgent passes the root background shell registry into the complete tool set', () => {
+  const registry = new BackgroundShellRegistry<any>();
+  const { deps } = createDeps({ backgroundShellRegistry: registry });
+
+  const { agent } = buildAgent({}, deps);
+
+  expect(agent.tools?.map((tool) => tool.name)).toEqual(
+    expect.arrayContaining(['shell', 'get_shell_job', 'cancel_shell_job']),
+  );
 });
 
 it.sequential('application run loop pauses an opted-in root tool pending approval', async () => {

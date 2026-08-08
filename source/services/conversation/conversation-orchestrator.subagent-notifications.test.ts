@@ -40,6 +40,18 @@ const question = (
     ...overrides,
   } as ConversationEvent);
 
+const shellCompletion = (
+  overrides: Partial<Extract<ConversationEvent, { type: 'background_shell_completed' }>> = {},
+): ConversationEvent =>
+  ({
+    type: 'background_shell_completed',
+    jobId: 'shell-1',
+    command: 'pnpm test',
+    status: 'completed',
+    output: 'exit 0\nall tests passed',
+    ...overrides,
+  } as ConversationEvent);
+
 /** Yield to the event loop so orchestrator-initiated turns can run to completion. */
 async function settle(times = 4): Promise<void> {
   for (let i = 0; i < times; i++) {
@@ -159,6 +171,21 @@ function makeHarness(options: { queueActive?: boolean; injects?: boolean } = {})
 }
 
 describe('ConversationOrchestrator background subagent notifications mid-turn', () => {
+  it('hands a settled shell job to the running turn at its next request boundary', async () => {
+    const h = makeHarness({ queueActive: true });
+
+    h.emit(shellCompletion());
+    await settle();
+
+    expect(h.service.injectIntoActiveTurn).toHaveBeenCalledTimes(1);
+    expect(h.injectedTexts()[0]).toContain('Background shell job finished');
+    expect(h.injectedTexts()[0]).toContain('pnpm test');
+    expect(h.service.sendMessage).not.toHaveBeenCalled();
+    expect(h.config.messages.getMessages()).toContainEqual(
+      expect.objectContaining({ sender: 'command', toolName: 'background_shell_notification' }),
+    );
+  });
+
   it('hands a settled run to the running turn instead of waiting for it to end', async () => {
     const h = makeHarness({ queueActive: true });
 
@@ -447,7 +474,9 @@ describe('ConversationOrchestrator background subagent notifications', () => {
 
     const announced = h.config.messages
       .getMessages()
-      .filter((message) => message.sender === 'command' && (message as any).command === 'background_subagent_notification');
+      .filter(
+        (message) => message.sender === 'command' && (message as any).command === 'background_subagent_notification',
+      );
     expect((announced[0] as any).toolArgs.runs[0]).toEqual({
       role: 'explorer',
       status: 'failed',

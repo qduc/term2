@@ -1,13 +1,12 @@
 import React, { type FC } from 'react';
 import { Box, Text } from 'ink';
 import type {
-  BackgroundSubagentTask,
-  BackgroundSubagentTaskStatus,
+  BackgroundTask,
   BackgroundSubagentTaskTool,
 } from '../../services/subagents/subagent-notification-store.js';
 
 type Props = {
-  tasks: readonly BackgroundSubagentTask[];
+  tasks: readonly BackgroundTask[];
   now: number;
 };
 
@@ -19,7 +18,11 @@ const formatRole = (role: string): string => {
   return role.charAt(0).toUpperCase() + role.slice(1).toLowerCase();
 };
 
-const formatTaskLabel = (task: BackgroundSubagentTask): string => {
+const formatTaskLabel = (task: BackgroundTask): string => {
+  if (task.kind === 'shell') {
+    const command = task.command.replaceAll(/\s+/g, ' ').trim();
+    return command.length > TASK_LABEL_LIMIT ? `${command.slice(0, TASK_LABEL_LIMIT - 1)}…` : command;
+  }
   const normalized = task.task.replaceAll(/\s+/g, ' ').trim();
   const fallback = `${formatRole(task.role)} background task`;
   const label = normalized || fallback;
@@ -51,7 +54,7 @@ export const formatBackgroundTaskElapsed = (elapsedMs: number): string => {
   return minutes > 0 ? `${minutes}m ${String(seconds).padStart(2, '0')}s` : `${seconds}s`;
 };
 
-const formatTerminalStatus = (task: BackgroundSubagentTask): string => {
+const formatTerminalStatus = (task: BackgroundTask): string => {
   switch (task.status) {
     case 'completed':
       return 'Completed recently';
@@ -59,6 +62,8 @@ const formatTerminalStatus = (task: BackgroundSubagentTask): string => {
       return task.error ? `Failed recently (${task.error})` : 'Failed recently';
     case 'cancelled':
       return 'Cancelled recently';
+    case 'timed_out':
+      return 'Timed out recently';
     default:
       return 'Running';
   }
@@ -73,12 +78,12 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now }) => {
     <Box flexDirection="column" marginBottom={1}>
       <Text color="#94a3b8">Background tasks · {activeCount} active</Text>
       {tasks.map((task) => (
-        <Box key={task.runId} flexDirection="column">
+        <Box key={task.kind === 'shell' ? task.jobId : task.runId} flexDirection="column">
           <Box flexDirection="row">
             <Box flexGrow={1}>
               <Text color="#64748b">• </Text>
-              <Text color="#a5b4fc">[{formatRole(task.role)}]</Text>
-              {task.name && <Text color="#c4b5fd"> {task.name}</Text>}
+              <Text color="#a5b4fc">[{task.kind === 'shell' ? 'Shell' : formatRole(task.role)}]</Text>
+              {task.kind !== 'shell' && task.name && <Text color="#c4b5fd"> {task.name}</Text>}
               <Text> {formatTaskLabel(task)}</Text>
               <Text color="#94a3b8">
                 {' '}
@@ -88,11 +93,11 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now }) => {
                   : formatTerminalStatus(task)}
               </Text>
             </Box>
-            {task.usage?.prompt_tokens != null && (
+            {task.kind !== 'shell' && task.usage?.prompt_tokens != null && (
               <Text color="#94a3b8">Ctx {formatContextTokens(task.usage.prompt_tokens)}</Text>
             )}
           </Box>
-          {task.status === 'running' && task.lastTool && (
+          {task.kind !== 'shell' && task.status === 'running' && task.lastTool && (
             <Box flexDirection="row">
               <Text color="#475569">{'  └ '}</Text>
               <Text color="#64748b">

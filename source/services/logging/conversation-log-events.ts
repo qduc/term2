@@ -198,6 +198,24 @@ export interface SubagentQuestionLogEvent {
   question: string;
 }
 
+/** Durable observation that a session-owned shell job was launched. */
+export interface BackgroundShellStartedLogEvent {
+  type: 'background_shell_started';
+  jobId: string;
+  command: string;
+}
+
+/** Durable terminal observation for a background shell job. */
+export interface BackgroundShellCompletedLogEvent {
+  type: 'background_shell_completed';
+  jobId: string;
+  command: string;
+  status: 'completed' | 'failed' | 'timed_out' | 'cancelled';
+  /** Normalized, bounded shell output. */
+  output: string;
+  error?: string;
+}
+
 export interface ErrorLogEvent {
   type: 'error';
   message: string;
@@ -245,6 +263,8 @@ export type LogEvent =
   | SubagentToolStartedLogEvent
   | SubagentCompletedLogEvent
   | SubagentQuestionLogEvent
+  | BackgroundShellStartedLogEvent
+  | BackgroundShellCompletedLogEvent
   | ErrorLogEvent
   | AssistantTurnEvent
   | AssistantJournalDeltaLogEvent

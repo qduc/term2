@@ -330,9 +330,13 @@ export class LoggingService {
 
   private log(level: string, message: string, meta?: Record<string, any>): void {
     try {
+      // Callers that own an asynchronous operation can provide its correlation
+      // explicitly. That must beat the mutable process-wide fallback, otherwise
+      // overlapping background work is misattributed to the foreground turn.
+      const correlationId = typeof meta?.correlationId === 'string' ? meta.correlationId : this.correlationId;
       let metadata = {
-        ...(meta ?? {}),
         ...(this.correlationId && { correlationId: this.correlationId }),
+        ...(meta ?? {}),
       } as Record<string, unknown>;
 
       if (metadata.eventType === 'provider.request.started') {
@@ -358,7 +362,7 @@ export class LoggingService {
 
       const runtimeRecord = buildRuntimeLogRecord({
         level,
-        correlationId: this.correlationId,
+        correlationId,
         meta: metadata,
       });
 

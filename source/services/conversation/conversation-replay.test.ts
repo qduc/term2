@@ -343,6 +343,57 @@ it('replayEvents: subagent_tool_started restores scoped activity without a paren
   );
 });
 
+it('replayEvents: restores one settled background shell notification without recreating a job', () => {
+  const restored = replayEvents([
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'background_shell_started', jobId: 'shell-1', command: 'pnpm test' }),
+    env({
+      type: 'background_shell_completed',
+      jobId: 'shell-1',
+      command: 'pnpm test',
+      status: 'completed',
+      output: 'exit 0',
+    }),
+    // Registry event replay is at-least-once; static transcript projection is not.
+    env({
+      type: 'background_shell_completed',
+      jobId: 'shell-1',
+      command: 'pnpm test',
+      status: 'completed',
+      output: 'exit 0',
+    }),
+  ]);
+
+  const notifications = restored.messages.filter(
+    (message): message is CommandMessage =>
+      message.sender === 'command' && message.toolName === 'background_shell_notification',
+  );
+  expect(notifications).toHaveLength(1);
+  expect(notifications[0]).toMatchObject({
+    status: 'completed',
+    command: 'background_shell_notification',
+    output: 'exit 0',
+    toolArgs: { jobs: [{ jobId: 'shell-1', command: 'pnpm test', status: 'completed' }] },
+  });
+});
+
+it('replayEvents: marks an unresolved background shell job interrupted without restarting it', () => {
+  const restored = replayEvents([
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'background_shell_started', jobId: 'shell-lost', command: 'pnpm test' }),
+  ]);
+
+  expect(restored.messages).toContainEqual(
+    expect.objectContaining({
+      sender: 'command',
+      toolName: 'background_shell_notification',
+      status: 'aborted',
+      output: expect.stringContaining('interrupted'),
+    }),
+  );
+  expect(restored.replayWarnings.some((warning) => warning.includes('shell-lost'))).toBe(true);
+});
+
 it('replayEvents: unknown event type is ignored gracefully', () => {
   const envelopes: LogEnvelope[] = [
     env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
@@ -1624,6 +1675,30 @@ it('decodeLogEnvelope: rejects malformed known events without losing surrounding
     'answer',
     'still here',
   ]);
+});
+
+it('decodeLogEnvelope: validates the closed background shell lifecycle fields', () => {
+  expect(
+    decodeLogEnvelope({
+      event: { type: 'background_shell_started', jobId: 'shell-1', command: 'pnpm test' },
+    })?.event,
+  ).toMatchObject({ type: 'background_shell_started', jobId: 'shell-1' });
+  expect(
+    decodeLogEnvelope({
+      event: {
+        type: 'background_shell_completed',
+        jobId: 'shell-1',
+        command: 'pnpm test',
+        status: 'timed_out',
+        output: 'timeout',
+      },
+    })?.event,
+  ).toMatchObject({ type: 'background_shell_completed', status: 'timed_out' });
+  expect(
+    decodeLogEnvelope({
+      event: { type: 'background_shell_completed', jobId: 'shell-1', command: 'pnpm test', status: 'running' },
+    }),
+  ).toBeNull();
 });
 
 it('decodeLogEnvelope: skips invalid closed discriminants while retaining surrounding events', () => {

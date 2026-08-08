@@ -26,6 +26,34 @@ import { registerSandboxNetworkApprovalPauseController } from './sandbox/sandbox
 const DEFAULT_DRAIN_GRACE_MS = 200;
 const DEFAULT_TERMINATION_GRACE_MS = 2_000;
 
+// Sandbox network approvals identify the active command through one global
+// pause controller. Keep the lease until process settlement, not merely command
+// wrapping, so a concurrent sandboxed command cannot replace that controller.
+let sandboxExecutionLeaseHeld = false;
+const sandboxExecutionLeaseWaiters: Array<() => void> = [];
+
+function withSandboxExecutionLease<T>(operation: () => Promise<T>): Promise<T> {
+  const execute = (): Promise<T> => {
+    sandboxExecutionLeaseHeld = true;
+    return operation().finally(() => {
+      const next = sandboxExecutionLeaseWaiters.shift();
+      if (next) {
+        next();
+      } else {
+        sandboxExecutionLeaseHeld = false;
+      }
+    });
+  };
+
+  if (!sandboxExecutionLeaseHeld) return execute();
+
+  return new Promise<T>((resolve, reject) => {
+    sandboxExecutionLeaseWaiters.push(() => {
+      void execute().then(resolve, reject);
+    });
+  });
+}
+
 type ExecCallbackMeta = { outputComplete?: boolean };
 
 type ExecCallback = (error: any, stdout: string | Buffer, stderr: string | Buffer, meta?: ExecCallbackMeta) => void;
@@ -221,6 +249,17 @@ function stopChildProcess(child: ChildProcess): void {
 }
 
 export async function executeShellCommand(
+  command: string,
+  options: ExecuteShellOptions = {},
+): Promise<ShellExecutionResult> {
+  if (options.pauseOnSandboxNetworkApproval && !options.sshService) {
+    return await withSandboxExecutionLease(() => executeShellCommandUnleased(command, options));
+  }
+
+  return await executeShellCommandUnleased(command, options);
+}
+
+async function executeShellCommandUnleased(
   command: string,
   options: ExecuteShellOptions = {},
 ): Promise<ShellExecutionResult> {

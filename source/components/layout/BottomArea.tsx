@@ -21,7 +21,7 @@ import type { UserTurn } from '../../types/user-turn.js';
 import type { SkillsService } from '../../services/skills/skills-service.js';
 import type { StaticCommitBlocker } from '../message/MessageList.js';
 import type { QueuePauseReason } from '../../services/queue/queue-controller.js';
-import type { BackgroundSubagentTask } from '../../services/subagents/subagent-notification-store.js';
+import type { BackgroundTask } from '../../services/subagents/subagent-notification-store.js';
 import BackgroundTasksPanel from './BackgroundTasksPanel.js';
 import { deriveInputOwner } from '../../lib/input-owner.js';
 import type { SubmissionMutation } from '../../services/conversation/conversation-adapter.js';
@@ -80,7 +80,7 @@ export type BottomAreaProps = {
   pendingQueuedMessages?: ReadonlyArray<{ id: string; text: string; queuedAt: number }>;
   onRetractQueuedMessage?: (id: string) => Promise<SubmissionMutation>;
   onEditQueuedMessage?: (id: string, turn: UserTurn) => Promise<SubmissionMutation>;
-  backgroundSubagentTasks?: readonly BackgroundSubagentTask[];
+  backgroundSubagentTasks?: readonly BackgroundTask[];
   backgroundSubagentTasksNow?: number;
 };
 

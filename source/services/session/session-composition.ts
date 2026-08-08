@@ -68,6 +68,13 @@ const asSubagentEventSinkHost = (value: unknown): SubagentEventSinkHost | null =
     ? (value as SubagentEventSinkHost)
     : null;
 
+const asBackgroundShellEventSinkHost = (
+  value: unknown,
+): Pick<ConversationAgentClient, 'setBackgroundShellEventSink'> | null =>
+  value && typeof (value as ConversationAgentClient).setBackgroundShellEventSink === 'function'
+    ? (value as Pick<ConversationAgentClient, 'setBackgroundShellEventSink'>)
+    : null;
+
 // ── Public types ──────────────────────────────────────────────────
 
 export type ConversationSessionRetryOptions = {
@@ -121,6 +128,8 @@ export type SessionRuntimeInternals = {
   resolvedAskUserAnswerSink: AskUserAnswerSink | null;
   /** @internal Resolved subagent event sink host (derived from option or agent client). */
   resolvedSubagentEventSinkHost: SubagentEventSinkHost | null;
+  /** @internal Root shell lifecycle sink; nested runtimes omit this port. */
+  resolvedBackgroundShellEventSinkHost: Pick<ConversationAgentClient, 'setBackgroundShellEventSink'> | null;
   /** Completions of background subagent runs still owed to the main agent. */
   backgroundSubagentNotifications: BackgroundSubagentNotificationChannel;
   /** Read-only lifecycle projection for background subagent UI. */
@@ -281,6 +290,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   const resolvedTurnAccumulator = turnAccumulator ?? new TurnItemAccumulator();
   const resolvedAskUserAnswerSink = askUserAnswerSink ?? asAskUserAnswerSink(agentClient);
   const resolvedSubagentEventSinkHost = subagentEventSinkHost ?? asSubagentEventSinkHost(agentClient);
+  const resolvedBackgroundShellEventSinkHost = asBackgroundShellEventSinkHost(agentClient);
 
   // Background (async) subagent runs settle whenever they settle, including
   // while the conversation is idle and no per-turn sink is attached.
@@ -371,9 +381,10 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   });
 
   // Background lifecycle belongs to the conversation-scoped sink, not the
-  // active turn's UI sink. Dispatch it through conversation logging, while only
-  // terminal async events enter the main-agent notification queue.
-  resolvedSubagentEventSinkHost?.setBackgroundSubagentEventSink?.((event) => {
+  // active turn's UI sink. Both async subagents and root shell jobs use the
+  // same projection and delivery queue, while their concrete registries retain
+  // process/run ownership.
+  const recordBackgroundEvent = (event: ConversationEvent) => {
     conversationLogger.dispatchEventToLog(event);
     if (notificationStore.recordLifecycle(event)) {
       try {
@@ -398,7 +409,9 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
         errorMessage: error instanceof Error ? error.message : String(error),
       });
     }
-  });
+  };
+  resolvedSubagentEventSinkHost?.setBackgroundSubagentEventSink?.(recordBackgroundEvent);
+  resolvedBackgroundShellEventSinkHost?.setBackgroundShellEventSink?.(recordBackgroundEvent);
 
   const approvalFlow = new ApprovalFlowCoordinator({
     agentClient,
@@ -615,6 +628,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   });
 
   let disposed = false;
+  let backgroundShellSettlement: Promise<void> | undefined;
   const dispose = (): void => {
     if (disposed) return;
     disposed = true;
@@ -629,9 +643,16 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     // Background subagent runs are bound to the conversation, not to a turn,
     // so they must be cancelled even when no turn is in flight.
     getMethod<[], void>(agentClient, 'cancelBackgroundRuns')?.call(agentClient);
+    getMethod<[], void>(agentClient, 'cancelBackgroundShellJobs')?.call(agentClient);
     notificationObserver = null;
     taskObserver = null;
     resolvedSubagentEventSinkHost?.setBackgroundSubagentEventSink?.(null);
+    const shellDisposal = getMethod<[], Promise<void>>(agentClient, 'disposeBackgroundShellJobs')?.call(agentClient);
+    backgroundShellSettlement = shellDisposal
+      ? Promise.resolve(shellDisposal).finally(() =>
+          resolvedBackgroundShellEventSinkHost?.setBackgroundShellEventSink?.(null),
+        )
+      : Promise.resolve().then(() => resolvedBackgroundShellEventSinkHost?.setBackgroundShellEventSink?.(null));
     providerContinuity.clear();
   };
 
@@ -639,6 +660,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   const shutdown = (): Promise<void> => {
     shutdownPromise ??= (async () => {
       dispose();
+      await backgroundShellSettlement;
       await hookLifecycle?.shutdown();
     })();
     return shutdownPromise;
@@ -676,6 +698,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     journal,
     resolvedAskUserAnswerSink,
     resolvedSubagentEventSinkHost,
+    resolvedBackgroundShellEventSinkHost,
     backgroundSubagentNotifications,
     backgroundSubagentTasks,
     postExecutePending,

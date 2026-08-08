@@ -20,6 +20,8 @@ import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import { HookEventFactory } from '../hooks/hook-event-factory.js';
 import { createToolExecutionLifecyclePort } from '../hooks/hook-tool-lifecycle.js';
 import type { ToolExecutionLifecyclePort } from '../../tools/types.js';
+import { BackgroundShellRegistry } from '../shell/background-shell-registry.js';
+import type { BackgroundShellExecutionResult } from '../../tools/system/shell.js';
 
 /** A client whose lifetime is owned by the session that requested it. */
 export type SessionClientHandle = {
@@ -39,13 +41,15 @@ export type SessionClientHandle = {
   readonly hookLifecycle?: HookLifecyclePort;
   readonly hookEvents?: HookEventFactory;
   readonly toolLifecycle?: ToolExecutionLifecyclePort;
+  /** Present only for an owned root session handle. */
+  readonly backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
   /** Idempotently release resources captured by this session's client. */
   dispose(): void;
 };
 
 /** Creates the closure-bound client for one conversation session. */
 export type SessionClientFactory = {
-  create(sessionId: string): SessionClientHandle;
+  create(sessionId: string, options?: { allowBackgroundShell?: boolean }): SessionClientHandle;
 };
 
 type DisposableConversationAgentClient = ConversationAgentClient & { dispose?: () => void };
@@ -66,11 +70,13 @@ export function createOwnedSessionClientFactory(
     providerContinuity: ProviderContinuity,
     requestCapture: OpenAICandidateObserver,
     toolLifecycle?: ToolExecutionLifecyclePort,
+    backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>,
+    allowBackgroundShell?: boolean,
   ) => DisposableConversationAgentClient,
   hookLifecycle?: HookLifecyclePort,
 ): SessionClientFactory {
   return {
-    create(sessionId) {
+    create(sessionId, options) {
       const continuationProjectionMode: ContinuationProjectionMode =
         settings.get('agent.provider') === 'openai' ? 'openai-provider' : 'legacy';
       const toolOwnership = new ToolOwnershipRegistry();
@@ -98,6 +104,10 @@ export function createOwnedSessionClientFactory(
         : undefined;
       const toolLifecycle =
         hookLifecycle && hookEvents ? createToolExecutionLifecyclePort(hookLifecycle, hookEvents) : undefined;
+      const allowBackgroundShell = options?.allowBackgroundShell !== false;
+      const backgroundShellRegistry = allowBackgroundShell
+        ? new BackgroundShellRegistry<BackgroundShellExecutionResult>()
+        : undefined;
       const openAIRootFreshTurnSelectorParityObserver =
         continuationProjectionMode === 'openai-provider'
           ? new ProviderContinuityOpenAIRootSelectorParityObserver(
@@ -116,6 +126,8 @@ export function createOwnedSessionClientFactory(
         providerContinuity,
         requestCapture,
         toolLifecycle,
+        backgroundShellRegistry,
+        allowBackgroundShell,
       );
       let disposed = false;
       return {
@@ -131,10 +143,12 @@ export function createOwnedSessionClientFactory(
         hookLifecycle,
         hookEvents,
         toolLifecycle,
+        backgroundShellRegistry,
         dispose() {
           if (disposed) return;
           disposed = true;
           agentClient.dispose?.();
+          void backgroundShellRegistry?.dispose();
           postExecutePauseCapability.setActiveRunId(null);
           postExecutePending.close();
           toolOwnership.clear();

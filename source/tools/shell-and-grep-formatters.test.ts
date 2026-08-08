@@ -13,6 +13,22 @@ it('formatShellCommandMessage: sets toolName to "shell"', () => {
   expect(messages[0].command).toBe('echo "hello"');
 });
 
+it('formatShellCommandMessage: treats a background launch acknowledgement as success', () => {
+  const item = {
+    rawItem: { arguments: { command: 'pnpm test', background: true } },
+    output: JSON.stringify({ jobId: 'job-1', status: 'running' }),
+  } as any;
+
+  expect(formatShellCommandMessage(item, 0, new Map())).toMatchObject([
+    {
+      command: 'pnpm test',
+      output: 'Background job job-1 is running.',
+      success: true,
+      toolName: 'shell',
+    },
+  ]);
+});
+
 it('formatGrepCommandMessage: sets toolName to "grep" and populates toolArgs', () => {
   const item = {
     arguments: { pattern: 'TODO', path: 'src/' },

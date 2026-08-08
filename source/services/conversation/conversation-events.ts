@@ -26,6 +26,8 @@ export type ConversationEvent =
   | SubagentCommandMessageEvent
   | SubagentCompletedEvent
   | SubagentQuestionEvent
+  | BackgroundShellStartedEvent
+  | BackgroundShellCompletedEvent
   | CodexRateLimitEvent
   | UserMessageConsumedForAbortEvent
   | ContextCompactionStartedEvent
@@ -213,6 +215,24 @@ export interface SubagentQuestionEvent {
   name?: string;
   role: string;
   question: string;
+}
+
+/** A session-scoped shell job began after its launch acknowledgement returned. */
+export interface BackgroundShellStartedEvent {
+  type: 'background_shell_started';
+  jobId: string;
+  command: string;
+}
+
+/** Terminal result for an application-owned background shell job. */
+export interface BackgroundShellCompletedEvent {
+  type: 'background_shell_completed';
+  jobId: string;
+  command: string;
+  status: 'completed' | 'failed' | 'timed_out' | 'cancelled';
+  /** Bounded display/model output assembled by the shell owner. */
+  output: string;
+  error?: string;
 }
 
 /** Emitted when Codex reports ChatGPT plan usage limits. */

@@ -96,6 +96,15 @@ const isStructurallyValidKnownEvent = (event: UnknownObject): boolean => {
         hasString(event, 'role') &&
         hasString(event, 'question')
       );
+    case 'background_shell_started':
+      return hasString(event, 'jobId') && hasString(event, 'command');
+    case 'background_shell_completed':
+      return (
+        hasString(event, 'jobId') &&
+        hasString(event, 'command') &&
+        hasString(event, 'output') &&
+        isOneOf(event['status'], ['completed', 'failed', 'timed_out', 'cancelled'])
+      );
     case 'error':
       return hasString(event, 'message');
     case 'assistant_turn':

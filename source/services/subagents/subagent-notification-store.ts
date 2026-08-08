@@ -41,6 +41,22 @@ export type BackgroundSubagentNotification =
   | BackgroundSubagentCompletionNotification
   | BackgroundSubagentQuestionNotification;
 
+/** A settled shell job that still owes the main agent a notification. */
+export interface BackgroundShellCompletionNotification {
+  kind: 'shell_completion';
+  /** Stable per job: duplicate process settlement must never wake the agent twice. */
+  messageId: string;
+  jobId: string;
+  command: string;
+  status: 'completed' | 'failed' | 'timed_out' | 'cancelled';
+  output: string;
+  error?: string;
+  completedAt: number;
+}
+
+/** Background work is delivered through one queue regardless of its executor. */
+export type BackgroundNotification = BackgroundSubagentNotification | BackgroundShellCompletionNotification;
+
 export type BackgroundSubagentTaskStatus = 'running' | 'completed' | 'failed' | 'cancelled';
 
 /** The single most recent tool call observed for a live background run. */
@@ -52,6 +68,8 @@ export interface BackgroundSubagentTaskTool {
 
 /** Conversation-scoped projection of one background subagent lifecycle. */
 export interface BackgroundSubagentTask {
+  /** Omitted by legacy callers; any non-shell task is a subagent task. */
+  kind?: 'subagent';
   runId: string;
   /** Optional user-provided alias for identifying the run in the UI. */
   name?: string;
@@ -68,19 +86,35 @@ export interface BackgroundSubagentTask {
   error?: string;
 }
 
+export type BackgroundShellTaskStatus = 'running' | 'completed' | 'failed' | 'timed_out' | 'cancelled';
+
+/** Conversation-scoped projection of one session-owned background shell job. */
+export interface BackgroundShellTask {
+  kind: 'shell';
+  jobId: string;
+  command: string;
+  status: BackgroundShellTaskStatus;
+  startedAt: number;
+  completedAt?: number;
+  error?: string;
+}
+
+/** The UI has one background-task surface with executor-specific details. */
+export type BackgroundTask = BackgroundSubagentTask | BackgroundShellTask;
+
 /**
  * The delivery half of {@link SubagentNotificationStore}, for callers that hand
  * pending notifications to the main agent but never produce them.
  */
 export interface BackgroundSubagentNotificationPort {
   readonly pendingCount: number;
-  drain(): BackgroundSubagentNotification[];
-  retain(notifications: readonly BackgroundSubagentNotification[]): void;
+  drain(): BackgroundNotification[];
+  retain(notifications: readonly BackgroundNotification[]): void;
 }
 
 /** Read-only lifecycle projection used by the background-tasks UI. */
 export interface BackgroundSubagentTaskPort {
-  getSnapshot(): readonly BackgroundSubagentTask[];
+  getSnapshot(): readonly BackgroundTask[];
   setObserver(observer: (() => void) | null): void;
 }
 
@@ -119,9 +153,9 @@ export const BACKGROUND_TASK_RECENT_RETENTION_MS = 5_000;
  *    redelivered exactly once and a replayed event for it is still dropped.
  */
 export class SubagentNotificationStore implements BackgroundSubagentNotificationPort {
-  #pending = new Map<string, BackgroundSubagentNotification>();
+  #pending = new Map<string, BackgroundNotification>();
   #seen = new Set<string>();
-  #tasks = new Map<string, BackgroundSubagentTask>();
+  #tasks = new Map<string, BackgroundTask>();
   #settledTaskIds = new Set<string>();
   #lifecycleEpochs = new Map<string, number>();
   #now: () => number;
@@ -140,6 +174,38 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
    * answers "what is it doing now", not "what has it done".
    */
   recordLifecycle(event: ConversationEvent): boolean {
+    if (event.type === 'background_shell_started') {
+      this.#purgeExpiredTasks();
+      const existing = this.#tasks.get(event.jobId);
+      if (existing?.kind === 'shell' && existing.status !== 'running') return false;
+      if (existing?.kind === 'shell' && existing.status === 'running' && existing.command === event.command)
+        return false;
+      this.#tasks.set(event.jobId, {
+        kind: 'shell',
+        jobId: event.jobId,
+        command: event.command,
+        status: 'running',
+        startedAt: existing?.startedAt ?? this.#now(),
+      });
+      return true;
+    }
+
+    if (event.type === 'background_shell_completed') {
+      const existing = this.#tasks.get(event.jobId);
+      if (existing?.kind === 'shell' && existing.status !== 'running') return false;
+      const completedAt = this.#now();
+      this.#tasks.set(event.jobId, {
+        kind: 'shell',
+        jobId: event.jobId,
+        command: event.command,
+        status: event.status,
+        startedAt: existing?.kind === 'shell' ? existing.startedAt : completedAt,
+        completedAt,
+        ...(event.error ? { error: event.error } : {}),
+      });
+      return true;
+    }
+
     if (event.type === 'subagent_tool_started' || event.type === 'subagent_command_message') {
       return this.#recordToolActivity(event);
     }
@@ -152,7 +218,12 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
       // A terminal task still inside its retention window means this start is a
       // replay of the run that just finished, not a continuation of it.
       if (existing && existing.status !== 'running') return false;
-      if (existing?.status === 'running' && existing.role === event.role && existing.task === event.task) {
+      if (
+        existing?.kind !== 'shell' &&
+        existing?.status === 'running' &&
+        existing.role === event.role &&
+        existing.task === event.task
+      ) {
         return false;
       }
       // `continue_run_id` reuses a settled run id, so a start for one opens a
@@ -162,6 +233,7 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
       }
 
       this.#tasks.set(event.agentId, {
+        kind: 'subagent',
         runId: event.agentId,
         ...(event.name !== undefined ? { name: event.name } : {}),
         role: event.role,
@@ -182,16 +254,17 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
 
     const completedAt = this.#now();
     this.#tasks.set(result.agentId, {
+      kind: 'subagent',
       runId: result.agentId,
-      ...(existing?.name !== undefined
+      ...(existing?.kind !== 'shell' && existing?.name !== undefined
         ? { name: existing.name }
         : result.name !== undefined
         ? { name: result.name }
         : {}),
-      role: existing?.role ?? result.role,
-      task: existing?.task ?? '',
+      role: existing && existing.kind !== 'shell' ? existing.role : result.role,
+      task: existing && existing.kind !== 'shell' ? existing.task : '',
       status: result.status,
-      startedAt: existing?.startedAt ?? completedAt,
+      startedAt: existing && existing.kind !== 'shell' ? existing.startedAt : completedAt,
       completedAt,
       ...(result.usage !== undefined ? { usage: result.usage } : {}),
       ...(result.error ? { error: result.error } : {}),
@@ -212,7 +285,7 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
    */
   #recordToolActivity(event: SubagentToolStartedEvent | SubagentCommandMessageEvent): boolean {
     const task = this.#tasks.get(event.agentId);
-    if (!task || task.status !== 'running') return false;
+    if (!task || task.kind !== 'subagent' || task.status !== 'running') return false;
 
     const lastTool: BackgroundSubagentTaskTool =
       event.type === 'subagent_tool_started'
@@ -232,7 +305,7 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
     return true;
   }
 
-  getTaskSnapshot(): readonly BackgroundSubagentTask[] {
+  getTaskSnapshot(): readonly BackgroundTask[] {
     this.#purgeExpiredTasks();
     return [...this.#tasks.values()];
   }
@@ -262,7 +335,7 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
   }
 
   /** Hands over every pending notification in completion order and clears them. */
-  drain(): BackgroundSubagentNotification[] {
+  drain(): BackgroundNotification[] {
     const drained = [...this.#pending.values()];
     this.#pending.clear();
     // Handing the batch over is the point at which old ids become evictable:
@@ -272,7 +345,7 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
   }
 
   /** Returns undelivered notifications to the queue, ahead of anything newer. */
-  retain(notifications: readonly BackgroundSubagentNotification[]): void {
+  retain(notifications: readonly BackgroundNotification[]): void {
     if (notifications.length === 0) return;
     const newer = [...this.#pending.values()];
     this.#pending.clear();
@@ -319,7 +392,19 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
     }
   }
 
-  #notificationFor(event: ConversationEvent): BackgroundSubagentNotification | undefined {
+  #notificationFor(event: ConversationEvent): BackgroundNotification | undefined {
+    if (event.type === 'background_shell_completed') {
+      return {
+        kind: 'shell_completion',
+        messageId: `shell_completion:${event.jobId}`,
+        jobId: event.jobId,
+        command: event.command,
+        status: event.status,
+        output: event.output,
+        ...(event.error ? { error: event.error } : {}),
+        completedAt: this.#now(),
+      };
+    }
     if (event.type === 'subagent_completed' && event.async === true) {
       const result = (event as { result?: SubagentResult }).result;
       const runId = result?.agentId;
@@ -329,7 +414,11 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
         kind: 'completion',
         messageId: this.#completionMessageId(runId),
         runId,
-        ...(task?.name !== undefined ? { name: task.name } : result.name !== undefined ? { name: result.name } : {}),
+        ...(task?.kind !== 'shell' && task?.name !== undefined
+          ? { name: task.name }
+          : result.name !== undefined
+          ? { name: result.name }
+          : {}),
         role: result.role,
         status: result.status,
         preview: truncatePreview(result.finalText || result.error),

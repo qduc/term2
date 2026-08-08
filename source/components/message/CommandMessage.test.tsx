@@ -137,13 +137,33 @@ it('CommandMessage renders background subagent failure cause in header when pres
       toolName="background_subagent_notification"
       status="completed"
       success={true}
-      toolArgs={{ runs: [{ name: 'code_scan', role: 'explorer', status: 'failed', error: 'Max turns (100) exceeded' }] }}
+      toolArgs={{
+        runs: [{ name: 'code_scan', role: 'explorer', status: 'failed', error: 'Max turns (100) exceeded' }],
+      }}
       output="runId: run-1 | role: explorer | status: failed\n  error: Max turns (100) exceeded"
     />,
   );
 
   const output = stripAnsi(lastFrame() ?? '');
   expect(output).toContain('Background code_scan (explorer) failed: Max turns (100) exceeded');
+  unmount();
+});
+
+it('CommandMessage renders a settled background shell job as tool activity', async () => {
+  const { lastFrame, unmount } = await renderInAct(
+    <CommandMessage
+      command="background_shell_notification"
+      toolName="background_shell_notification"
+      status="completed"
+      success={true}
+      toolArgs={{ jobs: [{ jobId: 'shell-1', command: 'pnpm test', status: 'completed' }] }}
+      output="exit 0"
+    />,
+  );
+
+  const output = stripAnsi(lastFrame() ?? '');
+  expect(output).toContain('Background shell completed: pnpm test');
+  expect(output).toContain('exit 0');
   unmount();
 });
 

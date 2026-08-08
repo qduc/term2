@@ -148,6 +148,19 @@ export class ConversationLogger {
           question: event.question,
         });
         return;
+      case 'background_shell_started':
+        this.log({ type: 'background_shell_started', jobId: event.jobId, command: event.command });
+        return;
+      case 'background_shell_completed':
+        this.log({
+          type: 'background_shell_completed',
+          jobId: event.jobId,
+          command: event.command,
+          status: event.status,
+          output: event.output,
+          ...(event.error ? { error: event.error } : {}),
+        });
+        return;
       case 'error':
         this.turnAccumulator.flushReasoningItem();
         this.turnAccumulator.flushAssistantTextItem();

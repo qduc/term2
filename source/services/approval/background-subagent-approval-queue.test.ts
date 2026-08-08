@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   BackgroundSubagentApprovalQueue,
+  type BackgroundSubagentApprovalCallbacks,
   type BackgroundSubagentApprovalEntry,
 } from './background-subagent-approval-queue.js';
 
@@ -16,6 +17,12 @@ const entry = (
   ...overrides,
 });
 
+const enqueue = (
+  queue: BackgroundSubagentApprovalQueue,
+  pending: BackgroundSubagentApprovalEntry,
+  callbacks: Partial<BackgroundSubagentApprovalCallbacks> = {},
+) => queue.enqueue(pending, { onResolve: vi.fn(), ...callbacks });
+
 describe('BackgroundSubagentApprovalQueue', () => {
   it('publishes an immutable revisioned FIFO head and hides later runs until their turn', () => {
     const queue = new BackgroundSubagentApprovalQueue();
@@ -25,8 +32,8 @@ describe('BackgroundSubagentApprovalQueue', () => {
     const unsubscribe = queue.subscribe(() => observed.push(queue.getSnapshot().revision));
 
     expect(queue.getSnapshot()).toEqual({ revision: 0, current: null, pendingCount: 0, closed: false });
-    expect(queue.enqueue(first)).toEqual({ kind: 'enqueued', revision: 1 });
-    expect(queue.enqueue(second)).toEqual({ kind: 'enqueued', revision: 2 });
+    expect(enqueue(queue, first)).toEqual({ kind: 'enqueued', revision: 1 });
+    expect(enqueue(queue, second)).toEqual({ kind: 'enqueued', revision: 2 });
 
     const snapshot = queue.getSnapshot();
     expect(snapshot).toEqual({ revision: 2, current: first, pendingCount: 2, closed: false });
@@ -41,8 +48,9 @@ describe('BackgroundSubagentApprovalQueue', () => {
     const queue = new BackgroundSubagentApprovalQueue();
     const first = entry('call-a');
     const second = entry('call-b');
-    queue.enqueue(first);
-    queue.enqueue(second);
+    const firstResolved = vi.fn();
+    enqueue(queue, first, { onResolve: firstResolved });
+    enqueue(queue, second);
 
     const firstSnapshot = queue.getSnapshot();
     expect(
@@ -52,6 +60,7 @@ describe('BackgroundSubagentApprovalQueue', () => {
         decision: { answer: 'y' },
       }),
     ).toEqual({ kind: 'resolved', entry: first, decision: { answer: 'y' } });
+    expect(firstResolved).toHaveBeenCalledWith(first, { answer: 'y' });
     expect(queue.getSnapshot()).toEqual({ revision: 3, current: second, pendingCount: 1, closed: false });
 
     expect(queue.resolve({ revision: firstSnapshot.revision, entry: first, decision: { answer: 'y' } })).toEqual({
@@ -63,7 +72,7 @@ describe('BackgroundSubagentApprovalQueue', () => {
   it('rejects a stale identity without claiming the current approval', () => {
     const queue = new BackgroundSubagentApprovalQueue();
     const original = entry('call-a');
-    queue.enqueue(original);
+    enqueue(queue, original);
     const snapshot = queue.getSnapshot();
 
     expect(
@@ -81,8 +90,8 @@ describe('BackgroundSubagentApprovalQueue', () => {
     const first = entry('call-a');
     const second = entry('call-b');
     const released = vi.fn();
-    queue.enqueue(first);
-    queue.enqueue(second, { onRelease: released });
+    enqueue(queue, first);
+    enqueue(queue, second, { onRelease: released });
     const beforeUpdate = queue.getSnapshot();
     const updated = { ...second, metadata: { source: 'continued-segment' } };
 
@@ -107,8 +116,8 @@ describe('BackgroundSubagentApprovalQueue', () => {
     const first = entry('call-a');
     const second = entry('call-b', { runId: 'run-b', generation: 2 });
     const firstReleased = vi.fn();
-    queue.enqueue(first, { onRelease: firstReleased });
-    queue.enqueue(second);
+    enqueue(queue, first, { onRelease: firstReleased });
+    enqueue(queue, second);
     const snapshot = queue.getSnapshot();
 
     expect(queue.remove({ revision: snapshot.revision, entry: first })).toEqual({ kind: 'removed', revision: 3 });
@@ -122,8 +131,8 @@ describe('BackgroundSubagentApprovalQueue', () => {
     const second = entry('call-b');
     const firstReleased = vi.fn();
     const secondReleased = vi.fn();
-    queue.enqueue(first, { onRelease: firstReleased });
-    queue.enqueue(second, { onRelease: secondReleased });
+    enqueue(queue, first, { onRelease: firstReleased });
+    enqueue(queue, second, { onRelease: secondReleased });
 
     queue.close();
     queue.close();
@@ -133,7 +142,7 @@ describe('BackgroundSubagentApprovalQueue', () => {
     expect(secondReleased).toHaveBeenCalledTimes(1);
     expect(secondReleased).toHaveBeenCalledWith(second, { kind: 'closed' });
     expect(queue.getSnapshot()).toEqual({ revision: 3, current: null, pendingCount: 0, closed: true });
-    expect(queue.enqueue(entry('late'))).toEqual({ kind: 'closed' });
+    expect(enqueue(queue, entry('late'))).toEqual({ kind: 'closed' });
     expect(queue.resolve({ revision: 3, entry: first, decision: { answer: 'y' } })).toEqual({ kind: 'closed' });
     expect(queue.update({ revision: 3, expected: first, entry: first })).toEqual({ kind: 'closed' });
     expect(queue.remove({ revision: 3, entry: first })).toEqual({ kind: 'closed' });
@@ -150,12 +159,110 @@ describe('BackgroundSubagentApprovalQueue', () => {
     queue.subscribe(() => {
       const revision = queue.getSnapshot().revision;
       secondRevisions.push(revision);
-      if (revision === 1) queue.enqueue(entry('call-b'));
+      if (revision === 1) enqueue(queue, entry('call-b'));
     });
 
-    queue.enqueue(entry('call-a'));
+    enqueue(queue, entry('call-a'));
 
     expect(firstRevisions).toEqual([1]);
     expect(secondRevisions).toEqual([1, 2]);
+  });
+
+  it('keeps the current entry unpublished until its resolve callback succeeds', () => {
+    const queue = new BackgroundSubagentApprovalQueue();
+    const first = entry('call-a');
+    const second = entry('call-b', { runId: 'run-b' });
+    const observer = vi.fn();
+    queue.subscribe(observer);
+    let attempts = 0;
+    const apply = vi.fn(() => {
+      attempts += 1;
+      expect(queue.getSnapshot()).toBe(beforeResolve);
+      expect(queue.resolve({ revision: beforeResolve.revision, entry: second, decision: { answer: 'y' } })).toEqual({
+        kind: 'stale',
+        reason: 'identity_mismatch',
+      });
+      if (attempts === 1) throw new Error('lease application failed');
+    });
+    enqueue(queue, first, { onResolve: apply });
+    enqueue(queue, second);
+    const beforeResolve = queue.getSnapshot();
+    observer.mockClear();
+
+    expect(() => queue.resolve({ revision: beforeResolve.revision, entry: first, decision: { answer: 'y' } })).toThrow(
+      'lease application failed',
+    );
+    expect(queue.getSnapshot()).toBe(beforeResolve);
+    expect(observer).not.toHaveBeenCalled();
+
+    expect(queue.resolve({ revision: beforeResolve.revision, entry: first, decision: { answer: 'y' } })).toEqual({
+      kind: 'resolved',
+      entry: first,
+      decision: { answer: 'y' },
+    });
+    expect(queue.getSnapshot()).toMatchObject({ current: second, revision: beforeResolve.revision + 1 });
+    expect(apply).toHaveBeenCalledTimes(2);
+  });
+
+  it('isolates release callback failures while removing and closing entries exactly once', () => {
+    const queue = new BackgroundSubagentApprovalQueue();
+    const first = entry('call-a');
+    const second = entry('call-b');
+    const third = entry('call-c');
+    const removeError = new Error('remove release failed');
+    const closeError = new Error('close release failed');
+    const firstRelease = vi.fn(() => {
+      throw removeError;
+    });
+    const secondRelease = vi.fn(() => {
+      throw closeError;
+    });
+    const thirdRelease = vi.fn();
+    enqueue(queue, first, { onRelease: firstRelease });
+    enqueue(queue, second, { onRelease: secondRelease });
+    enqueue(queue, third, { onRelease: thirdRelease });
+
+    expect(queue.remove({ revision: 3, entry: first })).toEqual({
+      kind: 'removed',
+      revision: 4,
+      releaseErrors: [removeError],
+    });
+    expect(queue.close()).toEqual([closeError]);
+    expect(queue.close()).toEqual([]);
+    expect(firstRelease).toHaveBeenCalledTimes(1);
+    expect(secondRelease).toHaveBeenCalledTimes(1);
+    expect(thirdRelease).toHaveBeenCalledTimes(1);
+    expect(queue.getSnapshot()).toEqual({ revision: 5, current: null, pendingCount: 0, closed: true });
+  });
+
+  it('deep-clones and freezes metadata before publishing it', () => {
+    const queue = new BackgroundSubagentApprovalQueue();
+    const metadata = { deniedRead: { path: '/private/a' }, choices: ['once', 'deny'] };
+    enqueue(queue, entry('call-a', { metadata }));
+    metadata.deniedRead.path = '/mutated';
+    metadata.choices.push('remember');
+
+    const published = queue.getSnapshot().current!.metadata!;
+    expect(published).toEqual({ deniedRead: { path: '/private/a' }, choices: ['once', 'deny'] });
+    expect(Object.isFrozen(published)).toBe(true);
+    expect(Object.isFrozen(published.deniedRead)).toBe(true);
+    expect(Object.isFrozen(published.choices)).toBe(true);
+  });
+
+  it('does not spin when a listener unsubscribes and resubscribes during notification', () => {
+    const queue = new BackgroundSubagentApprovalQueue();
+    const revisions: number[] = [];
+    const listener = () => {
+      revisions.push(queue.getSnapshot().revision);
+      unsubscribe();
+      unsubscribe = queue.subscribe(listener);
+    };
+    let unsubscribe = queue.subscribe(listener);
+
+    enqueue(queue, entry('call-a'));
+    enqueue(queue, entry('call-b'));
+
+    expect(revisions).toEqual([1, 2]);
+    unsubscribe();
   });
 });

@@ -6,6 +6,14 @@
  * identity checked against UI requests, so a delayed action cannot approve a
  * different tool call that happens to share a call id.
  */
+export type BackgroundSubagentApprovalMetadataValue =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly BackgroundSubagentApprovalMetadataValue[]
+  | { readonly [key: string]: BackgroundSubagentApprovalMetadataValue };
+
 export type BackgroundSubagentApprovalEntry = {
   readonly runId: string;
   readonly generation: number;
@@ -13,7 +21,7 @@ export type BackgroundSubagentApprovalEntry = {
   readonly toolName: string;
   readonly argumentsText: string;
   /** Presentation or policy data retained without interpretation by this queue. */
-  readonly metadata?: Readonly<Record<string, unknown>>;
+  readonly metadata?: Readonly<Record<string, BackgroundSubagentApprovalMetadataValue>>;
 };
 
 /** Raw UI input; approval policy and lease resumption interpret it elsewhere. */
@@ -52,6 +60,8 @@ export type BackgroundSubagentApprovalRemovalRequest = {
 export type BackgroundSubagentApprovalRelease = { readonly kind: 'removed' | 'closed' };
 
 export type BackgroundSubagentApprovalCallbacks = {
+  /** Applies the raw answer while this entry still owns the visible head. */
+  readonly onResolve: (entry: BackgroundSubagentApprovalEntry, decision: BackgroundSubagentApprovalDecision) => void;
   /**
    * The run owner is told that this queue no longer owns its pause. It decides
    * how to release the lease; this primitive never manufactures a rejection.
@@ -78,7 +88,7 @@ export type BackgroundSubagentApprovalUpdateResult =
   | { readonly kind: 'closed' };
 
 export type BackgroundSubagentApprovalRemoveResult =
-  | { readonly kind: 'removed'; readonly revision: number }
+  | { readonly kind: 'removed'; readonly revision: number; readonly releaseErrors?: readonly unknown[] }
   | { readonly kind: 'stale'; readonly reason: 'revision_mismatch' | 'identity_mismatch' }
   | { readonly kind: 'closed' };
 
@@ -99,8 +109,37 @@ function sameIdentity(left: BackgroundSubagentApprovalEntry, right: BackgroundSu
   );
 }
 
+function cloneAndFreezeMetadataValue(
+  value: BackgroundSubagentApprovalMetadataValue,
+  ancestors: Set<object>,
+): BackgroundSubagentApprovalMetadataValue {
+  if (value === null || typeof value !== 'object') return value;
+  if (ancestors.has(value)) throw new TypeError('Background subagent approval metadata must not contain cycles.');
+  ancestors.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return Object.freeze(value.map((item) => cloneAndFreezeMetadataValue(item, ancestors)));
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new TypeError('Background subagent approval metadata must contain only plain data.');
+    }
+    return Object.freeze(
+      Object.fromEntries(
+        Object.entries(value).map(([key, item]) => [key, cloneAndFreezeMetadataValue(item, ancestors)]),
+      ),
+    );
+  } finally {
+    ancestors.delete(value);
+  }
+}
+
 function freezeEntry(entry: BackgroundSubagentApprovalEntry): BackgroundSubagentApprovalEntry {
-  const metadata = entry.metadata ? Object.freeze({ ...entry.metadata }) : undefined;
+  const metadata = entry.metadata
+    ? (cloneAndFreezeMetadataValue(entry.metadata, new Set()) as Readonly<
+        Record<string, BackgroundSubagentApprovalMetadataValue>
+      >)
+    : undefined;
   return Object.freeze({ ...entry, ...(metadata ? { metadata } : {}) });
 }
 
@@ -132,19 +171,23 @@ export class BackgroundSubagentApprovalQueue {
   #closed = false;
   #snapshot: BackgroundSubagentApprovalSnapshot = freezeSnapshot(0, [], false);
   #notifying = false;
+  #resolving: Pending | undefined;
 
   getSnapshot(): BackgroundSubagentApprovalSnapshot {
     return this.#snapshot;
   }
 
   subscribe(listener: Listener): () => void {
-    this.#listeners.set(listener, 0);
+    // A subscription begins after the consumer has read the current snapshot.
+    // Using the current revision also prevents unsubscribe/resubscribe inside a
+    // notification from resetting progress and spinning the dispatch loop.
+    this.#listeners.set(listener, this.#revision);
     return () => this.#listeners.delete(listener);
   }
 
   enqueue(
     entry: BackgroundSubagentApprovalEntry,
-    callbacks: BackgroundSubagentApprovalCallbacks = {},
+    callbacks: BackgroundSubagentApprovalCallbacks,
   ): BackgroundSubagentApprovalEnqueueResult {
     if (this.#closed) return { kind: 'closed' };
     const immutableEntry = freezeEntry(entry);
@@ -153,24 +196,36 @@ export class BackgroundSubagentApprovalQueue {
         `Duplicate background subagent approval: ${immutableEntry.runId}:${immutableEntry.generation}:${immutableEntry.toolCallId}`,
       );
     }
-    this.#pending.push({ entry: immutableEntry, callbacks });
+    this.#pending.push({
+      entry: immutableEntry,
+      callbacks: { onResolve: callbacks.onResolve, ...(callbacks.onRelease ? { onRelease: callbacks.onRelease } : {}) },
+    });
     this.#changed();
     return { kind: 'enqueued', revision: this.#revision };
   }
 
   /**
-   * Claims exactly the visible FIFO head. The consumer must apply this raw
-   * decision to the same lease synchronously; a second action sees stale.
+   * Resolves exactly the visible FIFO head. Its callback applies the raw
+   * decision while the head and snapshot remain authoritative. Only a
+   * successful application promotes and publishes the next entry.
    */
   resolve(request: BackgroundSubagentApprovalResolutionRequest): BackgroundSubagentApprovalResolveResult {
     if (this.#closed) return { kind: 'closed' };
     if (request.revision !== this.#revision) return { kind: 'stale', reason: 'revision_mismatch' };
     const current = this.#pending[0];
     if (!current || !sameIdentity(current.entry, request.entry)) return { kind: 'stale', reason: 'identity_mismatch' };
+    if (current === this.#resolving) return { kind: 'stale', reason: 'identity_mismatch' };
 
+    const decision = Object.freeze({ ...request.decision });
+    this.#resolving = current;
+    try {
+      current.callbacks.onResolve(current.entry, decision);
+    } finally {
+      this.#resolving = undefined;
+    }
     this.#pending.shift();
     this.#changed();
-    return { kind: 'resolved', entry: current.entry, decision: { ...request.decision } };
+    return { kind: 'resolved', entry: current.entry, decision };
   }
 
   /**
@@ -183,6 +238,7 @@ export class BackgroundSubagentApprovalQueue {
     if (!sameIdentity(request.expected, request.entry)) return { kind: 'stale', reason: 'identity_mismatch' };
     const index = this.#pending.findIndex((pending) => sameIdentity(pending.entry, request.expected));
     if (index < 0) return { kind: 'stale', reason: 'identity_mismatch' };
+    if (this.#pending[index] === this.#resolving) return { kind: 'stale', reason: 'identity_mismatch' };
 
     this.#pending[index] = { entry: freezeEntry(request.entry), callbacks: this.#pending[index]!.callbacks };
     this.#changed();
@@ -195,24 +251,41 @@ export class BackgroundSubagentApprovalQueue {
     if (request.revision !== this.#revision) return { kind: 'stale', reason: 'revision_mismatch' };
     const index = this.#pending.findIndex((pending) => sameIdentity(pending.entry, request.entry));
     if (index < 0) return { kind: 'stale', reason: 'identity_mismatch' };
+    if (this.#pending[index] === this.#resolving) return { kind: 'stale', reason: 'identity_mismatch' };
 
     const [removed] = this.#pending.splice(index, 1);
     this.#changed();
-    removed!.callbacks.onRelease?.(removed!.entry, { kind: 'removed' });
-    return { kind: 'removed', revision: this.#revision };
+    const releaseErrors = this.#release([removed!], { kind: 'removed' });
+    return {
+      kind: 'removed',
+      revision: this.#revision,
+      ...(releaseErrors.length > 0 ? { releaseErrors } : {}),
+    };
   }
 
   /**
    * Terminal and idempotent. Closing never interprets an answer: each run
    * owner gets an explicit release callback and can cancel its own lease.
    */
-  close(): void {
-    if (this.#closed) return;
+  close(): readonly unknown[] {
+    if (this.#closed) return Object.freeze([]);
     this.#closed = true;
     const pending = this.#pending;
     this.#pending = [];
     this.#changed();
-    for (const item of pending) item.callbacks.onRelease?.(item.entry, { kind: 'closed' });
+    return this.#release(pending, { kind: 'closed' });
+  }
+
+  #release(pending: readonly Pending[], release: BackgroundSubagentApprovalRelease): readonly unknown[] {
+    const errors: unknown[] = [];
+    for (const item of pending) {
+      try {
+        item.callbacks.onRelease?.(item.entry, release);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    return Object.freeze(errors);
   }
 
   #changed(): void {

@@ -2,7 +2,6 @@ import React, { type FC } from 'react';
 import { Box, Text } from 'ink';
 import type {
   BackgroundTask,
-  BackgroundSubagentTaskStatus,
   BackgroundSubagentTaskTool,
 } from '../../services/subagents/subagent-notification-store.js';
 

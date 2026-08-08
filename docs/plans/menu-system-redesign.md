@@ -184,10 +184,14 @@ The implementation of each case is commented at its site: the passive case in
 ### ModelSettingConfig
 
 This plan referenced `ModelSettingConfig` in the `model` frame without ever
-defining it. Step 1 defined it in `menu-types.ts` as a mirror of the fields in
-`utils/ai/model-settings.ts` that the settings-backed model frame actually
-needs — `modelKey`, `providerKey`, `fallbackProviderKey?` — rather than
-introducing a translation layer between the two shapes.
+defining it, and the Phase 1 kernel filled that gap with a placeholder:
+`{ settingKey; label?; requiresRestart? }` (`menu-types.ts:53-57` as of
+`362755fb`). The placeholder was never consumed.
+
+Step 1 replaced it with a mirror of the fields in `utils/ai/model-settings.ts`
+that the settings-backed model frame actually needs — `modelKey`,
+`providerKey`, `fallbackProviderKey?` — rather than introducing a translation
+layer between the two shapes.
 
 `providerKey` is the load-bearing field: without it the session cannot build
 the single `apply-settings` intent carrying both the model and the provider

@@ -137,7 +137,31 @@ In scope (as originally written):
 
 Out of scope: deleting any legacy module. That is Step 3.
 
-#### Step 3 — Phase 5: delete legacy paths
+#### Step 3 — Phase 5: delete legacy paths — IN FLIGHT
+
+Being implemented in the worktree `.worktrees/menu-redesign-phase5`. Its owner
+holds completion and test status; **this document does not assert that the step
+is done, reviewable, or safe to merge.** Ask the owner before acting on it.
+
+Two facts about that branch that are easy to misread, both verified rather than
+reported:
+
+- Its base is stale. It sits one commit past the merge-base while `main` has
+  moved well ahead, so `git diff main <branch>` is dominated by main's newer
+  work being *absent* from the branch, not by Phase 5 deletions. Do not read
+  that diffstat as this step's scope.
+- `insertions.ts` surviving the deletion pass is correct, not an oversight:
+  `ModelMenuSession`, `PathMenuSession`, and `SkillsMenuSession` still import
+  it. Only the *obsolete* helpers go.
+
+A separate workstream depends on this step: the settings-transaction, handoff,
+provider-management, and model-catalog milestones of
+`docs/plans/ui-business-layer-separation/MAP.md` are deliberately deferred
+behind it, because they overlap `app.tsx`, `use-provider-selection.ts`, and the
+menu intent host. Neither workstream may silently supersede the other. See also
+the corresponding entry in `AGENTS.md`.
+
+Original scope:
 
 In scope: `useTriggerDetection`, `useModeHandlers`, the `insertions.ts`
 helpers, `toPopupProps`, `PopupManager`'s hand-mapped prop adapter, stored

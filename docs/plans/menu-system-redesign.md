@@ -1,8 +1,8 @@
 # Menu system redesign
 
-Status: partially implemented. Phases 1–3 and Phase 4 graphs 1–2 are merged
-(`efa50cfa`, implementation commit `ed3a8a31`). Phase 4 graphs 3–4 and Phase 5
-are pending.
+Status: partially implemented. Phases 1–3 and Phase 4 graphs 1–3 are merged
+(`efa50cfa` and `3b4f67dd`; implementation commits `ed3a8a31` and `b9ac1938`).
+Phase 4 graph 4 and Phase 5 are pending.
 
 ## Resume here
 
@@ -72,9 +72,24 @@ begins.
 Was: commit the ~978-line working-tree blob so later graphs have a reviewable
 base. No longer outstanding.
 
-#### Step 1 — Phase 4 graph 3: settings, reset, settings value, settings-backed model
+#### Step 1 — Phase 4 graph 3 — DONE (`b9ac1938`, merged `3b4f67dd`)
 
-In scope:
+Settings, reset, settings value, and settings-backed model are controller-owned.
+The rules `settings`, `settings-value-child`, and `settings-model` are enabled
+at `InputBox.tsx:173-183`; `command-model` and `direct-setting-value` are
+defined but disabled, awaiting Step 2. The `reopenSettingsMenu` +
+`settingsFilterRef` hack is gone.
+
+Two outcomes worth carrying forward are recorded below under
+`### Successor restore points` and `### ModelSettingConfig`.
+
+**The return-point warning in this step's original scope is resolved, not
+outstanding.** It said that if the hack still looked necessary after the
+cutover, a missing return-point invariant was the cause. It did not: the design
+resolved into the two restore-point cases below, both confirmed against
+already-pinned tests. No invariant was missing.
+
+Original scope, for the record:
 
 - Split the colliding rules (see `### Phase 4 rule-id collision`) and enable
   `settings`, `settings-value-child`, and `settings-model`.
@@ -134,6 +149,50 @@ Close the step by making `MenuRegistry` total instead of
 compiler prove every frame kind has been migrated, which is a stronger gate
 than any search for stale callers.
 
+### Successor restore points
+
+A successor transition can be reached two ways, and they need **different**
+restore points. Step 1 derived this empirically; Step 2 needs the same rule for
+direct `/effort ` and `/auto-approve `, so it is written down here rather than
+left as an inference from test fixtures.
+
+| How the child was reached | Restore point |
+| --- | --- |
+| Explicit accept from a mounted parent list | the actual pre-transition editor snapshot, preserving whatever filter the user had typed |
+| Passively typed (user typed the whole trigger) | the bare prefix, e.g. `/settings ` |
+
+The reasoning: a passively-typed activation never had a mounted parent session
+filtering a list, so there is no prior parent state to preserve, and Back must
+not invent one by reconstructing "what the user had typed before this". This
+reproduces the deleted `settingsFilterRef` default, which started at `''` and
+was only ever populated by an explicit list selection — so the two cases are a
+faithful decomposition of the old behavior, not a new policy.
+
+Both cases are pinned. Find them with:
+
+```bash
+grep -n "Input:/settings " source/components/InputBox.test.tsx
+```
+
+Those assertions predate the migration; they are the reason the passive case is
+known to restore to the bare prefix. Do not "fix" them to preserve a filter.
+
+The implementation of each case is commented at its site: the passive case in
+`triggers.ts` (`settingsListRestorePoint`), the explicit case in
+`SettingsMenuSession.tsx` (`pushChildEffect`).
+
+### ModelSettingConfig
+
+This plan referenced `ModelSettingConfig` in the `model` frame without ever
+defining it. Step 1 defined it in `menu-types.ts` as a mirror of the fields in
+`utils/ai/model-settings.ts` that the settings-backed model frame actually
+needs — `modelKey`, `providerKey`, `fallbackProviderKey?` — rather than
+introducing a translation layer between the two shapes.
+
+`providerKey` is the load-bearing field: without it the session cannot build
+the single `apply-settings` intent carrying both the model and the provider
+change, and would have to emit two intents, which this design forbids.
+
 ### Phase 4 rule-id collision
 
 `determine-active-menu.ts` collapses graph 3 and graph 4 into shared rule ids:
@@ -148,7 +207,9 @@ rule that a frame is never partly owned by the legacy detector and partly by
 the controller.
 
 **Split the rules; do not merge the graphs.** Use `settings-value-child` /
-`direct-setting-value` and `settings-model` / `command-model`. The frames
+`direct-setting-value` and `settings-model` / `command-model`. Step 1 carried
+this out under exactly those names; all four rules now exist in `triggers.ts`,
+with the two graph-4 rules defined but not yet enabled. The frames
 already differ, and the current single rules hardcode the graph-4 shapes, which
 are wrong for the graph-3 child:
 

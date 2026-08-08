@@ -5,6 +5,7 @@ import { act } from 'react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { Text } from 'ink';
 import { renderInAct, rerenderInAct } from '../test-helpers/ink-testing.js';
+import { ShellInteractionSession } from '../services/shell/shell-interaction-session.js';
 import { useShellMode } from './use-shell-mode.js';
 
 const mocks = vi.hoisted(() => ({
@@ -28,11 +29,17 @@ const Harness = (props: Parameters<typeof useShellMode>[0]) => {
   return <Text>shell</Text>;
 };
 
-const renderHarness = async (liteMode = true) => {
+const createSession = (liteMode = true) =>
+  new ShellInteractionSession({
+    settingsService: { get: vi.fn(() => undefined) } as any,
+    conversationSink: { addShellContext: mocks.addShellContext },
+    liteMode,
+  });
+
+const renderHarness = async (liteMode = true, session = createSession(liteMode)) => {
   return renderInAct(
     <Harness
-      settingsService={{ get: vi.fn(() => undefined) } as any}
-      conversationService={{ addShellContext: mocks.addShellContext } as any}
+      session={session}
       addShellMessage={mocks.addShellMessage}
       replaceInput={mocks.replaceInput}
       liteMode={liteMode}
@@ -48,8 +55,13 @@ beforeEach(() => {
   mocks.addShellContext.mockReset();
 });
 
-it('delegates command execution to the shell-session helper', async () => {
-  await renderHarness();
+it('clears the composer and projects accepted shell command results', async () => {
+  const session = createSession();
+  await renderHarness(true, session);
+
+  await act(async () => {
+    shellApi!.toggleShellMode();
+  });
 
   await act(async () => {
     await shellApi!.handleShellSubmit('  ls  ');
@@ -61,7 +73,8 @@ it('delegates command execution to the shell-session helper', async () => {
 });
 
 it('flushes shell history when shell mode closes', async () => {
-  await renderHarness();
+  const session = createSession();
+  await renderHarness(true, session);
 
   await act(async () => {
     shellApi!.toggleShellMode();
@@ -79,7 +92,8 @@ it('flushes shell history when shell mode closes', async () => {
 });
 
 it('auto-exits shell mode in non-lite mode and flushes pending history', async () => {
-  const view = await renderHarness(true);
+  const session = createSession();
+  const view = await renderHarness(true, session);
 
   await act(async () => {
     shellApi!.toggleShellMode();
@@ -92,8 +106,7 @@ it('auto-exits shell mode in non-lite mode and flushes pending history', async (
   await rerenderInAct(
     view,
     <Harness
-      settingsService={{ get: vi.fn(() => undefined) } as any}
-      conversationService={{ addShellContext: mocks.addShellContext } as any}
+      session={session}
       addShellMessage={mocks.addShellMessage}
       replaceInput={mocks.replaceInput}
       liteMode={false}

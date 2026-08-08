@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import { render } from 'ink';
 import meow from 'meow';
 import App from './app.js';
-import { SSHInfo } from './hooks/use-shell-mode.js';
+import type { SSHInfo } from './services/shell/shell-interaction-session.js';
 import { getInkRenderOptions } from './utils/ink-render-options.js';
 import { AgentClient } from './lib/agent-client.js';
 import { ConversationService } from './services/conversation/conversation-service.js';

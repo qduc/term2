@@ -482,6 +482,64 @@ it('with autoApprove=true: rejects YELLOW command if no auto-approve model confi
   expect(calls[0].rejectionReason ?? '').toMatch(/YELLOW/);
 });
 
+it('with autoApprove=true: exits without continuing when configured YELLOW history export fails', async () => {
+  const stdout = createStringWritable();
+  const stderr = createStringWritable();
+  let continuationCalls = 0;
+  let chatCalls = 0;
+
+  const session: any = {
+    async sendMessage(_prompt: string) {
+      return {
+        type: 'approval_required',
+        approval: {
+          agentName: 'CLI Agent',
+          toolName: 'bash',
+          argumentsText: 'npm install',
+          callId: 'call-yellow-history-error',
+        },
+      };
+    },
+    async handleApprovalDecision() {
+      continuationCalls += 1;
+      return { type: 'response', finalText: 'done', commandMessages: [] };
+    },
+    exportState() {
+      throw new Error('history unavailable');
+    },
+  };
+
+  const settingsService: any = {
+    get(key: string) {
+      if (key === 'agent.autoApproveModel') return 'gpt-4o-mini';
+      return undefined;
+    },
+    getDynamic() {
+      return undefined;
+    },
+  };
+  const agentClient: any = {
+    async chat() {
+      chatCalls += 1;
+      return '{"results":[{"approved":true,"reasoning":"safe"}]}';
+    },
+  };
+
+  const exitCode = await runWithSession(session, {
+    prompt: 'run',
+    autoApprove: true,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+    settingsService,
+    agentClient,
+  });
+
+  expect(exitCode).toBe(1);
+  expect(continuationCalls).toBe(0);
+  expect(chatCalls).toBe(0);
+  expect(stderr.getOutput()).toContain('error history unavailable');
+});
+
 it('with autoApprove=true: uses LLM to evaluate YELLOW commands', async () => {
   const stdout = createStringWritable();
   const stderr = createStringWritable();

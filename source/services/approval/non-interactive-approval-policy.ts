@@ -83,11 +83,12 @@ export class NonInteractiveApprovalPolicy {
       };
     }
 
+    const history = (input.getHistory?.() ?? []) as ProviderInputItem[];
     try {
       const callId = approval.callId || '__single__';
       const advisories = await evaluateShellAutoApprovalAdvisories({
         commands: [{ id: callId, command }],
-        history: (input.getHistory?.() ?? []) as ProviderInputItem[],
+        history,
         settingsService: this.deps.settingsService,
         agentClient: this.deps.agentClient!,
         logger: this.deps.logger ?? noOpLogger,

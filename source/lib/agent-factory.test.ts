@@ -445,6 +445,79 @@ it.sequential('buildAgent resolves codex default_reasoning_level', async () => {
   expect(agent.defaultRunOptions?.reasoning?.effort).toBe('medium');
 });
 
+it.sequential('buildAgent sends high effort for neuralwatt when the setting is default', () => {
+  const { deps } = createDeps({
+    providerId: 'neuralwatt',
+    settingsValues: {
+      'agent.model': 'deepseek-v4-flash',
+      'agent.reasoningEffort': 'default',
+    },
+  });
+
+  const result = buildAgent({ model: 'deepseek-v4-flash', reasoningEffort: 'default' }, deps);
+  const agent = result.agent as any;
+
+  expect(agent.modelSettings?.reasoning?.effort).toBe('high');
+  expect(agent.defaultRunOptions?.reasoning?.effort).toBe('high');
+});
+
+it.sequential('buildAgent matches the neuralwatt provider id case-insensitively', () => {
+  const { deps } = createDeps({
+    providerId: 'Neuralwatt',
+    settingsValues: {
+      'agent.model': 'deepseek-v4-flash',
+      'agent.reasoningEffort': 'default',
+    },
+  });
+
+  const result = buildAgent({ model: 'deepseek-v4-flash', reasoningEffort: 'default' }, deps);
+
+  expect(result.agent.modelSettings?.reasoning?.effort).toBe('high');
+});
+
+it.sequential('buildAgent leaves an explicit neuralwatt effort alone', () => {
+  const { deps } = createDeps({
+    providerId: 'neuralwatt',
+    settingsValues: {
+      'agent.model': 'deepseek-v4-flash',
+      'agent.reasoningEffort': 'low',
+    },
+  });
+
+  const result = buildAgent({ model: 'deepseek-v4-flash', reasoningEffort: 'low' }, deps);
+
+  expect(result.agent.modelSettings?.reasoning?.effort).toBe('low');
+});
+
+it.sequential('buildAgent honours an explicit neuralwatt effort of none', () => {
+  const { deps } = createDeps({
+    providerId: 'neuralwatt',
+    settingsValues: {
+      'agent.model': 'deepseek-v4-flash',
+      'agent.reasoningEffort': 'none',
+    },
+  });
+
+  const result = buildAgent({ model: 'deepseek-v4-flash', reasoningEffort: 'none' }, deps);
+
+  expect(result.agent.modelSettings?.reasoning?.effort).toBe('none');
+});
+
+it.sequential('buildAgent still omits reasoning for providers with no default level', () => {
+  const { deps } = createDeps({
+    providerId: 'openai-compatible',
+    settingsValues: {
+      'agent.model': 'some-local-model',
+      'agent.reasoningEffort': 'default',
+    },
+  });
+
+  const result = buildAgent({ model: 'some-local-model', reasoningEffort: 'default' }, deps);
+
+  expect(result.agent.modelSettings?.reasoning).toBeFalsy();
+  expect((result.agent as any).defaultRunOptions).toBeUndefined();
+});
+
 it.sequential('buildAgent sets flex service tier when enabled', () => {
   const { deps } = createDeps({
     providerId: 'openai',

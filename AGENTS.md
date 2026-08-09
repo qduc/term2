@@ -50,6 +50,13 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   foreground-subagent transfer waits on an explicit post-transfer approval and
   continuation decision. The worktree is `.worktrees/background-task-controls`
   on branch `codex/background-task-controls`.
+- Test suite audit — foundation in progress, tracked in
+  `docs/plans/test-suite-audit.md`. The current milestone is non-destructive:
+  build the evidence graph, not cleanup. Do not remove, rewrite, retier, or
+  consolidate tests, and do not dispatch explorers, without the approval the
+  plan describes. The graph and its vocabulary live in `docs/test-audit/`; the
+  worktree is `.worktrees/test-suite-audit-foundation` on branch
+  `test-suite-audit-foundation`.
 - UI/business layer separation — completed through settings transaction,
   handoff workflow, provider management, and model catalog milestones. See
   `docs/plans/ui-business-layer-separation/MAP.md` for the merged commits and

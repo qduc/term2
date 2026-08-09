@@ -63,6 +63,7 @@
     "test:verbose": "vitest run",
     "test:vitest:watch": "vitest",
     "test:vitest:coverage": "vitest run --coverage",
+    "test-audit": "tsx scripts/test-audit/cli.ts",
     "lint": "eslint . && prettier --check .",
     "lint-fix": "eslint --fix . && prettier --write .",
     "post-build": "cp -r source/prompts dist/ && chmod +x dist/cli.js",

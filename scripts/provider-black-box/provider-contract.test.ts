@@ -530,6 +530,67 @@ describe('provider boundary contracts through the registry', () => {
     });
   });
 
+  it('captures OpenRouter-style delta.reasoning and replays it through the registry tool continuation boundary', async () => {
+    server = await startFakeProviderHttpServer({ scenario: 'reasoning-field', protocol: 'chat-completions' });
+    const providerCase: ProviderCase = {
+      name: 'Gateway reasoning continuation fixture',
+      registryId: 'fixture-openai-compatible-reasoning-field',
+      model: 'thinking-fixture',
+      protocol: 'chat-completions',
+      expectedRoles: [],
+      runtimeType: 'openai-compatible',
+      providerOptions: {},
+    };
+    const settings = createSettings(providerCase);
+    registerRuntimeProvider(providerCase, settings);
+    const provider = getProvider(providerCase.registryId)!;
+    const model = await provider.createStreamedModel!(providerCase.model, {
+      settingsService: settings,
+      loggingService: quietLogging,
+    });
+    const initial = {
+      ...fixtureRequest,
+      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'look up fixture' }] }],
+    } as any;
+    const first = await collect(model.stream(initial));
+    const reasoning = first.flatMap((event: any) => event.output ?? []).find((item: any) => item.type === 'reasoning');
+    expect(reasoning).toMatchObject({
+      text: 'Need gateway reasoning.',
+      providerMetadata: {
+        reasoning_content: 'Need gateway reasoning.',
+        openai_compatible_reasoning_content: true,
+      },
+    });
+
+    await collect(
+      model.stream({
+        ...initial,
+        input: [
+          ...initial.input,
+          {
+            type: 'reasoning',
+            text: reasoning.text,
+            // This is the persisted representation after reasoning_content is
+            // deliberately removed to prevent duplicate legacy serialization.
+            providerMetadata: { openai_compatible_reasoning_content: true },
+          },
+          { type: 'tool_call', id: 'call_reasoning', name: fixtureTool.name, arguments: '{}' },
+          { type: 'tool_result', id: 'call_reasoning', output: 'fixture result' },
+        ],
+      }),
+    );
+
+    expect(server.requests).toHaveLength(2);
+    // The outgoing wire spelling stays `reasoning_content`: the fetch
+    // middleware owns that normalization for every openai-compatible provider.
+    expect((server.requests[1]!.body as any).messages).toContainEqual({
+      role: 'assistant',
+      content: null,
+      reasoning_content: 'Need gateway reasoning.',
+      tool_calls: [{ id: 'call_reasoning', type: 'function', function: { name: fixtureTool.name, arguments: '{}' } }],
+    });
+  });
+
   it('reassembles Chat Completions tool fragments with the authoritative tool ID', async () => {
     const providerCase = providerCases[1]!;
     const result = await runProviderCase(providerCase, 'tool-fragments');

@@ -69,13 +69,17 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
         sawFinishReason = true;
         finishReason = choice.finish_reason;
       }
-      if (delta?.reasoning_content) {
-        reasoning += delta.reasoning_content;
+      // deepseek-style servers stream reasoning on `reasoning_content`;
+      // OpenRouter-style gateways use `reasoning`. Reading only the former
+      // silently dropped every reasoning token from the latter.
+      const reasoningDelta = delta?.reasoning_content ?? delta?.reasoning;
+      if (reasoningDelta) {
+        reasoning += reasoningDelta;
         yield {
           type: 'reasoning_delta',
-          text: delta.reasoning_content,
+          text: reasoningDelta,
           providerMetadata: {
-            reasoning_content: delta.reasoning_content,
+            reasoning_content: reasoningDelta,
             openai_compatible_reasoning_content: true,
           },
         };

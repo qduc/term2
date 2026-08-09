@@ -232,8 +232,20 @@ it('replayEvents: compact assistant_turn + ledger pairs + trailing user message 
   const envelopes: LogEnvelope[] = [
     env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
     env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'run diagnostics' } }),
-    env({ type: 'tool_started', turnId: 'turn-1', toolCallId: 'call-a', toolName: 'shell', arguments: '{"command":"env"}' }),
-    env({ type: 'tool_started', turnId: 'turn-1', toolCallId: 'call-b', toolName: 'shell', arguments: '{"command":"pwd"}' }),
+    env({
+      type: 'tool_started',
+      turnId: 'turn-1',
+      toolCallId: 'call-a',
+      toolName: 'shell',
+      arguments: '{"command":"env"}',
+    }),
+    env({
+      type: 'tool_started',
+      turnId: 'turn-1',
+      toolCallId: 'call-b',
+      toolName: 'shell',
+      arguments: '{"command":"pwd"}',
+    }),
     env({
       type: 'tool_result',
       turnId: 'turn-1',
@@ -276,9 +288,7 @@ it('replayEvents: compact assistant_turn + ledger pairs + trailing user message 
   ];
 
   const restored = replayEvents(envelopes);
-  const toolItems = restored.history.filter(
-    (item: any) => item.callId === 'call-a' || item.callId === 'call-b',
-  );
+  const toolItems = restored.history.filter((item: any) => item.callId === 'call-a' || item.callId === 'call-b');
 
   expect(toolItems.map((item: any) => item.callId)).toEqual(['call-a', 'call-a', 'call-b', 'call-b']);
   expect(toolItems.map((item: any) => item.type)).toEqual([

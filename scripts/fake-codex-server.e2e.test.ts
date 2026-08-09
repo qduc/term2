@@ -94,7 +94,6 @@ it('writes rich chained input through the real fake-Codex HTTP Responses transpo
     instructions: 'HTTP_CONTEXT_SENTINEL',
     previous_response_id: 'resp_before',
     tool_choice: { type: 'function', name: 'lookup' },
-    max_output_tokens: 12,
     input: [
       {
         type: 'reasoning',
@@ -188,7 +187,6 @@ it('writes the streamed-turn request contract to the real fake-Codex WebSocket w
     top_p: 0.8,
     frequency_penalty: 0.3,
     presence_penalty: 0.4,
-    max_output_tokens: 123,
     reasoning: { effort: 'high', summary: 'concise' },
     generate: false,
     custom_codex_option: true,

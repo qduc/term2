@@ -147,7 +147,8 @@ export const useConversation = ({
   );
   const [backgroundSubagentTaskState, setBackgroundSubagentTaskState] = useState(readBackgroundSubagentTasks);
   const readBackgroundApproval = useCallback(
-    (): BackgroundSubagentApprovalSnapshot => conversationService.backgroundSubagentApprovals.getSnapshot(),
+    (): BackgroundSubagentApprovalSnapshot =>
+      conversationService.backgroundSubagentApprovals?.getSnapshot?.() ?? { pendingCount: 0, pending: [] },
     [conversationService],
   );
   const [backgroundSubagentApproval, setBackgroundSubagentApproval] = useState(readBackgroundApproval);
@@ -157,30 +158,30 @@ export const useConversation = ({
   }, [readBackgroundSubagentTasks]);
 
   const listBackgroundTaskDetails = useCallback(
-    () => conversationService.backgroundTaskControl.listDetails(),
+    () => conversationService.backgroundTaskControl?.listDetails?.() ?? [],
     [conversationService],
   );
   const getBackgroundTaskDetails = useCallback(
     (target: import('../services/session/background-task-control.js').BackgroundTaskControlTarget) =>
-      conversationService.backgroundTaskControl.getDetails(target),
+      conversationService.backgroundTaskControl?.getDetails?.(target) ?? null,
     [conversationService],
   );
   const stopBackgroundTask = useCallback(
     (target: import('../services/session/background-task-control.js').BackgroundTaskControlTarget) =>
-      conversationService.backgroundTaskControl.requestStop(target),
+      conversationService.backgroundTaskControl?.requestStop?.(target) ?? false,
     [conversationService],
   );
   const getForegroundTaskTransferCandidate = useCallback(
-    () => conversationService.backgroundTaskControl.getForegroundTransferCandidate(),
+    () => conversationService.backgroundTaskControl?.getForegroundTransferCandidate?.() ?? null,
     [conversationService],
   );
   const listForegroundTaskTransferCandidates = useCallback(
-    () => conversationService.backgroundTaskControl.listForegroundTransferCandidates(),
+    () => conversationService.backgroundTaskControl?.listForegroundTransferCandidates?.() ?? [],
     [conversationService],
   );
   const moveForegroundTaskToBackground = useCallback(
     (target: import('../services/session/background-task-control.js').ForegroundTaskControlTarget) =>
-      conversationService.backgroundTaskControl.moveForegroundToBackground(target),
+      conversationService.backgroundTaskControl?.moveForegroundToBackground?.(target) ?? false,
     [conversationService],
   );
 
@@ -196,17 +197,16 @@ export const useConversation = ({
     return () => clearInterval(interval);
   }, [backgroundSubagentTaskState.tasks.length, refreshBackgroundSubagentTasks]);
 
-  useEffect(
-    () =>
-      conversationService.backgroundSubagentApprovals.subscribe(() =>
-        setBackgroundSubagentApproval(readBackgroundApproval()),
-      ),
-    [conversationService, readBackgroundApproval],
-  );
+  useEffect(() => {
+    if (typeof conversationService.backgroundSubagentApprovals?.subscribe !== 'function') return;
+    return conversationService.backgroundSubagentApprovals.subscribe(() =>
+      setBackgroundSubagentApproval(readBackgroundApproval()),
+    );
+  }, [conversationService, readBackgroundApproval]);
 
   const resolveBackgroundSubagentApproval = useCallback(
     (request: BackgroundSubagentApprovalResolutionRequest) =>
-      conversationService.backgroundSubagentApprovals.resolve(request),
+      conversationService.backgroundSubagentApprovals?.resolve?.(request),
     [conversationService],
   );
 

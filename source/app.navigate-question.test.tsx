@@ -68,6 +68,11 @@ vi.mock('./context/InputContext.js', () => ({
     cursorOffset: 0,
     triggerIndex: null,
     images: [],
+    controller: {
+      getSnapshot: () => ({ stack: [] }),
+      open: vi.fn(),
+      setIntentHost: vi.fn(),
+    },
   }),
 }));
 

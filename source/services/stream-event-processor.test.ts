@@ -454,6 +454,25 @@ it('emits usage_update when stream event includes usage', async () => {
   expect(acc.latestUsage).toBeTruthy();
 });
 
+it('passes cost_update events through to the session unchanged', async () => {
+  const record = {
+    requestId: 'req-1',
+    provider: 'openai',
+    model: 'gpt-4.1',
+    serviceTier: 'standard' as const,
+    outcome: 'completed' as const,
+    usdMicros: 3450,
+    source: 'catalog' as const,
+  };
+  const stream = makeStream([{ type: 'cost_update', record }]);
+  const acc = createStreamAccumulator();
+  const events: any[] = [];
+  for await (const ev of processStreamEvents(stream, acc, baseOpts(), baseDeps())) {
+    events.push(ev);
+  }
+  expect(events.filter((e) => e.type === 'cost_update')).toEqual([{ type: 'cost_update', record }]);
+});
+
 it('uses explicit application run usage before completion usage', async () => {
   const stream = makeStream([], {
     runUsage: { requests: 2, inputTokens: 31, outputTokens: 9, totalTokens: 40 },

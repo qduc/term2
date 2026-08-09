@@ -159,6 +159,7 @@ const App: FC<AppProps> = ({
   const {
     messages,
     lastUsage,
+    costSummary,
     lastCodexRateLimit,
     pendingApproval,
     waitingForApproval,
@@ -404,8 +405,6 @@ const App: FC<AppProps> = ({
     const costUsage = `${costLabel}: ${costAmount}${lowerBound} (${summary.pricedRequests} priced, ${summary.unpricedRequests} unpriced requests)`;
     return `${tokenUsage}\n${costUsage}`;
   }, [getCostSummary, getSubagentUsage, sessionUsage]);
-
-  const costSummary = useMemo(() => getCostSummary(), [getCostSummary, lastUsage]);
 
   const staticCommitBlocker = useMemo(
     () => detectStaticCommitBlocker(messages, { displayMode }),

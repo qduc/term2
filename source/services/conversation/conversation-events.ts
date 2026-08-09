@@ -32,7 +32,8 @@ export type ConversationEvent =
   | UserMessageConsumedForAbortEvent
   | ContextCompactionStartedEvent
   | ContextCompactionCompletedEvent
-  | ContextCompactionFailedEvent;
+  | ContextCompactionFailedEvent
+  | CostUpdateEvent;
 
 export interface RetryEvent {
   type: 'retry';
@@ -112,6 +113,16 @@ export interface ApprovalRequiredEvent {
 export interface UsageUpdateEvent {
   type: 'usage_update';
   usage: NormalizedUsage;
+}
+
+/**
+ * Emitted when a dispatched model request settles its cost record during a
+ * run, so the UI can show per-request cost before the run ends.
+ */
+export interface CostUpdateEvent {
+  type: 'cost_update';
+  /** The settled cost record for one dispatched model request. */
+  record: ModelRequestCost;
 }
 
 export interface CommandMessageEvent {

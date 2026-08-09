@@ -4,7 +4,7 @@ import type { ApprovedToolContext } from '../approval/approval-presentation-poli
 import type { PendingApproval } from '../../contracts/conversation.js';
 import type { Message } from '../../types/message.js';
 import type { NormalizedUsage, UsageAccumulator } from '../../utils/ai/token-usage.js';
-import type { SessionCostAccumulator } from '../../services/cost/model-cost.js';
+import type { SessionCostAccumulator, SessionCostSummary } from '../../services/cost/model-cost.js';
 import type { CodexRateLimitInfo } from './conversation-events.js';
 import type { QueueStateSnapshot } from './conversation-adapter.js';
 
@@ -30,6 +30,8 @@ export interface UIPort {
   /** @deprecated Interaction snapshots now arrive through ConversationService. */
   onApprovalResolved(): void;
   onUsageUpdate(usage: NormalizedUsage): void;
+  /** Emitted after every session cost add so the status bar is reactive. */
+  onCostUpdate?(summary: SessionCostSummary): void;
   onRateLimitUpdate(rateLimit: CodexRateLimitInfo): void;
   onRateLimitClear(): void;
   onResetTransient(): void;

@@ -1016,13 +1016,28 @@ export class ConversationOrchestrator {
       }
 
       baseOnEvent(event);
+      if (eventType === 'cost_update') {
+        // Per-request cost records arrive live during the run; the terminal
+        // result re-delivers the same records and the accumulator dedups them
+        // by request id, so adding here is idempotent.
+        this.config.costAccumulator?.addRecord(event.record);
+        this.emitCostSummary();
+        return;
+      }
       if (eventType === 'subagent_completed') {
         if (event.result.usage) {
           this.config.subagentUsageAccumulator?.add(event.result.usage);
         }
         this.config.costAccumulator?.addRecords(event.result.costRecords ?? []);
+        this.emitCostSummary();
       }
     };
+  }
+
+  /** Push the accumulator's current summary to the UI after any cost add. */
+  private emitCostSummary(): void {
+    const summary = this.config.costAccumulator?.getSummary();
+    if (summary) this.config.ui.onCostUpdate?.(summary);
   }
 
   private applyServiceResult(
@@ -1068,6 +1083,7 @@ export class ConversationOrchestrator {
       this.config.ui.onUsageUpdate(latestStreamedUsage ?? result.usage);
     }
     this.config.costAccumulator?.addRecords(result.costRecords ?? []);
+    this.emitCostSummary();
   }
 
   /**

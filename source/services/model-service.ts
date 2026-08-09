@@ -90,6 +90,29 @@ export function getModelDefaultReasoningLevel(provider: string, modelId: string)
   return model?.default_reasoning_level;
 }
 
+// Providers that reason only when the request explicitly asks them to, and that
+// expose no `default_reasoning_level` in their /models response for
+// getModelDefaultReasoningLevel() to read. Keyed by lowercased provider id, so a
+// custom provider entry named 'Neuralwatt' or 'neuralwatt' both match.
+//
+// Neuralwatt: verified against api.neuralwatt.com — a bare deepseek-v4-flash
+// request returns message keys ['role','content','function_call'] and stream
+// deltas ['content','role'], with no reasoning anywhere. Adding
+// reasoning_effort makes the model emit a `reasoning` field (note: `reasoning`,
+// not `reasoning_content`) on both the message and the deltas.
+const PROVIDER_DEFAULT_REASONING_LEVEL: Record<string, string> = {
+  neuralwatt: 'high',
+};
+
+/**
+ * Effort to use for a provider when the user's `agent.reasoningEffort` is
+ * 'default'. 'default' otherwise means "send no reasoning_effort and let the
+ * API choose", which for these providers means no reasoning at all.
+ */
+export function getProviderDefaultReasoningLevel(provider: string): string | undefined {
+  return PROVIDER_DEFAULT_REASONING_LEVEL[provider.toLowerCase()];
+}
+
 export function filterModels(models: ModelInfo[], query: string): ModelInfo[] {
   const trimmed = query.trim();
   if (!trimmed) {

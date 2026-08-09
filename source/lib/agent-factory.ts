@@ -16,7 +16,7 @@ import {
   shouldUseNativePatchTool as shouldUseNativePatchToolPolicy,
   shouldUseStrictToolSchema,
 } from './tool-selection-policy.js';
-import { getModelDefaultReasoningLevel } from '../services/model-service.js';
+import { getModelDefaultReasoningLevel, getProviderDefaultReasoningLevel } from '../services/model-service.js';
 import { toolApprovalPolicyRegistry } from '../services/approval/tool-approval-policy-registry.js';
 import type { AgentRuntime } from '../services/agent-runtime/agent-runtime.js';
 import { isZodToolParameterSchema } from '../tools/types.js';
@@ -364,12 +364,11 @@ export function buildAgent(
 
   let effectiveReasoningEffort = reasoningEffort;
   const isDefaultSetting = deps.settings.get('agent.reasoningEffort') === 'default';
-  if (
-    deps.providerId === 'codex' &&
-    isDefaultSetting &&
-    (!effectiveReasoningEffort || effectiveReasoningEffort === 'default')
-  ) {
-    const defaultReasoningLevel = getModelDefaultReasoningLevel('codex', resolvedModel);
+  if (isDefaultSetting && (!effectiveReasoningEffort || effectiveReasoningEffort === 'default')) {
+    const defaultReasoningLevel =
+      deps.providerId === 'codex'
+        ? getModelDefaultReasoningLevel('codex', resolvedModel)
+        : getProviderDefaultReasoningLevel(deps.providerId);
     if (defaultReasoningLevel) {
       effectiveReasoningEffort = defaultReasoningLevel as ReasoningEffortSetting;
     }

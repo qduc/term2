@@ -4,7 +4,11 @@ import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { JsonSchemaDefinition } from '../contracts/model-types.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { AgentConfiguration } from './agent-configuration.js';
-import { fetchModels, getModelDefaultReasoningLevel } from '../services/model-service.js';
+import {
+  fetchModels,
+  getModelDefaultReasoningLevel,
+  getProviderDefaultReasoningLevel,
+} from '../services/model-service.js';
 import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
 import type { ISessionContextService } from '../services/service-interfaces.js';
 import { selectAgentStreamItems } from '../services/agent-stream.js';
@@ -155,8 +159,11 @@ export class AgentChatService {
         };
 
         let effectiveEffort = tempEffort;
-        if (tempProvider === 'codex' && isDefaultSetting && (!effectiveEffort || effectiveEffort === 'default')) {
-          const defaultReasoningLevel = getModelDefaultReasoningLevel('codex', tempModel);
+        if (isDefaultSetting && (!effectiveEffort || effectiveEffort === 'default')) {
+          const defaultReasoningLevel =
+            tempProvider === 'codex'
+              ? getModelDefaultReasoningLevel('codex', tempModel)
+              : getProviderDefaultReasoningLevel(tempProvider);
           if (defaultReasoningLevel) {
             effectiveEffort = defaultReasoningLevel as ReasoningEffortSetting;
           }
@@ -230,8 +237,11 @@ export class AgentChatService {
       };
 
       let effectiveEffort = tempEffort;
-      if (tempProvider === 'codex' && isDefaultSetting && (!effectiveEffort || effectiveEffort === 'default')) {
-        const defaultReasoningLevel = getModelDefaultReasoningLevel('codex', tempModel);
+      if (isDefaultSetting && (!effectiveEffort || effectiveEffort === 'default')) {
+        const defaultReasoningLevel =
+          tempProvider === 'codex'
+            ? getModelDefaultReasoningLevel('codex', tempModel)
+            : getProviderDefaultReasoningLevel(tempProvider);
         if (defaultReasoningLevel) {
           effectiveEffort = defaultReasoningLevel as ReasoningEffortSetting;
         }

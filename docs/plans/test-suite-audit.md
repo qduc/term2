@@ -153,10 +153,18 @@ a bias rather than because the evidence is strong. Calibration should be read wi
 that in mind: agreement between cheap homogeneous explorers is weaker evidence than
 agreement between differently configured ones.
 
+## Domain shards
+
+Settled 2026-08-10 in `docs/test-audit/shards.md`: 17 non-overlapping shards over all
+458 test files, sized 12 to 44. Boundaries follow ownership seams rather than equal
+size, because a duplication claim is only usable when both tests sit inside one
+assignment. Read that file before cutting a Milestone 3 assignment.
+
 ## Deferred decisions
 
-- Exact calibration sample.
-- Domain shard boundaries after inventory.
+- Exact calibration sample. Narrowed to a stratified 16 drawn from the shard table,
+  but not fixed until the calibration probe reports whether explorer judgment is
+  usable at all.
 - Whether runtime history belongs in checked-in artifacts or CI.
 - Whether mutation testing is proportional for disputed high-value contracts.
 - Whether the default/CI suite topology should change.

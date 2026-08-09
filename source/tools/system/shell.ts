@@ -129,6 +129,15 @@ function backgroundShellJobResponse(job: BackgroundShellJob<BackgroundShellExecu
   };
 }
 
+function activeBackgroundShellJobResponse(job: BackgroundShellJob<BackgroundShellExecutionResult>) {
+  return {
+    status: 'background_job_active',
+    jobId: job.id,
+    message:
+      'This background shell job is still running. End the current turn and wait for its automatic completion notification; do not poll get_shell_job.',
+  };
+}
+
 /**
  * Root composition registers these alongside `shell` when it supplies the
  * session-owned registry. Keeping them here makes the model contract and its
@@ -146,6 +155,8 @@ export function createBackgroundShellJobToolDefinitions(
       needsApproval: () => false,
       execute: ({ job_id }) => {
         const job = registry.get(job_id);
+        if (job?.status === 'running' || job?.status === 'cancelling')
+          return JSON.stringify(activeBackgroundShellJobResponse(job));
         return JSON.stringify(job ? backgroundShellJobResponse(job) : { jobId: job_id, status: 'not_found' });
       },
       formatCommandMessage: () => [],

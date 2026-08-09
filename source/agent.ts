@@ -256,11 +256,13 @@ export const getAgentDefinition = (
   const codeContextEnabled = !(executionContext?.isRemote() ?? false);
   const isGpt5 = shouldPreferPatchEditingModel(resolvedModel);
   const sandboxEnabled = settingsService.get('sandbox.enabled');
-  // Async delegation is an all-or-nothing parent capability: launch, result
-  // retrieval, and the two non-blocking control tools share one registry path.
+  // Async delegation is an all-or-nothing parent capability: launch, status
+  // preflight, result retrieval, and the two non-blocking control tools share
+  // one registry path.
   const asyncSubagentEnabled =
     Boolean(runSubagentAsync) &&
     Boolean(getSubagentResult) &&
+    Boolean(getSubagentStatus) &&
     Boolean(sendSubagentMessage) &&
     Boolean(cancelSubagentRun);
   const memoryCapability = new MemoryCapabilityBuilder(settingsService, {
@@ -323,15 +325,15 @@ export const getAgentDefinition = (
   const rootBackgroundShellRegistry = allowBackgroundShell ? backgroundShellRegistry : undefined;
 
   if (orchestratorMode) {
-    if (!runSubagentAsync || !getSubagentResult || !sendSubagentMessage || !cancelSubagentRun) {
+    if (!runSubagentAsync || !getSubagentResult || !getSubagentStatus || !sendSubagentMessage || !cancelSubagentRun) {
       throw new Error(
-        'orchestratorMode requires runSubagentAsync, getSubagentResult, sendSubagentMessage, and cancelSubagentRun: cannot build orchestrator agent without asynchronous delegation.',
+        'orchestratorMode requires runSubagentAsync, getSubagentResult, getSubagentStatus, sendSubagentMessage, and cancelSubagentRun: cannot build orchestrator agent without asynchronous delegation.',
       );
     }
     const tools: AnyToolDefinition[] = [
       createRunSubagentToolDefinition({ runSubagentAsync }),
-      createGetSubagentResultToolDefinition(getSubagentResult),
-      ...(getSubagentStatus ? [createGetSubagentStatusToolDefinition(getSubagentStatus)] : []),
+      createGetSubagentResultToolDefinition(getSubagentResult, getSubagentStatus),
+      createGetSubagentStatusToolDefinition(getSubagentStatus),
       createSendMessageToolDefinition(sendSubagentMessage),
       createCancelRunToolDefinition(cancelSubagentRun),
     ];
@@ -506,11 +508,9 @@ export const getAgentDefinition = (
     // Add async subagent tools (not in lite mode). The conjunction is
     // `asyncSubagentEnabled` spelled out so the callbacks narrow: registering any
     // of these without the rest would advertise delegation the prompt never explains.
-    if (runSubagentAsync && getSubagentResult && sendSubagentMessage && cancelSubagentRun) {
-      tools.push(createGetSubagentResultToolDefinition(getSubagentResult));
-      if (getSubagentStatus) {
-        tools.push(createGetSubagentStatusToolDefinition(getSubagentStatus));
-      }
+    if (runSubagentAsync && getSubagentResult && getSubagentStatus && sendSubagentMessage && cancelSubagentRun) {
+      tools.push(createGetSubagentResultToolDefinition(getSubagentResult, getSubagentStatus));
+      tools.push(createGetSubagentStatusToolDefinition(getSubagentStatus));
       tools.push(
         createSendMessageToolDefinition(sendSubagentMessage),
         createCancelRunToolDefinition(cancelSubagentRun),

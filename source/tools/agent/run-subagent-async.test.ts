@@ -107,19 +107,28 @@ it('run_subagent_async exposes an optional active-run name in its acknowledgemen
 });
 
 it('get_subagent_result tool is registered with the correct name', () => {
-  const tool = createGetSubagentResultToolDefinition(async () => makeResult());
+  const tool = createGetSubagentResultToolDefinition(
+    async () => makeResult(),
+    () => makeStatus({ status: 'completed' }),
+  );
   expect(tool.name).toBe('get_subagent_result');
 });
 
 it('get_subagent_result schema requires a runId', () => {
-  const tool = createGetSubagentResultToolDefinition(async () => makeResult());
+  const tool = createGetSubagentResultToolDefinition(
+    async () => makeResult(),
+    () => makeStatus({ status: 'completed' }),
+  );
 
   expect(tool.parameters.safeParse({ runId: 'run-abc' }).success).toBe(true);
   expect(tool.parameters.safeParse({}).success).toBe(false);
 });
 
 it('get_subagent_result returns a formatted SubagentResult', async () => {
-  const tool = createGetSubagentResultToolDefinition(async () => makeResult({ finalText: 'Answer here.' }));
+  const tool = createGetSubagentResultToolDefinition(
+    async () => makeResult({ finalText: 'Answer here.' }),
+    () => makeStatus({ status: 'completed' }),
+  );
 
   const raw = (await tool.execute({ runId: 'run-abc' })) as string;
 
@@ -128,20 +137,37 @@ it('get_subagent_result returns a formatted SubagentResult', async () => {
   expect(raw.startsWith('{')).toBe(false);
 });
 
-it('get_subagent_result renders structured validation and diffStat evidence', async () => {
-  const tool = createGetSubagentResultToolDefinition(async () =>
-    makeResult({
-      finalText: 'Done.',
-      diffStat: [
-        { path: 'src/a.ts', added: 10, deleted: 3 },
-        { path: 'src/b.ts', added: 5, deleted: 0 },
-      ],
-      validation: {
-        command: 'pnpm vitest run',
-        exitStatus: 0,
-        outputExcerpt: 'Tests passed',
-      },
+it('get_subagent_result refuses an active background run without awaiting its result', async () => {
+  const getResult = vi.fn(async () => makeResult());
+  const tool = createGetSubagentResultToolDefinition(getResult, () => makeStatus({ status: 'running' }));
+
+  await expect(tool.execute({ runId: 'run-123' })).resolves.toBe(
+    JSON.stringify({
+      status: 'background_run_active',
+      runId: 'run-123',
+      message:
+        'This background subagent is still running. End the current turn and wait for its automatic completion notification; do not call get_subagent_result again.',
     }),
+  );
+  expect(getResult).not.toHaveBeenCalled();
+});
+
+it('get_subagent_result renders structured validation and diffStat evidence', async () => {
+  const tool = createGetSubagentResultToolDefinition(
+    async () =>
+      makeResult({
+        finalText: 'Done.',
+        diffStat: [
+          { path: 'src/a.ts', added: 10, deleted: 3 },
+          { path: 'src/b.ts', added: 5, deleted: 0 },
+        ],
+        validation: {
+          command: 'pnpm vitest run',
+          exitStatus: 0,
+          outputExcerpt: 'Tests passed',
+        },
+      }),
+    () => makeStatus({ status: 'completed' }),
   );
 
   const raw = (await tool.execute({ runId: 'run-abc' })) as string;
@@ -169,9 +195,12 @@ it('preserves registry error codes through the async tool boundary', async () =>
 });
 
 it('get_subagent_result returns failed result text on error', async () => {
-  const tool = createGetSubagentResultToolDefinition(async () => {
-    throw new Error('Run not found');
-  });
+  const tool = createGetSubagentResultToolDefinition(
+    async () => {
+      throw new Error('Run not found');
+    },
+    () => makeStatus({ status: 'completed' }),
+  );
 
   const raw = (await tool.execute({ runId: 'run-abc' })) as string;
 
@@ -197,7 +226,10 @@ it('run_subagent_async formatCommandMessage renders started async run', () => {
 });
 
 it('get_subagent_result formatCommandMessage renders completed result', () => {
-  const tool = createGetSubagentResultToolDefinition(async () => makeResult());
+  const tool = createGetSubagentResultToolDefinition(
+    async () => makeResult(),
+    () => makeStatus({ status: 'completed' }),
+  );
 
   const item = {
     rawItem: {

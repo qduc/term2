@@ -2,7 +2,7 @@ import { it, expect, vi } from 'vitest';
 import { getAgentDefinition, getAgentsInstructions, getEnvInfo } from './agent.js';
 import { createMockSettingsService } from './services/settings/settings-service.mock.js';
 import { ExecutionContext } from './services/execution-context.js';
-import type { SubagentResult, SubagentRunHandle } from './services/subagents/types.js';
+import type { SubagentResult, SubagentRunHandle, SubagentRunStatus } from './services/subagents/types.js';
 import os from 'os';
 import { BackgroundShellRegistry } from './services/shell/background-shell-registry.js';
 
@@ -34,9 +34,21 @@ const makeSubagentRunHandle = (): SubagentRunHandle => ({
   task: 'test task',
 });
 
+const makeSubagentRunStatus = (): SubagentRunStatus => ({
+  runId: 'run-1',
+  role: 'worker',
+  status: 'completed',
+  task: 'test task',
+  taskPreview: 'test task',
+  startedAt: 0,
+  elapsedMs: 0,
+  toolCounts: {},
+});
+
 const orchestratorSubagentDeps = {
   runSubagentAsync: async () => makeSubagentRunHandle(),
   getSubagentResult: async () => makeSubagentResult(),
+  getSubagentStatus: () => makeSubagentRunStatus(),
   sendSubagentMessage: () => ({
     ok: true as const,
     runId: 'run-1',
@@ -300,6 +312,7 @@ it('getAgentDefinition registers parent async controls in orchestrator and ordin
   const asyncControls = {
     runSubagentAsync: async () => makeSubagentRunHandle(),
     getSubagentResult: async () => makeSubagentResult(),
+    getSubagentStatus: () => makeSubagentRunStatus(),
     sendSubagentMessage: () => ({
       ok: true as const,
       runId: 'run-1',
@@ -491,6 +504,7 @@ it('getAgentDefinition in orchestrator mode retains full memory authority', () =
   expect(definition.tools.map((tool) => tool.name)).toEqual([
     'run_subagent',
     'get_subagent_result',
+    'get_subagent_status',
     'send_message',
     'cancel_run',
     'shell',

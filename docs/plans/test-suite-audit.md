@@ -64,11 +64,7 @@ The initial recommendations are `keep`, `rewrite_candidate`,
 - [x] Write the canonical explorer brief.
 - [x] Collect a centralized baseline and record its environment and limitations.
 - [x] Run focused tests, the full suite, typecheck, formatting checks, and
-      `git diff --check`. All green on 2026-08-09: 9 focused tests, 458 suite
-      files passed with 1 skipped opt-in Docker test, `tsc --noEmit` clean,
-      Prettier clean. `scripts/**` is a global ESLint ignore in
-      `eslint.config.js`, so `scripts/test-audit/` is type-checked and
-      formatted but not linted, as with the rest of `scripts/`.
+      `git diff --check`. See `## Solo-foundation verification`.
 
 Completion criterion: another session can validate and query the empty graph,
 reproduce the baseline command, and prepare calibration assignments without
@@ -110,38 +106,52 @@ one run is cartography, not a stable performance benchmark.
 
 ## Solo-foundation verification
 
-- `pnpm test scripts/test-audit/graph.test.ts`: 8 passed.
-- `pnpm test`: 5,810 passed and 1 opt-in test skipped across 459 files.
+Two sessions recorded this independently; the numbers below are the later run, at
+`schemaVersion: 2`.
+
+- `pnpm test scripts/test-audit/graph.test.ts`: 21 passed.
+- `pnpm test`: 5,812 passed and 1 opt-in Docker test skipped, across 458 passed
+  files and 1 skipped. Requires `pnpm build` first, because
+  `source/cli.integration.test.ts` spawns `dist/cli.js`.
 - `pnpm typecheck`: passed.
-- `pnpm lint`: passed with 34 existing warnings and no errors.
+- `pnpm lint`: passed with existing warnings and no errors. Note that it does not
+  cover the new code: `scripts/**` is a global ESLint ignore in `eslint.config.js`,
+  so `scripts/test-audit/` is type-checked and Prettier-checked but never linted, as
+  with the rest of `scripts/`.
 - Changed-file Prettier check: passed.
 - `pnpm test-audit validate`: passed for the empty source graph.
 - `git diff --check`: passed.
 
-## Open schema questions raised by review
+## Schema questions settled before fan-out
 
-These surfaced in the 2026-08-09 foundation review and must be settled before the
-calibration wave produces artifacts, while the graph is still empty and cheap to
-reshape.
+The 2026-08-09 foundation review found the schema could not represent what the later
+milestones produce. These were settled at `schemaVersion: 2` while the graph was
+still empty, on the reasoning that reshaping a schema is cheap now and invalidates
+explorer artifacts later.
 
-- **A second opinion has nowhere to live.** The validator permits exactly one
-  decision per Test, and no record carries a reviewer or provenance. Milestone 2
-  runs two explorers over the same files and Milestone 3 makes selective second
-  review mandatory. Either give a decision a reviewer and supersession shape, or
-  state that reconciliation happens outside the graph and only the agreed decision
-  is recorded.
-- **Artifacts have no defined path into the graph.** IDs are unique only within one
-  artifact, and there is no merge command or collision convention. Wave-based
-  fan-out ends with several validated artifacts and no sanctioned way to combine
-  them.
-- **A deletion candidate need not name its replacement.** The explorer brief calls
-  for *named* retained coverage, but the schema is satisfied when any unrelated test
-  happens to share the contract. Requiring at least one `replacementTestIds` entry
-  for `deletion_candidate` would make the brief and the validator agree.
-- Smaller gaps: nothing prevents two `file` records for the same path or a `case`
-  record with no parent file record; `report` counts decisions but never undecided
-  tests, which is the progress number a fan-out needs; the baseline records CPU
-  seconds but not thread count, which dominates its wall-clock figure.
+- **A second opinion now has a place.** A decision carries an `id`, a `reviewer`, an
+  optional `sourceArtifact`, and a `role` of `primary` or `second_opinion`. There is
+  at most one decision of record per Test; independent judgments sit beside it
+  instead of overwriting it. Two decisions on one Test must come from different
+  reviewers, so a reviewer cannot second-review their own conclusion. Only the
+  decision of record removes a test, so a dissent proposing deletion never subtracts
+  evidence.
+- **Artifacts have a defined path into the graph.** A test id must be prefixed with
+  its `domainId`, which makes non-overlapping domain assignments safe to combine, and
+  `pnpm test-audit merge` unions shared vocabulary and concatenates records. Two
+  artifacts describing one contract differently is a conflict the coordinator
+  reconciles; merge refuses to pick a winner.
+- **A deletion must name its replacement.** `deletion_candidate` requires at least
+  one `replacementTestIds` entry, so the brief and the validator now agree.
+- Also closed: a path is recorded at one granularity, and mixing file and case
+  records for it is rejected; `report` counts undecided tests and tests where a
+  second opinion disagrees; the baseline records CPU count and pool configuration.
+
+Reviewer independence is enforced structurally but cannot be enforced semantically.
+Two explorers on the same model, given the same brief, may agree because they share
+a bias rather than because the evidence is strong. Calibration should be read with
+that in mind: agreement between cheap homogeneous explorers is weaker evidence than
+agreement between differently configured ones.
 
 ## Deferred decisions
 

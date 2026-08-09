@@ -1,22 +1,32 @@
 #!/usr/bin/env node
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { parse } from 'yaml';
-import { parseAuditGraph, queryTests, renderAuditReport, type AuditRecommendation, type TestQuery } from './graph.js';
+import { parse, stringify } from 'yaml';
+import {
+  mergeAuditGraphs,
+  parseAuditGraph,
+  queryTests,
+  renderAuditReport,
+  type AuditGraph,
+  type AuditRecommendation,
+  type TestQuery,
+} from './graph.js';
 
 const usage = `Usage: pnpm test-audit <command> [options]
 
 Commands:
   validate                         Validate the graph and all typed references
   list [filters]                   List tests and their recommendations
-  show <test-id>                   Show one test and its connected nodes
+  show <test-id>                   Show one test, its contracts, and every decision
   report                           Render the current audit summary as Markdown
+  merge <path...> [--out <path>]   Merge explorer artifacts into one validated graph
 
 Options:
   --graph <path>                   Graph file (default: docs/test-audit/graph.yaml)
   --domain <id>                    Filter list by domain
   --suite <id>                     Filter list by suite
   --recommendation <value>         Filter list by recommendation
+  --undecided                      List only tests with no decision of record
 `;
 
 const recommendationValues = new Set<AuditRecommendation>([
@@ -38,7 +48,14 @@ function takeOption(args: string[], name: string): string | undefined {
   return value;
 }
 
-async function loadGraph(path: string) {
+function takeFlag(args: string[], name: string): boolean {
+  const index = args.indexOf(name);
+  if (index === -1) return false;
+  args.splice(index, 1);
+  return true;
+}
+
+async function loadGraph(path: string): Promise<AuditGraph> {
   const source = await readFile(path, 'utf8');
   return parseAuditGraph(parse(source));
 }
@@ -49,6 +66,24 @@ async function main(): Promise<void> {
   const command = args.shift();
   if (!command || command === '--help' || command === '-h') {
     console.log(usage);
+    return;
+  }
+
+  // merge reads its own inputs and must not require the default graph to exist.
+  if (command === 'merge') {
+    const outPath = takeOption(args, '--out');
+    if (args.length === 0) throw new Error('merge requires at least one artifact path');
+    const graphs = await Promise.all(args.map((path) => loadGraph(resolve(path))));
+    const merged = mergeAuditGraphs(graphs);
+    const rendered = stringify(merged);
+    if (outPath) {
+      await writeFile(resolve(outPath), rendered, 'utf8');
+      console.log(
+        `Merged ${graphs.length} artifacts into ${outPath}: ${merged.tests.length} tests, ${merged.decisions.length} decisions`,
+      );
+    } else {
+      process.stdout.write(rendered);
+    }
     return;
   }
 
@@ -71,10 +106,14 @@ async function main(): Promise<void> {
       domainId: takeOption(args, '--domain'),
       suiteId: takeOption(args, '--suite'),
       recommendation: recommendation as AuditRecommendation | undefined,
+      undecidedOnly: takeFlag(args, '--undecided'),
     };
     if (args.length > 0) throw new Error(`unexpected arguments: ${args.join(' ')}`);
-    for (const { test, decision } of queryTests(graph, query)) {
-      console.log(`${test.id}\t${test.file}\t${decision?.recommendation ?? 'unreviewed'}`);
+    for (const { test, primary, decisions } of queryTests(graph, query)) {
+      const dispute = decisions.some((decision) => decision.recommendation !== primary?.recommendation)
+        ? '\tdisputed'
+        : '';
+      console.log(`${test.id}\t${test.file}\t${primary?.recommendation ?? 'unreviewed'}${dispute}`);
     }
     return;
   }
@@ -85,7 +124,20 @@ async function main(): Promise<void> {
     const result = queryTests(graph, {}).find(({ test }) => test.id === testId);
     if (!result) throw new Error(`unknown test ${testId}`);
     const contracts = graph.contracts.filter(({ id }) => result.test.contractIds.includes(id));
-    console.log(JSON.stringify({ ...result, contracts }, null, 2));
+    const seamIds = new Set(contracts.flatMap(({ seamIds: ids }) => ids));
+    const riskIds = new Set(contracts.flatMap(({ riskIds: ids }) => ids));
+    console.log(
+      JSON.stringify(
+        {
+          ...result,
+          contracts,
+          seams: graph.seams.filter(({ id }) => seamIds.has(id)),
+          risks: graph.risks.filter(({ id }) => riskIds.has(id)),
+        },
+        null,
+        2,
+      ),
+    );
     return;
   }
 

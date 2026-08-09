@@ -5,10 +5,14 @@ Measured 2026-08-09 in the isolated `test-suite-audit-foundation` worktree at
 
 ## Environment
 
-- Linux 6.8.12-41-pve x86_64
+- Linux 6.8.12-41-pve x86_64, 8 logical CPUs
 - Node.js v24.19.0
 - pnpm 11.7.0
-- Vitest 4.1.9
+- Vitest 4.1.9, default thread pool and default concurrency
+
+Worker concurrency, not test count, dominates the wall-clock figure below. A repeat
+measurement on a machine with a different CPU count, or with `--pool`/`maxThreads`
+overridden, is not comparable to this one.
 - No explorer or other audit test process was intentionally run concurrently.
 
 ## Reproduction

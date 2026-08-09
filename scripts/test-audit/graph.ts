@@ -22,8 +22,35 @@ const recommendationSchema = z.enum([
   'needs_review',
 ]);
 
+const decisionSchema = z
+  .object({
+    id: idSchema,
+    testId: idSchema,
+    // `primary` is the decision of record. `second_opinion` carries an independent
+    // reviewer's judgment without overwriting it, which is what the calibration wave
+    // and mandatory deletion review produce.
+    role: z.enum(['primary', 'second_opinion']),
+    reviewer: idSchema,
+    sourceArtifact: z.string().trim().min(1).optional(),
+    recommendation: recommendationSchema,
+    confidence: z.enum(['low', 'medium', 'high']),
+    reason: z.string().trim().min(1),
+    evidence: z.array(z.string().trim().min(1)).min(1),
+    replacementTestIds: referenceListSchema,
+    status: z.enum(['proposed', 'reviewed', 'approved', 'rejected']),
+  })
+  .superRefine((decision, context) => {
+    if (decision.recommendation === 'deletion_candidate' && decision.replacementTestIds.length === 0) {
+      context.addIssue({
+        code: 'custom',
+        path: ['replacementTestIds'],
+        message: `decision ${decision.id} proposes deletion without naming retained coverage`,
+      });
+    }
+  });
+
 const auditGraphSchema = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   domains: z.array(namedNodeSchema),
   suites: z.array(namedNodeSchema),
   seams: z.array(namedNodeSchema),
@@ -64,17 +91,7 @@ const auditGraphSchema = z.object({
       }),
     ]),
   ),
-  decisions: z.array(
-    z.object({
-      testId: idSchema,
-      recommendation: recommendationSchema,
-      confidence: z.enum(['low', 'medium', 'high']),
-      reason: z.string().trim().min(1),
-      evidence: z.array(z.string().trim().min(1)).min(1),
-      replacementTestIds: referenceListSchema,
-      status: z.enum(['proposed', 'reviewed', 'approved', 'rejected']),
-    }),
-  ),
+  decisions: z.array(decisionSchema),
 });
 
 export type AuditGraph = z.infer<typeof auditGraphSchema>;
@@ -98,6 +115,44 @@ function assertReference(owner: string, relation: string, id: string, targets: S
   if (!targets.has(id)) throw new Error(`${owner} references missing ${relation} ${id}`);
 }
 
+/**
+ * A test id must be namespaced by its domain. Explorer artifacts are produced
+ * independently and merged later, so unqualified ids would collide across waves.
+ */
+function assertDomainNamespace(test: AuditTest): void {
+  if (!test.id.startsWith(`${test.domainId}-`)) {
+    throw new Error(`test ${test.id} must be namespaced by its domain ${test.domainId}`);
+  }
+}
+
+/**
+ * A file is recorded at one granularity. Mixing a file record with case records for
+ * the same path double-counts its evidence and makes deletion arithmetic wrong.
+ */
+function assertConsistentGranularity(tests: AuditTest[]): void {
+  const kindsByFile = new Map<string, Set<AuditTest['kind']>>();
+  for (const test of tests) {
+    const kinds = kindsByFile.get(test.file) ?? new Set<AuditTest['kind']>();
+    if (test.kind === 'file' && kinds.has('file')) {
+      throw new Error(`duplicate file record for ${test.file}`);
+    }
+    kinds.add(test.kind);
+    kindsByFile.set(test.file, kinds);
+  }
+  for (const [file, kinds] of kindsByFile) {
+    if (kinds.size > 1) throw new Error(`file ${file} mixes file and case records`);
+  }
+}
+
+function isPendingDeletion(decision: AuditDecision | undefined): boolean {
+  // A rejected deletion proposal keeps its test, so it still counts as evidence.
+  return decision?.recommendation === 'deletion_candidate' && decision.status !== 'rejected';
+}
+
+export function primaryDecisionOf(graph: AuditGraph, testId: string): AuditDecision | undefined {
+  return graph.decisions.find((decision) => decision.testId === testId && decision.role === 'primary');
+}
+
 function validateGraph(graph: AuditGraph): void {
   assertUniqueIds('domain', graph.domains);
   assertUniqueIds('suite', graph.suites);
@@ -106,6 +161,7 @@ function validateGraph(graph: AuditGraph): void {
   assertUniqueIds('fixture', graph.fixtures);
   assertUniqueIds('contract', graph.contracts);
   assertUniqueIds('test', graph.tests);
+  assertUniqueIds('decision', graph.decisions);
 
   const domainIds = idsOf(graph.domains);
   const suiteIds = idsOf(graph.suites);
@@ -127,6 +183,7 @@ function validateGraph(graph: AuditGraph): void {
   for (const test of graph.tests) {
     assertReference(`test ${test.id}`, 'domain', test.domainId, domainIds);
     assertReference(`test ${test.id}`, 'suite', test.suiteId, suiteIds);
+    assertDomainNamespace(test);
     for (const contractId of test.contractIds) {
       assertReference(`test ${test.id}`, 'contract', contractId, contractIds);
     }
@@ -134,27 +191,40 @@ function validateGraph(graph: AuditGraph): void {
       assertReference(`test ${test.id}`, 'fixture', fixtureId, fixtureIds);
     }
   }
+  assertConsistentGranularity(graph.tests);
 
-  const decisionsByTest = new Map<string, AuditDecision>();
+  const primaryByTest = new Map<string, AuditDecision>();
+  const reviewersByTest = new Map<string, Set<string>>();
   for (const decision of graph.decisions) {
-    assertReference(`decision for ${decision.testId}`, 'test', decision.testId, testIds);
-    if (decisionsByTest.has(decision.testId)) throw new Error(`duplicate decision for test ${decision.testId}`);
-    decisionsByTest.set(decision.testId, decision);
+    assertReference(`decision ${decision.id}`, 'test', decision.testId, testIds);
+
+    if (decision.role === 'primary') {
+      if (primaryByTest.has(decision.testId)) {
+        throw new Error(`duplicate primary decision for test ${decision.testId}`);
+      }
+      primaryByTest.set(decision.testId, decision);
+    }
+
+    // Independent review is only independent if a different reviewer performed it.
+    const reviewers = reviewersByTest.get(decision.testId) ?? new Set<string>();
+    if (reviewers.has(decision.reviewer)) {
+      throw new Error(`reviewer ${decision.reviewer} recorded more than one decision for test ${decision.testId}`);
+    }
+    reviewers.add(decision.reviewer);
+    reviewersByTest.set(decision.testId, reviewers);
+
     for (const replacementId of decision.replacementTestIds) {
-      assertReference(`decision for ${decision.testId}`, 'replacement test', replacementId, testIds);
+      assertReference(`decision ${decision.id}`, 'replacement test', replacementId, testIds);
       if (replacementId === decision.testId) {
-        throw new Error(`decision for ${decision.testId} cannot replace a test with itself`);
+        throw new Error(`decision ${decision.id} cannot replace a test with itself`);
       }
     }
   }
 
-  // A rejected deletion proposal keeps its test, so it must still count as evidence.
-  const isPendingDeletion = (decision: AuditDecision | undefined): boolean =>
-    decision?.recommendation === 'deletion_candidate' && decision.status !== 'rejected';
-
-  const retainedTests = graph.tests.filter((test) => !isPendingDeletion(decisionsByTest.get(test.id)));
+  const retainedTests = graph.tests.filter((test) => !isPendingDeletion(primaryByTest.get(test.id)));
   for (const decision of graph.decisions) {
-    if (!isPendingDeletion(decision)) continue;
+    // Only the decision of record removes a test; a second opinion is not yet acted on.
+    if (decision.role !== 'primary' || !isPendingDeletion(decision)) continue;
     const test = graph.tests.find(({ id }) => id === decision.testId)!;
     for (const contractId of test.contractIds) {
       if (!retainedTests.some((candidate) => candidate.contractIds.includes(contractId))) {
@@ -170,28 +240,92 @@ export function parseAuditGraph(input: unknown): AuditGraph {
   return graph;
 }
 
+/**
+ * Combine independently produced explorer artifacts. Shared vocabulary nodes may
+ * repeat across artifacts, but only when they agree; a conflicting definition is a
+ * reconciliation task for the coordinator, not something to silently pick a winner for.
+ */
+export function mergeAuditGraphs(graphs: AuditGraph[]): AuditGraph {
+  if (graphs.length === 0) throw new Error('merge requires at least one graph');
+
+  const merged: AuditGraph = {
+    schemaVersion: 2,
+    domains: [],
+    suites: [],
+    seams: [],
+    risks: [],
+    fixtures: [],
+    contracts: [],
+    tests: [],
+    decisions: [],
+  };
+
+  const vocabularyKeys = ['domains', 'suites', 'seams', 'risks', 'fixtures', 'contracts'] as const;
+  for (const key of vocabularyKeys) {
+    const byId = new Map<string, unknown>();
+    for (const graph of graphs) {
+      for (const node of graph[key]) {
+        const existing = byId.get(node.id);
+        if (existing && JSON.stringify(existing) !== JSON.stringify(node)) {
+          throw new Error(`conflicting ${key} definition for ${node.id}`);
+        }
+        byId.set(node.id, node);
+      }
+    }
+    // The union is rebuilt from validated inputs, so the element type is unchanged.
+    (merged[key] as unknown[]) = [...byId.values()];
+  }
+
+  for (const graph of graphs) {
+    merged.tests.push(...graph.tests);
+    merged.decisions.push(...graph.decisions);
+  }
+
+  return parseAuditGraph(merged);
+}
+
 export interface TestQuery {
   domainId?: string;
   suiteId?: string;
   recommendation?: AuditRecommendation;
+  undecidedOnly?: boolean;
 }
 
-export function queryTests(graph: AuditGraph, query: TestQuery): Array<{ test: AuditTest; decision?: AuditDecision }> {
-  const decisionsByTest = new Map(graph.decisions.map((decision) => [decision.testId, decision]));
+export interface TestQueryResult {
+  test: AuditTest;
+  primary?: AuditDecision;
+  decisions: AuditDecision[];
+}
+
+export function queryTests(graph: AuditGraph, query: TestQuery): TestQueryResult[] {
   return graph.tests
-    .map((test) => ({ test, decision: decisionsByTest.get(test.id) }))
-    .filter(({ test, decision }) => {
+    .map((test) => {
+      const decisions = graph.decisions.filter((decision) => decision.testId === test.id);
+      return { test, primary: decisions.find(({ role }) => role === 'primary'), decisions };
+    })
+    .filter(({ test, primary }) => {
       if (query.domainId && test.domainId !== query.domainId) return false;
       if (query.suiteId && test.suiteId !== query.suiteId) return false;
-      if (query.recommendation && decision?.recommendation !== query.recommendation) return false;
+      if (query.recommendation && primary?.recommendation !== query.recommendation) return false;
+      if (query.undecidedOnly && primary) return false;
       return true;
     });
 }
 
 export function renderAuditReport(graph: AuditGraph): string {
   const recommendationCounts = new Map<AuditRecommendation, number>();
-  for (const decision of graph.decisions) {
-    recommendationCounts.set(decision.recommendation, (recommendationCounts.get(decision.recommendation) ?? 0) + 1);
+  let undecided = 0;
+  let disputed = 0;
+
+  for (const test of graph.tests) {
+    const decisions = graph.decisions.filter((decision) => decision.testId === test.id);
+    const primary = decisions.find(({ role }) => role === 'primary');
+    if (!primary) {
+      undecided += 1;
+      continue;
+    }
+    recommendationCounts.set(primary.recommendation, (recommendationCounts.get(primary.recommendation) ?? 0) + 1);
+    if (decisions.some((decision) => decision.recommendation !== primary.recommendation)) disputed += 1;
   }
 
   const lines = [
@@ -200,6 +334,8 @@ export function renderAuditReport(graph: AuditGraph): string {
     `Tests: ${graph.tests.length}`,
     `Behavior contracts: ${graph.contracts.length}`,
     `Decisions: ${graph.decisions.length}`,
+    `Undecided tests: ${undecided}`,
+    `Tests where a second opinion disagrees: ${disputed}`,
     '',
     '## Recommendations',
     '',

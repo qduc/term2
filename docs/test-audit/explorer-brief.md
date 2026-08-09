@@ -6,10 +6,15 @@ the Assignment section before dispatch; the rest is the shared contract.
 ## Assignment
 
 - Domain: `<domain-id>`
+- Reviewer id: `<your unique reviewer id>`
 - Included paths: `<explicit paths>`
 - Excluded paths: `<explicit paths>`
 - Graph input: `docs/test-audit/graph.yaml` at `<commit>`
 - Output path: `<unique artifact path>`
+
+Every test id you emit must begin with `<domain-id>-`, and every decision must carry
+your reviewer id. Artifacts are merged later; unnamespaced ids collide and
+unattributed judgments cannot be reviewed independently.
 
 ## Objective
 
@@ -45,12 +50,19 @@ is a `needs_review` result, not a reason to omit a test.
 - `retier_candidate`: the evidence matters, but its execution cost does not belong
   in its current suite tier.
 - `deletion_candidate`: named retained coverage protects every contract, or the
-  behavior is demonstrably no longer a contract.
+  behavior is demonstrably no longer a contract. Name the retained tests in
+  `replacementTestIds`; the validator rejects an unnamed deletion.
 - `architecture_signal`: setup or mocking exposes a production ownership problem.
 - `needs_review`: available evidence cannot support a stronger recommendation.
 
 Recommendations are proposals. Record facts separately from judgments, use
 `needs_review` when evidence is incomplete, and leave repository tests unchanged.
+
+During a calibration wave, where two explorers cover the same files independently,
+emit every decision with `role: second_opinion`. Neither pass is the decision of
+record; the coordinator reconciles them and writes the `primary`. Do not read the
+other explorer's artifact before submitting your own — agreement is only evidence if
+it was reached separately.
 
 ## Required output
 

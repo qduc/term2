@@ -128,11 +128,11 @@ export function createSessionContextService(): ISessionContextService {
 }
 
 export function createMockExecutionContext(cwd = '/tmp/workspace'): ExecutionContext {
-  return {
-    getCwd: () => cwd,
-    isRemote: () => false,
-    getSSHService: () => undefined,
-  };
+  // A real context leased to `cwd`, so fixtures track the production contract
+  // instead of a hand-rolled structural stand-in that drifts from it.
+  const context = new ExecutionContext();
+  context.enterWorkspace(cwd);
+  return context;
 }
 
 export function getAgentTool(agent: any, name: string): any {

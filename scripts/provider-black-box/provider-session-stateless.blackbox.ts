@@ -142,7 +142,7 @@ describe('assembled stateless provider lifecycle black-box', () => {
       activeServer = await startStatelessLifecycleServer(row);
       activeWorkspace = await createIsolatedWorkspaceLease({
         prefix: `term2-${row.id}-`,
-        prepare: (root) => writeStatelessSettings(root, row, activeServer!.baseUrl),
+        prepare: (_root, paths) => writeStatelessSettings(paths.logDir, row, activeServer!.baseUrl),
       });
       activeChild = await activeWorkspace.start({
         cwd: process.cwd(),
@@ -261,8 +261,7 @@ async function waitForMilliseconds(milliseconds: number): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 }
 
-async function writeStatelessSettings(root: string, row: StatelessProviderRow, baseUrl: string): Promise<void> {
-  const settingsDir = join(root, 'Library', 'Logs', 'term2-nodejs');
+async function writeStatelessSettings(settingsDir: string, row: StatelessProviderRow, baseUrl: string): Promise<void> {
   await mkdir(settingsDir, { recursive: true });
 
   const providerEntry = row.runtimeType

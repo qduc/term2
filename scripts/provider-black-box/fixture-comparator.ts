@@ -55,9 +55,18 @@ export function compareRecordedRequest(
   } = {},
 ): RequestComparison {
   const ignored = new Set(
-    (options.ignoredHeaders ?? ['authorization', 'cookie', 'x-api-key', 'api-key', 'user-agent']).map((key) =>
-      key.toLowerCase(),
-    ),
+    (
+      options.ignoredHeaders ?? [
+        'authorization',
+        'cookie',
+        'x-api-key',
+        'api-key',
+        'user-agent',
+        'x-stainless-arch',
+        'x-stainless-os',
+        'x-stainless-runtime-version',
+      ]
+    ).map((key) => key.toLowerCase()),
   );
   const cleanHeaders = (headers: Record<string, string>) =>
     Object.fromEntries(

@@ -6,6 +6,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { finished } from 'node:stream/promises';
 import type { Writable } from 'node:stream';
 import { stripVTControlCharacters } from 'node:util';
+import { resolveSettingsDirectory } from '../../source/services/settings/settings-path.js';
 
 const DEFAULT_TIMEOUT_MS = 20_000;
 const DEFAULT_WRITE_TIMEOUT_MS = 5_000;
@@ -326,14 +327,19 @@ export async function runIsolatedCliInWorkspace(
 }
 
 function createWorkspacePaths(root: string): IsolatedWorkspacePaths {
+  const stateDir = join(root, 'state');
   return {
     configDir: join(root, 'config'),
-    stateDir: join(root, 'state'),
+    stateDir,
     dataDir: join(root, 'data'),
     cacheDir: join(root, 'cache'),
     codexHome: join(root, 'codex'),
     conversationsDir: join(root, 'conversations'),
-    logDir: join(root, 'Library', 'Logs', 'term2-nodejs'),
+    logDir: resolveSettingsDirectory({
+      platform: process.platform,
+      homeDir: root,
+      env: { XDG_STATE_HOME: stateDir, LOCALAPPDATA: join(root, 'AppData', 'Local') },
+    }),
     outputsDir: join(root, 'outputs'),
   };
 }

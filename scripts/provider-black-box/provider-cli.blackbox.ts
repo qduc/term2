@@ -17,8 +17,8 @@ describe('assembled provider CLI black-box', () => {
       cwd: process.cwd(),
       args: ['fixture prompt', '--provider', 'fixture-provider', '--model', 'fixture'],
       deadlineMs: 15_000,
-      prepare: async (root) => {
-        const settingsDir = join(root, 'Library', 'Logs', 'term2-nodejs');
+      prepare: async (_root, paths) => {
+        const settingsDir = paths.logDir;
         await mkdir(settingsDir, { recursive: true });
         await writeFile(
           join(settingsDir, 'settings.json'),
@@ -53,8 +53,8 @@ describe('assembled provider CLI black-box', () => {
       args: ['fixture prompt', '--provider', 'openai', '--model', 'fixture'],
       env: { OPENAI_BASE_URL: `${server.baseUrl}/v1` },
       deadlineMs: 15_000,
-      prepare: async (root) => {
-        const settingsDir = join(root, 'Library', 'Logs', 'term2-nodejs');
+      prepare: async (_root, paths) => {
+        const settingsDir = paths.logDir;
         await mkdir(settingsDir, { recursive: true });
         await writeFile(
           join(settingsDir, 'settings.json'),
@@ -85,8 +85,8 @@ describe('assembled provider CLI black-box', () => {
       cwd: process.cwd(),
       args: ['fixture prompt', '--provider', 'fixture-provider', '--model', 'fixture'],
       deadlineMs: 15_000,
-      prepare: async (root) => {
-        const settingsDir = join(root, 'Library', 'Logs', 'term2-nodejs');
+      prepare: async (_root, paths) => {
+        const settingsDir = paths.logDir;
         await mkdir(settingsDir, { recursive: true });
         await writeFile(
           join(settingsDir, 'settings.json'),

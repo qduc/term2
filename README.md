@@ -155,7 +155,7 @@ While in the chat, you can use these commands:
 - `/effort [level]` - Set reasoning effort for O1/O3 models (e.g. none, minimal, low, medium, high)
 - `/copy` - Copy the latest assistant response to the clipboard
 - `/handoff` - Hand off the last assistant response to another model or session
-- `/auto-approve [off|advisory|auto]` - Set or cycle shell auto-approval mode
+- `/auto-approve [off|advisory|auto|always]` - Set or cycle shell auto-approval mode
 - `/settings [key] [value]` - Modify runtime settings (e.g., `/settings agent.temperature 0.7`)
 
 
@@ -219,6 +219,7 @@ Toggle modes with `/auto-approve`:
 | `off` (default) | Every command requires manual confirmation |
 | `advisory` | Manual confirmation, but LLM reasoning is displayed alongside |
 | `auto` | Safe commands execute automatically; risky ones still prompt |
+| `always` | **YOLO**: every command runs without prompting (DANGEROUS) |
 
 ```json
 {

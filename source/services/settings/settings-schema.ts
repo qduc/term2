@@ -217,7 +217,10 @@ export const ShellSettingsSchema = z.object({
   timeout: z.number().int().positive().default(120000),
   maxOutputLines: z.number().int().positive().default(1000),
   maxOutputChars: z.number().int().positive().default(40000),
-  autoApproveMode: z.enum(['off', 'advisory', 'auto']).default('off').describe('Mode for shell command auto-approval'),
+  autoApproveMode: z
+    .enum(['off', 'advisory', 'auto', 'always'])
+    .default('off')
+    .describe('Mode for shell command auto-approval'),
   useRtkCompression: z.boolean().optional().default(false).describe('Use RTK to compress shell command output'),
 });
 
@@ -566,7 +569,7 @@ export interface SettingsWithSources {
     timeout: SettingWithSource<number>;
     maxOutputLines: SettingWithSource<number>;
     maxOutputChars: SettingWithSource<number>;
-    autoApproveMode: SettingWithSource<'off' | 'advisory' | 'auto'>;
+    autoApproveMode: SettingWithSource<'off' | 'advisory' | 'auto' | 'always'>;
     useRtkCompression: SettingWithSource<boolean>;
   };
   sandbox: {

@@ -110,6 +110,7 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
     { value: 'off', description: 'Disabled' },
     { value: 'advisory', description: 'LLM provides safety analysis' },
     { value: 'auto', description: 'Full auto-approval (CAUTION)' },
+    { value: 'always', description: 'YOLO - allow all, no approval (DANGEROUS)' },
   ],
   'sandbox.readPolicy': [
     {

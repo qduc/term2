@@ -11,12 +11,12 @@ const createSessionContextService = () => ({
 
 const logger = new LoggingService({ disableLogging: true });
 
-const makeMockSettings = (mode: 'off' | 'advisory' | 'auto') => ({
+const makeMockSettings = (mode: 'off' | 'advisory' | 'auto' | 'always') => ({
   get: <T>(key: string): T | undefined => (key === 'shell.autoApproveMode' ? (mode as unknown as T) : undefined),
   getDynamic: (key: string) => (key === 'shell.autoApproveMode' ? mode : undefined),
 });
 
-const makeSandboxAwareSettings = (mode: 'off' | 'advisory' | 'auto', sandboxEnabled: boolean) => ({
+const makeSandboxAwareSettings = (mode: 'off' | 'advisory' | 'auto' | 'always', sandboxEnabled: boolean) => ({
   get: <T>(key: string): T | undefined => {
     if (key === 'shell.autoApproveMode') return mode as unknown as T;
     if (key === 'sandbox.enabled') return sandboxEnabled as unknown as T;
@@ -109,6 +109,11 @@ it('isUnsandboxedApprovalEligible requires sandbox enabled and mode != off', () 
   expect(makeResolver(makeSandboxAwareSettings('auto', true) as any).isUnsandboxedApprovalEligible()).toBe(true);
 });
 
+it('isUnsandboxedApprovalEligible is always true in always mode regardless of sandbox', () => {
+  expect(makeResolver(makeSandboxAwareSettings('always', true) as any).isUnsandboxedApprovalEligible()).toBe(true);
+  expect(makeResolver(makeSandboxAwareSettings('always', false) as any).isUnsandboxedApprovalEligible()).toBe(true);
+});
+
 it('isUnsandboxedApprovalEligible is false when sandbox is disabled regardless of mode', () => {
   expect(makeResolver(makeSandboxAwareSettings('off', false) as any).isUnsandboxedApprovalEligible()).toBe(false);
   expect(makeResolver(makeSandboxAwareSettings('advisory', false) as any).isUnsandboxedApprovalEligible()).toBe(false);
@@ -148,6 +153,20 @@ it('shouldAutoApprove returns false when mode is not auto', () => {
     sessionContextService: createSessionContextService() as any,
   });
   expect(resolver.shouldAutoApprove(makeAdvisory({ approved: true, source: 'llm' }))).toBe(false);
+});
+
+it('shouldAutoApprove returns true for any advisory (or none) in always mode', () => {
+  const resolver = new ShellAutoApprovalResolver({
+    conversationStore: new ConversationStore(),
+    agentClient: makeMockAgentClient({}),
+    logger,
+    settingsService: makeMockSettings('always') as any,
+    sessionContextService: createSessionContextService() as any,
+  });
+  // Even an undefined advisory auto-approves in YOLO mode.
+  expect(resolver.shouldAutoApprove(undefined)).toBe(true);
+  expect(resolver.shouldAutoApprove(makeAdvisory({ source: 'system', approved: false }))).toBe(true);
+  expect(resolver.shouldAutoApprove(makeAdvisory({ riskLevel: 'high' }))).toBe(true);
 });
 
 it('clearCache empties cached advisories so next eval re-runs LLM', async () => {

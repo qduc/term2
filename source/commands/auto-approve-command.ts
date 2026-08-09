@@ -15,19 +15,19 @@ export function createAutoApproveSlashCommand({
 }: CreateAutoApproveSlashCommandDeps): SlashCommand {
   return {
     name: 'auto-approve',
-    description: 'Set or cycle shell auto-approval mode (off, advisory, auto)',
+    description: 'Set or cycle shell auto-approval mode (off, advisory, auto, always)',
     expectsArgs: true,
     completion: { type: 'setting-value', trigger: AUTO_APPROVE_TRIGGER, settingKey: 'shell.autoApproveMode' },
     action: (args?: string) => {
-      const validModes = ['off', 'advisory', 'auto'] as const;
-      let newValue: 'off' | 'advisory' | 'auto';
+      const validModes = ['off', 'advisory', 'auto', 'always'] as const;
+      let newValue: 'off' | 'advisory' | 'auto' | 'always';
 
       if (args && args.trim()) {
         const requested = args.trim().toLowerCase();
         if (validModes.includes(requested as any)) {
           newValue = requested as any;
         } else {
-          addSystemMessage(`Error: Invalid mode '${args}'. Use: off, advisory, or auto.`);
+          addSystemMessage(`Error: Invalid mode '${args}'. Use: off, advisory, auto, or always.`);
           return false;
         }
       } else {
@@ -36,6 +36,8 @@ export function createAutoApproveSlashCommand({
           newValue = 'advisory';
         } else if (currentValue === 'advisory') {
           newValue = 'auto';
+        } else if (currentValue === 'auto') {
+          newValue = 'always';
         } else {
           newValue = 'off';
         }

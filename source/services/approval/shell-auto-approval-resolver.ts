@@ -8,7 +8,7 @@ import {
 import { getCallIdFromObject, getToolInfoFromInterruption } from '../interruption-info.js';
 import type { ShellAutoApprovalAgentClient } from '../conversation-agent-client.js';
 
-export type AutoApproveMode = 'off' | 'advisory' | 'auto';
+export type AutoApproveMode = 'off' | 'advisory' | 'auto' | 'always';
 
 const MAX_TRACKED_MANUAL_DECISIONS = 20;
 
@@ -61,10 +61,17 @@ export class ShellAutoApprovalResolver {
   isUnsandboxedApprovalEligible(): boolean {
     const mode = this.getAutoApproveMode();
     const sandboxEnabled = this.deps.settingsService?.get('sandbox.enabled') !== false;
+    // In 'always' mode every shell command runs unrestricted, so unsandboxed
+    // escapes and Docker host control are not forced to a human prompt.
+    if (mode === 'always') return true;
     return sandboxEnabled && (mode === 'advisory' || mode === 'auto');
   }
 
   shouldAutoApprove(advisory: LLMAdvisory | undefined): boolean {
+    if (this.getAutoApproveMode() === 'always') {
+      // YOLO: bypass the LLM gate entirely and approve every shell command.
+      return true;
+    }
     return (
       this.getAutoApproveMode() === 'auto' &&
       advisory?.approved === true &&

@@ -51,6 +51,7 @@ it('buildSettingValueSuggestions returns enum suggestions for shell.autoApproveM
   expect(values.includes('off')).toBe(true);
   expect(values.includes('advisory')).toBe(true);
   expect(values.includes('auto')).toBe(true);
+  expect(values.includes('always')).toBe(true);
 });
 
 it('buildSettingValueSuggestions returns enum suggestions for webSearch.provider', () => {

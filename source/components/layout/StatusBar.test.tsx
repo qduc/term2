@@ -60,14 +60,17 @@ it.sequential('StatusBar renders the compact two-row configuration and usage lay
 
   const lines = (lastFrame() ?? '').split('\n');
   expect(lines.some((line) => line.includes('Standard │ Codex/gpt-5.6-luna · high'))).toBe(true);
-  expect(lines.some((line) => line.includes('Auto'))).toBe(true);
-  expect(lines.some((line) => line.includes('7D 78% · reset '))).toBe(true);
+  // 2x2 grid: configuration + usage share the top row, safety + rate limit the bottom row.
+  expect(
+    lines.some((line) => line.includes('Standard │ Codex/gpt-5.6-luna · high') && line.includes('↑ 11.8k / ↓ 13')),
+  ).toBe(true);
+  expect(lines.some((line) => line.includes('Auto') && line.includes('7D 78% · reset '))).toBe(true);
   expect(lines.some((line) => line.includes('↑ 11.8k / ↓ 13 │ Ctx 12k / 272k'))).toBe(true);
   expect(lines.some((line) => line.includes('Cache 0'))).toBe(false);
   expect(lines.some((line) => line.includes('(0 cached)'))).toBe(false);
 });
 
-it.sequential('StatusBar renders cache usage in the footer', async () => {
+it.sequential('StatusBar renders cache usage', async () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',
     'agent.provider': 'openai',
@@ -101,7 +104,7 @@ it.sequential('StatusBar renders cache usage as a percentage of prompt tokens', 
   expect(lastFrame()).toContain('↑ 79.7k (99.6% cached)');
 });
 
-it.sequential('StatusBar renders context usage as used/window in the footer', async () => {
+it.sequential('StatusBar renders context usage as used/window', async () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'claude-sonnet-4-6',
     'agent.provider': 'anthropic',
@@ -547,7 +550,7 @@ it.sequential(
   },
 );
 
-it.sequential('StatusBar shows always when mode is always and the sandbox is off', async () => {
+it.sequential('StatusBar shows YOLO when mode is always and the sandbox is off', async () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',
     'agent.provider': 'openai',
@@ -558,7 +561,8 @@ it.sequential('StatusBar shows always when mode is always and the sandbox is off
   const { lastFrame } = await renderInAct(<StatusBar settingsService={settingsService} />);
   const output = lastFrame() ?? '';
 
-  expect(output.includes('always')).toBe(true);
+  expect(output.includes('YOLO')).toBe(true);
+  expect(output.includes('always')).toBe(false);
   expect(output.includes('Auto')).toBe(false);
   expect(output.includes('Sandboxed')).toBe(false);
 });

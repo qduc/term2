@@ -15,6 +15,16 @@ function formatStatusBarTokens(tokens: number): string {
   return tokens > 1_000 ? `${(tokens / 1_000).toFixed(1)}k` : tokens.toLocaleString();
 }
 
+// Status-bar label per shell auto-approval mode. The raw value 'always' reads
+// like a sentence fragment, so the established 'YOLO' term (see
+// value-suggestions.ts for 'shell.autoApproveMode') is shown instead.
+const AUTO_APPROVE_LABELS: Record<'off' | 'advisory' | 'auto' | 'always', string> = {
+  off: '',
+  advisory: 'Advisory',
+  auto: 'Auto',
+  always: 'YOLO',
+};
+
 interface StatusBarProps {
   settingsService: SettingsService;
   isShellMode?: boolean;
@@ -177,69 +187,81 @@ const StatusBar: FC<StatusBarProps> = ({
     ...(orchestratorMode ? ['Orchestrator'] : []),
   ];
   const modeLabel = modeLabels.length > 0 ? modeLabels.join(' · ') : 'Standard';
-  // 'always' overrides the sandbox label so YOLO mode is always visible,
+  // 'always' (YOLO) overrides the sandbox label so YOLO mode is always visible,
   // rendered in red below. When the sandbox is on it still confines commands,
   // but every approval is auto-granted, so the mode must not hide behind
   // 'Sandboxed'.
   const autoApproveAlways = autoApproveMode === 'always';
   const safetyLabel = sandboxEnabled
     ? autoApproveAlways
-      ? 'always'
+      ? AUTO_APPROVE_LABELS.always
       : 'Sandboxed'
-    : autoApproveMode !== 'off'
-    ? autoApproveMode === 'auto'
-      ? 'Auto'
-      : autoApproveMode
-    : '';
+    : AUTO_APPROVE_LABELS[autoApproveMode];
 
   return (
     <Box marginTop={1} flexDirection="column" width="100%">
-      <Box width="100%">
-        {sshInfo && (
-          <>
-            <Box marginRight={1}>
-              <Text color="#f97316" bold>
-                SSH
-              </Text>
-              <Text color={slate}>
-                {' '}
-                {sshInfo.user}@{sshInfo.host}:{sshInfo.remoteDir}
-              </Text>
-            </Box>
-            <Text color={slate}>│</Text>
-          </>
-        )}
-        <Box marginX={1}>
-          <Text color={modeLabel === 'Standard' ? slate : accent} bold={modeLabel !== 'Standard'}>
-            {modeLabel}
-          </Text>
-          {queueLength != null && queueLength > 0 && (
+      <Box width="100%" flexWrap="wrap">
+        <Box flexGrow={1}>
+          {sshInfo && (
             <>
-              <Text color={slate}> │ </Text>
-              <Text color={accent}>[Q:{queueLength}]</Text>
+              <Box marginRight={1}>
+                <Text color="#f97316" bold>
+                  SSH
+                </Text>
+                <Text color={slate}>
+                  {' '}
+                  {sshInfo.user}@{sshInfo.host}:{sshInfo.remoteDir}
+                </Text>
+              </Box>
+              <Text color={slate}>│</Text>
+            </>
+          )}
+          <Box marginX={1}>
+            <Text color={modeLabel === 'Standard' ? slate : accent} bold={modeLabel !== 'Standard'}>
+              {modeLabel}
+            </Text>
+            {queueLength != null && queueLength > 0 && (
+              <>
+                <Text color={slate}> │ </Text>
+                <Text color={accent}>[Q:{queueLength}]</Text>
+              </>
+            )}
+          </Box>
+
+          {model && (
+            <>
+              <Text color={slate}>│</Text>
+              <Box marginX={1}>
+                <Text color={accent}>
+                  {providerLabel}/{model}
+                </Text>
+                {reasoningEffort && reasoningEffort !== 'default' && <Text color={glow}> · {reasoningEffort}</Text>}
+              </Box>
+            </>
+          )}
+
+          {mentorMode && mentorModel && (
+            <>
+              <Text color={slate}>│</Text>
+              <Box marginX={1}>
+                <Text color="#a78bfa">{mentorModel}</Text>
+              </Box>
             </>
           )}
         </Box>
 
-        {model && (
-          <>
-            <Text color={slate}>│</Text>
-            <Box marginX={1}>
-              <Text color={accent}>
-                {providerLabel}/{model}
+        {(tokensText || contextText || costText) && (
+          <Box>
+            {tokensText && (
+              <Text color={usageColor} bold={Boolean(largeUncachedWarning)}>
+                {tokensText}
               </Text>
-              {reasoningEffort && reasoningEffort !== 'default' && <Text color={glow}> · {reasoningEffort}</Text>}
-            </Box>
-          </>
-        )}
-
-        {mentorMode && mentorModel && (
-          <>
-            <Text color={slate}>│</Text>
-            <Box marginX={1}>
-              <Text color="#a78bfa">{mentorModel}</Text>
-            </Box>
-          </>
+            )}
+            {tokensText && contextText && <Text color={slate}> │ </Text>}
+            {contextText && <Text color={slate}>{contextText}</Text>}
+            {(tokensText || contextText) && costText && <Text color={slate}> │ </Text>}
+            {costText && <Text color={costColor}>{costText}</Text>}
+          </Box>
         )}
       </Box>
 
@@ -279,20 +301,9 @@ const StatusBar: FC<StatusBarProps> = ({
           )}
         </Box>
 
-        {(tokensText || contextText || costText || codexRateLimitText) && (
-          <Box flexDirection="column" alignItems="flex-end">
-            {codexRateLimitText && <Text color={slate}>{codexRateLimitText}</Text>}
-            <Box>
-              {tokensText && (
-                <Text color={usageColor} bold={Boolean(largeUncachedWarning)}>
-                  {tokensText}
-                </Text>
-              )}
-              {tokensText && contextText && <Text color={slate}> │ </Text>}
-              {contextText && <Text color={slate}>{contextText}</Text>}
-              {(tokensText || contextText) && costText && <Text color={slate}> │ </Text>}
-              {costText && <Text color={costColor}>{costText}</Text>}
-            </Box>
+        {codexRateLimitText && (
+          <Box>
+            <Text color={slate}>{codexRateLimitText}</Text>
           </Box>
         )}
       </Box>

@@ -385,9 +385,12 @@ function normalizeCodexRequestData(
 ): any {
   const normalizedRequestData = { ...requestData };
 
-  // Codex responses endpoint rejects temperature; always omit it.
+  // Codex responses endpoint rejects temperature and max_output_tokens; always omit them.
   if ('temperature' in normalizedRequestData) {
     delete normalizedRequestData.temperature;
+  }
+  if ('max_output_tokens' in normalizedRequestData) {
+    delete normalizedRequestData.max_output_tokens;
   }
 
   const hasPreviousResponseId =

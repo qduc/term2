@@ -152,6 +152,21 @@ it('get_subagent_result refuses an active background run without awaiting its re
   expect(getResult).not.toHaveBeenCalled();
 });
 
+it('get_subagent_result directs an answer-blocked subagent to send_message instead of waiting', async () => {
+  const getResult = vi.fn(async () => makeResult());
+  const tool = createGetSubagentResultToolDefinition(getResult, () => makeStatus({ status: 'waiting_for_answer' }));
+
+  await expect(tool.execute({ runId: 'run-123' })).resolves.toBe(
+    JSON.stringify({
+      status: 'background_run_waiting_for_answer',
+      runId: 'run-123',
+      message:
+        'This background subagent is waiting for your answer. Use send_message with its messageId to resume it; do not call get_subagent_result.',
+    }),
+  );
+  expect(getResult).not.toHaveBeenCalled();
+});
+
 it('get_subagent_result renders structured validation and diffStat evidence', async () => {
   const tool = createGetSubagentResultToolDefinition(
     async () =>

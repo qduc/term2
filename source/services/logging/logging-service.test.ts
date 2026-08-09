@@ -1,4 +1,4 @@
-import { it, expect, beforeAll, afterAll } from 'vitest';
+import { it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -35,6 +35,33 @@ const findMainLogFile = (logDir: string) => {
   return files.find((f) => f.endsWith('.log') && f.startsWith('term2-') && !f.includes('openrouter'));
 };
 
+const readMainLogEntries = (logDir: string): Record<string, any>[] => {
+  if (!fs.existsSync(logDir)) return [];
+  const mainLogFile = findMainLogFile(logDir);
+  if (!mainLogFile) return [];
+
+  return fs
+    .readFileSync(path.join(logDir, mainLogFile), 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+};
+
+const waitForMainLogEntry = async (
+  logDir: string,
+  predicate: (entry: Record<string, any>) => boolean,
+): Promise<Record<string, any>> => {
+  let matchingEntry: Record<string, any> | undefined;
+  await vi.waitFor(
+    () => {
+      matchingEntry = readMainLogEntries(logDir).find(predicate);
+      expect(matchingEntry).toBeTruthy();
+    },
+    { timeout: 1_000, interval: 5 },
+  );
+  return matchingEntry!;
+};
+
 beforeAll(() => {
   cleanupLogs();
 });
@@ -52,17 +79,14 @@ it.sequential('LoggingService initializes without error', async () => {
   expect(logger).toBeTruthy();
 });
 
-it.sequential('creates log directory if it does not exist', async () => {
+it.sequential('creates log directory if it does not exist', () => {
   const logDir = getTestLogDir();
   new LoggingService({ logDir, disableLogging: false });
-
-  // Give it a moment to create the directory
-  await new Promise((resolve) => setTimeout(resolve, 100));
 
   expect(fs.existsSync(logDir)).toBe(true);
 });
 
-it.sequential('respects DISABLE_LOGGING flag', async () => {
+it.sequential('respects DISABLE_LOGGING flag', () => {
   const logDir = getTestLogDir();
   const logger = new LoggingService({
     logDir,
@@ -71,23 +95,17 @@ it.sequential('respects DISABLE_LOGGING flag', async () => {
 
   logger.info('test message', { foo: 'bar' });
 
-  // Give it a moment
-  await new Promise((resolve) => setTimeout(resolve, 100));
-
   // No error should occur, and no files should be created
   expect(fs.existsSync(logDir)).toBe(false);
 });
 
-it.sequential('uses DISABLE_LOGGING env when disableLogging is omitted', async () => {
+it.sequential('uses DISABLE_LOGGING env when disableLogging is omitted', () => {
   const logDir = getTestLogDir();
   const originalDisableLogging = process.env.DISABLE_LOGGING;
   process.env.DISABLE_LOGGING = '1';
 
   try {
     new LoggingService({ logDir });
-
-    // Give it a moment
-    await new Promise((resolve) => setTimeout(resolve, 100));
 
     expect(fs.existsSync(logDir)).toBe(false);
   } finally {
@@ -109,8 +127,7 @@ it.sequential('logs messages with correct format', async () => {
 
   logger.info('test info message', { context: 'test' });
 
-  // Give async write time - increase to 500ms
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  await waitForMainLogEntry(logDir, (entry) => entry.message === 'test info message');
 
   fs.mkdirSync(logDir, { recursive: true });
   // Check that a log file exists
@@ -137,7 +154,7 @@ it.sequential('logs messages with correct format', async () => {
   expect(firstLog.context).toBe('test');
 });
 
-it.sequential('supports custom log levels including security', async () => {
+it.sequential('supports custom log levels including security', () => {
   const logDir = getTestLogDir();
   const logger = new LoggingService({
     logDir,
@@ -145,16 +162,13 @@ it.sequential('supports custom log levels including security', async () => {
     logLevel: 'debug',
   });
 
-  logger.security('dangerous command detected', { command: 'rm -rf /' });
-  logger.error('error occurred', {});
-  logger.warn('warning', {});
-  logger.info('info', {});
-  logger.debug('debug', {});
-
-  // Give async writes time
-  await new Promise((resolve) => setTimeout(resolve, 200));
-
-  expect(true).toBe(true);
+  expect(() => {
+    logger.security('dangerous command detected', { command: 'rm -rf /' });
+    logger.error('error occurred', {});
+    logger.warn('warning', {});
+    logger.info('info', {});
+    logger.debug('debug', {});
+  }).not.toThrow();
 });
 
 it.sequential('automatically writes provider traffic artifacts for sent and received payloads', async () => {
@@ -187,8 +201,6 @@ it.sequential('automatically writes provider traffic artifacts for sent and rece
     modelClass: 'OpenAIResponsesWSModelWithPromptCacheKey',
     modelWrapperClass: 'FallbackResponsesModel',
   });
-
-  await new Promise((resolve) => setTimeout(resolve, 200));
 
   const providerRoot = path.join(logDir, 'provider-traffic');
   expect(fs.existsSync(providerRoot)).toBe(true);
@@ -299,8 +311,7 @@ it.sequential('tracks correlation IDs', async () => {
   logger.setCorrelationId(correlationId);
   logger.info('message with correlation', {});
 
-  // Give async write time
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  await waitForMainLogEntry(logDir, (entry) => entry.message === 'message with correlation');
 
   fs.mkdirSync(logDir, { recursive: true });
   const files = fs.readdirSync(logDir);
@@ -321,7 +332,7 @@ it.sequential('tracks correlation IDs', async () => {
   logger.clearCorrelationId();
   logger.info('message without correlation', {});
 
-  await new Promise((resolve) => setTimeout(resolve, 200));
+  await waitForMainLogEntry(logDir, (entry) => entry.message === 'message without correlation');
 
   const content2 = fs.readFileSync(logFile, 'utf8');
   const lines2 = content2.split('\n').filter((l) => l.trim());
@@ -341,7 +352,7 @@ it.sequential('uses explicit correlation metadata instead of an overlapping proc
   logger.setCorrelationId('foreground-trace');
   logger.info('background completion', { correlationId: 'background-job-trace' });
 
-  await new Promise((resolve) => setTimeout(resolve, 300));
+  await waitForMainLogEntry(logDir, (entry) => entry.message === 'background completion');
 
   const mainLogFile = findMainLogFile(logDir);
   expect(mainLogFile).toBeTruthy();
@@ -361,7 +372,10 @@ it.sequential('uses a stable audit file path for rotated app logs', async () => 
 
   logger.info('write to initialize rotate metadata', { eventType: 'test.rotate.audit' });
 
-  await new Promise((resolve) => setTimeout(resolve, 300));
+  await vi.waitFor(() => expect(fs.existsSync(path.join(logDir, 'term2-audit.json'))).toBe(true), {
+    timeout: 1_000,
+    interval: 5,
+  });
 
   const files = fs.readdirSync(logDir);
   expect(files.includes('term2-audit.json')).toBe(true);
@@ -387,7 +401,7 @@ it.sequential('emits canonical contract fields on logs', async () => {
     messageId: 'msg-contract',
   });
 
-  await new Promise((resolve) => setTimeout(resolve, 300));
+  await waitForMainLogEntry(logDir, (entry) => entry.message === 'contract test');
 
   fs.mkdirSync(logDir, { recursive: true });
   const mainLogFile = findMainLogFile(logDir);
@@ -431,7 +445,7 @@ it.sequential('truncates base64 image data in provider.request.started', async (
     ],
   });
 
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  await waitForMainLogEntry(logDir, (entry) => entry.message === 'Agent stream started');
 
   fs.mkdirSync(logDir, { recursive: true });
   const mainLogFile = findMainLogFile(logDir);
@@ -466,7 +480,7 @@ it.sequential('does not truncate base64 image data outside provider.request.star
     ],
   });
 
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  await waitForMainLogEntry(logDir, (entry) => entry.message === 'Agent stream finished');
 
   fs.mkdirSync(logDir, { recursive: true });
   const mainLogFile = findMainLogFile(logDir);
@@ -500,7 +514,7 @@ it.sequential('truncates long provider response text in file logs', async () => 
     payload: { raw: longText },
   });
 
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  await waitForMainLogEntry(logDir, (entry) => entry.message === 'OpenRouter stream done');
 
   fs.mkdirSync(logDir, { recursive: true });
   const mainLogFile = findMainLogFile(logDir);
@@ -539,7 +553,7 @@ it.sequential('respects LOG_CATEGORIES filter while preserving errors', async ()
     logger.info('retry log should keep', { eventType: 'retry.upstream', category: 'retry' });
     logger.error('error should keep', { eventType: 'stream.failed', category: 'stream' });
 
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await waitForMainLogEntry(logDir, (entry) => entry.eventType === 'stream.failed');
 
     fs.mkdirSync(logDir, { recursive: true });
     const mainLogFile = findMainLogFile(logDir);

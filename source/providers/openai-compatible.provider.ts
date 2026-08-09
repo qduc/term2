@@ -35,6 +35,16 @@ export type CustomProviderConfig = {
   apiKey?: string;
 };
 
+// The tag carried on `provider_opaque` items so a later turn can prove the
+// continuity metadata it is about to splice came from *this* endpoint. It must
+// identify the configured provider, not its type: two providers of type
+// `openai-compatible` — a deepseek endpoint and an OpenRouter gateway — spell
+// reasoning differently, and tagging both `openai-compatible` would let one's
+// fields be replayed into the other's request. `config.name` is already the
+// provider's identity elsewhere (see createOpenAICompatibleProviderDefinition).
+export const opaqueProviderTag = (config: CustomProviderConfig): string =>
+  config.name || config.type || 'openai-compatible';
+
 const DEFAULT_BASE_URLS: Record<string, string> = {
   anthropic: 'https://api.anthropic.com/v1',
   google: 'https://generativelanguage.googleapis.com/v1beta',
@@ -184,8 +194,7 @@ export class OpencodeAnthropicFormatProvider {
     });
     const costCapture: CostTrailerCapture = {};
     applyClientResponseNormalization(openAIClient, this.deps.loggingService, costCapture);
-    const providerId = this.config.type || 'openai-compatible';
-    return new OpenAIChatCompletionsModel(openAIClient, resolvedModel, costCapture, providerId);
+    return new OpenAIChatCompletionsModel(openAIClient, resolvedModel, costCapture, opaqueProviderTag(this.config));
   }
 
   getStreamedModel(modelName?: string): StreamedModelTurn {
@@ -220,7 +229,12 @@ export function createCustomProviderModelProvider(config: CustomProviderConfig, 
         maxRetries: normalizedDeps.settingsService?.get('agent.retryAttempts') ?? 2,
         fetch: buildProviderFetch(config, normalizedDeps, [createOpenAIResponsesMiddleware()]) as any,
       });
-      return new OpenAIChatCompletionsModel(openAIClient, normalizedDeps.defaultModel);
+      return new OpenAIChatCompletionsModel(
+        openAIClient,
+        normalizedDeps.defaultModel,
+        undefined,
+        opaqueProviderTag(config),
+      );
     }
     case 'anthropic':
       return new AiSdkAnthropicProvider({
@@ -267,7 +281,12 @@ export function createCustomProviderModelProvider(config: CustomProviderConfig, 
       });
       const costCapture: CostTrailerCapture = {};
       applyClientResponseNormalization(openAIClient, normalizedDeps.loggingService, costCapture);
-      return new OpenAIChatCompletionsModel(openAIClient, normalizedDeps.defaultModel, costCapture);
+      return new OpenAIChatCompletionsModel(
+        openAIClient,
+        normalizedDeps.defaultModel,
+        costCapture,
+        opaqueProviderTag(config),
+      );
     }
   }
 }

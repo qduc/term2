@@ -1,10 +1,6 @@
 import OpenAI from 'openai';
 import type { ILoggingService } from '../services/service-interfaces.js';
 
-function normalizeMessageField(_target: any): void {
-  /* no-op: raw wire fields are preserved verbatim */
-}
-
 /** Mutable per-request capture for a provider-reported USD charge trailer. */
 export interface CostTrailerCapture {
   /** USD charge string from the most recent request's cost-only trailer. */
@@ -61,10 +57,6 @@ function createNormalizedReasoningStream(
             if (choices.length === 1 && choices[0].index !== 0) {
               choices[0].index = 0;
             }
-
-            for (const choice of choices) {
-              normalizeMessageField(choice.delta);
-            }
           }
           return result;
         },
@@ -94,12 +86,7 @@ export function applyClientResponseNormalization(
 
     if (!result || typeof result !== 'object') return result;
 
-    if (Array.isArray(result.choices)) {
-      for (const choice of result.choices) {
-        normalizeMessageField(choice.message);
-      }
-      return result;
-    }
+    if (Array.isArray(result.choices)) return result;
 
     if (typeof result[Symbol.asyncIterator] === 'function') {
       return createNormalizedReasoningStream(result, loggingService, costCapture);

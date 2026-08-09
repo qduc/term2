@@ -442,7 +442,10 @@ it('assistant reasoning_content from provider response is preserved as reasoning
   });
   expect(result.output[1]).toEqual({
     type: 'provider_opaque',
-    provider: 'openai-compatible',
+    // Tagged with the configured provider, not its type: two providers of type
+    // `openai-compatible` spell reasoning differently, so the type cannot prove
+    // an opaque item came from the endpoint about to receive it back.
+    provider: 'provider-test',
     item: {
       reasoning_content: 'Need to inspect the project first.',
     },
@@ -489,7 +492,10 @@ it('assistant reasoning_content from provider stream is preserved as reasoning o
   });
   expect(finalEvent.output[1]).toEqual({
     type: 'provider_opaque',
-    provider: 'openai-compatible',
+    // Tagged with the configured provider, not its type: two providers of type
+    // `openai-compatible` spell reasoning differently, so the type cannot prove
+    // an opaque item came from the endpoint about to receive it back.
+    provider: 'provider-test',
     item: {
       reasoning_content: 'Need to stream reasoning.',
     },

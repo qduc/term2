@@ -591,10 +591,10 @@ it('stream() surfaces OpenRouter-style delta.reasoning and reasoning_details in 
       provider: 'openai-compatible',
       item: {
         reasoning: 'Weighing the options.',
-        reasoning_details: [
-          { type: 'reasoning.text', text: 'Weighing', format: 'unknown', index: 0 },
-          { type: 'reasoning.text', text: ' the options.', format: 'unknown', index: 0 },
-        ],
+        // One logical entry streamed over two chunks, not two entries: `index`
+        // identifies the entry, so the chunks merge rather than accumulating as
+        // fragments the provider never sent.
+        reasoning_details: [{ type: 'reasoning.text', text: 'Weighing the options.', format: 'unknown', index: 0 }],
       },
     },
     { type: 'message', content: [{ type: 'text', text: 'Final answer.' }] },
@@ -664,6 +664,7 @@ it('replays reasoning captured from delta.reasoning verbatim as reasoning and re
     // drain
   }
 
+  console.log(JSON.stringify(bodies[1].messages, null, 2));
   expect(bodies).toHaveLength(2);
   const assistant = bodies[1].messages.find((message: any) => Array.isArray(message.tool_calls));
   expect(assistant.reasoning).toBe('Need the fixture tool.');
@@ -698,6 +699,112 @@ it('refuses to splice provider_opaque from another provider into an OpenAI-compa
       // drain
     }
   }).rejects.toThrow("Refusing to splice provider_opaque from 'deepseek' into 'openrouter' request");
+});
+
+// Two providers of type `openai-compatible` — a deepseek endpoint and an
+// OpenRouter gateway — spell reasoning differently, so tagging opaque items with
+// the shared type rather than the configured provider let one endpoint's fields
+// be replayed into the other's request. That is the exact splice the refusal
+// exists to prevent, and the type-level tag could not see it.
+it('refuses an opaque item from a different provider of the same openai-compatible type', async () => {
+  const client = { chat: { completions: { create: async () => emptyStream() } } };
+  const model = new OpenAIChatCompletionsModel(client, 'fixture-chat', undefined, 'my-openrouter');
+  const request = {
+    input: [
+      { type: 'provider_opaque', provider: 'my-deepseek', item: { reasoning_content: 'deepseek thinking' } },
+      { type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] },
+    ],
+    tools: [],
+  } as any;
+
+  await expect(async () => {
+    for await (const _event of model.stream(request)) {
+      // drain
+    }
+  }).rejects.toThrow("Refusing to splice provider_opaque from 'my-deepseek' into 'my-openrouter' request");
+});
+
+// A continuity payload is only known once the completion arrives, so the run
+// loop appends the opaque item after the turn's tool results. Anchoring it on
+// whichever message happened to be last attached it to a `tool` message's
+// predecessor — a *previous* turn's assistant message — clobbering that turn's
+// own reasoning with a later turn's.
+it('splices a trailing opaque payload onto its own turn, not an earlier assistant message', async () => {
+  const bodies: any[] = [];
+  const client = {
+    chat: {
+      completions: {
+        create: async (body: any) => {
+          bodies.push(body);
+          return emptyStream();
+        },
+      },
+    },
+  };
+  const model = new OpenAIChatCompletionsModel(client, 'fixture-chat', undefined, 'gateway');
+  const request = {
+    input: [
+      { type: 'message', role: 'user', content: [{ type: 'text', text: 'first' }] },
+      { type: 'tool_call', id: 'call_a', name: 'lookup', arguments: '{}' },
+      { type: 'tool_result', id: 'call_a', output: 'a' },
+      { type: 'provider_opaque', provider: 'gateway', item: { reasoning: 'first turn thinking' } },
+      { type: 'message', role: 'user', content: [{ type: 'text', text: 'second' }] },
+      { type: 'tool_call', id: 'call_b', name: 'lookup', arguments: '{}' },
+      { type: 'tool_result', id: 'call_b', output: 'b' },
+      { type: 'provider_opaque', provider: 'gateway', item: { reasoning: 'second turn thinking' } },
+    ],
+    tools: [],
+  } as any;
+
+  for await (const _event of model.stream(request)) {
+    // drain
+  }
+
+  const assistants = bodies[0].messages.filter((message: any) => message.role === 'assistant');
+  expect(assistants).toHaveLength(2);
+  expect(assistants[0].tool_calls[0].id).toBe('call_a');
+  expect(assistants[0].reasoning).toBe('first turn thinking');
+  expect(assistants[1].tool_calls[0].id).toBe('call_b');
+  expect(assistants[1].reasoning).toBe('second turn thinking');
+});
+
+// The payload is the same reasoning the normalized item carries, in the
+// provider's own spelling. Replaying both sends the tokens twice, in two fields.
+it('replaces reconstructed reasoning_content with the payload spelling rather than sending both', async () => {
+  const bodies: any[] = [];
+  const client = {
+    chat: {
+      completions: {
+        create: async (body: any) => {
+          bodies.push(body);
+          return emptyStream();
+        },
+      },
+    },
+  };
+  const model = new OpenAIChatCompletionsModel(client, 'fixture-chat', undefined, 'gateway');
+  const request = {
+    input: [
+      { type: 'message', role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      {
+        type: 'reasoning',
+        text: 'Thinking.',
+        providerMetadata: { reasoning_content: 'Thinking.', openai_compatible_reasoning_content: true },
+      },
+      { type: 'tool_call', id: 'call_a', name: 'lookup', arguments: '{}' },
+      { type: 'tool_result', id: 'call_a', output: 'a' },
+      { type: 'provider_opaque', provider: 'gateway', item: { reasoning: 'Thinking.' } },
+    ],
+    tools: [],
+  } as any;
+
+  for await (const _event of model.stream(request)) {
+    // drain
+  }
+
+  const assistant = bodies[0].messages.find((message: any) => Array.isArray(message.tool_calls));
+  expect(assistant.reasoning).toBe('Thinking.');
+  expect(assistant).not.toHaveProperty('reasoning_content');
 });
 
 it('preserves generic reasoning without native OpenAI metadata as an assistant text message', async () => {

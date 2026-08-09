@@ -121,9 +121,12 @@ export class LargeUncachedInputGuard {
     const reasons: LargeUncachedInputWarningReason[] = [];
 
     if (!this.#config.enabled || tokenCount < this.#config.largePromptTokenThreshold) {
+      // `warningKey` deduplicates repeated *warnings*; nothing reads it on an
+      // allow. Hashing here would serialize the whole outgoing history a second
+      // time for a value that is discarded.
       return {
         action: 'allow',
-        warningKey: warningKeyFor(context.input, reasons, context),
+        warningKey: '',
         reasons,
         estimatedTokens: tokenCount,
         estimatedBytes,
@@ -167,8 +170,12 @@ export class LargeUncachedInputGuard {
       reasons.push('undo_rewind');
     }
 
+    if (reasons.length === 0) {
+      return { action: 'allow', warningKey: '', reasons, estimatedTokens: tokenCount, estimatedBytes };
+    }
+
     return {
-      action: reasons.length > 0 ? 'warn' : 'allow',
+      action: 'warn',
       warningKey: warningKeyFor(context.input, reasons, context),
       reasons,
       estimatedTokens: tokenCount,

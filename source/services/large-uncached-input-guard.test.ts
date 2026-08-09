@@ -204,3 +204,74 @@ it('warning key is stable for the same pending input and changes when input chan
   expect(first.warningKey).toBe(second.warningKey);
   expect(first.warningKey).not.toBe(changed.warningKey);
 });
+
+// The guard runs against the full outgoing history, so every serialization of
+// the payload costs time proportional to the conversation. `warningKey` only
+// deduplicates repeated warnings; hashing it on an allow serialized the whole
+// history a second time to produce a value no caller reads.
+it('serializes the payload once per inspect on the allow path', () => {
+  let serializations = 0;
+  const countingInput = {
+    history: 'x'.repeat(1_000),
+    toJSON() {
+      serializations++;
+      return this.history;
+    },
+  };
+
+  const guard = new LargeUncachedInputGuard();
+  const decision = guard.inspect({
+    input: countingInput,
+    now: 1_000,
+    provider: 'openai',
+    model: 'gpt-5',
+    reasoningEffort: 'medium',
+    mode: 'standard',
+  });
+
+  expect(decision.action).toBe('allow');
+  expect(decision.warningKey).toBe('');
+  expect(serializations).toBe(1);
+});
+
+it('reports the size estimate on an allow even though it skips the warning key', () => {
+  const guard = new LargeUncachedInputGuard();
+  const decision = guard.inspect({
+    input: largeInput(),
+    now: 1_000,
+    provider: 'openai',
+    model: 'gpt-5',
+    reasoningEffort: 'medium',
+    mode: 'standard',
+  });
+
+  expect(decision.action).toBe('allow');
+  expect(decision.reasons).toEqual([]);
+  expect(decision.estimatedTokens).toBeGreaterThanOrEqual(
+    DEFAULT_LARGE_UNCACHED_INPUT_GUARD_CONFIG.largePromptTokenThreshold,
+  );
+});
+
+it('still produces a stable warning key on the warn path', () => {
+  const guard = new LargeUncachedInputGuard();
+  guard.recordSuccessfulInput({
+    input: 'small',
+    now: 1_000,
+    provider: 'openai',
+    model: 'gpt-5',
+    reasoningEffort: 'medium',
+    mode: 'standard',
+  });
+
+  const decision = guard.inspect({
+    input: largeInput(),
+    now: 2_000,
+    provider: 'openrouter',
+    model: 'gpt-5',
+    reasoningEffort: 'medium',
+    mode: 'standard',
+  });
+
+  expect(decision.action).toBe('warn');
+  expect(decision.warningKey).not.toBe('');
+});

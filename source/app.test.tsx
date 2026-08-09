@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createNode } from '../node_modules/ink/build/dom.js';
 import reconciler from '../node_modules/ink/build/reconciler.js';
 import App from './app.js';
-import { renderInAct } from './test-helpers/ink-testing.js';
+import { renderInAct, rerenderInAct } from './test-helpers/ink-testing.js';
 
 const mocks = vi.hoisted(() => ({
   bottomAreaProps: null as any,
@@ -59,6 +59,7 @@ const mocks = vi.hoisted(() => ({
   slashActionReturnValue: undefined as boolean | void | undefined,
   clearConversationCallback: null as null | (() => Promise<void>),
   messageListMounts: 0,
+  inputValue: '',
   stdoutWrite: vi.fn(),
   selectedSkill: null as any,
   sandboxNetworkHandler: null as null | ((request: { host: string; port?: number }) => Promise<unknown>),
@@ -124,7 +125,7 @@ vi.mock('./context/InputContext.js', () => ({
     setInputAndCursor: mocks.setInputAndCursor,
   }),
   useInputState: () => ({
-    input: '',
+    input: mocks.inputValue,
     mode: 'text',
     cursorOffset: 0,
     triggerIndex: null,
@@ -325,6 +326,7 @@ beforeEach(() => {
   mocks.clearConversation.mockReset();
   mocks.clearConversationCallback = null;
   mocks.messageListMounts = 0;
+  mocks.inputValue = '';
   mocks.stdoutWrite.mockReset();
   mocks.admissionConfirmation = null;
   mocks.submitTurnForAdmission.mockReset();
@@ -705,5 +707,95 @@ describe('App orchestration', () => {
     rejectCompletion?.(failure);
     await expect(submission).rejects.toThrow('send failed');
     expect(mocks.replaceInput).toHaveBeenCalledWith('');
+  });
+
+  // previewLargeUncachedInput builds and serializes the entire outgoing
+  // history, so its cost grows with the conversation. It used to run once per
+  // keystroke, synchronously during render, which blocked the event loop
+  // between the key press and the repaint and read as typing lag in long
+  // sessions.
+  describe('large-uncached composer advisory', () => {
+    const renderApp = async (services: ReturnType<typeof createServices>) =>
+      renderInAct(<App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />);
+
+    const type = async (view: Awaited<ReturnType<typeof renderApp>>, services: any, text: string) => {
+      for (let i = 1; i <= text.length; i++) {
+        mocks.inputValue = text.slice(0, i);
+        await rerenderInAct(
+          view,
+          <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+        );
+      }
+    };
+
+    it.sequential('does not re-run the preview once per keystroke', async () => {
+      vi.useFakeTimers();
+      try {
+        const services = createServices();
+        const view = await renderApp(services);
+        services.conversationService.previewLargeUncachedInput.mockClear();
+
+        await type(view, services, 'refactor the planner');
+
+        expect(services.conversationService.previewLargeUncachedInput).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it.sequential('runs the preview once after typing settles', async () => {
+      vi.useFakeTimers();
+      try {
+        const services = createServices();
+        const view = await renderApp(services);
+        services.conversationService.previewLargeUncachedInput.mockClear();
+
+        await type(view, services, 'refactor the planner');
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(500);
+        });
+
+        expect(services.conversationService.previewLargeUncachedInput).toHaveBeenCalledTimes(1);
+        expect(services.conversationService.previewLargeUncachedInput).toHaveBeenCalledWith(
+          { text: 'refactor the planner' },
+          expect.any(Number),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it.sequential('clears a shown warning immediately when the composer is emptied', async () => {
+      vi.useFakeTimers();
+      try {
+        const services = createServices();
+        services.conversationService.previewLargeUncachedInput.mockReturnValue({
+          action: 'warn',
+          warningKey: 'k',
+          reasons: ['idle_timeout'],
+          estimatedTokens: 90_000,
+          estimatedBytes: 360_000,
+        });
+        const view = await renderApp(services);
+
+        await type(view, services, 'hi');
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(500);
+        });
+        expect(mocks.bottomAreaProps.largeUncachedWarning).not.toBeNull();
+
+        // Submitting clears the composer; the advisory must not outlive the
+        // text it described, so an empty composer bypasses the debounce.
+        mocks.inputValue = '';
+        await rerenderInAct(
+          view,
+          <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+        );
+
+        expect(mocks.bottomAreaProps.largeUncachedWarning).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });

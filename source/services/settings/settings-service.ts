@@ -180,6 +180,29 @@ export class SettingsService {
       this.settings.app = { ...app, ...normalized };
     }
 
+    // Normalize sandbox / auto-approve exclusivity on load: 'always' mode
+    // cannot coexist with an enabled sandbox (it auto-approves the unsandboxed
+    // escape the sandbox exists to gate), so a persisted conflict is demoted
+    // to 'auto' up front and flagged instead of silently surviving a restart.
+    // When the conflict comes from the settings file, the demotion is recorded
+    // as a startup migration so the file is rewritten once and the conflict
+    // cannot be resurrected by a later reconcile.
+    let normalizedSandboxAutoApproveConflict = false;
+    if (this.settings.sandbox?.enabled === true && this.settings.shell?.autoApproveMode === 'always') {
+      this.settings.shell.autoApproveMode = 'auto';
+      this.sources.set('shell.autoApproveMode', 'config');
+      if (fileConfig.shell?.autoApproveMode === 'always' && (fileConfig.sandbox?.enabled ?? true) === true) {
+        this.startupMigrations.push(['shell.autoApproveMode', 'auto']);
+        normalizedSandboxAutoApproveConflict = true;
+      }
+      if (!this.disableLogging) {
+        this.loggingService.warn(
+          'shell.autoApproveMode "always" conflicts with sandbox.enabled=true; demoted mode to "auto"',
+          { settingsFile: settingsFilePath },
+        );
+      }
+    }
+
     // Register any runtime-defined providers from settings.json so they appear
     // in the model selection menu and can be selected as agent.provider.
     this.registerRuntimeProviders();
@@ -235,7 +258,10 @@ export class SettingsService {
         }
       }
     } else if (
-      (shouldUpdateFile || shouldMigrateLegacyProviderFormat || migratedLegacyAncillarySettings) &&
+      (shouldUpdateFile ||
+        shouldMigrateLegacyProviderFormat ||
+        migratedLegacyAncillarySettings ||
+        normalizedSandboxAutoApproveConflict) &&
       !fileHadErrors
     ) {
       if (!this.disableFilePersistence) {
@@ -447,6 +473,27 @@ export class SettingsService {
   }
 
   /**
+   * Enforce sandbox / auto-approve exclusivity: 'always' auto-approval cannot
+   * coexist with an enabled sandbox. Setting the mode to 'always' disables the
+   * sandbox; enabling the sandbox while the mode is 'always' demotes the mode
+   * to 'auto'. Returns the coupled key when a normalization was applied, so
+   * callers can notify listeners for it (the status bar reads both settings).
+   */
+  private normalizeSandboxAutoApproveExclusivity(key: string, value: unknown): string | undefined {
+    if (key === 'shell.autoApproveMode' && value === 'always') {
+      this.settings.sandbox.enabled = false;
+      this.sources.set('sandbox.enabled', 'cli');
+      return 'sandbox.enabled';
+    }
+    if (key === 'sandbox.enabled' && value === true && this.settings.shell.autoApproveMode === 'always') {
+      this.settings.shell.autoApproveMode = 'auto';
+      this.sources.set('shell.autoApproveMode', 'cli');
+      return 'shell.autoApproveMode';
+    }
+    return undefined;
+  }
+
+  /**
    * Set a setting value (runtime modification)
    * Only runtime-modifiable settings can be changed.
    * Sensitive settings cannot be modified (must come from environment).
@@ -491,6 +538,11 @@ export class SettingsService {
       }
     }
 
+    // Same single-enforcement-point treatment for the sandbox / auto-approve
+    // pair. Must run after recordRuntimeOverride so that method can read the
+    // pre-normalization mode for its own override-map handling.
+    const coupledKey = this.normalizeSandboxAutoApproveExclusivity(key, value);
+
     // If we're changing the logging level, update the logging service runtime
     if (key === 'logging.logLevel') {
       try {
@@ -525,6 +577,9 @@ export class SettingsService {
     }
 
     this.notifyChange(key);
+    if (coupledKey) {
+      this.notifyChange(coupledKey);
+    }
   }
 
   /**
@@ -600,11 +655,16 @@ export class SettingsService {
 
     this.sources.set(key, 'cli');
 
+    const coupledKey = this.normalizeSandboxAutoApproveExclusivity(key, value);
+
     if (!this.disableFilePersistence) {
       this.saveToFile((current) => this.applyPersistedSetting(current, key, value));
     }
 
     this.notifyChange(key);
+    if (coupledKey) {
+      this.notifyChange(coupledKey);
+    }
   }
 
   /**
@@ -617,6 +677,8 @@ export class SettingsService {
         `Cannot reset '${key}' - it is a sensitive setting that can only be configured via environment variables.`,
       );
     }
+
+    let coupledKey: string | undefined;
 
     if (key) {
       // Reset specific setting
@@ -644,6 +706,7 @@ export class SettingsService {
       obj[lastKey] = cloneSettingValue(defaultValue);
       this.sources.set(key, 'default');
       this.recordRuntimeOverride(key, defaultValue, 'default');
+      coupledKey = this.normalizeSandboxAutoApproveExclusivity(key, defaultValue);
     } else {
       // Reset all settings
       this.settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
@@ -661,6 +724,9 @@ export class SettingsService {
     }
 
     this.notifyChange(key);
+    if (key && coupledKey) {
+      this.notifyChange(coupledKey);
+    }
   }
 
   /**
@@ -754,6 +820,15 @@ export class SettingsService {
             };
     }
 
+    // Sandbox / auto-approve exclusivity in the persisted copy, mirroring the
+    // app-mode block above: writing one side must normalize the other side in
+    // the file so a stale service cannot commit the conflicting pair.
+    if (key === 'shell.autoApproveMode' && value === 'always') {
+      setSettingValue(next, 'sandbox.enabled', false);
+    } else if (key === 'sandbox.enabled' && value === true && current.shell?.autoApproveMode === 'always') {
+      setSettingValue(next, 'shell.autoApproveMode', 'auto');
+    }
+
     return SettingsSchema.parse(next) as SettingsData;
   }
 
@@ -768,6 +843,17 @@ export class SettingsService {
           this.runtimeOverrideSources.set(modeKey, 'cli');
         }
       }
+    }
+    // Sandbox / auto-approve exclusivity, mirroring the app-mode block: the
+    // runtime override map must stay consistent with the normalized in-memory
+    // state so a later reconciliation cannot resurrect the conflict. Rule B
+    // reads this.settings because normalization runs after this method.
+    if (key === 'shell.autoApproveMode' && value === 'always') {
+      this.runtimeOverrides.set('sandbox.enabled', false);
+      this.runtimeOverrideSources.set('sandbox.enabled', source);
+    } else if (key === 'sandbox.enabled' && value === true && this.settings.shell.autoApproveMode === 'always') {
+      this.runtimeOverrides.set('shell.autoApproveMode', 'auto');
+      this.runtimeOverrideSources.set('shell.autoApproveMode', source);
     }
   }
 

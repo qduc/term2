@@ -525,6 +525,44 @@ it.sequential('StatusBar shows compact auto approval without the model name', as
   expect(output.includes('Sandboxed')).toBe(false);
 });
 
+it.sequential(
+  'StatusBar shows Sandboxed, not always, when a sandbox-on + always config is normalized on load',
+  async () => {
+    // SettingsService enforces sandbox/auto-approve exclusivity: an 'always'
+    // mode alongside an enabled sandbox is demoted to 'auto' at load time, so
+    // the status bar must reflect the normalized state (sandbox on -> Sandboxed).
+    const settingsService = createMockSettingsService({
+      'agent.model': 'gpt-4o',
+      'agent.provider': 'openai',
+      'shell.autoApproveMode': 'always',
+      'sandbox.enabled': true,
+    });
+    expect(settingsService.get('shell.autoApproveMode')).toBe('auto');
+
+    const { lastFrame } = await renderInAct(<StatusBar settingsService={settingsService} />);
+    const output = lastFrame() ?? '';
+
+    expect(output.includes('Sandboxed')).toBe(true);
+    expect(output.includes('always')).toBe(false);
+  },
+);
+
+it.sequential('StatusBar shows always when mode is always and the sandbox is off', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+    'shell.autoApproveMode': 'always',
+    'sandbox.enabled': false,
+  });
+
+  const { lastFrame } = await renderInAct(<StatusBar settingsService={settingsService} />);
+  const output = lastFrame() ?? '';
+
+  expect(output.includes('always')).toBe(true);
+  expect(output.includes('Auto')).toBe(false);
+  expect(output.includes('Sandboxed')).toBe(false);
+});
+
 it.sequential('StatusBar renders a static commit blocker warning', async () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',

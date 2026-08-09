@@ -1426,3 +1426,137 @@ it('set() enables target app mode and disables sibling modes', async () => {
   expect(service.get('app.orchestratorMode')).toBe(false);
   expect(service.get('app.mentorMode')).toBe(false);
 });
+
+// Sandbox / auto-approve exclusivity: 'always' auto-approval cannot coexist
+// with an enabled sandbox.
+it('setting mode to always disables the sandbox', () => {
+  const service = new SettingsService({ settingsDir: getTestSettingsDir(), disableLogging: true });
+
+  service.set('shell.autoApproveMode', 'always');
+
+  expect(service.get('sandbox.enabled')).toBe(false);
+});
+
+it('enabling the sandbox while mode is always demotes the mode to auto', () => {
+  const service = new SettingsService({ settingsDir: getTestSettingsDir(), disableLogging: true });
+
+  service.set('shell.autoApproveMode', 'always');
+  service.set('sandbox.enabled', true);
+
+  expect(service.get('sandbox.enabled')).toBe(true);
+  expect(service.get('shell.autoApproveMode')).toBe('auto');
+});
+
+it('leaving always does not silently re-enable the sandbox', () => {
+  const service = new SettingsService({ settingsDir: getTestSettingsDir(), disableLogging: true });
+
+  service.set('shell.autoApproveMode', 'always');
+  service.set('shell.autoApproveMode', 'auto');
+
+  expect(service.get('shell.autoApproveMode')).toBe('auto');
+  expect(service.get('sandbox.enabled')).toBe(false);
+});
+
+it('reset of sandbox.enabled to its default demotes an always mode to auto', () => {
+  const service = new SettingsService({ settingsDir: getTestSettingsDir(), disableLogging: true });
+
+  service.set('shell.autoApproveMode', 'always');
+  service.reset('sandbox.enabled');
+
+  expect(service.get('sandbox.enabled')).toBe(true);
+  expect(service.get('shell.autoApproveMode')).toBe('auto');
+});
+
+it('persists the sandbox disable alongside an always mode write', async () => {
+  await withNonTestEnvironment(async () => {
+    const settingsDir = getTestSettingsDir();
+    const service = new SettingsService({ settingsDir, disableLogging: true });
+
+    service.set('shell.autoApproveMode', 'always');
+
+    const persisted = JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf-8'));
+    expect(persisted.shell.autoApproveMode).toBe('always');
+    expect(persisted.sandbox.enabled).toBe(false);
+  });
+});
+
+it('last committed change wins when a stale service re-enables the sandbox', async () => {
+  await withNonTestEnvironment(async () => {
+    const settingsDir = getTestSettingsDir();
+    const first = new SettingsService({ settingsDir, disableLogging: true });
+    first.set('shell.autoApproveMode', 'always');
+
+    const second = new SettingsService({ settingsDir, disableLogging: true });
+    second.set('sandbox.enabled', true);
+
+    const persisted = JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf-8'));
+    expect(persisted.sandbox.enabled).toBe(true);
+    expect(persisted.shell.autoApproveMode).toBe('auto');
+  });
+});
+
+it('demotes a persisted sandbox-on + always conflict on load', () => {
+  const settingsDir = getTestSettingsDir();
+  const settingsFile = path.join(settingsDir, 'settings.json');
+  if (!fs.existsSync(settingsDir)) {
+    fs.mkdirSync(settingsDir, { recursive: true });
+  }
+  fs.writeFileSync(
+    settingsFile,
+    JSON.stringify({
+      shell: { autoApproveMode: 'always' },
+      sandbox: { enabled: true },
+    }),
+    'utf-8',
+  );
+
+  const service = new SettingsService({ settingsDir, disableLogging: true });
+
+  expect(service.get('shell.autoApproveMode')).toBe('auto');
+  expect(service.get('sandbox.enabled')).toBe(true);
+});
+
+it('rewrites the settings file once when a persisted conflict is normalized on load', async () => {
+  await withNonTestEnvironment(async () => {
+    const settingsDir = getTestSettingsDir();
+    const settingsFile = path.join(settingsDir, 'settings.json');
+    if (!fs.existsSync(settingsDir)) {
+      fs.mkdirSync(settingsDir, { recursive: true });
+    }
+    fs.writeFileSync(
+      settingsFile,
+      JSON.stringify({
+        shell: { autoApproveMode: 'always' },
+        sandbox: { enabled: true },
+      }),
+      'utf-8',
+    );
+
+    const service = new SettingsService({ settingsDir, disableLogging: true });
+    expect(service.get('shell.autoApproveMode')).toBe('auto');
+
+    const persisted = JSON.parse(fs.readFileSync(settingsFile, 'utf-8'));
+    expect(persisted.shell.autoApproveMode).toBe('auto');
+    expect(persisted.sandbox.enabled).toBe(true);
+  });
+});
+it('does not demote when a persisted always mode has the sandbox explicitly disabled', () => {
+  const settingsDir = getTestSettingsDir();
+  const settingsFile = path.join(settingsDir, 'settings.json');
+  if (!fs.existsSync(settingsDir)) {
+    fs.mkdirSync(settingsDir, { recursive: true });
+  }
+  fs.writeFileSync(
+    settingsFile,
+    JSON.stringify({
+      shell: { autoApproveMode: 'always' },
+      sandbox: { enabled: false },
+    }),
+    'utf-8',
+  );
+
+  const service = new SettingsService({ settingsDir, disableLogging: true });
+
+  expect(service.get('shell.autoApproveMode')).toBe('always');
+  expect(service.get('sandbox.enabled')).toBe(false);
+});

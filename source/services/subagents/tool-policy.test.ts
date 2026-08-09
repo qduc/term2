@@ -296,6 +296,63 @@ describe('worker shell sandbox approval parity', () => {
   });
 });
 
+describe('worker shell auto-approval in always mode', () => {
+  function wrapShell(mode: string | undefined, needsApproval: () => boolean | Promise<boolean>) {
+    const execute = vi.fn(async () => 'executed');
+    const policy = new SubagentToolPolicy({
+      settings: createMockSettings(mode === undefined ? {} : { 'shell.autoApproveMode': mode }),
+      logger: createMockLogger(),
+      sessionContextService: createSessionContextService(),
+    });
+    const wrapped = policy.wrapShellTool(
+      {
+        name: 'shell',
+        description: 'test shell',
+        parameters: z.object({ command: z.string() }),
+        needsApproval,
+        execute,
+        formatCommandMessage: () => [],
+      },
+      process.cwd(),
+      [],
+      'run the project tests',
+    );
+    return { wrapped, execute };
+  }
+
+  it('executes a RED command in always mode even when the underlying shell requires approval', async () => {
+    const { wrapped, execute } = wrapShell('always', async () => true);
+
+    await expect(wrapped.execute({ command: 'rm -rf /tmp/something' })).resolves.toBe('executed');
+    expect(execute).toHaveBeenCalledOnce();
+  });
+
+  it('executes a YELLOW command in always mode without consulting the auto-approval evaluator', async () => {
+    // No agentClient is provided, so the evaluator path would reject;
+    // always mode must skip the gate entirely.
+    const { wrapped, execute } = wrapShell('always', async () => true);
+
+    await expect(wrapped.execute({ command: 'npm run test:verbose -- --help' })).resolves.toBe('executed');
+    expect(execute).toHaveBeenCalledOnce();
+  });
+
+  it('still blocks a RED command when mode is off', async () => {
+    const { wrapped, execute } = wrapShell('off', async () => true);
+
+    await expect(wrapped.execute({ command: 'rm -rf /tmp/something' })).resolves.toContain('blocked for safety');
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('still enforces the workspace write boundary in always mode', async () => {
+    const { wrapped, execute } = wrapShell('always', async () => true);
+
+    await expect(wrapped.execute({ command: 'echo hi > /etc/passwd' })).resolves.toContain(
+      'outside the allowed write boundary',
+    );
+    expect(execute).not.toHaveBeenCalled();
+  });
+});
+
 describe('shell-edit-hole measurement (plan D2)', () => {
   // Documents the coverage gap of extractPathsFromCommand: it only captures
   // redirection (>/>>/tee), so most shell-edit commands are invisible to

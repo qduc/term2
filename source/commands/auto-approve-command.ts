@@ -46,7 +46,13 @@ export function createAutoApproveSlashCommand({
       settingsService.set('shell.autoApproveMode', newValue);
       applyRuntimeSetting('shell.autoApproveMode', newValue);
 
-      addSystemMessage(`Shell auto-approval mode set to: ${newValue.toUpperCase()}`);
+      if (newValue === 'always') {
+        addSystemMessage(
+          'Shell auto-approval mode set to: ALWAYS. Sandbox disabled — every command runs without prompting (YOLO).',
+        );
+      } else {
+        addSystemMessage(`Shell auto-approval mode set to: ${newValue.toUpperCase()}`);
+      }
       return true;
     },
   };

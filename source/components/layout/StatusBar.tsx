@@ -177,8 +177,15 @@ const StatusBar: FC<StatusBarProps> = ({
     ...(orchestratorMode ? ['Orchestrator'] : []),
   ];
   const modeLabel = modeLabels.length > 0 ? modeLabels.join(' · ') : 'Standard';
+  // 'always' overrides the sandbox label so YOLO mode is always visible,
+  // rendered in red below. When the sandbox is on it still confines commands,
+  // but every approval is auto-granted, so the mode must not hide behind
+  // 'Sandboxed'.
+  const autoApproveAlways = autoApproveMode === 'always';
   const safetyLabel = sandboxEnabled
-    ? 'Sandboxed'
+    ? autoApproveAlways
+      ? 'always'
+      : 'Sandboxed'
     : autoApproveMode !== 'off'
     ? autoApproveMode === 'auto'
       ? 'Auto'
@@ -240,7 +247,12 @@ const StatusBar: FC<StatusBarProps> = ({
         <Box flexGrow={1}>
           {safetyLabel && (
             <Box marginRight={1}>
-              <Text color={sandboxEnabled || autoApproveMode === 'auto' ? '#10b981' : '#f97316'} bold>
+              <Text
+                color={
+                  autoApproveAlways ? warnRed : sandboxEnabled || autoApproveMode === 'auto' ? '#10b981' : '#f97316'
+                }
+                bold
+              >
                 {safetyLabel}
               </Text>
             </Box>

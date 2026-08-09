@@ -221,6 +221,10 @@ Toggle modes with `/auto-approve`:
 | `auto` | Safe commands execute automatically; risky ones still prompt |
 | `always` | **YOLO**: every command runs without prompting (DANGEROUS) |
 
+In `always` mode, subagent shell commands are auto-approved too; subagents stay confined to the workspace write boundary and remain banned from unsandboxed execution.
+
+`always` and the sandbox are mutually exclusive: setting the mode disables the sandbox, and re-enabling the sandbox demotes the mode back to `auto`.
+
 ```json
 {
   "shell": { "autoApproveMode": "auto" },

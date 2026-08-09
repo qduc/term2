@@ -386,7 +386,10 @@ export class SubagentToolPolicy {
         // is for the root agent; do not re-block the command by classification.
         // Keep the worker's non-interactive fallback only when the underlying
         // shell actually requires approval (for example, without a sandbox).
-        if (await originalNeedsApproval(params, context)) {
+        // In 'always' auto-approval mode that fallback is skipped entirely,
+        // mirroring the root agent's unrestricted shell approval path.
+        const autoApproveMode = this.#settings.get('shell.autoApproveMode');
+        if (autoApproveMode !== 'always' && (await originalNeedsApproval(params, context))) {
           const status = classifyCommand(command, this.#logger);
           if (status === SafetyStatus.RED) {
             return `Error: command blocked for safety (${status}). Workers cannot run commands that require interactive approval. Command: ${command}`;

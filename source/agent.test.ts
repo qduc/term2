@@ -373,6 +373,10 @@ it('getAgentDefinition registers root background shell controls only with its se
   expect(nonInteractive.tools.map((tool) => tool.name)).not.toEqual(
     expect.arrayContaining(['get_shell_job', 'cancel_shell_job']),
   );
+  expect(enabled.instructions).toContain('### Background shell jobs');
+  expect(enabled.instructions).toContain('End the current turn and wait for the automatic completion notification');
+  expect(disabled.instructions).not.toContain('### Background shell jobs');
+  expect(nonInteractive.instructions).not.toContain('### Background shell jobs');
 });
 
 it('getAgentDefinition registers no async delegation tools when the parent controls are absent', () => {

@@ -109,6 +109,8 @@ it('background shell acknowledges immediately, exposes status and cancellation, 
   });
   const jobs = createBackgroundShellJobToolDefinitions(registry);
 
+  expect(jobs.get.description).toContain('Do not use this to poll a running job');
+
   const acknowledgement = JSON.parse(await shell.execute({ command: 'pnpm test', background: true }));
   expect(acknowledgement).toEqual({ jobId: 'background-job', status: 'running' });
   expect(correlationId).toBe('foreground-command');
@@ -140,7 +142,7 @@ it('background shell reports a timeout as timed_out through the lifecycle event 
   });
   const shell = createShellToolDefinition({
     loggingService: createNoopLogger(),
-    settingsService: createMockSettingsService(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': false }),
     backgroundShellRegistry: registry,
     executeShellCommandImpl: async () => ({ stdout: '', stderr: '', exitCode: null, timedOut: true }),
   });

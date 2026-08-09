@@ -123,6 +123,21 @@ it('buildPromptSpec excludes shell-sandbox when sandbox is disabled', () => {
   expect(spec.fragmentFiles.includes('worktree-hygiene.md')).toBe(true);
 });
 
+it('buildPromptSpec tells the model to wait for background shell completion instead of polling', () => {
+  const spec = buildPromptSpec({
+    model: 'gpt-4o',
+    liteMode: false,
+    backgroundShellEnabled: true,
+  });
+  const guidance = spec.inlineSections.join('\n');
+
+  expect(guidance).toContain('Background shell jobs');
+  expect(guidance).toContain('`background: true`');
+  expect(guidance).toContain('Do NOT call `get_shell_job` as a polling loop');
+  expect(guidance.toLowerCase()).toContain('end the current turn and wait for the automatic completion notification');
+  expect(guidance.toLowerCase()).toContain('do not run `sleep` merely to wait');
+});
+
 it('adds persistent-memory guidance only when memory tools are enabled', () => {
   expect(buildPromptSpec({ model: 'gpt-4o', liteMode: false, memoryEnabled: true }).fragmentFiles).toContain(
     'memory.md',

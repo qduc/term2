@@ -1,4 +1,5 @@
 import React, { act } from 'react';
+import os from 'node:os';
 import { expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { InputProvider, useInputState } from '../../context/InputContext.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
@@ -31,12 +32,22 @@ const settingsCommand: SlashCommand = {
   action: () => {},
 };
 
+const modelCommand: SlashCommand = {
+  name: 'model',
+  description: 'Model',
+  expectsArgs: true,
+  completion: { type: 'model', trigger: '/model ' },
+  action: () => {},
+};
+
 const ControllerHost = ({
   controller,
   settingsService,
+  onUnavailableModelSelected,
 }: {
   controller: MenuControllerImpl;
   settingsService: ReturnType<typeof createMockSettingsService>;
+  onUnavailableModelSelected?: (provider: string) => void;
 }) => {
   const { input: _input } = useInputState();
   const models = useModelSelection({ loggingService: noopLoggingService, settingsService });
@@ -45,7 +56,7 @@ const ControllerHost = ({
       stack={controller.getSnapshot().stack}
       controller={controller}
       interactions={controller.getInteractionRegistry()}
-      services={{ models, settingsService }}
+      services={{ models, settingsService, onUnavailableModelSelected }}
     />
   );
 };
@@ -55,7 +66,10 @@ const buildController = (
 ) => {
   const controller = new MenuControllerImpl({ intentHost });
   controller.setTriggerRegistry(
-    createDefaultTriggerRegistry([settingsCommand], ['settings', 'settings-value-child', 'settings-model']),
+    createDefaultTriggerRegistry(
+      [settingsCommand, modelCommand],
+      ['settings', 'settings-value-child', 'settings-model', 'command-model'],
+    ),
   );
   return controller;
 };
@@ -72,9 +86,105 @@ beforeEach(() => {
   });
 });
 
+it.each([
+  ['openai', 'API key'],
+  ['openrouter', 'API key'],
+  ['codex', 'Codex login'],
+] as const)(
+  'routes direct /model selection for unavailable %s to setup without a provider request',
+  async (provider, _reason) => {
+    if (provider === 'codex') {
+      vi.stubEnv('CHATGPT_LOCAL_HOME', '');
+      vi.stubEnv('CODEX_HOME', '/tmp/term2-test-no-codex-auth');
+      vi.spyOn(os, 'homedir').mockReturnValue('/tmp/term2-test-no-codex-home');
+    }
+
+    const requestSetup = vi.fn();
+    const intentHost = vi.fn();
+    const controller = buildController(intentHost);
+    const settingsService = createMockSettingsService({ 'agent.provider': provider });
+
+    await renderInAct(
+      <InputProvider controller={controller}>
+        <ControllerHost
+          controller={controller}
+          settingsService={settingsService}
+          onUnavailableModelSelected={requestSetup}
+        />
+      </InputProvider>,
+    );
+
+    await act(async () => {
+      controller.applyEditorEdit({ type: 'set-text', text: '/model typed-unavailable', cursor: 24 });
+      await Promise.resolve();
+    });
+    await act(async () => {
+      for (let i = 0; i < 10; i += 1) await Promise.resolve();
+    });
+
+    expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('model');
+    await act(async () => {
+      controller.dispatchActiveEvent({
+        type: 'accept',
+        input: {
+          kind: 'composer',
+          text: controller.getSnapshot().editor.text,
+          cursor: controller.getSnapshot().editor.cursor,
+        },
+        selected: undefined,
+      });
+      await Promise.resolve();
+    });
+
+    expect(requestSetup).toHaveBeenCalledWith(provider);
+    expect(intentHost).not.toHaveBeenCalled();
+  },
+);
+
+it('routes acceptance of the retained unavailable model row back to setup', async () => {
+  const requestSetup = vi.fn();
+  const controller = buildController(vi.fn());
+  const settingsService = createMockSettingsService({ 'agent.provider': 'openai' });
+
+  await renderInAct(
+    <InputProvider controller={controller}>
+      <ControllerHost
+        controller={controller}
+        settingsService={settingsService}
+        onUnavailableModelSelected={requestSetup}
+      />
+    </InputProvider>,
+  );
+
+  await act(async () => {
+    controller.applyEditorEdit({ type: 'set-text', text: '/model ', cursor: 7 });
+    await Promise.resolve();
+  });
+  await act(async () => {
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+  });
+
+  await act(async () => {
+    controller.dispatchActiveEvent({
+      type: 'accept',
+      input: {
+        kind: 'composer',
+        text: controller.getSnapshot().editor.text,
+        cursor: controller.getSnapshot().editor.cursor,
+      },
+      selected: undefined,
+    });
+    await Promise.resolve();
+  });
+
+  expect(requestSetup).toHaveBeenCalledWith('openai');
+});
+
 afterEach(() => {
   clearModelCache();
   unregisterProvider(providerId);
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 
 it('accepting a fetched model applies the model and provider in one apply-settings intent, closing through the settings-list Back', async () => {

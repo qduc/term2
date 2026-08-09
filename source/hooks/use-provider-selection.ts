@@ -54,7 +54,10 @@ export type ProviderSelectionMenuItem =
 
 const DELETE_CONFIRM_DEFAULT_INDEX = 1;
 
-export const useProviderSelection = (settingsService: SettingsService) => {
+export const useProviderSelection = (
+  settingsService: SettingsService,
+  options?: { onProviderSelected?: (provider: string) => void; allowCodexSelection?: boolean },
+) => {
   const { mode, controller, setInput, replaceInput } = useInputContext();
   const providerSession = useMemo(() => new ProviderManagementSession(settingsService), [settingsService]);
 
@@ -146,9 +149,12 @@ export const useProviderSelection = (settingsService: SettingsService) => {
     }
   }, [phase, items, draft, editingOriginalName, reorderList]);
 
-  const checkIsInactive = useCallback((item: ProviderSelectionMenuItem) => {
-    return item.kind === 'provider' && item.id === 'codex';
-  }, []);
+  const checkIsInactive = useCallback(
+    (item: ProviderSelectionMenuItem) => {
+      return item.kind === 'provider' && item.id === 'codex' && !options?.allowCodexSelection;
+    },
+    [options?.allowCodexSelection],
+  );
 
   const {
     selectedIndex,
@@ -282,6 +288,13 @@ export const useProviderSelection = (settingsService: SettingsService) => {
       } else {
         // Provider selected
         const provider = items[index]!;
+        options?.onProviderSelected?.(provider.id);
+        if (provider.id === 'codex' && options?.onProviderSelected && !provider.hasCredentials) {
+          setErrorMessage(
+            'Codex is not logged in on this host. Run `npx @openai/codex login`, then select Codex again.',
+          );
+          return;
+        }
         if (provider.isCustom) {
           setFieldErrors({});
           setDiscardFromPhase(null);
@@ -677,7 +690,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
 
       return false;
     },
-    [phase, draft, editingField, editingOriginalName, settingsService, setInput, setSelectedIndex],
+    [phase, draft, editingField, editingOriginalName, settingsService, setInput, setSelectedIndex, options],
   );
 
   const requestDelete = useCallback(() => {

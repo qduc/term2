@@ -22,6 +22,7 @@ export type InputOwner =
   | { kind: 'approval' }
   | { kind: 'queue-paused' }
   | { kind: 'background-tasks' }
+  | { kind: 'first-run-setup' }
   | { kind: 'menu' }
   | { kind: 'input' };
 
@@ -35,6 +36,7 @@ export type InputOwnerState = {
   pendingApproval: unknown | null;
   queuePaused: boolean;
   backgroundTaskManagerOpen?: boolean;
+  firstRunSetupActive?: boolean;
   menuOpen?: boolean;
   /**
    * True while the agent is actively processing a turn. Mirrors the original
@@ -67,6 +69,10 @@ export const deriveInputOwner = (state: InputOwnerState): InputOwner => {
   ) {
     return { kind: 'approval' };
   }
+  // The gate owns the boundary before its menu mounts, but once the provider
+  // or model surface is visible that menu becomes the sole keyboard consumer.
+  // This keeps the composer blocked without deadlocking the setup flow.
+  if (state.firstRunSetupActive && !state.menuOpen) return { kind: 'first-run-setup' };
   if (state.menuOpen) return { kind: 'menu' };
   if (state.queuePaused) return { kind: 'queue-paused' };
   if (state.backgroundTaskManagerOpen) return { kind: 'background-tasks' };

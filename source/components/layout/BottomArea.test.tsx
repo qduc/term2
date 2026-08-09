@@ -1,12 +1,16 @@
 // @ts-expect-error IS_REACT_ACT_ENVIRONMENT is not in globalThis types
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-import { it, expect } from 'vitest';
+import { afterEach, it, expect, vi } from 'vitest';
 import React, { act } from 'react';
 import { render } from 'ink-testing-library';
 import { InputProvider } from '../../context/InputContext.js';
 import BottomArea, { type BottomAreaProps } from './BottomArea.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import type { SlashCommand } from '../../slash-commands.js';
+import { MenuControllerImpl } from '../input/menu-controller.js';
+import { useFirstRunSetupGate } from '../../hooks/use-first-run-setup.js';
+import { getProvider } from '../../providers/index.js';
+import { renderInAct } from '../../test-helpers/ink-testing.js';
 import {
   conversationUIReducer,
   createInitialUIState,
@@ -64,6 +68,38 @@ const renderBottomArea = async (props: Partial<BottomAreaProps> = {}) => {
   return result;
 };
 
+const FirstRunBottomArea = ({
+  controller,
+  settingsService,
+  onSubmit,
+}: {
+  controller: MenuControllerImpl;
+  settingsService: ReturnType<typeof createMockSettingsService>;
+  onSubmit: BottomAreaProps['onSubmit'];
+}) => {
+  const firstRunSetup = useFirstRunSetupGate({
+    settingsService,
+    controller,
+    applyProvider: (provider) => settingsService.setPersistentDynamic('agent.provider', provider),
+  });
+
+  return (
+    <BottomArea
+      {...baseProps}
+      settingsService={settingsService}
+      onSubmit={onSubmit}
+      firstRunSetup={firstRunSetup}
+      onProviderSelected={firstRunSetup.active ? firstRunSetup.onProviderSelected : undefined}
+      onUnavailableModelSelected={firstRunSetup.requestSetup}
+    />
+  );
+};
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
+
 it.sequential('BottomArea shows input when idle', async () => {
   const { lastFrame, unmount } = await renderBottomArea(baseProps);
   const output = lastFrame() ?? '';
@@ -73,6 +109,86 @@ it.sequential('BottomArea shows input when idle', async () => {
   act(() => {
     unmount();
   });
+});
+
+it.sequential('BottomArea blocks a fast Enter during the initial first-run handoff', async () => {
+  const onSubmit = vi.fn(async () => {});
+  const view = await renderBottomArea({
+    ...baseProps,
+    onSubmit,
+    firstRunSetup: { active: true, phase: 'provider', provider: 'openai' },
+  });
+
+  await act(async () => {
+    view.stdin.write('\r');
+    await Promise.resolve();
+  });
+
+  expect(onSubmit).not.toHaveBeenCalled();
+  expect(view.lastFrame()).toContain('First-run setup');
+  expect(view.lastFrame()).not.toContain('❯ Type a message');
+  act(() => view.unmount());
+});
+
+it.sequential('keeps the active first-run provider menu interactive through credential and model handoff', async () => {
+  vi.stubEnv('OPENAI_API_KEY', '');
+  vi.stubEnv('OPENROUTER_API_KEY', '');
+  vi.stubEnv('CHATGPT_LOCAL_HOME', '');
+  vi.stubEnv('CODEX_HOME', '/tmp/term2-test-no-codex-auth');
+  const settingsService = createMockSettingsService();
+  const controller = new MenuControllerImpl();
+  const onSubmit = vi.fn(async () => {});
+  const openRouter = getProvider('openrouter');
+  vi.spyOn(openRouter!, 'fetchModels').mockResolvedValue([]);
+
+  const view = await renderInAct(
+    <InputProvider controller={controller}>
+      <FirstRunBottomArea controller={controller} settingsService={settingsService} onSubmit={onSubmit} />
+    </InputProvider>,
+  );
+
+  await act(async () => {
+    for (let i = 0; i < 5; i += 1) await new Promise((resolve) => setImmediate(resolve));
+  });
+  expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('providers');
+  expect(view.lastFrame()).toContain('Provider Management');
+
+  await act(async () => {
+    view.stdin.write('\u001b[B');
+    for (let i = 0; i < 5; i += 1) await new Promise((resolve) => setImmediate(resolve));
+  });
+  await act(async () => {
+    view.stdin.write('\r');
+    for (let i = 0; i < 5; i += 1) await new Promise((resolve) => setImmediate(resolve));
+  });
+  expect(settingsService.get('agent.provider')).toBe('openrouter');
+  expect(view.lastFrame()).toContain('Step 4: API Key');
+  expect(onSubmit).not.toHaveBeenCalled();
+
+  await act(async () => {
+    controller.dispatchActiveEvent({ type: 'input', text: 'test-key' });
+    controller.dispatchActiveEvent({
+      type: 'accept',
+      input: { kind: 'composer', text: 'test-key', cursor: 'test-key'.length },
+      selected: undefined,
+    });
+    for (let i = 0; i < 5; i += 1) await new Promise((resolve) => setImmediate(resolve));
+  });
+  expect(view.lastFrame()).toContain('Save Changes');
+
+  await act(async () => {
+    controller.dispatchActiveEvent({
+      type: 'accept',
+      input: { kind: 'none' },
+      selected: undefined,
+    });
+    for (let i = 0; i < 5; i += 1) await new Promise((resolve) => setImmediate(resolve));
+  });
+  expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('model');
+  expect(view.lastFrame()).toContain('First-run setup');
+  expect(view.lastFrame()).toContain('Choose a model');
+  expect(onSubmit).not.toHaveBeenCalled();
+  act(() => view.unmount());
 });
 
 it.sequential('BottomArea places active background tasks directly above the input', async () => {

@@ -29,6 +29,7 @@ import type { SubmissionMutation } from '../../services/conversation/conversatio
 import type { SessionCostSummary } from '../../services/cost/model-cost.js';
 import type { BackgroundTaskControlPort } from '../../services/session/background-task-control.js';
 import { useInputState } from '../../context/InputContext.js';
+import FirstRunSetupPrompt, { type FirstRunSetupPhase } from '../input/FirstRunSetupPrompt.js';
 
 export type BottomAreaProps = {
   pendingApproval: PendingApproval | null;
@@ -94,6 +95,9 @@ export type BottomAreaProps = {
   listForegroundTaskTransferCandidates?: BackgroundTaskControlPort['listForegroundTransferCandidates'];
   moveForegroundTaskToBackground?: BackgroundTaskControlPort['moveForegroundToBackground'];
   backgroundApprovalPendingCount?: number;
+  firstRunSetup?: { active: boolean; phase: FirstRunSetupPhase | null; provider: string };
+  onProviderSelected?: (provider: string) => void;
+  onUnavailableModelSelected?: (provider: string) => void;
 };
 
 const BottomArea: FC<BottomAreaProps> = ({
@@ -158,6 +162,9 @@ const BottomArea: FC<BottomAreaProps> = ({
   listForegroundTaskTransferCandidates,
   moveForegroundTaskToBackground,
   backgroundApprovalPendingCount = 0,
+  firstRunSetup,
+  onProviderSelected,
+  onUnavailableModelSelected,
 }) => {
   const { controller } = useInputState();
   const [dotCount, setDotCount] = useState(1);
@@ -211,6 +218,7 @@ const BottomArea: FC<BottomAreaProps> = ({
     queuePaused,
     isProcessing,
     backgroundTaskManagerOpen,
+    firstRunSetupActive: firstRunSetup?.active,
     menuOpen: controller.getSnapshot().stack.length > 0,
   });
   const showHandoffConfirm = inputOwner.kind === 'handoff-confirm';
@@ -239,6 +247,9 @@ const BottomArea: FC<BottomAreaProps> = ({
   return (
     <Box flexDirection="column" width="100%">
       <Box flexDirection="column" marginTop={1}>
+        {firstRunSetup?.active && firstRunSetup.phase && (
+          <FirstRunSetupPrompt phase={firstRunSetup.phase} provider={firstRunSetup.provider} />
+        )}
         {showHandoffConfirm ? (
           <HandoffConfirmationPrompt
             onConfirm={onHandoffConfirm || (() => {})}
@@ -336,6 +347,8 @@ const BottomArea: FC<BottomAreaProps> = ({
           pendingQueuedMessages={pendingQueuedMessages}
           onRetractQueuedMessage={onRetractQueuedMessage}
           onEditQueuedMessage={onEditQueuedMessage}
+          onProviderSelected={onProviderSelected}
+          onUnavailableModelSelected={onUnavailableModelSelected}
           promptLabel={
             waitingForAskUserAnswer
               ? 'Answer: '

@@ -200,6 +200,41 @@ describe('deriveInputOwner', () => {
     ).toEqual({ kind: 'menu' });
   });
 
+  it('gives the first-run setup gate ownership before its provider menu mounts', () => {
+    expect(
+      deriveInputOwner({
+        handoffStage: null,
+        pendingSurgeTurn: null,
+        pendingLargeUncachedTurn: null,
+        waitingForApproval: false,
+        pendingApproval: null,
+        queuePaused: false,
+        firstRunSetupActive: true,
+        waitingForRejectionReason: false,
+        waitingForAskUserAnswer: false,
+        isProcessing: false,
+      }),
+    ).toEqual({ kind: 'first-run-setup' });
+  });
+
+  it('hands first-run keyboard ownership to its mounted menu', () => {
+    expect(
+      deriveInputOwner({
+        handoffStage: null,
+        pendingSurgeTurn: null,
+        pendingLargeUncachedTurn: null,
+        waitingForApproval: false,
+        pendingApproval: null,
+        queuePaused: false,
+        firstRunSetupActive: true,
+        menuOpen: true,
+        waitingForRejectionReason: false,
+        waitingForAskUserAnswer: false,
+        isProcessing: false,
+      }),
+    ).toEqual({ kind: 'menu' });
+  });
+
   it('lets urgent modals preempt a menu without changing the menu state', () => {
     expect(
       deriveInputOwner({

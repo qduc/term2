@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { promises as fs, type Dirent } from 'node:fs';
 import { default as createIgnore, type Ignore } from 'ignore';
+import { getActiveWorkspaceRoot } from './workspace/active-workspace-root.js';
 
 export type PathEntry = {
   path: string;
@@ -27,13 +28,15 @@ export type WorkspaceEntryScanResult = {
   truncatedByTotalLimit: boolean;
 };
 
-const workspaceRoot = process.cwd();
+/** Follows an `enter_worktree` lease; see active-workspace-root.ts. */
+const workspaceRoot = (): string => getActiveWorkspaceRoot();
 const DEFAULT_IGNORES = ['.git/**'];
 const GITIGNORE_NAME = '.gitignore';
 const MAX_SCAN_DEPTH = 25;
 export const WORKSPACE_PATH_COMPLETION_ENTRY_LIMIT = 10_000;
 
 let cachedEntries: PathEntry[] | null = null;
+let cachedRoot: string | null = null;
 let lastLoadedAt: number | null = null;
 let lastLoadTruncated = false;
 let lastLoadTruncatedByTotalLimit = false;
@@ -161,7 +164,7 @@ const loadDirectoryEntries = async (
 };
 
 const loadWorkspaceEntries = async (): Promise<PathEntry[]> => {
-  const result = await loadDirectoryEntries(workspaceRoot);
+  const result = await loadDirectoryEntries(workspaceRoot());
   lastLoadTruncated = result.truncated;
   lastLoadTruncatedByTotalLimit = result.truncatedByTotalLimit;
 
@@ -174,7 +177,13 @@ export const scanWorkspaceEntries = async (
 ): Promise<WorkspaceEntryScanResult> => loadDirectoryEntries(cwd, options);
 
 export const getWorkspaceEntries = async (): Promise<PathEntry[]> => {
+  // The cache holds one root's entries, so a worktree switch has to drop it —
+  // otherwise completion keeps offering paths from the checkout we just left.
+  if (cachedEntries && cachedRoot !== workspaceRoot()) {
+    cachedEntries = null;
+  }
   if (!cachedEntries) {
+    cachedRoot = workspaceRoot();
     cachedEntries = await loadWorkspaceEntries();
     lastLoadedAt = Date.now();
   }
@@ -187,7 +196,7 @@ export const refreshWorkspaceEntries = async (): Promise<PathEntry[]> => {
   return getWorkspaceEntries();
 };
 
-export const getWorkspaceRoot = (): string => workspaceRoot;
+export const getWorkspaceRoot = (): string => workspaceRoot();
 
 export const getWorkspaceEntriesMeta = (): WorkspaceEntriesMeta => ({
   lastLoadedAt,

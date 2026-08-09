@@ -10,6 +10,7 @@ import { formatContextUsage, type NormalizedUsage } from '../../utils/ai/token-u
 import type { CodexRateLimitInfo, CodexRateLimitWindow } from '../../services/conversation/conversation-events.js';
 import type { StaticCommitBlocker } from '../message/MessageList.js';
 import { formatUsdMicros, type SessionCostSummary } from '../../services/cost/model-cost.js';
+import { getActiveWorkspaceRoot } from '../../services/workspace/active-workspace-root.js';
 
 function formatStatusBarTokens(tokens: number): string {
   return tokens > 1_000 ? `${(tokens / 1_000).toFixed(1)}k` : tokens.toLocaleString();
@@ -66,7 +67,7 @@ const StatusBar: FC<StatusBarProps> = ({
   const sandboxEnabled = useSetting(settingsService, 'sandbox.enabled') ?? false;
   // Session-scoped grants are intentionally not process-global, so only the
   // persistent project grant is discoverable from this app-wide status bar.
-  const dockerHostAccess = hasDockerHostControlProject(process.cwd()) ? 'project' : undefined;
+  const dockerHostAccess = hasDockerHostControlProject(getActiveWorkspaceRoot()) ? 'project' : undefined;
 
   const providerDef = getProvider(providerKey);
   const providerLabel = providerDef?.label || providerKey;

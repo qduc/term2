@@ -1,6 +1,13 @@
-import { it, expect } from 'vitest';
+import { it, expect, afterEach } from 'vitest';
 import { ExecutionContext } from './execution-context.js';
 import { ISSHService } from './service-interfaces.js';
+import { publishActiveWorkspaceRoot } from './workspace/active-workspace-root.js';
+
+// Entering a workspace also publishes a process-wide fallback root; clear it so
+// these tests stay order-independent.
+afterEach(() => {
+  publishActiveWorkspaceRoot(undefined);
+});
 
 // Mock SSH service for testing
 function createMockSSHService(): ISSHService {

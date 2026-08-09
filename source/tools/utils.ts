@@ -1,4 +1,5 @@
 import path from 'path';
+import { getActiveWorkspaceRoot } from '../services/workspace/active-workspace-root.js';
 import { homedir } from 'os';
 import { lstat, realpath } from 'fs/promises';
 import { z } from 'zod';
@@ -10,7 +11,7 @@ import { SANDBOX_TEMP_DIR } from '../utils/shell/temp-dir.js';
  */
 export function resolveWorkspacePath(
   relativePath: string,
-  baseDir: string = process.cwd(),
+  baseDir: string = getActiveWorkspaceRoot(),
   options?: {
     /**
      * If true, resolve the path but do not enforce that it stays within baseDir.
@@ -148,7 +149,7 @@ export async function isWorkspacePathPhysicallyInside(targetPath: string, worksp
  * hook loading/trust: trusting a project permits execution, never silent model
  * mutation.
  */
-export function isProtectedHookPath(targetPath: string, workspaceRoot: string = process.cwd()): boolean {
+export function isProtectedHookPath(targetPath: string, workspaceRoot: string = getActiveWorkspaceRoot()): boolean {
   const normalizedTarget = path.resolve(targetPath);
   const roots = [path.join(homedir(), '.term2', 'hooks'), path.join(path.resolve(workspaceRoot), '.term2', 'hooks')];
   return roots.some((root) => {

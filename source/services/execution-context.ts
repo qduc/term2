@@ -1,6 +1,7 @@
 import { ISSHService } from './service-interfaces.js';
 import path from 'path';
 import process from 'process';
+import { publishActiveWorkspaceRoot } from './workspace/active-workspace-root.js';
 
 /**
  * Owns the single filesystem root every tool resolves against.
@@ -59,10 +60,12 @@ export class ExecutionContext {
       throw new Error(`Active workspace must be an absolute path, received: ${root}`);
     }
     this.activeWorkspace = root;
+    publishActiveWorkspaceRoot(root);
   }
 
   /** Releases the lease, returning the session to its home root. */
   exitWorkspace(): void {
     this.activeWorkspace = undefined;
+    publishActiveWorkspaceRoot(undefined);
   }
 }

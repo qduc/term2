@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { getActiveWorkspaceRoot } from '../workspace/active-workspace-root.js';
 import { realpathSync } from 'node:fs';
 import { realpath, stat } from 'node:fs/promises';
 
@@ -60,7 +61,7 @@ export function setWorkspaceRoot(root: string): void {
 }
 
 export function getWorkspaceRoot(): string {
-  return workspaceRoot ?? process.cwd();
+  return workspaceRoot ?? getActiveWorkspaceRoot();
 }
 
 // ─── Path safety ─────────────────────────────────────────────────

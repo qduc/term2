@@ -67,6 +67,7 @@ Several agents share the primary checkout, so concurrent edits pile into one `gi
 
 Do each bug fix or feature in its own worktree: `git worktree add .worktrees/<slug> -b <slug>`. Commit inside it, merge back with `git merge --no-ff <slug>` from the primary checkout, then `git worktree remove` and `git branch -d`. Trivial single-file edits can stay in place.
 
+- **`git worktree add` does not move you into the worktree.** Creating one and then editing leaves every edit in the primary checkout, because the file tools resolve against the session's execution root, not the shell's `cd`. The app's own agent uses the `enter_worktree` tool for this; when working through a harness that lacks it, pass the worktree path explicitly on every edit and verify with `git -C .worktrees/<slug> status`.
 - Create worktrees under `.worktrees/`, never as a sibling directory like `../term2-<slug>`. The shell sandbox only grants writes to the workspace root and the temp dir (`allowWrite` in `source/utils/shell/sandbox/sandbox-policy.ts`), so a sibling checkout fails to write — sometimes half-created, with `.git/worktrees/<slug>/` metadata but no checkout.
 - Run `pnpm install` directly in each worktree. pnpm links from its global content-addressable store, so this does not duplicate disk space. Do not symlink `node_modules` from the primary checkout — that caused broken `pnpm exec` resolution in the past.
 - Never `git checkout` another branch in the primary checkout — other agents have HEAD-dependent work in flight.

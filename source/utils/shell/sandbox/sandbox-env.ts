@@ -1,4 +1,5 @@
 import { resolveSandboxXdgLayout } from '../temp-dir.js';
+import { getActiveWorkspaceRoot } from '../../../services/workspace/active-workspace-root.js';
 
 const ALLOWED_EXACT_KEYS = new Set(['PATH', 'SHELL', 'TMPDIR', 'TEMP', 'TMP', 'TERM', 'HOME', 'TMUX']);
 
@@ -45,7 +46,7 @@ export function createSandboxEnvironment(
   }
 
   if (options.readPolicy === 'strict') {
-    const cwd = options.cwd ?? process.cwd();
+    const cwd = options.cwd ?? getActiveWorkspaceRoot();
     const { config, cache, data, state } = resolveSandboxXdgLayout(cwd);
     env.XDG_CONFIG_HOME = config;
     env.XDG_CACHE_HOME = cache;

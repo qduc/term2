@@ -6,6 +6,7 @@ import type { ILoggingService } from '../service-interfaces.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { ModelRequestCost } from '../../services/cost/model-cost.js';
 import { extractUsage } from '../../utils/ai/token-usage.js';
+import { getActiveWorkspaceRoot } from '../workspace/active-workspace-root.js';
 import { extractCommandMessages } from '../../utils/streaming/extract-command-messages.js';
 import { attachCachedArguments } from '../command-message-streaming.js';
 import { createInvalidToolCallDiagnostic } from '../logging/logging-contract.js';
@@ -323,8 +324,12 @@ function resolveOutsideWorkspaceEdit(
   const operation = Array.isArray(record?.operations) ? record.operations[0] : record;
   const rawPath = operation && typeof operation === 'object' ? (operation as Record<string, unknown>).path : undefined;
   if (typeof rawPath !== 'string') return undefined;
-  const target = path.resolve(rawPath);
-  const workspace = path.resolve(process.cwd());
+  // Both the relative-path resolution and the membership test must use the
+  // leased root: resolving against the process cwd would place a worktree-
+  // relative edit in the main checkout and mis-detect it as outside the
+  // workspace.
+  const workspace = path.resolve(getActiveWorkspaceRoot());
+  const target = path.resolve(workspace, rawPath);
   if (target === workspace || target.startsWith(`${workspace}${path.sep}`)) return undefined;
   return { path: target, folder: path.dirname(target) };
 }

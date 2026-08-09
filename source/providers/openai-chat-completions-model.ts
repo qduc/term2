@@ -49,7 +49,7 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
       ...(request.reasoning?.effort ? { reasoning_effort: request.reasoning.effort } : {}),
       ...(request.providerOptions ?? {}),
       ...(request.outputType && request.outputType !== 'text'
-        ? { response_format: toChatResponseFormat(request.outputType as any) }
+        ? { response_format: toChatResponseFormat(request.outputType) }
         : {}),
       signal: request.signal,
     });
@@ -74,19 +74,15 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
       }
       if (delta) {
         for (const [key, val] of Object.entries(delta)) {
+          // `role` is response-only; `content`/`tool_calls` are modeled above.
+          // Everything else is continuity metadata by default — the failure this
+          // capture exists to fix was an unknown field being dropped because
+          // nobody had enumerated it.
           if (key === 'role' || key === 'content' || key === 'tool_calls' || key === 'finish_reason') {
             continue;
           }
           if (val == null) continue;
-          if (typeof val === 'string') {
-            rawContinuityMetadata[key] =
-              (typeof rawContinuityMetadata[key] === 'string' ? (rawContinuityMetadata[key] as string) : '') + val;
-          } else if (Array.isArray(val)) {
-            const existing = Array.isArray(rawContinuityMetadata[key]) ? (rawContinuityMetadata[key] as unknown[]) : [];
-            rawContinuityMetadata[key] = [...existing, ...val];
-          } else {
-            rawContinuityMetadata[key] = val;
-          }
+          accumulateContinuityField(rawContinuityMetadata, key, val);
         }
       }
       // deepseek-style servers stream reasoning on `reasoning_content`;
@@ -210,47 +206,152 @@ function normalizeChatUsage(usage: any): StreamedModelUsage {
   };
 }
 
-function consumeReasoningFields(
-  pendingOpaquePayload: Record<string, unknown> | null,
-  pendingReasoningContent: string,
-): Record<string, unknown> {
-  if (pendingOpaquePayload) return pendingOpaquePayload;
-  if (pendingReasoningContent) return { reasoning_content: pendingReasoningContent };
-  return {};
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/**
+ * Accumulates one non-modeled `delta` field into the turn's continuity payload.
+ *
+ * Chat Completions streams `delta.*` as increments, so strings concatenate.
+ * Arrays are the case that needs care: providers stream `reasoning_details` as
+ * repeated entries carrying the same `index`, and that `index` identifies one
+ * logical entry rather than one chunk. Appending blindly replays a single entry
+ * as N fragments, which is the opposite of the verbatim round-trip this payload
+ * exists for — and would split a signature or encrypted blob across entries.
+ */
+function accumulateContinuityField(target: Record<string, unknown>, key: string, value: unknown): void {
+  if (typeof value === 'string') {
+    const existing = typeof target[key] === 'string' ? (target[key] as string) : '';
+    target[key] = existing + value;
+    return;
+  }
+  if (Array.isArray(value)) {
+    const existing = Array.isArray(target[key]) ? (target[key] as unknown[]) : [];
+    target[key] = mergeIndexedEntries(existing, value);
+    return;
+  }
+  target[key] = value;
 }
+
+function mergeIndexedEntries(existing: unknown[], incoming: unknown[]): unknown[] {
+  const result = [...existing];
+  for (const entry of incoming) {
+    const index = isRecord(entry) ? entry.index : undefined;
+    const matchAt =
+      typeof index === 'number'
+        ? result.findIndex((candidate) => isRecord(candidate) && candidate.index === index)
+        : -1;
+    if (matchAt === -1) {
+      result.push(isRecord(entry) ? { ...entry } : entry);
+      continue;
+    }
+    result[matchAt] = mergeEntryFields(result[matchAt] as Record<string, unknown>, entry as Record<string, unknown>);
+  }
+  return result;
+}
+
+/**
+ * Merges a later chunk of an indexed entry into the entry accumulated so far.
+ *
+ * Within one entry the payload field (`text`, or whatever a future entry type
+ * names it) arrives in pieces while the descriptors (`type`, `format`, `index`)
+ * arrive identical on every chunk. There is no type-level way to tell them
+ * apart, so an identical repeat is treated as a descriptor and a differing
+ * value as a continuation. The one case this reads wrong — two consecutive
+ * byte-identical payload chunks — loses a duplicate fragment, which is a
+ * smaller harm than fragmenting the entry or truncating a blob.
+ */
+function mergeEntryFields(base: Record<string, unknown>, incoming: Record<string, unknown>): Record<string, unknown> {
+  const merged = { ...base };
+  for (const [key, value] of Object.entries(incoming)) {
+    if (typeof value === 'string' && typeof merged[key] === 'string' && merged[key] !== value) {
+      merged[key] = (merged[key] as string) + value;
+      continue;
+    }
+    merged[key] = value;
+  }
+  return merged;
+}
+
+/**
+ * Opaque items persisted before the provider tag was corrected carry the
+ * provider *type* rather than the configured provider, so every
+ * chat-completions endpoint shared this one tag. Accept it so conversations
+ * recorded in that window still replay; a genuinely foreign provider is still
+ * refused.
+ */
+const LEGACY_SHARED_PROVIDER_TAG = 'openai-compatible';
+
+/** The wire spellings a continuity payload may use for reasoning. */
+const REASONING_WIRE_FIELDS = ['reasoning_content', 'reasoning', 'reasoning_details'] as const;
+
+const isOwnOpaqueTag = (tag: unknown, providerId: string): boolean =>
+  tag === providerId || tag === LEGACY_SHARED_PROVIDER_TAG;
+
+const opaqueMarkerOf = (item: any): { provider: unknown } | undefined =>
+  item.providerOpaque ?? (item.type === 'provider_opaque' ? { provider: item.provider } : undefined);
 
 function openAICompatibleMessages(input: StreamedModelTurnRequest['input'], providerId = 'openai-compatible'): any[] {
   const messages: any[] = [];
-  let pendingReasoningContent = '';
-  let pendingOpaquePayload: Record<string, unknown> | null = null;
+  // Continuity payloads in the order their turns occurred. They are attached
+  // after coalescing rather than inline: a payload is only known once the
+  // completion arrives, which is after the turn's tool calls were dispatched
+  // into history (`application-run-loop.ts`, the provider_opaque loop that runs
+  // past the tool results). So an opaque item trails the assistant group it
+  // describes, and until coalescing has re-merged that turn's split tool-call
+  // messages there is no single group to anchor it on.
+  const opaquePayloads: Record<string, unknown>[] = [];
+  // Native reasoning restored from a conversation persisted before the opaque
+  // lane existed, recognized by its `providerMetadata` marker.
+  let pendingLegacyNativeReasoning = '';
+
+  // Whether this history carries any continuity payload of ours. When it does,
+  // every bare `reasoning` item in it is the normalized twin of a payload
+  // rather than another provider's reasoning, and replaying it as text would
+  // send the same tokens twice.
+  const historyCarriesOwnOpaque = (input as any[]).some((item) =>
+    isOwnOpaqueTag(opaqueMarkerOf(item)?.provider, providerId),
+  );
+
+  const reasoningFields = (): Record<string, unknown> =>
+    pendingLegacyNativeReasoning ? { reasoning_content: pendingLegacyNativeReasoning } : {};
+  const hasReasoningFields = () => pendingLegacyNativeReasoning.length > 0;
 
   for (const rawItem of input as any[]) {
     const item = rawItem as any;
-    const providerOpaque =
-      item.providerOpaque ?? (item.type === 'provider_opaque' ? { provider: item.provider } : undefined);
+    const providerOpaque = opaqueMarkerOf(item);
     if (providerOpaque) {
-      if (providerOpaque.provider !== providerId) {
+      const tag = providerOpaque.provider;
+      if (!isOwnOpaqueTag(tag, providerId)) {
         throw new Error(
-          `Refusing to splice provider_opaque from '${providerOpaque.provider}' into '${providerId}' request: opaque items are only valid on the provider that produced them`,
+          `Refusing to splice provider_opaque from '${tag}' into '${providerId}' request: opaque items are only valid on the provider that produced them`,
         );
       }
       const rawPayload = item.type === 'provider_opaque' ? item.item : item;
-      const { providerOpaque: _, type: _t, ...payload } = rawPayload as any;
-      const lastMessage = messages[messages.length - 1];
-      const lastAssistant = lastMessage?.role === 'assistant' ? lastMessage : undefined;
-      if (lastAssistant) {
-        if (!('reasoning_content' in payload)) {
-          delete lastAssistant.reasoning_content;
-        }
-        Object.assign(lastAssistant, payload);
-      } else {
-        pendingOpaquePayload = { ...(pendingOpaquePayload ?? {}), ...payload };
-      }
+      const { providerOpaque: _marker, type: _type, ...payload } = rawPayload as any;
+      opaquePayloads.push(payload);
       continue;
     }
     if (item.type === 'reasoning') {
-      if (typeof item.text === 'string') {
-        pendingReasoningContent += item.text;
+      const directNativeReasoning = item.providerMetadata?.reasoning_content;
+      // Persistence intentionally removes the duplicate text field from a
+      // standalone reasoning item, so the marker is what identifies restored
+      // native reasoning from before the opaque lane.
+      const legacyNativeReasoning =
+        typeof directNativeReasoning === 'string'
+          ? directNativeReasoning
+          : item.providerMetadata?.openai_compatible_reasoning_content === true
+          ? item.text
+          : undefined;
+      if (typeof legacyNativeReasoning === 'string') {
+        pendingLegacyNativeReasoning += legacyNativeReasoning;
+      } else if (!historyCarriesOwnOpaque && typeof item.text === 'string') {
+        // Reasoning from a provider with no chat-completions wire form (an
+        // Anthropic thinking block restored across a model switch, say). It is
+        // not this provider's `reasoning_content`, and inventing that field
+        // would hand one provider another's private state. Retain it as plain
+        // assistant text, the only shape this wire has for it.
+        messages.push({ role: 'assistant', content: item.text });
       }
       continue;
     }
@@ -263,17 +364,13 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input'], prov
         }
         return { type: 'text', text: part.text };
       });
-      const reasoningFields = consumeReasoningFields(pendingOpaquePayload, pendingReasoningContent);
-      const hasReasoning = pendingOpaquePayload !== null || pendingReasoningContent.length > 0;
-      messages.push({
+      const message = {
         role: item.role,
         content,
-        ...(item.role === 'assistant' && hasReasoning ? reasoningFields : {}),
-      });
-      if (item.role === 'assistant') {
-        pendingReasoningContent = '';
-        pendingOpaquePayload = null;
-      }
+        ...(item.role === 'assistant' && hasReasoningFields() ? reasoningFields() : {}),
+      };
+      messages.push(message);
+      if (item.role === 'assistant') pendingLegacyNativeReasoning = '';
       continue;
     }
     if (item.type === 'tool_call') {
@@ -282,16 +379,14 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input'], prov
       if (previous?.role === 'assistant' && Array.isArray(previous.tool_calls)) {
         previous.tool_calls.push(toolCall);
       } else {
-        const reasoningFields = consumeReasoningFields(pendingOpaquePayload, pendingReasoningContent);
-        const hasReasoning = pendingOpaquePayload !== null || pendingReasoningContent.length > 0;
-        messages.push({
+        const message = {
           role: 'assistant',
-          ...(hasReasoning ? { content: null, ...reasoningFields } : {}),
+          ...(hasReasoningFields() ? { content: null, ...reasoningFields() } : {}),
           tool_calls: [toolCall],
-        });
+        };
+        messages.push(message);
       }
-      pendingReasoningContent = '';
-      pendingOpaquePayload = null;
+      pendingLegacyNativeReasoning = '';
       continue;
     }
     if (item.type === 'tool_result') {
@@ -304,26 +399,43 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input'], prov
   }
 
   // Chat Completions requires assistant messages to contain content or tool
-  // calls. Native reasoning is continuation metadata for the matching
-  // assistant message, not standalone text content.
-  if (pendingOpaquePayload || pendingReasoningContent) {
-    const reasoningFields = consumeReasoningFields(pendingOpaquePayload, pendingReasoningContent);
-    let lastUserIndex = -1;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i]?.role === 'user') {
-        lastUserIndex = i;
-        break;
-      }
-    }
-    const primaryAssistant = messages
-      .slice(lastUserIndex >= 0 ? lastUserIndex + 1 : 0)
-      .find((m: any) => m.role === 'assistant');
-    if (primaryAssistant) {
-      Object.assign(primaryAssistant, reasoningFields);
-    }
-  }
+  // calls. Native reasoning is continuation metadata for the matching assistant
+  // message/tool call, not a valid standalone message; if no such item follows
+  // — an interrupted turn — omit it rather than inventing a message to carry
+  // it or back-dating it onto an earlier one that did not produce it.
+  return attachOpaquePayloads(coalesceReasoningToolCallBatches(messages), opaquePayloads);
+}
 
-  return coalesceReasoningToolCallBatches(messages);
+/**
+ * Splices each turn's continuity payload onto the assistant message that turn
+ * produced. Both lists are in turn order and coalescing has already collapsed a
+ * turn's parallel tool calls into one assistant message, so the i-th payload
+ * belongs to the i-th assistant message. Surplus payloads — turns that
+ * coalescing merged into a single message — fold into the last one rather than
+ * being dropped.
+ */
+function attachOpaquePayloads(messages: any[], payloads: Record<string, unknown>[]): any[] {
+  if (!payloads.length) return messages;
+  const assistants = messages.filter((message) => message?.role === 'assistant');
+  if (!assistants.length) return messages;
+
+  payloads.forEach((payload, index) => {
+    const target = assistants[Math.min(index, assistants.length - 1)];
+    // The payload carries this turn's reasoning in the provider's own spelling,
+    // so it supersedes any normalized `reasoning_content` reconstructed for the
+    // same message — keeping both would send the same tokens twice, in two
+    // different fields.
+    for (const field of REASONING_WIRE_FIELDS) {
+      if (!(field in payload)) delete target[field];
+    }
+    Object.assign(target, payload);
+    // A reasoning-bearing tool-call message states `content: null` explicitly
+    // rather than omitting it; a payload that adds the reasoning has to carry
+    // that pairing too, or the two ways a message can acquire reasoning would
+    // serialize differently.
+    if (Array.isArray(target.tool_calls) && !('content' in target)) target.content = null;
+  });
+  return messages;
 }
 
 function coalesceReasoningToolCallBatches(messages: any[]): any[] {

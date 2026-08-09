@@ -1,6 +1,7 @@
 # Provider-faithful reasoning round-trip on the chat-completions lane
 
-Status: **planned, not implemented.** Nobody is on it.
+Status: **implemented and merged** (`65746671`, `af85266f`, plus the review fixes
+below). Nobody is on it.
 
 ## Resume here
 
@@ -132,6 +133,40 @@ dropped because nobody had enumerated it.
   output`, "no application-owned response traffic was persisted"), confirmed by
   running the suite at HEAD with no changes applied. Do not attribute it to this
   work, and do not treat the suite as green until it is separately resolved.
+
+## What the first implementation got wrong
+
+A review of the merged work found four defects worth recording, because three of
+them are consequences of the design sketch above being read too literally.
+
+- **The provider tag was the config *type*, not the configured provider.**
+  `config.type` is `openai-compatible` for both a deepseek endpoint and an
+  OpenRouter gateway, so the refusal above could never fire for the very
+  scenario that motivated it. The tag is now `config.name`
+  (`opaqueProviderTag()`), which is already the provider's identity elsewhere.
+  Items persisted with the old shared tag are still accepted — see
+  `LEGACY_SHARED_PROVIDER_TAG`.
+
+- **Step 4's "splices the payload back onto the assistant message" hides an
+  ordering problem.** The payload is only known at the completion, which arrives
+  *after* the turn's tool calls were dispatched into history, so the opaque item
+  trails its own turn's tool results (`application-run-loop.ts`, the
+  `provider_opaque` loop). Anchoring it on the last message therefore lands on a
+  `tool` message or a previous turn's assistant message. It is now attached
+  after `coalesceReasoningToolCallBatches` has re-merged the turn's split
+  tool-call messages, matching payloads to assistant messages in turn order.
+
+- **`reasoning_details` entries must merge on `index`.** The field taxonomy
+  above says "captured verbatim"; the first implementation concatenated the
+  delta arrays, replaying one logical entry as N single-token fragments. `index`
+  identifies the entry, not the chunk.
+
+- **Deleting the `openai_compatible_reasoning_content` marker (Open Question 2)
+  was done without answering the question.** Removing it made every restored
+  reasoning item look native, so reasoning from a provider with no
+  chat-completions wire form was emitted as `reasoning_content` — or, when a
+  user message followed it, dropped entirely. The marker is retained and still
+  distinguishes legacy native reasoning; a payload supersedes it when present.
 
 ## Open questions
 

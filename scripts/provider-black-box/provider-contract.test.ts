@@ -504,7 +504,7 @@ describe('provider boundary contracts through the registry', () => {
     });
     expect(opaque).toEqual({
       type: 'provider_opaque',
-      provider: 'openai-compatible',
+      provider: 'fixture-openai-compatible-reasoning',
       item: { reasoning_content: 'Need native reasoning.' },
     });
 
@@ -519,7 +519,7 @@ describe('provider boundary contracts through the registry', () => {
           },
           {
             type: 'provider_opaque',
-            provider: 'openai-compatible',
+            provider: 'fixture-openai-compatible-reasoning',
             item: { reasoning_content: 'Need native reasoning.' },
           },
           { type: 'tool_call', id: 'call_reasoning', name: fixtureTool.name, arguments: '{}' },
@@ -570,7 +570,7 @@ describe('provider boundary contracts through the registry', () => {
     });
     expect(opaque).toEqual({
       type: 'provider_opaque',
-      provider: 'openai-compatible',
+      provider: 'fixture-openai-compatible-reasoning-field',
       item: { reasoning: 'Need gateway reasoning.' },
     });
 
@@ -585,7 +585,7 @@ describe('provider boundary contracts through the registry', () => {
           },
           {
             type: 'provider_opaque',
-            provider: 'openai-compatible',
+            provider: 'fixture-openai-compatible-reasoning-field',
             item: { reasoning: 'Need gateway reasoning.' },
           },
           { type: 'tool_call', id: 'call_reasoning', name: fixtureTool.name, arguments: '{}' },

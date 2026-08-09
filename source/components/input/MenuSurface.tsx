@@ -89,6 +89,7 @@ export function MenuSurface({ stack, controller, interactions, services, enabled
       {menuPromptLabel && (
         <Box>
           <Text color="#22d3ee">{menuPromptLabel}</Text>
+          <Text>{input}</Text>
         </Box>
       )}
       <MenuStackHost

@@ -86,7 +86,7 @@ function buildProviderFetch(
   const sessionContextService = deps.sessionContextService ?? NULL_SESSION_CONTEXT_SERVICE;
   return createProviderFetch({
     providerId: config.name,
-    defaultModel: deps.defaultModel,
+    defaultModel: (deps.defaultModel || '').trim(),
     deps: {
       loggingService:
         deps.loggingService ||
@@ -187,7 +187,7 @@ export class OpencodeAnthropicFormatProvider {
   }
 
   getStreamedModel(modelName?: string): StreamedModelTurn {
-    const resolvedModel = modelName || this.deps.defaultModel || '';
+    const resolvedModel = (modelName || this.deps.defaultModel || '').trim();
     const runtimeConfig = this.resolveRuntimeConfig();
     switch (selectOpencodeModelTransport(resolvedModel)) {
       case 'anthropic-messages':
@@ -201,11 +201,12 @@ export class OpencodeAnthropicFormatProvider {
 }
 
 export function createCustomProviderModelProvider(config: CustomProviderConfig, deps: CustomProviderRuntimeDeps): any {
+  const normalizedDeps = { ...deps, defaultModel: (deps.defaultModel || '').trim() };
   const providerType = config.type || 'openai-compatible';
   const resolveConfig = () => ({
     baseURL: config.baseUrl ? normalizeBaseUrl(config.baseUrl) : undefined,
     apiKey: config.apiKey,
-    fetch: deps.fetch,
+    fetch: normalizedDeps.fetch,
     name: config.name,
   });
 
@@ -214,19 +215,19 @@ export function createCustomProviderModelProvider(config: CustomProviderConfig, 
       const openAIClient = new OpenAI({
         apiKey: config.apiKey,
         baseURL: config.baseUrl ? normalizeBaseUrl(config.baseUrl) : undefined,
-        maxRetries: deps.settingsService?.get('agent.retryAttempts') ?? 2,
-        fetch: buildProviderFetch(config, deps, [createOpenAIResponsesMiddleware()]) as any,
+        maxRetries: normalizedDeps.settingsService?.get('agent.retryAttempts') ?? 2,
+        fetch: buildProviderFetch(config, normalizedDeps, [createOpenAIResponsesMiddleware()]) as any,
       });
-      return new OpenAIChatCompletionsModel(openAIClient, deps.defaultModel);
+      return new OpenAIChatCompletionsModel(openAIClient, normalizedDeps.defaultModel);
     }
     case 'anthropic':
       return new AiSdkAnthropicProvider({
-        defaultModel: deps.defaultModel,
+        defaultModel: normalizedDeps.defaultModel,
         resolveConfig: () => ({
           ...resolveConfig(),
-          fetch: buildProviderFetch(config, deps, [
+          fetch: buildProviderFetch(config, normalizedDeps, [
             createAnthropicMiddleware(config.type || 'anthropic', config.baseUrl, {
-              sessionContextService: deps.sessionContextService,
+              sessionContextService: normalizedDeps.sessionContextService,
             }),
           ]),
           headers: {
@@ -236,14 +237,14 @@ export function createCustomProviderModelProvider(config: CustomProviderConfig, 
       });
     case 'google':
       return new AiSdkGoogleProvider({
-        defaultModel: deps.defaultModel,
+        defaultModel: normalizedDeps.defaultModel,
         resolveConfig: () => ({
           ...resolveConfig(),
-          fetch: buildProviderFetch(config, deps, []),
+          fetch: buildProviderFetch(config, normalizedDeps, []),
         }),
       });
     case 'opencode':
-      return new OpencodeAnthropicFormatProvider(config, deps);
+      return new OpencodeAnthropicFormatProvider(config, normalizedDeps);
     case 'openai-compatible':
     case 'llama.cpp':
     default: {
@@ -255,16 +256,16 @@ export function createCustomProviderModelProvider(config: CustomProviderConfig, 
       const openAIClient = new OpenAI({
         baseURL: normalizeBaseUrl(runtimeConfig.baseUrl),
         apiKey: runtimeConfig.apiKey || 'no-key',
-        maxRetries: deps.settingsService?.get('agent.retryAttempts') ?? 2,
-        fetch: buildProviderFetch(config, deps, [
+        maxRetries: normalizedDeps.settingsService?.get('agent.retryAttempts') ?? 2,
+        fetch: buildProviderFetch(config, normalizedDeps, [
           createOpenAICompatibleMiddleware(providerType, runtimeConfig.baseUrl, {
-            sessionContextService: deps.sessionContextService,
+            sessionContextService: normalizedDeps.sessionContextService,
           }),
         ]) as any,
       });
       const costCapture: CostTrailerCapture = {};
-      applyClientResponseNormalization(openAIClient, deps.loggingService, costCapture);
-      return new OpenAIChatCompletionsModel(openAIClient, deps.defaultModel, costCapture);
+      applyClientResponseNormalization(openAIClient, normalizedDeps.loggingService, costCapture);
+      return new OpenAIChatCompletionsModel(openAIClient, normalizedDeps.defaultModel, costCapture);
     }
   }
 }

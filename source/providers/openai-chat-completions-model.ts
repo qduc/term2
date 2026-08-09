@@ -9,11 +9,15 @@ import type {
 
 /** Application-owned adapter for OpenAI-compatible chat-completions endpoints. */
 export class OpenAIChatCompletionsModel implements StreamedModelTurn {
-  constructor(
-    private readonly client: any,
-    private readonly model: string,
-    private readonly costCapture?: CostTrailerCapture,
-  ) {}
+  private readonly client: any;
+  private readonly model: string;
+  private readonly costCapture?: CostTrailerCapture;
+
+  constructor(client: any, model: string, costCapture?: CostTrailerCapture) {
+    this.client = client;
+    this.model = model.trim();
+    this.costCapture = costCapture;
+  }
 
   // createCustomProviderModelProvider() (openai-compatible.provider.ts) returns
   // this class for the 'openai'/'openai-compatible'/'llama.cpp' provider types,

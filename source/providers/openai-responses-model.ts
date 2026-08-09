@@ -513,14 +513,25 @@ export function normalizeResponseEvent(
 
 export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn {
   protected readonly lifecycle = new Lifecycle();
+  protected readonly _client: any;
+  protected readonly _model: string;
+  protected readonly capture?: ProviderRequestCapture;
+  protected readonly supportsContextCompaction: boolean;
+  protected readonly contextCompactionSessionState?: ContextCompactionSessionState;
 
   constructor(
-    protected readonly _client: any,
-    protected readonly _model: string,
-    protected readonly capture?: ProviderRequestCapture,
-    protected readonly supportsContextCompaction = false,
-    protected readonly contextCompactionSessionState?: ContextCompactionSessionState,
-  ) {}
+    _client: any,
+    _model: string,
+    capture?: ProviderRequestCapture,
+    supportsContextCompaction = false,
+    contextCompactionSessionState?: ContextCompactionSessionState,
+  ) {
+    this._client = _client;
+    this._model = _model.trim();
+    this.capture = capture;
+    this.supportsContextCompaction = supportsContextCompaction;
+    this.contextCompactionSessionState = contextCompactionSessionState;
+  }
 
   async getResponse(request: StreamedModelTurnRequest): Promise<any> {
     this.lifecycle.begin(request, 'http', this._model, this._client);

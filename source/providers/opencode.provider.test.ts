@@ -312,6 +312,12 @@ it('selectOpencodeModelTransport routes other models through OpenAI chat complet
   expect(selectOpencodeModelTransport('llama-3.3')).toBe('openai-chat-completions');
 });
 
+it('selectOpencodeModelTransport and shouldApplyOpencodeAnthropicPromptCaching handle whitespace in model names', () => {
+  expect(selectOpencodeModelTransport('  deepseek-v4-flash  ')).toBe('openai-chat-completions');
+  expect(selectOpencodeModelTransport('  gpt-5.4  ')).toBe('openai-responses');
+  expect(shouldApplyOpencodeAnthropicPromptCaching('  claude-sonnet-4-5  ')).toBe(true);
+});
+
 it('shouldApplyOpencodeAnthropicPromptCaching applies only to Anthropic Claude and qwen model IDs', () => {
   expect(shouldApplyOpencodeAnthropicPromptCaching('claude-sonnet-4-5')).toBe(true);
   expect(shouldApplyOpencodeAnthropicPromptCaching('qwen3-coder')).toBe(true);

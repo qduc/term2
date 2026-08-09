@@ -24,6 +24,9 @@ const mocks = vi.hoisted(() => ({
   toggleShellMode: vi.fn(),
   cycleAppModes: vi.fn(),
   replaceInput: vi.fn(),
+  onApprove: vi.fn(),
+  onReject: vi.fn(),
+  submitRejectionReason: vi.fn(),
   onSkillActivationCancelled: vi.fn(),
 }));
 
@@ -75,6 +78,10 @@ const renderHarness = async (overrides: Partial<Parameters<typeof useAppKeyboard
     toggleShellMode: mocks.toggleShellMode,
     cycleAppModes: mocks.cycleAppModes,
     replaceInput: mocks.replaceInput,
+    approvalShortcutsEnabled: true,
+    onApprove: mocks.onApprove,
+    onReject: mocks.onReject,
+    submitRejectionReason: mocks.submitRejectionReason,
     onSkillActivationCancelled: mocks.onSkillActivationCancelled,
     inputOwner: { kind: 'input' } as InputOwner,
     ...overrides,
@@ -94,6 +101,9 @@ beforeEach(() => {
   mocks.toggleShellMode.mockReset();
   mocks.cycleAppModes.mockReset();
   mocks.replaceInput.mockReset();
+  mocks.onApprove.mockReset();
+  mocks.onReject.mockReset();
+  mocks.submitRejectionReason.mockReset();
   mocks.onSkillActivationCancelled.mockReset();
 });
 
@@ -293,4 +303,25 @@ it.sequential('app shortcuts remain active when owner is input', async () => {
   await fireInput('\u001b[Z', { shift: true, tab: true });
 
   expect(mocks.cycleAppModes.mock.calls.length).toBe(before + 1);
+});
+
+it.sequential('rejects exactly once and bridges an immediate rejection reason before the editor is ready', async () => {
+  await renderHarness({ inputOwner: { kind: 'approval' } });
+
+  await fireInput('nneeds review', {});
+  await fireInput('', { return: true });
+
+  expect(mocks.onReject).toHaveBeenCalledTimes(1);
+  expect(mocks.replaceInput).toHaveBeenCalledWith('needs review');
+  expect(mocks.submitRejectionReason).toHaveBeenCalledTimes(1);
+  expect(mocks.submitRejectionReason).toHaveBeenCalledWith('needs review');
+});
+
+it.sequential('approves exactly once at the stable approval boundary', async () => {
+  await renderHarness({ inputOwner: { kind: 'approval' } });
+
+  await fireInput('y', {});
+
+  expect(mocks.onApprove).toHaveBeenCalledTimes(1);
+  expect(mocks.onReject).not.toHaveBeenCalled();
 });

@@ -20,6 +20,7 @@ export { calculateInputWidth };
 
 type Props = {
   onSubmit: (value: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) => void | Promise<void>;
+  onRejectionReasonInputReady?: () => void;
   /** @deprecated Menu commands are consumed by ApplicationInputSurface. */
   slashCommands?: SlashCommand[];
   /** @deprecated Menu commands are consumed by ApplicationInputSurface. */
@@ -63,6 +64,7 @@ const isFocusReportingSequence = (input: string): boolean =>
 
 const InputBox: FC<Props> = ({
   onSubmit,
+  onRejectionReasonInputReady,
   settingsService,
   loggingService,
   waitingForRejectionReason = false,
@@ -124,6 +126,10 @@ const InputBox: FC<Props> = ({
   const terminalWidth = useTerminalWidth({ waitingForRejectionReason, isShellMode, promptLabel: activePromptLabel });
   const { navigateUp, navigateDown } = useInputHistory(historyService);
   const remountInput = useCallback(() => setInputKey((previous) => previous + 1), []);
+
+  useEffect(() => {
+    if (waitingForRejectionReason) onRejectionReasonInputReady?.();
+  }, [onRejectionReasonInputReady, waitingForRejectionReason]);
 
   const handleCursorChange = useCallback(
     (nextOffset: number) => {

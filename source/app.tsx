@@ -49,6 +49,7 @@ import {
 } from './utils/shell/sandbox/sandbox-network-approval.js';
 import { SandboxNetworkApprovalCoordinator } from './utils/shell/sandbox/sandbox-network-approval-coordinator.js';
 import { useFirstRunSetupGate } from './hooks/use-first-run-setup.js';
+import { TOOL_NAME_ASK_USER } from './tools/tool-names.js';
 
 export {
   appendStartupBannerId,
@@ -187,6 +188,7 @@ const App: FC<AppProps> = ({
     resolveAdmissionConfirmation,
     submitConversationTurn,
     submitApprovalDecision,
+    handleApprovalDecision,
     onTypeAnswer,
     clearConversation,
     stopProcessing,
@@ -548,6 +550,28 @@ const App: FC<AppProps> = ({
     cancelAskUser();
   }, [cancelAskUser, pendingApproval, sandboxPromptRequest]);
 
+  const submitBridgedRejectionReason = useCallback(
+    async (reason: string) => {
+      if (backgroundApprovalEntry) {
+        resolveBackgroundSubagentApproval({
+          revision: backgroundApprovalState.revision,
+          entry: backgroundApprovalEntry,
+          decision: { answer: 'no', rejectionReason: reason },
+        });
+        setWaitingForRejectionReason(false);
+        return;
+      }
+      await handleApprovalDecision('n', reason);
+    },
+    [
+      backgroundApprovalEntry,
+      backgroundApprovalState.revision,
+      handleApprovalDecision,
+      resolveBackgroundSubagentApproval,
+      setWaitingForRejectionReason,
+    ],
+  );
+
   const backgroundPendingApproval: import('./contracts/conversation.js').ApprovalDescriptor | null =
     backgroundApprovalEntry
       ? {
@@ -607,7 +631,7 @@ const App: FC<AppProps> = ({
     [goToPreviousQuestion, goToNextQuestion],
   );
 
-  const { interruptConfirmVisible } = useAppKeyboardShortcuts({
+  const { interruptConfirmVisible, markRejectionReasonInputReady } = useAppKeyboardShortcuts({
     exitWithUsage,
     pendingSkillRef,
     waitingForAskUserAnswer: effectiveWaitingForAskUserAnswer,
@@ -627,6 +651,13 @@ const App: FC<AppProps> = ({
     cycleAppModes,
     replaceInput,
     onSkillActivationCancelled: () => addSystemMessage('Skill activation cancelled.'),
+    approvalShortcutsEnabled:
+      effectivePendingApproval?.toolName !== TOOL_NAME_ASK_USER && !effectivePendingApproval?.dockerHostControl,
+    approvalShortcutApproveAnswer:
+      sandboxPromptRequest || effectivePendingApproval?.deniedRead ? 'allow-once' : undefined,
+    onApprove: handleApprove,
+    onReject: handleReject,
+    submitRejectionReason: submitBridgedRejectionReason,
     inputOwner,
   });
 
@@ -823,6 +854,7 @@ const App: FC<AppProps> = ({
             onRetractQueuedMessage={retractPendingSubmission}
             onEditQueuedMessage={editPendingSubmission}
             onSubmit={handleSubmit}
+            onRejectionReasonInputReady={markRejectionReasonInputReady}
             slashCommands={slashCommands}
             skillsService={skillsService}
             settingsService={settingsService}

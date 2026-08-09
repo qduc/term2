@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useInput } from 'ink';
 import type { MutableRefObject } from 'react';
 import type { InputMode } from '../context/InputContext.js';
@@ -20,6 +20,7 @@ const INTERRUPT_CONFIRM_TIMEOUT_MS = 2000;
 export type UseAppKeyboardShortcutsResult = {
   /** True while a second Escape would interrupt the in-flight turn. */
   interruptConfirmVisible: boolean;
+  markRejectionReasonInputReady: () => void;
 };
 
 export type UseAppKeyboardShortcutsOptions = {
@@ -47,6 +48,11 @@ export type UseAppKeyboardShortcutsOptions = {
   cycleAppModes: () => void;
   replaceInput: (value: string) => void;
   onSkillActivationCancelled: () => void;
+  approvalShortcutsEnabled: boolean;
+  approvalShortcutApproveAnswer?: string;
+  onApprove: (answer?: string) => void;
+  onReject: () => void;
+  submitRejectionReason: (reason: string) => void | Promise<void>;
   /**
    * Resolved owner of keyboard input. When a non-`'input'` owner is active,
    * a modal confirmation prompt owns input and the shortcut handler stays
@@ -75,6 +81,11 @@ export const useAppKeyboardShortcuts = ({
   cycleAppModes,
   replaceInput,
   onSkillActivationCancelled,
+  approvalShortcutsEnabled,
+  approvalShortcutApproveAnswer,
+  onApprove,
+  onReject,
+  submitRejectionReason,
   inputOwner,
 }: UseAppKeyboardShortcutsOptions): UseAppKeyboardShortcutsResult => {
   // `armedRef` — not the state below — is what the key handler reads. A user can
@@ -84,6 +95,8 @@ export const useAppKeyboardShortcuts = ({
   const armedRef = useRef(false);
   const [interruptConfirmVisible, setInterruptConfirmVisible] = useState(false);
   const interruptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const approvalDecisionConsumedRef = useRef(false);
+  const rejectionReasonBridgeRef = useRef<string | null>(null);
 
   const disarmInterrupt = (): void => {
     armedRef.current = false;
@@ -113,6 +126,12 @@ export const useAppKeyboardShortcuts = ({
     cycleAppModes,
     replaceInput,
     onSkillActivationCancelled,
+    approvalShortcutsEnabled,
+    approvalShortcutApproveAnswer,
+    onApprove,
+    onReject,
+    submitRejectionReason,
+    inputOwner,
     exitWithUsage,
   });
 
@@ -135,8 +154,21 @@ export const useAppKeyboardShortcuts = ({
     cycleAppModes,
     replaceInput,
     onSkillActivationCancelled,
+    approvalShortcutsEnabled,
+    approvalShortcutApproveAnswer,
+    onApprove,
+    onReject,
+    submitRejectionReason,
+    inputOwner,
     exitWithUsage,
   };
+
+  const markRejectionReasonInputReady = useCallback(() => {
+    // Once the bridge has received text it remains the sole consumer through
+    // submission. Clearing it here would hand a partially buffered key burst
+    // to the editor and could lose or duplicate the remainder of that burst.
+    if (rejectionReasonBridgeRef.current === '') rejectionReasonBridgeRef.current = null;
+  }, []);
 
   // `inputOwner` is read here via a ref-like pattern: Ink's `isActive` option
   // captures the value at render time, and this hook re-runs on every render,
@@ -147,14 +179,61 @@ export const useAppKeyboardShortcuts = ({
   // Ctrl+C (emergency exit) remains global: it must work even while a prompt
   // owns input. All other shortcuts are suppressed via `isActive` when a modal
   // prompt is up, so they cannot double-fire against the prompt's own handler.
-  useInput(
-    (input: string, key) => {
-      if (key.ctrl && input === 'c') {
-        stateRef.current.exitWithUsage();
+  const handleGlobalInput = useCallback((input: string, key: Parameters<Parameters<typeof useInput>[0]>[1]) => {
+    const current = stateRef.current;
+    if (key.ctrl && input === 'c') {
+      current.exitWithUsage();
+      return;
+    }
+
+    if (rejectionReasonBridgeRef.current !== null) {
+      if (key.escape) {
+        rejectionReasonBridgeRef.current = null;
+        current.setWaitingForRejectionReason(false);
+        current.replaceInput('');
+        return;
       }
-    },
-    { isActive: true },
-  );
+      if (key.return) {
+        const reason = rejectionReasonBridgeRef.current;
+        rejectionReasonBridgeRef.current = null;
+        current.replaceInput('');
+        void current.submitRejectionReason(reason);
+        return;
+      }
+      if (key.backspace || key.delete) {
+        const next = rejectionReasonBridgeRef.current.slice(0, -1);
+        rejectionReasonBridgeRef.current = next;
+        current.replaceInput(next);
+        return;
+      }
+      if (input && !key.ctrl && !key.meta) {
+        const next = rejectionReasonBridgeRef.current + input;
+        rejectionReasonBridgeRef.current = next;
+        current.replaceInput(next);
+      }
+      return;
+    }
+
+    if (
+      current.inputOwner.kind === 'approval' &&
+      current.approvalShortcutsEnabled &&
+      !approvalDecisionConsumedRef.current
+    ) {
+      const decision = input[0];
+      if (decision === 'y') {
+        approvalDecisionConsumedRef.current = true;
+        current.onApprove(current.approvalShortcutApproveAnswer);
+      } else if (decision === 'n') {
+        approvalDecisionConsumedRef.current = true;
+        const bufferedReason = current.inputValue + input.slice(1);
+        rejectionReasonBridgeRef.current = bufferedReason;
+        if (bufferedReason) current.replaceInput(bufferedReason);
+        current.onReject();
+      }
+    }
+  }, []);
+
+  useInput(handleGlobalInput, { isActive: true });
 
   // Non-emergency shortcuts. Suppressed entirely while a modal confirmation
   // prompt owns input (Esc, Shift-Tab, skill/ask-user/rejection-cancel paths).
@@ -238,10 +317,11 @@ export const useAppKeyboardShortcuts = ({
   // Escape then means "clear the buffer" — so an armed confirmation can never
   // be completed by a later, unrelated Escape.
   useEffect(() => {
+    if (inputOwner.kind !== 'approval') approvalDecisionConsumedRef.current = false;
     if ((!isProcessing && !waitingForApproval) || inputValue.length > 0) {
       disarmInterrupt();
     }
-  }, [isProcessing, waitingForApproval, inputValue]);
+  }, [inputOwner.kind, isProcessing, waitingForApproval, inputValue]);
 
   useEffect(
     () => () => {
@@ -250,5 +330,5 @@ export const useAppKeyboardShortcuts = ({
     [],
   );
 
-  return { interruptConfirmVisible };
+  return { interruptConfirmVisible, markRejectionReasonInputReady };
 };

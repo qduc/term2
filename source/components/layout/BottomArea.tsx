@@ -46,6 +46,7 @@ export type BottomAreaProps = {
   lastUsage?: NormalizedUsage | null;
   lastCodexRateLimit?: CodexRateLimitInfo | null;
   onSubmit: (value: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) => Promise<void>;
+  onRejectionReasonInputReady?: () => void;
   slashCommands: SlashCommand[];
   settingsService: SettingsService;
   loggingService: LoggingService;
@@ -112,6 +113,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   toolCallStreamingInfo = null,
   isShellMode = false,
   onSubmit,
+  onRejectionReasonInputReady,
   slashCommands,
   settingsService,
   loggingService,
@@ -333,6 +335,7 @@ const BottomArea: FC<BottomAreaProps> = ({
         <ApplicationInputSurface
           enabled={inputOwner.kind === 'input' || inputOwner.kind === 'menu'}
           onSubmit={onSubmit}
+          onRejectionReasonInputReady={onRejectionReasonInputReady}
           slashCommands={slashCommands}
           waitingForRejectionReason={waitingForRejectionReason}
           isShellMode={isShellMode}

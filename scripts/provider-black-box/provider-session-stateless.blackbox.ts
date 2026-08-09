@@ -183,10 +183,8 @@ async function sendApprovalTurn(
   await waitForNewVisibleOutput(child, 'Allow this action?', outputMarker, 15_000);
   // ApprovalPrompt handles y/n as single-key shortcuts; unlike text input,
   // this control does not consume a trailing carriage return.
-  const decisionMarker = captureOutputMarker(child);
   await writeApprovalShortcut(child, decision);
   if (decision === 'n') {
-    await waitForNewVisibleOutput(child, 'Why? ', decisionMarker, 5_000);
     await writeAndSubmitText(child, 'black-box rejection');
   }
   await waitForCompletedTurn(child, response, outputMarker);
@@ -204,7 +202,6 @@ async function writeAndSubmitText(child: PtyChildDriver, text: string): Promise<
 }
 
 async function writeApprovalShortcut(child: PtyChildDriver, decision: 'y' | 'n'): Promise<void> {
-  await waitForMilliseconds(TERMINAL_KEY_EVENT_GAP_MS);
   await child.write(decision);
 }
 
@@ -248,7 +245,7 @@ async function waitForNewVisibleOutput(
     (snapshot) =>
       snapshot.output.length > outputMarker.outputLength &&
       snapshot.visibleOutput.length > outputMarker.visibleLength &&
-      snapshot.visibleOutput.includes(text),
+      snapshot.output.slice(outputMarker.outputLength).includes(text),
     timeoutMs,
   );
 }

@@ -1,4 +1,5 @@
 import os from 'node:os';
+import { getActiveWorkspaceRoot } from '../../../services/workspace/active-workspace-root.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { SandboxRuntimeConfig } from '@anthropic-ai/sandbox-runtime';
@@ -429,7 +430,7 @@ export function isPathProtected(target: string, home: string): boolean {
 export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOptions = {}): SandboxRuntimeConfig {
   const home = options.home ?? os.homedir();
   const readPolicy = options.readPolicy ?? 'standard';
-  const workspaceRoot = fs.realpathSync(options.cwd ?? process.cwd());
+  const workspaceRoot = fs.realpathSync(options.cwd ?? getActiveWorkspaceRoot());
   const tmpDir = SANDBOX_TEMP_DIR;
   const appCacheDir = path.join(home, '.cache', 'term2-nodejs');
   const rtkConfigDir = path.join(home, '.config', 'rtk');

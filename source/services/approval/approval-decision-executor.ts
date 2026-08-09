@@ -19,6 +19,7 @@ import type { SessionAccessState } from '../session/session-access-state.js';
 import type { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
 import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
+import { getActiveWorkspaceRoot } from '../workspace/active-workspace-root.js';
 
 export type ApprovalDecisionSource = 'user' | 'policy' | 'system';
 
@@ -243,7 +244,9 @@ export class ApprovalDecisionExecutor {
         extraAllowRead: [stagedInfo.suggestedParent],
       });
       if (answer === 'allow-remember') {
-        getProjectAllowReadStore(process.cwd()).append(stagedInfo.suggestedParent);
+        // Key the grant to the root the command actually ran under, so a grant
+        // made in one worktree does not silently authorize another.
+        getProjectAllowReadStore(getActiveWorkspaceRoot()).append(stagedInfo.suggestedParent);
         this.deps.logger.security('Sandbox allowed-read path remembered for project', {
           path: stagedInfo.suggestedParent,
           deniedPath: stagedInfo.path,
@@ -264,7 +267,7 @@ export class ApprovalDecisionExecutor {
   ): void {
     if (!dockerDecision || !isDockerRequest || typeof parsedDecisionArgs?.command !== 'string') return;
 
-    const cwd = typeof parsedDecisionArgs.cwd === 'string' ? parsedDecisionArgs.cwd : process.cwd();
+    const cwd = typeof parsedDecisionArgs.cwd === 'string' ? parsedDecisionArgs.cwd : getActiveWorkspaceRoot();
     const scope = answer === 'docker-allow-once' ? 'once' : answer === 'docker-allow-session' ? 'session' : 'project';
     if (this.deps.sessionAccess) this.deps.sessionAccess.grantDocker(parsedDecisionArgs.command, cwd, scope);
     else

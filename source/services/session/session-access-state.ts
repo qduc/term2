@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { getActiveWorkspaceRoot } from '../workspace/active-workspace-root.js';
 import path from 'node:path';
 import type { ISettingsService } from '../service-interfaces.js';
 import { requestsDockerHostControl } from '../../utils/shell/sandbox/docker-host-control.js';
@@ -20,7 +21,7 @@ export class SessionAccessState {
     this.#readFolders.add(folder);
   }
 
-  allowsRead(targetPath: string, baseDir: string = process.cwd()): boolean {
+  allowsRead(targetPath: string, baseDir: string = getActiveWorkspaceRoot()): boolean {
     const target = path.resolve(baseDir, targetPath);
     return [...this.#readFolders].some((folder) => {
       const resolvedFolder = path.resolve(baseDir, folder);
@@ -28,15 +29,15 @@ export class SessionAccessState {
     });
   }
 
-  allowEditFile(file: string, baseDir: string = process.cwd()): void {
+  allowEditFile(file: string, baseDir: string = getActiveWorkspaceRoot()): void {
     this.#editFiles.add(path.resolve(baseDir, file));
   }
 
-  allowEditFolder(folder: string, baseDir: string = process.cwd()): void {
+  allowEditFolder(folder: string, baseDir: string = getActiveWorkspaceRoot()): void {
     this.#editFolders.add(path.resolve(baseDir, folder));
   }
 
-  allowsEdit(targetPath: string, baseDir: string = process.cwd()): boolean {
+  allowsEdit(targetPath: string, baseDir: string = getActiveWorkspaceRoot()): boolean {
     const target = path.resolve(baseDir, targetPath);
     return (
       this.#editFiles.has(target) ||

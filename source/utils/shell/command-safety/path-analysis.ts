@@ -1,4 +1,5 @@
 import path from 'path';
+import { getActiveWorkspaceRoot } from '../../../services/workspace/active-workspace-root.js';
 import type { ILoggingService } from '../../../services/service-interfaces.js';
 import {
   SafetyStatus,
@@ -138,7 +139,10 @@ export function analyzePathRisk(inputPath: string | undefined, loggingService?: 
     return SafetyStatus.GREEN;
   }
 
-  const cwd = process.cwd();
+  // Project membership must be judged against the leased worktree, not the
+  // checkout the process started in, or paths inside the active worktree are
+  // classified as outside the project.
+  const cwd = getActiveWorkspaceRoot();
 
   // Pre-calculate project membership for absolute paths
   const isAbsolute = path.isAbsolute(candidate);

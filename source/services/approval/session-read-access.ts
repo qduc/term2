@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { getActiveWorkspaceRoot } from '../workspace/active-workspace-root.js';
 import type { SessionAccessState } from '../session/session-access-state.js';
 import type { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
 
@@ -12,7 +13,7 @@ export class SessionReadAccess {
     this.#foldersBySession.set(sessionId, folders);
   }
 
-  allows(sessionId: string, targetPath: string, baseDir: string = process.cwd()): boolean {
+  allows(sessionId: string, targetPath: string, baseDir: string = getActiveWorkspaceRoot()): boolean {
     const folders = this.#foldersBySession.get(sessionId);
     if (!folders) return false;
 

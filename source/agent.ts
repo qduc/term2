@@ -54,6 +54,7 @@ import { shouldPreferPatchEditingModel } from './lib/tool-selection-policy.js';
 import { SkillsService } from './services/skills/skills-service.js';
 import { createActivateSkillToolDefinition } from './tools/agent/activate-skill.js';
 import { createRunAgentWorkflowToolDefinition } from './tools/run-agent-workflow.js';
+import { createWorktreeToolDefinitions } from './tools/system/worktree.js';
 import type { AgentRuntime } from './services/agent-runtime/agent-runtime.js';
 import type { WorkflowLimits } from './services/agent-runtime/workflow/workflow-types.js';
 import { getProjectTreeForPrompt } from './utils/project-tree.js';
@@ -409,6 +410,19 @@ export const getAgentDefinition = (
   if (rootBackgroundShellRegistry) {
     const backgroundTools = createBackgroundShellJobToolDefinitions(rootBackgroundShellRegistry);
     tools.push(backgroundTools.get, backgroundTools.cancel);
+  }
+
+  // Worktree switching re-roots the local filesystem; in remote mode the remote
+  // directory owns the execution root, so the tools have nothing to lease.
+  if (executionContext && !executionContext.isRemote()) {
+    const worktreeTools = createWorktreeToolDefinitions({
+      executionContext,
+      getRunningJobs: () =>
+        (rootBackgroundShellRegistry?.list() ?? [])
+          .filter((job) => job.status === 'running' || job.status === 'cancelling')
+          .map((job) => ({ id: job.id, command: job.command })),
+    });
+    tools.push(worktreeTools.enter, worktreeTools.exit);
   }
 
   tools.push(...memoryCapability.tools);

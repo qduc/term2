@@ -1,6 +1,13 @@
-import { it, expect } from 'vitest';
+import { it, expect, afterEach } from 'vitest';
 import { ExecutionContext } from './execution-context.js';
 import { ISSHService } from './service-interfaces.js';
+import { publishActiveWorkspaceRoot } from './workspace/active-workspace-root.js';
+
+// Entering a workspace also publishes a process-wide fallback root; clear it so
+// these tests stay order-independent.
+afterEach(() => {
+  publishActiveWorkspaceRoot(undefined);
+});
 
 // Mock SSH service for testing
 function createMockSSHService(): ISSHService {
@@ -54,4 +61,48 @@ it('getCwd returns process.cwd when remote but no remoteDir', () => {
   const ctx = new ExecutionContext(mockSSH);
   // When SSH service is provided but no remoteDir, falls back to process.cwd
   expect(ctx.getCwd()).toBe(process.cwd());
+});
+
+it('getCwd returns the active workspace once one is entered', () => {
+  const ctx = new ExecutionContext();
+  ctx.enterWorkspace('/repo/.worktrees/feature');
+  expect(ctx.getCwd()).toBe('/repo/.worktrees/feature');
+});
+
+it('getHomeWorkspace keeps reporting the session root while a workspace is active', () => {
+  const ctx = new ExecutionContext();
+  ctx.enterWorkspace('/repo/.worktrees/feature');
+  expect(ctx.getHomeWorkspace()).toBe(process.cwd());
+});
+
+it('exitWorkspace restores the session root', () => {
+  const ctx = new ExecutionContext();
+  ctx.enterWorkspace('/repo/.worktrees/feature');
+  ctx.exitWorkspace();
+  expect(ctx.getCwd()).toBe(process.cwd());
+  expect(ctx.getActiveWorkspace()).toBeUndefined();
+});
+
+it('getActiveWorkspace is undefined until a workspace is entered', () => {
+  expect(new ExecutionContext().getActiveWorkspace()).toBeUndefined();
+});
+
+it('entering a second workspace replaces the first rather than nesting', () => {
+  const ctx = new ExecutionContext();
+  ctx.enterWorkspace('/repo/.worktrees/one');
+  ctx.enterWorkspace('/repo/.worktrees/two');
+  ctx.exitWorkspace();
+  expect(ctx.getCwd()).toBe(process.cwd());
+});
+
+it('rejects a relative workspace root so the active root is always unambiguous', () => {
+  const ctx = new ExecutionContext();
+  expect(() => ctx.enterWorkspace('.worktrees/feature')).toThrow(/absolute/i);
+  expect(ctx.getActiveWorkspace()).toBeUndefined();
+});
+
+it('rejects entering a local workspace in remote mode, where the remote dir owns the root', () => {
+  const ctx = new ExecutionContext(createMockSSHService(), '/remote/path');
+  expect(() => ctx.enterWorkspace('/repo/.worktrees/feature')).toThrow(/remote/i);
+  expect(ctx.getCwd()).toBe('/remote/path');
 });

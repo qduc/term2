@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { getActiveWorkspaceRoot } from '../../../services/workspace/active-workspace-root.js';
 import path from 'node:path';
 
 const PROJECT_CONFIG_DIR = '.term2';
@@ -92,7 +93,7 @@ export function getProjectNetworkAllowStore(workspaceRoot: string): ProjectNetwo
   return projectNetworkAllowStore;
 }
 
-export function isHostAllowed(host: string, port?: number, workspaceRoot: string = process.cwd()): boolean {
+export function isHostAllowed(host: string, port?: number, workspaceRoot: string = getActiveWorkspaceRoot()): boolean {
   if (sessionNetworkAllowStore.isAllowed(host, port)) return true;
   return getProjectNetworkAllowStore(workspaceRoot).isAllowed(host, port);
 }
@@ -101,7 +102,7 @@ export function addAllowedHost(
   host: string,
   port: number | undefined,
   scope: 'session' | 'project',
-  workspaceRoot: string = process.cwd(),
+  workspaceRoot: string = getActiveWorkspaceRoot(),
 ): void {
   const entry = port != null && port !== 80 && port !== 443 ? `${host}:${port}` : host;
   if (scope === 'session') {

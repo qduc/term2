@@ -488,21 +488,22 @@ it('Codex HTTP writes every supported request setting and the abort signal to th
     top_p: 0.8,
     frequency_penalty: 0.3,
     presence_penalty: 0.4,
-    max_output_tokens: 123,
     reasoning: { effort: 'high', summary: 'concise' },
     generate: false,
     custom_codex_option: true,
   });
   expect(capturedBody.temperature).toBeUndefined();
+  expect(capturedBody.max_output_tokens).toBeUndefined();
   expect(capturedOptions).toEqual({ signal: controller.signal, headers: { 'x-test': 'yes' } });
 });
 
-it('CodexResponsesModel.buildResponsesCreateRequest strips temperature from requestData', () => {
+it('CodexResponsesModel.buildResponsesCreateRequest strips temperature and max_output_tokens from requestData', () => {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   transport.buildResponsesCreateRequest = function () {
     return {
       requestData: {
         temperature: 0.2,
+        max_output_tokens: 16384,
       },
       sdkRequestHeaders: {},
       signal: undefined,
@@ -511,9 +512,13 @@ it('CodexResponsesModel.buildResponsesCreateRequest strips temperature from requ
 
   try {
     const model = new CodexResponsesModel({} as any, 'gpt-5-codex', transport);
-    const built = (model as any).buildResponsesCreateRequest({ input: [], tools: [], temperature: 0.2 }, true);
+    const built = (model as any).buildResponsesCreateRequest(
+      { input: [], tools: [], temperature: 0.2, maxTokens: 16384 },
+      true,
+    );
 
     expect('temperature' in built.requestData).toBe(false);
+    expect('max_output_tokens' in built.requestData).toBe(false);
   } finally {
   }
 });

@@ -538,6 +538,105 @@ it('stream() surfaces reasoning_content as reasoning_delta events and in the com
   ]);
 });
 
+// OpenRouter-style gateways (and opencode in front of them) stream reasoning on
+// `delta.reasoning` instead of `delta.reasoning_content`. Reading only the
+// latter dropped every reasoning token these providers emitted.
+async function* openRouterReasoningStream(): AsyncIterable<any> {
+  yield { choices: [{ delta: { reasoning: 'Weighing' } }] };
+  yield { choices: [{ delta: { reasoning: ' the options.' } }] };
+  yield { choices: [{ delta: { content: 'Final answer.' } }] };
+  yield { choices: [{ delta: {}, finish_reason: 'stop' }] };
+}
+
+it('stream() surfaces OpenRouter-style delta.reasoning as reasoning_delta events and in the completion output', async () => {
+  const client = {
+    chat: { completions: { create: async () => openRouterReasoningStream() } },
+  };
+
+  const model = new OpenAIChatCompletionsModel(client, 'mimo-v2.5-pro');
+  const events: any[] = [];
+  for await (const event of model.stream({ input: [], tools: [] } as any)) {
+    events.push(event);
+  }
+
+  const reasoningDeltas = events.filter((event) => event.type === 'reasoning_delta').map((event) => event.text);
+  expect(reasoningDeltas).toEqual(['Weighing', ' the options.']);
+
+  const completion = events.find((event) => event.type === 'completion');
+  expect(completion.output).toEqual([
+    {
+      type: 'reasoning',
+      text: 'Weighing the options.',
+      providerMetadata: {
+        reasoning_content: 'Weighing the options.',
+        openai_compatible_reasoning_content: true,
+      },
+    },
+    { type: 'message', content: [{ type: 'text', text: 'Final answer.' }] },
+  ]);
+});
+
+// The wire spelling for an outgoing assistant message is owned centrally by
+// preserveReasoningContentForOpenAICompatibleMessages in the fetch middleware,
+// so reasoning captured from `delta.reasoning` still replays as
+// `reasoning_content` here — the adapter must not invent a second spelling.
+it('replays reasoning captured from delta.reasoning as reasoning_content on continuation', async () => {
+  const bodies: any[] = [];
+  const client = {
+    chat: {
+      completions: {
+        create: async (body: any) => {
+          bodies.push(body);
+          if (bodies.length === 1) {
+            return (async function* () {
+              yield { choices: [{ delta: { reasoning: 'Need the fixture tool.' } }] };
+              yield {
+                choices: [
+                  {
+                    delta: {
+                      tool_calls: [{ index: 0, id: 'call_fixture', function: { name: 'lookup', arguments: '{}' } }],
+                    },
+                  },
+                ],
+              };
+              yield { choices: [{ delta: {}, finish_reason: 'tool_calls' }] };
+            })();
+          }
+          return (async function* () {
+            yield { choices: [{ delta: { content: 'done' } }] };
+            yield { choices: [{ delta: {}, finish_reason: 'stop' }] };
+          })();
+        },
+      },
+    },
+  };
+  const model = new OpenAIChatCompletionsModel(client, 'mimo-v2.5-pro');
+  const loop = new ApplicationRunLoop({ resolveModel: () => model });
+  const stream = loop.startStream(
+    {
+      name: 'openrouter-reasoning-continuation',
+      instructions: 'Use tools when needed.',
+      model: 'mimo-v2.5-pro',
+      tools: [
+        {
+          name: 'lookup',
+          parameters: { type: 'object' },
+          needsApproval: async () => false,
+          execute: async () => 'fixture result',
+        },
+      ] as any,
+    },
+    'Look it up.',
+  );
+  for await (const _event of stream) {
+    // drain
+  }
+
+  expect(bodies).toHaveLength(2);
+  const assistant = bodies[1].messages.find((message: any) => Array.isArray(message.tool_calls));
+  expect(assistant.reasoning_content).toBe('Need the fixture tool.');
+});
+
 it('attaches a captured provider cost trailer as costUsd on the completion', async () => {
   const client = {
     chat: {

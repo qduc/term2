@@ -9,7 +9,10 @@ export type FakeProviderScenario =
   | 'early-close'
   | 'incomplete'
   | 'tool-fragments'
-  | 'reasoning';
+  | 'reasoning'
+  // OpenRouter-style gateways spell chat-completions reasoning `reasoning`
+  // rather than `reasoning_content`.
+  | 'reasoning-field';
 export type FakeProviderProtocol = 'chat-completions' | 'responses' | 'anthropic' | 'google';
 export type CapturedHttpRequest = {
   method: string;
@@ -183,6 +186,11 @@ export function framesFor(protocol: FakeProviderProtocol, scenario: FakeProvider
   if (scenario === 'reasoning')
     return [
       { id: 'chatcmpl_fake', choices: [{ index: 0, delta: { reasoning_content: 'Need native reasoning.' } }] },
+      { id: 'chatcmpl_fake', choices: [{ index: 0, delta: { content: 'hello' }, finish_reason: 'stop' }] },
+    ];
+  if (scenario === 'reasoning-field')
+    return [
+      { id: 'chatcmpl_fake', choices: [{ index: 0, delta: { reasoning: 'Need gateway reasoning.' } }] },
       { id: 'chatcmpl_fake', choices: [{ index: 0, delta: { content: 'hello' }, finish_reason: 'stop' }] },
     ];
   if (scenario === 'tool-fragments')

@@ -1,3 +1,26 @@
+## [0.12.0] - 2026-08-09
+
+### Features
+- Added server-side context compaction for supported OpenAI Responses models, with configurable thresholds and context-usage feedback in the status bar.
+- Added editing and removal of messages queued while a turn is in progress.
+- Added fuller background-task controls, including task inspection, stopping tasks, clearer completion notifications, shell handoff, and foreground-subagent transfer with approval handling.
+- Added acknowledged peer-channel delivery so local Codex and compatible agent sessions can reliably wake and exchange follow-up messages.
+- Added a session-scoped option to approve edits outside the workspace.
+
+### Bug Fixes
+- Fixed Escape and prompt-input handling across menu transitions, including double-Escape interruption behavior.
+- Fixed provider-stream recovery, cancellation, replay, and usage-accounting edge cases across supported providers.
+- Fixed runaway or malformed model output from continuing indefinitely.
+- Fixed orphaned shell child processes when the CLI exits.
+- Fixed Codex requests that included an unsupported `max_output_tokens` parameter.
+
+### Improvements
+- Redesigned interactive menus so each surface has exclusive input ownership, improving autocomplete, cursor preservation, and transition reliability.
+- Improved provider support and resilience, including direct application-owned streaming, OpenCode Responses indicators, and safer continuation handling.
+- Made the status bar more concise while adding elapsed command time, cache percentage, and clearer background-subagent identity and context information.
+- Improved approval decisions with risk-aware automatic review and clearer adopted-subagent approval controls.
+- Centralized conversation, settings, provider, model-catalog, and handoff session ownership for more reliable interactive and non-interactive behavior.
+
 ## [0.11.1]
 
 ### Features

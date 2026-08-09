@@ -1,4 +1,5 @@
 import React, { FC, useEffect } from 'react';
+import { useInput } from 'ink';
 import InputBox from '../InputBox.js';
 import { useInputContext } from '../../context/InputContext.js';
 import { useSlashCommands } from '../../hooks/use-slash-commands.js';
@@ -74,6 +75,21 @@ export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props)
       setCursorOverride(cursorOffset);
     }
   }, [cursorOffset, cursorOverride, setCursorOverride, stack.length]);
+
+  // Keep Escape subscribed across the editor/menu remount. A key can arrive
+  // after the controller opens a menu but before the replacement surface's
+  // passive input effect is installed; the controller snapshot is the only
+  // authoritative owner during that handoff.
+  useInput(
+    (_input, key) => {
+      if (!enabled || !key.escape) return;
+      if (controller.getSnapshot().stack.length === 0) return;
+
+      controller.escape();
+      setCursorOverride(controller.getSnapshot().editor.cursor);
+    },
+    { isActive: true },
+  );
 
   const services: MenuServices = {
     settingsService: props.settingsService,

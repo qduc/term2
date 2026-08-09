@@ -129,7 +129,7 @@ export function SettingsMenuSession({ frame, active, controller, interactions, s
             return pushChildEffect(frame, selected.key, currentEditor);
           }
           case 'escape':
-            return { stack: { type: 'close-top' } };
+            return { buffer: { type: 'clear' }, stack: { type: 'close-top' } };
           default:
             return;
         }

@@ -85,6 +85,7 @@ const InputBox: FC<Props> = ({
     setImages,
     cursorOverride: contextCursorOverride,
     setCursorOverride,
+    controller,
   } = useInputContext();
   const cursorOverride = propsCursorOverride ?? contextCursorOverride;
   const { stdin } = useStdin();
@@ -164,10 +165,19 @@ const InputBox: FC<Props> = ({
     return false;
   }, [onChange, updateQueueSelection]);
 
+  const handleEscape = useCallback((): boolean => {
+    if (controller.getSnapshot().stack.length > 0) {
+      controller.escape();
+      setCursorOverride(controller.getSnapshot().editor.cursor);
+      return true;
+    }
+    return cancelQueueInteraction();
+  }, [cancelQueueInteraction, controller, setCursorOverride]);
+
   const { escHintVisible } = useEscapeKey({
     value,
     onChange,
-    onEscape: cancelQueueInteraction,
+    onEscape: handleEscape,
     turnInFlight,
   });
 

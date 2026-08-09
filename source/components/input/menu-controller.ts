@@ -685,15 +685,21 @@ export class MenuControllerImpl implements MenuController {
       return;
     }
 
+    // A slash/settings interaction may not have registered its effect yet
+    // when the first Escape arrives during the InputBox -> MenuSurface
+    // handoff. Keep root-trigger cancellation at the controller boundary so
+    // this transition cannot leave the command in the editor.
+    const clearsRootTrigger = topFrame.kind === 'slash' || topFrame.kind === 'settings';
+    const effect: MenuEffect = clearsRootTrigger
+      ? { stack: { type: 'close-top' }, buffer: { type: 'clear' } }
+      : { stack: { type: 'close-top' } };
+
     // Default escape behavior is still a controller transition, so child
     // BackPolicy and provider return-point behavior are applied uniformly.
-    this.dispatch(
-      { stack: { type: 'close-top' } },
-      {
-        frameId: topFrame.id,
-        revision: 'binding' in topFrame ? topFrame.binding.revision : this.state.editor.revision,
-      },
-    );
+    this.dispatch(effect, {
+      frameId: topFrame.id,
+      revision: 'binding' in topFrame ? topFrame.binding.revision : this.state.editor.revision,
+    });
   }
 
   public open(unboundFrame: UnboundFrameSpec, options?: OpenOptions): void {

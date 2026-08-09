@@ -34,10 +34,7 @@ export function MenuSurface({ stack, controller, interactions, services, enabled
       if (!enabled || controller.getSnapshot().stack.length === 0) return;
       if (isFocusReportingSequence(_input)) return;
 
-      if (key.escape) {
-        controller.escape();
-        setCursorOverride(controller.getSnapshot().editor.cursor);
-      } else if (key.upArrow) {
+      if (key.upArrow) {
         dispatch({ type: 'move', direction: 'up' });
       } else if (key.downArrow) {
         dispatch({ type: 'move', direction: 'down' });

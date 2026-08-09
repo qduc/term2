@@ -93,6 +93,27 @@ it.sequential('pressing ESC once shows hint, second time clears input', async ()
   expect(finalFrame.includes('some text'), 'Value should be cleared').toBe(false);
 });
 
+it.sequential('treats two ESC bytes delivered in one terminal chunk as a clear', async () => {
+  let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
+
+  const TestHarness = () => {
+    useCaptureInputEmitter((emitter) => {
+      inputEmitter = emitter;
+    });
+    return <TestComponent />;
+  };
+
+  const { lastFrame } = await renderAndFlush(<TestHarness />);
+
+  await act(async () => {
+    inputEmitter!.emit('input', '\u001B\u001B');
+    await flushReactUpdates(3);
+  });
+
+  expect(lastFrame()!.includes('some text'), 'Value should be cleared').toBe(false);
+  expect(lastFrame()!.includes('HINT'), 'Hint should be hidden after clearing').toBe(false);
+});
+
 it.sequential('clears non-empty text during an in-flight turn', async () => {
   let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
   const TestHarness = () => {

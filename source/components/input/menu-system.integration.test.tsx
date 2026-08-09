@@ -2,6 +2,7 @@
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 import React, { act, useEffect } from 'react';
+import { useStdin } from 'ink';
 import { it, expect, vi } from 'vitest';
 import ApplicationInputSurface from './ApplicationInputSurface.js';
 import { InputProvider, useInputContext } from '../../context/InputContext.js';
@@ -103,6 +104,18 @@ const SeedInput = ({ text, cursor }: { text: string; cursor: number }) => {
   return null;
 };
 
+type InputEmitter = { emit: (event: string, input: string) => void };
+
+const CaptureInputEmitter = ({ onEmitter }: { onEmitter: (emitter: InputEmitter) => void }) => {
+  const stdin = useStdin() as unknown as { internal_eventEmitter: InputEmitter };
+
+  useEffect(() => {
+    onEmitter(stdin.internal_eventEmitter);
+  }, [onEmitter, stdin]);
+
+  return null;
+};
+
 const writeInput = async (stdin: { write: (input: string) => void }, input: string) => {
   await act(async () => {
     stdin.write(input);
@@ -132,6 +145,27 @@ it.sequential('opens the slash menu and Escape cancels it through the terminal b
 
   expect(controller.getSnapshot().editor.text).toBe('');
   expect(lastFrame()).not.toContain('/clear');
+});
+
+it.sequential('clears a slash command when Escape arrives during the menu handoff', async () => {
+  const controller = new MenuControllerImpl();
+  let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
+  await renderSurface(
+    controller,
+    slashCommands,
+    <CaptureInputEmitter onEmitter={(emitter) => (inputEmitter = emitter)} />,
+  );
+
+  await act(async () => {
+    // Seed the controller synchronously so Escape exercises the ownership
+    // handoff itself, before the replacement surface's passive effect runs.
+    controller.replaceText('/');
+    inputEmitter!.emit('input', '\u001b');
+    await settle();
+  });
+
+  expect(controller.getSnapshot().stack).toHaveLength(0);
+  expect(controller.getSnapshot().editor.text).toBe('');
 });
 
 it.sequential('filters a path trigger and inserts the selected entry with a trailing space', async () => {
@@ -194,6 +228,37 @@ it.sequential('typing the /settings autocomplete trigger opens the settings menu
   expect(controller.getSnapshot().editor.text).toBe('/settings ');
   expect(lastFrame()).toContain('Use ↑↓ to navigate, Enter to edit, Esc to close');
 });
+
+it.sequential('Escape from the root settings menu clears the slash command buffer', async () => {
+  const controller = new MenuControllerImpl();
+  const { stdin } = await renderSurface(controller, [...slashCommands, settingsCommand]);
+
+  await writeInput(stdin, '/settings ');
+  await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'settings');
+
+  await writeInput(stdin, '\u001b');
+  await waitFor(() => controller.getSnapshot().stack.length === 0);
+
+  expect(controller.getSnapshot().editor).toMatchObject({ text: '', cursor: 0 });
+});
+
+it.sequential(
+  'Escape returns from a settings value child to its filtered parent through the terminal boundary',
+  async () => {
+    const controller = new MenuControllerImpl();
+    const { stdin } = await renderSurface(controller, [...slashCommands, settingsCommand]);
+
+    await writeInput(stdin, '/settings shell.time');
+    await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'settings');
+    await writeInput(stdin, '\r');
+    await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'settings_value');
+
+    await writeInput(stdin, '\u001b');
+    await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'settings');
+
+    expect(controller.getSnapshot().editor).toMatchObject({ text: '/settings shell.time', cursor: 20 });
+  },
+);
 
 it.sequential('accepting a /model prefix opens the model successor menu', async () => {
   const controller = new MenuControllerImpl();

@@ -18,6 +18,7 @@ export const useEscapeKey = ({
   turnInFlight = false,
 }: Options): { escHintVisible: boolean } => {
   const [escHintVisible, setEscHintVisible] = useState(false);
+  const escHintVisibleRef = useRef(false);
   const escTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onEscapeRef = useRef(onEscape);
   onEscapeRef.current = onEscape;
@@ -34,6 +35,7 @@ export const useEscapeKey = ({
       clearTimeout(escTimeoutRef.current);
       escTimeoutRef.current = null;
     }
+    escHintVisibleRef.current = false;
     setEscHintVisible(false);
   }, [turnInFlight, value]);
 
@@ -45,19 +47,26 @@ export const useEscapeKey = ({
     // confirmation; clearing non-empty text still takes precedence.
     if (turnInFlight && value.length === 0) return;
 
+    // Ink parses two ESC bytes delivered in one terminal chunk as a single
+    // meta+escape key. Treat that representation as the second press too.
+    const isDoubleEscape = key.meta === true;
+
     // Double ESC clears text buffer.
-    if (escHintVisible) {
+    if (escHintVisibleRef.current || isDoubleEscape) {
       if (escTimeoutRef.current) {
         clearTimeout(escTimeoutRef.current);
         escTimeoutRef.current = null;
       }
+      escHintVisibleRef.current = false;
       setEscHintVisible(false);
       onChange('');
       return;
     }
 
+    escHintVisibleRef.current = true;
     setEscHintVisible(true);
     escTimeoutRef.current = setTimeout(() => {
+      escHintVisibleRef.current = false;
       setEscHintVisible(false);
       escTimeoutRef.current = null;
     }, ESC_HINT_TIMEOUT_MS);

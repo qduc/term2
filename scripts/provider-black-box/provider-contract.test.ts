@@ -495,12 +495,17 @@ describe('provider boundary contracts through the registry', () => {
     } as any;
     const first = await collect(model.stream(initial));
     const reasoning = first.flatMap((event: any) => event.output ?? []).find((item: any) => item.type === 'reasoning');
-    expect(reasoning).toMatchObject({
+    const opaque = first
+      .flatMap((event: any) => event.output ?? [])
+      .find((item: any) => item.type === 'provider_opaque');
+    expect(reasoning).toEqual({
+      type: 'reasoning',
       text: 'Need native reasoning.',
-      providerMetadata: {
-        reasoning_content: 'Need native reasoning.',
-        openai_compatible_reasoning_content: true,
-      },
+    });
+    expect(opaque).toEqual({
+      type: 'provider_opaque',
+      provider: 'openai-compatible',
+      item: { reasoning_content: 'Need native reasoning.' },
     });
 
     await collect(
@@ -511,9 +516,11 @@ describe('provider boundary contracts through the registry', () => {
           {
             type: 'reasoning',
             text: reasoning.text,
-            // This is the persisted representation after reasoning_content is
-            // deliberately removed to prevent duplicate legacy serialization.
-            providerMetadata: { openai_compatible_reasoning_content: true },
+          },
+          {
+            type: 'provider_opaque',
+            provider: 'openai-compatible',
+            item: { reasoning_content: 'Need native reasoning.' },
           },
           { type: 'tool_call', id: 'call_reasoning', name: fixtureTool.name, arguments: '{}' },
           { type: 'tool_result', id: 'call_reasoning', output: 'fixture result' },
@@ -554,12 +561,17 @@ describe('provider boundary contracts through the registry', () => {
     } as any;
     const first = await collect(model.stream(initial));
     const reasoning = first.flatMap((event: any) => event.output ?? []).find((item: any) => item.type === 'reasoning');
-    expect(reasoning).toMatchObject({
+    const opaque = first
+      .flatMap((event: any) => event.output ?? [])
+      .find((item: any) => item.type === 'provider_opaque');
+    expect(reasoning).toEqual({
+      type: 'reasoning',
       text: 'Need gateway reasoning.',
-      providerMetadata: {
-        reasoning_content: 'Need gateway reasoning.',
-        openai_compatible_reasoning_content: true,
-      },
+    });
+    expect(opaque).toEqual({
+      type: 'provider_opaque',
+      provider: 'openai-compatible',
+      item: { reasoning: 'Need gateway reasoning.' },
     });
 
     await collect(
@@ -570,9 +582,11 @@ describe('provider boundary contracts through the registry', () => {
           {
             type: 'reasoning',
             text: reasoning.text,
-            // This is the persisted representation after reasoning_content is
-            // deliberately removed to prevent duplicate legacy serialization.
-            providerMetadata: { openai_compatible_reasoning_content: true },
+          },
+          {
+            type: 'provider_opaque',
+            provider: 'openai-compatible',
+            item: { reasoning: 'Need gateway reasoning.' },
           },
           { type: 'tool_call', id: 'call_reasoning', name: fixtureTool.name, arguments: '{}' },
           { type: 'tool_result', id: 'call_reasoning', output: 'fixture result' },
@@ -581,12 +595,10 @@ describe('provider boundary contracts through the registry', () => {
     );
 
     expect(server.requests).toHaveLength(2);
-    // The outgoing wire spelling stays `reasoning_content`: the fetch
-    // middleware owns that normalization for every openai-compatible provider.
     expect((server.requests[1]!.body as any).messages).toContainEqual({
       role: 'assistant',
       content: null,
-      reasoning_content: 'Need gateway reasoning.',
+      reasoning: 'Need gateway reasoning.',
       tool_calls: [{ id: 'call_reasoning', type: 'function', function: { name: fixtureTool.name, arguments: '{}' } }],
     });
   });

@@ -74,7 +74,7 @@ it('cost trailer is stripped from the stream', async () => {
   expect(chunks[0].usage.prompt_tokens).toBe(90);
 });
 
-it('real usage chunk passes through with reasoning_content normalized', async () => {
+it('real usage chunk passes through with reasoning_content preserved verbatim', async () => {
   const reasoningChunk = {
     id: 'r2',
     choices: [{ index: 0, delta: { reasoning_content: 'thinking...' } }],
@@ -89,7 +89,7 @@ it('real usage chunk passes through with reasoning_content normalized', async ()
 
   const chunks = await collectStream(client);
   expect(chunks).toHaveLength(1);
-  expect(chunks[0].choices[0].delta.reasoning).toBe('thinking...');
+  expect(chunks[0].choices[0].delta.reasoning).toBeUndefined();
   expect(chunks[0].choices[0].delta.reasoning_content).toBe('thinking...');
 });
 

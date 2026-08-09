@@ -1,10 +1,8 @@
 import OpenAI from 'openai';
 import type { ILoggingService } from '../services/service-interfaces.js';
 
-function normalizeMessageField(target: any): void {
-  if (target && typeof target.reasoning_content === 'string' && typeof target.reasoning !== 'string') {
-    target.reasoning = target.reasoning_content;
-  }
+function normalizeMessageField(_target: any): void {
+  /* no-op: raw wire fields are preserved verbatim */
 }
 
 /** Mutable per-request capture for a provider-reported USD charge trailer. */

@@ -6,16 +6,7 @@ import { applyLlamaCppRequestTransform } from './llama-cpp.provider.js';
 import { createOpencodeSessionInjector } from './opencode-session.js';
 
 function preserveReasoningContentForOpenAICompatibleMessages(messages: any[]): any[] {
-  return messages.map((message) => {
-    if (message?.role !== 'assistant' || typeof message.reasoning !== 'string') {
-      return message;
-    }
-    const { reasoning, ...rest } = message;
-    return {
-      ...rest,
-      reasoning_content: typeof message.reasoning_content === 'string' ? message.reasoning_content : reasoning,
-    };
-  });
+  return messages;
 }
 
 function sanitizeOpenAICompatibleMessages(messages: any[]): any[] {

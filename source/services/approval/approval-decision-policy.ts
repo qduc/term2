@@ -23,7 +23,6 @@ export class ShellAutoApprovalDecisionPolicy implements ApprovalDecisionPolicy {
 
   async decide(context: ApprovalContext): Promise<'approve' | 'prompt'> {
     if (context.toolName !== 'shell' && context.toolName !== 'bash') return 'prompt';
-    if (!context.llmAdvisory) return 'prompt';
     if (this.shellAutoApproval.shouldAutoApprove(context.llmAdvisory)) return 'approve';
     return 'prompt';
   }

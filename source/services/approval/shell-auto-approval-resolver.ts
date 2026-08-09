@@ -170,7 +170,7 @@ export class DelegatingShellAutoApprovalResolver extends ShellAutoApprovalResolv
   }
 
   override getAutoApproveMode(): AutoApproveMode | undefined {
-    return this.delegate ? this.delegate.getAutoApproveMode() : super.getAutoApproveMode();
+    return this.delegate ? this.delegate.getAutoApproveMode?.() : super.getAutoApproveMode();
   }
 
   override isUnsandboxedApprovalEligible(): boolean {

@@ -222,6 +222,14 @@ export async function buildConversationResult(
 
     let llmAdvisory: LLMAdvisory | undefined;
     if ((toolName === 'shell' || toolName === 'bash') && !forceHumanApproval) {
+      if (shellAutoApproval.getAutoApproveMode() === 'always') {
+        return {
+          kind: 'auto_approve',
+          callId,
+          argumentsText,
+        };
+      }
+
       llmAdvisory = await shellAutoApproval.resolveAdvisoryForInterruption({
         interruption,
         siblings: result.interruptions || [],

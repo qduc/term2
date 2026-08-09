@@ -146,7 +146,8 @@ export class ToolApprovalBatchCoordinator {
         decision = 'approve';
       } else {
         llmAdvisory =
-          toolName === 'shell' || toolName === 'bash'
+          (toolName === 'shell' || toolName === 'bash') &&
+          this.deps.shellAutoApproval.getAutoApproveMode?.() !== 'always'
             ? await this.deps.shellAutoApproval.resolveAdvisoryForInterruption({
                 interruption,
                 siblings,

@@ -246,6 +246,53 @@ it('shell auto-approval off skips advisory evaluation and omits llmAdvisory', as
   expect(chatCalls.length).toBe(0);
 });
 
+it.each(['shell', 'bash'] as const)(
+  'always mode skips shell LLM evaluation and approval prompts for %s commands',
+  async (toolName) => {
+    const initialStream = createInterruptedStream([
+      createShellInterruption({ callId: `call-always-${toolName}`, command: 'pnpm test --help', toolName }),
+    ]);
+    const finalStream = createFinalStream('Command completed without approval.');
+
+    const { bundle, chatCalls } = createSessionHarness({
+      settingsOverrides: {
+        'shell.autoApproveMode': 'always',
+        'sandbox.enabled': false,
+      },
+      startStreams: [initialStream],
+      continuationStreams: [finalStream],
+    });
+
+    expect(bundle.shellAutoApproval.getAutoApproveMode()).toBe('always');
+    const result = await bundle.terminalAdapter.sendMessage('run the command without prompting');
+
+    expect(getResponseResult(result).finalText).toBe('Command completed without approval.');
+    expect(chatCalls).toHaveLength(0);
+  },
+);
+
+it('always mode skips evaluator calls for later shell interruptions in the approval batch', async () => {
+  const first = createShellInterruption({ callId: 'call-always-batch-1', command: 'pwd' });
+  const second = createShellInterruption({ callId: 'call-always-batch-2', command: 'pnpm test --help' });
+  const initialStream = createInterruptedStream([first, second]);
+  const continuationAfterFirst = createInterruptedStream([second]);
+  const finalStream = createFinalStream('Batch completed without approval.');
+
+  const { bundle, chatCalls } = createSessionHarness({
+    settingsOverrides: {
+      'shell.autoApproveMode': 'always',
+      'sandbox.enabled': false,
+    },
+    startStreams: [initialStream],
+    continuationStreams: [continuationAfterFirst, finalStream],
+  });
+
+  const result = await bundle.terminalAdapter.sendMessage('run both commands without prompting');
+
+  expect(getResponseResult(result).finalText).toBe('Batch completed without approval.');
+  expect(chatCalls).toHaveLength(0);
+});
+
 it('RED-classified shell command includes LLM rationale but remains a system rejection advisory', async () => {
   const initialStream = createInterruptedStream([createShellInterruption({ callId: 'call-red', command: 'rm -rf /' })]);
   const { bundle, chatCalls } = createSessionHarness({

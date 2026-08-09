@@ -98,6 +98,35 @@ it('ShellAutoApprovalDecisionPolicy returns approve for auto-approvable shell co
   expect(result).toBe('approve');
 });
 
+it('ShellAutoApprovalDecisionPolicy approves always-mode shell commands without an advisory', async () => {
+  const client = createMockAgentClient();
+  const conversationStore = new ConversationStore();
+
+  const shellAutoApproval = new ShellAutoApprovalResolver({
+    conversationStore,
+    agentClient: client as any,
+    logger,
+    settingsService: {
+      get: <T>(key: string): T | undefined =>
+        key === 'shell.autoApproveMode' ? ('always' as unknown as T) : undefined,
+    } as any,
+    sessionContextService: {
+      runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      getContext: () => null,
+    },
+  });
+
+  const policy = new ShellAutoApprovalDecisionPolicy(shellAutoApproval);
+
+  await expect(
+    policy.decide({
+      toolName: 'bash',
+      argumentsText: 'pnpm test --help',
+      callId: 'c-always-no-advisory',
+    }),
+  ).resolves.toBe('approve');
+});
+
 it('ShellAutoApprovalDecisionPolicy returns prompt for non-shell tool', async () => {
   const client = createMockAgentClient();
   const conversationStore = new ConversationStore();

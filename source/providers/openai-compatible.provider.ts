@@ -184,7 +184,8 @@ export class OpencodeAnthropicFormatProvider {
     });
     const costCapture: CostTrailerCapture = {};
     applyClientResponseNormalization(openAIClient, this.deps.loggingService, costCapture);
-    return new OpenAIChatCompletionsModel(openAIClient, resolvedModel, costCapture);
+    const providerId = this.config.type || 'openai-compatible';
+    return new OpenAIChatCompletionsModel(openAIClient, resolvedModel, costCapture, providerId);
   }
 
   getStreamedModel(modelName?: string): StreamedModelTurn {

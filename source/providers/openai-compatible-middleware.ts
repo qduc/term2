@@ -5,10 +5,6 @@ import { addCacheControlToLastTwoMessages } from './common/openai-compatible-mes
 import { applyLlamaCppRequestTransform } from './llama-cpp.provider.js';
 import { createOpencodeSessionInjector } from './opencode-session.js';
 
-function preserveReasoningContentForOpenAICompatibleMessages(messages: any[]): any[] {
-  return messages;
-}
-
 function sanitizeOpenAICompatibleMessages(messages: any[]): any[] {
   return messages.map((message) => {
     if (!message || typeof message !== 'object') return message;
@@ -92,9 +88,7 @@ export function createOpenAICompatibleMiddleware(
         let changed = false;
 
         if (Array.isArray(body?.messages)) {
-          body.messages = sanitizeOpenAICompatibleMessages(
-            preserveReasoningContentForOpenAICompatibleMessages(mergeAssistantMessages(body.messages)),
-          );
+          body.messages = sanitizeOpenAICompatibleMessages(mergeAssistantMessages(body.messages));
           addCacheControlToLastTwoMessages(body.messages, body.model);
           changed = true;
         }

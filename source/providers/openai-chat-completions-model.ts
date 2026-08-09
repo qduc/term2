@@ -12,11 +12,13 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
   private readonly client: any;
   private readonly model: string;
   private readonly costCapture?: CostTrailerCapture;
+  private readonly providerId: string;
 
-  constructor(client: any, model: string, costCapture?: CostTrailerCapture) {
+  constructor(client: any, model: string, costCapture?: CostTrailerCapture, providerId?: string) {
     this.client = client;
     this.model = model.trim();
     this.costCapture = costCapture;
+    this.providerId = providerId ?? 'openai-compatible';
   }
 
   // createCustomProviderModelProvider() (openai-compatible.provider.ts) returns
@@ -30,7 +32,7 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
   async *stream(request: StreamedModelTurnRequest): AsyncIterable<StreamedModelTurnEvent> {
     const messages = [
       ...(request.instructions ? [{ role: 'system', content: request.instructions }] : []),
-      ...openAICompatibleMessages(request.input),
+      ...openAICompatibleMessages(request.input, this.providerId),
     ];
     assertValidOpenAICompatibleMessages(messages);
     const response = await this.client.chat.completions.create({
@@ -47,7 +49,7 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
       ...(request.reasoning?.effort ? { reasoning_effort: request.reasoning.effort } : {}),
       ...(request.providerOptions ?? {}),
       ...(request.outputType && request.outputType !== 'text'
-        ? { response_format: toChatResponseFormat(request.outputType) }
+        ? { response_format: toChatResponseFormat(request.outputType as any) }
         : {}),
       signal: request.signal,
     });
@@ -72,13 +74,7 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
       }
       if (delta) {
         for (const [key, val] of Object.entries(delta)) {
-          if (
-            key === 'role' ||
-            key === 'content' ||
-            key === 'tool_calls' ||
-            key === 'refusal' ||
-            key === 'function_call'
-          ) {
+          if (key === 'role' || key === 'content' || key === 'tool_calls' || key === 'finish_reason') {
             continue;
           }
           if (val == null) continue;
@@ -138,41 +134,41 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
     if (!sawFinishReason) throw new Error('OpenAI-compatible streamed response ended without a finish reason');
     for (const [index, call] of calls)
       yield { type: 'tool_call', id: call.id ?? `call_${index}`, name: call.name, arguments: call.arguments };
+
+    const output: any[] = [];
+    if (reasoning) {
+      output.push({
+        type: 'reasoning',
+        text: reasoning,
+      });
+    }
+    if (Object.keys(rawContinuityMetadata).length > 0) {
+      output.push({
+        type: 'provider_opaque',
+        provider: this.providerId,
+        item: rawContinuityMetadata,
+      });
+    }
+    if (calls.size) {
+      output.push(
+        ...[...calls].map(([index, call]) => ({
+          type: 'tool_call' as const,
+          id: call.id ?? `call_${index}`,
+          name: call.name,
+          arguments: call.arguments,
+        })),
+      );
+    } else {
+      output.push({ type: 'message', content: [{ type: 'text', text }] });
+    }
+
     yield {
       type: 'completion',
       responseId: `chatcmpl-${Date.now()}`,
       ...(finishReason !== undefined ? { finishReason } : {}),
       usage,
-      // The normalized reasoning stream captures the cost-only trailer into the
-      // shared capture object; surface it as the provider-reported charge.
       ...(this.costCapture?.cost !== undefined ? { costUsd: this.costCapture.cost } : {}),
-      output: [
-        ...(reasoning
-          ? [
-              {
-                type: 'reasoning' as const,
-                text: reasoning,
-              },
-            ]
-          : []),
-        ...(Object.keys(rawContinuityMetadata).length > 0
-          ? [
-              {
-                type: 'provider_opaque' as const,
-                provider: 'openai-compatible',
-                item: rawContinuityMetadata,
-              },
-            ]
-          : []),
-        ...(calls.size
-          ? [...calls].map(([index, call]) => ({
-              type: 'tool_call' as const,
-              id: call.id ?? `call_${index}`,
-              name: call.name,
-              arguments: call.arguments,
-            }))
-          : [{ type: 'message' as const, content: [{ type: 'text' as const, text }] }]),
-      ],
+      output,
     };
   }
 }
@@ -214,7 +210,16 @@ function normalizeChatUsage(usage: any): StreamedModelUsage {
   };
 }
 
-function openAICompatibleMessages(input: StreamedModelTurnRequest['input']): any[] {
+function consumeReasoningFields(
+  pendingOpaquePayload: Record<string, unknown> | null,
+  pendingReasoningContent: string,
+): Record<string, unknown> {
+  if (pendingOpaquePayload) return pendingOpaquePayload;
+  if (pendingReasoningContent) return { reasoning_content: pendingReasoningContent };
+  return {};
+}
+
+function openAICompatibleMessages(input: StreamedModelTurnRequest['input'], providerId = 'openai-compatible'): any[] {
   const messages: any[] = [];
   let pendingReasoningContent = '';
   let pendingOpaquePayload: Record<string, unknown> | null = null;
@@ -224,47 +229,28 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input']): any
     const providerOpaque =
       item.providerOpaque ?? (item.type === 'provider_opaque' ? { provider: item.provider } : undefined);
     if (providerOpaque) {
-      if (providerOpaque.provider !== 'openai-compatible') {
+      if (providerOpaque.provider !== providerId) {
         throw new Error(
-          `Refusing to splice provider_opaque from '${providerOpaque.provider}' into an OpenAI-compatible request: opaque items are only valid on the provider that produced them`,
+          `Refusing to splice provider_opaque from '${providerOpaque.provider}' into '${providerId}' request: opaque items are only valid on the provider that produced them`,
         );
       }
       const rawPayload = item.type === 'provider_opaque' ? item.item : item;
       const { providerOpaque: _, type: _t, ...payload } = rawPayload as any;
-      let lastUserIndex = -1;
-      for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i]?.role === 'user') {
-          lastUserIndex = i;
-          break;
-        }
-      }
-      const turnAssistant = messages
-        .slice(lastUserIndex >= 0 ? lastUserIndex + 1 : 0)
-        .find((m: any) => m.role === 'assistant');
-      if (turnAssistant) {
+      const lastMessage = messages[messages.length - 1];
+      const lastAssistant = lastMessage?.role === 'assistant' ? lastMessage : undefined;
+      if (lastAssistant) {
         if (!('reasoning_content' in payload)) {
-          delete turnAssistant.reasoning_content;
+          delete lastAssistant.reasoning_content;
         }
-        Object.assign(turnAssistant, payload);
+        Object.assign(lastAssistant, payload);
       } else {
         pendingOpaquePayload = { ...(pendingOpaquePayload ?? {}), ...payload };
       }
       continue;
     }
     if (item.type === 'reasoning') {
-      const directNativeReasoning = item.providerMetadata?.reasoning_content;
-      // Persistence intentionally removes the duplicate text field from a
-      // standalone reasoning item. Keep this marker so restored native
-      // OpenAI-compatible reasoning is still distinguished from generic
-      // provider reasoning without sending a foreign field to other models.
-      const nativeReasoning =
-        typeof directNativeReasoning === 'string'
-          ? directNativeReasoning
-          : item.providerMetadata?.openai_compatible_reasoning_content === true
-          ? item.text
-          : undefined;
-      if (typeof nativeReasoning === 'string') {
-        pendingReasoningContent += nativeReasoning;
+      if (typeof item.text === 'string') {
+        pendingReasoningContent += item.text;
       }
       continue;
     }
@@ -277,15 +263,12 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input']): any
         }
         return { type: 'text', text: part.text };
       });
-      const reasoningFields = pendingOpaquePayload
-        ? pendingOpaquePayload
-        : pendingReasoningContent
-        ? { reasoning_content: pendingReasoningContent }
-        : {};
+      const reasoningFields = consumeReasoningFields(pendingOpaquePayload, pendingReasoningContent);
+      const hasReasoning = pendingOpaquePayload !== null || pendingReasoningContent.length > 0;
       messages.push({
         role: item.role,
         content,
-        ...(item.role === 'assistant' ? reasoningFields : {}),
+        ...(item.role === 'assistant' && hasReasoning ? reasoningFields : {}),
       });
       if (item.role === 'assistant') {
         pendingReasoningContent = '';
@@ -293,21 +276,17 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input']): any
       }
       continue;
     }
-    if (item.type === 'tool_call' || item.type === 'function_call') {
-      const toolCallId = item.id ?? item.callId ?? item.call_id;
-      const toolCall = { id: toolCallId, type: 'function', function: { name: item.name, arguments: item.arguments } };
+    if (item.type === 'tool_call') {
+      const toolCall = { id: item.id, type: 'function', function: { name: item.name, arguments: item.arguments } };
       const previous = messages[messages.length - 1];
       if (previous?.role === 'assistant' && Array.isArray(previous.tool_calls)) {
         previous.tool_calls.push(toolCall);
       } else {
-        const reasoningFields = pendingOpaquePayload
-          ? pendingOpaquePayload
-          : pendingReasoningContent
-          ? { reasoning_content: pendingReasoningContent }
-          : {};
+        const reasoningFields = consumeReasoningFields(pendingOpaquePayload, pendingReasoningContent);
+        const hasReasoning = pendingOpaquePayload !== null || pendingReasoningContent.length > 0;
         messages.push({
           role: 'assistant',
-          ...(pendingOpaquePayload || pendingReasoningContent ? { content: null, ...reasoningFields } : {}),
+          ...(hasReasoning ? { content: null, ...reasoningFields } : {}),
           tool_calls: [toolCall],
         });
       }
@@ -315,11 +294,10 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input']): any
       pendingOpaquePayload = null;
       continue;
     }
-    if (item.type === 'tool_result' || item.type === 'function_call_result') {
-      const toolCallId = item.id ?? item.callId ?? item.call_id;
+    if (item.type === 'tool_result') {
       messages.push({
         role: 'tool',
-        tool_call_id: toolCallId,
+        tool_call_id: item.id,
         content: typeof item.output === 'string' ? item.output : JSON.stringify(item.output),
       });
     }
@@ -327,8 +305,24 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input']): any
 
   // Chat Completions requires assistant messages to contain content or tool
   // calls. Native reasoning is continuation metadata for the matching
-  // assistant message/tool call, not a valid standalone message; if no such
-  // item follows, omit it rather than creating a provider-invalid request.
+  // assistant message, not standalone text content.
+  if (pendingOpaquePayload || pendingReasoningContent) {
+    const reasoningFields = consumeReasoningFields(pendingOpaquePayload, pendingReasoningContent);
+    let lastUserIndex = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i]?.role === 'user') {
+        lastUserIndex = i;
+        break;
+      }
+    }
+    const primaryAssistant = messages
+      .slice(lastUserIndex >= 0 ? lastUserIndex + 1 : 0)
+      .find((m: any) => m.role === 'assistant');
+    if (primaryAssistant) {
+      Object.assign(primaryAssistant, reasoningFields);
+    }
+  }
+
   return coalesceReasoningToolCallBatches(messages);
 }
 

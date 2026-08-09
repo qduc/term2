@@ -74,11 +74,12 @@ function createNormalizedReasoningStream(
 }
 
 /**
- * Normalizes `reasoning_content` -> `reasoning` on responses from the OpenAI client.
+ * Intercepts response stream metadata for OpenAI-compatible client calls.
  *
- * Cost-only trailers are no longer discarded outright: the reported USD charge
- * is captured into `costCapture` (billing metadata) while the trailer itself is
- * still kept out of the SDK usage accumulator.
+ * Wire fields (`reasoning_content` vs `reasoning`) are preserved verbatim.
+ * Cost-only trailers are intercepted: the reported USD charge is captured into
+ * `costCapture` (billing metadata) while the trailer itself is kept out of the
+ * SDK usage accumulator.
  */
 export function applyClientResponseNormalization(
   client: OpenAI,

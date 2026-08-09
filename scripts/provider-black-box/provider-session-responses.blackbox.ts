@@ -201,7 +201,7 @@ describe('application-owned Responses lifecycle through the shipped CLI', () => 
     const providerCase: ProviderTransportCase = { provider: 'openai', transport: 'http' };
     const server = await startResponsesFixtureServer({ mode: 'background-shell' });
     activeServer = server;
-    const workspace = await createWorkspace(server, providerCase);
+    const workspace = await createWorkspace(server, providerCase, 'background-shell');
     activeWorkspace = workspace;
     const child = await startCli(workspace);
     activeChild = child;
@@ -346,7 +346,7 @@ async function createWorkspace(
           },
           app: { liteMode: true },
           shell: { autoApproveMode: 'off' },
-          sandbox: { enabled: true, allowNetworking: false },
+          sandbox: { enabled: mode !== 'background-shell', allowNetworking: false },
         }),
       );
       if (providerCase.provider === 'codex') {

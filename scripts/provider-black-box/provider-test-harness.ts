@@ -335,6 +335,8 @@ function createWorkspacePaths(root: string): IsolatedWorkspacePaths {
     cacheDir: join(root, 'cache'),
     codexHome: join(root, 'codex'),
     conversationsDir: join(root, 'conversations'),
+    // Match the platform-specific path that env-paths('term2') resolves to inside
+    // the child process; the shared resolver receives isolated XDG/LOCALAPPDATA roots.
     logDir: resolveSettingsDirectory({
       platform: process.platform,
       homeDir: root,

@@ -73,11 +73,23 @@ re-deriving the vocabulary or safety rules.
 ### 2. Calibration wave
 
 Waiting for explicit approval. Two explorers independently inspect the same 10–20
-representative test files. The coordinator reconciles disagreements and changes the
-rubric or schema before wider fan-out.
+test files. The coordinator reconciles disagreements and changes the rubric or schema
+before wider fan-out.
 
-Completion criterion: disputed terms have one canonical interpretation and the
-calibration report records agreement and remaining ambiguity.
+A four-file probe ran first, recorded in `docs/test-audit/calibration-probe.md`.
+Read it before designing the wave. Explorer judgment is usable — both reviewers
+stated observable contracts and every spot-checked coverage claim was accurate — but
+both returned `keep` on all four files, so their ability to reach any other
+conclusion is still unmeasured. The wave sample must therefore be salted with
+plausible non-`keep` files and carry a positive control, or it will reproduce that
+result at four times the cost. The contract-granularity gap (22 statements versus 10
+over the same four files) must be settled in the brief first, because it is not
+recoverable afterwards.
+
+Completion criterion: disputed terms have one canonical interpretation, the
+calibration report records agreement and remaining ambiguity, and at least one
+reviewer has demonstrably produced a non-`keep` recommendation with evidence that
+survives review.
 
 ### 3. Domain exploration
 

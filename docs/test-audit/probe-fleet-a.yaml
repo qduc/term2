@@ -1,0 +1,446 @@
+schemaVersion: 2
+domains:
+  - id: probe
+    label: Test audit calibration probe domain
+suites:
+  - id: unit
+    label: Default Vitest unit suite
+seams:
+  - id: probe-seam-sandbox-failure-classifier
+    label: >-
+      Boundary where the raw and sandbox-annotated stderr of a failed sandboxed
+      command becomes a failure classification the approval flow acts on.
+  - id: probe-seam-approval-decision-policy
+    label: >-
+      Boundary where a tool request (tool name, arguments, LLM advisory) becomes
+      an approve or prompt decision.
+  - id: probe-seam-terminal-input-boundary
+    label: >-
+      Boundary where terminal keystrokes become editor text and menu state via
+      Ink's useInput, InputProvider, and MenuControllerImpl.
+  - id: probe-seam-agent-client-run-loop
+    label: >-
+      Boundary where AgentClient drives ApplicationRunLoop: startStream, steer,
+      openTurn/closeTurn, abort, and retry wiring.
+risks:
+  - id: probe-risk-misclassified-sandbox-failure
+    label: >-
+      A sandbox denial is misreported, so the user cannot see the specific
+      denied path or the approval flow offers the wrong remedy.
+    severity: medium
+  - id: probe-risk-unsafe-auto-approval
+    label: >-
+      A shell command auto-approves when it should prompt, running an unsafe
+      command without human consent, or prompts when it should auto-run.
+    severity: high
+  - id: probe-risk-menu-input-lost
+    label: >-
+      Escape or acceptance at a menu boundary drops text the user typed or
+      leaves a stale menu open, so the input line misrepresents what will be
+      submitted.
+    severity: medium
+  - id: probe-risk-steer-silently-dropped
+    label: >-
+      A user message steered at an in-flight turn is silently discarded, so the
+      user believes the agent received a message it never saw.
+    severity: high
+  - id: probe-risk-run-loop-unbounded
+    label: >-
+      A run exceeds its turn budget or ignores an abort, so the agent keeps
+      doing work the user did not sanction.
+    severity: medium
+  - id: probe-risk-cryptic-failure
+    label: >-
+      A run fails with a cryptic or misleading error, so the user cannot tell
+      why it failed or what to fix.
+    severity: low
+fixtures:
+  - id: probe-fixture-registered-providers
+    label: >-
+      Providers registered process-globally under unique per-test ids via
+      registerProvider, isolating each test without mutating the registry.
+  - id: probe-fixture-ink-stdin-emitter
+    label: >-
+      Ink's internal stdin event emitter captured via useStdin and driven with
+      renderInAct plus act-based settling (ink-testing helper).
+  - id: probe-fixture-mock-file-service
+    label: vi.mock of file-service returning one mock/path workspace entry.
+  - id: probe-fixture-mock-agent-client-streams
+    label: createMockAgentClient returning queued startStream/continueRunStream results.
+  - id: probe-fixture-mock-settings
+    label: In-memory settings stub returning shell.autoApproveMode.
+contracts:
+  - id: probe-classifier-annotation-block
+    statement: >-
+      A command whose stderr carries a sandbox runtime violation annotation is
+      reported as blocked by the sandbox, with the annotated stderr preserved.
+    seamIds:
+      - probe-seam-sandbox-failure-classifier
+    riskIds:
+      - probe-risk-misclassified-sandbox-failure
+  - id: probe-classifier-network-block
+    statement: >-
+      A command blocked by the proxy allowlist is reported as a network sandbox
+      failure, not an unknown block, so the approval flow can offer network
+      approval.
+    seamIds:
+      - probe-seam-sandbox-failure-classifier
+    riskIds:
+      - probe-risk-misclassified-sandbox-failure
+  - id: probe-classifier-denied-read
+    statement: >-
+      Under a strict read policy, a sandbox-denied file read is reported with
+      the exact denied path and a suggested parent directory, so the same
+      command can be retried with elevated read access.
+    seamIds:
+      - probe-seam-sandbox-failure-classifier
+    riskIds:
+      - probe-risk-misclassified-sandbox-failure
+  - id: probe-classifier-docker-block
+    statement: >-
+      A failed command whose stderr shows a blocked Docker daemon connection is
+      reported as a Docker block, not a generic sandbox block, so the approval
+      flow can offer host control.
+    seamIds:
+      - probe-seam-sandbox-failure-classifier
+    riskIds:
+      - probe-risk-misclassified-sandbox-failure
+  - id: probe-classifier-ignores-no-signal
+    statement: >-
+      A command that succeeded while mentioning the daemon, a command that
+      already held Docker host control, and stderr carrying no sandbox signal
+      are left unclassified so the command's own output is what the user sees.
+    seamIds:
+      - probe-seam-sandbox-failure-classifier
+    riskIds:
+      - probe-risk-misclassified-sandbox-failure
+  - id: probe-approval-manual-always-prompt
+    statement: >-
+      With manual approval enabled, every tool request goes to the user for
+      approval; no tool is ever auto-approved.
+    seamIds:
+      - probe-seam-approval-decision-policy
+    riskIds:
+      - probe-risk-unsafe-auto-approval
+  - id: probe-approval-shell-auto-approve
+    statement: >-
+      With shell auto-approval enabled, a shell or bash command that the
+      auto-approval resolver approves runs without a human prompt, including in
+      always mode with no advisory at all.
+    seamIds:
+      - probe-seam-approval-decision-policy
+    riskIds:
+      - probe-risk-unsafe-auto-approval
+  - id: probe-approval-otherwise-prompt
+    statement: >-
+      A non-shell tool, a shell command with no approving advisory, and a shell
+      command in off mode always prompt a human before running.
+    seamIds:
+      - probe-seam-approval-decision-policy
+    riskIds:
+      - probe-risk-unsafe-auto-approval
+  - id: probe-menu-slash-open-cancel
+    statement: >-
+      Typing '/' opens the slash-command menu; pressing Escape closes it and
+      clears the slash text the user had typed.
+    seamIds:
+      - probe-seam-terminal-input-boundary
+    riskIds:
+      - probe-risk-menu-input-lost
+  - id: probe-menu-escape-handoff
+    statement: >-
+      Pressing Escape in the instant the slash menu hands off to its
+      replacement surface still cancels the command: the input ends empty and
+      no menu stays open.
+    seamIds:
+      - probe-seam-terminal-input-boundary
+    riskIds:
+      - probe-risk-menu-input-lost
+  - id: probe-menu-path-trigger
+    statement: >-
+      Typing a path trigger opens a path menu filtered by the typed text, and
+      accepting an entry inserts it into the input with a trailing space at the
+      cursor.
+    seamIds:
+      - probe-seam-terminal-input-boundary
+    riskIds:
+      - probe-risk-menu-input-lost
+  - id: probe-menu-settings-successor
+    statement: >-
+      Accepting /settings (typed in full, as a prefix, or via its autocomplete
+      trigger) opens the settings successor menu with '/settings ' in the input.
+    seamIds:
+      - probe-seam-terminal-input-boundary
+    riskIds:
+      - probe-risk-menu-input-lost
+  - id: probe-menu-settings-escape-back
+    statement: >-
+      Escape from the settings root clears the slash buffer; Escape from a
+      settings value child returns to the filtered settings parent with the
+      cursor restored.
+    seamIds:
+      - probe-seam-terminal-input-boundary
+    riskIds:
+      - probe-risk-menu-input-lost
+  - id: probe-menu-model-skills-successor
+    statement: >-
+      Accepting a /model or /skills prefix opens the corresponding successor
+      menu with '/model ' or '/skills ' in the input.
+    seamIds:
+      - probe-seam-terminal-input-boundary
+    riskIds:
+      - probe-risk-menu-input-lost
+  - id: probe-menu-skill-activate
+    statement: >-
+      Accepting a skill in the skills menu activates it (the skill is delivered
+      to the caller and a confirmation message is shown) and clears the command
+      buffer.
+    seamIds:
+      - probe-seam-terminal-input-boundary
+    riskIds:
+      - probe-risk-menu-input-lost
+  - id: probe-run-loop-override-executes
+    statement: >-
+      A run with an override agent executes the override's own tools and
+      completes, and a run with no explicit budget fails clearly once the
+      default single-turn cap is exceeded.
+    seamIds:
+      - probe-seam-agent-client-run-loop
+    riskIds:
+      - probe-risk-run-loop-unbounded
+  - id: probe-run-loop-steer-across-pause
+    statement: >-
+      A user message steered at a turn paused for approval is admitted into
+      that turn's history when the turn resumes.
+    seamIds:
+      - probe-seam-agent-client-run-loop
+    riskIds:
+      - probe-risk-steer-silently-dropped
+  - id: probe-run-loop-steer-before-request
+    statement: >-
+      A user message steered before the turn's first request is prepared is
+      admitted to that same turn rather than refused or demoted to a later
+      turn.
+    seamIds:
+      - probe-seam-agent-client-run-loop
+    riskIds:
+      - probe-risk-steer-silently-dropped
+  - id: probe-run-loop-steer-across-retry
+    statement: >-
+      A user message steered while a failed turn restarts its stream after a
+      retry is admitted to the restarted stream of the same turn.
+    seamIds:
+      - probe-seam-agent-client-run-loop
+    riskIds:
+      - probe-risk-steer-silently-dropped
+  - id: probe-run-loop-steer-released-on-close
+    statement: >-
+      A steer still waiting when the turn closes without another request is
+      handed back to the caller as released, so the caller can send it as its
+      own turn instead of losing it.
+    seamIds:
+      - probe-seam-agent-client-run-loop
+    riskIds:
+      - probe-risk-steer-silently-dropped
+  - id: probe-run-loop-missing-streamed-model
+    statement: >-
+      Starting a run with a provider that exposes no streamed-model factory
+      fails with a clear error naming the missing capability, not a cryptic
+      failure.
+    seamIds:
+      - probe-seam-agent-client-run-loop
+    riskIds:
+      - probe-risk-cryptic-failure
+  - id: probe-run-loop-retry-abort
+    statement: >-
+      A retry callback registered on the client is invoked by the provider, and
+      aborting the client aborts an in-flight direct stream.
+    seamIds:
+      - probe-seam-agent-client-run-loop
+    riskIds:
+      - probe-risk-run-loop-unbounded
+tests:
+  - kind: file
+    id: probe-sandbox-failure-classifier-test
+    file: source/utils/shell/sandbox/sandbox-failure-classifier.test.ts
+    domainId: probe
+    suiteId: unit
+    contractIds:
+      - probe-classifier-annotation-block
+      - probe-classifier-network-block
+      - probe-classifier-denied-read
+      - probe-classifier-docker-block
+      - probe-classifier-ignores-no-signal
+    fixtureIds: []
+  - kind: file
+    id: probe-approval-decision-policy-test
+    file: source/services/approval/approval-decision-policy.test.ts
+    domainId: probe
+    suiteId: unit
+    contractIds:
+      - probe-approval-manual-always-prompt
+      - probe-approval-shell-auto-approve
+      - probe-approval-otherwise-prompt
+    fixtureIds:
+      - probe-fixture-mock-agent-client-streams
+      - probe-fixture-mock-settings
+  - kind: file
+    id: probe-menu-system-integration-test
+    file: source/components/input/menu-system.integration.test.tsx
+    domainId: probe
+    suiteId: unit
+    contractIds:
+      - probe-menu-slash-open-cancel
+      - probe-menu-escape-handoff
+      - probe-menu-path-trigger
+      - probe-menu-settings-successor
+      - probe-menu-settings-escape-back
+      - probe-menu-model-skills-successor
+      - probe-menu-skill-activate
+    fixtureIds:
+      - probe-fixture-ink-stdin-emitter
+      - probe-fixture-mock-file-service
+  - kind: file
+    id: probe-agent-client-application-run-loop-test
+    file: source/lib/agent-client.application-run-loop.test.ts
+    domainId: probe
+    suiteId: unit
+    contractIds:
+      - probe-run-loop-override-executes
+      - probe-run-loop-steer-across-pause
+      - probe-run-loop-steer-before-request
+      - probe-run-loop-steer-across-retry
+      - probe-run-loop-steer-released-on-close
+      - probe-run-loop-missing-streamed-model
+      - probe-run-loop-retry-abort
+    fixtureIds:
+      - probe-fixture-registered-providers
+decisions:
+  - id: probe-sandbox-failure-classifier-test-r1
+    testId: probe-sandbox-failure-classifier-test
+    role: second_opinion
+    reviewer: probe-fleet-a
+    sourceArtifact: /tmp/term2-test-audit-probe/fleet.yaml
+    recommendation: keep
+    confidence: high
+    reason: >-
+      Uniquely protects the classifier decision tree with observable result
+      shapes; no other file imports classifySandboxFailure.
+    evidence:
+      - >-
+        This file is the only test importing classifySandboxFailure (grep over
+        source); its eight cases assert full classification objects including
+        the exact denied path and suggested parent.
+      - >-
+        Sibling detector tests (denied-read-detector.test.ts,
+        docker-host-control.test.ts) cover the sub-detectors, not the
+        classifier's branch ordering and guards (readPolicy strict, exitCode,
+        dockerHostControlActive).
+      - >-
+        If it vanished, a regression reclassifying a strict denied read as a
+        generic block, or reporting a daemon failure as a sandbox block, would
+        escape and send the approval flow to the wrong remedy.
+      - >-
+        Gap noted: the non-sandboxed early return (sandboxed=false) has no
+        direct case in the file.
+    replacementTestIds: []
+    status: proposed
+  - id: probe-approval-decision-policy-test-r1
+    testId: probe-approval-decision-policy-test
+    role: second_opinion
+    reviewer: probe-fleet-a
+    sourceArtifact: /tmp/term2-test-audit-probe/fleet.yaml
+    recommendation: keep
+    confidence: medium
+    reason: >-
+      The policy wiring and tool gate matter and are asserted through observable
+      approve/prompt outcomes, though the resolver criteria they depend on are
+      covered more deeply by sibling resolver tests.
+    evidence:
+      - >-
+        The file asserts observable decisions ('approve'/'prompt') from
+        decide(), covering manual mode, auto mode with an approving advisory,
+        always mode without an advisory, the non-shell tool gate, and the
+        missing/negative advisory cases.
+      - >-
+        The underlying shouldAutoApprove criteria are exhaustively covered in
+        shell-auto-approval-resolver.test.ts (fail-closed matrix, mode gates,
+        always mode), so this file's unique value is the policy layer's tool
+        gate and delegation wiring.
+      - >-
+        If it vanished, a policy that stopped gating on tool name, or that
+        flipped the resolver answer into the wrong outcome, would auto-run a
+        non-shell tool or prompt on every shell command with no direct test.
+      - >-
+        The fixture is heavier than the exercised path needs (mock agent client
+        with stream queues that shouldAutoApprove never touches), a maintenance
+        smell rather than a contract weakness.
+    replacementTestIds: []
+    status: proposed
+  - id: probe-menu-system-integration-test-r1
+    testId: probe-menu-system-integration-test
+    role: second_opinion
+    reviewer: probe-fleet-a
+    sourceArtifact: /tmp/term2-test-audit-probe/fleet.yaml
+    recommendation: keep
+    confidence: medium
+    reason: >-
+      The terminal-input seam is uniquely covered here: sibling tests drive the
+      controller directly, while this file exercises real keystrokes through
+      Ink's stdin boundary, including the Escape handoff race.
+    evidence:
+      - >-
+        The two Escape-boundary tests ('opens the slash menu and Escape cancels
+        it through the terminal boundary'; 'clears a slash command when Escape
+        arrives during the menu handoff') exercise the stdin-to-frame pipeline
+        and a handoff race that controller.applyEditorEdit-driven sibling tests
+        (menu-controller.test.ts, session tests) cannot see.
+      - >-
+        The path-trigger, settings successor, model/skills successor, and skill
+        activation cases assert observable end states (editor text, cursor,
+        rendered frame, callbacks) after real input events.
+      - >-
+        If it vanished, an Escape-ownership regression that drops the slash
+        text or leaves a stale menu open would escape detection because the
+        lower-level tests seed the controller synchronously, bypassing the
+        handoff.
+      - >-
+        Several successor-menu cases partially re-verify behavior the session
+        tests cover at a lower seam; the file's unique value concentrates in
+        the terminal-boundary and handoff cases.
+    replacementTestIds: []
+    status: proposed
+  - id: probe-agent-client-application-run-loop-test-r1
+    testId: probe-agent-client-application-run-loop-test
+    role: second_opinion
+    reviewer: probe-fleet-a
+    sourceArtifact: /tmp/term2-test-audit-probe/fleet.yaml
+    recommendation: keep
+    confidence: high
+    reason: >-
+      Uniquely protects steer admission at the AgentClient boundary, where
+      documented regressions lived; run-loop-level tests drive the loop
+      directly and cannot see the stop-before-resume bug class.
+    evidence:
+      - >-
+        Three steer tests carry in-file regression provenance (approval-pause
+        resume, steer before first request, retry restart) explaining that the
+        defects were invisible to tests driving ApplicationRunLoop directly;
+        the file asserts observable outcomes ('admitted'/'released') and
+        history content.
+      - >-
+        The remaining tests cover override-agent execution, the missing
+        streamed-model factory error, and retry-callback/abort wiring, none of
+        which has direct coverage elsewhere (sibling
+        application-run-loop.test.ts covers steer mechanics at the loop seam,
+        not the AgentClient boundary).
+      - >-
+        If it vanished, reverting the resume/retry steer fixes would silently
+        drop a user message the user had already been shown as accepted, with
+        no other test able to observe it.
+      - >-
+        The unique per-test provider ids (registerProvider) keep the
+        process-global registry isolated without mutation, making the file safe
+        to run in the shared suite.
+    replacementTestIds: []
+    status: proposed

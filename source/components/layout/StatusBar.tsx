@@ -99,7 +99,9 @@ const StatusBar: FC<StatusBarProps> = ({
         ? `⚠️ ${formatStatusBarTokens(cacheReadTokens)} uncached`
         : `${cachePercentage}% cached`
       : '';
-    tokenParts.push(`↑ ${formatStatusBarTokens(lastUsage.prompt_tokens)}${cacheText ? ` (${cacheText})` : ''}`);
+    if (cacheText) {
+      tokenParts.push(`(${cacheText})`);
+    }
   }
   if (lastUsage?.completion_tokens != null) tokenParts.push(`↓ ${formatStatusBarTokens(lastUsage.completion_tokens)}`);
   const tokensText = tokenParts.join(' / ');

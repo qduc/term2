@@ -61,11 +61,11 @@ it.sequential('StatusBar renders the compact two-row configuration and usage lay
   const lines = (lastFrame() ?? '').split('\n');
   expect(lines.some((line) => line.includes('Standard │ Codex/gpt-5.6-luna · high'))).toBe(true);
   // 2x2 grid: configuration + usage share the top row, safety + rate limit the bottom row.
-  expect(
-    lines.some((line) => line.includes('Standard │ Codex/gpt-5.6-luna · high') && line.includes('↑ 11.8k / ↓ 13')),
-  ).toBe(true);
+  expect(lines.some((line) => line.includes('Standard │ Codex/gpt-5.6-luna · high') && line.includes('↓ 13'))).toBe(
+    true,
+  );
   expect(lines.some((line) => line.includes('Auto') && line.includes('7D 78% · reset '))).toBe(true);
-  expect(lines.some((line) => line.includes('↑ 11.8k / ↓ 13 │ Ctx 12k / 272k'))).toBe(true);
+  expect(lines.some((line) => line.includes('↓ 13 │ Ctx 12k / 272k'))).toBe(true);
   expect(lines.some((line) => line.includes('Cache 0'))).toBe(false);
   expect(lines.some((line) => line.includes('(0 cached)'))).toBe(false);
 });
@@ -86,7 +86,7 @@ it.sequential('StatusBar renders cache usage', async () => {
 
   const output = lastFrame() ?? '';
 
-  expect(output.includes('↑ 1.2k (75.0% cached) / ↓ 350')).toBe(true);
+  expect(output.includes('(75.0% cached) / ↓ 350')).toBe(true);
   expect(output.includes('│ Cache')).toBe(false);
 });
 
@@ -101,7 +101,7 @@ it.sequential('StatusBar renders cache usage as a percentage of prompt tokens', 
     <StatusBar settingsService={settingsService} lastUsage={{ prompt_tokens: 79_697, cache_read_tokens: 79_360 }} />,
   );
 
-  expect(lastFrame()).toContain('↑ 79.7k (99.6% cached)');
+  expect(lastFrame()).toContain('(99.6% cached)');
 });
 
 it.sequential('StatusBar renders context usage as used/window', async () => {
@@ -214,7 +214,7 @@ it.sequential('StatusBar places session cost beside token and context usage', as
     />,
   );
 
-  expect(lastFrame()).toContain('↑ 1.2k / ↓ 350 │ Ctx 1k / 272k │ Cost $0.42');
+  expect(lastFrame()).toContain('↓ 350 │ Ctx 1k / 272k │ Cost $0.42');
 });
 
 it.sequential('StatusBar hides context usage when the model is not in the catalog', async () => {
@@ -457,7 +457,7 @@ it.sequential('StatusBar renders large uncached prompt warning and confirmation 
     />,
   );
   const outputWarning = lastFrameWarning() ?? '';
-  expect(outputWarning.includes('↑ 63.6k (⚠️ 62.0k uncached) / ↓ 856')).toBe(true);
+  expect(outputWarning.includes('(⚠️ 62.0k uncached) / ↓ 856')).toBe(true);
   expect(outputWarning.includes('Cache Miss Risk')).toBe(false);
   expect(outputWarning.includes('Confirm Cache Miss')).toBe(false);
 
@@ -471,7 +471,7 @@ it.sequential('StatusBar renders large uncached prompt warning and confirmation 
     />,
   );
   const outputConfirm = lastFrameConfirm() ?? '';
-  expect(outputConfirm.includes('↑ 63.6k (⚠️ 62.0k uncached) / ↓ 856')).toBe(true);
+  expect(outputConfirm.includes('(⚠️ 62.0k uncached) / ↓ 856')).toBe(true);
   expect(outputConfirm.includes('Confirm Cache Miss')).toBe(false);
 });
 

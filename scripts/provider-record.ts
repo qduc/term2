@@ -9,6 +9,7 @@ import { recordAndSelfValidate } from './provider-black-box/fixture-self-validat
 import { fixtureRequest } from './provider-black-box/provider-wire-fixtures.js';
 import { createFixtureRecorder, createRecordingMiddleware } from './provider-black-box/fixture-recorder.js';
 import type { FixtureTransport } from './provider-black-box/fixture-envelope.js';
+import type { FakeProviderScenario } from './provider-black-box/fake-provider-http-server.js';
 import { selectOpencodeModelTransport } from '../source/providers/opencode-routing.js';
 
 const require = createRequire(import.meta.url);
@@ -29,7 +30,17 @@ const outArg = get('--out');
 const fromFake = has('--from-fake');
 
 const fakeProtocols = ['chat-completions', 'responses', 'anthropic', 'google'] as const;
-const fakeScenarios = ['success', 'error', 'early-close', 'incomplete', 'tool-fragments', 'reasoning'] as const;
+const fakeScenarios = [
+  'success',
+  'error',
+  'early-close',
+  'incomplete',
+  'tool-fragments',
+  'reasoning',
+  'reasoning-field',
+  // `satisfies` keeps a renamed or removed scenario from silently lingering
+  // here; a newly added one still has to be listed by hand.
+] as const satisfies readonly FakeProviderScenario[];
 
 if (!fromFake) {
   if (!has('--yes')) fail('Live recording is disabled by default. Re-run with --yes and an explicit probe.');

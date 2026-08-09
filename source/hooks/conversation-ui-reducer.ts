@@ -17,6 +17,7 @@ import type { CodexRateLimitInfo } from '../services/conversation/conversation-e
 import type { PendingApproval } from '../contracts/conversation.js';
 import type { QueuePauseReason } from '../services/queue/queue-controller.js';
 import type { PendingInteractionSnapshot } from '../services/session/pending-interaction-state.js';
+import type { SessionCostSummary } from '../services/cost/model-cost.js';
 
 // ---------------------------------------------------------------------------
 // State shape
@@ -81,6 +82,8 @@ export interface ConversationUIState {
   // Usage (included here so reset_all can clear them atomically)
   lastUsage: NormalizedUsage | null;
   lastCodexRateLimit: CodexRateLimitInfo | null;
+  /** Reactive session cost summary, mirrored from the session cost accumulator. */
+  costSummary: SessionCostSummary | null;
 
   // Queue state snapshot
   queueSnapshot: QueueSnapshot | null;
@@ -140,6 +143,7 @@ export type ConversationUIAction =
   // --- Usage ---
   | { type: 'usage/updated'; usage: NormalizedUsage }
   | { type: 'usage/cleared' }
+  | { type: 'cost/updated'; summary: SessionCostSummary }
   | { type: 'rate_limit/updated'; rateLimit: CodexRateLimitInfo }
   | { type: 'rate_limit/cleared' }
 
@@ -173,6 +177,7 @@ export function createInitialUIState(initialUsage: NormalizedUsage | null): Conv
     toolCallStreamingInfo: null,
     lastUsage: initialUsage,
     lastCodexRateLimit: null,
+    costSummary: null,
     queueSnapshot: null,
     pendingQueuedMessages: [],
   };
@@ -499,6 +504,9 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
 
     case 'usage/cleared':
       return { ...state, lastUsage: null };
+
+    case 'cost/updated':
+      return { ...state, costSummary: action.summary };
 
     case 'rate_limit/updated':
       return { ...state, lastCodexRateLimit: action.rateLimit };

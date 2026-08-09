@@ -185,6 +185,10 @@ describe('ApplicationRunLoop generation guard', () => {
       { type: 'text_delta', text: 'Please inspect the current diff. ' },
       { type: 'text_delta', text: 'Please inspect the current diff.' },
       {
+        type: 'cost_update',
+        record: expect.objectContaining({ outcome: 'completed', unpricedReason: 'missing_usage' }),
+      },
+      {
         type: 'item',
         item: { type: 'message', role: 'assistant', content: [{ type: 'output_text', text }] },
       },
@@ -419,6 +423,10 @@ describe('ApplicationRunLoop', () => {
     await expect(collect(stream)).resolves.toEqual([
       { type: 'reasoning_delta', text: 'Thinking' },
       { type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 12 },
+      {
+        type: 'cost_update',
+        record: expect.objectContaining({ outcome: 'completed', unpricedReason: 'missing_usage' }),
+      },
     ]);
   });
 
@@ -948,7 +956,14 @@ describe('ApplicationRunLoop', () => {
     const events = await collect(stream);
     await stream.completed;
 
-    expect(events).toEqual([{ type: 'text_delta', text: 'hello' }, expect.objectContaining({ type: 'item' })]);
+    expect(events).toEqual([
+      { type: 'text_delta', text: 'hello' },
+      {
+        type: 'cost_update',
+        record: expect.objectContaining({ outcome: 'completed', unpricedReason: 'missing_usage' }),
+      },
+      expect.objectContaining({ type: 'item' }),
+    ]);
     expect(stream.finalOutput).toBe('hello');
     expect(stream.lastResponseId).toBe('resp-1');
   });

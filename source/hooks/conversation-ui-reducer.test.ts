@@ -311,6 +311,22 @@ it('usage/cleared resets usage', () => {
   expect(next.lastUsage).toBe(null);
 });
 
+it('cost/updated sets the cost summary', () => {
+  const state = createInitialUIState(null);
+  const summary = { knownUsdMicros: 420_000, pricedRequests: 1, unpricedRequests: 0, state: 'estimated' as const };
+  const next = conversationUIReducer(state, { type: 'cost/updated', summary });
+  expect(next.costSummary).toEqual(summary);
+});
+
+it('reset_all clears the cost summary', () => {
+  const prev: ConversationUIState = {
+    ...createInitialUIState(null),
+    costSummary: { knownUsdMicros: 420_000, pricedRequests: 1, unpricedRequests: 0, state: 'estimated' },
+  };
+  const next = conversationUIReducer(prev, { type: 'reset_all' });
+  expect(next.costSummary).toBe(null);
+});
+
 it('rate_limit/updated sets rate limit', () => {
   const state = createInitialUIState(null);
   const rateLimit = { allowed: false, limit_reached: true };

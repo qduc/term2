@@ -55,7 +55,8 @@ function projectProviderItems(items: readonly unknown[]): unknown[] {
       event.type === 'tool_call_streaming_delta' ||
       event.type === 'context_compaction_started' ||
       event.type === 'context_compaction_completed' ||
-      event.type === 'usage_update'
+      event.type === 'usage_update' ||
+      event.type === 'cost_update'
     ) {
       return [];
     }

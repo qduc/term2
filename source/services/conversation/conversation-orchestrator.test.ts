@@ -9,6 +9,7 @@ import type { NormalizedUsage, UsageAccumulator } from '../../utils/ai/token-usa
 import type { ConversationTerminal } from '../../contracts/conversation.js';
 import { PendingInteractionState } from '../session/pending-interaction-state.js';
 import { ASK_USER_NO_ANSWER_RESULT } from '../../tools/agent/ask-user-constants.js';
+import { createSessionCostAccumulator } from '../cost/model-cost.js';
 
 function createMessage(id: string, sender: Message['sender'], text: string, overrides: Partial<Message> = {}): Message {
   return { id, sender, text, ...overrides } as Message;
@@ -95,6 +96,7 @@ function makeUIPort(): UIPort {
     onApprovalRequested: vi.fn(),
     onApprovalResolved: vi.fn(),
     onUsageUpdate: vi.fn(),
+    onCostUpdate: vi.fn(),
     onRateLimitUpdate: vi.fn(),
     onRateLimitClear: vi.fn(),
     onResetTransient: vi.fn(),
@@ -178,6 +180,40 @@ describe('ConversationOrchestrator', () => {
 
     expect(cfg.ui.onStreamingThinkingStarted).toHaveBeenCalled();
     expect(cfg.ui.onStreamingToolInfo).toHaveBeenCalledWith({ toolName: 'shell', argumentCharCount: 12 });
+  });
+
+  // The run loop emits one cost_update event per dispatched model request, so
+  // the status bar can show per-request cost before the turn ends. This test
+  // pins the hop from that event into the accumulator and the UI callback.
+  it('feeds a per-request cost_update event into the accumulator and notifies the UI', async () => {
+    const costAccumulator = createSessionCostAccumulator();
+    const cfg = makeConfig({ costAccumulator });
+    (cfg.conversationService as any).isQueueActive = undefined;
+    (cfg.conversationService as any).setQueuedTurnStartObserver = undefined;
+    const terminal: ConversationTerminal = { type: 'response', finalText: 'ok', commandMessages: [] };
+
+    vi.mocked(cfg.conversationService.sendMessage).mockImplementation(async (_input: any, options: any) => {
+      options.onEvent({
+        type: 'cost_update',
+        record: {
+          requestId: 'req-1',
+          provider: 'openai',
+          model: 'gpt-4.1',
+          serviceTier: 'standard',
+          outcome: 'completed',
+          usdMicros: 3450,
+          source: 'catalog',
+        },
+      });
+      return terminal;
+    });
+
+    await new ConversationOrchestrator(cfg).sendUserMessage('hello');
+
+    expect(costAccumulator.getSummary()).toMatchObject({ knownUsdMicros: 3450, pricedRequests: 1, state: 'estimated' });
+    expect(cfg.ui.onCostUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ knownUsdMicros: 3450, pricedRequests: 1, state: 'estimated' }),
+    );
   });
 
   it('requests approval for approval_required terminals', async () => {

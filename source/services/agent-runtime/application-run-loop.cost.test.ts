@@ -73,7 +73,8 @@ describe('ApplicationRunLoop cost records', () => {
     expect(record.source).toBe('catalog');
     // 900 uncached * $2 + 100 cached * $0.5 + 200 output * $8 = 3450 micros.
     expect(record.usdMicros).toBe(3450);
-    expect(record.requestId).toBe('req-1-1');
+    // Request ids are process-wide monotonic, so only the shape is pinned here.
+    expect(record.requestId).toMatch(/^req-\d+$/);
     // Exposed on the stream too.
     expect(stream.runCostRecords).toHaveLength(1);
   });
@@ -115,8 +116,9 @@ describe('ApplicationRunLoop cost records', () => {
     expect(calls()).toBe(2);
     const records = stream.runCostRecords as ModelRequestCost[];
     expect(records).toHaveLength(2);
-    expect(records[0]!.requestId).toBe('req-1-1');
-    expect(records[1]!.requestId).toBe('req-2-2');
+    expect(records[0]!.requestId).toMatch(/^req-\d+$/);
+    expect(records[1]!.requestId).toMatch(/^req-\d+$/);
+    expect(records[0]!.requestId).not.toBe(records[1]!.requestId);
     expect(records[0]!.usdMicros).toBe(3450);
     expect(records[1]!.usdMicros).toBe(3450);
   });
@@ -168,8 +170,8 @@ describe('ApplicationRunLoop cost records', () => {
     expect(records).toHaveLength(2);
     const ids = records.map((record) => record.requestId);
     expect(new Set(ids).size).toBe(2);
-    expect(ids[0]).toBe('req-1-1');
-    expect(ids[1]).toBe('req-2-2');
+    expect(ids[0]).toMatch(/^req-\d+$/);
+    expect(ids[1]).toMatch(/^req-\d+$/);
   });
 
   it('records a cancelled dispatch as an unpriced cancelled marker', async () => {
@@ -186,5 +188,70 @@ describe('ApplicationRunLoop cost records', () => {
     expect(records).toHaveLength(1);
     expect(records[0]!.outcome).toBe('cancelled');
     expect(records[0]!.unpricedReason).toBe('missing_usage');
+  });
+
+  it('emits a cost_update event for every dispatched request during a tool loop', async () => {
+    const echoTool: ToolDefinition = {
+      name: 'echo',
+      description: 'echo',
+      parameters: z.object({}),
+      needsApproval: () => false,
+      execute: () => 'ok',
+      formatCommandMessage: () => [],
+    };
+    const { model, calls } = toolLoopModel('echo');
+    const loop = new ApplicationRunLoop({ resolveModel: () => model });
+    const stream = loop.startStream({ ...agent, tools: [echoTool] }, 'loop', { providerId: 'openai' });
+    const events = await collect(stream);
+    expect(calls()).toBe(2);
+    const updates = events.filter(
+      (event): event is { type: 'cost_update'; record: ModelRequestCost } =>
+        (event as { type?: string }).type === 'cost_update',
+    );
+    expect(updates).toHaveLength(2);
+    expect(updates[0]!.record.requestId).toMatch(/^req-\d+$/);
+    expect(updates[1]!.record.requestId).toMatch(/^req-\d+$/);
+    expect(updates[0]!.record.requestId).not.toBe(updates[1]!.record.requestId);
+    expect(updates[0]!.record.usdMicros).toBe(3450);
+    expect(updates[1]!.record.usdMicros).toBe(3450);
+  });
+
+  it('emits a cost_update marker when dispatch fails, before the run error', async () => {
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => ({
+        async *stream() {
+          throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+        },
+      }),
+    });
+    const stream = loop.startStream(agent, 'hello', { providerId: 'openai' });
+    const events: unknown[] = [];
+    await expect(
+      (async () => {
+        for await (const event of stream) events.push(event);
+      })(),
+    ).rejects.toThrow();
+    // Observe the same failure on the terminal promise so it is not unhandled.
+    await expect(stream.completed).rejects.toThrow();
+    const updates = events.filter(
+      (event): event is { type: 'cost_update'; record: ModelRequestCost } =>
+        (event as { type?: string }).type === 'cost_update',
+    );
+    expect(updates).toHaveLength(1);
+    expect(updates[0]!.record.outcome).toBe('cancelled');
+    expect(updates[0]!.record.unpricedReason).toBe('missing_usage');
+  });
+
+  it('keeps request ids unique across separate runs so session dedup cannot drop records', async () => {
+    const loop = new ApplicationRunLoop({ resolveModel: () => completionModel({ usage: USAGE }) });
+    const first = loop.startStream(agent, 'one', { providerId: 'openai' });
+    await collect(first);
+    const second = loop.startStream(agent, 'two', { providerId: 'openai' });
+    await collect(second);
+    const firstRecords = first.runCostRecords as ModelRequestCost[];
+    const secondRecords = second.runCostRecords as ModelRequestCost[];
+    expect(firstRecords).toHaveLength(1);
+    expect(secondRecords).toHaveLength(1);
+    expect(firstRecords[0]!.requestId).not.toBe(secondRecords[0]!.requestId);
   });
 });

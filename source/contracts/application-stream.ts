@@ -1,6 +1,7 @@
 import type { CodexRateLimitInfo } from './streamed-model-turn.js';
 import type { ProviderInputItem } from './provider-input.js';
 import type { NormalizedUsage } from '../utils/ai/token-usage.js';
+import type { ModelRequestCost } from '../services/cost/model-cost.js';
 
 /**
  * Closed event protocol consumed by the session/UI pipeline.
@@ -15,6 +16,8 @@ export type ApplicationRunEvent =
   | { readonly type: 'context_compaction_started'; readonly provider: string }
   | { readonly type: 'context_compaction_completed'; readonly provider: string; readonly durationMs: number }
   | { readonly type: 'item'; readonly item: ProviderInputItem }
-  | { readonly type: 'usage_update'; readonly usage: NormalizedUsage };
+  | { readonly type: 'usage_update'; readonly usage: NormalizedUsage }
+  /** One settled cost record per dispatched model request, emitted as soon as it is known. */
+  | { readonly type: 'cost_update'; readonly record: ModelRequestCost };
 
 export type ApplicationRunStream = AsyncIterable<ApplicationRunEvent>;

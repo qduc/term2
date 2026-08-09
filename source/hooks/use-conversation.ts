@@ -118,7 +118,14 @@ export const useConversation = ({
   const [uiState, dispatch] = useReducer(conversationUIReducer, initialMessages, (init) =>
     createInitialUIState(getInitialLastUsage(init)),
   );
-  const { thinkingStartedAt, toolCallStreamingInfo, lastUsage, lastCodexRateLimit, pendingQueuedMessages } = uiState;
+  const {
+    thinkingStartedAt,
+    toolCallStreamingInfo,
+    lastUsage,
+    lastCodexRateLimit,
+    costSummary,
+    pendingQueuedMessages,
+  } = uiState;
   const {
     isProcessing,
     pendingInteractionId,
@@ -243,6 +250,7 @@ export const useConversation = ({
         onApprovalRequested: (approval) => dispatch({ type: 'approval/requested', approval }),
         onApprovalResolved: () => dispatch({ type: 'approval/resolved' }),
         onUsageUpdate: (usage) => dispatch({ type: 'usage/updated', usage }),
+        onCostUpdate: (summary) => dispatch({ type: 'cost/updated', summary }),
         onRateLimitUpdate: (rateLimit) => dispatch({ type: 'rate_limit/updated', rateLimit }),
         onRateLimitClear: () => dispatch({ type: 'rate_limit/cleared' }),
         onResetTransient: () => dispatch({ type: 'reset_transient' }),
@@ -438,6 +446,7 @@ export const useConversation = ({
     messages,
     sessionId: sessionId ?? conversationService.sessionId,
     lastUsage,
+    costSummary,
     lastCodexRateLimit,
     pendingApproval,
     waitingForApproval,

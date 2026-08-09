@@ -86,6 +86,10 @@ export async function* processStreamEvents(
       yield { type: 'usage_update', usage: acc.latestUsage };
       continue;
     }
+    if (event.type === 'cost_update') {
+      yield { type: 'cost_update', record: event.record };
+      continue;
+    }
     if (event.type === 'codex_rate_limits') {
       yield event;
       continue;

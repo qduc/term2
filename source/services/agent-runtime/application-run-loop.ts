@@ -192,8 +192,6 @@ type RunState = {
   turnCount: number;
   /** Turn budget for the run; undefined means unbounded. */
   maxTurns?: number;
-  /** Monotonic per-request sequence used to build stable run-local request ids. */
-  costRequestSeq?: number;
   /** Cumulative model-request cost records for this run, preserved across continuation. */
   costRecords?: ModelRequestCost[];
   /**
@@ -252,6 +250,17 @@ class EventQueue {
     return new Promise((resolve, reject) => this.#waiters.push({ resolve, reject }));
   }
 }
+
+/**
+ * Process-wide monotonic counter for model-request cost ids.
+ *
+ * Request ids must be unique across every run in the process: root runs,
+ * subagent runs, and approval continuations all feed the same session
+ * accumulator, which dedups by id to make event + terminal double-delivery
+ * safe. A run-local sequence (as in a per-run counter) would collide across
+ * turns and silently drop later turns' records.
+ */
+let nextCostRequestSeq = 0;
 
 /**
  * Small provider-neutral agent loop. It owns model-turn sequencing and tool
@@ -680,9 +689,9 @@ export class ApplicationRunLoop {
       let sawToolCall = false;
       let completion: Extract<StreamedModelTurnEvent, { type: 'completion' }> | undefined;
       let pendingNativeReasoning: PendingNativeReasoning | undefined;
-      // Stable run-local request id, allocated immediately before dispatch so a
-      // cost record can be settled exactly once (success or failure).
-      const requestId = this.#nextRequestId(state);
+      // Stable process-unique request id, allocated immediately before dispatch
+      // so a cost record can be settled exactly once (success or failure).
+      const requestId = this.#nextRequestId();
 
       const request: StreamedModelTurnRequest = {
         instructions: state.agent.instructions,
@@ -795,13 +804,17 @@ export class ApplicationRunLoop {
         // unpriced marker so the summary stays honest (partial) rather than
         // appearing exact. Observational only: the error still propagates.
         const cancelled = error instanceof Error && error.name === 'AbortError';
-        this.#appendCostRecord(state, {
+        const record = this.#appendCostRecord(state, {
           requestId,
           provider: state.currentProviderId,
           model: state.agent.model,
           tier: resolveServiceTier(request),
           outcome: cancelled ? 'cancelled' : 'failed',
         });
+        // Only the live queue sees cost records: `output`/`newItems` feed
+        // persistence and replay, and a cost event must never become a
+        // restored history item.
+        queue.push({ type: 'cost_update', record });
         throw error;
       }
 
@@ -848,7 +861,13 @@ export class ApplicationRunLoop {
         normalizedCompletionUsage = undefined;
       }
       // Attribute cost while the dispatched request's identity is still known.
-      this.#appendCostRecord(state, {
+      // Emit it immediately so the UI can show this request's cost before the
+      // run ends; the terminal result re-delivers the cumulative record list
+      // and the session accumulator ignores the duplicates by request id.
+      // Only the live queue sees the event: `output`/`newItems` feed
+      // persistence and replay, and a cost event must never become a restored
+      // history item.
+      const record = this.#appendCostRecord(state, {
         requestId,
         provider: state.currentProviderId,
         model: state.agent.model,
@@ -857,6 +876,7 @@ export class ApplicationRunLoop {
         usage: normalizedCompletionUsage,
         providerUsd: completion.costUsd,
       });
+      queue.push({ type: 'cost_update', record });
       stream.lastResponseId = completion.responseId;
       stream.rawResponses?.push(completion);
       // Some provider adapters report function calls only in the terminal
@@ -1098,9 +1118,9 @@ export class ApplicationRunLoop {
     }
   }
 
-  #nextRequestId(state: RunState): string {
-    state.costRequestSeq = (state.costRequestSeq ?? 0) + 1;
-    return `req-${state.turnCount}-${state.costRequestSeq}`;
+  #nextRequestId(): string {
+    nextCostRequestSeq += 1;
+    return `req-${nextCostRequestSeq}`;
   }
 
   #appendCostRecord(
@@ -1114,7 +1134,7 @@ export class ApplicationRunLoop {
       usage?: ReturnType<typeof normalizeModelUsage>;
       providerUsd?: number | string;
     },
-  ): void {
+  ): ModelRequestCost {
     const record = computeModelCost({
       requestId: input.requestId,
       provider: input.provider ?? 'unknown',
@@ -1127,6 +1147,7 @@ export class ApplicationRunLoop {
       pricingVersion: getCatalogPricingVersion(),
     });
     state.costRecords = [...(state.costRecords ?? []), record];
+    return record;
   }
 
   async #notifyToolLifecycle(operation: (() => void | Promise<void>) | undefined): Promise<void> {

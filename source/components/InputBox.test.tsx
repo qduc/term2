@@ -1411,6 +1411,7 @@ it.sequential('InputBox allows backspace and delete keys to modify input in prov
   await pressKey('a');
   frame = lastFrame() ?? '';
   expect(frame.includes('Input:a')).toBe(true);
+  expect(toVisibleText(frame)).toContain('Enter Provider Name: a');
 
   // Press Backspace (\x7f)
   await pressKey('\x7f');

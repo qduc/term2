@@ -1,0 +1,218 @@
+// @ts-expect-error IS_REACT_ACT_ENVIRONMENT is not in globalThis types
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+import React, { act, useEffect } from 'react';
+import { it, expect, vi } from 'vitest';
+import ApplicationInputSurface from './ApplicationInputSurface.js';
+import { InputProvider, useInputContext } from '../../context/InputContext.js';
+import { MenuControllerImpl } from './menu-controller.js';
+import type { HistoryService } from '../../services/history-service.js';
+import type { LoggingService } from '../../services/logging/logging-service.js';
+import type { SlashCommand } from '../../slash-commands.js';
+import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
+import { renderInAct } from '../../test-helpers/ink-testing.js';
+
+vi.mock('../../services/file-service.js', () => ({
+  getWorkspaceEntries: vi.fn(async () => [{ path: 'mock/path', type: 'file' }]),
+  refreshWorkspaceEntries: vi.fn(async () => [{ path: 'mock/path', type: 'file' }]),
+  getWorkspaceEntriesMeta: vi.fn(() => ({
+    lastLoadedAt: null,
+    totalEntries: 1,
+    truncated: false,
+    truncatedByTotalLimit: false,
+    limit: 10_000,
+  })),
+}));
+
+const loggingService = {
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+  debug: () => {},
+  security: () => {},
+  setCorrelationId: () => {},
+  getCorrelationId: () => undefined,
+  clearCorrelationId: () => {},
+} as unknown as LoggingService;
+
+const historyService = {
+  getMessages: () => [],
+  getTurns: () => [],
+  addMessage: () => {},
+  clear: () => {},
+} as unknown as HistoryService;
+
+const slashCommands: SlashCommand[] = [{ name: '/clear', description: 'Clear', action: () => {} }];
+
+const settingsCommand: SlashCommand = {
+  name: 'settings',
+  description: 'Settings',
+  expectsArgs: true,
+  action: () => false,
+  completion: { type: 'settings', trigger: '/settings ', resetTrigger: '/settings reset ' },
+};
+
+const modelCommand: SlashCommand = {
+  name: 'model',
+  description: 'Model',
+  expectsArgs: true,
+  action: () => false,
+  completion: { type: 'model', trigger: '/model ' },
+};
+
+const skillsCommand: SlashCommand = {
+  name: 'skills',
+  description: 'Skills',
+  expectsArgs: true,
+  action: () => false,
+  completion: { type: 'skills', trigger: '/skills ' },
+};
+
+const settle = async () => {
+  await act(async () => {
+    for (let i = 0; i < 10; i++) await new Promise((resolve) => setImmediate(resolve));
+  });
+};
+
+const renderSurface = async (controller: MenuControllerImpl, commands = slashCommands, children?: React.ReactNode) => {
+  const result = await renderInAct(
+    <InputProvider controller={controller}>
+      <ApplicationInputSurface
+        enabled
+        onSubmit={async () => {}}
+        slashCommands={commands}
+        settingsService={createMockSettingsService()}
+        loggingService={loggingService}
+        historyService={historyService}
+      />
+      {children}
+    </InputProvider>,
+  );
+  await settle();
+  return result;
+};
+
+const SeedInput = ({ text, cursor }: { text: string; cursor: number }) => {
+  const { setInput, setCursorOffset } = useInputContext();
+
+  useEffect(() => {
+    setInput(text);
+    setCursorOffset(cursor);
+  }, [cursor, setCursorOffset, setInput, text]);
+
+  return null;
+};
+
+const writeInput = async (stdin: { write: (input: string) => void }, input: string) => {
+  await act(async () => {
+    stdin.write(input);
+    await settle();
+  });
+};
+
+const waitFor = async (predicate: () => boolean, description = 'menu state', diagnostic?: () => string) => {
+  const deadline = Date.now() + 3000;
+  while (!predicate()) {
+    if (Date.now() > deadline) {
+      throw new Error(`Timed out waiting for ${description}${diagnostic ? `: ${diagnostic()}` : ''}`);
+    }
+    await settle();
+  }
+};
+
+it.sequential('opens the slash menu and Escape cancels it through the terminal boundary', async () => {
+  const controller = new MenuControllerImpl();
+  const { lastFrame, stdin } = await renderSurface(controller);
+
+  await writeInput(stdin, '/');
+  await waitFor(() => (lastFrame() ?? '').includes('/clear'));
+
+  await writeInput(stdin, '\u001b');
+  await waitFor(() => controller.getSnapshot().stack.length === 0);
+
+  expect(controller.getSnapshot().editor.text).toBe('');
+  expect(lastFrame()).not.toContain('/clear');
+});
+
+it.sequential('filters a path trigger and inserts the selected entry with a trailing space', async () => {
+  const controller = new MenuControllerImpl();
+  const { lastFrame, stdin } = await renderSurface(
+    controller,
+    slashCommands,
+    <SeedInput text="before @after" cursor={8} />,
+  );
+
+  await waitFor(
+    () => (lastFrame() ?? '').includes('mock/path'),
+    'path menu',
+    () =>
+      `stack=${controller
+        .getSnapshot()
+        .stack.map((frame) => frame.kind)
+        .join(',')}; frame=${lastFrame() ?? ''}`,
+  );
+  await writeInput(stdin, '\r');
+  await waitFor(() => controller.getSnapshot().stack.length === 0);
+
+  expect(controller.getSnapshot().editor.text).toBe('before mock/path after');
+  expect(controller.getSnapshot().editor.cursor).toBe('before mock/path '.length);
+});
+
+it.sequential('accepting /settings opens the settings successor menu', async () => {
+  const controller = new MenuControllerImpl();
+  const { lastFrame, stdin } = await renderSurface(controller, [...slashCommands, settingsCommand]);
+
+  await writeInput(stdin, '/settings');
+  await waitFor(() => (lastFrame() ?? '').includes('/settings'));
+  await writeInput(stdin, '\r');
+  await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'settings');
+
+  expect(controller.getSnapshot().editor.text).toBe('/settings ');
+  expect(lastFrame()).toContain('Use ↑↓ to navigate, Enter to edit, Esc to close');
+});
+
+it.sequential('accepting a /settings prefix opens the settings successor menu', async () => {
+  const controller = new MenuControllerImpl();
+  const { lastFrame, stdin } = await renderSurface(controller, [...slashCommands, settingsCommand]);
+
+  await writeInput(stdin, '/sett');
+  await waitFor(() => (lastFrame() ?? '').includes('/settings'));
+  await writeInput(stdin, '\r');
+  await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'settings');
+
+  expect(controller.getSnapshot().editor.text).toBe('/settings ');
+  expect(lastFrame()).toContain('Use ↑↓ to navigate, Enter to edit, Esc to close');
+});
+
+it.sequential('typing the /settings autocomplete trigger opens the settings menu', async () => {
+  const controller = new MenuControllerImpl();
+  const { lastFrame, stdin } = await renderSurface(controller, [...slashCommands, settingsCommand]);
+
+  await writeInput(stdin, '/settings ');
+  await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'settings');
+
+  expect(controller.getSnapshot().editor.text).toBe('/settings ');
+  expect(lastFrame()).toContain('Use ↑↓ to navigate, Enter to edit, Esc to close');
+});
+
+it.sequential('accepting a /model prefix opens the model successor menu', async () => {
+  const controller = new MenuControllerImpl();
+  const { stdin } = await renderSurface(controller, [...slashCommands, modelCommand]);
+
+  await writeInput(stdin, '/mod');
+  await writeInput(stdin, '\r');
+  await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'model');
+
+  expect(controller.getSnapshot().editor.text).toBe('/model ');
+});
+
+it.sequential('accepting a /skills prefix opens the skills successor menu', async () => {
+  const controller = new MenuControllerImpl();
+  const { stdin } = await renderSurface(controller, [...slashCommands, skillsCommand]);
+
+  await writeInput(stdin, '/ski');
+  await writeInput(stdin, '\r');
+  await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'skills');
+
+  expect(controller.getSnapshot().editor.text).toBe('/skills ');
+});

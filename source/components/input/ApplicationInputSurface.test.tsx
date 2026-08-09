@@ -63,6 +63,26 @@ const renderSurface = async (controller: MenuControllerImpl) => {
   return result;
 };
 
+it.sequential('routes Escape through the active slash session and clears the trigger buffer', async () => {
+  const controller = new MenuControllerImpl();
+  const { stdin } = await renderSurface(controller);
+
+  await act(async () => {
+    controller.applyEditorEdit({ type: 'set-text', text: '/', cursor: 1 });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+
+  expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('slash');
+
+  await act(async () => {
+    stdin.write('\u001b');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+
+  expect(controller.getSnapshot().stack).toHaveLength(0);
+  expect(controller.getSnapshot().editor.text).toBe('');
+});
+
 it.sequential('unmounts InputBox while a menu is visible and restores the empty stack after close', async () => {
   inputBoxMounts.mounted = 0;
   inputBoxMounts.unmounted = 0;

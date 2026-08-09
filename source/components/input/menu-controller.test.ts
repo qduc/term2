@@ -67,6 +67,40 @@ describe('MenuControllerImpl', () => {
     }
   });
 
+  it('keeps an active frame snapshot stable when the same trigger registry is reapplied', () => {
+    const registry = new TriggerRuleRegistry();
+    registry.registerRule({
+      id: 'slash',
+      priority: 10,
+      parse: (editor) =>
+        editor.text.startsWith('/')
+          ? {
+              ruleId: 'slash',
+              identity: 'slash-root',
+              frame: {
+                kind: 'slash',
+                binding: {
+                  trigger: { range: { start: 0, end: 1 }, text: '/' },
+                  queryStart: 1,
+                  queryEnd: 'cursor',
+                  replacement: { start: 0, end: 'cursor' },
+                },
+              },
+            }
+          : null,
+      successors: [],
+    });
+
+    const controller = new MenuControllerImpl({ triggerRegistry: registry });
+    controller.applyEditorEdit({ type: 'set-text', text: '/he', cursor: 3 });
+    const before = controller.getSnapshot();
+
+    controller.setTriggerRegistry(registry);
+
+    expect(controller.getSnapshot()).toBe(before);
+    expect(controller.getSnapshot().stack[0]).toBe(before.stack[0]);
+  });
+
   it('handles Escape and dismissal tracking', () => {
     const registry = new TriggerRuleRegistry();
     const pathRule: TriggerRule = {

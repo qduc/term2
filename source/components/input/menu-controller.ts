@@ -123,6 +123,14 @@ export class MenuControllerImpl implements MenuController {
       this.state.activationEpoch,
       this.state.dismissedActivation,
     );
+    if (
+      reconciled.nextStack === this.state.stack &&
+      reconciled.nextCandidateIdentity === this.state.resolvedCandidateIdentity &&
+      reconciled.nextEpoch === this.state.activationEpoch &&
+      reconciled.nextDismissedActivation === this.state.dismissedActivation
+    ) {
+      return;
+    }
     this.state = {
       ...this.state,
       stack: reconciled.nextStack,
@@ -251,6 +259,21 @@ export class MenuControllerImpl implements MenuController {
     };
   }
 
+  private sameBinding(left: TextBinding, right: TextBinding): boolean {
+    return (
+      left.trigger.text === right.trigger.text &&
+      left.trigger.range.start === right.trigger.range.start &&
+      left.trigger.range.end === right.trigger.range.end &&
+      left.queryStart === right.queryStart &&
+      left.queryEnd === right.queryEnd &&
+      left.query === right.query &&
+      left.replacement.start === right.replacement.start &&
+      left.replacement.end === right.replacement.end &&
+      left.activationId === right.activationId &&
+      left.revision === right.revision
+    );
+  }
+
   private reconcileTriggers(
     editor: EditorSnapshot,
     stack: readonly MenuFrame[],
@@ -308,6 +331,14 @@ export class MenuControllerImpl implements MenuController {
       // Update existing frame binding with new revision and query
       if (topFrame && 'binding' in topFrame) {
         const updatedBinding = this.computeBinding(candidate, editor, currentActivationId);
+        if (this.sameBinding(topFrame.binding, updatedBinding)) {
+          return {
+            nextStack: stack,
+            nextCandidateIdentity: prevCandidateIdentity,
+            nextEpoch: epoch,
+            nextDismissedActivation: dismissedActivation,
+          };
+        }
         const updatedFrame = { ...topFrame, binding: updatedBinding } as MenuFrame;
         const nextStack = [...stack.slice(0, -1), updatedFrame];
         return {

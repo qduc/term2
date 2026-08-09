@@ -17,6 +17,7 @@ import type { HistoryService } from './services/history-service.js';
 import type { LoggingService } from './services/logging/logging-service.js';
 import { ISSHService } from './services/service-interfaces.js';
 import { useSetting } from './hooks/use-setting.js';
+import { useDebouncedValue } from './hooks/use-debounced-value.js';
 import { parseInput } from './utils/input-parser.js';
 import { ConversationConfigurationService } from './services/runtime-setting-router.js';
 import { useShellMode } from './hooks/use-shell-mode.js';
@@ -55,6 +56,14 @@ export {
   scheduleExitSideEffects,
   TERMINAL_REDRAW_CLEAR,
 } from './app-helpers.js';
+
+/**
+ * How long the composer must be quiet before the large-uncached-input advisory
+ * is recomputed. Long enough that a burst of typing costs one pass instead of
+ * one per character, short enough that the notice appears while the user is
+ * still looking at the text that triggered it.
+ */
+const LARGE_UNCACHED_PREVIEW_DEBOUNCE_MS = 250;
 
 interface AppProps {
   conversationService: ConversationService;
@@ -306,11 +315,20 @@ const App: FC<AppProps> = ({
 
   // The composer owns this live preview because it changes as the user types;
   // admitted turns and confirmation state belong to ConversationAdmissionWorkflow.
+  //
+  // The preview costs a full outgoing-history build plus a serialization of it,
+  // so it scales with conversation length. Running it per keystroke blocked the
+  // event loop between the key press and the repaint, which read as typing lag
+  // in long sessions. Debounce it: the advisory only has to be right once the
+  // user pauses, and the authoritative check still runs at submit time in
+  // ConversationAdmissionWorkflow. An emptied composer flushes immediately so a
+  // stale warning never outlives the text it described.
+  const previewInput = useDebouncedValue(input, LARGE_UNCACHED_PREVIEW_DEBOUNCE_MS, (value) => value === '');
   const largeUncachedWarning = useMemo(() => {
-    if (!input || mode !== 'text' || input.startsWith('/')) return null;
-    const preview = conversationService.previewLargeUncachedInput({ text: input }, Date.now());
+    if (!previewInput || mode !== 'text' || previewInput.startsWith('/')) return null;
+    const preview = conversationService.previewLargeUncachedInput({ text: previewInput }, Date.now());
     return preview.action === 'warn' ? preview : null;
-  }, [conversationService, input, mode]);
+  }, [conversationService, previewInput, mode]);
 
   const pendingSurgeTurn = admissionConfirmation?.kind === 'surge' ? admissionConfirmation.turn : null;
   const pendingSurgeReason = admissionConfirmation?.kind === 'surge' ? admissionConfirmation.reason : '';

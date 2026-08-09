@@ -14,6 +14,7 @@ import {
 } from '../providers/provider-service.js';
 import { resolveProviderId, resolveProviderName } from '../services/settings/custom-provider-normalization.js';
 import { ProviderManagementSession } from '../services/providers/provider-management-session.js';
+import { getProviderCredentialSettingKey } from '../utils/ai/provider-credentials.js';
 
 export type { ProviderSelectionPhase, CustomProviderDraft, ProviderSelectionItem };
 
@@ -24,6 +25,7 @@ export type ProviderSelectionMenuItem =
       label: string;
       isActive: boolean;
       isCustom: boolean;
+      hasCredentials?: boolean;
     }
   | {
       kind: 'add-provider';
@@ -78,6 +80,7 @@ export const useProviderSelection = (settingsService: SettingsService) => {
             label: i.label,
             isActive: i.isActive,
             isCustom: i.isCustom,
+            hasCredentials: i.hasCredentials,
           })),
           { kind: 'add-provider' as const, label: 'Add Custom Provider' },
           { kind: 'action' as const, label: 'Reorder Providers' },
@@ -286,13 +289,14 @@ export const useProviderSelection = (settingsService: SettingsService) => {
           // Edit custom provider directly
           const list = (settingsService.getDynamic('providers') as any[]) || [];
           const found = list.find((p: any) => resolveProviderId(p) === provider.id);
+          const storedKey = found?.apiKey || '';
           if (found) {
             const id = resolveProviderId(found) ?? provider.id;
             setDraft({
               name: resolveProviderName(found, id),
               type: found.type || 'openai-compatible',
               baseUrl: found.baseUrl || '',
-              apiKey: found.apiKey || '',
+              apiKey: storedKey,
             });
           } else {
             setDraft({
@@ -304,24 +308,39 @@ export const useProviderSelection = (settingsService: SettingsService) => {
           }
           setEditingOriginalName(found ? resolveProviderId(found) ?? provider.id : null);
           setFieldErrors({});
-          setPhase('edit_fields');
-          setSelectedIndex(0);
-          setInput('');
+          if (!provider.hasCredentials) {
+            setPhase('wizard_key');
+            setSelectedIndex(0);
+            replaceInput(storedKey);
+          } else {
+            setPhase('edit_fields');
+            setSelectedIndex(0);
+            setInput('');
+          }
         } else if (provider.id !== 'codex') {
           // Allow editing apiKey for built-in providers (except Codex)
           setFieldErrors({});
           setDiscardFromPhase(null);
           setDraftModified(false);
-          const storedKey = (settingsService.getDynamic(`agent.${provider.id}.apiKey`) as string) || '';
+          const credentialSettingKey = getProviderCredentialSettingKey(provider.id);
+          const storedKey = credentialSettingKey
+            ? (settingsService.getDynamic(credentialSettingKey) as string) || ''
+            : '';
           setDraft({
             name: provider.label,
             type: provider.id as any,
             apiKey: storedKey,
           });
           setEditingOriginalName(provider.id);
-          setPhase('edit_fields');
-          setSelectedIndex(2);
-          setInput('');
+          if (!provider.hasCredentials) {
+            setPhase('wizard_key');
+            setSelectedIndex(0);
+            replaceInput(storedKey);
+          } else {
+            setPhase('edit_fields');
+            setSelectedIndex(2);
+            setInput('');
+          }
         }
       }
     } else if (phase === 'wizard_type') {

@@ -1,6 +1,7 @@
 // @ts-expect-error IS_REACT_ACT_ENVIRONMENT is not in globalThis types
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-import { it, expect } from 'vitest';
+import { afterEach, it, expect, vi } from 'vitest';
+import os from 'node:os';
 import React from 'react';
 import { renderInAct } from '../../test-helpers/ink-testing.js';
 import ModelSelectionMenu from './ModelSelectionMenu.js';
@@ -12,6 +13,11 @@ const mockModels: ModelInfo[] = [
   { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', provider: 'openai' },
   { id: 'claude-3-opus', name: 'Claude 3 Opus', provider: 'openrouter' },
 ];
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
 
 it.sequential('ModelSelectionMenu renders loading state', async () => {
   const { lastFrame } = await renderInAct(
@@ -99,6 +105,45 @@ it.sequential('ModelSelectionMenu shows provider in header if specified', async 
     />,
   );
   expect(lastFrame()?.includes('OpenAI')).toBe(true);
+});
+
+it.sequential('ModelSelectionMenu gives Codex login guidance for an unavailable Codex model', async () => {
+  vi.stubEnv('CHATGPT_LOCAL_HOME', '');
+  vi.stubEnv('CODEX_HOME', '/tmp/term2-test-no-codex-auth');
+  vi.spyOn(os, 'homedir').mockReturnValue('/tmp/term2-test-no-codex-home');
+
+  const { lastFrame } = await renderInAct(
+    <ModelSelectionMenu
+      settingsService={createMockSettingsService()}
+      items={[{ id: 'gpt-5.3-codex', provider: 'codex', unavailableReason: 'missing-codex-login' }]}
+      selectedIndex={0}
+      query=""
+      provider="codex"
+    />,
+  );
+
+  const output = lastFrame()!;
+  expect(output).toContain('Not logged in on this host');
+  expect(output).toContain('npx @openai/codex login');
+  expect(output).toContain('(login required)');
+  expect(output).not.toContain('API key not configured on this host');
+});
+
+it.sequential('ModelSelectionMenu retains API-key guidance for unavailable API-key models', async () => {
+  const { lastFrame } = await renderInAct(
+    <ModelSelectionMenu
+      settingsService={createMockSettingsService()}
+      items={[{ id: 'gpt-4o', provider: 'openai', unavailableReason: 'missing-credentials' }]}
+      selectedIndex={0}
+      query=""
+      provider="openai"
+    />,
+  );
+
+  const output = lastFrame()!;
+  expect(output).toContain('API key not configured on this host');
+  expect(output).toContain('Use Provider Management to configure it');
+  expect(output).not.toContain('npx @openai/codex login');
 });
 
 it.sequential('ModelSelectionMenu provider tabs include custom providers from settings', async () => {

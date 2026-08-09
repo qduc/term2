@@ -1,6 +1,7 @@
 import { clearModelCache, fetchModels, type ModelInfo } from '../model-service.js';
 import { getProviderIds, sortProvidersByOrder } from '../../providers/index.js';
 import type { ILoggingService, ISettingsService } from '../service-interfaces.js';
+import { getAvailableProviderIds } from '../../utils/ai/provider-credentials.js';
 
 type ModelFetcher = (provider: string) => Promise<ModelInfo[]>;
 
@@ -51,6 +52,11 @@ export class ModelCatalogSession {
   }
 
   refresh(provider: string): void {
+    this.invalidate(provider);
+  }
+
+  /** Invalidate provider state when its credential/readiness boundary changes. */
+  invalidate(provider: string): void {
     this.#failedProviders.delete(provider);
     this.#modelsByProvider.delete(provider);
     ++this.#requestId;
@@ -58,12 +64,13 @@ export class ModelCatalogSession {
   }
 
   nextProvider(current: string | null, direction: 'next' | 'prev'): string | undefined {
-    const ids = getProviderIds();
+    const ids = getAvailableProviderIds(this.#settingsService, getProviderIds());
     const order = (this.#settingsService.getDynamic('providerOrder') as string[] | undefined) ?? [];
     const ordered = order.length > 0 ? sortProvidersByOrder(ids, order) : ids;
     if (ordered.length === 0) return undefined;
     const currentIndex = ordered.indexOf(current ?? '');
-    const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+    if (currentIndex < 0) return direction === 'prev' ? ordered.at(-1) : ordered[0];
+    const safeIndex = currentIndex;
     const offset = direction === 'prev' ? -1 : 1;
     return ordered[(safeIndex + offset + ordered.length) % ordered.length];
   }

@@ -2,8 +2,13 @@ import React, { FC, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import type { ModelInfo } from '../../services/model-service.js';
 import { getAllProviders, sortProvidersByOrder } from '../../providers/index.js';
-import { hasProviderCredentials } from '../../utils/ai/provider-credentials.js';
+import {
+  getAvailableProviderIds,
+  hasProviderCredentials,
+  resolveProviderCredentials,
+} from '../../utils/ai/provider-credentials.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
+import { useSetting } from '../../hooks/use-setting.js';
 import { MenuContainer } from '../common/MenuContainer.js';
 import { ScrollableTabBar } from '../common/ScrollableTabBar.js';
 
@@ -17,6 +22,7 @@ type Props = {
   scrollOffset?: number;
   maxHeight?: number;
   canSwitchProvider?: boolean;
+  credentialRevision?: number;
   settingsService: SettingsService;
 };
 
@@ -30,8 +36,11 @@ const ModelSelectionMenu: FC<Props> = ({
   scrollOffset = 0,
   maxHeight = 10,
   canSwitchProvider = true,
+  credentialRevision = 0,
   settingsService,
 }) => {
+  const openAIApiKey = useSetting(settingsService, 'agent.openai.apiKey');
+  const openRouterApiKey = useSetting(settingsService, 'agent.openrouter.apiKey');
   const tabItems = useMemo(() => {
     const all = getAllProviders();
     const providerOrder = settingsService.get('providerOrder') ?? [];
@@ -44,18 +53,31 @@ const ModelSelectionMenu: FC<Props> = ({
             .map((id) => all.find((p) => p.id === id)!)
             .filter(Boolean)
         : all;
-    return sorted.map((p) => ({
-      id: p.id,
-      label: p.label,
-      hasCredentials: hasProviderCredentials(settingsService, p.id),
-    }));
-  }, [settingsService]);
+    const availableIds = new Set(
+      getAvailableProviderIds(
+        settingsService,
+        sorted.map((p) => p.id),
+      ),
+    );
+    return sorted
+      .filter((p) => availableIds.has(p.id) || p.id === provider)
+      .map((p) => ({
+        id: p.id,
+        label: p.label,
+        hasCredentials: hasProviderCredentials(settingsService, p.id),
+        unavailableReason: resolveProviderCredentials(settingsService, p.id).unavailableReason,
+      }));
+  }, [credentialRevision, openAIApiKey, openRouterApiKey, provider, settingsService]);
+
+  const activeTab = tabItems.find((item) => item.id === provider);
 
   const tabBar = (
     <ScrollableTabBar
       items={tabItems}
       activeItemId={provider ?? ''}
-      getItemWidth={(p) => 1 + p.label.length + (!p.hasCredentials ? 9 : 0) + 1}
+      getItemWidth={(p) =>
+        1 + p.label.length + (!p.hasCredentials ? (p.unavailableReason === 'missing-codex-login' ? 17 : 9) : 0) + 1
+      }
       renderTab={(p, isActive) => {
         const isDisabled = !p.hasCredentials;
         return (
@@ -67,7 +89,7 @@ const ModelSelectionMenu: FC<Props> = ({
           >
             {' '}
             {p.label}
-            {isDisabled ? ' (no key)' : ''}{' '}
+            {isDisabled ? (p.unavailableReason === 'missing-codex-login' ? ' (login required)' : ' (no key)') : ''}{' '}
           </Text>
         );
       }}
@@ -78,6 +100,14 @@ const ModelSelectionMenu: FC<Props> = ({
   return (
     <Box flexDirection="column">
       {tabBar}
+      {activeTab && !activeTab.hasCredentials && (
+        <Text color="yellow">
+          ⚠ {activeTab.label} unavailable:{' '}
+          {activeTab.unavailableReason === 'missing-codex-login'
+            ? 'Not logged in on this host. Run `npx @openai/codex login` to log in to Codex.'
+            : 'API key not configured on this host. Use Provider Management to configure it.'}
+        </Text>
+      )}
       {!canSwitchProvider && (
         <Box marginTop={0}>
           <Text color="yellow">
@@ -104,6 +134,11 @@ const ModelSelectionMenu: FC<Props> = ({
             <Text inverse={isSelected} color={isSelected ? 'magenta' : undefined} bold={isSelected}>
               {item.id}
             </Text>
+            {item.unavailableReason === 'missing-codex-login' ? (
+              <Text color="yellow"> — unavailable: Not logged in on this host. Run `npx @openai/codex login`.</Text>
+            ) : item.unavailableReason === 'missing-credentials' ? (
+              <Text color="yellow"> — unavailable: API key not configured on this host</Text>
+            ) : null}
             {item.name && <Text color={isSelected ? 'white' : '#64748b'}> — {item.name}</Text>}
           </Box>
         )}

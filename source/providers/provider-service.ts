@@ -1,6 +1,7 @@
 import type { ISettingsService } from '../services/service-interfaces.js';
 import { getAllProviders, upsertProvider, unregisterProvider } from './index.js';
 import { createOpenAICompatibleProviderDefinition } from './openai-compatible-lazy.js';
+import { hasProviderCredentials } from '../utils/ai/provider-credentials.js';
 import {
   decodeStoredCustomProviderConfigs,
   normalizeProviderIdentifier,
@@ -31,6 +32,7 @@ export interface ProviderSelectionItem {
   label: string;
   isCustom: boolean;
   isActive: boolean;
+  hasCredentials: boolean;
 }
 
 export const PROVIDER_TYPES: CustomProviderDraft['type'][] = [
@@ -94,6 +96,7 @@ export const loadProviderItems = (settingsService: ISettingsService): ProviderSe
       label: p.label,
       isCustom: false,
       isActive: p.id === activeProvider,
+      hasCredentials: hasProviderCredentials(settingsService, p.id),
     }));
 
   for (const c of customList) {
@@ -103,6 +106,7 @@ export const loadProviderItems = (settingsService: ISettingsService): ProviderSe
         label: c.name,
         isCustom: true,
         isActive: c.id === activeProvider,
+        hasCredentials: hasProviderCredentials(settingsService, c.id),
       });
     }
   }
@@ -113,6 +117,7 @@ export const loadProviderItems = (settingsService: ISettingsService): ProviderSe
       label: activeProvider,
       isCustom: customList.some((c) => c.id === activeProvider),
       isActive: true,
+      hasCredentials: hasProviderCredentials(settingsService, activeProvider),
     });
   }
 

@@ -1,5 +1,6 @@
 import { type ProviderDefinition, type ProviderDeps, type ProviderFetch } from './registry.js';
 import type { CustomProviderConfig } from './openai-compatible.provider.js';
+import { resolveProviderCredentialValue } from '../utils/ai/provider-credentials.js';
 
 export function createOpenAICompatibleProviderDefinition(config: CustomProviderConfig): ProviderDefinition {
   const providerId = config.name;
@@ -21,7 +22,7 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
         label: entry.name ? String(entry.name) : providerId,
         type: entry.type ? String(entry.type) : 'openai-compatible',
         baseUrl: entry.baseUrl ? String(entry.baseUrl) : undefined,
-        apiKey: entry.apiKey ? String(entry.apiKey) : undefined,
+        apiKey: resolveProviderCredentialValue(settingsService, providerId),
       };
       const provider = createCustomProviderModelProvider(resolvedConfig, {
         defaultModel: model || settingsService.get('agent.model') || '',

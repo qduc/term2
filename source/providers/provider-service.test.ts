@@ -247,6 +247,38 @@ it('loadProviderItems includes built-in providers without custom flag', () => {
   expect(openai!.isActive).toBe(true);
 });
 
+it('loadProviderItems reports missing first-party credentials without hiding the provider', () => {
+  const settingsService = createMockSettingsService([], 'openai');
+  const items = loadProviderItems(settingsService);
+
+  expect(items.find((item) => item.id === 'openai')).toMatchObject({ hasCredentials: false });
+  expect(items.find((item) => item.id === 'openrouter')).toMatchObject({ hasCredentials: false });
+});
+
+it('loadProviderItems applies the shared credential rule to custom remote and local providers', () => {
+  const settingsService = createMockSettingsService([
+    {
+      id: 'remote-provider',
+      name: 'Remote Provider',
+      type: 'openai-compatible',
+      baseUrl: 'https://llm.example.test/v1',
+    },
+    {
+      id: 'local-provider',
+      name: 'Local Provider',
+      type: 'openai-compatible',
+      baseUrl: 'http://localhost:1234/v1',
+    },
+  ]);
+
+  expect(loadProviderItems(settingsService).find((item) => item.id === 'remote-provider')).toMatchObject({
+    hasCredentials: false,
+  });
+  expect(loadProviderItems(settingsService).find((item) => item.id === 'local-provider')).toMatchObject({
+    hasCredentials: true,
+  });
+});
+
 it('loadProviderItems includes custom providers with custom flag', () => {
   const settingsService = createMockSettingsService(
     [

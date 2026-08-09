@@ -9,6 +9,7 @@ import type { FetchMiddleware } from './fetch/compose.js';
 import { buildOpenAICompatibleUrl, normalizeBaseUrl } from './common/openai-compatible-utils.js';
 import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
 import { isOpencodeProvider, resolveOpencodeRuntimeConfig } from './opencode.provider.js';
+import { resolveProviderCredentialValue } from '../utils/ai/provider-credentials.js';
 import { generateOpencodeSessionId } from './opencode-session.js';
 import { selectOpencodeModelTransport, shouldApplyOpencodeAnthropicPromptCaching } from './opencode-routing.js';
 import { createAnthropicMiddleware } from './anthropic-middleware.js';
@@ -68,7 +69,7 @@ function findConfigFromSettings(settingsService: ISettingsService, providerId: s
     label: entry.name,
     type: entry.type,
     baseUrl: entry.baseUrl,
-    apiKey: entry.apiKey,
+    apiKey: resolveProviderCredentialValue(settingsService, providerId),
   };
 }
 

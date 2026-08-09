@@ -158,6 +158,7 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
         error={models.error}
         scrollOffset={models.scrollOffset}
         canSwitchProvider={models.canSwitchProvider}
+        credentialRevision={models.credentialRevision}
       />
       {applyError && <Text color="red">{applyError}</Text>}
     </Box>

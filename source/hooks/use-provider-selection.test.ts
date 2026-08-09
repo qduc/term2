@@ -227,30 +227,17 @@ it.sequential(
     });
     await flush();
 
-    // OpenAI opens edit_fields
-    expect(hook!.phase).toBe('edit_fields');
-    expect(hook!.selectedIndex).toBe(2); // API Key is selected
-    expect(hook!.draft?.name).toBe('OpenAI');
-
-    // Verify we can edit API Key and save it
-    await act(async () => {
-      hook!.selectItem(); // select API Key at index 2
-    });
-    await flush();
+    // An unavailable OpenAI opens directly at its credential setup prompt.
     expect(hook!.phase).toBe('wizard_key');
+    expect(hook!.selectedIndex).toBe(0);
+    expect(hook!.draft?.name).toBe('OpenAI');
 
     await act(async () => {
       hook!.handleTextInputSubmit('sk-mock-openai-key');
     });
     await flush();
     expect(hook!.phase).toBe('edit_fields');
-    expect(hook!.selectedIndex).toBe(2); // Selected row is API Key row
-
-    await act(async () => {
-      hook!.moveDown(); // Move to "Save Changes" at index 3
-    });
-    await flush();
-    expect(hook!.selectedIndex).toBe(3);
+    expect(hook!.selectedIndex).toBe(3); // Focus Save Changes after direct setup
 
     await act(async () => {
       hook!.selectItem(); // Save Changes
@@ -366,6 +353,59 @@ it.sequential('useProviderSelection - requestDelete on a custom provider opens c
   expect(hook!.phase).toBe('list');
   expect(settingsService.get('providers').length).toBe(0);
   expect(settingsService.get('agent.provider')).toBe('openai');
+
+  await act(async () => {
+    renderer.unmount();
+  });
+});
+
+it.sequential('useProviderSelection - unavailable remote custom providers open credential setup directly', async () => {
+  const settingsService = createMockSettingsService([
+    {
+      id: 'remote-ollama',
+      name: 'Remote Ollama',
+      type: 'openai-compatible',
+      baseUrl: 'https://llm.example.test/v1',
+    },
+  ]);
+  let hook: ReturnType<typeof useProviderSelection> | undefined;
+  let renderer: any;
+
+  await act(async () => {
+    renderer = render(
+      React.createElement(
+        InputProvider as any,
+        {},
+        React.createElement(TestComponent, {
+          settingsService,
+          onHookResult: (h) => {
+            hook = h;
+          },
+        }),
+      ),
+    );
+  });
+  await act(async () => {
+    hook!.open();
+  });
+  await flush();
+
+  const active = hook!.getActiveItems();
+  const targetIndex = active.findIndex((item) => item.kind === 'provider' && item.id === 'remote-ollama');
+  const moveCount = active
+    .slice(0, targetIndex)
+    .filter((item) => !(item.kind === 'provider' && item.id === 'codex')).length;
+  for (let i = 0; i < moveCount; i++) {
+    hook!.moveDown();
+  }
+  await flush();
+  await act(async () => {
+    hook!.selectItem();
+  });
+  await flush();
+
+  expect(hook!.phase).toBe('wizard_key');
+  expect(hook!.draft?.name).toBe('Remote Ollama');
 
   await act(async () => {
     renderer.unmount();

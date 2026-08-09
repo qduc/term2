@@ -17,6 +17,28 @@ afterEach(() => {
   }
 });
 
+it('CLI --help documents the available command-line options', () => {
+  const help = execFileSync('node', ['--import', 'tsx', 'source/cli.tsx', '--help'], {
+    env: {
+      ...process.env,
+      DISABLE_LOGGING: '1',
+    },
+    encoding: 'utf8',
+  });
+
+  expect(help).toContain('$ term2 [options] [prompt...]');
+  expect(help).toContain('-m, --model <model>');
+  expect(help).toContain('-p, --provider <provider>');
+  expect(help).toContain('-r, --reasoning <effort>');
+  expect(help).toContain('-l, --lite');
+  expect(help).toContain('--auto-approve');
+  expect(help).toContain('--ssh <user@host>');
+  expect(help).toContain('--remote-dir <path>');
+  expect(help).toContain('--ssh-port <port>');
+  expect(help).toContain('-R, --resume [conversation-id|ls]');
+  expect(help).toContain('--fork');
+});
+
 it('CLI --resume ls prints list of conversations and exits', () => {
   // Create a mock conversation file in the testDir
   const convId = 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6';

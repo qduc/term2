@@ -513,32 +513,6 @@ const ApprovalPrompt: FC<Props> = ({
         onReject();
       }
     }
-
-    if (isSandboxNetworkApproval) {
-      if (input === 'y') {
-        onApprove('allow-once');
-      }
-      if (input === 'n') {
-        onReject();
-      }
-    } else if (!isAskUser && !isDeniedReadShell && !isDockerHostControlApproval) {
-      if (input === 'y') {
-        onApprove();
-      }
-
-      if (input === 'n') {
-        onReject();
-      }
-    }
-    if (isDeniedReadShell) {
-      // Quick shortcuts for denied-read: y = allow once, n = deny.
-      if (input === 'y') {
-        onApprove('allow-once');
-      }
-      if (input === 'n') {
-        onReject();
-      }
-    }
   });
 
   // Special handling for max turns exceeded prompt

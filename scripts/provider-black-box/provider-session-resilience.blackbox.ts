@@ -545,8 +545,8 @@ async function createWorkspace(route: ProviderRoute, server: ResilienceHttpServe
   const workspace = await createIsolatedWorkspaceLease({
     prefix: `term2-resilience-${route.rowId}-`,
     env: route.baseUrlEnv ? { [route.baseUrlEnv]: `${serverUrl(server)}${route.baseUrlSuffix ?? ''}` } : undefined,
-    prepare: async (root, paths) => {
-      await writeSettings(root, route, server);
+    prepare: async (_root, paths) => {
+      await writeSettings(paths.logDir, route, server);
       if (route.provider === 'codex') await writeFixtureCodexAuth(paths);
     },
   });
@@ -554,11 +554,10 @@ async function createWorkspace(route: ProviderRoute, server: ResilienceHttpServe
 }
 
 async function writeSettings(
-  root: string,
+  settingsDir: string,
   route: ProviderRoute,
   server: ResilienceHttpServer | ResilienceWebSocketServer,
 ): Promise<void> {
-  const settingsDir = join(root, 'Library', 'Logs', 'term2-nodejs');
   await mkdir(settingsDir, { recursive: true });
   const settings: Record<string, unknown> = {
     agent: {

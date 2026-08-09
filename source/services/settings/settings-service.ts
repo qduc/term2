@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import envPaths from 'env-paths';
 import { LoggingService } from '../logging/logging-service.js';
 import { getProvider, upsertProvider } from '../../providers/registry.js';
 import { createOpenAICompatibleProviderDefinition } from '../../providers/openai-compatible-lazy.js';
@@ -28,8 +27,7 @@ import {
   saveSettingsToFile,
   stripSensitiveSettings,
 } from './settings-persistence.js';
-
-const paths = envPaths('term2');
+import { resolveSettingsDirectory } from './settings-path.js';
 
 function cloneSettingValue<T>(value: T): T {
   if (value == null || typeof value !== 'object') {
@@ -103,7 +101,7 @@ export class SettingsService {
     loggingService?: LoggingService;
   }) {
     const {
-      settingsDir = path.join(paths.log),
+      settingsDir = resolveSettingsDirectory(),
       disableLogging = false,
       disableFilePersistence,
       cli = {},

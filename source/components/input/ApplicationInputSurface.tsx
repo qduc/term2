@@ -22,6 +22,7 @@ import type { SubmissionMutation } from '../../services/conversation/conversatio
 export type ApplicationInputSurfaceProps = {
   enabled?: boolean;
   onSubmit: (value: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) => void | Promise<void>;
+  onRejectionReasonInputReady?: () => void;
   slashCommands: SlashCommand[];
   waitingForRejectionReason?: boolean;
   turnInFlight?: boolean;

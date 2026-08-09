@@ -51,3 +51,37 @@ it('treats a redacted expected header value as matching any actual value', () =>
     false,
   );
 });
+
+it('ignores SDK platform headers that vary across recording environments', () => {
+  expect(
+    compareRecordedRequest(
+      {
+        ...expected,
+        headers: {
+          ...expected.headers,
+          'x-stainless-arch': 'arm64',
+          'x-stainless-os': 'MacOS',
+          'x-stainless-runtime-version': 'v24.16.0',
+        },
+      },
+      {
+        ...expected,
+        headers: {
+          ...expected.headers,
+          'x-stainless-arch': 'x64',
+          'x-stainless-os': 'Linux',
+          'x-stainless-runtime-version': 'v24.19.0',
+        },
+      },
+    ).equal,
+  ).toBe(true);
+});
+
+it('still compares nonvolatile recorded headers', () => {
+  expect(
+    compareRecordedRequest(
+      { ...expected, headers: { ...expected.headers, 'x-stainless-package-version': '6.9.1' } },
+      { ...expected, headers: { ...expected.headers, 'x-stainless-package-version': '6.10.0' } },
+    ).equal,
+  ).toBe(false);
+});

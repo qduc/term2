@@ -729,7 +729,7 @@ it.sequential('ApprovalPrompt sends allow-project for network access approval', 
   expect(answer).toBe('allow-project');
 });
 
-it.sequential('ApprovalPrompt handles y and n shortcut keys for network access approval', async () => {
+it.sequential('ApprovalPrompt leaves network y and n shortcuts to the stable application owner', async () => {
   let answer: string | undefined;
   let rejected = false;
   const approval: ApprovalDescriptor = {
@@ -743,13 +743,13 @@ it.sequential('ApprovalPrompt handles y and n shortcut keys for network access a
     <ApprovalPrompt approval={approval} onApprove={(value) => (answer = value)} onReject={() => {}} />,
   );
   await writeInput(stdinY, 'y');
-  expect(answer).toBe('allow-once');
+  expect(answer).toBeUndefined();
 
   const { stdin: stdinN } = await renderInAct(
     <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => (rejected = true)} />,
   );
   await writeInput(stdinN, 'n');
-  expect(rejected).toBe(true);
+  expect(rejected).toBe(false);
 });
 
 it.sequential('ApprovalPrompt handles malformed shell approval arguments gracefully', async () => {

@@ -94,7 +94,7 @@ it.sequential('ApprovalPrompt denied-read Enter on "Deny" calls onReject', async
   expect(rejected).toBe(true);
 });
 
-it.sequential('ApprovalPrompt denied-read "y" key calls onApprove with allow-once', async () => {
+it.sequential('ApprovalPrompt leaves denied-read "y" to the stable application shortcut owner', async () => {
   let approveArg: string | undefined;
   const result = await renderInAct(
     <ApprovalPrompt
@@ -106,10 +106,10 @@ it.sequential('ApprovalPrompt denied-read "y" key calls onApprove with allow-onc
     />,
   );
   await writeInput(result.stdin, 'y');
-  expect(approveArg).toBe('allow-once');
+  expect(approveArg).toBeUndefined();
 });
 
-it.sequential('ApprovalPrompt denied-read "n" key calls onReject', async () => {
+it.sequential('ApprovalPrompt leaves denied-read "n" to the stable application shortcut owner', async () => {
   let rejected = false;
   const result = await renderInAct(
     <ApprovalPrompt
@@ -121,7 +121,7 @@ it.sequential('ApprovalPrompt denied-read "n" key calls onReject', async () => {
     />,
   );
   await writeInput(result.stdin, 'n');
-  expect(rejected).toBe(true);
+  expect(rejected).toBe(false);
 });
 
 it.sequential('ApprovalPrompt denied-read navigates to and selects "Run unsandboxed once"', async () => {

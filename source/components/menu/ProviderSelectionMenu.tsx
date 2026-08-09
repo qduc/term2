@@ -16,6 +16,7 @@ type Props = {
   fieldErrors?: Record<string, string>;
   selectedProviderName?: string;
   draft: CustomProviderDraft | null;
+  allowCodexSelection?: boolean;
 };
 
 const ProviderSelectionMenu: FC<Props> = ({
@@ -27,6 +28,7 @@ const ProviderSelectionMenu: FC<Props> = ({
   fieldErrors,
   selectedProviderName,
   draft,
+  allowCodexSelection = false,
 }) => {
   const getHeader = () => {
     switch (phase) {
@@ -186,7 +188,7 @@ const ProviderSelectionMenu: FC<Props> = ({
         scrollOffset={scrollOffset}
         borderColor={getBorderColor()}
         footer={getFooter()}
-        isInactive={(item) => item.kind === 'provider' && item.id === 'codex'}
+        isInactive={(item) => item.kind === 'provider' && item.id === 'codex' && !allowCodexSelection}
         renderItem={(item, index, isSelected, isInactive) => {
           let label = item.label;
           let prefix = '  ';

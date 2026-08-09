@@ -38,6 +38,8 @@ export type ApplicationInputSurfaceProps = {
   pendingQueuedMessages?: ReadonlyArray<{ id: string; text: string; queuedAt: number }>;
   onRetractQueuedMessage?: (id: string) => Promise<SubmissionMutation>;
   onEditQueuedMessage?: (id: string, turn: UserTurn) => Promise<SubmissionMutation>;
+  onProviderSelected?: (provider: string) => void;
+  onUnavailableModelSelected?: (provider: string) => void;
 };
 
 export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props) => {
@@ -100,6 +102,8 @@ export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props)
     settings,
     settingsValue,
     models,
+    onProviderSelected: props.onProviderSelected,
+    onUnavailableModelSelected: props.onUnavailableModelSelected,
   };
 
   if (stack.length > 0) {

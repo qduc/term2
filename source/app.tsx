@@ -48,6 +48,7 @@ import {
   type SandboxNetworkAccessRequest,
 } from './utils/shell/sandbox/sandbox-network-approval.js';
 import { SandboxNetworkApprovalCoordinator } from './utils/shell/sandbox/sandbox-network-approval-coordinator.js';
+import { useFirstRunSetupGate } from './hooks/use-first-run-setup.js';
 
 export {
   appendStartupBannerId,
@@ -274,6 +275,17 @@ const App: FC<AppProps> = ({
     (key: string, value: unknown) => configurationService.applyRuntimeSetting(key, value),
     [configurationService],
   );
+  const applySetupProvider = useCallback(
+    (provider: string) => {
+      configurationService.apply([{ key: 'agent.provider', value: provider, persistence: 'runtime' }]);
+    },
+    [configurationService],
+  );
+  const firstRunSetup = useFirstRunSetupGate({
+    settingsService,
+    controller,
+    applyProvider: applySetupProvider,
+  });
 
   const shellInteractionSession = useMemo(
     () =>
@@ -576,6 +588,7 @@ const App: FC<AppProps> = ({
     waitingForAskUserAnswer: effectiveWaitingForAskUserAnswer,
     pendingApproval: effectivePendingApproval,
     queuePaused,
+    firstRunSetupActive: firstRunSetup.active,
     isProcessing: effectiveIsProcessing,
     menuOpen,
   });
@@ -732,13 +745,21 @@ const App: FC<AppProps> = ({
         void submitAdmittedTurn({ text: intentRequest.intent.text });
         return;
       }
-      return handleSettingsIntent(intentRequest, {
+      const result = handleSettingsIntent(intentRequest, {
         settingsService,
         configurationService,
         onSettingChange: handleConfigurationSettingChange,
         onSystemMessage: addSystemMessage,
         applyRuntimeSetting,
       });
+      if (
+        result?.ok &&
+        intentRequest.intent.type === 'apply-settings' &&
+        intentRequest.intent.changes.some((change) => change.key === 'agent.model')
+      ) {
+        firstRunSetup.completeModelSelection();
+      }
+      return result;
     });
     return () => controller.setIntentHost(undefined);
   }, [
@@ -752,6 +773,7 @@ const App: FC<AppProps> = ({
     handoff,
     slashCommands,
     replaceInput,
+    firstRunSetup,
   ]);
 
   return (
@@ -815,6 +837,9 @@ const App: FC<AppProps> = ({
             sshInfo={sshInfo}
             lastCodexRateLimit={lastCodexRateLimit}
             staticCommitBlocker={staticCommitBlocker}
+            firstRunSetup={firstRunSetup}
+            onProviderSelected={firstRunSetup.active ? firstRunSetup.onProviderSelected : undefined}
+            onUnavailableModelSelected={firstRunSetup.requestSetup}
             onSettingChange={handleSettingChange}
             onSystemMessage={addSystemMessage}
             handoffState={handoff.handoffState}

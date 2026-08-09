@@ -6,6 +6,7 @@ import ProviderSelectionMenu from '../menu/ProviderSelectionMenu.js';
 import type { MenuComponentProps } from './menu-registry.js';
 import type { MenuEffect, MenuEvent, MenuFrame, MenuInteraction } from './menu-types.js';
 import { applyMenuEditorEvent } from './menu-editor.js';
+import { hasProviderCredentials } from '../../utils/ai/provider-credentials.js';
 
 type Props = MenuComponentProps<Extract<MenuFrame, { kind: 'providers' }>>;
 
@@ -24,11 +25,15 @@ export const getProviderWizardPromptLabel = (phase: ProviderSelectionPhase): str
 export function ProviderMenuSession({ frame, active, controller, interactions, services }: Props) {
   const { setMenuPromptLabel } = useInputContext();
   const settingsService = services.settingsService as SettingsService | undefined;
-  const providers = useProviderSelection(settingsService!);
   if (!settingsService) {
     throw new Error('ProviderMenuSession requires settingsService');
   }
-
+  const onProviderSelected = services.onProviderSelected as ((provider: string) => void) | undefined;
+  const codexSelectable = Boolean(onProviderSelected) || hasProviderCredentials(settingsService, 'codex');
+  const providers = useProviderSelection(settingsService!, {
+    onProviderSelected,
+    allowCodexSelection: codexSelectable,
+  });
   useEffect(() => {
     if (!active) return;
     setMenuPromptLabel(getProviderWizardPromptLabel(providers.phase));
@@ -103,6 +108,7 @@ export function ProviderMenuSession({ frame, active, controller, interactions, s
       fieldErrors={providers.fieldErrors}
       selectedProviderName={providers.selectedProviderName}
       draft={providers.draft}
+      allowCodexSelection={codexSelectable}
     />
   );
 }

@@ -7,6 +7,7 @@ import type { SettingsService } from '../../services/settings/settings-service.j
 import type { MenuComponentProps } from './menu-registry.js';
 import type { MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
 import { applyMenuEditorEvent } from './menu-editor.js';
+import { resolveProviderCredentials } from '../../utils/ai/provider-credentials.js';
 
 type ModelsState = ReturnType<typeof useModelSelection>;
 
@@ -84,6 +85,16 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
             setApplyError(null);
             const modelId = resolvedModelId();
             if (!modelId) return 'fallthrough';
+
+            const unavailable = models.provider
+              ? resolveProviderCredentials(settingsService, models.provider).unavailableReason
+              : undefined;
+            const selectedUnavailable = models.getSelectedItem()?.unavailableReason;
+            if (unavailable || selectedUnavailable) {
+              const requestSetup = services.onUnavailableModelSelected as ((provider: string) => void) | undefined;
+              requestSetup?.(models.provider ?? settingsService.get('agent.provider'));
+              return keep();
+            }
 
             if (frame.target.type === 'setting') {
               const { config } = frame.target;

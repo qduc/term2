@@ -15,7 +15,7 @@ import type { SlashCommand } from '../../slash-commands.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
 import type { LoggingService } from '../../services/logging/logging-service.js';
 import type { HistoryService } from '../../services/history-service.js';
-import type { SkillsService } from '../../services/skills/skills-service.js';
+import type { SkillInfo, SkillsService } from '../../services/skills/skills-service.js';
 import type { UserTurn } from '../../types/user-turn.js';
 import type { SubmissionMutation } from '../../services/conversation/conversation-adapter.js';
 
@@ -40,6 +40,7 @@ export type ApplicationInputSurfaceProps = {
   onEditQueuedMessage?: (id: string, turn: UserTurn) => Promise<SubmissionMutation>;
   onProviderSelected?: (provider: string) => void;
   onUnavailableModelSelected?: (provider: string) => void;
+  onSkillSelected?: (skill: SkillInfo) => void;
 };
 
 export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props) => {
@@ -104,6 +105,8 @@ export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props)
     models,
     onProviderSelected: props.onProviderSelected,
     onUnavailableModelSelected: props.onUnavailableModelSelected,
+    onSkillSelected: props.onSkillSelected,
+    onSystemMessage: props.onSystemMessage,
   };
 
   if (stack.length > 0) {

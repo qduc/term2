@@ -10,6 +10,7 @@ import { MenuControllerImpl } from './menu-controller.js';
 import type { HistoryService } from '../../services/history-service.js';
 import type { LoggingService } from '../../services/logging/logging-service.js';
 import type { SlashCommand } from '../../slash-commands.js';
+import type { SkillInfo, SkillsService } from '../../services/skills/skills-service.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import { renderInAct } from '../../test-helpers/ink-testing.js';
 
@@ -75,7 +76,16 @@ const settle = async () => {
   });
 };
 
-const renderSurface = async (controller: MenuControllerImpl, commands = slashCommands, children?: React.ReactNode) => {
+const renderSurface = async (
+  controller: MenuControllerImpl,
+  commands = slashCommands,
+  children?: React.ReactNode,
+  options?: {
+    skillsService?: SkillsService;
+    onSkillSelected?: (skill: SkillInfo) => void;
+    onSystemMessage?: (text: string) => void;
+  },
+) => {
   const result = await renderInAct(
     <InputProvider controller={controller}>
       <ApplicationInputSurface
@@ -85,6 +95,9 @@ const renderSurface = async (controller: MenuControllerImpl, commands = slashCom
         settingsService={createMockSettingsService()}
         loggingService={loggingService}
         historyService={historyService}
+        skillsService={options?.skillsService}
+        onSkillSelected={options?.onSkillSelected}
+        onSystemMessage={options?.onSystemMessage}
       />
       {children}
     </InputProvider>,
@@ -280,4 +293,35 @@ it.sequential('accepting a /skills prefix opens the skills successor menu', asyn
   await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'skills');
 
   expect(controller.getSnapshot().editor.text).toBe('/skills ');
+});
+
+it.sequential('accepting a skill activates it immediately and clears the command buffer', async () => {
+  const skill: SkillInfo = {
+    name: 'codebase-design',
+    description: 'Design deep modules',
+    location: '/skills/codebase-design/SKILL.md',
+    isProjectLevel: true,
+    body: 'Use deep modules.',
+    rawContent: '---\nname: codebase-design\n---\nUse deep modules.',
+  };
+  const onSkillSelected = vi.fn();
+  const onSystemMessage = vi.fn();
+  const controller = new MenuControllerImpl();
+  const { lastFrame, stdin } = await renderSurface(controller, [...slashCommands, skillsCommand], undefined, {
+    skillsService: { getAvailableSkills: () => [skill] } as SkillsService,
+    onSkillSelected,
+    onSystemMessage,
+  });
+
+  await writeInput(stdin, '/skills ');
+  await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'skills');
+  await writeInput(stdin, '\r');
+  await waitFor(() => controller.getSnapshot().stack.length === 0);
+
+  expect(onSkillSelected).toHaveBeenCalledWith(skill);
+  expect(onSystemMessage).toHaveBeenCalledWith(
+    'Skill "codebase-design" activated. Type your request (or press Esc to cancel).',
+  );
+  expect(controller.getSnapshot().editor).toMatchObject({ text: '', cursor: 0 });
+  expect(lastFrame()).not.toContain('/skills');
 });

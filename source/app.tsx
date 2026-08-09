@@ -839,6 +839,7 @@ const App: FC<AppProps> = ({
             firstRunSetup={firstRunSetup}
             onProviderSelected={firstRunSetup.active ? firstRunSetup.onProviderSelected : undefined}
             onUnavailableModelSelected={firstRunSetup.requestSetup}
+            onSkillSelected={handleSkillSelected}
             onSettingChange={handleSettingChange}
             onSystemMessage={addSystemMessage}
             handoffState={handoff.handoffState}

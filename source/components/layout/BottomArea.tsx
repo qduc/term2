@@ -18,7 +18,7 @@ import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { CodexRateLimitInfo } from '../../services/conversation/conversation-events.js';
 import type { PendingApproval } from '../../contracts/conversation.js';
 import type { UserTurn } from '../../types/user-turn.js';
-import type { SkillsService } from '../../services/skills/skills-service.js';
+import type { SkillInfo, SkillsService } from '../../services/skills/skills-service.js';
 import type { StaticCommitBlocker } from '../message/MessageList.js';
 import type { QueuePauseReason } from '../../services/queue/queue-controller.js';
 import type { BackgroundTask } from '../../services/subagents/subagent-notification-store.js';
@@ -98,6 +98,7 @@ export type BottomAreaProps = {
   firstRunSetup?: { active: boolean; phase: FirstRunSetupPhase | null; provider: string };
   onProviderSelected?: (provider: string) => void;
   onUnavailableModelSelected?: (provider: string) => void;
+  onSkillSelected?: (skill: SkillInfo) => void;
 };
 
 const BottomArea: FC<BottomAreaProps> = ({
@@ -165,6 +166,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   firstRunSetup,
   onProviderSelected,
   onUnavailableModelSelected,
+  onSkillSelected,
 }) => {
   const { controller } = useInputState();
   const [dotCount, setDotCount] = useState(1);
@@ -349,6 +351,7 @@ const BottomArea: FC<BottomAreaProps> = ({
           onEditQueuedMessage={onEditQueuedMessage}
           onProviderSelected={onProviderSelected}
           onUnavailableModelSelected={onUnavailableModelSelected}
+          onSkillSelected={onSkillSelected}
           promptLabel={
             waitingForAskUserAnswer
               ? 'Answer: '

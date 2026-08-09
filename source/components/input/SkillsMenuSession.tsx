@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
 import SkillSelectionMenu from '../menu/SkillSelectionMenu.js';
-import { computeSkillInsertion } from './insertions.js';
 import type { SkillInfo } from '../../services/skills/skills-service.js';
 import type { MenuComponentProps } from './menu-registry.js';
 import type { MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
@@ -11,11 +10,14 @@ type SkillsState = ReturnType<typeof import('../../hooks/use-skill-selection.js'
 type Props = MenuComponentProps<Extract<MenuFrame, { kind: 'skills' }>> & {
   services: MenuComponentProps<Extract<MenuFrame, { kind: 'skills' }>>['services'] & {
     skills: SkillsState;
+    onSkillSelected?: (skill: SkillInfo) => void;
+    onSystemMessage?: (text: string) => void;
   };
 };
 
 export function SkillsMenuSession({ frame, active, controller, interactions, services }: Props) {
   const skills = services.skills;
+  const { onSkillSelected, onSystemMessage } = services;
   const keep = (): MenuEffect => ({ stack: { type: 'keep' } });
   const interaction = useMemo<MenuInteraction>(
     () => ({
@@ -35,17 +37,12 @@ export function SkillsMenuSession({ frame, active, controller, interactions, ser
             return { stack: { type: 'keep' } };
           case 'accept': {
             const selected = skills.getSelectedItem() as SkillInfo | undefined;
-            const editor = controller.getSnapshot().editor;
-            const insertion = computeSkillInsertion({
-              selection: selected,
-              triggerIndex: frame.binding.replacement.start,
-              value: editor.text,
-              cursorOffset: editor.cursor,
-              appendTrailingSpace: true,
-            });
-            if (!insertion) return 'fallthrough';
+            if (!selected) return 'fallthrough';
+
+            onSkillSelected?.(selected);
+            onSystemMessage?.(`Skill "${selected.name}" activated. Type your request (or press Esc to cancel).`);
             return {
-              buffer: { type: 'replace', text: insertion.nextValue, cursor: insertion.nextCursor },
+              buffer: { type: 'clear' },
               stack: { type: 'close-top' },
             };
           }
@@ -56,7 +53,7 @@ export function SkillsMenuSession({ frame, active, controller, interactions, ser
         }
       },
     }),
-    [controller, frame, skills],
+    [controller, onSkillSelected, onSystemMessage, skills],
   );
 
   useEffect(() => {

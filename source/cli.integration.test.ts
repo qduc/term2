@@ -237,6 +237,9 @@ it('CLI accepts a custom provider from settings.json in non-interactive mode', (
     settingsFile,
     JSON.stringify(
       {
+        agent: {
+          retryAttempts: 0,
+        },
         providers: [
           {
             name: providerName,

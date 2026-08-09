@@ -33,6 +33,7 @@ it.sequential('starts the terminal UI and exits on Ctrl+C', { timeout: E2E_TIMEO
     cwd: process.cwd(),
     env: {
       HOME: tempHome,
+      OPENAI_API_KEY: 'test-key',
       TERM2_CONVERSATIONS_DIR: tempConversationsDir,
       DISABLE_LOGGING: '1',
     },

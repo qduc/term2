@@ -46,6 +46,7 @@ const TestComponent = ({
     () =>
       settingsService ??
       createMockSettingsService({
+        'agent.openai.apiKey': 'fake-key',
         'agent.openrouter.apiKey': 'fake-key',
       }),
     [settingsService],
@@ -81,6 +82,7 @@ const ImmediateToggleComponent = ({ onResults, settingsService }: ImmediateToggl
     () =>
       settingsService ??
       createMockSettingsService({
+        'agent.openai.apiKey': 'fake-key',
         'agent.openrouter.apiKey': 'fake-key',
       }),
     [settingsService],
@@ -151,6 +153,117 @@ it.sequential('toggleProvider cycles through available providers', async () => {
   });
 });
 
+it.sequential(
+  'does not fetch a provider without a credential and preserves its selected model as unavailable',
+  async () => {
+    clearModelCache();
+    let fetchCount = 0;
+    const settingsService = createMockSettingsService({
+      'agent.provider': 'openrouter',
+      'agent.model': 'previous-model',
+    });
+    // The registered provider is first-party and has no key in this fixture.
+    const provider = (await import('../providers/registry.js')).getProvider('openrouter')!;
+    const originalFetcher = provider.fetchModels;
+    provider.fetchModels = async () => {
+      fetchCount++;
+      return [{ id: 'should-not-load' }];
+    };
+
+    let capturedModels: any;
+    let renderer: any;
+    try {
+      await flush(() => {
+        renderer = render(
+          <InputProvider>
+            <TestComponent
+              settingsService={settingsService}
+              initialInput="/model "
+              onResults={(m) => {
+                capturedModels = m;
+              }}
+            />
+          </InputProvider>,
+        );
+      });
+      await waitForIdle(() => capturedModels);
+
+      expect(fetchCount).toBe(0);
+      expect(capturedModels.filteredModels).toMatchObject([
+        { id: 'previous-model', unavailableReason: 'missing-credentials' },
+      ]);
+
+      await flush(() => {
+        settingsService.setPersistentDynamic('agent.openrouter.apiKey', 'configured-but-unvalidated');
+      });
+      await waitForIdle(() => capturedModels);
+      expect(fetchCount).toBe(1);
+      expect(capturedModels.filteredModels.map((model: any) => model.id)).toEqual(['should-not-load']);
+
+      await flush(() => {
+        settingsService.setPersistentDynamic('agent.openrouter.apiKey', undefined);
+      });
+      await waitForIdle(() => capturedModels);
+      expect(fetchCount).toBe(1);
+      expect(capturedModels.filteredModels).toMatchObject([
+        { id: 'previous-model', unavailableReason: 'missing-credentials' },
+      ]);
+    } finally {
+      provider.fetchModels = originalFetcher;
+      renderer?.unmount();
+    }
+  },
+);
+
+it.sequential('does not commit an in-flight model fetch after its credential is removed', async () => {
+  clearModelCache();
+  const settingsService = createMockSettingsService({
+    'agent.provider': 'openrouter',
+    'agent.model': 'previous-model',
+    'agent.openrouter.apiKey': 'configured-key',
+  });
+  const provider = (await import('../providers/registry.js')).getProvider('openrouter')!;
+  const originalFetcher = provider.fetchModels;
+  let resolveFetch!: (models: any[]) => void;
+  provider.fetchModels = () =>
+    new Promise((resolve) => {
+      resolveFetch = resolve;
+    });
+
+  let capturedModels: any;
+  let renderer: any;
+  try {
+    await flush(() => {
+      renderer = render(
+        <InputProvider>
+          <TestComponent
+            settingsService={settingsService}
+            initialInput="/model "
+            onResults={(m) => {
+              capturedModels = m;
+            }}
+          />
+        </InputProvider>,
+      );
+    });
+    await flush(() => {});
+    expect(capturedModels.loading).toBe(true);
+
+    await flush(() => {
+      settingsService.setPersistentDynamic('agent.openrouter.apiKey', undefined);
+    });
+    resolveFetch([{ id: 'stale-model' }]);
+    await waitForIdle(() => capturedModels);
+
+    expect(capturedModels.filteredModels).toMatchObject([
+      { id: 'previous-model', unavailableReason: 'missing-credentials' },
+    ]);
+  } finally {
+    provider.fetchModels = originalFetcher;
+    renderer?.unmount();
+  }
+});
+
 it.sequential('toggleProvider supports prev and next direction', async () => {
   let capturedModels: any;
   let renderer: any;
@@ -200,6 +313,7 @@ it.sequential('toggleProvider uses the configured provider immediately after ope
   const expectedPrevious = providerIds[0];
   const settingsService = createMockSettingsService({
     'agent.provider': configuredProvider,
+    'agent.openai.apiKey': 'fake-key',
     'agent.openrouter.apiKey': 'fake-key',
   });
   let renderer: any;

@@ -270,6 +270,57 @@ it('resolves a stored provider config by legacy name alias when the stored id di
   expect(Array.isArray(models)).toBe(true);
 });
 
+it('passes an optional stored key to a local runtime provider', async () => {
+  const provider = createOpenAICompatibleProviderDefinition({ name: 'local-with-optional-key' });
+  let capturedHeaders: Record<string, string> | undefined;
+  const fakeFetch = async (_url: string, options?: any) => {
+    capturedHeaders = options?.headers;
+    return new Response(JSON.stringify({ data: [{ id: 'model-a' }] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  const deps: ProviderDeps = {
+    settingsService: {
+      get: (key: any) =>
+        ((
+          {
+            providers: [
+              {
+                id: 'local-with-optional-key',
+                name: 'Local With Optional Key',
+                type: 'openai-compatible',
+                baseUrl: 'http://localhost:1234/v1',
+                apiKey: 'optional-local-key',
+              },
+            ],
+          } as Record<string, any>
+        )[key]),
+      getDynamic(key: string) {
+        return this.get(key as any);
+      },
+      set() {},
+      setDynamic() {},
+      setPersistent() {},
+      setPersistentDynamic() {},
+    },
+    loggingService: {
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+      debug: () => {},
+      security: () => {},
+      setCorrelationId: () => {},
+      getCorrelationId: () => undefined,
+      clearCorrelationId: () => {},
+    },
+  };
+
+  await provider.fetchModels(deps, fakeFetch);
+  expect(capturedHeaders?.Authorization).toBe('Bearer optional-local-key');
+});
+
 it('providerData fields are forwarded into the chat-completions request body root', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, successResponse);

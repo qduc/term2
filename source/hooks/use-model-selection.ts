@@ -5,6 +5,11 @@ import type { ILoggingService, ISettingsService } from '../services/service-inte
 import { ModelCatalogSession } from '../services/models/model-catalog-session.js';
 import { parseModelProviderArg } from '../utils/ai/model-provider-arg.js';
 import { getModelSettingConfigForInput } from '../utils/ai/model-settings.js';
+import {
+  getProviderCredentialSettingKey,
+  getProviderIdForCredentialSettingKey,
+  resolveProviderCredentials,
+} from '../utils/ai/provider-credentials.js';
 
 export const useModelSelection = (deps: { loggingService: ILoggingService; settingsService: ISettingsService }) => {
   const { loggingService, settingsService } = deps;
@@ -23,6 +28,7 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
   const providerRef = useRef<string | null>(null);
   const isInitialLoadRef = useRef(true);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [credentialRevision, setCredentialRevision] = useState(0);
   const shouldPreselectRef = useRef(false);
 
   const controllerFrame = controller.getSnapshot().stack.at(-1);
@@ -32,6 +38,25 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
   // is authoritative whether or not the model graph is controller-owned.
   const modelSettingConfig = getModelSettingConfigForInput(input);
   const canSwitchProvider = true;
+
+  useEffect(() => {
+    const unsubscribe = settingsService.onChange?.((changedKey) => {
+      if (
+        !changedKey ||
+        changedKey === getProviderCredentialSettingKey('openai') ||
+        changedKey === getProviderCredentialSettingKey('openrouter')
+      ) {
+        const providerId = getProviderIdForCredentialSettingKey(changedKey);
+        if (providerId) catalogSession.invalidate(providerId);
+        else catalogSession.clear();
+        setCredentialRevision((revision) => revision + 1);
+      } else if (changedKey === 'providers') {
+        catalogSession.clear();
+        setCredentialRevision((revision) => revision + 1);
+      }
+    });
+    return unsubscribe;
+  }, [settingsService]);
 
   // While the model graph is controller-owned, the binding is the source of
   // truth for both the query and the replacement start. Keep the legacy
@@ -73,6 +98,29 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
   useEffect(() => {
     if (!isOpen || !provider) return;
 
+    const credentialResolution = resolveProviderCredentials(settingsService, provider);
+    if (credentialResolution.required && !credentialResolution.configured) {
+      const modelKey = modelSettingConfig ? modelSettingConfig.modelKey : 'agent.model';
+      const configuredModel = settingsService.getDynamic(modelKey);
+      const unavailableModels =
+        typeof configuredModel === 'string' && configuredModel
+          ? [
+              {
+                id: configuredModel,
+                provider,
+                unavailableReason: credentialResolution.unavailableReason ?? ('missing-credentials' as const),
+              },
+            ]
+          : [];
+      setModels(unavailableModels);
+      setSelectedIndex(0);
+      setScrollOffset(0);
+      setLoading(false);
+      setError(null);
+      isInitialLoadRef.current = false;
+      return;
+    }
+
     const cachedModels = catalogSession.getCached(provider);
 
     const load = async () => {
@@ -110,7 +158,7 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
       setError(message);
       setLoading(false);
     });
-  }, [isOpen, provider, catalogSession, refreshKey]);
+  }, [isOpen, provider, catalogSession, refreshKey, credentialRevision, modelSettingConfig, settingsService]);
 
   const refresh = useCallback(() => {
     if (!isOpen || !provider) return;
@@ -272,5 +320,6 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
     refresh,
     canSwitchProvider,
     modelSettingConfig,
+    credentialRevision,
   };
 };

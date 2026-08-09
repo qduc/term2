@@ -49,6 +49,52 @@ it.sequential('ProviderSelectionMenu renders structured provider items without b
   expect(frame.includes('(custom)')).toBe(false);
 });
 
+it.sequential('ProviderSelectionMenu explains unavailable providers and their setup route', async () => {
+  const { lastFrame } = await renderInAct(
+    <ProviderSelectionMenu
+      phase="list"
+      selectedIndex={0}
+      activeItems={[
+        {
+          kind: 'provider',
+          id: 'openrouter',
+          label: 'OpenRouter',
+          isActive: false,
+          isCustom: false,
+          hasCredentials: false,
+        },
+      ]}
+      errorMessage={null}
+      fieldErrors={{}}
+      selectedProviderName={undefined}
+      draft={null}
+    />,
+  );
+
+  expect(lastFrame()).toContain('API key not configured on this host');
+  expect(lastFrame()).toContain('Enter to configure');
+});
+
+it.sequential('ProviderSelectionMenu identifies missing Codex login', async () => {
+  const { lastFrame } = await renderInAct(
+    <ProviderSelectionMenu
+      phase="list"
+      selectedIndex={0}
+      activeItems={[
+        { kind: 'provider', id: 'codex', label: 'Codex', isActive: false, isCustom: false, hasCredentials: false },
+      ]}
+      errorMessage={null}
+      fieldErrors={{}}
+      selectedProviderName={undefined}
+      draft={null}
+    />,
+  );
+
+  expect(lastFrame()).toContain('Not logged in on this host');
+  expect(lastFrame()).toContain('npx @openai/codex login');
+  expect(lastFrame()).not.toContain('API key not configured');
+});
+
 it.sequential('ProviderSelectionMenu highlights destructive delete confirmation text', async () => {
   const { lastFrame } = await renderInAct(
     <ProviderSelectionMenu

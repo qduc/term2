@@ -15,6 +15,7 @@ import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session/session-contex
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import envPaths from 'env-paths';
+import { resolveCodexTokenPath } from './codex-auth.js';
 
 const DEFAULT_CODEX_MODEL = 'gpt-5.3-codex';
 
@@ -85,36 +86,8 @@ export function extractAccountId(idToken?: string, accessToken?: string): string
   return null;
 }
 
-// Searches token file locations in predefined priority order
-export function resolveTokenPath(): string | null {
-  const candidates: string[] = [];
-
-  if (process.env.CHATGPT_LOCAL_HOME) {
-    candidates.push(path.join(process.env.CHATGPT_LOCAL_HOME, 'auth.json'));
-    candidates.push(process.env.CHATGPT_LOCAL_HOME);
-  }
-  if (process.env.CODEX_HOME) {
-    candidates.push(path.join(process.env.CODEX_HOME, 'auth.json'));
-    candidates.push(process.env.CODEX_HOME);
-  }
-
-  const home = os.homedir();
-  if (home) {
-    candidates.push(path.join(home, '.chatgpt-local', 'auth.json'));
-    candidates.push(path.join(home, '.codex', 'auth.json'));
-  }
-
-  for (const candidate of candidates) {
-    try {
-      if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-        return candidate;
-      }
-    } catch {
-      // ignore
-    }
-  }
-  return null;
-}
+// Kept as a compatibility export for the provider's existing callers/tests.
+export const resolveTokenPath = resolveCodexTokenPath;
 
 export class CodexTokenManager {
   private activeRefreshPromise: Promise<string> | null = null;

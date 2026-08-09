@@ -7,6 +7,7 @@ export type ModelInfo = {
   id: string;
   name?: string;
   provider: string;
+  unavailableReason?: 'missing-credentials' | 'missing-codex-login';
   default_reasoning_level?: string;
   /** Context window in tokens from the vendored model catalog, when known. */
   contextWindow?: number;

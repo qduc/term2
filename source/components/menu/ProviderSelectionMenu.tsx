@@ -198,8 +198,15 @@ const ProviderSelectionMenu: FC<Props> = ({
             // Built-in (non-active): greyed out, not actionable on Enter.
             // Custom providers remain bright so they look interactive.
             // Note: openai and openrouter remain active/bright because we can change their api key.
-            color = isInactive ? 'gray' : isSelected ? 'green' : 'white';
-            suffix = item.label === 'Codex' ? 'Run `npx @openai/codex login` to login to Codex' : '';
+            const unavailable = item.hasCredentials === false;
+            color = isInactive ? 'gray' : unavailable ? 'yellow' : isSelected ? 'green' : 'white';
+            if (item.id === 'codex') {
+              suffix = unavailable
+                ? 'Not logged in on this host · Run `npx @openai/codex login`'
+                : 'Run `npx @openai/codex login` to login to Codex';
+            } else if (unavailable) {
+              suffix = 'API key not configured on this host · Enter to configure';
+            }
           } else if (item.kind === 'add-provider') {
             prefix = '+ ';
             color = isSelected ? 'green' : 'yellow';

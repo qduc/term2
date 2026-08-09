@@ -278,6 +278,7 @@ export const getAgentDefinition = (
     runSubagentForegroundEnabled: Boolean(runSubagent),
     runSubagentAsyncEnabled: asyncSubagentEnabled,
     asyncSubagentControlsEnabled: asyncSubagentEnabled,
+    backgroundShellEnabled: allowBackgroundShell && Boolean(backgroundShellRegistry),
     sandboxEnabled,
     memoryEnabled: memoryCapability.access !== 'none',
     memoryGuidance: memoryCapability.guidance,

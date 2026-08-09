@@ -3,6 +3,7 @@ import { selectPromptProfile } from './prompt-profiles.js';
 import { getSearchViaShellAddendum } from './search-via-shell.js';
 import { getSubagentDelegationAddendum } from './subagent-delegation.js';
 import { getShellSandboxAddendum } from './shell-sandbox.js';
+import { getBackgroundShellAddendum } from './background-shell.js';
 
 export type PromptConstructorOptions = {
   model: string;
@@ -16,6 +17,7 @@ export type PromptConstructorOptions = {
   runSubagentForegroundEnabled?: boolean;
   runSubagentAsyncEnabled?: boolean;
   asyncSubagentControlsEnabled?: boolean;
+  backgroundShellEnabled?: boolean;
   sandboxEnabled?: boolean;
   memoryEnabled?: boolean;
   memoryGuidance?: string;
@@ -39,6 +41,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     runSubagentForegroundEnabled = false,
     runSubagentAsyncEnabled = false,
     asyncSubagentControlsEnabled = false,
+    backgroundShellEnabled = false,
     sandboxEnabled = true,
     memoryEnabled = false,
     memoryGuidance = '',
@@ -61,6 +64,10 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
 
   if (sandboxEnabled) {
     inlineSections.push(getShellSandboxAddendum());
+  }
+
+  if (backgroundShellEnabled) {
+    inlineSections.push(getBackgroundShellAddendum());
   }
 
   if (mentorMode && isRegularMode) {

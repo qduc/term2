@@ -680,13 +680,13 @@ it('refuses to splice provider_opaque from another provider into an OpenAI-compa
       },
     },
   };
-  const model = new OpenAIChatCompletionsModel(client, 'fixture-chat');
+  const model = new OpenAIChatCompletionsModel(client, 'fixture-chat', undefined, 'openrouter');
   const request = {
     input: [
       {
         type: 'provider_opaque',
-        provider: 'anthropic',
-        item: { thinking: 'foreign thinking' },
+        provider: 'deepseek',
+        item: { reasoning_content: 'foreign thinking' },
       },
       { type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] },
     ],
@@ -697,7 +697,61 @@ it('refuses to splice provider_opaque from another provider into an OpenAI-compa
     for await (const _event of model.stream(request)) {
       // drain
     }
-  }).rejects.toThrow("Refusing to splice provider_opaque from 'anthropic' into an OpenAI-compatible request");
+  }).rejects.toThrow("Refusing to splice provider_opaque from 'deepseek' into 'openrouter' request");
+});
+
+it('preserves generic reasoning without native OpenAI metadata as an assistant text message', async () => {
+  const client = {
+    chat: {
+      completions: {
+        create: async (body: any) => {
+          expect(body.messages).toContainEqual({ role: 'assistant', content: 'generic reasoning fallback' });
+          return emptyStream();
+        },
+      },
+    },
+  };
+  const model = new OpenAIChatCompletionsModel(client, 'fixture-chat');
+  const request = {
+    input: [
+      {
+        type: 'reasoning',
+        text: 'generic reasoning fallback',
+      },
+      { type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] },
+    ],
+    tools: [],
+  } as any;
+
+  for await (const _event of model.stream(request)) {
+    // drain
+  }
+});
+
+it('captures non-modeled delta properties such as refusal into rawContinuityMetadata', async () => {
+  const client = {
+    chat: {
+      completions: {
+        create: async () => {
+          return (async function* () {
+            yield { choices: [{ delta: { refusal: 'I cannot answer.' } }] };
+            yield { choices: [{ delta: {}, finish_reason: 'stop' }] };
+          })();
+        },
+      },
+    },
+  };
+  const model = new OpenAIChatCompletionsModel(client, 'fixture-chat');
+  const events: any[] = [];
+  for await (const event of model.stream({ input: [], tools: [] } as any)) {
+    events.push(event);
+  }
+  const completion = events.find((e) => e.type === 'completion');
+  expect(completion.output).toContainEqual({
+    type: 'provider_opaque',
+    provider: 'openai-compatible',
+    item: { refusal: 'I cannot answer.' },
+  });
 });
 
 it('attaches a captured provider cost trailer as costUsd on the completion', async () => {

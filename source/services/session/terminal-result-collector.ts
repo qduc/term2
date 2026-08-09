@@ -2,6 +2,7 @@ import type { ConversationEvent, FinalResponseEvent } from '../conversation/conv
 import type { ConversationTerminal } from '../../contracts/conversation.js';
 import type { CommandMessage } from '../../tools/types.js';
 import { type NormalizedUsage } from '../../utils/ai/token-usage.js';
+import type { ModelRequestCost } from '../cost/model-cost.js';
 import type { PersistedAssistantTurnItem } from '../conversation/conversation-persistence-types.js';
 import { AmbiguousModelOutcomeError } from '../retry/retry-errors.js';
 
@@ -63,6 +64,13 @@ export async function collectTerminalResult(
   let runUsage: NormalizedUsage | undefined;
   let latestStreamedUsage: NormalizedUsage | undefined;
 
+  // Cost records are cumulative for the run on the same terms as `runUsage`:
+  // each terminal event carries every record so far, so the latest one
+  // supersedes rather than appends. Without copying them onto the returned
+  // terminal the session cost accumulator — and so the status bar — never sees
+  // a single record.
+  let runCostRecords: ModelRequestCost[] | undefined;
+
   const resolvedUsage = (): NormalizedUsage | undefined => {
     const usage = !isEmptyUsage(runUsage) ? runUsage : latestStreamedUsage;
     return isEmptyUsage(usage) ? undefined : usage;
@@ -96,6 +104,7 @@ export async function collectTerminalResult(
       }
       case 'approval_required': {
         const usage = event.usage ?? resolvedUsage();
+        const costRecords = event.costRecords?.length ? event.costRecords : runCostRecords;
         return {
           type: 'approval_required',
           approval: {
@@ -108,6 +117,7 @@ export async function collectTerminalResult(
             postExecute: event.approval.postExecute,
           },
           ...(usage ? { usage } : {}),
+          ...(costRecords?.length ? { costRecords } : {}),
         };
       }
       case 'usage_update': {
@@ -125,6 +135,9 @@ export async function collectTerminalResult(
           // supersedes an earlier one because the run-state accumulator keeps
           // growing on the same run state.
           runUsage = event.usage;
+        }
+        if (event.costRecords?.length) {
+          runCostRecords = event.costRecords;
         }
         if (event.commandMessages?.length) {
           for (const msg of event.commandMessages) {
@@ -178,6 +191,7 @@ export async function collectTerminalResult(
     finalText,
     ...(reasoningText ? { reasoningText } : {}),
     ...(usage ? { usage } : {}),
+    ...(runCostRecords?.length ? { costRecords: runCostRecords } : {}),
     turnItems,
   };
 }

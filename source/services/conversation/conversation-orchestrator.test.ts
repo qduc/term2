@@ -9,6 +9,7 @@ import type { NormalizedUsage, UsageAccumulator } from '../../utils/ai/token-usa
 import type { ConversationTerminal } from '../../contracts/conversation.js';
 import { PendingInteractionState } from '../session/pending-interaction-state.js';
 import { ASK_USER_NO_ANSWER_RESULT } from '../../tools/agent/ask-user-constants.js';
+import { createSessionCostAccumulator } from '../cost/model-cost.js';
 
 function createMessage(id: string, sender: Message['sender'], text: string, overrides: Partial<Message> = {}): Message {
   return { id, sender, text, ...overrides } as Message;
@@ -160,6 +161,42 @@ describe('ConversationOrchestrator', () => {
     );
     expect(cfg.ui.onTurnStart).toHaveBeenCalled();
     expect(cfg.ui.onTurnEnd).toHaveBeenCalled();
+  });
+
+  // `costRecords` is an optional field re-declared at every hop between the run
+  // loop and the status bar, so any hop that forgets to copy it fails silently:
+  // no type error, and every per-hop unit test still passes. This test pins the
+  // last hop end-of-chain — a terminal that carries records must leave the
+  // session accumulator with a priced summary, which is what the status bar
+  // renders from.
+  it('feeds a terminal cost record into the session cost accumulator', async () => {
+    const costAccumulator = createSessionCostAccumulator();
+    const cfg = makeConfig({ costAccumulator });
+    (cfg.conversationService as any).isQueueActive = undefined;
+    (cfg.conversationService as any).setQueuedTurnStartObserver = undefined;
+    const terminal: ConversationTerminal = {
+      type: 'response',
+      finalText: 'ok',
+      commandMessages: [],
+      costRecords: [
+        {
+          requestId: 'req-1',
+          provider: 'openrouter',
+          model: 'deepseek/deepseek-v4-flash',
+          serviceTier: 'standard',
+          outcome: 'completed',
+          usdMicros: 3450,
+          source: 'catalog',
+        },
+      ],
+    };
+
+    vi.mocked(cfg.conversationService.sendMessage).mockResolvedValue(terminal);
+
+    await new ConversationOrchestrator(cfg).sendUserMessage('hello');
+
+    // 'estimated' rather than 'known': a catalog-priced record is an estimate.
+    expect(costAccumulator.getSummary()).toMatchObject({ knownUsdMicros: 3450, pricedRequests: 1, state: 'estimated' });
   });
 
   it('forwards live reasoning and tool-call indicators to the UI port', async () => {

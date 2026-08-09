@@ -955,6 +955,10 @@ export class TurnWorkflow {
       finalText: result.finalText,
       ...(result.reasoningText ? { reasoningText: result.reasoningText } : {}),
       ...(usage && Object.keys(usage).length > 0 ? { usage } : {}),
+      // Cost records are run-cumulative, so the continuation cycle must carry
+      // forward what the collector observed; dropping them here silently
+      // unprices every turn that used a tool or paused for approval.
+      ...(result.costRecords?.length ? { costRecords: result.costRecords } : {}),
       turnItems: result.turnItems,
     };
   }

@@ -111,6 +111,68 @@ it('collectTerminalResult carries usage_update usage into approval_required resu
   }
 });
 
+// Regression: the collector is the seam between run-loop events and the
+// UI-facing terminal. It dropped `costRecords` off both terminal events, so the
+// session cost accumulator stayed empty and the status bar rendered nothing no
+// matter how well the run loop priced the run.
+const costRecord = (usdMicros: number) => ({ usdMicros, source: 'catalog' as const });
+
+it('collectTerminalResult carries cost records from the final event onto the response terminal', async () => {
+  const result = await collectTerminalResult(
+    asAsyncIterable([{ type: 'final', finalText: 'done', costRecords: [costRecord(1200)] }]),
+  );
+
+  expect(result.type).toBe('response');
+  expect(result.costRecords).toEqual([costRecord(1200)]);
+});
+
+it('collectTerminalResult carries cost records onto an approval_required terminal', async () => {
+  const result = await collectTerminalResult(
+    asAsyncIterable([
+      {
+        type: 'approval_required',
+        costRecords: [costRecord(900)],
+        approval: { agentName: 'CLI Agent', toolName: 'shell', argumentsText: 'ls source' },
+      },
+    ]),
+  );
+
+  expect(result.costRecords).toEqual([costRecord(900)]);
+});
+
+it('collectTerminalResult lets a later final supersede earlier cost records rather than appending', async () => {
+  // Records are run-cumulative, exactly like `usage`: the second `final` already
+  // contains the first turn's record, so appending would double-bill the run.
+  const result = await collectTerminalResult(
+    asAsyncIterable([
+      { type: 'final', finalText: 'first', costRecords: [costRecord(1000)] },
+      { type: 'final', finalText: 'second', costRecords: [costRecord(1000), costRecord(500)] },
+    ]),
+  );
+
+  expect(result.costRecords).toEqual([costRecord(1000), costRecord(500)]);
+});
+
+it('collectTerminalResult falls back to earlier cost records when the approval event omits them', async () => {
+  const result = await collectTerminalResult(
+    asAsyncIterable([
+      { type: 'final', finalText: '', costRecords: [costRecord(700)] },
+      {
+        type: 'approval_required',
+        approval: { agentName: 'CLI Agent', toolName: 'shell', argumentsText: 'ls source' },
+      },
+    ]),
+  );
+
+  expect(result.costRecords).toEqual([costRecord(700)]);
+});
+
+it('collectTerminalResult omits costRecords entirely when the run priced nothing', async () => {
+  const result = await collectTerminalResult(asAsyncIterable([{ type: 'final', finalText: 'done' }]));
+
+  expect(result.costRecords).toBeUndefined();
+});
+
 it('collectTerminalResult trusts the final run-cumulative usage and does not re-sum per-turn snapshots', async () => {
   // Long-horizon regression: a multi-turn run streams a per-turn `usage_update`
   // before each tool call. The terminal `final` event carries the authoritative

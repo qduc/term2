@@ -426,6 +426,52 @@ it('executes continuation turn successfully', async () => {
   expect(selectorCalls).toBe(0);
 });
 
+// Regression: the continuation cycle rebuilds the response terminal, and the
+// rebuild dropped `costRecords`. Every turn that used a tool or paused for
+// approval therefore reached the UI and the conversation log unpriced, even
+// though the run loop had priced it.
+it('carries cost records through the continuation rebuild of the response terminal', async () => {
+  const costRecords = [{ usdMicros: 4200, source: 'catalog' as const }];
+  const mockClient = {
+    getProvider() {
+      return 'openai';
+    },
+    async continueRunStream() {
+      const stream = new MockStream([{ type: 'text_delta', text: 'continuation response' }]);
+      stream.finalOutput = 'continuation response';
+      (stream as any).runCostRecords = costRecords;
+      return stream;
+    },
+  };
+
+  const { workflow, composition } = setupWorkflow(mockClient);
+  const token = composition.generationGuard.capture();
+  composition.approvalFlow.prepareContinuation = () =>
+    ({
+      pendingApprovalContext: {
+        state: {},
+        interruption: { type: 'tool_approval_item', callId: 'call-1', name: 'shell', arguments: '{}' },
+        toolCallArgumentsById: new Map([['call-1', '{}']]),
+        emittedCommandIds: new Set<string>(),
+        token,
+        inputMode: 'delta',
+        cumulativeUsage: {},
+        cumulativeCommandMessages: [],
+        cumulativeTurnItems: [],
+      },
+      toolStartedEvent: undefined,
+    } as any);
+
+  const iterator = workflow.executeContinuation({ kind: 'approval_decision', answer: 'y', generation: token });
+  let res = await iterator.next();
+  while (!res.done) res = await iterator.next();
+  const outcome = res.value;
+
+  expect(outcome.kind).toBe('response');
+  if (outcome.kind !== 'response' || outcome.terminal.type !== 'response') throw new Error('expected a response');
+  expect(outcome.terminal.costRecords).toEqual(costRecords);
+});
+
 it('resumes one post-execute-gated stream without consuming it twice', async () => {
   const mockClient: any = {
     getProvider: () => 'openai',

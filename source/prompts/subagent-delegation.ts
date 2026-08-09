@@ -55,7 +55,7 @@ Otherwise, just do it yourself — especially when the task needs mid-flight cou
   const backgroundRules = backgroundEnabled
     ? `**Background execution rules:**
 - A returned handle with \`status: "running"\` means delegation succeeded. Do not duplicate or independently perform the delegated unit.
-- Do NOT call \`get_subagent_result\` immediately after a background launch. It blocks until completion and prevents useful work or the next user instruction. End the current turn and wait for the completion notification, which inlines the full result so you can continue directly.
+- Do NOT call \`get_subagent_result\` immediately after a background launch. Active runs are refused rather than awaited. End the current turn and wait for the completion notification, which inlines the full result so you can continue directly.
 - Fresh background runs support explorer, worker, mentor, and librarian. They persist across ordinary parent-turn completion in process memory until the 30-minute sliding TTL expires or the 50-session cap evicts them.
 - Use \`get_subagent_result\` only with the exact \`runId\` from a completed run when you need to re-fetch a result already received. Mentor and librarian fresh calls reuse their default session; explorer fresh calls start a new session. Worker runs are always fresh and cannot be continued. Only completed non-worker runs support \`continue_run_id\`; do not invent runIds or continue active, failed, cancelled, missing, or evicted runs.${
         controlsEnabled

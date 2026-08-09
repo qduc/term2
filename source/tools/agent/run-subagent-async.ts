@@ -166,7 +166,7 @@ export function createRunSubagentAsyncToolDefinition(
     name: 'run_subagent_async',
     description:
       'Start a subagent that runs asynchronously in the background and returns a runId immediately — the call does NOT block. ' +
-      'After a successful launch, do NOT immediately call get_subagent_result; that call blocks until completion and freezes you out of doing other work or receiving the next user instruction. ' +
+      'After a successful launch, do NOT immediately call get_subagent_result; active runs are refused and must settle through their completion notification. ' +
       'Instead, end your turn and wait for the harness completion notification, which inlines the full result so you can continue without a second tool call. ' +
       'A returned handle with status: "running" means the launch succeeded; do not duplicate the delegated task. ' +
       'Only call get_subagent_result inline if, after honest assessment, you truly cannot take any other useful action or reply to the user without the result at all. ' +
@@ -203,18 +203,35 @@ export function createRunSubagentAsyncToolDefinition(
 
 export function createGetSubagentResultToolDefinition(
   getSubagentResult: (params: GetSubagentResultParams, context?: unknown, details?: unknown) => Promise<SubagentResult>,
+  getSubagentStatus: (
+    params: GetSubagentStatusParams,
+    context?: unknown,
+    details?: unknown,
+  ) => SubagentRunStatus | SubagentRunStatus[],
 ): ToolDefinition<typeof getSubagentResultSchema> {
   return {
     name: 'get_subagent_result',
     description:
       'Retrieve the final result of a background subagent run started with run_subagent using execution: "background". ' +
-      'Provide the runId returned by that background launch. This call BLOCKS until the run completes. ' +
-      'Do not call it immediately after launching a subagent — that defeats async and freezes you out of doing other work. ' +
+      'Provide the runId returned by that background launch. Active background runs are refused rather than awaited. ' +
+      'When a run is still active, end the current turn and wait for its completion notification instead of calling this tool again. ' +
       'The completion notification already inlines the full result, so you normally will not need this tool at all; use it only if you need to re-fetch a result you already saw.',
     parameters: getSubagentResultSchema,
     needsApproval: () => false,
     execute: async (params, context, details) => {
       try {
+        const status = getSubagentStatus({ runId: params.runId }, context, details);
+        if (
+          !Array.isArray(status) &&
+          (status.status === 'running' || status.status === 'waiting_for_answer' || status.status === 'cancelling')
+        ) {
+          return JSON.stringify({
+            status: 'background_run_active',
+            runId: params.runId,
+            message:
+              'This background subagent is still running. End the current turn and wait for its automatic completion notification; do not call get_subagent_result again.',
+          });
+        }
         const result = await getSubagentResult(params, context, details);
         return formatSubagentResult(result);
       } catch (error: any) {

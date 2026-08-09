@@ -115,7 +115,12 @@ it('background shell acknowledges immediately, exposes status and cancellation, 
   expect(acknowledgement).toEqual({ jobId: 'background-job', status: 'running' });
   expect(correlationId).toBe('foreground-command');
   expect(cleanupCalls).toBe(0);
-  expect(JSON.parse(String(await jobs.get.execute({ job_id: 'background-job' })))).toMatchObject({ status: 'running' });
+  expect(JSON.parse(String(await jobs.get.execute({ job_id: 'background-job' })))).toEqual({
+    status: 'background_job_active',
+    jobId: 'background-job',
+    message:
+      'This background shell job is still running. End the current turn and wait for its automatic completion notification; do not poll get_shell_job.',
+  });
 
   expect(JSON.parse(String(await jobs.cancel.execute({ job_id: 'background-job' })))).toMatchObject({
     jobId: 'background-job',

@@ -178,7 +178,7 @@ it('buildPromptSpec tells orchestrators to trust successful delegation and wait 
   expect(guidance.toLowerCase()).toContain('end the current turn and wait for the completion notification');
   expect(guidance).toContain('inlines the full result so you can continue directly');
   expect(guidance).toContain('Do NOT call `get_subagent_result` immediately');
-  expect(guidance).toContain('blocks until completion');
+  expect(guidance).toContain('Active runs are refused rather than awaited');
   expect(guidance).not.toContain('Use `run_subagent` only');
 });
 

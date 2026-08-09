@@ -45,6 +45,11 @@ export interface ModelRequestCost {
   source?: CostSource;
   /** Catalog provenance when priced from the vendored catalog. */
   pricingVersion?: string;
+  /**
+   * Catalog provider whose rate was borrowed, set only when the request's own
+   * provider carried no priced catalog entry.
+   */
+  pricedFromProvider?: string;
   unpricedReason?: UnpricedReason;
 }
 
@@ -68,11 +73,20 @@ export interface CatalogPrice {
 }
 
 /**
- * Result of a provider-scoped pricing lookup. The cost module consumes the
- * typed failure so it can report why a request is unpriced.
+ * Result of a pricing lookup. The cost module consumes the typed failure so it
+ * can report why a request is unpriced.
  */
 export type PricingLookupResult =
-  | { found: true; price: CatalogPrice }
+  | {
+      found: true;
+      price: CatalogPrice;
+      /**
+       * Catalog provider the rate was borrowed from, set only when it is not
+       * the requested provider. A borrowed rate is the same model at another
+       * provider's price, so it is an estimate even by catalog standards.
+       */
+      pricedFromProvider?: string;
+    }
   | { found: false; reason: Extract<UnpricedReason, 'unknown_provider' | 'unknown_model' | 'unknown_tier'> };
 
 export interface ModelCostInput {
@@ -221,6 +235,7 @@ export function computeModelCost(input: ModelCostInput): ModelRequestCost {
     usdMicros: uncachedMicros + cachedMicros + cacheWriteMicros + outputMicros,
     source: 'catalog',
     ...(input.pricingVersion ? { pricingVersion: input.pricingVersion } : {}),
+    ...(lookup.pricedFromProvider ? { pricedFromProvider: lookup.pricedFromProvider } : {}),
   };
 }
 

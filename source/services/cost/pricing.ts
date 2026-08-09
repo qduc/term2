@@ -1,18 +1,23 @@
 /**
- * Provider-scoped pricing lookup backed by the vendored model catalog plus
- * the versioned Term2 tier overlay.
+ * Pricing lookup backed by the vendored model catalog plus the versioned Term2
+ * tier overlay.
  *
- * Matching reuses the catalog's exact/dash-bounded model matching inside the
- * named provider only. Cross-provider model fallback (`getCatalogModel`) is
- * deliberately NOT used for pricing: a price is a provider-specific contract,
- * and borrowing another provider's rate would misreport a bill.
+ * Matching reuses the catalog's exact/dash-bounded model matching, preferring
+ * the named provider and falling back to the same model under any other
+ * provider. The fallback exists because a model id identifies a model more
+ * reliably than a provider id does: term2 users reach catalog models through
+ * proxies and OpenAI-compatible gateways whose provider id is never in the
+ * catalog, and no price at all is worse than a rate that is right for the
+ * model but possibly wrong for the vendor. A borrowed rate is flagged on the
+ * result (`pricedFromProvider`) so the cost record says whose price it used;
+ * gateways do resell at their own margins, so a flagged charge is an estimate.
  */
 import {
   CATALOG_META,
   MODEL_CATALOG,
   type GeneratedCatalogModel,
 } from '../../providers/model-catalog/catalog.generated.js';
-import { lookupModel } from '../../providers/model-catalog/catalog.js';
+import { findModelMatches, lookupModel } from '../../providers/model-catalog/catalog.js';
 import type { CatalogPrice, PricingLookupResult, ServiceTier } from './model-cost.js';
 import { TIER_PRICING_OVERLAY, type OverlayTier } from './pricing-overlay.js';
 
@@ -64,22 +69,24 @@ export function getModelPricing(provider: string, model: string, tier: ServiceTi
     return { found: false, reason: 'unknown_tier' };
   }
 
-  // Standard tier: provider-scoped catalog lookup only.
+  // Standard tier: the named provider first, then the same model anywhere.
   const catalog = MODEL_CATALOG as Record<string, Record<string, GeneratedCatalogModel>>;
-  const providerCatalog = catalog[providerId];
-  if (!providerCatalog) {
-    return { found: false, reason: 'unknown_provider' };
+  const ownPrice = entryToCatalogPrice(lookupModel(catalog, providerId, modelId) ?? {});
+  if (ownPrice) {
+    return { found: true, price: ownPrice };
   }
-  const entry = lookupModel(catalog, providerId, modelId);
-  if (!entry) {
-    return { found: false, reason: 'unknown_model' };
+
+  // Fall back to the best-matching entry under another provider that actually
+  // carries a price; an unpriced entry is no better than a miss.
+  for (const match of findModelMatches(catalog, modelId)) {
+    if (match.providerId === providerId) continue;
+    const price = entryToCatalogPrice(match.info);
+    if (price) {
+      return { found: true, price, pricedFromProvider: match.providerId };
+    }
   }
-  const price = entryToCatalogPrice(entry);
-  if (!price) {
-    // The model exists in the catalog but carries no vendored price.
-    return { found: false, reason: 'unknown_model' };
-  }
-  return { found: true, price };
+
+  return { found: false, reason: catalog[providerId] ? 'unknown_model' : 'unknown_provider' };
 }
 
 /** Catalog provenance string recorded on catalog-priced requests. */

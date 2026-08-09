@@ -16,13 +16,44 @@ describe('getModelPricing', () => {
     expect(result.found).toBe(true);
   });
 
-  it('never falls back across providers for pricing', () => {
-    // gpt-5.6-sol exists under both openai and codex. A custom provider id that
-    // is not in the catalog must NOT resolve via another provider's price.
-    expect(getModelPricing('custom-local-llm', 'gpt-5.6-sol', 'standard')).toEqual({
-      found: false,
-      reason: 'unknown_provider',
-    });
+  it("borrows another provider's rate for a model reached through a gateway, and says whose", () => {
+    // A proxy/gateway provider id is never in the catalog, but the model is
+    // the same model, so its rate is usable — flagged with its source.
+    const result = getModelPricing('custom-local-llm', 'gpt-5.6-sol', 'standard');
+    expect(result.found).toBe(true);
+    if (!result.found) return;
+    expect(result.pricedFromProvider).toMatch(/^(openai|codex)$/);
+    expect(result.price).toEqual(
+      (getModelPricing(result.pricedFromProvider!, 'gpt-5.6-sol', 'standard') as { price: unknown }).price,
+    );
+  });
+
+  it('does not flag a borrowed provider when the requested provider prices the model itself', () => {
+    const result = getModelPricing('openai', 'gpt-4.1', 'standard');
+    expect(result.found && result.pricedFromProvider).toBeUndefined();
+  });
+
+  it('prices a bare model id against a vendor-qualified catalog entry', () => {
+    // Regression: gateways expose `deepseek-v4-flash`, while the catalog keys
+    // the same model as `deepseek/deepseek-v4-flash`, so every request on such
+    // a model was unpriced — and a run with no priced request shows no cost at
+    // all in the status bar.
+    const result = getModelPricing('opencode', 'deepseek-v4-flash', 'standard');
+    expect(result.found).toBe(true);
+    if (!result.found) return;
+    expect(result.price.inputPerMTok).toBeGreaterThan(0);
+    expect(result.pricedFromProvider).toBe('openrouter');
+  });
+
+  it('prices a variant suffix on a vendor-qualified catalog entry', () => {
+    const result = getModelPricing('neuralwatt', 'deepseek-v4-flash-flex', 'standard');
+    expect(result.found).toBe(true);
+  });
+
+  it('borrows a rate for a dated alias reached through a gateway', () => {
+    const result = getModelPricing('my-gateway', 'claude-sonnet-4-6-20251120', 'standard');
+    expect(result.found).toBe(true);
+    if (result.found) expect(result.pricedFromProvider).toBe('anthropic');
   });
 
   it('reports unknown_model for a known provider with an unknown model id', () => {
@@ -32,8 +63,8 @@ describe('getModelPricing', () => {
     });
   });
 
-  it('reports unknown_provider for an unknown provider', () => {
-    expect(getModelPricing('not-a-provider', 'gpt-4.1', 'standard')).toEqual({
+  it('reports unknown_provider when neither the provider nor the model id is known', () => {
+    expect(getModelPricing('not-a-provider', 'model-that-does-not-exist', 'standard')).toEqual({
       found: false,
       reason: 'unknown_provider',
     });

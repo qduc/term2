@@ -186,6 +186,21 @@ describe('computeModelCost', () => {
     expect(unknownTier.unpricedReason).toBe('unknown_tier');
   });
 
+  it('records which provider a borrowed rate came from, and omits the field otherwise', () => {
+    const borrowed = computeModelCost(
+      baseInput({
+        provider: 'my-gateway',
+        getPrice: () => ({ found: true, price: STANDARD_PRICE, pricedFromProvider: 'anthropic' }),
+      }),
+    );
+    expect(borrowed.pricedFromProvider).toBe('anthropic');
+    expect(borrowed.source).toBe('catalog');
+    // The borrowed rate still prices the request normally.
+    expect(borrowed.usdMicros).toBe(3450);
+
+    expect(computeModelCost(baseInput()).pricedFromProvider).toBeUndefined();
+  });
+
   it('records a failed/cancelled request without billable evidence as unpriced', () => {
     const failed = computeModelCost(baseInput({ outcome: 'failed', usage: undefined }));
     expect(failed.outcome).toBe('failed');

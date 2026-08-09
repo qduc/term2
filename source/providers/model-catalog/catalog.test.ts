@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { CATALOG_META, MODEL_CATALOG } from './catalog.generated.js';
-import { getCatalogModel, getModelContextWindow, lookupModel, type ModelCatalogData } from './catalog.js';
+import {
+  getCatalogModel,
+  getModelContextWindow,
+  lookupModel,
+  lookupModelAnyProvider,
+  type ModelCatalogData,
+} from './catalog.js';
 
 /**
  * Synthetic catalog with a prefix chain of distinct values so the
@@ -56,6 +62,77 @@ describe('lookupModel', () => {
   });
 });
 
+describe('lookupModel across a vendor/ prefix', () => {
+  // Aggregator catalogs key models by `vendor/model`, while the same model
+  // configured behind a gateway is usually a bare id (and occasionally the
+  // reverse). Neither side's id is wrong, so matching drops the vendor segment.
+  const vendorCatalog: ModelCatalogData = {
+    aggregator: {
+      'deepseek/deepseek-v4-flash': { contextWindow: 1048576, maxTokens: 393216 },
+      'gpt-4o': { contextWindow: 128000, maxTokens: 16384 },
+    },
+  };
+
+  it('matches a bare model id against a vendor-qualified catalog id', () => {
+    expect(lookupModel(vendorCatalog, 'aggregator', 'deepseek-v4-flash')?.contextWindow).toBe(1048576);
+  });
+
+  it('matches a bare dated/variant alias by prefix after dropping the vendor segment', () => {
+    expect(lookupModel(vendorCatalog, 'aggregator', 'deepseek-v4-flash-flex')?.contextWindow).toBe(1048576);
+  });
+
+  it('matches a vendor-qualified request against a bare catalog id', () => {
+    expect(lookupModel(vendorCatalog, 'aggregator', 'openai/gpt-4o')?.maxTokens).toBe(16384);
+  });
+
+  it('still refuses a vendor-stripped prefix that ends mid-word', () => {
+    expect(lookupModel(vendorCatalog, 'aggregator', 'deepseek-v4-flashy')).toBeUndefined();
+  });
+
+  it('prefers a vendor-stripped exact id over a truncated prefix of the full id', () => {
+    const mixed: ModelCatalogData = {
+      aggregator: {
+        // A dash-bounded prefix of the request: the right family, wrong model.
+        'deepseek-v4': { contextWindow: 1, maxTokens: 1 },
+        // Exactly the requested model once the vendor segment is dropped.
+        'deepseek/deepseek-v4-flash': { contextWindow: 2, maxTokens: 2 },
+      },
+    };
+    expect(lookupModel(mixed, 'aggregator', 'deepseek-v4-flash')?.maxTokens).toBe(2);
+  });
+
+  it('still prefers a full-id exact entry over a vendor-stripped one', () => {
+    const mixed: ModelCatalogData = {
+      aggregator: {
+        'deepseek-v4-flash': { contextWindow: 1, maxTokens: 1 },
+        'deepseek/deepseek-v4-flash': { contextWindow: 2, maxTokens: 2 },
+      },
+    };
+    expect(lookupModel(mixed, 'aggregator', 'deepseek-v4-flash')?.maxTokens).toBe(1);
+  });
+});
+
+describe('lookupModelAnyProvider', () => {
+  const crossProviderCatalog: ModelCatalogData = {
+    // Iterated first: only a prefix of the requested dated alias.
+    gateway: { 'claude-sonnet-4-5': { contextWindow: 1000000, maxTokens: 64000 } },
+    // Iterated second: an exact hit, which must win over the earlier prefix.
+    anthropic: { 'claude-sonnet-4-5-20250929': { contextWindow: 900000, maxTokens: 32000 } },
+  };
+
+  it('matches a dated alias by prefix under a provider that is not the requested one', () => {
+    expect(lookupModelAnyProvider(syntheticCatalog, 'claude-sonnet-4-6-20251120-preview')?.maxTokens).toBe(64000);
+  });
+
+  it('prefers an exact hit under any provider over a prefix hit under another', () => {
+    expect(lookupModelAnyProvider(crossProviderCatalog, 'claude-sonnet-4-5-20250929')?.maxTokens).toBe(32000);
+  });
+
+  it('returns undefined when no provider carries the model', () => {
+    expect(lookupModelAnyProvider(syntheticCatalog, 'model-that-does-not-exist')).toBeUndefined();
+  });
+});
+
 describe('getModelContextWindow over the vendored catalog', () => {
   it('returns the context window for a known OpenAI model', () => {
     expect(getModelContextWindow('openai', 'gpt-5.6-sol')).toBe(272000);
@@ -75,6 +152,12 @@ describe('getModelContextWindow over the vendored catalog', () => {
     // scopes to the catalog entry). The model id alone must still resolve.
     expect(getModelContextWindow('custom-local-llm', 'claude-sonnet-4-6')).toBe(1000000);
     expect(getModelContextWindow('anthropic', 'gpt-5.6-sol')).toBe(272000);
+  });
+
+  it('resolves a dated alias through an unknown provider (prefix match, not just exact)', () => {
+    // A gateway or proxy provider id never scopes to a catalog entry, but the
+    // dated alias is still the same model, so its metadata is usable.
+    expect(getModelContextWindow('my-gateway', 'claude-sonnet-4-6-20251120')).toBe(1000000);
   });
 
   it('returns undefined when neither the provider nor the model id is known', () => {

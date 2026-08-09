@@ -510,7 +510,7 @@ it('second-turn replay coalesces native reasoning with its assistant text instea
   ).toBe(false);
 });
 
-it('stream() surfaces reasoning_content as reasoning_delta events and in the completion output', async () => {
+it('stream() surfaces reasoning_content as reasoning_delta events and in completion provider_opaque output', async () => {
   const client = {
     chat: { completions: { create: async () => reasoningStream() } },
   };
@@ -529,26 +529,44 @@ it('stream() surfaces reasoning_content as reasoning_delta events and in the com
     {
       type: 'reasoning',
       text: 'Thinking it through.',
-      providerMetadata: {
+    },
+    {
+      type: 'provider_opaque',
+      provider: 'openai-compatible',
+      item: {
         reasoning_content: 'Thinking it through.',
-        openai_compatible_reasoning_content: true,
       },
     },
     { type: 'message', content: [{ type: 'text', text: 'Final answer.' }] },
   ]);
 });
 
-// OpenRouter-style gateways (and opencode in front of them) stream reasoning on
-// `delta.reasoning` instead of `delta.reasoning_content`. Reading only the
-// latter dropped every reasoning token these providers emitted.
 async function* openRouterReasoningStream(): AsyncIterable<any> {
-  yield { choices: [{ delta: { reasoning: 'Weighing' } }] };
-  yield { choices: [{ delta: { reasoning: ' the options.' } }] };
+  yield {
+    choices: [
+      {
+        delta: {
+          reasoning: 'Weighing',
+          reasoning_details: [{ type: 'reasoning.text', text: 'Weighing', format: 'unknown', index: 0 }],
+        },
+      },
+    ],
+  };
+  yield {
+    choices: [
+      {
+        delta: {
+          reasoning: ' the options.',
+          reasoning_details: [{ type: 'reasoning.text', text: ' the options.', format: 'unknown', index: 0 }],
+        },
+      },
+    ],
+  };
   yield { choices: [{ delta: { content: 'Final answer.' } }] };
   yield { choices: [{ delta: {}, finish_reason: 'stop' }] };
 }
 
-it('stream() surfaces OpenRouter-style delta.reasoning as reasoning_delta events and in the completion output', async () => {
+it('stream() surfaces OpenRouter-style delta.reasoning and reasoning_details in provider_opaque output', async () => {
   const client = {
     chat: { completions: { create: async () => openRouterReasoningStream() } },
   };
@@ -567,20 +585,23 @@ it('stream() surfaces OpenRouter-style delta.reasoning as reasoning_delta events
     {
       type: 'reasoning',
       text: 'Weighing the options.',
-      providerMetadata: {
-        reasoning_content: 'Weighing the options.',
-        openai_compatible_reasoning_content: true,
+    },
+    {
+      type: 'provider_opaque',
+      provider: 'openai-compatible',
+      item: {
+        reasoning: 'Weighing the options.',
+        reasoning_details: [
+          { type: 'reasoning.text', text: 'Weighing', format: 'unknown', index: 0 },
+          { type: 'reasoning.text', text: ' the options.', format: 'unknown', index: 0 },
+        ],
       },
     },
     { type: 'message', content: [{ type: 'text', text: 'Final answer.' }] },
   ]);
 });
 
-// The wire spelling for an outgoing assistant message is owned centrally by
-// preserveReasoningContentForOpenAICompatibleMessages in the fetch middleware,
-// so reasoning captured from `delta.reasoning` still replays as
-// `reasoning_content` here — the adapter must not invent a second spelling.
-it('replays reasoning captured from delta.reasoning as reasoning_content on continuation', async () => {
+it('replays reasoning captured from delta.reasoning verbatim as reasoning and reasoning_details on continuation', async () => {
   const bodies: any[] = [];
   const client = {
     chat: {
@@ -589,7 +610,18 @@ it('replays reasoning captured from delta.reasoning as reasoning_content on cont
           bodies.push(body);
           if (bodies.length === 1) {
             return (async function* () {
-              yield { choices: [{ delta: { reasoning: 'Need the fixture tool.' } }] };
+              yield {
+                choices: [
+                  {
+                    delta: {
+                      reasoning: 'Need the fixture tool.',
+                      reasoning_details: [
+                        { type: 'reasoning.text', text: 'Need the fixture tool.', format: 'unknown', index: 0 },
+                      ],
+                    },
+                  },
+                ],
+              };
               yield {
                 choices: [
                   {
@@ -634,7 +666,38 @@ it('replays reasoning captured from delta.reasoning as reasoning_content on cont
 
   expect(bodies).toHaveLength(2);
   const assistant = bodies[1].messages.find((message: any) => Array.isArray(message.tool_calls));
-  expect(assistant.reasoning_content).toBe('Need the fixture tool.');
+  expect(assistant.reasoning).toBe('Need the fixture tool.');
+  expect(assistant.reasoning_details).toEqual([
+    { type: 'reasoning.text', text: 'Need the fixture tool.', format: 'unknown', index: 0 },
+  ]);
+});
+
+it('refuses to splice provider_opaque from another provider into an OpenAI-compatible request', async () => {
+  const client = {
+    chat: {
+      completions: {
+        create: async () => emptyStream(),
+      },
+    },
+  };
+  const model = new OpenAIChatCompletionsModel(client, 'fixture-chat');
+  const request = {
+    input: [
+      {
+        type: 'provider_opaque',
+        provider: 'anthropic',
+        item: { thinking: 'foreign thinking' },
+      },
+      { type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] },
+    ],
+    tools: [],
+  } as any;
+
+  await expect(async () => {
+    for await (const _event of model.stream(request)) {
+      // drain
+    }
+  }).rejects.toThrow("Refusing to splice provider_opaque from 'anthropic' into an OpenAI-compatible request");
 });
 
 it('attaches a captured provider cost trailer as costUsd on the completion', async () => {

@@ -59,6 +59,7 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
     const calls = new Map<number, { id?: string; name: string; arguments: string }>();
     let text = '';
     let reasoning = '';
+    const rawContinuityMetadata: Record<string, unknown> = {};
     let sawFinishReason = false;
     let finishReason: string | undefined;
     let usage: StreamedModelUsage | undefined;
@@ -68,6 +69,29 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
       if (choice?.finish_reason != null) {
         sawFinishReason = true;
         finishReason = choice.finish_reason;
+      }
+      if (delta) {
+        for (const [key, val] of Object.entries(delta)) {
+          if (
+            key === 'role' ||
+            key === 'content' ||
+            key === 'tool_calls' ||
+            key === 'refusal' ||
+            key === 'function_call'
+          ) {
+            continue;
+          }
+          if (val == null) continue;
+          if (typeof val === 'string') {
+            rawContinuityMetadata[key] =
+              (typeof rawContinuityMetadata[key] === 'string' ? (rawContinuityMetadata[key] as string) : '') + val;
+          } else if (Array.isArray(val)) {
+            const existing = Array.isArray(rawContinuityMetadata[key]) ? (rawContinuityMetadata[key] as unknown[]) : [];
+            rawContinuityMetadata[key] = [...existing, ...val];
+          } else {
+            rawContinuityMetadata[key] = val;
+          }
+        }
       }
       // deepseek-style servers stream reasoning on `reasoning_content`;
       // OpenRouter-style gateways use `reasoning`. Reading only the former
@@ -128,7 +152,15 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
               {
                 type: 'reasoning' as const,
                 text: reasoning,
-                providerMetadata: { reasoning_content: reasoning, openai_compatible_reasoning_content: true },
+              },
+            ]
+          : []),
+        ...(Object.keys(rawContinuityMetadata).length > 0
+          ? [
+              {
+                type: 'provider_opaque' as const,
+                provider: 'openai-compatible',
+                item: rawContinuityMetadata,
               },
             ]
           : []),
@@ -185,8 +217,40 @@ function normalizeChatUsage(usage: any): StreamedModelUsage {
 function openAICompatibleMessages(input: StreamedModelTurnRequest['input']): any[] {
   const messages: any[] = [];
   let pendingReasoningContent = '';
+  let pendingOpaquePayload: Record<string, unknown> | null = null;
 
-  for (const item of input) {
+  for (const rawItem of input as any[]) {
+    const item = rawItem as any;
+    const providerOpaque =
+      item.providerOpaque ?? (item.type === 'provider_opaque' ? { provider: item.provider } : undefined);
+    if (providerOpaque) {
+      if (providerOpaque.provider !== 'openai-compatible') {
+        throw new Error(
+          `Refusing to splice provider_opaque from '${providerOpaque.provider}' into an OpenAI-compatible request: opaque items are only valid on the provider that produced them`,
+        );
+      }
+      const rawPayload = item.type === 'provider_opaque' ? item.item : item;
+      const { providerOpaque: _, type: _t, ...payload } = rawPayload as any;
+      let lastUserIndex = -1;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i]?.role === 'user') {
+          lastUserIndex = i;
+          break;
+        }
+      }
+      const turnAssistant = messages
+        .slice(lastUserIndex >= 0 ? lastUserIndex + 1 : 0)
+        .find((m: any) => m.role === 'assistant');
+      if (turnAssistant) {
+        if (!('reasoning_content' in payload)) {
+          delete turnAssistant.reasoning_content;
+        }
+        Object.assign(turnAssistant, payload);
+      } else {
+        pendingOpaquePayload = { ...(pendingOpaquePayload ?? {}), ...payload };
+      }
+      continue;
+    }
     if (item.type === 'reasoning') {
       const directNativeReasoning = item.providerMetadata?.reasoning_content;
       // Persistence intentionally removes the duplicate text field from a
@@ -201,11 +265,6 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input']): any
           : undefined;
       if (typeof nativeReasoning === 'string') {
         pendingReasoningContent += nativeReasoning;
-      } else {
-        // Generic reasoning has no Chat Completions wire representation.
-        // Retain the historical assistant-text fallback without inventing a
-        // provider-native `reasoning_content` field for unrelated providers.
-        messages.push({ role: 'assistant', content: item.text });
       }
       continue;
     }
@@ -218,33 +277,49 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input']): any
         }
         return { type: 'text', text: part.text };
       });
+      const reasoningFields = pendingOpaquePayload
+        ? pendingOpaquePayload
+        : pendingReasoningContent
+        ? { reasoning_content: pendingReasoningContent }
+        : {};
       messages.push({
         role: item.role,
         content,
-        ...(item.role === 'assistant' && pendingReasoningContent ? { reasoning_content: pendingReasoningContent } : {}),
+        ...(item.role === 'assistant' ? reasoningFields : {}),
       });
-      if (item.role === 'assistant') pendingReasoningContent = '';
+      if (item.role === 'assistant') {
+        pendingReasoningContent = '';
+        pendingOpaquePayload = null;
+      }
       continue;
     }
-    if (item.type === 'tool_call') {
-      const toolCall = { id: item.id, type: 'function', function: { name: item.name, arguments: item.arguments } };
+    if (item.type === 'tool_call' || item.type === 'function_call') {
+      const toolCallId = item.id ?? item.callId ?? item.call_id;
+      const toolCall = { id: toolCallId, type: 'function', function: { name: item.name, arguments: item.arguments } };
       const previous = messages[messages.length - 1];
       if (previous?.role === 'assistant' && Array.isArray(previous.tool_calls)) {
         previous.tool_calls.push(toolCall);
       } else {
+        const reasoningFields = pendingOpaquePayload
+          ? pendingOpaquePayload
+          : pendingReasoningContent
+          ? { reasoning_content: pendingReasoningContent }
+          : {};
         messages.push({
           role: 'assistant',
-          ...(pendingReasoningContent ? { content: null, reasoning_content: pendingReasoningContent } : {}),
+          ...(pendingOpaquePayload || pendingReasoningContent ? { content: null, ...reasoningFields } : {}),
           tool_calls: [toolCall],
         });
       }
       pendingReasoningContent = '';
+      pendingOpaquePayload = null;
       continue;
     }
-    if (item.type === 'tool_result') {
+    if (item.type === 'tool_result' || item.type === 'function_call_result') {
+      const toolCallId = item.id ?? item.callId ?? item.call_id;
       messages.push({
         role: 'tool',
-        tool_call_id: item.id,
+        tool_call_id: toolCallId,
         content: typeof item.output === 'string' ? item.output : JSON.stringify(item.output),
       });
     }
@@ -261,7 +336,10 @@ function coalesceReasoningToolCallBatches(messages: any[]): any[] {
   const result: any[] = [];
   for (let index = 0; index < messages.length; index += 1) {
     const message = messages[index];
-    if (message?.role !== 'assistant' || !message.reasoning_content || !Array.isArray(message.tool_calls)) {
+    const hasReasoning =
+      message?.role === 'assistant' &&
+      (message.reasoning_content != null || message.reasoning != null || message.reasoning_details != null);
+    if (!hasReasoning || !Array.isArray(message.tool_calls)) {
       result.push(message);
       continue;
     }
@@ -278,6 +356,8 @@ function coalesceReasoningToolCallBatches(messages: any[]): any[] {
         next?.role === 'assistant' &&
         Array.isArray(next.tool_calls) &&
         next.reasoning_content == null &&
+        next.reasoning == null &&
+        next.reasoning_details == null &&
         next.content == null
       ) {
         message.tool_calls.push(...next.tool_calls);

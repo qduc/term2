@@ -439,9 +439,12 @@ it('assistant reasoning_content from provider response is preserved as reasoning
   expect(result.output[0]).toEqual({
     type: 'reasoning',
     text: 'Need to inspect the project first.',
-    providerMetadata: {
+  });
+  expect(result.output[1]).toEqual({
+    type: 'provider_opaque',
+    provider: 'openai-compatible',
+    item: {
       reasoning_content: 'Need to inspect the project first.',
-      openai_compatible_reasoning_content: true,
     },
   });
 });
@@ -483,9 +486,12 @@ it('assistant reasoning_content from provider stream is preserved as reasoning o
   expect(finalEvent.output[0]).toEqual({
     type: 'reasoning',
     text: 'Need to stream reasoning.',
-    providerMetadata: {
+  });
+  expect(finalEvent.output[1]).toEqual({
+    type: 'provider_opaque',
+    provider: 'openai-compatible',
+    item: {
       reasoning_content: 'Need to stream reasoning.',
-      openai_compatible_reasoning_content: true,
     },
   });
 });

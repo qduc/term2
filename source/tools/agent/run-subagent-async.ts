@@ -221,10 +221,15 @@ export function createGetSubagentResultToolDefinition(
     execute: async (params, context, details) => {
       try {
         const status = getSubagentStatus({ runId: params.runId }, context, details);
-        if (
-          !Array.isArray(status) &&
-          (status.status === 'running' || status.status === 'waiting_for_answer' || status.status === 'cancelling')
-        ) {
+        if (!Array.isArray(status) && status.status === 'waiting_for_answer') {
+          return JSON.stringify({
+            status: 'background_run_waiting_for_answer',
+            runId: params.runId,
+            message:
+              'This background subagent is waiting for your answer. Use send_message with its messageId to resume it; do not call get_subagent_result.',
+          });
+        }
+        if (!Array.isArray(status) && (status.status === 'running' || status.status === 'cancelling')) {
           return JSON.stringify({
             status: 'background_run_active',
             runId: params.runId,

@@ -1,22 +1,20 @@
 # Background shell monitor
 
-Status: plan — implementation is tracked here in six phases. Phase 1 (chunk
-tap) merged (6d886844); phase 2 (output store) merged (c2ed6c83); phase 3
-(watches) merged (de1484f0); phase 4 (notification plumbing) in progress. All
-2026-08-10. The idle-session-wake product call was approved at kickoff — see
-`## Decided`.
+Status: plan — implementation is tracked here in six phases. Phases 1–4
+(chunk tap, output store, watches, notification plumbing) merged 2026-08-10
+(6d886844, c2ed6c83, de1484f0, 0fc912e7); phase 5 (tools & UI) in progress.
+The idle-session-wake product call was approved at kickoff — see `## Decided`.
 
 ## Resume here
 
 Read this before touching anything this plan covers. Six phases implement the
-feature. Phases 1 (chunk tap, 6d886844), 2 (output store, c2ed6c83), and 3
-(watches, de1484f0) are merged into main; their worktrees and branches are
-removed. Phase 4 (notification plumbing) runs in
-`.worktrees/background-shell-monitor-4-notification-plumbing`; phases 5–6 not
-started. Read `docs/plans/mid-turn-injection.md` before phase 4 — it owns the
-vocabulary (Segment, Request Boundary, Injection, Background Notification) for
-the delivery path. Approved at kickoff (2026-08-10): monitor firings may wake an
-idle session — see `## Decided`. Phases run in dependency order:
+feature. Phases 1–4 (chunk tap 6d886844, output store c2ed6c83, watches
+de1484f0, notification plumbing 0fc912e7) are merged into main; their worktrees
+and branches are removed. Phase 5 (tools & UI) runs in
+`.worktrees/background-shell-monitor-5-tools-ui`; phase 6 not started.
+`mid-turn-injection.md` was already read for phase 4. Approved at kickoff
+(2026-08-10): monitor firings may wake an idle session — see `## Decided`.
+Phases run in dependency order:
 1 → 2 → 3 are a strict
 build-up, 4 builds on 3, 5 builds on 4, and 6 is independent. Each phase is TDD
 and lands in its own worktree (`.worktrees/background-shell-monitor-N-<slug>`),
@@ -281,7 +279,10 @@ independently reviewable, each in its own worktree.
   flush-before-completion ordering rule.
 - **Obligations:** read `docs/plans/mid-turn-injection.md` first; run
   `pnpm test:provider-black-box` during development on this phase.
-- **Status:** in progress (approved 2026-08-10)
+- **Status:** completed — merged to main as 0fc912e7 (feature commit
+  153ef757); worktree and branch removed. Validation note: the generous
+  (always-on) idle-wake path needs no orchestrator change — the generic drain
+  already opens a hidden model-only turn for any pending notification.
 
 ### Phase 5 — Tools and UI
 
@@ -292,7 +293,7 @@ independently reviewable, each in its own worktree.
   stranded-running-row rule at `shell.ts:144`); `get_shell_job` returns the
   bounded tail plus `droppedBytes` for running jobs; the transcript
   `background_job_active` branch shows the tail instead of `'Still running.'`.
-- **Status:** not started
+- **Status:** in progress (approved 2026-08-10)
 
 ### Phase 6 — Settings
 

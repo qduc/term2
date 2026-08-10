@@ -261,6 +261,98 @@ describe('background shell monitor tools', () => {
   });
 });
 
+describe('background timeout and overflow policy', () => {
+  it('background launches use shell.backgroundTimeout and truncate overflow when timeout_ms is absent', async () => {
+    const registry = new BackgroundShellRegistry<{ output: string; status: 'completed' | 'failed' | 'timed_out' }>({
+      createId: () => 'background-timeout-job',
+    });
+    const seenOptions: Array<{ timeout?: number; overflow?: 'kill' | 'truncate' }> = [];
+    const shell = createShellToolDefinition({
+      loggingService: createNoopLogger(),
+      settingsService: createMockSettingsService({
+        'sandbox.enabled': false,
+        'shell.timeout': 120000,
+        'shell.backgroundTimeout': 1_800_000,
+      }),
+      backgroundShellRegistry: registry,
+      executeShellCommandImpl: async (_command, options) => {
+        seenOptions.push({ timeout: options?.timeout, overflow: options?.overflow });
+        return { stdout: 'ok', stderr: '', exitCode: 0, timedOut: false };
+      },
+    });
+
+    await shell.execute({ command: 'npm run dev', background: true });
+    await registry.whenSettled('background-timeout-job');
+
+    expect(seenOptions).toEqual([{ timeout: 1_800_000, overflow: 'truncate' }]);
+  });
+
+  it('background launches honor an explicit timeout_ms over shell.backgroundTimeout and still truncate', async () => {
+    const registry = new BackgroundShellRegistry<{ output: string; status: 'completed' | 'failed' | 'timed_out' }>({
+      createId: () => 'background-timeout-override-job',
+    });
+    const seenOptions: Array<{ timeout?: number; overflow?: 'kill' | 'truncate' }> = [];
+    const shell = createShellToolDefinition({
+      loggingService: createNoopLogger(),
+      settingsService: createMockSettingsService({
+        'sandbox.enabled': false,
+        'shell.timeout': 120000,
+        'shell.backgroundTimeout': 1_800_000,
+      }),
+      backgroundShellRegistry: registry,
+      executeShellCommandImpl: async (_command, options) => {
+        seenOptions.push({ timeout: options?.timeout, overflow: options?.overflow });
+        return { stdout: 'ok', stderr: '', exitCode: 0, timedOut: false };
+      },
+    });
+
+    await shell.execute({ command: 'npm run dev', background: true, timeout_ms: 60_000 });
+    await registry.whenSettled('background-timeout-override-job');
+
+    expect(seenOptions).toEqual([{ timeout: 60_000, overflow: 'truncate' }]);
+  });
+
+  it('foreground launches keep shell.timeout and the kill overflow default', async () => {
+    const seenOptions: Array<{ timeout?: number; overflow?: 'kill' | 'truncate' }> = [];
+    const shell = createShellToolDefinition({
+      loggingService: createNoopLogger(),
+      settingsService: createMockSettingsService({
+        'sandbox.enabled': false,
+        'shell.timeout': 120000,
+        'shell.backgroundTimeout': 1_800_000,
+      }),
+      executeShellCommandImpl: async (_command, options) => {
+        seenOptions.push({ timeout: options?.timeout, overflow: options?.overflow });
+        return { stdout: 'ok', stderr: '', exitCode: 0, timedOut: false };
+      },
+    });
+
+    await shell.execute({ command: 'echo hi' });
+
+    expect(seenOptions).toEqual([{ timeout: 120_000, overflow: 'kill' }]);
+  });
+
+  it('foreground launches honor an explicit timeout_ms and keep the kill overflow default', async () => {
+    const seenOptions: Array<{ timeout?: number; overflow?: 'kill' | 'truncate' }> = [];
+    const shell = createShellToolDefinition({
+      loggingService: createNoopLogger(),
+      settingsService: createMockSettingsService({
+        'sandbox.enabled': false,
+        'shell.timeout': 120000,
+        'shell.backgroundTimeout': 1_800_000,
+      }),
+      executeShellCommandImpl: async (_command, options) => {
+        seenOptions.push({ timeout: options?.timeout, overflow: options?.overflow });
+        return { stdout: 'ok', stderr: '', exitCode: 0, timedOut: false };
+      },
+    });
+
+    await shell.execute({ command: 'echo hi', timeout_ms: 30_000 });
+
+    expect(seenOptions).toEqual([{ timeout: 30_000, overflow: 'kill' }]);
+  });
+});
+
 it('background shell acknowledges immediately, exposes status and cancellation, and defers sandbox cleanup', async () => {
   const registry = new BackgroundShellRegistry<{ output: string; status: 'completed' | 'failed' | 'timed_out' }>({
     createId: () => 'background-job',

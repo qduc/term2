@@ -92,6 +92,11 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
     { value: '120000', description: '120s' },
     { value: '300000', description: '5m' },
   ],
+  'shell.backgroundTimeout': [
+    { value: '600000', description: '10m' },
+    { value: '1800000', description: '30m (default)' },
+    { value: '3600000', description: '1h' },
+  ],
   'shell.maxOutputLines': [{ value: '200' }, { value: '500' }, { value: '1000' }],
   'shell.maxOutputChars': [{ value: '20000' }, { value: '50000' }, { value: '100000' }],
   'ui.historySize': [{ value: '50' }, { value: '100' }, { value: '200' }],

@@ -28,6 +28,7 @@ it('getSettingCategory maps known keys to expected categories', () => {
   expect(getSettingCategory(SETTING_KEYS.AGENT_MAX_MODEL_REQUEST_DURATION_MS).id).toBe('safety');
   expect(getSettingCategory('agent.autoApproveReasoningEffort').id).toBe('safety');
   expect(getSettingCategory('shell.timeout').id).toBe('tools');
+  expect(getSettingCategory(SETTING_KEYS.SHELL_BACKGROUND_TIMEOUT).id).toBe('tools');
   expect(getSettingCategory('agent.subagentWorkerModel').id).toBe('models');
   expect(getSettingCategory('memory.enabled').id).toBe('memory');
   expect(getSettingCategory('memory.directory').id).toBe('memory');

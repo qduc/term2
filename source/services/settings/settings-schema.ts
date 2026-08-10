@@ -215,6 +215,12 @@ export const AgentSettingsSchema = z.object({
 
 export const ShellSettingsSchema = z.object({
   timeout: z.number().int().positive().default(120000),
+  backgroundTimeout: z
+    .number()
+    .int()
+    .positive()
+    .default(30 * 60 * 1000)
+    .describe('Timeout for background shell jobs, in milliseconds. Capped: 0 or unbounded values are rejected.'),
   maxOutputLines: z.number().int().positive().default(1000),
   maxOutputChars: z.number().int().positive().default(40000),
   autoApproveMode: z
@@ -567,6 +573,7 @@ export interface SettingsWithSources {
   };
   shell: {
     timeout: SettingWithSource<number>;
+    backgroundTimeout: SettingWithSource<number>;
     maxOutputLines: SettingWithSource<number>;
     maxOutputChars: SettingWithSource<number>;
     autoApproveMode: SettingWithSource<'off' | 'advisory' | 'auto' | 'always'>;
@@ -691,6 +698,7 @@ export const SETTING_KEYS = {
   AGENT_CONTEXT_COMPACTION_ENABLED: 'agent.contextCompaction.enabled',
   AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD: 'agent.contextCompaction.compactThreshold',
   SHELL_TIMEOUT: 'shell.timeout',
+  SHELL_BACKGROUND_TIMEOUT: 'shell.backgroundTimeout',
   SHELL_MAX_OUTPUT_LINES: 'shell.maxOutputLines',
   SHELL_MAX_OUTPUT_CHARS: 'shell.maxOutputChars',
   SHELL_AUTO_APPROVE_MODE: 'shell.autoApproveMode',
@@ -797,6 +805,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_CONTEXT_COMPACTION_ENABLED,
   SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD,
   SETTING_KEYS.SHELL_TIMEOUT,
+  SETTING_KEYS.SHELL_BACKGROUND_TIMEOUT,
   SETTING_KEYS.SHELL_MAX_OUTPUT_LINES,
   SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS,
   SETTING_KEYS.LOGGING_LOG_LEVEL,
@@ -952,6 +961,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   },
   shell: {
     timeout: 120000,
+    backgroundTimeout: 30 * 60 * 1000,
     maxOutputLines: 1000,
     maxOutputChars: 40000,
     autoApproveMode: 'off',

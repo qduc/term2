@@ -114,6 +114,11 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
       source: settings.shell.timeout.source,
     },
     {
+      key: SETTING_KEYS.SHELL_BACKGROUND_TIMEOUT,
+      value: settings.shell.backgroundTimeout.value,
+      source: settings.shell.backgroundTimeout.source,
+    },
+    {
       key: SETTING_KEYS.SHELL_MAX_OUTPUT_LINES,
       value: settings.shell.maxOutputLines.value,
       source: settings.shell.maxOutputLines.source,

@@ -237,6 +237,13 @@ it('buildSettingValueSuggestions returns enum suggestions for ui.displayMode', (
   expect(values).toEqual(['standard', 'concise']);
 });
 
+it('buildSettingValueSuggestions returns curated presets for shell.backgroundTimeout', () => {
+  const result = buildSettingValueSuggestions('shell.backgroundTimeout');
+  const values = result.map((r) => r.value);
+  expect(values.includes('1800000')).toBe(true);
+  expect(values.includes('3600000')).toBe(true);
+});
+
 it('buildSettingValueSuggestions returns transport suggestions', () => {
   expect(buildSettingValueSuggestions('agent.transport').map((suggestion) => suggestion.value)).toEqual([
     'websocket',

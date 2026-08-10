@@ -61,6 +61,7 @@ export const SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.AGENT_CODEX_WEBSOCKET_INTER_FRAME_TIMEOUT_MS]:
     'Codex WebSocket timeout between response frames, in milliseconds',
   [SETTING_KEYS.SHELL_TIMEOUT]: 'Shell command timeout in milliseconds',
+  [SETTING_KEYS.SHELL_BACKGROUND_TIMEOUT]: 'Timeout for background shell jobs in milliseconds (default 30 minutes)',
   [SETTING_KEYS.SHELL_MAX_OUTPUT_LINES]: 'Maximum lines of shell output to capture',
   [SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS]: 'Maximum characters of shell output to capture',
   [SETTING_KEYS.UI_HISTORY_SIZE]: 'Number of history items to keep',
@@ -209,6 +210,7 @@ export const CATEGORY_KEYS = {
   tools: new Set<string>([
     SETTING_KEYS.ENABLE_AGENT_WORKFLOW,
     SETTING_KEYS.SHELL_TIMEOUT,
+    SETTING_KEYS.SHELL_BACKGROUND_TIMEOUT,
     SETTING_KEYS.SHELL_MAX_OUTPUT_LINES,
     SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS,
     SETTING_KEYS.SHELL_USE_RTK_COMPRESSION,

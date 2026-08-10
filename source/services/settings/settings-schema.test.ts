@@ -274,6 +274,20 @@ it('SettingsSchema rejects non-positive agent.maxParallelToolCalls values', () =
   expect(() => SettingsSchema.parse({ agent: { maxParallelToolCalls: 0 } })).toThrow();
 });
 
+it('shell.backgroundTimeout defaults to 30 minutes, is runtime modifiable, and is bounded', () => {
+  const parsed = SettingsSchema.parse({ shell: {} });
+  expect(parsed.shell?.backgroundTimeout).toBe(30 * 60 * 1000);
+  expect(DEFAULT_SETTINGS.shell.backgroundTimeout).toBe(30 * 60 * 1000);
+  expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.SHELL_BACKGROUND_TIMEOUT)).toBe(true);
+
+  expect(SettingsSchema.parse({ shell: { backgroundTimeout: 60_000 } }).shell?.backgroundTimeout).toBe(60_000);
+
+  // Capped: never zero, never negative, never unbounded.
+  for (const value of [0, -1, 1.5, Infinity, Number.NaN]) {
+    expect(() => SettingsSchema.parse({ shell: { backgroundTimeout: value } })).toThrow();
+  }
+});
+
 it('SettingsSchema preserves user-configured workflow model tiers', () => {
   const parsed = SettingsSchema.parse({
     agent: { efficientModel: 'gpt-5-mini', capableModel: 'gpt-5.3-codex' },

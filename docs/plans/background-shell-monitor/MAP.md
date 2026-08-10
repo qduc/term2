@@ -48,6 +48,10 @@ already delivers job completions.
   `shell_output:${jobId}:${watchId}:${seq}` keeps repeat firings distinct under
   the exactly-once `messageId` dedupe. Never emit a monitor notification after
   the job's terminal notification.
+- Store and watch phases stay pure. The shell-tool seam (open the store stream
+  at `registry.launch`, close it in the already-passed `onSettled` callback,
+  `shell.ts:920`) is wired in **phase 5**, not phases 2–3; phases 2–3 drive the
+  store only through its own API.
 - Update `## Resume here` and the per-phase status on every phase transition.
   Per AGENTS.md, move the plan down (or drop it) once its design record stops
   earning its place.

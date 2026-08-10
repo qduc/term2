@@ -28,6 +28,7 @@ import { deriveInputOwner } from '../../lib/input-owner.js';
 import type { SubmissionMutation } from '../../services/conversation/conversation-adapter.js';
 import type { SessionCostSummary } from '../../services/cost/model-cost.js';
 import type { BackgroundTaskControlPort } from '../../services/session/background-task-control.js';
+import type { BackgroundTaskControlDetails } from '../../services/session/background-task-control.js';
 import { useInputState } from '../../context/InputContext.js';
 import FirstRunSetupPrompt, { type FirstRunSetupPhase } from '../input/FirstRunSetupPrompt.js';
 
@@ -89,6 +90,8 @@ export type BottomAreaProps = {
   onEditQueuedMessage?: (id: string, turn: UserTurn) => Promise<SubmissionMutation>;
   backgroundSubagentTasks?: readonly BackgroundTask[];
   backgroundSubagentTasksNow?: number;
+  backgroundTaskDetails?: readonly BackgroundTaskControlDetails[];
+  backgroundTaskDetailsNow?: number;
   listBackgroundTaskDetails?: BackgroundTaskControlPort['listDetails'];
   getBackgroundTaskDetails?: BackgroundTaskControlPort['getDetails'];
   stopBackgroundTask?: BackgroundTaskControlPort['requestStop'];
@@ -158,6 +161,8 @@ const BottomArea: FC<BottomAreaProps> = ({
   onEditQueuedMessage,
   backgroundSubagentTasks = [],
   backgroundSubagentTasksNow = Date.now(),
+  backgroundTaskDetails,
+  backgroundTaskDetailsNow = backgroundSubagentTasksNow,
   listBackgroundTaskDetails,
   getBackgroundTaskDetails,
   stopBackgroundTask,
@@ -309,9 +314,12 @@ const BottomArea: FC<BottomAreaProps> = ({
             {isProcessing && !toolCallStreamingInfo && thinkingStartedAt == null && (
               <Text color="#64748b">processing{'.'.repeat(dotCount)}</Text>
             )}
-            {foregroundTransferCandidate && <Text color="#64748b">Foreground shell running · Ctrl+B manage</Text>}
+            {foregroundTransferCandidate && <Text color="#64748b">Foreground shell running · Ctrl+G manage</Text>}
             {interruptConfirmVisible && <Text color="#f59e0b">Press ESC again to interrupt</Text>}
-            <BackgroundTasksPanel tasks={backgroundSubagentTasks} now={backgroundSubagentTasksNow} />
+            <BackgroundTasksPanel
+              tasks={backgroundTaskDetails ?? backgroundSubagentTasks}
+              now={backgroundTaskDetails ? backgroundTaskDetailsNow : backgroundSubagentTasksNow}
+            />
             {listBackgroundTaskDetails && getBackgroundTaskDetails && stopBackgroundTask && (
               <BackgroundTaskManager
                 enabled={inputOwner.kind === 'input' || showBackgroundTaskManager}

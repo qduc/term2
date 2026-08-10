@@ -33,17 +33,30 @@ const taskLabel = (details: BackgroundTaskControlDetails): string => {
 };
 
 const isActive = (details: BackgroundTaskControlDetails): boolean =>
-  details.status === 'running' || details.status === 'waiting_for_answer';
+  details.status === 'running' || details.status === 'waiting_for_answer' || details.status === 'awaiting_approval';
 
 const statusText = (details: BackgroundTaskControlDetails): string => {
-  switch (details.status) {
-    case 'waiting_for_answer':
-      return 'waiting for answer';
-    case 'timed_out':
-      return 'timed out';
-    default:
-      return details.status.replaceAll('_', ' ');
+  const status = details.status as string;
+  if (status === 'failed') return 'failed · terminal';
+  if (status === 'completed') return 'completed · terminal';
+  if (status === 'timed_out') return 'timed out · terminal';
+  if (status === 'cancelled') return 'cancelled · terminal';
+  const activity = details.activity;
+  if (!activity) return status.replaceAll('_', ' ');
+  switch (activity.state) {
+    case 'waiting':
+      return `waiting for ${activity.reason ?? 'provider'}`;
+    case 'quiet':
+      return 'quiet · no observed progress · still running';
+    case 'cancelling':
+      return 'cancelling';
+    case 'settled':
+      return `${status.replaceAll('_', ' ')} · terminal`;
+    case 'active':
+      return 'active';
   }
+  /* c8 ignore next -- exhaustive switch over the normalized activity union */
+  return status.replaceAll('_', ' ');
 };
 
 const formatToolCounts = (counts: Record<string, number>): string =>
@@ -126,11 +139,11 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
   useInput(
     (input, key) => {
       if (!open) {
-        if (key.ctrl && input.toLowerCase() === 'b') openManager();
+        if (key.ctrl && input.toLowerCase() === 'g') openManager();
         return;
       }
 
-      if (key.escape || (key.ctrl && input.toLowerCase() === 'b')) {
+      if (key.escape || (key.ctrl && input.toLowerCase() === 'g')) {
         close();
         return;
       }

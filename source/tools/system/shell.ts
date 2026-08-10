@@ -585,6 +585,7 @@ export function createShellToolDefinition(deps: {
       let dockerHostControl: DockerHostControl | undefined;
       let backgroundCleanupDeferred = false;
       let transferred = false;
+      let observedJobId: string | undefined;
       const ownsCorrelationId = !background;
       let foregroundCorrelationRestored = false;
       const restoreForegroundCorrelation = () => {
@@ -763,6 +764,9 @@ export function createShellToolDefinition(deps: {
             pauseOnSandboxNetworkApproval: sandboxed,
             signal,
             sshService,
+            onOutputChunk: () => {
+              if (observedJobId) backgroundShellRegistry?.recordOutputChunk(observedJobId);
+            },
           });
 
           const stdout = result.stdout ?? '';
@@ -920,6 +924,7 @@ export function createShellToolDefinition(deps: {
               onSettled: cleanupAfterExecution,
               resultToStatus: (result) => result.status,
             });
+            observedJobId = job.id;
             backgroundCleanupDeferred = true;
             return JSON.stringify({ jobId: job.id, status: job.status });
           } catch (error) {
@@ -940,6 +945,7 @@ export function createShellToolDefinition(deps: {
               restoreForegroundCorrelation();
             },
           });
+          observedJobId = lease.jobId;
           // Cleanup is lease-owned now, whether it stays foreground or moves.
           backgroundCleanupDeferred = true;
           const result = await lease.foregroundResult;

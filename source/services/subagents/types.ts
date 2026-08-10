@@ -233,4 +233,8 @@ export interface SubagentRunStatus {
   turnHistory?: TurnSnapshot[];
   currentText?: string;
   pendingToolCounts?: Record<string, number>;
+  /** Registry-owned liveness evidence used by the session UI projection. */
+  lastActivityAt?: number;
+  activityState?: 'active' | 'waiting' | 'cancelling';
+  waitingReason?: 'provider' | 'approval' | 'answer';
 }

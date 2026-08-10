@@ -24,6 +24,7 @@ export type ConversationEvent =
   | SubagentTextTurnEvent
   | SubagentStreamingTextEvent
   | SubagentCommandMessageEvent
+  | SubagentApprovalRequiredEvent
   | SubagentCompletedEvent
   | SubagentQuestionEvent
   | BackgroundShellStartedEvent
@@ -209,6 +210,13 @@ export interface SubagentCommandMessageEvent {
   agentId: string;
   role: string;
   message: CommandMessage;
+}
+
+/** A child execution entered an approval pause owned by the background lease. */
+export interface SubagentApprovalRequiredEvent {
+  type: 'subagent_approval_required';
+  agentId: string;
+  role: string;
 }
 
 export interface SubagentCompletedEvent {

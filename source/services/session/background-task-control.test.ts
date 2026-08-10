@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { BackgroundTaskControl } from './background-task-control.js';
 import { SubagentNotificationStore } from '../subagents/subagent-notification-store.js';
+import { BACKGROUND_SUBAGENT_QUIET_AFTER_MS } from './background-task-control.js';
 
 const subagentStatus = (overrides: Record<string, unknown> = {}) => ({
   runId: 'run-1',
@@ -24,6 +25,94 @@ const shellJob = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe('BackgroundTaskControl', () => {
+  it('normalizes observed, provider-waiting, and quiet activity without treating quiet as terminal', () => {
+    const requestStop = vi.fn((runId: string) => ({ ok: true as const, runId, status: 'cancelling' as const }));
+    const now = 100_000;
+    const control = new BackgroundTaskControl({
+      now: () => now,
+      client: {
+        listBackgroundSubagentStatuses: () => [
+          subagentStatus({ runId: 'active', lastActivityAt: now - 1_000, activityState: 'active' }),
+          subagentStatus({
+            runId: 'provider',
+            lastActivityAt: now - 1_000,
+            activityState: 'waiting',
+            waitingReason: 'provider',
+          }),
+          subagentStatus({
+            runId: 'quiet',
+            lastActivityAt: now - BACKGROUND_SUBAGENT_QUIET_AFTER_MS - 1,
+            activityState: 'active',
+          }),
+        ],
+        getBackgroundSubagentStatus: (id) =>
+          subagentStatus({
+            runId: id,
+            lastActivityAt: now - BACKGROUND_SUBAGENT_QUIET_AFTER_MS - 1,
+            activityState: 'active',
+          }),
+        requestBackgroundSubagentStop: requestStop,
+      },
+      notifications: new SubagentNotificationStore(),
+    });
+
+    expect(control.listDetails()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'active', activity: expect.objectContaining({ state: 'active' }) }),
+        expect.objectContaining({
+          id: 'provider',
+          activity: expect.objectContaining({ state: 'waiting', reason: 'provider' }),
+        }),
+        expect.objectContaining({
+          id: 'quiet',
+          activity: expect.objectContaining({
+            state: 'quiet',
+            lastActivityAt: now - BACKGROUND_SUBAGENT_QUIET_AFTER_MS - 1,
+          }),
+        }),
+      ]),
+    );
+
+    expect(control.requestStop({ kind: 'subagent', id: 'quiet' })).toEqual({
+      ok: true,
+      details: expect.objectContaining({ id: 'quiet', activity: expect.objectContaining({ state: 'cancelling' }) }),
+    });
+  });
+
+  it('keeps approval waiting and confirmed failure distinct from quiet', () => {
+    const control = new BackgroundTaskControl({
+      now: () => 100_000,
+      client: {
+        listBackgroundSubagentStatuses: () => [
+          subagentStatus({
+            runId: 'approval',
+            status: 'awaiting_approval',
+            activityState: 'waiting',
+            waitingReason: 'approval',
+          }),
+          subagentStatus({ runId: 'failed', status: 'failed', activityState: 'active', lastActivityAt: 1_000 }),
+        ],
+        getBackgroundSubagentStatus: (id) =>
+          id === 'approval'
+            ? subagentStatus({
+                runId: id,
+                status: 'awaiting_approval',
+                activityState: 'waiting',
+                waitingReason: 'approval',
+              })
+            : subagentStatus({ runId: id, status: 'failed', activityState: 'active', lastActivityAt: 1_000 }),
+      },
+      notifications: new SubagentNotificationStore(),
+    });
+
+    expect(control.getDetails({ kind: 'subagent', id: 'approval' })).toEqual(
+      expect.objectContaining({ activity: expect.objectContaining({ state: 'waiting', reason: 'approval' }) }),
+    );
+    expect(control.getDetails({ kind: 'subagent', id: 'failed' })).toEqual(
+      expect.objectContaining({ status: 'failed', activity: expect.objectContaining({ state: 'settled' }) }),
+    );
+  });
+
   it('lists live work before retained terminal work and returns executor-specific details', () => {
     const control = new BackgroundTaskControl({
       client: {

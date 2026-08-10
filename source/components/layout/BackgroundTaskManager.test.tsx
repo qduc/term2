@@ -52,7 +52,7 @@ const writeInput = async (stdin: { write: (value: string) => void }, value: stri
   });
 };
 
-it.sequential('opens with Ctrl+B and exposes retained tasks without replacing the compact panel', async () => {
+it.sequential('opens with Ctrl+G and exposes retained tasks without replacing the compact panel', async () => {
   const onOpenChange = vi.fn();
   const view = await renderInAct(
     <BackgroundTaskManager
@@ -65,6 +65,8 @@ it.sequential('opens with Ctrl+B and exposes retained tasks without replacing th
 
   expect(view.lastFrame() ?? '').toBe('');
   await writeInput(view.stdin, '\x02');
+  expect(view.lastFrame() ?? '').toBe('');
+  await writeInput(view.stdin, '\x07');
 
   const output = view.lastFrame() ?? '';
   expect(output).toContain('Manage background tasks');
@@ -86,7 +88,7 @@ it.sequential('selects a task and shows executor-specific details on Enter', asy
     />,
   );
 
-  await writeInput(view.stdin, '\x02');
+  await writeInput(view.stdin, '\x07');
   await writeInput(view.stdin, '\u001B[B');
   await writeInput(view.stdin, '\r');
 
@@ -103,7 +105,7 @@ it.sequential('requires confirmation before force stopping exactly one live task
     <BackgroundTaskManager listDetails={() => [subagent]} getDetails={() => subagent} requestStop={requestStop} />,
   );
 
-  await writeInput(view.stdin, '\x02');
+  await writeInput(view.stdin, '\x07');
   await writeInput(view.stdin, 'x');
   expect(view.lastFrame() ?? '').toContain('Press Enter to force stop');
   expect(requestStop).not.toHaveBeenCalled();
@@ -112,6 +114,53 @@ it.sequential('requires confirmation before force stopping exactly one live task
   expect(requestStop).toHaveBeenCalledOnce();
   expect(requestStop).toHaveBeenCalledWith({ kind: 'subagent', id: 'run-1' });
   expect(view.lastFrame() ?? '').toContain('Stop requested');
+});
+
+it.sequential('keeps quiet work visibly running and stoppable without calling it hung', async () => {
+  const quiet = {
+    ...subagent,
+    activity: { state: 'quiet' as const, lastActivityAt: 1_000 },
+  };
+  const requestStop = vi.fn(() => ({ ok: true as const, details: { ...quiet, status: 'cancelling' as const } }));
+  const view = await renderInAct(
+    <BackgroundTaskManager listDetails={() => [quiet]} getDetails={() => quiet} requestStop={requestStop} />,
+  );
+
+  await writeInput(view.stdin, '\x07');
+  expect(view.lastFrame() ?? '').toContain('no observed progress');
+  expect(view.lastFrame() ?? '').toContain('[x] Force stop');
+  expect(view.lastFrame() ?? '').not.toContain('hung');
+  await writeInput(view.stdin, 'x');
+  await writeInput(view.stdin, '\r');
+  expect(requestStop).toHaveBeenCalledWith({ kind: 'subagent', id: 'run-1' });
+});
+
+it.sequential('shows provider and approval waits separately from quiet and terminal failure', async () => {
+  const waiting = {
+    ...subagent,
+    activity: { state: 'waiting' as const, reason: 'provider' as const, lastActivityAt: 1_000 },
+  };
+  const approval = {
+    ...subagent,
+    id: 'approval',
+    status: 'awaiting_approval' as const,
+    activity: { state: 'waiting' as const, reason: 'approval' as const, lastActivityAt: 1_000 },
+  };
+  const failed = { ...subagent, id: 'failed', status: 'failed' as const, error: 'exit 1' };
+  const view = await renderInAct(
+    <BackgroundTaskManager
+      listDetails={() => [waiting, approval, failed]}
+      getDetails={() => waiting}
+      requestStop={() => ({ ok: false as const, code: 'not_active' as const })}
+    />,
+  );
+
+  await writeInput(view.stdin, '\x07');
+  expect(view.lastFrame() ?? '').toContain('waiting for provider');
+  await writeInput(view.stdin, '\u001B[B');
+  expect(view.lastFrame() ?? '').toContain('waiting for approval');
+  await writeInput(view.stdin, '\u001B[B');
+  expect(view.lastFrame() ?? '').toContain('failed · terminal');
 });
 
 it.sequential('does not offer force stop for settled work and Escape restores the previous input owner', async () => {
@@ -126,7 +175,7 @@ it.sequential('does not offer force stop for settled work and Escape restores th
     />,
   );
 
-  await writeInput(view.stdin, '\x02');
+  await writeInput(view.stdin, '\x07');
   expect(view.lastFrame() ?? '').not.toContain('[x] Force stop');
   await writeInput(view.stdin, '\u001B');
   await act(async () => {
@@ -152,7 +201,7 @@ it.sequential('opens for a foreground shell and requires confirmation before mov
     />,
   );
 
-  await writeInput(view.stdin, '\x02');
+  await writeInput(view.stdin, '\x07');
   expect(view.lastFrame() ?? '').toContain('pnpm test:provider-black-box');
   expect(view.lastFrame() ?? '').toContain('[b] Put in background');
 
@@ -180,7 +229,7 @@ it.sequential('lists and transfers a foreground subagent through the same manage
     />,
   );
 
-  await writeInput(view.stdin, '\x02');
+  await writeInput(view.stdin, '\x07');
   expect(view.lastFrame() ?? '').toContain('[worker · foreground] inspect the approval boundary');
   await writeInput(view.stdin, 'b');
   await writeInput(view.stdin, '\r');

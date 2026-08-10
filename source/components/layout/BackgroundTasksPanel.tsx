@@ -4,9 +4,10 @@ import type {
   BackgroundTask,
   BackgroundSubagentTaskTool,
 } from '../../services/subagents/subagent-notification-store.js';
+import type { BackgroundTaskControlDetails } from '../../services/session/background-task-control.js';
 
 type Props = {
-  tasks: readonly BackgroundTask[];
+  tasks: readonly (BackgroundTask | BackgroundTaskControlDetails)[];
   now: number;
 };
 
@@ -29,11 +30,15 @@ const formatRole = (role: string): string => {
   return role.charAt(0).toUpperCase() + role.slice(1).toLowerCase();
 };
 
-const formatTaskLabel = (task: BackgroundTask): string => {
+type PanelTask = BackgroundTask | BackgroundTaskControlDetails;
+
+const isControlTask = (task: PanelTask): task is BackgroundTaskControlDetails => 'id' in task;
+
+const formatTaskLabel = (task: PanelTask): string => {
   if (task.kind === 'shell') {
     return truncate(firstLine(task.command).replaceAll(/\s+/g, ' '), TASK_LABEL_LIMIT);
   }
-  const normalized = firstLine(task.task).replaceAll(/\s+/g, ' ');
+  const normalized = firstLine('taskPreview' in task ? task.taskPreview : task.task).replaceAll(/\s+/g, ' ');
   const label = normalized || `${formatRole(task.role)} background task`;
   return truncate(label, TASK_LABEL_LIMIT);
 };
@@ -61,12 +66,19 @@ export const formatBackgroundTaskElapsed = (elapsedMs: number): string => {
   return minutes > 0 ? `${minutes}m ${String(seconds).padStart(2, '0')}s` : `${seconds}s`;
 };
 
-const formatTerminalStatus = (task: BackgroundTask): string => {
+const formatTerminalStatus = (task: PanelTask): string => {
   switch (task.status) {
     case 'completed':
       return 'Completed recently';
     case 'failed':
-      return task.error ? `Failed recently (${task.error})` : 'Failed recently';
+      const error = 'error' in task ? task.error : undefined;
+      return isControlTask(task)
+        ? error
+          ? `Failed · terminal (${error})`
+          : 'Failed · terminal'
+        : error
+        ? `Failed recently (${error})`
+        : 'Failed recently';
     case 'cancelled':
       return 'Cancelled recently';
     case 'timed_out':
@@ -76,16 +88,38 @@ const formatTerminalStatus = (task: BackgroundTask): string => {
   }
 };
 
+const isTerminal = (task: PanelTask): boolean =>
+  task.status === 'completed' || task.status === 'failed' || task.status === 'timed_out' || task.status === 'cancelled';
+
+const formatLiveStatus = (task: PanelTask, now: number): string => {
+  if (!isControlTask(task) || !task.activity) return `Running · ${formatBackgroundTaskElapsed(now - task.startedAt)}`;
+  switch (task.activity.state) {
+    case 'active':
+      return `Active · ${formatBackgroundTaskElapsed(now - task.startedAt)}`;
+    case 'waiting':
+      return `Waiting for ${task.activity.reason ?? 'provider'}`;
+    case 'quiet':
+      return 'Quiet · no observed progress · still running';
+    case 'cancelling':
+      return 'Cancelling';
+    case 'settled':
+      return formatTerminalStatus(task);
+  }
+};
+
 const BackgroundTasksPanel: FC<Props> = ({ tasks, now }) => {
   if (tasks.length === 0) return null;
 
-  const activeCount = tasks.filter((task) => task.status === 'running').length;
+  const activeCount = tasks.filter((task) => !isTerminal(task)).length;
 
   return (
     <Box flexDirection="column" marginBottom={1}>
-      <Text color="#94a3b8">Background tasks · {activeCount} active · Ctrl+B manage</Text>
+      <Text color="#94a3b8">Background tasks · {activeCount} active · Ctrl+G manage</Text>
       {tasks.map((task) => (
-        <Box key={task.kind === 'shell' ? task.jobId : task.runId} flexDirection="column">
+        <Box
+          key={task.kind === 'shell' ? ('id' in task ? task.id : task.jobId) : 'id' in task ? task.id : task.runId}
+          flexDirection="column"
+        >
           <Box flexDirection="row">
             <Box flexGrow={1} flexShrink={1} minWidth={0}>
               <Text wrap="truncate-end">
@@ -98,16 +132,14 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now }) => {
             <Box flexShrink={0}>
               <Text color="#94a3b8" wrap="truncate-end">
                 {'  '}
-                {task.status === 'running'
-                  ? `Running · ${formatBackgroundTaskElapsed(now - task.startedAt)}`
-                  : formatTerminalStatus(task)}
-                {task.kind !== 'shell' && task.usage?.prompt_tokens != null
+                {!isTerminal(task) ? formatLiveStatus(task, now) : formatTerminalStatus(task)}
+                {task.kind !== 'shell' && !isControlTask(task) && task.usage?.prompt_tokens != null
                   ? ` · Ctx ${formatContextTokens(task.usage.prompt_tokens)}`
                   : ''}
               </Text>
             </Box>
           </Box>
-          {task.kind !== 'shell' && task.status === 'running' && task.lastTool && (
+          {task.kind !== 'shell' && !isControlTask(task) && task.status === 'running' && task.lastTool && (
             <Box flexDirection="row">
               <Text color="#475569">{'  └ '}</Text>
               <Box flexGrow={1} flexShrink={1} minWidth={0}>

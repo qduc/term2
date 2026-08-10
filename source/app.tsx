@@ -174,6 +174,8 @@ const App: FC<AppProps> = ({
     toolCallStreamingInfo,
     backgroundSubagentTasks,
     backgroundSubagentTasksNow,
+    backgroundTaskDetails,
+    backgroundTaskDetailsNow,
     listBackgroundTaskDetails,
     getBackgroundTaskDetails,
     stopBackgroundTask,
@@ -844,6 +846,8 @@ const App: FC<AppProps> = ({
             pendingQueuedMessages={pendingQueuedMessages}
             backgroundSubagentTasks={backgroundSubagentTasks}
             backgroundSubagentTasksNow={backgroundSubagentTasksNow}
+            backgroundTaskDetails={backgroundTaskDetails}
+            backgroundTaskDetailsNow={backgroundTaskDetailsNow}
             listBackgroundTaskDetails={listBackgroundTaskDetails}
             getBackgroundTaskDetails={getBackgroundTaskDetails}
             stopBackgroundTask={stopBackgroundTask}

@@ -14,6 +14,8 @@ export interface BackgroundShellJob<TResult> {
   completedAt?: number;
   result?: TResult;
   error?: string;
+  /** Last registry-observed start or output-chunk timestamp. */
+  lastActivityAt?: number;
 }
 
 export interface BackgroundShellLaunch<TResult> extends BackgroundShellJob<TResult> {
@@ -162,6 +164,7 @@ export class BackgroundShellRegistry<TResult> {
       status: 'running',
       startedAt: this.#now(),
     };
+    job.lastActivityAt = job.startedAt;
     const controller = new AbortController();
     this.#runningJobs += 1;
     const record: JobRecord<TResult> = {
@@ -192,6 +195,7 @@ export class BackgroundShellRegistry<TResult> {
       status: 'running',
       startedAt: this.#now(),
     };
+    job.lastActivityAt = job.startedAt;
     const controller = new AbortController();
     let resolveForegroundResult!: (result: TResult | ForegroundShellTransferResult) => void;
     let rejectForegroundResult!: (error: unknown) => void;
@@ -303,7 +307,16 @@ export class BackgroundShellRegistry<TResult> {
     const record = this.#jobs.get(id);
     if (!record || record.job.status !== 'running') return false;
     record.job.status = 'cancelling';
+    record.job.lastActivityAt = this.#now();
     record.controller.abort();
+    return true;
+  }
+
+  /** Records that a running process produced output without retaining the chunk. */
+  recordOutputChunk(id: string): boolean {
+    const record = this.#jobs.get(id) ?? [...this.#foreground.values()].find((candidate) => candidate.job.id === id);
+    if (!record || (record.job.status !== 'running' && record.job.status !== 'cancelling')) return false;
+    record.job.lastActivityAt = this.#now();
     return true;
   }
 
@@ -344,6 +357,7 @@ export class BackgroundShellRegistry<TResult> {
     const { job } = record;
     this.#runningJobs -= 1;
     job.completedAt = this.#now();
+    job.lastActivityAt = job.completedAt;
     if (record.controller.signal.aborted) {
       job.status = 'cancelled';
       if (result !== undefined) job.result = result;
@@ -386,6 +400,7 @@ export class BackgroundShellRegistry<TResult> {
 
     const { job } = record;
     job.completedAt = this.#now();
+    job.lastActivityAt = job.completedAt;
     if (record.controller.signal.aborted) {
       job.status = 'cancelled';
       if (result !== undefined) job.result = result;

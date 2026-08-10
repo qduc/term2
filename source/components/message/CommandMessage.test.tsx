@@ -152,6 +152,8 @@ const TOOLS_NEEDING_A_VERB = [
   'ask_orchestrator',
   'activate_skill',
   'run_agent_workflow',
+  'enter_worktree',
+  'exit_worktree',
 ];
 
 it('CommandMessage renders a verb, not a raw [tool_name] header, for every orchestration tool', async () => {
@@ -163,6 +165,26 @@ it('CommandMessage renders a verb, not a raw [tool_name] header, for every orche
     expect(output, `${toolName} has no case in the displayAction switch`).not.toContain(`[${toolName}]`);
     unmount();
   }
+});
+
+it('CommandMessage describes worktree transitions with their action and arguments', async () => {
+  const enter = await renderInAct(
+    <CommandMessage
+      command='enter_worktree "feature"'
+      toolName="enter_worktree"
+      toolArgs={{ name: 'feature' }}
+      status="completed"
+      success={true}
+    />,
+  );
+  expect(stripAnsi(enter.lastFrame() ?? '')).toContain('Entered worktree name=feature');
+  enter.unmount();
+
+  const exit = await renderInAct(
+    <CommandMessage command="exit_worktree" toolName="exit_worktree" toolArgs={{}} status="completed" success={true} />,
+  );
+  expect(stripAnsi(exit.lastFrame() ?? '')).toContain('Left worktree');
+  exit.unmount();
 });
 
 it('CommandMessage renders an all-runs get_subagent_status peek without leaking a null runId', async () => {

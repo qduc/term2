@@ -38,3 +38,4 @@ eval/auto-approval/models.yaml
 
 # pnpm store (created by local installs; not part of the project)
 .pnpm-store/
+.claude/worktrees/

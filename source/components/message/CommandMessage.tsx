@@ -234,6 +234,10 @@ const CommandMessage: FC<Props> = ({
         return renderAction('Activated skill');
       case 'run_agent_workflow':
         return renderAction('Ran agent workflow');
+      case 'enter_worktree':
+        return renderAction('Entered worktree');
+      case 'exit_worktree':
+        return renderAction('Left worktree');
       case 'background_subagent_notification': {
         const runs = Array.isArray(toolArgs?.runs) ? toolArgs.runs : [];
         if (runs.length === 1) {

@@ -2,17 +2,21 @@
 
 Status: plan — implementation is tracked here in six phases. Phase 1 (chunk
 tap) merged (6d886844); phase 2 (output store) merged (c2ed6c83); phase 3
-(watches) in progress. All 2026-08-10. The idle-session-wake product call was
-approved at kickoff — see `## Decided`.
+(watches) merged (de1484f0); phase 4 (notification plumbing) in progress. All
+2026-08-10. The idle-session-wake product call was approved at kickoff — see
+`## Decided`.
 
 ## Resume here
 
 Read this before touching anything this plan covers. Six phases implement the
-feature. Phases 1 (chunk tap, 6d886844) and 2 (output store, c2ed6c83) are
-merged into main; their worktrees and branches are removed. Phase 3 (watches)
-runs in `.worktrees/background-shell-monitor-3-watches`; phases 4–6 not started.
-Approved at kickoff (2026-08-10): monitor firings may wake an idle session — see
-`## Decided`. Phases run in dependency order:
+feature. Phases 1 (chunk tap, 6d886844), 2 (output store, c2ed6c83), and 3
+(watches, de1484f0) are merged into main; their worktrees and branches are
+removed. Phase 4 (notification plumbing) runs in
+`.worktrees/background-shell-monitor-4-notification-plumbing`; phases 5–6 not
+started. Read `docs/plans/mid-turn-injection.md` before phase 4 — it owns the
+vocabulary (Segment, Request Boundary, Injection, Background Notification) for
+the delivery path. Approved at kickoff (2026-08-10): monitor firings may wake an
+idle session — see `## Decided`. Phases run in dependency order:
 1 → 2 → 3 are a strict
 build-up, 4 builds on 3, 5 builds on 4, and 6 is independent. Each phase is TDD
 and lands in its own worktree (`.worktrees/background-shell-monitor-N-<slug>`),
@@ -259,8 +263,13 @@ independently reviewable, each in its own worktree.
 - **Scope:** registration, replay from `fromOffset` (default 0), `idleMs`
   debounce, `notifyLimit`, retirement on terminal status,
   flush-before-completion ordering.
+  replay from the head of the retained buffer; lines evicted before
+  registration are not replayable (their bytes surface as `droppedBytes`); "no
+  idle time" (idleMs 0) fires each concerned push window. These are pins, not
+  defects — see `## Found in the territory`.
 - **Tests:** injected clock; no real timers in tests.
-- **Status:** in progress (approved 2026-08-10)
+- **Status:** completed — merged to main as de1484f0 (feature commit d90eb170);
+  worktree and branch removed.
 
 ### Phase 4 — Event and notification plumbing
 
@@ -272,7 +281,7 @@ independently reviewable, each in its own worktree.
   flush-before-completion ordering rule.
 - **Obligations:** read `docs/plans/mid-turn-injection.md` first; run
   `pnpm test:provider-black-box` during development on this phase.
-- **Status:** not started
+- **Status:** in progress (approved 2026-08-10)
 
 ### Phase 5 — Tools and UI
 
@@ -350,3 +359,10 @@ independently reviewable, each in its own worktree.
   `readTail` orders cross-stream content chronologically but is approximate when
   a job holds two partial lines at once (both documented in the module).
   Retention default is `maxRetainedJobs: 20`.
+- 2026-08-10: Phase 3 merged. Watch-layer pins: `stream` defaults to `'both'`;
+  `fromOffset` is a count of retained complete lines to skip (a watch registered
+  after eviction cannot replay evicted lines — `droppedBytes` already says so);
+  the idle `idleMs` debounce resets only on new *matches for that watch*, so
+  noisy unrelated output never delays a firing; `settleJob` cancels debounce,
+  flushes pending firings synchronously, then retires (all before it returns,
+  so the caller can emit the job's completion and no monitor firing can follow).

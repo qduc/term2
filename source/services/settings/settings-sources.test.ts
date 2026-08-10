@@ -82,3 +82,10 @@ it('reports a source for every sandbox setting, including allowNetworking', () =
   expect(withSources.sandbox.allowNetworking).toBeDefined();
   expect(withSources.sandbox.allowNetworking.source).toBe('default');
 });
+
+it('reports a source and value for shell.backgroundTimeout', () => {
+  const withSources = buildSettingsWithSources(DEFAULT_SETTINGS, () => 'default');
+  expect(withSources.shell.backgroundTimeout).toBeDefined();
+  expect(withSources.shell.backgroundTimeout.value).toBe(30 * 60 * 1000);
+  expect(withSources.shell.backgroundTimeout.source).toBe('default');
+});

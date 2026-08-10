@@ -84,6 +84,7 @@ it('SettingsService initializes with defaults', async () => {
   expect(service.get('agent.retryAttempts')).toBe(2);
   expect(service.get('agent.maxParallelToolCalls')).toBe(3);
   expect(service.get('shell.timeout')).toBe(120000);
+  expect(service.get('shell.backgroundTimeout')).toBe(30 * 60 * 1000);
   expect(service.get('shell.maxOutputLines')).toBe(1000);
   expect(service.get('shell.maxOutputChars')).toBe(40000);
   expect(service.get('ui.historySize')).toBe(1000);

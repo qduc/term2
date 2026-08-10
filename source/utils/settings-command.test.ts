@@ -27,6 +27,7 @@ const baseSettings = {
   },
   shell: {
     timeout: { value: 120000, source: 'default' },
+    backgroundTimeout: { value: 1800000, source: 'default' },
     maxOutputLines: { value: 1000, source: 'default' },
     maxOutputChars: { value: 40000, source: 'default' },
   },
@@ -95,6 +96,7 @@ it('formatSettingsSummary renders values with sources', () => {
   expect(summary.includes('agent.efficientModel: gpt-5-mini (config)')).toBe(true);
   expect(summary.includes('agent.capableModel: undefined (default)')).toBe(true);
   expect(summary.includes('shell.timeout: 120000 (default)')).toBe(true);
+  expect(summary.includes('shell.backgroundTimeout: 1800000 (default)')).toBe(true);
   expect(summary.includes('logging.logLevel: info (default)')).toBe(true);
   expect(summary.includes('agent.maxParallelToolCalls: 3 (default)')).toBe(true);
   expect(summary.includes('agent.contextCompaction.enabled: false (default)')).toBe(true);

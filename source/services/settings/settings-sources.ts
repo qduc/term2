@@ -44,6 +44,7 @@ const SETTINGS_SOURCE_KEYS = {
   },
   shell: {
     timeout: 'shell.timeout',
+    backgroundTimeout: 'shell.backgroundTimeout',
     maxOutputLines: 'shell.maxOutputLines',
     maxOutputChars: 'shell.maxOutputChars',
     autoApproveMode: 'shell.autoApproveMode',

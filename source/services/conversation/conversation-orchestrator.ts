@@ -4,7 +4,7 @@ import type { ConversationOrchestratorConfig } from './conversation-orchestrator
 import type { ConversationEvent } from './conversation-events.js';
 import type { SubmissionMutation } from './conversation-adapter.js';
 import type { BotMessage, CommandMessage, UserMessage } from '../../types/message.js';
-import { isUserMessage } from '../../types/message.js';
+import { isCommandMessage, isUserMessage } from '../../types/message.js';
 import type { ConversationTerminal, PendingApproval } from '../../contracts/conversation.js';
 import { isDeniedReadApproveAnswer } from '../../contracts/conversation.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
@@ -239,6 +239,8 @@ export class ConversationOrchestrator {
   #activeTurns = 0;
   /** True while {@link stopProcessing} is tearing the conversation down. */
   #stoppingByUser = false;
+  /** Stranded rows already reported, so the warning stays one per occurrence. */
+  readonly #reportedStrandedCallIds = new Set<string>();
 
   constructor(private config: ConversationOrchestratorConfig) {
     this.createMessageId = config.createMessageId ?? createMessageIdFactory(config.now);
@@ -322,6 +324,7 @@ export class ConversationOrchestrator {
     this.#displayedBackgroundNotificationMessageIds.clear();
     this.#retractedSteerIds.clear();
     this.#editedSteerTurns.clear();
+    this.#reportedStrandedCallIds.clear();
   }
 
   stopProcessing(): void {
@@ -778,9 +781,55 @@ export class ConversationOrchestrator {
   #endTurn(flushNotifications = true): void {
     this.#activeTurns = Math.max(0, this.#activeTurns - 1);
     this.config.ui.onTurnEnd();
+    this.#finalizeStrandedCommandMessages();
     if (flushNotifications) {
       void this.#deliverBackgroundSubagentNotifications();
     }
+  }
+
+  /**
+   * Close command rows that no completion will ever close.
+   *
+   * A row opens as `running` on `tool_started` and closes only when a command
+   * message carrying the same callId arrives. Anything that ends a turn without
+   * that message — a stream error, a retry, a tool whose result is never
+   * rendered — leaves the row running for the rest of the session. That is not
+   * cosmetic: a running command is the first message that cannot render
+   * statically, so one stranded row keeps every later message re-rendering
+   * outside Ink's Static region.
+   *
+   * The warning is half the point. A silent net would hide the next tool that
+   * strands a row the way the last one hid for fourteen hours.
+   */
+  #finalizeStrandedCommandMessages(): void {
+    // A turn that parks on an approval closes and reopens around the prompt, so
+    // reaching here does not mean the work finished. Anything still running is
+    // legitimately in flight until the user decides.
+    if (this.#activeTurns > 0) return;
+    if (this.config.conversationService.getPendingInteractionSnapshot?.()) return;
+
+    const stranded = this.config.messages
+      .getMessages()
+      .filter((message): message is CommandMessage => isCommandMessage(message) && message.status === 'running');
+    if (stranded.length === 0) return;
+
+    this.config.messages.setMessages((messages) =>
+      messages.map((message) =>
+        message.sender === 'command' && message.status === 'running'
+          ? { ...message, status: 'aborted' as const }
+          : message,
+      ),
+    );
+
+    const unreported = stranded.filter((message) => !this.#reportedStrandedCallIds.has(message.callId ?? message.id));
+    if (unreported.length === 0) return;
+    for (const message of unreported) {
+      this.#reportedStrandedCallIds.add(message.callId ?? message.id);
+    }
+    this.config.loggingService.warn('Command rows left running at turn end; aborting them', {
+      tools: unreported.map((message) => message.toolName ?? 'unknown'),
+      callIds: unreported.map((message) => message.callId ?? message.id),
+    });
   }
 
   /**

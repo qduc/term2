@@ -961,4 +961,95 @@ describe('ConversationOrchestrator', () => {
     observer({ requestId: directlyAppendedId, input: 'first' });
     expect(vi.mocked(cfg.messages.appendMessages).mock.calls.length).toBe(beforeCalls + 1);
   });
+
+  // A command row opens as `running` on tool_started and closes only when a
+  // command message for the same callId arrives. Before this sweep,
+  // `stopProcessing` was the only site in the codebase that ever cleared one,
+  // so every other way a turn can end -- stream error, retry, a tool whose
+  // result never rendered -- left the row running for the rest of the session.
+  // That is not cosmetic: a running command is the first message that cannot
+  // render statically, so one stranded row keeps every later message
+  // re-rendering outside Ink's Static region.
+  describe('stranded command rows', () => {
+    const runningRow = (id: string, overrides: Partial<Message> = {}) =>
+      createMessage(id, 'command' as Message['sender'], '', {
+        status: 'running',
+        callId: id,
+        toolName: 'cancel_shell_job',
+        ...overrides,
+      } as Partial<Message>);
+
+    function configWithoutQueue(): ConversationOrchestratorConfig {
+      const cfg = makeConfig();
+      (cfg.conversationService as any).isQueueActive = undefined;
+      (cfg.conversationService as any).setQueuedTurnStartObserver = undefined;
+      return cfg;
+    }
+
+    const commandRows = (cfg: ConversationOrchestratorConfig) =>
+      cfg.messages.getMessages().filter((message) => message.sender === 'command');
+
+    it('aborts a row left running when the turn fails', async () => {
+      const cfg = configWithoutQueue();
+      cfg.messages.appendMessages([runningRow('call-stranded')]);
+      vi.mocked(cfg.conversationService.sendMessage).mockRejectedValue(new Error('stream ended'));
+
+      await new ConversationOrchestrator(cfg).sendUserMessage('hello');
+
+      expect(commandRows(cfg)).toMatchObject([{ callId: 'call-stranded', status: 'aborted' }]);
+    });
+
+    it('warns once, naming the tool, so the next such bug is greppable', async () => {
+      const cfg = configWithoutQueue();
+      cfg.messages.appendMessages([runningRow('call-stranded')]);
+      vi.mocked(cfg.conversationService.sendMessage).mockRejectedValue(new Error('stream ended'));
+
+      const orchestrator = new ConversationOrchestrator(cfg);
+      await orchestrator.sendUserMessage('hello');
+      await orchestrator.sendUserMessage('again');
+
+      const warnings = vi
+        .mocked(cfg.loggingService.warn)
+        .mock.calls.filter(([message]) => String(message).includes('running'));
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]?.[1]).toMatchObject({ tools: ['cancel_shell_job'], callIds: ['call-stranded'] });
+    });
+
+    it('leaves a resolved row untouched and stays quiet', async () => {
+      const cfg = configWithoutQueue();
+      cfg.messages.appendMessages([runningRow('call-done', { status: 'completed' } as Partial<Message>)]);
+      vi.mocked(cfg.conversationService.sendMessage).mockResolvedValue({
+        type: 'response',
+        finalText: 'ok',
+        commandMessages: [],
+      });
+
+      await new ConversationOrchestrator(cfg).sendUserMessage('hello');
+
+      expect(commandRows(cfg)).toMatchObject([{ callId: 'call-done', status: 'completed' }]);
+      expect(cfg.loggingService.warn).not.toHaveBeenCalled();
+    });
+
+    // A turn that parks on an approval closes and reopens around the prompt, so
+    // reaching endTurn does not mean the work finished. Sweeping there would
+    // abort the sibling of a parallel tool call that is still legitimately
+    // running. (The awaiting tool's own row is hidden during the prompt by
+    // `filterPendingCommandMessagesForApproval`, which is separate behavior.)
+    it('spares live rows while an approval is outstanding', async () => {
+      const cfg = configWithoutQueue();
+      cfg.messages.appendMessages([runningRow('call-awaiting'), runningRow('call-parallel')]);
+      vi.mocked(cfg.conversationService.getPendingInteractionSnapshot).mockReturnValue({
+        approval: { callId: 'call-awaiting', toolName: 'cancel_shell_job' },
+      } as any);
+      vi.mocked(cfg.conversationService.sendMessage).mockResolvedValue({
+        type: 'approval_required',
+        approval: { callId: 'call-awaiting', toolName: 'cancel_shell_job' },
+      } as unknown as ConversationTerminal);
+
+      await new ConversationOrchestrator(cfg).sendUserMessage('hello');
+
+      expect(commandRows(cfg)).toMatchObject([{ callId: 'call-parallel', status: 'running' }]);
+      expect(cfg.loggingService.warn).not.toHaveBeenCalled();
+    });
+  });
 });

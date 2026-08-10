@@ -286,12 +286,30 @@ const isRetryableAbnormalCloseError = (error: unknown, logger?: Pick<ILoggingSer
   return closeCode ? RETRYABLE_WEBSOCKET_CLOSE_CODES.has(closeCode) : true;
 };
 
+/**
+ * Provider adapters refuse to invent a completion when the stream body ends
+ * without a terminal marker (`finish_reason`, AI-SDK finish event, Responses
+ * `response.completed`, …). That is the right refusal — the body was cut
+ * short — but the cut itself is usually a flaky upstream close, so the run
+ * should retry rather than terminate. Matched by the shared phrase every
+ * adapter uses: "streamed response ended without".
+ */
+export function isIncompleteStreamTerminalError(error: unknown): boolean {
+  return getMessage(error).toLowerCase().includes('streamed response ended without');
+}
+
 export const isRetryableTransportError = (
   error: unknown,
   logger?: Pick<ILoggingService, 'info'>,
 ): RetryableTransportDecision => {
   if (error instanceof AmbiguousModelOutcomeError) {
     return { retryable: false, transportFallback: false };
+  }
+
+  // Incomplete terminals are retryable but not a network-protocol class: keep
+  // transportFallback false so Codex does not force an HTTP/WS switch.
+  if (isIncompleteStreamTerminalError(error)) {
+    return { retryable: true, transportFallback: false };
   }
 
   const retryable =
@@ -313,6 +331,12 @@ export const isTransientRetryableError = (error: unknown, logger?: Pick<ILogging
   // Rate-limit with retry-after > 60s — never retry automatically
   if (error instanceof LongRetryDelayError) {
     return false;
+  }
+
+  // Incomplete stream terminals (finish_reason / finish event missing) are
+  // recoverable mid-stream cuts — same policy as isRetryableTransportError.
+  if (isIncompleteStreamTerminalError(error)) {
+    return true;
   }
 
   if (error instanceof RateLimitError) {

@@ -66,7 +66,9 @@ const shellParametersSchema = z.object({
     .int()
     .positive()
     .optional()
-    .describe('Optional timeout in milliseconds for each command. Defaults to 120000 ms (2 minutes) if not specified.'),
+    .describe(
+      'Optional timeout in milliseconds for each command. Defaults to shell.timeout (foreground) or shell.backgroundTimeout (background) if not specified.',
+    ),
   max_output_length: relaxedNumber
     .int()
     .positive()
@@ -838,8 +840,12 @@ export function createShellToolDefinition(deps: {
         background || transferred ? { ...metadata, correlationId } : metadata;
 
       try {
-        // Use provided values or settings defaults or hardcoded defaults
-        const timeoutValue = timeout_ms ?? settingsService.get('shell.timeout');
+        // Use provided values or settings defaults or hardcoded defaults. A
+        // background launch uses shell.backgroundTimeout instead of
+        // shell.timeout (background jobs may legitimately outlive the
+        // foreground budget); an explicit timeout_ms always wins.
+        const timeoutValue =
+          timeout_ms ?? settingsService.get(background ? 'shell.backgroundTimeout' : 'shell.timeout');
         const timeout = timeoutValue != null ? timeoutValue : undefined;
         const maxOutputLengthValue = max_output_length ?? settingsService.get('shell.maxOutputChars');
         const configuredMaxOutputLength = settingsService.get('shell.maxOutputChars');
@@ -985,6 +991,10 @@ export function createShellToolDefinition(deps: {
             cwd,
             timeout,
             maxBuffer: 1024 * 1024, // 1MB max buffer
+            // A long-running monitored background job must survive a full
+            // buffer: drop from the head of the retained text instead of
+            // killing the child. Foreground keeps the 'kill' default.
+            overflow: background ? 'truncate' : 'kill',
             env: sandboxed
               ? createSandboxEnvironment(undefined, {
                   cwd,

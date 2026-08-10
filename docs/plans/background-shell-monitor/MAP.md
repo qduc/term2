@@ -1,15 +1,17 @@
 # Background shell monitor
 
 Status: plan — implementation is tracked here in six phases. Phase 1 (chunk
-tap) is in progress (approved 2026-08-10); phases 2–6 not started. The
-idle-session-wake product call was approved at kickoff — see `## Decided`.
+tap) merged (6d886844, 2026-08-10); phase 2 in progress. The idle-session-wake
+product call was approved at kickoff — see `## Decided`.
 
 ## Resume here
 
 Read this before touching anything this plan covers. Six phases implement the
-feature. Phase 1 is under way in `.worktrees/background-shell-monitor-1-chunk-tap`;
-phases 2–6 have not started. Approved at kickoff (2026-08-10): monitor firings
-may wake an idle session — see `## Decided`. Phases run in dependency order:
+feature. Phase 1 (chunk tap) is merged (6d886844) into main; its worktree and
+branch are removed. Phase 2 (output store) runs in
+`.worktrees/background-shell-monitor-2-output-store`; phases 3–6 not started.
+Approved at kickoff (2026-08-10): monitor firings may wake an idle session — see
+`## Decided`. Phases run in dependency order:
 1 → 2 → 3 are a strict
 build-up, 4 builds on 3, 5 builds on 4, and 6 is independent. Each phase is TDD
 and lands in its own worktree (`.worktrees/background-shell-monitor-N-<slug>`),
@@ -232,7 +234,9 @@ independently reviewable, each in its own worktree.
   truncate does not kill, foreground kill behaviour unchanged.
 - **Obligations:** the execution seam — run `pnpm test:provider-black-box` during
   development on this phase.
-- **Status:** in progress (approved 2026-08-10)
+- **Status:** completed — merged to main as 6d886844 (feature commit
+  318ab0a6); worktree and branch removed. The kill-overflow test asserts only
+  the observable surface (see `## Found in the territory`, 2026-08-10).
 
 ### Phase 2 — Output store
 
@@ -325,3 +329,12 @@ independently reviewable, each in its own worktree.
   `source/utils/shell/shell.ts` to `source/tools/system/shell.ts` (UI/business
   layer separation); `createBackgroundShellJobToolDefinitions` and the stranded
   running-row `formatCommandMessage` note still sit at `shell.ts:200`/`shell.ts:144`.
+- 2026-08-10: Phase 1 merged. The black-box suite has one pre-existing failure
+  (`provider-session-resilience` > reasoning traffic not persisted under the
+  workspace's Library/Logs) reproducible on pristine main; isolated via stash +
+  rebuild during phase 1. Not caused by the phase-1 change.
+- 2026-08-10: Overflow-kill never surfaces an error on `ShellExecutionResult` —
+  the type has no `error` field. `defaultExecImpl` sets `ex`, and the wrapper
+  converts the rejection into `{ exitCode: null, signal: null, timedOut: false }`
+  via its catch. So an overflow-killed job reads as "killed, no exit code" to
+  callers, not as an error. Relevant to phase 5's `get_shell_job` content.

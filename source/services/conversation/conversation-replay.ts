@@ -87,6 +87,13 @@ interface ReplayedBackgroundShellJob {
     output: string;
     error?: string;
   };
+  /**
+   * Monitor firings in stored order. Kept on the job record so they replay
+   * ahead of the terminal row: a monitor hit must never read as new activity
+   * on a dead job. Idempotent per watchId:seq, mirroring the notification
+   * messageId dedupe.
+   */
+  firings?: { watchId: string; seq: number; matchedLines: string; droppedBytes?: number }[];
 }
 
 /**
@@ -691,6 +698,10 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
       // intentionally idempotent and only records the first terminal result.
       if (job?.completed) return;
       state.backgroundShellJobs.set(event.jobId, {
+        // Keep any monitor firings recorded before settlement: the completed
+        // event must not clobber them, or firings would replay as a dead job's
+        // new activity on the other side of its terminal row.
+        ...(job?.firings !== undefined ? { firings: job.firings } : {}),
         jobId: event.jobId,
         command: event.command,
         completed: {
@@ -699,6 +710,25 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
           ...(event.error ? { error: event.error } : {}),
         },
       });
+      return;
+    }
+    case 'background_shell_output': {
+      const existing = state.backgroundShellJobs.get(event.jobId);
+      // A firing may be the only record for a job whose start was never seen
+      // (or whose process still outlived the session); synthesize the job.
+      const job = existing ?? { jobId: event.jobId, command: event.command };
+      const firing = {
+        watchId: event.watchId,
+        seq: event.seq,
+        matchedLines: event.matchedLines,
+        ...(event.droppedBytes !== undefined ? { droppedBytes: event.droppedBytes } : {}),
+      };
+      const firings = job.firings ?? [];
+      // Registry events are at-least-once; a firing is transcribed once per
+      // watchId:seq so replay never duplicates a row.
+      if (firings.some((f) => f.watchId === firing.watchId && f.seq === firing.seq)) return;
+      job.firings = [...firings, firing];
+      state.backgroundShellJobs.set(event.jobId, job);
       return;
     }
     case 'error': {
@@ -790,6 +820,27 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
  */
 function appendReplayedBackgroundShellJobs(state: ReplayState): void {
   for (const job of state.backgroundShellJobs.values()) {
+    // Monitor firings replay first, in stored order, so they sit ahead of the
+    // job's terminal row exactly as they were produced before its settlement.
+    for (const firing of job.firings ?? []) {
+      state.messages.push({
+        id: `background-shell-output-${job.jobId}-${firing.watchId}-${firing.seq}`,
+        sender: 'command',
+        status: 'completed',
+        command: 'background_shell_output_notification',
+        output: firing.matchedLines,
+        success: true,
+        toolName: 'background_shell_output_notification',
+        toolArgs: {
+          jobId: job.jobId,
+          command: job.command,
+          watchId: firing.watchId,
+          seq: firing.seq,
+          matchedLines: firing.matchedLines,
+          ...(firing.droppedBytes !== undefined ? { droppedBytes: firing.droppedBytes } : {}),
+        },
+      });
+    }
     const completed = job.completed;
     const interrupted = !completed;
     const jobStatus = interrupted ? 'interrupted' : completed.status;

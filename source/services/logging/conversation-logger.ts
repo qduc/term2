@@ -162,6 +162,17 @@ export class ConversationLogger {
           ...(event.error ? { error: event.error } : {}),
         });
         return;
+      case 'background_shell_output':
+        this.log({
+          type: 'background_shell_output',
+          jobId: event.jobId,
+          command: event.command,
+          watchId: event.watchId,
+          seq: event.seq,
+          matchedLines: event.matchedLines,
+          ...(event.droppedBytes !== undefined ? { droppedBytes: event.droppedBytes } : {}),
+        });
+        return;
       case 'error':
         this.turnAccumulator.flushReasoningItem();
         this.turnAccumulator.flushAssistantTextItem();

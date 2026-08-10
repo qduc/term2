@@ -477,6 +477,100 @@ it('replayEvents: marks an unresolved background shell job interrupted without r
   expect(restored.replayWarnings.some((warning) => warning.includes('shell-lost'))).toBe(true);
 });
 
+it('replayEvents: replays watch firings ahead of the job terminal row in stored order', () => {
+  const restored = replayEvents([
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'background_shell_started', jobId: 'shell-1', command: 'pnpm test' }),
+    env({
+      type: 'background_shell_output',
+      jobId: 'shell-1',
+      command: 'pnpm test',
+      watchId: 'watch-1',
+      seq: 1,
+      matchedLines: 'Listening on http://localhost:3000',
+    }),
+    env({
+      type: 'background_shell_output',
+      jobId: 'shell-1',
+      command: 'pnpm test',
+      watchId: 'watch-1',
+      seq: 2,
+      matchedLines: 'error TS2345',
+      droppedBytes: 512,
+    }),
+    env({
+      type: 'background_shell_completed',
+      jobId: 'shell-1',
+      command: 'pnpm test',
+      status: 'completed',
+      output: 'exit 0',
+    }),
+  ]);
+
+  const rows = restored.messages.filter(
+    (message): message is CommandMessage => message.sender === 'command' && message.toolName !== undefined,
+  );
+  expect(rows).toHaveLength(3);
+  expect(rows[0]).toMatchObject({
+    toolName: 'background_shell_output_notification',
+    output: 'Listening on http://localhost:3000',
+    toolArgs: { jobId: 'shell-1', watchId: 'watch-1', seq: 1, matchedLines: 'Listening on http://localhost:3000' },
+  });
+  expect(rows[1]).toMatchObject({
+    toolName: 'background_shell_output_notification',
+    output: 'error TS2345',
+    toolArgs: { jobId: 'shell-1', watchId: 'watch-1', seq: 2, droppedBytes: 512 },
+  });
+  // The terminal row stays last: a firing must never read as new activity on a dead job.
+  expect(rows[2]).toMatchObject({
+    toolName: 'background_shell_notification',
+    output: 'exit 0',
+  });
+});
+
+it('replayEvents: renders firings for a job that never settled and dedupes by watchId:seq', () => {
+  const restored = replayEvents([
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({
+      type: 'background_shell_output',
+      jobId: 'shell-1',
+      command: 'pnpm test',
+      watchId: 'watch-1',
+      seq: 1,
+      matchedLines: 'first line',
+    }),
+    // Registry events are at-least-once: the same firing redelivered must not duplicate.
+    env({
+      type: 'background_shell_output',
+      jobId: 'shell-1',
+      command: 'pnpm test',
+      watchId: 'watch-1',
+      seq: 1,
+      matchedLines: 'first line',
+    }),
+    // A different watch may reuse the same seq; both belong in the transcript.
+    env({
+      type: 'background_shell_output',
+      jobId: 'shell-1',
+      command: 'pnpm test',
+      watchId: 'watch-2',
+      seq: 1,
+      matchedLines: 'second watch line',
+    }),
+  ]);
+
+  const firingRows = restored.messages.filter(
+    (message): message is CommandMessage =>
+      message.sender === 'command' && message.toolName === 'background_shell_output_notification',
+  );
+  expect(firingRows.map((row) => row.output)).toEqual(['first line', 'second watch line']);
+  // The job never settled, so the interrupted row follows the firings.
+  expect(restored.messages).toContainEqual(
+    expect.objectContaining({ sender: 'command', toolName: 'background_shell_notification', status: 'aborted' }),
+  );
+  expect(restored.replayWarnings.some((warning) => warning.includes('shell-1'))).toBe(true);
+});
+
 it('replayEvents: unknown event type is ignored gracefully', () => {
   const envelopes: LogEnvelope[] = [
     env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
@@ -1780,6 +1874,45 @@ it('decodeLogEnvelope: validates the closed background shell lifecycle fields', 
   expect(
     decodeLogEnvelope({
       event: { type: 'background_shell_completed', jobId: 'shell-1', command: 'pnpm test', status: 'running' },
+    }),
+  ).toBeNull();
+});
+
+it('decodeLogEnvelope: validates the shell watch firing shape', () => {
+  expect(
+    decodeLogEnvelope({
+      event: {
+        type: 'background_shell_output',
+        jobId: 'shell-1',
+        command: 'pnpm test',
+        watchId: 'watch-1',
+        seq: 3,
+        matchedLines: 'error TS2345',
+        droppedBytes: 512,
+      },
+    })?.event,
+  ).toMatchObject({
+    type: 'background_shell_output',
+    jobId: 'shell-1',
+    watchId: 'watch-1',
+    seq: 3,
+    matchedLines: 'error TS2345',
+  });
+  expect(
+    decodeLogEnvelope({
+      event: { type: 'background_shell_output', jobId: 'shell-1', command: 'pnpm test', watchId: 'watch-1', seq: 3 },
+    }),
+  ).toBeNull();
+  expect(
+    decodeLogEnvelope({
+      event: {
+        type: 'background_shell_output',
+        jobId: 'shell-1',
+        command: 'pnpm test',
+        watchId: 'watch-1',
+        seq: 'three',
+        matchedLines: 'oops',
+      },
     }),
   ).toBeNull();
 });

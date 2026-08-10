@@ -217,6 +217,56 @@ it('dispatchEventToLog persists background shell lifecycle events without adding
   ]);
 });
 
+it('dispatchEventToLog persists a shell watch firing with all of its fields', () => {
+  const { logger } = makeLoggingService();
+  const sinkEvents: any[] = [];
+  const conversationLogger = new ConversationLogger({
+    turnAccumulator: new TurnItemAccumulator(),
+    logger,
+    getAssistantTurnState: () => ({ previousResponseId: null }),
+    journal: makeJournal(),
+  });
+  conversationLogger.setLogSink((event) => sinkEvents.push(event));
+
+  conversationLogger.dispatchEventToLog({
+    type: 'background_shell_output',
+    jobId: 'shell-1',
+    command: 'pnpm test',
+    watchId: 'watch-1',
+    seq: 2,
+    matchedLines: 'Listening on http://localhost:3000',
+    droppedBytes: 512,
+  });
+  conversationLogger.dispatchEventToLog({
+    type: 'background_shell_output',
+    jobId: 'shell-1',
+    command: 'pnpm test',
+    watchId: 'watch-1',
+    seq: 3,
+    matchedLines: 'error TS2345',
+  });
+
+  expect(sinkEvents).toEqual([
+    {
+      type: 'background_shell_output',
+      jobId: 'shell-1',
+      command: 'pnpm test',
+      watchId: 'watch-1',
+      seq: 2,
+      matchedLines: 'Listening on http://localhost:3000',
+      droppedBytes: 512,
+    },
+    {
+      type: 'background_shell_output',
+      jobId: 'shell-1',
+      command: 'pnpm test',
+      watchId: 'watch-1',
+      seq: 3,
+      matchedLines: 'error TS2345',
+    },
+  ]);
+});
+
 it('dispatchEventToLog checkpoints accumulated turn items before logging an error', () => {
   const { logger } = makeLoggingService();
   const sinkEvents: any[] = [];

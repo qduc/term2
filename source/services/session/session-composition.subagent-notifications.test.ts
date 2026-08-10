@@ -313,6 +313,56 @@ it('routes root background shell lifecycle through the persistent task and notif
   runtime.dispose();
 });
 
+it('routes shell watch firings through the notification lane without touching the task projection', () => {
+  const sinks: Sinks = { turn: null, background: null, shell: null, approval: null };
+  const runtime = createSessionRuntime({
+    sessionId: 'bg-shell-output',
+    agentClient: makeClient(sinks),
+    deps: { logger: makeLogger(), sessionContextService },
+  });
+  let notifications = 0;
+  runtime.backgroundSubagentNotifications.setObserver(() => notifications++);
+
+  sinks.shell?.({ type: 'background_shell_started', jobId: 'shell-1', command: 'safe-hold' });
+  sinks.shell?.({
+    type: 'background_shell_output',
+    jobId: 'shell-1',
+    command: 'safe-hold',
+    watchId: 'watch-1',
+    seq: 1,
+    matchedLines: 'Listening on http://localhost:3000',
+  });
+  sinks.shell?.({
+    type: 'background_shell_output',
+    jobId: 'shell-1',
+    command: 'safe-hold',
+    watchId: 'watch-1',
+    seq: 2,
+    matchedLines: 'ready',
+  });
+
+  // A monitor hit is not a lifecycle state change: the task stays running.
+  expect(runtime.backgroundSubagentTasks.getSnapshot()).toEqual([
+    expect.objectContaining({ kind: 'shell', jobId: 'shell-1', status: 'running' }),
+  ]);
+  expect(runtime.backgroundSubagentNotifications.drain()).toEqual([
+    expect.objectContaining({
+      kind: 'shell_output',
+      messageId: 'shell_output:shell-1:watch-1:1',
+      watchId: 'watch-1',
+      seq: 1,
+      matchedLines: 'Listening on http://localhost:3000',
+    }),
+    expect.objectContaining({
+      kind: 'shell_output',
+      messageId: 'shell_output:shell-1:watch-1:2',
+      seq: 2,
+    }),
+  ]);
+  expect(notifications).toBe(2);
+  runtime.dispose();
+});
+
 it('exposes per-item background controls through the session runtime and wakes both observers on a stop request', () => {
   const sinks: Sinks = { turn: null, background: null, shell: null, approval: null };
   let stopCalls = 0;

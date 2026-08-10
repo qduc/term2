@@ -53,6 +53,19 @@ const shellCompletion = (
     ...overrides,
   } as ConversationEvent);
 
+const shellOutput = (
+  overrides: Partial<Extract<ConversationEvent, { type: 'background_shell_output' }>> = {},
+): ConversationEvent =>
+  ({
+    type: 'background_shell_output',
+    jobId: 'shell-1',
+    command: 'pnpm test',
+    watchId: 'watch-1',
+    seq: 1,
+    matchedLines: 'Listening on http://localhost:3000',
+    ...overrides,
+  } as ConversationEvent);
+
 /** Yield to the event loop so orchestrator-initiated turns can run to completion. */
 async function settle(times = 4): Promise<void> {
   for (let i = 0; i < times; i++) {
@@ -236,6 +249,38 @@ describe('ConversationOrchestrator background subagent notifications mid-turn', 
     );
   });
 
+  it('hands a watch firing to the running turn and announces its own command row', async () => {
+    const h = makeHarness({ queueActive: true });
+
+    h.emit(shellOutput());
+    await settle();
+
+    expect(h.service.injectIntoActiveTurn).toHaveBeenCalledTimes(1);
+    expect(h.injectedTexts()[0]).toContain('Background shell watch matched output');
+    expect(h.injectedTexts()[0]).toContain('watchId: watch-1');
+    expect(h.injectedTexts()[0]).toContain('seq: 1');
+    expect(h.injectedTexts()[0]).toContain('Listening on http://localhost:3000');
+    expect(h.injectedTexts()[0]).toContain('automatic system notification');
+    expect(h.service.sendMessage).not.toHaveBeenCalled();
+    expect(h.config.messages.getMessages()).toContainEqual(
+      expect.objectContaining({
+        sender: 'command',
+        toolName: 'background_shell_output_notification',
+        toolArgs: {
+          firings: [
+            {
+              jobId: 'shell-1',
+              command: 'pnpm test',
+              watchId: 'watch-1',
+              seq: 1,
+              matchedLines: 'Listening on http://localhost:3000',
+            },
+          ],
+        },
+      }),
+    );
+  });
+
   it('tells the active turn that the same shell moved to background without requesting a stop', async () => {
     const h = makeHarness({ queueActive: true });
 
@@ -343,6 +388,22 @@ describe('ConversationOrchestrator background subagent notifications', () => {
     expect(text).toContain('Decide the answer, investigate it yourself, or escalate');
     expect(text).toContain('no direct user channel');
     expect(h.config.messages.getMessages().some((message) => message.sender === 'user')).toBe(false);
+  });
+
+  it('wakes an idle session with a hidden turn when a watch fires', async () => {
+    const h = makeHarness();
+
+    h.emit(shellOutput());
+    await settle();
+
+    expect(h.service.sendMessage).toHaveBeenCalledTimes(1);
+    const text = h.sentTexts()[0];
+    expect(text).toContain('Background shell watch matched output');
+    expect(text).toContain('jobId: shell-1');
+    expect(text).toContain('matchedLines:');
+    expect(text).toContain('Listening on http://localhost:3000');
+    expect(h.config.messages.getMessages().some((message) => message.sender === 'user')).toBe(false);
+    expect(h.store.pendingCount).toBe(0);
   });
 
   it('shows distinct questions from one run independently by message id', async () => {

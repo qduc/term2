@@ -212,6 +212,26 @@ it('retains a subagent name and context usage when a task completes', () => {
   ]);
 });
 
+it('updates the live background task projection from a usage event', () => {
+  const store = makeStore();
+  store.recordLifecycle(started());
+
+  const changed = store.recordLifecycle({
+    type: 'usage_update',
+    agentId: 'run-1',
+    usage: { prompt_tokens: 240, completion_tokens: 60, total_tokens: 300 },
+  } as ConversationEvent);
+
+  expect(changed).toBe(true);
+  expect(store.getTaskSnapshot()).toEqual([
+    expect.objectContaining({
+      runId: 'run-1',
+      status: 'running',
+      usage: { prompt_tokens: 240, completion_tokens: 60, total_tokens: 300 },
+    }),
+  ]);
+});
+
 it('ignores foreground subagent lifecycle in the background task projection', () => {
   const store = makeStore();
 

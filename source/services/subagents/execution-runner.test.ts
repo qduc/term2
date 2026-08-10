@@ -159,4 +159,25 @@ describe('ExecutionSubagentRunner text-turn peek events', () => {
 
     expect(clients[0]?.dispose).toHaveBeenCalledTimes(1);
   });
+
+  it('forwards usage updates with the owning subagent id', async () => {
+    const usage = { prompt_tokens: 120, completion_tokens: 30, total_tokens: 150 };
+    const { runner, received } = makeRunner([
+      { type: 'usage_update', usage },
+      { type: 'final', finalText: 'Done.', usage },
+    ]);
+
+    await runner.run('run-1', { role: 'explorer', task: 'inspect' }, definition);
+
+    expect(received).toContainEqual({ type: 'usage_update', agentId: 'run-1', usage });
+  });
+
+  it('forwards final usage when the stream has no separate usage update', async () => {
+    const usage = { prompt_tokens: 90, completion_tokens: 20, total_tokens: 110 };
+    const { runner, received } = makeRunner([{ type: 'final', finalText: 'Done.', usage }]);
+
+    await runner.run('run-1', { role: 'explorer', task: 'inspect' }, definition);
+
+    expect(received).toContainEqual({ type: 'usage_update', agentId: 'run-1', usage });
+  });
 });

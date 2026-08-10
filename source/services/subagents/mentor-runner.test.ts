@@ -59,6 +59,7 @@ it('returns final text and usage from a settled stream (F4 regression)', async (
     }),
     fetchModels: async () => [{ id: 'mentor-model' }],
   });
+  const received: any[] = [];
   const runner = new MentorRunner({
     logger: createMockLogger(),
     settings: createMockSettings({
@@ -66,6 +67,7 @@ it('returns final text and usage from a settled stream (F4 regression)', async (
       'agent.mentorProvider': providerId,
     }),
     sessionContextService: createSessionContextService(),
+    onEvent: (event) => received.push(event),
   });
 
   const result = await runner.run('mentor-run', 'Review this change.');
@@ -80,4 +82,9 @@ it('returns final text and usage from a settled stream (F4 regression)', async (
   });
   expect(result.usage?.prompt_tokens).toBe(21);
   expect(result.usage?.completion_tokens).toBe(6);
+  expect(received).toContainEqual({
+    type: 'usage_update',
+    agentId: 'mentor-run',
+    usage: { prompt_tokens: 21, completion_tokens: 6, total_tokens: 27 },
+  });
 });

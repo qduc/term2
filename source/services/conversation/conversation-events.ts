@@ -112,6 +112,8 @@ export interface ApprovalRequiredEvent {
  */
 export interface UsageUpdateEvent {
   type: 'usage_update';
+  /** Present for usage emitted by a subagent rather than the root turn. */
+  agentId?: string;
   usage: NormalizedUsage;
 }
 

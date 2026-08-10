@@ -8,7 +8,7 @@ import { SubagentSession } from './subagent-session.js';
 import { loadRoleDefinition, resolvePrompt, PROMPTS_DIR } from './role-loader.js';
 import { getEnvInfo, getAgentsInstructions } from '../../agent.js';
 import { getProvider } from '../../providers/index.js';
-import { extractFinalText, isAbortLike } from './utils.js';
+import { extractFinalText, isAbortLike, safeEmit } from './utils.js';
 import { selectAgentStreamItems } from '../agent-stream.js';
 import { normalizeAgentRunUsage, extractUsage } from '../../utils/ai/token-usage.js';
 import type { ModelRequestCost } from '../../services/cost/model-cost.js';
@@ -22,6 +22,7 @@ export class MentorRunner {
   #sessionContextService: ISessionContextService;
   #executionContext?: ExecutionContext;
   #mentorSession: SubagentSession;
+  #onEvent?: (event: ConversationEvent) => void;
 
   constructor(deps: {
     logger: ILoggingService;
@@ -36,6 +37,7 @@ export class MentorRunner {
     this.#sessionContextService = deps.sessionContextService;
     this.#executionContext = deps.executionContext;
     this.#mentorSession = deps.session ?? new SubagentSession(randomUUID(), 'mentor');
+    this.#onEvent = deps.onEvent;
   }
 
   reset(): void {
@@ -80,6 +82,7 @@ export class MentorRunner {
         if (!signal?.aborted && !isAbortLike(error?.message, error)) throw error;
         const usage = normalizeAgentRunUsage(error?.usage) ?? extractUsage(error);
         if (slot && usage) childBudget!.recordUsage(usage);
+        if (usage) safeEmit(this.#logger, this.#onEvent, { type: 'usage_update', agentId, usage });
         return {
           agentId,
           role: 'mentor',
@@ -181,6 +184,9 @@ export class MentorRunner {
     }
     this.#mentorSession.appendOutput({ output: selectAgentStreamItems(stream), lastResponseId: stream.lastResponseId });
 
+    const usage = normalizeAgentRunUsage(stream.runUsage) ?? extractUsage(stream);
+    if (usage) safeEmit(this.#logger, this.#onEvent, { type: 'usage_update', agentId, usage });
+
     return {
       agentId,
       role: 'mentor',
@@ -188,7 +194,7 @@ export class MentorRunner {
       finalText: extractFinalText(stream),
       filesChanged: [],
       toolsUsed: [],
-      usage: normalizeAgentRunUsage(stream.runUsage) ?? extractUsage(stream),
+      usage,
       costRecords: stream.runCostRecords as ModelRequestCost[] | undefined,
     };
   }

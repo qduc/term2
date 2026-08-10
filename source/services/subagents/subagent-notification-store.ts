@@ -232,6 +232,14 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
       return this.#recordToolActivity(event);
     }
 
+    if (event.type === 'usage_update') {
+      if (!event.agentId) return false;
+      const task = this.#tasks.get(event.agentId);
+      if (!task || task.kind !== 'subagent' || task.status !== 'running') return false;
+      this.#tasks.set(event.agentId, { ...task, usage: event.usage });
+      return true;
+    }
+
     if (event.type === 'subagent_started' && event.async === true) {
       // Retention is what separates replay from continuation here, so it has to
       // be current whether or not the UI has read a snapshot since.

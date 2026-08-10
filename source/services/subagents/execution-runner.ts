@@ -228,6 +228,7 @@ export class ExecutionSubagentRunner {
     let subagentStatus: SubagentResult['status'] = 'completed';
     let loopProcessedError = false;
     let currentText = '';
+    let emittedUsageUpdate = false;
 
     try {
       for await (const event of runtime.turns.start(userTurn, {
@@ -283,11 +284,23 @@ export class ExecutionSubagentRunner {
               currentText = '';
             }
             finalText = event.finalText;
-            if (event.usage) usage = event.usage;
+            if (event.usage) {
+              usage = event.usage;
+              if (!emittedUsageUpdate) {
+                safeEmit(this.#logger, onEvent, { type: 'usage_update', agentId, usage: event.usage });
+                emittedUsageUpdate = true;
+              }
+            }
             if (event.costRecords && event.costRecords.length > 0) costRecords = event.costRecords;
             break;
           case 'usage_update':
             if (event.usage) usage = event.usage;
+            safeEmit(this.#logger, onEvent, {
+              type: 'usage_update',
+              agentId,
+              usage: event.usage,
+            });
+            emittedUsageUpdate = true;
             break;
           case 'error':
             error = new Error(event.message);
@@ -318,6 +331,9 @@ export class ExecutionSubagentRunner {
       }
       if (!usage) {
         usage = normalizeAgentRunUsage(err?.state?.usage) ?? extractUsage(err);
+      }
+      if (usage && !emittedUsageUpdate) {
+        safeEmit(this.#logger, onEvent, { type: 'usage_update', agentId, usage });
       }
     } finally {
       try {

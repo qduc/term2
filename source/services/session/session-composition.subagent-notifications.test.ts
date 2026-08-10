@@ -194,6 +194,19 @@ it('projects background starts, tool activity, and completions to task observers
   ]);
 
   sinks.background?.({
+    type: 'usage_update',
+    agentId: 'run-task',
+    usage: { prompt_tokens: 240, completion_tokens: 60, total_tokens: 300 },
+  });
+  expect(runtime.backgroundSubagentTasks.getSnapshot()).toEqual([
+    expect.objectContaining({
+      runId: 'run-task',
+      status: 'running',
+      usage: { prompt_tokens: 240, completion_tokens: 60, total_tokens: 300 },
+    }),
+  ]);
+
+  sinks.background?.({
     type: 'subagent_tool_started',
     agentId: 'run-task',
     role: 'worker',
@@ -206,7 +219,7 @@ it('projects background starts, tool activity, and completions to task observers
 
   sinks.background?.(completion('run-task'));
 
-  expect(notified).toBe(3);
+  expect(notified).toBe(4);
   expect(runtime.backgroundSubagentTasks.getSnapshot()).toEqual([
     expect.objectContaining({
       runId: 'run-task',

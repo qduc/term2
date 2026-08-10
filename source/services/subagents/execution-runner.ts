@@ -25,6 +25,7 @@ import { createSessionRuntime } from '../session/session-composition.js';
 import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
 import type { SkillsService } from '../skills/skills-service.js';
 import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import { pinWorkerWorktree } from './worker-worktree.js';
 
 const MAX_PEEK_TEXT_LENGTH = 200;
 
@@ -114,6 +115,30 @@ export class ExecutionSubagentRunner {
       throw new Error('SubagentManager: createClient factory not provided');
     }
 
+    let runExecutionContext = this.#executionContext;
+    let worktreePath: string | undefined;
+    if (request.worktree) {
+      const pin = await pinWorkerWorktree({
+        name: request.worktree,
+        role: request.role,
+        homeRoot: this.#executionContext?.getHomeWorkspace() ?? process.cwd(),
+        isRemote: this.#executionContext?.isRemote() ?? false,
+      });
+      if (!pin.ok) {
+        return {
+          agentId,
+          role: request.role,
+          status: 'failed',
+          finalText: '',
+          filesChanged: [],
+          toolsUsed: [],
+          error: pin.error,
+        };
+      }
+      runExecutionContext = pin.executionContext;
+      worktreePath = pin.worktreePath;
+    }
+
     // ── Budget enforcement ──
     // Root executions do NOT consume a child slot; only actual nested
     // agent runs do. The root budget tracks children, not itself.
@@ -131,6 +156,7 @@ export class ExecutionSubagentRunner {
           filesChanged: [],
           toolsUsed: [],
           error: `Budget exhausted: ${slot.reason}${slot.max !== undefined ? ` (${slot.current}/${slot.max})` : ''}`,
+          ...(worktreePath ? { worktreePath } : {}),
         };
       }
       childSlot = slot;
@@ -151,6 +177,9 @@ export class ExecutionSubagentRunner {
       diffDeltas,
       validationCapture,
       segmentControl ? (question) => segmentControl.askOrchestrator(question) : undefined,
+      runExecutionContext && runExecutionContext !== this.#executionContext
+        ? { executionContext: runExecutionContext }
+        : undefined,
     );
 
     const providerId = definition.provider;
@@ -181,7 +210,7 @@ export class ExecutionSubagentRunner {
       toolDefinitions,
       searchViaShell,
       this.#settings,
-      this.#executionContext,
+      runExecutionContext,
       this.#skillsService,
     );
 
@@ -375,6 +404,7 @@ export class ExecutionSubagentRunner {
         ...(costRecords && costRecords.length > 0 ? { costRecords } : {}),
         ...(diffStat.length > 0 ? { diffStat } : {}),
         ...(validation ? { validation } : {}),
+        ...(worktreePath ? { worktreePath } : {}),
       };
     }
 
@@ -391,6 +421,7 @@ export class ExecutionSubagentRunner {
       ...(costRecords && costRecords.length > 0 ? { costRecords } : {}),
       ...(diffStat.length > 0 ? { diffStat } : {}),
       ...(validation ? { validation } : {}),
+      ...(worktreePath ? { worktreePath } : {}),
     };
   }
 }

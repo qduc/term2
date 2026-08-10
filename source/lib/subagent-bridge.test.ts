@@ -409,6 +409,15 @@ it('runSubagent calls SubagentManager.runAsTool', async () => {
   expect(result.finalText).toBe('mock-tool-result');
 });
 
+it('runSubagent forwards worktree into the nested request', async () => {
+  const { manager, trackRunAsTool } = createMockManager();
+  const bridge = makeBridge(manager);
+
+  await bridge.runSubagent({ role: 'worker', task: 'edit in isolation', worktree: 'feature' });
+
+  expect(trackRunAsTool.lastArgs.args.worktree).toBe('feature');
+});
+
 it('runSubagent throws when SubagentManager is null', async () => {
   const bridge = makeBridge(null);
 
@@ -539,6 +548,15 @@ it('runSubagentAsync forwards an optional active-run name to the registry reques
   await bridge.runSubagentAsync({ role: 'explorer', task: 'find files', name: 'code_scan' });
 
   expect(trackStartRunAsync.lastArgs.name).toBe('code_scan');
+});
+
+it('runSubagentAsync forwards worktree into the async request', async () => {
+  const { manager, trackStartRunAsync } = createMockManager();
+  const bridge = makeBridge(manager);
+
+  await bridge.runSubagentAsync({ role: 'worker', task: 'edit in isolation', worktree: 'feature' });
+
+  expect(trackStartRunAsync.lastArgs.worktree).toBe('feature');
 });
 
 it('runSubagentAsync passes the bridge abort signal to startRunAsync', async () => {

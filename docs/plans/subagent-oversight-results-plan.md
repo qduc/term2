@@ -73,17 +73,17 @@ not enforcement. Concretely, `extractPathsFromCommand` (`tool-policy.ts:269,307`
 captures paths it can parse; shell edits with unrecognized command shapes are not in
 `filesChanged` and so are not in `diffStat`.
 
-Mitigation already present in policy: `orchestrator.md` asks workers to use an isolated
-git worktree on non-trivial changes, where git is both accurate and a useful
-cross-check that catches shell edits. **The plan's first implementation step is a
-measurement**: instrument a dev-only counter of how often a worker shell command results
-in a filesystem change that is *not* present in `filesChanged` (compare `git status`
-before/after around worker shell invocations in a test fixture). If the rate is
-negligible, the reconciliation path (git cross-check) is deferred. If it is material,
-build a limited git-stat reconciliation that runs only for worktree-isolated runs and
-only attributes paths already in `filesChanged` plus any *new* paths the worker's shell
-touched within its write boundary. The measurement decides; the plan does not pre-commit
-to building reconciliation.
+Mitigation already present in policy: `orchestrator.md` has the parent create an isolated
+git worktree and pin the worker via `run_subagent` `worktree` on non-trivial changes,
+where git is both accurate and a useful cross-check that catches shell edits. **The plan's
+first implementation step is a measurement**: instrument a dev-only counter of how often a
+worker shell command results in a filesystem change that is *not* present in
+`filesChanged` (compare `git status` before/after around worker shell invocations in a
+test fixture). If the rate is negligible, the reconciliation path (git cross-check) is
+deferred. If it is material, build a limited git-stat reconciliation that runs only for
+worktree-isolated runs and only attributes paths already in `filesChanged` plus any
+*new* paths the worker's shell touched within its write boundary. The measurement decides;
+the plan does not pre-commit to building reconciliation.
 
 ### D3. diffStat shape and capture point
 

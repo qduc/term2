@@ -23,6 +23,12 @@ export interface SubagentRequest {
   executionBudget?: ExecutionBudget;
   /** Continue a completed async session. */
   continueRunId?: string;
+  /**
+   * Pin a worker into an existing git worktree by directory basename or branch
+   * name (same resolution as `enter_worktree`). Parent session root is unchanged.
+   * Worker only.
+   */
+  worktree?: string;
 }
 
 /** Narrow per-segment callbacks supplied by the logical async-run owner. */
@@ -170,6 +176,11 @@ export interface SubagentResult {
    * validation command.
    */
   validation?: ValidationEvidence;
+  /**
+   * Absolute path of the worktree this worker was pinned into, when
+   * {@link SubagentRequest.worktree} resolved successfully.
+   */
+  worktreePath?: string;
 }
 
 /**

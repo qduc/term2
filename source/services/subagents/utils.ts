@@ -157,6 +157,10 @@ export function formatSubagentResult(result: SubagentResult): string {
   const lines: string[] = [];
   lines.push(`Status: ${result.status}`);
 
+  if (result.worktreePath) {
+    lines.push(`Worktree: ${result.worktreePath}`);
+  }
+
   if (result.error) {
     lines.push(`Error: ${result.error}`);
   }

@@ -38,6 +38,7 @@ import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import { getCallIdFromObject } from '../interruption-info.js';
 import { normalizeToolParameters } from '../../lib/tool-invoke.js';
 import { ForegroundSubagentLease, type BackgroundSubagentApprovalPauseSink } from './foreground-subagent-lease.js';
+import { pinWorkerWorktree } from './worker-worktree.js';
 
 export type CachedRoleTool = {
   agent: ApplicationAgent;
@@ -214,12 +215,33 @@ export class NestedSubagentRunner {
   #getOrCreateRoleTool(role: SupportedSubagentRole): CachedRoleTool {
     const cached = this.#roleToolCache.get(role);
     if (cached) return cached;
+    const created = this.#buildRoleTool(role);
+    this.#roleToolCache.set(role, created);
+    return created;
+  }
 
+  /**
+   * Builds role tools for one nested run. When `executionContext` is supplied
+   * (worker worktree pin), tools are ephemeral and must not enter the role
+   * cache — that cache freezes the session root.
+   */
+  #buildRoleTool(role: SupportedSubagentRole, options?: { executionContext?: ExecutionContext }): CachedRoleTool {
     // Use the injected resolver when available (shared ResolvedAgentDefinition
     // adaptation path); otherwise fall back to direct loadRoleDefinition.
     const definition = this.#resolveRole ? this.#resolveRole(role) : loadRoleDefinition(role, this.#settings);
     const searchViaShell = resolveSubagentSearchViaShell(this.#settings, definition.model, definition.canRunShell);
-    const toolDefinitions = this.#toolFactory.buildToolDefinitions(definition, [], '', searchViaShell, true);
+    const runExecutionContext = options?.executionContext ?? this.#executionContext;
+    const toolDefinitions = this.#toolFactory.buildToolDefinitions(
+      definition,
+      [],
+      '',
+      searchViaShell,
+      true,
+      undefined,
+      undefined,
+      undefined,
+      options?.executionContext ? { executionContext: options.executionContext } : undefined,
+    );
     const providerId = definition.provider;
     const tools = this.#toolFactory.buildAgentTools(toolDefinitions, {
       providerId,
@@ -286,7 +308,7 @@ export class NestedSubagentRunner {
       toolDefinitions,
       searchViaShell,
       this.#settings,
-      this.#executionContext,
+      runExecutionContext,
       this.#skillsService,
     );
 
@@ -299,10 +321,7 @@ export class NestedSubagentRunner {
     };
 
     const tool = this.createSubagentTool(role, definition, agent);
-
-    const created = { agent, tool };
-    this.#roleToolCache.set(role, created);
-    return created;
+    return { agent, tool };
   }
 
   /**
@@ -452,6 +471,33 @@ export class NestedSubagentRunner {
       | { resumeState?: string; signal?: AbortSignal; toolCall?: { callId?: string } }
       | undefined;
 
+    let worktreePath: string | undefined;
+    let pinnedRoleTool: CachedRoleTool | undefined;
+    if (request.worktree) {
+      const pin = await pinWorkerWorktree({
+        name: request.worktree,
+        role: request.role,
+        homeRoot: this.#executionContext?.getHomeWorkspace() ?? process.cwd(),
+        isRemote: this.#executionContext?.isRemote() ?? false,
+      });
+      if (!pin.ok) {
+        const agentId = detailsRecord?.toolCall?.callId ?? randomUUID();
+        const failed: NestedSubagentResult = {
+          agentId,
+          role,
+          status: 'failed',
+          finalText: '',
+          filesChanged: [],
+          toolsUsed: [],
+          error: pin.error,
+        };
+        safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result: { ...failed, status: 'failed' } });
+        return failed;
+      }
+      worktreePath = pin.worktreePath;
+      pinnedRoleTool = this.#buildRoleTool(role, { executionContext: pin.executionContext });
+    }
+
     // ── Budget enforcement ──
     // Only acquire a slot for fresh runs, not resumed ones (resumed runs
     // already hold their slot from the initial invocation).
@@ -518,7 +564,7 @@ export class NestedSubagentRunner {
     let abortListener: (() => void) | undefined;
     let transferredToBackground = false;
     try {
-      const { tool, agent: roleAgent } = this.#getOrCreateRoleTool(role);
+      const { tool, agent: roleAgent } = pinnedRoleTool ?? this.#getOrCreateRoleTool(role);
       replayApprovals(nestedLedger, readParentApprovals(context), roleAgent);
       const nestedToolContext: ToolInvocationContext<SubagentRunContext> = {
         context: runContext,
@@ -577,6 +623,9 @@ export class NestedSubagentRunner {
             (terminal) => {
               try {
                 const parsed = parseNestedSubagentResult(terminal);
+                if (worktreePath) {
+                  parsed.worktreePath = worktreePath;
+                }
                 if (transferredSlot && parsed.usage) request.executionBudget!.recordUsage(parsed.usage);
                 if (parsed.status !== 'interrupted' && parsed.status !== 'running') {
                   const completed: SubagentResult = { ...parsed, status: parsed.status };
@@ -604,9 +653,13 @@ export class NestedSubagentRunner {
           finalText: '',
           filesChanged: [],
           toolsUsed: [],
+          ...(worktreePath ? { worktreePath } : {}),
         };
       }
       const parsed = parseNestedSubagentResult(raw);
+      if (worktreePath) {
+        parsed.worktreePath = worktreePath;
+      }
       // Record usage from nested run
       if (childSlot && parsed.usage) {
         request.executionBudget!.recordUsage(parsed.usage);

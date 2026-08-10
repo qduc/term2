@@ -318,7 +318,9 @@ Minimum safe policy:
 
 For async/parallel workers, the parent should still try to assign non-overlapping responsibilities, but correctness should rely on file-level conflict detection, not folder-level disjointness.
 
-Potential later improvement: run each worker in a separate git worktree or branch and merge patches after review. That is safer for parallel edits but heavier to implement.
+**Shipped (existing pin):** `run_subagent` accepts optional `worktree` for `role: "worker"`, resolving an already-created worktree by directory basename or branch and pinning the child's tools to that root without re-rooting the parent session.
+
+Potential later improvement: auto-create (and optionally remove) a worktree per worker and merge patches after review.
 
 ## Conversation Events
 

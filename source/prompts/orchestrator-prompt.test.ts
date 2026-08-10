@@ -47,6 +47,13 @@ it('orchestrator prompt delegates bounded mechanical follow-through while retain
   expect(lower).toContain('coordination costs more than direct execution');
 });
 
+it('orchestrator prompt pins workers into existing worktrees via run_subagent worktree', () => {
+  expect(orchestratorPrompt).toContain('worktree');
+  expect(orchestratorPrompt).toContain('role: "worker"');
+  expect(orchestratorPrompt).toContain('do not ask the worker to enter the worktree itself');
+  expect(orchestratorPrompt).toContain('git worktree add .worktrees/<slug> -b <slug>');
+});
+
 it('orchestrator prompt documents get_subagent_status as the non-blocking mid-run peek', () => {
   const lower = orchestratorPrompt.toLowerCase();
 

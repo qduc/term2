@@ -52,6 +52,11 @@ import {
   type BackgroundShellTerminalStatus,
   type BackgroundShellRegistry,
 } from '../../services/shell/background-shell-registry.js';
+import type {
+  BackgroundShellWatches,
+  BackgroundShellOutputBundle,
+  RegisterShellOutputWatchOptions,
+} from '../../services/shell/background-shell-watches.js';
 
 const shellSandboxModeSchema = z.enum(['default', 'unsandboxed']).optional().default('default');
 
@@ -114,9 +119,39 @@ const getBackgroundShellJobParameters = z.object({
   job_id: z.string().min(1).describe('The background shell job ID.'),
 });
 
+const monitorShellJobParameters = z.object({
+  job_id: z.string().min(1).describe('The background shell job ID to monitor.'),
+  pattern: z
+    .string()
+    .optional()
+    .describe('Regular expression matched against each complete output line; absent matches any line.'),
+  stream: z.enum(['stdout', 'stderr', 'both']).optional().describe('Which output stream to monitor. Defaults to both.'),
+  idle_ms: relaxedNumber
+    .int()
+    .nonnegative()
+    .optional()
+    .describe(
+      'Quiet window in milliseconds that coalesces a burst of matches into one notification. Defaults to 1500.',
+    ),
+  notify_limit: relaxedNumber
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'Maximum number of notifications this watch may deliver before retiring. Defaults to 1 with a pattern, 5 without.',
+    ),
+  once: z.boolean().optional().describe('Retire the watch after its first notification (notify_limit 1).'),
+});
+
+const cancelShellMonitorParameters = z.object({
+  watch_id: z.string().min(1).describe('The watch ID returned by monitor_shell_job.'),
+});
+
 export interface BackgroundShellJobToolDefinitions {
   get: SchemaToolDefinition<typeof getBackgroundShellJobParameters>;
   cancel: SchemaToolDefinition<typeof getBackgroundShellJobParameters>;
+  monitor?: SchemaToolDefinition<typeof monitorShellJobParameters>;
+  cancelMonitor?: SchemaToolDefinition<typeof cancelShellMonitorParameters>;
 }
 
 function backgroundShellJobResponse(job: BackgroundShellJob<BackgroundShellExecutionResult>) {
@@ -129,13 +164,50 @@ function backgroundShellJobResponse(job: BackgroundShellJob<BackgroundShellExecu
   };
 }
 
-function activeBackgroundShellJobResponse(job: BackgroundShellJob<BackgroundShellExecutionResult>) {
+const ACTIVE_JOB_MESSAGE =
+  'This background shell job is still running. End the current turn and wait for its automatic completion notification; do not poll get_shell_job.';
+
+function activeBackgroundShellJobResponse(
+  job: BackgroundShellJob<BackgroundShellExecutionResult>,
+  output: BackgroundShellOutputBundle | undefined,
+) {
+  const tail = output?.store.readTail(job.id);
+  if (!tail) {
+    // The store has no stream for this job (no monitoring layer, or a job
+    // that never went through the shell-tool seam): keep the refusal form.
+    return {
+      status: 'background_job_active',
+      jobId: job.id,
+      message: ACTIVE_JOB_MESSAGE,
+    };
+  }
   return {
     status: 'background_job_active',
     jobId: job.id,
-    message:
-      'This background shell job is still running. End the current turn and wait for its automatic completion notification; do not poll get_shell_job.',
+    command: job.command,
+    tail: tail.text,
+    droppedBytes: tail.droppedBytes,
+    message: ACTIVE_JOB_MESSAGE,
   };
+}
+
+/**
+ * Common transcript extraction for the job/monitor control tools: call id,
+ * normalized arguments, the parsed tool result, and a string reader.
+ */
+function backgroundShellToolTranscript(
+  item: Parameters<FormatCommandMessage>[0],
+  toolCallArgumentsById: Map<string, unknown>,
+) {
+  const callId = getCallIdFromItem(item);
+  const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
+  const args =
+    normalizeToolArguments(item?.rawItem?.arguments ?? item?.arguments) ?? normalizeToolArguments(fallbackArgs) ?? {};
+  const toolName = item?.toolName ?? item?.rawItem?.name ?? 'shell_job';
+  const outputText = getOutputText(item);
+  const response = safeJsonParse(outputText) as Record<string, unknown> | null;
+  const readString = (value: unknown): string => (typeof value === 'string' ? value : '');
+  return { callId, args, toolName, outputText, response, readString };
 }
 
 /**
@@ -148,15 +220,10 @@ function activeBackgroundShellJobResponse(job: BackgroundShellJob<BackgroundShel
  * session.
  */
 export const formatBackgroundShellJobCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
-  const callId = getCallIdFromItem(item);
-  const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
-  const args =
-    normalizeToolArguments(item?.rawItem?.arguments ?? item?.arguments) ?? normalizeToolArguments(fallbackArgs) ?? {};
-  const toolName = item?.toolName ?? item?.rawItem?.name ?? 'shell_job';
-
-  const outputText = getOutputText(item);
-  const response = safeJsonParse(outputText) as Record<string, unknown> | null;
-  const readString = (value: unknown): string => (typeof value === 'string' ? value : '');
+  const { args, toolName, outputText, response, readString } = backgroundShellToolTranscript(
+    item,
+    toolCallArgumentsById,
+  );
 
   const jobId = readString(response?.jobId) || readString((args as Record<string, unknown>)?.job_id);
   const status = readString(response?.status);
@@ -170,9 +237,15 @@ export const formatBackgroundShellJobCommandMessage: FormatCommandMessage = (ite
       return `Job ${jobId} not found.`;
     }
     // The active-job response carries an instruction aimed at the model
-    // ("do not poll"), which is noise in the transcript.
+    // ("do not poll"), which is noise in the transcript: show the bounded
+    // tail and drop accounting instead of the static refusal string.
     if (status === 'background_job_active') {
-      return 'Still running.';
+      const tail = readString(response?.tail);
+      const droppedBytes = typeof response?.droppedBytes === 'number' ? response.droppedBytes : 0;
+      const body = [tail, droppedBytes > 0 ? `(${droppedBytes} bytes of earlier output dropped)` : '']
+        .filter(Boolean)
+        .join('\n');
+      return body || 'Still running.';
     }
 
     const header = jobCommand ? `${status} · ${jobCommand}` : status ? `status: ${status}` : '';
@@ -193,14 +266,109 @@ export const formatBackgroundShellJobCommandMessage: FormatCommandMessage = (ite
 };
 
 /**
+ * Transcript row for `monitor_shell_job`. Renders the returned watchId and the
+ * job it is attached to; a later `background_shell_output` notification carries
+ * the seq/matchedLines of each firing.
+ */
+export const formatBackgroundShellMonitorCommandMessage: FormatCommandMessage = (
+  item,
+  index,
+  toolCallArgumentsById,
+) => {
+  const { args, toolName, outputText, response, readString } = backgroundShellToolTranscript(
+    item,
+    toolCallArgumentsById,
+  );
+  const jobId = readString(response?.jobId) || readString((args as Record<string, unknown>)?.job_id);
+  const watchId = readString(response?.watchId);
+  const status = readString(response?.status);
+
+  const output = (() => {
+    if (!response) {
+      return outputText || 'No output';
+    }
+    if (status === 'not_found') {
+      return `Job ${jobId} not found.`;
+    }
+    const error = readString(response?.error);
+    if (error) {
+      return error;
+    }
+    if (status === 'monitoring') {
+      const seq = typeof response?.seq === 'number' ? ` (firing ${response.seq})` : '';
+      const matched = readString(response?.matchedLines);
+      return [watchId ? `Monitoring job ${jobId} (watch ${watchId}).${seq}` : `Monitoring job ${jobId}.`, matched]
+        .filter(Boolean)
+        .join('\n');
+    }
+    return outputText || 'No output';
+  })();
+
+  return [
+    createBaseMessage(item, index, 0, false, {
+      command: watchId ? `${toolName} ${watchId}` : `${toolName} ${jobId}`,
+      output,
+      success: status === 'monitoring',
+      toolName,
+      toolArgs: args,
+    }),
+  ];
+};
+
+/** Transcript row for `cancel_shell_monitor`. */
+export const formatBackgroundShellCancelMonitorCommandMessage: FormatCommandMessage = (
+  item,
+  index,
+  toolCallArgumentsById,
+) => {
+  const { args, toolName, outputText, response, readString } = backgroundShellToolTranscript(
+    item,
+    toolCallArgumentsById,
+  );
+  const watchId = readString(response?.watchId) || readString((args as Record<string, unknown>)?.watch_id);
+  const status = readString(response?.status);
+
+  const output = (() => {
+    if (!response) {
+      return outputText || 'No output';
+    }
+    const error = readString(response?.error);
+    if (error) {
+      return error;
+    }
+    if (status === 'not_found') {
+      return `Watch ${watchId} not found.`;
+    }
+    if (status === 'cancelled') {
+      return `Stopped monitoring (watch ${watchId}).`;
+    }
+    return outputText || 'No output';
+  })();
+
+  return [
+    createBaseMessage(item, index, 0, false, {
+      command: watchId ? `${toolName} ${watchId}` : toolName,
+      output,
+      success: status === 'cancelled',
+      toolName,
+      toolArgs: args,
+    }),
+  ];
+};
+
+/**
  * Root composition registers these alongside `shell` when it supplies the
  * session-owned registry. Keeping them here makes the model contract and its
  * shell lifecycle use the same job representation.
+ *
+ * `output` carries the session-owned store + watch layer; when it is absent
+ * (legacy callers), the monitor tools are not registered.
  */
 export function createBackgroundShellJobToolDefinitions(
   registry: BackgroundShellRegistry<BackgroundShellExecutionResult>,
+  output?: BackgroundShellOutputBundle,
 ): BackgroundShellJobToolDefinitions {
-  return {
+  const definitions: BackgroundShellJobToolDefinitions = {
     get: {
       name: 'get_shell_job',
       description:
@@ -210,7 +378,7 @@ export function createBackgroundShellJobToolDefinitions(
       execute: ({ job_id }) => {
         const job = registry.get(job_id);
         if (job?.status === 'running' || job?.status === 'cancelling')
-          return JSON.stringify(activeBackgroundShellJobResponse(job));
+          return JSON.stringify(activeBackgroundShellJobResponse(job, output));
         return JSON.stringify(job ? backgroundShellJobResponse(job) : { jobId: job_id, status: 'not_found' });
       },
       formatCommandMessage: formatBackgroundShellJobCommandMessage,
@@ -230,6 +398,62 @@ export function createBackgroundShellJobToolDefinitions(
       formatCommandMessage: formatBackgroundShellJobCommandMessage,
     },
   };
+
+  if (output) {
+    definitions.monitor = {
+      name: 'monitor_shell_job',
+      description:
+        "Attach a watch to a running background shell job. The watch replays the job's retained output, and each time a complete line in the selected stream matches `pattern` (or any line arrives when `pattern` is absent) and the output has been quiet for `idle_ms`, a `shell_output` notification carrying the matched lines is delivered through the conversation; the job keeps running. Returns a watchId; stop the watch with cancel_shell_monitor.",
+      parameters: monitorShellJobParameters,
+      needsApproval: () => false,
+      execute: ({ job_id, pattern, stream, idle_ms, notify_limit, once }) => {
+        const job = registry.get(job_id);
+        if (
+          !job ||
+          output.store.readTail(job_id) === undefined ||
+          (job.status !== 'running' && job.status !== 'cancelling')
+        ) {
+          return JSON.stringify({ jobId: job_id, status: 'not_found' });
+        }
+        let compiled: RegExp | undefined;
+        if (pattern !== undefined) {
+          try {
+            compiled = new RegExp(pattern);
+          } catch (error) {
+            return JSON.stringify({
+              jobId: job_id,
+              status: 'error',
+              error: `Invalid monitor pattern: ${error instanceof Error ? error.message : String(error)}`,
+            });
+          }
+        }
+        const options: RegisterShellOutputWatchOptions = {
+          jobId: job_id,
+          pattern: compiled,
+          stream,
+          idleMs: idle_ms,
+          notifyLimit: once ? 1 : notify_limit,
+          command: job.command,
+        };
+        const watchId = output.watches.registerWatch(options);
+        return JSON.stringify({ watchId, jobId: job_id, status: 'monitoring' });
+      },
+      formatCommandMessage: formatBackgroundShellMonitorCommandMessage,
+    };
+    definitions.cancelMonitor = {
+      name: 'cancel_shell_monitor',
+      description: 'Stop a shell monitor watch so it stops delivering shell_output notifications.',
+      parameters: cancelShellMonitorParameters,
+      needsApproval: () => false,
+      execute: ({ watch_id }) => {
+        const cancelled = output.watches.cancelWatch(watch_id);
+        return JSON.stringify({ watchId: watch_id, status: cancelled ? 'cancelled' : 'not_found' });
+      },
+      formatCommandMessage: formatBackgroundShellCancelMonitorCommandMessage,
+    };
+  }
+
+  return definitions;
 }
 
 /**
@@ -434,6 +658,8 @@ export function createShellToolDefinition(deps: {
   nestedCompatibility?: NestedToolCompatibilityState;
   /** Root session-owned lifecycle for local background shell jobs. */
   backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
+  /** Root session-owned output store + watch layer for background jobs. */
+  backgroundShellWatches?: BackgroundShellWatches;
 }): ShellToolDefinition {
   const {
     loggingService,
@@ -449,6 +675,7 @@ export function createShellToolDefinition(deps: {
     sessionAccess,
     nestedCompatibility,
     backgroundShellRegistry,
+    backgroundShellWatches,
   } = deps;
   const deniedReadByCallId = new Map<string, DeniedReadInfo>();
   const overrideByCallId = new Map<string, { extraAllowRead?: string[]; forceUnsandboxed?: boolean }>();
@@ -586,6 +813,10 @@ export function createShellToolDefinition(deps: {
       let backgroundCleanupDeferred = false;
       let transferred = false;
       let observedJobId: string | undefined;
+      // Background-only monitor seam: set when the background branch opens the
+      // job's output stream, so the shared onOutputChunk never touches the
+      // store for a foreground lease job.
+      let monitoredJobId: string | undefined;
       const ownsCorrelationId = !background;
       let foregroundCorrelationRestored = false;
       const restoreForegroundCorrelation = () => {
@@ -764,8 +995,13 @@ export function createShellToolDefinition(deps: {
             pauseOnSandboxNetworkApproval: sandboxed,
             signal,
             sshService,
-            onOutputChunk: () => {
+            onOutputChunk: (stream, text) => {
               if (observedJobId) backgroundShellRegistry?.recordOutputChunk(observedJobId);
+              // Monitoring is background-only: the store stream is opened only
+              // for the background branch, so a foreground lease job is never
+              // pushed here. watches.push feeds the store and evaluates the
+              // job's watches in one call.
+              if (monitoredJobId) backgroundShellWatches?.push(monitoredJobId, stream, text);
             },
           });
 
@@ -923,8 +1159,21 @@ export function createShellToolDefinition(deps: {
               run: executePreparedCommand,
               onStarted: (jobId) => {
                 observedJobId = jobId;
+                // Open the retained output stream (and the watch layer) for
+                // this job at launch; settled in onSettled below.
+                if (backgroundShellWatches) {
+                  monitoredJobId = jobId;
+                  backgroundShellWatches.open(jobId);
+                }
               },
-              onSettled: cleanupAfterExecution,
+              onSettled: () => {
+                // Flush matched-but-undelivered watch firings before the
+                // registry emits background_shell_completed (it awaits this
+                // callback first): no monitor firing may trail the terminal
+                // notification. Then release shell resources as before.
+                if (monitoredJobId) backgroundShellWatches?.settleJob(monitoredJobId);
+                return cleanupAfterExecution();
+              },
               resultToStatus: (result) => result.status,
             });
             backgroundCleanupDeferred = true;

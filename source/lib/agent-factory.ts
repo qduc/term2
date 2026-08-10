@@ -24,6 +24,7 @@ import { isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../tools/
 import type { AnyToolDefinition, JsonSchemaObject, PostExecutePauseCapability, ToolRegistry } from '../tools/types.js';
 import type { SessionAccessState } from '../services/session/session-access-state.js';
 import type { BackgroundShellRegistry } from '../services/shell/background-shell-registry.js';
+import type { BackgroundShellOutputBundle } from '../services/shell/background-shell-watches.js';
 import type { BackgroundShellExecutionResult } from '../tools/system/shell.js';
 import { getCatalogModel } from '../providers/model-catalog/catalog.js';
 
@@ -52,6 +53,8 @@ export interface AgentFactoryDeps {
   sessionAccess?: SessionAccessState;
   /** Root-session-owned background shell capability. */
   backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
+  /** Root-session-owned output store + watch layer for background jobs. */
+  backgroundShellOutput?: BackgroundShellOutputBundle;
   /** False for one-shot/non-interactive callers until their lifecycle is supported. */
   allowBackgroundShell?: boolean;
 }
@@ -344,6 +347,7 @@ export function buildAgent(
       postExecuteDeniedRead: Boolean(deps.postExecutePauseCapability),
       sessionAccess: deps.sessionAccess,
       backgroundShellRegistry: deps.backgroundShellRegistry,
+      backgroundShellOutput: deps.backgroundShellOutput,
       allowBackgroundShell: deps.allowBackgroundShell,
     },
     resolvedModel,

@@ -21,6 +21,12 @@ import { HookEventFactory } from '../hooks/hook-event-factory.js';
 import { createToolExecutionLifecyclePort } from '../hooks/hook-tool-lifecycle.js';
 import type { ToolExecutionLifecyclePort } from '../../tools/types.js';
 import { BackgroundShellRegistry } from '../shell/background-shell-registry.js';
+import { BackgroundShellOutputStore } from '../shell/background-shell-output-store.js';
+import {
+  BackgroundShellWatches,
+  type BackgroundShellOutputBundle,
+  type BackgroundShellWatchScheduler,
+} from '../shell/background-shell-watches.js';
 import type { BackgroundShellExecutionResult } from '../../tools/system/shell.js';
 
 /** A client whose lifetime is owned by the session that requested it. */
@@ -43,6 +49,8 @@ export type SessionClientHandle = {
   readonly toolLifecycle?: ToolExecutionLifecyclePort;
   /** Present only for an owned root session handle. */
   readonly backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
+  /** Present only for an owned root session handle. */
+  readonly backgroundShellOutput?: BackgroundShellOutputBundle;
   /** Idempotently release resources captured by this session's client. */
   dispose(): void;
 };
@@ -53,6 +61,19 @@ export type SessionClientFactory = {
 };
 
 type DisposableConversationAgentClient = ConversationAgentClient & { dispose?: () => void };
+
+/**
+ * Production timer adapter for {@link BackgroundShellWatches}: a real
+ * `setTimeout`/`clearTimeout` pair. The watches module keeps its scheduler
+ * injected so unit tests drive time deterministically; owned sessions pass
+ * this adapter when the watch layer is created.
+ */
+export function createBackgroundShellWatchScheduler(): BackgroundShellWatchScheduler {
+  return {
+    schedule: (callback, delayMs) => setTimeout(callback, delayMs),
+    cancel: (handle) => clearTimeout(handle as NodeJS.Timeout),
+  };
+}
 
 /**
  * Makes a factory for production clients. Each handle owns exactly the client
@@ -72,6 +93,7 @@ export function createOwnedSessionClientFactory(
     toolLifecycle?: ToolExecutionLifecyclePort,
     backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>,
     allowBackgroundShell?: boolean,
+    backgroundShellOutput?: BackgroundShellOutputBundle,
   ) => DisposableConversationAgentClient,
   hookLifecycle?: HookLifecyclePort,
 ): SessionClientFactory {
@@ -108,6 +130,18 @@ export function createOwnedSessionClientFactory(
       const backgroundShellRegistry = allowBackgroundShell
         ? new BackgroundShellRegistry<BackgroundShellExecutionResult>()
         : undefined;
+      // The output store + watch layer are session-owned beside the registry:
+      // the shell tool opens a job's stream at launch and the monitor tools
+      // register watches against the same watch set.
+      const backgroundShellOutput: BackgroundShellOutputBundle | undefined = allowBackgroundShell
+        ? (() => {
+            const store = new BackgroundShellOutputStore();
+            return {
+              store,
+              watches: new BackgroundShellWatches({ store, scheduler: createBackgroundShellWatchScheduler() }),
+            };
+          })()
+        : undefined;
       const openAIRootFreshTurnSelectorParityObserver =
         continuationProjectionMode === 'openai-provider'
           ? new ProviderContinuityOpenAIRootSelectorParityObserver(
@@ -128,7 +162,9 @@ export function createOwnedSessionClientFactory(
         toolLifecycle,
         backgroundShellRegistry,
         allowBackgroundShell,
+        backgroundShellOutput,
       );
+
       let disposed = false;
       return {
         agentClient,
@@ -144,6 +180,7 @@ export function createOwnedSessionClientFactory(
         hookEvents,
         toolLifecycle,
         backgroundShellRegistry,
+        backgroundShellOutput,
         dispose() {
           if (disposed) return;
           disposed = true;

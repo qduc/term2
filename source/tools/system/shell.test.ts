@@ -1,9 +1,15 @@
-import { it, expect, beforeEach, afterEach } from 'vitest';
+import { it, expect, describe, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { createBackgroundShellJobToolDefinitions, createShellToolDefinition } from './shell.js';
 import { BackgroundShellRegistry } from '../../services/shell/background-shell-registry.js';
+import { BackgroundShellOutputStore } from '../../services/shell/background-shell-output-store.js';
+import {
+  BackgroundShellWatches,
+  type BackgroundShellWatchScheduler,
+  type ShellOutputFiring,
+} from '../../services/shell/background-shell-watches.js';
 import { ApprovalLedger, type ToolInvocationContext } from '../../services/agent-runtime/tool-invocation-context.js';
 import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
 import {
@@ -75,6 +81,185 @@ function createDeferred<T>() {
   });
   return { promise, resolve: resolve! };
 }
+
+/** Deterministic timer for the seam tests; no real timers fire. */
+class FakeScheduler implements BackgroundShellWatchScheduler {
+  #now = 0;
+  #nextId = 1;
+  readonly #due = new Map<number, { at: number; callback: () => void }>();
+
+  schedule(callback: () => void, delayMs: number): unknown {
+    const id = this.#nextId++;
+    this.#due.set(id, { at: this.#now + delayMs, callback });
+    return id;
+  }
+
+  cancel(handle: unknown): void {
+    this.#due.delete(handle as number);
+  }
+
+  advance(ms: number): void {
+    this.#now += ms;
+    for (;;) {
+      const due = [...this.#due.entries()]
+        .filter(([, entry]) => entry.at <= this.#now)
+        .sort((a, b) => a[1].at - b[1].at);
+      if (due.length === 0) return;
+      for (const [id, entry] of due) {
+        this.#due.delete(id);
+        entry.callback();
+      }
+    }
+  }
+}
+
+function createMonitorBundle() {
+  const store = new BackgroundShellOutputStore();
+  const scheduler = new FakeScheduler();
+  const firings: ShellOutputFiring[] = [];
+  const watches = new BackgroundShellWatches({ store, scheduler, onFiring: (firing) => firings.push(firing) });
+  return { store, scheduler, watches, firings };
+}
+
+function createSettledRegistry(createId = () => 'monitor-job'): BackgroundShellRegistry<{
+  output: string;
+  status: 'completed' | 'failed' | 'timed_out';
+}> {
+  return new BackgroundShellRegistry<{ output: string; status: 'completed' | 'failed' | 'timed_out' }>({ createId });
+}
+
+describe('background shell monitor tools', () => {
+  it('monitor_shell_job registers a watch on a running job and cancel_shell_monitor removes it', async () => {
+    const { store, watches } = createMonitorBundle();
+    const registry = createSettledRegistry(() => 'monitored-job');
+    const hold = createDeferred<{ stdout: string; stderr: string; exitCode: number; timedOut: boolean }>();
+    registry.launch({
+      command: 'npm run dev',
+      run: async () => {
+        const result = await hold.promise;
+        return { output: result.stdout || 'ok', status: result.exitCode === 0 ? 'completed' : 'failed' };
+      },
+      onSettled: () => undefined,
+      resultToStatus: (result) => result.status,
+    });
+    // The shell-tool seam opens the store stream at launch.
+    store.open('monitored-job');
+    store.push('monitored-job', 'stdout', 'compiling...\n');
+    store.push('monitored-job', 'stdout', 'server listening on 3000\n');
+
+    const jobs = createBackgroundShellJobToolDefinitions(registry, { store, watches });
+
+    const registered = JSON.parse(
+      String(await jobs.monitor!.execute({ job_id: 'monitored-job', pattern: 'listening on' })),
+    );
+    expect(registered).toMatchObject({ jobId: 'monitored-job', status: 'monitoring' });
+    expect(registered.watchId).toBeTypeOf('string');
+
+    const cancelled = JSON.parse(String(await jobs.cancelMonitor!.execute({ watch_id: registered.watchId })));
+    expect(cancelled).toMatchObject({ watchId: registered.watchId, status: 'cancelled' });
+
+    const missing = JSON.parse(String(await jobs.cancelMonitor!.execute({ watch_id: 'watch-nope' })));
+    expect(missing).toMatchObject({ watchId: 'watch-nope', status: 'not_found' });
+  });
+
+  it('monitor_shell_job reports not_found for an unknown job and an error for an invalid pattern', async () => {
+    const { store, watches } = createMonitorBundle();
+    const registry = createSettledRegistry();
+    const jobs = createBackgroundShellJobToolDefinitions(registry, { store, watches });
+
+    const unknown = JSON.parse(String(await jobs.monitor!.execute({ job_id: 'no-such-job' })));
+    expect(unknown).toMatchObject({ jobId: 'no-such-job', status: 'not_found' });
+
+    const hold = createDeferred<{ stdout: string; stderr: string; exitCode: number; timedOut: boolean }>();
+    registry.launch({
+      command: 'npm run dev',
+      run: async () => {
+        const r = await hold.promise;
+        return { output: r.stdout || 'ok', status: 'completed' };
+      },
+      onSettled: () => undefined,
+      resultToStatus: (result) => result.status,
+    });
+    store.open('monitor-job');
+    const invalid = JSON.parse(String(await jobs.monitor!.execute({ job_id: 'monitor-job', pattern: '(' })));
+    expect(invalid.status).toBe('error');
+    expect(invalid.error).toContain('Invalid monitor pattern');
+  });
+
+  it('get_shell_job returns the retained tail for a running job instead of the refusal message', async () => {
+    const { store, watches } = createMonitorBundle();
+    const registry = createSettledRegistry(() => 'tail-job');
+    const hold = createDeferred<{ stdout: string; stderr: string; exitCode: number; timedOut: boolean }>();
+    registry.launch({
+      command: 'npm run dev',
+      run: async () => {
+        const r = await hold.promise;
+        return { output: r.stdout || 'ok', status: 'completed' };
+      },
+      onSettled: () => undefined,
+      resultToStatus: (result) => result.status,
+    });
+    store.open('tail-job');
+    store.push('tail-job', 'stdout', 'line one\n');
+    store.push('tail-job', 'stdout', 'line two\n');
+
+    const jobs = createBackgroundShellJobToolDefinitions(registry, { store, watches });
+    const active = JSON.parse(String(await jobs.get.execute({ job_id: 'tail-job' })));
+
+    expect(active.status).toBe('background_job_active');
+    expect(active.tail).toBe('line one\nline two\n');
+    expect(active.message).toContain('do not poll');
+    expect(active.droppedBytes).toBe(0);
+  });
+
+  it('registrations without an output bundle keep the legacy surface and no monitor tools', async () => {
+    const registry = new BackgroundShellRegistry<{ output: string; status: 'completed' | 'failed' | 'timed_out' }>({
+      createId: () => 'legacy-job',
+    });
+    const jobs = createBackgroundShellJobToolDefinitions(registry);
+    expect(jobs.monitor).toBeUndefined();
+    expect(jobs.cancelMonitor).toBeUndefined();
+  });
+
+  it('shell-tool seam opens the store at launch, pushes chunks, and settles the watch before completion', async () => {
+    const { store, watches, firings } = createMonitorBundle();
+    const registry = new BackgroundShellRegistry<{ output: string; status: 'completed' | 'failed' | 'timed_out' }>({
+      createId: () => 'seam-job',
+    });
+    const shell = createShellToolDefinition({
+      loggingService: createNoopLogger(),
+      settingsService: createMockSettingsService({ 'sandbox.enabled': false }),
+      backgroundShellRegistry: registry,
+      backgroundShellWatches: watches,
+      executeShellCommandImpl: async (_command, options) => {
+        // The job prints a line the eventual monitor wants, then completes.
+        options?.onOutputChunk?.('stdout', 'server listening on 3000\n');
+        return { stdout: 'server listening on 3000\n', stderr: '', exitCode: 0, timedOut: false };
+      },
+    });
+
+    await shell.execute({ command: 'npm run dev', background: true });
+
+    // The seam opened the store stream and routed the chunk into it.
+    const tail = store.readTail('seam-job');
+    expect(tail?.text).toContain('server listening on 3000');
+
+    // Registering a monitor after the run still catches the retained output,
+    // and settleJob flushes it before the job's completion is terminal.
+    const jobs = createBackgroundShellJobToolDefinitions(registry, { store, watches });
+    const registered = JSON.parse(
+      String(await jobs.monitor!.execute({ job_id: 'seam-job', pattern: 'listening on', once: true })),
+    );
+    expect(registered.status).toBe('monitoring');
+
+    await registry.whenSettled('seam-job');
+
+    // settleJob closed the store stream and fired the retained match.
+    expect(store.readTail('seam-job')?.closed).toBe(true);
+    expect(firings).toHaveLength(1);
+    expect(firings[0]).toMatchObject({ jobId: 'seam-job', seq: 1, matchedLines: 'server listening on 3000' });
+  });
+});
 
 it('background shell acknowledges immediately, exposes status and cancellation, and defers sandbox cleanup', async () => {
   const registry = new BackgroundShellRegistry<{ output: string; status: 'completed' | 'failed' | 'timed_out' }>({

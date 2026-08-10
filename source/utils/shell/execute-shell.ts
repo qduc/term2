@@ -65,6 +65,18 @@ type ExecOptions = {
   env?: NodeJS.ProcessEnv;
   drainGraceMs?: number;
   /**
+   * What happens when retained output exceeds `maxBuffer`. `'kill'` sets an
+   * error and signals the child (foreground default); `'truncate'` drops from
+   * the head of the retained text and keeps the process running.
+   */
+  overflow?: 'kill' | 'truncate';
+  /**
+   * Called once per output chunk as it arrives, in arrival order, per stream.
+   * Chunks are raw: a chunk may split a line, and line reassembly is not this
+   * tap's concern.
+   */
+  onOutputChunk?: (stream: 'stdout' | 'stderr', text: string) => void;
+  /**
    * Lets the caller force settlement with whatever output has arrived. An impl
    * that does not register one still gets bounded: the caller settles on its
    * own, just without partial output.
@@ -95,6 +107,7 @@ const defaultExecImpl: ExecImpl = (command, options, callback) => {
 
   const maxBuffer = options.maxBuffer ?? 1024 * 1024;
   const drainGraceMs = options.drainGraceMs ?? DEFAULT_DRAIN_GRACE_MS;
+  const overflow = options.overflow ?? 'kill';
   const streamsAtEof = () => stdoutAtEof && stderrAtEof;
 
   const releaseStreams = () => {
@@ -145,10 +158,16 @@ const defaultExecImpl: ExecImpl = (command, options, callback) => {
 
   child.stdout?.setEncoding('utf8');
   child.stdout?.on('data', (chunk) => {
+    options.onOutputChunk?.('stdout', chunk);
     stdout += chunk;
     if (stdout.length > maxBuffer) {
-      ex ??= new Error('stdout maxBuffer length exceeded');
-      stopChildProcess(child);
+      if (overflow === 'truncate') {
+        // Drop from the head of the retained text; the process keeps running.
+        stdout = stdout.slice(stdout.length - maxBuffer);
+      } else {
+        ex ??= new Error('stdout maxBuffer length exceeded');
+        stopChildProcess(child);
+      }
     }
   });
   child.stdout?.on('end', () => markEof('stdout'));
@@ -156,10 +175,16 @@ const defaultExecImpl: ExecImpl = (command, options, callback) => {
 
   child.stderr?.setEncoding('utf8');
   child.stderr?.on('data', (chunk) => {
+    options.onOutputChunk?.('stderr', chunk);
     stderr += chunk;
     if (stderr.length > maxBuffer) {
-      ex ??= new Error('stderr maxBuffer length exceeded');
-      stopChildProcess(child);
+      if (overflow === 'truncate') {
+        // Drop from the head of the retained text; the process keeps running.
+        stderr = stderr.slice(stderr.length - maxBuffer);
+      } else {
+        ex ??= new Error('stderr maxBuffer length exceeded');
+        stopChildProcess(child);
+      }
     }
   });
   child.stderr?.on('end', () => markEof('stderr'));
@@ -216,6 +241,19 @@ export interface ExecuteShellOptions {
   drainGraceMs?: number;
   /** How long SIGTERM gets before SIGKILL follows. */
   terminationGraceMs?: number;
+  /**
+   * Called once per output chunk as it arrives, in arrival order, per stream.
+   * Chunks are raw: a chunk may split a line, and line reassembly is not this
+   * tap's concern.
+   */
+  onOutputChunk?: (stream: 'stdout' | 'stderr', text: string) => void;
+  /**
+   * What happens when retained output exceeds `maxBuffer`. `'kill'` sets an
+   * error and signals the child — the foreground default, unchanged. `'truncate'`
+   * drops from the head of the retained final-result text and keeps the process
+   * running. Default `'kill'`.
+   */
+  overflow?: 'kill' | 'truncate';
 }
 
 function signalChildProcess(child: ChildProcess, signal: NodeJS.Signals): void {
@@ -297,6 +335,8 @@ async function executeShellCommandUnleased(
     pauseOnSandboxNetworkApproval = false,
     drainGraceMs = DEFAULT_DRAIN_GRACE_MS,
     terminationGraceMs = DEFAULT_TERMINATION_GRACE_MS,
+    onOutputChunk,
+    overflow = 'kill',
   } = options;
 
   if (sshService) {
@@ -404,6 +444,8 @@ async function executeShellCommandUnleased(
           env: childEnv,
           detached: process.platform !== 'win32',
           drainGraceMs,
+          overflow,
+          onOutputChunk,
           registerFinalizer: (finalize) => {
             finalizeImpl = finalize;
           },

@@ -316,3 +316,51 @@ it('run() retries a mid-stream transport drop instead of failing the subagent', 
   const retryEvent = events.find((e) => e.type === 'retry');
   expect(retryEvent?.retryType).toBe('upstream');
 });
+
+it('run() retries when a chat stream ends without a finish reason', async () => {
+  // Same recovery path as a transport drop: subagents must not fail a worker
+  // permanently when the provider closes SSE before a finish_reason frame.
+  let runCount = 0;
+  const events: any[] = [];
+
+  const incompleteStreamError = new Error('OpenAI-compatible streamed response ended without a finish reason');
+
+  const providerId = registerTestProvider({
+    label: 'Mock Incomplete Stream Finish Provider',
+    createStreamedModel: () =>
+      ({
+        stream: async function* () {
+          runCount++;
+          if (runCount === 1) {
+            yield* wrapErrorAsAgentStream(incompleteStreamError);
+          }
+          yield* wrapResultAsAgentStream({
+            status: 'completed',
+            finalOutput: 'Recovered after incomplete stream',
+            history: [],
+            messages: [],
+          });
+        },
+      } as any),
+    fetchModels: async () => [{ id: 'mock-model' }],
+  });
+
+  const manager = new TestSubagentManager({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.model': 'mock-model',
+      'agent.provider': providerId,
+      'agent.retryAttempts': 2,
+    }),
+    sessionContextService: createSessionContextService() as any,
+    onEvent: (event: ConversationEvent) => events.push(event),
+  });
+
+  const result = await manager.run({ role: 'worker', task: 'implement the change' });
+
+  expect(result.status).toBe('completed');
+  expect(result.finalText).toBe('Recovered after incomplete stream');
+  expect(runCount).toBe(2);
+  const retryEvent = events.find((e) => e.type === 'retry');
+  expect(retryEvent?.retryType).toBe('upstream');
+});

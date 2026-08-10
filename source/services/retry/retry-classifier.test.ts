@@ -216,6 +216,26 @@ it('classify returns transient for undici onSocketClose TypeError mid-stream', (
   expect(result.delayMs > 0 && result.delayMs <= 30000).toBe(true);
 });
 
+it('classify returns transient when a chat stream ends without a finish reason', () => {
+  // Regression: opencode/deepseek sometimes closes SSE after partial
+  // reasoning with no finish_reason. The adapter correctly refuses to
+  // synthesize completion; the classifier must treat that as recoverable.
+  const classifier = makeClassifier();
+
+  const result = classifier.classify(
+    baseContext({
+      error: new Error('OpenAI-compatible streamed response ended without a finish reason'),
+      retryCounts: baseCounts(),
+      maxTransientRetries: 5,
+    }),
+  );
+
+  expect(result.kind).toBe('transient');
+  if (result.kind !== 'transient') return;
+  expect(result.attempt).toBe(1);
+  expect(result.delayMs > 0 && result.delayMs <= 30000).toBe(true);
+});
+
 it('classify returns transient for ECONNRESET socket error', () => {
   const classifier = makeClassifier();
 

@@ -103,6 +103,34 @@ it('isRetryableTransportError separates retryable errors from HTTP fallback cand
   });
 });
 
+// Incomplete stream terminals: the provider closed the body after partial
+// deltas without a finish marker. Retryable on the same transport — not a
+// reason to force HTTP/WS fallback.
+it('isRetryableTransportError retries incomplete stream terminals without transport fallback', () => {
+  const incompleteTerminals = [
+    'OpenAI-compatible streamed response ended without a finish reason',
+    'AI SDK streamed response ended without an authoritative native finish reason',
+    'AI SDK streamed response ended without a finish event',
+    'Codex streamed response ended without a completed response event.',
+    'OpenAI streamed response ended without a completion.',
+  ];
+
+  for (const message of incompleteTerminals) {
+    expect(isRetryableTransportError(new Error(message))).toEqual({
+      retryable: true,
+      transportFallback: false,
+    });
+    expect(isTransientRetryableError(new Error(message))).toBe(true);
+  }
+
+  // Unrelated "without a" wording must not piggyback on the incomplete-stream
+  // pattern (false-positive guard).
+  expect(isRetryableTransportError(new Error('request failed without a valid API key'))).toEqual({
+    retryable: false,
+    transportFallback: false,
+  });
+});
+
 it('isRetryableTransportError logs websocket close code at info level', () => {
   const { calls, logger } = createLoggerMock();
 

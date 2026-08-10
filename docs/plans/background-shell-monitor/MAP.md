@@ -1,15 +1,16 @@
 # Background shell monitor
 
 Status: plan — implementation is tracked here in six phases. Phase 1 (chunk
-tap) merged (6d886844, 2026-08-10); phase 2 in progress. The idle-session-wake
-product call was approved at kickoff — see `## Decided`.
+tap) merged (6d886844); phase 2 (output store) merged (c2ed6c83); phase 3
+(watches) in progress. All 2026-08-10. The idle-session-wake product call was
+approved at kickoff — see `## Decided`.
 
 ## Resume here
 
 Read this before touching anything this plan covers. Six phases implement the
-feature. Phase 1 (chunk tap) is merged (6d886844) into main; its worktree and
-branch are removed. Phase 2 (output store) runs in
-`.worktrees/background-shell-monitor-2-output-store`; phases 3–6 not started.
+feature. Phases 1 (chunk tap, 6d886844) and 2 (output store, c2ed6c83) are
+merged into main; their worktrees and branches are removed. Phase 3 (watches)
+runs in `.worktrees/background-shell-monitor-3-watches`; phases 4–6 not started.
 Approved at kickoff (2026-08-10): monitor firings may wake an idle session — see
 `## Decided`. Phases run in dependency order:
 1 → 2 → 3 are a strict
@@ -249,7 +250,8 @@ independently reviewable, each in its own worktree.
   (`source/services/shell/background-shell-output-store.ts`) — ring buffer, line
   assembly, drop accounting, retention. Pure unit; no process.
 - **Tests:** fully unit-testable without a real child.
-- **Status:** not started
+- **Status:** completed — merged to main as c2ed6c83 (feature commit
+  c4b1289a); worktree and branch removed.
 
 ### Phase 3 — Watches
 
@@ -258,7 +260,7 @@ independently reviewable, each in its own worktree.
   debounce, `notifyLimit`, retirement on terminal status,
   flush-before-completion ordering.
 - **Tests:** injected clock; no real timers in tests.
-- **Status:** not started
+- **Status:** in progress (approved 2026-08-10)
 
 ### Phase 4 — Event and notification plumbing
 
@@ -342,3 +344,9 @@ independently reviewable, each in its own worktree.
   converts the rejection into `{ exitCode: null, signal: null, timedOut: false }`
   via its catch. So an overflow-killed job reads as "killed, no exit code" to
   callers, not as an error. Relevant to phase 5's `get_shell_job` content.
+- 2026-08-10: Phase 2 merged. Two implementation pins worth carrying forward:
+  byte accounting counts line text only (terminators not counted; UTF-16
+  `length`, matching `execute-shell.ts`'s `maxBuffer` convention), and
+  `readTail` orders cross-stream content chronologically but is approximate when
+  a job holds two partial lines at once (both documented in the module).
+  Retention default is `maxRetainedJobs: 20`.

@@ -84,6 +84,19 @@ export type BackgroundShellEvent<TResult> =
       status: BackgroundShellTerminalStatus;
       output?: TResult;
       error?: string;
+    }
+  | {
+      /** One watch firing for a job that may still be running. */
+      type: 'background_shell_output';
+      jobId: string;
+      command: string;
+      watchId: string;
+      /** Per-watch monotonic firing ordinal; the notification messageId dedupe key. */
+      seq: number;
+      /** Bounded, complete-line match text carried by the firing. */
+      matchedLines: string;
+      /** Present when the job's retained buffer evicted bytes before this firing. */
+      droppedBytes?: number;
     };
 
 /** Observational only: failures must not interfere with job lifecycle. */

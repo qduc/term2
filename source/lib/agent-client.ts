@@ -752,11 +752,22 @@ export class AgentClient {
   }
 }
 
-function backgroundShellEventToConversationEvent(
+export function backgroundShellEventToConversationEvent(
   event: BackgroundShellEvent<BackgroundShellExecutionResult>,
 ): ConversationEvent {
   if (event.type === 'background_shell_started') {
     return event;
+  }
+  if (event.type === 'background_shell_output') {
+    return {
+      type: 'background_shell_output',
+      jobId: event.jobId,
+      command: event.command,
+      watchId: event.watchId,
+      seq: event.seq,
+      matchedLines: event.matchedLines,
+      ...(event.droppedBytes !== undefined ? { droppedBytes: event.droppedBytes } : {}),
+    };
   }
   return {
     type: 'background_shell_completed',

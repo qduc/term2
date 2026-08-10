@@ -99,6 +99,19 @@ const shellCompleted = (
     ...overrides,
   } as ConversationEvent);
 
+const shellOutput = (
+  overrides: Partial<Extract<ConversationEvent, { type: 'background_shell_output' }>> = {},
+): ConversationEvent =>
+  ({
+    type: 'background_shell_output',
+    jobId: 'shell-1',
+    command: 'pnpm test',
+    watchId: 'watch-1',
+    seq: 1,
+    matchedLines: 'Listening on http://localhost:3000',
+    ...overrides,
+  } as ConversationEvent);
+
 const makeStore = (options: { now?: () => number; deliveredIdCap?: number } = {}) =>
   new SubagentNotificationStore({ now: () => 1_000, ...options });
 
@@ -183,6 +196,80 @@ it('retains a question ahead of newer completions using its message id', () => {
   store.retain(undelivered);
 
   expect(store.drain().map((notification) => notification.messageId)).toEqual(['question-1', 'completion:run-2']);
+});
+
+it('drains watch firings before the job completion and never after it', () => {
+  const store = makeStore({ now: () => 4_242 });
+
+  expect(store.enqueue(shellOutput())).toBe(true);
+  expect(store.enqueue(shellOutput({ seq: 2, matchedLines: 'error TS2345', droppedBytes: 512 }))).toBe(true);
+  expect(store.enqueue(shellCompleted())).toBe(true);
+
+  expect(store.drain()).toEqual([
+    {
+      kind: 'shell_output',
+      messageId: 'shell_output:shell-1:watch-1:1',
+      jobId: 'shell-1',
+      command: 'pnpm test',
+      watchId: 'watch-1',
+      seq: 1,
+      matchedLines: 'Listening on http://localhost:3000',
+      recordedAt: 4_242,
+    },
+    {
+      kind: 'shell_output',
+      messageId: 'shell_output:shell-1:watch-1:2',
+      jobId: 'shell-1',
+      command: 'pnpm test',
+      watchId: 'watch-1',
+      seq: 2,
+      matchedLines: 'error TS2345',
+      droppedBytes: 512,
+      recordedAt: 4_242,
+    },
+    expect.objectContaining({ kind: 'shell_completion', messageId: 'shell_completion:shell-1' }),
+  ]);
+});
+
+it('retains watch firings ahead of newer notifications in message order', () => {
+  const store = makeStore();
+  store.enqueue(shellOutput());
+  const undelivered = store.drain();
+  store.enqueue(shellCompleted());
+  store.retain(undelivered);
+
+  expect(store.drain().map((notification) => notification.messageId)).toEqual([
+    'shell_output:shell-1:watch-1:1',
+    'shell_completion:shell-1',
+  ]);
+});
+
+it('keeps every distinct watch firing and drops an exact messageId duplicate once', () => {
+  const store = makeStore();
+
+  expect(store.enqueue(shellOutput())).toBe(true);
+  // Same watch, next firing: distinct messageId, must not be deduped.
+  expect(store.enqueue(shellOutput({ seq: 2, matchedLines: 'second firing' }))).toBe(true);
+  // Exact replay of the first firing: deduped.
+  expect(store.enqueue(shellOutput())).toBe(false);
+  // A different watch reusing seq 1: distinct messageId.
+  expect(store.enqueue(shellOutput({ watchId: 'watch-2' }))).toBe(true);
+
+  expect(store.drain().map((notification) => notification.messageId)).toEqual([
+    'shell_output:shell-1:watch-1:1',
+    'shell_output:shell-1:watch-1:2',
+    'shell_output:shell-1:watch-2:1',
+  ]);
+});
+
+it('does not project a watch firing into the task lifecycle', () => {
+  const store = makeStore();
+  store.recordLifecycle(shellStarted());
+
+  expect(store.recordLifecycle(shellOutput())).toBe(false);
+  expect(store.getTaskSnapshot()).toEqual([
+    expect.objectContaining({ kind: 'shell', jobId: 'shell-1', status: 'running' }),
+  ]);
 });
 
 it('projects an async start as a running background task with role, task, and start time', () => {

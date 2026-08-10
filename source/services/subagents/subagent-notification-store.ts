@@ -54,6 +54,26 @@ export interface BackgroundShellCompletionNotification {
   completedAt: number;
 }
 
+/** One shell watch firing while its job may still be running. */
+export interface BackgroundShellOutputNotification {
+  kind: 'shell_output';
+  /**
+   * `shell_output:${jobId}:${watchId}:${seq}` — the seq suffix keeps a
+   * repeating watch's firings distinct under the exactly-once dedupe.
+   */
+  messageId: string;
+  jobId: string;
+  command: string;
+  watchId: string;
+  /** Per-watch monotonic firing ordinal; also encoded in the messageId suffix. */
+  seq: number;
+  /** Bounded, complete-line match text carried by the firing. */
+  matchedLines: string;
+  /** Present only when the firing carried it. */
+  droppedBytes?: number;
+  recordedAt: number;
+}
+
 /** A user action on background work that the main agent must plan around. */
 export interface BackgroundUserControlNotification {
   kind: 'user_control';
@@ -71,6 +91,7 @@ export interface BackgroundUserControlNotification {
 export type BackgroundNotification =
   | BackgroundSubagentNotification
   | BackgroundShellCompletionNotification
+  | BackgroundShellOutputNotification
   | BackgroundUserControlNotification;
 
 export type BackgroundSubagentTaskStatus = 'running' | 'completed' | 'failed' | 'cancelled';
@@ -447,6 +468,19 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
         output: event.output,
         ...(event.error ? { error: event.error } : {}),
         completedAt: this.#now(),
+      };
+    }
+    if (event.type === 'background_shell_output') {
+      return {
+        kind: 'shell_output',
+        messageId: `shell_output:${event.jobId}:${event.watchId}:${event.seq}`,
+        jobId: event.jobId,
+        command: event.command,
+        watchId: event.watchId,
+        seq: event.seq,
+        matchedLines: event.matchedLines,
+        ...(event.droppedBytes !== undefined ? { droppedBytes: event.droppedBytes } : {}),
+        recordedAt: this.#now(),
       };
     }
     if (event.type === 'subagent_completed' && event.async === true) {

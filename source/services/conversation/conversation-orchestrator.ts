@@ -53,6 +53,10 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
     (notification): notification is Extract<BackgroundNotification, { kind: 'shell_completion' }> =>
       notification.kind === 'shell_completion',
   );
+  const shellOutputs = notifications.filter(
+    (notification): notification is Extract<BackgroundNotification, { kind: 'shell_output' }> =>
+      notification.kind === 'shell_output',
+  );
   const userControls = notifications.filter(
     (notification): notification is Extract<BackgroundNotification, { kind: 'user_control' }> =>
       notification.kind === 'user_control',
@@ -129,6 +133,30 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
     );
   }
 
+  if (shellOutputs.length > 0) {
+    const noun = shellOutputs.length === 1 ? 'watch' : 'watches';
+    const entries = shellOutputs.map((notification) =>
+      [
+        `- jobId: ${notification.jobId} | command: ${notification.command} | watchId: ${notification.watchId} | seq: ${notification.seq}`,
+        ...(notification.droppedBytes !== undefined ? [`  droppedBytes: ${notification.droppedBytes}`] : []),
+        '  matchedLines:',
+        notification.matchedLines
+          .split('\n')
+          .map((line) => `    ${line}`)
+          .join('\n'),
+      ].join('\n'),
+    );
+    sections.push(
+      [
+        `Background shell ${noun} matched output (${shellOutputs.length}). This is an automatic system notification, not a user message.`,
+        '',
+        ...entries,
+        '',
+        'Assess whether the matched output changes what you should do next and continue through the next necessary steps yourself, telling the user concisely, in your own words, what you concluded.',
+      ].join('\n'),
+    );
+  }
+
   if (userControls.length > 0) {
     const stopControls = userControls.filter((notification) => notification.action === 'stop');
     const backgroundMoves = userControls.filter((notification) => notification.action === 'background');
@@ -190,6 +218,13 @@ function formatBackgroundSubagentNotificationDisplay(notifications: readonly Bac
           `- jobId: ${notification.jobId} | command: ${notification.command} | status: ${notification.status}`,
           ...(notification.error ? [`  error: ${notification.error}`] : []),
           ...(notification.output ? [`  output: ${notification.output}`] : []),
+        ].join('\n');
+      }
+      if (notification.kind === 'shell_output') {
+        return [
+          `- jobId: ${notification.jobId} | command: ${notification.command} | watchId: ${notification.watchId} | seq: ${notification.seq}`,
+          ...(notification.droppedBytes !== undefined ? [`  droppedBytes: ${notification.droppedBytes}`] : []),
+          ...(notification.matchedLines ? [`  matchedLines: ${notification.matchedLines}`] : []),
         ].join('\n');
       }
       if (notification.kind === 'user_control') {
@@ -866,6 +901,10 @@ export class ConversationOrchestrator {
       (notification): notification is Extract<BackgroundNotification, { kind: 'shell_completion' }> =>
         notification.kind === 'shell_completion',
     );
+    const shellOutputs = newlyDisplayed.filter(
+      (notification): notification is Extract<BackgroundNotification, { kind: 'shell_output' }> =>
+        notification.kind === 'shell_output',
+    );
     const userControls = newlyDisplayed.filter(
       (notification): notification is Extract<BackgroundNotification, { kind: 'user_control' }> =>
         notification.kind === 'user_control',
@@ -901,6 +940,29 @@ export class ConversationOrchestrator {
                   command,
                   status,
                   ...(error ? { error } : {}),
+                })),
+              },
+            },
+          ]
+        : []),
+      ...(shellOutputs.length > 0
+        ? [
+            {
+              id: this.createMessageId(),
+              sender: 'command' as const,
+              status: 'completed' as const,
+              command: 'background_shell_output_notification',
+              output: formatBackgroundSubagentNotificationDisplay(shellOutputs),
+              success: true,
+              toolName: 'background_shell_output_notification',
+              toolArgs: {
+                firings: shellOutputs.map(({ jobId, command, watchId, seq, matchedLines, droppedBytes }) => ({
+                  jobId,
+                  command,
+                  watchId,
+                  seq,
+                  matchedLines,
+                  ...(droppedBytes !== undefined ? { droppedBytes } : {}),
                 })),
               },
             },

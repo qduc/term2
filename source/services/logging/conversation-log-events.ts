@@ -218,6 +218,20 @@ export interface BackgroundShellCompletedLogEvent {
   error?: string;
 }
 
+/** Durable observation that a shell watch fired matched output. */
+export interface BackgroundShellOutputLogEvent {
+  type: 'background_shell_output';
+  jobId: string;
+  command: string;
+  watchId: string;
+  /** Per-watch monotonic firing ordinal; the notification messageId dedupe key. */
+  seq: number;
+  /** Bounded, complete-line match text carried by the firing. */
+  matchedLines: string;
+  /** Present when the job's retained buffer evicted bytes before this firing. */
+  droppedBytes?: number;
+}
+
 export interface ErrorLogEvent {
   type: 'error';
   message: string;
@@ -267,6 +281,7 @@ export type LogEvent =
   | SubagentQuestionLogEvent
   | BackgroundShellStartedLogEvent
   | BackgroundShellCompletedLogEvent
+  | BackgroundShellOutputLogEvent
   | ErrorLogEvent
   | AssistantTurnEvent
   | AssistantJournalDeltaLogEvent

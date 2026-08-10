@@ -133,31 +133,41 @@ process.on('exit', () => {
 
 const cli = meow(
   `
-        Usage
-          $ term2
+    Usage
+      $ term2 [options] [prompt...]
+      $ term2 [options] --resume [conversation-id|ls]
 
-                    $ term2 "prompt here"
+    Options
+      -m, --model <model>                  Override the configured model (e.g. gpt-5.4)
+      -p, --provider <provider>            Override the configured provider (e.g. openai, openrouter)
+      -r, --reasoning <effort>             Set reasoning effort (default, none, minimal, low, medium, high, xhigh)
+      -l, --lite                           Start in lite mode (minimal context, session-only)
+          --auto-approve                   Allow tool execution for a non-interactive prompt
+          --ssh <user@host>                Enable SSH mode for a remote host
+          --remote-dir <path>              Remote working directory (required for non-lite SSH sessions)
+          --ssh-port <port>                SSH port (default: 22)
+      -R, --resume [conversation-id|ls]    Resume the last conversation, a specific ID, or list recent conversations
+          --fork                            Fork the resumed conversation into a new session (requires --resume)
+      -h, --help                           Show help
+      -v, --version                        Show version
 
-        Options
-          -m, --model       Override the default OpenAI model (e.g. gpt-4o)
-          -r, --reasoning   Set the reasoning effort for reasoning models (e.g. medium, high)
-          -p, --provider    Override the default provider (e.g. openai, openrouter)
-          -l, --lite        Start in lite mode (minimal context, session-only)
-                    --auto-approve    Allow tool execution in non-interactive mode
-          --ssh             Enable SSH mode (user@host)
-          --remote-dir      Required remote working directory for SSH mode
-          --ssh-port        Optional SSH port (default: 22)
-          -R, --resume      Resume a conversation (optionally provide UUID, or "ls"/"list" to show recent)
+    Notes
+      A prompt passed on the command line runs non-interactively. Tool execution is disabled by default;
+      use --auto-approve to allow tools to run without interactive confirmation.
 
-        Examples
-          $ term2 -m gpt-4o
-          $ term2 --lite
-                    $ term2 "explain this function"
-                    $ term2 --auto-approve "list files in current dir"
-          $ term2 --resume          # Resume last conversation
-          $ term2 --resume <uuid>   # Resume specific conversation
-          $ term2 --resume ls       # List last 10 conversations
-    `,
+    Examples
+      $ term2
+      $ term2 "explain this function"
+      $ term2 --model gpt-5.4 --provider openai
+      $ term2 --lite
+      $ term2 --auto-approve "list files in the current directory"
+      $ term2 --resume
+      $ term2 --resume <conversation-id>
+      $ term2 --resume <conversation-id> --fork
+      $ term2 --resume ls
+      $ term2 --ssh user@host --remote-dir /path/to/project
+      $ term2 --ssh user@host --remote-dir /path/to/project --ssh-port 2222
+  `,
   {
     importMeta: import.meta,
     flags: {

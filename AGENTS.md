@@ -34,9 +34,6 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 
 ## Active or deferred
 
-- Background shell monitor — implementation tracked in
-  `docs/plans/background-shell-monitor/MAP.md`. Phase 1 (chunk tap) merged;
-  phases 2–6 pending.
 - Exclusive menu input ownership — follow-on plan tracked in
   `docs/plans/exclusive-menu-input.md`; waiting for implementation approval.
 - Scheduled live provider canaries — a deferred follow-up requiring CI, secret/billing, and OAuth-storage decisions. No plan doc, and nobody is on it.
@@ -59,6 +56,13 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   ownership boundaries.
 
 ## Completed — still read before touching these areas
+
+- `docs/plans/background-shell-monitor/MAP.md` — **all six phases merged**
+  (2026-08-10; last merge `78e5a08c`). Read before touching the shell tool's
+  background path, `BackgroundShellRegistry`, `BackgroundShellOutputStore`,
+  `BackgroundShellWatches`, the `background_shell_output` notification lane,
+  or `shell.backgroundTimeout`: it records the overflow-kill result shape, the
+  watch-layer pins, and the pre-existing ink-layer / black-box failures.
 
 - `docs/plans/openai-context-compaction.md` — OpenAI context compaction (server-side
   `context_management`). **All steps are fully merged (`baf07fe0`).** Read the plan before

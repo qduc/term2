@@ -1,24 +1,26 @@
 # Background shell monitor
 
-Status: plan — implementation is tracked here in six phases. Phases 1–5
-(chunk tap, output store, watches, notification plumbing, tools & UI) merged
-2026-08-10 (6d886844, c2ed6c83, de1484f0, 0fc912e7, 8c053098); phase 6
-(settings) in progress. The idle-session-wake product call was approved at
-kickoff — see `## Decided`.
+Status: plan — implementation is tracked here in six phases. **All six phases
+merged 2026-08-10**: chunk tap 6d886844, output store c2ed6c83, watches
+de1484f0, notification plumbing 0fc912e7, tools & UI 8c053098, settings
+78e5a08c. Feature complete; the plan's design record can be dropped once its
+notes stop earning their place. The idle-session-wake product call was approved
+at kickoff — see `## Decided`.
 
 ## Resume here
 
 Read this before touching anything this plan covers. Six phases implement the
-feature. Phases 1–5 (chunk tap 6d886844, output store c2ed6c83, watches
-de1484f0, notification plumbing 0fc912e7, tools & UI 8c053098) are merged into
-main; their worktrees and branches are removed. Phase 6 (settings) runs in
-`.worktrees/background-shell-monitor-6-settings`. The shell-tool seam wiring is
-now live: the store opens at launch, chunks route through the watches, and
-`settleJob` runs in `onSettled` before the registry emits completion, so the
-flush-before-completion ordering rule is enforced in production. Phase 4's
-`mid-turn-injection.md` read is done. Approved at kickoff (2026-08-10): monitor
-firings may wake an idle session — see `## Decided`. Phases run in dependency
-order:
+feature. All six phases are merged into main: chunk tap 6d886844, output
+store c2ed6c83, watches de1484f0, notification plumbing 0fc912e7, tools & UI
+8c053098, settings 78e5a08c — worktrees and branches removed. The feature is
+complete: the agent can attach a watch to a running background shell job, be
+notified through the durable lane when its output matches, and read the real
+tail via `get_shell_job`; background launches use `shell.backgroundTimeout`
+(30 min, capped) and `overflow: 'truncate'`. The ground-truth notes in
+`## Found in the territory` (overflow-kill result shape, watch-layer pins,
+pre-existing ink-layer and black-box failures) are worth keeping for adjacent
+work. Approved at kickoff (2026-08-10): monitor firings may wake an idle
+session — see `## Decided`.
 1 → 2 → 3 are a strict
 build-up, 4 builds on 3, 5 builds on 4, and 6 is independent. Each phase is TDD
 and lands in its own worktree (`.worktrees/background-shell-monitor-N-<slug>`),
@@ -297,12 +299,16 @@ independently reviewable, each in its own worktree.
   stranded-running-row rule at `shell.ts:144`); `get_shell_job` returns the
   bounded tail plus `droppedBytes` for running jobs; the transcript
   `background_job_active` branch shows the tail instead of `'Still running.'`.
+- **Scope:** `monitor_shell_job` and `cancel_shell_monitor` next to
+  `get_shell_job` in `createBackgroundShellJobToolDefinitions`
+  (`source/tools/system/shell.ts:200`) with `formatCommandMessage` for both (the
+  stranded-running-row rule at `shell.ts:144`); `get_shell_job` returns the
+  bounded tail plus `droppedBytes` for running jobs; the transcript
+  `background_job_active` branch shows the tail instead of `'Still running.'`.
+  The shell-tool seam (store open at `onStarted`, chunk push through the
+  watches, `settleJob` in `onSettled`) is wired here.
 - **Status:** completed — merged to main as 8c053098 (feature commit
-  3d89d4ea); worktree and branch removed. The seam + tools + tail are live;
-  note the shell-tool seam now opens the store at `onStarted`, pushes every
-  `onOutputChunk` through the watches, and calls `settleJob` in `onSettled`
-  before the registry emits completion — the ordering rule is enforced in
-  production, not just tested.
+  3d89d4ea); worktree and branch removed.
 
 ### Phase 6 — Settings
 
@@ -311,7 +317,11 @@ independently reviewable, each in its own worktree.
   unbounded) applied to background launches in place of `shell.timeout`, with
   `timeout_ms` still overriding; wire through the `setting-wiring` skill checklist
   so it appears in `/settings`.
-- **Status:** in progress (approved 2026-08-10)
+- **Status:** completed — merged to main as 78e5a08c (feature commits
+  877ed317, 10cbdebe); worktree and branch removed. `shell.backgroundTimeout`
+  default 30 min, positive-int, capped; background launches read it in place of
+  `shell.timeout` with `timeout_ms` precedence, and pass `overflow: 'truncate'`;
+  foreground unchanged (`'kill'`).
 
 ## Open
 

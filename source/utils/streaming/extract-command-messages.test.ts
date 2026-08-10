@@ -14,7 +14,7 @@ import {
 } from '../../tools/file/code-context.js';
 import { formatGrepCommandMessage } from '../../tools/file/grep.js';
 import { formatReadFileCommandMessage } from '../../tools/file/read-file.js';
-import { formatShellCommandMessage } from '../../tools/system/shell.js';
+import { formatBackgroundShellJobCommandMessage, formatShellCommandMessage } from '../../tools/system/shell.js';
 
 const withStubbedNow = (value: number) => {
   const realNow = Date.now;
@@ -36,6 +36,8 @@ beforeEach(() => {
     { name: 'read_code_outline', formatCommandMessage: formatReadCodeOutlineCommandMessage },
     { name: 'read_file', formatCommandMessage: formatReadFileCommandMessage },
     { name: 'shell', formatCommandMessage: formatShellCommandMessage },
+    { name: 'get_shell_job', formatCommandMessage: formatBackgroundShellJobCommandMessage },
+    { name: 'cancel_shell_job', formatCommandMessage: formatBackgroundShellJobCommandMessage },
   ]);
 });
 
@@ -835,4 +837,129 @@ it('extracts code_context_search output', () => {
   } finally {
     restore();
   }
+});
+
+// The UI opens a `running` command row on tool_started for every tool and only
+// closes it when a command message arrives for the same callId. These tools
+// once formatted to [], so their rows stayed running forever and pinned Ink's
+// Static split behind them for the rest of the session.
+it('renders a cancel_shell_job call so its running row can resolve', () => {
+  const items = [
+    {
+      type: 'function_call',
+      id: 'call-cancel',
+      name: 'cancel_shell_job',
+      arguments: JSON.stringify({ job_id: '247fc7f0' }),
+    },
+    {
+      type: 'tool_call_output_item',
+      output: JSON.stringify({
+        jobId: '247fc7f0',
+        command: 'bash /tmp/watchdog.sh',
+        status: 'cancelling',
+      }),
+      rawItem: {
+        type: 'function_call_result',
+        name: 'cancel_shell_job',
+        callId: 'call-cancel',
+      },
+    },
+  ];
+
+  const messages = extractCommandMessages(items);
+
+  expect(messages).toHaveLength(1);
+  expect(messages[0]).toMatchObject({
+    sender: 'command',
+    status: 'completed',
+    callId: 'call-cancel',
+    command: 'cancel_shell_job 247fc7f0',
+    output: 'cancelling · bash /tmp/watchdog.sh',
+    success: true,
+    toolName: 'cancel_shell_job',
+  });
+});
+
+it('renders a get_shell_job call with the job output', () => {
+  const items = [
+    {
+      type: 'tool_call_output_item',
+      output: JSON.stringify({
+        jobId: 'job-1',
+        command: 'pnpm test',
+        status: 'cancelled',
+        output: 'stopped',
+      }),
+      rawItem: {
+        type: 'function_call_result',
+        name: 'get_shell_job',
+        callId: 'call-get',
+      },
+    },
+  ];
+
+  const messages = extractCommandMessages(items);
+
+  expect(messages).toHaveLength(1);
+  expect(messages[0]).toMatchObject({
+    command: 'get_shell_job job-1',
+    output: 'cancelled · pnpm test\nstopped',
+    success: true,
+  });
+});
+
+it('reports a get_shell_job miss as a failed row', () => {
+  const items = [
+    {
+      type: 'function_call',
+      id: 'call-missing',
+      name: 'get_shell_job',
+      arguments: JSON.stringify({ job_id: 'gone' }),
+    },
+    {
+      type: 'tool_call_output_item',
+      output: JSON.stringify({ jobId: 'gone', status: 'not_found' }),
+      rawItem: {
+        type: 'function_call_result',
+        name: 'get_shell_job',
+        callId: 'call-missing',
+      },
+    },
+  ];
+
+  const messages = extractCommandMessages(items);
+
+  expect(messages).toHaveLength(1);
+  expect(messages[0]).toMatchObject({
+    command: 'get_shell_job gone',
+    output: 'Job gone not found.',
+    success: false,
+  });
+});
+
+it('renders a still-running get_shell_job without the model-facing instruction', () => {
+  const items = [
+    {
+      type: 'tool_call_output_item',
+      output: JSON.stringify({
+        status: 'background_job_active',
+        jobId: 'job-2',
+        message: 'This background shell job is still running. End the current turn and wait.',
+      }),
+      rawItem: {
+        type: 'function_call_result',
+        name: 'get_shell_job',
+        callId: 'call-active',
+      },
+    },
+  ];
+
+  const messages = extractCommandMessages(items);
+
+  expect(messages).toHaveLength(1);
+  expect(messages[0]).toMatchObject({
+    command: 'get_shell_job job-2',
+    output: 'Still running.',
+    success: true,
+  });
 });

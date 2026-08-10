@@ -139,6 +139,60 @@ function activeBackgroundShellJobResponse(job: BackgroundShellJob<BackgroundShel
 }
 
 /**
+ * Job control is part of what the model did, so it belongs in the transcript.
+ * It also has to be: the UI opens a `running` command row on every
+ * `tool_started` and only closes it when a command message arrives for the same
+ * callId. A formatter returning `[]` leaves that row running forever, and
+ * because a running command is the first thing that cannot render statically,
+ * every message behind it stays out of Ink's Static region for the rest of the
+ * session.
+ */
+export const formatBackgroundShellJobCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
+  const callId = getCallIdFromItem(item);
+  const fallbackArgs = callId && toolCallArgumentsById.has(callId) ? toolCallArgumentsById.get(callId) : null;
+  const args =
+    normalizeToolArguments(item?.rawItem?.arguments ?? item?.arguments) ?? normalizeToolArguments(fallbackArgs) ?? {};
+  const toolName = item?.toolName ?? item?.rawItem?.name ?? 'shell_job';
+
+  const outputText = getOutputText(item);
+  const response = safeJsonParse(outputText) as Record<string, unknown> | null;
+  const readString = (value: unknown): string => (typeof value === 'string' ? value : '');
+
+  const jobId = readString(response?.jobId) || readString((args as Record<string, unknown>)?.job_id);
+  const status = readString(response?.status);
+  const jobCommand = readString(response?.command);
+
+  const output = (() => {
+    if (!response) {
+      return outputText || 'No output';
+    }
+    if (status === 'not_found') {
+      return `Job ${jobId} not found.`;
+    }
+    // The active-job response carries an instruction aimed at the model
+    // ("do not poll"), which is noise in the transcript.
+    if (status === 'background_job_active') {
+      return 'Still running.';
+    }
+
+    const header = jobCommand ? `${status} · ${jobCommand}` : status ? `status: ${status}` : '';
+    const body = readString(response.output);
+    const error = readString(response.error);
+    return [header, body, error].filter(Boolean).join('\n') || outputText || 'No output';
+  })();
+
+  return [
+    createBaseMessage(item, index, 0, false, {
+      command: jobId ? `${toolName} ${jobId}` : toolName,
+      output,
+      success: status !== 'not_found' && !readString(response?.error),
+      toolName,
+      toolArgs: args,
+    }),
+  ];
+};
+
+/**
  * Root composition registers these alongside `shell` when it supplies the
  * session-owned registry. Keeping them here makes the model contract and its
  * shell lifecycle use the same job representation.
@@ -159,7 +213,7 @@ export function createBackgroundShellJobToolDefinitions(
           return JSON.stringify(activeBackgroundShellJobResponse(job));
         return JSON.stringify(job ? backgroundShellJobResponse(job) : { jobId: job_id, status: 'not_found' });
       },
-      formatCommandMessage: () => [],
+      formatCommandMessage: formatBackgroundShellJobCommandMessage,
     },
     cancel: {
       name: 'cancel_shell_job',
@@ -173,7 +227,7 @@ export function createBackgroundShellJobToolDefinitions(
         const current = registry.get(job_id);
         return JSON.stringify(backgroundShellJobResponse(current ?? job));
       },
-      formatCommandMessage: () => [],
+      formatCommandMessage: formatBackgroundShellJobCommandMessage,
     },
   };
 }

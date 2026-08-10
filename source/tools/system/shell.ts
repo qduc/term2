@@ -921,10 +921,12 @@ export function createShellToolDefinition(deps: {
             const job = backgroundShellRegistry!.launch({
               command: optimizedCommand,
               run: executePreparedCommand,
+              onStarted: (jobId) => {
+                observedJobId = jobId;
+              },
               onSettled: cleanupAfterExecution,
               resultToStatus: (result) => result.status,
             });
-            observedJobId = job.id;
             backgroundCleanupDeferred = true;
             return JSON.stringify({ jobId: job.id, status: job.status });
           } catch (error) {
@@ -938,6 +940,9 @@ export function createShellToolDefinition(deps: {
             command: optimizedCommand,
             parentSignal: toolSignal,
             run: executePreparedCommand,
+            onStarted: (jobId) => {
+              observedJobId = jobId;
+            },
             onSettled: cleanupAfterExecution,
             resultToStatus: (result) => result.status,
             onAdopted: () => {
@@ -945,7 +950,6 @@ export function createShellToolDefinition(deps: {
               restoreForegroundCorrelation();
             },
           });
-          observedJobId = lease.jobId;
           // Cleanup is lease-owned now, whether it stays foreground or moves.
           backgroundCleanupDeferred = true;
           const result = await lease.foregroundResult;

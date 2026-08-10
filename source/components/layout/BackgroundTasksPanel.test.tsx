@@ -256,6 +256,7 @@ it.sequential(
     const output = renderer.lastFrame() ?? '';
     expect(output).toContain('Active');
     expect(output).toContain('Waiting for provider');
+    expect(output).toContain('last activity 2s ago');
     expect(output).toContain('Quiet · no observed progress');
     expect(output).toContain('Failed · terminal');
     expect(output).not.toContain('hung');

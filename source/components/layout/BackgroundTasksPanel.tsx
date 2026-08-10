@@ -66,6 +66,9 @@ export const formatBackgroundTaskElapsed = (elapsedMs: number): string => {
   return minutes > 0 ? `${minutes}m ${String(seconds).padStart(2, '0')}s` : `${seconds}s`;
 };
 
+const formatBackgroundTaskActivityAge = (now: number, lastActivityAt: number): string =>
+  `last activity ${formatBackgroundTaskElapsed(now - lastActivityAt)} ago`;
+
 const formatTerminalStatus = (task: PanelTask): string => {
   switch (task.status) {
     case 'completed':
@@ -93,15 +96,16 @@ const isTerminal = (task: PanelTask): boolean =>
 
 const formatLiveStatus = (task: PanelTask, now: number): string => {
   if (!isControlTask(task) || !task.activity) return `Running · ${formatBackgroundTaskElapsed(now - task.startedAt)}`;
+  const activityAge = formatBackgroundTaskActivityAge(now, task.activity.lastActivityAt);
   switch (task.activity.state) {
     case 'active':
-      return `Active · ${formatBackgroundTaskElapsed(now - task.startedAt)}`;
+      return `Active · ${formatBackgroundTaskElapsed(now - task.startedAt)} · ${activityAge}`;
     case 'waiting':
-      return `Waiting for ${task.activity.reason ?? 'provider'}`;
+      return `Waiting for ${task.activity.reason ?? 'provider'} · ${activityAge}`;
     case 'quiet':
-      return 'Quiet · no observed progress · still running';
+      return `Quiet · no observed progress · ${activityAge} · still running`;
     case 'cancelling':
-      return 'Cancelling';
+      return `Cancelling · ${activityAge}`;
     case 'settled':
       return formatTerminalStatus(task);
   }

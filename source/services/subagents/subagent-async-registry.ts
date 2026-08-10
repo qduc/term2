@@ -470,7 +470,8 @@ export class SubagentAsyncRegistry {
     }
 
     if (event.type === 'subagent_command_message') {
-      this.#markActivity(run, 'waiting', 'provider');
+      const toolStillRunning = event.message.status === 'pending' || event.message.status === 'running';
+      this.#markActivity(run, toolStillRunning ? 'active' : 'waiting', 'provider');
       return;
     }
 

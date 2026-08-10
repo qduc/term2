@@ -27,6 +27,8 @@ export interface BackgroundShellLaunchOptions<TResult> {
   command: string;
   /** The registry creates this signal so cancellation has one owner. */
   run: (signal: AbortSignal) => Promise<TResult>;
+  /** Called after registration and before the runner starts. */
+  onStarted?: (jobId: string) => void;
   /** Releases resources that must remain live until the process settles. */
   onSettled?: () => Promise<void> | void;
   /** Lets the launcher preserve a successful process result that timed out. */
@@ -172,8 +174,9 @@ export class BackgroundShellRegistry<TResult> {
       controller,
       settled: Promise.resolve(job),
     };
-    record.settled = this.#settle(record, options);
     this.#jobs.set(job.id, record);
+    options.onStarted?.(job.id);
+    record.settled = this.#settle(record, options);
     this.#emit({ type: 'background_shell_started', jobId: job.id, command: job.command });
 
     return { ...job, settled: record.settled };
@@ -217,8 +220,9 @@ export class BackgroundShellRegistry<TResult> {
       rejectForegroundResult,
       settled: Promise.resolve(job),
     };
-    record.settled = this.#settleForeground(record, options);
     this.#foreground.set(options.callId, record);
+    options.onStarted?.(job.id);
+    record.settled = this.#settleForeground(record, options);
     return {
       callId: record.callId,
       jobId: job.id,

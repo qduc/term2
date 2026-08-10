@@ -21,6 +21,27 @@ describe('BackgroundShellRegistry', () => {
     vi.restoreAllMocks();
   });
 
+  it('publishes the job id before a synchronous runner output callback', () => {
+    let startedJobId: string | undefined;
+    let outputRecorded = false;
+    const registry = new BackgroundShellRegistry<string>({ createId: () => 'early-output-job' });
+
+    const job = registry.launch({
+      command: 'printf early',
+      onStarted: (jobId) => {
+        startedJobId = jobId;
+      },
+      run: async () => {
+        outputRecorded = registry.recordOutputChunk(startedJobId ?? '');
+        return 'done';
+      },
+    });
+
+    expect(startedJobId).toBe(job.id);
+    expect(outputRecorded).toBe(true);
+    registry.dispose();
+  });
+
   it('starts a job with a registry-owned abort signal and retains its result', async () => {
     let receivedSignal: AbortSignal | undefined;
     const registry = new BackgroundShellRegistry<string>();

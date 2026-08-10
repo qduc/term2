@@ -508,6 +508,47 @@ describe('peek / getRunStatus', () => {
     registry.dispose();
   });
 
+  it('keeps a long-running tool active when its running command message arrives', async () => {
+    let now = 1_000;
+    const registry = new SubagentAsyncRegistry({
+      logger: createMockLogger(),
+      now: () => now,
+      setInterval: () => 1 as any,
+      clearInterval: () => {},
+      run: () => new Promise<SubagentResult>(() => undefined),
+    });
+    const handle = registry.startRun({ role: 'worker', task: 'run a long tool' });
+
+    now = 2_000;
+    registry.handleSubagentEvent({
+      type: 'subagent_tool_started',
+      agentId: handle.runId,
+      role: 'worker',
+      toolCallId: 'tool-1',
+      toolName: 'shell',
+      arguments: { command: 'tail -f log' },
+    });
+    now = 2_500;
+    registry.handleSubagentEvent({
+      type: 'subagent_command_message',
+      agentId: handle.runId,
+      role: 'worker',
+      message: {
+        id: 'command-1',
+        sender: 'command',
+        status: 'running',
+        command: 'tail -f log',
+        output: '',
+      },
+    });
+
+    expect(registry.getRunStatus(handle.runId)).toMatchObject({
+      activityState: 'active',
+      lastActivityAt: 2_500,
+    });
+    registry.dispose();
+  });
+
   it('tracks provider waits, approval waits, cancellation, and settlement as bounded activity state', async () => {
     let now = 1_000;
     const registry = new SubagentAsyncRegistry({

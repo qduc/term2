@@ -89,3 +89,42 @@ export function resolveExitWorktree(request: ExitWorktreeRequest): ExitWorktreeO
   }
   return { kind: 'exited', homeRoot };
 }
+
+/**
+ * Outcome of pinning a worker into an existing worktree without re-rooting the
+ * parent session. Busy jobs are irrelevant: a child pin does not switch the
+ * parent root and must not wait on parent background shells.
+ */
+export type ResolveWorkerWorktreeOutcome =
+  | { kind: 'resolved'; worktree: GitWorktree }
+  | { kind: 'not_found'; available: GitWorktree[] }
+  | { kind: 'ambiguous'; candidates: GitWorktree[] }
+  | { kind: 'unavailable'; worktree: GitWorktree };
+
+/**
+ * Resolves a worker's `worktree` name the same way `enter_worktree` matches
+ * names, but without parent-session busy / already_active outcomes.
+ */
+export function resolveWorkerWorktree(
+  name: string,
+  homeRoot: string,
+  worktrees: GitWorktree[],
+): ResolveWorkerWorktreeOutcome {
+  const candidates = enterableWorktrees(worktrees, homeRoot);
+
+  const byBranch = candidates.filter((worktree) => worktree.branch === name);
+  const matches = byBranch.length > 0 ? byBranch : candidates.filter((w) => path.basename(w.path) === name);
+
+  if (matches.length === 0) {
+    return { kind: 'not_found', available: candidates.filter((worktree) => !worktree.prunable) };
+  }
+  if (matches.length > 1) {
+    return { kind: 'ambiguous', candidates: matches };
+  }
+
+  const [match] = matches;
+  if (match.prunable) {
+    return { kind: 'unavailable', worktree: match };
+  }
+  return { kind: 'resolved', worktree: match };
+}

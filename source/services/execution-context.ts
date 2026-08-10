@@ -68,4 +68,19 @@ export class ExecutionContext {
     this.activeWorkspace = undefined;
     publishActiveWorkspaceRoot(undefined);
   }
+
+  /**
+   * Run-local root for a child subagent (or any concurrent owner that must not
+   * retarget the session). Same absolute-path lease as {@link enterWorkspace},
+   * but does **not** publish {@link publishActiveWorkspaceRoot} — concurrent
+   * pins therefore cannot stomp the parent session's process-wide fallback.
+   */
+  static pin(root: string): ExecutionContext {
+    if (!path.isAbsolute(root)) {
+      throw new Error(`Active workspace must be an absolute path, received: ${root}`);
+    }
+    const ctx = new ExecutionContext();
+    ctx.activeWorkspace = root;
+    return ctx;
+  }
 }

@@ -1,5 +1,10 @@
 import { it, expect } from 'vitest';
-import { resolveEnterWorktree, resolveExitWorktree, type RunningJob } from './worktree-transition.js';
+import {
+  resolveEnterWorktree,
+  resolveExitWorktree,
+  resolveWorkerWorktree,
+  type RunningJob,
+} from './worktree-transition.js';
 import type { GitWorktree } from './parse-worktree-list.js';
 
 const HOME = '/repo';
@@ -101,4 +106,37 @@ it('refuses to exit while background jobs are still running under the worktree',
     kind: 'busy',
     jobs,
   });
+});
+
+it('resolveWorkerWorktree resolves by directory name without busy checks', () => {
+  expect(resolveWorkerWorktree('feature', HOME, [home, feature, fix])).toEqual({
+    kind: 'resolved',
+    worktree: feature,
+  });
+});
+
+it('resolveWorkerWorktree resolves by branch name', () => {
+  expect(resolveWorkerWorktree('codex/fix-thing', HOME, [home, feature, fix])).toEqual({
+    kind: 'resolved',
+    worktree: fix,
+  });
+});
+
+it('resolveWorkerWorktree reports not_found with available trees', () => {
+  const result = resolveWorkerWorktree('nope', HOME, [home, feature, fix]);
+  expect(result.kind).toBe('not_found');
+  expect(result.kind === 'not_found' && result.available).toEqual([feature, fix]);
+});
+
+it('resolveWorkerWorktree refuses ambiguous directory names', () => {
+  const one = worktree({ path: '/repo/.worktrees/a/feature', branch: 'team-a-feature' });
+  const two = worktree({ path: '/repo/.worktrees/b/feature', branch: 'team-b-feature' });
+  const result = resolveWorkerWorktree('feature', HOME, [home, one, two]);
+  expect(result.kind).toBe('ambiguous');
+  expect(result.kind === 'ambiguous' && result.candidates.map((w) => w.path)).toEqual([one.path, two.path]);
+});
+
+it('resolveWorkerWorktree refuses a prunable worktree', () => {
+  const gone = worktree({ path: '/repo/.worktrees/gone', branch: 'gone', prunable: true });
+  expect(resolveWorkerWorktree('gone', HOME, [home, gone])).toEqual({ kind: 'unavailable', worktree: gone });
 });

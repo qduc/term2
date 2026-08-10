@@ -22,6 +22,9 @@ const RUN_SUBAGENT_DESCRIPTION =
   'Include the objective, task-specific scope, non-discoverable parent findings or decisions, constraints, deliverable or acceptance criteria, and validation when applicable. ' +
   'Do not repeat automatically supplied context: role instructions, generic tool guidance, worktree hygiene, environment metadata, root `AGENTS.md`, or skills catalog. ' +
   'The subagent does not see your conversation or reasoning.\n\n' +
+  'For isolated worker edits, create a git worktree under the workspace root first ' +
+  '(`git worktree add .worktrees/<slug> -b <slug>`), then pass `worktree` as that directory basename or branch name. ' +
+  '`worktree` is worker-only; it pins the child into that existing tree without re-rooting this session.\n\n' +
   'Foreground returns a summary with status (completed, failed, cancelled, or interrupted), any final text, a list of tools used, and files changed. ' +
   'A background status of "running" means launch succeeded: do not duplicate the task or immediately call get_subagent_result; end the turn and wait for the completion notification.';
 
@@ -43,6 +46,16 @@ const backgroundFields = {
     .describe('Continue a completed background run using its runId. Background only; worker continuation is blocked.'),
 };
 
+const worktreeField = {
+  worktree: z
+    .string()
+    .optional()
+    .describe(
+      'Worker only. Directory basename or branch of an existing git worktree to pin the child into. ' +
+        'Create the worktree first under the workspace root; this does not re-root the parent session.',
+    ),
+};
+
 const runSubagentSchema = z
   .object({
     execution: z
@@ -50,11 +63,16 @@ const runSubagentSchema = z
       .describe('"foreground" returns the result in this turn; "background" returns a running handle immediately.'),
     role: z.enum(ALL_ROLES).describe('The subagent role to use.'),
     task: z.string().describe('The full task description.'),
+    ...worktreeField,
     ...backgroundFields,
   })
   .strict();
 
-export type ForegroundRunSubagentParams = { role: (typeof FOREGROUND_ROLES)[number]; task: string };
+export type ForegroundRunSubagentParams = {
+  role: (typeof FOREGROUND_ROLES)[number];
+  task: string;
+  worktree?: string;
+};
 export type RunSubagentParams =
   | ({ execution: 'foreground' } & ForegroundRunSubagentParams & {
         name?: string;
@@ -66,6 +84,7 @@ export type RunSubagentParams =
       task: string;
       name?: string;
       continue_run_id?: string;
+      worktree?: string;
     };
 
 export type RunSubagentToolCallbacks = {
@@ -75,7 +94,10 @@ export type RunSubagentToolCallbacks = {
     details?: unknown,
   ) => Promise<NestedSubagentResult>;
   runSubagentAsync?: (
-    params: Pick<Extract<RunSubagentParams, { execution: 'background' }>, 'role' | 'task' | 'name' | 'continue_run_id'>,
+    params: Pick<
+      Extract<RunSubagentParams, { execution: 'background' }>,
+      'role' | 'task' | 'name' | 'continue_run_id' | 'worktree'
+    >,
     context?: unknown,
     details?: unknown,
   ) => Promise<SubagentRunHandle>;
@@ -88,6 +110,7 @@ function createRunSubagentSchema({ runSubagent, runSubagentAsync }: RunSubagentT
         execution: z.literal('foreground').describe('Only foreground execution is available in this session.'),
         role: z.enum(FOREGROUND_ROLES).describe('The subagent role to use.'),
         task: z.string().describe('The full task description.'),
+        ...worktreeField,
       })
       .strict();
   }
@@ -98,6 +121,7 @@ function createRunSubagentSchema({ runSubagent, runSubagentAsync }: RunSubagentT
         execution: z.literal('background').describe('Only background execution is available in this session.'),
         role: z.enum(BACKGROUND_ROLES).describe('The subagent role to use.'),
         task: z.string().describe('The full task description.'),
+        ...worktreeField,
         ...backgroundFields,
       })
       .strict();
@@ -353,7 +377,11 @@ export function createRunSubagentToolDefinition(
         }
         try {
           const result = await resolvedCallbacks.runSubagent(
-            { role: params.role, task: params.task },
+            {
+              role: params.role as (typeof FOREGROUND_ROLES)[number],
+              task: params.task,
+              ...(params.worktree ? { worktree: params.worktree } : {}),
+            },
             context,
             details,
           );
@@ -380,6 +408,7 @@ export function createRunSubagentToolDefinition(
               task: params.task,
               name: params.name ?? undefined,
               continue_run_id: params.continue_run_id ?? undefined,
+              ...(params.worktree ? { worktree: params.worktree } : {}),
             },
             context,
             details,

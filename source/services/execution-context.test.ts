@@ -1,7 +1,7 @@
 import { it, expect, afterEach } from 'vitest';
 import { ExecutionContext } from './execution-context.js';
 import { ISSHService } from './service-interfaces.js';
-import { publishActiveWorkspaceRoot } from './workspace/active-workspace-root.js';
+import { getActiveWorkspaceRoot, publishActiveWorkspaceRoot } from './workspace/active-workspace-root.js';
 
 // Entering a workspace also publishes a process-wide fallback root; clear it so
 // these tests stay order-independent.
@@ -105,4 +105,26 @@ it('rejects entering a local workspace in remote mode, where the remote dir owns
   const ctx = new ExecutionContext(createMockSSHService(), '/remote/path');
   expect(() => ctx.enterWorkspace('/repo/.worktrees/feature')).toThrow(/remote/i);
   expect(ctx.getCwd()).toBe('/remote/path');
+});
+
+it('pin leases a root without publishing the process-wide active workspace', () => {
+  publishActiveWorkspaceRoot(undefined);
+  const before = getActiveWorkspaceRoot();
+  const pinned = ExecutionContext.pin('/repo/.worktrees/feature');
+  expect(pinned.getCwd()).toBe('/repo/.worktrees/feature');
+  expect(pinned.getActiveWorkspace()).toBe('/repo/.worktrees/feature');
+  expect(getActiveWorkspaceRoot()).toBe(before);
+});
+
+it('pin does not retarget a parent session context that entered a different root', () => {
+  const parent = new ExecutionContext();
+  parent.enterWorkspace('/repo/.worktrees/parent');
+  const child = ExecutionContext.pin('/repo/.worktrees/child');
+  expect(parent.getCwd()).toBe('/repo/.worktrees/parent');
+  expect(child.getCwd()).toBe('/repo/.worktrees/child');
+  expect(getActiveWorkspaceRoot()).toBe('/repo/.worktrees/parent');
+});
+
+it('pin rejects a relative workspace root', () => {
+  expect(() => ExecutionContext.pin('.worktrees/feature')).toThrow(/absolute/i);
 });

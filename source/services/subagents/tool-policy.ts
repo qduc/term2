@@ -769,10 +769,12 @@ export class SubagentToolFactory {
     diffDeltas?: Map<string, { added: number; deleted: number }>,
     validationCapture?: ValidationCapture,
     askOrchestrator?: (question: string) => Promise<string>,
+    options?: { executionContext?: ExecutionContext },
   ): AnyToolDefinition[] {
     const tools: AnyToolDefinition[] = [];
-    const cwd = this.#executionContext?.getCwd() ?? process.cwd();
-    const isRemote = this.#executionContext?.isRemote() ?? false;
+    const executionContext = options?.executionContext ?? this.#executionContext;
+    const cwd = executionContext?.getCwd() ?? process.cwd();
+    const isRemote = executionContext?.isRemote() ?? false;
 
     // Mentor is advisory-only; it must never inherit incidental capabilities.
     if (definition.role === 'mentor') return tools;
@@ -804,7 +806,7 @@ export class SubagentToolFactory {
       tools.push(
         this.#toolPolicy.wrapReadToolWithScope(
           createReadFileToolDefinition({
-            executionContext: this.#executionContext,
+            executionContext,
             allowOutsideWorkspace: false,
             nestedCompatibility: this.#nestedCompatibility,
           }),
@@ -817,7 +819,7 @@ export class SubagentToolFactory {
         tools.push(
           this.#toolPolicy.wrapReadToolWithScope(
             createGrepToolDefinition({
-              executionContext: this.#executionContext,
+              executionContext,
               globAvailable,
               nestedCompatibility: this.#nestedCompatibility,
             }),
@@ -826,7 +828,7 @@ export class SubagentToolFactory {
           ),
           this.#toolPolicy.wrapReadToolWithScope(
             createFindFilesToolDefinition({
-              executionContext: this.#executionContext,
+              executionContext,
               nestedCompatibility: this.#nestedCompatibility,
             }),
             fsReadScope,
@@ -842,12 +844,12 @@ export class SubagentToolFactory {
       if (!isRemote) {
         tools.push(
           this.#toolPolicy.wrapReadToolWithScope(
-            createReadCodeOutlineToolDefinition({ executionContext: this.#executionContext }),
+            createReadCodeOutlineToolDefinition({ executionContext }),
             fsReadScope,
             (params) => params.path,
           ),
           this.#toolPolicy.wrapReadToolWithScope(
-            createCodeContextSearchToolDefinition({ executionContext: this.#executionContext, globAvailable }),
+            createCodeContextSearchToolDefinition({ executionContext, globAvailable }),
             fsReadScope,
             (params) => params.path,
           ),
@@ -875,7 +877,7 @@ export class SubagentToolFactory {
         createShellToolDefinition({
           settingsService: this.#settings,
           loggingService: this.#logger,
-          executionContext: this.#executionContext,
+          executionContext,
           searchViaShell,
           nestedCompatibility: this.#nestedCompatibility,
         }),
@@ -902,7 +904,7 @@ export class SubagentToolFactory {
               createApplyPatchToolDefinition({
                 settingsService: this.#settings,
                 loggingService: this.#logger,
-                executionContext: this.#executionContext,
+                executionContext,
               }),
               cwd,
               filesChanged,
@@ -931,7 +933,7 @@ export class SubagentToolFactory {
               createSearchReplaceToolDefinition({
                 settingsService: this.#settings,
                 loggingService: this.#logger,
-                executionContext: this.#executionContext,
+                executionContext,
               }),
               cwd,
               filesChanged,
@@ -947,7 +949,7 @@ export class SubagentToolFactory {
               createCreateFileToolDefinition({
                 settingsService: this.#settings,
                 loggingService: this.#logger,
-                executionContext: this.#executionContext,
+                executionContext,
               }),
               cwd,
               filesChanged,

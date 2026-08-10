@@ -1,20 +1,24 @@
 # Background shell monitor
 
-Status: plan — implementation is tracked here in six phases. Phases 1–4
-(chunk tap, output store, watches, notification plumbing) merged 2026-08-10
-(6d886844, c2ed6c83, de1484f0, 0fc912e7); phase 5 (tools & UI) in progress.
-The idle-session-wake product call was approved at kickoff — see `## Decided`.
+Status: plan — implementation is tracked here in six phases. Phases 1–5
+(chunk tap, output store, watches, notification plumbing, tools & UI) merged
+2026-08-10 (6d886844, c2ed6c83, de1484f0, 0fc912e7, 8c053098); phase 6
+(settings) in progress. The idle-session-wake product call was approved at
+kickoff — see `## Decided`.
 
 ## Resume here
 
 Read this before touching anything this plan covers. Six phases implement the
-feature. Phases 1–4 (chunk tap 6d886844, output store c2ed6c83, watches
-de1484f0, notification plumbing 0fc912e7) are merged into main; their worktrees
-and branches are removed. Phase 5 (tools & UI) runs in
-`.worktrees/background-shell-monitor-5-tools-ui`; phase 6 not started.
-`mid-turn-injection.md` was already read for phase 4. Approved at kickoff
-(2026-08-10): monitor firings may wake an idle session — see `## Decided`.
-Phases run in dependency order:
+feature. Phases 1–5 (chunk tap 6d886844, output store c2ed6c83, watches
+de1484f0, notification plumbing 0fc912e7, tools & UI 8c053098) are merged into
+main; their worktrees and branches are removed. Phase 6 (settings) runs in
+`.worktrees/background-shell-monitor-6-settings`. The shell-tool seam wiring is
+now live: the store opens at launch, chunks route through the watches, and
+`settleJob` runs in `onSettled` before the registry emits completion, so the
+flush-before-completion ordering rule is enforced in production. Phase 4's
+`mid-turn-injection.md` read is done. Approved at kickoff (2026-08-10): monitor
+firings may wake an idle session — see `## Decided`. Phases run in dependency
+order:
 1 → 2 → 3 are a strict
 build-up, 4 builds on 3, 5 builds on 4, and 6 is independent. Each phase is TDD
 and lands in its own worktree (`.worktrees/background-shell-monitor-N-<slug>`),
@@ -293,7 +297,12 @@ independently reviewable, each in its own worktree.
   stranded-running-row rule at `shell.ts:144`); `get_shell_job` returns the
   bounded tail plus `droppedBytes` for running jobs; the transcript
   `background_job_active` branch shows the tail instead of `'Still running.'`.
-- **Status:** in progress (approved 2026-08-10)
+- **Status:** completed — merged to main as 8c053098 (feature commit
+  3d89d4ea); worktree and branch removed. The seam + tools + tail are live;
+  note the shell-tool seam now opens the store at `onStarted`, pushes every
+  `onOutputChunk` through the watches, and calls `settleJob` in `onSettled`
+  before the registry emits completion — the ordering rule is enforced in
+  production, not just tested.
 
 ### Phase 6 — Settings
 
@@ -302,7 +311,7 @@ independently reviewable, each in its own worktree.
   unbounded) applied to background launches in place of `shell.timeout`, with
   `timeout_ms` still overriding; wire through the `setting-wiring` skill checklist
   so it appears in `/settings`.
-- **Status:** not started
+- **Status:** in progress (approved 2026-08-10)
 
 ## Open
 

@@ -216,7 +216,7 @@ it.sequential('BottomArea places active background tasks directly above the inpu
   });
 });
 
-it.sequential('BottomArea gives the background task manager exclusive input ownership after Ctrl+B', async () => {
+it.sequential('BottomArea gives the background task manager exclusive input ownership after Ctrl+G', async () => {
   const details = {
     kind: 'subagent' as const,
     id: 'run-worker',
@@ -236,7 +236,7 @@ it.sequential('BottomArea gives the background task manager exclusive input owne
   });
 
   await act(async () => {
-    view.stdin.write('\x02');
+    view.stdin.write('\x07');
     await new Promise((resolve) => setImmediate(resolve));
   });
 
@@ -345,7 +345,7 @@ it.sequential('BottomArea advertises the manager while a shell is transferable',
     }),
   });
 
-  expect(lastFrame() ?? '').toContain('Foreground shell running · Ctrl+B manage');
+  expect(lastFrame() ?? '').toContain('Foreground shell running · Ctrl+G manage');
   act(() => unmount());
 });
 

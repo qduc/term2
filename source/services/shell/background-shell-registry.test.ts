@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   BackgroundShellRegistry,
   BackgroundShellRegistryCapacityError,
@@ -6,6 +6,42 @@ import {
 } from './background-shell-registry.js';
 
 describe('BackgroundShellRegistry', () => {
+  it('records output activity timestamps without retaining output chunks', async () => {
+    let now = 1_000;
+    const registry = new BackgroundShellRegistry<string>({ now: () => now });
+    const job = registry.launch({ command: 'watch', run: () => new Promise<string>(() => undefined) });
+
+    expect(registry.get(job.id)).toMatchObject({ lastActivityAt: 1_000 });
+    now = 2_500;
+    registry.recordOutputChunk(job.id);
+    expect(registry.get(job.id)).toMatchObject({ lastActivityAt: 2_500 });
+    expect(registry.get(job.id)).not.toHaveProperty('outputChunk');
+    expect(registry.cancel(job.id)).toBe(true);
+    registry.dispose();
+    vi.restoreAllMocks();
+  });
+
+  it('publishes the job id before a synchronous runner output callback', () => {
+    let startedJobId: string | undefined;
+    let outputRecorded = false;
+    const registry = new BackgroundShellRegistry<string>({ createId: () => 'early-output-job' });
+
+    const job = registry.launch({
+      command: 'printf early',
+      onStarted: (jobId) => {
+        startedJobId = jobId;
+      },
+      run: async () => {
+        outputRecorded = registry.recordOutputChunk(startedJobId ?? '');
+        return 'done';
+      },
+    });
+
+    expect(startedJobId).toBe(job.id);
+    expect(outputRecorded).toBe(true);
+    registry.dispose();
+  });
+
   it('starts a job with a registry-owned abort signal and retains its result', async () => {
     let receivedSignal: AbortSignal | undefined;
     const registry = new BackgroundShellRegistry<string>();

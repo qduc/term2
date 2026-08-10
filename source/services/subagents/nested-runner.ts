@@ -406,6 +406,11 @@ export class NestedSubagentRunner {
                 : loop.continueRunStream(stream.state!);
             },
             (snapshot) => {
+              this.#onEvent?.({
+                type: 'subagent_approval_required',
+                agentId: runContext.agentId,
+                role,
+              });
               this.#backgroundApprovalPauseSink?.({
                 ...snapshot,
                 role,

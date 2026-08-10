@@ -4,6 +4,19 @@ import type { ForegroundShellLeaseDetails, ForegroundShellTransferResult } from 
 import type { SubagentCancelAcknowledgement, SubagentRunHandle, SubagentRunStatus } from '../subagents/types.js';
 import type { ForegroundSubagentCandidate } from '../subagents/nested-runner.js';
 import type { BackgroundSubagentNotificationPort } from '../subagents/subagent-notification-store.js';
+import {
+  BACKGROUND_SHELL_QUIET_AFTER_MS,
+  BACKGROUND_SUBAGENT_QUIET_AFTER_MS,
+  normalizeBackgroundTaskActivity,
+  type BackgroundTaskActivity,
+} from './background-task-liveness.js';
+
+export { BACKGROUND_SHELL_QUIET_AFTER_MS, BACKGROUND_SUBAGENT_QUIET_AFTER_MS } from './background-task-liveness.js';
+export type {
+  BackgroundTaskActivity,
+  BackgroundTaskActivityState,
+  BackgroundTaskWaitReason,
+} from './background-task-liveness.js';
 
 export type BackgroundTaskControlTarget = { kind: 'subagent'; id: string } | { kind: 'shell'; id: string };
 export type ForegroundTaskControlTarget = { kind: 'shell'; callId: string } | { kind: 'subagent'; runId: string };
@@ -17,6 +30,7 @@ export type BackgroundTaskControlDetails =
       task: string;
       taskPreview: string;
       status: Exclude<SubagentRunStatus['status'], 'not_found'>;
+      activity?: BackgroundTaskActivity;
       startedAt: number;
       elapsedMs: number;
       lastToolName?: string;
@@ -31,6 +45,7 @@ export type BackgroundTaskControlDetails =
       id: string;
       command: string;
       status: BackgroundShellJob<unknown>['status'];
+      activity?: BackgroundTaskActivity;
       startedAt: number;
       completedAt?: number;
       output?: string;
@@ -111,22 +126,26 @@ export class BackgroundTaskControl implements BackgroundTaskControlPort {
   readonly #notifications: BackgroundSubagentNotificationPort;
   readonly #onNotification?: () => void;
   readonly #onTaskChange?: () => void;
+  readonly #now: () => number;
 
   constructor({
     client,
     notifications,
     onNotification,
     onTaskChange,
+    now = Date.now,
   }: {
     client: BackgroundTaskControlClient;
     notifications: BackgroundSubagentNotificationPort;
     onNotification?: () => void;
     onTaskChange?: () => void;
+    now?: () => number;
   }) {
     this.#client = client;
     this.#notifications = notifications;
     this.#onNotification = onNotification;
     this.#onTaskChange = onTaskChange;
+    this.#now = now;
   }
 
   /** Lists live registry entries first, followed by retained terminal entries. */
@@ -157,7 +176,11 @@ export class BackgroundTaskControl implements BackgroundTaskControlPort {
       const acknowledged = this.#client.requestBackgroundSubagentStop?.(target.id);
       if (!acknowledged) return { ok: false, code: 'unavailable' };
       if (!acknowledged.ok) return { ok: false, code: 'not_active' };
-      const details = { ...before, status: 'cancelling' as const };
+      const details = {
+        ...before,
+        status: 'cancelling' as const,
+        activity: { ...before.activity, state: 'cancelling' as const, lastActivityAt: this.#now() },
+      };
       this.#notifyStop(target, details);
       return { ok: true, details };
     }
@@ -165,7 +188,11 @@ export class BackgroundTaskControl implements BackgroundTaskControlPort {
     const stopped = this.#client.requestBackgroundShellStop?.(target.id);
     if (stopped === undefined) return { ok: false, code: 'unavailable' };
     if (!stopped) return { ok: false, code: 'not_active' };
-    const details = { ...before, status: 'cancelling' as const };
+    const details = {
+      ...before,
+      status: 'cancelling' as const,
+      activity: { ...before.activity, state: 'cancelling' as const, lastActivityAt: this.#now() },
+    };
     this.#notifyStop(target, details);
     return { ok: true, details };
   }
@@ -251,30 +278,54 @@ export class BackgroundTaskControl implements BackgroundTaskControlPort {
   #notifyStop(target: BackgroundTaskControlTarget, details: BackgroundTaskControlDetails): void {
     const queued = this.#notifications.enqueueUserControl({ action: 'stop', target, details });
     if (queued) this.#onNotification?.();
-    // The lifecycle projection intentionally stays compact and does not grow a
-    // transient `cancelling` state. Wake its observer so a control-aware UI can
-    // re-read this port immediately, then wait for the normal terminal event.
+    // Cancellation is asynchronous. Expose the cancelling transition immediately
+    // while the registry retains ownership until its ordinary terminal event.
     this.#onTaskChange?.();
   }
 
   #subagentDetails(status: SubagentRunStatus): Extract<BackgroundTaskControlDetails, { kind: 'subagent' }> | null {
     if (status.status === 'not_found') return null;
-    const { runId, ...details } = status;
+    const { runId, activityState, waitingReason, lastActivityAt, ...details } = status;
     return {
       kind: 'subagent',
       id: runId,
       ...details,
       status: status.status as Exclude<SubagentRunStatus['status'], 'not_found'>,
+      activity: normalizeBackgroundTaskActivity({
+        status: status.status,
+        activityState:
+          status.status === 'awaiting_approval' || status.status === 'waiting_for_answer' ? 'waiting' : activityState,
+        waitingReason:
+          status.status === 'awaiting_approval'
+            ? 'approval'
+            : status.status === 'waiting_for_answer'
+            ? 'answer'
+            : waitingReason,
+        lastActivityAt: lastActivityAt ?? status.startedAt,
+        now: this.#now(),
+        quietAfterMs: BACKGROUND_SUBAGENT_QUIET_AFTER_MS,
+      }),
     };
   }
 
   #shellDetails(job: BackgroundShellJob<unknown>): Extract<BackgroundTaskControlDetails, { kind: 'shell' }> {
-    const { id, result, ...details } = job;
+    const { id, result, lastActivityAt, ...details } = job;
     const output =
       result && typeof result === 'object' && 'output' in result && typeof result.output === 'string'
         ? result.output
         : undefined;
-    return { kind: 'shell', id, ...details, ...(output === undefined ? {} : { output }) };
+    return {
+      kind: 'shell',
+      id,
+      ...details,
+      activity: normalizeBackgroundTaskActivity({
+        status: job.status,
+        lastActivityAt: lastActivityAt ?? job.startedAt,
+        now: this.#now(),
+        quietAfterMs: BACKGROUND_SHELL_QUIET_AFTER_MS,
+      }),
+      ...(output === undefined ? {} : { output }),
+    };
   }
 
   #foregroundShellDetails(candidate: ForegroundShellLeaseDetails): ForegroundShellTaskControlDetails {

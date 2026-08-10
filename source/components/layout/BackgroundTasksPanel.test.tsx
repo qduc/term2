@@ -194,3 +194,71 @@ it.sequential('shows failure reason for recently failed tasks when error is pres
   const output = renderer.lastFrame() ?? '';
   expect(output).toContain('Failed recently (Max turns (100) exceeded)');
 });
+
+it.sequential(
+  'distinguishes observed activity, provider waits, quiet work, and confirmed terminal failure',
+  async () => {
+    const renderer = await renderInAct(
+      <BackgroundTasksPanel
+        tasks={
+          [
+            {
+              kind: 'subagent',
+              id: 'active',
+              role: 'explorer',
+              task: 'observe activity',
+              taskPreview: 'observe activity',
+              status: 'running',
+              startedAt: 1_000,
+              elapsedMs: 2_000,
+              toolCounts: {},
+              activity: { state: 'active', lastActivityAt: 2_000 },
+            },
+            {
+              kind: 'subagent',
+              id: 'waiting',
+              role: 'explorer',
+              task: 'wait for provider',
+              taskPreview: 'wait for provider',
+              status: 'running',
+              startedAt: 1_000,
+              elapsedMs: 3_000,
+              toolCounts: {},
+              activity: { state: 'waiting', reason: 'provider', lastActivityAt: 3_000 },
+            },
+            {
+              kind: 'shell',
+              id: 'quiet-shell',
+              command: 'tail -f log',
+              status: 'running',
+              startedAt: 1_000,
+              activity: { state: 'quiet', lastActivityAt: 1_000 },
+            },
+            {
+              kind: 'subagent',
+              id: 'failed',
+              role: 'worker',
+              task: 'fail',
+              taskPreview: 'fail',
+              status: 'failed',
+              startedAt: 1_000,
+              elapsedMs: 4_000,
+              toolCounts: {},
+              activity: { state: 'settled', lastActivityAt: 4_000 },
+              error: 'exit 1',
+            },
+          ] as any
+        }
+        now={4_000}
+      />,
+    );
+
+    const output = renderer.lastFrame() ?? '';
+    expect(output).toContain('Active');
+    expect(output).toContain('Waiting for provider');
+    expect(output).toContain('last activity 2s ago');
+    expect(output).toContain('Quiet · no observed progress');
+    expect(output).toContain('Failed · terminal');
+    expect(output).not.toContain('hung');
+  },
+);

@@ -63,7 +63,7 @@ describe('foreground lease adoption', () => {
       type: 'subagent_completed',
       async: true,
       result: { ...result('explorer'), agentId: 'root-call' },
-    } as ConversationEvent);
+    } as unknown as ConversationEvent);
     await expect(registry.getResult('root-call')).resolves.toMatchObject({ agentId: 'root-call', status: 'completed' });
     expect(events.filter((event) => event.type === 'subagent_completed')).toHaveLength(0);
     registry.dispose();
@@ -113,7 +113,7 @@ describe('foreground lease adoption', () => {
       type: 'subagent_completed',
       async: true,
       result: { ...result('explorer'), agentId: 'dispose-adopted', status: 'cancelled' },
-    } as ConversationEvent);
+    } as unknown as ConversationEvent);
 
     await expect(settlement).resolves.toBeUndefined();
     expect(events.filter((event) => event.type === 'subagent_completed')).toHaveLength(0);
@@ -503,6 +503,96 @@ describe('peek / getRunStatus', () => {
     expect(status.lastToolAt).toBe(1500);
     expect(status.toolCounts).toEqual({ search_replace: 2 });
     expect(status.elapsedMs).toBe(500);
+    expect(status.lastActivityAt).toBe(1500);
+    expect(status.activityState).toBe('active');
+    registry.dispose();
+  });
+
+  it('keeps a long-running tool active when its running command message arrives', async () => {
+    let now = 1_000;
+    const registry = new SubagentAsyncRegistry({
+      logger: createMockLogger(),
+      now: () => now,
+      setInterval: () => 1 as any,
+      clearInterval: () => {},
+      run: () => new Promise<SubagentResult>(() => undefined),
+    });
+    const handle = registry.startRun({ role: 'worker', task: 'run a long tool' });
+
+    now = 2_000;
+    registry.handleSubagentEvent({
+      type: 'subagent_tool_started',
+      agentId: handle.runId,
+      role: 'worker',
+      toolCallId: 'tool-1',
+      toolName: 'shell',
+      arguments: { command: 'tail -f log' },
+    });
+    now = 2_500;
+    registry.handleSubagentEvent({
+      type: 'subagent_command_message',
+      agentId: handle.runId,
+      role: 'worker',
+      message: {
+        id: 'command-1',
+        sender: 'command',
+        status: 'running',
+        command: 'tail -f log',
+        output: '',
+      },
+    });
+
+    expect(registry.getRunStatus(handle.runId)).toMatchObject({
+      activityState: 'active',
+      lastActivityAt: 2_500,
+    });
+    registry.dispose();
+  });
+
+  it('tracks provider waits, approval waits, cancellation, and settlement as bounded activity state', async () => {
+    let now = 1_000;
+    const registry = new SubagentAsyncRegistry({
+      logger: createMockLogger(),
+      now: () => now,
+      setInterval: () => 1 as any,
+      clearInterval: () => {},
+      run: () => new Promise<SubagentResult>(() => undefined),
+    });
+    const handle = registry.startRun({ role: 'explorer', task: 'inspect' });
+
+    expect(registry.getRunStatus(handle.runId)).toMatchObject({
+      activityState: 'waiting',
+      waitingReason: 'provider',
+      lastActivityAt: 1_000,
+    });
+
+    now = 1_500;
+    registry.handleSubagentEvent({
+      type: 'subagent_streaming_text',
+      agentId: handle.runId,
+      text: 'checking',
+    });
+    expect(registry.getRunStatus(handle.runId)).toMatchObject({ activityState: 'active', lastActivityAt: 1_500 });
+
+    now = 2_000;
+    registry.handleSubagentEvent({
+      type: 'subagent_approval_required',
+      agentId: handle.runId,
+      role: 'explorer',
+    } as ConversationEvent);
+    expect(registry.getRunStatus(handle.runId)).toMatchObject({
+      activityState: 'waiting',
+      waitingReason: 'approval',
+      lastActivityAt: 2_000,
+    });
+
+    now = 2_500;
+    registry.cancelRun(handle.runId);
+    expect(registry.getRunStatus(handle.runId)).toMatchObject({
+      status: 'cancelling',
+      activityState: 'cancelling',
+      lastActivityAt: 2_500,
+    });
     registry.dispose();
   });
 

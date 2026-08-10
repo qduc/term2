@@ -14,6 +14,8 @@ export interface BackgroundShellJob<TResult> {
   completedAt?: number;
   result?: TResult;
   error?: string;
+  /** Last registry-observed start or output-chunk timestamp. */
+  lastActivityAt?: number;
 }
 
 export interface BackgroundShellLaunch<TResult> extends BackgroundShellJob<TResult> {
@@ -25,6 +27,8 @@ export interface BackgroundShellLaunchOptions<TResult> {
   command: string;
   /** The registry creates this signal so cancellation has one owner. */
   run: (signal: AbortSignal) => Promise<TResult>;
+  /** Called after registration and before the runner starts. */
+  onStarted?: (jobId: string) => void;
   /** Releases resources that must remain live until the process settles. */
   onSettled?: () => Promise<void> | void;
   /** Lets the launcher preserve a successful process result that timed out. */
@@ -162,6 +166,7 @@ export class BackgroundShellRegistry<TResult> {
       status: 'running',
       startedAt: this.#now(),
     };
+    job.lastActivityAt = job.startedAt;
     const controller = new AbortController();
     this.#runningJobs += 1;
     const record: JobRecord<TResult> = {
@@ -169,8 +174,9 @@ export class BackgroundShellRegistry<TResult> {
       controller,
       settled: Promise.resolve(job),
     };
-    record.settled = this.#settle(record, options);
     this.#jobs.set(job.id, record);
+    options.onStarted?.(job.id);
+    record.settled = this.#settle(record, options);
     this.#emit({ type: 'background_shell_started', jobId: job.id, command: job.command });
 
     return { ...job, settled: record.settled };
@@ -192,6 +198,7 @@ export class BackgroundShellRegistry<TResult> {
       status: 'running',
       startedAt: this.#now(),
     };
+    job.lastActivityAt = job.startedAt;
     const controller = new AbortController();
     let resolveForegroundResult!: (result: TResult | ForegroundShellTransferResult) => void;
     let rejectForegroundResult!: (error: unknown) => void;
@@ -213,8 +220,9 @@ export class BackgroundShellRegistry<TResult> {
       rejectForegroundResult,
       settled: Promise.resolve(job),
     };
-    record.settled = this.#settleForeground(record, options);
     this.#foreground.set(options.callId, record);
+    options.onStarted?.(job.id);
+    record.settled = this.#settleForeground(record, options);
     return {
       callId: record.callId,
       jobId: job.id,
@@ -303,7 +311,16 @@ export class BackgroundShellRegistry<TResult> {
     const record = this.#jobs.get(id);
     if (!record || record.job.status !== 'running') return false;
     record.job.status = 'cancelling';
+    record.job.lastActivityAt = this.#now();
     record.controller.abort();
+    return true;
+  }
+
+  /** Records that a running process produced output without retaining the chunk. */
+  recordOutputChunk(id: string): boolean {
+    const record = this.#jobs.get(id) ?? [...this.#foreground.values()].find((candidate) => candidate.job.id === id);
+    if (!record || (record.job.status !== 'running' && record.job.status !== 'cancelling')) return false;
+    record.job.lastActivityAt = this.#now();
     return true;
   }
 
@@ -344,6 +361,7 @@ export class BackgroundShellRegistry<TResult> {
     const { job } = record;
     this.#runningJobs -= 1;
     job.completedAt = this.#now();
+    job.lastActivityAt = job.completedAt;
     if (record.controller.signal.aborted) {
       job.status = 'cancelled';
       if (result !== undefined) job.result = result;
@@ -386,6 +404,7 @@ export class BackgroundShellRegistry<TResult> {
 
     const { job } = record;
     job.completedAt = this.#now();
+    job.lastActivityAt = job.completedAt;
     if (record.controller.signal.aborted) {
       job.status = 'cancelled';
       if (result !== undefined) job.result = result;

@@ -17,6 +17,7 @@ import type { UserTurn } from '../types/user-turn.js';
 import type { RewindTargetId } from '../services/conversation/conversation-store.js';
 import { conversationUIReducer, createInitialUIState, getConversationUIFlags } from './conversation-ui-reducer.js';
 import type { BackgroundTask } from '../services/subagents/subagent-notification-store.js';
+import type { BackgroundTaskControlDetails } from '../services/session/background-task-control.js';
 import type {
   BackgroundSubagentApprovalSnapshot,
   BackgroundSubagentApprovalResolutionRequest,
@@ -153,6 +154,14 @@ export const useConversation = ({
     [conversationService],
   );
   const [backgroundSubagentTaskState, setBackgroundSubagentTaskState] = useState(readBackgroundSubagentTasks);
+  const readBackgroundTaskDetails = useCallback(
+    (): { tasks: readonly BackgroundTaskControlDetails[]; now: number } => ({
+      tasks: conversationService.backgroundTaskControl?.listDetails?.() ?? [],
+      now: Date.now(),
+    }),
+    [conversationService],
+  );
+  const [backgroundTaskDetailsState, setBackgroundTaskDetailsState] = useState(readBackgroundTaskDetails);
   const readBackgroundApproval = useCallback(
     (): BackgroundSubagentApprovalSnapshot =>
       conversationService.backgroundSubagentApprovals?.getSnapshot?.() ?? { pendingCount: 0, pending: [] },
@@ -162,7 +171,8 @@ export const useConversation = ({
 
   const refreshBackgroundSubagentTasks = useCallback(() => {
     setBackgroundSubagentTaskState(readBackgroundSubagentTasks());
-  }, [readBackgroundSubagentTasks]);
+    setBackgroundTaskDetailsState(readBackgroundTaskDetails());
+  }, [readBackgroundSubagentTasks, readBackgroundTaskDetails]);
 
   const listBackgroundTaskDetails = useCallback(
     () => conversationService.backgroundTaskControl?.listDetails?.() ?? [],
@@ -460,6 +470,8 @@ export const useConversation = ({
     toolCallStreamingInfo,
     backgroundSubagentTasks: backgroundSubagentTaskState.tasks,
     backgroundSubagentTasksNow: backgroundSubagentTaskState.now,
+    backgroundTaskDetails: backgroundTaskDetailsState.tasks,
+    backgroundTaskDetailsNow: backgroundTaskDetailsState.now,
     listBackgroundTaskDetails,
     getBackgroundTaskDetails,
     stopBackgroundTask,

@@ -84,6 +84,10 @@ type StoredRun = {
   turnHistory: TurnSnapshot[];
   pendingToolCounts: Map<string, number>;
   currentText: string;
+  /** Bounded liveness evidence; no streamed text or output is retained here. */
+  lastActivityAt: number;
+  activityState: 'active' | 'waiting' | 'cancelling';
+  waitingReason?: 'provider' | 'approval' | 'answer';
   /**
    * The run's own traffic context, fixed when the run is created and re-applied
    * to every later segment. Providers key server-side state off it, so a
@@ -220,6 +224,7 @@ export class SubagentAsyncRegistry {
     const runId = continuation ?? this.#allocateRunId();
     trafficContext ??= this.#deriveTrafficContext(runId);
     const control = new SubagentRunControl();
+    const startedAt = this.#now();
     let resolve!: (result: SubagentResult) => void;
     const promise = new Promise<SubagentResult>((r) => (resolve = r));
     const stored: StoredRun = {
@@ -235,15 +240,18 @@ export class SubagentAsyncRegistry {
         toolsUsed: new Map(),
         diffStat: new Map(),
       },
-      lastUsedAt: this.#now(),
+      lastUsedAt: startedAt,
       resolve,
       promise,
       settled: false,
-      startedAt: this.#now(),
+      startedAt,
       toolCounts: new Map(),
       turnHistory: [],
       pendingToolCounts: new Map(),
       currentText: '',
+      lastActivityAt: startedAt,
+      activityState: 'waiting',
+      waitingReason: 'provider',
       ...(trafficContext ? { trafficContext } : {}),
     };
     this.#runs.set(runId, stored);
@@ -304,6 +312,7 @@ export class SubagentAsyncRegistry {
     }
     let resolve!: (result: SubagentResult) => void;
     const promise = new Promise<SubagentResult>((r) => (resolve = r));
+    const startedAt = this.#now();
     const stored: StoredRun = {
       runId: lease.runId,
       role: request.role,
@@ -313,15 +322,18 @@ export class SubagentAsyncRegistry {
       status: 'running',
       control: new SubagentRunControl(),
       evidence: { filesChanged: new Set(), toolsUsed: new Map(), diffStat: new Map() },
-      lastUsedAt: this.#now(),
+      lastUsedAt: startedAt,
       resolve,
       promise,
       settled: false,
-      startedAt: this.#now(),
+      startedAt,
       toolCounts: new Map(),
       turnHistory: [],
       pendingToolCounts: new Map(),
       currentText: '',
+      lastActivityAt: startedAt,
+      activityState: 'waiting',
+      waitingReason: 'provider',
       lease,
     };
     this.#runs.set(lease.runId, stored);
@@ -389,6 +401,9 @@ export class SubagentAsyncRegistry {
       elapsedMs: this.#now() - run.startedAt,
       ...(run.lastToolName !== undefined ? { lastToolName: run.lastToolName } : {}),
       ...(run.lastToolAt !== undefined ? { lastToolAt: run.lastToolAt } : {}),
+      lastActivityAt: run.lastActivityAt,
+      activityState: run.activityState,
+      ...(run.waitingReason === undefined ? {} : { waitingReason: run.waitingReason }),
       toolCounts: counts,
       ...(run.turnHistory.length > 0
         ? {
@@ -422,18 +437,27 @@ export class SubagentAsyncRegistry {
     if (
       event.type !== 'subagent_tool_started' &&
       event.type !== 'subagent_text_turn' &&
-      event.type !== 'subagent_streaming_text'
+      event.type !== 'subagent_streaming_text' &&
+      event.type !== 'subagent_command_message' &&
+      event.type !== 'subagent_approval_required'
     )
       return;
     const run = this.#runs.get(event.agentId);
     if (!run || !isActiveStatus(run.status)) return;
 
+    if (event.type === 'subagent_approval_required') {
+      this.#markActivity(run, 'waiting', 'approval');
+      return;
+    }
+
     if (event.type === 'subagent_streaming_text') {
+      this.#markActivity(run, 'active');
       run.currentText = event.text;
       return;
     }
 
     if (event.type === 'subagent_text_turn') {
+      this.#markActivity(run, 'active');
       run.turnHistory.push({
         text: event.text.slice(0, TURN_TEXT_CHAR_LIMIT),
         precedingToolCounts: mapToRecord(run.pendingToolCounts),
@@ -445,8 +469,15 @@ export class SubagentAsyncRegistry {
       return;
     }
 
+    if (event.type === 'subagent_command_message') {
+      const toolStillRunning = event.message.status === 'pending' || event.message.status === 'running';
+      this.#markActivity(run, toolStillRunning ? 'active' : 'waiting', 'provider');
+      return;
+    }
+
     const name = event.toolName;
     if (!name) return;
+    this.#markActivity(run, 'active');
     run.toolCounts.set(name, (run.toolCounts.get(name) ?? 0) + 1);
     run.pendingToolCounts.set(name, (run.pendingToolCounts.get(name) ?? 0) + 1);
     run.lastToolName = name;
@@ -532,6 +563,7 @@ export class SubagentAsyncRegistry {
   #cancelRun(run: StoredRun): void {
     if (run.status !== 'running' && run.status !== 'waiting_for_answer') return;
     run.status = 'cancelling';
+    this.#markActivity(run, 'cancelling');
     run.lease?.cancel();
     run.control.requestCancellation();
   }
@@ -630,6 +662,7 @@ export class SubagentAsyncRegistry {
 
   #startSegment(run: StoredRun, request: SubagentRequest, input: string): void {
     if (run.settled) return;
+    this.#markActivity(run, 'waiting', 'provider');
     const controller = run.control.beginSegment();
     void this.#executeSegment(run, request, input, controller);
   }
@@ -693,6 +726,7 @@ export class SubagentAsyncRegistry {
   #settle(run: StoredRun, result: SubagentResult, emit = true): void {
     if (run.settled) return;
     run.status = result.status;
+    run.lastActivityAt = this.#now();
     run.result = result;
     run.lastUsedAt = this.#now();
     run.settled = true;
@@ -712,6 +746,7 @@ export class SubagentAsyncRegistry {
       return Promise.reject(new Error('The subagent run is no longer accepting questions.'));
     const asked = run.control.ask(question);
     run.status = 'waiting_for_answer';
+    this.#markActivity(run, 'waiting', 'answer');
     safeEmit(this.#logger, this.#onEvent, {
       type: 'subagent_question',
       async: true,
@@ -722,6 +757,16 @@ export class SubagentAsyncRegistry {
       question: asked.question,
     });
     return asked.answer;
+  }
+
+  #markActivity(
+    run: StoredRun,
+    state: 'active' | 'waiting' | 'cancelling',
+    waitingReason?: 'provider' | 'approval' | 'answer',
+  ): void {
+    run.lastActivityAt = this.#now();
+    run.activityState = state;
+    run.waitingReason = state === 'waiting' ? waitingReason : undefined;
   }
 
   #assembleTerminalResult(run: StoredRun, segment: SubagentResult): SubagentResult {

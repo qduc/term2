@@ -585,6 +585,7 @@ export function createShellToolDefinition(deps: {
       let dockerHostControl: DockerHostControl | undefined;
       let backgroundCleanupDeferred = false;
       let transferred = false;
+      let observedJobId: string | undefined;
       const ownsCorrelationId = !background;
       let foregroundCorrelationRestored = false;
       const restoreForegroundCorrelation = () => {
@@ -763,6 +764,9 @@ export function createShellToolDefinition(deps: {
             pauseOnSandboxNetworkApproval: sandboxed,
             signal,
             sshService,
+            onOutputChunk: () => {
+              if (observedJobId) backgroundShellRegistry?.recordOutputChunk(observedJobId);
+            },
           });
 
           const stdout = result.stdout ?? '';
@@ -917,6 +921,9 @@ export function createShellToolDefinition(deps: {
             const job = backgroundShellRegistry!.launch({
               command: optimizedCommand,
               run: executePreparedCommand,
+              onStarted: (jobId) => {
+                observedJobId = jobId;
+              },
               onSettled: cleanupAfterExecution,
               resultToStatus: (result) => result.status,
             });
@@ -933,6 +940,9 @@ export function createShellToolDefinition(deps: {
             command: optimizedCommand,
             parentSignal: toolSignal,
             run: executePreparedCommand,
+            onStarted: (jobId) => {
+              observedJobId = jobId;
+            },
             onSettled: cleanupAfterExecution,
             resultToStatus: (result) => result.status,
             onAdopted: () => {

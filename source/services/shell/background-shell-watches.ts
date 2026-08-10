@@ -1,6 +1,17 @@
 import type { BackgroundShellOutputStream, BackgroundShellOutputStore } from './background-shell-output-store.js';
 
 /**
+ * The session-owned output store + watch layer handed to the shell tool and
+ * the job-control tools. Created beside the registry and threaded alongside
+ * it, so the shell seam and the monitor tools share one store and one watch
+ * set per job.
+ */
+export interface BackgroundShellOutputBundle {
+  store: BackgroundShellOutputStore;
+  watches: BackgroundShellWatches;
+}
+
+/**
  * Watch semantics over a {@link BackgroundShellOutputStore}: attach a watch to
  * a background shell job and be told, without polling, when the job's output
  * says something worth reacting to.
@@ -127,7 +138,7 @@ const MAX_MATCHED_TEXT = 4096;
 export class BackgroundShellWatches {
   readonly #store: BackgroundShellOutputStore;
   readonly #scheduler: BackgroundShellWatchScheduler;
-  readonly #onFiring: ((firing: ShellOutputFiring) => void) | undefined;
+  #onFiring: ((firing: ShellOutputFiring) => void) | undefined;
   readonly #watches = new Map<string, WatchRecord>();
   #nextWatchId = 0;
 
@@ -135,6 +146,15 @@ export class BackgroundShellWatches {
     this.#store = options.store;
     this.#scheduler = options.scheduler;
     this.#onFiring = options.onFiring;
+  }
+
+  /**
+   * Replaces the firing subscriber. The phase-5 shell-tool wiring installs the
+   * conversation-lane sink here when the session attaches it, so firings enter
+   * the same durable lane as job-completion events.
+   */
+  setOnFiring(callback: ((firing: ShellOutputFiring) => void) | undefined): void {
+    this.#onFiring = callback;
   }
 
   /** Begins a job's output stream; delegates to the store. */

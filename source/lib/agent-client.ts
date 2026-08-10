@@ -44,6 +44,7 @@ import {
   type BackgroundShellRegistry,
 } from '../services/shell/background-shell-registry.js';
 import type { BackgroundShellExecutionResult } from '../tools/system/shell.js';
+import type { BackgroundShellOutputBundle } from '../services/shell/background-shell-watches.js';
 import type {
   SubagentCancelAcknowledgement,
   SubagentRunHandle,
@@ -94,6 +95,7 @@ export class AgentClient {
   #toolLifecycle?: ToolExecutionLifecyclePort;
   #hookScope: Term2HookScope = 'root';
   #backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
+  #backgroundShellOutput?: BackgroundShellOutputBundle;
 
   /**
    * Forward real-time subagent activity events to the active conversation
@@ -128,6 +130,26 @@ export class AgentClient {
     this.#backgroundShellRegistry?.setEventSink(
       sink ? (event) => sink(backgroundShellEventToConversationEvent(event)) : undefined,
     );
+    // Watch firings ride the same conversation lane: a firing is converted to
+    // the background_shell_output conversation event and pushed to the sink,
+    // so it is enqueued in exactly-once order with job completions.
+    this.#backgroundShellOutput?.watches.setOnFiring(
+      sink
+        ? (firing) => {
+            sink(
+              backgroundShellEventToConversationEvent({
+                type: 'background_shell_output',
+                jobId: firing.jobId,
+                command: firing.command ?? '',
+                watchId: firing.watchId,
+                seq: firing.seq,
+                matchedLines: firing.matchedLines,
+                ...(firing.droppedBytes !== undefined ? { droppedBytes: firing.droppedBytes } : {}),
+              }),
+            );
+          }
+        : undefined,
+    );
   }
 
   /** @deprecated Ordinary turn completion must not cancel background runs. */
@@ -154,8 +176,8 @@ export class AgentClient {
     toolLifecycle,
     hookScope,
     backgroundShellRegistry,
-    allowBackgroundShell = true,
-    // Retained for session-factory compatibility; direct execution no longer
+    backgroundShellOutput,
+    allowBackgroundShell = true, // Retained for session-factory compatibility; direct execution no longer
     // projects chained input through the legacy mode.
     continuationProjectionMode: _continuationProjectionMode = 'legacy',
   }: {
@@ -187,6 +209,8 @@ export class AgentClient {
     hookScope?: Term2HookScope;
     /** Root-session-owned shell registry. Nested clients deliberately omit it. */
     backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
+    /** Root-session-owned output store + watch layer. Nested clients deliberately omit it. */
+    backgroundShellOutput?: BackgroundShellOutputBundle;
     /** False for one-shot/non-interactive callers until their lifecycle is supported. */
     allowBackgroundShell?: boolean;
     continuationProjectionMode?: ContinuationProjectionMode;
@@ -198,6 +222,7 @@ export class AgentClient {
     this.#toolLifecycle = toolLifecycle;
     this.#hookScope = hookScope ?? 'root';
     this.#backgroundShellRegistry = allowBackgroundShell ? backgroundShellRegistry : undefined;
+    this.#backgroundShellOutput = allowBackgroundShell ? backgroundShellOutput : undefined;
     this.#askUserAnswerStore = new AskUserAnswerStore();
 
     // Create AgentConfiguration (handles editor, model, provider, reasoning, etc.)
@@ -215,6 +240,7 @@ export class AgentClient {
         postExecutePauseCapability,
         sessionAccess,
         backgroundShellRegistry: this.#backgroundShellRegistry,
+        backgroundShellOutput: this.#backgroundShellOutput,
         allowBackgroundShell,
         onConfigChanged: (_changedKey?: string) => {
           // Direct streamed models capture provider/settings at creation time.

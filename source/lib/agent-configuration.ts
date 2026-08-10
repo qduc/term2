@@ -13,6 +13,7 @@ import type { PostExecutePauseCapability } from '../tools/types.js';
 import type { SessionAccessState } from '../services/session/session-access-state.js';
 import type { ApplicationAgent } from '../services/agent-runtime/application-run-loop.js';
 import type { BackgroundShellRegistry } from '../services/shell/background-shell-registry.js';
+import type { BackgroundShellOutputBundle } from '../services/shell/background-shell-watches.js';
 import type { BackgroundShellExecutionResult } from '../tools/system/shell.js';
 
 /** Narrow capability interface consumed by chat/session clients. */
@@ -38,6 +39,8 @@ export interface AgentConfigurationDeps {
   sessionAccess?: SessionAccessState;
   /** Root-session-owned shell registry; nested clients omit it. */
   backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
+  /** Root-session-owned output store + watch layer; nested clients omit it. */
+  backgroundShellOutput?: BackgroundShellOutputBundle;
   /** False for one-shot/non-interactive callers until their lifecycle is supported. */
   allowBackgroundShell?: boolean;
 }
@@ -66,6 +69,7 @@ export class AgentConfiguration implements AgentSource {
   #postExecutePauseCapability?: PostExecutePauseCapability;
   #sessionAccess?: SessionAccessState;
   #backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
+  #backgroundShellOutput?: BackgroundShellOutputBundle;
   #allowBackgroundShell: boolean;
   #unsubscribeSettings: (() => void) | null = null;
   #isDisposed = false;
@@ -92,6 +96,7 @@ export class AgentConfiguration implements AgentSource {
     this.#postExecutePauseCapability = deps.postExecutePauseCapability;
     this.#sessionAccess = deps.sessionAccess;
     this.#backgroundShellRegistry = deps.backgroundShellRegistry;
+    this.#backgroundShellOutput = deps.backgroundShellOutput;
     this.#allowBackgroundShell = deps.allowBackgroundShell ?? true;
 
     // Create editor
@@ -207,6 +212,7 @@ export class AgentConfiguration implements AgentSource {
       postExecutePauseCapability: this.#postExecutePauseCapability,
       sessionAccess: this.#sessionAccess,
       backgroundShellRegistry: this.#backgroundShellRegistry,
+      backgroundShellOutput: this.#backgroundShellOutput,
       allowBackgroundShell: this.#allowBackgroundShell,
     };
   }

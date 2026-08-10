@@ -10,6 +10,7 @@ import {
   type BackgroundShellExecutionResult,
 } from './tools/system/shell.js';
 import type { BackgroundShellRegistry } from './services/shell/background-shell-registry.js';
+import type { BackgroundShellOutputBundle } from './services/shell/background-shell-watches.js';
 import { createAskMentorToolDefinition } from './tools/agent/ask-mentor.js';
 import { createAskUserToolDefinition } from './tools/agent/ask-user.js';
 import { createRunSubagentToolDefinition, type ForegroundRunSubagentParams } from './tools/agent/run-subagent.js';
@@ -216,6 +217,8 @@ export const getAgentDefinition = (
     sessionAccess?: SessionAccessState;
     /** Root-session-only capability. Nested/subagent factories do not receive it. */
     backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
+    /** Root-session-only output store + watch layer for background jobs. */
+    backgroundShellOutput?: BackgroundShellOutputBundle;
     /** False for one-shot/non-interactive callers until their lifecycle is supported. */
     allowBackgroundShell?: boolean;
   },
@@ -238,6 +241,7 @@ export const getAgentDefinition = (
     postExecuteDeniedRead = false,
     sessionAccess,
     backgroundShellRegistry,
+    backgroundShellOutput,
     allowBackgroundShell = true,
   } = deps;
   const defaultModel = settingsService.get('agent.model');
@@ -324,7 +328,7 @@ export const getAgentDefinition = (
   }
 
   const rootBackgroundShellRegistry = allowBackgroundShell ? backgroundShellRegistry : undefined;
-
+  const rootBackgroundShellOutput = allowBackgroundShell ? backgroundShellOutput : undefined;
   if (orchestratorMode) {
     if (!runSubagentAsync || !getSubagentResult || !getSubagentStatus || !sendSubagentMessage || !cancelSubagentRun) {
       throw new Error(
@@ -346,13 +350,19 @@ export const getAgentDefinition = (
         orchestratorMode: true,
         searchViaShell,
         backgroundShellRegistry: rootBackgroundShellRegistry,
+        backgroundShellWatches: rootBackgroundShellOutput?.watches,
       }),
       createReadFileToolDefinition({ executionContext, allowOutsideWorkspace: true, orchestratorMode: true }),
       createGrepToolDefinition({ executionContext, orchestratorMode: true, globAvailable: false }),
     );
     if (rootBackgroundShellRegistry) {
-      const backgroundTools = createBackgroundShellJobToolDefinitions(rootBackgroundShellRegistry);
+      const backgroundTools = createBackgroundShellJobToolDefinitions(
+        rootBackgroundShellRegistry,
+        rootBackgroundShellOutput,
+      );
       tools.push(backgroundTools.get, backgroundTools.cancel);
+      if (backgroundTools.monitor) tools.push(backgroundTools.monitor);
+      if (backgroundTools.cancelMonitor) tools.push(backgroundTools.cancelMonitor);
     }
     if (codeContextEnabled) {
       tools.push(
@@ -394,6 +404,7 @@ export const getAgentDefinition = (
     postExecuteDeniedRead,
     sessionAccess,
     backgroundShellRegistry: rootBackgroundShellRegistry,
+    backgroundShellWatches: rootBackgroundShellOutput?.watches,
   });
   const tools: AnyToolDefinition[] = [
     shellTool,
@@ -408,8 +419,13 @@ export const getAgentDefinition = (
   ];
 
   if (rootBackgroundShellRegistry) {
-    const backgroundTools = createBackgroundShellJobToolDefinitions(rootBackgroundShellRegistry);
+    const backgroundTools = createBackgroundShellJobToolDefinitions(
+      rootBackgroundShellRegistry,
+      rootBackgroundShellOutput,
+    );
     tools.push(backgroundTools.get, backgroundTools.cancel);
+    if (backgroundTools.monitor) tools.push(backgroundTools.monitor);
+    if (backgroundTools.cancelMonitor) tools.push(backgroundTools.cancelMonitor);
   }
 
   // Worktree switching re-roots the local filesystem; in remote mode the remote

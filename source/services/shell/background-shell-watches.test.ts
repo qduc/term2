@@ -52,8 +52,24 @@ function setup(store: BackgroundShellOutputStore = new BackgroundShellOutputStor
   });
   return { store, scheduler, watches, firings };
 }
-
 describe('BackgroundShellWatches', () => {
+  it('re-routes firings through a new onFiring subscriber after setOnFiring', () => {
+    const { store, scheduler, watches } = setup();
+    store.open('job-1');
+    const later: ShellOutputFiring[] = [];
+    watches.setOnFiring((firing) => later.push(firing));
+
+    const watchId = watches.registerWatch({ jobId: 'job-1', pattern: /listening on \d+/ });
+    watches.push('job-1', 'stdout', 'server listening on 3000\n');
+    scheduler.advance(1500);
+
+    expect(later).toEqual([expect.objectContaining({ watchId, seq: 1, matchedLines: 'server listening on 3000' })]);
+    watches.setOnFiring(undefined);
+    watches.push('job-1', 'stdout', 'again listening on 3001\n');
+    scheduler.advance(1500);
+    expect(later).toHaveLength(1);
+  });
+
   it('fires once with the matched line after idleMs of quiet', () => {
     const { store, scheduler, watches, firings } = setup();
     store.open('job-1');

@@ -963,3 +963,33 @@ it('renders a still-running get_shell_job without the model-facing instruction',
     success: true,
   });
 });
+
+it('renders the retained tail for a running monitored job instead of the do-not-poll instruction', () => {
+  const items = [
+    {
+      type: 'tool_call_output_item',
+      output: JSON.stringify({
+        status: 'background_job_active',
+        jobId: 'job-3',
+        command: 'pnpm dev',
+        tail: 'server listening on 3000',
+        droppedBytes: 512,
+        message: 'This background shell job is still running. End the current turn and wait.',
+      }),
+      rawItem: {
+        type: 'function_call_result',
+        name: 'get_shell_job',
+        callId: 'call-active-tail',
+      },
+    },
+  ];
+
+  const messages = extractCommandMessages(items);
+
+  expect(messages).toHaveLength(1);
+  expect(messages[0]).toMatchObject({
+    command: 'get_shell_job job-3',
+    output: expect.stringContaining('server listening on 3000'),
+    success: true,
+  });
+});

@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { PassThrough, Writable } from 'stream';
 import type { ChildProcess } from 'child_process';
 import { executeShellCommand } from './execute-shell.js';
@@ -226,6 +226,72 @@ it('serializes sandboxed executions so network approval pauses the owning child'
   await expect(second).resolves.toMatchObject({ stdout: 'second complete', exitCode: 0 });
 
   unregisterHandler();
+});
+
+// The chunk tap and the overflow policy live in defaultExecImpl, which spawns
+// real children, so these run real processes — the same convention as
+// execute-shell.orphan-bound.test.ts. Each write is time-separated so the
+// child's separate write() calls cannot coalesce into one pipe chunk.
+describe.skipIf(process.platform === 'win32')('executeShellCommand chunk tap and overflow', () => {
+  const nodeEval = (program: string) => `node -e "${program}"`;
+
+  it('delivers each chunk as it arrives, per stream, in arrival order', async () => {
+    const chunks: Array<['stdout' | 'stderr', string]> = [];
+
+    const result = await executeShellCommand(
+      nodeEval(
+        `process.stdout.write('a'); setTimeout(() => process.stderr.write('b'), 30); setTimeout(() => process.stdout.write('c'), 60)`,
+      ),
+      { timeout: 10_000, onOutputChunk: (stream, text) => chunks.push([stream, text]) },
+    );
+
+    expect(chunks).toEqual([
+      ['stdout', 'a'],
+      ['stderr', 'b'],
+      ['stdout', 'c'],
+    ]);
+    expect(result.stdout).toBe('ac');
+    expect(result.stderr).toBe('b');
+  });
+
+  it('delivers a line split across two chunks as two raw chunks, in order', async () => {
+    const texts: string[] = [];
+
+    const result = await executeShellCommand(
+      nodeEval(`process.stdout.write('hel'); setTimeout(() => process.stdout.write('lo\\n'), 30)`),
+      { timeout: 10_000, onOutputChunk: (_stream, text) => texts.push(text) },
+    );
+
+    expect(texts).toEqual(['hel', 'lo\n']);
+    expect(result.stdout).toBe('hello\n');
+  });
+
+  it('truncate overflow keeps the child running and retains the tail of the output', async () => {
+    const result = await executeShellCommand(
+      nodeEval(`process.stdout.write('x'.repeat(3000)); setTimeout(() => process.stdout.write('END'), 30)`),
+      { timeout: 10_000, maxBuffer: 1024, overflow: 'truncate' },
+    );
+
+    // The post-flood write landed, which is only possible if the flood did not
+    // kill the child, and the retained text is the last 1024 bytes.
+    expect(result.exitCode).toBe(0);
+    expect(result.timedOut).toBe(false);
+    expect(result.stdout).toBe('x'.repeat(1021) + 'END');
+  });
+
+  it('default kill overflow still kills the child and hands back the untrimmed buffer', async () => {
+    const result = await executeShellCommand(
+      nodeEval(`process.stdout.write('x'.repeat(3000)); setTimeout(() => process.stdout.write('END'), 30)`),
+      { timeout: 10_000, maxBuffer: 1024 },
+    );
+
+    // The child was killed before the post-flood write could land, and the
+    // accumulated buffer is handed back untrimmed.
+    expect(result.stdout).toBe('x'.repeat(3000));
+    expect(result.exitCode).toBeNull();
+    expect(result.timedOut).toBe(false);
+    expect(result.signal).toBeNull();
+  });
 });
 
 function createFakeChildProcess(): ChildProcess {

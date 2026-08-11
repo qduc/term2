@@ -63,4 +63,25 @@ describe('CopyMenuSession', () => {
     expect(onCopySelection).not.toHaveBeenCalled();
     expect(controller.getSnapshot().stack).toHaveLength(0);
   });
+
+  it('renders code block preview for code block items', async () => {
+    const controller = new MenuControllerImpl();
+    controller.open({ kind: 'copy', items: selections });
+    const frame = controller.getSnapshot().stack[0];
+    if (!frame || frame.kind !== 'copy') throw new Error('copy frame was not opened');
+
+    const { lastFrame } = await renderInAct(
+      <CopyMenuSession
+        frame={frame}
+        active={true}
+        controller={controller}
+        interactions={controller.getInteractionRegistry()}
+        services={{}}
+      />,
+    );
+
+    const output = lastFrame() ?? '';
+    expect(output).toContain('2. Code block #1');
+    expect(output).toContain('— code');
+  });
 });

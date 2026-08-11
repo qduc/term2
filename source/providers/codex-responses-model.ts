@@ -319,6 +319,7 @@ function codexString(value: unknown): string | undefined {
 }
 
 import {
+  isIncompleteStreamTerminalError,
   isPreviousResponseNotFoundError,
   isRetryableTransportError,
   isWebSocketConnectionLimitReachedError,
@@ -791,12 +792,21 @@ const isDefinitelyUnsentWebSocketError = (error: unknown, seen = new Set<unknown
 };
 
 const asAmbiguousModelOutcome = (error: unknown): AmbiguousModelOutcomeError | undefined => {
-  if (!isRetryableTransportError(error).transportFallback || isDefinitelyUnsentWebSocketError(error)) {
+  // Connection never carried the request: safe to let outer retry / transport
+  // fallback policies decide. Do not pretend the model may have run.
+  if (isDefinitelyUnsentWebSocketError(error)) {
     return undefined;
   }
-  return new AmbiguousModelOutcomeError(getErrorMessage(error) || 'Codex request outcome is unknown.', {
-    cause: error,
-  });
+  // Incomplete stream terminals keep transportFallback=false so Codex does not
+  // force an HTTP/WS switch — but the request may already have been accepted,
+  // so replaying is unsafe. Wrap them the same way as transport-fallback
+  // failures so RetryingModel and the conversation classifier terminate.
+  if (isIncompleteStreamTerminalError(error) || isRetryableTransportError(error).transportFallback) {
+    return new AmbiguousModelOutcomeError(getErrorMessage(error) || 'Codex request outcome is unknown.', {
+      cause: error,
+    });
+  }
+  return undefined;
 };
 
 const hasGenerateFalse = (request: StreamedModelTurnRequest): boolean => request.providerOptions?.generate === false;

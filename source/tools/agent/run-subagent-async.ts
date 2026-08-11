@@ -217,6 +217,7 @@ export function createGetSubagentResultToolDefinition(
       'When a run is still active, end the current turn and wait for its completion notification instead of calling this tool again. ' +
       'The completion notification already inlines the full result, so you normally will not need this tool at all; use it only if you need to re-fetch a result you already saw.',
     parameters: getSubagentResultSchema,
+    parallelSafe: true,
     needsApproval: () => false,
     execute: async (params, context, details) => {
       try {
@@ -348,6 +349,7 @@ export function createGetSubagentStatusToolDefinition(
       'For a finished or settled run, the completion notification inlines the full result; use get_subagent_result only to re-fetch one you already saw. ' +
       'This call never blocks and never awaits a run.',
     parameters: getSubagentStatusSchema,
+    parallelSafe: true,
     needsApproval: () => false,
     execute: (params, context, details) => {
       try {

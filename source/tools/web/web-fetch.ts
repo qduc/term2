@@ -73,6 +73,7 @@ export const createWebFetchToolDefinition = (deps: {
     name: 'web_fetch',
     description: WEB_FETCH_DESCRIPTION,
     parameters: webFetchSchema,
+    parallelSafe: true,
     needsApproval: () => false,
     execute: async (params) => {
       const { url, max_chars = DEFAULT_MAX_CHARS, heading: targetHeadings, continuation_token } = params;

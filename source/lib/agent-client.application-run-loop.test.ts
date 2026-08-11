@@ -3,6 +3,9 @@ import { AgentClient } from './agent-client.js';
 import { registerProvider } from '../providers/registry.js';
 import { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
+import { createRunSubagentToolDefinition } from '../tools/agent/run-subagent.js';
+import type { NestedSubagentResult } from '../services/subagents/types.js';
+import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
 
 const providers = new Set<string>();
 const makeSettings = (provider: string): ISettingsService => {
@@ -53,6 +56,91 @@ afterEach(() => {
 });
 
 describe('AgentClient application-run-loop execution', () => {
+  it('starts eligible foreground explorer calls from one response together and preserves provider result order', async () => {
+    const provider = `parallel-explorers-${Date.now()}`;
+    providers.add(provider);
+    const starts: string[] = [];
+    const deferred = new Map<string, { resolve: (result: NestedSubagentResult) => void }>();
+    const requests: Array<Parameters<StreamedModelTurn['stream']>[0]> = [];
+    let modelCalls = 0;
+
+    registerProvider({
+      id: provider,
+      label: 'Parallel explorer test provider',
+      createStreamedModel: () => ({
+        async *stream(request: any) {
+          requests.push(request);
+          modelCalls += 1;
+          if (modelCalls === 1) {
+            yield {
+              type: 'completion',
+              responseId: 'parallel-response',
+              output: [
+                {
+                  type: 'tool_call',
+                  id: 'call-first',
+                  name: 'run_subagent',
+                  arguments: JSON.stringify({ execution: 'foreground', role: 'explorer', task: 'first' }),
+                },
+                {
+                  type: 'tool_call',
+                  id: 'call-second',
+                  name: 'run_subagent',
+                  arguments: JSON.stringify({ execution: 'foreground', role: 'explorer', task: 'second' }),
+                },
+              ],
+            };
+            return;
+          }
+          yield {
+            type: 'completion',
+            responseId: 'parallel-done',
+            output: [{ type: 'message', content: [{ type: 'text', text: 'done' }] }],
+          };
+        },
+      }),
+      fetchModels: async () => [],
+    });
+
+    const runSubagent = async ({ task }: { task: string }): Promise<NestedSubagentResult> => {
+      starts.push(task);
+      return await new Promise((resolve) => deferred.set(task, { resolve }));
+    };
+    const tool = createRunSubagentToolDefinition({ runSubagent: runSubagent as any });
+    const instance = client(provider, {
+      agentOverride: { name: 'override', model: 'test-model', instructions: 'test', tools: [tool] },
+      maxTurns: 2,
+    });
+
+    const stream = await instance.startStream('run');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(starts).toEqual(['first', 'second']);
+
+    deferred.get('second')?.resolve({
+      agentId: 'second',
+      role: 'explorer',
+      status: 'completed',
+      finalText: 'second result',
+      filesChanged: [],
+      toolsUsed: [],
+    });
+    deferred.get('first')?.resolve({
+      agentId: 'first',
+      role: 'explorer',
+      status: 'completed',
+      finalText: 'first result',
+      filesChanged: [],
+      toolsUsed: [],
+    });
+
+    await stream.completed;
+    expect(requests[1].input.filter((item: any) => item.type === 'tool_result').map((item: any) => item.id)).toEqual([
+      'call-first',
+      'call-second',
+    ]);
+    instance.dispose();
+  });
+
   it('executes an override agent with its original tool definitions', async () => {
     const provider = `override-direct-${Date.now()}`;
     providers.add(provider);

@@ -18,6 +18,7 @@ const RUN_SUBAGENT_DESCRIPTION =
   'or "background" when the work can continue after you return control; background returns a running handle and later completion notification. ' +
   'The subagent runs in its own context and returns only a summary, preserving your context. ' +
   '(When to reach for this vs. doing it yourself is covered by the delegation guidance in your system instructions.)\n\n' +
+  'Independent foreground explorer and librarian calls in the same model response may run in parallel when they do not use a worktree; keep worker calls and dependent tasks serial.\n\n' +
   '## Task Requirements\n' +
   'Include the objective, task-specific scope, non-discoverable parent findings or decisions, constraints, deliverable or acceptance criteria, and validation when applicable. ' +
   'Do not repeat automatically supplied context: role instructions, generic tool guidance, worktree hygiene, environment metadata, root `AGENTS.md`, or skills catalog. ' +
@@ -359,6 +360,14 @@ export function createRunSubagentToolDefinition(
     name: 'run_subagent',
     description: RUN_SUBAGENT_DESCRIPTION,
     parameters,
+    parallelSafe: (params: unknown) => {
+      const candidate = params as Partial<RunSubagentParams>;
+      return (
+        candidate.execution === 'foreground' &&
+        (candidate.role === 'explorer' || candidate.role === 'librarian') &&
+        candidate.worktree === undefined
+      );
+    },
     needsApproval: () => false,
     execute: async (rawParams: unknown, context, details) => {
       const params = rawParams as RunSubagentParams;

@@ -48,6 +48,7 @@ export const createAskMentorToolDefinition = (
   name: 'ask_mentor',
   description: ASK_MENTOR_DESCRIPTION,
   parameters: askMentorSchema,
+  parallelSafe: true,
   needsApproval: () => false,
   execute: async ({ question, context }) => {
     const prompt = context ? `Context:\n${context}\n\nQuestion:\n${question}` : question;

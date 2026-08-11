@@ -30,8 +30,8 @@ export type MentorPoolMenuItem =
   | { kind: 'action'; action: 'add' | 'reorder' | 'save' | 'cancel'; label: string; tone?: 'default' | 'destructive' }
   | { kind: 'field'; field: 'model' | 'provider' | 'reasoning'; label: string; detail: string }
   | { kind: 'provider'; id: string; label: string }
-  | { kind: 'reasoning'; value: MentorPoolReasoningEffort; label: string }
-  | { kind: 'reorder-entry'; index: number; label: string };
+  | { kind: 'reasoning'; value: MentorPoolReasoningEffort | undefined; label: string }
+  | { kind: 'reorder-entry'; entry: MentorPoolEntry; index: number; label: string };
 
 const mentorPoolEntrySchema = z.object({
   model: z.string().min(1, 'Model is required'),
@@ -45,10 +45,51 @@ const cloneEntries = (value: unknown): MentorPoolEntry[] => {
   return parsed.success ? parsed.data.map((entry) => ({ ...entry })) : [];
 };
 
+export function formatMentorPoolProvider(provider?: string): string {
+  return provider || 'Inherit mentor provider';
+}
+
+export function formatMentorPoolReasoning(reasoningEffort?: MentorPoolReasoningEffort): string {
+  switch (reasoningEffort) {
+    case 'none':
+      return 'None';
+    case 'minimal':
+      return 'Minimal';
+    case 'low':
+      return 'Low';
+    case 'medium':
+      return 'Medium';
+    case 'high':
+      return 'High';
+    case 'xhigh':
+      return 'Extra high';
+    case undefined:
+      return 'Inherit mentor reasoning';
+    case 'default':
+      return 'Provider default';
+  }
+}
+
 export function formatMentorPoolEntry(entry: MentorPoolEntry): string {
   const provider = entry.provider ? ` @ ${entry.provider}` : '';
   const effort = entry.reasoningEffort && entry.reasoningEffort !== 'default' ? ` (${entry.reasoningEffort})` : '';
   return `${entry.model}${provider}${effort}`;
+}
+
+export function buildMentorPoolListItems(entries: readonly MentorPoolEntry[]): MentorPoolMenuItem[] {
+  const actions: MentorPoolMenuItem[] = [];
+  if (entries.length < 8) actions.push({ kind: 'action', action: 'add', label: 'Add Entry' });
+  if (entries.length > 1) actions.push({ kind: 'action', action: 'reorder', label: 'Reorder Entries' });
+  actions.push({ kind: 'action', action: 'save', label: 'Save Changes' });
+  return [
+    ...entries.map((entry, index) => ({
+      kind: 'entry' as const,
+      entry,
+      index,
+      label: entry.model,
+    })),
+    ...actions,
+  ];
 }
 
 export function useMentorPoolSelection(settingsService: SettingsService, active: boolean) {
@@ -68,26 +109,19 @@ export function useMentorPoolSelection(settingsService: SettingsService, active:
 
   const activeItems = useMemo<MentorPoolMenuItem[]>(() => {
     if (phase === 'list') {
-      const actions: MentorPoolMenuItem[] = [];
-      if (entries.length < 8) actions.push({ kind: 'action', action: 'add', label: 'Add Entry' });
-      actions.push({ kind: 'action', action: 'reorder', label: 'Reorder Entries' });
-      actions.push({ kind: 'action', action: 'save', label: 'Save Changes' });
-      return [
-        ...entries.map((entry, index) => ({
-          kind: 'entry' as const,
-          entry,
-          index,
-          label: formatMentorPoolEntry(entry),
-        })),
-        ...actions,
-      ];
+      return buildMentorPoolListItems(entries);
     }
     if (phase === 'edit_fields') {
       if (!draft) return [];
       return [
         { kind: 'field', field: 'model', label: 'Model', detail: draft.model || '<empty>' },
-        { kind: 'field', field: 'provider', label: 'Provider', detail: draft.provider || 'Inherit' },
-        { kind: 'field', field: 'reasoning', label: 'Reasoning', detail: draft.reasoningEffort || 'Inherit' },
+        { kind: 'field', field: 'provider', label: 'Provider', detail: formatMentorPoolProvider(draft.provider) },
+        {
+          kind: 'field',
+          field: 'reasoning',
+          label: 'Reasoning',
+          detail: formatMentorPoolReasoning(draft.reasoningEffort),
+        },
         { kind: 'action', action: 'save', label: 'Save Changes' },
         { kind: 'action', action: 'cancel', label: 'Cancel' },
       ];
@@ -99,7 +133,14 @@ export function useMentorPoolSelection(settingsService: SettingsService, active:
       ];
     }
     if (phase === 'edit_reasoning') {
-      return MENTOR_POOL_REASONING_EFFORTS.map((value) => ({ kind: 'reasoning' as const, value, label: value }));
+      return [
+        { kind: 'reasoning' as const, value: undefined, label: formatMentorPoolReasoning() },
+        ...MENTOR_POOL_REASONING_EFFORTS.map((value) => ({
+          kind: 'reasoning' as const,
+          value,
+          label: formatMentorPoolReasoning(value),
+        })),
+      ];
     }
     if (phase === 'confirm_delete') {
       return [
@@ -116,7 +157,8 @@ export function useMentorPoolSelection(settingsService: SettingsService, active:
     return reorderList.map((entry, index) => ({
       kind: 'reorder-entry' as const,
       index,
-      label: formatMentorPoolEntry(entry),
+      entry,
+      label: entry.model,
     }));
   }, [draft, entries, phase, providerItems, reorderList]);
 
@@ -213,7 +255,7 @@ export function useMentorPoolSelection(settingsService: SettingsService, active:
         } else {
           setPhase('edit_reasoning');
           selection.setSelectedIndex(
-            Math.max(0, MENTOR_POOL_REASONING_EFFORTS.indexOf(draft.reasoningEffort ?? 'default')),
+            draft.reasoningEffort === undefined ? 0 : MENTOR_POOL_REASONING_EFFORTS.indexOf(draft.reasoningEffort) + 1,
           );
           setInput('');
         }
@@ -236,7 +278,10 @@ export function useMentorPoolSelection(settingsService: SettingsService, active:
       return;
     }
     if (phase === 'edit_reasoning' && item.kind === 'reasoning' && draft) {
-      setDraft({ ...draft, reasoningEffort: item.value === 'default' ? undefined : item.value });
+      // Keep an explicitly stored `default` distinct from an omitted value:
+      // the runner treats an omitted value as falling back to the mentor
+      // setting, while `default` uses the provider default.
+      setDraft({ ...draft, reasoningEffort: item.value });
       setDraftModified(true);
       setPhase('edit_fields');
       selection.setSelectedIndex(2);

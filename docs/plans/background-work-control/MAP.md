@@ -4,6 +4,8 @@
 
 Background details, per-item stop, action notification, and truthful root-shell transfer are implemented and verified at `d17810dc`. Foreground-subagent transfer is authorized for implementation in `.worktrees/background-subagent-transfer`. Build it as an approval-capable lease adopted by the existing async registry; do not implement transfer as cancel-and-restart and do not route child approvals through the root turn's singleton approval continuation.
 
+Background-task liveness presentation is now planned in [liveness-ui.md](liveness-ui.md). It must surface observed activity and intentional waits without claiming that silence proves a task is hung; its task-manager shortcut will move from Ctrl+B to Ctrl+G to avoid tmux's default prefix.
+
 ## Destination
 
 Users can inspect and stop individual background subagents or shell jobs, move a running foreground subagent or shell execution into the background without restarting it, and the main agent is reliably told about execution-changing user actions so it can re-plan.

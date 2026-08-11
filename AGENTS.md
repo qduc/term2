@@ -37,6 +37,14 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 - Exclusive menu input ownership — follow-on plan tracked in
   `docs/plans/exclusive-menu-input.md`; waiting for implementation approval.
 - Scheduled live provider canaries — a deferred follow-up requiring CI, secret/billing, and OAuth-storage decisions. No plan doc, and nobody is on it.
+- Run budgets as staged escalation — designed in
+  `docs/plans/run-budget-stall-escalation.md`, awaiting implementation approval;
+  nobody is on it. Read it before changing `maxTurns` handling in
+  `ApplicationRunLoop`, `AgentLimits`/`resolveLimits`, `ExecutionBudget`, or the
+  `max_turns_exceeded` prompt: it records why the turn cap is a check-in rather
+  than a ceiling, that per-request USD accounting already exists (so the
+  `maxCost` "unsupported" rejection is stale), and that identical-failure
+  detection is already in the loop as a silent retry suppressor.
 - Provider-faithful reasoning round-trip on the chat-completions lane — planned
   in `docs/plans/chat-completions-reasoning-roundtrip.md`, awaiting
   implementation approval; nobody is on it. Read it before changing how

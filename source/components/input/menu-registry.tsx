@@ -9,6 +9,7 @@ import { SettingsMenuSession } from './SettingsMenuSession.js';
 import { SettingsValueMenuSession } from './SettingsValueMenuSession.js';
 import { ModelMenuSession } from './ModelMenuSession.js';
 import { CopyMenuSession } from './CopyMenuSession.js';
+import { MentorPoolMenuSession } from './MentorPoolMenuSession.js';
 
 export type MenuServices = Record<string, unknown>;
 
@@ -33,6 +34,7 @@ const defaultRegistry: MenuRegistry = {
   slash: SlashMenuSession as React.ComponentType<any>,
   settings: SettingsMenuSession as React.ComponentType<any>,
   settings_value: SettingsValueMenuSession as React.ComponentType<any>,
+  mentor_pool: MentorPoolMenuSession as React.ComponentType<any>,
   model: ModelMenuSession as React.ComponentType<any>,
 };
 

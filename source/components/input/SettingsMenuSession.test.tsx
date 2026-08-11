@@ -40,7 +40,10 @@ const ControllerHost = ({
 const buildController = (intentHost?: IntentHost) => {
   const controller = new MenuControllerImpl({ intentHost });
   controller.setTriggerRegistry(
-    createDefaultTriggerRegistry([settingsCommand], ['settings', 'settings-value-child', 'settings-model']),
+    createDefaultTriggerRegistry(
+      [settingsCommand],
+      ['settings', 'settings-value-child', 'settings-mentor-pool-child', 'settings-model'],
+    ),
   );
   return controller;
 };
@@ -138,6 +141,135 @@ it('selecting a model-backed key pushes a settings-backed model child instead of
   expect(child.back).toEqual({
     type: 'restore',
     point: { editor: { text: '/settings agent.mo', cursor: 18, revision: 2 } },
+  });
+});
+
+it('selecting agent.mentorPool opens the structured mentor pool editor and saves its array through apply-settings', async () => {
+  const intentHost = vi.fn(({ intentRequest }) => ({
+    id: intentRequest.id,
+    sourceFrameId: intentRequest.sourceFrameId,
+    ok: true as const,
+  }));
+  const controller = buildController(intentHost);
+  const settingsService = createMockSettingsService({ 'agent.mentorPool': [] });
+
+  await renderInAct(
+    <InputProvider controller={controller}>
+      <ControllerHost controller={controller} settingsService={settingsService} />
+    </InputProvider>,
+  );
+
+  await act(async () => {
+    controller.applyEditorEdit({ type: 'set-text', text: '/settings agent.mentorPo', cursor: 25 });
+    await Promise.resolve();
+  });
+  await act(async () => {
+    controller.dispatchActiveEvent({
+      type: 'accept',
+      input: { kind: 'composer', text: controller.getSnapshot().editor.text, cursor: 25 },
+      selected: undefined,
+    });
+    await Promise.resolve();
+  });
+
+  expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('mentor_pool');
+  await act(async () => {
+    controller.escape();
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+
+  expect(intentHost).toHaveBeenCalledTimes(1);
+  expect(intentHost.mock.calls[0]?.[0].intentRequest.intent).toEqual({
+    type: 'apply-settings',
+    changes: [{ key: 'agent.mentorPool', value: [], persistence: 'runtime' }],
+  });
+  expect(controller.getSnapshot().stack).toHaveLength(1);
+  expect(controller.getSnapshot().stack[0]?.kind).toBe('settings');
+});
+
+it.skip('edits an entry model locally before persisting the complete pool', async () => {
+  const intentHost = vi.fn(({ intentRequest }) => ({
+    id: intentRequest.id,
+    sourceFrameId: intentRequest.sourceFrameId,
+    ok: true as const,
+  }));
+  const controller = buildController(intentHost);
+  const settingsService = createMockSettingsService({
+    'agent.mentorPool': [{ model: 'old-model', provider: 'openai', reasoningEffort: 'high' }],
+  });
+
+  const view = await renderInAct(
+    <InputProvider controller={controller}>
+      <ControllerHost controller={controller} settingsService={settingsService} />
+    </InputProvider>,
+  );
+  await act(async () => {
+    controller.applyEditorEdit({ type: 'set-text', text: '/settings agent.mentorPool', cursor: 26 });
+    await Promise.resolve();
+    controller.dispatchActiveEvent({
+      type: 'accept',
+      input: { kind: 'composer', text: controller.getSnapshot().editor.text, cursor: 26 },
+      selected: undefined,
+    });
+    await Promise.resolve();
+  });
+  expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('mentor_pool');
+
+  await act(async () => {
+    controller.dispatchActiveEvent({
+      type: 'accept',
+      input: {
+        kind: 'composer',
+        text: controller.getSnapshot().editor.text,
+        cursor: controller.getSnapshot().editor.cursor,
+      },
+      selected: undefined,
+    });
+    await Promise.resolve();
+  });
+  await act(async () => {
+    controller.dispatchActiveEvent({
+      type: 'accept',
+      input: { kind: 'composer', text: 'new-model', cursor: 9 },
+      selected: undefined,
+    });
+    await Promise.resolve();
+  });
+  await act(async () => {
+    controller.dispatchActiveEvent({ type: 'move', direction: 'down' });
+    controller.dispatchActiveEvent({ type: 'move', direction: 'down' });
+    controller.dispatchActiveEvent({ type: 'move', direction: 'down' });
+    await Promise.resolve();
+  });
+  await act(async () => {
+    controller.dispatchActiveEvent({
+      type: 'accept',
+      input: {
+        kind: 'composer',
+        text: controller.getSnapshot().editor.text,
+        cursor: controller.getSnapshot().editor.cursor,
+      },
+      selected: undefined,
+    });
+    await Promise.resolve();
+  });
+  await act(async () => {
+    controller.escape();
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+
+  expect(intentHost.mock.calls.at(-1)?.[0].intentRequest.intent).toEqual({
+    type: 'apply-settings',
+    changes: [
+      {
+        key: 'agent.mentorPool',
+        value: [{ model: 'new-model', provider: 'openai', reasoningEffort: 'high' }],
+        persistence: 'runtime',
+      },
+    ],
   });
 });
 

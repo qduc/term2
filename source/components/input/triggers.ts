@@ -2,6 +2,7 @@ import type { SlashCommand } from '../../slash-commands.js';
 import { TriggerRuleRegistry } from './menu-controller.js';
 import { determineActiveMenu } from './determine-active-menu.js';
 import { getModelSettingConfigForInput } from '../../utils/ai/model-settings.js';
+import { SETTING_KEYS } from '../../services/settings/settings-service.js';
 
 export const STOP_CHAR_REGEX = /[\s,;:()[\]{}<>]/;
 export const SETTINGS_TRIGGER = '/settings ';
@@ -163,6 +164,40 @@ export function createDefaultTriggerRegistry(
     successors: [],
   });
 
+  registerRule({
+    id: 'settings-mentor-pool-child',
+    priority: 45,
+    parse: (editor) => {
+      const active = determineActiveMenu(editor.text, editor.cursor, slashCommands);
+      if (
+        active.type !== 'settings_value' ||
+        active.origin !== 'settings-list' ||
+        active.key !== SETTING_KEYS.AGENT_MENTOR_POOL
+      ) {
+        return null;
+      }
+      return {
+        ruleId: 'settings-mentor-pool-child',
+        identity: `settings-mentor-pool-child:${active.startIndex}`,
+        frame: {
+          kind: 'mentor_pool' as const,
+          origin: {
+            type: 'settings-list' as const,
+            operation: 'set' as const,
+            back: { type: 'restore' as const, point: settingsListRestorePoint(editor.revision) },
+          },
+          binding: {
+            trigger: { range: { start: 0, end: active.startIndex }, text: editor.text.slice(0, active.startIndex) },
+            queryStart: active.startIndex,
+            queryEnd: 'cursor' as const,
+            replacement: { start: active.startIndex, end: 'buffer-end' as const },
+          },
+        },
+      };
+    },
+    successors: [],
+  });
+
   // Priority 40: direct setting-value triggers (graph 4 — `/effort `,
   // `/auto-approve `). Disabled until Step 2 enables `direct-setting-value`.
   registerRule({
@@ -220,6 +255,7 @@ export function createDefaultTriggerRegistry(
     },
     successors: [
       { ruleId: 'settings-value-child', operation: 'push' },
+      { ruleId: 'settings-mentor-pool-child', operation: 'push' },
       { ruleId: 'settings-model', operation: 'push' },
     ],
   });

@@ -80,6 +80,12 @@ export type MenuFrame =
     }
   | {
       id: FrameId;
+      kind: 'mentor_pool';
+      binding: TextBinding;
+      origin: SettingsOrigin;
+    }
+  | {
+      id: FrameId;
       kind: 'model';
       target: { type: 'command' } | { type: 'setting'; config: ModelSettingConfig };
       binding: TextBinding;

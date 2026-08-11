@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
 import SettingsSelectionMenu from '../menu/SettingsSelectionMenu.js';
 import { getModelSettingConfig } from '../../utils/ai/model-settings.js';
+import { SETTING_KEYS } from '../../services/settings/settings-service.js';
 import { SETTINGS_RESET_TRIGGER } from './triggers.js';
 import type { useSettingsCompletion } from '../../hooks/use-settings-completion.js';
 import type { MenuComponentProps } from './menu-registry.js';
@@ -32,7 +33,19 @@ const pushChildEffect = (
   const back = { type: 'restore' as const, point: { editor: currentEditor } };
 
   const modelConfig = getModelSettingConfig(key);
-  const childFrame = modelConfig
+  const isMentorPool = key === SETTING_KEYS.AGENT_MENTOR_POOL;
+  const childFrame = isMentorPool
+    ? {
+        kind: 'mentor_pool' as const,
+        origin: { type: 'settings-list' as const, operation: 'set' as const, back },
+        binding: {
+          trigger,
+          queryStart: nextText.length,
+          queryEnd: 'cursor' as const,
+          replacement: { start: nextText.length, end: 'buffer-end' as const },
+        },
+      }
+    : modelConfig
     ? {
         kind: 'model' as const,
         target: {

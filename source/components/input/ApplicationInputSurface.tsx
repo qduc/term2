@@ -65,6 +65,7 @@ export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props)
         'skills',
         'settings',
         'settings-value-child',
+        'settings-mentor-pool-child',
         'settings-model',
         'command-model',
         'direct-setting-value',

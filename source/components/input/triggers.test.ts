@@ -36,7 +36,11 @@ describe('Phase 4 rule-id split (graph 3 vs graph 4)', () => {
     const registry = createDefaultTriggerRegistry(commands, ['settings', 'settings-value-child', 'settings-model']);
     const settingsRule = registry.getRule('settings');
     expect(settingsRule).toBeDefined();
-    expect(settingsRule?.successors.map((s) => s.ruleId).sort()).toEqual(['settings-model', 'settings-value-child']);
+    expect(settingsRule?.successors.map((s) => s.ruleId).sort()).toEqual([
+      'settings-mentor-pool-child',
+      'settings-model',
+      'settings-value-child',
+    ]);
   });
 
   it('enabling only the graph-3 ids leaves graph-4 triggers unmatched', () => {

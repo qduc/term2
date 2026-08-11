@@ -15,7 +15,12 @@ import { resolveAncillaryModelTier, type AncillaryModelTier } from '../agent-run
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, '../../prompts');
 export const PROMPTS_DIR = path.join(BASE_PROMPT_PATH, 'subagents');
 
-const ROLE_MAX_TURNS_DEFAULT = 20;
+/**
+ * Fallback when a role markdown file omits `maxTurns`.
+ * Generous tripwire, not a workload estimate — healthy runs should rarely
+ * approach it; settlement reports a budget stop rather than failing.
+ */
+export const ROLE_MAX_TURNS_DEFAULT = 200;
 
 const roleModelTiers: Record<string, AncillaryModelTier> = {
   mentor: 'smart',

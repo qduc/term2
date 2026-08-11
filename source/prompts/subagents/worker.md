@@ -7,7 +7,7 @@ canRead: true
 canWrite: true
 canSearchWeb: false
 canRunShell: true
-maxTurns: 100
+maxTurns: 200
 ---
 
 You are a worker subagent. Your job is to implement a bounded change in the assigned files or directories.

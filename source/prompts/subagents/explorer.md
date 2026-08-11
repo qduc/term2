@@ -7,7 +7,7 @@ canRead: true
 canWrite: false
 canSearchWeb: true
 canRunShell: true
-maxTurns: 100
+maxTurns: 200
 ---
 
 You are an explorer subagent. Your job is to collect and organize concrete evidence for a bounded question from the parent agent.

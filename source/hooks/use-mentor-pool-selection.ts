@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { z } from 'zod';
 import { useInputContext } from '../context/InputContext.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
@@ -63,6 +63,8 @@ export function useMentorPoolSelection(settingsService: SettingsService, active:
   const [discardFromPhase, setDiscardFromPhase] = useState<MentorPoolPhase | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const settingsServiceRef = useRef(settingsService);
+  settingsServiceRef.current = settingsService;
 
   const activeItems = useMemo<MentorPoolMenuItem[]>(() => {
     if (phase === 'list') {
@@ -122,9 +124,10 @@ export function useMentorPoolSelection(settingsService: SettingsService, active:
 
   useEffect(() => {
     if (!active) return;
-    const loaded = cloneEntries(settingsService.get(SETTING_KEYS.AGENT_MENTOR_POOL));
+    const currentSettingsService = settingsServiceRef.current;
+    const loaded = cloneEntries(currentSettingsService.get(SETTING_KEYS.AGENT_MENTOR_POOL));
     setEntries(loaded);
-    setProviderItems(loadProviderItems(settingsService));
+    setProviderItems(loadProviderItems(currentSettingsService));
     setPhase('list');
     setDraft(null);
     setEditingIndex(null);
@@ -133,7 +136,7 @@ export function useMentorPoolSelection(settingsService: SettingsService, active:
     setDiscardFromPhase(null);
     setErrorMessage(null);
     setFieldErrors({});
-  }, [active, settingsService]);
+  }, [active]);
 
   useEffect(() => {
     selection.setSelectedIndex(0);

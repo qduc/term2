@@ -189,6 +189,56 @@ it('selecting agent.mentorPool opens the structured mentor pool editor and saves
   expect(controller.getSnapshot().stack[0]?.kind).toBe('settings');
 });
 
+it('opens the model editor for a new mentor pool entry without exceeding the React update depth', async () => {
+  const controller = buildController();
+  const settingsService = createMockSettingsService({ 'agent.mentorPool': [] });
+
+  const view = await renderInAct(
+    <InputProvider controller={controller}>
+      <ControllerHost controller={controller} settingsService={settingsService} />
+    </InputProvider>,
+  );
+
+  await act(async () => {
+    controller.applyEditorEdit({ type: 'set-text', text: '/settings agent.mentorPool', cursor: 26 });
+    await Promise.resolve();
+    controller.dispatchActiveEvent({
+      type: 'accept',
+      input: { kind: 'composer', text: controller.getSnapshot().editor.text, cursor: 26 },
+      selected: undefined,
+    });
+    await Promise.resolve();
+  });
+
+  await act(async () => {
+    controller.dispatchActiveEvent({
+      type: 'accept',
+      input: {
+        kind: 'composer',
+        text: controller.getSnapshot().editor.text,
+        cursor: controller.getSnapshot().editor.cursor,
+      },
+      selected: undefined,
+    });
+    await Promise.resolve();
+  });
+
+  await act(async () => {
+    controller.dispatchActiveEvent({
+      type: 'accept',
+      input: {
+        kind: 'composer',
+        text: controller.getSnapshot().editor.text,
+        cursor: controller.getSnapshot().editor.cursor,
+      },
+      selected: undefined,
+    });
+    await Promise.resolve();
+  });
+
+  expect(view.lastFrame()).toContain('Enter Model ID');
+});
+
 it.skip('edits an entry model locally before persisting the complete pool', async () => {
   const intentHost = vi.fn(({ intentRequest }) => ({
     id: intentRequest.id,

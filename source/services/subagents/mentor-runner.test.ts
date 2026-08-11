@@ -200,6 +200,126 @@ it('fails only when every sample fails', async () => {
 });
 
 /**
+ * The pool's whole purpose is uncorrelated opinions: different models fail in
+ * different ways, so a disagreement between them is real signal. If every
+ * entry silently ran on the same model the feature would be theatre.
+ */
+it('consults every model in the pool and labels each answer with its model', async () => {
+  const seenModels: string[] = [];
+  const providerId = registerTestProvider({
+    label: 'Pool mentor provider',
+    createStreamedModel: (model: string) => ({
+      async *stream() {
+        seenModels.push(model);
+        yield {
+          type: 'completion',
+          responseId: `mentor-response-${model}`,
+          output: [{ type: 'message', content: [{ type: 'text', text: `Opinion from ${model}` }] }],
+          usage: { inputTokens: 10, outputTokens: 3 },
+        };
+      },
+    }),
+    fetchModels: async () => [{ id: 'model-a' }, { id: 'model-b' }],
+  });
+  const runner = new MentorRunner({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.mentorModel': 'model-a',
+      'agent.mentorProvider': providerId,
+      'agent.mentorPool': [
+        { model: 'model-a', provider: providerId },
+        { model: 'model-b', provider: providerId },
+      ],
+    }),
+    sessionContextService: createSessionContextService(),
+  });
+
+  const result = await runner.run('mentor-run', 'Is this design sound?');
+
+  expect(result.status).toBe('completed');
+  expect(seenModels.sort()).toEqual(['model-a', 'model-b']);
+  expect(result.finalText).toContain('model-a');
+  expect(result.finalText).toContain('model-b');
+  expect(result.finalText).toContain('Opinion from model-a');
+  expect(result.finalText).toContain('Opinion from model-b');
+  expect(result.usage?.prompt_tokens).toBe(20);
+});
+
+it('reports which pool model failed and keeps the rest', async () => {
+  const providerId = registerTestProvider({
+    label: 'Partly broken pool provider',
+    createStreamedModel: (model: string) => ({
+      async *stream() {
+        if (model === 'model-b') throw new Error('model-b is unavailable');
+        yield {
+          type: 'completion',
+          responseId: `mentor-response-${model}`,
+          output: [{ type: 'message', content: [{ type: 'text', text: `Opinion from ${model}` }] }],
+          usage: { inputTokens: 10, outputTokens: 3 },
+        };
+      },
+    }),
+    fetchModels: async () => [{ id: 'model-a' }, { id: 'model-b' }],
+  });
+  const runner = new MentorRunner({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.mentorModel': 'model-a',
+      'agent.mentorProvider': providerId,
+      'agent.mentorPool': [
+        { model: 'model-a', provider: providerId },
+        { model: 'model-b', provider: providerId },
+      ],
+    }),
+    sessionContextService: createSessionContextService(),
+  });
+
+  const result = await runner.run('mentor-run', 'Is this design sound?');
+
+  expect(result.status).toBe('completed');
+  expect(result.finalText).toContain('Opinion from model-a');
+  // The failure names the model, so a consistently broken pool entry is visible.
+  expect(result.finalText).toContain('model-b');
+  expect(result.finalText).toMatch(/1 of 2 .*(failed|unavailable)/i);
+});
+
+it('lets the pool override mentorSamples', async () => {
+  let calls = 0;
+  const providerId = registerTestProvider({
+    label: 'Pool over samples provider',
+    createStreamedModel: (model: string) => ({
+      async *stream() {
+        calls += 1;
+        yield {
+          type: 'completion',
+          responseId: `mentor-response-${calls}`,
+          output: [{ type: 'message', content: [{ type: 'text', text: `Opinion from ${model}` }] }],
+          usage: { inputTokens: 10, outputTokens: 3 },
+        };
+      },
+    }),
+    fetchModels: async () => [{ id: 'model-a' }, { id: 'model-b' }],
+  });
+  const runner = new MentorRunner({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.mentorModel': 'model-a',
+      'agent.mentorProvider': providerId,
+      'agent.mentorSamples': 5,
+      'agent.mentorPool': [
+        { model: 'model-a', provider: providerId },
+        { model: 'model-b', provider: providerId },
+      ],
+    }),
+    sessionContextService: createSessionContextService(),
+  });
+
+  await runner.run('mentor-run', 'Is this design sound?');
+
+  expect(calls).toBe(2);
+});
+
+/**
  * Default must stay byte-for-byte the old behavior, including the persistent
  * session that mentorMode's ongoing relationship depends on.
  */

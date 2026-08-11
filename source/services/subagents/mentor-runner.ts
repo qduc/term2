@@ -19,6 +19,18 @@ import type { ExecutionBudget } from '../agent-runtime/execution-budget.js';
 /** Upper bound on `agent.mentorSamples`; each sample is a full mentor call. */
 const MAX_MENTOR_SAMPLES = 8;
 
+/**
+ * One consultation in a mentor fan-out. `model`/`provider` are absent for plain
+ * sampling, where every consultation uses the configured mentor model.
+ */
+interface MentorConsultation {
+  model?: string;
+  provider?: string;
+  reasoningEffort?: string;
+  /** Shown in the answer's heading so the agent can attribute each opinion. */
+  label?: string;
+}
+
 export class MentorRunner {
   #logger: ILoggingService;
   #settings: ISettingsService;
@@ -78,11 +90,11 @@ export class MentorRunner {
     if (session) this.#mentorSession = session;
     try {
       try {
-        const samples = this.#resolveSampleCount();
+        const consultations = this.#resolveConsultations();
         const result =
-          samples > 1
-            ? await this.#runSamples(agentId, task, samples, signal)
-            : await this.#runWithSession(agentId, task, this.#mentorSession, signal);
+          consultations.length > 1
+            ? await this.#runSamples(agentId, task, consultations, signal)
+            : await this.#runWithSession(agentId, task, this.#mentorSession, signal, consultations[0]);
         if (slot && result.usage) childBudget!.recordUsage(result.usage);
         return result;
       } catch (error: any) {
@@ -124,34 +136,64 @@ export class MentorRunner {
   }
 
   /**
-   * Consults the mentor `samples` times concurrently and returns every answer.
+   * Builds the list of consultations for one mentor call.
    *
-   * Each sample gets its own throwaway session. Sharing one session would feed
-   * sample N-1's answer into sample N as conversation history, so the samples
-   * would anchor on the first answer instead of being independent opinions —
-   * the whole reason for sampling. The persistent `#mentorSession` is left
-   * untouched, so single-sample mentor mode keeps its ongoing relationship.
+   * A configured pool *defines* the consultations — one per entry — and
+   * `agent.mentorSamples` is ignored. The two do not multiply: a pool asks
+   * different models the same question, which is a different intent from
+   * asking one model repeatedly, and combining them silently would make the
+   * cost of a consultation hard to predict.
    */
-  async #runSamples(agentId: string, task: string, samples: number, signal?: AbortSignal): Promise<SubagentResult> {
+  #resolveConsultations(): MentorConsultation[] {
+    const pool = this.#settings.get('agent.mentorPool');
+    if (Array.isArray(pool) && pool.length > 0) {
+      return pool.slice(0, MAX_MENTOR_SAMPLES).map((entry: any) => ({
+        model: entry?.model,
+        provider: entry?.provider,
+        reasoningEffort: entry?.reasoningEffort,
+        label: entry?.model,
+      }));
+    }
+    return Array.from({ length: this.#resolveSampleCount() }, () => ({}));
+  }
+
+  /**
+   * Runs every consultation concurrently and returns all the answers.
+   *
+   * Each one gets its own throwaway session. Sharing one session would feed
+   * answer N-1 into consultation N as conversation history, so the answers
+   * would anchor on the first opinion instead of being independent — the whole
+   * reason for sampling. The persistent `#mentorSession` is left untouched, so
+   * single-consultation mentor mode keeps its ongoing relationship.
+   */
+  async #runSamples(
+    agentId: string,
+    task: string,
+    consultations: MentorConsultation[],
+    signal?: AbortSignal,
+  ): Promise<SubagentResult> {
+    const samples = consultations.length;
     const settled = await Promise.allSettled(
-      Array.from({ length: samples }, () =>
-        this.#runWithSession(agentId, task, new SubagentSession(randomUUID(), 'mentor'), signal),
+      consultations.map((consultation) =>
+        this.#runWithSession(agentId, task, new SubagentSession(randomUUID(), 'mentor'), signal, consultation),
       ),
     );
 
     const answers: string[] = [];
-    const failures: unknown[] = [];
+    const failures: { label?: string; reason: unknown }[] = [];
     const usageTotals = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
     const costRecords: ModelRequestCost[] = [];
     let sawUsage = false;
 
     settled.forEach((outcome, index) => {
+      const label = consultations[index]?.label;
       if (outcome.status === 'rejected') {
-        failures.push(outcome.reason);
+        failures.push({ label, reason: outcome.reason });
         return;
       }
       const result = outcome.value;
-      answers.push(`## Mentor sample ${index + 1} of ${samples}\n\n${result.finalText}`);
+      const heading = `## Mentor sample ${index + 1} of ${samples}${label ? ` — ${label}` : ''}`;
+      answers.push(`${heading}\n\n${result.finalText}`);
       if (result.usage) {
         sawUsage = true;
         usageTotals.prompt_tokens += result.usage.prompt_tokens ?? 0;
@@ -164,13 +206,18 @@ export class MentorRunner {
     if (answers.length === 0) {
       // Nothing to hand back, so surface the real failure rather than an empty
       // consultation. An abort is rethrown as-is so `run` reports `cancelled`.
-      const abort = failures.find((error: any) => isAbortLike(error?.message, error));
-      throw abort ?? failures[0];
+      const abort = failures.find(({ reason }: any) => isAbortLike(reason?.message, reason));
+      throw (abort ?? failures[0]).reason;
     }
 
     const sections = [...answers];
     if (failures.length > 0) {
-      const detail = failures.map((error: any) => error?.message ?? String(error)).join('; ');
+      const detail = failures
+        .map(({ label, reason }: any) => {
+          const message = reason?.message ?? String(reason);
+          return label ? `${label}: ${message}` : message;
+        })
+        .join('; ');
       sections.push(`_${failures.length} of ${samples} mentor samples failed: ${detail}_`);
     }
 
@@ -191,10 +238,14 @@ export class MentorRunner {
     task: string,
     mentorSession: SubagentSession,
     signal?: AbortSignal,
+    consultation?: MentorConsultation,
   ): Promise<SubagentResult> {
     const definition = loadRoleDefinition('mentor', this.#settings);
-    const mentorModelName = definition.model;
-    const mentorProvider = definition.provider;
+    // A pool entry overrides the configured mentor model for this consultation
+    // only. An entry may name a model without a provider, in which case it runs
+    // on the mentor's usual provider.
+    const mentorModelName = consultation?.model ?? definition.model;
+    const mentorProvider = consultation?.provider ?? definition.provider;
     const mentorMode = this.#settings.get('app.mentorMode');
 
     const baseInstructions = mentorMode
@@ -229,7 +280,7 @@ export class MentorRunner {
       throw new Error(`${providerDef.label || mentorProvider} is configured but could not be initialized.`);
 
     const mentorAgent = mentorSession.ensureAgent(() => {
-      const reasoningEffort = this.#settings.get('agent.mentorReasoningEffort');
+      const reasoningEffort = consultation?.reasoningEffort ?? this.#settings.get('agent.mentorReasoningEffort');
       const modelSettings: any = {
         retry: { maxRetries: this.#settings.get('agent.retryAttempts') ?? 2 },
       };

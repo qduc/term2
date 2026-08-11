@@ -50,6 +50,26 @@ it('buildRuntimeLogRecord omits sentinel-valued fields', () => {
   expect(parsed.eventType).toBe('log.message');
 });
 
+it('buildRuntimeLogRecord removes null optional context instead of emitting an invalid record', () => {
+  const record = buildRuntimeLogRecord({
+    level: 'error',
+    meta: {
+      eventType: 'provider.response.failed',
+      messageId: 'msg-1',
+      traceId: null,
+      sessionId: null,
+      provider: null,
+      model: null,
+    },
+  });
+
+  expect(record).not.toHaveProperty('traceId');
+  expect(record).not.toHaveProperty('sessionId');
+  expect(record).not.toHaveProperty('provider');
+  expect(record).not.toHaveProperty('model');
+  expect(() => RuntimeLogSchema.parse(record)).not.toThrow();
+});
+
 it('buildRuntimeLogRecord preserves valid provider/model/session/trace', () => {
   const record = buildRuntimeLogRecord({
     level: 'info',

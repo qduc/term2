@@ -86,7 +86,7 @@ export class CodexResponsesTransport {
             else if ((message as any).event) yield (message as any).event;
             else if (message.type === 'error') throw (message as any).error;
             else if (message.type === 'close')
-              throw new Error('Codex WebSocket closed before a terminal response event.');
+              throw new Error('Codex WebSocket connection closed before a terminal response event.');
           }
         } finally {
           try {
@@ -135,7 +135,8 @@ export class OpenAIResponsesModel implements StreamedModelTurn {
     const source = await this.fetchResponse(request, true);
     for await (const event of source) {
       if (event?.type === 'error') throw new Error(event.error?.message ?? 'Codex WebSocket provider error');
-      if (event?.type === 'close') throw new Error('Codex WebSocket closed before a terminal response event.');
+      if (event?.type === 'close')
+        throw new Error('Codex WebSocket connection closed before a terminal response event.');
       yield event;
       if (
         event?.type === 'response.completed' ||
@@ -1440,7 +1441,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       if (this.#shouldForgetCodexServerHistory(error)) {
         this.#forgetCodexResponseId();
       }
-      throw (receivedRawFrame ? asAmbiguousModelOutcome(error) : undefined) ?? error;
+      throw asAmbiguousModelOutcome(error) ?? error;
     }
   }
 

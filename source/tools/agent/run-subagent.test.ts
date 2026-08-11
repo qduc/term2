@@ -24,6 +24,16 @@ it('createRunSubagentToolDefinition defines the tool correctly', () => {
   expect(tool.needsApproval({ role: 'explorer', task: 'test' }, undefined)).toBe(false);
 });
 
+it('describes explorer tasks as evidence collection rather than delegated reasoning', () => {
+  const tool = createRunSubagentToolDefinition(async () => makeResult());
+  const roles = getSubagentsRolesSection();
+
+  expect(tool.description).toContain('For explorer, request concrete evidence to collect');
+  expect(tool.description).toContain('Do not ask explorer to diagnose, recommend a fix, choose an approach');
+  expect(roles).toContain('evidence collection');
+  expect(roles).not.toContain('answering codebase questions');
+});
+
 it('requires an explicit execution mode and dispatches foreground work to the nested runner', async () => {
   const foreground = vi.fn(async () => makeResult({ finalText: 'Foreground result.' }));
   const background = vi.fn(async () => ({
@@ -149,6 +159,16 @@ it('uses a provider-compatible object schema instead of a discriminated union', 
   };
   expect(schema.anyOf).toBeUndefined();
   expect(schema.required).toContain('execution');
+});
+
+it('describes task as a bounded delegated unit rather than the full parent task', () => {
+  const tool = createRunSubagentToolDefinition(async () => makeResult());
+  const schema = z.toJSONSchema(toOpenAIStrictToolSchema(tool.parameters)) as {
+    properties?: { task?: { description?: string } };
+  };
+
+  expect(schema.properties?.task?.description).toContain('bounded delegated unit');
+  expect(schema.properties?.task?.description).not.toContain('full task description');
 });
 
 it('describes task-specific context without requesting automatically supplied context', () => {

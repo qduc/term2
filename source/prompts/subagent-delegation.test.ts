@@ -33,6 +33,16 @@ it('getSubagentDelegationAddendum includes self-service fallback when orchestrat
   expect(result.includes('just do it yourself')).toBe(true);
 });
 
+it('keeps diagnosis and recommendations with the parent when delegating evidence collection', () => {
+  const result = getSubagentDelegationAddendum({ orchestratorMode: false });
+
+  expect(result).toContain('Explorer is an evidence collector, not a reasoning delegate');
+  expect(result).toContain(
+    "Do not pass the user's entire investigation, diagnosis, review, or planning task to explorer",
+  );
+  expect(result).toContain('You retain responsibility for hypotheses, causal analysis, judgments, and recommendations');
+});
+
 it('orchestrator mode protects outcome ownership and safe coordination', () => {
   const result = getSubagentDelegationAddendum({ orchestratorMode: true });
   expect(result).toContain('Delegation transfers execution, never outcome ownership');

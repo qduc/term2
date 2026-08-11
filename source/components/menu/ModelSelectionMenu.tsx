@@ -22,6 +22,7 @@ type Props = {
   scrollOffset?: number;
   maxHeight?: number;
   canSwitchProvider?: boolean;
+  providerSwitchDisabledMessage?: string;
   credentialRevision?: number;
   settingsService: SettingsService;
 };
@@ -36,6 +37,7 @@ const ModelSelectionMenu: FC<Props> = ({
   scrollOffset = 0,
   maxHeight = 10,
   canSwitchProvider = true,
+  providerSwitchDisabledMessage = 'Provider can only be changed at the start of a new conversation (/clear to reset)',
   credentialRevision = 0,
   settingsService,
 }) => {
@@ -110,9 +112,7 @@ const ModelSelectionMenu: FC<Props> = ({
       )}
       {!canSwitchProvider && (
         <Box marginTop={0}>
-          <Text color="yellow">
-            ⚠ Provider can only be changed at the start of a new conversation (/clear to reset)
-          </Text>
+          <Text color="yellow">⚠ {providerSwitchDisabledMessage}</Text>
         </Box>
       )}
       <MenuContainer

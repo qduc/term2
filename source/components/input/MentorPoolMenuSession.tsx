@@ -3,6 +3,7 @@ import { useInputContext } from '../../context/InputContext.js';
 import { SETTING_KEYS } from '../../services/settings/settings-service.js';
 import { useMentorPoolSelection } from '../../hooks/use-mentor-pool-selection.js';
 import MentorPoolSelectionMenu from '../menu/MentorPoolSelectionMenu.js';
+import ModelSelectionMenu from '../menu/ModelSelectionMenu.js';
 import type { MenuComponentProps } from './menu-registry.js';
 import type { MenuEffect, MenuEvent, MenuFrame, MenuInteraction } from './menu-types.js';
 import { applyMenuEditorEvent } from './menu-editor.js';
@@ -15,12 +16,15 @@ export function MentorPoolMenuSession({ frame, active, controller, interactions,
     | import('../../services/settings/settings-service.js').SettingsService
     | undefined;
   if (!settingsService) throw new Error('MentorPoolMenuSession requires settingsService');
-  const pool = useMentorPoolSelection(settingsService, active);
+  const loggingService = services.loggingService as
+    | import('../../services/service-interfaces.js').ILoggingService
+    | undefined;
+  const pool = useMentorPoolSelection(settingsService, active, loggingService);
   const [applyError, setApplyError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!active) return;
-    setMenuPromptLabel(pool.phase === 'edit_model' ? 'Enter Model ID: ' : undefined);
+    setMenuPromptLabel(pool.phase === 'edit_model' ? 'Search models or enter a custom ID: ' : undefined);
     return () => setMenuPromptLabel(undefined);
   }, [active, pool.phase, setMenuPromptLabel]);
 
@@ -52,7 +56,14 @@ export function MentorPoolMenuSession({ frame, active, controller, interactions,
 
         switch (event.type) {
           case 'move':
-            if (event.direction === 'up') pool.moveUp();
+            if (editingModel) {
+              if (event.direction === 'up') pool.moveModelUp();
+              else if (event.direction === 'down') pool.moveModelDown();
+              else if (event.direction === 'home') pool.moveModelHome();
+              else if (event.direction === 'end') pool.moveModelEnd();
+              else if (event.direction === 'page-up') pool.pageModelUp();
+              else pool.pageModelDown();
+            } else if (event.direction === 'up') pool.moveUp();
             else if (event.direction === 'down') pool.moveDown();
             else if (event.direction === 'home') pool.moveHome();
             else if (event.direction === 'end') pool.moveEnd();
@@ -62,6 +73,8 @@ export function MentorPoolMenuSession({ frame, active, controller, interactions,
           case 'command':
             if (editingModel && (event.command === 'backspace' || event.command === 'delete')) {
               applyMenuEditorEvent(controller, event);
+            } else if (editingModel && event.command === 'refresh') {
+              pool.refreshModels();
             } else if (event.command === 'delete') {
               pool.requestDelete();
             } else if (event.command === 'reorder-up') {
@@ -73,7 +86,7 @@ export function MentorPoolMenuSession({ frame, active, controller, interactions,
           case 'accept':
             setApplyError(null);
             if (editingModel) {
-              pool.handleTextInputSubmit(textFromInput(event));
+              pool.selectModel(textFromInput(event));
             } else if (pool.phase === 'reorder') {
               pool.saveReorder();
             } else {
@@ -100,6 +113,22 @@ export function MentorPoolMenuSession({ frame, active, controller, interactions,
   }, [active, frame.id, interaction, interactions]);
 
   if (!active) return null;
+  if (pool.phase === 'edit_model') {
+    return (
+      <ModelSelectionMenu
+        settingsService={settingsService}
+        items={pool.filteredModels}
+        selectedIndex={pool.modelSelectedIndex}
+        query={controller.getSnapshot().editor.text}
+        provider={pool.modelProvider}
+        loading={pool.modelLoading}
+        error={pool.modelError}
+        scrollOffset={pool.modelScrollOffset}
+        canSwitchProvider={false}
+        providerSwitchDisabledMessage="Provider is resolved from this entry or mentor settings. Edit Provider to change it."
+      />
+    );
+  }
   return (
     <MentorPoolSelectionMenu
       phase={pool.phase}

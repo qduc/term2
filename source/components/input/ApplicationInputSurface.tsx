@@ -99,6 +99,7 @@ export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props)
 
   const services: MenuServices = {
     settingsService: props.settingsService,
+    loggingService: props.loggingService,
     slash,
     path,
     skills,

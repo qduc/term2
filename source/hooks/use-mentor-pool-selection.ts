@@ -3,7 +3,11 @@ import { z } from 'zod';
 import { useInputContext } from '../context/InputContext.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
 import { SETTING_KEYS } from '../services/settings/settings-service.js';
+import { filterModels, type ModelInfo } from '../services/model-service.js';
+import { ModelCatalogSession } from '../services/models/model-catalog-session.js';
+import type { ILoggingService } from '../services/service-interfaces.js';
 import { loadProviderItems, type ProviderSelectionItem } from '../providers/provider-service.js';
+import { resolveProviderCredentials } from '../utils/ai/provider-credentials.js';
 import { useSelection } from './use-selection.js';
 import type { MenuEffect } from '../components/input/menu-types.js';
 
@@ -40,10 +44,56 @@ const mentorPoolEntrySchema = z.object({
 });
 const mentorPoolSchema = z.array(mentorPoolEntrySchema).max(8, 'Mentor pool cannot contain more than 8 entries');
 
+const noOpLoggingService: ILoggingService = {
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+  debug: () => {},
+  security: () => {},
+  setCorrelationId: () => {},
+  getCorrelationId: () => undefined,
+  clearCorrelationId: () => {},
+};
+
 const cloneEntries = (value: unknown): MentorPoolEntry[] => {
   const parsed = mentorPoolSchema.safeParse(value);
   return parsed.success ? parsed.data.map((entry) => ({ ...entry })) : [];
 };
+
+export function mergeMentorPoolModels({
+  catalogModels,
+  entries,
+  provider,
+  currentModel,
+}: {
+  catalogModels: readonly ModelInfo[];
+  entries: readonly MentorPoolEntry[];
+  provider: string;
+  currentModel: string;
+}): ModelInfo[] {
+  const catalogIds = new Set(catalogModels.map((model) => model.id));
+  const suggestedIds = new Set<string>();
+  const suggestions: ModelInfo[] = [];
+  const addSuggestion = (id: string, name: string) => {
+    if (!id || catalogIds.has(id) || suggestedIds.has(id)) return;
+    suggestedIds.add(id);
+    suggestions.push({ id, name, provider });
+  };
+
+  addSuggestion(currentModel, 'Current model (not in catalog)');
+  for (const entry of entries) {
+    if (entry.provider === undefined || entry.provider === provider) addSuggestion(entry.model, 'In mentor pool');
+  }
+  return [...suggestions, ...catalogModels];
+}
+
+export function resolveMentorPoolModelSelection(
+  models: readonly ModelInfo[],
+  selectedIndex: number,
+  typedModel: string,
+): string {
+  return models[selectedIndex]?.id ?? typedModel.trim();
+}
 
 export function formatMentorPoolEntry(entry: MentorPoolEntry): string {
   const provider = entry.provider ? ` @ ${entry.provider}` : '';
@@ -51,8 +101,12 @@ export function formatMentorPoolEntry(entry: MentorPoolEntry): string {
   return `${entry.model}${provider}${effort}`;
 }
 
-export function useMentorPoolSelection(settingsService: SettingsService, active: boolean) {
-  const { setInput, replaceInput } = useInputContext();
+export function useMentorPoolSelection(
+  settingsService: SettingsService,
+  active: boolean,
+  loggingService?: ILoggingService,
+) {
+  const { input, setInput, replaceInput } = useInputContext();
   const [phase, setPhase] = useState<MentorPoolPhase>('list');
   const [entries, setEntries] = useState<MentorPoolEntry[]>([]);
   const [draft, setDraft] = useState<MentorPoolDraft | null>(null);
@@ -63,8 +117,33 @@ export function useMentorPoolSelection(settingsService: SettingsService, active:
   const [discardFromPhase, setDiscardFromPhase] = useState<MentorPoolPhase | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const catalogSession = useMemo(
+    () => new ModelCatalogSession({ settingsService, loggingService: loggingService ?? noOpLoggingService }),
+    [loggingService, settingsService],
+  );
+  const [catalogModels, setCatalogModels] = useState<ModelInfo[]>([]);
+  const [modelLoading, setModelLoading] = useState(false);
+  const [modelError, setModelError] = useState<string | null>(null);
+  const [modelSelectedIndex, setModelSelectedIndex] = useState(0);
+  const [modelScrollOffset, setModelScrollOffset] = useState(0);
+  const [modelRefreshKey, setModelRefreshKey] = useState(0);
   const settingsServiceRef = useRef(settingsService);
   settingsServiceRef.current = settingsService;
+  const modelProvider =
+    draft?.provider ??
+    settingsService.get(SETTING_KEYS.AGENT_MENTOR_PROVIDER) ??
+    settingsService.get(SETTING_KEYS.AGENT_PROVIDER);
+  const modelItems = useMemo(
+    () =>
+      mergeMentorPoolModels({
+        catalogModels,
+        entries,
+        provider: modelProvider,
+        currentModel: draft?.model ?? '',
+      }),
+    [catalogModels, draft?.model, entries, modelProvider],
+  );
+  const filteredModels = useMemo(() => filterModels(modelItems, input), [input, modelItems]);
 
   const activeItems = useMemo<MentorPoolMenuItem[]>(() => {
     if (phase === 'list') {
@@ -137,6 +216,63 @@ export function useMentorPoolSelection(settingsService: SettingsService, active:
     setErrorMessage(null);
     setFieldErrors({});
   }, [active]);
+
+  useEffect(() => {
+    if (!active || phase !== 'edit_model') return;
+    /* eslint-disable react-hooks/set-state-in-effect */
+    const credentials = resolveProviderCredentials(settingsService, modelProvider);
+    const cachedModels = catalogSession.getCached(modelProvider);
+    setCatalogModels(cachedModels ?? []);
+    setModelSelectedIndex(0);
+    setModelScrollOffset(0);
+    setModelError(null);
+
+    if (credentials.required && !credentials.configured) {
+      setModelLoading(false);
+      return;
+    }
+
+    catalogSession.begin();
+    let disposed = false;
+    const load = async () => {
+      setModelLoading(!cachedModels);
+      try {
+        const result = await catalogSession.load(modelProvider);
+        if (disposed || result.kind === 'stale') return;
+        setCatalogModels(result.models);
+      } catch (error) {
+        if (!disposed) setModelError(error instanceof Error ? error.message : String(error));
+      } finally {
+        if (!disposed) setModelLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      disposed = true;
+    };
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [active, catalogSession, modelProvider, modelRefreshKey, phase, settingsService]);
+
+  useEffect(() => {
+    // Changing the search text starts a new list navigation session.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setModelSelectedIndex(0);
+    setModelScrollOffset(0);
+  }, [input]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setModelSelectedIndex((index) => Math.min(index, Math.max(0, filteredModels.length - 1)));
+  }, [filteredModels.length]);
+
+  useEffect(() => {
+    if (modelSelectedIndex < modelScrollOffset) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setModelScrollOffset(modelSelectedIndex);
+    } else if (modelSelectedIndex >= modelScrollOffset + 10) {
+      setModelScrollOffset(modelSelectedIndex - 9);
+    }
+  }, [modelScrollOffset, modelSelectedIndex]);
 
   useEffect(() => {
     selection.setSelectedIndex(0);
@@ -292,7 +428,7 @@ export function useMentorPoolSelection(settingsService: SettingsService, active:
     selection.setSelectedIndex(1);
   }, [activeItems, phase, selection.selectedIndex, selection.setSelectedIndex]);
 
-  const handleTextInputSubmit = useCallback(
+  const saveModel = useCallback(
     (value: string) => {
       if (phase !== 'edit_model' || !draft) return false;
       const model = value.trim();
@@ -312,6 +448,38 @@ export function useMentorPoolSelection(settingsService: SettingsService, active:
     },
     [draft, phase, setInput, selection.setSelectedIndex],
   );
+
+  const selectModel = useCallback(
+    (typedValue: string) => saveModel(resolveMentorPoolModelSelection(filteredModels, modelSelectedIndex, typedValue)),
+    [filteredModels, modelSelectedIndex, saveModel],
+  );
+
+  const moveModelUp = useCallback(() => {
+    setModelSelectedIndex((index) =>
+      filteredModels.length === 0 ? 0 : index > 0 ? index - 1 : filteredModels.length - 1,
+    );
+  }, [filteredModels.length]);
+
+  const moveModelDown = useCallback(() => {
+    setModelSelectedIndex((index) =>
+      filteredModels.length === 0 ? 0 : index < filteredModels.length - 1 ? index + 1 : 0,
+    );
+  }, [filteredModels.length]);
+
+  const moveModelHome = useCallback(() => setModelSelectedIndex(0), []);
+  const moveModelEnd = useCallback(
+    () => setModelSelectedIndex(Math.max(0, filteredModels.length - 1)),
+    [filteredModels.length],
+  );
+  const pageModelUp = useCallback(() => setModelSelectedIndex((index) => Math.max(0, index - 10)), []);
+  const pageModelDown = useCallback(
+    () => setModelSelectedIndex((index) => Math.min(Math.max(0, filteredModels.length - 1), index + 10)),
+    [filteredModels.length],
+  );
+  const refreshModels = useCallback(() => {
+    catalogSession.refresh(modelProvider);
+    setModelRefreshKey((key) => key + 1);
+  }, [catalogSession, modelProvider]);
 
   const movePoolUp = useCallback(() => {
     if (phase !== 'reorder' || selection.selectedIndex <= 0) return;
@@ -410,10 +578,23 @@ export function useMentorPoolSelection(settingsService: SettingsService, active:
     getSelectedItem: selection.getSelectedItem,
     errorMessage,
     fieldErrors,
+    modelProvider,
+    filteredModels,
+    modelLoading,
+    modelError,
+    modelSelectedIndex,
+    modelScrollOffset,
     selectItem,
     goBack,
     requestDelete,
-    handleTextInputSubmit,
+    selectModel,
+    moveModelUp,
+    moveModelDown,
+    moveModelHome,
+    moveModelEnd,
+    pageModelUp,
+    pageModelDown,
+    refreshModels,
     moveUp: selection.moveUp,
     moveDown: selection.moveDown,
     moveHome: selection.moveHome,

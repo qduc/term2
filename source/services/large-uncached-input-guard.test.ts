@@ -206,13 +206,12 @@ it('warning key is stable for the same pending input and changes when input chan
 });
 
 // The guard runs against the full outgoing history, so every serialization of
-// the payload costs time proportional to the conversation. `warningKey` only
-// deduplicates repeated warnings; hashing it on an allow serialized the whole
-// history a second time to produce a value no caller reads.
-it('serializes the payload once per inspect on the allow path', () => {
+// the payload costs time proportional to the conversation. When no risk factors
+// apply, the decision is always allow regardless of size — skip the serialize.
+it('does not serialize the payload when no warning reasons apply', () => {
   let serializations = 0;
   const countingInput = {
-    history: 'x'.repeat(1_000),
+    history: 'x'.repeat(DEFAULT_LARGE_UNCACHED_INPUT_GUARD_CONFIG.largePromptTokenThreshold * 4),
     toJSON() {
       serializations++;
       return this.history;
@@ -231,13 +230,24 @@ it('serializes the payload once per inspect on the allow path', () => {
 
   expect(decision.action).toBe('allow');
   expect(decision.warningKey).toBe('');
-  expect(serializations).toBe(1);
+  expect(serializations).toBe(0);
 });
 
-it('reports the size estimate on an allow even though it skips the warning key', () => {
+// When risk factors fire, size still gates the warning. Below-threshold inputs
+// serialize once for the estimate and never hash a warning key.
+it('serializes the payload once on a below-threshold allow with risk factors', () => {
+  let serializations = 0;
+  const countingInput = {
+    history: 'x'.repeat(1_000),
+    toJSON() {
+      serializations++;
+      return this.history;
+    },
+  };
+
   const guard = new LargeUncachedInputGuard();
-  const decision = guard.inspect({
-    input: largeInput(),
+  guard.recordSuccessfulInput({
+    input: 'small',
     now: 1_000,
     provider: 'openai',
     model: 'gpt-5',
@@ -245,11 +255,98 @@ it('reports the size estimate on an allow even though it skips the warning key',
     mode: 'standard',
   });
 
+  const decision = guard.inspect({
+    input: countingInput,
+    now: 2_000,
+    provider: 'openrouter',
+    model: 'gpt-5',
+    reasoningEffort: 'medium',
+    mode: 'standard',
+  });
+
   expect(decision.action).toBe('allow');
-  expect(decision.reasons).toEqual([]);
-  expect(decision.estimatedTokens).toBeGreaterThanOrEqual(
-    DEFAULT_LARGE_UNCACHED_INPUT_GUARD_CONFIG.largePromptTokenThreshold,
-  );
+  expect(decision.warningKey).toBe('');
+  expect(serializations).toBe(1);
+});
+
+// The warn path needs both a size estimate and a warning key. Reuse the same
+// serialized string so a large history is not stringified twice.
+it('serializes the payload once on the warn path', () => {
+  let serializations = 0;
+  const countingInput = {
+    history: largeInput(),
+    toJSON() {
+      serializations++;
+      return this.history;
+    },
+  };
+
+  const guard = new LargeUncachedInputGuard();
+  guard.recordSuccessfulInput({
+    input: 'small',
+    now: 1_000,
+    provider: 'openai',
+    model: 'gpt-5',
+    reasoningEffort: 'medium',
+    mode: 'standard',
+  });
+
+  const decision = guard.inspect({
+    input: countingInput,
+    now: 2_000,
+    provider: 'openrouter',
+    model: 'gpt-5',
+    reasoningEffort: 'medium',
+    mode: 'standard',
+  });
+
+  expect(decision.action).toBe('warn');
+  expect(decision.warningKey).not.toBe('');
+  expect(serializations).toBe(1);
+});
+
+it('mightWarn is false when session state cannot produce a warning', () => {
+  const guard = new LargeUncachedInputGuard();
+  guard.recordSuccessfulInput({
+    input: 'small',
+    now: 1_000,
+    provider: 'openai',
+    model: 'gpt-5',
+    reasoningEffort: 'medium',
+    mode: 'standard',
+  });
+
+  expect(
+    guard.mightWarn({
+      now: 2_000,
+      provider: 'openai',
+      model: 'gpt-5',
+      reasoningEffort: 'medium',
+      mode: 'standard',
+    }),
+  ).toBe(false);
+});
+
+it('mightWarn is true after idle timeout', () => {
+  const guard = new LargeUncachedInputGuard();
+  guard.recordSuccessfulInput({
+    input: 'small',
+    now: 1_000,
+    provider: 'openai',
+    model: 'gpt-5',
+    reasoningEffort: 'medium',
+    mode: 'standard',
+  });
+
+  expect(
+    guard.mightWarn({
+      now: 1_000 + DEFAULT_LARGE_UNCACHED_INPUT_GUARD_CONFIG.idleMs + 1,
+      provider: 'openai',
+      model: 'gpt-5',
+      reasoningEffort: 'medium',
+      mode: 'standard',
+    }),
+  ).toBe(true);
 });
 
 it('still produces a stable warning key on the warn path', () => {
@@ -274,4 +371,42 @@ it('still produces a stable warning key on the warn path', () => {
 
   expect(decision.action).toBe('warn');
   expect(decision.warningKey).not.toBe('');
+});
+
+// Composer previews pass a precomputed size (cached finalized history + draft)
+// so inspect never stringifies the full transcript on each keystroke pause.
+it('accepts precomputed estimatedBytes without serializing input', () => {
+  let serializations = 0;
+  const countingInput = {
+    history: largeInput(),
+    toJSON() {
+      serializations++;
+      return this.history;
+    },
+  };
+
+  const guard = new LargeUncachedInputGuard();
+  guard.recordSuccessfulInput({
+    input: 'small',
+    now: 1_000,
+    provider: 'openai',
+    model: 'gpt-5',
+    reasoningEffort: 'medium',
+    mode: 'standard',
+  });
+
+  const decision = guard.inspect({
+    input: countingInput,
+    estimatedBytes: DEFAULT_LARGE_UNCACHED_INPUT_GUARD_CONFIG.largePromptTokenThreshold * 4,
+    contentKey: 'history:1\ndraft',
+    now: 2_000,
+    provider: 'openrouter',
+    model: 'gpt-5',
+    reasoningEffort: 'medium',
+    mode: 'standard',
+  });
+
+  expect(decision.action).toBe('warn');
+  expect(decision.estimatedTokens).toBe(DEFAULT_LARGE_UNCACHED_INPUT_GUARD_CONFIG.largePromptTokenThreshold);
+  expect(serializations).toBe(0);
 });

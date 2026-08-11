@@ -5,7 +5,11 @@ import type { SessionToolTracker } from './session-tool-tracker.js';
 import type { ProviderContinuity } from '../provider-continuity.js';
 import type { ProviderHistorySnapshot } from '../conversation/conversation-store.js';
 import { InputSurgeGuard, type InputSurgeInputKind, type InputSurgeDecision } from '../input-surge-guard.js';
-import { LargeUncachedInputGuard, type LargeUncachedInputDecision } from '../large-uncached-input-guard.js';
+import {
+  getSerializedInputBytes,
+  LargeUncachedInputGuard,
+  type LargeUncachedInputDecision,
+} from '../large-uncached-input-guard.js';
 import { getProvider } from '../../providers/index.js';
 import { getMethod } from '../interruption-info.js';
 import { normalizeUserTurn, type UserTurn } from '../../types/user-turn.js';
@@ -20,12 +24,32 @@ const supportsConversationChaining = (providerId: string): boolean => {
   return providerDef?.capabilities?.supportsConversationChaining ?? false;
 };
 
+/**
+ * Byte size of `JSON.stringify([...finalizedHistory, draftItem])` without
+ * re-serializing the finalized prefix. Finalized messages never change while
+ * the user types, so callers cache `historyBytes`/`historyLength` once per
+ * history identity and only re-measure the draft.
+ */
+export const combineHistoryAndDraftBytes = (
+  historyBytes: number,
+  historyLength: number,
+  draftItemBytes: number,
+): number => (historyLength === 0 ? draftItemBytes + 2 : historyBytes + draftItemBytes + 1);
+
 export type SessionInputPlan = {
   streamInput: ProviderInput;
   inputSurgeKind: 'delta' | 'full_history';
   effectiveTurn: UserTurn;
   /** Stage 0 observation only; never used to select or alter wire input. */
   providerHistorySnapshot?: ProviderHistorySnapshot;
+};
+
+/** Cached size of the finalized (non-draft) portion of the next outgoing input. */
+type OutgoingSizeCache = {
+  key: string;
+  useChaining: boolean;
+  finalizedHistoryBytes: number;
+  finalizedHistoryLength: number;
 };
 
 /**
@@ -46,8 +70,11 @@ export class SessionInputPlanner {
   #toolTracker: SessionToolTracker;
   #providerContinuity: ProviderContinuity;
   #getProviderHistorySnapshot?: () => ProviderHistorySnapshot;
+  /** Cheap history identity — must not clone the transcript. */
+  #getHistoryIdentity?: () => string;
   #inputSurgeGuard = new InputSurgeGuard();
   #largeUncachedInputGuard = new LargeUncachedInputGuard();
+  #outgoingSizeCache: OutgoingSizeCache | null = null;
 
   constructor(deps: {
     settingsService?: ISettingsService;
@@ -55,12 +82,14 @@ export class SessionInputPlanner {
     toolTracker: SessionToolTracker;
     providerContinuity: ProviderContinuity;
     getProviderHistorySnapshot?: () => ProviderHistorySnapshot;
+    getHistoryIdentity?: () => string;
   }) {
     this.#settingsService = deps.settingsService;
     this.#agentClient = deps.agentClient;
     this.#toolTracker = deps.toolTracker;
     this.#providerContinuity = deps.providerContinuity;
     this.#getProviderHistorySnapshot = deps.getProviderHistorySnapshot;
+    this.#getHistoryIdentity = deps.getHistoryIdentity;
   }
 
   /**
@@ -106,6 +135,7 @@ export class SessionInputPlanner {
   reset(): void {
     this.#inputSurgeGuard.reset();
     this.#largeUncachedInputGuard.reset();
+    this.#outgoingSizeCache = null;
   }
 
   /**
@@ -197,28 +227,132 @@ export class SessionInputPlanner {
    * Preview what the large-uncached-input guard would decide for the given input.
    *
    * Does not mutate any state or consume the pending mode notice.
+   *
+   * Cost model while typing:
+   * 1. Session risk check (`mightWarn`) — free; skips everything when a warn
+   *    is impossible (active chat, same config).
+   * 2. Finalized history is measured once per history identity and cached —
+   *    finalized messages never change while the user types.
+   * 3. Each preview only re-sizes the draft turn and combines it with the
+   *    cached history bytes (no full-history `JSON.stringify`).
    */
   previewLargeUncachedInput(
     input: string | UserTurn,
     now?: number,
     context?: { pendingModeNotice?: string | null },
   ): LargeUncachedInputDecision {
-    const turn = normalizeUserTurn(input);
-    const { streamInput } = this.build(turn, {
-      includeTurn: true,
-      pendingModeNotice: context?.pendingModeNotice ?? null,
-    });
-    return this.#largeUncachedInputGuard.inspect({
-      input: streamInput,
-      now: now ?? Date.now(),
+    const at = now ?? Date.now();
+    const riskContext = {
+      now: at,
       provider: this.#getProviderForGuard(),
       model: this.#getModelForGuard(),
       reasoningEffort: this.#getReasoningEffortForGuard(),
       mode: this.#getTrafficMode(),
+    };
+    if (!this.#largeUncachedInputGuard.mightWarn(riskContext)) {
+      return {
+        action: 'allow',
+        warningKey: '',
+        reasons: [],
+        estimatedTokens: 0,
+        estimatedBytes: 0,
+      };
+    }
+
+    const turn = normalizeUserTurn(input);
+    const effectiveTurn = this.#turnWithModeNotice(turn, context?.pendingModeNotice ?? null);
+    const { estimatedBytes, contentKey } = this.#estimateOutgoingInputSize(effectiveTurn);
+    return this.#largeUncachedInputGuard.inspect({
+      estimatedBytes,
+      contentKey,
+      ...riskContext,
     });
   }
 
   // ── Private helpers ──────────────────────────────────────────────
+
+  /**
+   * Size the next outgoing payload using a cache of the finalized history.
+   * Only the draft turn is re-serialized on cache hits.
+   */
+  #estimateOutgoingInputSize(effectiveTurn: UserTurn): { estimatedBytes: number; contentKey: string } {
+    const cache = this.#getOutgoingSizeCache();
+
+    if (cache.useChaining) {
+      if (effectiveTurn.images?.length) {
+        const item = this.#makeUserInputItem(effectiveTurn);
+        // Chained image turns send `[userItem]`, not the bare text.
+        const estimatedBytes = getSerializedInputBytes([item]);
+        return { estimatedBytes, contentKey: `${cache.key}\nimg:${estimatedBytes}` };
+      }
+      const text = effectiveTurn.text ?? '';
+      const estimatedBytes = getSerializedInputBytes(text);
+      return { estimatedBytes, contentKey: `${cache.key}\n${text}` };
+    }
+
+    const draftItem = this.#makeUserInputItem(effectiveTurn);
+    const draftItemBytes = getSerializedInputBytes(draftItem);
+    const estimatedBytes = combineHistoryAndDraftBytes(
+      cache.finalizedHistoryBytes,
+      cache.finalizedHistoryLength,
+      draftItemBytes,
+    );
+    return {
+      estimatedBytes,
+      contentKey: `${cache.key}\n${effectiveTurn.text ?? ''}\n${draftItemBytes}`,
+    };
+  }
+
+  #getOutgoingSizeCache(): OutgoingSizeCache {
+    const key = this.#outgoingSizeCacheKey();
+    if (this.#outgoingSizeCache?.key === key) {
+      return this.#outgoingSizeCache;
+    }
+
+    const provider = this.#getProviderForGuard() ?? 'openai';
+    const dynamicSupportsChaining = getMethod<[], boolean>(this.#agentClient, 'supportsConversationChaining');
+    const supportsChaining = dynamicSupportsChaining
+      ? dynamicSupportsChaining.call(this.#agentClient)
+      : supportsConversationChaining(provider);
+    const history = this.#toolTracker.getReconciledHistory();
+    // The draft user turn is never a function_call, so malformed-arg detection
+    // on history alone matches build(includeTurn: true).
+    const hasMalformedArgs = hasMalformedToolCallArguments(history);
+    const useChaining =
+      supportsChaining && !hasMalformedArgs && this.#providerContinuity.isChainingAvailable(history.length + 1);
+
+    if (useChaining) {
+      this.#outgoingSizeCache = {
+        key,
+        useChaining: true,
+        finalizedHistoryBytes: 0,
+        finalizedHistoryLength: 0,
+      };
+      return this.#outgoingSizeCache;
+    }
+
+    const finalizedHistory = sanitizeMalformedToolCallArguments(
+      dropUnpairedFunctionCalls(history),
+    ) as ProviderInputItem[];
+    this.#outgoingSizeCache = {
+      key,
+      useChaining: false,
+      finalizedHistoryBytes: getSerializedInputBytes(finalizedHistory),
+      finalizedHistoryLength: finalizedHistory.length,
+    };
+    return this.#outgoingSizeCache;
+  }
+
+  #outgoingSizeCacheKey(): string {
+    const historyIdentity =
+      this.#getHistoryIdentity?.() ?? this.#getProviderHistorySnapshot?.()?.identity ?? 'unknown-history';
+    // Continuity can flip full-history vs delta without a history revision.
+    const continuity = `${this.#providerContinuity.previousResponseId ?? ''}:${
+      this.#providerContinuity.chainingBroken ? 1 : 0
+    }`;
+    const provider = this.#getProviderForGuard() ?? '';
+    return `${historyIdentity}|${continuity}|${provider}`;
+  }
 
   #getTrafficMode(): string {
     if (!this.#settingsService) return 'standard';

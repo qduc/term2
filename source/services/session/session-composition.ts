@@ -407,6 +407,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     toolTracker,
     providerContinuity,
     getProviderHistorySnapshot: () => conversationStore.getProviderHistorySnapshot(),
+    getHistoryIdentity: () => conversationStore.getProviderHistoryIdentity().identity,
   });
 
   const journal = new AssistantTurnJournal({

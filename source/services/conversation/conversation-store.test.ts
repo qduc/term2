@@ -122,6 +122,20 @@ it('provides an immutable full provider-history snapshot with stable identity un
   expect(first.history).toEqual([{ role: 'user', type: 'message', content: 'A' }]);
 });
 
+it('exposes a cheap history identity that matches the full snapshot without cloning history', () => {
+  const store = new ConversationStore();
+  store.addUserMessage('A');
+
+  const identity = store.getProviderHistoryIdentity();
+  const snapshot = store.getProviderHistorySnapshot();
+  expect(identity.identity).toBe(snapshot.identity);
+  expect(identity.revision).toBe(snapshot.revision);
+  expect(identity.origin).toBe(snapshot.origin);
+
+  store.addUserMessage('B');
+  expect(store.getProviderHistoryIdentity().identity).not.toBe(identity.identity);
+});
+
 it('gives independent authoritative histories distinct stable snapshot identities', () => {
   const firstStore = new ConversationStore();
   const secondStore = new ConversationStore();

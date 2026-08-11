@@ -267,7 +267,7 @@ it('previewLargeUncachedInput() does not mutate history or consume pending mode 
   expect(stateFacade.exportState()).toEqual(before);
 });
 
-it('previewLargeUncachedInput() estimates from outgoing input instead of accepting accumulated session usage overrides', () => {
+it('previewLargeUncachedInput() skips the expensive estimate when no warning is possible', () => {
   const mockClient = createMockAgentClient({
     getProvider() {
       return 'codex';
@@ -285,11 +285,13 @@ it('previewLargeUncachedInput() estimates from outgoing input instead of accepti
   });
   const { stateFacade } = bundle;
 
+  // Fresh session, no resume/idle/undo risk: mightWarn is false, so the preview
+  // returns allow without building or serializing the outgoing history.
   const large = 'x'.repeat(64_000 * 4);
   const decision = stateFacade.previewLargeUncachedInput(large, 1_000);
 
   expect(decision.action).toBe('allow');
-  expect(decision.estimatedTokens >= 64_000).toBe(true);
+  expect(decision.estimatedTokens).toBe(0);
 });
 
 it('sendMessage() records successful large guard state after provider request completion', async () => {

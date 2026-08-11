@@ -163,16 +163,29 @@ export class ConversationStore {
   }
 
   /**
+   * Cheap revision/identity for the provider-facing transcript. Does not clone
+   * history — use this when only the cache key / prefix anchor is needed.
+   */
+  getProviderHistoryIdentity(): { revision: number; identity: string; origin: string } {
+    const origin = `history:${this.#historyIdentity}`;
+    return {
+      revision: this.#historyRevision,
+      identity: `${origin}:${this.#historyRevision}`,
+      origin,
+    };
+  }
+
+  /**
    * Returns a read-only copy of the complete provider-facing transcript. The
    * revision/identity pair is the prefix anchor for provider-private
    * continuation instrumentation; callers cannot mutate the store through it.
    */
   getProviderHistorySnapshot(): ProviderHistorySnapshot {
+    const { revision, identity, origin } = this.getProviderHistoryIdentity();
     const history = this.#freezeHistory(this.#cloneSnapshotHistory(this.#history));
-    const origin = `history:${this.#historyIdentity}`;
     return Object.freeze({
-      revision: this.#historyRevision,
-      identity: `${origin}:${this.#historyRevision}`,
+      revision,
+      identity,
       origin,
       history,
     });

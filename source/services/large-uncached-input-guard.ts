@@ -17,13 +17,30 @@ export type LargeUncachedInputWarningReason =
   | 'undo_rewind';
 
 export interface LargeUncachedInputContext {
-  input: unknown;
+  /**
+   * Outgoing provider input. Optional when `estimatedBytes` is supplied — the
+   * composer path sizes finalized history once and only re-estimates the draft.
+   */
+  input?: unknown;
+  /**
+   * Precomputed payload size. When set, `inspect` skips `JSON.stringify` of
+   * `input` (which is O(conversation) for full-history sends).
+   */
+  estimatedBytes?: number;
+  /**
+   * Stable material for `warningKey` when sizing without serializing `input`
+   * (e.g. history identity + draft text).
+   */
+  contentKey?: string;
   now: number;
   provider?: string | null;
   model?: string | null;
   reasoningEffort?: string | null;
   mode?: string | null;
 }
+
+/** Context fields needed to know whether a warning *could* fire, without the payload. */
+export type LargeUncachedInputRiskContext = Omit<LargeUncachedInputContext, 'input'>;
 
 export interface LargeUncachedInputDecision {
   action: 'allow' | 'warn';
@@ -47,28 +64,27 @@ export const DEFAULT_LARGE_UNCACHED_INPUT_GUARD_CONFIG: LargeUncachedInputGuardC
   idleMs: 5 * 60 * 1_000,
 };
 
-export const getSerializedInputBytes = (input: unknown): number => {
+const serializeInput = (input: unknown): string => {
   try {
-    const serialized = JSON.stringify(input);
-    return Buffer.byteLength(serialized ?? String(input));
+    return JSON.stringify(input) ?? String(input);
   } catch {
-    return Buffer.byteLength(String(input));
+    return String(input);
   }
+};
+
+export const getSerializedInputBytes = (input: unknown): number => {
+  return Buffer.byteLength(serializeInput(input));
 };
 
 const estimateTokens = (bytes: number): number => Math.ceil(bytes / 4);
 
 const warningKeyFor = (
-  input: unknown,
+  serializedInput: string,
   reasons: LargeUncachedInputWarningReason[],
   context: Pick<LargeUncachedInputContext, 'provider' | 'model' | 'reasoningEffort' | 'mode'>,
 ): string => {
   const hash = crypto.createHash('sha256');
-  try {
-    hash.update(JSON.stringify(input) ?? String(input));
-  } catch {
-    hash.update(String(input));
-  }
+  hash.update(serializedInput);
   hash.update('\n');
   hash.update([...reasons].sort().join(','));
   hash.update('\n');
@@ -87,6 +103,14 @@ const isStandardPlanTransition = (fromMode?: string | null, toMode?: string | nu
   const pair = new Set([fromMode ?? 'standard', toMode ?? 'standard']);
   return pair.size <= 2 && pair.has('standard') && pair.has('plan');
 };
+
+const allowDecision = (estimatedTokens = 0, estimatedBytes = 0): LargeUncachedInputDecision => ({
+  action: 'allow',
+  warningKey: '',
+  reasons: [],
+  estimatedTokens,
+  estimatedBytes,
+});
 
 export class LargeUncachedInputGuard {
   #config: LargeUncachedInputGuardConfig;
@@ -114,24 +138,75 @@ export class LargeUncachedInputGuard {
     this.#rewoundSinceSuccess = true;
   }
 
-  inspect(context: LargeUncachedInputContext): LargeUncachedInputDecision {
-    const estimatedBytes = getSerializedInputBytes(context.input);
-    const estimatedTokens = estimateTokens(estimatedBytes);
-    const tokenCount = estimatedTokens;
-    const reasons: LargeUncachedInputWarningReason[] = [];
+  /**
+   * True when session state alone could produce a warning (idle, resume, undo,
+   * provider/model/mode change). Callers that only care about the warn action
+   * can skip building and serializing the outgoing payload when this is false.
+   *
+   * Size is not considered here — a large payload with no risk factors still
+   * allows, so a false result is definitive.
+   */
+  mightWarn(context: LargeUncachedInputRiskContext): boolean {
+    if (!this.#config.enabled) return false;
+    return this.#collectReasons(context).length > 0;
+  }
 
-    if (!this.#config.enabled || tokenCount < this.#config.largePromptTokenThreshold) {
-      // `warningKey` deduplicates repeated *warnings*; nothing reads it on an
-      // allow. Hashing here would serialize the whole outgoing history a second
-      // time for a value that is discarded.
+  inspect(context: LargeUncachedInputContext): LargeUncachedInputDecision {
+    if (!this.#config.enabled) {
+      return allowDecision();
+    }
+
+    // Reasons do not depend on payload size. Collect them first so the common
+    // "actively chatting, same config" path never serializes the history.
+    const reasons = this.#collectReasons(context);
+    if (reasons.length === 0) {
+      return allowDecision();
+    }
+
+    const { estimatedBytes, keyMaterial } = this.#resolveSize(context);
+    const estimatedTokens = estimateTokens(estimatedBytes);
+
+    if (estimatedTokens < this.#config.largePromptTokenThreshold) {
+      return allowDecision(estimatedTokens, estimatedBytes);
+    }
+
+    return {
+      action: 'warn',
+      warningKey: warningKeyFor(keyMaterial, reasons, context),
+      reasons,
+      estimatedTokens,
+      estimatedBytes,
+    };
+  }
+
+  #resolveSize(context: LargeUncachedInputContext): { estimatedBytes: number; keyMaterial: string } {
+    if (typeof context.estimatedBytes === 'number' && Number.isFinite(context.estimatedBytes)) {
       return {
-        action: 'allow',
-        warningKey: '',
-        reasons,
-        estimatedTokens: tokenCount,
-        estimatedBytes,
+        estimatedBytes: Math.max(0, context.estimatedBytes),
+        keyMaterial: context.contentKey ?? String(context.estimatedBytes),
       };
     }
+    const serialized = serializeInput(context.input);
+    return {
+      estimatedBytes: Buffer.byteLength(serialized),
+      keyMaterial: serialized,
+    };
+  }
+
+  recordSuccessfulInput(context: LargeUncachedInputContext): void {
+    this.#lastSuccessful = {
+      provider: context.provider,
+      model: context.model,
+      reasoningEffort: context.reasoningEffort,
+      mode: context.mode,
+      completedAt: context.now,
+    };
+    this.#resumedUpdatedAtMs = undefined;
+    this.#rewoundSinceSuccess = false;
+  }
+
+  #collectReasons(context: LargeUncachedInputRiskContext): LargeUncachedInputWarningReason[] {
+    const reasons: LargeUncachedInputWarningReason[] = [];
 
     if (this.#lastSuccessful) {
       if (this.#lastSuccessful.provider && context.provider && this.#lastSuccessful.provider !== context.provider) {
@@ -170,28 +245,6 @@ export class LargeUncachedInputGuard {
       reasons.push('undo_rewind');
     }
 
-    if (reasons.length === 0) {
-      return { action: 'allow', warningKey: '', reasons, estimatedTokens: tokenCount, estimatedBytes };
-    }
-
-    return {
-      action: 'warn',
-      warningKey: warningKeyFor(context.input, reasons, context),
-      reasons,
-      estimatedTokens: tokenCount,
-      estimatedBytes,
-    };
-  }
-
-  recordSuccessfulInput(context: LargeUncachedInputContext): void {
-    this.#lastSuccessful = {
-      provider: context.provider,
-      model: context.model,
-      reasoningEffort: context.reasoningEffort,
-      mode: context.mode,
-      completedAt: context.now,
-    };
-    this.#resumedUpdatedAtMs = undefined;
-    this.#rewoundSinceSuccess = false;
+    return reasons;
   }
 }

@@ -18,6 +18,7 @@ import type { LoggingService } from './services/logging/logging-service.js';
 import { ISSHService } from './services/service-interfaces.js';
 import { useSetting } from './hooks/use-setting.js';
 import { useDebouncedValue } from './hooks/use-debounced-value.js';
+import type { LargeUncachedInputDecision } from './services/large-uncached-input-guard.js';
 import { parseInput } from './utils/input-parser.js';
 import { ConversationConfigurationService } from './services/runtime-setting-router.js';
 import { useShellMode } from './hooks/use-shell-mode.js';
@@ -333,19 +334,27 @@ const App: FC<AppProps> = ({
   // The composer owns this live preview because it changes as the user types;
   // admitted turns and confirmation state belong to ConversationAdmissionWorkflow.
   //
-  // The preview costs a full outgoing-history build plus a serialization of it,
-  // so it scales with conversation length. Running it per keystroke blocked the
-  // event loop between the key press and the repaint, which read as typing lag
-  // in long sessions. Debounce it: the advisory only has to be right once the
-  // user pauses, and the authoritative check still runs at submit time in
-  // ConversationAdmissionWorkflow. An emptied composer flushes immediately so a
-  // stale warning never outlives the text it described.
+  // The preview can cost a full outgoing-history build plus a serialization of
+  // it (when a warning is actually possible), so it scales with conversation
+  // length. Keep it off the keystroke path: debounce the composer text, then
+  // evaluate in an effect so the work never sits inside a render. The
+  // authoritative check still runs at submit time in ConversationAdmissionWorkflow.
+  // An emptied composer flushes immediately so a stale warning never outlives
+  // the text it described.
   const previewInput = useDebouncedValue(input, LARGE_UNCACHED_PREVIEW_DEBOUNCE_MS, (value) => value === '');
-  const largeUncachedWarning = useMemo(() => {
-    if (!previewInput || mode !== 'text' || previewInput.startsWith('/')) return null;
+  const [largeUncachedPreview, setLargeUncachedPreview] = useState<LargeUncachedInputDecision | null>(null);
+  useEffect(() => {
+    if (!previewInput || mode !== 'text' || previewInput.startsWith('/')) {
+      setLargeUncachedPreview(null);
+      return;
+    }
     const preview = conversationService.previewLargeUncachedInput({ text: previewInput }, Date.now());
-    return preview.action === 'warn' ? preview : null;
+    setLargeUncachedPreview(preview.action === 'warn' ? preview : null);
   }, [conversationService, previewInput, mode]);
+  // Drop the advisory on the same render that empties the composer / leaves text
+  // mode; don't wait a frame for the effect to clear a stale warn.
+  const largeUncachedWarning =
+    !previewInput || mode !== 'text' || previewInput.startsWith('/') ? null : largeUncachedPreview;
 
   const pendingSurgeTurn = admissionConfirmation?.kind === 'surge' ? admissionConfirmation.turn : null;
   const pendingSurgeReason = admissionConfirmation?.kind === 'surge' ? admissionConfirmation.reason : '';

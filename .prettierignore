@@ -2,6 +2,8 @@ coverage
 dist
 dist.bak/**
 .worktrees/**
+.claude/worktrees/**
+.term2/**
 generated
 log_viewer
 *.md

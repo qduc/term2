@@ -122,24 +122,26 @@ export class ConversationAdmissionWorkflow {
       return { kind: 'confirmation_required', confirmation };
     }
 
-    const large = this.#deps.conversation.previewLargeUncachedInput(turn, this.#deps.now());
-    if (large.action === 'warn') {
-      const confirmation: AdmissionConfirmation = {
-        id: this.#createId(),
-        kind: 'large_uncached',
-        turn,
-        estimatedTokens: large.estimatedTokens,
-        options,
-      };
-      this.#setPending(confirmation);
-      this.#deps.logger.debug('Large uncached input warning shown', {
-        eventType: 'large_uncached_input_warning_shown',
-        category: 'provider',
-        estimatedTokens: large.estimatedTokens,
-        estimatedBytes: large.estimatedBytes,
-        reasons: large.reasons,
-      });
-      return { kind: 'confirmation_required', confirmation };
+    if (!options.busyMode) {
+      const large = this.#deps.conversation.previewLargeUncachedInput(turn, this.#deps.now());
+      if (large.action === 'warn') {
+        const confirmation: AdmissionConfirmation = {
+          id: this.#createId(),
+          kind: 'large_uncached',
+          turn,
+          estimatedTokens: large.estimatedTokens,
+          options,
+        };
+        this.#setPending(confirmation);
+        this.#deps.logger.debug('Large uncached input warning shown', {
+          eventType: 'large_uncached_input_warning_shown',
+          category: 'provider',
+          estimatedTokens: large.estimatedTokens,
+          estimatedBytes: large.estimatedBytes,
+          reasons: large.reasons,
+        });
+        return { kind: 'confirmation_required', confirmation };
+      }
     }
 
     return this.#admit(turn, options);

@@ -797,5 +797,66 @@ describe('App orchestration', () => {
         vi.useRealTimers();
       }
     });
+
+    it.sequential('does not show or run preview when user types while agent is processing', async () => {
+      vi.useFakeTimers();
+      try {
+        const services = createServices();
+        services.conversationService.previewLargeUncachedInput.mockReturnValue({
+          action: 'warn',
+          warningKey: 'k',
+          reasons: ['idle_timeout'],
+          estimatedTokens: 90_000,
+          estimatedBytes: 360_000,
+        });
+        mocks.conversationState.isProcessing = true;
+        const view = await renderApp(services);
+        services.conversationService.previewLargeUncachedInput.mockClear();
+
+        await type(view, services, 'hello agent');
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(500);
+        });
+
+        expect(services.conversationService.previewLargeUncachedInput).not.toHaveBeenCalled();
+        expect(mocks.bottomAreaProps.largeUncachedWarning).toBeNull();
+      } finally {
+        vi.useRealTimers();
+        mocks.conversationState.isProcessing = false;
+      }
+    });
+
+    it.sequential('clears warning immediately when agent starts processing', async () => {
+      vi.useFakeTimers();
+      try {
+        const services = createServices();
+        services.conversationService.previewLargeUncachedInput.mockReturnValue({
+          action: 'warn',
+          warningKey: 'k',
+          reasons: ['idle_timeout'],
+          estimatedTokens: 90_000,
+          estimatedBytes: 360_000,
+        });
+        mocks.conversationState.isProcessing = false;
+        const view = await renderApp(services);
+
+        await type(view, services, 'hi');
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(500);
+        });
+        expect(mocks.bottomAreaProps.largeUncachedWarning).not.toBeNull();
+
+        mocks.conversationState.isProcessing = true;
+        await rerenderInAct(
+          view,
+          <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+        );
+
+        expect(mocks.bottomAreaProps.largeUncachedWarning).toBeNull();
+      } finally {
+        vi.useRealTimers();
+        mocks.conversationState.isProcessing = false;
+      }
+    });
   });
 });

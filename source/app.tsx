@@ -344,17 +344,17 @@ const App: FC<AppProps> = ({
   const previewInput = useDebouncedValue(input, LARGE_UNCACHED_PREVIEW_DEBOUNCE_MS, (value) => value === '');
   const [largeUncachedPreview, setLargeUncachedPreview] = useState<LargeUncachedInputDecision | null>(null);
   useEffect(() => {
-    if (!previewInput || mode !== 'text' || previewInput.startsWith('/')) {
+    if (!previewInput || mode !== 'text' || previewInput.startsWith('/') || isProcessing) {
       setLargeUncachedPreview(null);
       return;
     }
     const preview = conversationService.previewLargeUncachedInput({ text: previewInput }, Date.now());
     setLargeUncachedPreview(preview.action === 'warn' ? preview : null);
-  }, [conversationService, previewInput, mode]);
+  }, [conversationService, previewInput, mode, isProcessing]);
   // Drop the advisory on the same render that empties the composer / leaves text
-  // mode; don't wait a frame for the effect to clear a stale warn.
+  // mode or starts processing; don't wait a frame for the effect to clear a stale warn.
   const largeUncachedWarning =
-    !previewInput || mode !== 'text' || previewInput.startsWith('/') ? null : largeUncachedPreview;
+    !previewInput || mode !== 'text' || previewInput.startsWith('/') || isProcessing ? null : largeUncachedPreview;
 
   const pendingSurgeTurn = admissionConfirmation?.kind === 'surge' ? admissionConfirmation.turn : null;
   const pendingSurgeReason = admissionConfirmation?.kind === 'surge' ? admissionConfirmation.reason : '';

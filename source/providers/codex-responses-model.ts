@@ -8,7 +8,12 @@ import type {
 } from '../contracts/streamed-model-turn.js';
 import { toCodexResponsesInput } from './codex-turn-converter.js';
 import { sanitizeHeaders } from '../utils/header-sanitizer.js';
-import type { ISessionContextService, IProviderTraffic } from '../services/service-interfaces.js';
+import type {
+  ISessionContextService,
+  IProviderTraffic,
+  ProviderTrafficStreamDiagnostics,
+} from '../services/service-interfaces.js';
+import { AbortedStreamRecorder } from './aborted-stream-recorder.js';
 import { OrphanedChainedToolOutputError } from '../lib/chained-input-filter.js';
 import { AmbiguousModelOutcomeError } from '../services/retry/retry-errors.js';
 import { ChainedWireState, type ChainedWireStateKey, type ChainedRequestToken } from './chained-wire-state.js';
@@ -944,6 +949,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     requestData: Record<string, unknown>,
     outcome: 'consumer_closed' | 'aborted',
     eventCount: number,
+    diagnostics?: ProviderTrafficStreamDiagnostics,
   ): void {
     const providerTraffic = this.providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
     const model = typeof requestData.model === 'string' ? requestData.model : this.#modelNameFallback();
@@ -954,6 +960,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       model,
       outcome,
       eventCount,
+      ...(diagnostics ? { diagnostics } : {}),
       modelClass: WS_RESPONSE_MODEL_CLASS,
       modelWrapperClass: WS_RESPONSE_WRAPPER_CLASS,
     });
@@ -977,9 +984,13 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       let sourceExhausted = false;
       let streamFailed = false;
       let eventCount = 0;
+      // A stream cut off mid-flight produces no payload to summarize later, so
+      // the transcript is retained until a terminal event proves it redundant.
+      const recorder = new AbortedStreamRecorder();
       try {
         for await (const event of responseStream) {
           eventCount += 1;
+          recorder.observe(event);
           if (
             event &&
             typeof event === 'object' &&
@@ -995,6 +1006,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
             ((event as any).type === 'response.completed' || (event as any).type === 'response.incomplete') &&
             (event as any).response
           ) {
+            recorder.release();
             const response = (event as any).response;
             if (wireStateKey && wireStateToken && typeof response.id === 'string' && response.id.length > 0) {
               wireState.recordResponse(wireStateKey, wireStateToken, response.id, response.output);
@@ -1013,8 +1025,19 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         throw error;
       } finally {
         if (!sawTerminalEvent && !sourceExhausted && !streamFailed) {
-          logClosed(requestId, requestData, signal?.aborted ? 'aborted' : 'consumer_closed', eventCount);
+          // A consumer-closed stream ended because we stopped reading, which is
+          // ordinary; its partial output stays out of the log. An abort is the
+          // failure we cannot otherwise explain, so it keeps the transcript.
+          const outcome = signal?.aborted ? 'aborted' : 'consumer_closed';
+          logClosed(
+            requestId,
+            requestData,
+            outcome,
+            eventCount,
+            outcome === 'aborted' ? recorder.diagnostics() : undefined,
+          );
         }
+        recorder.release();
         if (wireStateKey && wireStateToken) {
           wireState.abandon(wireStateKey, wireStateToken);
         }

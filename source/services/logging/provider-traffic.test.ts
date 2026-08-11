@@ -810,7 +810,7 @@ it('ProviderTraffic.recordResponseReceived redacts encrypted_content from a plai
   const store = new ProviderTrafficArtifactStore({ rootDir });
   const debug = vi.fn();
   const error = vi.fn();
-  const loggingService = { debug, error, getCorrelationId: () => undefined };
+  const loggingService = { debug, warn: vi.fn(), error, getCorrelationId: () => undefined };
   const traffic = new ProviderTraffic(loggingService, NULL_SESSION_CONTEXT_SERVICE, store);
 
   const requestId = 'plain-object-req';
@@ -853,7 +853,7 @@ it('ProviderTraffic records consumer-closed streams as metadata without fabricat
   const debug = vi.fn();
   const error = vi.fn();
   const traffic = new ProviderTraffic(
-    { debug, error, getCorrelationId: () => undefined },
+    { debug, warn: vi.fn(), error, getCorrelationId: () => undefined },
     NULL_SESSION_CONTEXT_SERVICE,
     store,
   );
@@ -883,4 +883,64 @@ it('ProviderTraffic records consumer-closed streams as metadata without fabricat
     'codex response closed',
     expect.objectContaining({ eventType: 'provider.response.closed', outcome: 'consumer_closed', eventCount: 2 }),
   );
+});
+
+// An aborted stream has no payload to summarize, so its retained transcript is
+// the only record of what the model was producing when it was cut off.
+it("ProviderTraffic writes an aborted stream's transcript to the artifact and keeps it out of the app log", () => {
+  const rootDir = makeTempDir();
+  const store = new ProviderTrafficArtifactStore({ rootDir });
+  const debug = vi.fn();
+  const warn = vi.fn();
+  const error = vi.fn();
+  const traffic = new ProviderTraffic(
+    { debug, warn, error, getCorrelationId: () => undefined },
+    NULL_SESSION_CONTEXT_SERVICE,
+    store,
+  );
+  const requestId = 'aborted-req';
+
+  traffic.recordRequestStart({ requestId, provider: 'codex', model: 'gpt-5.6-luna', sentBody: { input: [] } });
+  traffic.recordResponseClosed({
+    requestId,
+    provider: 'codex',
+    model: 'gpt-5.6-luna',
+    outcome: 'aborted',
+    eventCount: 2,
+    diagnostics: {
+      durationMs: 300_041,
+      firstEventMs: 812,
+      lastEventMs: 299_988,
+      maxGapMs: 1204,
+      responseId: 'resp_runaway',
+      eventTypeCounts: { 'response.reasoning_summary_text.delta': 2 },
+      events: [{ type: 'response.reasoning_summary_text.delta', delta: 'looping forever' }],
+    },
+  });
+
+  const dayDir = fs.readdirSync(rootDir).find((entry) => /^\d{4}-\d{2}-\d{2}$/.test(entry));
+  const sessionDir = fs.readdirSync(path.join(rootDir, dayDir!))[0];
+  const requestFile = fs.readdirSync(path.join(rootDir, dayDir!, sessionDir)).find((name) => name.endsWith('.json'))!;
+  const received = readRequestFile(path.join(rootDir, dayDir!, sessionDir, requestFile)).received as Record<
+    string,
+    unknown
+  >;
+
+  expect(received.summary).toMatchObject({
+    outcome: 'aborted',
+    eventCount: 2,
+    durationMs: 300_041,
+    maxGapMs: 1204,
+    responseId: 'resp_runaway',
+    eventTypeCounts: { 'response.reasoning_summary_text.delta': 2 },
+    events: [{ type: 'response.reasoning_summary_text.delta', delta: 'looping forever' }],
+  });
+
+  // An abort is worth noticing, but the transcript would swamp the app log.
+  expect(warn).toHaveBeenCalledWith(
+    'codex response closed',
+    expect.objectContaining({ outcome: 'aborted', durationMs: 300_041, maxGapMs: 1204 }),
+  );
+  expect(JSON.stringify(warn.mock.calls)).not.toContain('looping forever');
+  expect(error).not.toHaveBeenCalled();
 });

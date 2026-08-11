@@ -986,7 +986,7 @@ export function summarizeWebsocketResponse(response: unknown): ReceivedTrafficSu
 
 export class ProviderTraffic implements IProviderTraffic {
   constructor(
-    private readonly loggingService: Pick<ILoggingService, 'debug' | 'error' | 'getCorrelationId'>,
+    private readonly loggingService: Pick<ILoggingService, 'debug' | 'warn' | 'error' | 'getCorrelationId'>,
     private readonly sessionContextService: ISessionContextService,
     private readonly store: ProviderTrafficArtifactStore,
   ) {}
@@ -1188,7 +1188,11 @@ export class ProviderTraffic implements IProviderTraffic {
     const sessionStartedAt = trafficContext?.sessionStartedAt ?? timestamp;
     const mode = trafficContext?.mode ?? 'unknown';
     const firstUserMessagePreview = trafficContext?.firstUserMessagePreview;
-    const summary = { outcome: input.outcome, eventCount: input.eventCount };
+    const summary = {
+      outcome: input.outcome,
+      eventCount: input.eventCount,
+      ...(input.diagnostics ? input.diagnostics : {}),
+    };
 
     this.store.recordRequestComplete({
       requestId: input.requestId,
@@ -1204,7 +1208,10 @@ export class ProviderTraffic implements IProviderTraffic {
       evaluator: isEvaluator,
     });
 
-    this.loggingService.debug(`${input.provider} response closed`, {
+    // The retained transcript belongs in the traffic artifact, not the app log.
+    const { events: _events, ...logSummary } = summary as typeof summary & { events?: unknown[] };
+    const logClosed = input.outcome === 'aborted' ? this.loggingService.warn : this.loggingService.debug;
+    logClosed.call(this.loggingService, `${input.provider} response closed`, {
       eventType: `${eventPrefix}.response.closed`,
       category: 'provider',
       phase: 'provider_response',
@@ -1219,7 +1226,7 @@ export class ProviderTraffic implements IProviderTraffic {
       model: input.model,
       modelClass: input.modelClass,
       modelWrapperClass: input.modelWrapperClass,
-      ...summary,
+      ...logSummary,
     });
   }
 

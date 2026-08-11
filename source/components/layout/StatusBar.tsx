@@ -113,7 +113,6 @@ const StatusBar: FC<StatusBarProps> = ({
           costSummary.state === 'partial' ? '+' : ''
         }`
       : '';
-  const costColor = costSummary?.state === 'partial' ? warnRed : slate;
 
   const warningText = (() => {
     if (!largeUncachedWarning || usageHasIntegratedWarning) {
@@ -263,7 +262,7 @@ const StatusBar: FC<StatusBarProps> = ({
             {tokensText && contextText && <Text color={slate}> │ </Text>}
             {contextText && <Text color={slate}>{contextText}</Text>}
             {(tokensText || contextText) && costText && <Text color={slate}> │ </Text>}
-            {costText && <Text color={costColor}>{costText}</Text>}
+            {costText && <Text color={slate}>{costText}</Text>}
           </Box>
         )}
       </Box>

@@ -196,8 +196,18 @@ export class SessionInputPlanner {
     // Fall back to stateless mode where the arguments can be sanitized before
     // sending.
     const hasMalformedArgs = hasMalformedToolCallArguments(outgoingHistory);
+    // Unpaid tool debt means previous_response_id still requires function_call
+    // outputs. A text-only delta would 400 ("No tool output found for function
+    // call …"). Drop the chain and send self-contained full history instead.
+    const hasUnsettledChainDebt = this.#providerContinuity.hasOutstandingToolDebt();
+    if (hasUnsettledChainDebt && this.#providerContinuity.previousResponseId) {
+      this.#providerContinuity.clear();
+    }
     const useChaining =
-      supportsChaining && !hasMalformedArgs && this.#providerContinuity.isChainingAvailable(outgoingHistory.length);
+      supportsChaining &&
+      !hasMalformedArgs &&
+      !hasUnsettledChainDebt &&
+      this.#providerContinuity.isChainingAvailable(outgoingHistory.length);
     const latestInput = outgoingHistory[outgoingHistory.length - 1] ?? effectiveTurn.text;
     const chainedInput = effectiveTurn.images?.length ? latestInput : effectiveTurn.text;
 

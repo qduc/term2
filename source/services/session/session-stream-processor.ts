@@ -427,6 +427,9 @@ export class SessionStreamProcessor {
           historyCommitted,
           postCommitSnapshot,
         );
+        // A terminal response that issued function calls opens unpaid chain
+        // debt; a response with no remaining unsettled calls settles it.
+        this.#syncOutstandingToolDebt();
         if (candidateWasObserved) {
           this.deps.openAIRootCheckpointLifecycleObserver?.publication(
             !historyCommitted ? 'history_not_committed' : promoted ? 'promoted' : 'candidate_not_promoted',
@@ -437,10 +440,23 @@ export class SessionStreamProcessor {
         // Interrupted streams retain the established response-ID behavior, but
         // cannot corroborate an observed checkpoint without a history commit.
         this.deps.providerContinuity.update(snapshot.lastResponseId);
+        // Approvals and other interruptions leave the same unpaid tool debt
+        // as a clean terminal that issued function calls.
+        this.#syncOutstandingToolDebt();
         result = { kind: 'partial' };
       }
     });
 
     return ran ? result : { kind: 'stale' };
+  }
+
+  /**
+   * Mirror the tool ledger's unsettled call ids onto provider continuity so
+   * the next request can refuse a text-only delta against an unpaid chain.
+   */
+  #syncOutstandingToolDebt(): void {
+    this.deps.providerContinuity.replaceOutstandingToolCallIds(
+      this.deps.toolTracker.unsettledToolCallIdsForCurrentTurn(),
+    );
   }
 }

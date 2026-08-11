@@ -75,6 +75,8 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 
 - `docs/plans/mid-turn-injection.md` — steering and background-subagent notifications reaching a turn already in flight. Read it before touching the run loop, `AgentClient`, the turn coordinator, or notification delivery: it defines the vocabulary those areas are described in (**Segment**, **Request Boundary**, **Injection**, **Background Notification**, now in `CONTEXT.md`), and the bug it fixed was invisible for want of those words.
 
+- `docs/plans/chain-settlement.md` — unpaid tool debt after a mid-stream failure must not leave a live `previousResponseId`. Read before changing `ProviderContinuity`, stream finalize debt sync, terminate recovery, `SessionInputPlanner` chaining, or “No tool output found for function call” classification: a text-only continue against an open chain is a server 400.
+
 # Parallel Work Isolation
 
 Several agents share the primary checkout, so concurrent edits pile into one `git status` with no way to tell whose work is whose.

@@ -46,6 +46,18 @@ it('completedResultCallIdsForCurrentTurn exposes only completed current-turn res
   expect(tracker.completedResultCallIdsForCurrentTurn()).toEqual(['call-completed']);
 });
 
+it('unsettledToolCallIdsForCurrentTurn excludes completed results only', () => {
+  const tracker = new SessionToolTracker(new ConversationStore());
+  tracker.beginTurn();
+  tracker.recordFunctionCall({ type: 'function_call', callId: 'call-completed', name: 'shell', arguments: '{}' });
+  tracker.recordFunctionResult({ type: 'function_call_output', callId: 'call-completed', output: 'ok' });
+  tracker.recordFunctionCall({ type: 'function_call', callId: 'call-pending', name: 'shell', arguments: '{}' });
+  tracker.recordFunctionCall({ type: 'function_call', callId: 'call-aborted', name: 'shell', arguments: '{}' });
+  tracker.recordAbortedApproval('failed', 'Stream failed', 'call-aborted');
+
+  expect(tracker.unsettledToolCallIdsForCurrentTurn()).toEqual(['call-pending', 'call-aborted']);
+});
+
 it('activeCallIdsForCurrentTurn includes aborted call IDs (provider requires output for every call)', () => {
   const tracker = new SessionToolTracker(new ConversationStore());
   tracker.beginTurn();

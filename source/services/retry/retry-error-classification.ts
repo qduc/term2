@@ -62,6 +62,31 @@ export function isPreviousResponseNotFoundError(error: unknown, seen = new Set<u
   return false;
 }
 
+/**
+ * Server rejected a chained request because previous_response_id still has
+ * function calls without outputs in the new input. Same recovery class as
+ * previous_response_not_found: drop the chain and replay full history.
+ */
+export function isMissingServerToolOutputError(error: unknown, seen = new Set<unknown>()): boolean {
+  if (!error || seen.has(error)) return false;
+  seen.add(error);
+
+  if (typeof error === 'string') {
+    return /no tool output found for function call/i.test(error);
+  }
+  if (typeof error !== 'object') return false;
+
+  const value = error as Record<string, unknown>;
+  if (typeof value.message === 'string' && /no tool output found for function call/i.test(value.message)) {
+    return true;
+  }
+  if (isMissingServerToolOutputError(value.message, seen)) return true;
+  if (isMissingServerToolOutputError(value.body, seen)) return true;
+  if (isMissingServerToolOutputError(value.error, seen)) return true;
+  if (isMissingServerToolOutputError(value.cause, seen)) return true;
+  return false;
+}
+
 export function isWebSocketConnectionLimitReachedError(error: unknown, seen = new Set<unknown>()): boolean {
   if (!error || seen.has(error)) return false;
   seen.add(error);
@@ -291,11 +316,18 @@ const isRetryableAbnormalCloseError = (error: unknown, logger?: Pick<ILoggingSer
  * without a terminal marker (`finish_reason`, AI-SDK finish event, Responses
  * `response.completed`, …). That is the right refusal — the body was cut
  * short — but the cut itself is usually a flaky upstream close, so the run
- * should retry rather than terminate. Matched by the shared phrase every
- * adapter uses: "streamed response ended without".
+ * should retry rather than terminate.
+ *
+ * Matched phrases:
+ * - "streamed response ended without" (HTTP/SSE incomplete body)
+ * - "closed before a terminal response event" (Codex/OpenAI WebSocket close
+ *   before response.completed / failed / incomplete)
  */
 export function isIncompleteStreamTerminalError(error: unknown): boolean {
-  return getMessage(error).toLowerCase().includes('streamed response ended without');
+  const message = getMessage(error).toLowerCase();
+  return (
+    message.includes('streamed response ended without') || message.includes('closed before a terminal response event')
+  );
 }
 
 export const isRetryableTransportError = (

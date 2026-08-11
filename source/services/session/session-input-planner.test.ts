@@ -24,6 +24,33 @@ it('carries the authoritative immutable history snapshot alongside the unchanged
   expect(plan.inputSurgeKind).toBe('delta');
 });
 
+it('drops chaining and uses full history when the previous response still has unpaid tool debt', () => {
+  const history = [
+    { role: 'user', type: 'message', content: 'inspect' },
+    { type: 'function_call', call_id: 'call-1', name: 'shell', arguments: '{}' },
+    { type: 'function_call_output', call_id: 'call-1', output: 'Stream failed' },
+  ];
+  const continuity = new ProviderContinuity();
+  continuity.update('resp-with-open-tools');
+  continuity.replaceOutstandingToolCallIds(['call-1']);
+
+  const planner = new SessionInputPlanner({
+    agentClient: { getProvider: () => 'openai', supportsConversationChaining: () => true } as any,
+    toolTracker: { getReconciledHistory: () => history } as any,
+    providerContinuity: continuity,
+  });
+
+  const plan = planner.build({ text: 'continue' }, { includeTurn: true, pendingModeNotice: null });
+
+  expect(plan.inputSurgeKind).toBe('full_history');
+  expect(Array.isArray(plan.streamInput)).toBe(true);
+  expect(continuity.previousResponseId).toBe(null);
+  expect(continuity.hasOutstandingToolDebt()).toBe(false);
+  const items = plan.streamInput as Array<Record<string, unknown>>;
+  expect(items.some((item) => item.type === 'function_call_output' || item.type === 'function_call')).toBe(true);
+  expect(items[items.length - 1]).toMatchObject({ role: 'user' });
+});
+
 it('combineHistoryAndDraftBytes matches JSON.stringify of history-plus-draft', () => {
   const history = [
     { role: 'user', type: 'message', content: 'prior' },

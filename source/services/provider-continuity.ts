@@ -63,6 +63,13 @@ export type ProviderCheckpoint = ProviderCheckpointBinding & {
  *
  * This is the single source of truth for provider continuity. All other
  * collaborators read from this object rather than storing their own copy.
+ *
+ * ## Chain settlement
+ *
+ * When a published response issued function calls, the next request must
+ * supply matching tool outputs or the chain must be dropped. Outstanding
+ * call ids are the local record of that unpaid server debt. Clear them only
+ * when a later terminal response replaces them, or when continuity is reset.
  */
 export class ProviderContinuity {
   #previousResponseId: string | null = null;
@@ -70,6 +77,8 @@ export class ProviderContinuity {
   #lineage = 0;
   #checkpoint: ProviderCheckpoint | null = null;
   #retiredCheckpoints: ProviderCheckpoint[] = [];
+  /** Function-call ids the published previousResponseId still requires outputs for. */
+  #outstandingToolCallIds: string[] = [];
 
   get previousResponseId(): string | null {
     return this.#previousResponseId;
@@ -89,6 +98,30 @@ export class ProviderContinuity {
 
   get retiredCheckpoints(): readonly ProviderCheckpoint[] {
     return this.#retiredCheckpoints;
+  }
+
+  /** Call ids the current chain still needs tool outputs for. */
+  get outstandingToolCallIds(): readonly string[] {
+    return this.#outstandingToolCallIds;
+  }
+
+  hasOutstandingToolDebt(): boolean {
+    return this.#outstandingToolCallIds.length > 0;
+  }
+
+  /**
+   * Replace the unpaid tool-call set for the current chain. Pass an empty
+   * list when the latest terminal response left no open function calls.
+   */
+  replaceOutstandingToolCallIds(callIds: readonly string[]): void {
+    const unique: string[] = [];
+    const seen = new Set<string>();
+    for (const callId of callIds) {
+      if (typeof callId !== 'string' || !callId || seen.has(callId)) continue;
+      seen.add(callId);
+      unique.push(callId);
+    }
+    this.#outstandingToolCallIds = unique;
   }
 
   /**
@@ -208,12 +241,14 @@ export class ProviderContinuity {
 
   clear(): void {
     this.#previousResponseId = null;
+    this.#outstandingToolCallIds = [];
     this.#retireCheckpoint('reset');
     this.#lineage++;
   }
 
   breakChaining(): void {
     this.#previousResponseId = null;
+    this.#outstandingToolCallIds = [];
     this.#chainingBroken = true;
     this.#retireCheckpoint('chaining_broken');
   }

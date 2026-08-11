@@ -3,6 +3,8 @@ import { APIConnectionError, APIConnectionTimeoutError, InternalServerError, Rat
 import { ModelBehaviorError } from '../../contracts/model-errors.js';
 import { OpenAICompatibleError, OpenRouterError, LongRetryDelayError } from '../../providers/common/provider-errors.js';
 import {
+  isIncompleteStreamTerminalError,
+  isMissingServerToolOutputError,
   isNetworkProtocolError,
   isRetryableTransportError,
   isTransientRetryableError,
@@ -169,6 +171,28 @@ it('isTransientRetryableError: OpenAI SDK errors are retryable', () => {
 it('isTransientRetryableError: websocket receive watchdog timeouts are retryable', () => {
   expect(isTransientRetryableError(new Error('WebSocket first frame timeout'))).toBe(true);
   expect(isTransientRetryableError(new Error('WebSocket idle timeout'))).toBe(true);
+});
+
+it('incomplete stream terminal errors include WebSocket closed before terminal response', () => {
+  expect(isIncompleteStreamTerminalError(new Error('Codex WebSocket closed before a terminal response event.'))).toBe(
+    true,
+  );
+  expect(isIncompleteStreamTerminalError(new Error('OpenAI WebSocket closed before a terminal response event.'))).toBe(
+    true,
+  );
+  expect(
+    isRetryableTransportError(new Error('Codex WebSocket closed before a terminal response event.')).retryable,
+  ).toBe(true);
+  expect(isMissingServerToolOutputError('No tool output found for function call call_YaJm4jYEzyg2fIGYTMbjwez6.')).toBe(
+    true,
+  );
+  expect(
+    isMissingServerToolOutputError({
+      status: 400,
+      error: { message: 'No tool output found for function call call_abc.' },
+    }),
+  ).toBe(true);
+  expect(isMissingServerToolOutputError(new Error('invalid_request_error: bad tools'))).toBe(false);
 });
 
 it('isTransientRetryableError: OpenRouter 429/5xx are retryable', () => {

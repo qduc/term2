@@ -34,6 +34,11 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 
 ## Active or deferred
 
+- Parallel safe-tool dispatch — proposed in
+  `docs/plans/parallel-safe-tool-dispatch.md`, awaiting implementation approval;
+  nobody is on it. It batches only contiguous, auto-approved read-only calls
+  from one completed model response, preserving result order and the existing
+  approval/budget owners.
 - Exclusive menu input ownership — follow-on plan tracked in
   `docs/plans/exclusive-menu-input.md`; waiting for implementation approval.
 - Scheduled live provider canaries — a deferred follow-up requiring CI, secret/billing, and OAuth-storage decisions. No plan doc, and nobody is on it.

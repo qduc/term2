@@ -1,3 +1,23 @@
+## [0.13.0] - 2026-08-11
+
+### Features
+- Added monitored background shell jobs with retained output, tail inspection, watches, completion notifications, configurable timeouts, and bounded overflow handling.
+- Added first-run provider setup and credential-aware model readiness checks.
+- Added provider-faithful reasoning round-trips for chat-completions models, preserving provider-specific reasoning metadata across tool turns.
+- Expanded `/copy` with options to copy the full response or selected code.
+
+### Bug Fixes
+- Fixed Codex WebSocket close recovery and stopped accepted close events from being replayed.
+- Fixed unpaid tool-chain debt after mid-stream failures so stale continuation state is not reused.
+- Fixed Tab handling in the slash-command menu, approval handoffs, and command rows that could remain running or leave shell job-control calls unresolved.
+- Fixed active background-result polling by routing incomplete results through the appropriate wait or messaging path.
+
+### Improvements
+- Added per-request session cost tracking and pricing for catalog-matched gateway models.
+- Improved input responsiveness for large uncached histories and suppressed the uncached warning while an agent turn is running.
+- Improved provider and skill-selection flows, including provider-wizard input and immediate skill activation.
+- Added more detailed command-line help and clearer worktree transition descriptions.
+
 ## [0.12.0] - 2026-08-09
 
 ### Features

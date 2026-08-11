@@ -23,8 +23,6 @@ type Props = {
   onRejectionReasonInputReady?: () => void;
   /** @deprecated Menu commands are consumed by ApplicationInputSurface. */
   slashCommands?: SlashCommand[];
-  /** @deprecated Menu commands are consumed by ApplicationInputSurface. */
-  onSlashTabComplete?: (command: SlashCommand) => boolean;
   /** @deprecated Menu sessions are mounted by ApplicationInputSurface. */
   skillsService?: SkillsService;
   waitingForRejectionReason?: boolean;

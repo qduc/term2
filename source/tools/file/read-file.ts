@@ -12,7 +12,7 @@ const READ_FILE_DESCRIPTION =
   'Read file content from the workspace (like cat command). Supports reading specific line ranges. ' +
   'Use this to inspect a known file or verify a specific claim about a location. ' +
   'Avoid reading tiny repeated chunks (e.g. 50 lines at a time); read the full file if it is under 1000 lines or use a larger window. ' +
-  'Do NOT use this to search for text across files (use grep) or to explore unfamiliar code (use run_subagent with an explorer). ' +
+  'Do NOT use this to search for text across files (use grep). ' +
   'Returns the file path, total line count, and the requested lines.';
 const READ_FILE_DESCRIPTION_OUTSIDE =
   'Read file content from the filesystem (like cat command). Supports reading specific line ranges. ' +

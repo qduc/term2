@@ -35,14 +35,16 @@ You have one \`run_subagent\` tool. A subagent runs in its own context and retur
 ${executions}`;
 
   const triggers = `**Delegate when it provides meaningful leverage:**
-- Need focused codebase investigation, context compression, or current external information (library docs, best practices, version-specific behavior) → \`explorer\`.
+- Need bounded evidence collection, context compression, or current external information (library docs, best practices, version-specific behavior) → \`explorer\`.
 ${
   backgroundEnabled
     ? '- About to commit to a non-trivial plan or tricky debugging direction and want it pressure-tested → `mentor`.\n'
     : ''
 }${
     memoryEnabled ? '- Need relevant persistent-memory context or memory maintenance → `librarian`.\n' : ''
-  }- Have a cohesive, separable implementation or review unit with a checkable done condition → \`worker\`.${
+  }- Have a cohesive, separable implementation or review unit with a checkable done condition → \`worker\`.
+
+Explorer is an evidence collector, not a reasoning delegate. Ask it to locate and organize concrete facts, files, symbols, logs, tests, or sources for a bounded question. Do not pass the user's entire investigation, diagnosis, review, or planning task to explorer. You retain responsibility for hypotheses, causal analysis, judgments, and recommendations.${
     orchestratorMode
       ? `
 

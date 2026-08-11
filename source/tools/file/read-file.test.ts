@@ -12,6 +12,13 @@ it('orchestrator read_file description permits direct inspection', () => {
   expect(tool.description).not.toContain('to verify a specific claim');
 });
 
+it('standard read_file description does not redirect unfamiliar code inspection to explorer', () => {
+  const tool = createReadFileToolDefinition();
+
+  expect(tool.description).not.toContain('run_subagent');
+  expect(tool.description).not.toContain('use run_subagent with an explorer');
+});
+
 const readFileToolDefinition = createReadFileToolDefinition();
 const readFileToolDefinitionAllowOutside = createReadFileToolDefinition({
   allowOutsideWorkspace: true,

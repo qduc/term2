@@ -14,6 +14,24 @@ function settings(values: Record<string, unknown>): ISettingsService {
 }
 
 describe('loadRoleDefinition ancillary tier reasoning', () => {
+  it('defines explorer as an evidence collector without diagnostic or recommendation ownership', () => {
+    const definition = loadRoleDefinition(
+      'explorer',
+      settings({
+        'agent.model': 'main-model',
+        'agent.provider': 'openai',
+        'agent.reasoningEffort': 'low',
+        'memory.enabled': true,
+      }),
+    );
+
+    expect(definition.description).toContain('evidence collection');
+    expect(definition.instructions).toContain('Collect and organize evidence only');
+    expect(definition.instructions).toContain(
+      'Do not diagnose root causes, make recommendations, choose an approach, or answer the parent task on its behalf',
+    );
+  });
+
   it('uses global reasoning effort when the mentor legacy setting only has its schema default', () => {
     const definition = loadRoleDefinition(
       'mentor',

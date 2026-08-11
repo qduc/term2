@@ -102,7 +102,7 @@ export function executeSlashCommandSelection({
 }
 
 export const useSlashCommands = ({ commands, onClose }: UseSlashCommandsOptions) => {
-  const { mode, controller, input, setInput, setInputAndCursor, setCursorOverride } = useInputContext();
+  const { mode, controller, input, setInput, setCursorOverride } = useInputContext();
 
   const isOpen = mode === 'slash_commands';
 
@@ -158,14 +158,6 @@ export const useSlashCommands = ({ commands, onClose }: UseSlashCommandsOptions)
     });
   }, [getSelectedItem, close, filter, setInput, setCursorOverride]);
 
-  const completeSelected = useCallback(() => {
-    const command = getSelectedItem();
-    if (command) {
-      const nextValue = `/${command.name} `;
-      setInputAndCursor(nextValue, nextValue.length, nextValue.length);
-    }
-  }, [getSelectedItem, setInputAndCursor]);
-
   return {
     isOpen,
     filter,
@@ -183,6 +175,5 @@ export const useSlashCommands = ({ commands, onClose }: UseSlashCommandsOptions)
     pageDown,
     getSelectedItem,
     executeSelected,
-    completeSelected,
   };
 };

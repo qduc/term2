@@ -902,13 +902,6 @@ const App: FC<AppProps> = ({
             pendingSurgeReason={pendingSurgeReason}
             onSurgeApprove={handleSurgeApprove}
             onSurgeDecline={handleSurgeDecline}
-            onSlashTabComplete={(command) => {
-              if (command.name === 'rewind' || command.name === 'undo' || command.name === 'retry') {
-                openRewindMenu(command.name === 'retry' ? 'resend' : 'edit');
-                return true;
-              }
-              return false;
-            }}
           />
         </Box>
       </Box>

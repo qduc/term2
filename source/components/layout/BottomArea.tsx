@@ -75,7 +75,6 @@ export type BottomAreaProps = {
   pendingSurgeReason?: string;
   onSurgeApprove?: () => void;
   onSurgeDecline?: () => void;
-  onSlashTabComplete?: (command: SlashCommand) => boolean;
   skillsService?: SkillsService;
   staticCommitBlocker?: StaticCommitBlocker | null;
   // Queue state
@@ -147,7 +146,6 @@ const BottomArea: FC<BottomAreaProps> = ({
   pendingSurgeReason = '',
   onSurgeApprove,
   onSurgeDecline,
-  onSlashTabComplete,
   skillsService,
   staticCommitBlocker = null,
   queuePaused = false,
@@ -354,7 +352,6 @@ const BottomArea: FC<BottomAreaProps> = ({
           historyService={historyService}
           onSettingChange={onSettingChange}
           onSystemMessage={onSystemMessage}
-          onSlashTabComplete={onSlashTabComplete}
           skillsService={skillsService}
           turnInFlight={isProcessing}
           pendingQueuedMessages={pendingQueuedMessages}

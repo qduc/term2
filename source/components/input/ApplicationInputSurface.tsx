@@ -32,7 +32,6 @@ export type ApplicationInputSurfaceProps = {
   historyService: HistoryService;
   onSettingChange?: (key: string, value: any) => void;
   onSystemMessage?: (text: string) => void;
-  onSlashTabComplete?: (command: SlashCommand) => boolean;
   promptLabel?: string;
   allowEmptySubmit?: boolean;
   skillsService?: SkillsService;
@@ -98,7 +97,6 @@ export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props)
   const services: MenuServices = {
     settingsService: props.settingsService,
     slash,
-    onSlashTabComplete: props.onSlashTabComplete,
     path,
     skills,
     settings,

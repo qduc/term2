@@ -131,14 +131,14 @@ describe('ConversationAdmissionWorkflow', () => {
     const { workflow, conversation, logger, send } = createWorkflow();
     (conversation.previewLargeUncachedInput as any).mockReturnValue(warnedLarge);
 
-    const pending = workflow.submit(turn, { busyMode: 'follow_up' });
+    const pending = workflow.submit(turn);
     if (pending.kind !== 'confirmation_required') throw new Error('Expected confirmation');
 
     const approved = workflow.resolve(pending.confirmation.id, 'approve');
     if (approved.kind !== 'submitted') throw new Error('Expected submission');
     await approved.completion;
 
-    expect(send).toHaveBeenCalledWith(turn, { busyMode: 'follow_up' });
+    expect(send).toHaveBeenCalledWith(turn, {});
     expect(logger.debug).toHaveBeenCalledWith(
       'Large uncached input warning shown',
       expect.objectContaining({
@@ -149,6 +149,19 @@ describe('ConversationAdmissionWorkflow', () => {
         reasons: warnedLarge.reasons,
       }),
     );
+  });
+
+  it('bypasses large uncached input warning when busyMode is set (agent running)', async () => {
+    const { workflow, conversation, send } = createWorkflow();
+    (conversation.previewLargeUncachedInput as any).mockReturnValue(warnedLarge);
+
+    const result = workflow.submit(turn, { busyMode: 'steer' });
+    expect(result.kind).toBe('submitted');
+    if (result.kind !== 'submitted') throw new Error('Expected submission');
+    await result.completion;
+
+    expect(conversation.previewLargeUncachedInput).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith(turn, { busyMode: 'steer' });
   });
 
   it('consumes a matching confirmation before awaiting and ignores stale or repeated decisions', async () => {

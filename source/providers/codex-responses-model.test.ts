@@ -1933,6 +1933,41 @@ it('CodexResponsesWSModel marks transport failure after buffered raw frames as a
   }
 });
 
+it('CodexResponsesWSModel marks close before terminal as ambiguous even without raw frames', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  let attempts = 0;
+  // Incomplete-stream class: transportFallback stays false, but the request may
+  // already have been accepted — RetryingModel must not replay.
+  const closeError = new Error('Codex WebSocket connection closed before a terminal response event.');
+  transport.fetchResponse = async function () {
+    attempts += 1;
+    return (async function* () {
+      throw closeError;
+    })();
+  };
+
+  const model = new CodexResponsesWSModel(
+    { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+    'gpt-5-codex',
+    { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+    transport,
+  );
+  const retrying = new RetryingModel(model, { retryAttempts: 2, sleep: async () => {} });
+
+  await expect(
+    collect(
+      retrying.stream({
+        input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+        tools: [],
+      }),
+    ),
+  ).rejects.toMatchObject({
+    name: 'AmbiguousModelOutcomeError',
+    unsafeToReplay: true,
+  });
+  expect(attempts).toBe(1);
+});
+
 it('CodexResponsesWSModel drops interleaved tool calls from an already-trimmed tool-continuation delta', async () => {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const seenRequests: any[] = [];

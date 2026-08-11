@@ -152,18 +152,25 @@ it('keeps queued messages behind a continuation that requests another approval',
   };
 
   const secondApproval = createApprovalStream('second-approval');
-  const finalStream = new MockStream([]);
-  finalStream.finalOutput = 'completed';
+  // Fresh streams per terminal: MockStream is single-consume, and the second
+  // startStream may receive full history (not the raw user string).
+  const makeCompletedStream = () => {
+    const stream = new MockStream([]);
+    stream.finalOutput = 'completed';
+    return stream;
+  };
   const initialStream = createApprovalStream('first-approval');
+  let startIndex = 0;
   let continuationIndex = 0;
   const service = new ConversationService({
     agentClient: partialClient({
-      async startStream(input: unknown) {
-        if (input !== 'follow-up') return initialStream;
-        return finalStream;
+      async startStream() {
+        // First user turn opens with an approval; later starts (queued follow-up
+        // after the multi-approval turn settles) complete immediately.
+        return startIndex++ === 0 ? initialStream : makeCompletedStream();
       },
       async continueRunStream() {
-        return continuationIndex++ === 0 ? secondApproval : finalStream;
+        return continuationIndex++ === 0 ? secondApproval : makeCompletedStream();
       },
     }),
     deps: { logger: mockLogger, sessionContextService },

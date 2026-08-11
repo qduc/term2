@@ -125,6 +125,7 @@ export const createReadCodeOutlineToolDefinition = (
     name: 'read_code_outline',
     description: READ_CODE_OUTLINE_DESCRIPTION,
     parameters: readCodeOutlineParametersSchema,
+    parallelSafe: true,
     needsApproval: async ({ path: filePath }) => {
       try {
         const cwd = executionContext?.getCwd() || process.cwd();
@@ -167,6 +168,7 @@ export const createCodeContextSearchToolDefinition = (
     name: 'code_context_search',
     description: buildCodeContextSearchDescription(globAvailable),
     parameters: codeContextSearchParametersSchema,
+    parallelSafe: true,
     needsApproval: async (params) => {
       if (params.query_type !== 'related') {
         return false;

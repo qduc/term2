@@ -92,6 +92,7 @@ export const createWebSearchToolDefinition = (deps: {
     name: 'web_search',
     description: WEB_SEARCH_DESCRIPTION,
     parameters: webSearchSchema,
+    parallelSafe: true,
     needsApproval: () => false, // Web search is read-only, safe operation
     execute: async (params) => {
       const { query } = params;

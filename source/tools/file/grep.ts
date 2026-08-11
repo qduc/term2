@@ -186,6 +186,7 @@ export const createGrepToolDefinition = (
     name: 'grep',
     description: buildGrepDescription(globAvailable, orchestratorMode),
     parameters: searchParametersSchema,
+    parallelSafe: true,
     argumentParsing: 'strict',
     // Read-only, but not necessarily in-bounds: `path` is passed through to a
     // shell `rg`/`grep -r` invocation, so an out-of-workspace path is an

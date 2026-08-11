@@ -98,6 +98,8 @@ export interface SchemaToolDefinition<TSchema extends ZodTypeAny> {
   name: string;
   description: string;
   parameters: TSchema;
+  /** Opt-in capability for independent, auto-approved calls in one model response. */
+  parallelSafe?: boolean | ((params: z.infer<TSchema>, context?: unknown) => Promise<boolean> | boolean);
   /** Optional provider-facing schema when a strict transport cannot express the runtime contract. */
   strictParameters?: ZodTypeAny;
   argumentParsing?: 'repair' | 'strict';
@@ -145,6 +147,9 @@ export interface AnyToolDefinition {
   name: string;
   description: string;
   parameters: ToolParameterSchema;
+  /** Opt-in capability for independent, auto-approved calls in one model response. */
+  /** `never` keeps heterogeneous schema-derived predicates assignable at the erased boundary. */
+  parallelSafe?: boolean | ((params: never, context?: unknown) => Promise<boolean> | boolean);
   strictParameters?: ZodTypeAny;
   argumentParsing?: 'repair' | 'strict';
   approvalPresentation?: ApprovalPresentationCapability;

@@ -32,6 +32,7 @@ export const createActivateSkillToolDefinition = (
     name: 'activate_skill',
     description: ACTIVATE_SKILL_DESCRIPTION,
     parameters: activateSkillSchema,
+    parallelSafe: true,
     needsApproval: () => false, // Safe operation
     execute: async (params) => {
       const { name } = params;

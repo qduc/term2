@@ -376,6 +376,7 @@ export function createBackgroundShellJobToolDefinitions(
       description:
         'Get the non-blocking status and bounded output of a background shell job. Do not use this to poll a running job; completion is delivered automatically.',
       parameters: getBackgroundShellJobParameters,
+      parallelSafe: true,
       needsApproval: () => false,
       execute: ({ job_id }) => {
         const job = registry.get(job_id);

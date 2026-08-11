@@ -18,6 +18,7 @@ import { createGuardedSettingsCommand } from '../commands/guarded-settings-comma
 import { createSkillsSlashCommand } from '../commands/skills-command.js';
 import type { SkillsService, SkillInfo } from '../services/skills/skills-service.js';
 import type { Message } from '../types/message.js';
+import type { CopySelection } from '../utils/copy-selections.js';
 import type { RewindItem } from '../utils/conversation/rewind-items.js';
 
 interface UseAppCommandsProps {
@@ -35,6 +36,7 @@ interface UseAppCommandsProps {
   restoreTurnToInput: (turn: { text: string; images?: UserTurn['images'] }) => void;
   openRewindMenu: (disposition: RewindDisposition) => void;
   openProvidersMenu: () => void;
+  openCopyMenu?: (selections: CopySelection[]) => void;
   onRewind?: () => void;
   onHandoff?: (capturedText: string) => void;
   sendUserMessage: (input: string | UserTurn) => Promise<void>;
@@ -64,6 +66,7 @@ export const useAppCommands = ({
   restoreTurnToInput,
   openRewindMenu,
   openProvidersMenu,
+  openCopyMenu,
   onRewind,
   onHandoff,
   sendUserMessage,
@@ -93,7 +96,7 @@ export const useAppCommands = ({
       createModelSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage, replaceInput }),
       createEffortSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage, replaceInput }),
       createClearSlashCommand(clearConversation, addSystemMessage),
-      createCopySlashCommand({ messages, addSystemMessage }),
+      createCopySlashCommand({ messages, addSystemMessage, openCopyMenu }),
       createUsageSlashCommand(addSystemMessage, getSessionUsage),
       createRewindSlashCommand({
         name: 'rewind',
@@ -194,6 +197,7 @@ export const useAppCommands = ({
     restoreTurnToInput,
     openRewindMenu,
     openProvidersMenu,
+    openCopyMenu,
     onRewind,
     onHandoff,
     sendUserMessage,

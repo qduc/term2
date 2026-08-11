@@ -5,6 +5,7 @@ import {
   countUndoableUserTurnsFrom,
   findLastUndoableUserMessage,
   listUndoableUserMessageIndices,
+  getAssistantResponseText,
   getLastFinalAssistantText,
   getUserMessageEntries,
   mergeCommandMessages,
@@ -33,6 +34,23 @@ it('getLastFinalAssistantText combines contiguous bot messages', () => {
     { id: '2', sender: 'bot', text: 'world', status: 'finalized' },
   ];
   expect(getLastFinalAssistantText(messages)).toBe('hello world');
+});
+
+it('getAssistantResponseText selects the requested response from newest to oldest', () => {
+  const messages: Message[] = [
+    userMsg('u1', 'first question'),
+    botMsg('b1', 'first answer'),
+    userMsg('u2', 'second question'),
+    botMsg('b2', 'second '),
+    botMsg('b3', 'answer'),
+  ];
+
+  expect(getAssistantResponseText(messages, 1)).toBe('second answer');
+  expect(getAssistantResponseText(messages, 2)).toBe('first answer');
+});
+
+it('getAssistantResponseText returns null when the requested response does not exist', () => {
+  expect(getAssistantResponseText([userMsg('u1', 'question'), botMsg('b1', 'answer')], 2)).toBe(null);
 });
 
 // ---------------------------------------------------------------------------

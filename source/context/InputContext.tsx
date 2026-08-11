@@ -42,6 +42,7 @@ export type InputMode =
   | 'settings_value_completion'
   | 'model_selection'
   | 'skill_selection'
+  | 'copy_selection'
   | 'rewind_selection'
   | 'provider_selection';
 
@@ -59,6 +60,8 @@ export function frameKindToLegacyMode(kind: MenuFrame['kind'] | undefined): Inpu
       return 'model_selection';
     case 'skills':
       return 'skill_selection';
+    case 'copy':
+      return 'copy_selection';
     case 'rewind':
       return 'rewind_selection';
     case 'providers':

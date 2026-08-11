@@ -2,6 +2,7 @@ import type { RewindItem } from '../../utils/conversation/rewind-items.js';
 import type { RewindDisposition } from '../../commands/rewind-command.js';
 import type { CustomProviderDraft, ProviderSelectionItem } from '../../hooks/use-provider-selection.js';
 import type { SlashCommand } from '../../slash-commands.js';
+import type { CopySelection } from '../../utils/copy-selections.js';
 import type { TriggerRuleRegistry } from './menu-controller.js';
 
 export type ProviderField = 'name' | 'type' | 'baseUrl' | 'apiKey';
@@ -85,6 +86,7 @@ export type MenuFrame =
       back: BackPolicy;
     }
   | { id: FrameId; kind: 'skills'; binding: TextBinding }
+  | { id: FrameId; kind: 'copy'; items: CopySelection[] }
   | { id: FrameId; kind: 'rewind'; items: RewindItem[]; initialDisposition: RewindDisposition }
   | { id: FrameId; kind: 'providers'; returnPoint: ReturnPoint };
 
@@ -112,6 +114,7 @@ export type FrameSpecOf<F extends MenuFrame = MenuFrame> = F extends MenuFrame
 export type FrameSpec = FrameSpecOf;
 
 export type UnboundFrameSpec =
+  | Omit<Extract<MenuFrame, { kind: 'copy' }>, 'id'>
   | Omit<Extract<MenuFrame, { kind: 'rewind' }>, 'id'>
   | Omit<Extract<MenuFrame, { kind: 'providers' }>, 'id' | 'returnPoint'>;
 

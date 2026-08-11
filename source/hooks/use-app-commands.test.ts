@@ -1,6 +1,6 @@
 // @ts-expect-error IS_REACT_ACT_ENVIRONMENT is not in globalThis types
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import React, { act } from 'react';
 import { render } from 'ink-testing-library';
 import type { Message } from './use-conversation.js';
@@ -112,6 +112,66 @@ it.sequential('createCopySlashCommand reports clipboard failures asynchronously'
   await flushMicrotasks();
 
   expect(systemMessages).toEqual(['Failed to copy to clipboard: clipboard unavailable']);
+});
+
+it.sequential('createCopySlashCommand copies the requested assistant response', async () => {
+  const copied: string[] = [];
+  const command = createCopySlashCommand({
+    messages: [
+      { id: '1', sender: 'user', text: 'first question' },
+      { id: '2', sender: 'bot', text: 'first answer' },
+      { id: '3', sender: 'user', text: 'second question' },
+      { id: '4', sender: 'bot', text: 'second answer' },
+    ],
+    addSystemMessage: () => {},
+    copy: async (text) => {
+      copied.push(text);
+    },
+  });
+
+  expect(command.action('2')).toBe(true);
+  await flushMicrotasks();
+
+  expect(copied).toEqual(['first answer']);
+});
+
+it.sequential('createCopySlashCommand rejects invalid response numbers', async () => {
+  const systemMessages: string[] = [];
+  let copyCalled = false;
+  const command = createCopySlashCommand({
+    messages: [{ id: '1', sender: 'bot', text: 'hello' }],
+    addSystemMessage: (text) => systemMessages.push(text),
+    copy: async () => {
+      copyCalled = true;
+    },
+  });
+
+  expect(command.action('0')).toBe(true);
+  await flushMicrotasks();
+
+  expect(copyCalled).toBe(false);
+  expect(systemMessages).toEqual(['Copy response number must be a positive whole number, e.g. /copy 2.']);
+});
+
+it.sequential('createCopySlashCommand opens a selection menu when the response contains code blocks', () => {
+  const openCopyMenu = vi.fn();
+  const copy = vi.fn(async () => {});
+  const command = createCopySlashCommand({
+    messages: [
+      { id: '1', sender: 'user', text: 'show code' },
+      { id: '2', sender: 'bot', text: 'Here it is:\n```ts\nconst answer = 42;\n```' },
+    ],
+    addSystemMessage: () => {},
+    copy,
+    openCopyMenu,
+  });
+
+  expect(command.action()).toBe(true);
+  expect(copy).not.toHaveBeenCalled();
+  expect(openCopyMenu).toHaveBeenCalledWith([
+    { label: 'Full response', text: 'Here it is:\n```ts\nconst answer = 42;\n```' },
+    { label: 'Code block #1', text: 'const answer = 42;' },
+  ]);
 });
 
 const TestHookWrapper = ({

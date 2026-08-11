@@ -18,6 +18,7 @@ import type { HistoryService } from '../../services/history-service.js';
 import type { SkillInfo, SkillsService } from '../../services/skills/skills-service.js';
 import type { UserTurn } from '../../types/user-turn.js';
 import type { SubmissionMutation } from '../../services/conversation/conversation-adapter.js';
+import type { CopySelection } from '../../utils/copy-selections.js';
 
 export type ApplicationInputSurfaceProps = {
   enabled?: boolean;
@@ -41,6 +42,7 @@ export type ApplicationInputSurfaceProps = {
   onProviderSelected?: (provider: string) => void;
   onUnavailableModelSelected?: (provider: string) => void;
   onSkillSelected?: (skill: SkillInfo) => void;
+  onCopySelection?: (selection: CopySelection) => void;
 };
 
 export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props) => {
@@ -105,6 +107,7 @@ export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props)
     onProviderSelected: props.onProviderSelected,
     onUnavailableModelSelected: props.onUnavailableModelSelected,
     onSkillSelected: props.onSkillSelected,
+    onCopySelection: props.onCopySelection,
     onSystemMessage: props.onSystemMessage,
   };
 

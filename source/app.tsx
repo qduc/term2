@@ -51,6 +51,8 @@ import {
 import { SandboxNetworkApprovalCoordinator } from './utils/shell/sandbox/sandbox-network-approval-coordinator.js';
 import { useFirstRunSetupGate } from './hooks/use-first-run-setup.js';
 import { TOOL_NAME_ASK_USER } from './tools/tool-names.js';
+import { copyToClipboard } from './utils/clipboard.js';
+import type { CopySelection } from './utils/copy-selections.js';
 
 export {
   appendStartupBannerId,
@@ -467,6 +469,28 @@ const App: FC<AppProps> = ({
     [addSystemMessage, controller, openRewindPickerItems],
   );
 
+  const openCopyMenu = useCallback(
+    (selections: CopySelection[]) => {
+      controller.closeAll();
+      controller.open({ kind: 'copy', items: selections }, { buffer: { type: 'clear' } });
+    },
+    [controller],
+  );
+
+  const handleCopySelection = useCallback(
+    (selection: CopySelection) => {
+      void copyToClipboard(selection.text)
+        .then(() => {
+          addSystemMessage(`Copied ${selection.label.toLowerCase()} to the clipboard.`);
+        })
+        .catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          addSystemMessage(`Failed to copy to clipboard: ${message}`);
+        });
+    },
+    [addSystemMessage],
+  );
+
   const { slashCommands, cycleAppModes } = useAppCommands({
     settingsService,
     addSystemMessage,
@@ -487,6 +511,7 @@ const App: FC<AppProps> = ({
       controller.closeAll();
       controller.open({ kind: 'providers' });
     },
+    openCopyMenu,
     onHandoff: handoff.startHandoff,
     sendUserMessage,
     skillsService: skillsService ?? ({ getAvailableSkills: () => [] } as unknown as SkillsService),
@@ -885,6 +910,7 @@ const App: FC<AppProps> = ({
             onProviderSelected={firstRunSetup.active ? firstRunSetup.onProviderSelected : undefined}
             onUnavailableModelSelected={firstRunSetup.requestSetup}
             onSkillSelected={handleSkillSelected}
+            onCopySelection={handleCopySelection}
             onSettingChange={handleSettingChange}
             onSystemMessage={addSystemMessage}
             handoffState={handoff.handoffState}

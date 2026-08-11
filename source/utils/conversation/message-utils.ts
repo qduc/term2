@@ -3,36 +3,57 @@ import type { Message } from '../../types/message.js';
 import { isCommandMessage, isUserMessage } from '../../types/message.js';
 
 /**
- * Get the text content of the final assistant response, combining contiguous
- * bot messages into a single string. Returns null if no bot messages exist.
+ * Get an assistant response by its 1-based position from newest to oldest.
+ * Contiguous bot messages are combined because streaming can represent one
+ * response as several UI messages. Returns null when that response does not
+ * exist.
  */
-export function getLastFinalAssistantText(messages: Message[]): string | null {
-  let lastBotIndex = -1;
-  for (let index = messages.length - 1; index >= 0; index--) {
-    const message = messages[index];
-    if (message?.sender === 'bot' && typeof message.text === 'string' && message.text.length > 0) {
-      lastBotIndex = index;
-      break;
-    }
-  }
-
-  if (lastBotIndex === -1) {
+export function getAssistantResponseText(messages: Message[], responseNumber = 1): string | null {
+  if (!Number.isSafeInteger(responseNumber) || responseNumber < 1) {
     return null;
   }
 
-  const texts: string[] = [];
-  for (let index = lastBotIndex; index >= 0; index--) {
-    const message = messages[index];
-    if (message?.sender === 'bot') {
-      if (typeof message.text === 'string') {
-        texts.unshift(message.text);
+  let remaining = responseNumber;
+  for (let index = messages.length - 1; index >= 0; ) {
+    while (index >= 0 && messages[index]?.sender !== 'bot') {
+      index--;
+    }
+    if (index < 0) {
+      return null;
+    }
+
+    const texts: string[] = [];
+    while (index >= 0) {
+      const message = messages[index];
+      if (message?.sender !== 'bot') {
+        break;
       }
-    } else {
-      break;
+      const text = message.text;
+      if (typeof text === 'string') {
+        texts.unshift(text);
+      }
+      index--;
+    }
+
+    const responseText = texts.join('').trim();
+    if (!responseText) {
+      continue;
+    }
+
+    remaining--;
+    if (remaining === 0) {
+      return responseText;
     }
   }
 
-  return texts.join('').trim() || null;
+  return null;
+}
+
+/**
+ * Get the text content of the final assistant response.
+ */
+export function getLastFinalAssistantText(messages: Message[]): string | null {
+  return getAssistantResponseText(messages);
 }
 
 /**

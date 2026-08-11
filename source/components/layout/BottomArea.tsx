@@ -29,6 +29,7 @@ import type { SubmissionMutation } from '../../services/conversation/conversatio
 import type { SessionCostSummary } from '../../services/cost/model-cost.js';
 import type { BackgroundTaskControlPort } from '../../services/session/background-task-control.js';
 import type { BackgroundTaskControlDetails } from '../../services/session/background-task-control.js';
+import type { CopySelection } from '../../utils/copy-selections.js';
 import { useInputState } from '../../context/InputContext.js';
 import FirstRunSetupPrompt, { type FirstRunSetupPhase } from '../input/FirstRunSetupPrompt.js';
 
@@ -102,6 +103,7 @@ export type BottomAreaProps = {
   onProviderSelected?: (provider: string) => void;
   onUnavailableModelSelected?: (provider: string) => void;
   onSkillSelected?: (skill: SkillInfo) => void;
+  onCopySelection?: (selection: CopySelection) => void;
 };
 
 const BottomArea: FC<BottomAreaProps> = ({
@@ -172,6 +174,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   onProviderSelected,
   onUnavailableModelSelected,
   onSkillSelected,
+  onCopySelection,
 }) => {
   const { controller } = useInputState();
   const [dotCount, setDotCount] = useState(1);
@@ -360,6 +363,7 @@ const BottomArea: FC<BottomAreaProps> = ({
           onProviderSelected={onProviderSelected}
           onUnavailableModelSelected={onUnavailableModelSelected}
           onSkillSelected={onSkillSelected}
+          onCopySelection={onCopySelection}
           promptLabel={
             waitingForAskUserAnswer
               ? 'Answer: '

@@ -11,6 +11,7 @@ import type { HistoryService } from '../../services/history-service.js';
 import type { LoggingService } from '../../services/logging/logging-service.js';
 import type { SlashCommand } from '../../slash-commands.js';
 import type { SkillInfo, SkillsService } from '../../services/skills/skills-service.js';
+import type { CopySelection } from '../../utils/copy-selections.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import { renderInAct } from '../../test-helpers/ink-testing.js';
 
@@ -70,6 +71,11 @@ const skillsCommand: SlashCommand = {
   completion: { type: 'skills', trigger: '/skills ' },
 };
 
+const copySelections: CopySelection[] = [
+  { label: 'Full response', text: 'answer\n```\ncode\n```' },
+  { label: 'Code block #1', text: 'code' },
+];
+
 const settle = async () => {
   await act(async () => {
     for (let i = 0; i < 10; i++) await new Promise((resolve) => setImmediate(resolve));
@@ -84,6 +90,7 @@ const renderSurface = async (
     skillsService?: SkillsService;
     onSkillSelected?: (skill: SkillInfo) => void;
     onSystemMessage?: (text: string) => void;
+    onCopySelection?: (selection: CopySelection) => void;
   },
 ) => {
   const result = await renderInAct(
@@ -98,6 +105,7 @@ const renderSurface = async (
         skillsService={options?.skillsService}
         onSkillSelected={options?.onSkillSelected}
         onSystemMessage={options?.onSystemMessage}
+        onCopySelection={options?.onCopySelection}
       />
       {children}
     </InputProvider>,
@@ -158,6 +166,21 @@ it.sequential('opens the slash menu and Escape cancels it through the terminal b
 
   expect(controller.getSnapshot().editor.text).toBe('');
   expect(lastFrame()).not.toContain('/clear');
+});
+
+it.sequential('copy menu owns keyboard input and accepts the selected code block', async () => {
+  const controller = new MenuControllerImpl();
+  const onCopySelection = vi.fn();
+  const { lastFrame, stdin } = await renderSurface(controller, slashCommands, undefined, { onCopySelection });
+
+  controller.open({ kind: 'copy', items: copySelections });
+  await waitFor(() => (lastFrame() ?? '').includes('Code block #1'));
+
+  await writeInput(stdin, '\u001b[B');
+  await writeInput(stdin, '\r');
+  await waitFor(() => controller.getSnapshot().stack.length === 0);
+
+  expect(onCopySelection).toHaveBeenCalledWith(copySelections[1]);
 });
 
 it.sequential('clears a slash command when Escape arrives during the menu handoff', async () => {

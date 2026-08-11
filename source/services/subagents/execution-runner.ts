@@ -15,7 +15,14 @@ import type {
 import { SubagentToolFactory, type ValidationCapture } from './tool-policy.js';
 import { SubagentSession } from './subagent-session.js';
 import { MAX_SUBAGENT_MODEL_RETRIES } from '../retry/conversation-retry-policy.js';
-import { isAbortLike, aggregateToolUsage, safeEmit } from './utils.js';
+import {
+  isAbortLike,
+  aggregateToolUsage,
+  safeEmit,
+  isMaxTurnsExceededError,
+  extractMaxTurnsLimit,
+  buildTurnBudgetExhaustedFinalText,
+} from './utils.js';
 import { normalizeAgentRunUsage, extractUsage } from '../../utils/ai/token-usage.js';
 import type { ModelRequestCost } from '../../services/cost/model-cost.js';
 import { buildInstructions, resolveSubagentSearchViaShell } from './role-loader.js';
@@ -390,6 +397,32 @@ export class ExecutionSubagentRunner {
 
     const diffStat = buildDiffStat(filesChanged, diffDeltas);
     const validation = validationCapture.value;
+
+    // Turn-budget exhaustion is containment, not a crash: report partial work
+    // under status completed so the parent can continue from evidence.
+    if (error && isMaxTurnsExceededError(error) && signal?.aborted !== true) {
+      const maxTurns = extractMaxTurnsLimit(error) ?? definition.maxTurns;
+      this.#logger.warn('Subagent turn budget exhausted', {
+        agentId,
+        role: request.role,
+        maxTurns,
+      });
+      const partialText = finalText.trim() || currentText.trim();
+      const resultText = await truncateResultText(buildTurnBudgetExhaustedFinalText({ maxTurns, partialText }));
+      return {
+        agentId,
+        role: request.role,
+        status: 'completed',
+        ...resultText,
+        filesChanged: [...new Set(filesChanged)],
+        toolsUsed: aggregateToolUsage(toolCounts),
+        ...(usage ? { usage } : {}),
+        ...(costRecords && costRecords.length > 0 ? { costRecords } : {}),
+        ...(diffStat.length > 0 ? { diffStat } : {}),
+        ...(validation ? { validation } : {}),
+        ...(worktreePath ? { worktreePath } : {}),
+      };
+    }
 
     if (error) {
       return {

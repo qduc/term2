@@ -53,6 +53,7 @@ function buildNestedRunner(
     failAfterApproval?: boolean;
     onEvent?: (event: ConversationEvent) => void;
     onBackgroundApprovalPause?: (pause: BackgroundSubagentApprovalPause) => void;
+    logger?: ReturnType<typeof createMockLogger>;
   } = {},
 ) {
   let first = true;
@@ -106,7 +107,7 @@ function buildNestedRunner(
   } as unknown as SubagentToolFactory;
 
   const runner = new NestedSubagentRunner({
-    logger: createMockLogger(),
+    logger: options.logger ?? createMockLogger(),
     settings: createMockSettings({ 'agent.model': 'nested-model', 'agent.provider': providerId }),
     sessionContextService: createSessionContextService(),
     toolFactory: stubToolFactory,
@@ -435,12 +436,33 @@ describe('NestedSubagentRunner end to end', () => {
   });
 
   it("enforces the role's turn budget instead of running as long as the model keeps calling tools", async () => {
-    const { runner } = buildNestedRunner({ alwaysCallsTool: true, maxTurns: 3 });
+    const events: ConversationEvent[] = [];
+    const warn = vi.fn();
+    const { runner } = buildNestedRunner({
+      alwaysCallsTool: true,
+      maxTurns: 3,
+      onEvent: (event) => events.push(event),
+      logger: { ...createMockLogger(), warn },
+    });
 
-    await expect(
-      runner.runAsTool({ role: 'worker', task: 'update notes' }, parentToolContext(), {
-        toolCall: { callId: 'parent-call-1' },
-      }),
-    ).rejects.toThrow(/Max turns \(3\) exceeded/);
+    const result = await runner.runAsTool({ role: 'worker', task: 'update notes' }, parentToolContext(), {
+      toolCall: { callId: 'parent-call-1' },
+    });
+
+    // Budget stop is containment, not a crash: settle a completed report with
+    // partial side effects instead of throwing / status failed.
+    expect(result.status).toBe('completed');
+    expect(result.error).toBeUndefined();
+    expect(result.finalText).toContain('Turn budget exhausted (3)');
+    expect(result.finalText).toContain('budget stop, not a task failure');
+    expect(result.filesChanged).toEqual(['notes.md']);
+    expect(result.toolsUsed).toEqual([{ toolName: 'fake_tool', count: 3 }]);
+    expect(events.find((event) => event.type === 'subagent_completed')).toMatchObject({
+      result: { status: 'completed', agentId: 'parent-call-1' },
+    });
+    expect(warn).toHaveBeenCalledWith(
+      'Subagent turn budget exhausted',
+      expect.objectContaining({ role: 'worker', maxTurns: 3 }),
+    );
   });
 });

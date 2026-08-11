@@ -128,6 +128,41 @@ describe('ExecutionSubagentRunner text-turn peek events', () => {
     expect(committedEvents(received)).not.toContainEqual(expect.objectContaining({ type: 'subagent_text_turn' }));
   });
 
+  it('settles a turn-budget stop as completed with partial work, not failed', async () => {
+    const warn = vi.fn();
+    stream.events = [
+      { type: 'tool_started', toolCallId: 'call-1', toolName: 'grep', arguments: {} },
+      { type: 'text_delta', delta: 'Found candidate files under source/.' },
+      { type: 'error', message: 'Max turns (5) exceeded' },
+    ];
+    const received: any[] = [];
+    const runner = new ExecutionSubagentRunner({
+      logger: { ...createMockLogger(), warn },
+      settings: createMockSettings(),
+      sessionContextService: createSessionContextService(),
+      createClient: () => ({ dispose: vi.fn() } as any),
+      toolFactory: {
+        buildToolDefinitions: () => [],
+        buildAgentTools: () => [],
+      } as any,
+      onEvent: (event) => received.push(event),
+      toolOwnership: new ToolOwnershipRegistry(),
+    });
+
+    // Simulate tool bookkeeping that the real tool path would have recorded.
+    const result = await runner.run('run-budget', { role: 'explorer', task: 'inspect' }, definition);
+
+    expect(result.status).toBe('completed');
+    expect(result.error).toBeUndefined();
+    expect(result.finalText).toContain('Turn budget exhausted (5)');
+    expect(result.finalText).toContain('Found candidate files under source/.');
+    expect(result.finalText).toContain('budget stop, not a task failure');
+    expect(warn).toHaveBeenCalledWith(
+      'Subagent turn budget exhausted',
+      expect.objectContaining({ agentId: 'run-budget', role: 'explorer', maxTurns: 5 }),
+    );
+  });
+
   it('saves the complete final result when its display preview is truncated', async () => {
     const fullText = `${'a'.repeat(40_000)}FULL-RESULT-SENTINEL${'b'.repeat(100)}`;
     const { runner } = makeRunner([{ type: 'final', finalText: fullText }]);

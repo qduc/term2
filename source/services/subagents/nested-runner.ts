@@ -28,6 +28,9 @@ import {
   createCompositeAbortSignal,
   createAbortError,
   isAbortLike,
+  isMaxTurnsExceededError,
+  extractMaxTurnsLimit,
+  buildTurnBudgetExhaustedFinalText,
 } from './utils.js';
 import { normalizeAgentRunUsage, extractUsage } from '../../utils/ai/token-usage.js';
 import type { ModelRequestCost } from '../../services/cost/model-cost.js';
@@ -405,40 +408,68 @@ export class NestedSubagentRunner {
         // A transferred run never manufactures a second execution. Each
         // continuation resolves exactly one tool interruption, then this loop
         // observes the next returned segment (including batched siblings).
-        for (;;) {
-          settled = await stream.completed;
-          this.#toolOwnership.claim(collectApprovalCallIds(stream.interruptions), {
-            kind: 'subagent',
-            agentId: runContext.agentId,
-            role,
-          });
-          if (!stream.interruptions?.length || !foregroundLease?.adopted || !stream.state) break;
-          let resumed: typeof stream | undefined;
-          const continued = await foregroundLease.waitForBackgroundContinuation(
-            stream.state,
-            stream.interruptions[0],
-            () => {
-              resumed = trafficContext
-                ? this.#sessionContextService.runWithContext(trafficContext, () =>
-                    loop.continueRunStream(stream.state!),
-                  )
-                : loop.continueRunStream(stream.state!);
-            },
-            (snapshot) => {
-              this.#onEvent?.({
-                type: 'subagent_approval_required',
-                agentId: runContext.agentId,
-                role,
-              });
-              this.#backgroundApprovalPauseSink?.({
-                ...snapshot,
-                role,
-                apply: (callback) => foregroundLease.applyBackgroundApproval(snapshot, callback),
-              });
-            },
-          );
-          if (!continued || !resumed) break;
-          stream = resumed;
+        try {
+          for (;;) {
+            settled = await stream.completed;
+            this.#toolOwnership.claim(collectApprovalCallIds(stream.interruptions), {
+              kind: 'subagent',
+              agentId: runContext.agentId,
+              role,
+            });
+            if (!stream.interruptions?.length || !foregroundLease?.adopted || !stream.state) break;
+            let resumed: typeof stream | undefined;
+            const continued = await foregroundLease.waitForBackgroundContinuation(
+              stream.state,
+              stream.interruptions[0],
+              () => {
+                resumed = trafficContext
+                  ? this.#sessionContextService.runWithContext(trafficContext, () =>
+                      loop.continueRunStream(stream.state!),
+                    )
+                  : loop.continueRunStream(stream.state!);
+              },
+              (snapshot) => {
+                this.#onEvent?.({
+                  type: 'subagent_approval_required',
+                  agentId: runContext.agentId,
+                  role,
+                });
+                this.#backgroundApprovalPauseSink?.({
+                  ...snapshot,
+                  role,
+                  apply: (callback) => foregroundLease.applyBackgroundApproval(snapshot, callback),
+                });
+              },
+            );
+            if (!continued || !resumed) break;
+            stream = resumed;
+          }
+        } catch (error) {
+          // Turn-budget exhaustion is a containment stop: settle a completed
+          // report with partial side effects rather than failing the parent tool.
+          if (isMaxTurnsExceededError(error) && signal?.aborted !== true) {
+            const maxTurns = extractMaxTurnsLimit(error) ?? definition.maxTurns;
+            this.#logger.warn('Subagent turn budget exhausted', {
+              agentId: runContext.agentId,
+              role,
+              maxTurns,
+            });
+            const budgetResult: NestedSubagentResult = {
+              agentId: runContext.agentId,
+              role,
+              status: 'completed',
+              finalText: buildTurnBudgetExhaustedFinalText({
+                maxTurns,
+                partialText: extractFinalText(stream),
+              }),
+              filesChanged: [...new Set(runContext.filesChanged)],
+              toolsUsed: aggregateContextToolUsage(runContext.toolCounts),
+              usage: extractUsage(stream),
+              costRecords: stream.runCostRecords as ModelRequestCost[] | undefined,
+            };
+            return JSON.stringify(budgetResult);
+          }
+          throw error;
         }
 
         const interrupted = Boolean(stream.interruptions?.length);

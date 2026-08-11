@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ISettingsService } from '../service-interfaces.js';
-import { loadRoleDefinition } from './role-loader.js';
+import { loadRoleDefinition, ROLE_MAX_TURNS_DEFAULT } from './role-loader.js';
 
 function settings(values: Record<string, unknown>): ISettingsService {
   return {
@@ -12,6 +12,21 @@ function settings(values: Record<string, unknown>): ISettingsService {
     setPersistentDynamic: () => {},
   };
 }
+
+describe('loadRoleDefinition turn budgets', () => {
+  it('gives tool-using roles a generous tripwire budget and keeps mentor single-turn', () => {
+    const base = {
+      'agent.model': 'main-model',
+      'agent.provider': 'openai',
+      'memory.enabled': true,
+    };
+    expect(ROLE_MAX_TURNS_DEFAULT).toBe(200);
+    expect(loadRoleDefinition('explorer', settings(base)).maxTurns).toBe(200);
+    expect(loadRoleDefinition('worker', settings(base)).maxTurns).toBe(200);
+    expect(loadRoleDefinition('librarian', settings(base)).maxTurns).toBe(200);
+    expect(loadRoleDefinition('mentor', settings(base)).maxTurns).toBe(1);
+  });
+});
 
 describe('loadRoleDefinition ancillary tier reasoning', () => {
   it('defines explorer as an evidence collector without diagnostic or recommendation ownership', () => {

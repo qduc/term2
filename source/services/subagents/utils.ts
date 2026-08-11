@@ -1,10 +1,48 @@
 import type { SubagentResult } from './types.js';
+import { MaxTurnsExceededError } from '../agent-runtime/application-run-loop.js';
+import { isMaxTurnsError } from '../../utils/conversation/conversation-utils.js';
 
 export function isAbortLike(message: string | undefined, obj?: unknown): boolean {
   if (message?.includes('abort') || message?.includes('cancel')) return true;
   const o = obj as Record<string, unknown> | undefined;
   if (o && (o['name'] === 'AbortError' || o['code'] === 'ERR_ABORTED' || o['kind'] === 'aborted')) return true;
   return false;
+}
+
+/**
+ * True when a run ended because its turn budget was spent.
+ *
+ * Subagent settlement treats this as a containment stop (report partial work),
+ * not as a crash. Main-agent recovery still uses {@link isMaxTurnsError} on the
+ * message string for the human check-in prompt.
+ */
+export function isMaxTurnsExceededError(error: unknown): boolean {
+  if (error instanceof MaxTurnsExceededError) return true;
+  if (error && typeof error === 'object' && (error as { name?: string }).name === 'MaxTurnsExceededError') {
+    return true;
+  }
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  return isMaxTurnsError(message);
+}
+
+export function extractMaxTurnsLimit(error: unknown): number | undefined {
+  if (error instanceof MaxTurnsExceededError) return error.maxTurns;
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  const match = /Max turns \((\d+)\) exceeded/.exec(message);
+  return match ? Number(match[1]) : undefined;
+}
+
+/**
+ * Parent-facing final text when a subagent hits its turn budget.
+ * Status stays `completed`; the header states that this is not a task failure.
+ */
+export function buildTurnBudgetExhaustedFinalText(options: { maxTurns?: number; partialText?: string }): string {
+  const limitSuffix = typeof options.maxTurns === 'number' ? ` (${options.maxTurns})` : '';
+  const header =
+    `Turn budget exhausted${limitSuffix}. Stopping with partial results — this is a budget stop, not a task failure. ` +
+    `Report what completed and what remains.`;
+  const body = options.partialText?.trim();
+  return body ? `${header}\n\n${body}` : header;
 }
 
 export function isToolHistoryItem(raw: any): boolean {

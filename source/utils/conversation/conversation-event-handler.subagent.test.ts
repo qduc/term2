@@ -722,3 +722,60 @@ it('subagent_command_message: appends multiple tool calls of the same type inste
 
   expect(messages[0].tools).toEqual(['read_file "file1.txt" (Success)', 'read_file "file2.txt" (Success)']);
 });
+
+it('subagent_command_message: ignores tool start events and keeps result events', () => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'subagent_started',
+    agentId: 'agent-1',
+    role: 'explorer',
+    task: 'find files',
+  } as ConversationEvent);
+
+  // Tool start event (status: 'running', no outcome suffix)
+  handler({
+    type: 'subagent_command_message',
+    agentId: 'agent-1',
+    role: 'explorer',
+    message: {
+      id: 'cmd-1',
+      sender: 'command',
+      status: 'running',
+      command: 'read_file "file1.txt"',
+      toolName: 'read_file',
+    },
+  } as any);
+
+  let messages = deps.calls.appendedMessages[0];
+  for (const update of deps.calls.setMessagesCalls) {
+    messages = update(messages);
+  }
+
+  // Tool start event should not be added to tools
+  expect(messages[0].tools).toEqual([]);
+
+  // Tool completion event (status: 'completed', success: true)
+  handler({
+    type: 'subagent_command_message',
+    agentId: 'agent-1',
+    role: 'explorer',
+    message: {
+      id: 'cmd-1',
+      sender: 'command',
+      status: 'completed',
+      command: 'read_file "file1.txt"',
+      toolName: 'read_file',
+      success: true,
+    },
+  } as any);
+
+  for (const update of deps.calls.setMessagesCalls) {
+    messages = update(messages);
+  }
+
+  // Result event is kept in tools
+  expect(messages[0].tools).toEqual(['read_file "file1.txt" (Success)']);
+});

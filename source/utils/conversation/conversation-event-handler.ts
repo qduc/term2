@@ -13,6 +13,7 @@ import type {
   SystemMessage,
 } from '../../types/message.js';
 import { isCommandMessage, isSubagentActivityMessage } from '../../types/message.js';
+import { isResultToolEvent } from '../../components/message/SubagentActivityMessage.js';
 import { parseToolArguments, formatToolCommand, type StreamingState } from './conversation-utils.js';
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
 import { findMarkdownCommitOffset } from './markdown-commit-frontier.js';
@@ -489,6 +490,13 @@ export function createConversationEventHandler(
               toolName === TOOL_NAME_APPLY_PATCH;
 
             const itemToAppend = isWriteTool ? event.message : finishedCommand;
+            if (!isResultToolEvent(itemToAppend)) {
+              return {
+                ...message,
+                role: message.role ?? event.role,
+              };
+            }
+
             currentTools.push(itemToAppend);
 
             return {
@@ -499,6 +507,13 @@ export function createConversationEventHandler(
           };
 
           if (index === -1) {
+            const isWriteTool =
+              toolName === TOOL_NAME_CREATE_FILE ||
+              toolName === TOOL_NAME_SEARCH_REPLACE ||
+              toolName === TOOL_NAME_APPLY_PATCH;
+            const itemToAppend = isWriteTool ? event.message : finishedCommand;
+            const toolsToInit = isResultToolEvent(itemToAppend) ? [itemToAppend] : [];
+
             return trimMessages([
               ...prev,
               {
@@ -508,7 +523,7 @@ export function createConversationEventHandler(
                 agentId: event.agentId,
                 role: event.role,
                 task: '',
-                tools: [finishedCommand],
+                tools: toolsToInit,
               },
             ]);
           }

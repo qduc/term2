@@ -200,68 +200,50 @@ it.sequential('SubagentActivityMessage renders single-match string tool with che
   expect(output.includes('✔ grep "TODO"')).toBe(true);
 });
 
-it.sequential('SubagentActivityMessage renders unknown-suffix tool as running when activity is running', async () => {
+it.sequential(
+  'SubagentActivityMessage filters out tool start event (without result suffix) when activity is running',
+  async () => {
+    const props = {
+      msg: {
+        role: 'explorer',
+        task: 'find x',
+        status: 'running',
+        tools: ['read_file "source/app.tsx"'],
+      },
+    };
+
+    const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />);
+    const output = toVisibleText(lastFrame() ?? '');
+
+    expect(output.includes('read_file')).toBe(false);
+  },
+);
+
+it.sequential('SubagentActivityMessage filters out running write tool CommandMessage object', async () => {
+  const runningWriteMsg = {
+    id: 'cmd-w1',
+    sender: 'command' as const,
+    status: 'running' as const,
+    command: 'create_file "src/test.txt"',
+    output: '',
+    toolName: TOOL_NAME_CREATE_FILE,
+    toolArgs: { path: 'src/test.txt', content: 'hello' },
+  };
+
   const props = {
     msg: {
       role: 'explorer',
       task: 'find x',
       status: 'running',
-      tools: ['read_file "source/app.tsx"'],
+      tools: [runningWriteMsg],
     },
   };
 
   const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />);
   const output = toVisibleText(lastFrame() ?? '');
 
-  expect(output.includes('\u25b6 read_file "source/app.tsx"')).toBe(true);
-});
-
-it.sequential('SubagentActivityMessage renders unknown-suffix tool as success when activity is completed', async () => {
-  const props = {
-    msg: {
-      role: 'explorer',
-      task: 'find x',
-      status: 'completed',
-      tools: ['read_file "source/app.tsx"'],
-    },
-  };
-
-  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />);
-  const output = toVisibleText(lastFrame() ?? '');
-
-  expect(output.includes('\u2714 read_file "source/app.tsx"')).toBe(true);
-});
-
-it.sequential('SubagentActivityMessage renders unknown-suffix tool as failed when activity failed', async () => {
-  const props = {
-    msg: {
-      role: 'explorer',
-      task: 'find x',
-      status: 'failed',
-      tools: ['read_file "source/app.tsx"'],
-    },
-  };
-
-  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />);
-  const output = toVisibleText(lastFrame() ?? '');
-
-  expect(output.includes('\u2716 read_file "source/app.tsx"')).toBe(true);
-});
-
-it.sequential('SubagentActivityMessage renders unknown-suffix tool as failed when activity was cancelled', async () => {
-  const props = {
-    msg: {
-      role: 'explorer',
-      task: 'find x',
-      status: 'cancelled',
-      tools: ['read_file "source/app.tsx"'],
-    },
-  };
-
-  const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />);
-  const output = toVisibleText(lastFrame() ?? '');
-
-  expect(output.includes('\u2716 read_file "source/app.tsx"')).toBe(true);
+  expect(output.includes('create_file')).toBe(false);
+  expect(output.includes('Created')).toBe(false);
 });
 
 it.sequential('SubagentActivityMessage does not misparse embedded (Failed: in arguments', async () => {

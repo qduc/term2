@@ -750,8 +750,10 @@ export class ApplicationRunLoop {
         ...options.generationGuard,
       });
       const consume = async (): Promise<void> => {
-        const deadline = new GenerationDeadline(generationGuard.requestDeadlineMs, () =>
-          requestAbortController.abort(),
+        const deadline = new GenerationDeadline(
+          generationGuard.requestDeadlineMs,
+          () => requestAbortController.abort(),
+          () => generationGuard.progress,
         );
         let iterator: AsyncIterator<StreamedModelTurnEvent> | undefined;
         let iteratorFinished = false;

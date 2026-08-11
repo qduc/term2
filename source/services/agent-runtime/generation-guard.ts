@@ -124,6 +124,13 @@ function zValues(value: string): Uint32Array {
   return z;
 }
 
+export interface GenerationProgress {
+  readonly outputCharacters: number;
+  readonly textCharacters: number;
+  readonly reasoningCharacters: number;
+  readonly toolArgumentCharacters: number;
+}
+
 /** Owns counting and repetition state for exactly one provider request. */
 export class GenerationGuard {
   readonly #options: ResolvedGenerationGuardOptions;
@@ -152,6 +159,28 @@ export class GenerationGuard {
 
   get reasoningCharacters(): number {
     return this.#reasoningCharacters;
+  }
+
+  get outputCharacters(): number {
+    return this.#outputCharacters;
+  }
+
+  get toolArgumentCharacters(): number {
+    return this.#observableToolArgumentCharacters;
+  }
+
+  /**
+   * A snapshot of what this request has produced so far. A deadline abort
+   * reports it in the error message because that message is the only part of
+   * the failure that survives the subagent tool-output boundary.
+   */
+  get progress(): GenerationProgress {
+    return {
+      outputCharacters: this.#outputCharacters,
+      textCharacters: this.#textCharacters,
+      reasoningCharacters: this.#reasoningCharacters,
+      toolArgumentCharacters: this.#observableToolArgumentCharacters,
+    };
   }
 
   observeText(text: string): void {
@@ -291,15 +320,33 @@ export class GenerationGuard {
   }
 }
 
+/**
+ * The deadline message carries the progress counters because a subagent
+ * failure is re-thrown from a tool-output string: the message survives that
+ * boundary and a structured payload does not.
+ */
+function describeDeadlineExpiry(timeoutMs: number, progress: GenerationProgress | undefined): string {
+  const base = `Model request exceeded its total deadline (${Math.round(timeoutMs / 1000)}s)`;
+  if (!progress) return `${base}.`;
+  return (
+    `${base}; streamed ${progress.outputCharacters} output chars ` +
+    `(text ${progress.textCharacters}, reasoning ${progress.reasoningCharacters}, ` +
+    `tool arguments ${progress.toolArgumentCharacters}).`
+  );
+}
+
 /** Race one iterator read with a deadline that aborts the active provider signal. */
 export class GenerationDeadline {
   #error: GenerationGuardError | undefined;
   #timer: ReturnType<typeof setTimeout> | undefined;
   readonly #waitingRejectors = new Set<(error: GenerationGuardError) => void>();
 
-  constructor(timeoutMs: number, abortActiveRequest: () => void) {
+  constructor(timeoutMs: number, abortActiveRequest: () => void, describeProgress?: () => GenerationProgress) {
     this.#timer = setTimeout(() => {
-      this.#error = new GenerationGuardError('request_deadline', 'Model request exceeded its total deadline.');
+      this.#error = new GenerationGuardError(
+        'request_deadline',
+        describeDeadlineExpiry(timeoutMs, describeProgress?.()),
+      );
       abortActiveRequest();
       for (const reject of this.#waitingRejectors) reject(this.#error);
       this.#waitingRejectors.clear();

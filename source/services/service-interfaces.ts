@@ -52,6 +52,22 @@ export interface ProviderTrafficClosedResponse {
   eventCount: number;
   modelClass?: string;
   modelWrapperClass?: string;
+  /**
+   * A stream that ends without a terminal event leaves no payload to
+   * summarize, so the retained transcript and its timings are the only record
+   * of what the model was doing when it was cut off.
+   */
+  diagnostics?: ProviderTrafficStreamDiagnostics;
+}
+
+export interface ProviderTrafficStreamDiagnostics {
+  durationMs: number;
+  firstEventMs?: number;
+  lastEventMs?: number;
+  maxGapMs?: number;
+  responseId?: string;
+  eventTypeCounts: Record<string, number>;
+  events: unknown[];
 }
 
 export interface IProviderTraffic {

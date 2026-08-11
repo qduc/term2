@@ -962,6 +962,50 @@ it('CodexResponsesWSModel labels a consumer-closed stream as aborted when its re
   ]);
 });
 
+// An aborted stream leaves no payload behind, so the transcript is the only
+// evidence of what the model was doing when the deadline cut it off.
+it('CodexResponsesWSModel retains the partial transcript of an aborted stream', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const trafficCalls: Array<{ method: string; args: any }> = [];
+  const mockProviderTraffic: IProviderTraffic = {
+    recordRequestStart() {},
+    async recordResponseReceived() {},
+    recordRequestFailed() {},
+    recordResponseClosed(input: any) {
+      trafficCalls.push({ method: 'recordResponseClosed', args: input });
+    },
+  };
+
+  transport.fetchResponse = async function () {
+    return makeStream([
+      { type: 'response.created', response: { id: 'resp_ws_runaway' } },
+      { type: 'response.output_text.delta', delta: 'runaway output' },
+    ]);
+  };
+
+  const controller = new AbortController();
+  const model = new CodexResponsesWSModel(
+    { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+    'gpt-5-codex',
+    { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+    undefined,
+    mockProviderTraffic,
+    undefined,
+    transport,
+  );
+  const iterator = model.stream({ input: [], tools: [], signal: controller.signal })[Symbol.asyncIterator]();
+
+  await iterator.next();
+  controller.abort();
+  await iterator.return?.();
+
+  const diagnostics = trafficCalls[0]!.args.diagnostics;
+  expect(diagnostics.responseId).toBe('resp_ws_runaway');
+  expect(diagnostics.eventTypeCounts).toMatchObject({ 'response.created': 1, 'response.output_text.delta': 1 });
+  expect(JSON.stringify(diagnostics.events)).toContain('runaway output');
+  expect(typeof diagnostics.durationMs).toBe('number');
+});
+
 it('CodexResponsesWSModel keeps provider stream failures on the existing failure path', async () => {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const trafficCalls: Array<{ method: string; args: any }> = [];

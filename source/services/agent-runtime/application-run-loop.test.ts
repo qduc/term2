@@ -344,6 +344,42 @@ describe('ApplicationRunLoop generation guard', () => {
       vi.useRealTimers();
     }
   });
+
+  // A subagent re-throws this failure from a tool-output string, so the message
+  // is the only part that reaches the log where the failure is noticed.
+  it('reports how much the request had streamed when its deadline expired', async () => {
+    vi.useFakeTimers();
+    try {
+      let started!: () => void;
+      const startedPromise = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      const model: StreamedModelTurn = {
+        async *stream(request) {
+          yield { type: 'reasoning_delta' as const, text: 'thinking hard' };
+          yield { type: 'text_delta' as const, text: 'partial' };
+          started();
+          await new Promise<void>((resolve) =>
+            request.signal?.addEventListener('abort', () => resolve(), { once: true }),
+          );
+          yield { type: 'completion' as const, responseId: 'too-late', output: [] };
+        },
+      };
+      const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'prompt', {
+        generationGuard: { ...guard, requestDeadlineMs: 10 },
+      } as any);
+      await startedPromise;
+      const completion = expect(stream.completed).rejects.toMatchObject({
+        code: 'request_deadline',
+        message:
+          'Model request exceeded its total deadline (0s); streamed 20 output chars (text 7, reasoning 13, tool arguments 0).',
+      });
+      await vi.advanceTimersByTimeAsync(10);
+      await completion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('ApplicationRunLoop', () => {

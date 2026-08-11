@@ -16,6 +16,9 @@ import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
 import type { ExecutionBudget } from '../agent-runtime/execution-budget.js';
 
+/** Upper bound on `agent.mentorSamples`; each sample is a full mentor call. */
+const MAX_MENTOR_SAMPLES = 8;
+
 export class MentorRunner {
   #logger: ILoggingService;
   #settings: ISettingsService;
@@ -75,7 +78,11 @@ export class MentorRunner {
     if (session) this.#mentorSession = session;
     try {
       try {
-        const result = await this.#runWithSession(agentId, task, signal);
+        const samples = this.#resolveSampleCount();
+        const result =
+          samples > 1
+            ? await this.#runSamples(agentId, task, samples, signal)
+            : await this.#runWithSession(agentId, task, this.#mentorSession, signal);
         if (slot && result.usage) childBudget!.recordUsage(result.usage);
         return result;
       } catch (error: any) {
@@ -109,7 +116,82 @@ export class MentorRunner {
     return this.run(agentId, task, signal, session, undefined);
   }
 
-  async #runWithSession(agentId: string, task: string, signal?: AbortSignal): Promise<SubagentResult> {
+  #resolveSampleCount(): number {
+    const configured = this.#settings.get('agent.mentorSamples');
+    const parsed = typeof configured === 'number' ? configured : Number(configured);
+    if (!Number.isFinite(parsed)) return 1;
+    return Math.max(1, Math.min(MAX_MENTOR_SAMPLES, Math.floor(parsed)));
+  }
+
+  /**
+   * Consults the mentor `samples` times concurrently and returns every answer.
+   *
+   * Each sample gets its own throwaway session. Sharing one session would feed
+   * sample N-1's answer into sample N as conversation history, so the samples
+   * would anchor on the first answer instead of being independent opinions —
+   * the whole reason for sampling. The persistent `#mentorSession` is left
+   * untouched, so single-sample mentor mode keeps its ongoing relationship.
+   */
+  async #runSamples(agentId: string, task: string, samples: number, signal?: AbortSignal): Promise<SubagentResult> {
+    const settled = await Promise.allSettled(
+      Array.from({ length: samples }, () =>
+        this.#runWithSession(agentId, task, new SubagentSession(randomUUID(), 'mentor'), signal),
+      ),
+    );
+
+    const answers: string[] = [];
+    const failures: unknown[] = [];
+    const usageTotals = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+    const costRecords: ModelRequestCost[] = [];
+    let sawUsage = false;
+
+    settled.forEach((outcome, index) => {
+      if (outcome.status === 'rejected') {
+        failures.push(outcome.reason);
+        return;
+      }
+      const result = outcome.value;
+      answers.push(`## Mentor sample ${index + 1} of ${samples}\n\n${result.finalText}`);
+      if (result.usage) {
+        sawUsage = true;
+        usageTotals.prompt_tokens += result.usage.prompt_tokens ?? 0;
+        usageTotals.completion_tokens += result.usage.completion_tokens ?? 0;
+        usageTotals.total_tokens += result.usage.total_tokens ?? 0;
+      }
+      if (result.costRecords) costRecords.push(...result.costRecords);
+    });
+
+    if (answers.length === 0) {
+      // Nothing to hand back, so surface the real failure rather than an empty
+      // consultation. An abort is rethrown as-is so `run` reports `cancelled`.
+      const abort = failures.find((error: any) => isAbortLike(error?.message, error));
+      throw abort ?? failures[0];
+    }
+
+    const sections = [...answers];
+    if (failures.length > 0) {
+      const detail = failures.map((error: any) => error?.message ?? String(error)).join('; ');
+      sections.push(`_${failures.length} of ${samples} mentor samples failed: ${detail}_`);
+    }
+
+    return {
+      agentId,
+      role: 'mentor',
+      status: 'completed',
+      finalText: sections.join('\n\n'),
+      filesChanged: [],
+      toolsUsed: [],
+      ...(sawUsage ? { usage: usageTotals } : {}),
+      ...(costRecords.length > 0 ? { costRecords } : {}),
+    };
+  }
+
+  async #runWithSession(
+    agentId: string,
+    task: string,
+    mentorSession: SubagentSession,
+    signal?: AbortSignal,
+  ): Promise<SubagentResult> {
     const definition = loadRoleDefinition('mentor', this.#settings);
     const mentorModelName = definition.model;
     const mentorProvider = definition.provider;
@@ -124,7 +206,7 @@ export class MentorRunner {
     const agentsInstructions = this.#executionContext?.isRemote() ? '' : getAgentsInstructions(cwd);
     const instructions = `${baseInstructions}\n\nEnvironment: ${envInfo}${agentsInstructions}`;
 
-    this.#mentorSession.switchProvider(mentorProvider);
+    mentorSession.switchProvider(mentorProvider);
 
     const providerDef = getProvider(mentorProvider);
     if (!providerDef?.createStreamedModel) {
@@ -134,7 +216,7 @@ export class MentorRunner {
           `Please check that all required credentials and provider settings are set.`,
       );
     }
-    const streamedModel = await this.#mentorSession.ensureModel(mentorProvider, (providerId) => {
+    const streamedModel = await mentorSession.ensureModel(mentorProvider, (providerId) => {
       const definition = getProvider(providerId);
       if (!definition?.createStreamedModel) throw new Error(`${providerId} has no streamed model`);
       return definition.createStreamedModel(mentorModelName, {
@@ -146,7 +228,7 @@ export class MentorRunner {
     if (!streamedModel)
       throw new Error(`${providerDef.label || mentorProvider} is configured but could not be initialized.`);
 
-    const mentorAgent = this.#mentorSession.ensureAgent(() => {
+    const mentorAgent = mentorSession.ensureAgent(() => {
       const reasoningEffort = this.#settings.get('agent.mentorReasoningEffort');
       const modelSettings: any = {
         retry: { maxRetries: this.#settings.get('agent.retryAttempts') ?? 2 },
@@ -164,16 +246,16 @@ export class MentorRunner {
       } satisfies ApplicationAgent;
     }) as ApplicationAgent;
 
-    this.#mentorSession.addUserMessage(task);
+    mentorSession.addUserMessage(task);
 
     const supportsChaining = providerDef.capabilities?.supportsConversationChaining ?? false;
-    const input = this.#mentorSession.getInput(task, supportsChaining);
+    const input = mentorSession.getInput(task, supportsChaining);
     const loop = new ApplicationRunLoop({ resolveModel: () => streamedModel });
     const stream = loop.startStream(mentorAgent, input, {
       ...(signal ? { signal } : {}),
       maxTurns: definition.maxTurns,
-      ...(supportsChaining && this.#mentorSession.previousResponseId
-        ? { previousResponseId: this.#mentorSession.previousResponseId }
+      ...(supportsChaining && mentorSession.previousResponseId
+        ? { previousResponseId: mentorSession.previousResponseId }
         : {}),
     });
     try {
@@ -182,7 +264,7 @@ export class MentorRunner {
       if (stream.runUsage !== undefined) error.usage = stream.runUsage;
       throw error;
     }
-    this.#mentorSession.appendOutput({ output: selectAgentStreamItems(stream), lastResponseId: stream.lastResponseId });
+    mentorSession.appendOutput({ output: selectAgentStreamItems(stream), lastResponseId: stream.lastResponseId });
 
     const usage = normalizeAgentRunUsage(stream.runUsage) ?? extractUsage(stream);
     if (usage) safeEmit(this.#logger, this.#onEvent, { type: 'usage_update', agentId, usage });

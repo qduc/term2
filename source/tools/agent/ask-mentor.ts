@@ -8,7 +8,10 @@ const ASK_MENTOR_DESCRIPTION =
   'Use this for architecture trade-offs, design review, debugging strategy, or when you need a second opinion. ' +
   'The mentor does not see your thinking, files, or conversation context—fully explain the situation in your question. ' +
   'Do NOT use this to perform actions, read files, or run commands; use the standard tools for those. ' +
-  'Returns the mentor answer as text.';
+  'Returns the mentor answer as text. ' +
+  'If sampling is configured, several independent answers are returned as labelled sections. ' +
+  'Where they disagree, treat the disagreement as a signal that the question is genuinely uncertain — ' +
+  'weigh the reasoning rather than adopting whichever answer matches your current plan.';
 
 const askMentorSchema = z.object({
   question: z.string().describe('The question to ask the mentor.'),

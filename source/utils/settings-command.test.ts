@@ -14,6 +14,7 @@ const baseSettings = {
     mentorModel: { value: undefined, source: 'default' },
     mentorProvider: { value: undefined, source: 'default' },
     mentorReasoningEffort: { value: 'default', source: 'default' },
+    mentorSamples: { value: 1, source: 'default' },
     useFlexServiceTier: { value: false, source: 'default' },
     contextCompaction: {
       enabled: { value: false, source: 'default' },

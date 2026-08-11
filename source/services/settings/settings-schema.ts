@@ -123,6 +123,13 @@ export const AgentSettingsSchema = z.object({
     .enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .default('default')
     .describe('Reasoning effort for the mentor model'),
+  mentorSamples: z
+    .number()
+    .int()
+    .min(1)
+    .max(8)
+    .default(1)
+    .describe('Number of independent mentor answers to gather per consultation (1 = single answer)'),
   useFlexServiceTier: z
     .boolean()
     .optional()
@@ -550,6 +557,7 @@ export interface SettingsWithSources {
     mentorModel: SettingWithSource<string | undefined>;
     mentorProvider: SettingWithSource<string | undefined>;
     mentorReasoningEffort: SettingWithSource<string>;
+    mentorSamples: SettingWithSource<number>;
     useFlexServiceTier: SettingWithSource<boolean>;
     contextCompaction: {
       enabled: SettingWithSource<boolean>;
@@ -694,6 +702,7 @@ export const SETTING_KEYS = {
   AGENT_MENTOR_MODEL: 'agent.mentorModel',
   AGENT_MENTOR_PROVIDER: 'agent.mentorProvider',
   AGENT_MENTOR_REASONING_EFFORT: 'agent.mentorReasoningEffort',
+  AGENT_MENTOR_SAMPLES: 'agent.mentorSamples',
   AGENT_USE_FLEX_SERVICE_TIER: 'agent.useFlexServiceTier',
   AGENT_CONTEXT_COMPACTION_ENABLED: 'agent.contextCompaction.enabled',
   AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD: 'agent.contextCompaction.compactThreshold',
@@ -938,6 +947,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     mentorModel: undefined,
     mentorProvider: undefined,
     mentorReasoningEffort: 'default',
+    mentorSamples: 1,
     useFlexServiceTier: false,
     contextCompaction: {
       enabled: false,

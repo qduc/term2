@@ -73,6 +73,11 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
       source: settings.agent.mentorReasoningEffort.source,
     },
     {
+      key: SETTING_KEYS.AGENT_MENTOR_SAMPLES,
+      value: settings.agent.mentorSamples.value,
+      source: settings.agent.mentorSamples.source,
+    },
+    {
       key: SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER,
       value: settings.agent.useFlexServiceTier.value,
       source: settings.agent.useFlexServiceTier.source,

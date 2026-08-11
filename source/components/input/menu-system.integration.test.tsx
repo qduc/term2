@@ -296,6 +296,21 @@ it.sequential(
   },
 );
 
+it.sequential('opens the mentor pool editor without repeatedly updating the controller store', async () => {
+  const controller = new MenuControllerImpl();
+  const { lastFrame, stdin } = await renderSurface(controller, [...slashCommands, settingsCommand]);
+
+  await writeInput(stdin, '/settings agent.mentorPool');
+  await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'settings');
+
+  await writeInput(stdin, '\r');
+  await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'mentor_pool');
+  await settle();
+
+  expect(lastFrame()).toContain('Mentor Pool');
+  expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('mentor_pool');
+});
+
 it.sequential('accepting a /model prefix opens the model successor menu', async () => {
   const controller = new MenuControllerImpl();
   const { stdin } = await renderSurface(controller, [...slashCommands, modelCommand]);

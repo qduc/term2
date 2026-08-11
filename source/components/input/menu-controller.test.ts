@@ -101,6 +101,45 @@ describe('MenuControllerImpl', () => {
     expect(controller.getSnapshot().stack[0]).toBe(before.stack[0]);
   });
 
+  it('keeps an active mentor pool snapshot stable when the trigger registry is reapplied', () => {
+    const registry = new TriggerRuleRegistry();
+    registry.registerRule({
+      id: 'mentor_pool',
+      priority: 10,
+      parse: (editor) =>
+        editor.text.startsWith('/settings agent.mentorPool ')
+          ? {
+              ruleId: 'mentor_pool',
+              identity: 'mentor-pool',
+              frame: {
+                kind: 'mentor_pool',
+                origin: {
+                  type: 'settings-list',
+                  operation: 'set',
+                  back: { type: 'restore', point: { editor: { text: '/settings ', cursor: 10, revision: 1 } } },
+                },
+                binding: {
+                  trigger: { range: { start: 0, end: 27 }, text: '/settings agent.mentorPool ' },
+                  queryStart: 27,
+                  queryEnd: 'cursor',
+                  replacement: { start: 27, end: 'buffer-end' },
+                },
+              },
+            }
+          : null,
+      successors: [],
+    });
+
+    const controller = new MenuControllerImpl({ triggerRegistry: registry });
+    controller.applyEditorEdit({ type: 'set-text', text: '/settings agent.mentorPool ', cursor: 27 });
+    const before = controller.getSnapshot();
+
+    controller.setTriggerRegistry(registry);
+
+    expect(controller.getSnapshot()).toBe(before);
+    expect(controller.getSnapshot().stack[0]).toBe(before.stack[0]);
+  });
+
   it('handles Escape and dismissal tracking', () => {
     const registry = new TriggerRuleRegistry();
     const pathRule: TriggerRule = {

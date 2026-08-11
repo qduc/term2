@@ -291,22 +291,23 @@ export class MenuControllerImpl implements MenuController {
 
     // Explicitly opened frames ignore text trigger reconciliation until closed
     if (topFrame && (topFrame.kind === 'rewind' || topFrame.kind === 'providers' || topFrame.kind === 'mentor_pool')) {
-      const nextStack =
-        topFrame.kind === 'mentor_pool' && 'binding' in topFrame
-          ? [
-              ...stack.slice(0, -1),
-              {
-                ...topFrame,
-                binding: {
-                  ...topFrame.binding,
-                  query: editor.text.slice(topFrame.binding.queryStart, editor.cursor),
-                  revision: editor.revision,
-                },
-              },
-            ]
-          : stack;
+      if (topFrame.kind === 'mentor_pool' && 'binding' in topFrame) {
+        const binding = {
+          ...topFrame.binding,
+          query: editor.text.slice(topFrame.binding.queryStart, editor.cursor),
+          revision: editor.revision,
+        };
+        if (!this.sameBinding(topFrame.binding, binding)) {
+          return {
+            nextStack: [...stack.slice(0, -1), { ...topFrame, binding }],
+            nextCandidateIdentity: prevCandidateIdentity,
+            nextEpoch: epoch,
+            nextDismissedActivation: dismissedActivation,
+          };
+        }
+      }
       return {
-        nextStack,
+        nextStack: stack,
         nextCandidateIdentity: prevCandidateIdentity,
         nextEpoch: epoch,
         nextDismissedActivation: dismissedActivation,

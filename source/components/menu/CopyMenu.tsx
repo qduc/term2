@@ -8,19 +8,36 @@ type Props = {
   selectedIndex: number;
 };
 
+export function getCodePreview(text: string, maxLength = 60): string {
+  const cleaned = text.replace(/\s+/g, ' ').trim();
+  if (!cleaned) return '';
+  if (cleaned.length <= maxLength) return cleaned;
+  return `${cleaned.slice(0, maxLength - 1)}…`;
+}
+
 const CopyMenu: FC<Props> = ({ items, selectedIndex }) => (
   <MenuContainer
     items={items}
     selectedIndex={selectedIndex}
     borderColor="cyan"
     footer="⏎ copy · esc cancel · ↑↓ navigate"
-    renderItem={(item, index, isSelected) => (
-      <Box key={`${item.label}-${index}`}>
-        <Text inverse={isSelected} color={isSelected ? 'cyan' : undefined} bold={isSelected}>
-          {`${isSelected ? '▸' : ' '} ${index + 1}. ${item.label}`}
-        </Text>
-      </Box>
-    )}
+    renderItem={(item, index, isSelected) => {
+      const isCodeBlock = item.label !== 'Full response';
+      const preview = isCodeBlock ? getCodePreview(item.text) : '';
+
+      return (
+        <Box key={`${item.label}-${index}`}>
+          <Text inverse={isSelected} color={isSelected ? 'cyan' : undefined} bold={isSelected}>
+            {`${isSelected ? '▸' : ' '} ${index + 1}. ${item.label}`}
+          </Text>
+          {preview ? (
+            <Text color={isSelected ? 'cyan' : '#64748b'} dimColor={!isSelected}>
+              {` — ${preview}`}
+            </Text>
+          ) : null}
+        </Box>
+      );
+    }}
   />
 );
 

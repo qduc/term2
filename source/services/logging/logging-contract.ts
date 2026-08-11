@@ -99,6 +99,11 @@ export const buildRuntimeLogRecord = ({
     messageId: buildMessageId(meta),
   };
 
+  delete record.provider;
+  delete record.model;
+  delete record.sessionId;
+  delete record.traceId;
+
   if (rawProvider !== 'unknown') record.provider = rawProvider;
   if (rawModel !== 'unknown') record.model = rawModel;
   if (rawSessionId !== 'session-unknown') record.sessionId = rawSessionId;

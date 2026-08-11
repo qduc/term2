@@ -335,7 +335,10 @@ it('does not replay an accepted but unacknowledged turn through the production r
     }
   };
 
-  await expect(consume()).rejects.toThrow('before a terminal response event');
+  await expect(consume()).rejects.toMatchObject({
+    name: 'AmbiguousModelOutcomeError',
+    unsafeToReplay: true,
+  });
   expect(server.receivedRequests).toHaveLength(1);
 });
 

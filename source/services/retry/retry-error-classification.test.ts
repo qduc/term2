@@ -34,6 +34,9 @@ it('isNetworkProtocolError correctly flags network protocol errors', () => {
   expect(
     isNetworkProtocolError(new Error('Responses websocket connection closed before a terminal response event.')),
   ).toBe(true);
+  expect(isNetworkProtocolError(new Error('Codex WebSocket connection closed before a terminal response event.'))).toBe(
+    true,
+  );
   expect(isNetworkProtocolError(new Error('Responses websocket is not open.'))).toBe(true);
   expect(isNetworkProtocolError(new Error('unexpected server response: 502'))).toBe(true);
   expect(

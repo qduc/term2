@@ -1,5 +1,6 @@
 import { decideRetry } from './conversation-retry-policy.js';
 import {
+  isMissingServerToolOutputError,
   isPreviousResponseNotFoundError,
   isRetryableTransportError,
   isWebSocketConnectionLimitReachedError,
@@ -45,6 +46,7 @@ export class DefaultRetryClassifier {
 
     if (
       isPreviousResponseNotFoundError(error) ||
+      isMissingServerToolOutputError(error) ||
       isWebSocketConnectionLimitReachedError(error) ||
       isMissingChainedToolOutputError(error) ||
       isOrphanedChainedToolOutputError(error)

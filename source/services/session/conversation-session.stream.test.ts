@@ -262,9 +262,9 @@ it('run() exports completed tool pairs from a stream that later fails', async ()
   }).rejects.toThrow();
 
   const state = stateFacade!.exportState();
-  // Reconciled history: user message + completed call/result pair.
-  // The aborted second call has no result yet, so it is not pushed into history.
-  expect(state.history.length).toBe(3);
+  // Reconciled history: user message + completed call/result pair + synthetic
+  // abort pair for the in-flight second call (chain settlement on terminate).
+  expect(state.history.length).toBe(5);
   expect(state.toolLedger.length).toBe(2);
   expect((state.toolLedger[0] as unknown as Record<string, unknown>).status).toBe('completed');
   expect((state.toolLedger[1] as unknown as Record<string, unknown>).status).toBe('aborted');
@@ -273,6 +273,7 @@ it('run() exports completed tool pairs from a stream that later fails', async ()
       (item: { callId: string }) => item.callId,
     ),
   ).toEqual(['call-read', 'call-read']);
+  expect(state.previousResponseId).toBe(null);
 });
 
 it('run() emits tool_recovery before error when a streamed turn fails after tool activity', async () => {
@@ -376,6 +377,9 @@ it('run() emits tool_recovery before error when a streamed turn fails after tool
   );
   expect(types.includes('function_call')).toBe(true);
   expect(types.includes('function_call_result') || types.includes('function_call_output')).toBe(true);
+  // Chain settlement: terminate must drop previousResponseId so a follow-up
+  // "continue" cannot 400 on unpaid function-call debt.
+  expect(state.previousResponseId).toBe(null);
 });
 
 it('importState() reconciles completed ledger pairs into canonical history', () => {

@@ -323,6 +323,29 @@ it('terminate with stream marks open calls aborted and reconciles history', () =
   expect(result.events[0].type).toBe('error');
 });
 
+it('terminate clears provider chain so the next user turn cannot send unpaid tool debt', () => {
+  const { executor, deps } = makeExecutor();
+  deps.conversationStore.addUserMessage('hello');
+  deps.providerContinuity.update('resp-with-tools');
+  deps.providerContinuity.replaceOutstandingToolCallIds(['call-open']);
+  deps.toolTracker.ledger.recordFunctionCall({
+    type: 'function_call',
+    callId: 'call-open',
+    name: 'shell',
+    arguments: '{}',
+  });
+
+  const result = executor.apply({
+    plan: { kind: 'terminate', events: [{ type: 'error', message: 'stream failed' }] },
+    state: baseRecoveryState({ stream: { completed: Promise.resolve(undefined) } as any }),
+    retryCounts: baseCounts(),
+  });
+
+  expect(result.kind).toBe('terminated');
+  expect(deps.providerContinuity.previousResponseId).toBe(null);
+  expect(deps.providerContinuity.hasOutstandingToolDebt()).toBe(false);
+});
+
 it('terminate includes tool_recovery event when there are recovered calls', () => {
   const { executor, deps } = makeExecutor();
   deps.conversationStore.addUserMessage('hello');

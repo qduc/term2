@@ -51,6 +51,34 @@ it('update after breakChaining keeps chaining broken', () => {
   expect(pc.isChainingAvailable()).toBe(false);
 });
 
+it('tracks outstanding tool debt until clear or replace', () => {
+  const pc = new ProviderContinuity();
+  expect(pc.hasOutstandingToolDebt()).toBe(false);
+
+  pc.update('resp-with-tools');
+  pc.replaceOutstandingToolCallIds(['call-a', 'call-b', 'call-a', '']);
+  expect(pc.outstandingToolCallIds).toEqual(['call-a', 'call-b']);
+  expect(pc.hasOutstandingToolDebt()).toBe(true);
+
+  pc.replaceOutstandingToolCallIds([]);
+  expect(pc.hasOutstandingToolDebt()).toBe(false);
+
+  pc.replaceOutstandingToolCallIds(['call-c']);
+  pc.clear();
+  expect(pc.previousResponseId).toBe(null);
+  expect(pc.hasOutstandingToolDebt()).toBe(false);
+  expect(pc.outstandingToolCallIds).toEqual([]);
+});
+
+it('breakChaining clears outstanding tool debt', () => {
+  const pc = new ProviderContinuity();
+  pc.update('resp-1');
+  pc.replaceOutstandingToolCallIds(['call-1']);
+  pc.breakChaining();
+  expect(pc.hasOutstandingToolDebt()).toBe(false);
+  expect(pc.outstandingToolCallIds).toEqual([]);
+});
+
 it('keeps a candidate checkpoint separate from existing previousResponseId behavior until terminal acceptance', () => {
   const pc = new ProviderContinuity();
   const binding = {

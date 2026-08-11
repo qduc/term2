@@ -168,6 +168,25 @@ it('classify returns transport_downgrade when a chained continuation has an orph
   expect(classifier.classify(baseContext({ error })).kind).toBe('transport_downgrade');
 });
 
+it('classify returns transport_downgrade for server missing tool output 400', () => {
+  const classifier = makeClassifier();
+  const error = Object.assign(
+    new Error(
+      'Error: {"type":"error","error":{"type":"invalid_request_error","message":"No tool output found for function call call_YaJm4jYEzyg2fIGYTMbjwez6.","param":"input"},"status":400}',
+    ),
+    { status: 400 },
+  );
+
+  expect(classifier.classify(baseContext({ error })).kind).toBe('transport_downgrade');
+});
+
+it('classify returns transient for Codex WebSocket closed before terminal response', () => {
+  const classifier = makeClassifier();
+  const error = new Error('Codex WebSocket closed before a terminal response event.');
+
+  expect(classifier.classify(baseContext({ error })).kind).toBe('transient');
+});
+
 it('classify leaves unrelated websocket 400 errors unrecoverable', () => {
   const classifier = makeClassifier();
   const error = Object.assign(new Error('Unexpected server response: 400 {"error":{"code":"invalid_request_error"}}'), {

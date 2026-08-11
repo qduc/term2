@@ -76,6 +76,16 @@ export class SessionToolTracker {
   }
 
   /**
+   * Call ids recorded this turn that still lack a completed tool result.
+   * Aborted/failed/started entries count — the provider chain may still be
+   * waiting for an output for those calls.
+   */
+  unsettledToolCallIdsForCurrentTurn(): string[] {
+    const completed = new Set(this.completedResultCallIdsForCurrentTurn());
+    return this.activeCallIdsForCurrentTurn().filter((callId) => !completed.has(callId));
+  }
+
+  /**
    * Export the current ledger state.
    */
   export(): SavedToolExecution[] {

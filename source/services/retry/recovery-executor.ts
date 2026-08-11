@@ -99,6 +99,10 @@ export class DefaultRecoveryExecutor implements RecoveryExecutor {
         }
 
         if (state.stream) {
+          // Inject synthetic error results for open calls when possible so
+          // full-history replay stays self-contained, then drop any leftovers
+          // that never got a call item recorded.
+          this.deps.toolTracker.recordAbortedApproval('Stream failed', 'Stream failed');
           this.deps.toolTracker.markOpenCallsAborted('Stream failed');
           const projected = projectProviderHistory({
             history: this.deps.conversationStore.getHistory(),
@@ -108,6 +112,11 @@ export class DefaultRecoveryExecutor implements RecoveryExecutor {
             this.deps.conversationStore.replaceHistory(projected.history);
           }
         }
+
+        // Chain settlement: a terminated stream must not leave previousResponseId
+        // pointing at a response that still requires tool outputs. The next user
+        // turn ("continue") would otherwise send a text-only delta and get a 400.
+        this.deps.providerContinuity.clear();
 
         const recoverySummary = this.deps.toolTracker.getRecoverySummary();
         if (recoverySummary) {

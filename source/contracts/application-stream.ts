@@ -13,8 +13,23 @@ export type ApplicationRunEvent =
   | { readonly type: 'codex_rate_limits'; readonly rateLimits: CodexRateLimitInfo }
   | { readonly type: 'tool_call_streaming_delta'; readonly toolName?: string; readonly argumentCharCount: number }
   /** Server-side context compaction bracketed by real provider frames; see StreamedModelTurnEvent. */
-  | { readonly type: 'context_compaction_started'; readonly provider: string }
-  | { readonly type: 'context_compaction_completed'; readonly provider: string; readonly durationMs: number }
+  | {
+      readonly type: 'context_compaction_started';
+      readonly provider: string;
+      readonly strategy?: 'native' | 'local';
+    }
+  | {
+      readonly type: 'context_compaction_completed';
+      readonly provider: string;
+      readonly durationMs: number;
+      readonly strategy?: 'native' | 'local';
+    }
+  | {
+      readonly type: 'context_compaction_failed';
+      readonly provider: string;
+      readonly durationMs: number;
+      readonly strategy: 'local';
+    }
   | { readonly type: 'item'; readonly item: ProviderInputItem }
   | { readonly type: 'usage_update'; readonly usage: NormalizedUsage }
   /** One settled cost record per dispatched model request, emitted as soon as it is known. */

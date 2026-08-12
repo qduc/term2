@@ -53,6 +53,12 @@ import type {
 import type { BackgroundSubagentApprovalPauseSink } from '../services/subagents/foreground-subagent-lease.js';
 import type { ForegroundSubagentCandidate } from '../services/subagents/nested-runner.js';
 import type { NestedToolCompatibilityState } from '../services/session/nested-tool-compatibility-state.js';
+import { LocalContextCompactor } from '../services/agent-runtime/context-compaction/local-context-compactor.js';
+import { CONTEXT_COMPACTION_INSTRUCTIONS } from '../prompts/context-compaction.js';
+import { getCatalogModel } from '../providers/model-catalog/catalog.js';
+import { supportsContextCompactionModel } from '../providers/openai-responses-model.js';
+import { projectConversationMessage } from '../services/conversation/conversation-message-projection.js';
+import { isLocalContextSummary } from '../contracts/provider-input.js';
 
 type ChainedRunOptions = AgentClientRunOptions;
 
@@ -96,6 +102,104 @@ export class AgentClient {
   #hookScope: Term2HookScope = 'root';
   #backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
   #backgroundShellOutput?: BackgroundShellOutputBundle;
+
+  #boundaryCompaction() {
+    return {
+      compact: async ({
+        history,
+        automaticCompactionsThisRun,
+        signal,
+        onStarted,
+      }: {
+        history: readonly ProviderInputItem[];
+        automaticCompactionsThisRun: number;
+        signal?: AbortSignal;
+        onStarted: (provider: string) => void;
+      }) => {
+        const enabled = this.#settings.get('agent.contextCompaction.enabled');
+        const mode = this.#settings.get('agent.contextCompaction.mode') ?? 'native';
+        if (!enabled || mode === 'native') return { kind: 'unchanged' as const };
+        const provider = this.#agentConfig.getProvider();
+        const model = this.#agentConfig.getModel();
+        const nativeAvailable =
+          (provider === 'openai' || provider === 'codex') &&
+          supportsContextCompactionModel(model) &&
+          !this.#contextCompactionSessionState.disabled;
+        if (mode === 'auto' && nativeAvailable) return { kind: 'unchanged' as const };
+
+        const catalog = getCatalogModel(provider, model);
+        const configuredMaxOutput = this.#settings.get('agent.maxOutputTokens');
+        let started = false;
+        const compactor = new LocalContextCompactor({
+          generate: async ({ renderedInput, maxOutputTokens }) => {
+            if (!started) {
+              started = true;
+              onStarted(provider);
+            }
+            const result = await this.#chatService.chatDetailed(renderedInput, {
+              provider,
+              model,
+              reasoningEffort: 'none',
+              instructions: CONTEXT_COMPACTION_INSTRUCTIONS,
+              maxTokens: maxOutputTokens,
+            });
+            return {
+              text: result.text,
+              usage: result.usage
+                ? { inputTokens: result.usage.prompt_tokens, outputTokens: result.usage.completion_tokens }
+                : undefined,
+              costRecords: result.costRecords,
+            };
+          },
+        });
+        const checkpoint = history.find(isLocalContextSummary)?.contextSummary;
+        let outcome;
+        try {
+          outcome = await compactor.compactAtBoundary({
+            history,
+            provider,
+            model,
+            sourceRevision: 0,
+            contextWindow: catalog?.contextWindow,
+            maxOutputTokens:
+              configuredMaxOutput === undefined
+                ? catalog?.maxTokens
+                : Math.min(configuredMaxOutput, catalog?.maxTokens ?? configuredMaxOutput),
+            compactThreshold: this.#settings.get('agent.contextCompaction.compactThreshold') ?? 0.8,
+            compactThresholdTokens: this.#settings.get('agent.contextCompaction.compactThresholdTokens') ?? null,
+            manual: false,
+            automaticCompactionsThisRun,
+            hasCompleteNewUserTurn: true,
+            checkpoint: checkpoint ? { rearmAtEstimatedTokens: checkpoint.rearmAtEstimatedTokens } : undefined,
+            signal,
+          });
+        } catch (error) {
+          this.#logger.warn('Automatic local context compaction failed; continuing with uncompacted history', {
+            provider,
+            model,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return started ? { kind: 'failed' as const, provider } : { kind: 'unchanged' as const };
+        }
+        if (outcome.kind !== 'compacted') return { kind: 'unchanged' as const };
+        const genuineUsers = history.filter((item) => {
+          const message = projectConversationMessage(item);
+          return message?.role === 'user' && !message.isSynthetic;
+        });
+        const hotUsers = outcome.hotTail.filter((item) => {
+          const message = projectConversationMessage(item);
+          return message?.role === 'user' && !message.isSynthetic;
+        }).length;
+        const preservedUsers = hotUsers === 0 ? genuineUsers : genuineUsers.slice(0, -hotUsers);
+        return {
+          kind: 'compacted' as const,
+          history: [...preservedUsers, outcome.checkpoint, ...outcome.hotTail],
+          modelInput: [outcome.checkpoint, ...outcome.hotTail],
+          costRecords: outcome.costRecords,
+        };
+      },
+    };
+  }
 
   /**
    * Forward real-time subagent activity events to the active conversation
@@ -705,6 +809,7 @@ export class AgentClient {
       const requestPreparation = this.#openAIRequestPreparation(options);
       const run = () => {
         return this.#applicationRunLoop.startStream(agent, userInput, {
+          boundaryCompaction: this.#boundaryCompaction(),
           ...(requestPreparation ? { requestPreparation } : {}),
           ...(supportsChaining && options.previousResponseId ? { previousResponseId: options.previousResponseId } : {}),
           providerId: provider,
@@ -734,6 +839,7 @@ export class AgentClient {
     const supportsChaining = getProvider(provider)?.capabilities?.supportsConversationChaining === true;
     const requestPreparation = this.#openAIRequestPreparation(options);
     const stream = this.#applicationRunLoop.continueRunStream(state, {
+      boundaryCompaction: this.#boundaryCompaction(),
       ...(requestPreparation ? { requestPreparation } : {}),
       ...(supportsChaining && options.previousResponseId ? { previousResponseId: options.previousResponseId } : {}),
       providerId: provider,

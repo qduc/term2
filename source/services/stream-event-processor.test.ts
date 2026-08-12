@@ -947,3 +947,29 @@ it('carries a non-zero compaction duration through to the accumulator', async ()
 
   expect(acc.lastContextCompactionDurationMs).toBeGreaterThan(0);
 });
+
+it('surfaces application-owned local compaction lifecycle with its strategy', async () => {
+  const acc = createStreamAccumulator();
+  const stream = makeStream([
+    { type: 'context_compaction_started', provider: 'openrouter', strategy: 'local' },
+    { type: 'context_compaction_completed', provider: 'openrouter', strategy: 'local', durationMs: 42 },
+  ]);
+  const emitted: any[] = [];
+  for await (const event of processStreamEvents(stream, acc, baseOpts(), baseDeps())) emitted.push(event);
+
+  expect(emitted).toEqual([
+    {
+      type: 'context_compaction_started',
+      provider: 'openrouter',
+      sessionId: 'test-session',
+      strategy: 'local',
+    },
+    {
+      type: 'context_compaction_completed',
+      provider: 'openrouter',
+      sessionId: 'test-session',
+      durationMs: 42,
+      strategy: 'local',
+    },
+  ]);
+});

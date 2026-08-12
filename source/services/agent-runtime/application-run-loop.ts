@@ -756,6 +756,12 @@ export class ApplicationRunLoop {
             durationMs: Math.max(0, Date.now() - compactionStartedAt),
           });
         }
+
+        // Summarization is an asynchronous part of this same request
+        // boundary. Admit anything that arrived while it was in flight after
+        // applying a replacement, so the steer cannot be overwritten by the
+        // checkpoint or miss a terminal model request.
+        this.#admitPendingSteers(state, stream, queue);
       }
 
       state.turnCount += 1;

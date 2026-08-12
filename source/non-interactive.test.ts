@@ -728,3 +728,32 @@ it('runNonInteractive() blocks background shell execution for caller-owned clien
   expect(await toolInterceptors[0]?.('shell', { command: 'safe' })).toBeNull();
   expect(removedInterceptors).toBe(1);
 });
+it('returns non-zero and prints the hard-fit diagnostic when local compaction cannot fit', async () => {
+  const stdout = createStringWritable();
+  const stderr = createStringWritable();
+  const error = Object.assign(
+    new Error('The protected recent conversation is too large to fit the configured context window'),
+    {
+      code: 'context_compaction_hard_fit',
+    },
+  );
+  const session: any = {
+    async sendMessage() {
+      throw error;
+    },
+    async handleApprovalDecision() {
+      return null;
+    },
+  };
+
+  const exitCode = await runWithSession(session, {
+    prompt: 'oversized prompt',
+    autoApprove: false,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+  });
+
+  expect(exitCode).toBe(1);
+  expect(stdout.getOutput()).toBe('');
+  expect(stderr.getOutput()).toContain('error The protected recent conversation is too large');
+});

@@ -46,12 +46,10 @@ export function MentorPoolMenuSession({ frame, active, controller, interactions,
         }
 
         const editingModel = pool.phase === 'edit_model';
-        if (
-          editingModel &&
-          (event.type === 'input' ||
-            (event.type === 'command' && (event.command === 'left' || event.command === 'right')))
-        ) {
-          if (applyMenuEditorEvent(controller, event)) return keep();
+        // Match ModelMenuSession: typing edits the search box; left/right switch
+        // provider tabs (not the cursor), so model + provider are chosen together.
+        if (editingModel && applyMenuEditorEvent(controller, event, { horizontal: false })) {
+          return keep();
         }
 
         switch (event.type) {
@@ -71,8 +69,10 @@ export function MentorPoolMenuSession({ frame, active, controller, interactions,
             else pool.pageDown();
             return keep();
           case 'command':
-            if (editingModel && (event.command === 'backspace' || event.command === 'delete')) {
-              applyMenuEditorEvent(controller, event);
+            if (editingModel && event.command === 'left') {
+              pool.toggleModelProvider('prev');
+            } else if (editingModel && event.command === 'right') {
+              pool.toggleModelProvider('next');
             } else if (editingModel && event.command === 'refresh') {
               pool.refreshModels();
             } else if (event.command === 'delete') {
@@ -124,8 +124,7 @@ export function MentorPoolMenuSession({ frame, active, controller, interactions,
         loading={pool.modelLoading}
         error={pool.modelError}
         scrollOffset={pool.modelScrollOffset}
-        canSwitchProvider={false}
-        providerSwitchDisabledMessage="Provider is resolved from this entry or mentor settings. Edit Provider to change it."
+        canSwitchProvider={true}
       />
     );
   }

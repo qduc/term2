@@ -210,6 +210,8 @@ it('opens the model editor for a new mentor pool entry without exceeding the Rea
     await Promise.resolve();
   });
 
+  // Add Entry jumps straight into the model menu (provider tabs + catalog),
+  // so model and provider are chosen together without a separate provider step.
   await act(async () => {
     controller.dispatchActiveEvent({
       type: 'accept',
@@ -223,20 +225,10 @@ it('opens the model editor for a new mentor pool entry without exceeding the Rea
     await Promise.resolve();
   });
 
-  await act(async () => {
-    controller.dispatchActiveEvent({
-      type: 'accept',
-      input: {
-        kind: 'composer',
-        text: controller.getSnapshot().editor.text,
-        cursor: controller.getSnapshot().editor.cursor,
-      },
-      selected: undefined,
-    });
-    await Promise.resolve();
-  });
-
-  expect(view.lastFrame()).toContain('Enter Model ID');
+  const frame = view.lastFrame() ?? '';
+  // ModelSelectionMenu with provider tabs — not a free-text "Enter Model ID" prompt.
+  expect(frame).toContain('switch provider');
+  expect(frame).toMatch(/OpenAI|Codex|OpenRouter/);
 });
 
 it.skip('edits an entry model locally before persisting the complete pool', async () => {

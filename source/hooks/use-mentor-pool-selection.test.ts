@@ -1,8 +1,10 @@
 import { expect, it } from 'vitest';
 import {
+  applyMentorPoolModelPick,
   buildMentorPoolListItems,
   formatMentorPoolReasoning,
   mergeMentorPoolModels,
+  resolveMentorPoolBrowseProvider,
   resolveMentorPoolModelSelection,
 } from './use-mentor-pool-selection.js';
 
@@ -63,4 +65,48 @@ it('selects the highlighted catalog model but accepts a typed custom ID when the
 
   expect(resolveMentorPoolModelSelection(models, 0, 'custom-model')).toBe('catalog-model');
   expect(resolveMentorPoolModelSelection([], 0, ' custom-model ')).toBe('custom-model');
+});
+
+it('pins both model and provider when a catalog pick is applied to a draft', () => {
+  expect(applyMentorPoolModelPick({ model: '', _isNew: true }, 'gpt-5', 'openai')).toEqual({
+    model: 'gpt-5',
+    provider: 'openai',
+    _isNew: true,
+  });
+
+  expect(
+    applyMentorPoolModelPick(
+      { model: 'old', provider: 'openrouter', reasoningEffort: 'high' },
+      'claude-sonnet',
+      'anthropic',
+    ),
+  ).toEqual({
+    model: 'claude-sonnet',
+    provider: 'anthropic',
+    reasoningEffort: 'high',
+  });
+});
+
+it('resolves the model browser starting provider from the entry, then mentor, then agent', () => {
+  expect(
+    resolveMentorPoolBrowseProvider({
+      draftProvider: 'openrouter',
+      mentorProvider: 'openai',
+      agentProvider: 'anthropic',
+    }),
+  ).toBe('openrouter');
+  expect(
+    resolveMentorPoolBrowseProvider({
+      draftProvider: undefined,
+      mentorProvider: 'openai',
+      agentProvider: 'anthropic',
+    }),
+  ).toBe('openai');
+  expect(
+    resolveMentorPoolBrowseProvider({
+      draftProvider: undefined,
+      mentorProvider: undefined,
+      agentProvider: 'anthropic',
+    }),
+  ).toBe('anthropic');
 });

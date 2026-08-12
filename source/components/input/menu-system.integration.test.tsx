@@ -265,6 +265,16 @@ it.sequential('typing the /settings autocomplete trigger opens the settings menu
   expect(lastFrame()).toContain('Use ↑↓ to navigate, Enter to edit, Esc to close');
 });
 
+it.sequential('shows the typed settings query above the filtered menu', async () => {
+  const controller = new MenuControllerImpl();
+  const { lastFrame, stdin } = await renderSurface(controller, [...slashCommands, settingsCommand]);
+
+  await writeInput(stdin, '/settings shell.time');
+  await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'settings');
+
+  expect(lastFrame()).toContain('Filter: shell.time');
+});
+
 it.sequential('Escape from the root settings menu clears the slash command buffer', async () => {
   const controller = new MenuControllerImpl();
   const { stdin } = await renderSurface(controller, [...slashCommands, settingsCommand]);

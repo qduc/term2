@@ -1,29 +1,16 @@
 # Tool output bounding and effect safety
 
-Status: **design only, awaiting implementation approval.** Nobody is on it.
+Status: **implemented** (Milestones 1 and 2). Branch `tool-output-effect-safety`.
 
 ## Resume here
 
-Two defects exist in the shipped code today, independent of context compaction.
-Both are cheap to fix and both block the compaction plan from delivering what it
-promises.
+Both defects are fixed. Compaction can rely on:
 
-1. **`read_file` returns an unbounded slice.** `tools/file/read-file.ts` filters
-   the requested line range and returns it with no byte cap. A lockfile, a
-   minified bundle, or a generated file enters context whole. A "verbatim hot
-   tail" is not achievable while one tool result can exceed the model window on
-   its own.
-2. **The tool ledger cannot express an ambiguous outcome.** `ToolExecutionStatus`
-   is `'started' | 'completed' | 'failed' | 'approval_required' | 'aborted'`
-   (`services/tool-execution-ledger.ts`). On stream failure,
-   `services/retry/recovery-executor.ts` calls `recordAbortedApproval` and
-   `markOpenCallsAborted` so in-flight calls receive synthetic **error** results
-   and history stays self-contained. A shell command that dispatched, performed
-   an irreversible side effect, and then lost its stream is therefore reported to
-   the model as failed — and the model retries it.
+1. **Bounded tool results** — `read_file`, `web_fetch`, and `apply_patch` results that enter model context are capped; oversize payloads spool to a temp file with the shell note `Full output saved to \`<path>\``.
+2. **Ambiguous effect status** — `ToolExecutionStatus` includes `'unknown'`. Stream recovery settles never-dispatched open calls as `aborted` and dispatched-but-unobserved calls as `unknown` with a verify-before-retry synthetic result (not a failure).
 
 **Why this is a separate plan.** These pay off with or without compaction, and
-two of them are live bugs. More importantly, compaction cannot own either
+two of them were live bugs. More importantly, compaction cannot own either
 guarantee: a summary is not a mechanism for at-most-once execution, and a
 compaction policy cannot bound a tool result that was already unbounded when it
 entered history. `docs/plans/provider-neutral-context-compaction.md` depends on
@@ -71,47 +58,37 @@ state is `unknown`, not "probably failed, try again."
 
 ## Milestone 1 — bounded tool results
 
-Status: **pending.**
+Status: **done.**
 
-The requirement is that results are **bounded**. Retrieval of the full payload
-already works: `saveShellOutputArtifact` writes it to a file and the result text
-names the path, which the agent reads back with an ordinary file read. Reuse
-that; do not build a store.
-
-- Cap `read_file` by bytes as well as by line range. Over the cap, return path,
-  total line count, requested range, bounded content, and a spooled-file path in
-  the same shape shell already uses.
-- Apply the same treatment to the other unbounded producers: web fetch and
-  `apply-patch` diffs. (The search-style tools — `grep`, `glob`, `code-context`
-  — already cap their result counts.)
-- Reuse `formatShellExecutionOutput`'s spooling helper rather than duplicating
-  it, and keep the `Full output saved to \`<path>\`` note shape unchanged; the
-  agent's follow-up read depends on it.
-- Cover: a file larger than the cap, a binary file, a multibyte character on the
-  cap boundary, and the unchanged shell note.
-
-This milestone has no effect-safety semantics and no model-behavior change
-beyond smaller results.
+- Cap `read_file` by UTF-8 bytes as well as by line range. Over the cap, return path,
+  total line count, requested range, bounded content, and a spooled-file path with
+  `Full output saved to \`<path>\``. Binary files are refused without dumping.
+- `web_fetch` uses the same spool helper and note shape (replacing the prior
+  "Full content saved to temp file" prose).
+- `apply_patch` results and large error fragments are bounded via the same helper.
+- Shared helpers: `saveOutputArtifact` / `formatFullOutputSavedNote` in
+  `utils/shell/shell-output.ts`, and `boundToolResultText` /
+  `truncateToUtf8Bytes` in `utils/output/bound-tool-result.ts`.
+- Covered: oversize file, binary file, multibyte character on the cap boundary,
+  unchanged shell note shape.
 
 ## Milestone 2 — ambiguous effect status and verify-before-retry
 
-Status: **pending.**
+Status: **done.**
 
-- Add `'unknown'` to `ToolExecutionStatus` and to
-  `conversation-state-schema.ts`, with a migration path for logs written before
-  it existed.
-- Split today's single failure mapping in `recovery-executor.ts`. A call that
-  never dispatched settles as `aborted`. A call that dispatched but whose
-  outcome was never observed settles as `unknown`.
-- The synthetic tool result injected for an `unknown` call must state that the
-  outcome is unobserved and that the operation must be verified before any
-  retry. It must not read as a failure.
-- Never auto-retry an `unknown` non-idempotent operation. Recovery paths that
-  currently replay must consult status first.
-- Cover: stream failure after dispatch, stream failure before dispatch, resume
-  with an `unknown` entry present, projection and ledger reconciliation of
-  `unknown`, and the black-box scenario where a completed side effect is not
-  repeated after recovery.
+- `'unknown'` added to `ToolExecutionStatus` and `conversation-state-schema.ts`,
+  with migration of unrecognized historical statuses to `aborted`.
+- `dispatchedAt` + `markDispatched` / `settleOpenCallsOnStreamFailure` on the
+  ledger. Run loop calls `getOnToolDispatch` before `execute`; session
+  composition wires it to the tool tracker.
+- Never-dispatched open calls → `aborted` with synthetic error result.
+  Dispatched, unobserved → `unknown` with verify-before-retry message (not a failure).
+- Projection / restore treat `unknown` pairs like aborted pairs for history
+  repair. Local synthetic pairs still do not pay provider-side tool debt while
+  `previousResponseId` is live (chain settlement still clears the chain).
+- Covered: stream failure after/before dispatch, resume with unknown present,
+  projection and ledger reconciliation of unknown, run-loop dispatch ordering,
+  existing black-box "side effect not re-executed after recovery" (compaction path).
 
 ## Explicitly out of scope
 
@@ -140,5 +117,6 @@ failure, and both were proposed as seams for work that is itself deferred.
 ## Open questions, not design blockers
 
 - Whether an `unknown` operation should block the turn pending user
-  confirmation, or annotate and continue.
+  confirmation, or annotate and continue. (Shipped: annotate and continue.)
 - Whether the `read_file` byte cap should be a setting or a constant.
+  (Shipped: constant aligned with `getTrimConfig().maxCharacters`, default 40_000.)

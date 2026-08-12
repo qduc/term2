@@ -17,6 +17,7 @@ import {
 import { ExecutionContext } from '../../services/execution-context.js';
 import { withFileLock } from './file-locks.js';
 import { TOOL_NAME_APPLY_PATCH } from '../tool-names.js';
+import { boundToolResultText, truncateToUtf8Bytes } from '../../utils/output/bound-tool-result.js';
 
 /**
  * Error thrown when patch validation fails (malformed diff)
@@ -510,13 +511,14 @@ export function createApplyPatchToolDefinition(deps: {
           }
         }
 
-        return output
+        const joined = output
           .map((item) =>
             item.success
               ? item.message || `Updated ${item.path ?? params.path}`
               : `Error: ${(item.error || 'unknown error').replace(/\n/g, ' ')}`,
           )
           .join('\n');
+        return (await boundToolResultText({ fullText: joined })).text;
       } catch (error: any) {
         if (enableFileLogging) {
           loggingService.error('File operation failed', {
@@ -525,7 +527,8 @@ export function createApplyPatchToolDefinition(deps: {
             error: error instanceof Error ? error.message : String(error),
           });
         }
-        return `Error: ${(error.message || String(error)).replace(/\n/g, ' ')}`;
+        const message = `Error: ${(error.message || String(error)).replace(/\n/g, ' ')}`;
+        return (await boundToolResultText({ fullText: message })).text;
       }
     },
     formatCommandMessage: formatApplyPatchCommandMessage,
@@ -715,7 +718,7 @@ export function formatPatchError(error: Error, diff: string, original?: string):
       else {
         const invalidLineMatch = message.match(/^Invalid Line:\s*([\s\S]*)$/);
         if (invalidLineMatch) {
-          const invalidLine = invalidLineMatch[1].trim();
+          const invalidLine = truncateToUtf8Bytes(invalidLineMatch[1].trim(), 200).text;
           formatted = `Invalid line: "${invalidLine}". Use only space, +, -, or @@ prefixes.`;
         }
       }

@@ -1,0 +1,111 @@
+import { getTrimConfig } from './output-trim.js';
+import { formatFullOutputSavedNote, saveOutputArtifact } from '../shell/shell-output.js';
+
+/** Default byte cap for tool results that enter model context. */
+export const DEFAULT_TOOL_RESULT_MAX_BYTES = 40_000;
+
+export function utf8ByteLength(text: string): number {
+  return Buffer.byteLength(text, 'utf8');
+}
+
+/**
+ * Truncate to at most `maxBytes` UTF-8 bytes without splitting a multi-byte
+ * code unit. Returns the original string when it already fits.
+ */
+export function truncateToUtf8Bytes(
+  text: string,
+  maxBytes: number,
+): { text: string; truncated: boolean; byteLength: number } {
+  const byteLength = utf8ByteLength(text);
+  if (byteLength <= maxBytes) {
+    return { text, truncated: false, byteLength };
+  }
+
+  const buf = Buffer.from(text, 'utf8');
+  let end = Math.min(maxBytes, buf.length);
+  // Walk back over UTF-8 continuation bytes (10xxxxxx) so we do not cut mid-character.
+  while (end > 0 && (buf[end] & 0xc0) === 0x80) {
+    end--;
+  }
+  return {
+    text: buf.subarray(0, end).toString('utf8'),
+    truncated: true,
+    byteLength,
+  };
+}
+
+/**
+ * Heuristic binary detection: NUL bytes or a high share of non-text control
+ * bytes in the sample. Used to refuse dumping opaque binary into context.
+ */
+export function looksLikeBinary(buffer: Buffer): boolean {
+  if (buffer.length === 0) {
+    return false;
+  }
+  const sample = buffer.subarray(0, Math.min(buffer.length, 8192));
+  let nonText = 0;
+  for (let i = 0; i < sample.length; i++) {
+    const byte = sample[i]!;
+    if (byte === 0) {
+      return true;
+    }
+    // Allow common whitespace control chars; count other C0 controls and DEL.
+    if (byte < 7 || (byte > 13 && byte < 32) || byte === 127) {
+      nonText++;
+    }
+  }
+  return nonText / sample.length > 0.3;
+}
+
+export function resolveToolResultMaxBytes(override?: number): number {
+  if (typeof override === 'number' && Number.isFinite(override) && override > 0) {
+    return Math.floor(override);
+  }
+  // Stay aligned with the existing character trim default unless a caller overrides.
+  return getTrimConfig().maxCharacters || DEFAULT_TOOL_RESULT_MAX_BYTES;
+}
+
+export interface BoundToolResultTextParams {
+  /** Text that would enter model context if it fits. */
+  fullText: string;
+  /** Optional override for the byte cap. */
+  maxBytes?: number;
+  /**
+   * Full payload written to the artifact when truncated. Defaults to `fullText`.
+   * Use when the on-wire text includes headers that should not replace the
+   * retrievable body, or when the artifact should carry richer metadata.
+   */
+  artifactContents?: string;
+}
+
+export interface BoundToolResultTextResult {
+  text: string;
+  truncated: boolean;
+  artifactPath?: string;
+  byteLength: number;
+}
+
+/**
+ * Bound a tool result for model context. Over the cap, spool the full payload
+ * and append the shell note shape so the agent can read the path back.
+ */
+export async function boundToolResultText(params: BoundToolResultTextParams): Promise<BoundToolResultTextResult> {
+  const maxBytes = resolveToolResultMaxBytes(params.maxBytes);
+  const byteLength = utf8ByteLength(params.fullText);
+  if (byteLength <= maxBytes) {
+    return { text: params.fullText, truncated: false, byteLength };
+  }
+
+  // Reserve room for the note line so the combined result stays near the cap.
+  const noteReserve = 120;
+  const bodyBudget = Math.max(256, maxBytes - noteReserve);
+  const { text: truncatedBody } = truncateToUtf8Bytes(params.fullText, bodyBudget);
+  const artifactPath = await saveOutputArtifact(params.artifactContents ?? params.fullText);
+  const note = formatFullOutputSavedNote(artifactPath);
+  return {
+    text: `${truncatedBody}\n${note}`,
+    truncated: true,
+    artifactPath,
+    byteLength,
+  };
+}

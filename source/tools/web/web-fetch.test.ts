@@ -136,10 +136,11 @@ it.sequential('execute: saves full content to temp file when content exceeds max
     })) as string;
 
     expect(result.includes('Content truncated at 200 characters')).toBe(true);
-    expect(result.includes('Full content saved to temp file:')).toBe(true);
+    expect(result.includes('Full output saved to')).toBe(true);
+    expect(result.includes('Full content saved to temp file:')).toBe(false);
 
     // Extract the temp file path from the output and clean up
-    const match = result.match(/`([^`]+\.md)`/);
+    const match = result.match(/Full output saved to `([^`]+)`/);
     if (match) {
       tempFile = match[1];
     }
@@ -170,7 +171,7 @@ it.sequential('execute: does not save temp file when content fits within max_cha
       max_chars: 10000,
       heading: [],
     })) as string;
-    expect(result.includes('Full content saved to temp file:')).toBe(false);
+    expect(result.includes('Full output saved to')).toBe(false);
   } finally {
     global.fetch = originalFetch;
   }
@@ -188,5 +189,5 @@ it.sequential('execute: does not save temp file on continuation request', async 
   // The call will error because the token doesn't exist in the cache,
   // but it should never try to save a temp file.
   expect(result.startsWith('Error:')).toBe(true);
-  expect(result.includes('Full content saved to temp file:')).toBe(false);
+  expect(result.includes('Full output saved to')).toBe(false);
 });

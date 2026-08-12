@@ -264,7 +264,10 @@ export class SessionStreamProcessor {
                   type: 'tool_result',
                   callId: cid,
                   toolName: entry?.toolName ?? toolNameOf(item),
-                  status: entry?.status === 'failed' || entry?.status === 'aborted' ? entry.status : 'completed',
+                  status:
+                    entry?.status === 'failed' || entry?.status === 'aborted' || entry?.status === 'unknown'
+                      ? entry.status
+                      : 'completed',
                   output: entry?.output ?? outputOf(item),
                   ...(entry?.historyItems ? { historyItems: entry.historyItems } : {}),
                 });

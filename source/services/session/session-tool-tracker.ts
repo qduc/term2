@@ -77,8 +77,8 @@ export class SessionToolTracker {
 
   /**
    * Call ids recorded this turn that still lack a completed tool result.
-   * Aborted/failed/started entries count — the provider chain may still be
-   * waiting for an output for those calls.
+   * Aborted/unknown/started entries count — local synthetic results do not pay
+   * provider-side tool debt while previousResponseId still points at the chain.
    */
   unsettledToolCallIdsForCurrentTurn(): string[] {
     const completed = new Set(this.completedResultCallIdsForCurrentTurn());
@@ -128,10 +128,30 @@ export class SessionToolTracker {
   }
 
   /**
+   * Mark that tool execution has begun for this callId (side effects may occur).
+   */
+  markDispatched(callId: string): void {
+    this.toolLedger.markDispatched(callId);
+  }
+
+  /**
    * Mark open calls as aborted with the given error message.
    */
   markOpenCallsAborted(errorMessage: string, callId?: string): void {
     this.toolLedger.markOpenCallsAborted(errorMessage, callId);
+  }
+
+  /**
+   * Settle open calls after stream failure: dispatched → unknown, otherwise aborted.
+   */
+  settleOpenCallsOnStreamFailure(
+    reason = 'Stream failed',
+    callId?: string,
+  ): {
+    abortedCallIds: string[];
+    unknownCallIds: string[];
+  } {
+    return this.toolLedger.settleOpenCallsOnStreamFailure(reason, callId);
   }
 
   /**
@@ -142,12 +162,12 @@ export class SessionToolTracker {
   }
 
   /**
-   * Restore completed and aborted tool ledger entries from a snapshot.
+   * Restore completed, aborted, and unknown tool ledger entries from a snapshot.
    *
    * Completed entries carry their results forward so they can be reprojected
-   * into history. Aborted entries (with synthetic error results) are also
-   * preserved so the reconciler injects error-result pairs for interrupted
-   * tool calls instead of leaving dangling function_call items.
+   * into history. Aborted and unknown entries (with synthetic results) are also
+   * preserved so the reconciler injects result pairs for interrupted tool calls
+   * instead of leaving dangling function_call items.
    */
   restoreCompletedEntries(snapshot: SavedToolExecution[]): void {
     const merged = [...snapshot];
@@ -158,7 +178,7 @@ export class SessionToolTracker {
     });
 
     for (const entry of this.toolLedger.export()) {
-      if (entry.status !== 'completed' && entry.status !== 'aborted') {
+      if (entry.status !== 'completed' && entry.status !== 'aborted' && entry.status !== 'unknown') {
         continue;
       }
 

@@ -64,7 +64,7 @@ export interface ToolResultLogEvent {
   turnId?: string;
   callId: string;
   toolName: string;
-  status: 'completed' | 'failed' | 'aborted';
+  status: 'completed' | 'failed' | 'aborted' | 'unknown';
   output?: unknown;
   historyItems?: unknown[];
 }

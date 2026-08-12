@@ -21,8 +21,10 @@ export interface FormatShellExecutionOutputResult {
   artifactPath?: string;
 }
 
-const TRUNCATED_NOTE_PREFIX = 'Full output saved to';
-let shellOutputTempDirPromise: Promise<string> | undefined;
+/** Load-bearing prose: the agent reads this path back with an ordinary file read. */
+export const FULL_OUTPUT_SAVED_NOTE_PREFIX = 'Full output saved to';
+
+let outputArtifactTempDirPromise: Promise<string> | undefined;
 
 function buildArtifactContents(params: {
   command: string;
@@ -51,13 +53,23 @@ function buildArtifactContents(params: {
   ].join('\n');
 }
 
-async function saveShellOutputArtifact(contents: string): Promise<string> {
-  shellOutputTempDirPromise ??= mkdtemp(path.join(os.tmpdir(), 'term2-shell-output-'));
-  const tempDir = await shellOutputTempDirPromise;
+/**
+ * Spool full tool output to a temp file for later retrieval.
+ * Shared by shell, read_file, web_fetch, and other bounded producers.
+ */
+export async function saveOutputArtifact(contents: string, options?: { filenamePrefix?: string }): Promise<string> {
+  outputArtifactTempDirPromise ??= mkdtemp(path.join(os.tmpdir(), 'term2-tool-output-'));
+  const tempDir = await outputArtifactTempDirPromise;
   const suffix = randomBytes(3).toString('hex');
-  const artifactPath = path.join(tempDir, `output-${suffix}.txt`);
+  const prefix = options?.filenamePrefix ?? 'output';
+  const artifactPath = path.join(tempDir, `${prefix}-${suffix}.txt`);
   await writeFile(artifactPath, contents, 'utf8');
   return artifactPath;
+}
+
+/** Build the standard truncation note the agent relies on for follow-up reads. */
+export function formatFullOutputSavedNote(artifactPath: string): string {
+  return `${FULL_OUTPUT_SAVED_NOTE_PREFIX} \`${artifactPath}\``;
 }
 
 export async function formatShellExecutionOutput({
@@ -83,12 +95,12 @@ export async function formatShellExecutionOutput({
 
   let artifactPath: string | undefined;
   if (stdoutTruncated || stderrTruncated) {
-    artifactPath = await saveShellOutputArtifact(
+    artifactPath = await saveOutputArtifact(
       buildArtifactContents({ command, cwd, stdout, stderr, exitCode, timedOut, durationMs }),
     );
   }
 
-  const truncationNote = artifactPath ? `${TRUNCATED_NOTE_PREFIX} \`${artifactPath}\`` : '';
+  const truncationNote = artifactPath ? formatFullOutputSavedNote(artifactPath) : '';
 
   return {
     text: [statusLine, runtimeLine, combinedOutput, emptyOutputNote, truncationNote].filter(Boolean).join('\n'),

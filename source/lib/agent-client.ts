@@ -99,6 +99,7 @@ export class AgentClient {
   #askUserAnswerStore: AskUserAnswerStore;
   #isDisposed = false;
   #toolLifecycle?: ToolExecutionLifecyclePort;
+  #onToolDispatch?: (callId: string) => void;
   #hookScope: Term2HookScope = 'root';
   #backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
   #backgroundShellOutput?: BackgroundShellOutputBundle;
@@ -361,6 +362,7 @@ export class AgentClient {
     this.#retryAttempts = retryAttempts ?? 2;
     this.#applicationRunLoop = new ApplicationRunLoop({
       toolLifecycle: this.#toolLifecycle,
+      getOnToolDispatch: () => this.#onToolDispatch,
       contextCompactionSessionState: this.#contextCompactionSessionState,
       logDiagnostic: (message, meta) => deps.logger.info(message, meta),
       resolveModel: (selectedModel) => {
@@ -455,6 +457,14 @@ export class AgentClient {
         retryAttempts: this.#retryAttempts,
       });
     }
+  }
+
+  /**
+   * Wire session tool-ledger dispatch marking. Called after composition creates
+   * the tracker so mid-tool stream recovery can settle as `unknown`.
+   */
+  setOnToolDispatch(handler: ((callId: string) => void) | undefined): void {
+    this.#onToolDispatch = handler;
   }
 
   setModel(model: string): void {

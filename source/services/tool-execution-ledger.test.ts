@@ -712,3 +712,94 @@ it('hasMalformedToolCallArguments returns false when no function_calls exist', (
 
   expect(hasMalformedToolCallArguments(history)).toBe(false);
 });
+
+it('markDispatched records dispatchedAt on open entries only', () => {
+  const ledger = new ToolExecutionLedger();
+  ledger.beginTurn();
+  ledger.recordFunctionCall({ type: 'function_call', callId: 'call-open', name: 'shell', arguments: '{}' });
+  ledger.recordFunctionCall({ type: 'function_call', callId: 'call-done', name: 'shell', arguments: '{}' });
+  ledger.recordFunctionResult({ type: 'function_call_output', callId: 'call-done', output: 'ok' });
+
+  ledger.markDispatched('call-open');
+  ledger.markDispatched('call-done');
+  ledger.markDispatched('call-missing');
+
+  const open = ledger.export().find((e) => e.callId === 'call-open')!;
+  const done = ledger.export().find((e) => e.callId === 'call-done')!;
+  expect(open.dispatchedAt).toBeTruthy();
+  expect(done.dispatchedAt).toBeUndefined();
+});
+
+it('settleOpenCallsOnStreamFailure splits never-dispatched aborted from dispatched unknown', () => {
+  const ledger = new ToolExecutionLedger();
+  ledger.beginTurn();
+  ledger.recordFunctionCall({ type: 'function_call', callId: 'call-waiting', name: 'shell', arguments: '{}' });
+  ledger.recordFunctionCall({ type: 'function_call', callId: 'call-ran', name: 'shell', arguments: '{}' });
+  ledger.markDispatched('call-ran');
+
+  const settled = ledger.settleOpenCallsOnStreamFailure('Stream failed');
+  expect(settled.abortedCallIds).toEqual(['call-waiting']);
+  expect(settled.unknownCallIds).toEqual(['call-ran']);
+
+  const byId = Object.fromEntries(ledger.export().map((e) => [e.callId, e]));
+  expect(byId['call-waiting']!.status).toBe('aborted');
+  expect(byId['call-waiting']!.output).toBe('Stream failed');
+  expect(byId['call-ran']!.status).toBe('unknown');
+  expect(String(byId['call-ran']!.output)).toContain('Outcome unobserved');
+  expect(String(byId['call-ran']!.output)).not.toBe('Stream failed');
+  expect(String(byId['call-ran']!.output)).not.toMatch(/^Error:/);
+  expect(byId['call-ran']!.historyItems!.length).toBe(2);
+});
+
+it('reconcileHistoryWithToolLedger injects unknown pairs and does not treat them as incomplete', () => {
+  const history = [{ role: 'user', type: 'message', content: 'continue' }];
+  const ledger: SavedToolExecution[] = [
+    {
+      turnId: 'turn-1',
+      callId: 'call-unknown',
+      toolName: 'shell',
+      arguments: '{}',
+      status: 'unknown',
+      startedAt: '2026-05-26T00:00:00.000Z',
+      dispatchedAt: '2026-05-26T00:00:00.500Z',
+      completedAt: '2026-05-26T00:00:01.000Z',
+      failureReason: 'Stream failed',
+      output: 'Outcome unobserved: verify before retry',
+      historyItems: [
+        { type: 'function_call', callId: 'call-unknown', name: 'shell', arguments: '{}' },
+        {
+          type: 'function_call_output',
+          callId: 'call-unknown',
+          output: 'Outcome unobserved: verify before retry',
+        },
+      ],
+    },
+  ];
+
+  const result = reconcileHistoryWithToolLedger(history, ledger);
+  expect(result.addedCompletedPairs).toBe(1);
+  expect(result.droppedIncompleteCalls).toBe(0);
+  expect(result.history).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ type: 'function_call', callId: 'call-unknown' }),
+      expect.objectContaining({
+        type: 'function_call_output',
+        callId: 'call-unknown',
+        output: expect.stringContaining('Outcome unobserved'),
+      }),
+    ]),
+  );
+});
+
+it('getRecoverySummary treats unknown pairs as recovered rather than dropped', () => {
+  const ledger = new ToolExecutionLedger();
+  ledger.beginTurn();
+  ledger.recordFunctionCall({ type: 'function_call', callId: 'call-ran', name: 'shell', arguments: '{}' });
+  ledger.markDispatched('call-ran');
+  ledger.settleOpenCallsOnStreamFailure('Stream failed');
+
+  const summary = ledger.getRecoverySummary();
+  expect(summary).toBeTruthy();
+  expect(summary!.recoveredCallIds).toEqual(['call-ran']);
+  expect(summary!.droppedCallIds).toEqual([]);
+});

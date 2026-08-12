@@ -158,6 +158,13 @@ export class MaxTurnsExceededError extends Error {
 export interface ApplicationRunLoopDeps {
   readonly resolveModel: (model: string) => StreamedModelTurn | Promise<StreamedModelTurn>;
   readonly toolLifecycle?: ToolExecutionLifecyclePort;
+  /**
+   * Called when a tool body is about to run. Used by the session tool ledger to
+   * mark dispatch so stream recovery can distinguish "never ran" from "outcome
+   * unobserved". Resolved via getter so the session can wire the tracker after
+   * the client is constructed.
+   */
+  readonly getOnToolDispatch?: () => ((callId: string) => void) | undefined;
   /** Conservative cap for independent calls from one response; child budgets remain authoritative. */
   readonly maxParallelToolCalls?: number;
   /**
@@ -1241,6 +1248,9 @@ export class ApplicationRunLoop {
       attempt,
       scope: state?.hookScope ?? 'root',
     };
+    // Dispatch mark must run before execute so a mid-tool stream failure can
+    // settle the ledger as unknown rather than aborted.
+    this.#deps.getOnToolDispatch?.()?.(callId);
     await this.#notifyToolLifecycle(() => this.#deps.toolLifecycle?.before(lifecycleContext));
     try {
       const result = await definition.execute(params, toolContext, { toolCall: { callId } });

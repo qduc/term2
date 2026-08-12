@@ -164,6 +164,48 @@ it('projectProviderHistory reports incomplete ledger entries without injecting c
   ]);
 });
 
+it('projectProviderHistory injects unknown ledger pairs with verify-before-retry output', () => {
+  const history: AgentInputItem[] = [{ role: 'user', type: 'message', content: 'continue' }];
+  const unknownEntry: SavedToolExecution = {
+    turnId: 'turn-1',
+    callId: 'call-shell',
+    toolName: 'shell',
+    arguments: '{}',
+    status: 'unknown',
+    startedAt: '2026-05-26T00:00:00.000Z',
+    dispatchedAt: '2026-05-26T00:00:00.500Z',
+    completedAt: '2026-05-26T00:00:01.000Z',
+    output: 'Outcome unobserved: verify before any retry',
+    historyItems: [
+      { type: 'function_call', callId: 'call-shell', name: 'shell', arguments: '{}' },
+      {
+        type: 'function_call_output',
+        callId: 'call-shell',
+        output: 'Outcome unobserved: verify before any retry',
+      },
+    ],
+  };
+
+  const projected = projectProviderHistory({ history, toolLedger: [unknownEntry] });
+
+  expect(projected.history).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ type: 'function_call', callId: 'call-shell' }),
+      expect.objectContaining({
+        type: 'function_call_output',
+        callId: 'call-shell',
+        output: expect.stringContaining('Outcome unobserved'),
+      }),
+    ]),
+  );
+  expect(projected.warnings).toEqual([
+    {
+      code: ProjectionWarningCode.CompletedToolHistoryInserted,
+      detail: { addedCompletedPairs: 1 },
+    },
+  ]);
+});
+
 it('projectProviderHistory is pure and idempotent', () => {
   const history: AgentInputItem[] = [{ role: 'user', type: 'message', content: 'continue' }];
   const ledger = [completedLedgerEntry(), abortedLedgerEntry()];

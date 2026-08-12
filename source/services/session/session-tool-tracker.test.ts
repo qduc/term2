@@ -58,6 +58,20 @@ it('unsettledToolCallIdsForCurrentTurn excludes completed results only', () => {
   expect(tracker.unsettledToolCallIdsForCurrentTurn()).toEqual(['call-pending', 'call-aborted']);
 });
 
+it('restoreCompletedEntries preserves unknown settled pairs across snapshot restore', () => {
+  const tracker = new SessionToolTracker(new ConversationStore());
+  tracker.beginTurn();
+  tracker.recordFunctionCall({ type: 'function_call', callId: 'call-unknown', name: 'shell', arguments: '{}' });
+  tracker.markDispatched('call-unknown');
+  tracker.settleOpenCallsOnStreamFailure('Stream failed');
+
+  tracker.restoreCompletedEntries([]);
+  const entry = tracker.export().find((e) => e.callId === 'call-unknown');
+  expect(entry?.status).toBe('unknown');
+  expect(String(entry?.output)).toContain('Outcome unobserved');
+  expect(entry?.historyItems?.length).toBe(2);
+});
+
 it('activeCallIdsForCurrentTurn includes aborted call IDs (provider requires output for every call)', () => {
   const tracker = new SessionToolTracker(new ConversationStore());
   tracker.beginTurn();

@@ -60,11 +60,10 @@ export class DefaultRecoveryExecutor implements RecoveryExecutor {
       case 'retry_fresh': {
         if (state.stream) {
           this.deps.providerContinuity.clear();
-          // Mark in-flight tool calls as aborted with synthetic error results
-          // before restoring the snapshot. This ensures the reconciler injects
-          // proper function_call_output pairs into history instead of leaving
-          // dangling function_call items that confuse the provider API on retry.
-          this.deps.toolTracker.recordAbortedApproval('Stream failed', 'Stream failed');
+          // Settle open calls before restoring the snapshot: never-dispatched
+          // calls become aborted; dispatched-but-unobserved become unknown so
+          // the model is told to verify before retrying non-idempotent work.
+          this.deps.toolTracker.settleOpenCallsOnStreamFailure('Stream failed');
           this.deps.toolTracker.restoreCompletedEntries(journalSnapshotToLedger(state.journalSnapshot));
           const projected = projectProviderHistory({
             history: this.deps.conversationStore.getHistory(),
@@ -99,10 +98,10 @@ export class DefaultRecoveryExecutor implements RecoveryExecutor {
         }
 
         if (state.stream) {
-          // Inject synthetic error results for open calls when possible so
-          // full-history replay stays self-contained, then drop any leftovers
-          // that never got a call item recorded.
-          this.deps.toolTracker.recordAbortedApproval('Stream failed', 'Stream failed');
+          // Inject synthetic results for open calls when possible so full-history
+          // replay stays self-contained, then drop any leftovers that never got a
+          // call item recorded. Dispatched calls settle as unknown (not failed).
+          this.deps.toolTracker.settleOpenCallsOnStreamFailure('Stream failed');
           this.deps.toolTracker.markOpenCallsAborted('Stream failed');
           const projected = projectProviderHistory({
             history: this.deps.conversationStore.getHistory(),

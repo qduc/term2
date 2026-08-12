@@ -70,6 +70,7 @@ export function createConversationEventHandler(
   const activeRunningToolCallIds = new Set<string>();
   const pendingSubagentToolCalls = new Map<string, { role?: string; task?: string; [key: string]: unknown }>();
   const foregroundSubagentToolCallIds = new Set<string>();
+  const seenSubagentAgentIds = new Set<string>();
 
   // Foreground delegation is rendered by SubagentActivityMessage, so its
   // CommandMessage would duplicate the activity row. Background delegation is
@@ -367,6 +368,19 @@ export function createConversationEventHandler(
         return;
       }
 
+      case 'subagent_transferred': {
+        setMessages((prev) => {
+          const index = prev.findIndex((msg) => isSubagentActivityMessage(msg) && msg.agentId === event.agentId);
+          if (index === -1) return prev;
+          const current = prev[index];
+          if (!isSubagentActivityMessage(current) || current.status !== 'running') return prev;
+          const next = [...prev];
+          next[index] = { ...current, status: 'backgrounded' };
+          return trimMessages(next);
+        });
+        return;
+      }
+
       case 'subagent_started': {
         if (event.parentTool === 'ask_mentor') {
           return;
@@ -413,6 +427,10 @@ export function createConversationEventHandler(
           subagentMsg.callId = matchingCallId;
         }
 
+        if (seenSubagentAgentIds.has(event.agentId)) {
+          return;
+        }
+        seenSubagentAgentIds.add(event.agentId);
         appendMessages([subagentMsg]);
         return;
       }
@@ -544,6 +562,7 @@ export function createConversationEventHandler(
           return trimMessages(
             prev.map((msg) => {
               if (isSubagentActivityMessage(msg) && msg.agentId === event.result.agentId) {
+                if (msg.status === 'backgrounded') return msg;
                 return {
                   ...msg,
                   status: event.result.status,

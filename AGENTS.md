@@ -63,6 +63,12 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   foreground-subagent transfer waits on an explicit post-transfer approval and
   continuation decision. The worktree is `.worktrees/background-task-controls`
   on branch `codex/background-task-controls`.
+- Unified subagent live UI — planned in
+  `docs/plans/background-work-control/unified-subagent-ui.md`. Read it before
+  changing `SubagentActivityMessage`, `BackgroundTasksPanel`,
+  `BackgroundTaskManager`, or foreground-to-background event routing: a
+  transferred transcript card must settle as `backgrounded`, and unadopted
+  work may appear on the compact strip only with an explicit foreground tag.
 - UI/business layer separation — completed through settings transaction,
   handoff workflow, provider management, and model catalog milestones. See
   `docs/plans/ui-business-layer-separation/MAP.md` for the merged commits and

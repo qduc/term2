@@ -300,6 +300,9 @@ const CommandMessage: FC<Props> = ({
           if (action === 'background' && target?.kind === 'shell') {
             return renderAction(`Moved shell ${target.id ?? 'job'} to background`);
           }
+          if (action === 'background' && target?.kind === 'subagent') {
+            return renderAction(`Moved subagent ${target.id ?? 'run'} to background`);
+          }
         }
         return renderAction('Background task control updated');
       }

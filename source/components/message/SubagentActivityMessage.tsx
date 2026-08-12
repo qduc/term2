@@ -96,6 +96,8 @@ const SubagentActivityMessage: FC<Props> = ({ msg }) => {
     msg.status && msg.status !== 'running'
       ? msg.status === 'failed' && msg.error
         ? ` — failed: ${msg.error}`
+        : msg.status === 'backgrounded'
+        ? ' — moved to background'
         : ` — ${msg.status}`
       : '';
   const color =
@@ -103,7 +105,7 @@ const SubagentActivityMessage: FC<Props> = ({ msg }) => {
       ? 'green'
       : msg.status === 'failed'
       ? 'red'
-      : msg.status === 'cancelled'
+      : msg.status === 'cancelled' || msg.status === 'backgrounded'
       ? 'gray'
       : 'yellow';
 

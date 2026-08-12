@@ -398,6 +398,12 @@ it('dispatchEventToLog logs event-specific records', () => {
     arguments: { command: 'pwd' },
   });
   conversationLogger.dispatchEventToLog({
+    type: 'subagent_transferred',
+    agentId: 'agent-1',
+    runId: 'agent-1',
+    role: 'worker',
+  });
+  conversationLogger.dispatchEventToLog({
     type: 'subagent_completed',
     result: {
       agentId: 'agent-1',
@@ -448,6 +454,12 @@ it('dispatchEventToLog logs event-specific records', () => {
       toolCallId: 'nested-call-1',
       toolName: 'shell',
       arguments: { command: 'pwd' },
+    },
+    {
+      type: 'subagent_transferred',
+      agentId: 'agent-1',
+      runId: 'agent-1',
+      role: 'worker',
     },
     {
       type: 'subagent_completed',

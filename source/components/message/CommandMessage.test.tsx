@@ -143,6 +143,24 @@ it('CommandMessage renders a foreground shell move without calling it a stop', a
   unmount();
 });
 
+it('CommandMessage renders a foreground subagent move without calling it a shell', async () => {
+  const { lastFrame, unmount } = await renderInAct(
+    <CommandMessage
+      command="background_task_control_notification"
+      toolName="background_task_control_notification"
+      status="completed"
+      success={true}
+      toolArgs={{ actions: [{ action: 'background', target: { kind: 'subagent', id: 'child-1' } }] }}
+      output="Moved to background: child-1 (worker)"
+    />,
+  );
+
+  const output = stripAnsi(lastFrame() ?? '');
+  expect(output).toContain('Moved subagent child-1 to background');
+  expect(output).not.toContain('Background task control updated');
+  unmount();
+});
+
 // The other half of the guard in command-message-helpers.test.ts: a tool missing from this
 // switch renders the raw `[tool_name]` header instead of a verb. Keep both lists in step.
 const TOOLS_NEEDING_A_VERB = [

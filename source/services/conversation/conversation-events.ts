@@ -26,6 +26,7 @@ export type ConversationEvent =
   | SubagentCommandMessageEvent
   | SubagentApprovalRequiredEvent
   | SubagentCompletedEvent
+  | SubagentTransferredEvent
   | SubagentQuestionEvent
   | BackgroundShellStartedEvent
   | BackgroundShellCompletedEvent
@@ -225,6 +226,14 @@ export interface SubagentCompletedEvent {
   result: SubagentResult;
   /** True when this completion finishes a background-owned run. */
   async?: boolean;
+}
+
+/** The foreground transcript card is no longer the live owner of this run. */
+export interface SubagentTransferredEvent {
+  type: 'subagent_transferred';
+  agentId: string;
+  runId: string;
+  role: string;
 }
 
 /** A bounded blocker from a live async execution segment to its orchestrator. */

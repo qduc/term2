@@ -43,6 +43,7 @@ const foregroundSubagent = {
   task: 'inspect the approval boundary',
   parentTool: 'run_subagent',
   status: 'running' as const,
+  startedAt: 4_000,
 };
 
 const writeInput = async (stdin: { write: (value: string) => void }, value: string) => {
@@ -232,6 +233,7 @@ it.sequential('lists and transfers a foreground subagent through the same manage
   await writeInput(view.stdin, '\x07');
   expect(view.lastFrame() ?? '').toContain('[worker · foreground] inspect the approval boundary');
   await writeInput(view.stdin, 'b');
+  expect(view.lastFrame() ?? '').toContain('Press Enter to put this subagent in the background');
   await writeInput(view.stdin, '\r');
 
   expect(moveForegroundToBackground).toHaveBeenCalledWith({ kind: 'subagent', runId: 'child-1' });

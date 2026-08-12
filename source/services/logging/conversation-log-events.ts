@@ -191,6 +191,13 @@ export interface SubagentCompletedLogEvent {
   costRecords?: ModelRequestCost[];
 }
 
+export interface SubagentTransferredLogEvent {
+  type: 'subagent_transferred';
+  agentId: string;
+  runId: string;
+  role: string;
+}
+
 export interface SubagentQuestionLogEvent {
   type: 'subagent_question';
   messageId: string;
@@ -278,6 +285,7 @@ export type LogEvent =
   | SubagentStartedLogEvent
   | SubagentToolStartedLogEvent
   | SubagentCompletedLogEvent
+  | SubagentTransferredLogEvent
   | SubagentQuestionLogEvent
   | BackgroundShellStartedLogEvent
   | BackgroundShellCompletedLogEvent

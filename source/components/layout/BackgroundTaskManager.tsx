@@ -188,9 +188,7 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
           setDetailsVisible(true);
           setFeedback('Moved to background');
         } else {
-          setFeedback(
-            result?.code === 'capacity' ? 'Background task limit reached' : 'Shell is no longer transferable',
-          );
+          setFeedback(result?.code === 'capacity' ? 'Background task limit reached' : 'Task is no longer transferable');
         }
         return;
       }
@@ -271,7 +269,10 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
       {detailsVisible && selected && <BackgroundTaskDetailsView details={selected} />}
       {stopArmed && <Text color="#f59e0b">Press Enter to force stop this task, or Esc to close.</Text>}
       {backgroundArmed && (
-        <Text color="#f59e0b">Press Enter to put this shell in the background, or Esc to close.</Text>
+        <Text color="#f59e0b">
+          Press Enter to put this {selectedForeground?.kind === 'subagent' ? 'subagent' : 'shell'} in the background, or
+          Esc to close.
+        </Text>
       )}
       {feedback && (
         <Text color={feedback === 'Stop requested' || feedback === 'Moved to background' ? '#f59e0b' : '#f87171'}>

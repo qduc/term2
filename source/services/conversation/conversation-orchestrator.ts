@@ -183,13 +183,21 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
       );
     }
     if (backgroundMoves.length > 0) {
+      const movedSubagents = backgroundMoves.filter((notification) => notification.details.kind === 'subagent').length;
+      const movedShells = backgroundMoves.length - movedSubagents;
+      const movedWhat =
+        movedSubagents > 0 && movedShells === 0
+          ? movedSubagents === 1
+            ? 'a foreground subagent into the background'
+            : 'foreground subagents into the background'
+          : movedShells > 0 && movedSubagents === 0
+          ? movedShells === 1
+            ? 'a foreground shell into the background'
+            : 'foreground shells into the background'
+          : 'foreground work into the background';
       sections.push(
         [
-          `The user moved ${
-            backgroundMoves.length === 1
-              ? 'a foreground shell into the background'
-              : 'foreground shells into the background'
-          }. This is an automatic user control notification, not a user message.`,
+          `The user moved ${movedWhat}. This is an automatic user control notification, not a user message.`,
           '',
           ...entriesFor(backgroundMoves, 'moved to'),
           '',

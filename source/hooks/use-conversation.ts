@@ -162,6 +162,11 @@ export const useConversation = ({
     [conversationService],
   );
   const [backgroundTaskDetailsState, setBackgroundTaskDetailsState] = useState(readBackgroundTaskDetails);
+  const readForegroundTransferCandidates = useCallback(
+    () => conversationService.backgroundTaskControl?.listForegroundTransferCandidates?.() ?? [],
+    [conversationService],
+  );
+  const [foregroundTransferCandidates, setForegroundTransferCandidates] = useState(readForegroundTransferCandidates);
   const readBackgroundApproval = useCallback(
     (): BackgroundSubagentApprovalSnapshot =>
       conversationService.backgroundSubagentApprovals?.getSnapshot?.() ?? { pendingCount: 0, pending: [] },
@@ -172,7 +177,8 @@ export const useConversation = ({
   const refreshBackgroundSubagentTasks = useCallback(() => {
     setBackgroundSubagentTaskState(readBackgroundSubagentTasks());
     setBackgroundTaskDetailsState(readBackgroundTaskDetails());
-  }, [readBackgroundSubagentTasks, readBackgroundTaskDetails]);
+    setForegroundTransferCandidates(readForegroundTransferCandidates());
+  }, [readBackgroundSubagentTasks, readBackgroundTaskDetails, readForegroundTransferCandidates]);
 
   const listBackgroundTaskDetails = useCallback(
     () => conversationService.backgroundTaskControl?.listDetails?.() ?? [],
@@ -212,12 +218,21 @@ export const useConversation = ({
     // Keep ticking while the details lane still has rows: the panel's per-row
     // linger only expires on a tick, and terminal details outlive the store's
     // own retention window.
-    if (backgroundSubagentTaskState.tasks.length === 0 && backgroundTaskDetailsState.tasks.length === 0) return;
+    if (
+      !isProcessing &&
+      backgroundSubagentTaskState.tasks.length === 0 &&
+      backgroundTaskDetailsState.tasks.length === 0 &&
+      foregroundTransferCandidates.length === 0
+    ) {
+      return;
+    }
     const interval = setInterval(refreshBackgroundSubagentTasks, 1_000);
     return () => clearInterval(interval);
   }, [
+    isProcessing,
     backgroundSubagentTaskState.tasks.length,
     backgroundTaskDetailsState.tasks.length,
+    foregroundTransferCandidates.length,
     refreshBackgroundSubagentTasks,
   ]);
 

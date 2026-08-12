@@ -190,12 +190,15 @@ function makeHarness(options: { queueActive?: boolean; injects?: boolean } = {})
       )
         observer?.();
     },
-    emitBackgroundMove() {
+    emitBackgroundMove(kind: 'shell' | 'subagent' = 'shell') {
       if (
         store.enqueueUserControl({
           action: 'background',
-          target: { kind: 'shell', id: 'shell-moved' },
-          details: { kind: 'shell', id: 'shell-moved', command: 'pnpm test:provider-black-box' },
+          target: { kind, id: kind === 'shell' ? 'shell-moved' : 'child-1' },
+          details:
+            kind === 'shell'
+              ? { kind: 'shell', id: 'shell-moved', command: 'pnpm test:provider-black-box' }
+              : { kind: 'subagent', id: 'child-1', role: 'worker', task: 'inspect the approval boundary' },
         })
       )
         observer?.();
@@ -292,6 +295,19 @@ describe('ConversationOrchestrator background subagent notifications mid-turn', 
     expect(h.injectedTexts()[0]).not.toContain('requested stop');
     expect(h.config.messages.getMessages()).toContainEqual(
       expect.objectContaining({ output: 'Moved to background: shell pnpm test:provider-black-box' }),
+    );
+  });
+
+  it('tells the active turn that a foreground subagent moved without calling it a shell', async () => {
+    const h = makeHarness({ queueActive: true });
+
+    h.emitBackgroundMove('subagent');
+    await settle();
+
+    expect(h.injectedTexts()[0]).toContain('moved a foreground subagent into the background');
+    expect(h.injectedTexts()[0]).not.toContain('foreground shell');
+    expect(h.config.messages.getMessages()).toContainEqual(
+      expect.objectContaining({ output: 'Moved to background: child-1 (worker)' }),
     );
   });
 

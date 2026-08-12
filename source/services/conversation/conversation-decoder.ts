@@ -89,6 +89,8 @@ const isStructurallyValidKnownEvent = (event: UnknownObject): boolean => {
       );
     case 'subagent_completed':
       return isObject(event['result']) && hasString(event['result'], 'agentId');
+    case 'subagent_transferred':
+      return hasString(event, 'agentId') && hasString(event, 'runId') && hasString(event, 'role');
     case 'subagent_question':
       return (
         hasString(event, 'messageId') &&

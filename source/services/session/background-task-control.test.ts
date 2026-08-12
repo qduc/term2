@@ -292,7 +292,7 @@ describe('BackgroundTaskControl', () => {
     const control = new BackgroundTaskControl({
       client: {
         listForegroundSubagentCandidates: () => [
-          { runId: 'child-1', role: 'worker', task: 'inspect tests', parentTool: 'run_subagent' },
+          { runId: 'child-1', role: 'worker', task: 'inspect tests', parentTool: 'run_subagent', startedAt: 1_000 },
         ],
         moveForegroundSubagent: move,
         getBackgroundSubagentStatus: (runId) => subagentStatus({ runId, role: 'worker', task: 'inspect tests' }),

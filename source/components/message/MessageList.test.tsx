@@ -249,7 +249,11 @@ it.sequential('MessageList renders completed subagent tool results in its compac
       agentId: 'agent-1',
       role: 'explorer',
       task: 'inspect the command message rendering flow and report findings that are quite long',
-      tools: ['grep (2 matches)', 'read_file (Success)', 'read_code_outline (Success)'],
+      tools: [
+        'grep "needle" (2 matches)',
+        'read_file "source/app.tsx" (Success)',
+        'read_code_outline "source/app.tsx" (Success)',
+      ],
     },
   ];
 
@@ -442,6 +446,27 @@ it.sequential('splitStaticHistory moves completed subagent activity to static hi
   const { history, active } = splitStaticHistory(messages);
 
   expect(history.map((message) => message.id)).toEqual(['older', 'completed-subagent', 'after']);
+  expect(active).toEqual([]);
+});
+
+it.sequential('splitStaticHistory moves a transferred subagent card to static history', async () => {
+  const messages = [
+    { id: 'older', sender: 'bot', text: 'older', status: 'finalized' },
+    {
+      id: 'moved-subagent',
+      sender: 'subagent',
+      status: 'backgrounded',
+      agentId: 'agent-1',
+      role: 'worker',
+      task: 'inspect the module',
+      tools: ['read_file'],
+    },
+    { id: 'after', sender: 'bot', text: 'after', status: 'finalized' },
+  ];
+
+  const { history, active } = splitStaticHistory(messages);
+
+  expect(history.map((message) => message.id)).toEqual(['older', 'moved-subagent', 'after']);
   expect(active).toEqual([]);
 });
 

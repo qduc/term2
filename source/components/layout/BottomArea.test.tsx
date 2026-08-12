@@ -206,7 +206,7 @@ it.sequential('BottomArea places active background tasks directly above the inpu
     backgroundSubagentTasksNow: Date.now(),
   });
   const output = lastFrame() ?? '';
-  const panelIndex = output.indexOf('Background tasks · 1 active');
+  const panelIndex = output.indexOf('Tasks · 1 active');
   const inputIndex = output.indexOf('❯');
 
   expect(panelIndex).toBeGreaterThanOrEqual(0);
@@ -345,7 +345,11 @@ it.sequential('BottomArea advertises the manager while a shell is transferable',
     }),
   });
 
-  expect(lastFrame() ?? '').toContain('Foreground shell running · Ctrl+G manage');
+  const output = lastFrame() ?? '';
+  expect(output).toContain('Tasks · 1 active · Ctrl+G manage');
+  expect(output).toContain('[Shell · foreground]');
+  expect(output).toContain('long-command');
+  expect(output).not.toContain('Foreground shell running · Ctrl+G manage');
   act(() => unmount());
 });
 

@@ -107,6 +107,27 @@ it('delivers events to the background sink when no per-turn sink is attached', (
   expect(background.events[0]).toMatchObject({ type: 'subagent_completed', async: true });
 });
 
+it('delivers a transfer event to the turn sink before the async start pins later events', () => {
+  const { bridge, emit } = makeBridge();
+  const turn = collector();
+  const background = collector();
+
+  bridge.setEventSink(turn.sink);
+  bridge.setBackgroundEventSink(background.sink);
+
+  emit({
+    type: 'subagent_transferred',
+    agentId: 'root-call',
+    runId: 'root-call',
+    role: 'explorer',
+  });
+  emit(startedEvent('root-call', true));
+  emit(commandEvent('root-call'));
+
+  expect(turn.events.map((event) => event.type)).toEqual(['subagent_transferred']);
+  expect(background.events.map((event) => event.type)).toEqual(['subagent_started', 'subagent_command_message']);
+});
+
 it('keeps synchronous events on the turn sink and async lifecycle events on the background sink', () => {
   const { bridge, emit } = makeBridge();
   const turn = collector();

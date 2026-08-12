@@ -54,6 +54,7 @@ export interface ForegroundSubagentCandidate {
   role: string;
   task: string;
   parentTool?: string;
+  startedAt: number;
 }
 
 type ForegroundLeaseCandidate = ForegroundSubagentCandidate & { lease: ForegroundSubagentLease };
@@ -558,6 +559,7 @@ export class NestedSubagentRunner {
       role,
       task: request.task,
       parentTool: request.parentTool,
+      startedAt: Date.now(),
     });
     const composite = createCompositeAbortSignal(lease.signal);
     const signal = composite?.signal;

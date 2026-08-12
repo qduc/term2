@@ -54,6 +54,19 @@ describe('foreground lease adoption', () => {
     expect(handle).toEqual({ runId: 'root-call', role: 'explorer', status: 'running', task: 'inspect' });
     expect(run).not.toHaveBeenCalled();
     expect(lease.adopted).toBe(true);
+    expect(events.map((event) => event.type)).toEqual(['subagent_transferred', 'subagent_started']);
+    expect(events[0]).toEqual({
+      type: 'subagent_transferred',
+      agentId: 'root-call',
+      runId: 'root-call',
+      role: 'explorer',
+    });
+    expect(events[1]).toMatchObject({
+      type: 'subagent_started',
+      agentId: 'root-call',
+      async: true,
+    });
+    expect(events[0]).not.toHaveProperty('async');
     expect(registry.sendMessage('root-call', 'please inspect one more file')).toEqual({
       ok: false,
       code: 'unsupported_control',

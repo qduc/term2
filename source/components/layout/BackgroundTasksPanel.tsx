@@ -4,10 +4,14 @@ import type {
   BackgroundTask,
   BackgroundSubagentTaskTool,
 } from '../../services/subagents/subagent-notification-store.js';
-import type { BackgroundTaskControlDetails } from '../../services/session/background-task-control.js';
+import type {
+  BackgroundTaskControlDetails,
+  ForegroundTransferCandidate,
+} from '../../services/session/background-task-control.js';
+import { normalizeLiveTaskRows, type LiveTaskRow } from './live-task-rows.js';
 
 type Props = {
-  tasks: readonly (BackgroundTask | BackgroundTaskControlDetails)[];
+  tasks: readonly LiveTaskRow[] | readonly (BackgroundTask | BackgroundTaskControlDetails)[];
   now: number;
 };
 
@@ -30,7 +34,7 @@ const formatRole = (role: string): string => {
   return role.charAt(0).toUpperCase() + role.slice(1).toLowerCase();
 };
 
-type PanelTask = BackgroundTask | BackgroundTaskControlDetails;
+type PanelTask = BackgroundTask | BackgroundTaskControlDetails | ForegroundTransferCandidate;
 
 const isControlTask = (task: PanelTask): task is BackgroundTaskControlDetails => 'id' in task;
 
@@ -95,7 +99,8 @@ const isTerminal = (task: PanelTask): boolean =>
   task.status === 'completed' || task.status === 'failed' || task.status === 'timed_out' || task.status === 'cancelled';
 
 const formatLiveStatus = (task: PanelTask, now: number): string => {
-  if (!isControlTask(task) || !task.activity) return `Running · ${formatBackgroundTaskElapsed(now - task.startedAt)}`;
+  const startedAt = 'startedAt' in task && typeof task.startedAt === 'number' ? task.startedAt : now;
+  if (!isControlTask(task) || !task.activity) return `Running · ${formatBackgroundTaskElapsed(now - startedAt)}`;
   const activityAge = formatBackgroundTaskActivityAge(now, task.activity.lastActivityAt);
   switch (task.activity.state) {
     case 'active':
@@ -114,43 +119,45 @@ const formatLiveStatus = (task: PanelTask, now: number): string => {
 /** How long a settled task stays on the panel after it finishes. */
 export const BACKGROUND_TASKS_PANEL_GRACE_MS = 5_000;
 
-const taskKey = (task: PanelTask): string =>
-  task.kind === 'shell' ? ('id' in task ? task.id : task.jobId) : 'id' in task ? task.id : task.runId;
-
 const BackgroundTasksPanel: FC<Props> = ({ tasks, now }) => {
+  const rows = normalizeLiveTaskRows(tasks);
   // The registry keeps terminal entries around indefinitely, so each settled row
   // lingers briefly — long enough to read its outcome — then drops off on its own.
   const settledAtRef = useRef(new Map<string, number>());
   const settledAt = settledAtRef.current;
-  const liveKeys = new Set(tasks.map(taskKey));
+  const liveKeys = new Set(rows.map((row) => row.key));
   for (const key of settledAt.keys()) if (!liveKeys.has(key)) settledAt.delete(key);
 
-  const visible = tasks.filter((task) => {
-    const key = taskKey(task);
-    if (!isTerminal(task)) {
-      settledAt.delete(key);
+  const visible = rows.filter((row) => {
+    if (!isTerminal(row.task)) {
+      settledAt.delete(row.key);
       return true;
     }
-    const since = settledAt.get(key) ?? now;
-    settledAt.set(key, since);
+    const since = settledAt.get(row.key) ?? now;
+    settledAt.set(row.key, since);
     return now - since < BACKGROUND_TASKS_PANEL_GRACE_MS;
   });
 
   if (visible.length === 0) return null;
 
-  const activeCount = visible.filter((task) => !isTerminal(task)).length;
+  const activeCount = visible.filter((row) => !isTerminal(row.task)).length;
 
   return (
     <Box flexDirection="column" marginBottom={1}>
-      <Text color="#94a3b8">Background tasks · {activeCount} active · Ctrl+G manage</Text>
-      {visible.map((task) => (
-        <Box key={taskKey(task)} flexDirection="column">
+      <Text color="#94a3b8">Tasks · {activeCount} active · Ctrl+G manage</Text>
+      {visible.map(({ key, placement, task }) => (
+        <Box key={key} flexDirection="column">
           <Box flexDirection="row">
             <Box flexGrow={1} flexShrink={1} minWidth={0}>
               <Text wrap="truncate-end">
                 <Text color="#64748b">• </Text>
-                <Text color="#a5b4fc">[{task.kind === 'shell' ? 'Shell' : formatRole(task.role)}]</Text>
-                {task.kind !== 'shell' && task.name && <Text color="#c4b5fd"> {truncate(task.name, NAME_LIMIT)}</Text>}
+                <Text color="#a5b4fc">
+                  [{task.kind === 'shell' ? 'Shell' : formatRole(task.role)}
+                  {placement === 'foreground' ? ' · foreground' : ''}]
+                </Text>
+                {task.kind !== 'shell' && 'name' in task && task.name && (
+                  <Text color="#c4b5fd"> {truncate(task.name, NAME_LIMIT)}</Text>
+                )}
                 <Text> {formatTaskLabel(task)}</Text>
               </Text>
             </Box>
@@ -158,22 +165,26 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now }) => {
               <Text color="#94a3b8" wrap="truncate-end">
                 {'  '}
                 {!isTerminal(task) ? formatLiveStatus(task, now) : formatTerminalStatus(task)}
-                {task.kind !== 'shell' && !isControlTask(task) && task.usage?.prompt_tokens != null
+                {task.kind !== 'shell' && !isControlTask(task) && 'usage' in task && task.usage?.prompt_tokens != null
                   ? ` · Ctx ${formatContextTokens(task.usage.prompt_tokens)}`
                   : ''}
               </Text>
             </Box>
           </Box>
-          {task.kind !== 'shell' && !isControlTask(task) && task.status === 'running' && task.lastTool && (
-            <Box flexDirection="row">
-              <Text color="#475569">{'  └ '}</Text>
-              <Box flexGrow={1} flexShrink={1} minWidth={0}>
-                <Text color="#64748b" wrap="truncate-end">
-                  {TOOL_STATE_MARKER[task.lastTool.state]} {formatToolLabel(task.lastTool)}
-                </Text>
+          {task.kind !== 'shell' &&
+            !isControlTask(task) &&
+            task.status === 'running' &&
+            'lastTool' in task &&
+            task.lastTool && (
+              <Box flexDirection="row">
+                <Text color="#475569">{'  └ '}</Text>
+                <Box flexGrow={1} flexShrink={1} minWidth={0}>
+                  <Text color="#64748b" wrap="truncate-end">
+                    {TOOL_STATE_MARKER[task.lastTool.state]} {formatToolLabel(task.lastTool)}
+                  </Text>
+                </Box>
               </Box>
-            </Box>
-          )}
+            )}
         </Box>
       ))}
     </Box>

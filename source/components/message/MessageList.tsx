@@ -89,7 +89,12 @@ const canRenderStatically = (message: MessageLike) => {
   }
 
   if (message.sender === 'subagent') {
-    return message.status === 'completed' || message.status === 'failed' || message.status === 'cancelled';
+    return (
+      message.status === 'completed' ||
+      message.status === 'failed' ||
+      message.status === 'cancelled' ||
+      message.status === 'backgrounded'
+    );
   }
 
   if (message.sender === 'bot') {
@@ -318,7 +323,10 @@ const MessageList = <T extends MessageLike = Message>({
         });
       const isFinishedSubagent =
         message.sender === 'subagent' &&
-        (message.status === 'completed' || message.status === 'failed' || message.status === 'cancelled');
+        (message.status === 'completed' ||
+          message.status === 'failed' ||
+          message.status === 'cancelled' ||
+          message.status === 'backgrounded');
 
       // Keep finished subagent summaries dynamic while sibling work is still
       // running. Committing them to <Static> mid-flight causes an extra Ink

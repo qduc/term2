@@ -638,6 +638,9 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
       return;
     }
     case 'subagent_started': {
+      if (state.messages.some((message) => message.sender === 'subagent' && message.agentId === event.agentId)) {
+        return;
+      }
       state.messages.push({
         id: `subagent-${event.agentId}`,
         sender: 'subagent',
@@ -649,6 +652,15 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
         async: event.async,
         tools: [],
       } as SubagentActivityMessage);
+      return;
+    }
+    case 'subagent_transferred': {
+      state.messages = state.messages.map((message) => {
+        if (message.sender === 'subagent' && message.agentId === event.agentId && message.status === 'running') {
+          return { ...message, status: 'backgrounded' };
+        }
+        return message;
+      });
       return;
     }
     case 'subagent_tool_started': {
@@ -676,6 +688,7 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
       const agentId = event.result.agentId;
       state.messages = state.messages.map((msg) => {
         if (msg.sender === 'subagent' && msg.agentId === agentId) {
+          if (msg.status === 'backgrounded') return msg;
           return {
             ...msg,
             status: event.result.status,

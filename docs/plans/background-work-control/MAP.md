@@ -4,7 +4,7 @@
 
 Background details, per-item stop, action notification, and truthful root-shell transfer are implemented and verified at `d17810dc`. Foreground-subagent transfer is authorized for implementation in `.worktrees/background-subagent-transfer`. Build it as an approval-capable lease adopted by the existing async registry; do not implement transfer as cancel-and-restart and do not route child approvals through the root turn's singleton approval continuation.
 
-Background-task liveness presentation is now planned in [liveness-ui.md](liveness-ui.md). It must surface observed activity and intentional waits without claiming that silence proves a task is hung; its task-manager shortcut will move from Ctrl+B to Ctrl+G to avoid tmux's default prefix.
+Background-task liveness presentation is planned in [liveness-ui.md](liveness-ui.md). Foreground and background subagent live cards are unified in [unified-subagent-ui.md](unified-subagent-ui.md): settle the transcript on transfer, share one compact row with an explicit placement tag, and keep `listDetails()` background-only.
 
 ## Destination
 
@@ -36,6 +36,7 @@ Users can inspect and stop individual background subagents or shell jobs, move a
 
 - **Direct shell mode** [research] — Does the requested foreground-shell action include commands launched from direct Shell Mode, whose current session only records completed history and exposes no process handle?
 - **Task-manager merge point** [done] — After menu Phase 5 handed off, the app-level manager now lists and transfers foreground shells and subagents through the session-owned control port.
+- **Unified live UI** [plan] — Foreground and background subagent cards still use different hosts; a transferred transcript row stays `running`. → [unified-subagent-ui.md](unified-subagent-ui.md)
 
 ## Fog
 

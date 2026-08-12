@@ -426,6 +426,48 @@ it('replayEvents: subagent_tool_started restores scoped activity without a paren
   );
 });
 
+it('replayEvents: subagent_transferred freezes the existing card and ignores a later async start', () => {
+  const restored = replayEvents([
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({
+      type: 'subagent_started',
+      agentId: 'root-call',
+      role: 'explorer',
+      task: 'inspect',
+      parentTool: 'run_subagent',
+    }),
+    env({ type: 'subagent_transferred', agentId: 'root-call', runId: 'root-call', role: 'explorer' }),
+    env({
+      type: 'subagent_started',
+      agentId: 'root-call',
+      role: 'explorer',
+      task: 'inspect',
+      parentTool: 'run_subagent',
+      async: true,
+    }),
+    env({
+      type: 'subagent_completed',
+      result: {
+        agentId: 'root-call',
+        role: 'explorer',
+        status: 'completed',
+        finalText: 'done',
+        filesChanged: [],
+        toolsUsed: [],
+      },
+    }),
+  ]);
+
+  const cards = restored.messages.filter((message) => message.sender === 'subagent');
+  expect(cards).toHaveLength(1);
+  expect(cards[0]).toMatchObject({
+    sender: 'subagent',
+    agentId: 'root-call',
+    status: 'backgrounded',
+  });
+  expect(cards[0]).not.toHaveProperty('finalText');
+});
+
 it('replayEvents: restores one settled background shell notification without recreating a job', () => {
   const restored = replayEvents([
     env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),

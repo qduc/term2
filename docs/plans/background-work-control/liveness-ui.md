@@ -113,7 +113,9 @@ the modal behavior together.
    them through `background-task-control.ts`.
 2. **Project the status in the compact panel.** Update
    `BackgroundTasksPanel.tsx` and its tests to show activity age/reason for
-   running tasks, while preserving concise retained terminal rows.
+   running tasks, while preserving concise retained terminal rows. If
+   [unified-subagent-ui.md](unified-subagent-ui.md) has landed, extend its
+   shared live-row helper instead of inventing a third row shape.
 3. **Expose the evidence in the manager.** Update
    `BackgroundTaskManager.tsx` and tests for list and details rendering,
    including quiet tasks remaining stoppable and waiting tasks not being styled

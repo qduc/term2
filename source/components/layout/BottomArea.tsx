@@ -24,6 +24,7 @@ import type { QueuePauseReason } from '../../services/queue/queue-controller.js'
 import type { BackgroundTask } from '../../services/subagents/subagent-notification-store.js';
 import BackgroundTasksPanel from './BackgroundTasksPanel.js';
 import BackgroundTaskManager from './BackgroundTaskManager.js';
+import { mergeLiveTaskRows } from './live-task-rows.js';
 import { deriveInputOwner } from '../../lib/input-owner.js';
 import type { SubmissionMutation } from '../../services/conversation/conversation-adapter.js';
 import type { SessionCostSummary } from '../../services/cost/model-cost.js';
@@ -315,10 +316,14 @@ const BottomArea: FC<BottomAreaProps> = ({
             {isProcessing && !toolCallStreamingInfo && thinkingStartedAt == null && (
               <Text color="#64748b">processing{'.'.repeat(dotCount)}</Text>
             )}
-            {foregroundTransferCandidate && <Text color="#64748b">Foreground shell running · Ctrl+G manage</Text>}
             {interruptConfirmVisible && <Text color="#f59e0b">Press ESC again to interrupt</Text>}
             <BackgroundTasksPanel
-              tasks={backgroundTaskDetails ?? backgroundSubagentTasks}
+              tasks={mergeLiveTaskRows({
+                foreground:
+                  listForegroundTaskTransferCandidates?.() ??
+                  (foregroundTransferCandidate ? [foregroundTransferCandidate] : []),
+                background: backgroundTaskDetails ?? backgroundSubagentTasks,
+              })}
               now={backgroundTaskDetails ? backgroundTaskDetailsNow : backgroundSubagentTasksNow}
             />
             {listBackgroundTaskDetails && getBackgroundTaskDetails && stopBackgroundTask && (

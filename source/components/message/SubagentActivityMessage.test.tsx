@@ -286,6 +286,27 @@ it.sequential(
   },
 );
 
+it.sequential('SubagentActivityMessage freezes a transferred card with its last tools', async () => {
+  const { lastFrame } = await renderInAct(
+    <SubagentActivityMessage
+      msg={{
+        role: 'explorer',
+        task: 'find x',
+        status: 'backgrounded',
+        parentTool: 'run_subagent',
+        tools: ['read_file "source/app.tsx" (Success)'],
+        finalText: 'should not replace the peek',
+      }}
+    />,
+  );
+  const output = toVisibleText(lastFrame() ?? '');
+
+  expect(output).toContain('run_subagent [explorer] find x');
+  expect(output).toContain('— moved to background');
+  expect(output).toContain('✔ read_file "source/app.tsx"');
+  expect(output).not.toContain('should not replace the peek');
+});
+
 it.sequential('SubagentActivityMessage appends failure reason to status suffix when error is present', async () => {
   const props = {
     msg: {

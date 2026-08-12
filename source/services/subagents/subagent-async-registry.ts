@@ -345,6 +345,14 @@ export class SubagentAsyncRegistry {
       if (request.name !== undefined) this.#activeNameToRunId.delete(request.name);
       throw error;
     }
+    // Emit transfer before the async start so the bridge still routes it to
+    // the turn sink. The following start pins this agentId as background.
+    safeEmit(this.#logger, this.#onEvent, {
+      type: 'subagent_transferred',
+      agentId: lease.runId,
+      runId: lease.runId,
+      role: request.role,
+    });
     safeEmit(this.#logger, this.#onEvent, {
       type: 'subagent_started',
       agentId: lease.runId,

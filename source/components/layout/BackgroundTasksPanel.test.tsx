@@ -5,6 +5,7 @@ import React from 'react';
 import { renderInAct, rerenderInAct } from '../../test-helpers/ink-testing.js';
 import type { BackgroundSubagentTask, BackgroundTask } from '../../services/subagents/subagent-notification-store.js';
 import BackgroundTasksPanel from './BackgroundTasksPanel.js';
+import { mergeLiveTaskRows } from './live-task-rows.js';
 
 const runningTask = (overrides: Partial<BackgroundSubagentTask> = {}): BackgroundSubagentTask => ({
   kind: 'subagent',
@@ -33,7 +34,7 @@ it.sequential('renders a shell job without assigning it a subagent role', async 
   const renderer = await renderInAct(<BackgroundTasksPanel tasks={[task]} now={4_000} />);
 
   const output = renderer.lastFrame() ?? '';
-  expect(output).toContain('Background tasks · 1 active');
+  expect(output).toContain('Tasks · 1 active');
   expect(output).toContain('[Shell]');
   expect(output).toContain('pnpm test -- source/components');
   expect(output).toContain('Running · 3s');
@@ -57,7 +58,7 @@ it.sequential('shows active count, short task label, role badge, status, and ela
   );
 
   const output = renderer.lastFrame() ?? '';
-  expect(output).toContain('Background tasks · 2 active');
+  expect(output).toContain('Tasks · 2 active');
   expect(output).toContain('Worker');
   expect(output).toContain('ui_fix');
   expect(output).toContain('Explorer');
@@ -168,7 +169,7 @@ it.sequential('shows a concise recently completed indication without counting it
   );
 
   const output = renderer.lastFrame() ?? '';
-  expect(output).toContain('Background tasks · 0 active');
+  expect(output).toContain('Tasks · 0 active');
   expect(output).toContain('Explorer');
   expect(output).toContain('Completed recently');
   expect(output).not.toContain('Running');
@@ -269,23 +270,62 @@ it.sequential('drops each settled row once its linger expires, leaving still-run
   const renderer = await renderInAct(<BackgroundTasksPanel tasks={[finished, running]} now={10_000} />);
 
   expect(renderer.lastFrame() ?? '').toContain('finished work');
-  expect(renderer.lastFrame() ?? '').toContain('Background tasks · 1 active');
+  expect(renderer.lastFrame() ?? '').toContain('Tasks · 1 active');
 
   await rerenderInAct(renderer, <BackgroundTasksPanel tasks={[finished, running]} now={16_000} />);
 
   const output = renderer.lastFrame() ?? '';
   expect(output).not.toContain('finished work');
   expect(output).toContain('ongoing work');
-  expect(output).toContain('Background tasks · 1 active');
+  expect(output).toContain('Tasks · 1 active');
 });
 
 it.sequential('hides the whole panel once every row has settled and lingered', async () => {
   const finished = runningTask({ runId: 'run-done', status: 'completed' });
   const renderer = await renderInAct(<BackgroundTasksPanel tasks={[finished]} now={10_000} />);
 
-  expect(renderer.lastFrame() ?? '').toContain('Background tasks · 0 active');
+  expect(renderer.lastFrame() ?? '').toContain('Tasks · 0 active');
 
   await rerenderInAct(renderer, <BackgroundTasksPanel tasks={[finished]} now={16_000} />);
 
   expect(renderer.lastFrame() ?? '').toBe('');
+});
+
+it.sequential('tags unadopted work as foreground and leaves adopted rows untagged', async () => {
+  const renderer = await renderInAct(
+    <BackgroundTasksPanel
+      tasks={mergeLiveTaskRows({
+        foreground: [
+          {
+            kind: 'subagent',
+            runId: 'child-1',
+            role: 'explorer',
+            task: 'audit provider fixtures',
+            status: 'running',
+            startedAt: 1_000,
+          },
+          {
+            kind: 'shell',
+            callId: 'call-1',
+            jobId: 'job-1',
+            command: 'pnpm test',
+            status: 'running',
+            startedAt: 2_000,
+          },
+        ],
+        background: [runningTask({ task: 'write the report' })],
+      })}
+      now={4_000}
+    />,
+  );
+
+  const output = renderer.lastFrame() ?? '';
+  expect(output).toContain('Tasks · 3 active');
+  expect(output).toContain('[Explorer · foreground]');
+  expect(output).toContain('audit provider fixtures');
+  expect(output).toContain('[Shell · foreground]');
+  expect(output).toContain('pnpm test');
+  expect(output).toContain('[Explorer]');
+  expect(output).toContain('write the report');
+  expect(output).toContain('Running · 3s');
 });

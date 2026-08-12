@@ -239,6 +239,66 @@ it('subagent_started links callId from tool_started and command_message replaces
   expect(completedMsg[0].status).toBe('completed');
 });
 
+it('subagent_transferred freezes the existing card and ignores a later completion', () => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'subagent_started',
+    agentId: 'root-call',
+    role: 'explorer',
+    task: 'inspect the approval boundary',
+    parentTool: 'run_subagent',
+  } as ConversationEvent);
+  handler({
+    type: 'subagent_command_message',
+    agentId: 'root-call',
+    role: 'explorer',
+    message: { toolName: 'read_file', command: 'read_file "source/app.tsx"', success: true, output: '' },
+  } as ConversationEvent);
+  handler({
+    type: 'subagent_transferred',
+    agentId: 'root-call',
+    runId: 'root-call',
+    role: 'explorer',
+  } as ConversationEvent);
+  handler({
+    type: 'subagent_started',
+    agentId: 'root-call',
+    role: 'explorer',
+    task: 'inspect the approval boundary',
+    parentTool: 'run_subagent',
+    async: true,
+  } as ConversationEvent);
+  handler({
+    type: 'subagent_completed',
+    async: true,
+    result: {
+      agentId: 'root-call',
+      role: 'explorer',
+      status: 'completed',
+      finalText: 'done',
+      filesChanged: [],
+      toolsUsed: [],
+    },
+  } as ConversationEvent);
+
+  let messages = deps.calls.appendedMessages[0];
+  for (const update of deps.calls.setMessagesCalls) {
+    messages = update(messages);
+  }
+
+  expect(messages.filter((message) => message.sender === 'subagent')).toHaveLength(1);
+  expect(messages[0]).toMatchObject({
+    sender: 'subagent',
+    agentId: 'root-call',
+    status: 'backgrounded',
+    tools: ['read_file "source/app.tsx" (Success)'],
+  });
+  expect(messages[0]).not.toHaveProperty('finalText');
+});
+
 it('run_subagent background launch remains an ordinary command message', () => {
   const deps = createMockDeps();
   const state = createStreamingState();

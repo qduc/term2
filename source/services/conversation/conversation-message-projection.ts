@@ -1,4 +1,5 @@
 import { stripSteeringNotice } from '../../prompts/steering-notice.js';
+import { isLocalContextSummary } from '../../contracts/provider-input.js';
 
 export const SHELL_CONTEXT_PREFIX = '[Previous Shell Session]';
 export const LEGACY_MODE_NOTICE_PREFIX = '[Mode Notice] ';
@@ -56,8 +57,9 @@ export function projectConversationMessage(item: unknown): ConversationMessagePr
       images: [],
       imageCount: 0,
       isSynthetic:
-        message.role === 'user' &&
-        (content.startsWith(SHELL_CONTEXT_PREFIX) || content.startsWith(LEGACY_MODE_NOTICE_PREFIX)),
+        isLocalContextSummary(message) ||
+        (message.role === 'user' &&
+          (content.startsWith(SHELL_CONTEXT_PREFIX) || content.startsWith(LEGACY_MODE_NOTICE_PREFIX))),
     };
   }
 
@@ -85,6 +87,8 @@ export function projectConversationMessage(item: unknown): ConversationMessagePr
     images,
     imageCount,
     isSynthetic:
-      message.role === 'user' && (text.startsWith(SHELL_CONTEXT_PREFIX) || text.startsWith(LEGACY_MODE_NOTICE_PREFIX)),
+      isLocalContextSummary(message) ||
+      (message.role === 'user' &&
+        (text.startsWith(SHELL_CONTEXT_PREFIX) || text.startsWith(LEGACY_MODE_NOTICE_PREFIX))),
   };
 }

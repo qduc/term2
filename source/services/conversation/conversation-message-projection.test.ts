@@ -1,6 +1,17 @@
 import { expect, it } from 'vitest';
 import { projectConversationMessage } from './conversation-message-projection.js';
 
+it('classifies a marked local context summary as synthetic', () => {
+  expect(
+    projectConversationMessage({
+      type: 'message',
+      role: 'system',
+      content: 'summary',
+      contextSummary: { version: 1, strategy: 'local' },
+    }),
+  ).toMatchObject({ role: 'system', text: 'summary', isSynthetic: true });
+});
+
 it.each([
   {
     label: 'direct user message',

@@ -29,6 +29,21 @@ export interface ContextSummaryGenerator {
   }): Promise<SummaryGenerationResult>;
 }
 
+export class ContextCompactionHardFitError extends Error {
+  readonly code = 'context_compaction_hard_fit' as const;
+  readonly reason: 'single_turn_too_large' | 'result_still_too_large';
+
+  constructor(reason: 'single_turn_too_large' | 'result_still_too_large') {
+    super(
+      reason === 'single_turn_too_large'
+        ? 'The protected recent conversation is too large to fit the configured context window'
+        : 'The compacted conversation is still too large to fit the configured context window',
+    );
+    this.name = 'ContextCompactionHardFitError';
+    this.reason = reason;
+  }
+}
+
 export type ContextSummaryCheckpoint = ProviderInputItem & { contextSummary: ContextSummaryMarker };
 
 export type LocalCompactionOutcome =

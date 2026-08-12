@@ -8,12 +8,13 @@ import type { NestedSubagentResult } from '../services/subagents/types.js';
 import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
 
 const providers = new Set<string>();
-const makeSettings = (provider: string): ISettingsService => {
+const makeSettings = (provider: string, overrides: Record<string, unknown> = {}): ISettingsService => {
   const values: Record<string, unknown> = {
     'agent.provider': provider,
     'agent.model': 'test-model',
     'agent.retryAttempts': 2,
     'agent.reasoningEffort': 'default',
+    ...overrides,
   };
   return {
     get: (key: string) => values[key],
@@ -40,10 +41,14 @@ const sessionContextService = {
   getContext: () => null,
 } as any;
 
-const client = (provider: string, options: Record<string, unknown> = {}) =>
+const client = (
+  provider: string,
+  options: Record<string, unknown> = {},
+  settingOverrides: Record<string, unknown> = {},
+) =>
   new AgentClient({
     ...options,
-    deps: { logger, settings: makeSettings(provider), sessionContextService },
+    deps: { logger, settings: makeSettings(provider, settingOverrides), sessionContextService },
     toolOwnership: new ToolOwnershipRegistry(),
   } as any);
 
@@ -56,6 +61,111 @@ afterEach(() => {
 });
 
 describe('AgentClient application-run-loop execution', () => {
+  it('uses local compaction for an unsupported provider only when auto mode is selected', async () => {
+    const provider = `local-compaction-auto-${Date.now()}`;
+    providers.add(provider);
+    const requests: any[] = [];
+    registerProvider({
+      id: provider,
+      label: 'Local compaction fallback provider',
+      createStreamedModel: () => ({
+        async *stream(request: any) {
+          requests.push(request);
+          const summarizing = request.instructions?.includes('You compact historical conversation data');
+          const text = summarizing ? 'fixture local summary' : 'ordinary answer';
+          yield {
+            type: 'completion',
+            responseId: summarizing ? 'summary-response' : 'ordinary-response',
+            output: [{ type: 'message', content: [{ type: 'text', text }] }],
+          };
+        },
+      }),
+      fetchModels: async () => [],
+    });
+    const instance = client(
+      provider,
+      { agentOverride: { name: 'override', model: 'test-model', instructions: 'test', tools: [] } },
+      {
+        'agent.contextCompaction.enabled': true,
+        'agent.contextCompaction.mode': 'auto',
+        'agent.contextCompaction.compactThreshold': 0.8,
+        'agent.contextCompaction.compactThresholdTokens': 1_000,
+      },
+    );
+    const input = [
+      { role: 'user' as const, type: 'message' as const, content: `cold-${'x'.repeat(5_000)}` },
+      { role: 'assistant' as const, type: 'message' as const, content: 'cold answer' },
+      { role: 'user' as const, type: 'message' as const, content: 'hot one' },
+      { role: 'assistant' as const, type: 'message' as const, content: 'hot answer' },
+      { role: 'user' as const, type: 'message' as const, content: 'hot two' },
+    ];
+
+    const stream = await instance.startStream(input);
+    await stream.completed;
+
+    expect(requests).toHaveLength(2);
+    expect(requests[0].instructions).toContain('You compact historical conversation data');
+    expect(requests[1].input[0]).toMatchObject({ role: 'system' });
+    expect(JSON.stringify(requests[1].input)).toContain('fixture local summary');
+    expect(JSON.stringify(requests[1].input)).not.toContain('cold-');
+    instance.dispose();
+
+    requests.length = 0;
+    const nativeInstance = client(
+      provider,
+      { agentOverride: { name: 'override', model: 'test-model', instructions: 'test', tools: [] } },
+      {
+        'agent.contextCompaction.enabled': true,
+        'agent.contextCompaction.mode': 'native',
+        'agent.contextCompaction.compactThreshold': 0.8,
+        'agent.contextCompaction.compactThresholdTokens': 1_000,
+      },
+    );
+    const nativeStream = await nativeInstance.startStream(input);
+    await nativeStream.completed;
+    expect(requests).toHaveLength(1);
+    expect(JSON.stringify(requests[0].input)).toContain('cold-');
+    nativeInstance.dispose();
+  });
+
+  it('fails with a typed error instead of dispatching when the protected hot tail cannot fit', async () => {
+    const provider = `local-compaction-hard-fit-${Date.now()}`;
+    providers.add(provider);
+    let requests = 0;
+    registerProvider({
+      id: provider,
+      label: 'Local compaction hard-fit provider',
+      createStreamedModel: () => ({
+        async *stream() {
+          requests += 1;
+          yield { type: 'completion', responseId: 'unexpected', output: [] };
+        },
+      }),
+      fetchModels: async () => [],
+    });
+    const instance = client(
+      provider,
+      { agentOverride: { name: 'override', model: 'test-model', instructions: 'test', tools: [] } },
+      {
+        'agent.contextCompaction.enabled': true,
+        'agent.contextCompaction.mode': 'auto',
+        'agent.contextCompaction.compactThreshold': 0.8,
+        'agent.contextCompaction.compactThresholdTokens': 1_000,
+      },
+    );
+    const stream = await instance.startStream([
+      { role: 'user', type: 'message', content: 'cold' },
+      { role: 'assistant', type: 'message', content: 'cold answer' },
+      { role: 'user', type: 'message', content: 'hot one' },
+      { role: 'assistant', type: 'message', content: 'hot answer' },
+      { role: 'user', type: 'message', content: `protected-${'x'.repeat(5_000)}` },
+    ] as any);
+
+    await expect(stream.completed).rejects.toMatchObject({ code: 'context_compaction_hard_fit' });
+    expect(requests).toBe(0);
+    instance.dispose();
+  });
+
   it('starts eligible foreground explorer calls from one response together and preserves provider result order', async () => {
     const provider = `parallel-explorers-${Date.now()}`;
     providers.add(provider);

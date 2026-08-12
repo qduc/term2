@@ -99,6 +99,87 @@ describe('ApplicationRunLoop request-boundary compaction', () => {
       expect.arrayContaining([expect.objectContaining({ type: 'context_compaction_completed', strategy: 'local' })]),
     );
   });
+
+  it('admits a steer that arrives while compaction is in flight before dispatching the request', async () => {
+    let releaseCompaction!: () => void;
+    let markCompactionStarted!: () => void;
+    const compactionStarted = new Promise<void>((resolve) => (markCompactionStarted = resolve));
+    const compactionReleased = new Promise<void>((resolve) => (releaseCompaction = resolve));
+    let request: any;
+    const model: StreamedModelTurn = {
+      async *stream(value) {
+        request = value;
+        yield { type: 'completion', responseId: 'fresh', output: [] };
+      },
+    };
+    const checkpoint = {
+      role: 'system' as const,
+      type: 'message' as const,
+      content: 'summary',
+      contextSummary: { version: 1 as const, strategy: 'local' as const },
+    };
+    const loop = new ApplicationRunLoop({ resolveModel: () => model });
+    loop.openTurn();
+    const stream = loop.startStream(agent, [{ role: 'user', type: 'message', content: 'old' }], {
+      boundaryCompaction: {
+        compact: async () => {
+          markCompactionStarted();
+          await compactionReleased;
+          return {
+            kind: 'compacted',
+            history: [{ role: 'user', type: 'message', content: 'old' }, checkpoint],
+            modelInput: [checkpoint],
+          };
+        },
+      },
+    });
+
+    await compactionStarted;
+    const steer = loop.steer([{ role: 'user', type: 'message', content: 'steer during summary' }]);
+    releaseCompaction();
+
+    await stream.completed;
+    expect(await steer).toBe('admitted');
+    expect(request.input).toEqual([
+      { role: 'system', type: 'message', content: [{ type: 'text', text: 'summary' }] },
+      { role: 'user', type: 'message', content: [{ type: 'text', text: 'steer during summary' }] },
+    ]);
+    expect(stream.history).toEqual([
+      { role: 'user', type: 'message', content: 'old' },
+      checkpoint,
+      { role: 'user', type: 'message', content: 'steer during summary' },
+    ]);
+  });
+
+  it('emits one local failure event and preserves history and chaining when compaction fails', async () => {
+    let request: any;
+    const model: StreamedModelTurn = {
+      async *stream(value) {
+        request = value;
+        yield { type: 'completion', responseId: 'fresh', output: [] };
+      },
+    };
+    const original = [{ role: 'user' as const, type: 'message' as const, content: 'unchanged' }];
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, original, {
+      providerId: 'openai',
+      supportsConversationChaining: true,
+      previousResponseId: 'still-live',
+      boundaryCompaction: {
+        compact: async () => ({ kind: 'failed', provider: 'openai' }),
+      },
+    });
+
+    const eventsPromise = collect(stream);
+    await stream.completed;
+    const events = await eventsPromise;
+
+    expect(request.previousResponseId).toBe('still-live');
+    expect(stream.history).toEqual(original);
+    expect(events.filter((event: any) => event.type === 'context_compaction_failed')).toEqual([
+      expect.objectContaining({ provider: 'openai', strategy: 'local' }),
+    ]);
+    expect(events.some((event: any) => event.type === 'provider_error')).toBe(false);
+  });
 });
 
 async function collect(stream: AsyncIterable<unknown>): Promise<unknown[]> {

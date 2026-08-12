@@ -589,7 +589,17 @@ Status: **complete (`4a867db8`).**
 
 ### Milestone 6 — black-box and quality gate
 
-Status: **partially complete.** Typecheck, lint (0 errors), and 336 focused integrated tests pass. The provider black-box run reached 143 passing tests before the existing background-shell approval PTY scenario timed out and `--bail=1` aborted five later scenarios. The broad suite reached 6,037 passing tests and 12 failures; seven affected UI/provider tests reproduce in the pre-feature checkout, while the nested-worktree Unix-socket failure is path-length-related. The remaining deterministic black-box rows below should be added when the unrelated PTY gate is repaired.
+Status: **partially complete.** Typecheck and lint (0 errors) pass. Focused
+coverage now proves unsupported-provider auto fallback, native-mode non-fallback,
+steer admission during an in-flight summary, transactional failure continuity,
+exactly one local failure event, and typed hard-fit failure before provider
+dispatch. The provider black-box run still reaches 143 passing tests before the
+pre-existing background-shell approval PTY scenario times out and `--bail=1`
+aborts five later scenarios; the resilience file also encounters the existing
+first-run credential/setup-state instability when run alone. The broad suite
+reached 6,062 passing tests and 12 failures across 9 files. The remaining
+deterministic black-box rows below still need shipped-CLI coverage; do not treat
+the infrastructure blocker as a pass.
 
 - Extend `provider-session-resilience.blackbox.ts` with deterministic fake
   summary and ordinary response calls.

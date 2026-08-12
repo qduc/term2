@@ -53,7 +53,10 @@ import type {
 import type { BackgroundSubagentApprovalPauseSink } from '../services/subagents/foreground-subagent-lease.js';
 import type { ForegroundSubagentCandidate } from '../services/subagents/nested-runner.js';
 import type { NestedToolCompatibilityState } from '../services/session/nested-tool-compatibility-state.js';
-import { LocalContextCompactor } from '../services/agent-runtime/context-compaction/local-context-compactor.js';
+import {
+  ContextCompactionHardFitError,
+  LocalContextCompactor,
+} from '../services/agent-runtime/context-compaction/local-context-compactor.js';
 import { CONTEXT_COMPACTION_INSTRUCTIONS } from '../prompts/context-compaction.js';
 import { getCatalogModel } from '../providers/model-catalog/catalog.js';
 import { supportsContextCompactionModel } from '../providers/openai-responses-model.js';
@@ -182,6 +185,12 @@ export class AgentClient {
             error: error instanceof Error ? error.message : String(error),
           });
           return started ? { kind: 'failed' as const, provider } : { kind: 'unchanged' as const };
+        }
+        if (
+          outcome.kind === 'blocked' &&
+          (outcome.reason === 'single_turn_too_large' || outcome.reason === 'result_still_too_large')
+        ) {
+          throw new ContextCompactionHardFitError(outcome.reason);
         }
         if (outcome.kind !== 'compacted') return { kind: 'unchanged' as const };
         const genuineUsers = history.filter((item) => {

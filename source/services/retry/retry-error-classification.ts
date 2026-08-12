@@ -63,21 +63,24 @@ export function isPreviousResponseNotFoundError(error: unknown, seen = new Set<u
 }
 
 /**
- * Server rejected a chained request because previous_response_id still has
- * function calls without outputs in the new input. Same recovery class as
- * previous_response_not_found: drop the chain and replay full history.
+ * Server rejected a chained request because its function calls and outputs no
+ * longer match. Same recovery class as previous_response_not_found: drop the
+ * chain and replay full history, whose provider adapter removes orphan outputs.
  */
 export function isMissingServerToolOutputError(error: unknown, seen = new Set<unknown>()): boolean {
   if (!error || seen.has(error)) return false;
   seen.add(error);
 
   if (typeof error === 'string') {
-    return /no tool output found for function call/i.test(error);
+    return /no tool (?:output found for function call|call found for function call output)/i.test(error);
   }
   if (typeof error !== 'object') return false;
 
   const value = error as Record<string, unknown>;
-  if (typeof value.message === 'string' && /no tool output found for function call/i.test(value.message)) {
+  if (
+    typeof value.message === 'string' &&
+    /no tool (?:output found for function call|call found for function call output)/i.test(value.message)
+  ) {
     return true;
   }
   if (isMissingServerToolOutputError(value.message, seen)) return true;

@@ -195,6 +195,15 @@ it('incomplete stream terminal errors include WebSocket closed before terminal r
   expect(isMissingServerToolOutputError(new Error('invalid_request_error: bad tools'))).toBe(false);
 });
 
+it('recognizes a provider rejection for an orphaned function call output', () => {
+  expect(
+    isMissingServerToolOutputError({
+      status: 400,
+      error: { message: 'No tool call found for function call output with call_id call_abc.' },
+    }),
+  ).toBe(true);
+});
+
 it('isTransientRetryableError: OpenRouter 429/5xx are retryable', () => {
   expect(isTransientRetryableError(new OpenRouterError('rate limited', 429, {}))).toBe(true);
   expect(isTransientRetryableError(new OpenRouterError('server error', 500, {}))).toBe(true);

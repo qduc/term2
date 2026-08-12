@@ -180,6 +180,18 @@ it('classify returns bounded chain recovery for server missing tool output 400',
   expect(classifier.classify(baseContext({ error }))).toMatchObject({ kind: 'chain_recovery', attempt: 1 });
 });
 
+it('classify returns bounded chain recovery for server orphaned tool output 400', () => {
+  const classifier = makeClassifier();
+  const error = Object.assign(
+    new Error(
+      'Error: {"type":"error","error":{"type":"invalid_request_error","message":"No tool call found for function call output with call_id call_TPLbZgMcqd0guPBWHwDh1zjK.","param":"input"},"status":400}',
+    ),
+    { status: 400 },
+  );
+
+  expect(classifier.classify(baseContext({ error }))).toMatchObject({ kind: 'chain_recovery', attempt: 1 });
+});
+
 it('classify stops chain recovery after the transient retry budget is exhausted', () => {
   const classifier = makeClassifier();
   const error = new MissingChainedToolOutputError(['call-required']);

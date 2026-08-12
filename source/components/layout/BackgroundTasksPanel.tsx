@@ -1,4 +1,4 @@
-import React, { type FC } from 'react';
+import React, { useRef, type FC } from 'react';
 import { Box, Text } from 'ink';
 import type {
   BackgroundTask,
@@ -111,19 +111,40 @@ const formatLiveStatus = (task: PanelTask, now: number): string => {
   }
 };
 
-const BackgroundTasksPanel: FC<Props> = ({ tasks, now }) => {
-  if (tasks.length === 0) return null;
+/** How long a settled task stays on the panel after it finishes. */
+export const BACKGROUND_TASKS_PANEL_GRACE_MS = 5_000;
 
-  const activeCount = tasks.filter((task) => !isTerminal(task)).length;
+const taskKey = (task: PanelTask): string =>
+  task.kind === 'shell' ? ('id' in task ? task.id : task.jobId) : 'id' in task ? task.id : task.runId;
+
+const BackgroundTasksPanel: FC<Props> = ({ tasks, now }) => {
+  // The registry keeps terminal entries around indefinitely, so each settled row
+  // lingers briefly — long enough to read its outcome — then drops off on its own.
+  const settledAtRef = useRef(new Map<string, number>());
+  const settledAt = settledAtRef.current;
+  const liveKeys = new Set(tasks.map(taskKey));
+  for (const key of settledAt.keys()) if (!liveKeys.has(key)) settledAt.delete(key);
+
+  const visible = tasks.filter((task) => {
+    const key = taskKey(task);
+    if (!isTerminal(task)) {
+      settledAt.delete(key);
+      return true;
+    }
+    const since = settledAt.get(key) ?? now;
+    settledAt.set(key, since);
+    return now - since < BACKGROUND_TASKS_PANEL_GRACE_MS;
+  });
+
+  if (visible.length === 0) return null;
+
+  const activeCount = visible.filter((task) => !isTerminal(task)).length;
 
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Text color="#94a3b8">Background tasks · {activeCount} active · Ctrl+G manage</Text>
-      {tasks.map((task) => (
-        <Box
-          key={task.kind === 'shell' ? ('id' in task ? task.id : task.jobId) : 'id' in task ? task.id : task.runId}
-          flexDirection="column"
-        >
+      {visible.map((task) => (
+        <Box key={taskKey(task)} flexDirection="column">
           <Box flexDirection="row">
             <Box flexGrow={1} flexShrink={1} minWidth={0}>
               <Text wrap="truncate-end">

@@ -209,10 +209,17 @@ export const useConversation = ({
   }, [conversationService, refreshBackgroundSubagentTasks]);
 
   useEffect(() => {
-    if (backgroundSubagentTaskState.tasks.length === 0) return;
+    // Keep ticking while the details lane still has rows: the panel's per-row
+    // linger only expires on a tick, and terminal details outlive the store's
+    // own retention window.
+    if (backgroundSubagentTaskState.tasks.length === 0 && backgroundTaskDetailsState.tasks.length === 0) return;
     const interval = setInterval(refreshBackgroundSubagentTasks, 1_000);
     return () => clearInterval(interval);
-  }, [backgroundSubagentTaskState.tasks.length, refreshBackgroundSubagentTasks]);
+  }, [
+    backgroundSubagentTaskState.tasks.length,
+    backgroundTaskDetailsState.tasks.length,
+    refreshBackgroundSubagentTasks,
+  ]);
 
   useEffect(() => {
     if (typeof conversationService.backgroundSubagentApprovals?.subscribe !== 'function') return;

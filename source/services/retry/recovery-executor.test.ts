@@ -350,6 +350,24 @@ it('retry_fresh without stream preserves user message and clears continuity', ()
   expect(deps.conversationStore.getHistory().length).toBe(1);
 });
 
+it('retry_fresh with disableChainingForAttempt clears continuity and marks the next request', () => {
+  const { executor, deps } = makeExecutor();
+  deps.conversationStore.addUserMessage('hello');
+  deps.providerContinuity.update('resp-old');
+
+  const result = executor.apply({
+    plan: { kind: 'retry_fresh', inputMode: 'full_history', disableChainingForAttempt: true },
+    state: baseRecoveryState({ addedUserMessage: true, stream: null }),
+    retryCounts: baseCounts(),
+  });
+
+  expect(result.kind).toBe('run');
+  if (result.kind !== 'run') return;
+  expect(result.disableChainingForAttempt).toBe(true);
+  expect(result.instruction.disableChainingForAttempt).toBe(true);
+  expect(deps.providerContinuity.previousResponseId).toBe(null);
+});
+
 it('retry_fresh with useStandardServiceTier passes flag through', () => {
   const { executor, deps } = makeExecutor();
   deps.conversationStore.addUserMessage('hello');

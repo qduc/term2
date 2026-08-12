@@ -57,7 +57,7 @@ interface ResilienceHttpServer {
   close(): Promise<void>;
 }
 
-type WsScenario = 'native-error' | 'incomplete' | 'abnormal-close' | 'reasoning';
+type WsScenario = 'native-error' | 'incomplete' | 'abnormal-close' | 'reasoning' | 'orphan-chain-recovery';
 
 interface ResilienceWebSocketServer {
   readonly url: string;
@@ -175,6 +175,8 @@ const PROMPT = 'fixture resilience prompt';
 const ANSWER = 'fixture resilience answer';
 const REASONING = 'fixture response-side reasoning';
 const TOOL_CALL_ID = 'call_fixture_restart';
+const ORPHAN_RESUME_CALL_ID = 'call_TPLbZgMcqd0guPBWHwDh1zjK';
+const STALE_WARMUP_RESPONSE_ID = 'resp_0c92da9f3e21513a006a7ca6ae955081919d93791700e69a20';
 const COMPACTION_ITEM_ID = 'cmp_fixture_context';
 const COMPACTION_CIPHERTEXT = 'fixture-compaction-encrypted-content';
 const COMPACTION_TOOL_CALL_ID = 'call_fixture_compaction_tool';
@@ -528,6 +530,61 @@ describe('application-owned context compaction black-box lifecycle', () => {
   });
 });
 
+describe('Codex WebSocket corrupt-history recovery', () => {
+  it('codex-websocket.orphan-chain-recovery sends a paired full-history request after a stale chain 400', async () => {
+    const route = WS_ROUTES.find((entry) => entry.route.provider === 'codex')!.route;
+    const server = await startResilienceWebSocketServer({
+      family: 'codex-responses',
+      scenario: 'orphan-chain-recovery',
+    });
+    activeWsServers.push(server);
+    const workspace = await createWorkspace(route, server);
+    activeWorkspaces.push(workspace);
+    await enableTransientRetries(workspace.paths.logDir);
+    const conversationId = '3281ca05-cc92-4a25-b686-5c4e969fc17c';
+    await writeCorruptCodexResume(workspace.paths.conversationsDir, conversationId, process.cwd());
+
+    const child = await startInteractive(workspace, route, ['--resume', conversationId]);
+    await child.waitForVisibleOutput(`Resumed conversation: ${conversationId}`);
+    await child.waitForVisibleOutput('❯ ');
+    const idle = captureIdlePrompt(child);
+    await submitPrompt(child, 'continue from the last result');
+    await child.waitForState(
+      (snapshot) =>
+        snapshot.visibleOutput.includes('recovered-after-orphan') ||
+        snapshot.visibleOutput.includes('follow-up-chained'),
+    );
+    await waitForNextIdlePrompt(child, idle);
+    const followUpIdle = captureIdlePrompt(child);
+    await submitPrompt(child, 'and then confirm continuity');
+    await waitForNextIdlePrompt(child, followUpIdle);
+    await child.terminate();
+
+    const created = server.requests.filter(isResponseCreate);
+    expect(
+      created.filter((request) => firstOrphanToolOutputCallId(request)),
+      'resumed history must not send an orphan tool output',
+    ).toEqual([]);
+    const paired = created.find((request) => {
+      const input = inputItems(asRecord(request)?.input);
+      return (
+        input.some((item) => item.type === 'function_call' && callIdOf(item) === ORPHAN_RESUME_CALL_ID) &&
+        input.some((item) => item.type === 'function_call_output' && callIdOf(item) === ORPHAN_RESUME_CALL_ID)
+      );
+    });
+    expect(paired, 'expected a self-contained request containing the completed tool pair').toBeTruthy();
+    expect(asRecord(paired)?.previous_response_id ?? null).not.toBe(STALE_WARMUP_RESPONSE_ID);
+    const generating = created.filter((request) => asRecord(request)?.generate !== false);
+    const followUp = generating.at(-1);
+    expect(asRecord(followUp)?.previous_response_id).toBeTruthy();
+    expect(asRecord(followUp)?.previous_response_id).not.toBe(STALE_WARMUP_RESPONSE_ID);
+    expect(child.getVisibleOutput().split('$ pwd').length - 1).toBe(1);
+    expect(child.getVisibleOutput().split('Conversation state was rejected by the provider').length - 1).toBeLessThan(
+      2,
+    );
+  });
+});
+
 async function runOneShot(
   route: ProviderRoute,
   server: ResilienceHttpServer | ResilienceWebSocketServer,
@@ -620,6 +677,83 @@ async function writeSettings(
     };
   }
   await writeFile(join(settingsDir, 'settings.json'), JSON.stringify(settings), 'utf8');
+}
+
+async function enableTransientRetries(settingsDir: string): Promise<void> {
+  const settingsPath = join(settingsDir, 'settings.json');
+  const settings = JSON.parse(await readFile(settingsPath, 'utf8')) as { agent?: Record<string, unknown> };
+  settings.agent = { ...(settings.agent ?? {}), retryAttempts: 3 };
+  await writeFile(settingsPath, JSON.stringify(settings), 'utf8');
+}
+
+async function writeCorruptCodexResume(conversationsDir: string, id: string, projectPath: string): Promise<void> {
+  await mkdir(conversationsDir, { recursive: true });
+  const ts = '2026-08-12T17:00:18.000Z';
+  const envelopes = [
+    {
+      v: 3,
+      seq: 1,
+      ts,
+      event: {
+        type: 'session_init',
+        id,
+        createdAt: ts,
+        projectPath,
+        model: 'fixture-codex-ws',
+        provider: 'codex',
+      },
+    },
+    {
+      v: 3,
+      seq: 2,
+      ts,
+      event: {
+        type: 'user_message',
+        message: { id: 'u1', sender: 'user', text: 'inspect the repo' },
+      },
+    },
+    {
+      v: 3,
+      seq: 3,
+      ts,
+      event: {
+        type: 'assistant_turn',
+        turn: {
+          items: [
+            { type: 'reasoning', text: 'I will inspect it.' },
+            { type: 'assistant_text', text: 'I will inspect it.' },
+            {
+              type: 'tool_call',
+              callId: ORPHAN_RESUME_CALL_ID,
+              toolName: 'shell',
+              arguments: '{"command":"pwd"}',
+            },
+            {
+              type: 'tool_result',
+              callId: ORPHAN_RESUME_CALL_ID,
+              toolName: 'shell',
+              status: 'completed',
+              output: '/workspace',
+            },
+          ],
+        },
+        state: {
+          previousResponseId: STALE_WARMUP_RESPONSE_ID,
+          model: 'fixture-codex-ws',
+          provider: 'codex',
+        },
+      },
+    },
+  ];
+  await writeFile(
+    join(conversationsDir, `${id}.jsonl`),
+    envelopes.map((envelope) => JSON.stringify(envelope)).join('\n') + '\n',
+  );
+  await writeFile(
+    join(conversationsDir, 'last.json'),
+    JSON.stringify({ entries: [{ id, updatedAt: ts, projectPath }] }),
+    'utf8',
+  );
 }
 
 async function writeFixtureCodexAuth(paths: IsolatedWorkspacePaths): Promise<void> {
@@ -800,6 +934,7 @@ async function startResilienceWebSocketServer(options: {
   const responseFrames: unknown[][] = [];
   const clients = new Set<WebSocket>();
   let closing = false;
+  let generatingCount = 0;
   const wsServer = new WebSocketServer({ port: 0, host: '127.0.0.1' });
   await new Promise<void>((resolve, reject) => {
     wsServer.once('listening', resolve);
@@ -813,7 +948,9 @@ async function startResilienceWebSocketServer(options: {
       handled = true;
       const message = parseJson(String(raw));
       requests.push(message);
-      const frames = responseFramesForWs(options.scenario, requests.length);
+      const isGenerating = asRecord(message)?.generate !== false && !firstOrphanToolOutputCallId(message);
+      if (isGenerating) generatingCount += 1;
+      const frames = responseFramesForWs(options.scenario, requests.length, message, generatingCount);
       responseFrames.push(frames);
       if (!isResponseCreate(message)) {
         socket.close(1008, 'expected response.create');
@@ -1136,8 +1273,38 @@ function compactionToolCallFrames(): HttpResponseFrame[] {
   ];
 }
 
-function responseFramesForWs(scenario: WsScenario, requestNumber: number): unknown[] {
+function responseFramesForWs(
+  scenario: WsScenario,
+  requestNumber: number,
+  message?: unknown,
+  generatingCount = 0,
+): unknown[] {
   const responseId = `resp_ws_${scenario}_${requestNumber}`;
+  if (scenario === 'orphan-chain-recovery') {
+    const orphanCallId = firstOrphanToolOutputCallId(message);
+    if (orphanCallId) {
+      return [
+        { type: 'response.created', response: { id: responseId, status: 'in_progress' } },
+        {
+          type: 'response.failed',
+          response: {
+            id: responseId,
+            status: 'failed',
+            error: {
+              type: 'invalid_request_error',
+              message: `No tool call found for function call output with call_id ${orphanCallId}.`,
+            },
+          },
+        },
+      ];
+    }
+    const isWarmup = asRecord(message)?.generate === false;
+    const text = isWarmup ? '' : generatingCount <= 1 ? 'recovered-after-orphan' : 'follow-up-chained';
+    return [
+      { type: 'response.created', response: { id: responseId, status: 'in_progress' } },
+      openAiCompletedResponse(responseId, text),
+    ];
+  }
   if (scenario === 'native-error') {
     return [
       { type: 'response.created', response: { id: responseId, status: 'in_progress' } },
@@ -1179,6 +1346,28 @@ function serverUrl(server: ResilienceHttpServer | ResilienceWebSocketServer): st
 
 function isResponseCreate(value: unknown): boolean {
   return asRecord(value)?.type === 'response.create';
+}
+
+function firstOrphanToolOutputCallId(message: unknown): string | undefined {
+  const body = asRecord(message);
+  const input = inputItems(body?.input);
+  const knownCalls = new Set(
+    input.flatMap((item) =>
+      item.type === 'function_call' || item.type === 'tool_call' ? [callIdOf(item)].filter(Boolean) : [],
+    ),
+  );
+  const previousId = typeof body?.previous_response_id === 'string' ? body.previous_response_id : undefined;
+  if (previousId && previousId !== STALE_WARMUP_RESPONSE_ID) {
+    return undefined;
+  }
+  for (const item of input) {
+    if (item.type !== 'function_call_output' && item.type !== 'function_call_result' && item.type !== 'tool_result') {
+      continue;
+    }
+    const callId = callIdOf(item);
+    if (callId && !knownCalls.has(callId)) return callId;
+  }
+  return undefined;
 }
 
 function flattenResponseFrames(frames: readonly HttpResponseFrame[]): string[] {

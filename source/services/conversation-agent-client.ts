@@ -18,6 +18,8 @@ import type { RunBudgetEvent } from './agent-runtime/run-budget.js';
 
 export type AgentClientRunOptions = {
   previousResponseId?: string | null;
+  /** Skip previous_response_id and transport history compression for this attempt. */
+  disableChainingForAttempt?: boolean;
   sessionId?: string;
   toolResultCallIds?: readonly string[];
   knownToolCallIds?: readonly string[];

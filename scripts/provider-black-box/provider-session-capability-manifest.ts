@@ -79,6 +79,7 @@ export const RESILIENCE_CAPABILITY_EXECUTIONS = [
   { rowId: 'codex-websocket', scenarioId: 'codex-websocket.native-error' },
   { rowId: 'codex-websocket', scenarioId: 'codex-websocket.incomplete-stream' },
   { rowId: 'codex-websocket', scenarioId: 'codex-websocket.abnormal-close' },
+  { rowId: 'codex-websocket', scenarioId: 'codex-websocket.orphan-chain-recovery' },
   { rowId: 'runtime-openai-compatible-chat', scenarioId: 'runtime-openai-compatible-chat.native-error' },
   { rowId: 'runtime-openai-compatible-chat', scenarioId: 'runtime-openai-compatible-chat.incomplete-stream' },
   { rowId: 'runtime-anthropic-messages', scenarioId: 'runtime-anthropic-messages.native-error' },

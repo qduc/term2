@@ -20,7 +20,7 @@ export class DefaultConversationRecoveryPolicy {
       }
 
       case 'chain_recovery':
-        return { kind: 'retry_fresh', inputMode: 'full_history' };
+        return { kind: 'retry_fresh', inputMode: 'full_history', disableChainingForAttempt: true };
 
       case 'transport_downgrade':
         return { kind: 'retry_fresh', inputMode: 'full_history' };

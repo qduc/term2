@@ -15,8 +15,9 @@ import type {
   ProviderTrafficStreamDiagnostics,
 } from '../services/service-interfaces.js';
 import { AbortedStreamRecorder } from './aborted-stream-recorder.js';
-import { OrphanedChainedToolOutputError } from '../lib/chained-input-filter.js';
-import { AmbiguousModelOutcomeError } from '../services/retry/retry-errors.js';
+import { isOrphanedChainedToolOutputError, OrphanedChainedToolOutputError } from '../lib/chained-input-filter.js';
+import { AmbiguousModelOutcomeError, ConversationStateNoProgressError } from '../services/retry/retry-errors.js';
+import { fingerprintChainRequest } from '../services/retry/chain-recovery-fingerprint.js';
 import { ChainedWireState, type ChainedWireStateKey, type ChainedRequestToken } from './chained-wire-state.js';
 import { LunaResponsesLiteWireProtocol } from './luna-responses-lite-wire-protocol.js';
 import { captureProviderRequest, type ProviderRequestCapture } from './provider-request-capture.js';
@@ -388,6 +389,7 @@ function codexString(value: unknown): string | undefined {
 
 import {
   isIncompleteStreamTerminalError,
+  isMissingServerToolOutputError,
   isPreviousResponseNotFoundError,
   isRetryableTransportError,
   isWebSocketConnectionLimitReachedError,
@@ -739,6 +741,16 @@ const collectFunctionCallIds = (input: unknown): string[] => {
   return ids;
 };
 
+const isExactInputPrefix = (input: readonly unknown[], prefix: readonly unknown[]): boolean => {
+  if (prefix.length > input.length) return false;
+  return prefix.every((item, index) => JSON.stringify(item) === JSON.stringify(input[index]));
+};
+
+const collectUnpairedToolResultCallIds = (original: unknown, filtered: unknown): string[] => {
+  const remaining = new Set(collectToolResultCallIds(filtered));
+  return collectToolResultCallIds(original).filter((callId) => !remaining.has(callId));
+};
+
 const dropUnpairedCodexToolItems = (history: readonly unknown[]): unknown[] => {
   const callIds = new Set<string>();
   const resultIds = new Set<string>();
@@ -948,6 +960,9 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   private readonly codexFunctionCallIdsByResponseId = new Map<string, Set<string>>();
   private readonly codexTurnIdsBySession = new Map<string, string>();
   #serverHistoryReuseDisabled = false;
+  #lastSentChainFingerprint?: string;
+  #lastRejectedChainFingerprint?: string;
+  #lastLogicalRequestByKey = new Map<string, { input: unknown[]; output: unknown[]; responseId: string }>();
 
   private readonly providerTraffic: IProviderTraffic;
   private readonly diagnosticLogger?: DiagnosticLogger;
@@ -1226,32 +1241,31 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   }
 
   #getRememberedCodexResponseIdForRequest(request: any): string | undefined {
-    if (this.#serverHistoryReuseDisabled) {
+    if (this.#serverHistoryReuseDisabled || hasGenerateFalse(request)) {
       return undefined;
     }
     const key = this.#getCodexServerHistoryKey();
-    if (!key || hasGenerateFalse(request)) {
+    const stored = key ? this.#lastLogicalRequestByKey.get(key) : undefined;
+    if (!stored || !Array.isArray(request.input)) {
       return undefined;
     }
-
-    const hasToolResultBeforeTrailingUserMessages = (items: readonly unknown[]): boolean => {
-      let endUserIndex = items.length;
-      while (endUserIndex > 0 && isUserInputMessage(items[endUserIndex - 1])) {
-        endUserIndex--;
-      }
-      return endUserIndex > 0 && isToolResultItem(items[endUserIndex - 1]);
-    };
-
-    const input = request.input;
-    const isInternalToolContinuation =
-      Array.isArray(input) &&
-      input.length > 1 &&
-      input.some(isUserInputMessage) &&
-      hasToolResultBeforeTrailingUserMessages(input);
-    return isInternalToolContinuation ? this.codexPreviousResponseIds.get(key) : undefined;
+    return isExactInputPrefix(request.input, stored.input) ? stored.responseId : undefined;
   }
 
   #prepareCodexServerHistoryRequests(request: any): PreparedCodexRequest {
+    if (request?.disableChaining === true) {
+      this.#forgetCodexResponseId();
+      const { previousResponseId: _previousResponseId, ...rest } = request;
+      const input = Array.isArray(rest.input) ? dropUnpairedCodexToolItems(rest.input) : rest.input;
+      this.diagnosticLogger?.debug?.('Codex chain recovery bypassed warmup and previous_response_id', {
+        eventType: 'codex.chain_recovery.warmup_bypassed',
+        category: 'provider',
+        phase: 'request_prepare',
+        droppedOrphanCallIds: collectUnpairedToolResultCallIds(rest.input, input),
+      });
+      return { request: input === rest.input ? rest : { ...rest, input } };
+    }
+
     const key = this.#getCodexServerHistoryKey();
     if (!key || hasGenerateFalse(request)) {
       return { request };
@@ -1268,50 +1282,10 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       return { request: replayRequest };
     }
 
-    const deltaStart = findServerManagedDeltaStart(input);
-    const warmupItems: unknown[] = deltaStart > 0 ? [...input.slice(0, deltaStart)] : [];
-    const rawDelta = deltaStart > 0 ? input.slice(deltaStart) : [...input];
-
-    // The trailing walk collects interleaved function-call items alongside
-    // their tool results to keep parallel outputs together.  Move those
-    // function-call items back to the warmup so the server receives them
-    // as history (generate: false) and can pair them with the tool results
-    // that arrive in the delta request.
-    const deltaInput: unknown[] = [];
-    for (const item of rawDelta) {
-      if (isToolResultItem(item)) {
-        deltaInput.push(item);
-      } else if (isToolContinuationItem(item)) {
-        warmupItems.push(item);
-      } else {
-        deltaInput.push(item);
-      }
-    }
-
     return {
-      warmupRequest: withProviderOptions(
-        {
-          ...replayRequest,
-          input: warmupItems,
-        },
-        { generate: false },
-      ),
-      request: {
-        ...replayRequest,
-        input: deltaInput,
-      },
+      warmupRequest: withProviderOptions(replayRequest, { generate: false }),
+      request: replayRequest,
     };
-  }
-
-  #withCodexPreviousResponseId(request: any, previousResponseId: string | undefined): any {
-    if (!previousResponseId) {
-      return request;
-    }
-
-    return this.#prepareCodexServerHistoryRequest({
-      ...request,
-      previousResponseId,
-    });
   }
 
   #rememberCodexResponseId(
@@ -1328,6 +1302,11 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     const key = this.#getCodexServerHistoryKey();
     if (key) {
       this.codexPreviousResponseIds.set(key, responseId);
+      this.#lastLogicalRequestByKey.set(key, {
+        input: Array.isArray(input) ? [...input] : this.#lastLogicalRequestByKey.get(key)?.input ?? [],
+        output: Array.isArray(output) ? [...output] : [],
+        responseId,
+      });
     }
     if (recordChainAnchor && (Array.isArray(output) || Array.isArray(input))) {
       this.codexFunctionCallIdsByResponseId.set(
@@ -1397,6 +1376,41 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     this.codexFunctionCallIdsByResponseId.clear();
     this.codexTurnIdsBySession.clear();
     this.chainedWireState.clear();
+    this.#lastLogicalRequestByKey.clear();
+    this.#lastSentChainFingerprint = undefined;
+  }
+
+  #fingerprintPreparedRequest(request: any, recoveryClass = 'chain_recovery'): string {
+    return fingerprintChainRequest({
+      provider: 'codex',
+      model: this.modelId,
+      previousResponseId: typeof request?.previousResponseId === 'string' ? request.previousResponseId : null,
+      input: Array.isArray(request?.input) ? request.input : [],
+      recoveryClass,
+    });
+  }
+
+  #assertChainRequestMakesProgress(request: any): void {
+    const fingerprint = this.#fingerprintPreparedRequest(request);
+    if (this.#lastRejectedChainFingerprint && this.#lastRejectedChainFingerprint === fingerprint) {
+      this.diagnosticLogger?.warn?.('Codex chain recovery would repeat a rejected request', {
+        eventType: 'retry.conversation_state_no_progress',
+        category: 'retry',
+        phase: 'request_prepare',
+      });
+      throw new ConversationStateNoProgressError();
+    }
+    this.#lastSentChainFingerprint = fingerprint;
+  }
+
+  #recordRejectedChainRequest(error: unknown): void {
+    if (
+      isMissingServerToolOutputError(error) ||
+      isOrphanedChainedToolOutputError(error) ||
+      isPreviousResponseNotFoundError(error)
+    ) {
+      this.#lastRejectedChainFingerprint = this.#lastSentChainFingerprint;
+    }
   }
 
   #shouldForgetCodexServerHistory(error: unknown): boolean {
@@ -1411,6 +1425,8 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     return (
       isPreviousResponseNotFoundError(error) ||
       message.includes('previous_response_not_found') ||
+      isMissingServerToolOutputError(error) ||
+      isOrphanedChainedToolOutputError(error) ||
       isRetryableTransportError(error).transportFallback
     );
   }
@@ -1475,10 +1491,21 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     if (!preparedRequest.warmupRequest) {
       return preparedRequest.request;
     }
+    if (!warmupResponseId) {
+      return originalRequest;
+    }
 
-    return warmupResponseId
-      ? this.#withCodexPreviousResponseId(preparedRequest.request, warmupResponseId)
-      : originalRequest;
+    const warmupInput = Array.isArray(preparedRequest.warmupRequest.input) ? preparedRequest.warmupRequest.input : [];
+    const currentInput = Array.isArray(preparedRequest.request.input) ? preparedRequest.request.input : [];
+    if (isExactInputPrefix(currentInput, warmupInput)) {
+      return {
+        ...preparedRequest.request,
+        previousResponseId: warmupResponseId,
+        input: currentInput.slice(warmupInput.length),
+      };
+    }
+
+    return this.#withoutCodexServerHistory(preparedRequest.request);
   }
 
   #withoutCodexServerHistory(request: any): any {
@@ -1500,10 +1527,11 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         );
         const warmupResponseId = await this.#warmupCodexUnary(preparedRequest.warmupRequest);
         const effectiveRequest = this.#getEffectiveCodexRequestAfterWarmup(request, preparedRequest, warmupResponseId);
+        this.#assertChainRequestMakesProgress(effectiveRequest);
 
         const response = await super.fetchUnaryResponse(effectiveRequest);
         const responseId = getResponseIdFromResponse(response);
-        this.#rememberCodexResponseId(responseId, asRecord(response)?.output, effectiveRequest.input);
+        this.#rememberCodexResponseId(responseId, asRecord(response)?.output, request.input);
         this.#rememberConsumedToolResultCallIds(
           responseId,
           effectiveRequest.previousResponseId,
@@ -1511,6 +1539,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         );
         return response;
       } catch (error) {
+        this.#recordRejectedChainRequest(error);
         if (isPreviousResponseUnavailableError(error) && attemptedWithServerHistory) {
           this.#forgetCodexResponseId();
           if (isPreviousResponseUnavailableError(error) && hasToolResultInput(request)) {
@@ -1543,13 +1572,14 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       );
       const warmupResponseId = await this.#warmupCodexStream(preparedRequest.warmupRequest);
       const effectiveRequest = this.#getEffectiveCodexRequestAfterWarmup(request, preparedRequest, warmupResponseId);
+      this.#assertChainRequestMakesProgress(effectiveRequest);
 
       let responseId: string | undefined;
       for await (const event of super.rawStream(effectiveRequest)) {
         const eventResponseId = getResponseIdFromStreamEvent(event);
         if (eventResponseId) {
           responseId = eventResponseId;
-          this.#rememberCodexResponseId(responseId, getResponseOutputFromStreamEvent(event), effectiveRequest.input);
+          this.#rememberCodexResponseId(responseId, getResponseOutputFromStreamEvent(event), request.input);
         }
         if (TERMINAL_RESPONSE_EVENT_TYPES.has(event?.type)) {
           this.#rememberConsumedToolResultCallIds(
@@ -1563,6 +1593,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       }
       this.#rememberConsumedToolResultCallIds(responseId, effectiveRequest.previousResponseId, effectiveRequest.input);
     } catch (error) {
+      this.#recordRejectedChainRequest(error);
       if (isPreviousResponseUnavailableError(error) && attemptedWithServerHistory && !receivedRawFrame) {
         this.#forgetCodexResponseId();
         if (isPreviousResponseUnavailableError(error) && hasToolResultInput(request)) {

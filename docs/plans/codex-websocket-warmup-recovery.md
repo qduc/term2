@@ -1,6 +1,10 @@
 # Codex WebSocket warmup and corrupt-history recovery
 
-Status: **design complete, awaiting implementation in a new session.** Nobody is on it.
+Status: **implemented.** Recovery sends a fresh full-history inference request; healthy WebSocket warmup is the complete logical request.
+
+## Resume here
+
+Implemented. Chain recovery sets `disableChainingForAttempt` so Codex skips `previous_response_id` and `generate:false` warmup. Healthy warmup now sends the complete logical request; generation is an exact-extension delta. Identical rejected chain fingerprints terminate locally as `retry.conversation_state_no_progress`.
 
 ## Resume here
 

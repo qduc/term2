@@ -25,7 +25,13 @@ export type ContinuationRecoveryResult =
   | { kind: 'stale' }
   | { kind: 'terminated' }
   | { kind: 'resume' }
-  | { kind: 'fresh_start'; retryCounts: RetryCounts; delayMs?: number; useStandardServiceTier?: boolean };
+  | {
+      kind: 'fresh_start';
+      retryCounts: RetryCounts;
+      delayMs?: number;
+      useStandardServiceTier?: boolean;
+      disableChainingForAttempt?: boolean;
+    };
 
 export class ContinuationRecoveryHandler {
   constructor(private readonly deps: ContinuationRecoveryHandlerDeps) {}
@@ -114,6 +120,9 @@ export class ContinuationRecoveryHandler {
       retryCounts: state.retryCounts,
       ...(typeof transientDelayMs === 'number' ? { delayMs: transientDelayMs } : {}),
       ...(recoveryResult.useStandardServiceTier ? { useStandardServiceTier: true } : {}),
+      ...(recoveryResult.disableChainingForAttempt || recoveryResult.instruction.disableChainingForAttempt
+        ? { disableChainingForAttempt: true }
+        : {}),
     };
   }
 }

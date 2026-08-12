@@ -3,7 +3,7 @@ import { ModelBehaviorError } from '../../contracts/model-errors.js';
 import { OpenAICompatibleError } from '../../providers/common/provider-errors.js';
 import { MissingChainedToolOutputError, OrphanedChainedToolOutputError } from '../../lib/chained-input-filter.js';
 import type { ClassificationContext } from './retry-contracts.js';
-import { AmbiguousModelOutcomeError } from './retry-errors.js';
+import { AmbiguousModelOutcomeError, ConversationStateNoProgressError } from './retry-errors.js';
 import { DefaultRetryClassifier } from './retry-classifier.js';
 
 const makeClassifier = (agentClient: Record<string, any> = {}, random: () => number = Math.random) =>
@@ -190,6 +190,13 @@ it('classify returns bounded chain recovery for server orphaned tool output 400'
   );
 
   expect(classifier.classify(baseContext({ error }))).toMatchObject({ kind: 'chain_recovery', attempt: 1 });
+});
+
+it('classify treats identical chain-recovery fingerprints as unrecoverable', () => {
+  const classifier = makeClassifier();
+  expect(classifier.classify(baseContext({ error: new ConversationStateNoProgressError() }))).toEqual({
+    kind: 'unrecoverable',
+  });
 });
 
 it('classify stops chain recovery after the transient retry budget is exhausted', () => {

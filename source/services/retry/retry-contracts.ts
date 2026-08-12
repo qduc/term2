@@ -27,7 +27,13 @@ export type ClassifiedFailure =
 export type RecoveryPlan =
   | { kind: 'resume_stream'; state: ContinuationHandle; previousResponseId: string | null }
   | { kind: 'replay_turn'; inputMode: 'full_history'; rollbackUserMessage: boolean; errorContext?: string }
-  | { kind: 'retry_fresh'; inputMode: 'delta' | 'full_history'; useStandardServiceTier?: boolean }
+  | {
+      kind: 'retry_fresh';
+      inputMode: 'delta' | 'full_history';
+      useStandardServiceTier?: boolean;
+      /** Skip previous_response_id and transport history compression on the next attempt. */
+      disableChainingForAttempt?: boolean;
+    }
   | { kind: 'terminate'; events: ConversationEvent[] };
 
 // ── Retry Counts ───────────────────────────────────────────────
@@ -77,6 +83,7 @@ export type NextRunInstruction = {
   maxModelRetries?: number;
   resumeState?: ContinuationHandle;
   resumePreviousResponseId?: string | null;
+  disableChainingForAttempt?: boolean;
 };
 
 // ── Recovery Result ────────────────────────────────────────────
@@ -84,6 +91,7 @@ export type NextRunInstruction = {
 export type RecoveryInstructions = {
   delayMs?: number;
   useStandardServiceTier?: boolean;
+  disableChainingForAttempt?: boolean;
 };
 
 export type RecoveryResult =

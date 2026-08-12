@@ -107,6 +107,8 @@ export interface ApplicationRunLoopOptions {
   readonly signal?: AbortSignal;
   /** Existing provider response to continue from on the first model turn. */
   readonly previousResponseId?: string | null;
+  /** Skip previous_response_id and transport history compression for the next model request. */
+  readonly disableChainingForAttempt?: boolean;
   /** Identity of the provider making this run. Required to establish response provenance. */
   readonly providerId?: string;
   /** Whether this provider accepts response IDs for continuation requests. */
@@ -267,6 +269,8 @@ type RunState = {
   costRecords?: ModelRequestCost[];
   /** Keep provider response IDs out of requests for providers that do not support them. */
   supportsConversationChaining: boolean;
+  /** One-shot: the next model request must be a fresh full-history inference. */
+  disableChainingForAttempt?: boolean;
   /** Provider currently executing this continuation. */
   currentProviderId?: string;
   /** Provider that originated responseId; absent on legacy handles. */
@@ -554,7 +558,9 @@ export class ApplicationRunLoop {
       // A response ID is usable only after its provider origin is recorded.
       // This also makes old callers that omit providerId fail closed.
       responseId:
-        options.providerId && options.supportsConversationChaining === true
+        options.disableChainingForAttempt !== true &&
+        options.providerId &&
+        options.supportsConversationChaining === true
           ? options.previousResponseId ?? undefined
           : undefined,
       pendingApprovals: [],
@@ -565,6 +571,7 @@ export class ApplicationRunLoop {
           ? options.providerId
           : undefined,
       requestPreparation: options.requestPreparation,
+      disableChainingForAttempt: options.disableChainingForAttempt === true,
       sessionId: options.sessionId,
       turnId: options.turnId,
       hookScope: options.hookScope,
@@ -663,6 +670,11 @@ export class ApplicationRunLoop {
     // refresh the preparation closure when supplied, while preserving the
     // root closure for callers that do not provide one again.
     if (options.requestPreparation) state.requestPreparation = options.requestPreparation;
+    if (options.disableChainingForAttempt === true) {
+      state.disableChainingForAttempt = true;
+      state.responseId = undefined;
+      state.responseProviderId = undefined;
+    }
     if (options.sessionId !== undefined) state.sessionId = options.sessionId;
     if (options.turnId !== undefined) state.turnId = options.turnId;
     if (options.hookScope !== undefined) state.hookScope = options.hookScope;
@@ -919,16 +931,24 @@ export class ApplicationRunLoop {
 
       const criticalWrapUp = state.criticalWrapUpPending === true && state.criticalWrapUpDispatched !== true;
       if (criticalWrapUp) state.criticalWrapUpDispatched = true;
+      const disableChaining = state.disableChainingForAttempt === true;
+      if (disableChaining) {
+        state.disableChainingForAttempt = false;
+        state.responseId = undefined;
+        state.responseProviderId = undefined;
+      }
       const request: StreamedModelTurnRequest = {
         instructions: criticalWrapUp
           ? `${state.agent.instructions}\n\nBudget containment is terminal. Do not call tools. In this one final response, summarize what you completed, the evidence you have, and what remains.`
           : state.agent.instructions,
         ...(state.supportsConversationChaining &&
+        !disableChaining &&
         state.responseId &&
         state.responseProviderId !== undefined &&
         state.responseProviderId === state.currentProviderId
           ? { previousResponseId: state.responseId }
           : {}),
+        ...(disableChaining ? { disableChaining: true } : {}),
         input: state.input,
         tools: toModelTools(criticalWrapUp ? [] : state.agent.tools),
         applicationTools: criticalWrapUp ? [] : state.agent.tools,

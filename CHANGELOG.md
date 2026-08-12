@@ -1,3 +1,26 @@
+## [0.14.0] - 2026-08-12
+
+### Features
+- Added provider-neutral local context compaction, including configurable policies and modes, manual compaction, durable checkpoints, safe request-boundary handling, and bounded quality evaluation.
+- Added a configurable mentor pool that can consult multiple models, sample each consultation, and select a provider and model through the shared model picker.
+- Added concurrent dispatch for contiguous auto-approved, read-only tool calls while preserving result order and serial approval, write, and control barriers.
+- Added OpenAI Responses `context_management` support for Codex models and expanded the supported model allowlist.
+- Added code-block previews in the `/copy` menu and retained active filter text in interactive menus.
+- Added scheduled CI updates for the model catalog.
+
+### Bug Fixes
+- Fixed local compaction boundaries and disabled-mode request timing so compaction remains safe and does not alter normal provider request behavior.
+- Fixed oversized or unobserved tool effects by bounding tool results and settling interrupted calls as unknown instead of retrying them blindly.
+- Fixed background task rows lingering after completion, slash-command menu wrapping, and mentor-pool input and settings stability.
+- Fixed subagent max-turn handling to stop cleanly at its budget and removed subagent tool-start events from activity messages.
+
+### Improvements
+- Improved diagnostics for aborted provider streams.
+- Clarified explorer delegation so explorers collect evidence while the parent agent retains analysis and decisions.
+- Updated the bundled model catalog.
+
+---
+
 ## [0.13.0] - 2026-08-11
 
 ### Features

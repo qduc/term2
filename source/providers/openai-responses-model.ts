@@ -177,7 +177,14 @@ function contextCompaction(
   // Responses API still accepts an integer token count and enforces a 1000
   // token minimum, so apply that provider-specific conversion at the wire
   // boundary rather than exposing model-specific token counts in settings.
-  return { threshold: Math.max(1000, Math.round(contextWindow * option.threshold)) };
+  const ratioThreshold = Math.max(1000, Math.round(contextWindow * option.threshold));
+  const thresholdTokens =
+    typeof option.thresholdTokens === 'number' &&
+    Number.isInteger(option.thresholdTokens) &&
+    option.thresholdTokens >= 1000
+      ? option.thresholdTokens
+      : undefined;
+  return { threshold: thresholdTokens === undefined ? ratioThreshold : Math.min(ratioThreshold, thresholdTokens) };
 }
 
 /** Wire shape for `context_management`, or undefined when gated off. */
@@ -340,7 +347,12 @@ export function markContextCompactionFailure(
 
 function responseStatusError(status: 'failed' | 'incomplete', response: any): Error {
   const providerError = response?.error;
-  const detail = providerError?.message ?? providerError?.code ?? response?.status;
+  const detail =
+    providerError?.message ??
+    providerError?.code ??
+    response?.incomplete_details?.reason ??
+    response?.incompleteDetails?.reason ??
+    response?.status;
   return new Error(
     `OpenAI response response.${status}${detail ? ` (${String(detail)})` : ''}${
       response?.id ? ` [${response.id}]` : ''

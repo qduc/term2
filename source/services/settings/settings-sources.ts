@@ -36,7 +36,9 @@ const SETTINGS_SOURCE_KEYS = {
     useFlexServiceTier: 'agent.useFlexServiceTier',
     contextCompaction: {
       enabled: 'agent.contextCompaction.enabled',
+      mode: 'agent.contextCompaction.mode',
       compactThreshold: 'agent.contextCompaction.compactThreshold',
+      compactThresholdTokens: 'agent.contextCompaction.compactThresholdTokens',
     },
     autoApproveModel: 'agent.autoApproveModel',
     autoApproveProvider: 'agent.autoApproveProvider',

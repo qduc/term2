@@ -1,4 +1,4 @@
-import type { ProviderInputItem } from '../../contracts/provider-input.js';
+import { isLocalContextSummary, type ProviderInputItem } from '../../contracts/provider-input.js';
 import type { StateSnapshot } from '../logging/conversation-log-events.js';
 import { reconcileHistoryWithToolLedger, type SavedToolExecution } from '../tool-execution-ledger.js';
 
@@ -32,19 +32,28 @@ const clone = <T>(value: T): T => {
   }
 };
 
-const hasOpenAICompaction = (history: readonly unknown[]): boolean =>
-  history.some((item) => {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
-    const record = item as Record<string, unknown>;
-    const marker = record.providerOpaque;
-    return (
-      record.type === 'compaction' &&
-      !!marker &&
-      typeof marker === 'object' &&
-      !Array.isArray(marker) &&
-      (marker as Record<string, unknown>).provider === 'openai'
-    );
-  });
+const isOpenAICompaction = (item: unknown): boolean => {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+  const record = item as Record<string, unknown>;
+  const marker = record.providerOpaque;
+  return (
+    record.type === 'compaction' &&
+    !!marker &&
+    typeof marker === 'object' &&
+    !Array.isArray(marker) &&
+    (marker as Record<string, unknown>).provider === 'openai'
+  );
+};
+
+export const isContextReplacementBoundary = (item: unknown): boolean =>
+  isOpenAICompaction(item) || isLocalContextSummary(item);
+
+const lastReplacementBoundaryIndex = (history: readonly unknown[]): number => {
+  for (let index = history.length - 1; index >= 0; index--) {
+    if (isContextReplacementBoundary(history[index])) return index;
+  }
+  return -1;
+};
 
 const warningsFromReconciliation = (result: {
   addedCompletedPairs: number;
@@ -88,7 +97,7 @@ export function projectProviderHistory(input: {
   // completed tool pairs from the local ledger behind it would send stale
   // function calls back to the provider and can cause a side effect to run
   // again on the next stateless request.
-  if (hasOpenAICompaction(input.history)) {
+  if (lastReplacementBoundaryIndex(input.history) >= 0) {
     return { history: clone([...input.history]) as ProviderInputItem[], warnings: [] };
   }
   const reconciled = reconcileHistoryWithToolLedger(input.history, input.toolLedger);
@@ -96,6 +105,15 @@ export function projectProviderHistory(input: {
     history: reconciled.history as ProviderInputItem[],
     warnings: warningsFromReconciliation(reconciled),
   };
+}
+
+/**
+ * Lossy projection used only when constructing a model request. Durable
+ * snapshots/imports retain genuine pre-boundary user turns for navigation.
+ */
+export function projectModelRequestHistory(history: readonly unknown[]): ProviderInputItem[] {
+  const boundary = lastReplacementBoundaryIndex(history);
+  return clone((boundary < 0 ? [...history] : history.slice(boundary)) as ProviderInputItem[]);
 }
 
 export function projectSnapshot(input: {

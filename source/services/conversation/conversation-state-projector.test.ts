@@ -3,6 +3,7 @@ import type { ProviderInputItem as AgentInputItem } from '../../contracts/provid
 import type { SavedToolExecution } from '../tool-execution-ledger.js';
 import {
   projectImportedState,
+  projectModelRequestHistory,
   projectProviderHistory,
   projectSnapshot,
   ProjectionWarningCode,
@@ -100,6 +101,53 @@ it('projectProviderHistory does not reinsert tool pairs behind a compaction mark
 
   expect(projected.history).toEqual(history);
   expect(projected.warnings).toEqual([]);
+});
+
+it('keeps genuine turns in additive projections but omits them from model requests after a local checkpoint', () => {
+  const checkpoint = {
+    role: 'system',
+    type: 'message',
+    content: 'summary',
+    contextSummary: {
+      version: 1,
+      strategy: 'local',
+      replacesThroughRevision: 4,
+      sourceProvider: 'openrouter',
+      sourceModel: 'model',
+      estimatedTokensBefore: 10_000,
+      estimatedTokensAfter: 2_000,
+      rearmAtEstimatedTokens: 10_000,
+    },
+  } as const;
+  const hotTurn = { role: 'user', type: 'message', content: 'latest' } as const;
+  const history: AgentInputItem[] = [
+    { role: 'user', type: 'message', content: 'old genuine turn' },
+    checkpoint,
+    hotTurn,
+  ];
+
+  expect(projectProviderHistory({ history, toolLedger: [completedLedgerEntry()] }).history).toEqual(history);
+  expect(projectSnapshot({ history, previousResponseId: null }).history).toEqual(history);
+  expect(projectImportedState({ history, previousResponseId: null }).history).toEqual(history);
+  expect(projectModelRequestHistory(history)).toEqual([checkpoint, hotTurn]);
+  expect(projectModelRequestHistory(projectModelRequestHistory(history))).toEqual([checkpoint, hotTurn]);
+});
+
+it('projects from the latest replacement checkpoint', () => {
+  const native = {
+    type: 'compaction',
+    encrypted_content: 'cipher',
+    providerOpaque: { provider: 'openai' },
+  } as AgentInputItem;
+  const local = {
+    role: 'system',
+    type: 'message',
+    content: 'new summary',
+    contextSummary: { version: 1, strategy: 'local' },
+  } as AgentInputItem;
+  const tail = { role: 'user', type: 'message', content: 'tail' } as AgentInputItem;
+
+  expect(projectModelRequestHistory([{ role: 'user', content: 'old' }, native, local, tail])).toEqual([local, tail]);
 });
 
 it('projectProviderHistory reports incomplete ledger entries without injecting completed history', () => {

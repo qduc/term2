@@ -57,6 +57,50 @@ describe('normalizeApplicationInput opaque lane', () => {
   });
 });
 
+describe('ApplicationRunLoop request-boundary compaction', () => {
+  it('dispatches the replacement input, clears chaining, and exposes replacement history', async () => {
+    let request: any;
+    const model: StreamedModelTurn = {
+      async *stream(value) {
+        request = value;
+        yield { type: 'completion', responseId: 'fresh', output: [] };
+      },
+    };
+    const checkpoint = {
+      role: 'system' as const,
+      type: 'message' as const,
+      content: 'summary',
+      contextSummary: { version: 1 as const, strategy: 'local' as const },
+    };
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(
+      agent,
+      [{ role: 'user', type: 'message', content: 'old' }],
+      {
+        providerId: 'openai',
+        supportsConversationChaining: true,
+        previousResponseId: 'stale',
+        boundaryCompaction: {
+          compact: async () => ({
+            kind: 'compacted',
+            history: [{ role: 'user', type: 'message', content: 'old' }, checkpoint],
+            modelInput: [checkpoint],
+          }),
+        },
+      },
+    );
+
+    await stream.completed;
+    const events = await collect(stream);
+
+    expect(request).not.toHaveProperty('previousResponseId');
+    expect(request.input).toEqual([{ role: 'system', type: 'message', content: [{ type: 'text', text: 'summary' }] }]);
+    expect(stream.history).toEqual([{ role: 'user', type: 'message', content: 'old' }, checkpoint]);
+    expect(events).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'context_compaction_completed', strategy: 'local' })]),
+    );
+  });
+});
+
 async function collect(stream: AsyncIterable<unknown>): Promise<unknown[]> {
   const events: unknown[] = [];
   for await (const event of stream) events.push(event);

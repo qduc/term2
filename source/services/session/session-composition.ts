@@ -1,5 +1,12 @@
 import type { ILoggingService, ISessionContextService, ISettingsService } from '../service-interfaces.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
+import { getCatalogModel } from '../../providers/model-catalog/catalog.js';
+import { CONTEXT_COMPACTION_INSTRUCTIONS } from '../../prompts/context-compaction.js';
+import { projectConversationMessage } from '../conversation/conversation-message-projection.js';
+import {
+  LocalContextCompactor,
+  type LocalCompactionOutcome,
+} from '../agent-runtime/context-compaction/local-context-compactor.js';
 import type { SteerOutcome } from '../agent-runtime/application-run-loop.js';
 import { ConversationStore } from '../conversation/conversation-store.js';
 import { ApprovalState, type PendingApprovalContext } from '../approval/approval-state.js';
@@ -118,6 +125,7 @@ export type SessionRuntimeInternals = {
   generationGuard: GenerationGuard;
   providerContinuity: ProviderContinuity;
   breakChaining: () => void;
+  compactContext: () => Promise<LocalCompactionOutcome | { kind: 'busy' | 'stale' }>;
   recoveryPolicy: DefaultConversationRecoveryPolicy;
   recoveryExecutor: DefaultRecoveryExecutor;
   retryClassifier: DefaultRetryClassifier;
@@ -266,6 +274,7 @@ export type SessionRuntime = {
   state: SessionManager;
   /** Controller for runtime model/provider/retry settings. */
   settings: SessionRuntimeController;
+  compactContext: () => Promise<LocalCompactionOutcome | { kind: 'busy' | 'stale' }>;
   logs: SessionLogs;
   approval: SessionApprovalQuery;
   /** Pending approval protocol projected by presentation layers. */
@@ -747,6 +756,80 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     return shutdownPromise;
   };
 
+  const compactContext = async (): Promise<LocalCompactionOutcome | { kind: 'busy' | 'stale' }> => {
+    if (!appState.statusMachine.is('idle')) return { kind: 'busy' };
+    const snapshot = conversationStore.getProviderHistorySnapshot();
+    const provider =
+      getMethod<[], string>(agentClient, 'getProvider')?.call(agentClient) ??
+      settingsService?.get('agent.provider') ??
+      'openai';
+    const model = settingsService?.get('agent.model') ?? 'gpt-5';
+    const catalog = getCatalogModel(provider, model);
+    const compactThreshold = settingsService?.get('agent.contextCompaction.compactThreshold') ?? 0.8;
+    const configuredMaxOutput = settingsService?.get('agent.maxOutputTokens');
+    const compactor = new LocalContextCompactor({
+      generate: async ({ renderedInput, maxOutputTokens }) => {
+        const options = {
+          provider,
+          model,
+          reasoningEffort: 'none' as const,
+          instructions: CONTEXT_COMPACTION_INSTRUCTIONS,
+          maxTokens: maxOutputTokens,
+        };
+        if (agentClient.chatDetailed) {
+          const result = await agentClient.chatDetailed(renderedInput, options);
+          return {
+            text: result.text,
+            usage: result.usage
+              ? {
+                  inputTokens: result.usage.prompt_tokens,
+                  outputTokens: result.usage.completion_tokens,
+                }
+              : undefined,
+            costRecords: result.costRecords,
+          };
+        }
+        return { text: await agentClient.chat(renderedInput, options) };
+      },
+    });
+    const outcome = await compactor.compactAtBoundary({
+      history: snapshot.history,
+      provider,
+      model,
+      sourceRevision: snapshot.revision,
+      contextWindow: catalog?.contextWindow,
+      maxOutputTokens:
+        configuredMaxOutput === undefined
+          ? catalog?.maxTokens
+          : Math.min(configuredMaxOutput, catalog?.maxTokens ?? configuredMaxOutput),
+      compactThreshold,
+      compactThresholdTokens: null,
+      manual: true,
+    });
+    if (outcome.kind !== 'compacted') return outcome;
+
+    const genuineUsers = snapshot.history.filter((item) => {
+      const message = projectConversationMessage(item);
+      return message?.role === 'user' && !message.isSynthetic;
+    });
+    const hotUsers = outcome.hotTail.filter((item) => {
+      const message = projectConversationMessage(item);
+      return message?.role === 'user' && !message.isSynthetic;
+    }).length;
+    const preservedUsers = hotUsers === 0 ? genuineUsers : genuineUsers.slice(0, -hotUsers);
+    if (
+      !conversationStore.replaceHistoryAtRevision(snapshot.revision, [
+        ...preservedUsers,
+        outcome.checkpoint,
+        ...outcome.hotTail,
+      ])
+    ) {
+      return { kind: 'stale' };
+    }
+    providerContinuity.clear();
+    return outcome;
+  };
+
   return {
     sessionId: id,
     sessionStartedAt: startedAt,
@@ -769,6 +852,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     generationGuard,
     providerContinuity,
     breakChaining,
+    compactContext,
     recoveryPolicy,
     recoveryExecutor,
     retryClassifier,
@@ -829,6 +913,7 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
     },
     state: stateFacade,
     settings: runtimeController,
+    compactContext: internals.compactContext,
     logs: {
       setLogSink: (sink) => {
         conversationLogger.setLogSink(sink);

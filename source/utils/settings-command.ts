@@ -88,9 +88,19 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
       source: settings.agent.contextCompaction.enabled.source,
     },
     {
+      key: SETTING_KEYS.AGENT_CONTEXT_COMPACTION_MODE,
+      value: settings.agent.contextCompaction.mode.value,
+      source: settings.agent.contextCompaction.mode.source,
+    },
+    {
       key: SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD,
       value: settings.agent.contextCompaction.compactThreshold.value,
       source: settings.agent.contextCompaction.compactThreshold.source,
+    },
+    {
+      key: SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD_TOKENS,
+      value: settings.agent.contextCompaction.compactThresholdTokens.value,
+      source: settings.agent.contextCompaction.compactThresholdTokens.source,
     },
     // agent.provider is hidden - it can only be changed in a new conversation via model menu
     {
@@ -275,10 +285,10 @@ export function createSettingsCommand({
         }
       }
 
-      if (key === SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD) {
+      if (key === SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD_TOKENS && parsedValue !== null) {
         if (typeof parsedValue !== 'number' || !Number.isInteger(parsedValue) || parsedValue < 1000) {
           addSystemMessage(
-            `Error: ${SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD} must be a whole number greater than or equal to 1000`,
+            `Error: ${SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD_TOKENS} must be null or a whole number greater than or equal to 1000`,
           );
           return true;
         }

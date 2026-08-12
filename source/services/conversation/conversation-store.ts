@@ -158,6 +158,14 @@ export class ConversationStore {
     this.#historyRevision++;
   }
 
+  /** Atomically replace history only if no transcript mutation raced the caller. */
+  replaceHistoryAtRevision(expectedRevision: number, items: readonly ProviderInputItem[]): boolean {
+    if (this.#historyRevision !== expectedRevision) return false;
+    this.#history = this.#cloneHistory([...items]);
+    this.#historyRevision++;
+    return true;
+  }
+
   getHistory(): ProviderInputItem[] {
     return this.#cloneHistory(this.#history);
   }

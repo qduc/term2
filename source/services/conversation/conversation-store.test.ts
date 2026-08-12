@@ -10,6 +10,19 @@ const addLegacyModeNotice = (store: ConversationStore, text: string) => {
   } as AgentInputItem);
 };
 
+it('atomically replaces history only at the expected revision', () => {
+  const store = new ConversationStore();
+  store.addUserMessage('old');
+  const source = store.getProviderHistorySnapshot();
+
+  expect(
+    store.replaceHistoryAtRevision(source.revision, [{ role: 'system', type: 'message', content: 'summary' }]),
+  ).toBe(true);
+  expect(store.getHistory()).toEqual([{ role: 'system', type: 'message', content: 'summary' }]);
+  expect(store.replaceHistoryAtRevision(source.revision, [{ role: 'user', content: 'stale overwrite' }])).toBe(false);
+  expect(store.getHistory()).toEqual([{ role: 'system', type: 'message', content: 'summary' }]);
+});
+
 it('addUserMessage() appends a user message item', () => {
   const store = new ConversationStore();
   store.addUserMessage('Hello');

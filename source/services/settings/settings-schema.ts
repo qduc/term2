@@ -149,10 +149,12 @@ export const AgentSettingsSchema = z.object({
   contextCompaction: z
     .object({
       enabled: z.boolean().default(false),
+      mode: z.enum(['native', 'auto', 'local']).default('native'),
       compactThreshold: z.number().finite().min(0).max(1).default(0.8),
+      compactThresholdTokens: z.number().int().finite().min(1_000).nullable().default(null),
     })
-    .default({ enabled: false, compactThreshold: 0.8 })
-    .describe('OpenAI server-side context compaction settings'),
+    .default({ enabled: false, mode: 'native', compactThreshold: 0.8, compactThresholdTokens: null })
+    .describe('Native and application-owned context compaction settings'),
   autoApproveModel: z
     .string()
     .optional()
@@ -573,7 +575,9 @@ export interface SettingsWithSources {
     useFlexServiceTier: SettingWithSource<boolean>;
     contextCompaction: {
       enabled: SettingWithSource<boolean>;
+      mode: SettingWithSource<'native' | 'auto' | 'local'>;
       compactThreshold: SettingWithSource<number>;
+      compactThresholdTokens: SettingWithSource<number | null>;
     };
     autoApproveModel: SettingWithSource<string>;
     autoApproveProvider: SettingWithSource<string | undefined>;
@@ -718,7 +722,9 @@ export const SETTING_KEYS = {
   AGENT_MENTOR_POOL: 'agent.mentorPool',
   AGENT_USE_FLEX_SERVICE_TIER: 'agent.useFlexServiceTier',
   AGENT_CONTEXT_COMPACTION_ENABLED: 'agent.contextCompaction.enabled',
+  AGENT_CONTEXT_COMPACTION_MODE: 'agent.contextCompaction.mode',
   AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD: 'agent.contextCompaction.compactThreshold',
+  AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD_TOKENS: 'agent.contextCompaction.compactThresholdTokens',
   SHELL_TIMEOUT: 'shell.timeout',
   SHELL_BACKGROUND_TIMEOUT: 'shell.backgroundTimeout',
   SHELL_MAX_OUTPUT_LINES: 'shell.maxOutputLines',
@@ -826,7 +832,9 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_MENTOR_POOL,
   SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER,
   SETTING_KEYS.AGENT_CONTEXT_COMPACTION_ENABLED,
+  SETTING_KEYS.AGENT_CONTEXT_COMPACTION_MODE,
   SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD,
+  SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD_TOKENS,
   SETTING_KEYS.SHELL_TIMEOUT,
   SETTING_KEYS.SHELL_BACKGROUND_TIMEOUT,
   SETTING_KEYS.SHELL_MAX_OUTPUT_LINES,
@@ -966,7 +974,9 @@ export const DEFAULT_SETTINGS: SettingsData = {
     useFlexServiceTier: false,
     contextCompaction: {
       enabled: false,
+      mode: 'native',
       compactThreshold: 0.8,
+      compactThresholdTokens: null,
     },
     autoApproveModel: 'gpt-4o-mini',
     autoApproveProvider: undefined,

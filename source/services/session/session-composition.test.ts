@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import {
   createConversationSession as createProductionConversationSession,
   createSessionRuntimeInternals as createProductionSessionRuntimeInternals,
@@ -108,6 +108,58 @@ it('createConversationSession returns bundle with auto sessionStartedAt when not
   const after = new Date().toISOString();
   expect(sessionStartedAt >= before).toBe(true);
   expect(sessionStartedAt <= after).toBe(true);
+});
+
+it('manual local compaction commits checkpoint plus hot tail and retains genuine rewind turns', async () => {
+  const chat = vi.fn(async () => '## Current goal and success criteria\nKeep testing.');
+  const runtime = createConversationSession({
+    sessionId: 'manual-compact',
+    agentClient: makeMockClient({ chat }),
+    deps: { logger: makeLogger(), sessionContextService },
+  });
+  const history = Array.from({ length: 4 }, (_, index) => [
+    { role: 'user', type: 'message', content: `user-${index}` },
+    { role: 'assistant', type: 'message', content: `answer-${index}` },
+  ]).flat();
+  runtime.stateFacade.importState({ history, previousResponseId: 'resp-old' });
+
+  const outcome = await runtime.compactContext();
+
+  expect(outcome.kind).toBe('compacted');
+  expect(chat).toHaveBeenCalled();
+  const stored = runtime.conversationStore.getHistory();
+  expect(stored.filter((item) => item.role === 'user').map((item) => item.content)).toEqual([
+    'user-0',
+    'user-1',
+    'user-2',
+    'user-3',
+  ]);
+  expect(stored.filter((item) => item.contextSummary)).toHaveLength(1);
+  expect(stored.slice(-4)).toEqual(history.slice(-4));
+});
+
+it('manual local compaction discards a stale summary without overwriting newer history', async () => {
+  let releaseSummary!: (value: string) => void;
+  const summary = new Promise<string>((resolve) => (releaseSummary = resolve));
+  const runtime = createConversationSession({
+    sessionId: 'stale-compact',
+    agentClient: makeMockClient({ chat: () => summary }),
+    deps: { logger: makeLogger(), sessionContextService },
+  });
+  const history = Array.from({ length: 4 }, (_, index) => [
+    { role: 'user', type: 'message', content: `user-${index}` },
+    { role: 'assistant', type: 'message', content: `answer-${index}` },
+  ]).flat();
+  runtime.stateFacade.importState({ history, previousResponseId: null });
+
+  const pending = runtime.compactContext();
+  await vi.waitFor(() => expect(runtime.conversationStore.getHistory()).toEqual(history));
+  runtime.conversationStore.addUserMessage('steer while summarizing');
+  releaseSummary('summary');
+
+  await expect(pending).resolves.toEqual({ kind: 'stale' });
+  expect(runtime.conversationStore.getLastUserMessage()).toBe('steer while summarizing');
+  expect(runtime.conversationStore.getHistory().some((item) => item.contextSummary)).toBe(false);
 });
 
 it('createSessionRuntime exposes runtime capabilities without conversation adapter construction details', () => {

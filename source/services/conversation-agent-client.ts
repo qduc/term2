@@ -12,6 +12,8 @@ import type { ForegroundShellLeaseDetails, ForegroundShellTransferResult } from 
 import type { BackgroundSubagentApprovalPauseSink } from './subagents/foreground-subagent-lease.js';
 import type { ForegroundSubagentCandidate } from './subagents/nested-runner.js';
 import type { NestedToolCompatibilityState } from './session/nested-tool-compatibility-state.js';
+import type { NormalizedUsage } from '../utils/ai/token-usage.js';
+import type { ModelRequestCost } from './cost/model-cost.js';
 
 export type AgentClientRunOptions = {
   previousResponseId?: string | null;
@@ -36,6 +38,13 @@ export type AgentClientChatOptions = {
   provider?: string;
   reasoningEffort?: ReasoningEffortSetting | null;
   instructions?: string;
+  maxTokens?: number;
+};
+
+export type AgentClientChatResult = {
+  text: string;
+  usage?: NormalizedUsage;
+  costRecords?: ModelRequestCost[];
 };
 
 export type AgentClientChatJsonOptions = AgentClientChatOptions & {
@@ -46,6 +55,7 @@ export type ToolInterceptor = (name: string, params: unknown, toolCallId?: strin
 
 export interface ShellAutoApprovalAgentClient {
   chat(message: string, options?: AgentClientChatOptions): Promise<string>;
+  chatDetailed?(message: string, options?: AgentClientChatOptions): Promise<AgentClientChatResult>;
   chatJson?(message: string, options: AgentClientChatJsonOptions): Promise<unknown>;
 }
 

@@ -1,4 +1,5 @@
 import type { UserTurn } from '../../types/user-turn.js';
+import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { ISettingsService } from '../service-interfaces.js';
 import { ConversationStore, type RewindTarget, type RewindTargetId } from '../conversation/conversation-store.js';
@@ -129,6 +130,14 @@ export class SessionManager {
       ...(model ? { model } : {}),
       ...(provider ? { provider } : {}),
     });
+  }
+
+  getProviderHistorySnapshot() {
+    return this.#conversationStore.getProviderHistorySnapshot();
+  }
+
+  replaceHistoryAtRevision(expectedRevision: number, history: readonly ProviderInputItem[]): boolean {
+    return this.#conversationStore.replaceHistoryAtRevision(expectedRevision, history);
   }
 
   exportState(): {

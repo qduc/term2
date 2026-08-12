@@ -40,19 +40,33 @@ it('Codex websocket receive timeouts default to transport-safe values and reject
 it('context compaction defaults to disabled with a conservative ratio and rejects invalid ratios', () => {
   expect(AgentSettingsSchema.parse({}).contextCompaction).toEqual({
     enabled: false,
+    mode: 'native',
     compactThreshold: 0.8,
+    compactThresholdTokens: null,
   });
   expect(DEFAULT_SETTINGS.agent.contextCompaction).toEqual({
     enabled: false,
+    mode: 'native',
     compactThreshold: 0.8,
+    compactThresholdTokens: null,
   });
   expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_CONTEXT_COMPACTION_ENABLED)).toBe(true);
+  expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_CONTEXT_COMPACTION_MODE)).toBe(true);
   expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD)).toBe(true);
+  expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD_TOKENS)).toBe(true);
 
   expect(
-    SettingsSchema.parse({ agent: { contextCompaction: { enabled: true, compactThreshold: 0.5 } } }).agent
-      ?.contextCompaction,
-  ).toEqual({ enabled: true, compactThreshold: 0.5 });
+    SettingsSchema.parse({
+      agent: {
+        contextCompaction: {
+          enabled: true,
+          mode: 'auto',
+          compactThreshold: 0.5,
+          compactThresholdTokens: 40_000,
+        },
+      },
+    }).agent?.contextCompaction,
+  ).toEqual({ enabled: true, mode: 'auto', compactThreshold: 0.5, compactThresholdTokens: 40_000 });
 
   for (const compactThreshold of [-0.01, 1.01, Infinity, Number.NaN]) {
     expect(() => SettingsSchema.parse({ agent: { contextCompaction: { compactThreshold } } })).toThrow();
@@ -64,6 +78,14 @@ it('context compaction defaults to disabled with a conservative ratio and reject
   expect(
     SettingsSchema.parse({ agent: { contextCompaction: { compactThreshold: 1 } } }).agent?.contextCompaction,
   ).toMatchObject({ compactThreshold: 1 });
+
+  for (const mode of ['native', 'auto', 'local'] as const) {
+    expect(SettingsSchema.parse({ agent: { contextCompaction: { mode } } }).agent?.contextCompaction.mode).toBe(mode);
+  }
+  expect(() => SettingsSchema.parse({ agent: { contextCompaction: { mode: 'unknown' } } })).toThrow();
+  for (const compactThresholdTokens of [0, 999, 1.5, Infinity, Number.NaN]) {
+    expect(() => SettingsSchema.parse({ agent: { contextCompaction: { compactThresholdTokens } } })).toThrow();
+  }
 });
 
 it('memory settings default to enabled local storage with bounded retrieval and context budgets', () => {

@@ -6,6 +6,17 @@
  * The run loop may add more fields as it adapts a provider, so this shape is
  * open rather than tied to one transport's item union.
  */
+export interface ContextSummaryMarker {
+  readonly version: 1;
+  readonly strategy: 'local';
+  readonly replacesThroughRevision?: number;
+  readonly sourceProvider?: string;
+  readonly sourceModel?: string;
+  readonly estimatedTokensBefore?: number;
+  readonly estimatedTokensAfter?: number;
+  readonly rearmAtEstimatedTokens?: number;
+}
+
 export interface ProviderInputItem {
   type?: unknown;
   role?: unknown;
@@ -26,7 +37,17 @@ export interface ProviderInputItem {
    * items.
    */
   providerOpaque?: { provider: string };
+  /** Application-owned portable replacement checkpoint. */
+  contextSummary?: ContextSummaryMarker;
   [key: string]: unknown;
 }
+
+export const isLocalContextSummary = (
+  item: unknown,
+): item is ProviderInputItem & { contextSummary: ContextSummaryMarker } => {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+  const marker = (item as ProviderInputItem).contextSummary;
+  return marker?.version === 1 && marker.strategy === 'local';
+};
 
 export type ProviderInput = string | ProviderInputItem | ProviderInputItem[];

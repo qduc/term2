@@ -16,6 +16,7 @@ import { createEffortSlashCommand } from '../commands/effort-command.js';
 import { createHandoffSlashCommand } from '../commands/handoff-command.js';
 import { createGuardedSettingsCommand } from '../commands/guarded-settings-command.js';
 import { createSkillsSlashCommand } from '../commands/skills-command.js';
+import { createCompactSlashCommand } from '../commands/compact-command.js';
 import type { SkillsService, SkillInfo } from '../services/skills/skills-service.js';
 import type { Message } from '../types/message.js';
 import type { CopySelection } from '../utils/copy-selections.js';
@@ -41,6 +42,7 @@ interface UseAppCommandsProps {
   onHandoff?: (capturedText: string) => void;
   sendUserMessage: (input: string | UserTurn) => Promise<void>;
   retryLastToolOutput: () => Promise<boolean>;
+  compactContext?: () => Promise<string>;
   skillsService: SkillsService;
   onSkillSelected: (skill: SkillInfo) => void;
 }
@@ -71,6 +73,7 @@ export const useAppCommands = ({
   onHandoff,
   sendUserMessage,
   retryLastToolOutput,
+  compactContext = async () => 'Context compaction is unavailable.',
   skillsService,
   onSkillSelected,
 }: UseAppCommandsProps) => {
@@ -121,6 +124,7 @@ export const useAppCommands = ({
         ...rewindDeps,
       }),
       createRetryToolSlashCommand({ retryLastToolOutput, addSystemMessage }),
+      createCompactSlashCommand({ compactContext, addSystemMessage }),
       createModeToggleCommand(
         'app.liteMode',
         'lite',
@@ -202,6 +206,7 @@ export const useAppCommands = ({
     onHandoff,
     sendUserMessage,
     retryLastToolOutput,
+    compactContext,
     togglePlanMode,
     skillsService,
     onSkillSelected,

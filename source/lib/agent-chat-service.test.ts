@@ -15,6 +15,7 @@ function mockStreamedModel(): any {
         type: 'completion',
         responseId: 'mock-response',
         output: [{ type: 'message', content: [{ type: 'text', text: completionText }] }],
+        usage: { inputTokens: 7, outputTokens: 3 },
       };
     },
   };
@@ -133,6 +134,24 @@ it.sequential('chat returns extracted response from agent run', async () => {
 
   const response = await service.chat('Hello');
   expect(response).toBe('mock response');
+});
+
+it.sequential('chatDetailed returns request usage and cost records for accounting', async () => {
+  const service = new AgentChatService({
+    agentConfig: new MockAgentConfig('mock-provider', 'mock-model') as any,
+    settings: createMockSettings('mock-provider'),
+    logger: mockLogger,
+  });
+
+  const response = await service.chatDetailed('Hello');
+
+  expect(response.text).toBe('mock response');
+  expect(response.usage).toEqual({
+    prompt_tokens: 7,
+    completion_tokens: 3,
+    total_tokens: 10,
+  });
+  expect(response.costRecords).toHaveLength(1);
 });
 
 it.sequential('abort cancels an active chat run', async () => {

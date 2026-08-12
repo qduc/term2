@@ -327,6 +327,80 @@ export class ConversationService {
     return this.#adapter.sendMessage(input, options);
   }
 
+  async compactContext(): Promise<string> {
+    const startedAt = Date.now();
+    this.#eventSink?.({
+      type: 'context_compaction_started',
+      provider: this.#deps.settingsService?.get('agent.provider') ?? 'openai',
+      sessionId: this.sessionId,
+      strategy: 'local',
+    });
+    try {
+      const outcome = await this.#runtime.compactContext();
+      if (outcome.kind === 'busy') {
+        this.#eventSink?.({
+          type: 'context_compaction_failed',
+          provider: this.#deps.settingsService?.get('agent.provider') ?? 'openai',
+          sessionId: this.sessionId,
+          errorCategory: 'validation',
+          durationMs: Date.now() - startedAt,
+          strategy: 'local',
+        });
+        return 'Context compaction is available only while the conversation is idle.';
+      }
+      if (outcome.kind === 'stale') throw new Error('Conversation changed while context compaction was running');
+      if (outcome.kind === 'blocked') {
+        const message =
+          outcome.reason === 'no_complete_cold_turn'
+            ? 'Nothing to compact: at least one complete cold turn is required.'
+            : `Context compaction was blocked: ${outcome.reason}.`;
+        this.#eventSink?.({
+          type: 'context_compaction_failed',
+          provider: this.#deps.settingsService?.get('agent.provider') ?? 'openai',
+          sessionId: this.sessionId,
+          errorCategory: 'validation',
+          durationMs: Date.now() - startedAt,
+          strategy: 'local',
+        });
+        return message;
+      }
+      if (outcome.kind !== 'compacted') return 'Nothing to compact.';
+      if (outcome.usage.inputTokens > 0 || outcome.usage.outputTokens > 0) {
+        this.#eventSink?.({
+          type: 'usage_update',
+          usage: {
+            prompt_tokens: outcome.usage.inputTokens,
+            completion_tokens: outcome.usage.outputTokens,
+            total_tokens: outcome.usage.inputTokens + outcome.usage.outputTokens,
+          },
+        });
+      }
+      for (const record of outcome.costRecords) this.#eventSink?.({ type: 'cost_update', record });
+      this.#eventSink?.({
+        type: 'context_compaction_completed',
+        provider: this.#deps.settingsService?.get('agent.provider') ?? 'openai',
+        sessionId: this.sessionId,
+        inputTokensBefore: outcome.checkpoint.contextSummary.estimatedTokensBefore,
+        inputTokensAfter: outcome.checkpoint.contextSummary.estimatedTokensAfter,
+        durationMs: Date.now() - startedAt,
+        strategy: 'local',
+      });
+      return `Context compacted locally (${outcome.checkpoint.contextSummary.estimatedTokensBefore ?? '?'} → ${
+        outcome.checkpoint.contextSummary.estimatedTokensAfter ?? '?'
+      } estimated tokens).`;
+    } catch (error) {
+      this.#eventSink?.({
+        type: 'context_compaction_failed',
+        provider: this.#deps.settingsService?.get('agent.provider') ?? 'openai',
+        sessionId: this.sessionId,
+        errorCategory: 'request',
+        durationMs: Date.now() - startedAt,
+        strategy: 'local',
+      });
+      throw error;
+    }
+  }
+
   /** Resume foreground messages retained after an execution failure or abort. */
   resumeQueue(): Promise<void> {
     return this.#adapter.resumeQueue();

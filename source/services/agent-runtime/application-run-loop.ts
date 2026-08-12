@@ -78,6 +78,24 @@ export interface ApplicationRequestPreparation {
   readonly run: <T>(operation: () => Promise<T>) => Promise<T>;
 }
 
+export interface ApplicationBoundaryCompaction {
+  readonly compact: (input: {
+    history: readonly ProviderInputItem[];
+    automaticCompactionsThisRun: number;
+    signal?: AbortSignal;
+    onStarted: (provider: string) => void;
+  }) => Promise<
+    | { kind: 'unchanged' }
+    | { kind: 'failed'; provider: string }
+    | {
+        kind: 'compacted';
+        history: ProviderInputItem[];
+        modelInput: ProviderInputItem[];
+        costRecords?: ModelRequestCost[];
+      }
+  >;
+}
+
 export interface ApplicationRunLoopOptions {
   readonly signal?: AbortSignal;
   /** Existing provider response to continue from on the first model turn. */
@@ -108,6 +126,8 @@ export interface ApplicationRunLoopOptions {
   readonly maxTurns?: number;
   /** Root-only provider request preparation, retained by continuations. */
   readonly requestPreparation?: ApplicationRequestPreparation;
+  /** Application-owned local compaction evaluated at each request boundary. */
+  readonly boundaryCompaction?: ApplicationBoundaryCompaction;
   /** Per-request output and deadline guard; model settings provide the normal runtime defaults. */
   readonly generationGuard?: GenerationGuardOptions;
   /**
@@ -202,6 +222,8 @@ type RunState = {
   approvals: ApprovalLedger;
   /** Model turns taken so far, preserved across continuation. */
   turnCount: number;
+  /** Local automatic compactions already paid for in this run. */
+  automaticCompactionsThisRun?: number;
   /** Turn budget for the run; undefined means unbounded. */
   maxTurns?: number;
   /** Cumulative model-request cost records for this run, preserved across continuation. */
@@ -488,6 +510,7 @@ export class ApplicationRunLoop {
       approvals: options.approvals ?? new ApprovalLedger(),
       turnCount: 0,
       maxTurns: options.maxTurns,
+      automaticCompactionsThisRun: 0,
     };
     state.approve = (interruption) => {
       state.approvalDecision = 'approved';
@@ -692,6 +715,41 @@ export class ApplicationRunLoop {
       // history, and the next request has not been built. A user message
       // admitted here reaches the model in sequence, mid-turn.
       this.#admitPendingSteers(state, stream, queue);
+
+      if (options.boundaryCompaction) {
+        const compactionStartedAt = Date.now();
+        const compaction = await options.boundaryCompaction.compact({
+          history: state.history,
+          automaticCompactionsThisRun: state.automaticCompactionsThisRun ?? 0,
+          signal: options.signal,
+          onStarted: (provider) =>
+            outputPush(stream, queue, { type: 'context_compaction_started', provider, strategy: 'local' }),
+        });
+        if (compaction.kind === 'compacted') {
+          state.history.splice(0, state.history.length, ...compaction.history);
+          state.input.splice(0, state.input.length, ...normalizeApplicationInput(compaction.modelInput));
+          state.responseId = undefined;
+          state.responseProviderId = undefined;
+          if (compaction.costRecords?.length) {
+            state.costRecords ??= [];
+            state.costRecords.push(...compaction.costRecords);
+          }
+          state.automaticCompactionsThisRun = (state.automaticCompactionsThisRun ?? 0) + 1;
+          outputPush(stream, queue, {
+            type: 'context_compaction_completed',
+            provider: state.currentProviderId ?? 'unknown',
+            strategy: 'local',
+            durationMs: Math.max(0, Date.now() - compactionStartedAt),
+          });
+        } else if (compaction.kind === 'failed') {
+          outputPush(stream, queue, {
+            type: 'context_compaction_failed',
+            provider: compaction.provider,
+            strategy: 'local',
+            durationMs: Math.max(0, Date.now() - compactionStartedAt),
+          });
+        }
+      }
 
       state.turnCount += 1;
       if (state.maxTurns !== undefined && state.turnCount > state.maxTurns) {

@@ -111,12 +111,38 @@ export async function* processStreamEvents(
     if (event.type === 'context_compaction_started') {
       // Surfaced live so the notice appears while the provider is actually compacting.
       // A response can carry several compaction items; the UI supersedes rather than stacks.
-      yield { type: 'context_compaction_started', provider: event.provider, sessionId: deps.sessionId };
+      yield {
+        type: 'context_compaction_started',
+        provider: event.provider,
+        sessionId: deps.sessionId,
+        ...(event.strategy ? { strategy: event.strategy } : {}),
+      };
       continue;
     }
     if (event.type === 'context_compaction_completed') {
+      if (event.strategy === 'local') {
+        yield {
+          type: 'context_compaction_completed',
+          provider: event.provider,
+          sessionId: deps.sessionId,
+          durationMs: event.durationMs,
+          strategy: 'local',
+        };
+        continue;
+      }
       // Deliberately not yielded here — see StreamAccumulator.lastContextCompactionDurationMs.
       acc.lastContextCompactionDurationMs = event.durationMs;
+      continue;
+    }
+    if (event.type === 'context_compaction_failed') {
+      yield {
+        type: 'context_compaction_failed',
+        provider: event.provider,
+        sessionId: deps.sessionId,
+        durationMs: event.durationMs,
+        errorCategory: 'request',
+        strategy: 'local',
+      };
       continue;
     }
 

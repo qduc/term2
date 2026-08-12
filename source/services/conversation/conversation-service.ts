@@ -365,6 +365,17 @@ export class ConversationService {
         return message;
       }
       if (outcome.kind !== 'compacted') return 'Nothing to compact.';
+      if (outcome.usage.inputTokens > 0 || outcome.usage.outputTokens > 0) {
+        this.#eventSink?.({
+          type: 'usage_update',
+          usage: {
+            prompt_tokens: outcome.usage.inputTokens,
+            completion_tokens: outcome.usage.outputTokens,
+            total_tokens: outcome.usage.inputTokens + outcome.usage.outputTokens,
+          },
+        });
+      }
+      for (const record of outcome.costRecords) this.#eventSink?.({ type: 'cost_update', record });
       this.#eventSink?.({
         type: 'context_compaction_completed',
         provider: this.#deps.settingsService?.get('agent.provider') ?? 'openai',

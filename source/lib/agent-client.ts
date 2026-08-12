@@ -761,6 +761,19 @@ export class AgentClient {
     return this.#chatService.chat(message, options);
   }
 
+  async chatDetailed(
+    message: string,
+    options: {
+      model?: string;
+      provider?: string;
+      reasoningEffort?: ReasoningEffortSetting | null;
+      instructions?: string;
+      maxTokens?: number;
+    } = {},
+  ) {
+    return this.#chatService.chatDetailed(message, options);
+  }
+
   async chatJson(
     message: string,
     options: {

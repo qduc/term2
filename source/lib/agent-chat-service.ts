@@ -12,6 +12,9 @@ import {
 import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
 import type { ISessionContextService } from '../services/service-interfaces.js';
 import { selectAgentStreamItems } from '../services/agent-stream.js';
+import type { AgentClientChatOptions, AgentClientChatResult } from '../services/conversation-agent-client.js';
+import type { ModelRequestCost } from '../services/cost/model-cost.js';
+import { normalizeUsage } from '../utils/ai/token-usage.js';
 
 export interface AgentChatServiceDeps {
   agentConfig: AgentConfiguration;
@@ -114,16 +117,11 @@ export class AgentChatService {
     return '';
   }
 
-  async chat(
-    message: string,
-    options: {
-      model?: string;
-      provider?: string;
-      reasoningEffort?: ReasoningEffortSetting | null;
-      instructions?: string;
-      maxTokens?: number;
-    } = {},
-  ): Promise<string> {
+  async chat(message: string, options: AgentClientChatOptions = {}): Promise<string> {
+    return (await this.chatDetailed(message, options)).text;
+  }
+
+  async chatDetailed(message: string, options: AgentClientChatOptions = {}): Promise<AgentClientChatResult> {
     const { agentConfig, settings, logger } = this.#deps;
 
     const tempProvider = options.provider || agentConfig.getProvider();
@@ -192,7 +190,12 @@ export class AgentChatService {
         maxTurns: 1, // Chat is usually single turn
       });
 
-      return this.#extractResponse(result);
+      const usage = normalizeUsage(result.runUsage);
+      return {
+        text: this.#extractResponse(result),
+        ...(usage ? { usage } : {}),
+        ...(Array.isArray(result.runCostRecords) ? { costRecords: result.runCostRecords as ModelRequestCost[] } : {}),
+      };
     } catch (error) {
       logger.error('Agent chat failed', {
         error: error instanceof Error ? error.message : String(error),

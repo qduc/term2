@@ -119,3 +119,28 @@ it('fails closed instead of exposing provider-opaque history to the summarizer',
   ).rejects.toThrow('provider-opaque');
   expect(generate).not.toHaveBeenCalled();
 });
+
+it('uses the existing local checkpoint as the running-summary seed on a later compaction', async () => {
+  const generate = vi.fn(async () => ({ text: 'updated summary' }));
+  const checkpoint: ProviderInputItem = {
+    role: 'system',
+    type: 'message',
+    content: 'envelope\n<summary>prior exact summary</summary>',
+    contextSummary: { version: 1, strategy: 'local' },
+  };
+  const outcome = await new LocalContextCompactor({ generate }).compactAtBoundary({
+    history: [checkpoint, ...turns(3)],
+    provider: 'openrouter',
+    model: 'test-model',
+    sourceRevision: 2,
+    contextWindow: 100_000,
+    maxOutputTokens: 1_000,
+    compactThreshold: 0.8,
+    compactThresholdTokens: null,
+    manual: true,
+  });
+  expect(outcome.kind).toBe('compacted');
+  expect(generate).toHaveBeenCalledWith(expect.objectContaining({ priorSummary: 'prior exact summary' }));
+  const firstCall = generate.mock.calls[0] as unknown as [{ transcriptChunk: string }];
+  expect(firstCall[0].transcriptChunk).not.toContain('contextSummary');
+});

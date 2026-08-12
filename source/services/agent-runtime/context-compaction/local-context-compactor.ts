@@ -1,4 +1,6 @@
 import type { ContextSummaryMarker, ProviderInputItem } from '../../../contracts/provider-input.js';
+import { isLocalContextSummary } from '../../../contracts/provider-input.js';
+import type { ModelRequestCost } from '../../cost/model-cost.js';
 import { buildContextCompactionInput, wrapContextSummary } from '../../../prompts/context-compaction.js';
 import { projectConversationMessage } from '../../conversation/conversation-message-projection.js';
 import {
@@ -14,6 +16,7 @@ import {
 export interface SummaryGenerationResult {
   text: string;
   usage?: { inputTokens?: number; outputTokens?: number };
+  costRecords?: ModelRequestCost[];
 }
 
 export interface ContextSummaryGenerator {
@@ -38,6 +41,7 @@ export type LocalCompactionOutcome =
       estimate: ContextEstimate;
       rearmAtTokens: number;
       usage: { inputTokens: number; outputTokens: number };
+      costRecords: ModelRequestCost[];
     }
   | {
       kind: 'blocked';
@@ -69,6 +73,12 @@ const addUsage = (
 ): void => {
   total.inputTokens += usage?.inputTokens ?? 0;
   total.outputTokens += usage?.outputTokens ?? 0;
+};
+
+const checkpointSummaryText = (item: ProviderInputItem): string | null => {
+  if (!isLocalContextSummary(item) || typeof item.content !== 'string') return null;
+  const match = /<summary>\n?([\s\S]*?)\n?<\/summary>/.exec(item.content);
+  return match?.[1]?.trim() ?? item.content;
 };
 
 const chunkColdPrefix = (items: readonly ProviderInputItem[], maxCharacters: number): string[] => {
@@ -138,11 +148,14 @@ export class LocalContextCompactor {
 
     // Leave the remaining 10% of the half-window budget for the bounded
     // running summary carried into every chunk after the first.
+    const priorCheckpoint = plan.coldPrefix.find(isLocalContextSummary);
+    const coldItems = plan.coldPrefix.filter((item) => !isLocalContextSummary(item));
     const maxChunkCharacters = Math.max(4_000, Math.floor(usableInputTokens * 0.4 * 4));
-    const chunks = chunkColdPrefix(plan.coldPrefix, maxChunkCharacters);
+    const chunks = chunkColdPrefix(coldItems, maxChunkCharacters);
     const summaryOutputCap = Math.max(256, Math.min(4_096, Math.floor(usableInputTokens * 0.1)));
-    let summary: string | null = null;
+    let summary: string | null = priorCheckpoint ? checkpointSummaryText(priorCheckpoint) : null;
     const usage = { inputTokens: 0, outputTokens: 0 };
+    const costRecords: ModelRequestCost[] = [];
     for (const transcriptChunk of chunks) {
       const result = await this.#generator.generate({
         priorSummary: summary,
@@ -153,6 +166,7 @@ export class LocalContextCompactor {
       });
       summary = result.text;
       addUsage(usage, result.usage);
+      if (result.costRecords) costRecords.push(...result.costRecords);
     }
 
     const content = wrapContextSummary(summary ?? '');
@@ -186,6 +200,7 @@ export class LocalContextCompactor {
       estimate: postEstimate,
       rearmAtTokens: rearmAt,
       usage,
+      costRecords,
     };
   }
 }

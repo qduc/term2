@@ -769,13 +769,26 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     const configuredMaxOutput = settingsService?.get('agent.maxOutputTokens');
     const compactor = new LocalContextCompactor({
       generate: async ({ renderedInput, maxOutputTokens }) => {
-        const text = await agentClient.chat(renderedInput, {
+        const options = {
           provider,
           model,
           instructions: CONTEXT_COMPACTION_INSTRUCTIONS,
           maxTokens: maxOutputTokens,
-        });
-        return { text };
+        };
+        if (agentClient.chatDetailed) {
+          const result = await agentClient.chatDetailed(renderedInput, options);
+          return {
+            text: result.text,
+            usage: result.usage
+              ? {
+                  inputTokens: result.usage.prompt_tokens,
+                  outputTokens: result.usage.completion_tokens,
+                }
+              : undefined,
+            costRecords: result.costRecords,
+          };
+        }
+        return { text: await agentClient.chat(renderedInput, options) };
       },
     });
     const outcome = await compactor.compactAtBoundary({

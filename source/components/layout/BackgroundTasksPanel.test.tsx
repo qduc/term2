@@ -262,3 +262,30 @@ it.sequential(
     expect(output).not.toContain('hung');
   },
 );
+
+it.sequential('drops each settled row once its linger expires, leaving still-running rows', async () => {
+  const finished = runningTask({ runId: 'run-done', task: 'finished work', status: 'completed' });
+  const running = runningTask({ runId: 'run-live', task: 'ongoing work' });
+  const renderer = await renderInAct(<BackgroundTasksPanel tasks={[finished, running]} now={10_000} />);
+
+  expect(renderer.lastFrame() ?? '').toContain('finished work');
+  expect(renderer.lastFrame() ?? '').toContain('Background tasks · 1 active');
+
+  await rerenderInAct(renderer, <BackgroundTasksPanel tasks={[finished, running]} now={16_000} />);
+
+  const output = renderer.lastFrame() ?? '';
+  expect(output).not.toContain('finished work');
+  expect(output).toContain('ongoing work');
+  expect(output).toContain('Background tasks · 1 active');
+});
+
+it.sequential('hides the whole panel once every row has settled and lingered', async () => {
+  const finished = runningTask({ runId: 'run-done', status: 'completed' });
+  const renderer = await renderInAct(<BackgroundTasksPanel tasks={[finished]} now={10_000} />);
+
+  expect(renderer.lastFrame() ?? '').toContain('Background tasks · 0 active');
+
+  await rerenderInAct(renderer, <BackgroundTasksPanel tasks={[finished]} now={16_000} />);
+
+  expect(renderer.lastFrame() ?? '').toBe('');
+});

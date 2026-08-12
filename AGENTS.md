@@ -34,6 +34,26 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 
 ## Active or deferred
 
+- Tool output bounding and effect safety — designed in
+  `docs/plans/tool-output-and-effect-safety.md`, awaiting implementation
+  approval; nobody is on it. Read it before touching `read_file`'s result size,
+  `utils/shell/shell-output.ts`, `ToolExecutionStatus`, the aborted-call
+  settlement in `services/retry/recovery-executor.ts`, or approval keying: it
+  records two shipped defects — an unbounded `read_file` result, and in-flight
+  tool calls settled as failed rather than unknown, which invites a duplicate
+  side effect after stream recovery. Two milestones, both small; a typed
+  artifact store and approval rebinding were considered and deferred there.
+  Blocks the compaction plan below.
+- Provider-neutral local context compaction — designed in
+  `docs/plans/provider-neutral-context-compaction.md`, awaiting implementation
+  approval; nobody is on it. It preserves the existing OpenAI-native opaque
+  lane and adds an opt-in local fallback built around safe request-boundary
+  cutting, ratio plus an optional raw-token automatic threshold, manual `/compact`,
+  sequential cold-prefix summaries with load-bearing facts copied verbatim
+  rather than paraphrased, a verbatim hot tail, durable replacement checkpoints,
+  and tool-ledger/continuity safety. Has a "Revisit after Milestone 3.5" list
+  recording what was deliberately not built. Depends on the tool-output and
+  effect-safety plan above.
 - Parallel safe-tool dispatch — proposed in
   `docs/plans/parallel-safe-tool-dispatch.md`, awaiting implementation approval;
   nobody is on it. It batches only contiguous, auto-approved read-only calls

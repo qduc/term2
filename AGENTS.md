@@ -44,9 +44,10 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   side effect after stream recovery. Two milestones, both small; a typed
   artifact store and approval rebinding were considered and deferred there.
   Blocks the compaction plan below.
-- Provider-neutral local context compaction — designed in
-  `docs/plans/provider-neutral-context-compaction.md`, awaiting implementation
-  approval; nobody is on it. It preserves the existing OpenAI-native opaque
+- Provider-neutral local context compaction — implemented through Milestone 5
+  and merged in `docs/plans/provider-neutral-context-compaction.md`; the remaining
+  Milestone 6 hardening matrix is partly blocked on the existing
+  background-shell approval PTY timeout. It preserves the OpenAI-native opaque
   lane and adds an opt-in local fallback built around safe request-boundary
   cutting, ratio plus an optional raw-token automatic threshold, manual `/compact`,
   sequential cold-prefix summaries with load-bearing facts copied verbatim

@@ -1,6 +1,6 @@
 # Provider-neutral local context compaction
 
-Status: **design only, awaiting implementation approval.** Nobody is on it.
+Status: **implemented through Milestone 5 and merged (`34d318eb`).** Milestone 6 hardening remains partially blocked by the pre-existing background-shell approval PTY timeout recorded below.
 
 ## Resume here
 
@@ -448,7 +448,7 @@ developing; any milestone touching the provider bridge or run loop also runs
 
 ### Milestone 1 — checkpoint and replacement-boundary contract
 
-Status: **pending.**
+Status: **complete (`e082d133`).**
 
 - Add the `contextSummary` marker to the provider-history contract.
 - Teach conversation message projection to classify marked summaries as
@@ -468,7 +468,7 @@ This milestone has no model calls and no automatic behavior.
 
 ### Milestone 2 — pure planning, pruning, and estimation
 
-Status: **pending.**
+Status: **complete (`4552e3c0`).**
 
 - Implement request estimation, turn grouping, safe-cut selection, hot-tail
   clamping, and cold tool-output serialization behind `LocalContextCompactor`.
@@ -490,7 +490,7 @@ Status: **pending.**
 
 ### Milestone 3 — bounded summary generation and manual `/compact`
 
-Status: **pending.**
+Status: **complete (`d937d5da`, `34abec2b`).**
 
 - Add the compaction prompt and a direct, tool-free summary request adapter.
 - Implement sequential chunk reduction and post-result size verification.
@@ -517,7 +517,7 @@ Manual mode is the quality and operability gate for automatic behavior.
 
 ### Milestone 3.5 — recall evaluation gate
 
-Status: **pending, blocks Milestone 4.**
+Status: **complete.** The harvested-session gate passed on `gpt-5.4-nano`: sequential recall `0.25`, full-history recall `0.25`, prune-only recall `0`, at `$0.246659`. Gemini 3.5 Flash Lite also beat pruning (`0.0833` versus `0`) but regressed against full history (`0.1667`). DeepSeek V4 Flash was stopped after roughly eight minutes without completing; GPT-5.6 Luna crossed the `$0.75` guard at `$0.761599` before producing an aggregate result.
 
 - Build deterministic long-session fixtures with answer keys for user
   constraints and corrections; accepted and rejected architecture; exact
@@ -542,7 +542,7 @@ lane. Qualitative approval that a summary merely "looks good" is insufficient.
 
 ### Milestone 4 — automatic request-boundary compaction
 
-Status: **pending, gated on Milestone 3.5.**
+Status: **complete (`44184b05`, `4a867db8`, `f2949ece`).**
 
 - Add `contextCompaction.mode` with backward-compatible default `native`; wire
   schema, descriptions, `/settings`, category membership, and runtime
@@ -575,7 +575,7 @@ Status: **pending, gated on Milestone 3.5.**
 
 ### Milestone 5 — durable lifecycle and UI parity
 
-Status: **pending.**
+Status: **complete (`4a867db8`).**
 
 - Extend the already-complete application/conversation compaction events with
   `strategy` and optional estimated before/after sizes.
@@ -589,7 +589,7 @@ Status: **pending.**
 
 ### Milestone 6 — black-box and quality gate
 
-Status: **pending.**
+Status: **partially complete.** Typecheck, lint (0 errors), and 336 focused integrated tests pass. The provider black-box run reached 143 passing tests before the existing background-shell approval PTY scenario timed out and `--bail=1` aborted five later scenarios. The broad suite reached 6,037 passing tests and 12 failures; seven affected UI/provider tests reproduce in the pre-feature checkout, while the nested-worktree Unix-socket failure is path-length-related. The remaining deterministic black-box rows below should be added when the unrelated PTY gate is repaired.
 
 - Extend `provider-session-resilience.blackbox.ts` with deterministic fake
   summary and ordinary response calls.

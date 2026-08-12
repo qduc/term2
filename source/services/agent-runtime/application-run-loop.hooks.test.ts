@@ -73,6 +73,34 @@ describe('ApplicationRunLoop tool lifecycle', () => {
     );
   });
 
+  it('notifies onToolDispatch before the tool body runs', async () => {
+    const order: string[] = [];
+    const agent: ApplicationAgent = {
+      name: 'test-agent',
+      instructions: 'Use the tool.',
+      model: 'test-model',
+      tools: [
+        tool(async () => {
+          order.push('execute');
+          return 'result';
+        }),
+      ],
+    };
+    const model = modelWithTool('call-dispatch');
+    const dispatchHandler: ((callId: string) => void) | undefined = (callId) => {
+      order.push(`dispatch:${callId}`);
+    };
+    const stream = new ApplicationRunLoop({
+      resolveModel: () => model,
+      getOnToolDispatch: () => dispatchHandler,
+    }).startStream(agent, 'use lookup');
+
+    await drain(stream);
+    await stream.completed;
+
+    expect(order).toEqual(['dispatch:call-dispatch', 'execute']);
+  });
+
   it('reports converted tool failures as tool errors without aborting the run', async () => {
     const lifecycle: ToolExecutionLifecyclePort = {
       before: vi.fn(),

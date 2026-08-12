@@ -1,7 +1,13 @@
 import type { Item, ToolCall, ToolResult } from '../contracts/conversation-items.js';
 import { normalizeRunItem } from './conversation/run-item-normalizer.js';
 
-export type ToolExecutionStatus = 'started' | 'completed' | 'failed' | 'approval_required' | 'aborted';
+export type ToolExecutionStatus = 'started' | 'completed' | 'failed' | 'approval_required' | 'aborted' | 'unknown';
+
+/** Synthetic tool result for a dispatched call whose outcome was never observed. */
+export const UNKNOWN_OUTCOME_TOOL_RESULT =
+  'Outcome unobserved: this operation was dispatched but the result was lost ' +
+  '(for example due to a stream failure). Do not assume it failed or succeeded. ' +
+  'Verify the current state before any retry, and do not re-run non-idempotent operations blindly.';
 
 export interface SavedToolExecution {
   turnId: string;
@@ -12,6 +18,8 @@ export interface SavedToolExecution {
   output?: unknown;
   failureReason?: string;
   startedAt: string;
+  /** Set when the tool body is entered; distinguishes dispatch from mere call receipt. */
+  dispatchedAt?: string;
   completedAt?: string;
   historyItems?: unknown[];
 }
@@ -138,8 +146,13 @@ const hasCallPair = (history: unknown[], callId: string): boolean => {
 const hasRecoverableCallPair = (entry: SavedToolExecution): boolean =>
   Array.isArray(entry.historyItems) && entry.historyItems.length >= 2;
 
-const isCompleteLedgerEntry = (entry: SavedToolExecution): boolean =>
-  entry.status === 'completed' && hasRecoverableCallPair(entry);
+/** Entries that carry a recoverable call/result pair for history projection. */
+const isProjectableSettledEntry = (entry: SavedToolExecution): boolean =>
+  (entry.status === 'completed' || entry.status === 'aborted' || entry.status === 'unknown') &&
+  hasRecoverableCallPair(entry);
+
+const isOpenEntry = (entry: SavedToolExecution): boolean =>
+  entry.status === 'started' || entry.status === 'approval_required';
 
 const hasReasoningHistoryItem = (items: readonly unknown[] | undefined): boolean =>
   Array.isArray(items) && items.some((item) => hasCanonicalType(item, 'reasoning'));
@@ -257,12 +270,26 @@ export class ToolExecutionLedger {
       : [...previousHistoryItems, resultItem];
   }
 
+  /**
+   * Mark that the tool body for this call has begun. Used by stream recovery to
+   * distinguish "never ran" (aborted) from "ran with unobserved outcome" (unknown).
+   */
+  markDispatched(callId: string): void {
+    const entry = [...this.#entries]
+      .reverse()
+      .find((candidate) => candidate.callId === callId && isOpenEntry(candidate));
+    if (!entry) {
+      return;
+    }
+    entry.dispatchedAt ??= new Date().toISOString();
+  }
+
   markOpenCallsAborted(reason: string, callId?: string): void {
     for (const entry of this.#entries) {
       if (callId && entry.callId !== callId) {
         continue;
       }
-      if (entry.status !== 'started' && entry.status !== 'approval_required') {
+      if (!isOpenEntry(entry)) {
         continue;
       }
       entry.status = 'aborted';
@@ -272,36 +299,84 @@ export class ToolExecutionLedger {
   }
 
   recordAbortedApproval(output: string, reason = 'Tool execution was not approved.', callId?: string): void {
-    const candidates = [...this.#entries]
-      .reverse()
-      .filter((candidate) => candidate.status === 'started' || candidate.status === 'approval_required');
+    const candidates = [...this.#entries].reverse().filter((candidate) => isOpenEntry(candidate));
 
     const targets = callId ? candidates.filter((c) => c.callId === callId) : candidates;
 
     for (const entry of targets) {
-      const callItem = entry.historyItems?.find(isToolCall);
-      if (!callItem) {
-        entry.status = 'aborted';
-        entry.failureReason = reason;
-        continue;
-      }
-
-      entry.status = 'aborted';
-      entry.failureReason = reason;
-      entry.completedAt = new Date().toISOString();
-      entry.output = output;
-      const previousHistoryItems = entry.historyItems ?? [callItem];
-      entry.historyItems = hasResultHistoryItem(previousHistoryItems, entry.callId)
-        ? previousHistoryItems
-        : [
-            ...previousHistoryItems,
-            {
-              type: 'function_call_output',
-              callId: entry.callId,
-              output,
-            },
-          ];
+      this.#settleOpenEntry(entry, {
+        status: 'aborted',
+        output,
+        reason,
+      });
     }
+  }
+
+  /**
+   * Settle open calls after a stream failure.
+   *
+   * - Never dispatched → `aborted` with a synthetic error result (safe to treat as "did not happen").
+   * - Dispatched but outcome unobserved → `unknown` with a non-failure verify-before-retry message.
+   */
+  settleOpenCallsOnStreamFailure(
+    reason = 'Stream failed',
+    callId?: string,
+  ): { abortedCallIds: string[]; unknownCallIds: string[] } {
+    const abortedCallIds: string[] = [];
+    const unknownCallIds: string[] = [];
+    const candidates = this.#entries.filter((entry) => isOpenEntry(entry) && (!callId || entry.callId === callId));
+
+    for (const entry of candidates) {
+      if (entry.dispatchedAt) {
+        this.#settleOpenEntry(entry, {
+          status: 'unknown',
+          output: UNKNOWN_OUTCOME_TOOL_RESULT,
+          reason,
+        });
+        unknownCallIds.push(entry.callId);
+      } else {
+        this.#settleOpenEntry(entry, {
+          status: 'aborted',
+          output: reason,
+          reason,
+        });
+        abortedCallIds.push(entry.callId);
+      }
+    }
+
+    return { abortedCallIds, unknownCallIds };
+  }
+
+  #settleOpenEntry(
+    entry: SavedToolExecution,
+    settlement: { status: 'aborted' | 'unknown'; output: string; reason: string },
+  ): void {
+    const callItem = entry.historyItems?.find(isToolCall);
+    if (!callItem) {
+      entry.status = settlement.status;
+      entry.failureReason = settlement.reason;
+      if (settlement.status === 'unknown') {
+        entry.output = settlement.output;
+        entry.completedAt = new Date().toISOString();
+      }
+      return;
+    }
+
+    entry.status = settlement.status;
+    entry.failureReason = settlement.reason;
+    entry.completedAt = new Date().toISOString();
+    entry.output = settlement.output;
+    const previousHistoryItems = entry.historyItems ?? [callItem];
+    entry.historyItems = hasResultHistoryItem(previousHistoryItems, entry.callId)
+      ? previousHistoryItems
+      : [
+          ...previousHistoryItems,
+          {
+            type: 'function_call_output',
+            callId: entry.callId,
+            output: settlement.output,
+          },
+        ];
   }
 
   /**
@@ -323,6 +398,17 @@ export class ToolExecutionLedger {
       .map((entry) => entry.callId);
   }
 
+  /**
+   * Call IDs settled for provider history in the current turn: completed,
+   * aborted-with-pair, or unknown-with-pair. Used so unpaid-debt tracking does
+   * not treat synthetic recovery results as still open.
+   */
+  settledResultCallIdsForCurrentTurn(): string[] {
+    return this.#entries
+      .filter((entry) => entry.turnId === this.#currentTurnId && isProjectableSettledEntry(entry))
+      .map((entry) => entry.callId);
+  }
+
   getRecoverySummary(): ToolLedgerRecoverySummary | null {
     const currentTurnEntries = this.#entries.filter((entry) => entry.turnId === this.#currentTurnId);
     if (currentTurnEntries.length === 0) {
@@ -330,10 +416,11 @@ export class ToolExecutionLedger {
     }
 
     const recoveredCallIds = currentTurnEntries
-      .filter((entry) => isCompleteLedgerEntry(entry))
+      .filter((entry) => isProjectableSettledEntry(entry))
       .map((entry) => entry.callId);
+    // Incomplete means no recoverable pair yet — exclude settled synthetic pairs.
     const droppedCallIds = currentTurnEntries
-      .filter((entry) => entry.status !== 'completed')
+      .filter((entry) => !isProjectableSettledEntry(entry))
       .map((entry) => entry.callId);
 
     if (recoveredCallIds.length === 0 && droppedCallIds.length === 0) {
@@ -417,11 +504,11 @@ export function reconcileHistoryWithToolLedger(
       // tool_calls").
       next = next.filter((item) => callIdOf(item) !== entry.callId);
       next.splice(insertionIndexForEntry(next, entry), 0, ...clone(entry.historyItems!));
-      // Count both completed and aborted pairs as injected so the warning fires
-      // and replaceHistory is called. Without this, aborted pairs injected from
-      // markOpenCallsAborted (with synthetic error results) would not trigger a
-      // history replacement, leaving dangling function_call items in the store.
-      if (entry.status === 'completed' || entry.status === 'aborted') {
+      // Count completed, aborted, and unknown pairs as injected so the warning
+      // fires and replaceHistory is called. Without this, synthetic pairs for
+      // interrupted calls would not trigger a history replacement, leaving
+      // dangling function_call items in the store.
+      if (entry.status === 'completed' || entry.status === 'aborted' || entry.status === 'unknown') {
         addedCompletedPairs++;
       }
       continue;

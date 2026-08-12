@@ -34,16 +34,6 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 
 ## Active or deferred
 
-- Tool output bounding and effect safety — designed in
-  `docs/plans/tool-output-and-effect-safety.md`, awaiting implementation
-  approval; nobody is on it. Read it before touching `read_file`'s result size,
-  `utils/shell/shell-output.ts`, `ToolExecutionStatus`, the aborted-call
-  settlement in `services/retry/recovery-executor.ts`, or approval keying: it
-  records two shipped defects — an unbounded `read_file` result, and in-flight
-  tool calls settled as failed rather than unknown, which invites a duplicate
-  side effect after stream recovery. Two milestones, both small; a typed
-  artifact store and approval rebinding were considered and deferred there.
-  Blocks the compaction plan below.
 - Provider-neutral local context compaction — designed in
   `docs/plans/provider-neutral-context-compaction.md`, awaiting implementation
   approval; nobody is on it. It preserves the existing OpenAI-native opaque
@@ -53,7 +43,7 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   rather than paraphrased, a verbatim hot tail, durable replacement checkpoints,
   and tool-ledger/continuity safety. Has a "Revisit after Milestone 3.5" list
   recording what was deliberately not built. Depends on the tool-output and
-  effect-safety plan above.
+  effect-safety plan (now implemented; see completed list).
 - Parallel safe-tool dispatch — proposed in
   `docs/plans/parallel-safe-tool-dispatch.md`, awaiting implementation approval;
   nobody is on it. It batches only contiguous, auto-approved read-only calls
@@ -89,6 +79,14 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   ownership boundaries.
 
 ## Completed — still read before touching these areas
+
+- `docs/plans/tool-output-and-effect-safety.md` — **Milestones 1–2 implemented**
+  (branch `tool-output-effect-safety`). Read before touching `read_file` result
+  size, `utils/shell/shell-output.ts` / `utils/output/bound-tool-result.ts`,
+  `ToolExecutionStatus`, stream-failure settlement in
+  `services/retry/recovery-executor.ts`, or tool dispatch marking: tool results
+  are byte-bounded with the shell spool note; dispatched-but-unobserved calls
+  settle as `unknown` (not failed) so recovery does not invite blind re-dispatch.
 
 - `docs/plans/background-shell-monitor/MAP.md` — **all six phases merged**
   (2026-08-10; last merge `78e5a08c`). Read before touching the shell tool's

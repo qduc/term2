@@ -1,29 +1,36 @@
 import { z } from 'zod';
 import * as fs from 'fs/promises';
 import { resolveWorkspacePath, relaxedNumber } from '../utils.js';
-import { trimOutput } from '../../utils/output/output-trim.js';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import { isSessionReadGranted } from '../../services/approval/session-read-access.js';
 import type { SessionAccessState } from '../../services/session/session-access-state.js';
 import type { NestedToolCompatibilityState } from '../../services/session/nested-tool-compatibility-state.js';
 import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from '../format-helpers.js';
+import {
+  boundToolResultText,
+  looksLikeBinary,
+  resolveToolResultMaxBytes,
+} from '../../utils/output/bound-tool-result.js';
 
 const READ_FILE_DESCRIPTION =
   'Read file content from the workspace (like cat command). Supports reading specific line ranges. ' +
   'Use this to inspect a known file or verify a specific claim about a location. ' +
   'Avoid reading tiny repeated chunks (e.g. 50 lines at a time); read the full file if it is under 1000 lines or use a larger window. ' +
   'Do NOT use this to search for text across files (use grep). ' +
-  'Returns the file path, total line count, and the requested lines.';
+  'Returns the file path, total line count, and the requested lines. ' +
+  'Large results are truncated and the full payload is saved to a file; look for "Full output saved to" and read that path when you need more.';
 const READ_FILE_DESCRIPTION_OUTSIDE =
   'Read file content from the filesystem (like cat command). Supports reading specific line ranges. ' +
   'Use this to inspect a known file or verify a specific claim about a location. ' +
   'Avoid reading tiny repeated chunks (e.g. 50 lines at a time); read the full file if it is under 1000 lines or use a larger window. ' +
-  'Returns the file path, total line count, and the requested lines.';
+  'Returns the file path, total line count, and the requested lines. ' +
+  'Large results are truncated and the full payload is saved to a file; look for "Full output saved to" and read that path when you need more.';
 const READ_FILE_DESCRIPTION_ORCHESTRATOR =
   'Inspect a known file directly, including to understand a small or clear area of the workspace. ' +
   'Delegate broad or separable exploration when it provides meaningful context compression or specialization. ' +
   'Supports line ranges — read the smallest relevant range. ' +
-  'Returns the file path, total line count, and the requested lines.';
+  'Returns the file path, total line count, and the requested lines. ' +
+  'Large results are truncated and the full payload is saved to a file; look for "Full output saved to" and read that path when you need more.';
 
 const readFileParametersSchema = z.object({
   path: z.string().describe('File path relative to workspace root'),
@@ -83,6 +90,8 @@ export const createReadFileToolDefinition = (
     sessionAccess?: SessionAccessState;
     /** Isolated legacy protocol for nested tools only. */
     nestedCompatibility?: NestedToolCompatibilityState;
+    /** Optional override for the result byte cap (tests). */
+    maxResultBytes?: number;
   } = {},
 ): ToolDefinition<typeof readFileParametersSchema> => {
   const {
@@ -91,6 +100,7 @@ export const createReadFileToolDefinition = (
     orchestratorMode = false,
     sessionAccess,
     nestedCompatibility,
+    maxResultBytes,
   } = deps;
   return {
     name: 'read_file',
@@ -131,19 +141,28 @@ export const createReadFileToolDefinition = (
           allowOutsideWorkspace: true,
         });
 
-        // Read file content
-        let content: string;
+        // Read as bytes first so binary files do not enter context as mojibake.
+        let buffer: Buffer;
         const sshService = executionContext?.getSSHService();
         if (executionContext?.isRemote() && sshService) {
-          content = await sshService.readFile(absolutePath);
+          const remoteContent = await sshService.readFile(absolutePath);
+          buffer = Buffer.from(remoteContent, 'utf8');
         } else {
-          content = await fs.readFile(absolutePath, 'utf8');
+          buffer = await fs.readFile(absolutePath);
         }
 
-        // Handle empty file
-        if (content === '') {
+        if (buffer.length === 0) {
           return '';
         }
+
+        if (looksLikeBinary(buffer)) {
+          return (
+            `Error: File appears to be binary and was not loaded into context: ${filePath} ` +
+            `(${buffer.length} bytes). Use shell tools or a specialized binary viewer if you need its contents.`
+          );
+        }
+
+        const content = buffer.toString('utf8');
 
         // Split into lines
         const lines = content.split('\n');
@@ -169,10 +188,23 @@ export const createReadFileToolDefinition = (
           return `${fromLine + idx}: ${line}`;
         });
 
-        // Join and trim output
         const fileContent = numberedLines.join('\n');
-        const result = header + fileContent;
-        return trimOutput(result);
+        const fullResult = header + fileContent;
+
+        const bounded = await boundToolResultText({
+          fullText: fullResult,
+          maxBytes: resolveToolResultMaxBytes(maxResultBytes),
+          artifactContents: [
+            `File: ${filePath}`,
+            `Absolute path: ${absolutePath}`,
+            `Total lines: ${totalLines}`,
+            `Requested range: ${fromLine}-${toLine}`,
+            '',
+            fileContent,
+            '',
+          ].join('\n'),
+        });
+        return bounded.text;
       } catch (error: any) {
         // Handle errors gracefully
         if (error.message?.includes('outside workspace')) {

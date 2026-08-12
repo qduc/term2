@@ -1,17 +1,17 @@
 import { z } from 'zod';
-import { writeFile } from 'fs/promises';
-import os from 'os';
-import path from 'path';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from '../format-helpers.js';
 import type { ISettingsService, ILoggingService } from '../../services/service-interfaces.js';
+import { boundToolResultText } from '../../utils/output/bound-tool-result.js';
+import { formatFullOutputSavedNote, saveOutputArtifact } from '../../utils/shell/shell-output.js';
 
 const WEB_FETCH_DESCRIPTION =
   'Fetch a web page and convert its HTML content to Markdown. ' +
   'Use this when you need the full content of a specific URL referenced by web_search or the user. ' +
   'Do NOT use this for broad queries; use web_search. ' +
   'Returns the page title, URL, table of contents, and extracted Markdown. ' +
-  'Initial fetches are truncated to max_chars; the full content is saved to a temporary file when exceeded.';
+  'Initial fetches are truncated to max_chars; the full content is saved to a temporary file when exceeded ' +
+  '(look for "Full output saved to" and read that path when you need more).';
 
 const DEFAULT_MAX_CHARS = 10000;
 const MAX_CHARS_LIMIT = 200000;
@@ -95,12 +95,7 @@ export const createWebFetchToolDefinition = (deps: {
 
         // For initial fetches, if content exceeds the user's requested max, save full to temp file
         if (!isContinuation && result.markdown.length > max_chars) {
-          const safeName = (url ?? 'unknown').replace(/[^a-zA-Z0-9]/g, '_').slice(0, 50);
-          const timestamp = Date.now();
-          const rand = Math.random().toString(36).slice(2, 8);
-          const tmpDir = os.tmpdir();
-          tempFilePath = path.join(tmpDir, `term2-web-fetch-${safeName}-${timestamp}-${rand}.md`);
-          await writeFile(tempFilePath, result.markdown, 'utf-8');
+          tempFilePath = await saveOutputArtifact(result.markdown, { filenamePrefix: 'web-fetch' });
 
           // Truncate the displayed markdown at a clean boundary near max_chars
           const truncated = result.markdown.slice(0, max_chars);
@@ -120,10 +115,12 @@ export const createWebFetchToolDefinition = (deps: {
         }
 
         if (tempFilePath) {
-          output += `\n\n**Full content saved to temp file: \`${tempFilePath}\`**\nThe full content has been saved for reference. You can use grep, read_file (with limited line range) on this file to find specific information.`;
+          output += `\n${formatFullOutputSavedNote(tempFilePath)}`;
         }
 
-        return output;
+        // Final hard bound so even max_chars near the upper limit cannot blow context alone.
+        const bounded = await boundToolResultText({ fullText: output });
+        return bounded.text;
       } catch (error: any) {
         loggingService.error('Web fetch failed', {
           url,

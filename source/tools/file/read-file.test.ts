@@ -234,6 +234,56 @@ it.sequential('execute: handles empty file', async () => {
   });
 });
 
+it.sequential('execute: bounds oversize files and spools full content with shell note', async () => {
+  await withTempDir(async (dir) => {
+    const filePath = 'huge.txt';
+    const body = `${'x'.repeat(2000)}SENTINEL-ONLY-IN-FULL${'y'.repeat(2000)}`;
+    await fs.writeFile(path.join(dir, filePath), body);
+
+    const tool = createReadFileToolDefinition({ maxResultBytes: 400 });
+    const result = (await tool.execute({ path: filePath })) as string;
+
+    expect(result).toContain('File: huge.txt');
+    expect(result).toContain('Full output saved to');
+    expect(result).not.toContain('SENTINEL-ONLY-IN-FULL');
+
+    const match = result.match(/Full output saved to `([^`]+)`/);
+    expect(match).toBeTruthy();
+    const artifact = await fs.readFile(match![1]!, 'utf8');
+    expect(artifact).toContain('SENTINEL-ONLY-IN-FULL');
+    expect(artifact).toContain('File: huge.txt');
+  });
+});
+
+it.sequential('execute: refuses binary files without dumping contents', async () => {
+  await withTempDir(async (dir) => {
+    const filePath = 'blob.bin';
+    await fs.writeFile(path.join(dir, filePath), Buffer.from([0x00, 0x01, 0xff, 0xfe, 0x00, 0x10]));
+
+    const result = (await readFileToolDefinition.execute({ path: filePath })) as string;
+
+    expect(result.startsWith('Error:')).toBe(true);
+    expect(result).toContain('binary');
+    expect(result).not.toContain('\u0000');
+  });
+});
+
+it.sequential('execute: truncates on a multibyte character boundary without corrupting UTF-8', async () => {
+  await withTempDir(async (dir) => {
+    const filePath = 'unicode.txt';
+    // Each "界" is 3 UTF-8 bytes; pad so the cap lands mid-character for naive slicers.
+    const content = `start${'界'.repeat(80)}end`;
+    await fs.writeFile(path.join(dir, filePath), content);
+
+    const tool = createReadFileToolDefinition({ maxResultBytes: 40 });
+    const result = (await tool.execute({ path: filePath })) as string;
+
+    expect(result).toContain('Full output saved to');
+    expect(result).not.toContain('\uFFFD');
+    expect(Buffer.from(result, 'utf8').toString('utf8')).toBe(result);
+  });
+});
+
 it.sequential('execute: handles line range beyond file length', async () => {
   await withTempDir(async (dir) => {
     const filePath = 'short.txt';

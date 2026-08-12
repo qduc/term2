@@ -148,7 +148,7 @@ it('retry_fresh with stream reconciles history and restores ledger', () => {
   expect(deps.providerContinuity.previousResponseId).toBe(null);
 });
 
-it('retry_fresh with stream marks in-flight calls as aborted and injects error results', () => {
+it('retry_fresh with stream marks never-dispatched in-flight calls as aborted and injects error results', () => {
   const { executor, deps } = makeExecutor();
   deps.conversationStore.addUserMessage('do work');
   deps.toolTracker.beginTurn();
@@ -170,8 +170,8 @@ it('retry_fresh with stream marks in-flight calls as aborted and injects error r
 
   expect(result.kind).toBe('run');
 
-  // The in-flight call should be marked aborted in the ledger with a synthetic
-  // error result so the reconciler injects it into history.
+  // Never-dispatched calls settle as aborted with a synthetic error result so
+  // the reconciler injects them into history.
   const ledgerEntries = deps.toolTracker.export();
   const abortedEntry = ledgerEntries.find((e) => e.callId === 'call-inflight');
   expect(abortedEntry).toBeTruthy();
@@ -194,6 +194,81 @@ it('retry_fresh with stream marks in-flight calls as aborted and injects error r
       }),
     ]),
   );
+});
+
+it('retry_fresh with stream marks dispatched in-flight calls as unknown, not failed', () => {
+  const { executor, deps } = makeExecutor();
+  deps.conversationStore.addUserMessage('do work');
+  deps.toolTracker.beginTurn();
+  deps.toolTracker.recordFunctionCall({
+    type: 'function_call',
+    callId: 'call-dispatched',
+    name: 'shell',
+    arguments: '{"command":"rm -rf /tmp/side-effect"}',
+  });
+  deps.toolTracker.markDispatched('call-dispatched');
+
+  const result = executor.apply({
+    plan: { kind: 'retry_fresh', inputMode: 'full_history' },
+    state: baseRecoveryState({
+      stream: { completed: Promise.resolve(undefined) } as any,
+      journalSnapshot: [],
+    }),
+    retryCounts: baseCounts(),
+  });
+
+  expect(result.kind).toBe('run');
+
+  const entry = deps.toolTracker.export().find((e) => e.callId === 'call-dispatched');
+  expect(entry).toBeTruthy();
+  expect(entry!.status).toBe('unknown');
+  expect(String(entry!.output)).toContain('Outcome unobserved');
+  expect(String(entry!.output)).toMatch(/[Vv]erify/);
+  expect(String(entry!.output)).not.toBe('Stream failed');
+  expect(String(entry!.output)).not.toMatch(/^Error:/);
+
+  const history = deps.conversationStore.getHistory();
+  const resultItems = history.filter((item) => (item as { callId?: string }).callId === 'call-dispatched');
+  expect(resultItems).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ type: 'function_call', callId: 'call-dispatched' }),
+      expect.objectContaining({
+        type: 'function_call_output',
+        callId: 'call-dispatched',
+        output: expect.stringContaining('Outcome unobserved'),
+      }),
+    ]),
+  );
+});
+
+it('terminate with stream settles dispatched calls as unknown and never-dispatched as aborted', () => {
+  const { executor, deps } = makeExecutor();
+  deps.conversationStore.addUserMessage('hello');
+  deps.toolTracker.beginTurn();
+  deps.toolTracker.recordFunctionCall({
+    type: 'function_call',
+    callId: 'call-waiting',
+    name: 'shell',
+    arguments: '{}',
+  });
+  deps.toolTracker.recordFunctionCall({
+    type: 'function_call',
+    callId: 'call-ran',
+    name: 'shell',
+    arguments: '{}',
+  });
+  deps.toolTracker.markDispatched('call-ran');
+
+  executor.apply({
+    plan: { kind: 'terminate', events: [{ type: 'error', message: 'stream failed' }] },
+    state: baseRecoveryState({ stream: { completed: Promise.resolve(undefined) } as any }),
+    retryCounts: baseCounts(),
+  });
+
+  const byId = Object.fromEntries(deps.toolTracker.export().map((e) => [e.callId, e]));
+  expect(byId['call-waiting']?.status).toBe('aborted');
+  expect(byId['call-ran']?.status).toBe('unknown');
+  expect(String(byId['call-ran']?.output)).toContain('Outcome unobserved');
 });
 
 it('retry_fresh uses completed outputs already present in the live ledger instead of run-state internals', () => {

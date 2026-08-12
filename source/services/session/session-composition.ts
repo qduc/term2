@@ -389,6 +389,13 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   const pendingInteraction = new PendingInteractionState();
   const toolTracker = new SessionToolTracker(conversationStore);
 
+  // Mark ledger dispatch when the run loop enters a tool body so stream recovery
+  // can distinguish never-dispatched (aborted) from unobserved outcome (unknown).
+  getMethod<[handler: ((callId: string) => void) | undefined], void>(agentClient, 'setOnToolDispatch')?.call(
+    agentClient,
+    (callId) => toolTracker.markDispatched(callId),
+  );
+
   const shellAutoApproval = new DelegatingShellAutoApprovalResolver({
     conversationStore,
     agentClient,

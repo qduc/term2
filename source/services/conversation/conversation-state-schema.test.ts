@@ -35,3 +35,61 @@ it('ImportedConversationStateSchema rejects malformed imported state before proj
 
   expect(parsed.success).toBe(false);
 });
+
+it('ImportedConversationStateSchema accepts unknown tool-execution status and dispatchedAt', () => {
+  const parsed = ImportedConversationStateSchema.parse({
+    history: [],
+    previousResponseId: null,
+    toolLedger: [
+      {
+        turnId: 'turn-1',
+        callId: 'call-1',
+        toolName: 'shell',
+        status: 'unknown',
+        startedAt: '2026-05-26T00:00:00.000Z',
+        dispatchedAt: '2026-05-26T00:00:00.500Z',
+        completedAt: '2026-05-26T00:00:01.000Z',
+        output: 'Outcome unobserved',
+      },
+    ],
+  });
+
+  expect(parsed.toolLedger?.[0]?.status).toBe('unknown');
+  expect(parsed.toolLedger?.[0]?.dispatchedAt).toBe('2026-05-26T00:00:00.500Z');
+});
+
+it('ImportedConversationStateSchema migrates unrecognized historical statuses to aborted', () => {
+  const parsed = ImportedConversationStateSchema.parse({
+    history: [],
+    previousResponseId: null,
+    toolLedger: [
+      {
+        turnId: 'turn-1',
+        callId: 'call-legacy',
+        toolName: 'shell',
+        status: 'pre-unknown-exotic-status',
+        startedAt: '2026-05-26T00:00:00.000Z',
+      },
+    ],
+  });
+
+  expect(parsed.toolLedger?.[0]?.status).toBe('aborted');
+});
+
+it('ImportedConversationStateSchema still accepts statuses written before unknown existed', () => {
+  const parsed = ImportedConversationStateSchema.parse({
+    history: [],
+    previousResponseId: null,
+    toolLedger: [
+      {
+        turnId: 'turn-1',
+        callId: 'call-old',
+        toolName: 'shell',
+        status: 'aborted',
+        startedAt: '2026-05-26T00:00:00.000Z',
+      },
+    ],
+  });
+
+  expect(parsed.toolLedger?.[0]?.status).toBe('aborted');
+});

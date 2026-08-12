@@ -1,6 +1,6 @@
 // @ts-expect-error IS_REACT_ACT_ENVIRONMENT is not in globalThis types
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-import { afterEach, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, it, expect, vi } from 'vitest';
 import os from 'node:os';
 import React from 'react';
 import { renderInAct } from '../../test-helpers/ink-testing.js';
@@ -13,6 +13,11 @@ const mockModels: ModelInfo[] = [
   { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', provider: 'openai' },
   { id: 'claude-3-opus', name: 'Claude 3 Opus', provider: 'openrouter' },
 ];
+
+beforeEach(() => {
+  vi.stubEnv('OPENAI_API_KEY', '');
+  vi.stubEnv('OPENROUTER_API_KEY', '');
+});
 
 afterEach(() => {
   vi.unstubAllEnvs();

@@ -351,9 +351,9 @@ it('run() emits tool_recovery before error when a streamed turn fails after tool
     | ToolRecoveryEvent
     | undefined;
   expect(recovery).toBeTruthy();
-  expect(recovery!.recoveredCallIds).toEqual(['call-read']);
-  expect(recovery!.droppedCallIds).toEqual(['call-write']);
-  expect(recovery!.message.includes('Recovered 1 completed')).toBe(true);
+  expect(recovery!.recoveredCallIds).toEqual(['call-read', 'call-write']);
+  expect(recovery!.droppedCallIds).toEqual([]);
+  expect(recovery!.message.includes('Recovered 2 settled')).toBe(true);
   expect(
     emitted.findIndex((event: ConversationEvent) => event.type === 'tool_recovery') <
       emitted.findIndex((event: ConversationEvent) => event.type === 'error'),

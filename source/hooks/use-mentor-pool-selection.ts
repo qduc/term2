@@ -120,6 +120,28 @@ export function resolveMentorPoolModelSelection(
   return models[selectedIndex]?.id ?? typedModel.trim();
 }
 
+/** Starting provider tab for the mentor-pool model browser. */
+export function resolveMentorPoolBrowseProvider({
+  draftProvider,
+  mentorProvider,
+  agentProvider,
+}: {
+  draftProvider?: string;
+  mentorProvider?: string;
+  agentProvider?: string;
+}): string {
+  return draftProvider || mentorProvider || agentProvider || '';
+}
+
+/** Apply a model catalog pick: pin both model id and the active provider tab. */
+export function applyMentorPoolModelPick(draft: MentorPoolDraft, model: string, provider: string): MentorPoolDraft {
+  return {
+    ...draft,
+    model,
+    ...(provider ? { provider } : {}),
+  };
+}
+
 export function formatMentorPoolEntry(entry: MentorPoolEntry): string {
   const provider = entry.provider ? ` @ ${entry.provider}` : '';
   const effort = entry.reasoningEffort && entry.reasoningEffort !== 'default' ? ` (${entry.reasoningEffort})` : '';
@@ -168,12 +190,16 @@ export function useMentorPoolSelection(
   const [modelSelectedIndex, setModelSelectedIndex] = useState(0);
   const [modelScrollOffset, setModelScrollOffset] = useState(0);
   const [modelRefreshKey, setModelRefreshKey] = useState(0);
+  /** Provider tab currently browsed in the model menu (independent of draft until pick). */
+  const [browsingProvider, setBrowsingProvider] = useState<string | null>(null);
   const settingsServiceRef = useRef(settingsService);
   settingsServiceRef.current = settingsService;
-  const modelProvider =
-    draft?.provider ??
-    settingsService.get(SETTING_KEYS.AGENT_MENTOR_PROVIDER) ??
-    settingsService.get(SETTING_KEYS.AGENT_PROVIDER);
+  const fallbackModelProvider = resolveMentorPoolBrowseProvider({
+    draftProvider: draft?.provider,
+    mentorProvider: settingsService.get(SETTING_KEYS.AGENT_MENTOR_PROVIDER),
+    agentProvider: settingsService.get(SETTING_KEYS.AGENT_PROVIDER),
+  });
+  const modelProvider = browsingProvider ?? fallbackModelProvider;
   const modelItems = useMemo(
     () =>
       mergeMentorPoolModels({
@@ -260,7 +286,7 @@ export function useMentorPoolSelection(
   }, [active]);
 
   useEffect(() => {
-    if (!active || phase !== 'edit_model') return;
+    if (!active || phase !== 'edit_model' || !modelProvider) return;
     /* eslint-disable react-hooks/set-state-in-effect */
     const credentials = resolveProviderCredentials(settingsService, modelProvider);
     const cachedModels = catalogSession.getCached(modelProvider);
@@ -320,6 +346,16 @@ export function useMentorPoolSelection(
     selection.setSelectedIndex(0);
   }, [phase, selection.setSelectedIndex]);
 
+  const resolveBrowseProvider = useCallback(
+    (draftProvider?: string) =>
+      resolveMentorPoolBrowseProvider({
+        draftProvider,
+        mentorProvider: settingsService.get(SETTING_KEYS.AGENT_MENTOR_PROVIDER),
+        agentProvider: settingsService.get(SETTING_KEYS.AGENT_PROVIDER),
+      }),
+    [settingsService],
+  );
+
   const openDraft = useCallback(
     (entry: MentorPoolEntry | null, index: number | null) => {
       setDraft(entry ? { ...entry, _isNew: false } : { model: '', _isNew: true });
@@ -327,10 +363,20 @@ export function useMentorPoolSelection(
       setDraftModified(false);
       setErrorMessage(null);
       setFieldErrors({});
-      setPhase('edit_fields');
-      setInput('');
+      // New entries jump straight into the model menu (with provider tabs) so
+      // the user picks model + provider in one step instead of a separate
+      // provider field first.
+      if (entry === null) {
+        setBrowsingProvider(resolveBrowseProvider(undefined));
+        setPhase('edit_model');
+        replaceInput('');
+      } else {
+        setBrowsingProvider(null);
+        setPhase('edit_fields');
+        setInput('');
+      }
     },
-    [setInput],
+    [replaceInput, resolveBrowseProvider, setInput],
   );
 
   const saveDraft = useCallback(() => {
@@ -380,6 +426,7 @@ export function useMentorPoolSelection(
         setErrorMessage(null);
         setFieldErrors({});
         if (item.field === 'model') {
+          setBrowsingProvider(resolveBrowseProvider(draft.provider));
           setPhase('edit_model');
           replaceInput(draft.model);
         } else if (item.field === 'provider') {
@@ -458,6 +505,7 @@ export function useMentorPoolSelection(
     phase,
     providerItems,
     replaceInput,
+    resolveBrowseProvider,
     saveDraft,
     selection.selectedIndex,
     setInput,
@@ -482,16 +530,19 @@ export function useMentorPoolSelection(
         setErrorMessage('Fix the highlighted fields before saving.');
         return false;
       }
-      setDraft({ ...draft, model });
+      // Pin the active provider tab with the model so the separate "Select
+      // Provider" step is optional (only needed for Inherit).
+      setDraft(applyMentorPoolModelPick(draft, model, modelProvider));
       setDraftModified(true);
       setFieldErrors({});
       setErrorMessage(null);
+      setBrowsingProvider(null);
       setPhase('edit_fields');
       selection.setSelectedIndex(0);
       setInput('');
       return true;
     },
-    [draft, phase, setInput, selection.setSelectedIndex],
+    [draft, modelProvider, phase, setInput, selection.setSelectedIndex],
   );
 
   const selectModel = useCallback(
@@ -522,9 +573,26 @@ export function useMentorPoolSelection(
     [filteredModels.length],
   );
   const refreshModels = useCallback(() => {
+    if (!modelProvider) return;
     catalogSession.refresh(modelProvider);
     setModelRefreshKey((key) => key + 1);
   }, [catalogSession, modelProvider]);
+
+  const toggleModelProvider = useCallback(
+    (direction: 'next' | 'prev' = 'next') => {
+      if (phase !== 'edit_model') return;
+      const next = catalogSession.nextProvider(modelProvider || null, direction);
+      if (!next || next === modelProvider) return;
+      const cachedModels = catalogSession.getCached(next);
+      setCatalogModels(cachedModels ?? []);
+      setModelSelectedIndex(0);
+      setModelScrollOffset(0);
+      setModelLoading(!cachedModels);
+      setModelError(null);
+      setBrowsingProvider(next);
+    },
+    [catalogSession, modelProvider, phase],
+  );
 
   const movePoolUp = useCallback(() => {
     if (phase !== 'reorder' || selection.selectedIndex <= 0) return;
@@ -562,6 +630,17 @@ export function useMentorPoolSelection(
     setInput('');
     if (phase === 'list') return;
     if (phase === 'edit_model' || phase === 'edit_provider' || phase === 'edit_reasoning') {
+      // Esc from the initial "add entry → model menu" step cancels the add
+      // when nothing has been chosen yet.
+      if (phase === 'edit_model' && draft?._isNew && !draft.model && !draftModified) {
+        setDraft(null);
+        setEditingIndex(null);
+        setBrowsingProvider(null);
+        setPhase('list');
+        selection.setSelectedIndex(0);
+        return;
+      }
+      setBrowsingProvider(null);
       setPhase('edit_fields');
       selection.setSelectedIndex(phase === 'edit_model' ? 0 : phase === 'edit_provider' ? 1 : 2);
     } else if (phase === 'edit_fields') {
@@ -588,7 +667,7 @@ export function useMentorPoolSelection(
       setDiscardFromPhase(null);
       selection.setSelectedIndex(0);
     }
-  }, [discardFromPhase, draftModified, phase, setInput, selection.setSelectedIndex]);
+  }, [discardFromPhase, draft, draftModified, phase, setInput, selection.setSelectedIndex]);
 
   const saveIntent = useCallback(
     (frameId: string): MenuEffect | null => {
@@ -640,6 +719,7 @@ export function useMentorPoolSelection(
     pageModelUp,
     pageModelDown,
     refreshModels,
+    toggleModelProvider,
     moveUp: selection.moveUp,
     moveDown: selection.moveDown,
     moveHome: selection.moveHome,

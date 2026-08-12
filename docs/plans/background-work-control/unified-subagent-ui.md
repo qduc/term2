@@ -1,6 +1,6 @@
 # Unified subagent live UI
 
-Status: implemented in `.worktrees/unified-subagent-ui`. Awaiting merge.
+Status: implemented and merged.
 
 Sibling of [liveness-ui.md](liveness-ui.md), not a replacement.
 

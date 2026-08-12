@@ -149,11 +149,11 @@ export const AgentSettingsSchema = z.object({
   contextCompaction: z
     .object({
       enabled: z.boolean().default(false),
-      mode: z.enum(['native', 'auto', 'local']).default('native'),
+      mode: z.enum(['native', 'auto', 'local']).default('auto'),
       compactThreshold: z.number().finite().min(0).max(1).default(0.8),
       compactThresholdTokens: z.number().int().finite().min(1_000).nullable().default(null),
     })
-    .default({ enabled: false, mode: 'native', compactThreshold: 0.8, compactThresholdTokens: null })
+    .default({ enabled: false, mode: 'auto', compactThreshold: 0.8, compactThresholdTokens: null })
     .describe('Native and application-owned context compaction settings'),
   autoApproveModel: z
     .string()
@@ -974,7 +974,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     useFlexServiceTier: false,
     contextCompaction: {
       enabled: false,
-      mode: 'native',
+      mode: 'auto',
       compactThreshold: 0.8,
       compactThresholdTokens: null,
     },

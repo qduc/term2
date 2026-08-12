@@ -41,7 +41,8 @@ export const SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.AGENT_TEMPERATURE]: 'Model temperature (0-2, controls randomness)',
   [SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER]: 'Use OpenAI Flex Service Tier to reduce costs (true|false, OpenAI only)',
   [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_ENABLED]: 'Enable context compaction (true|false)',
-  [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_MODE]: 'Context compaction strategy (native|auto|local; default native)',
+  [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_MODE]:
+    'Context compaction strategy: native uses provider support only; auto prefers native then falls back to local; local always uses the application summarizer (native|auto|local; default auto)',
   [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD]:
     'Context-window ratio for automatic context compaction (0-1, 0%-100%)',
   [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD_TOKENS]:

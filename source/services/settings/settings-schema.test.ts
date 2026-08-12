@@ -40,13 +40,13 @@ it('Codex websocket receive timeouts default to transport-safe values and reject
 it('context compaction defaults to disabled with a conservative ratio and rejects invalid ratios', () => {
   expect(AgentSettingsSchema.parse({}).contextCompaction).toEqual({
     enabled: false,
-    mode: 'native',
+    mode: 'auto',
     compactThreshold: 0.8,
     compactThresholdTokens: null,
   });
   expect(DEFAULT_SETTINGS.agent.contextCompaction).toEqual({
     enabled: false,
-    mode: 'native',
+    mode: 'auto',
     compactThreshold: 0.8,
     compactThresholdTokens: null,
   });

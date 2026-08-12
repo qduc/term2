@@ -25,6 +25,7 @@ Everything else is discoverable by reading the tree. Skills carry the depth:
 - **Provider changes run the black-box suite.** Provider, bridge, run-loop, registry, and non-interactive changes must run `pnpm test:provider-black-box` as part of development, not just at the end. See the `provider-testing` skill.
 - **A regression test is the floor, not the finish line.** After any non-trivial bug fix, ask what allowed the defect class and why nothing caught it earlier. See `## After a bug fix` in the `testing` skill.
 - **Never claim a test, build, or check passed unless you ran it and it succeeded.**
+- **Run tests with `NODE_ENV=test`.** If the shell exports `NODE_ENV=production`, vitest loads React's production build, whose `react` entry does not export `act`; `renderInAct` then fails ~26 tests in `MessageList.test.tsx` with `TypeError: act is not a function`. Prepend `NODE_ENV=test` explicitly (e.g. `NODE_ENV=test pnpm test`) instead of relying on the ambient value.
 
 # Work In Progress
 

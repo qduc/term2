@@ -12,6 +12,7 @@ import { isMissingChainedToolOutputError, isOrphanedChainedToolOutputError } fro
 
 const TRANSIENT_BASE_DELAY_MS = 500;
 const TRANSIENT_MAX_DELAY_MS = 30_000;
+const MAX_TRANSPORT_DOWNGRADES = 1;
 
 const computeTransientDelayMs = (attempt: number, random: () => number): number => {
   const baseDelay = Math.min(TRANSIENT_BASE_DELAY_MS * 2 ** Math.max(0, attempt - 1), TRANSIENT_MAX_DELAY_MS);
@@ -47,12 +48,24 @@ export class DefaultRetryClassifier {
     if (
       isPreviousResponseNotFoundError(error) ||
       isMissingServerToolOutputError(error) ||
-      isWebSocketConnectionLimitReachedError(error) ||
       isMissingChainedToolOutputError(error) ||
       isOrphanedChainedToolOutputError(error)
     ) {
       const nextAttempt = retryCounts.transientRetryCount + 1;
       if (nextAttempt > maxTransientRetries) {
+        return { kind: 'unrecoverable' };
+      }
+      return {
+        kind: 'chain_recovery',
+        attempt: nextAttempt,
+        delayMs: computeTransientDelayMs(nextAttempt, this.random),
+      };
+    }
+
+    if (isWebSocketConnectionLimitReachedError(error)) {
+      // A new connection can repair the provider's hard WebSocket lifetime
+      // limit once. Repeating the same fallback cannot make progress.
+      if (retryCounts.transportDowngradeCount >= MAX_TRANSPORT_DOWNGRADES) {
         return { kind: 'unrecoverable' };
       }
       return { kind: 'transport_downgrade' };

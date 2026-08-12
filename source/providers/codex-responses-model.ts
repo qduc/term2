@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { ResponsesWS } from 'openai/resources/responses/ws';
-import OpenAI from 'openai';
+import OpenAI, { InternalServerError } from 'openai';
 import type {
   ContextCompactionSessionState,
   StreamedModelTurn,
@@ -128,8 +128,9 @@ export class CodexResponsesTransport {
                 throw new Error('Codex WebSocket connection closed before a terminal response event.');
             }
           } catch (error) {
-            markContextCompactionFailure(error, request, sessionState);
-            throw error;
+            const normalizedError = normalizeExplicitCodexServerError(error);
+            markContextCompactionFailure(normalizedError, request, sessionState);
+            throw normalizedError;
           } finally {
             try {
               socket.close();
@@ -393,6 +394,24 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 
 const stringValue = (value: unknown): string | undefined => (typeof value === 'string' && value ? value : undefined);
+
+/**
+ * A Codex WebSocket `error` frame is an explicit provider rejection, unlike a
+ * socket close after sending a request. Normalize only its documented
+ * `server_error` shape to the SDK's 5xx error so the pre-event retry wrapper
+ * can retry it without treating an ambiguous outcome as safe to replay.
+ */
+function normalizeExplicitCodexServerError(error: unknown): unknown {
+  const outer = asRecord(asRecord(error)?.error) ?? asRecord(error);
+  const details = asRecord(outer?.error) ?? outer;
+  if (!details || (details.type !== 'server_error' && details.code !== 'server_error')) {
+    return error;
+  }
+
+  const normalized = new InternalServerError(500, details, stringValue(details.message), new Headers());
+  Object.defineProperty(normalized, 'cause', { value: error, configurable: true });
+  return normalized;
+}
 
 const CODEX_REPLAY_ITEM_TYPES_WITHOUT_IDS = new Set([
   'message',

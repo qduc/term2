@@ -140,6 +140,29 @@ it('RetryEventPresenter handles transport downgrade', () => {
   });
 });
 
+it('RetryEventPresenter identifies bounded conversation-state recovery separately from upstream failure', () => {
+  const presenter = new RetryEventPresenter();
+  const presentation = presenter.present({
+    failure: { kind: 'chain_recovery', attempt: 2, delayMs: 1000 },
+    maxTransientRetries: 3,
+    source: 'initial',
+    error: new Error('No tool output found for function call call-1.'),
+  });
+
+  expect(presentation.event).toMatchObject({
+    type: 'retry',
+    toolName: 'conversation',
+    attempt: 2,
+    maxRetries: 3,
+    retryType: 'conversation_state',
+  });
+  expect(presentation.logFields).toMatchObject({
+    eventType: 'retry.conversation_state',
+    retryAttempt: 2,
+    maxRetries: 3,
+  });
+});
+
 it('RetryEventPresenter handles model retry', () => {
   const presenter = new RetryEventPresenter();
   const failure: ClassifiedFailure = {

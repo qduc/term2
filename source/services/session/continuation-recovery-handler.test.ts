@@ -80,13 +80,13 @@ it('returns stale when generation guard is not current after presentation', asyn
   expect((next.value as any).kind).toBe('stale');
 });
 
-it('returns fresh_start when recovery executor signals fresh start', async () => {
+it('returns the scheduled delay for bounded conversation-state fresh recovery', async () => {
   const handler = new ContinuationRecoveryHandler({
     logger: { warn: () => {}, getCorrelationId: () => undefined, error: () => {}, debug: () => {} } as any,
     sessionId: 'test',
     generationGuard: { isCurrent: () => true } as any,
     retryClassifier: {
-      classify: () => ({ kind: 'transient', delayMs: 500 }),
+      classify: () => ({ kind: 'chain_recovery', attempt: 1, delayMs: 500 }),
     } as any,
     recoveryPolicy: {
       nextRetryCounts: (counts: any) => ({ ...counts, transientRetryCount: counts.transientRetryCount + 1 }),

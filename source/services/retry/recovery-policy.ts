@@ -19,6 +19,9 @@ export class DefaultConversationRecoveryPolicy {
         return { kind: 'retry_fresh', inputMode: 'full_history' };
       }
 
+      case 'chain_recovery':
+        return { kind: 'retry_fresh', inputMode: 'full_history' };
+
       case 'transport_downgrade':
         return { kind: 'retry_fresh', inputMode: 'full_history' };
 
@@ -49,6 +52,8 @@ export class DefaultConversationRecoveryPolicy {
   nextRetryCounts(current: RetryCounts, failure: ClassifiedFailure): RetryCounts {
     switch (failure.kind) {
       case 'transient':
+        return { ...current, transientRetryCount: failure.attempt };
+      case 'chain_recovery':
         return { ...current, transientRetryCount: failure.attempt };
       case 'service_tier_fallback':
         return { ...current, serviceTierFallbackCount: current.serviceTierFallbackCount + 1 };

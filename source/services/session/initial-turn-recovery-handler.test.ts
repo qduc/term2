@@ -17,7 +17,7 @@ function createAttempt() {
   });
 }
 
-it('presents and applies a recoverable retry decision', async () => {
+it('returns the scheduled delay for bounded conversation-state recovery', async () => {
   const nextCounts = {
     transientRetryCount: 1,
     serviceTierFallbackCount: 0,
@@ -46,7 +46,7 @@ it('presents and applies a recoverable retry decision', async () => {
       plan: () => ({ kind: 'retry_fresh', inputMode: 'full_history' }),
     } as any,
     retryClassifier: {
-      classify: () => ({ kind: 'transient', attempt: 1, delayMs: 25 }),
+      classify: () => ({ kind: 'chain_recovery', attempt: 1, delayMs: 25 }),
     } as any,
     retryEventPresenter: {
       present: () => ({

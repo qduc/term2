@@ -580,6 +580,8 @@ export function createConversationEventHandler(
         let text: string;
         if (event.retryType === 'flex_service_tier') {
           text = 'Flex service tier timed out. Falling back to standard service tier and retrying...';
+        } else if (event.retryType === 'conversation_state') {
+          text = `Conversation state was rejected by the provider. Rebuilding context and retrying... (Attempt ${event.attempt}/${event.maxRetries})`;
         } else if (event.retryType === 'upstream') {
           text = `Upstream error or rate limit encountered. Retrying... (Attempt ${event.attempt}/${event.maxRetries})`;
         } else if (event.retryType === 'parsing_error') {

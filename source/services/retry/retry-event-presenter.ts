@@ -69,6 +69,27 @@ export class RetryEventPresenter {
         return { event, logMessage, logFields };
       }
 
+      case 'chain_recovery': {
+        const event: ConversationEvent = {
+          type: 'retry',
+          toolName: 'conversation',
+          attempt: failure.attempt,
+          maxRetries: maxTransientRetries,
+          errorMessage,
+          retryType: 'conversation_state',
+        };
+        const logMessage = 'Provider rejected conversation continuity, rebuilding full history';
+        const logFields = {
+          eventType: 'retry.conversation_state',
+          retryType: 'conversation_state',
+          retryAttempt: failure.attempt,
+          maxRetries: maxTransientRetries,
+          errorMessage,
+          delayMs: failure.delayMs,
+        };
+        return { event, logMessage, logFields };
+      }
+
       case 'transport_downgrade': {
         const event: ConversationEvent = {
           type: 'retry',

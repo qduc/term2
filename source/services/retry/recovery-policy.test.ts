@@ -47,6 +47,14 @@ it('transient failure without stream produces retry_fresh with full_history', ()
   expect(result).toEqual({ kind: 'retry_fresh', inputMode: 'full_history' });
 });
 
+it('chain recovery rebuilds from full history and consumes the transient retry budget', () => {
+  const result = policy.plan(baseRecoveryContext({ failure: { kind: 'chain_recovery', attempt: 2, delayMs: 1000 } }));
+  expect(result).toEqual({ kind: 'retry_fresh', inputMode: 'full_history' });
+  expect(policy.nextRetryCounts(baseCounts(), { kind: 'chain_recovery', attempt: 2, delayMs: 1000 })).toMatchObject({
+    transientRetryCount: 2,
+  });
+});
+
 it('transport_downgrade produces retry_fresh with full_history', () => {
   const result = policy.plan(baseRecoveryContext({ failure: { kind: 'transport_downgrade' } }));
   expect(result).toEqual({ kind: 'retry_fresh', inputMode: 'full_history' });

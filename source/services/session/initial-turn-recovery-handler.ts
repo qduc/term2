@@ -162,7 +162,7 @@ export class InitialTurnRecoveryHandler {
     return {
       kind: 'run',
       instruction: result.instruction,
-      delayMs: classified.kind === 'transient' ? classified.delayMs : undefined,
+      delayMs: classified.kind === 'transient' || classified.kind === 'chain_recovery' ? classified.delayMs : undefined,
       useStandardServiceTier: result.useStandardServiceTier,
     };
   }

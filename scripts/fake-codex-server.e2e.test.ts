@@ -296,6 +296,25 @@ it('surfaces a provider error frame', async () => {
   expect(server.receivedRequests).toHaveLength(1);
 });
 
+it('retries an explicit Codex server-error frame before any model event', async () => {
+  server = await startFakeCodexServer({ scenario: 'provider-error' });
+  globalThis.WebSocket = NodeWebSocket as unknown as typeof WebSocket;
+  const model = new RetryingModel(createModel(server.baseUrl), {
+    retryAttempts: 2,
+    sleep: async () => {},
+    random: () => 0.5,
+  });
+
+  const consume = async () => {
+    for await (const _event of model.stream(request())) {
+      // An explicit error frame arrives before the provider emits any model event.
+    }
+  };
+
+  await expect(consume()).rejects.toThrow('Injected Codex server failure');
+  expect(server.receivedRequests).toHaveLength(3);
+});
+
 it('retries when the websocket connection fails before the turn can be sent', async () => {
   server = await startFakeCodexServer({ scenario: 'success' });
   const baseUrl = server.baseUrl;

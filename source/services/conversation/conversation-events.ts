@@ -44,7 +44,7 @@ export interface RetryEvent {
   attempt: number;
   maxRetries: number;
   errorMessage: string;
-  retryType?: 'hallucination' | 'parsing_error' | 'behavior' | 'flex_service_tier' | 'upstream';
+  retryType?: 'hallucination' | 'parsing_error' | 'behavior' | 'flex_service_tier' | 'upstream' | 'conversation_state';
 }
 
 export interface ToolRecoveryEvent {

@@ -1,6 +1,7 @@
 import { it, expect } from 'vitest';
 import { TurnCoordinator } from './turn-coordinator.js';
 import { TurnStatusMachine } from './turn-status-machine.js';
+import type { ConversationEvent } from '../conversation/conversation-events.js';
 
 const makeHarness = () => {
   const statusMachine = new TurnStatusMachine();
@@ -181,7 +182,7 @@ it('streaming -> awaiting_approval', async () => {
   });
 
   expect(statusMachine.current).toBe('idle');
-  const events: any[] = [];
+  const events: ConversationEvent[] = [];
   for await (const ev of coordinator.start('run command')) {
     events.push(ev);
   }
@@ -244,7 +245,7 @@ it('awaiting_approval -> continuing -> awaiting_approval', async () => {
   });
 
   expect(statusMachine.current).toBe('awaiting_approval');
-  const events: any[] = [];
+  const events: ConversationEvent[] = [];
   for await (const ev of coordinator.continueAfterApproval({ answer: 'y' })) {
     events.push(ev);
   }
@@ -305,16 +306,33 @@ it('Terminal completion to idle', async () => {
   expect(statusMachine.current).toBe('idle');
 });
 
-it('failed completes the status because the runner already emitted terminal events', async () => {
+it('failed completes the status and emits an authoritative error instead of ending silently', async () => {
   const { coordinator, statusMachine, turnWorkflow } = makeHarness();
   turnWorkflow.setNextInitialResult({
     kind: 'failed',
   });
 
   expect(statusMachine.current).toBe('idle');
-  for await (const _ of coordinator.start('run command')) {
+  const events: ConversationEvent[] = [];
+  for await (const event of coordinator.start('run command')) {
+    events.push(event);
   }
   expect(statusMachine.current).toBe('idle');
+  expect(events).toEqual([
+    { type: 'error', message: 'Conversation turn failed before producing an authoritative terminal event.' },
+  ]);
+});
+
+it('does not duplicate an authoritative error emitted before a failed outcome', async () => {
+  const { coordinator, turnWorkflow } = makeHarness();
+  turnWorkflow.setNextInitialResult({ kind: 'failed' }, [{ type: 'error', message: 'The input was rejected.' }]);
+
+  const events: ConversationEvent[] = [];
+  for await (const event of coordinator.start('run command')) {
+    events.push(event);
+  }
+
+  expect(events).toEqual([{ type: 'error', message: 'The input was rejected.' }]);
 });
 
 it('stale leaves status untouched because lifecycle operation resolved it', async () => {

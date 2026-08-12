@@ -7,6 +7,12 @@ import type { AssistantJournalItemLogEvent } from '../logging/conversation-log-e
 
 export type ClassifiedFailure =
   | { kind: 'transient'; attempt: number; delayMs: number }
+  /**
+   * The provider rejected conversation continuity (for example, because a
+   * chained tool result is missing). Rebuild from full history, but charge it
+   * against the normal bounded transient-retry budget.
+   */
+  | { kind: 'chain_recovery'; attempt: number; delayMs: number }
   | { kind: 'service_tier_fallback' }
   | { kind: 'transport_downgrade' }
   | {

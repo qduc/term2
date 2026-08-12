@@ -37,6 +37,11 @@ export interface TurnCoordinatorDeps {
   hookEvents?: HookEventFactory;
 }
 
+type ForwardedTurnOutcome = {
+  outcome: TurnOutcome;
+  sawAuthoritativeTerminal: boolean;
+};
+
 export class TurnCoordinator {
   #activeTurnId: string | undefined;
   #activeTurnStartedAt = 0;
@@ -64,10 +69,14 @@ export class TurnCoordinator {
     if (turnId) await this.#emitTurnStart(input, options.origin ?? 'user', turnId);
     let processed = false;
     try {
-      const turnOutcome = yield* this.#forwardOwned(this.deps.turnWorkflow.executeInitial(input, options), lease);
+      const forwarded = yield* this.#forwardOwned(this.deps.turnWorkflow.executeInitial(input, options), lease);
+      const turnOutcome = forwarded.outcome;
       processed = true;
 
       await this.#emitTurnEnd(turnOutcome);
+
+      const failureEvent = this.#authoritativeFailureEvent(forwarded);
+      if (failureEvent) yield failureEvent;
 
       yield* this.#executeTerminalCommand(this.deps.statusMachine.completeOutcome(turnOutcome, lease));
     } catch (error) {
@@ -102,14 +111,17 @@ export class TurnCoordinator {
     this.deps.turnWorkflow.setHookTurnId?.(this.#activeTurnId);
     let processed = false;
     try {
-      const turnOutcome = yield* this.#forwardOwned(
+      const forwarded = yield* this.#forwardOwned(
         this.deps.turnWorkflow.executeContinuation(
           this.deps.approvalFlow.buildApprovalDecision(answer, rejectionReason, stopAfterApprovalResolution),
         ),
         lease,
       );
+      const turnOutcome = forwarded.outcome;
       processed = true;
       await this.#emitTurnEnd(turnOutcome);
+      const failureEvent = this.#authoritativeFailureEvent(forwarded);
+      if (failureEvent) yield failureEvent;
       yield* this.#executeTerminalCommand(this.deps.statusMachine.completeContinuationOutcome(turnOutcome, lease));
     } catch (error) {
       if (!processed) {
@@ -134,9 +146,12 @@ export class TurnCoordinator {
     this.deps.turnWorkflow.setHookTurnId?.(this.#activeTurnId);
     let processed = false;
     try {
-      const turnOutcome = yield* this.#forwardOwned(this.deps.turnWorkflow.continuePostExecute(), lease);
+      const forwarded = yield* this.#forwardOwned(this.deps.turnWorkflow.continuePostExecute(), lease);
+      const turnOutcome = forwarded.outcome;
       processed = true;
       await this.#emitTurnEnd(turnOutcome);
+      const failureEvent = this.#authoritativeFailureEvent(forwarded);
+      if (failureEvent) yield failureEvent;
       yield* this.#executeTerminalCommand(this.deps.statusMachine.completeContinuationOutcome(turnOutcome, lease));
     } catch (error) {
       if (!processed) {
@@ -209,17 +224,29 @@ export class TurnCoordinator {
     this.deps.shellAutoApproval.recordManualDecision(argumentsText, answer === 'n' ? 'rejected' : 'approved');
   }
 
+  #authoritativeFailureEvent(forwarded: ForwardedTurnOutcome): ConversationEvent | undefined {
+    if (forwarded.outcome.kind !== 'failed' || forwarded.sawAuthoritativeTerminal) return undefined;
+    return {
+      type: 'error',
+      message: 'Conversation turn failed before producing an authoritative terminal event.',
+    };
+  }
+
   async *#forwardOwned(
     events: AsyncGenerator<ConversationEvent, TurnOutcome, void>,
     lease: TurnLease,
-  ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
+  ): AsyncGenerator<ConversationEvent, ForwardedTurnOutcome, void> {
+    let sawAuthoritativeTerminal = false;
     while (true) {
       const next = await events.next();
       if (!this.deps.statusMachine.owns(lease)) {
         await events.return({ kind: 'stale' });
-        return { kind: 'stale' };
+        return { outcome: { kind: 'stale' }, sawAuthoritativeTerminal };
       }
-      if (next.done) return next.value;
+      if (next.done) return { outcome: next.value, sawAuthoritativeTerminal };
+      if (next.value.type === 'final' || next.value.type === 'approval_required' || next.value.type === 'error') {
+        sawAuthoritativeTerminal = true;
+      }
       yield next.value;
     }
   }

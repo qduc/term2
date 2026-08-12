@@ -84,7 +84,8 @@ export class ContinuationRecoveryHandler {
       addedUserMessage: false,
       stream: retryStream,
     };
-    const transientDelayMs = classified.kind === 'transient' ? classified.delayMs : undefined;
+    const transientDelayMs =
+      classified.kind === 'transient' || classified.kind === 'chain_recovery' ? classified.delayMs : undefined;
 
     const recoveryResult = this.deps.recoveryExecutor.apply({
       plan,

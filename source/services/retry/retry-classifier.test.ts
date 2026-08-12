@@ -130,7 +130,7 @@ it('classify returns unrecoverable for 400 status error', () => {
   expect(result).toEqual({ kind: 'unrecoverable' });
 });
 
-it('classify returns transport_downgrade for previous_response_not_found websocket 400 payload', () => {
+it('classify returns bounded chain recovery for previous_response_not_found websocket 400 payload', () => {
   const classifier = makeClassifier();
   const error = Object.assign(
     new Error(
@@ -139,7 +139,7 @@ it('classify returns transport_downgrade for previous_response_not_found websock
     { status: 400 },
   );
 
-  expect(classifier.classify(baseContext({ error })).kind).toBe('transport_downgrade');
+  expect(classifier.classify(baseContext({ error }))).toMatchObject({ kind: 'chain_recovery', attempt: 1 });
 });
 
 it('classify returns transport_downgrade when the Responses websocket reaches its connection lifetime', () => {
@@ -154,21 +154,21 @@ it('classify returns transport_downgrade when the Responses websocket reaches it
   expect(classifier.classify(baseContext({ error })).kind).toBe('transport_downgrade');
 });
 
-it('classify returns transport_downgrade when a chained continuation is missing required tool output', () => {
+it('classify returns bounded chain recovery when a chained continuation is missing required tool output', () => {
   const classifier = makeClassifier();
   const error = new MissingChainedToolOutputError(['call-required']);
 
-  expect(classifier.classify(baseContext({ error })).kind).toBe('transport_downgrade');
+  expect(classifier.classify(baseContext({ error }))).toMatchObject({ kind: 'chain_recovery', attempt: 1 });
 });
 
-it('classify returns transport_downgrade when a chained continuation has an orphaned tool output', () => {
+it('classify returns bounded chain recovery when a chained continuation has an orphaned tool output', () => {
   const classifier = makeClassifier();
   const error = new OrphanedChainedToolOutputError(['call-orphaned']);
 
-  expect(classifier.classify(baseContext({ error })).kind).toBe('transport_downgrade');
+  expect(classifier.classify(baseContext({ error }))).toMatchObject({ kind: 'chain_recovery', attempt: 1 });
 });
 
-it('classify returns transport_downgrade for server missing tool output 400', () => {
+it('classify returns bounded chain recovery for server missing tool output 400', () => {
   const classifier = makeClassifier();
   const error = Object.assign(
     new Error(
@@ -177,7 +177,28 @@ it('classify returns transport_downgrade for server missing tool output 400', ()
     { status: 400 },
   );
 
-  expect(classifier.classify(baseContext({ error })).kind).toBe('transport_downgrade');
+  expect(classifier.classify(baseContext({ error }))).toMatchObject({ kind: 'chain_recovery', attempt: 1 });
+});
+
+it('classify stops chain recovery after the transient retry budget is exhausted', () => {
+  const classifier = makeClassifier();
+  const error = new MissingChainedToolOutputError(['call-required']);
+
+  expect(
+    classifier.classify(
+      baseContext({ error, maxTransientRetries: 1, retryCounts: { ...baseCounts(), transientRetryCount: 1 } }),
+    ),
+  ).toEqual({ kind: 'unrecoverable' });
+});
+
+it('classify permits a WebSocket connection-lifetime fallback only once', () => {
+  const classifier = makeClassifier();
+  const error = new Error('websocket_connection_limit_reached');
+
+  expect(classifier.classify(baseContext({ error }))).toEqual({ kind: 'transport_downgrade' });
+  expect(
+    classifier.classify(baseContext({ error, retryCounts: { ...baseCounts(), transportDowngradeCount: 1 } })),
+  ).toEqual({ kind: 'unrecoverable' });
 });
 
 it('classify returns transient for Codex WebSocket closed before terminal response', () => {

@@ -92,3 +92,30 @@ it('fails before generation for an uncatalogued model without a raw threshold', 
   ).rejects.toThrow('compactThresholdTokens');
   expect(generate).not.toHaveBeenCalled();
 });
+
+it('fails closed instead of exposing provider-opaque history to the summarizer', async () => {
+  const generate = vi.fn();
+  const history = [
+    ...turns(2),
+    {
+      type: 'compaction',
+      encrypted_content: 'secret-ciphertext',
+      providerOpaque: { provider: 'openai' },
+    },
+    ...turns(3),
+  ];
+  await expect(
+    new LocalContextCompactor({ generate }).compactAtBoundary({
+      history,
+      provider: 'openai',
+      model: 'gpt-5',
+      sourceRevision: 1,
+      contextWindow: 100_000,
+      maxOutputTokens: 1_000,
+      compactThreshold: 0.8,
+      compactThresholdTokens: null,
+      manual: true,
+    }),
+  ).rejects.toThrow('provider-opaque');
+  expect(generate).not.toHaveBeenCalled();
+});

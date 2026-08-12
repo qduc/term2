@@ -101,6 +101,9 @@ export class LocalContextCompactor {
   }
 
   async compactAtBoundary(input: LocalCompactionInput): Promise<LocalCompactionOutcome> {
+    if (input.history.some((item) => item.providerOpaque !== undefined)) {
+      throw new Error('Local compaction cannot summarize indispensable provider-opaque history');
+    }
     const threshold = resolveCompactionThreshold({
       contextWindow: input.contextWindow,
       compactThreshold: input.compactThreshold,

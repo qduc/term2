@@ -505,6 +505,7 @@ const App: FC<AppProps> = ({
     rewindToTarget: (item) => rewindToTarget(item.targetId, item.uiIndex),
     restoreTurnToInput,
     retryLastToolOutput,
+    compactContext: () => conversationService.compactContext(),
     onRewind: redrawMessageList,
     openRewindMenu,
     openProvidersMenu: () => {

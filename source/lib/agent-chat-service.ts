@@ -121,6 +121,7 @@ export class AgentChatService {
       provider?: string;
       reasoningEffort?: ReasoningEffortSetting | null;
       instructions?: string;
+      maxTokens?: number;
     } = {},
   ): Promise<string> {
     const { agentConfig, settings, logger } = this.#deps;
@@ -156,6 +157,7 @@ export class AgentChatService {
       if (options.model || options.reasoningEffort || options.instructions || options.provider) {
         const modelSettings: any = {
           retry: { maxRetries: settings.get('agent.retryAttempts') ?? 2 },
+          ...(options.maxTokens !== undefined ? { maxTokens: options.maxTokens } : {}),
         };
 
         let effectiveEffort = tempEffort;

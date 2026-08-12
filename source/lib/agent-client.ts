@@ -755,6 +755,7 @@ export class AgentClient {
       provider?: string;
       reasoningEffort?: ReasoningEffortSetting | null;
       instructions?: string;
+      maxTokens?: number;
     } = {},
   ): Promise<string> {
     return this.#chatService.chat(message, options);

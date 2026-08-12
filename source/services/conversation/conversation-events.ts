@@ -282,6 +282,7 @@ export interface ContextCompactionStartedEvent {
   provider: string;
   sessionId: string;
   inputTokensBefore?: number;
+  strategy?: 'native' | 'local';
 }
 
 export interface ContextCompactionCompletedEvent {
@@ -291,6 +292,7 @@ export interface ContextCompactionCompletedEvent {
   inputTokensBefore?: number;
   inputTokensAfter?: number;
   durationMs: number;
+  strategy?: 'native' | 'local';
 }
 
 export interface ContextCompactionFailedEvent {
@@ -299,4 +301,5 @@ export interface ContextCompactionFailedEvent {
   sessionId: string;
   errorCategory: 'request' | 'validation' | 'persistence';
   durationMs: number;
+  strategy?: 'native' | 'local';
 }

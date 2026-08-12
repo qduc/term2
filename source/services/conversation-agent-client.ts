@@ -36,6 +36,7 @@ export type AgentClientChatOptions = {
   provider?: string;
   reasoningEffort?: ReasoningEffortSetting | null;
   instructions?: string;
+  maxTokens?: number;
 };
 
 export type AgentClientChatJsonOptions = AgentClientChatOptions & {

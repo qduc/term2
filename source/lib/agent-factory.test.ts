@@ -548,7 +548,24 @@ it.sequential('buildAgent passes enabled context compaction to the OpenAI adapte
   });
 });
 
-it.sequential('buildAgent keeps context compaction out of non-OpenAI provider options', () => {
+it.sequential('buildAgent passes enabled context compaction to the Codex adapter', () => {
+  const { deps } = createDeps({
+    providerId: 'codex',
+    settingsValues: {
+      'agent.contextCompaction.enabled': true,
+      'agent.contextCompaction.compactThreshold': 0.5,
+    },
+  });
+
+  const result = buildAgent({ model: 'gpt-5.3-codex-spark' }, deps);
+
+  expect(result.agent.modelSettings?.providerData?.contextCompaction).toEqual({
+    enabled: true,
+    threshold: 0.5,
+  });
+});
+
+it.sequential('buildAgent keeps context compaction out of providers without the capability', () => {
   const { deps } = createDeps({
     providerId: 'openrouter',
     settingsValues: {

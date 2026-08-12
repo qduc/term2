@@ -1,6 +1,6 @@
-import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
+import type { ContextCompactionSessionState, StreamedModelTurn } from '../contracts/streamed-model-turn.js';
 import OpenAI from 'openai';
-import { CodexResponsesModel, CodexResponsesWSModel } from './codex-responses-model.js';
+import { CodexResponsesModel, CodexResponsesTransport, CodexResponsesWSModel } from './codex-responses-model.js';
 import { RetryingModel } from './retrying-model.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -431,6 +431,13 @@ async function fetchCodexModels(
     .filter(Boolean) as Array<{ id: string; name?: string; default_reasoning_level?: string }>;
 }
 
+const CODEX_CAPABILITIES = {
+  supportsConversationChaining: true,
+  supportsContextCompaction: true,
+  supportsPromptCacheKey: true,
+  usesStrictToolSchema: true,
+} as const;
+
 export class CodexProvider {
   private readonly models = new Map<string, RetryingModel>();
 
@@ -443,6 +450,7 @@ export class CodexProvider {
     private readonly retryAttempts: number,
     private readonly websocketReceiveTimeouts: { firstFrameMs: number; interFrameMs: number },
     private onRetry?: () => void,
+    private readonly contextCompactionSessionState?: ContextCompactionSessionState,
   ) {}
 
   setRetryCallback(callback?: () => void): void {
@@ -454,17 +462,30 @@ export class CodexProvider {
     const resolvedModel = modelName || DEFAULT_CODEX_MODEL;
     let retryingModel = this.models.get(resolvedModel);
     if (!retryingModel) {
+      // Tests inject a CodexResponsesTransport as loggingService (legacy seam).
+      // Prefer that over a freshly built transport so request/response fixtures still apply.
+      const injectedTransport =
+        this.loggingService instanceof CodexResponsesTransport ? this.loggingService : undefined;
+      const transport =
+        injectedTransport ??
+        new CodexResponsesTransport(this.openAIClient as any, resolvedModel, this.transport === 'websocket', {
+          supportsContextCompaction: CODEX_CAPABILITIES.supportsContextCompaction,
+          contextCompactionSessionState: this.contextCompactionSessionState,
+        });
+      const diagnosticLogger = injectedTransport ? undefined : this.loggingService;
       const selectedModel =
         this.transport === 'http'
-          ? new CodexResponsesModel(this.openAIClient as any, resolvedModel, this.loggingService)
+          ? new CodexResponsesModel(this.openAIClient as any, resolvedModel, diagnosticLogger, undefined, transport)
           : new CodexResponsesWSModel(
               this.openAIClient as any,
               resolvedModel,
               this.tokenManager,
-              this.loggingService,
-              this.loggingService?.providerTraffic,
+              diagnosticLogger,
+              diagnosticLogger?.providerTraffic,
               this.sessionContextService,
               this.websocketReceiveTimeouts,
+              undefined,
+              transport,
             );
       retryingModel = new RetryingModel(selectedModel, {
         retryAttempts: this.retryAttempts,
@@ -568,7 +589,10 @@ function codexProviderFingerprint(settingsService: { get(key: string): unknown }
 registerProvider({
   id: 'codex',
   label: 'Codex',
-  createStreamedModel: (model, { settingsService, loggingService, sessionContextService, onRetry, retryAttempts }) => {
+  createStreamedModel: (
+    model,
+    { settingsService, loggingService, sessionContextService, onRetry, retryAttempts, contextCompactionSessionState },
+  ) => {
     const defaultModel = settingsService.get('agent.model') || 'gpt-5.3-codex';
     // A session context is the ownership boundary for continuation state. Do
     // not fall back to the settings service: it can be shared by independent
@@ -620,6 +644,7 @@ registerProvider({
         interFrameMs: settingsService.get('agent.codex.websocketInterFrameTimeoutMs') ?? 600_000,
       },
       onRetry,
+      contextCompactionSessionState,
     );
     if (cacheKey) streamedProviders.set(cacheKey, { fingerprint, provider });
     return provider.getStreamedModel(model || defaultModel);
@@ -627,9 +652,5 @@ registerProvider({
   fetchModels: fetchCodexModels,
   clearConversations: undefined,
   sensitiveSettingKeys: [],
-  capabilities: {
-    supportsConversationChaining: true,
-    supportsPromptCacheKey: true,
-    usesStrictToolSchema: true,
-  },
+  capabilities: CODEX_CAPABILITIES,
 });

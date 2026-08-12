@@ -208,6 +208,8 @@ describe('application-owned Responses lifecycle through the shipped CLI', () => 
 
     await child.waitForVisibleOutput('❯');
     await writePrompt(child, 'launch the background shell fixture');
+    await child.waitForVisibleOutput('Allow this action?');
+    await writePrompt(child, 'y');
     await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 2);
     await child.waitForVisibleOutput('BACKGROUND-LAUNCH-FINAL');
     await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 3, 10_000);

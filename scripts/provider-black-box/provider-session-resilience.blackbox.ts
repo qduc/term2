@@ -567,6 +567,7 @@ async function writeSettings(
       retryAttempts: 0,
       maxTurns: 4,
       reasoningEffort: 'medium',
+      openai: { apiKey: 'fixture-key' },
       codex: { websocketFirstFrameTimeoutMs: 1_000, websocketInterFrameTimeoutMs: 1_000 },
       ...(route.contextCompaction ? { contextCompaction: { enabled: true, compactThreshold: 0.8 } } : {}),
     },

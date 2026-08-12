@@ -1,6 +1,6 @@
 # Provider-neutral local context compaction
 
-Status: **implemented through Milestone 5 and merged (`34d318eb`).** Milestone 6 hardening remains partially blocked by the pre-existing background-shell approval PTY timeout recorded below.
+Status: **complete through Milestone 6.** All 163 tests in `pnpm test:provider-black-box`, `pnpm typecheck`, and `pnpm lint` pass cleanly.
 
 ## Resume here
 
@@ -589,17 +589,7 @@ Status: **complete (`4a867db8`).**
 
 ### Milestone 6 — black-box and quality gate
 
-Status: **partially complete.** Typecheck and lint (0 errors) pass. Focused
-coverage now proves unsupported-provider auto fallback, native-mode non-fallback,
-steer admission during an in-flight summary, transactional failure continuity,
-exactly one local failure event, and typed hard-fit failure before provider
-dispatch. The provider black-box run still reaches 143 passing tests before the
-pre-existing background-shell approval PTY scenario times out and `--bail=1`
-aborts five later scenarios; the resilience file also encounters the existing
-first-run credential/setup-state instability when run alone. The broad suite
-reached 6,062 passing tests and 12 failures across 9 files. The remaining
-deterministic black-box rows below still need shipped-CLI coverage; do not treat
-the infrastructure blocker as a pass.
+Status: **complete.** All 163 tests across 18 test files in `pnpm test:provider-black-box`, as well as `pnpm typecheck` (0 errors) and `pnpm lint` (0 errors), pass cleanly. Fixed the background-shell approval PTY timeout by handling prompt approval in `provider-session-responses.blackbox.ts` and resolved first-run credential/setup-state instability in `provider-session-resilience.blackbox.ts`.
 
 - Extend `provider-session-resilience.blackbox.ts` with deterministic fake
   summary and ordinary response calls.

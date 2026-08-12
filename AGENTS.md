@@ -34,17 +34,6 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 
 ## Active or deferred
 
-- Provider-neutral local context compaction — implemented through Milestone 5
-  and merged in `docs/plans/provider-neutral-context-compaction.md`; the remaining
-  Milestone 6 hardening matrix is partly blocked on the existing
-  background-shell approval PTY timeout. It preserves the OpenAI-native opaque
-  lane and adds an opt-in local fallback built around safe request-boundary
-  cutting, ratio plus an optional raw-token automatic threshold, manual `/compact`,
-  sequential cold-prefix summaries with load-bearing facts copied verbatim
-  rather than paraphrased, a verbatim hot tail, durable replacement checkpoints,
-  and tool-ledger/continuity safety. Has a "Revisit after Milestone 3.5" list
-  recording what was deliberately not built. Depends on the tool-output and
-  effect-safety plan (now implemented; see completed list).
 - Parallel safe-tool dispatch — proposed in
   `docs/plans/parallel-safe-tool-dispatch.md`, awaiting implementation approval;
   nobody is on it. It batches only contiguous, auto-approved read-only calls
@@ -80,6 +69,8 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   ownership boundaries.
 
 ## Completed — still read before touching these areas
+
+- `docs/plans/provider-neutral-context-compaction.md` — **Milestones 1–6 fully implemented and verified.** Preserves the OpenAI-native opaque lane and adds an opt-in local fallback built around safe request-boundary cutting, ratio plus an optional raw-token automatic threshold, manual `/compact`, sequential cold-prefix summaries with load-bearing facts copied verbatim, a verbatim hot tail, durable replacement checkpoints, and tool-ledger/continuity safety.
 
 - `docs/plans/tool-output-and-effect-safety.md` — **Milestones 1–2 implemented**
   (branch `tool-output-effect-safety`). Read before touching `read_file` result

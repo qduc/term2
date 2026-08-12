@@ -8,6 +8,20 @@ import type { MenuServices } from './menu-registry.js';
 const isFocusReportingSequence = (input: string): boolean =>
   input === '\x1b[I' || input === '\x1b[O' || input === '[I' || input === '[O';
 
+const filterableMenuKinds = new Set<MenuFrame['kind']>([
+  'slash',
+  'path',
+  'settings',
+  'settings_value',
+  'model',
+  'skills',
+]);
+
+type FilterableMenuFrame = Extract<MenuFrame, { binding: { query: string } }>;
+
+const isFilterableMenu = (frame: MenuFrame | undefined): frame is FilterableMenuFrame =>
+  frame !== undefined && filterableMenuKinds.has(frame.kind);
+
 export type MenuSurfaceProps = {
   stack: readonly MenuFrame[];
   controller: MenuController;
@@ -19,6 +33,10 @@ export type MenuSurfaceProps = {
 /** The sole terminal input boundary while a controller menu is visible. */
 export function MenuSurface({ stack, controller, interactions, services, enabled }: MenuSurfaceProps) {
   const { input, cursorOffset, menuPromptLabel, setCursorOverride } = useInputContext();
+  const activeFrame = stack.at(-1);
+  const filterFrame = isFilterableMenu(activeFrame) ? activeFrame : undefined;
+  const promptLabel = menuPromptLabel ?? (filterFrame ? 'Filter: ' : undefined);
+  const promptText = menuPromptLabel ? input : filterFrame?.binding.query;
 
   useEffect(() => {
     if (enabled) setCursorOverride(cursorOffset);
@@ -86,10 +104,10 @@ export function MenuSurface({ stack, controller, interactions, services, enabled
 
   return (
     <Box flexDirection="column">
-      {menuPromptLabel && (
+      {promptLabel && (
         <Box>
-          <Text color="#22d3ee">{menuPromptLabel}</Text>
-          <Text>{input}</Text>
+          <Text color="#22d3ee">{promptLabel}</Text>
+          <Text>{promptText}</Text>
         </Box>
       )}
       <MenuStackHost

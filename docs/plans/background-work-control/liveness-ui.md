@@ -1,149 +1,310 @@
-# Background-task liveness UI
+# Background-task observation and liveness UI
 
-Status: plan. Waiting for implementation authorization.
+Status: implementation plan. Ready for implementation authorization.
 
-## Problem
+Research: [waiting-for-provider-ui-research.md](waiting-for-provider-ui-research.md).
 
-The compact background-task panel says only that a task is running and how
-long it has existed. That makes normal quiet work (a provider request, a
-long-running shell command, or a subagent awaiting approval) indistinguishable
-from an execution that has stopped producing observable progress. Ctrl+B also
-collides with tmux's default prefix, making the manager awkward to reach from
-the common nested-terminal case.
+## Resume here
+
+The first liveness delivery is already merged: the session control port projects
+registry activity, the compact panel distinguishes active/waiting/quiet work,
+and Ctrl+G is the task-manager shortcut. Do not repeat that shortcut migration.
+
+The remaining defect is contractual. `BackgroundTaskActivity` represents a
+lifecycle phase (`waiting` for a provider) and an evidence-age conclusion
+(`quiet`) in one exclusive enum. Consequently, a long provider wait can only
+remain `Waiting for provider`, even though the UI also needs to say that no
+evidence has arrived recently. The compact panel then crams task identity,
+phase, elapsed time, and evidence age into one row; it also misses background
+subagent context usage because control details omit it.
+
+This plan replaces that overloaded presentation contract. It does not change
+the execution or cancellation lifecycle.
 
 ## Outcome
 
-The UI makes a careful distinction between observable activity, intentional
-waiting, silence, and terminal failure. It never presents a task as "hung"
-solely because it has not emitted text. The persistent panel gives an at-a-
-glance summary; the task manager gives enough evidence to decide whether to
-inspect or stop one task.
+Every active background task has three independently true facts:
 
-`Ctrl+G` opens and closes the background-task manager. It replaces Ctrl+B in
-all hints, handlers, and interaction tests. Ctrl+G is deliberately scoped to
-the app's background-task manager; it does not alter the manager's `[b] Put in
-background` action for a selected foreground task.
-
-## Design
-
-### Normalized activity evidence
-
-Add a small, presentation-neutral activity snapshot to the session-facing
-`BackgroundTaskControlDetails` union:
-
-- `activity`: a typed current state such as `working`, `waiting_for_provider`,
-  `awaiting_approval`, `cancelling`, or `quiet`;
-- `lastActivityAt`: the timestamp of the last observable event;
-- `activitySummary`: a bounded human-readable description of the most recent
-  work, for example `Running shell command`, `Calling read_file`, or `Waiting
-  for approval`.
-
-Keep classification policy in the session/control seam, not in Ink. The
-subagent registry remains the authority for subagent lifecycle and captured
-tool/text progress; the shell registry remains the authority for shell
-lifecycle. `BackgroundTaskControl` normalizes their records for presentation.
-
-The subagent record updates activity time on every owned text-stream,
-text-turn, tool-start, approval-state transition, cancellation, and terminal
-event. Its existing `lastToolAt` stays a tool-specific diagnostic rather than
-being overloaded as generic liveness.
-
-The shell record gains activity time and a bounded last-activity summary from
-process start, stdout/stderr chunk receipt, stop request, and settlement. Do
-not retain unbounded shell output merely to display liveness. If the shell
-execution adapter cannot report output chunks, surface it as `working` with
-`Started command; no output observed yet`, rather than manufacturing a
-heartbeat.
-
-### Silence policy
-
-Classify a live task from evidence, never from elapsed duration alone:
-
-| Condition | UI wording | Meaning |
-| --- | --- | --- |
-| Recent owned event | `Working · last activity 4s ago` | Progress was observed. |
-| Known blocking state | `Waiting for provider response` / `Waiting for approval` | Silence is expected and the reason is known. |
-| Live task past a state-specific observation threshold with no event | `No observed progress for 1m 12s` | A prompt to inspect or stop, not a hang diagnosis. |
-| Timeout, exit, or explicit lifecycle failure | Existing terminal status plus concrete error | A confirmed outcome. |
-
-Thresholds are one named policy constant with per-state values, injected or
-tested with a clock. Start conservative and make them observable in unit tests;
-they must not cause a provider request or quiet but live shell process to be
-marked failed. A task remains cancellable in `quiet` just as in `working`.
-
-### Presentation
-
-`BackgroundTasksPanel` becomes a compact live summary:
-
-```text
-Background tasks · 2 active · Ctrl+G manage
-• [Worker] Audit fixtures               Working · 42s · last activity 3s ago
-  └ ▶ rg provider fixtures
-• [Shell] pnpm test                     No observed progress for 1m 12s
+```ts
+{
+  phase: 'waiting',
+  reason: 'provider',
+  lastObservation: { kind: 'request_dispatched', at: 1_723_456_789_000 },
+  liveness: { state: 'recent' | 'quiet', ageMs: number },
+}
 ```
 
-Use stable text/icons rather than a fast spinner as the only signal. If a
-subtle spinner is added, it is decorative; status and activity age must remain
-readable in copied terminal output and snapshot tests.
+The compact panel answers “should I care?” without sacrificing the task name;
+the manager answers “what exactly happened?” A long silent provider request is
+visually worth attention but is never called hung or failed. Context is shown
+as the most recent request's prompt tokens and gains a fraction/percentage only
+when the same subagent's model has a known context window.
 
-`BackgroundTaskManager` lists the same concise status and, in details, shows
-started time, elapsed time, last observed activity, its source/summary, latest
-tool or shell output excerpt, and terminal error if any. Keep the existing
-stop confirmation and durable user-action notification semantics unchanged.
+Example at normal width:
 
-### Input ownership and shortcut migration
+```text
+• [Explorer] audit provider fixtures
+  Awaiting provider response · sent 18s ago
+  Last: Request handed to provider · Ctx 12.3k
+```
 
-Define the manager shortcut once (for example, an exported
-`BACKGROUND_TASK_MANAGER_SHORTCUT` matcher) rather than scattering `key.ctrl &&
-input === 'b'`. The modal owns Ctrl+G only when it is eligible according to the
-existing `deriveInputOwner` result. Higher-priority approval and setup prompts
-continue to preempt it; Ctrl-C and Ctrl-D remain root-owned signal keys.
+After the liveness threshold:
 
-When the manager is open, Ctrl+G closes it. When it is closed, Ctrl+G opens it
-only if it has a background or transferable foreground task. No other view may
-also interpret the key. Update visible hints, the foreground-shell hint, and
-the modal behavior together.
+```text
+• [Explorer] audit provider fixtures
+  Awaiting provider response · no activity observed for 2m 14s ⚠
+  Last: Request handed to provider
+```
+
+## Decisions
+
+- **Three axes, not a richer status string.** Preserve the existing lifecycle
+  phase/reason independently from `lastObservation` and liveness. `quiet` is a
+  liveness assessment, never a lifecycle replacement for `waiting/provider`.
+- **Observation is a closed protocol.** Use a discriminated union, not
+  `activitySummary: string`. Ink owns wording; registries own only observed
+  facts. Do not retain raw provider output or unbounded tool arguments merely
+  for status text.
+- **Truthful provider language.** `request_dispatched` means this process
+  handed a request to its model runtime; it must never imply provider
+  acceptance, queue position, or remote “thinking.” Do not invent retry delay
+  or request IDs when the runtime did not provide them.
+- **Registry ownership stays unchanged.** `SubagentAsyncRegistry` and
+  `BackgroundShellRegistry` retain observations and their executor-specific
+  facts. `BackgroundTaskControl` computes the UI-safe liveness assessment and
+  resolves context-window metadata. Ink only formats the resulting contract.
+- **Snapshot model identity at run start.** A subagent can use a role-specific
+  model/provider and settings may later change. Capture provider/model for the
+  run when it is launched; never join current root settings to a live run.
+- **Liveness is an attention cue.** Keep conservative, injected per-executor
+  defaults. The initial implementation exposes them as an internal policy for
+  testing and session composition, not a new user setting. Adding a setting
+  later must use the setting-wiring workflow.
+- **Information budgets are deliberate.** The panel owns width classes rather
+  than depending on Flexbox's accidental truncation. Context is detail-only
+  unless its known ratio crosses a decided warning threshold.
+
+## Contract
+
+Create one small shared background-activity vocabulary for both registries and
+the session projection. A separate module earns its place: without it, the
+shell registry, subagent registry, liveness policy, and Ink formatter would
+each re-derive the same closed observation states.
+
+```ts
+type BackgroundTaskObservation =
+  | { kind: 'request_dispatched'; at: number }
+  | { kind: 'response_started'; at: number }
+  | { kind: 'text_received'; at: number }
+  | { kind: 'tool_started'; at: number; toolName: string }
+  | { kind: 'tool_completed'; at: number; toolName?: string }
+  | { kind: 'retrying'; at: number; attempt: number; maxRetries: number }
+  | { kind: 'approval_requested'; at: number }
+  | { kind: 'question_asked'; at: number }
+  | { kind: 'shell_started'; at: number }
+  | { kind: 'shell_output_received'; at: number }
+  | { kind: 'stop_requested'; at: number }
+  | { kind: 'settled'; at: number };
+
+type BackgroundTaskLiveness = {
+  state: 'recent' | 'quiet';
+  lastObservedAt: number;
+  ageMs: number;
+};
+```
+
+`BackgroundTaskControlDetails.activity` carries the lifecycle phase/reason,
+the latest observation, and the liveness value. Keep `startedAt` and task
+elapsed time for manager details, but do not make elapsed time the primary
+compact-panel signal.
+
+For a subagent, carry separate live fields:
+
+```ts
+model?: { provider: string; id: string; contextWindow?: number };
+latestUsage?: NormalizedUsage;
+```
+
+`latestUsage.prompt_tokens` is a snapshot of the most recent provider request,
+not a sum across logical subagent segments. Cumulative usage remains result or
+budget evidence and must not be presented as current context-window occupancy.
 
 ## Implementation slices
 
-1. **Specify the control contract first.** Add focused tests for normalized
-   activity state, clock-driven quiet classification, known waiting states, and
-   shell records with no output. Add the smallest timestamps/event updates to
-   `subagent-async-registry.ts` and `background-shell-registry.ts`, then map
-   them through `background-task-control.ts`.
-2. **Project the status in the compact panel.** Update
-   `BackgroundTasksPanel.tsx` and its tests to show activity age/reason for
-   running tasks, while preserving concise retained terminal rows. If
-   [unified-subagent-ui.md](unified-subagent-ui.md) has landed, extend its
-   shared live-row helper instead of inventing a third row shape.
-3. **Expose the evidence in the manager.** Update
-   `BackgroundTaskManager.tsx` and tests for list and details rendering,
-   including quiet tasks remaining stoppable and waiting tasks not being styled
-   as failures.
-4. **Migrate Ctrl+B to Ctrl+G.** Centralize the matcher, update `BottomArea`,
-   manager tests, and input-owner tests. Cover open, close, preemption by an
-   urgent prompt, ignored state with no tasks, and one-key/one-transition
-   behavior.
-5. **Validate the integration.** Run the focused registry, control, panel,
-   manager, `BottomArea`, and input-owner tests first; then typecheck, build,
-   and the full unit suite because the input owner and session control port are
-   shared. If implementation touches the run loop, provider bridge, or
-   provider event plumbing, also run `pnpm test:provider-black-box`.
+### 1. Establish the observation and liveness contract
+
+Write red, clock-driven tests first for the shared activity policy and
+`BackgroundTaskControl`:
+
+- a waiting-provider phase remains waiting after the threshold while its
+  liveness becomes quiet;
+- active, approval, answer, cancellation, and terminal phases retain their
+  current meanings;
+- zero/negative clock skew never produces a negative observation age;
+- the policy uses separate subagent and shell thresholds;
+- stop requests replace the observation with `stop_requested` without
+  prematurely settling the task.
+
+Then add `source/services/background-task-activity.ts` (or the closest shared
+service location), migrate the type/policy out of
+`source/services/session/background-task-liveness.ts`, and update
+`source/services/session/background-task-control.ts` to compute liveness from
+the last observation without changing phase. Remove the old mutually exclusive
+`quiet` activity state only after every caller uses the new contract.
+
+Tests: add a colocated activity-policy test; extend
+`source/services/session/background-task-control.test.ts` with structured
+contract assertions, injected `now`, and both executor thresholds.
+
+### 2. Record only observations the executors truly own
+
+Add bounded `lastObservation` storage to:
+
+- `source/services/subagents/subagent-async-registry.ts` for segment dispatch,
+  first response/text, tool start/completion, approval, orchestrator question,
+  cancellation, retry, and settlement;
+- `source/services/shell/background-shell-registry.ts` for launch, output,
+  stop request, and settlement.
+
+Emit `request_dispatched` immediately before the execution runner starts a
+model segment. The first text delta becomes `response_started` once and later
+deltas become `text_received`. Preserve existing bounded `currentText`,
+`lastToolName`, and shell-output behavior; observations complement them.
+
+Correct `RetryEvent` in `source/services/conversation/conversation-events.ts`
+to declare its optional `agentId`. `ExecutionSubagentRunner` already supplies
+that value; remove its cast and have the async registry retain the known
+attempt/max-retries observation. Do not change provider wire formats or add a
+synthetic retry delay.
+
+Tests: extend `subagent-async-registry.test.ts`,
+`background-shell-registry.test.ts`, and `execution-runner.test.ts`. Assert
+the observation union values and ordering through public status snapshots;
+assert a root retry remains valid without `agentId`, while an async retry is
+attributed to exactly its owning run.
+
+### 3. Carry subagent context safely through the control port
+
+At async-run launch, have the runtime composition path resolve the role's
+provider/model once and supply that immutable presentation metadata to the
+registry. The role loader remains the owner of role/model selection;
+`runtime.ts` only wires the resolver, and the registry does not read settings.
+For mentor runs, use the same resolved model path that the mentor runner uses.
+
+Handle `usage_update` in the async registry and retain its latest value
+separately from accumulated result usage. Add model metadata and `latestUsage`
+to `SubagentRunStatus`, then let `BackgroundTaskControl` attach the catalog
+context-window value when it recognizes the captured provider/model. An absent
+usage event or unknown catalog entry remains absent in the UI—never zero or a
+guessed percentage.
+
+Tests: add registry/control cases for live usage updates, later usage replacing
+the previous context snapshot, a model snapshot surviving settings changes, a
+known `12.3k/128k` context value, and unknown-model absolute-token fallback.
+Also retain the legacy notification-store usage tests: this change must not
+break completion summaries or root usage.
+
+### 4. Render deliberate compact width classes
+
+Refactor `BackgroundTasksPanel.tsx` around an explicit formatter/view model and
+the terminal width already available through Ink's `useStdout` convention.
+Extend the shared live-row helper from [unified-subagent-ui.md](unified-subagent-ui.md)
+instead of inventing a third row shape:
+
+| Width | First line | Second line |
+| --- | --- | --- |
+| Wide | role + task + full phase | observation + evidence age; show context only at the high-usage threshold |
+| Medium | role + truncated task + short phase | observation; omit normal context |
+| Narrow | role + truncated task + short phase/age | omit second line |
+
+Choose exact width and high-context thresholds as named constants after adding
+tests; do not bury them in JSX. Do not use a non-shrinking status column. The
+panel must retain the task label before optional telemetry, and retained
+terminal rows remain concise.
+
+Format lifecycle and liveness together only in presentation:
+`Awaiting provider response · sent 18s ago` when recent, and `Awaiting provider
+response · no activity observed for 2m 14s` when quiet. Wording for an
+observation comes solely from its union discriminator/payload.
+
+Tests: extend `BackgroundTasksPanel.test.tsx` with deterministic wide, medium,
+and narrow column cases. Assert textual contracts with `toContain`, not ANSI or
+flexbox layout internals; cover the quiet-provider combination, retry
+observation, and low-versus-high context display.
+
+### 5. Make the manager the diagnostic view
+
+Update `BackgroundTaskManager.tsx` to render the active task as labeled fields,
+not a compressed status suffix:
+
+```text
+State             Awaiting provider response
+Last observed     18s ago
+Last activity     Request handed to provider
+Started           6m 42s ago
+Model             gpt-5.6-sol
+Provider          OpenAI
+Context           12.3k / 128k (9.6%)
+Retries           1 of 3
+Last tool         read_file
+```
+
+Omit unavailable fields rather than showing fake defaults. The manager can
+show ordinary context count even when the compact panel omits it. Refresh the
+open manager from `listDetails()` on the existing background-task refresh path
+so its detail card does not freeze on the snapshot captured when Ctrl+G opened
+it. Preserve keyboard ownership, force-stop confirmation, foreground transfer,
+and Ctrl+G close behavior.
+
+Tests: extend `BackgroundTaskManager.test.tsx` for recent/quiet provider
+states, conditional model/context/retry fields, refresh while open, and the
+existing stop/transfer keyboard behavior. Use the existing Ink test helpers;
+do not add DOM testing utilities.
+
+### 6. Integrate and validate
+
+Run focused tests after each slice, beginning with the policy/registry/control
+tests and then the panel/manager tests. Before completion run:
+
+```text
+pnpm test source/services/session/background-task-control.test.ts
+pnpm test source/services/subagents/subagent-async-registry.test.ts
+pnpm test source/services/shell/background-shell-registry.test.ts
+pnpm test source/services/subagents/execution-runner.test.ts
+pnpm test source/components/layout/BackgroundTasksPanel.test.tsx
+pnpm test source/components/layout/BackgroundTaskManager.test.tsx
+pnpm typecheck
+pnpm build
+pnpm test
+pnpm test:provider-black-box
+```
+
+The registry, execution-runner, and conversation-event changes are
+provider-adjacent, so the provider black-box suite is mandatory. Run it during
+development after the event-contract slice, not only as a release check.
 
 ## Non-goals
 
-- Proving that a remote model is "thinking" or that a silent process is hung.
-- Restarting, retrying, or silently replacing a background task.
-- Writing full provider or shell transcript logs into the UI state.
-- Sending an observation-only task-manager view to the main agent.
+- Proving a remote model is thinking, accepted a request, or is healthy.
+- Declaring a task hung or changing cancellation/retry behavior based on
+  liveness.
+- Provider wire-format changes, polling, or new request-id storage.
+- New public settings, full provider transcripts, raw tool arguments, or
+  unbounded output in presentation state.
+- Changing the already-shipped Ctrl+G ownership/shortcut behavior.
 
 ## Acceptance criteria
 
-- A user can tell why every live task is believed to be active or waiting, and
-  when activity was last observed.
-- A quiet live task is called out without being reported as failed or hung.
-- Approval waits are visibly distinct from provider/tool silence.
-- Ctrl+G is the only manager shortcut shown and works exactly once per keypress
-  under the existing input-owner priority model.
-- Existing per-item stop, completion notification, transfer, and retained-task
-  behavior remain intact.
+- A provider wait can simultaneously display its lifecycle reason and that no
+  recent observation exists.
+- Every displayed observation corresponds to a local lifecycle event; no copy
+  claims remote provider state that the application cannot observe.
+- Compact rows preserve task identity at narrow widths and use a tested,
+  explicit information budget.
+- Manager details show observation age, model/provider, retry information, and
+  context only when each datum is known.
+- A context fraction uses the subagent's launch-time model and its most recent
+  request usage, never current root settings or cumulative run usage.
+- Quiet work stays cancellable and is never styled or described as failure.
+- Existing stop, transfer, completion notification, retained-task, and Ctrl+G
+  behavior remain covered by regression tests.

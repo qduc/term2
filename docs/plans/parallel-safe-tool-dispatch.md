@@ -1,6 +1,6 @@
 # Parallel safe-tool dispatch
 
-Status: **proposed — awaiting implementation approval**. Nobody is working on it.
+Status: **implemented and merged** (`b7eada1e`).
 
 ## Resume here
 

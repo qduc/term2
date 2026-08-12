@@ -34,13 +34,6 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 
 ## Active or deferred
 
-- Parallel safe-tool dispatch — proposed in
-  `docs/plans/parallel-safe-tool-dispatch.md`, awaiting implementation approval;
-  nobody is on it. It batches only contiguous, auto-approved read-only calls
-  from one completed model response, preserving result order and the existing
-  approval/budget owners.
-- Exclusive menu input ownership — follow-on plan tracked in
-  `docs/plans/exclusive-menu-input.md`; waiting for implementation approval.
 - Scheduled live provider canaries — a deferred follow-up requiring CI, secret/billing, and OAuth-storage decisions. No plan doc, and nobody is on it.
 - Run budgets as staged escalation — designed in
   `docs/plans/run-budget-stall-escalation.md`, awaiting implementation approval;
@@ -50,31 +43,45 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   than a ceiling, that per-request USD accounting already exists (so the
   `maxCost` "unsupported" rejection is stale), and that identical-failure
   detection is already in the loop as a silent retry suppressor.
-- Provider-faithful reasoning round-trip on the chat-completions lane — planned
-  in `docs/plans/chat-completions-reasoning-roundtrip.md`, awaiting
-  implementation approval; nobody is on it. Read it before changing how
-  `OpenAIChatCompletionsModel` or `openai-compatible-middleware.ts` handle
-  reasoning: it records why the existing `reasoning` → `reasoning_content`
-  rewrite is not defensive, and why reading `reasoning_details` as reasoning
-  text would double every token.
-- Background work controls — active implementation tracked in
-  `docs/plans/background-work-control/MAP.md`. Background inspection, per-item
-  stop, user-action notification, and root-shell transfer are implemented;
-  foreground-subagent transfer waits on an explicit post-transfer approval and
-  continuation decision. The worktree is `.worktrees/background-task-controls`
-  on branch `codex/background-task-controls`.
-- Unified subagent live UI — planned in
-  `docs/plans/background-work-control/unified-subagent-ui.md`. Read it before
-  changing `SubagentActivityMessage`, `BackgroundTasksPanel`,
-  `BackgroundTaskManager`, or foreground-to-background event routing: a
-  transferred transcript card must settle as `backgrounded`, and unadopted
-  work may appear on the compact strip only with an explicit foreground tag.
+- Background-task liveness UI — the initial compact panel and Ctrl+G shortcut
+  are merged; the remaining presentation-contract work is planned in
+  `docs/plans/background-work-control/liveness-ui.md`. It separates lifecycle
+  phase from evidence-age/liveness and adds context-use detail without changing
+  execution or cancellation lifecycle.
 - UI/business layer separation — completed through settings transaction,
   handoff workflow, provider management, and model catalog milestones. See
   `docs/plans/ui-business-layer-separation/MAP.md` for the merged commits and
   ownership boundaries.
 
 ## Completed — still read before touching these areas
+
+- `docs/plans/parallel-safe-tool-dispatch.md` — **implemented and merged**
+  (`b7eada1e`). It dispatches contiguous auto-approved safe tool calls from one
+  completed model response in parallel while preserving result order and the
+  existing approval and budget owners.
+
+- `docs/plans/exclusive-menu-input.md` — **implemented and merged**
+  (`517b74bc`). Read it before changing Ink input ownership, menu composition,
+  `InputBox`, or the session-owned menu surface.
+
+- `docs/plans/chat-completions-reasoning-roundtrip.md` — **implemented and
+  merged** (`65746671`, `af85266f`, plus review fixes). Read it before changing
+  `OpenAIChatCompletionsModel` or `openai-compatible-middleware.ts` reasoning:
+  the `reasoning` → `reasoning_content` rewrite is intentional, and reading
+  `reasoning_details` as reasoning text would double every token.
+
+- `docs/plans/background-work-control/MAP.md` — **background inspection,
+  per-item stop, action notifications, root-shell transfer, and
+  foreground-subagent transfer are implemented.** Read it before changing the
+  background registries, task-control port, transfer leases, or adopted-child
+  approval handling. Remaining liveness presentation work is tracked separately
+  in `docs/plans/background-work-control/liveness-ui.md`.
+- `docs/plans/background-work-control/unified-subagent-ui.md` — **implemented
+  and merged.** Read it before changing `SubagentActivityMessage`,
+  `BackgroundTasksPanel`, `BackgroundTaskManager`, or foreground-to-background
+  event routing: a transferred transcript card settles as `backgrounded`, and
+  unadopted work may appear on the compact strip only with an explicit
+  foreground tag.
 
 - `docs/plans/provider-neutral-context-compaction.md` — **Milestones 1–6 fully implemented and verified.** Preserves the OpenAI-native opaque lane and adds an opt-in local fallback built around safe request-boundary cutting, ratio plus an optional raw-token automatic threshold, manual `/compact`, sequential cold-prefix summaries with load-bearing facts copied verbatim, a verbatim hot tail, durable replacement checkpoints, and tool-ledger/continuity safety.
 

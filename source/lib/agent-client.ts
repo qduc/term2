@@ -104,6 +104,9 @@ export class AgentClient {
   #backgroundShellOutput?: BackgroundShellOutputBundle;
 
   #boundaryCompaction() {
+    const enabled = this.#settings.get('agent.contextCompaction.enabled');
+    const configuredMode = this.#settings.get('agent.contextCompaction.mode') ?? 'native';
+    if (!enabled || configuredMode === 'native') return undefined;
     return {
       compact: async ({
         history,
@@ -116,9 +119,7 @@ export class AgentClient {
         signal?: AbortSignal;
         onStarted: (provider: string) => void;
       }) => {
-        const enabled = this.#settings.get('agent.contextCompaction.enabled');
         const mode = this.#settings.get('agent.contextCompaction.mode') ?? 'native';
-        if (!enabled || mode === 'native') return { kind: 'unchanged' as const };
         const provider = this.#agentConfig.getProvider();
         const model = this.#agentConfig.getModel();
         const nativeAvailable =
@@ -807,9 +808,10 @@ export class AgentClient {
       const supportsChaining = getProvider(provider)?.capabilities?.supportsConversationChaining === true;
       const agent = this.#agentConfig.getApplicationAgent(options.sessionId);
       const requestPreparation = this.#openAIRequestPreparation(options);
+      const boundaryCompaction = this.#boundaryCompaction();
       const run = () => {
         return this.#applicationRunLoop.startStream(agent, userInput, {
-          boundaryCompaction: this.#boundaryCompaction(),
+          ...(boundaryCompaction ? { boundaryCompaction } : {}),
           ...(requestPreparation ? { requestPreparation } : {}),
           ...(supportsChaining && options.previousResponseId ? { previousResponseId: options.previousResponseId } : {}),
           providerId: provider,
@@ -838,8 +840,9 @@ export class AgentClient {
     const provider = this.#agentConfig.getProvider();
     const supportsChaining = getProvider(provider)?.capabilities?.supportsConversationChaining === true;
     const requestPreparation = this.#openAIRequestPreparation(options);
+    const boundaryCompaction = this.#boundaryCompaction();
     const stream = this.#applicationRunLoop.continueRunStream(state, {
-      boundaryCompaction: this.#boundaryCompaction(),
+      ...(boundaryCompaction ? { boundaryCompaction } : {}),
       ...(requestPreparation ? { requestPreparation } : {}),
       ...(supportsChaining && options.previousResponseId ? { previousResponseId: options.previousResponseId } : {}),
       providerId: provider,

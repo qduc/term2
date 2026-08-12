@@ -77,6 +77,8 @@ const buildController = (
 let providerId: string;
 
 beforeEach(() => {
+  vi.stubEnv('OPENAI_API_KEY', '');
+  vi.stubEnv('OPENROUTER_API_KEY', '');
   clearModelCache();
   providerId = `mock-provider-${Date.now()}-${Math.random()}`;
   registerProvider({

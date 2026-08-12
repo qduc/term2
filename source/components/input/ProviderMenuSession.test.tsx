@@ -2,12 +2,22 @@ import React, { act } from 'react';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { InputProvider, useInputState } from '../../context/InputContext.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import { renderInAct, toVisibleText } from '../../test-helpers/ink-testing.js';
 import { MenuStackHost } from './MenuStackHost.js';
 import { MenuControllerImpl } from './menu-controller.js';
+
+beforeEach(() => {
+  vi.stubEnv('OPENAI_API_KEY', '');
+  vi.stubEnv('OPENROUTER_API_KEY', '');
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
 
 const ControllerHost = ({
   controller,

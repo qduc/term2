@@ -43,6 +43,8 @@ it.sequential('opens provider management and rechecks into model selection after
   stateSettings = createMockSettingsService();
   const onState = vi.fn();
   const fetchModels = vi.spyOn(getProvider('openai')!, 'fetchModels');
+  vi.stubEnv('OPENAI_API_KEY', '');
+  vi.stubEnv('OPENROUTER_API_KEY', '');
   vi.stubEnv('CHATGPT_LOCAL_HOME', '');
   vi.stubEnv('CODEX_HOME', '/tmp/term2-test-no-codex-auth');
   vi.spyOn(os, 'homedir').mockReturnValue('/tmp/term2-test-no-codex-home');

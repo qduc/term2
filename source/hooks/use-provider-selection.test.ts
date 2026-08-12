@@ -1,10 +1,15 @@
 // @ts-expect-error IS_REACT_ACT_ENVIRONMENT is not in globalThis types
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-import { it, expect } from 'vitest';
+import { beforeEach, it, expect, vi } from 'vitest';
 import React, { act, useEffect } from 'react';
 import { render } from 'ink-testing-library';
 import { useProviderSelection } from './use-provider-selection.js';
 import { InputProvider, useInputContext } from '../context/InputContext.js';
+
+beforeEach(() => {
+  vi.stubEnv('OPENAI_API_KEY', '');
+  vi.stubEnv('OPENROUTER_API_KEY', '');
+});
 
 const TestComponent = ({
   settingsService,

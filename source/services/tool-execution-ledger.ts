@@ -436,7 +436,7 @@ export class ToolExecutionLedger {
 }
 
 const createRecoveryMessage = (completedPairs: number, incompleteCalls: number): string =>
-  `Recovered ${completedPairs} completed tool call/result pair(s) from a previously interrupted turn. Dropped ${incompleteCalls} incomplete tool call(s); do not assume dropped calls completed.`;
+  `Recovered ${completedPairs} settled tool call/result pair(s) from a previously interrupted turn. Dropped ${incompleteCalls} incomplete tool call(s); do not assume dropped calls completed.`;
 
 /**
  * Drop function_call items and function_call_output items that do not form a

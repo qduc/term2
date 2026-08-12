@@ -310,7 +310,7 @@ it('tool_recovery: marks dropped running commands failed and appends recovery no
     recoveredCallIds: ['call-read'],
     droppedCallIds: ['call-write'],
     message:
-      'Recovered 1 completed tool call/result pair(s) from a previously interrupted turn. Dropped 1 incomplete tool call(s); do not assume dropped calls completed.',
+      'Recovered 1 settled tool call/result pair(s) from a previously interrupted turn. Dropped 1 incomplete tool call(s); do not assume dropped calls completed.',
   } as ConversationEvent);
 
   expect(deps.calls.setMessagesCalls.length).toBe(1);
@@ -338,7 +338,7 @@ it('tool_recovery: marks dropped running commands failed and appends recovery no
   expect(next[1].failureReason).toBe('Dropped during recovery');
   expect(next[1].output.includes('not sent to model history')).toBe(true);
   expect(next[2].sender).toBe('system');
-  expect(next[2].text.startsWith('Recovered 1 completed')).toBe(true);
+  expect(next[2].text.startsWith('Recovered 1 settled')).toBe(true);
 });
 
 it('retry: adds system message about hallucination retry', () => {

@@ -240,7 +240,7 @@ it.sequential('MessageList preserves spaces in bot text immediately before a com
   expect(output.includes('read thisfile:')).toBe(false);
 });
 
-it.sequential('MessageList renders a compact subagent activity peek', async () => {
+it.sequential('MessageList renders completed subagent tool results in its compact activity peek', async () => {
   const messages = [
     {
       id: 'subagent-agent-1',
@@ -249,7 +249,7 @@ it.sequential('MessageList renders a compact subagent activity peek', async () =
       agentId: 'agent-1',
       role: 'explorer',
       task: 'inspect the command message rendering flow and report findings that are quite long',
-      tools: ['grep', 'read_file', 'read_code_outline'],
+      tools: ['grep (2 matches)', 'read_file (Success)', 'read_code_outline (Success)'],
     },
   ];
 

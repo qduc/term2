@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest';
+import { beforeEach, it, expect, vi } from 'vitest';
 import {
   PROVIDER_NAME_REGEX,
   PROVIDER_TYPES,
@@ -28,6 +28,11 @@ function createMockSettingsService(initialProviders: unknown[] = [], initialActi
     setPersistentDynamic: (key: string, value: unknown) => settings.set(key, value),
   } as any;
 }
+
+beforeEach(() => {
+  vi.stubEnv('OPENAI_API_KEY', '');
+  vi.stubEnv('OPENROUTER_API_KEY', '');
+});
 
 it('PROVIDER_NAME_REGEX', () => {
   expect(PROVIDER_NAME_REGEX.test('my-provider')).toBe(true);

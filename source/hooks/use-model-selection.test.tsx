@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest';
+import { afterEach, beforeEach, it, expect, vi } from 'vitest';
 // @ts-expect-error IS_REACT_ACT_ENVIRONMENT is not in globalThis types
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -21,6 +21,15 @@ type ImmediateToggleComponentProps = {
   onResults: (results: any) => void;
   settingsService?: ReturnType<typeof createMockSettingsService>;
 };
+
+beforeEach(() => {
+  vi.stubEnv('OPENAI_API_KEY', '');
+  vi.stubEnv('OPENROUTER_API_KEY', '');
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 const flush = async (callback: () => void) => {
   await act(async () => {

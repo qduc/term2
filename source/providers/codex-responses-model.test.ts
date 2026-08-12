@@ -407,6 +407,116 @@ it('CodexResponsesModel.buildResponsesCreateRequest merges Codex include into re
   }
 });
 
+it.each([
+  ['gpt-5.3-codex-spark', 64_000],
+  ['gpt-5.6-terra', 136_000],
+])(
+  'CodexResponsesTransport sends context_management for allowlisted models when enabled (%s)',
+  (modelName, expectedThreshold) => {
+    const transport = new CodexResponsesTransport({} as any, modelName, false, {
+      supportsContextCompaction: true,
+    });
+    const built = transport.buildResponsesCreateRequest(
+      {
+        input: [],
+        tools: [],
+        providerOptions: { contextCompaction: { enabled: true, threshold: 0.5 } },
+      },
+      true,
+    );
+
+    expect(built.requestData.context_management).toEqual([
+      { type: 'compaction', compact_threshold: expectedThreshold },
+    ]);
+    expect(built.requestData).not.toHaveProperty('contextCompaction');
+  },
+);
+
+it('CodexResponsesTransport does not send context_management without provider capability', () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5.3-codex-spark', false);
+  const built = transport.buildResponsesCreateRequest(
+    {
+      input: [],
+      tools: [],
+      providerOptions: { contextCompaction: { enabled: true, threshold: 0.5 } },
+    },
+    true,
+  );
+
+  expect(built.requestData).not.toHaveProperty('context_management');
+  expect(built.requestData).not.toHaveProperty('contextCompaction');
+});
+
+it('CodexResponsesTransport does not let extraBody bypass the context-compaction gate', () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5.3-codex-spark', false, {
+    supportsContextCompaction: true,
+  });
+  const built = transport.buildResponsesCreateRequest(
+    {
+      input: [],
+      tools: [],
+      providerOptions: {
+        extraBody: { context_management: [{ type: 'compaction', compact_threshold: 1000 }] },
+      },
+    },
+    true,
+  );
+
+  expect(built.requestData).not.toHaveProperty('context_management');
+});
+
+it('CodexResponsesTransport disables context_management after a session-level compaction failure', () => {
+  const sessionState = { disabled: true };
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5.3-codex-spark', false, {
+    supportsContextCompaction: true,
+    contextCompactionSessionState: sessionState,
+  });
+  const built = transport.buildResponsesCreateRequest(
+    {
+      input: [],
+      tools: [],
+      providerOptions: { contextCompaction: { enabled: true, threshold: 0.5 } },
+    },
+    true,
+  );
+
+  expect(built.requestData).not.toHaveProperty('context_management');
+});
+
+it('CodexResponsesTransport marks opaque context_management 500s as session-disabling failures', async () => {
+  const sessionState = { disabled: false };
+  const error = Object.assign(new Error('server_error'), {
+    status: 500,
+    error: { message: 'context_management failed with server_error' },
+  });
+  const client = {
+    responses: {
+      create: async () => {
+        throw error;
+      },
+    },
+  };
+  const transport = new CodexResponsesTransport(client as any, 'gpt-5.3-codex-spark', false, {
+    supportsContextCompaction: true,
+    contextCompactionSessionState: sessionState,
+  });
+
+  await expect(
+    transport.fetchResponse(
+      {
+        input: [],
+        tools: [],
+        providerOptions: { contextCompaction: { enabled: true, threshold: 0.5 } },
+      },
+      false,
+      { model: 'gpt-5.3-codex-spark' },
+    ),
+  ).rejects.toBe(error);
+
+  expect(sessionState.disabled).toBe(true);
+  expect((error as any).contextCompactionFailure).toBe('request');
+});
+
 it('CodexResponsesTransport formats reasoning input items with required summary array for Responses API', () => {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5.6-sol', false);
   const built = transport.buildResponsesCreateRequest(

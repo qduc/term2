@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { ResponsesWS } from 'openai/resources/responses/ws';
 import OpenAI from 'openai';
 import type {
+  ContextCompactionSessionState,
   StreamedModelTurn,
   StreamedModelTurnEvent,
   StreamedModelTurnRequest,
@@ -24,6 +25,7 @@ import {
   DEFAULT_WEBSOCKET_RECEIVE_TIMEOUTS,
   type WebSocketReceiveTimeouts,
 } from './websocket-receive-watchdog.js';
+import { markContextCompactionFailure, resolveContextManagement } from './openai-responses-model.js';
 
 const DUMMY_PROVIDER_TRAFFIC: IProviderTraffic = {
   recordRequestStart() {},
@@ -40,13 +42,39 @@ function toCodexToolChoice(choice: unknown): unknown {
   throw new Error('Unsupported Codex tool choice.');
 }
 
+export type CodexResponsesTransportOptions = {
+  supportsContextCompaction?: boolean;
+  contextCompactionSessionState?: ContextCompactionSessionState;
+};
+
 /** Provider-owned transport seam used by Codex's HTTP and WebSocket models. */
 export class CodexResponsesTransport {
-  constructor(private readonly client: any = {}, private readonly model = '', private readonly websocket = false) {}
+  constructor(
+    private readonly client: any = {},
+    private readonly model = '',
+    private readonly websocket = false,
+    private readonly options: CodexResponsesTransportOptions = {},
+  ) {}
 
   buildResponsesCreateRequest(request: StreamedModelTurnRequest, stream: boolean): any {
     const providerOptions = request.providerOptions ?? {};
-    const { extraBody, extraHeaders: _extraHeaders, ...nativeProviderData } = providerOptions;
+    // contextCompaction is an app-level option; context_management is capability-gated
+    // below. Do not let either leak through native provider data or extraBody.
+    const {
+      extraBody,
+      extraHeaders: _extraHeaders,
+      contextCompaction: _contextCompaction,
+      ...nativeProviderData
+    } = providerOptions as Record<string, unknown>;
+    const { context_management: _reservedContextManagement, ...safeExtraBody } = ((extraBody as
+      | Record<string, unknown>
+      | undefined) ?? {}) as Record<string, unknown>;
+    const contextManagement = resolveContextManagement(
+      providerOptions,
+      this.model,
+      this.options.supportsContextCompaction === true,
+      this.options.contextCompactionSessionState,
+    );
     return {
       requestData: {
         model: this.model,
@@ -62,50 +90,63 @@ export class CodexResponsesTransport {
         ...(request.maxTokens !== undefined ? { max_output_tokens: request.maxTokens } : {}),
         ...(request.reasoning !== undefined ? { reasoning: request.reasoning } : {}),
         ...nativeProviderData,
-        ...(extraBody ?? {}),
+        ...safeExtraBody,
         ...(request.previousResponseId ? { previous_response_id: request.previousResponseId } : {}),
         ...(request.codex?.promptCacheKey ? { prompt_cache_key: request.codex.promptCacheKey } : {}),
         ...(request.codex?.include ? { include: request.codex.include } : {}),
+        ...(contextManagement ? { context_management: contextManagement } : {}),
       },
     };
   }
 
   async fetchResponse(request: StreamedModelTurnRequest, stream: boolean, requestData: any): Promise<any> {
-    if (stream && this.websocket) {
-      if (!(this.client instanceof OpenAI) && typeof this.client?.responses?.create === 'function') {
-        return this.client.responses.create(requestData);
-      }
-      const headers = request.providerOptions?.extraHeaders;
-      const socket = new ResponsesWS(this.client, headers ? { headers: headers as Record<string, string> } : undefined);
-      const messages = socket.stream();
-      const requestEvent = { type: 'response.create', ...requestData } as any;
-      if ((socket as any).socket?.readyState === 0) {
-        (socket as any).socket.once('open', () => socket.send(requestEvent));
-      } else {
-        socket.send(requestEvent);
-      }
-      return (async function* () {
-        try {
-          for await (const message of messages) {
-            if (message.type === 'message') yield message.message;
-            else if ((message as any).event) yield (message as any).event;
-            else if (message.type === 'error') throw (message as any).error;
-            else if (message.type === 'close')
-              throw new Error('Codex WebSocket connection closed before a terminal response event.');
-          }
-        } finally {
-          try {
-            socket.close();
-          } catch {
-            /* best effort */
-          }
+    try {
+      if (stream && this.websocket) {
+        if (!(this.client instanceof OpenAI) && typeof this.client?.responses?.create === 'function') {
+          return this.client.responses.create(requestData);
         }
-      })();
+        const headers = request.providerOptions?.extraHeaders;
+        const socket = new ResponsesWS(
+          this.client,
+          headers ? { headers: headers as Record<string, string> } : undefined,
+        );
+        const messages = socket.stream();
+        const requestEvent = { type: 'response.create', ...requestData } as any;
+        if ((socket as any).socket?.readyState === 0) {
+          (socket as any).socket.once('open', () => socket.send(requestEvent));
+        } else {
+          socket.send(requestEvent);
+        }
+        const sessionState = this.options.contextCompactionSessionState;
+        return (async function* () {
+          try {
+            for await (const message of messages) {
+              if (message.type === 'message') yield message.message;
+              else if ((message as any).event) yield (message as any).event;
+              else if (message.type === 'error') throw (message as any).error;
+              else if (message.type === 'close')
+                throw new Error('Codex WebSocket connection closed before a terminal response event.');
+            }
+          } catch (error) {
+            markContextCompactionFailure(error, request, sessionState);
+            throw error;
+          } finally {
+            try {
+              socket.close();
+            } catch {
+              /* best effort */
+            }
+          }
+        })();
+      }
+      return await this.client.responses.create(requestData, {
+        ...(request.signal ? { signal: request.signal } : {}),
+        ...(request.providerOptions?.extraHeaders ? { headers: request.providerOptions.extraHeaders } : {}),
+      });
+    } catch (error) {
+      markContextCompactionFailure(error, request, this.options.contextCompactionSessionState);
+      throw error;
     }
-    return this.client.responses.create(requestData, {
-      ...(request.signal ? { signal: request.signal } : {}),
-      ...(request.providerOptions?.extraHeaders ? { headers: request.providerOptions.extraHeaders } : {}),
-    });
   }
 }
 

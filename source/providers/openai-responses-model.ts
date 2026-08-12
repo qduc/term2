@@ -140,7 +140,8 @@ function toResponsesOutputFormat(
   };
 }
 
-function supportsContextCompactionModel(model: string): boolean {
+/** Shared allowlist for Responses `context_management` (OpenAI + Codex). */
+export function supportsContextCompactionModel(model: string): boolean {
   // Server-side context_management is model-dependent: gpt-5.1/gpt-5.2 returned
   // opaque 500s when the threshold fired (docs/plans/openai-context-compaction.md).
   // OpenAI's compaction guide demos gpt-5.3-codex; the compact endpoint enum and
@@ -151,14 +152,14 @@ function supportsContextCompactionModel(model: string): boolean {
 }
 
 function contextCompaction(
-  providerOptions: StreamedModelProviderOptions,
+  providerOptions: StreamedModelProviderOptions | undefined,
   model: string,
   providerSupportsContextCompaction: boolean,
   sessionState?: ContextCompactionSessionState,
 ): { threshold: number } | undefined {
   if (sessionState?.disabled || !providerSupportsContextCompaction || !supportsContextCompactionModel(model))
     return undefined;
-  const option = (providerOptions as any).contextCompaction;
+  const option = (providerOptions as any)?.contextCompaction;
   if (
     option?.enabled !== true ||
     typeof option.threshold !== 'number' ||
@@ -168,7 +169,8 @@ function contextCompaction(
   ) {
     return undefined;
   }
-  const contextWindow = getModelContextWindow('openai', model);
+  // Catalog keys are shared across OpenAI and Codex model ids.
+  const contextWindow = getModelContextWindow('openai', model) ?? getModelContextWindow('codex', model);
   if (!contextWindow) return undefined;
 
   // The setting is a fraction of the selected model's context window. The
@@ -176,6 +178,18 @@ function contextCompaction(
   // token minimum, so apply that provider-specific conversion at the wire
   // boundary rather than exposing model-specific token counts in settings.
   return { threshold: Math.max(1000, Math.round(contextWindow * option.threshold)) };
+}
+
+/** Wire shape for `context_management`, or undefined when gated off. */
+export function resolveContextManagement(
+  providerOptions: StreamedModelProviderOptions | undefined,
+  model: string,
+  providerSupportsContextCompaction: boolean,
+  sessionState?: ContextCompactionSessionState,
+): Array<{ type: 'compaction'; compact_threshold: number }> | undefined {
+  const compaction = contextCompaction(providerOptions, model, providerSupportsContextCompaction, sessionState);
+  if (!compaction) return undefined;
+  return [{ type: 'compaction', compact_threshold: compaction.threshold }];
 }
 
 function requestBody(
@@ -189,7 +203,12 @@ function requestBody(
   // context_management is capability-gated below. Do not let the generic
   // extra-body escape hatch bypass that gate on unsupported endpoints/models.
   const { context_management: _reservedContextManagement, ...extraBody } = (providerOptions as any).extraBody ?? {};
-  const compaction = contextCompaction(providerOptions, model, providerSupportsContextCompaction, sessionState);
+  const contextManagement = resolveContextManagement(
+    providerOptions,
+    model,
+    providerSupportsContextCompaction,
+    sessionState,
+  );
   const projectedInput = toResponsesApiInput(request.input);
   const body = {
     model,
@@ -211,7 +230,7 @@ function requestBody(
       : {}),
     ...(request.previousResponseId ? { previous_response_id: request.previousResponseId } : {}),
     ...extraBody,
-    ...(compaction ? { context_management: [{ type: 'compaction', compact_threshold: compaction.threshold }] } : {}),
+    ...(contextManagement ? { context_management: contextManagement } : {}),
   } as any;
 
   // Encrypted reasoning is only returned when explicitly requested by the
@@ -305,7 +324,7 @@ export function contextCompactionFailureCategory(error: unknown): ContextCompact
   return undefined;
 }
 
-function markContextCompactionFailure(
+export function markContextCompactionFailure(
   error: unknown,
   request: StreamedModelTurnRequest,
   sessionState?: ContextCompactionSessionState,

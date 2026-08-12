@@ -293,7 +293,10 @@ function buildModelSettings({
   }
 
   const contextCompactionEnabled = deps.settings.get('agent.contextCompaction.enabled');
-  if (contextCompactionEnabled && deps.providerId === 'openai') {
+  // OpenAI and Codex both speak Responses `context_management`; other providers
+  // either do not, or have not been measured. Model-level allowlisting still
+  // gates the wire parameter inside each adapter.
+  if (contextCompactionEnabled && (deps.providerId === 'openai' || deps.providerId === 'codex')) {
     modelSettings.providerData = {
       ...(modelSettings.providerData || {}),
       contextCompaction: {

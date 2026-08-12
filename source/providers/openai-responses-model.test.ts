@@ -192,6 +192,16 @@ it('normalizes only completed Responses events as successful completions', () =>
   expect(() =>
     normalizeResponseEvent({ type: 'response.incomplete', response: { id: 'partial', status: 'incomplete' } }),
   ).toThrow('response.incomplete (incomplete)');
+  expect(() =>
+    normalizeResponseEvent({
+      type: 'response.incomplete',
+      response: {
+        id: 'partial',
+        status: 'incomplete',
+        incomplete_details: { reason: 'max_output_tokens' },
+      },
+    }),
+  ).toThrow('response.incomplete (max_output_tokens)');
 });
 
 it('getResponse (HTTP) preserves typed settings, including zero values, in the native body', async () => {
@@ -254,6 +264,27 @@ it.each([
   });
 
   expect(capturedBody.context_management).toEqual([{ type: 'compaction', compact_threshold: expectedThreshold }]);
+});
+
+it('uses the earlier of ratio and raw-token context compaction thresholds', async () => {
+  let capturedBody: any;
+  const client = {
+    responses: {
+      create: async (body: any) => {
+        capturedBody = body;
+        return { id: 'resp_compaction', output: [], usage: {} };
+      },
+    },
+  };
+  const model = new OpenAIResponsesModelWithPromptCacheKey(client, 'gpt-5.4-nano', undefined, true);
+
+  await model.getResponse({
+    input: [],
+    tools: [],
+    providerOptions: { contextCompaction: { enabled: true, threshold: 0.8, thresholdTokens: 120_000 } },
+  });
+
+  expect(capturedBody.context_management).toEqual([{ type: 'compaction', compact_threshold: 120_000 }]);
 });
 
 it.each([

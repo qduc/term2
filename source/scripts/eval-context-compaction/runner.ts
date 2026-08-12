@@ -55,7 +55,13 @@ const recordCosts = (records: readonly ModelRequestCost[] | undefined): void => 
 
 const call = async (message: string, instructions: string, maxTokens: number) => {
   if (!client.chatDetailed) throw new Error('Detailed chat accounting is unavailable');
-  const result = await client.chatDetailed(message, { provider, model, instructions, maxTokens });
+  const result = await client.chatDetailed(message, {
+    provider,
+    model,
+    reasoningEffort: 'none',
+    instructions,
+    maxTokens,
+  });
   if (!result.costRecords?.length)
     throw new Error('Provider request returned no cost record; refusing unmetered evaluation');
   recordCosts(result.costRecords);
@@ -77,9 +83,12 @@ if (sourceTurns.length < 7)
   throw new Error(`Evaluation requires at least seven genuine turns; found ${sourceTurns.length}`);
 
 const keysByCycle: Record<1 | 3 | 5, string[]> = {
-  1: ['9fc095f2', '7042e092', 'conversation-orchestrator.test.ts:458', 'AiSdkGoogleProvider'],
-  3: ['9fc095f2', 'conversation-orchestrator.test.ts:458', 'nothing blocking', 'Google'],
-  5: ['mechanical', 'orchestrator.md', 'architecture', 'sandbox'],
+  // Every key is present in the cold prefix and absent from that cycle's
+  // two-turn prune-only hot tail. This prevents a pruning arm from receiving
+  // credit for facts it never had to retain.
+  1: ['conversation.stream_history.replay_dropped', 'delta | full_history', 'Resumed SDK', 'post-execute pause/resume'],
+  3: ['832a98dc', 'reasoning-end', 'system image messages', '9fc095f2'],
+  5: ['832a98dc', 'reasoning-end', '9fc095f2', '7042e092'],
 };
 
 const summaryGenerator = {

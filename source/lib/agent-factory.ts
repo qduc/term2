@@ -293,15 +293,22 @@ function buildModelSettings({
   }
 
   const contextCompactionEnabled = deps.settings.get('agent.contextCompaction.enabled');
+  const contextCompactionMode = deps.settings.get('agent.contextCompaction.mode') ?? 'native';
   // OpenAI and Codex both speak Responses `context_management`; other providers
   // either do not, or have not been measured. Model-level allowlisting still
   // gates the wire parameter inside each adapter.
-  if (contextCompactionEnabled && (deps.providerId === 'openai' || deps.providerId === 'codex')) {
+  if (
+    contextCompactionEnabled &&
+    contextCompactionMode !== 'local' &&
+    (deps.providerId === 'openai' || deps.providerId === 'codex')
+  ) {
+    const thresholdTokens = deps.settings.get('agent.contextCompaction.compactThresholdTokens');
     modelSettings.providerData = {
       ...(modelSettings.providerData || {}),
       contextCompaction: {
         enabled: true,
         threshold: deps.settings.get('agent.contextCompaction.compactThreshold'),
+        ...(thresholdTokens !== null && thresholdTokens !== undefined ? { thresholdTokens } : {}),
       },
     };
   }

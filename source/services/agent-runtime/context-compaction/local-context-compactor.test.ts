@@ -32,6 +32,7 @@ it('reduces cold turns sequentially and returns a marked checkpoint plus verbati
   if (outcome.kind !== 'compacted') return;
   expect(generate).toHaveBeenCalledTimes(2);
   for (const call of generate.mock.calls) expect(() => JSON.parse(call[0].transcriptChunk)).not.toThrow();
+  for (const call of generate.mock.calls) expect(call[0].maxOutputTokens).toBe(500);
   expect(generate.mock.calls[1]![0].priorSummary).toBe('summary one');
   expect(outcome.checkpoint).toMatchObject({
     role: 'system',

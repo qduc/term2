@@ -772,6 +772,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
         const options = {
           provider,
           model,
+          reasoningEffort: 'none' as const,
           instructions: CONTEXT_COMPACTION_INSTRUCTIONS,
           maxTokens: maxOutputTokens,
         };

@@ -152,7 +152,10 @@ export class LocalContextCompactor {
     const coldItems = plan.coldPrefix.filter((item) => !isLocalContextSummary(item));
     const maxChunkCharacters = Math.max(4_000, Math.floor(usableInputTokens * 0.4 * 4));
     const chunks = chunkColdPrefix(coldItems, maxChunkCharacters);
-    const summaryOutputCap = Math.max(256, Math.min(4_096, Math.floor(usableInputTokens * 0.1)));
+    const summaryOutputCap = Math.max(
+      256,
+      Math.min(32_000, input.maxOutputTokens ?? 32_000, Math.floor(usableInputTokens * 0.1)),
+    );
     let summary: string | null = priorCheckpoint ? checkpointSummaryText(priorCheckpoint) : null;
     const usage = { inputTokens: 0, outputTokens: 0 };
     const costRecords: ModelRequestCost[] = [];

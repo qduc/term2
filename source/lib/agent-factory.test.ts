@@ -548,6 +548,24 @@ it.sequential('buildAgent passes enabled context compaction to the OpenAI adapte
   });
 });
 
+it.sequential('buildAgent passes an optional raw context compaction threshold without changing ratio-only data', () => {
+  const { deps } = createDeps({
+    providerId: 'openai',
+    settingsValues: {
+      'agent.contextCompaction.enabled': true,
+      'agent.contextCompaction.mode': 'auto',
+      'agent.contextCompaction.compactThreshold': 0.8,
+      'agent.contextCompaction.compactThresholdTokens': 120_000,
+    },
+  });
+  const result = buildAgent({ model: 'gpt-5.4-nano' }, deps);
+  expect(result.agent.modelSettings?.providerData?.contextCompaction).toEqual({
+    enabled: true,
+    threshold: 0.8,
+    thresholdTokens: 120_000,
+  });
+});
+
 it.sequential('buildAgent passes enabled context compaction to the Codex adapter', () => {
   const { deps } = createDeps({
     providerId: 'codex',

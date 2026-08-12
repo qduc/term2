@@ -40,10 +40,12 @@ export const SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.AGENT_REASONING_EFFORT]: 'Reasoning effort (none|minimal|low|medium|high|xhigh|default)',
   [SETTING_KEYS.AGENT_TEMPERATURE]: 'Model temperature (0-2, controls randomness)',
   [SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER]: 'Use OpenAI Flex Service Tier to reduce costs (true|false, OpenAI only)',
-  [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_ENABLED]:
-    'Enable OpenAI server-side context compaction (true|false, OpenAI only)',
+  [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_ENABLED]: 'Enable context compaction (true|false)',
+  [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_MODE]: 'Context compaction strategy (native|auto|local; default native)',
   [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD]:
-    'Context-window ratio for OpenAI server-side context compaction (0-1, 0%-100%)',
+    'Context-window ratio for automatic context compaction (0-1, 0%-100%)',
+  [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD_TOKENS]:
+    'Optional raw-token ceiling for automatic context compaction (null or integer >=1000)',
   [SETTING_KEYS.AGENT_MENTOR_MODEL]: 'Mentor model to use (optional, enables ask_mentor tool)',
   [SETTING_KEYS.AGENT_MENTOR_PROVIDER]: 'Provider to use for mentor model (openai, openrouter, etc.)',
   [SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT]:
@@ -192,7 +194,9 @@ export const CATEGORY_KEYS = {
     SETTING_KEYS.AGENT_MENTOR_POOL,
     SETTING_KEYS.AGENT_USE_FLEX_SERVICE_TIER,
     SETTING_KEYS.AGENT_CONTEXT_COMPACTION_ENABLED,
+    SETTING_KEYS.AGENT_CONTEXT_COMPACTION_MODE,
     SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD,
+    SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD_TOKENS,
     SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_MODEL,
     SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_REASONING_EFFORT,
     SETTING_KEYS.AGENT_SUBAGENT_WORKER_MODEL,

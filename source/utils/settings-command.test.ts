@@ -18,7 +18,9 @@ const baseSettings = {
     useFlexServiceTier: { value: false, source: 'default' },
     contextCompaction: {
       enabled: { value: false, source: 'default' },
+      mode: { value: 'native', source: 'default' },
       compactThreshold: { value: 0.8, source: 'default' },
+      compactThresholdTokens: { value: null, source: 'default' },
     },
     provider: { value: 'openai', source: 'default' },
     maxTurns: { value: 20, source: 'default' },
@@ -102,6 +104,8 @@ it('formatSettingsSummary renders values with sources', () => {
   expect(summary.includes('agent.maxParallelToolCalls: 3 (default)')).toBe(true);
   expect(summary.includes('agent.contextCompaction.enabled: false (default)')).toBe(true);
   expect(summary.includes('agent.contextCompaction.compactThreshold: 0.8 (default)')).toBe(true);
+  expect(summary.includes('agent.contextCompaction.mode: native (default)')).toBe(true);
+  expect(summary.includes('agent.contextCompaction.compactThresholdTokens: null (default)')).toBe(true);
   expect(summary.includes('memory.enabled: true (default)')).toBe(true);
 });
 

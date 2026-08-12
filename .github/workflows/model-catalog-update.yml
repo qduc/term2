@@ -1,0 +1,120 @@
+name: Update model catalog
+
+# Weekly refresh of the vendored model catalog. Downloads the latest
+# @earendil-works/pi-ai package into a throwaway directory (npm pack; no
+# dependency changes), points PI_AI_DATA_DIR at its dist/providers/data,
+# regenerates source/providers/model-catalog/catalog.generated.ts via
+# `pnpm catalog:update`, runs the focused catalog/pricing tests, and opens or
+# force-updates one predictable automation PR. The job exits cleanly (green
+# no-op) when a run produces no catalog changes.
+on:
+  schedule:
+    # 06:00 UTC every Monday.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# Serialize runs: a weekly tick and a manual dispatch must never race on the
+# same PR branch. A queued run waits rather than cancels, so an in-flight
+# update finishes and pushes before the next one starts.
+concurrency:
+  group: model-catalog-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # npm -g rather than corepack: corepack is bundled only with Node < 25,
+      # and npm ships with every Node release the runner may provision.
+      - name: Install pnpm
+        run: npm install -g pnpm@11.7.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # pi-ai is never added as a dependency: it requires Node >= 22.19 while
+      # this repo supports Node >= 20, and it would pull hundreds of unrelated
+      # lockfile lines just to power this CI-only task. Instead, pack the
+      # latest published tarball into a temp directory and point PI_AI_DATA_DIR
+      # at its dist/providers/data; catalog:update reads it without installing.
+      - name: Download latest pi-ai package
+        id: pi-ai
+        run: |
+          set -euo pipefail
+          TMP_DIR="$(mktemp -d "$RUNNER_TEMP/pi-ai.XXXXXX")"
+          # Run npm outside the checkout: npm otherwise enforces this repo's
+          # pnpm-only devEngines contract before it can fetch the tarball.
+          cd "$TMP_DIR"
+          TARBALL="$(npm pack @earendil-works/pi-ai --pack-destination "$TMP_DIR")"
+          tar -xzf "$TMP_DIR/$TARBALL" -C "$TMP_DIR"
+          PI_AI_VERSION="$(node -p "require('$TMP_DIR/package/package.json').version")"
+          echo "PI_AI_DATA_DIR=$TMP_DIR/package/dist/providers/data" >> "$GITHUB_ENV"
+          echo "pi-ai-version=$PI_AI_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Regenerate the model catalog
+        run: pnpm catalog:update
+
+      - name: Check for generated catalog changes
+        id: changes
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- source/providers/model-catalog/catalog.generated.ts; then
+            echo "No catalog drift; nothing to PR."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run focused catalog and pricing tests
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          pnpm test source/providers/model-catalog/catalog.test.ts \
+            source/providers/model-catalog/generate-catalog.test.ts \
+            source/services/cost/pricing.test.ts \
+            source/services/cost/model-cost.test.ts
+
+      - name: Open or update the automation pull request
+        if: steps.changes.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          BRANCH="chore/model-catalog-update"
+          BASE="${GITHUB_REF_NAME}"
+          PI_AI_VERSION="${{ steps.pi-ai.outputs.pi-ai-version }}"
+          PR_TITLE="chore: update model catalog (pi-ai ${PI_AI_VERSION})"
+          PR_BODY="Automated weekly model-catalog refresh.
+
+          Regenerates \`source/providers/model-catalog/catalog.generated.ts\` from the
+          latest published \`@earendil-works/pi-ai\` (\`${PI_AI_VERSION}\`) via
+          \`pnpm catalog:update\`. Focused catalog/pricing tests ran in the
+          \`Update model catalog\` workflow."
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add source/providers/model-catalog/catalog.generated.ts
+          git commit -m "$PR_TITLE"
+          git push -u origin "$BRANCH" --force
+
+          PR_NUMBER="$(gh pr list --state open --head "$BRANCH" --json number --jq '.[0].number // empty')"
+          if [ -n "$PR_NUMBER" ]; then
+            echo "Updating existing PR #${PR_NUMBER}."
+            gh pr edit "$PR_NUMBER" --title "$PR_TITLE" --body "$PR_BODY"
+          else
+            gh pr create --title "$PR_TITLE" --body "$PR_BODY" --head "$BRANCH" --base "$BASE"
+          fi

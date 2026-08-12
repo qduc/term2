@@ -229,7 +229,12 @@ it('getResponse (HTTP) preserves typed settings, including zero values, in the n
 
 it.each([
   ['gpt-5.4-mini', 200_000],
+  ['gpt-5.5', 136_000],
   ['gpt-5.6-luna', 136_000],
+  ['gpt-5.6-terra', 136_000],
+  ['gpt-5.6-sol', 136_000],
+  ['gpt-5.3-codex', 200_000],
+  ['gpt-5.3-codex-spark', 64_000],
 ])('converts the context compaction ratio to model tokens (%s)', async (modelName, expectedThreshold) => {
   let capturedBody: any;
   const client = {
@@ -253,6 +258,7 @@ it.each([
 
 it.each([
   ['unsupported model', 'gpt-5.3', true],
+  ['pre-5.4 auto-compact 500 family', 'gpt-5.2', true],
   ['unmeasured future model', 'gpt-5.10', true],
   ['non-OpenAI provider capability', 'gpt-5.4-mini', false],
 ])('does not send context management for an enabled %s', async (_label, modelName, supportsContextCompaction) => {

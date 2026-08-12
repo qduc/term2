@@ -141,10 +141,13 @@ function toResponsesOutputFormat(
 }
 
 function supportsContextCompactionModel(model: string): boolean {
-  // This allowlist is empirical: context_management returned opaque 500s on
-  // gpt-5.1/gpt-5.2, while the gpt-5.4 family and gpt-5.6-luna worked.
-  // Re-measure before adding any model family.
-  return /^(?:gpt-5\.4(?:$|[-_])|gpt-5\.6-luna(?:$|[-_]))/.test(model);
+  // Server-side context_management is model-dependent: gpt-5.1/gpt-5.2 returned
+  // opaque 500s when the threshold fired (docs/plans/openai-context-compaction.md).
+  // OpenAI's compaction guide demos gpt-5.3-codex; the compact endpoint enum and
+  // product usage cover gpt-5.5 and the full gpt-5.6 family (sol/terra/luna).
+  // Default-deny unmeasured families (e.g. bare gpt-5.3, gpt-5.10).
+  // Re-measure before adding a new family.
+  return /^(?:gpt-5\.(?:4|5|6)(?:$|[-_])|gpt-5\.3-codex(?:$|[-_]))/.test(model);
 }
 
 function contextCompaction(

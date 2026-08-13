@@ -166,7 +166,7 @@ describe('application-owned Responses lifecycle through the shipped CLI', () => 
       await writePrompt(child, 'run the approval fixture');
       await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 1);
       await child.waitForVisibleOutput('Allow this action?');
-      await writePrompt(child, 'y');
+      await writeApprovalShortcut(child, 'y');
       await waitForRequests(server, child, (requests) => toolResultRequests(requests).length >= 1);
       await child.waitForVisibleOutput('APPROVED-FINAL');
 
@@ -187,7 +187,7 @@ describe('application-owned Responses lifecycle through the shipped CLI', () => 
     await writePrompt(child, 'run the rejection fixture');
     await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 1);
     await child.waitForVisibleOutput('Allow this action?');
-    await writePrompt(child, 'n');
+    await writeApprovalShortcut(child, 'n');
     await child.waitForVisibleOutput('Why?');
     await writePrompt(child, 'fixture rejection');
     await waitForRequests(server, child, (requests) => toolResultRequests(requests).length >= 1);
@@ -209,7 +209,7 @@ describe('application-owned Responses lifecycle through the shipped CLI', () => 
     await child.waitForVisibleOutput('❯');
     await writePrompt(child, 'launch the background shell fixture');
     await child.waitForVisibleOutput('Allow this action?');
-    await writePrompt(child, 'y');
+    await writeApprovalShortcut(child, 'y');
     await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 2);
     await child.waitForVisibleOutput('BACKGROUND-LAUNCH-FINAL');
     await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 3, 10_000);
@@ -439,6 +439,11 @@ async function writePrompt(child: PtyChildDriver, text: string): Promise<void> {
   await child.write(text);
   await delay(50);
   await child.write('\r');
+}
+
+/** ApprovalPrompt accepts y/n immediately; they are not text submissions. */
+async function writeApprovalShortcut(child: PtyChildDriver, decision: 'y' | 'n'): Promise<void> {
+  await child.write(decision);
 }
 
 function toolResultRequests(requests: readonly CapturedResponsesRequest[]): CapturedResponsesRequest[] {

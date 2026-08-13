@@ -53,7 +53,7 @@ import {
   HOME_DIRECTORY_START_WARNING,
   shouldWarnOnHomeDirectoryStart,
 } from './utils/home-directory-start-guard.js';
-import { createLocalHookRuntime } from './services/hooks/hook-runtime.js';
+import { createRootHookRuntime } from './services/hooks/hook-composition.js';
 
 const sessionUsageAccumulator = createUsageAccumulator();
 const subagentUsageAccumulator = createUsageAccumulator();
@@ -572,7 +572,8 @@ const terminalTitleBase = buildProjectFolderTitle(executionContext.getCwd());
 // Hooks are trusted in-process code, not sandboxed tools. Discovery is done
 // once at startup; untrusted project roots are skipped rather than prompting
 // unexpectedly (including in non-interactive/CI mode).
-const localHookRuntime = createLocalHookRuntime({
+const localHookRuntime = createRootHookRuntime({
+  executionContext,
   userEnabled: settings.getDynamic('hooks.user.enabled') !== false,
   projectEnabled: settings.getDynamic('hooks.project.enabled') !== false,
   trustedProjectRoots: (settings.getDynamic('hooks.trustedProjectRoots') as string[] | undefined) ?? [],

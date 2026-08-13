@@ -15,17 +15,21 @@ previously missing public-boundary proofs:
 - The built CLI loads TypeScript user and explicitly trusted project hooks in
   deterministic user-before-project order.
 - In SSH execution mode, hook discovery and `session.start.cwd` remain local to
-  the Term2 process; a fake SSH boundary proves no remote discovery/execution.
+  the Term2 process; the root CLI-composition test passes a remote
+  `ExecutionContext`, discovers only the local project hook, and proves no SSH
+  discovery/execution occurs.
 
 The closure validation on 2026-08-13 passed:
 
-- Focused hook tests: 5 files, 19 tests.
+- Focused hook, SSH-composition, and provider-harness tests: 6 files, 31 tests.
 - Packaged CLI hook acceptance: 1 file, 3 tests.
+- Provider harness isolation test proves child `HOME` and `USERPROFILE` both
+  point at its disposable root, preserving hook isolation on Windows.
 - `NODE_ENV=test pnpm typecheck`, `NODE_ENV=test pnpm lint`,
   `NODE_ENV=test pnpm build`, and `git diff --check`.
-- `NODE_ENV=test pnpm test`: 480 files, 6,108 passing tests, 2 skipped.
-- `NODE_ENV=test pnpm test:provider-black-box`: passed (with the documented
-  `openai-websocket.reasoning` skip).
+- `NODE_ENV=test pnpm test`: 480 files, 6,109 passing tests, 2 skipped.
+- `NODE_ENV=test pnpm test:provider-black-box`: 19 files, 166 passing tests,
+  1 documented `openai-websocket.reasoning` skip.
 
 `pnpm lint` completed with 46 existing warnings and no errors. The unit suite
 again emitted the non-fatal `TimeoutNaNWarning` described in the baseline.

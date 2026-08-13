@@ -62,6 +62,15 @@ describe('provider black-box harness', () => {
     });
   });
 
+  it('isolates HOME and Windows USERPROFILE for child processes', async () => {
+    await withIsolatedWorkspace({}, async (workspace) => {
+      const child = await workspace.start({ command: process.execPath, args: [CHILD, 'home'] });
+      await child.waitForVisibleOutput(`HOME:${workspace.root}`);
+      await child.waitForVisibleOutput(`USERPROFILE:${workspace.root}`);
+      await expect(child.waitForExit()).resolves.toMatchObject({ exitCode: 0 });
+    });
+  });
+
   it('awaits termination after a bounded timeout', async () => {
     const workspace = await createIsolatedWorkspaceLease();
     try {

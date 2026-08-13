@@ -363,6 +363,9 @@ function createWorkspaceEnvironment(
   }
   Object.assign(env, {
     HOME: root,
+    // Node resolves os.homedir() from USERPROFILE on Windows; isolate both
+    // home conventions so hooks and settings never leak into the host profile.
+    USERPROFILE: root,
     XDG_CONFIG_HOME: paths.configDir,
     XDG_STATE_HOME: paths.stateDir,
     XDG_DATA_HOME: paths.dataDir,

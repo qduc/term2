@@ -30,7 +30,7 @@
 Final verification:
 - `pnpm typecheck`: passed.
 - Vitest excluding the terminal E2E: **4,859 passed, 1 skipped** across 386 passed files and 1 skipped file.
-- Full Vitest has one environment-sensitive timeout in `source/cli.e2e.test.ts` while waiting for terminal UI output; no other test failures were observed.
+- Historical verification had one environment-sensitive timeout in `source/cli.e2e.test.ts` while waiting for terminal UI output. It is not a current baseline failure; see the 2026-08-13 [validation baseline](./validation-baseline-2026-08-13.md).
 - ESLint: 0 errors and one pre-existing `require-yield` warning in `source/lib/agent-client.dispose.test.ts`.
 - Tracked-file formatting and `git diff --check`: passed. Literal `pnpm lint` is blocked only by the preserved unrelated untracked `source/providers/openrouter.provider.test.ts`, which was not modified.
 - Final explicit-`any` inventory: 3,777 occurrences (3,009 in tests; 768 in non-test files across 138 files). This plan intentionally does not pursue zero `any`.

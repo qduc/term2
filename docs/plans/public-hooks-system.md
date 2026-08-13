@@ -1,5 +1,5 @@
-Status: In progress (near finish). Core implementation complete; validation hardening and test fixes remaining.
-Last updated: 2026-08-05
+Status: In progress. Core implementation is complete; plan-specific end-to-end acceptance evidence and provider-gate reliability remain.
+Last updated: 2026-08-13
 
 # Public hooks system implementation plan
 
@@ -31,14 +31,21 @@ The core public hooks system implementation and validation hardening are structu
   - Core session/approval/run-loop/file-tool unit tests (1,141 passed across 79 test files)
   - Settings tests: 91 passed
   - `git diff --check` (clean)
-- **Not fully clean**:
-  - `pnpm test`: Pre-existing Ink UI test failure (`TypeError: act is not a function` due to dirty `ink-prompt` `0.3.2` -> `0.4.1` upgrade).
-  - `pnpm test:provider-black-box`: Passed 130 scenarios, 1 PTY timeout in Responses lifecycle suite.
+- **2026-08-13 baseline:** the base checkout passed `pnpm test` with 6,106 tests and 2 skips, and `pnpm test:provider-black-box` with 162 tests and 1 documented skip. The package scripts now pin `NODE_ENV=test`, so an ambient production value cannot select React's production entrypoint. Closure verification then passed the full unit suite from ambient `NODE_ENV=production`, but exposed a separate, repeatable full-suite resilience PTY timeout. See [the dated validation baseline](./validation-baseline-2026-08-13.md) for commands and caveats.
 
-### Remaining work to finish
+### Historical validation findings (resolved)
 
-1. **Resolve or isolate `ink-prompt` / Ink test breakage**: Fix the `TypeError: act is not a function` issue caused by the dirty `ink-prompt` `0.3.2` -> `0.4.1` upgrade.
-2. **Stabilize provider black-box test**: Re-run and eliminate the PTY timeout in the Responses lifecycle suite.
+The 2026-08-05 Ink `act is not a function` report and Responses-lifecycle PTY timeout were accurate observations at that time. They are no longer current blockers: the former was an ambient test-environment configuration defect, and the latter did not reproduce in the focused or full 2026-08-13 black-box runs.
+
+### Verified remaining work to finish
+
+The resolved validation debt does not yet prove every plan acceptance criterion. First, the full provider gate must be made reliable: its context-compaction resilience scenario has a full-suite-only PTY exit timeout. Repository tests also exercise the hook service and lifecycle seams, but no test currently proves all of the following end-to-end contracts:
+
+1. An actual interactive and non-interactive CLI each load a TypeScript user hook and deliver `status.change`.
+2. The packaged CLI loads a TypeScript hook and proves deterministic combined user/project ordering.
+3. SSH-mode execution keeps hook discovery and execution local to the Term2 process.
+
+Add those bounded acceptance tests, then re-evaluate plan completion against the acceptance criteria below.
 
 ---
 
@@ -307,4 +314,3 @@ The application-owned execution seam is `source/services/agent-runtime/applicati
 - Hot reload and hook management commands.
 - Tool argument mutation, result replacement, environment injection, custom tools, and UI extensions.
 - A richer machine-readable event stream separate from the small public hook contract.
-

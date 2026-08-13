@@ -451,7 +451,7 @@ export function createApplyPatchToolDefinition(deps: {
               }
 
               // Re-apply validation against the locked, current content.
-              let patched: string;
+              let patched: string | undefined;
               let usedHealing = false;
               try {
                 patched = applyDiff(original, diff);
@@ -502,7 +502,7 @@ export function createApplyPatchToolDefinition(deps: {
                   }
                 }
 
-                if (!usedHealing) {
+                if (!usedHealing || patched === undefined) {
                   return {
                     success: false,
                     operation: 'update_file',

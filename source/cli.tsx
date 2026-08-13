@@ -24,6 +24,7 @@ import { createSessionCostAccumulator, formatUsdMicros } from './services/cost/m
 import { buildProjectFolderTitle, setTerminalTitle } from './utils/output/terminal-title.js';
 import {
   generateId,
+  collectOrphanedDeltaSidecars,
   getConversationsDir,
   getResumeCommand,
   loadConversationForProject,
@@ -740,6 +741,9 @@ if (resumedConversation) {
 // Open the append-only log writer for the active session using the same
 // directory resolver as conversation loading and resume operations.
 const logWriterDir = getConversationsDir();
+// Sidecars whose conversation log is gone can never be resumed. Collect them
+// once at startup; sidecars for still-resumable crashed sessions are kept.
+collectOrphanedDeltaSidecars();
 const logWriter = createConversationLogWriter({ sessionId: effectiveSessionId, dir: logWriterDir, logger });
 function buildInitMeta(id: string, createdAt: string) {
   const cwd = executionContext?.getCwd();

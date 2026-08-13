@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import envPaths from 'env-paths';
-import { deltaSidecarPathFor, isTruncatedLogEvent } from '../logging/conversation-log-events.js';
+import { DELTA_SIDECAR_SUFFIX, deltaSidecarPathFor, isTruncatedLogEvent } from '../logging/conversation-log-events.js';
 import { decodeLogEnvelope, type PersistedLogEnvelope } from './conversation-decoder.js';
 import { replayEvents, type RestoredState } from './conversation-replay.js';
 
@@ -199,6 +199,44 @@ function restoredUpdatedAt(filePath: string, envelopes: PersistedLogEnvelope[]):
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Delete delta sidecars whose canonical conversation log no longer exists.
+ *
+ * Deliberately **not** keyed on lock liveness. A sidecar with no held lock is
+ * the crash case — the session died mid-turn — and its deltas are exactly what
+ * `--resume` needs to reconstruct the interrupted turn. Collecting those would
+ * destroy the data the sidecar exists to preserve.
+ *
+ * A sidecar whose `.jsonl` is gone can never be resumed, so it is unambiguous
+ * garbage. Sidecars for still-resumable crashed sessions are left alone; they
+ * are dropped by the next clean `close()` of that session.
+ *
+ * Returns the number of files removed.
+ */
+export function collectOrphanedDeltaSidecars(): number {
+  const dir = getConversationsDir();
+  if (!fs.existsSync(dir)) return 0;
+  let removed = 0;
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(dir);
+  } catch {
+    return 0;
+  }
+  for (const entry of entries) {
+    if (!entry.endsWith(DELTA_SIDECAR_SUFFIX)) continue;
+    const canonical = path.join(dir, `${entry.slice(0, -DELTA_SIDECAR_SUFFIX.length)}.jsonl`);
+    if (fs.existsSync(canonical)) continue;
+    try {
+      fs.unlinkSync(path.join(dir, entry));
+      removed += 1;
+    } catch {
+      // Best effort; a sidecar we cannot remove is inert.
+    }
+  }
+  return removed;
 }
 
 export function loadConversation(

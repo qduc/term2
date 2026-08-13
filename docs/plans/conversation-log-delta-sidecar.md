@@ -192,10 +192,29 @@ session's deltas append to the previous session's sidecar.
 
 ### 6. Orphaned sidecars need a GC
 
-A killed process never reaches `close()`. Startup should collect sidecars whose
-session is not live. The liveness signal already exists: `<sessionId>.lock`,
-acquired in `#initialize` and released in `close()`/`rotate()`. A sidecar with no
-held lock is either consumed by recovery or deleted.
+A killed process never reaches `close()`, so orphans need collecting.
+
+**Correction — an earlier draft of this plan got the GC rule wrong.** It said to
+collect sidecars with no held `<sessionId>.lock`. That is precisely backwards: a
+sidecar with no held lock *is* the crash case, and its deltas are exactly what
+`--resume` needs to rebuild the interrupted turn. Lock-keyed GC would delete the
+data the sidecar exists to preserve.
+
+The implemented rule (`collectOrphanedDeltaSidecars`) keys on the canonical log
+instead: **delete a sidecar only when its `<sessionId>.jsonl` no longer exists.**
+Such a sidecar can never be resumed, so it is unambiguous garbage. Sidecars for
+still-resumable crashed sessions are left alone and are dropped by the next
+clean `close()` of that session.
+
+Accumulation risk is low by construction: a sidecar is retained only when a
+session ends with an unsettled turn, i.e. a crash mid-stream.
+
+**Open policy question, deliberately not decided here:** should sidecars for
+crashed sessions also expire after some retention window (say 30 days), on the
+grounds that nobody resumes a months-old interrupted turn? That trades a bounded
+disk guarantee against silently discarding recoverable state, and it is the
+user's call, not an implementation detail. Orphan-only GC ships now because it
+cannot lose data.
 
 Order the operations in `close()` as **unlink sidecar → release lock**, not the
 reverse. Review flagged a window where a crash between `releaseLock` and
@@ -249,8 +268,9 @@ sidecars. They cannot, and this is worth recording so it is not re-litigated:
    appears as an entry.
 6. `rotate()` produces a fresh sidecar bound to the new session id; the previous
    sidecar is closed and dropped per rule (2).
-7. Startup GC removes sidecars with no held lock, and removes none with a held
-   lock.
+7. Startup GC removes sidecars whose canonical log is gone, and removes none
+   whose canonical log survives — including sidecars from crashed sessions that
+   are still resumable.
 8. fsync call count per turn is unchanged from baseline.
 9. Measured: the canonical log drops ~30% of bytes and ~91% of records versus
    today. (Originally written as "≥80% smaller"; that conflated event share with
@@ -352,7 +372,8 @@ Still open, deferred by default:
 
 ## Resume here
 
-**Steps 1–3 are implemented on `delta-sidecar-log`.** Steps 4–6 remain.
+**Steps 1–6 are implemented on `delta-sidecar-log`.** The plan is complete apart
+from the one open policy question below.
 
 Shipped in step 2/3:
 
@@ -375,12 +396,21 @@ from `user_message` lets a delta written outside that window have its sidecar
 dropped at close. A delta is direct evidence a turn is streaming, so it is the
 better signal.
 
-Next action: **step 4 (startup GC for orphaned sidecars).** Then step 5 (fork
-decision — assert criterion 10) and step 6 (already measured; just record).
+Shipped in steps 4–6:
 
-Remaining risk: with steps 1–3 only, a sidecar orphaned by a hard kill is never
-collected. It is inert (recovery reads it correctly, and a later clean close of
-the same session drops it), but step 4 is what bounds accumulation.
+- `conversation-persistence.ts` — `collectOrphanedDeltaSidecars()`, called once
+  at startup from `source/cli.tsx` before the writer opens.
+- Fork behavior asserted (criterion 10): the sidecar is not copied.
+- Size reduction measured; criterion 9 corrected from ≥80% to ~30% of bytes.
+
+**The GC rule in this plan was wrong and was corrected during implementation.**
+See hazard 6: keying collection on lock liveness would have deleted exactly the
+crash-recovery sidecars the feature exists to preserve. It now keys on the
+canonical log's absence.
+
+Next action: **decide the retention-window policy question in hazard 6** (expire
+crashed-session sidecars after N days, or keep them indefinitely). Nothing else
+is outstanding. Then merge to `main` with `git merge --no-ff delta-sidecar-log`.
 
 Findings already established — do not re-derive:
 

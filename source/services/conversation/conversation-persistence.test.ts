@@ -1415,3 +1415,60 @@ it.sequential('delta sidecar: a missing sidecar still loads the settled part of 
   const restored = persistenceModule.loadConversation(id);
   expect(restored!.messages.some((m) => m.sender === 'bot' && m.text === 'hello')).toBe(true);
 });
+
+it.sequential('delta sidecar: GC removes only sidecars whose conversation log is gone', () => {
+  const liveId = 'gc-live';
+  const orphanId = 'gc-orphan';
+
+  // A crashed-but-resumable session: canonical log present, sidecar retained.
+  fs.writeFileSync(
+    path.join(testDir, `${liveId}.jsonl`),
+    envelopeLine(1, { type: 'session_init', id: liveId, createdAt: '2026-06-01T00:00:00.000Z' }),
+  );
+  fs.writeFileSync(
+    path.join(testDir, `${liveId}.deltas`),
+    envelopeLine(2, { type: 'assistant_journal_delta', turnId: 't1', seq: 1, kind: 'text', delta: 'keep me' }),
+  );
+  // An orphan: no canonical log, so it can never be resumed.
+  fs.writeFileSync(
+    path.join(testDir, `${orphanId}.deltas`),
+    envelopeLine(1, { type: 'assistant_journal_delta', turnId: 't1', seq: 1, kind: 'text', delta: 'garbage' }),
+  );
+
+  expect(persistenceModule.collectOrphanedDeltaSidecars()).toBe(1);
+
+  // The crash-recovery sidecar must survive: deleting it would destroy the
+  // very data it exists to preserve.
+  expect(fs.existsSync(path.join(testDir, `${liveId}.deltas`))).toBe(true);
+  expect(fs.existsSync(path.join(testDir, `${orphanId}.deltas`))).toBe(false);
+});
+
+it.sequential('delta sidecar: forking a session with a live sidecar carries settled turns only', async () => {
+  const sourceId = 'fork-source';
+  const writer = createConversationLogWriter({
+    sessionId: sourceId,
+    dir: testDir,
+    logger: stubLogger,
+    saveLast: () => {},
+  });
+  writer.init({ id: sourceId, createdAt: '2026-06-01T00:00:00.000Z' });
+  writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'settled question' } });
+  writer.append(assistantTurn('settled answer'));
+  writer.append({ type: 'user_message', message: { id: 'u2', sender: 'user', text: 'interrupted question' } });
+  writer.append({ type: 'assistant_journal_delta', turnId: 't2', seq: 1, kind: 'text', delta: 'never finished' });
+  await writer.close();
+
+  expect(fs.existsSync(path.join(testDir, `${sourceId}.deltas`))).toBe(true);
+
+  const forkId = 'fork-target';
+  expect(persistenceModule.forkConversation(sourceId, forkId)).toBe(true);
+
+  // The sidecar is deliberately not copied: a fork of a half-streamed turn is
+  // not a coherent artifact, and its seq numbering belongs to the source.
+  expect(fs.existsSync(path.join(testDir, `${forkId}.deltas`))).toBe(false);
+
+  const forked = persistenceModule.loadConversation(forkId);
+  const texts = forked!.messages.map((m) => ('text' in m ? m.text : undefined));
+  expect(texts).toContain('settled answer');
+  expect(texts.some((t) => t?.includes('never finished'))).toBe(false);
+});

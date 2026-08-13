@@ -127,6 +127,8 @@ export interface WorkspaceCliOptions {
   args: string[];
   env?: Record<string, string | undefined>;
   deadlineMs?: number;
+  /** Absolute path to a built CLI when the test workspace is not the package root. */
+  cliPath?: string;
 }
 
 export interface IsolatedWorkspaceLease {
@@ -361,6 +363,9 @@ function createWorkspaceEnvironment(
   }
   Object.assign(env, {
     HOME: root,
+    // Node resolves os.homedir() from USERPROFILE on Windows; isolate both
+    // home conventions so hooks and settings never leak into the host profile.
+    USERPROFILE: root,
     XDG_CONFIG_HOME: paths.configDir,
     XDG_STATE_HOME: paths.stateDir,
     XDG_DATA_HOME: paths.dataDir,
@@ -583,6 +588,7 @@ async function runCapturedCli(options: {
   args: string[];
   env: NodeJS.ProcessEnv;
   deadlineMs?: number;
+  cliPath?: string;
   stdoutPath: string;
   stderrPath: string;
 }): Promise<BlackBoxRun> {
@@ -593,7 +599,7 @@ async function runCapturedCli(options: {
   let result: ChildExit = { exitCode: null, signal: null };
   let timedOut = false;
   try {
-    child = spawn(process.execPath, [join(options.cwd, 'dist/cli.js'), ...options.args], {
+    child = spawn(process.execPath, [options.cliPath ?? join(options.cwd, 'dist/cli.js'), ...options.args], {
       cwd: options.cwd,
       env: options.env,
       detached: process.platform !== 'win32',

@@ -53,7 +53,7 @@ import {
   HOME_DIRECTORY_START_WARNING,
   shouldWarnOnHomeDirectoryStart,
 } from './utils/home-directory-start-guard.js';
-import { HookService } from './services/hooks/hook-service.js';
+import { createRootHookRuntime } from './services/hooks/hook-composition.js';
 
 const sessionUsageAccumulator = createUsageAccumulator();
 const subagentUsageAccumulator = createUsageAccumulator();
@@ -572,13 +572,11 @@ const terminalTitleBase = buildProjectFolderTitle(executionContext.getCwd());
 // Hooks are trusted in-process code, not sandboxed tools. Discovery is done
 // once at startup; untrusted project roots are skipped rather than prompting
 // unexpectedly (including in non-interactive/CI mode).
-const hookService = new HookService({
-  discoveryOptions: {
-    cwd: executionContext.getCwd(),
-    userEnabled: settings.getDynamic('hooks.user.enabled') !== false,
-    projectEnabled: settings.getDynamic('hooks.project.enabled') !== false,
-    trustedProjectRoots: (settings.getDynamic('hooks.trustedProjectRoots') as string[] | undefined) ?? [],
-  },
+const localHookRuntime = createRootHookRuntime({
+  executionContext,
+  userEnabled: settings.getDynamic('hooks.user.enabled') !== false,
+  projectEnabled: settings.getDynamic('hooks.project.enabled') !== false,
+  trustedProjectRoots: (settings.getDynamic('hooks.trustedProjectRoots') as string[] | undefined) ?? [],
   registryOptions: {
     callbackTimeoutMs: Number(settings.getDynamic('hooks.timeoutMs') ?? 5_000),
   },
@@ -590,6 +588,7 @@ const hookService = new HookService({
     });
   },
 });
+const { hookService } = localHookRuntime;
 await hookService.initialize();
 
 const sessionClientFactory = createOwnedSessionClientFactory(
@@ -712,7 +711,7 @@ const conversationService = new ConversationService({
 if (conversationService.hookEvents) {
   await hookService.emit(
     conversationService.hookEvents.create('session.start', {
-      cwd: executionContext.getCwd(),
+      cwd: localHookRuntime.cwd,
       mode: 'interactive',
       providerName: settings.get('agent.provider'),
       modelName: settings.get('agent.model'),

@@ -40,6 +40,10 @@ if (mode === 'write') {
   process.stdin.once('data', (chunk) => {
     process.stdout.write(`echo: ${String(chunk).trim()}\r\n`, () => process.exit(0));
   });
+} else if (mode === 'home') {
+  // On Windows Node resolves os.homedir() from USERPROFILE. Reporting both
+  // variables lets the host-independent harness test pin that contract.
+  process.stdout.write(`HOME:${process.env.HOME}\r\nUSERPROFILE:${process.env.USERPROFILE}\r\n`);
 } else {
   throw new Error(`Unknown harness child mode: ${mode ?? '<missing>'}`);
 }

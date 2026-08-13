@@ -1,11 +1,40 @@
-Status: In progress. Core implementation is complete; plan-specific end-to-end acceptance evidence and provider-gate reliability remain.
+Status: Complete. All version-1 public-hooks acceptance criteria are implemented and evidenced at the public/package boundary.
 Last updated: 2026-08-13
 
 # Public hooks system implementation plan
 
 ## Resume here
 
-### Current state
+### Completion
+
+The public-hooks system is complete. The final closure tests added the three
+previously missing public-boundary proofs:
+
+- The built CLI loads a real TypeScript user hook through production `jiti` in
+  both interactive and non-interactive startup, and delivers `status.change`.
+- The built CLI loads TypeScript user and explicitly trusted project hooks in
+  deterministic user-before-project order.
+- In SSH execution mode, hook discovery and `session.start.cwd` remain local to
+  the Term2 process; the root CLI-composition test passes a remote
+  `ExecutionContext`, discovers only the local project hook, and proves no SSH
+  discovery/execution occurs.
+
+The closure validation on 2026-08-13 passed:
+
+- Focused hook, SSH-composition, and provider-harness tests: 6 files, 31 tests.
+- Packaged CLI hook acceptance: 1 file, 3 tests.
+- Provider harness isolation test proves child `HOME` and `USERPROFILE` both
+  point at its disposable root, preserving hook isolation on Windows.
+- `NODE_ENV=test pnpm typecheck`, `NODE_ENV=test pnpm lint`,
+  `NODE_ENV=test pnpm build`, and `git diff --check`.
+- `NODE_ENV=test pnpm test`: 480 files, 6,109 passing tests, 2 skipped.
+- `NODE_ENV=test pnpm test:provider-black-box`: 19 files, 166 passing tests,
+  1 documented `openai-websocket.reasoning` skip.
+
+`pnpm lint` completed with 46 existing warnings and no errors. The unit suite
+again emitted the non-fatal `TimeoutNaNWarning` described in the baseline.
+
+### Implemented system
 
 The core public hooks system implementation and validation hardening are structurally in place:
 - **Versioned hook contracts**: All 11 lifecycle events (`session.start`, `session.end`, `status.change`, `turn.start`, `turn.end`, `turn.error`, `tool.before`, `tool.after`, `tool.error`, `approval.requested`, `approval.resolved`).
@@ -36,16 +65,6 @@ The core public hooks system implementation and validation hardening are structu
 ### Historical validation findings (resolved)
 
 The 2026-08-05 Ink `act is not a function` report and Responses-lifecycle PTY timeout were accurate observations at that time. They are no longer current blockers: the former was an ambient test-environment configuration defect, and the latter did not reproduce in the focused or full 2026-08-13 black-box runs.
-
-### Verified remaining work to finish
-
-The resolved validation debt does not yet prove every plan acceptance criterion. First, the full provider gate must be made reliable: its context-compaction resilience scenario has a full-suite-only PTY exit timeout. Repository tests also exercise the hook service and lifecycle seams, but no test currently proves all of the following end-to-end contracts:
-
-1. An actual interactive and non-interactive CLI each load a TypeScript user hook and deliver `status.change`.
-2. The packaged CLI loads a TypeScript hook and proves deterministic combined user/project ordering.
-3. SSH-mode execution keeps hook discovery and execution local to the Term2 process.
-
-Add those bounded acceptance tests, then re-evaluate plan completion against the acceptance criteria below.
 
 ---
 

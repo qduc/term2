@@ -153,7 +153,7 @@ it.sequential('reconciles refreshed task order by identity before rendering and 
   await writeInput(view.stdin, '\x07');
   await writeInput(view.stdin, '\u001B[B');
 
-  current = [inserted, second, first];
+  current = [second, inserted, first];
   await rerenderInAct(view, <BackgroundTaskManager {...props} />);
   expect((view.lastFrame() ?? '').split('\n').find((line) => line.includes('❯'))).toContain('second_task');
   await writeInput(view.stdin, 'x');
@@ -193,7 +193,7 @@ it.sequential('transfers the highlighted foreground identity after refreshed can
   await writeInput(view.stdin, '\x07');
   await writeInput(view.stdin, '\u001B[B');
 
-  current = [inserted, second, first];
+  current = [second, inserted, first];
   await rerenderInAct(view, <BackgroundTaskManager {...props} />);
   expect((view.lastFrame() ?? '').split('\n').find((line) => line.includes('❯'))).toContain('second child task');
   await writeInput(view.stdin, 'b');

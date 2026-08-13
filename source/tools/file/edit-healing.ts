@@ -29,13 +29,13 @@ type HealingDeps = {
   ) => Promise<string>;
 };
 
-const DEFAULT_TIMEOUT_MS = 30_000;
-const DEFAULT_CONFIDENCE_THRESHOLD = 0.6;
-const DEFAULT_MAX_FILE_CHARS = 8_000;
+export const DEFAULT_TIMEOUT_MS = 30_000;
+export const DEFAULT_CONFIDENCE_THRESHOLD = 0.6;
+export const DEFAULT_MAX_FILE_CHARS = 8_000;
 
 const DELIMITER_CANDIDATES = ['---', '===', '<<<>>>', '|||', '###BOUNDARY###'];
 
-function chooseDelimiter(...fields: string[]): string {
+export function chooseDelimiter(...fields: string[]): string {
   for (const d of DELIMITER_CANDIDATES) {
     if (fields.every((f) => !`\n${f}\n`.includes(`\n${d}\n`))) return d;
   }
@@ -67,14 +67,14 @@ function buildUserData(originalParams: SearchReplaceFullOperation, fileContent: 
   ].join(`\n${delimiter}\n`);
 }
 
-function extractFileExcerpt(content: string, maxChars: number): string {
+export function extractFileExcerpt(content: string, maxChars: number): string {
   if (content.length <= maxChars) return content;
   const head = content.slice(0, Math.floor(maxChars / 2));
   const tail = content.slice(-Math.floor(maxChars / 2));
   return `${head}\n...<truncated>...\n${tail}`;
 }
 
-function stripCodeFences(text: string): string {
+export function stripCodeFences(text: string): string {
   const trimmed = text.trim();
   if (trimmed.startsWith('```') && trimmed.endsWith('```')) {
     return trimmed

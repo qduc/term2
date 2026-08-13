@@ -44,20 +44,51 @@ const statusText = (details: BackgroundTaskControlDetails): string => {
   if (status === 'cancelled') return 'cancelled · terminal';
   const activity = details.activity;
   if (!activity) return status.replaceAll('_', ' ');
-  switch (activity.state) {
-    case 'waiting':
-      return `waiting for ${activity.reason ?? 'provider'}`;
-    case 'quiet':
-      return 'quiet · no observed progress · still running';
-    case 'cancelling':
-      return 'cancelling';
+  if (activity.phase === 'waiting')
+    return `awaiting ${activity.reason ?? 'provider'} response${activity.liveness.state === 'quiet' ? ' · quiet' : ''}`;
+  if (activity.phase === 'cancelling') return 'cancelling';
+  if (activity.phase === 'settled') return `${status.replaceAll('_', ' ')} · terminal`;
+  return 'active';
+};
+
+const observationText = (details: BackgroundTaskControlDetails): string | undefined => {
+  const observation = details.activity?.lastObservation;
+  if (!observation) return undefined;
+  switch (observation.kind) {
+    case 'request_dispatched':
+      return 'Request handed to model runtime';
+    case 'response_started':
+      return 'Response started';
+    case 'text_received':
+      return 'Text received';
+    case 'tool_started':
+      return `Tool started: ${observation.toolName}`;
+    case 'tool_completed':
+      return observation.toolName ? `Tool completed: ${observation.toolName}` : 'Tool completed';
+    case 'retrying':
+      return `Retrying ${observation.attempt} of ${observation.maxRetries}`;
+    case 'approval_requested':
+      return 'Approval requested';
+    case 'question_asked':
+      return 'Question asked';
+    case 'shell_started':
+      return 'Shell started';
+    case 'shell_output_received':
+      return 'Shell output received';
+    case 'stop_requested':
+      return 'Stop requested';
     case 'settled':
-      return `${status.replaceAll('_', ' ')} · terminal`;
-    case 'active':
-      return 'active';
+      return 'Task settled';
   }
-  /* c8 ignore next -- exhaustive switch over the normalized activity union */
-  return status.replaceAll('_', ' ');
+};
+
+const formatContext = (promptTokens: number, contextWindow?: number): string => {
+  const tokens =
+    promptTokens >= 1000 ? `${(promptTokens / 1000).toFixed(1).replace(/\.0$/, '')}k` : String(promptTokens);
+  if (!contextWindow) return tokens;
+  const max =
+    contextWindow >= 1000 ? `${(contextWindow / 1000).toFixed(1).replace(/\.0$/, '')}k` : String(contextWindow);
+  return `${tokens} / ${max} (${((promptTokens / contextWindow) * 100).toFixed(1)}%)`;
 };
 
 const formatToolCounts = (counts: Record<string, number>): string =>
@@ -68,7 +99,14 @@ const formatToolCounts = (counts: Record<string, number>): string =>
 const BackgroundTaskDetailsView: FC<{ details: BackgroundTaskControlDetails }> = ({ details }) => (
   <Box flexDirection="column" marginTop={1} paddingLeft={2}>
     <Text color="#c4b5fd">ID: {details.id}</Text>
-    <Text>Status: {statusText(details)}</Text>
+    <Text>State: {statusText(details)}</Text>
+    {details.activity && (
+      <Text>
+        Last observed: {formatBackgroundTaskElapsed(details.activity.liveness.ageMs)} ago
+        {details.activity.liveness.state === 'quiet' ? ' (quiet)' : ''}
+      </Text>
+    )}
+    {observationText(details) && <Text>Last activity: {observationText(details)}</Text>}
     {details.kind === 'shell' ? (
       <>
         <Text wrap="wrap">Command: {details.command}</Text>
@@ -80,7 +118,18 @@ const BackgroundTaskDetailsView: FC<{ details: BackgroundTaskControlDetails }> =
         <Text>Role: {details.role}</Text>
         {details.name && <Text>Name: {details.name}</Text>}
         <Text wrap="wrap">Task: {details.task}</Text>
-        <Text>Elapsed: {formatBackgroundTaskElapsed(details.elapsedMs)}</Text>
+        <Text>Started: {formatBackgroundTaskElapsed(details.elapsedMs)} ago</Text>
+        {details.model && <Text>Model: {details.model.id}</Text>}
+        {details.model && <Text>Provider: {details.model.provider}</Text>}
+        {details.latestUsage?.prompt_tokens !== undefined && (
+          <Text>Context: {formatContext(details.latestUsage.prompt_tokens, details.model?.contextWindow)}</Text>
+        )}
+        {details.activity?.lastObservation.kind === 'retrying' && (
+          <Text>
+            Retries: {details.activity.lastObservation.attempt} of {details.activity.lastObservation.maxRetries}
+          </Text>
+        )}
+        {details.lastToolName && <Text>Last tool: {details.lastToolName}</Text>}
         {Object.keys(details.toolCounts).length > 0 && <Text>Tools: {formatToolCounts(details.toolCounts)}</Text>}
         {details.currentText && <Text wrap="wrap">Current: {details.currentText}</Text>}
       </>
@@ -227,7 +276,10 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
 
   if (!open) return null;
   const selectedForeground = foreground[selectedIndex] ?? null;
-  const selected = tasks[selectedIndex - foreground.length];
+  // The parent already refreshes on background-task changes. Read the port for
+  // this render rather than retaining the Ctrl+G snapshot in the detail card.
+  const refreshedTasks = listDetails();
+  const selected = refreshedTasks[selectedIndex - foreground.length] ?? tasks[selectedIndex - foreground.length];
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor="#6366f1" paddingX={1} marginBottom={1}>
@@ -243,7 +295,7 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
           {candidate.kind === 'shell' ? candidate.command : candidate.task} · running
         </Text>
       ))}
-      {tasks.map((task, index) => {
+      {refreshedTasks.map((task, index) => {
         const displayIndex = index + foreground.length;
         return (
           <Text key={`${task.kind}:${task.id}`} color={displayIndex === selectedIndex ? '#f8fafc' : '#64748b'}>

@@ -115,7 +115,7 @@ it.sequential('selects a task and shows executor-specific details on Enter', asy
   expect(getDetails).toHaveBeenCalledWith({ kind: 'shell', id: 'shell-1' });
   expect(output).toContain('ID: shell-1');
   expect(output).toContain('Command: pnpm test -- source/services');
-  expect(output).toContain('Status: running');
+  expect(output).toContain('State: running');
 });
 
 it.sequential('requires confirmation before force stopping exactly one live task', async () => {
@@ -138,7 +138,12 @@ it.sequential('requires confirmation before force stopping exactly one live task
 it.sequential('keeps quiet work visibly running and stoppable without calling it hung', async () => {
   const quiet = {
     ...subagent,
-    activity: { state: 'quiet' as const, lastActivityAt: 1_000 },
+    activity: {
+      phase: 'waiting' as const,
+      reason: 'provider' as const,
+      lastObservation: { kind: 'request_dispatched' as const, at: 1_000 },
+      liveness: { state: 'quiet' as const, lastObservedAt: 1_000, ageMs: 30_000 },
+    },
   };
   const requestStop = vi.fn(() => ({ ok: true as const, details: { ...quiet, status: 'cancelling' as const } }));
   const view = await renderInAct(
@@ -146,7 +151,7 @@ it.sequential('keeps quiet work visibly running and stoppable without calling it
   );
 
   await writeInput(view.stdin, '\x07');
-  expect(view.lastFrame() ?? '').toContain('no observed progress');
+  expect(view.lastFrame() ?? '').toContain('quiet');
   expect(view.lastFrame() ?? '').toContain('[x] Force stop');
   expect(view.lastFrame() ?? '').not.toContain('hung');
   await writeInput(view.stdin, 'x');
@@ -154,16 +159,58 @@ it.sequential('keeps quiet work visibly running and stoppable without calling it
   expect(requestStop).toHaveBeenCalledWith({ kind: 'subagent', id: 'run-1' });
 });
 
+it.sequential('renders diagnostic model, context, retry, and observation fields only when known', async () => {
+  const detailed = {
+    ...subagent,
+    model: { provider: 'openai', id: 'gpt-4o', contextWindow: 128_000 },
+    latestUsage: { prompt_tokens: 12_300 },
+    lastToolName: 'read_file',
+    activity: {
+      phase: 'waiting' as const,
+      reason: 'provider' as const,
+      lastObservation: { kind: 'retrying' as const, at: 1_000, attempt: 1, maxRetries: 3 },
+      liveness: { state: 'recent' as const, lastObservedAt: 1_000, ageMs: 18_000 },
+    },
+  };
+  const view = await renderInAct(
+    <BackgroundTaskManager
+      listDetails={() => [detailed]}
+      getDetails={() => detailed}
+      requestStop={() => ({ ok: false as const, code: 'not_active' as const })}
+    />,
+  );
+  await writeInput(view.stdin, '\x07');
+  await writeInput(view.stdin, '\r');
+  const output = view.lastFrame() ?? '';
+  expect(output).toContain('Last observed: 18s ago');
+  expect(output).toContain('Last activity: Retrying 1 of 3');
+  expect(output).toContain('Model: gpt-4o');
+  expect(output).toContain('Provider: openai');
+  expect(output).toContain('Context: 12.3k / 128k (9.6%)');
+  expect(output).toContain('Retries: 1 of 3');
+  expect(output).toContain('Last tool: read_file');
+});
+
 it.sequential('shows provider and approval waits separately from quiet and terminal failure', async () => {
   const waiting = {
     ...subagent,
-    activity: { state: 'waiting' as const, reason: 'provider' as const, lastActivityAt: 1_000 },
+    activity: {
+      phase: 'waiting' as const,
+      reason: 'provider' as const,
+      lastObservation: { kind: 'request_dispatched' as const, at: 1_000 },
+      liveness: { state: 'recent' as const, lastObservedAt: 1_000, ageMs: 1_000 },
+    },
   };
   const approval = {
     ...subagent,
     id: 'approval',
     status: 'awaiting_approval' as const,
-    activity: { state: 'waiting' as const, reason: 'approval' as const, lastActivityAt: 1_000 },
+    activity: {
+      phase: 'waiting' as const,
+      reason: 'approval' as const,
+      lastObservation: { kind: 'approval_requested' as const, at: 1_000 },
+      liveness: { state: 'recent' as const, lastObservedAt: 1_000, ageMs: 1_000 },
+    },
   };
   const failed = { ...subagent, id: 'failed', status: 'failed' as const, error: 'exit 1' };
   const view = await renderInAct(
@@ -175,9 +222,9 @@ it.sequential('shows provider and approval waits separately from quiet and termi
   );
 
   await writeInput(view.stdin, '\x07');
-  expect(view.lastFrame() ?? '').toContain('waiting for provider');
+  expect(view.lastFrame() ?? '').toContain('awaiting provider');
   await writeInput(view.stdin, '\u001B[B');
-  expect(view.lastFrame() ?? '').toContain('waiting for approval');
+  expect(view.lastFrame() ?? '').toContain('awaiting approval');
   await writeInput(view.stdin, '\u001B[B');
   expect(view.lastFrame() ?? '').toContain('failed · terminal');
 });

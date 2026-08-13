@@ -68,7 +68,7 @@ it.sequential('shows active count, short task label, role badge, status, and ela
   expect(output).not.toContain('model');
 });
 
-it.sequential('shows completed context usage at the right side of a named task', async () => {
+it.sequential('keeps normal context telemetry out of the compact medium-width row', async () => {
   const renderer = await renderInAct(
     <BackgroundTasksPanel
       tasks={[
@@ -85,7 +85,40 @@ it.sequential('shows completed context usage at the right side of a named task',
 
   const output = renderer.lastFrame() ?? '';
   expect(output).toContain('code_scan');
-  expect(output).toContain('Ctx 12.3k');
+  expect(output).not.toContain('Ctx 12.3k');
+});
+
+it.sequential('uses explicit wide, medium, and narrow information budgets without losing task identity', async () => {
+  const task = {
+    kind: 'subagent' as const,
+    id: 'liveness',
+    role: 'explorer',
+    task: 'audit provider fixtures for stalled request boundaries',
+    taskPreview: 'audit provider fixtures for stalled request boundaries',
+    status: 'running' as const,
+    startedAt: 1_000,
+    elapsedMs: 10_000,
+    toolCounts: {},
+    model: { provider: 'openai', id: 'gpt-4o', contextWindow: 128_000 },
+    latestUsage: { prompt_tokens: 120_000 },
+    activity: {
+      phase: 'waiting' as const,
+      reason: 'provider' as const,
+      lastObservation: { kind: 'request_dispatched' as const, at: 1_000 },
+      liveness: { state: 'quiet' as const, lastObservedAt: 1_000, ageMs: 10_000 },
+    },
+  };
+  {
+    const renderer = await renderInAct(<BackgroundTasksPanel tasks={[task]} now={11_000} columns={120} />);
+    expect(renderer.lastFrame() ?? '').toContain('no activity observed for 10s');
+    expect(renderer.lastFrame() ?? '').toContain('Ctx 120k / 128k (93.8%)');
+    await rerenderInAct(renderer, <BackgroundTasksPanel tasks={[task]} now={11_000} columns={80} />);
+    expect(renderer.lastFrame() ?? '').toContain('Request handed to model runtime');
+    expect(renderer.lastFrame() ?? '').not.toContain('Ctx 120k');
+    await rerenderInAct(renderer, <BackgroundTasksPanel tasks={[task]} now={11_000} columns={40} />);
+    expect(renderer.lastFrame() ?? '').toContain('audit provider fixtures');
+    expect(renderer.lastFrame() ?? '').not.toContain('Request handed to model runtime');
+  }
 });
 
 it.sequential('updates elapsed duration when time advances', async () => {
@@ -213,7 +246,11 @@ it.sequential(
               startedAt: 1_000,
               elapsedMs: 2_000,
               toolCounts: {},
-              activity: { state: 'active', lastActivityAt: 2_000 },
+              activity: {
+                phase: 'active',
+                lastObservation: { kind: 'text_received', at: 2_000 },
+                liveness: { state: 'recent', lastObservedAt: 2_000, ageMs: 2_000 },
+              },
             },
             {
               kind: 'subagent',
@@ -225,7 +262,12 @@ it.sequential(
               startedAt: 1_000,
               elapsedMs: 3_000,
               toolCounts: {},
-              activity: { state: 'waiting', reason: 'provider', lastActivityAt: 3_000 },
+              activity: {
+                phase: 'waiting',
+                reason: 'provider',
+                lastObservation: { kind: 'request_dispatched', at: 3_000 },
+                liveness: { state: 'recent', lastObservedAt: 3_000, ageMs: 1_000 },
+              },
             },
             {
               kind: 'shell',
@@ -233,7 +275,11 @@ it.sequential(
               command: 'tail -f log',
               status: 'running',
               startedAt: 1_000,
-              activity: { state: 'quiet', lastActivityAt: 1_000 },
+              activity: {
+                phase: 'active',
+                lastObservation: { kind: 'shell_output_received', at: 1_000 },
+                liveness: { state: 'quiet', lastObservedAt: 1_000, ageMs: 3_000 },
+              },
             },
             {
               kind: 'subagent',
@@ -245,7 +291,11 @@ it.sequential(
               startedAt: 1_000,
               elapsedMs: 4_000,
               toolCounts: {},
-              activity: { state: 'settled', lastActivityAt: 4_000 },
+              activity: {
+                phase: 'settled',
+                lastObservation: { kind: 'settled', at: 4_000 },
+                liveness: { state: 'recent', lastObservedAt: 4_000, ageMs: 0 },
+              },
               error: 'exit 1',
             },
           ] as any
@@ -256,9 +306,9 @@ it.sequential(
 
     const output = renderer.lastFrame() ?? '';
     expect(output).toContain('Active');
-    expect(output).toContain('Waiting for provider');
-    expect(output).toContain('last activity 2s ago');
-    expect(output).toContain('Quiet · no observed progress');
+    expect(output).toContain('Awaiting provider response');
+    expect(output).toContain('Text received');
+    expect(output).toContain('Shell output received');
     expect(output).toContain('Failed · terminal');
     expect(output).not.toContain('hung');
   },

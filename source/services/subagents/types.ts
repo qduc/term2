@@ -1,4 +1,5 @@
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
+import type { BackgroundTaskObservation } from '../background-task-activity.js';
 import type { ModelRequestCost } from '../../services/cost/model-cost.js';
 import type { ExecutionBudget } from '../agent-runtime/execution-budget.js';
 
@@ -244,8 +245,14 @@ export interface SubagentRunStatus {
   turnHistory?: TurnSnapshot[];
   currentText?: string;
   pendingToolCounts?: Record<string, number>;
-  /** Registry-owned liveness evidence used by the session UI projection. */
+  /** Registry-owned local observation used by the session UI projection. */
+  lastObservation?: BackgroundTaskObservation;
+  /** Compatibility timestamp retained for callers outside the control port. */
   lastActivityAt?: number;
   activityState?: 'active' | 'waiting' | 'cancelling';
   waitingReason?: 'provider' | 'approval' | 'answer';
+  /** Immutable role resolution captured when the run was launched. */
+  model?: { provider: string; id: string };
+  /** Most recent provider request usage, never accumulated run usage. */
+  latestUsage?: NormalizedUsage;
 }

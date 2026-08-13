@@ -108,6 +108,14 @@ describe('ExecutionSubagentRunner text-turn peek events', () => {
     await runner.run('run-1', { role: 'explorer', task: 'inspect' }, definition);
 
     expect(committedEvents(received)).toContainEqual({
+      type: 'retry',
+      agentId: 'run-1',
+      toolName: 'model',
+      attempt: 1,
+      maxRetries: 2,
+      errorMessage: 'retrying',
+    });
+    expect(committedEvents(received)).toContainEqual({
       type: 'subagent_text_turn',
       agentId: 'run-1',
       role: 'explorer',

@@ -353,8 +353,7 @@ export class ExecutionSubagentRunner {
               errorMessage: event.errorMessage,
               retryType: event.retryType,
               agentId,
-              role: request.role,
-            } as any);
+            });
             break;
         }
       }

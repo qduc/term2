@@ -38,6 +38,36 @@ type RunParams = {
 const make = (run: (params: RunParams) => Promise<SubagentResult> = async ({ request }) => result(request.role)) =>
   new SubagentAsyncRegistry({ logger: createMockLogger(), run });
 
+describe('background observations', () => {
+  it('keeps the latest local observation and latest usage independently from cumulative result evidence', () => {
+    const registry = new SubagentAsyncRegistry({
+      logger: createMockLogger(),
+      run: () => new Promise<SubagentResult>(() => undefined),
+      now: () => 1_000,
+      modelForRole: () => ({ provider: 'openai', id: 'gpt-4o' }),
+    });
+    const handle = registry.startRun({ role: 'explorer', task: 'inspect' });
+    expect(registry.getRunStatus(handle.runId)).toMatchObject({
+      lastObservation: { kind: 'request_dispatched', at: 1_000 },
+      model: { provider: 'openai', id: 'gpt-4o' },
+    });
+    registry.handleSubagentEvent({ type: 'usage_update', agentId: handle.runId, usage: { prompt_tokens: 12_300 } });
+    registry.handleSubagentEvent({
+      type: 'retry',
+      agentId: handle.runId,
+      toolName: 'model',
+      attempt: 1,
+      maxRetries: 3,
+      errorMessage: 'retrying',
+    });
+    expect(registry.getRunStatus(handle.runId)).toMatchObject({
+      latestUsage: { prompt_tokens: 12_300 },
+      lastObservation: { kind: 'retrying', attempt: 1, maxRetries: 3 },
+    });
+    registry.dispose();
+  });
+});
+
 describe('foreground lease adoption', () => {
   it('adopts the exact stable lease without starting the async runner and settles from one terminal event', async () => {
     const events: ConversationEvent[] = [];

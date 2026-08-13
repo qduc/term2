@@ -58,16 +58,29 @@ describe('BackgroundTaskControl', () => {
 
     expect(control.listDetails()).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: 'active', activity: expect.objectContaining({ state: 'active' }) }),
+        expect.objectContaining({
+          id: 'active',
+          activity: expect.objectContaining({
+            phase: 'active',
+            liveness: expect.objectContaining({ state: 'recent' }),
+          }),
+        }),
         expect.objectContaining({
           id: 'provider',
-          activity: expect.objectContaining({ state: 'waiting', reason: 'provider' }),
+          activity: expect.objectContaining({
+            phase: 'waiting',
+            reason: 'provider',
+            liveness: expect.objectContaining({ state: 'recent' }),
+          }),
         }),
         expect.objectContaining({
           id: 'quiet',
           activity: expect.objectContaining({
-            state: 'quiet',
-            lastActivityAt: now - BACKGROUND_SUBAGENT_QUIET_AFTER_MS - 1,
+            phase: 'active',
+            liveness: expect.objectContaining({
+              state: 'quiet',
+              lastObservedAt: now - BACKGROUND_SUBAGENT_QUIET_AFTER_MS - 1,
+            }),
           }),
         }),
       ]),
@@ -75,7 +88,13 @@ describe('BackgroundTaskControl', () => {
 
     expect(control.requestStop({ kind: 'subagent', id: 'quiet' })).toEqual({
       ok: true,
-      details: expect.objectContaining({ id: 'quiet', activity: expect.objectContaining({ state: 'cancelling' }) }),
+      details: expect.objectContaining({
+        id: 'quiet',
+        activity: expect.objectContaining({
+          phase: 'cancelling',
+          lastObservation: expect.objectContaining({ kind: 'stop_requested' }),
+        }),
+      }),
     });
   });
 
@@ -106,10 +125,10 @@ describe('BackgroundTaskControl', () => {
     });
 
     expect(control.getDetails({ kind: 'subagent', id: 'approval' })).toEqual(
-      expect.objectContaining({ activity: expect.objectContaining({ state: 'waiting', reason: 'approval' }) }),
+      expect.objectContaining({ activity: expect.objectContaining({ phase: 'waiting', reason: 'approval' }) }),
     );
     expect(control.getDetails({ kind: 'subagent', id: 'failed' })).toEqual(
-      expect.objectContaining({ status: 'failed', activity: expect.objectContaining({ state: 'settled' }) }),
+      expect.objectContaining({ status: 'failed', activity: expect.objectContaining({ phase: 'settled' }) }),
     );
   });
 

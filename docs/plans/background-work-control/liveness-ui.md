@@ -1,10 +1,16 @@
 # Background-task observation and liveness UI
 
-Status: implementation plan. Ready for implementation authorization.
+Status: completed (2026-08-13).
 
 Research: [waiting-for-provider-ui-research.md](waiting-for-provider-ui-research.md).
 
 ## Resume here
+
+Implementation note (2026-08-13): all six slices are implemented. The shared observation protocol now lives in
+`source/services/background-task-activity.ts`; the control port projects phase,
+last observation, and derived liveness separately. Async runs retain launch-time
+model metadata and latest request usage. The focused contract/registry/control/UI
+suites, full test suite, typecheck, build, lint/Prettier, and provider black-box suite are green.
 
 The first liveness delivery is already merged: the session control port projects
 registry activity, the compact panel distinguishes active/waiting/quiet work,

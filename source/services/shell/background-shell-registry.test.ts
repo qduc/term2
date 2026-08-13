@@ -11,10 +11,16 @@ describe('BackgroundShellRegistry', () => {
     const registry = new BackgroundShellRegistry<string>({ now: () => now });
     const job = registry.launch({ command: 'watch', run: () => new Promise<string>(() => undefined) });
 
-    expect(registry.get(job.id)).toMatchObject({ lastActivityAt: 1_000 });
+    expect(registry.get(job.id)).toMatchObject({
+      lastActivityAt: 1_000,
+      lastObservation: { kind: 'shell_started', at: 1_000 },
+    });
     now = 2_500;
     registry.recordOutputChunk(job.id);
-    expect(registry.get(job.id)).toMatchObject({ lastActivityAt: 2_500 });
+    expect(registry.get(job.id)).toMatchObject({
+      lastActivityAt: 2_500,
+      lastObservation: { kind: 'shell_output_received', at: 2_500 },
+    });
     expect(registry.get(job.id)).not.toHaveProperty('outputChunk');
     expect(registry.cancel(job.id)).toBe(true);
     registry.dispose();

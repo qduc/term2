@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { BackgroundTaskObservation } from '../background-task-activity.js';
 
 export type BackgroundShellJobStatus = 'running' | 'cancelling' | 'completed' | 'failed' | 'timed_out' | 'cancelled';
 export type BackgroundShellTerminalStatus = Extract<
@@ -16,6 +17,8 @@ export interface BackgroundShellJob<TResult> {
   error?: string;
   /** Last registry-observed start or output-chunk timestamp. */
   lastActivityAt?: number;
+  /** Last bounded event the local shell registry observed. */
+  lastObservation?: BackgroundTaskObservation;
 }
 
 export interface BackgroundShellLaunch<TResult> extends BackgroundShellJob<TResult> {
@@ -180,6 +183,7 @@ export class BackgroundShellRegistry<TResult> {
       startedAt: this.#now(),
     };
     job.lastActivityAt = job.startedAt;
+    job.lastObservation = { kind: 'shell_started', at: job.startedAt };
     const controller = new AbortController();
     this.#runningJobs += 1;
     const record: JobRecord<TResult> = {
@@ -212,6 +216,7 @@ export class BackgroundShellRegistry<TResult> {
       startedAt: this.#now(),
     };
     job.lastActivityAt = job.startedAt;
+    job.lastObservation = { kind: 'shell_started', at: job.startedAt };
     const controller = new AbortController();
     let resolveForegroundResult!: (result: TResult | ForegroundShellTransferResult) => void;
     let rejectForegroundResult!: (error: unknown) => void;
@@ -325,6 +330,7 @@ export class BackgroundShellRegistry<TResult> {
     if (!record || record.job.status !== 'running') return false;
     record.job.status = 'cancelling';
     record.job.lastActivityAt = this.#now();
+    record.job.lastObservation = { kind: 'stop_requested', at: record.job.lastActivityAt };
     record.controller.abort();
     return true;
   }
@@ -334,6 +340,7 @@ export class BackgroundShellRegistry<TResult> {
     const record = this.#jobs.get(id) ?? [...this.#foreground.values()].find((candidate) => candidate.job.id === id);
     if (!record || (record.job.status !== 'running' && record.job.status !== 'cancelling')) return false;
     record.job.lastActivityAt = this.#now();
+    record.job.lastObservation = { kind: 'shell_output_received', at: record.job.lastActivityAt };
     return true;
   }
 
@@ -375,6 +382,7 @@ export class BackgroundShellRegistry<TResult> {
     this.#runningJobs -= 1;
     job.completedAt = this.#now();
     job.lastActivityAt = job.completedAt;
+    job.lastObservation = { kind: 'settled', at: job.completedAt };
     if (record.controller.signal.aborted) {
       job.status = 'cancelled';
       if (result !== undefined) job.result = result;
@@ -418,6 +426,7 @@ export class BackgroundShellRegistry<TResult> {
     const { job } = record;
     job.completedAt = this.#now();
     job.lastActivityAt = job.completedAt;
+    job.lastObservation = { kind: 'settled', at: job.completedAt };
     if (record.controller.signal.aborted) {
       job.status = 'cancelled';
       if (result !== undefined) job.result = result;

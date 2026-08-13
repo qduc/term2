@@ -2,7 +2,7 @@
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import React, { act, useState } from 'react';
 import { expect, it, vi } from 'vitest';
-import { renderInAct } from '../../test-helpers/ink-testing.js';
+import { renderInAct, rerenderInAct } from '../../test-helpers/ink-testing.js';
 import BackgroundTaskManagerView, { type BackgroundTaskManagerProps } from './BackgroundTaskManager.js';
 
 type TestManagerProps = Omit<BackgroundTaskManagerProps, 'open' | 'onOpenChange'> & {
@@ -133,6 +133,73 @@ it.sequential('requires confirmation before force stopping exactly one live task
   expect(requestStop).toHaveBeenCalledOnce();
   expect(requestStop).toHaveBeenCalledWith({ kind: 'subagent', id: 'run-1' });
   expect(view.lastFrame() ?? '').toContain('Stop requested');
+});
+
+it.sequential('reconciles refreshed task order by identity before rendering and handling stop keys', async () => {
+  const first = { ...subagent, id: 'first', name: 'first_task' };
+  const second = { ...subagent, id: 'second', name: 'second_task' };
+  const inserted = { ...subagent, id: 'inserted', name: 'inserted_task' };
+  let current = [first, second];
+  const requestStop = vi.fn((target: { kind: 'subagent' | 'shell'; id: string }) => ({
+    ok: true as const,
+    details: { ...(target.id === 'second' ? second : first), id: target.id, status: 'cancelling' as const },
+  }));
+  const props = {
+    listDetails: () => current,
+    getDetails: () => null,
+    requestStop,
+  };
+  const view = await renderInAct(<BackgroundTaskManager {...props} />);
+  await writeInput(view.stdin, '\x07');
+  await writeInput(view.stdin, '\u001B[B');
+
+  current = [inserted, second, first];
+  await rerenderInAct(view, <BackgroundTaskManager {...props} />);
+  expect((view.lastFrame() ?? '').split('\n').find((line) => line.includes('❯'))).toContain('second_task');
+  await writeInput(view.stdin, 'x');
+  await writeInput(view.stdin, '\r');
+  expect(requestStop).toHaveBeenLastCalledWith({ kind: 'subagent', id: 'second' });
+
+  current = [inserted, first];
+  await rerenderInAct(view, <BackgroundTaskManager {...props} />);
+  expect((view.lastFrame() ?? '').split('\n').find((line) => line.includes('❯'))).toContain('first_task');
+  await writeInput(view.stdin, 'x');
+  await writeInput(view.stdin, '\r');
+  expect(requestStop).toHaveBeenLastCalledWith({ kind: 'subagent', id: 'first' });
+});
+
+it.sequential('transfers the highlighted foreground identity after refreshed candidates reorder', async () => {
+  const first = { ...foregroundSubagent, runId: 'first-child', task: 'first child task' };
+  const second = { ...foregroundSubagent, runId: 'second-child', task: 'second child task' };
+  const inserted = { ...foregroundSubagent, runId: 'inserted-child', task: 'inserted child task' };
+  let current = [first, second];
+  const moveForegroundToBackground = vi.fn(
+    (target: Parameters<NonNullable<BackgroundTaskManagerProps['moveForegroundToBackground']>>[0]) => {
+      const movedId = target.kind === 'subagent' ? target.runId : target.callId;
+      return {
+        ok: true as const,
+        details: { ...subagent, id: movedId, task: `${movedId} moved` },
+      };
+    },
+  );
+  const props = {
+    listDetails: () => [],
+    getDetails: () => null,
+    requestStop: () => ({ ok: false as const, code: 'not_active' as const }),
+    listForegroundTransferCandidates: () => current,
+    moveForegroundToBackground,
+  };
+  const view = await renderInAct(<BackgroundTaskManager {...props} />);
+  await writeInput(view.stdin, '\x07');
+  await writeInput(view.stdin, '\u001B[B');
+
+  current = [inserted, second, first];
+  await rerenderInAct(view, <BackgroundTaskManager {...props} />);
+  expect((view.lastFrame() ?? '').split('\n').find((line) => line.includes('❯'))).toContain('second child task');
+  await writeInput(view.stdin, 'b');
+  await writeInput(view.stdin, '\r');
+
+  expect(moveForegroundToBackground).toHaveBeenCalledWith({ kind: 'subagent', runId: 'second-child' });
 });
 
 it.sequential('keeps quiet work visibly running and stoppable without calling it hung', async () => {

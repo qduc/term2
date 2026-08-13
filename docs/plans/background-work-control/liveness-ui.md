@@ -1,12 +1,30 @@
 # Background-task observation and liveness UI
 
-Status: completed (2026-08-13).
+Status: completed with adversarial-review corrections (2026-08-13); awaiting branch re-review before merge.
 
 Research: [waiting-for-provider-ui-research.md](waiting-for-provider-ui-research.md).
 
 ## Resume here
 
-Implementation note (2026-08-13): all six slices are implemented. The shared observation protocol now lives in
+Review correction note (2026-08-13): adversarial review found identity drift in
+the live manager snapshot, presentation-observation races after cancellation,
+premature tool completion, mutable foreground model resolution, pooled mentor
+model ambiguity, unbounded provider-derived labels, response-stream boundary
+drift, and an ineffective medium-width budget. Public-seam regressions now cover
+reordered/removed stop and transfer targets; buffered subagent and shell events
+after cancellation; running, successful, and failed commands; immutable
+foreground launch metadata (including a later resolver failure); a two-model
+mentor pool; bounded control-character-safe tool labels; three-chunk and next-
+boundary text streams; and exact medium/narrow width thresholds.
+
+Final correction verification is green: the six exact focused commands below
+pass 122 tests; the expanded correction focus passes 128 tests; typecheck and
+build pass; the full suite passes 6,122 tests with two skips; provider black-box
+passes 166 tests with one intentional skip; lint/Prettier passes with 46 existing
+warnings and no errors; and `git diff --check` passes. Merge remains gated on
+review of the correction commit.
+
+Implementation note (2026-08-13): all six original slices are implemented. The shared observation protocol now lives in
 `source/services/background-task-activity.ts`; the control port projects phase,
 last observation, and derived liveness separately. Async runs retain launch-time
 model metadata and latest request usage. The focused contract/registry/control/UI

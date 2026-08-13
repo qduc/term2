@@ -79,12 +79,13 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   unadopted work may appear on the compact strip only with an explicit
   foreground tag.
 
-- `docs/plans/background-work-control/liveness-ui.md` — **implemented**
-  (2026-08-13). It separates lifecycle phase/reason, locally observed facts,
-  and recent/quiet liveness; captures launch-time subagent model identity and
-  latest-request usage; and gives the compact panel explicit width budgets and
-  the manager live diagnostic fields without changing execution, cancellation,
-  or transfer semantics.
+- `docs/plans/background-work-control/liveness-ui.md` — **implemented and
+  verified with adversarial-review corrections** (2026-08-13; awaiting branch
+  re-review before merge). It separates lifecycle phase/reason, locally
+  observed facts, and recent/quiet liveness; captures truthful launch-time
+  model/context metadata; and gives the panel and manager explicit, live
+  information budgets without changing execution, cancellation, or transfer
+  semantics.
 
 - `docs/plans/provider-neutral-context-compaction.md` — **Milestones 1–6 fully implemented and verified.** Preserves the OpenAI-native opaque lane and adds an opt-in local fallback built around safe request-boundary cutting, ratio plus an optional raw-token automatic threshold, manual `/compact`, sequential cold-prefix summaries with load-bearing facts copied verbatim, a verbatim hot tail, durable replacement checkpoints, and tool-ledger/continuity safety.
 

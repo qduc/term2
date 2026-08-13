@@ -339,8 +339,10 @@ export class BackgroundShellRegistry<TResult> {
   recordOutputChunk(id: string): boolean {
     const record = this.#jobs.get(id) ?? [...this.#foreground.values()].find((candidate) => candidate.job.id === id);
     if (!record || (record.job.status !== 'running' && record.job.status !== 'cancelling')) return false;
-    record.job.lastActivityAt = this.#now();
-    record.job.lastObservation = { kind: 'shell_output_received', at: record.job.lastActivityAt };
+    if (record.job.status !== 'cancelling') {
+      record.job.lastActivityAt = this.#now();
+      record.job.lastObservation = { kind: 'shell_output_received', at: record.job.lastActivityAt };
+    }
     return true;
   }
 

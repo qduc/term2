@@ -43,6 +43,7 @@ export type BackgroundSubagentApprovalPauseSink = (pause: BackgroundSubagentAppr
 export class ForegroundSubagentLease {
   readonly #controller = new AbortController();
   readonly #runId: string;
+  readonly #model: { provider: string; id: string } | undefined;
   #detachParentAbort: (() => void) | undefined;
   #adopted = false;
   #settled = false;
@@ -63,8 +64,17 @@ export class ForegroundSubagentLease {
       }
     | undefined;
 
-  constructor({ runId, parentSignal }: { runId: string; parentSignal?: AbortSignal }) {
+  constructor({
+    runId,
+    parentSignal,
+    model,
+  }: {
+    runId: string;
+    parentSignal?: AbortSignal;
+    model?: { provider: string; id: string };
+  }) {
     this.#runId = runId;
+    this.#model = model;
     const abortFromParent = () => this.#controller.abort();
     if (parentSignal?.aborted) abortFromParent();
     else parentSignal?.addEventListener('abort', abortFromParent, { once: true });
@@ -81,6 +91,10 @@ export class ForegroundSubagentLease {
 
   get runId(): string {
     return this.#runId;
+  }
+
+  get model(): { provider: string; id: string } | undefined {
+    return this.#model;
   }
 
   get settled(): boolean {

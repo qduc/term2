@@ -18,7 +18,7 @@ import { SubagentRunControl } from './subagent-run-control.js';
 import { SubagentSession } from './subagent-session.js';
 import { isAbortLike, safeEmit, truncatePreview } from './utils.js';
 import { ForegroundSubagentLease } from './foreground-subagent-lease.js';
-import type { BackgroundTaskObservation } from '../background-task-activity.js';
+import { sanitizeBackgroundTaskToolLabel, type BackgroundTaskObservation } from '../background-task-activity.js';
 
 export const SUBAGENT_RUN_NAME_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/;
 const MAX_STEERING_GUIDANCE_CHARACTERS = 2_000;
@@ -92,6 +92,7 @@ type StoredRun = {
   waitingReason?: 'provider' | 'approval' | 'answer';
   model?: { provider: string; id: string };
   latestUsage?: NormalizedUsage;
+  responseInStream: boolean;
   /**
    * The run's own traffic context, fixed when the run is created and re-applied
    * to every later segment. Providers key server-side state off it, so a
@@ -262,6 +263,7 @@ export class SubagentAsyncRegistry {
       activityState: 'waiting',
       waitingReason: 'provider',
       ...(model === undefined ? {} : { model }),
+      responseInStream: false,
       ...(trafficContext ? { trafficContext } : {}),
     };
     this.#runs.set(runId, stored);
@@ -323,7 +325,7 @@ export class SubagentAsyncRegistry {
     let resolve!: (result: SubagentResult) => void;
     const promise = new Promise<SubagentResult>((r) => (resolve = r));
     const startedAt = this.#now();
-    const model = this.#modelForRole?.(request.role);
+    const model = lease.model;
     const stored: StoredRun = {
       runId: lease.runId,
       role: request.role,
@@ -347,6 +349,7 @@ export class SubagentAsyncRegistry {
       activityState: 'waiting',
       waitingReason: 'provider',
       ...(model === undefined ? {} : { model }),
+      responseInStream: false,
       lease,
     };
     this.#runs.set(lease.runId, stored);
@@ -485,6 +488,7 @@ export class SubagentAsyncRegistry {
     }
 
     if (event.type === 'retry') {
+      run.responseInStream = false;
       this.#observe(
         run,
         { kind: 'retrying', at: this.#now(), attempt: event.attempt, maxRetries: event.maxRetries },
@@ -500,14 +504,9 @@ export class SubagentAsyncRegistry {
     }
 
     if (event.type === 'subagent_streaming_text') {
-      this.#observe(
-        run,
-        {
-          kind: run.lastObservation.kind === 'response_started' ? 'text_received' : 'response_started',
-          at: this.#now(),
-        },
-        'active',
-      );
+      const kind = run.responseInStream ? 'text_received' : 'response_started';
+      run.responseInStream = true;
+      this.#observe(run, { kind, at: this.#now() }, 'active');
       run.currentText = event.text;
       return;
     }
@@ -527,10 +526,16 @@ export class SubagentAsyncRegistry {
 
     if (event.type === 'subagent_command_message') {
       const toolStillRunning = event.message.status === 'pending' || event.message.status === 'running';
+      if (toolStillRunning) return;
+      run.responseInStream = false;
       this.#observe(
         run,
-        { kind: 'tool_completed', at: this.#now() },
-        toolStillRunning ? 'active' : 'waiting',
+        {
+          kind: 'tool_completed',
+          at: this.#now(),
+          ...(run.lastToolName === undefined ? {} : { toolName: run.lastToolName }),
+        },
+        'waiting',
         'provider',
       );
       return;
@@ -538,10 +543,12 @@ export class SubagentAsyncRegistry {
 
     const name = event.toolName;
     if (!name) return;
-    this.#observe(run, { kind: 'tool_started', at: this.#now(), toolName: name }, 'active');
+    const displayName = sanitizeBackgroundTaskToolLabel(name);
+    run.responseInStream = false;
+    this.#observe(run, { kind: 'tool_started', at: this.#now(), toolName: displayName }, 'active');
     run.toolCounts.set(name, (run.toolCounts.get(name) ?? 0) + 1);
     run.pendingToolCounts.set(name, (run.pendingToolCounts.get(name) ?? 0) + 1);
-    run.lastToolName = name;
+    run.lastToolName = displayName;
     run.lastToolAt = this.#now();
   }
 
@@ -723,6 +730,7 @@ export class SubagentAsyncRegistry {
 
   #startSegment(run: StoredRun, request: SubagentRequest, input: string): void {
     if (run.settled) return;
+    run.responseInStream = false;
     this.#observe(run, { kind: 'request_dispatched', at: this.#now() }, 'waiting', 'provider');
     const controller = run.control.beginSegment();
     void this.#executeSegment(run, request, input, controller);
@@ -826,6 +834,7 @@ export class SubagentAsyncRegistry {
     state: 'active' | 'waiting' | 'cancelling' | 'settled',
     waitingReason?: 'provider' | 'approval' | 'answer',
   ): void {
+    if (run.lastObservation.kind === 'stop_requested' && observation.kind !== 'settled') return;
     run.lastObservation = observation;
     run.lastActivityAt = observation.at;
     run.activityState = state === 'settled' ? run.activityState : state;

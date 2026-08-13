@@ -84,10 +84,17 @@ describe('BackgroundShellRegistry', () => {
     expect(registry.cancel(job.id)).toBe(true);
     expect(receivedSignal?.aborted).toBe(true);
     expect(registry.get(job.id)?.status).toBe('cancelling');
+    expect(registry.get(job.id)?.lastObservation).toMatchObject({ kind: 'stop_requested' });
+    expect(registry.recordOutputChunk(job.id)).toBe(true);
+    expect(registry.get(job.id)?.lastObservation).toMatchObject({ kind: 'stop_requested' });
 
     release?.();
     await job.settled;
-    expect(registry.get(job.id)).toMatchObject({ status: 'cancelled', result: 'stopped' });
+    expect(registry.get(job.id)).toMatchObject({
+      status: 'cancelled',
+      result: 'stopped',
+      lastObservation: { kind: 'settled' },
+    });
   });
 
   it('runs settlement cleanup before publishing a terminal result', async () => {

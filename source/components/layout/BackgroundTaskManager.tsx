@@ -1,4 +1,4 @@
-import React, { type FC, useCallback, useEffect, useState } from 'react';
+import React, { type FC, useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import type {
   BackgroundTaskControlDetails,
@@ -27,6 +27,10 @@ const taskTarget = (details: BackgroundTaskControlDetails): BackgroundTaskContro
   kind: details.kind,
   id: details.id,
 });
+
+const backgroundKey = (details: BackgroundTaskControlDetails): string => `${details.kind}:${details.id}`;
+const foregroundKey = (details: ForegroundTransferCandidate): string =>
+  details.kind === 'shell' ? `foreground-shell:${details.callId}` : `foreground-subagent:${details.runId}`;
 
 const taskLabel = (details: BackgroundTaskControlDetails): string => {
   if (details.kind === 'shell') return details.command;
@@ -149,33 +153,48 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
   moveForegroundToBackground,
   onOpenChange,
 }) => {
-  const [tasks, setTasks] = useState<readonly BackgroundTaskControlDetails[]>([]);
-  const [foreground, setForeground] = useState<readonly ForegroundTransferCandidate[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [selectedOrdinal, setSelectedOrdinal] = useState(0);
   const [detailsVisible, setDetailsVisible] = useState(false);
-  const [stopArmed, setStopArmed] = useState(false);
-  const [backgroundArmed, setBackgroundArmed] = useState(false);
+  const [stopArmedKey, setStopArmedKey] = useState<string | null>(null);
+  const [backgroundArmedKey, setBackgroundArmedKey] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [hiddenForeground, setHiddenForeground] = useState<ReadonlySet<string>>(new Set());
+
+  const legacyForeground = getForegroundTransferCandidate?.() ?? null;
+  const foregroundSource = listForegroundTransferCandidates?.() ?? (legacyForeground ? [legacyForeground] : []);
+  const foreground = foregroundSource.filter((candidate) => !hiddenForeground.has(foregroundKey(candidate)));
+  const tasks = listDetails();
+  const rows = useMemo(
+    () => [
+      ...foreground.map((task) => ({ key: foregroundKey(task), kind: 'foreground' as const, task })),
+      ...tasks.map((task) => ({ key: backgroundKey(task), kind: 'background' as const, task })),
+    ],
+    [foreground, tasks],
+  );
+  const keyedIndex = selectedKey === null ? -1 : rows.findIndex((row) => row.key === selectedKey);
+  const selectedIndex = keyedIndex >= 0 ? keyedIndex : Math.min(selectedOrdinal, Math.max(0, rows.length - 1));
+  const selectedRow = rows[selectedIndex];
 
   const close = useCallback(() => {
     setDetailsVisible(false);
-    setStopArmed(false);
-    setBackgroundArmed(false);
+    setStopArmedKey(null);
+    setBackgroundArmedKey(null);
     setFeedback(null);
     onOpenChange?.(false);
   }, [onOpenChange]);
 
   const openManager = useCallback(() => {
     const next = listDetails();
-    const legacyForeground = getForegroundTransferCandidate?.() ?? null;
-    const nextForeground = listForegroundTransferCandidates?.() ?? (legacyForeground ? [legacyForeground] : []);
+    const legacy = getForegroundTransferCandidate?.() ?? null;
+    const nextForeground = listForegroundTransferCandidates?.() ?? (legacy ? [legacy] : []);
     if (next.length === 0 && nextForeground.length === 0) return;
-    setTasks(next);
-    setForeground(nextForeground);
-    setSelectedIndex(0);
+    setSelectedKey(nextForeground[0] ? foregroundKey(nextForeground[0]) : backgroundKey(next[0]!));
+    setSelectedOrdinal(0);
     setDetailsVisible(false);
-    setStopArmed(false);
-    setBackgroundArmed(false);
+    setStopArmedKey(null);
+    setBackgroundArmedKey(null);
+    setHiddenForeground(new Set());
     setFeedback(null);
     onOpenChange?.(true);
   }, [getForegroundTransferCandidate, listDetails, listForegroundTransferCandidates, onOpenChange]);
@@ -197,29 +216,29 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
       }
 
       if (key.upArrow || key.downArrow) {
-        setSelectedIndex((current) => {
-          const itemCount = tasks.length + foreground.length;
-          if (itemCount === 0) return 0;
-          return key.upArrow ? (current - 1 + itemCount) % itemCount : (current + 1) % itemCount;
-        });
+        if (rows.length === 0) return;
+        const nextIndex = key.upArrow
+          ? (selectedIndex - 1 + rows.length) % rows.length
+          : (selectedIndex + 1) % rows.length;
+        setSelectedKey(rows[nextIndex]!.key);
+        setSelectedOrdinal(nextIndex);
         setDetailsVisible(false);
-        setStopArmed(false);
-        setBackgroundArmed(false);
+        setStopArmedKey(null);
+        setBackgroundArmedKey(null);
         setFeedback(null);
         return;
       }
 
-      const selectedForeground = foreground[selectedIndex] ?? null;
-      const taskIndex = selectedIndex - foreground.length;
-      const selected = tasks[taskIndex];
+      const selectedForeground = selectedRow?.kind === 'foreground' ? selectedRow.task : null;
+      const selected = selectedRow?.kind === 'background' ? selectedRow.task : undefined;
       if (selectedForeground) {
         if (input.toLowerCase() === 'b' && moveForegroundToBackground) {
-          setBackgroundArmed(true);
+          setBackgroundArmedKey(selectedRow.key);
           setFeedback(null);
           return;
         }
         if (!key.return) return;
-        if (!backgroundArmed) {
+        if (backgroundArmedKey !== selectedRow.key) {
           setDetailsVisible(true);
           return;
         }
@@ -228,11 +247,11 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
             ? { kind: 'shell' as const, callId: selectedForeground.callId }
             : { kind: 'subagent' as const, runId: selectedForeground.runId };
         const result = moveForegroundToBackground?.(target);
-        setBackgroundArmed(false);
+        setBackgroundArmedKey(null);
         if (result?.ok) {
-          setForeground((current) => current.filter((candidate) => candidate !== selectedForeground));
-          setTasks((current) => [result.details, ...current]);
-          setSelectedIndex(0);
+          setHiddenForeground((current) => new Set(current).add(selectedRow.key));
+          setSelectedKey(backgroundKey(result.details));
+          setSelectedOrdinal(0);
           setDetailsVisible(true);
           setFeedback('Moved to background');
         } else {
@@ -242,18 +261,17 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
       }
       if (!selected) return;
       if (input.toLowerCase() === 'x' && isActive(selected)) {
-        setStopArmed(true);
+        setStopArmedKey(selectedRow.key);
         setFeedback(null);
         return;
       }
       if (!key.return) return;
 
       const target = taskTarget(selected);
-      if (stopArmed) {
+      if (stopArmedKey === selectedRow.key) {
         const result = requestStop(target);
-        setStopArmed(false);
+        setStopArmedKey(null);
         if (result.ok) {
-          setTasks((current) => current.map((task, index) => (index === taskIndex ? result.details : task)));
           setDetailsVisible(true);
           setFeedback('Stop requested');
         } else {
@@ -267,7 +285,6 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
         setFeedback('Task is no longer available');
         return;
       }
-      setTasks((current) => current.map((task, index) => (index === taskIndex ? latest : task)));
       setDetailsVisible(true);
       setFeedback(null);
     },
@@ -275,11 +292,8 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
   );
 
   if (!open) return null;
-  const selectedForeground = foreground[selectedIndex] ?? null;
-  // The parent already refreshes on background-task changes. Read the port for
-  // this render rather than retaining the Ctrl+G snapshot in the detail card.
-  const refreshedTasks = listDetails();
-  const selected = refreshedTasks[selectedIndex - foreground.length] ?? tasks[selectedIndex - foreground.length];
+  const selectedForeground = selectedRow?.kind === 'foreground' ? selectedRow.task : null;
+  const selected = selectedRow?.kind === 'background' ? selectedRow.task : undefined;
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor="#6366f1" paddingX={1} marginBottom={1}>
@@ -295,7 +309,7 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
           {candidate.kind === 'shell' ? candidate.command : candidate.task} · running
         </Text>
       ))}
-      {refreshedTasks.map((task, index) => {
+      {tasks.map((task, index) => {
         const displayIndex = index + foreground.length;
         return (
           <Text key={`${task.kind}:${task.id}`} color={displayIndex === selectedIndex ? '#f8fafc' : '#64748b'}>
@@ -318,8 +332,10 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
         </Box>
       )}
       {detailsVisible && selected && <BackgroundTaskDetailsView details={selected} />}
-      {stopArmed && <Text color="#f59e0b">Press Enter to force stop this task, or Esc to close.</Text>}
-      {backgroundArmed && (
+      {stopArmedKey === selectedRow?.key && (
+        <Text color="#f59e0b">Press Enter to force stop this task, or Esc to close.</Text>
+      )}
+      {backgroundArmedKey === selectedRow?.key && (
         <Text color="#f59e0b">
           Press Enter to put this {selectedForeground?.kind === 'subagent' ? 'subagent' : 'shell'} in the background, or
           Esc to close.

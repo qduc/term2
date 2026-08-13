@@ -62,7 +62,7 @@ it.sequential('shows active count, short task label, role badge, status, and ela
   expect(output).toContain('Worker');
   expect(output).toContain('ui_fix');
   expect(output).toContain('Explorer');
-  expect(output).toContain('implement the narrow background lifecycle panel');
+  expect(output).toContain('implement the narrow background lif…');
   expect(output).toContain('Running · 1m 05s');
   expect(output).toContain('Running · 5s');
   expect(output).not.toContain('model');
@@ -112,9 +112,15 @@ it.sequential('uses explicit wide, medium, and narrow information budgets withou
     const renderer = await renderInAct(<BackgroundTasksPanel tasks={[task]} now={11_000} columns={120} />);
     expect(renderer.lastFrame() ?? '').toContain('no activity observed for 10s');
     expect(renderer.lastFrame() ?? '').toContain('Ctx 120k / 128k (93.8%)');
-    await rerenderInAct(renderer, <BackgroundTasksPanel tasks={[task]} now={11_000} columns={80} />);
+    await rerenderInAct(renderer, <BackgroundTasksPanel tasks={[task]} now={11_000} columns={72} />);
+    expect(renderer.lastFrame() ?? '').toContain('audit provider fixtures for stalled…');
+    expect(renderer.lastFrame() ?? '').toContain(' · Waiting');
     expect(renderer.lastFrame() ?? '').toContain('Request handed to model runtime');
+    expect(renderer.lastFrame() ?? '').not.toContain('Awaiting provider response');
     expect(renderer.lastFrame() ?? '').not.toContain('Ctx 120k');
+    await rerenderInAct(renderer, <BackgroundTasksPanel tasks={[task]} now={11_000} columns={71} />);
+    expect(renderer.lastFrame() ?? '').toContain('audit provider fixtures…');
+    expect(renderer.lastFrame() ?? '').toContain('Awaiting provider response');
     await rerenderInAct(renderer, <BackgroundTasksPanel tasks={[task]} now={11_000} columns={40} />);
     expect(renderer.lastFrame() ?? '').toContain('audit provider fixtures');
     expect(renderer.lastFrame() ?? '').not.toContain('Request handed to model runtime');
@@ -306,7 +312,7 @@ it.sequential(
 
     const output = renderer.lastFrame() ?? '';
     expect(output).toContain('Active');
-    expect(output).toContain('Awaiting provider response');
+    expect(output).toContain('Waiting');
     expect(output).toContain('Text received');
     expect(output).toContain('Shell output received');
     expect(output).toContain('Failed · terminal');

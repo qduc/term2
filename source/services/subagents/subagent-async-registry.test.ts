@@ -66,9 +66,197 @@ describe('background observations', () => {
     });
     registry.dispose();
   });
+
+  it('omits single-model metadata for pooled mentor consultations while retaining one request usage snapshot', async () => {
+    const providerId = registerTestProvider({
+      label: 'Pooled mentor observation provider',
+      createStreamedModel: (model: string) => ({
+        async *stream() {
+          const inputTokens = model === 'mentor-a' ? 11 : 22;
+          yield {
+            type: 'completion',
+            responseId: `response-${model}`,
+            output: [{ type: 'message', content: [{ type: 'text', text: `Opinion from ${model}` }] }],
+            usage: { inputTokens, outputTokens: 3 },
+          };
+        },
+      }),
+      fetchModels: async () => [{ id: 'mentor-a' }, { id: 'mentor-b' }],
+    });
+    const runtime = createSubagentRuntime({
+      logger: createMockLogger(),
+      settings: createMockSettings({
+        'agent.mentorModel': 'default-mentor',
+        'agent.mentorProvider': providerId,
+        'agent.mentorSamples': 5,
+        'agent.mentorPool': [
+          { model: 'mentor-a', provider: providerId },
+          { model: 'mentor-b', provider: providerId },
+        ],
+      }),
+      sessionContextService: createSessionContextService(),
+      toolOwnership: new ToolOwnershipRegistry(),
+    });
+    const handle = runtime.asyncRegistry.startRun({ role: 'mentor', task: 'Compare the designs.' });
+    await runtime.asyncRegistry.getResult(handle.runId);
+
+    const status = runtime.asyncRegistry.getRunStatus(handle.runId) as any;
+    expect(status.model).toBeUndefined();
+    expect([11, 22]).toContain(status.latestUsage.prompt_tokens);
+    expect(status.latestUsage.prompt_tokens).not.toBe(33);
+    runtime.asyncRegistry.dispose();
+
+    const singleRuntime = createSubagentRuntime({
+      logger: createMockLogger(),
+      settings: createMockSettings({
+        'agent.mentorModel': 'default-mentor',
+        'agent.mentorProvider': providerId,
+      }),
+      sessionContextService: createSessionContextService(),
+      toolOwnership: new ToolOwnershipRegistry(),
+    });
+    const single = singleRuntime.asyncRegistry.startRun({ role: 'mentor', task: 'Review one design.' });
+    await singleRuntime.asyncRegistry.getResult(single.runId);
+    expect(singleRuntime.asyncRegistry.getRunStatus(single.runId)).toMatchObject({
+      model: { provider: providerId, id: 'default-mentor' },
+    });
+    singleRuntime.asyncRegistry.dispose();
+  });
+
+  it('fences stop_requested from buffered observations until terminal settlement', async () => {
+    let resolveRun!: (value: SubagentResult) => void;
+    const registry = new SubagentAsyncRegistry({
+      logger: createMockLogger(),
+      run: () => new Promise<SubagentResult>((resolve) => (resolveRun = resolve)),
+    });
+    const handle = registry.startRun({ role: 'explorer', task: 'inspect' });
+    registry.cancelRun(handle.runId);
+    registry.handleSubagentEvent({ type: 'subagent_streaming_text', agentId: handle.runId, text: 'buffered' });
+    registry.handleSubagentEvent({
+      type: 'retry',
+      agentId: handle.runId,
+      toolName: 'model',
+      attempt: 1,
+      maxRetries: 2,
+      errorMessage: 'retry',
+    });
+    registry.handleSubagentEvent({
+      type: 'subagent_tool_started',
+      agentId: handle.runId,
+      role: 'explorer',
+      toolName: 'read_file',
+      arguments: {},
+    } as ConversationEvent);
+    expect(registry.getRunStatus(handle.runId)).toMatchObject({
+      status: 'cancelling',
+      currentText: 'buffered',
+      lastObservation: { kind: 'stop_requested' },
+    });
+    resolveRun(result('explorer'));
+    await registry.getResult(handle.runId);
+    expect(registry.getRunStatus(handle.runId)).toMatchObject({ lastObservation: { kind: 'settled' } });
+    registry.dispose();
+  });
+
+  it('marks the first text chunk once per real response boundary and later chunks as received', () => {
+    const registry = make(() => new Promise<SubagentResult>(() => undefined));
+    const handle = registry.startRun({ role: 'explorer', task: 'inspect' });
+    const text = (value: string) =>
+      registry.handleSubagentEvent({ type: 'subagent_streaming_text', agentId: handle.runId, text: value });
+    text('one');
+    expect(registry.getRunStatus(handle.runId)).toMatchObject({ lastObservation: { kind: 'response_started' } });
+    text('one two');
+    text('one two three');
+    expect(registry.getRunStatus(handle.runId)).toMatchObject({ lastObservation: { kind: 'text_received' } });
+    registry.handleSubagentEvent({
+      type: 'retry',
+      agentId: handle.runId,
+      toolName: 'model',
+      attempt: 1,
+      maxRetries: 2,
+      errorMessage: 'retry',
+    });
+    text('next response');
+    expect(registry.getRunStatus(handle.runId)).toMatchObject({ lastObservation: { kind: 'response_started' } });
+    registry.handleSubagentEvent({
+      type: 'subagent_tool_started',
+      agentId: handle.runId,
+      role: 'explorer',
+      toolName: 'read_file',
+      arguments: {},
+    } as ConversationEvent);
+    text('response after tool boundary');
+    expect(registry.getRunStatus(handle.runId)).toMatchObject({ lastObservation: { kind: 'response_started' } });
+    registry.dispose();
+  });
+
+  it('retains bounded terminal-safe tool labels and reports completion only for terminal command messages', () => {
+    const registry = make(() => new Promise<SubagentResult>(() => undefined));
+    const handle = registry.startRun({ role: 'worker', task: 'inspect' });
+    const rawName = `shell\n\u001b[31m${'x'.repeat(120)}`;
+    registry.handleSubagentEvent({
+      type: 'subagent_tool_started',
+      agentId: handle.runId,
+      role: 'worker',
+      toolName: rawName,
+      arguments: {},
+    } as ConversationEvent);
+    const started = registry.getRunStatus(handle.runId) as any;
+    expect(started.lastObservation).toMatchObject({ kind: 'tool_started', toolName: started.lastToolName });
+    expect(started.lastToolName).not.toMatch(/[\n\u001b]/);
+    expect(started.lastToolName.length).toBeLessThanOrEqual(80);
+    registry.handleSubagentEvent({
+      type: 'subagent_command_message',
+      agentId: handle.runId,
+      role: 'worker',
+      message: { id: 'command', sender: 'command', status: 'running', command: 'work', output: '' },
+    });
+    expect(registry.getRunStatus(handle.runId)).toMatchObject({ lastObservation: { kind: 'tool_started' } });
+    registry.handleSubagentEvent({
+      type: 'subagent_command_message',
+      agentId: handle.runId,
+      role: 'worker',
+      message: { id: 'command', sender: 'command', status: 'completed', command: 'work', output: '' },
+    });
+    expect(registry.getRunStatus(handle.runId)).toMatchObject({ lastObservation: { kind: 'tool_completed' } });
+    registry.handleSubagentEvent({
+      type: 'subagent_tool_started',
+      agentId: handle.runId,
+      role: 'worker',
+      toolName: 'shell',
+      arguments: {},
+    } as ConversationEvent);
+    registry.handleSubagentEvent({
+      type: 'subagent_command_message',
+      agentId: handle.runId,
+      role: 'worker',
+      message: { id: 'failed-command', sender: 'command', status: 'failed', command: 'work', output: 'failed' },
+    });
+    expect(registry.getRunStatus(handle.runId)).toMatchObject({
+      lastObservation: { kind: 'tool_completed', toolName: 'shell' },
+    });
+    registry.dispose();
+  });
 });
 
 describe('foreground lease adoption', () => {
+  it('preserves the model captured by the foreground lease instead of re-resolving mutable settings', () => {
+    const registry = new SubagentAsyncRegistry({
+      logger: createMockLogger(),
+      run: () => new Promise<SubagentResult>(() => undefined),
+      modelForRole: () => ({ provider: 'provider-b', id: 'model-b' }),
+    });
+    const lease = new ForegroundSubagentLease({
+      runId: 'model-snapshot',
+      model: { provider: 'provider-a', id: 'model-a' },
+    });
+    registry.adoptForegroundLease(lease, { role: 'explorer', task: 'inspect' });
+    expect(registry.getRunStatus('model-snapshot')).toMatchObject({
+      model: { provider: 'provider-a', id: 'model-a' },
+    });
+    registry.dispose();
+  });
+
   it('adopts the exact stable lease without starting the async runner and settles from one terminal event', async () => {
     const events: ConversationEvent[] = [];
     const run = vi.fn(() => Promise.resolve(result('explorer')));
@@ -587,7 +775,8 @@ describe('peek / getRunStatus', () => {
 
     expect(registry.getRunStatus(handle.runId)).toMatchObject({
       activityState: 'active',
-      lastActivityAt: 2_500,
+      lastActivityAt: 2_000,
+      lastObservation: { kind: 'tool_started', toolName: 'shell' },
     });
     registry.dispose();
   });

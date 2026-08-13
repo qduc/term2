@@ -46,6 +46,8 @@ import { pinWorkerWorktree } from './worker-worktree.js';
 export type CachedRoleTool = {
   agent: ApplicationAgent;
   tool: AnyToolDefinition;
+  model: { provider: string; id: string };
+  maxTurns: number;
 };
 
 /** Observable foreground work that may be adopted without recreating it. */
@@ -55,6 +57,7 @@ export interface ForegroundSubagentCandidate {
   task: string;
   parentTool?: string;
   startedAt: number;
+  model?: { provider: string; id: string };
 }
 
 type ForegroundLeaseCandidate = ForegroundSubagentCandidate & { lease: ForegroundSubagentLease };
@@ -325,7 +328,12 @@ export class NestedSubagentRunner {
     };
 
     const tool = this.createSubagentTool(role, definition, agent);
-    return { agent, tool };
+    return {
+      agent,
+      tool,
+      model: { provider: definition.provider, id: definition.model },
+      maxTurns: definition.maxTurns,
+    };
   }
 
   /**
@@ -552,7 +560,12 @@ export class NestedSubagentRunner {
     // detachable parent link preserves ordinary foreground abort beforehand.
     const candidateRunId = detailsRecord?.toolCall?.callId ?? randomUUID();
     const parentComposite = createCompositeAbortSignal(detailsRecord?.signal, request.signal);
-    const lease = new ForegroundSubagentLease({ runId: candidateRunId, parentSignal: parentComposite?.signal });
+    const roleTool = pinnedRoleTool ?? this.#getOrCreateRoleTool(role);
+    const lease = new ForegroundSubagentLease({
+      runId: candidateRunId,
+      parentSignal: parentComposite?.signal,
+      model: roleTool.model,
+    });
     this.#foregroundLeases.set(candidateRunId, {
       lease,
       runId: candidateRunId,
@@ -560,6 +573,7 @@ export class NestedSubagentRunner {
       task: request.task,
       parentTool: request.parentTool,
       startedAt: Date.now(),
+      model: roleTool.model,
     });
     const composite = createCompositeAbortSignal(lease.signal);
     const signal = composite?.signal;
@@ -577,7 +591,7 @@ export class NestedSubagentRunner {
       toolCounts: {},
       activeCommandMessages: {},
       turnCount: 0,
-      maxTurns: (this.#resolveRole ? this.#resolveRole(role) : loadRoleDefinition(role, this.#settings)).maxTurns,
+      maxTurns: roleTool.maxTurns,
     };
     runContext.task = request.task;
 
@@ -597,7 +611,7 @@ export class NestedSubagentRunner {
     let abortListener: (() => void) | undefined;
     let transferredToBackground = false;
     try {
-      const { tool, agent: roleAgent } = pinnedRoleTool ?? this.#getOrCreateRoleTool(role);
+      const { tool, agent: roleAgent } = roleTool;
       replayApprovals(nestedLedger, readParentApprovals(context), roleAgent);
       const nestedToolContext: ToolInvocationContext<SubagentRunContext> = {
         context: runContext,

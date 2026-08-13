@@ -33,6 +33,18 @@ export type BackgroundTaskActivity = {
 
 export const BACKGROUND_SUBAGENT_QUIET_AFTER_MS = 30_000;
 export const BACKGROUND_SHELL_QUIET_AFTER_MS = 10_000;
+export const BACKGROUND_TASK_TOOL_LABEL_LIMIT = 80;
+
+/** Bounds provider-derived labels before they enter retained presentation state. */
+export const sanitizeBackgroundTaskToolLabel = (value: string): string => {
+  const normalized = value
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return normalized.length > BACKGROUND_TASK_TOOL_LABEL_LIMIT
+    ? `${normalized.slice(0, BACKGROUND_TASK_TOOL_LABEL_LIMIT - 1)}…`
+    : normalized;
+};
 
 export const assessBackgroundTaskLiveness = ({
   lastObservedAt,

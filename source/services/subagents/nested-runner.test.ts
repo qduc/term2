@@ -51,6 +51,8 @@ function buildNestedRunner(
     alwaysCallsTool?: boolean;
     /** Fail the exact continuation after an approved child tool. */
     failAfterApproval?: boolean;
+    /** Simulate mutable settings becoming invalid after launch-time role resolution. */
+    failRoleResolutionAfterFirst?: boolean;
     onEvent?: (event: ConversationEvent) => void;
     onBackgroundApprovalPause?: (pause: BackgroundSubagentApprovalPause) => void;
     logger?: ReturnType<typeof createMockLogger>;
@@ -106,17 +108,22 @@ function buildNestedRunner(
     buildAgentTools: () => [fakeTool],
   } as unknown as SubagentToolFactory;
 
+  let roleResolutions = 0;
   const runner = new NestedSubagentRunner({
     logger: options.logger ?? createMockLogger(),
     settings: createMockSettings({ 'agent.model': 'nested-model', 'agent.provider': providerId }),
     sessionContextService: createSessionContextService(),
     toolFactory: stubToolFactory,
     roleToolCache: new Map(),
-    resolveRole: () => ({
-      ...workerDefinition(providerId),
-      ...(options.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {}),
-      ...(options.maxTokens !== undefined ? { maxTokens: options.maxTokens } : {}),
-    }),
+    resolveRole: () => {
+      roleResolutions += 1;
+      if (options.failRoleResolutionAfterFirst && roleResolutions > 1) throw new Error('later settings are invalid');
+      return {
+        ...workerDefinition(providerId),
+        ...(options.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {}),
+        ...(options.maxTokens !== undefined ? { maxTokens: options.maxTokens } : {}),
+      };
+    },
     toolOwnership: new ToolOwnershipRegistry(),
     ...(options.onEvent ? { onEvent: options.onEvent } : {}),
     ...(options.onBackgroundApprovalPause ? { backgroundApprovalPauseSink: options.onBackgroundApprovalPause } : {}),
@@ -223,7 +230,7 @@ describe('NestedSubagentRunner end to end', () => {
   it('publishes an adopted pause through the session sink and resumes only through its application callback', async () => {
     const pauses: BackgroundSubagentApprovalPause[] = [];
     const events: ConversationEvent[] = [];
-    const { runner } = buildNestedRunner({
+    const { runner, providerId } = buildNestedRunner({
       needsApproval: true,
       onEvent: (event) => events.push(event),
       onBackgroundApprovalPause: (pause) => pauses.push(pause),
@@ -232,7 +239,11 @@ describe('NestedSubagentRunner end to end', () => {
     const foreground = runner.runAsTool({ role: 'worker', task: 'update notes' }, parentToolContext(), {
       toolCall: { callId: 'transferred-pause-sink' },
     });
+    expect(runner.getForegroundCandidate('transferred-pause-sink')).toMatchObject({
+      model: { provider: providerId, id: 'nested-model' },
+    });
     const lease = runner.getForegroundLease('transferred-pause-sink')!;
+    expect(lease.model).toEqual({ provider: providerId, id: 'nested-model' });
     lease.adopt();
     await expect(foreground).resolves.toMatchObject({ status: 'running', agentId: 'transferred-pause-sink' });
     await vi.waitFor(() => expect(pauses).toHaveLength(1));
@@ -252,6 +263,18 @@ describe('NestedSubagentRunner end to end', () => {
       }),
     );
     expect(pause.apply(() => true)).toBe(false);
+  });
+
+  it('does not re-resolve mutable role settings when a launched foreground run is transferred', async () => {
+    const { runner, providerId } = buildNestedRunner({ failRoleResolutionAfterFirst: true });
+    const foreground = runner.runAsTool({ role: 'worker', task: 'update notes' }, parentToolContext(), {
+      toolCall: { callId: 'immutable-transfer-model' },
+    });
+    const candidate = runner.getForegroundCandidate('immutable-transfer-model')!;
+    expect(candidate.model).toEqual({ provider: providerId, id: 'nested-model' });
+    candidate.lease.adopt();
+
+    await expect(foreground).resolves.toMatchObject({ status: 'running', agentId: 'immutable-transfer-model' });
   });
 
   it('turns a synchronous retained-loop launch failure into one durable adopted terminal without retaining the pause', async () => {

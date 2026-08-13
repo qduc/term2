@@ -17,7 +17,9 @@ type Props = {
   columns?: number;
 };
 
-const TASK_LABEL_LIMIT = 60;
+export const BACKGROUND_TASK_PANEL_NARROW_LABEL_LIMIT = 24;
+export const BACKGROUND_TASK_PANEL_MEDIUM_LABEL_LIMIT = 36;
+export const BACKGROUND_TASK_PANEL_WIDE_LABEL_LIMIT = 60;
 const TOOL_LABEL_LIMIT = 60;
 const NAME_LIMIT = 24;
 export const BACKGROUND_TASK_PANEL_MEDIUM_COLUMNS = 72;
@@ -43,13 +45,13 @@ type PanelTask = BackgroundTask | BackgroundTaskControlDetails | ForegroundTrans
 
 const isControlTask = (task: PanelTask): task is BackgroundTaskControlDetails => 'id' in task;
 
-const formatTaskLabel = (task: PanelTask): string => {
+const formatTaskLabel = (task: PanelTask, limit: number): string => {
   if (task.kind === 'shell') {
-    return truncate(firstLine(task.command).replaceAll(/\s+/g, ' '), TASK_LABEL_LIMIT);
+    return truncate(firstLine(task.command).replaceAll(/\s+/g, ' '), limit);
   }
   const normalized = firstLine('taskPreview' in task ? task.taskPreview : task.task).replaceAll(/\s+/g, ' ');
   const label = normalized || `${formatRole(task.role)} background task`;
-  return truncate(label, TASK_LABEL_LIMIT);
+  return truncate(label, limit);
 };
 
 const formatContextTokens = (tokens: number): string => {
@@ -111,6 +113,15 @@ const formatPhase = (task: BackgroundTaskControlDetails): string => {
   const activity = task.activity;
   if (!activity) return 'Running';
   if (activity.phase === 'waiting') return `Awaiting ${activity.reason ?? 'provider'} response`;
+  if (activity.phase === 'cancelling') return 'Cancelling';
+  if (activity.phase === 'settled') return formatTerminalStatus(task);
+  return 'Active';
+};
+
+const formatMediumPhase = (task: BackgroundTaskControlDetails): string => {
+  const activity = task.activity;
+  if (!activity) return 'Running';
+  if (activity.phase === 'waiting') return 'Waiting';
   if (activity.phase === 'cancelling') return 'Cancelling';
   if (activity.phase === 'settled') return formatTerminalStatus(task);
   return 'Active';
@@ -198,6 +209,12 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now, columns: testColumns }) =
           ratio !== undefined &&
           ratio >= BACKGROUND_TASK_PANEL_HIGH_CONTEXT_RATIO;
         const isNarrow = columns < BACKGROUND_TASK_PANEL_MEDIUM_COLUMNS;
+        const isWide = columns >= BACKGROUND_TASK_PANEL_WIDE_COLUMNS;
+        const taskLabelLimit = isNarrow
+          ? BACKGROUND_TASK_PANEL_NARROW_LABEL_LIMIT
+          : isWide
+          ? BACKGROUND_TASK_PANEL_WIDE_LABEL_LIMIT
+          : BACKGROUND_TASK_PANEL_MEDIUM_LABEL_LIMIT;
         const status = !isTerminal(task) ? formatLiveStatus(task, now) : formatTerminalStatus(task);
         return (
           <Box key={key} flexDirection="column">
@@ -211,7 +228,14 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now, columns: testColumns }) =
                 <Text color="#c4b5fd"> {truncate(task.name, NAME_LIMIT)}</Text>
               )}{' '}
               <Text>
-                {formatTaskLabel(task)} · {isNarrow ? status : controlTask ? formatPhase(controlTask) : status}
+                {formatTaskLabel(task, taskLabelLimit)} ·{' '}
+                {isNarrow
+                  ? status
+                  : controlTask
+                  ? isWide
+                    ? formatPhase(controlTask)
+                    : formatMediumPhase(controlTask)
+                  : status}
               </Text>
             </Text>
             {!isNarrow && controlTask && !isTerminal(task) && (

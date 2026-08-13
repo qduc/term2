@@ -479,13 +479,20 @@ describe('application-owned context compaction black-box lifecycle', () => {
     const firstIdlePrompt = captureIdlePrompt(first);
     await submitPrompt(first, 'run the side effect once');
     await first.waitForVisibleOutput('Allow this action?');
-    await submitPrompt(first, 'y');
+    // ApprovalPrompt handles y as a complete single-key action. Sending an
+    // extra Enter can arrive after the approval-to-composer remount and become
+    // a leading newline in the next input buffer.
+    await first.write('y');
     await server.waitForRequests(2);
     await first.waitForVisibleOutput('COMPACTION-TOOL-FINAL');
     await waitForNextIdlePrompt(first, firstIdlePrompt);
     const conversationId = await waitForConversationId(workspace);
     await submitPrompt(first, '/quit');
     await first.waitForExit(DEFAULT_TIMEOUT_MS);
+    // A trailing Enter from the preceding approval shortcut would turn this
+    // into a `\n/quit` user message and consume the fixture's resume frame.
+    expect(server.requests).toHaveLength(2);
+    expect(first.getVisibleOutput()).not.toContain('COMPACTION-TOOL-RESUMED');
 
     const resumed = await startInteractive(workspace, COMPACTION_ROUTE, ['--resume', conversationId]);
     try {

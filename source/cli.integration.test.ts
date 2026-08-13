@@ -1,9 +1,17 @@
 import { it, expect, beforeEach, afterEach } from 'vitest';
-import { execFileSync, execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import fs from 'fs';
+import { createRequire } from 'module';
 import os from 'os';
 import path from 'path';
 import { resolveSettingsDirectory } from './services/settings/settings-path.js';
+
+const require = createRequire(import.meta.url);
+
+// Run the CLI from TypeScript source via tsx instead of spawning dist/cli.js:
+// dist/ is a gitignored build artifact, so a fresh worktree has no compiled
+// CLI and these tests would fail until someone runs `pnpm build`.
+const cliArgs = ['--import', require.resolve('tsx'), path.resolve('source/cli.tsx')];
 
 let testDir = '';
 
@@ -18,7 +26,7 @@ afterEach(() => {
 });
 
 it('CLI --help documents the available command-line options', () => {
-  const help = execFileSync('node', ['--import', 'tsx', 'source/cli.tsx', '--help'], {
+  const help = execFileSync('node', [...cliArgs, '--help'], {
     env: {
       ...process.env,
       DISABLE_LOGGING: '1',
@@ -97,11 +105,7 @@ it('CLI --resume ls prints list of conversations and exits', () => {
   fs.utimesSync(filePath, now, now);
   fs.utimesSync(otherFilePath, now, now);
 
-  // Run the built CLI script with environment variable and --resume ls
-  // We point to dist/cli.js. Since the test runner compiles TS, dist/cli.js is up to date.
-  const cliPath = path.resolve('dist/cli.js');
-
-  const stdout = execSync(`node ${cliPath} --resume ls`, {
+  const stdout = execFileSync('node', [...cliArgs, '--resume', 'ls'], {
     env: {
       ...process.env,
       TERM2_CONVERSATIONS_DIR: testDir,
@@ -140,9 +144,7 @@ it('CLI --resume list also works', () => {
   const now = new Date();
   fs.utimesSync(filePath, now, now);
 
-  const cliPath = path.resolve('dist/cli.js');
-
-  const stdout = execSync(`node ${cliPath} --resume list`, {
+  const stdout = execFileSync('node', [...cliArgs, '--resume', 'list'], {
     env: {
       ...process.env,
       TERM2_CONVERSATIONS_DIR: testDir,
@@ -155,12 +157,10 @@ it('CLI --resume list also works', () => {
 });
 
 it('CLI --resume prints message and exits when no conversation is found', () => {
-  const cliPath = path.resolve('dist/cli.js');
-
   let error: any;
   let stderr = '';
   try {
-    execSync(`node ${cliPath} --resume dummy`, {
+    execFileSync('node', [...cliArgs, '--resume', 'dummy'], {
       env: {
         ...process.env,
         TERM2_CONVERSATIONS_DIR: testDir,
@@ -180,13 +180,12 @@ it('CLI --resume prints message and exits when no conversation is found', () => 
 });
 
 it('CLI prompts before starting in non-lite mode from home directory', () => {
-  const cliPath = path.resolve('dist/cli.js');
   const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
 
   let error: any;
   let stderr = '';
   try {
-    execFileSync('node', [cliPath], {
+    execFileSync('node', cliArgs, {
       env: {
         ...process.env,
         HOME: tempHome,
@@ -211,13 +210,12 @@ it('CLI prompts before starting in non-lite mode from home directory', () => {
 });
 
 it('CLI prompts before starting in non-lite mode from root directory', () => {
-  const cliPath = path.resolve('dist/cli.js');
   const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
 
   let error: any;
   let stderr = '';
   try {
-    execFileSync('node', [cliPath], {
+    execFileSync('node', cliArgs, {
       env: {
         ...process.env,
         HOME: tempHome,
@@ -242,7 +240,6 @@ it('CLI prompts before starting in non-lite mode from root directory', () => {
 });
 
 it('CLI accepts a custom provider from settings.json in non-interactive mode', () => {
-  const cliPath = path.resolve('dist/cli.js');
   const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
   const settingsDir = resolveSettingsDirectory({ homeDir: tempHome });
   fs.mkdirSync(settingsDir, { recursive: true });
@@ -275,7 +272,7 @@ it('CLI accepts a custom provider from settings.json in non-interactive mode', (
   let stderr = '';
 
   try {
-    execFileSync('node', [cliPath, '--provider', providerName, 'hello'], {
+    execFileSync('node', [...cliArgs, '--provider', providerName, 'hello'], {
       env: {
         ...process.env,
         HOME: tempHome,

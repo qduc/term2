@@ -1,7 +1,7 @@
 // @ts-expect-error IS_REACT_ACT_ENVIRONMENT is not in globalThis types
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import { afterEach, it, expect, vi } from 'vitest';
-import React, { act } from 'react';
+import React, { act, useState } from 'react';
 import { render } from 'ink-testing-library';
 import { InputProvider } from '../../context/InputContext.js';
 import BottomArea, { type BottomAreaProps } from './BottomArea.js';
@@ -49,6 +49,22 @@ const baseProps: BottomAreaProps = {
   queuePauseReason: undefined,
   onResumeQueue: () => {},
   onDiscardQueue: () => {},
+  backgroundTaskManagerOpen: false,
+  onBackgroundTaskManagerOpenChange: () => {},
+};
+
+const ControlledBottomArea = ({ props }: { props: BottomAreaProps }) => {
+  const [backgroundTaskManagerOpen, setBackgroundTaskManagerOpen] = useState(props.backgroundTaskManagerOpen);
+  return (
+    <BottomArea
+      {...props}
+      backgroundTaskManagerOpen={backgroundTaskManagerOpen}
+      onBackgroundTaskManagerOpenChange={(open) => {
+        setBackgroundTaskManagerOpen(open);
+        props.onBackgroundTaskManagerOpenChange(open);
+      }}
+    />
+  );
 };
 
 const renderBottomArea = async (props: Partial<BottomAreaProps> = {}) => {
@@ -60,7 +76,7 @@ const renderBottomArea = async (props: Partial<BottomAreaProps> = {}) => {
 
   const result = render(
     <InputProvider>
-      <BottomArea {...fullProps} />
+      <ControlledBottomArea props={fullProps} />
     </InputProvider>,
   );
 
@@ -228,11 +244,13 @@ it.sequential('BottomArea gives the background task manager exclusive input owne
     elapsedMs: 0,
     toolCounts: {},
   };
+  const onBackgroundTaskManagerOpenChange = vi.fn();
   const view = await renderBottomArea({
     ...baseProps,
     listBackgroundTaskDetails: () => [details],
     getBackgroundTaskDetails: () => details,
     stopBackgroundTask: () => ({ ok: false, code: 'not_active' }),
+    onBackgroundTaskManagerOpenChange,
   });
 
   await act(async () => {
@@ -243,6 +261,13 @@ it.sequential('BottomArea gives the background task manager exclusive input owne
   const output = view.lastFrame() ?? '';
   expect(output).toContain('Manage background tasks');
   expect(output).not.toContain('❯ Type a message');
+  expect(onBackgroundTaskManagerOpenChange).toHaveBeenLastCalledWith(true);
+
+  await act(async () => {
+    view.stdin.write('\u001B');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+  expect(onBackgroundTaskManagerOpenChange).toHaveBeenLastCalledWith(false);
   act(() => view.unmount());
 });
 

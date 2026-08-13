@@ -1,9 +1,27 @@
 // @ts-expect-error IS_REACT_ACT_ENVIRONMENT is not in globalThis types
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-import React, { act } from 'react';
+import React, { act, useState } from 'react';
 import { expect, it, vi } from 'vitest';
 import { renderInAct } from '../../test-helpers/ink-testing.js';
-import BackgroundTaskManager from './BackgroundTaskManager.js';
+import BackgroundTaskManagerView, { type BackgroundTaskManagerProps } from './BackgroundTaskManager.js';
+
+type TestManagerProps = Omit<BackgroundTaskManagerProps, 'open' | 'onOpenChange'> & {
+  onOpenChange?: (open: boolean) => void;
+};
+
+const BackgroundTaskManager = ({ onOpenChange, ...props }: TestManagerProps) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <BackgroundTaskManagerView
+      {...props}
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        onOpenChange?.(next);
+      }}
+    />
+  );
+};
 
 const subagent = {
   kind: 'subagent' as const,

@@ -18,6 +18,8 @@ import { ExecutionContext } from '../../services/execution-context.js';
 import { withFileLock } from './file-locks.js';
 import { TOOL_NAME_APPLY_PATCH } from '../tool-names.js';
 import { boundToolResultText, truncateToUtf8Bytes } from '../../utils/output/bound-tool-result.js';
+import { healPatchOperation } from './patch-healing.js';
+import { resolveAncillaryModelTier } from '../../services/agent-runtime/model-resolver.js';
 
 /**
  * Error thrown when patch validation fails (malformed diff)
@@ -212,8 +214,9 @@ export function createApplyPatchToolDefinition(deps: {
   settingsService: ISettingsService;
   executionContext?: ExecutionContext;
   sessionAccess?: SessionAccessState;
+  patchHealing?: typeof healPatchOperation;
 }): ToolDefinition<typeof applyPatchParametersSchema> {
-  const { loggingService, settingsService, executionContext, sessionAccess } = deps;
+  const { loggingService, settingsService, executionContext, sessionAccess, patchHealing = healPatchOperation } = deps;
 
   return {
     name: 'apply_patch',
@@ -449,15 +452,64 @@ export function createApplyPatchToolDefinition(deps: {
 
               // Re-apply validation against the locked, current content.
               let patched: string;
+              let usedHealing = false;
               try {
                 patched = applyDiff(original, diff);
               } catch (err: any) {
-                return {
-                  success: false,
-                  operation: 'update_file',
-                  path: filePath,
-                  error: formatPatchError(err, diff, original),
-                };
+                const errMessage = err?.message || String(err);
+                const isContextError = /^Invalid (?:EOF )?Context \d+:/.test(errMessage);
+                const enableEditHealing = settingsService.get('tools.enableEditHealing') ?? true;
+
+                if (isContextError && enableEditHealing) {
+                  const contextMatch = errMessage.match(/^Invalid (?:EOF )?Context \d+:\n([\s\S]*)$/);
+                  const contextText = contextMatch ? contextMatch[1] : '';
+                  const mismatchDiagnosis = diagnoseContextMismatch(contextText, original);
+
+                  try {
+                    const choreModel = resolveAncillaryModelTier('chore', settingsService);
+                    const healingModel =
+                      settingsService.get('agent.choreModel') ??
+                      settingsService.get('tools.editHealingModel') ??
+                      choreModel.model;
+                    const providerId =
+                      settingsService.get('agent.choreProvider') ??
+                      settingsService.get('tools.editHealingProvider') ??
+                      choreModel.provider;
+
+                    const healingResult = await patchHealing(
+                      filePath,
+                      diff,
+                      original,
+                      mismatchDiagnosis,
+                      healingModel,
+                      process.env.OPENAI_API_KEY ?? '',
+                      {
+                        settingsService,
+                        loggingService,
+                        providerId,
+                      },
+                    );
+
+                    if (healingResult.wasModified && healingResult.healedDiff) {
+                      patched = applyDiff(original, healingResult.healedDiff);
+                      usedHealing = true;
+                    }
+                  } catch (healingError: any) {
+                    loggingService.warn('apply_patch self-healing failed', {
+                      path: filePath,
+                      error: healingError?.message || String(healingError),
+                    });
+                  }
+                }
+
+                if (!usedHealing) {
+                  return {
+                    success: false,
+                    operation: 'update_file',
+                    path: filePath,
+                    error: formatPatchError(err, diff, original),
+                  };
+                }
               }
               await writeFileFn(targetPath, patched);
 
@@ -467,6 +519,7 @@ export function createApplyPatchToolDefinition(deps: {
                     path: filePath,
                     originalLength: original.length,
                     patchedLength: patched.length,
+                    healed: usedHealing,
                   });
                 } catch (_error) {
                   // Ignore logging errors to prevent operation failure
@@ -477,7 +530,7 @@ export function createApplyPatchToolDefinition(deps: {
                 success: true,
                 operation: 'update_file',
                 path: filePath,
-                message: `Updated ${filePath}`,
+                message: usedHealing ? `Updated ${filePath} (healed)` : `Updated ${filePath}`,
               };
             });
           }

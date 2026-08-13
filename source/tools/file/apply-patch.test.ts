@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
@@ -441,4 +441,87 @@ it.sequential('execute: create_file writes outside workspace when the call has b
     await fs.rm(workspaceDir, { recursive: true, force: true });
     await fs.rm(path.join(path.dirname(workspaceDir), 'outside-approved.txt'), { force: true });
   }
+});
+
+it.sequential('execute: heals stale context in apply_patch when enabled and patchHealing succeeds', async () => {
+  await withTempDir(async (dir) => {
+    const mockPatchHealing = vi.fn().mockResolvedValue({
+      wasModified: true,
+      healedDiff: [
+        '@@ function computeTotal',
+        ' function computeTotal(items: number[]): number {',
+        '-  let sum = 0;',
+        '+  let sum = 100;',
+        '   for (const item of items) {',
+      ].join('\n'),
+    });
+
+    const mockSettingsService = createMockSettingsService({ 'tools.enableEditHealing': true });
+
+    const tool = createApplyPatchToolDefinition({
+      loggingService: mockLoggingService,
+      settingsService: mockSettingsService,
+      patchHealing: mockPatchHealing,
+    });
+
+    const filePath = 'calc.ts';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(
+      absPath,
+      'function computeTotal(items: number[]): number {\n  let sum = 0;\n  for (const item of items) {\n  }\n}\n',
+    );
+
+    const staleDiff = [
+      '@@ function calculateTotal',
+      ' function calculateTotal(items: number[]): number {',
+      '-  let sum = 0;',
+      '+  let sum = 100;',
+      '   for (const item of items) {',
+    ].join('\n');
+
+    const result = await tool.execute({
+      type: 'update_file',
+      path: filePath,
+      diff: staleDiff,
+    });
+
+    expect(mockPatchHealing).toHaveBeenCalled();
+    expect(result).toContain('(healed)');
+    const updatedContent = await fs.readFile(absPath, 'utf8');
+    expect(updatedContent).toContain('let sum = 100;');
+  });
+});
+
+it.sequential('execute: falls back to error when tools.enableEditHealing is false', async () => {
+  await withTempDir(async (dir) => {
+    const mockPatchHealing = vi.fn();
+    const mockSettingsService = createMockSettingsService({ 'tools.enableEditHealing': false });
+
+    const tool = createApplyPatchToolDefinition({
+      loggingService: mockLoggingService,
+      settingsService: mockSettingsService,
+      patchHealing: mockPatchHealing,
+    });
+
+    const filePath = 'calc.ts';
+    const absPath = path.join(dir, filePath);
+    await fs.writeFile(absPath, 'function computeTotal(items: number[]): number {\n  let sum = 0;\n}\n');
+
+    const staleDiff = [
+      '@@ function calculateTotal',
+      ' function calculateTotal(items: number[]): number {',
+      '-  let sum = 0;',
+      '+  let sum = 100;',
+      '}\n',
+    ].join('\n');
+
+    const result = await tool.execute({
+      type: 'update_file',
+      path: filePath,
+      diff: staleDiff,
+    });
+
+    expect(mockPatchHealing).not.toHaveBeenCalled();
+    expect(result).toContain('Error: Invalid patch:');
+  });
 });

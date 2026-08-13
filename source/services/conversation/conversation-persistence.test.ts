@@ -1346,3 +1346,129 @@ it.sequential('writer + loadConversation: old logs without journal entries still
   expect(restored!.model).toBe('gpt-4o');
   expect(restored!.messages.some((m) => m.sender === 'bot' && m.text === 'hello')).toBe(true);
 });
+
+// --- delta sidecar -----------------------------------------------------------
+//
+// Deltas moved out of the canonical log into a `<sessionId>.deltas` sidecar
+// that survives only a crash mid-turn. Recovery must produce exactly what the
+// old inline-delta format produced.
+
+function envelopeLine(seq: number, event: unknown): string {
+  return `${JSON.stringify({ v: 3, seq, ts: '2026-06-01T00:00:00.000Z', event })}\n`;
+}
+
+const interruptedTurnEvents = (id: string): unknown[] => [
+  { type: 'session_init', id, createdAt: '2026-06-01T00:00:00.000Z' },
+  { type: 'user_message', message: { id: 'u1', sender: 'user', text: 'explain this' } },
+  { type: 'assistant_journal_delta', turnId: 't1', seq: 1, kind: 'text', delta: 'It works ' },
+  { type: 'assistant_journal_delta', turnId: 't1', seq: 2, kind: 'text', delta: 'like so.' },
+];
+
+it.sequential('delta sidecar: an interrupted turn replays identically to the legacy inline format', async () => {
+  const legacyId = 'legacy-inline';
+  const legacyPath = path.join(testDir, `${legacyId}.jsonl`);
+  fs.writeFileSync(
+    legacyPath,
+    interruptedTurnEvents(legacyId)
+      .map((event, index) => envelopeLine(index + 1, event))
+      .join(''),
+  );
+  const legacy = persistenceModule.loadConversation(legacyId);
+
+  const splitId = 'split-sidecar';
+  const writer = createConversationLogWriter({
+    sessionId: splitId,
+    dir: testDir,
+    logger: stubLogger,
+    saveLast: () => {},
+  });
+  writer.init({ id: splitId, createdAt: '2026-06-01T00:00:00.000Z' });
+  for (const event of interruptedTurnEvents(splitId).slice(1)) {
+    writer.append(event as LogEvent);
+  }
+  await writer.close();
+
+  // The turn never settled, so the sidecar must have survived close.
+  expect(fs.existsSync(path.join(testDir, `${splitId}.deltas`))).toBe(true);
+  const split = persistenceModule.loadConversation(splitId);
+
+  const shape = (state: ReturnType<typeof persistenceModule.loadConversation>) =>
+    state!.messages.map((m) => ({ sender: m.sender, text: 'text' in m ? m.text : undefined }));
+
+  expect(shape(split)).toEqual(shape(legacy));
+  expect(shape(split).some((m) => m.text?.includes('It works like so.'))).toBe(true);
+});
+
+it.sequential('delta sidecar: a missing sidecar still loads the settled part of a conversation', () => {
+  const id = 'sidecar-absent';
+  fs.writeFileSync(
+    path.join(testDir, `${id}.jsonl`),
+    [
+      envelopeLine(1, { type: 'session_init', id, createdAt: '2026-06-01T00:00:00.000Z' }),
+      envelopeLine(2, { type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hi' } }),
+      envelopeLine(4, assistantTurn('hello')),
+    ].join(''),
+  );
+
+  // seq 3 belonged to a delta that was dropped with the sidecar; the gap must
+  // not disturb replay.
+  const restored = persistenceModule.loadConversation(id);
+  expect(restored!.messages.some((m) => m.sender === 'bot' && m.text === 'hello')).toBe(true);
+});
+
+it.sequential('delta sidecar: GC removes only sidecars whose conversation log is gone', () => {
+  const liveId = 'gc-live';
+  const orphanId = 'gc-orphan';
+
+  // A crashed-but-resumable session: canonical log present, sidecar retained.
+  fs.writeFileSync(
+    path.join(testDir, `${liveId}.jsonl`),
+    envelopeLine(1, { type: 'session_init', id: liveId, createdAt: '2026-06-01T00:00:00.000Z' }),
+  );
+  fs.writeFileSync(
+    path.join(testDir, `${liveId}.deltas`),
+    envelopeLine(2, { type: 'assistant_journal_delta', turnId: 't1', seq: 1, kind: 'text', delta: 'keep me' }),
+  );
+  // An orphan: no canonical log, so it can never be resumed.
+  fs.writeFileSync(
+    path.join(testDir, `${orphanId}.deltas`),
+    envelopeLine(1, { type: 'assistant_journal_delta', turnId: 't1', seq: 1, kind: 'text', delta: 'garbage' }),
+  );
+
+  expect(persistenceModule.collectOrphanedDeltaSidecars()).toBe(1);
+
+  // The crash-recovery sidecar must survive: deleting it would destroy the
+  // very data it exists to preserve.
+  expect(fs.existsSync(path.join(testDir, `${liveId}.deltas`))).toBe(true);
+  expect(fs.existsSync(path.join(testDir, `${orphanId}.deltas`))).toBe(false);
+});
+
+it.sequential('delta sidecar: forking a session with a live sidecar carries settled turns only', async () => {
+  const sourceId = 'fork-source';
+  const writer = createConversationLogWriter({
+    sessionId: sourceId,
+    dir: testDir,
+    logger: stubLogger,
+    saveLast: () => {},
+  });
+  writer.init({ id: sourceId, createdAt: '2026-06-01T00:00:00.000Z' });
+  writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'settled question' } });
+  writer.append(assistantTurn('settled answer'));
+  writer.append({ type: 'user_message', message: { id: 'u2', sender: 'user', text: 'interrupted question' } });
+  writer.append({ type: 'assistant_journal_delta', turnId: 't2', seq: 1, kind: 'text', delta: 'never finished' });
+  await writer.close();
+
+  expect(fs.existsSync(path.join(testDir, `${sourceId}.deltas`))).toBe(true);
+
+  const forkId = 'fork-target';
+  expect(persistenceModule.forkConversation(sourceId, forkId)).toBe(true);
+
+  // The sidecar is deliberately not copied: a fork of a half-streamed turn is
+  // not a coherent artifact, and its seq numbering belongs to the source.
+  expect(fs.existsSync(path.join(testDir, `${forkId}.deltas`))).toBe(false);
+
+  const forked = persistenceModule.loadConversation(forkId);
+  const texts = forked!.messages.map((m) => ('text' in m ? m.text : undefined));
+  expect(texts).toContain('settled answer');
+  expect(texts.some((t) => t?.includes('never finished'))).toBe(false);
+});

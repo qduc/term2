@@ -20,6 +20,154 @@ afterEach(() => {
   for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
 
+function readSeqs(filePath: string): number[] {
+  if (!fs.existsSync(filePath)) return [];
+  return fs
+    .readFileSync(filePath, 'utf8')
+    .split('\n')
+    .filter((line) => line.trim())
+    .map((line) => {
+      try {
+        return decodeLogEnvelope(JSON.parse(line));
+      } catch {
+        return null;
+      }
+    })
+    .filter((envelope) => envelope !== null)
+    .map((envelope) => envelope.seq);
+}
+
+function readEventTypes(filePath: string): string[] {
+  if (!fs.existsSync(filePath)) return [];
+  return fs
+    .readFileSync(filePath, 'utf8')
+    .split('\n')
+    .filter((line) => line.trim())
+    .map((line) => {
+      try {
+        return decodeLogEnvelope(JSON.parse(line))?.event?.type ?? null;
+      } catch {
+        return null;
+      }
+    })
+    .filter((type): type is string => type !== null);
+}
+
+describe('ConversationLogWriter delta sidecar', () => {
+  it('keeps streaming deltas out of the canonical log and drops the sidecar on a settled close', async () => {
+    const dir = tempDir();
+    const sessionId = 'settled-session';
+    const writer = createConversationLogWriter({ sessionId, dir, logger, saveLast: vi.fn() });
+
+    writer.init({ id: sessionId, createdAt: '2026-06-01T00:00:00.000Z' });
+    writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hello' } });
+    writer.append({ type: 'assistant_journal_delta', turnId: 't1', seq: 1, kind: 'text', delta: 'partial ' });
+    writer.append({ type: 'assistant_journal_delta', turnId: 't1', seq: 2, kind: 'text', delta: 'answer' });
+    writer.append({ type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'partial answer' }] } });
+
+    // Mirrors real shutdown: conversationService.shutdown() appends background
+    // shell / subagent settlement events after the final turn, before close().
+    writer.append({ type: 'background_shell_completed', jobId: 'j1', exitCode: 0 } as never);
+    await writer.close();
+
+    const canonical = path.join(dir, `${sessionId}.jsonl`);
+    expect(readEventTypes(canonical)).not.toContain('assistant_journal_delta');
+    expect(fs.existsSync(path.join(dir, `${sessionId}.deltas`))).toBe(false);
+  });
+
+  it('retains the sidecar when the session closes with an unsettled turn', async () => {
+    const dir = tempDir();
+    const sessionId = 'interrupted-session';
+    const writer = createConversationLogWriter({ sessionId, dir, logger, saveLast: vi.fn() });
+
+    writer.init({ id: sessionId, createdAt: '2026-06-01T00:00:00.000Z' });
+    writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hello' } });
+    writer.append({ type: 'assistant_journal_delta', turnId: 't1', seq: 1, kind: 'text', delta: 'half-w' });
+    await writer.close();
+
+    const sidecar = path.join(dir, `${sessionId}.deltas`);
+    expect(fs.existsSync(sidecar)).toBe(true);
+    expect(readEventTypes(sidecar)).toEqual(['assistant_journal_delta']);
+  });
+
+  it('creates no sidecar for a session that never streams a delta', async () => {
+    const dir = tempDir();
+    const sessionId = 'quiet-session';
+    const writer = createConversationLogWriter({ sessionId, dir, logger, saveLast: vi.fn() });
+
+    writer.init({ id: sessionId, createdAt: '2026-06-01T00:00:00.000Z' });
+    writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hello' } });
+    writer.append({ type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'hi' }] } });
+    await writer.close();
+
+    expect(fs.existsSync(path.join(dir, `${sessionId}.deltas`))).toBe(false);
+  });
+
+  it('uses a sidecar name that the conversations *.jsonl glob does not match', async () => {
+    const dir = tempDir();
+    const sessionId = 'glob-session';
+    const writer = createConversationLogWriter({ sessionId, dir, logger, saveLast: vi.fn() });
+
+    writer.init({ id: sessionId, createdAt: '2026-06-01T00:00:00.000Z' });
+    writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hello' } });
+    writer.append({ type: 'assistant_journal_delta', turnId: 't1', seq: 1, kind: 'text', delta: 'x' });
+    await writer.close();
+
+    // listConversations enumerates with readdirSync(...).filter(f => f.endsWith('.jsonl')).
+    // A sidecar caught by that glob would appear as a phantom conversation.
+    expect(fs.readdirSync(dir).filter((f) => f.endsWith('.jsonl'))).toEqual([`${sessionId}.jsonl`]);
+  });
+
+  it('resumes sequence numbering past a sidecar-dominant tail after a crash', async () => {
+    const dir = tempDir();
+    const sessionId = 'crashed-session';
+    const first = createConversationLogWriter({ sessionId, dir, logger, saveLast: vi.fn() });
+
+    first.init({ id: sessionId, createdAt: '2026-06-01T00:00:00.000Z' });
+    first.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hello' } });
+    // Deltas dominate, so the high-water sequence number lives in the sidecar.
+    for (let i = 0; i < 5; i++) {
+      first.append({ type: 'assistant_journal_delta', turnId: 't1', seq: i, kind: 'text', delta: `d${i}` });
+    }
+    await first.close();
+
+    const sidecar = path.join(dir, `${sessionId}.deltas`);
+    const highestDeltaSeq = Math.max(...readSeqs(sidecar));
+    expect(highestDeltaSeq).toBeGreaterThan(Math.max(...readSeqs(path.join(dir, `${sessionId}.jsonl`))));
+
+    const seqsBeforeResume = readSeqs(path.join(dir, `${sessionId}.jsonl`));
+
+    const resumed = createConversationLogWriter({ sessionId, dir, logger, saveLast: vi.fn() });
+    resumed.init({ id: sessionId, createdAt: '2026-06-01T00:01:00.000Z' });
+    resumed.append({ type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'done' }] } });
+    await resumed.close();
+
+    // Every newly issued number must clear the sidecar's high-water mark, or
+    // the seq-ordered merge on read would interleave incorrectly.
+    const newSeqs = readSeqs(path.join(dir, `${sessionId}.jsonl`)).slice(seqsBeforeResume.length);
+    expect(newSeqs.length).toBeGreaterThan(0);
+    expect(Math.min(...newSeqs)).toBeGreaterThan(highestDeltaSeq);
+  });
+
+  it('binds the sidecar to the new session id on rotate', async () => {
+    const dir = tempDir();
+    const writer = createConversationLogWriter({ sessionId: 'first', dir, logger, saveLast: vi.fn() });
+
+    writer.init({ id: 'first', createdAt: '2026-06-01T00:00:00.000Z' });
+    writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hello' } });
+    writer.append({ type: 'assistant_journal_delta', turnId: 't1', seq: 1, kind: 'text', delta: 'stale' });
+    writer.rotate('second', { id: 'second', createdAt: '2026-06-01T00:02:00.000Z' });
+    writer.append({ type: 'assistant_journal_delta', turnId: 't2', seq: 1, kind: 'text', delta: 'fresh' });
+    await writer.close();
+
+    // The first session ended unsettled, so its sidecar is retained; the new
+    // session's deltas must not have appended to it.
+    expect(fs.readFileSync(path.join(dir, 'first.deltas'), 'utf8')).toContain('stale');
+    expect(fs.readFileSync(path.join(dir, 'first.deltas'), 'utf8')).not.toContain('fresh');
+    expect(fs.readFileSync(path.join(dir, 'second.deltas'), 'utf8')).toContain('fresh');
+  });
+});
+
 describe('ConversationLogWriter sequence continuity', () => {
   it('continues sequence numbers when reopening a log with legacy and malformed trailing records', async () => {
     const dir = tempDir();

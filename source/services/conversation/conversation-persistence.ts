@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import envPaths from 'env-paths';
-import { isTruncatedLogEvent } from '../logging/conversation-log-events.js';
+import { DELTA_SIDECAR_SUFFIX, deltaSidecarPathFor, isTruncatedLogEvent } from '../logging/conversation-log-events.js';
 import { decodeLogEnvelope, type PersistedLogEnvelope } from './conversation-decoder.js';
 import { replayEvents, type RestoredState } from './conversation-replay.js';
 
@@ -133,8 +133,7 @@ export function generateId(): string {
   return crypto.randomUUID();
 }
 
-function readEnvelopes(filePath: string): PersistedLogEnvelope[] {
-  const content = fs.readFileSync(filePath, 'utf-8');
+function decodeEnvelopeLines(content: string): PersistedLogEnvelope[] {
   const lines = content.split('\n');
   const envelopes: PersistedLogEnvelope[] = [];
   for (const line of lines) {
@@ -153,6 +152,40 @@ function readEnvelopes(filePath: string): PersistedLogEnvelope[] {
   return envelopes;
 }
 
+/**
+ * Read a conversation log, merging its delta sidecar when one is present.
+ *
+ * A sidecar only survives a session that ended with an unsettled turn — i.e. a
+ * crash mid-stream — so in the steady state this reads a single file. When one
+ * does exist, its deltas are interleaved by `seq` so `applyInterruptedTurnJournals`
+ * sees the same ordering it would have seen from a single inline log.
+ *
+ * Both files share one sequence counter, so the merge is a stable sort. Logs
+ * written before the sidecar split carry their deltas inline and are unaffected.
+ */
+function readEnvelopes(filePath: string): PersistedLogEnvelope[] {
+  const envelopes = decodeEnvelopeLines(fs.readFileSync(filePath, 'utf-8'));
+
+  const sidecarPath = deltaSidecarPathFor(filePath);
+  if (!fs.existsSync(sidecarPath)) {
+    return envelopes;
+  }
+
+  let deltas: PersistedLogEnvelope[];
+  try {
+    deltas = decodeEnvelopeLines(fs.readFileSync(sidecarPath, 'utf-8'));
+  } catch {
+    // An unreadable sidecar degrades an interrupted turn; it must never make
+    // an otherwise-loadable conversation fail to open.
+    return envelopes;
+  }
+  if (deltas.length === 0) {
+    return envelopes;
+  }
+
+  return [...envelopes, ...deltas].sort((a, b) => a.seq - b.seq);
+}
+
 function restoredUpdatedAt(filePath: string, envelopes: PersistedLogEnvelope[]): string | undefined {
   const latestEnvelopeTs = [...envelopes]
     .reverse()
@@ -166,6 +199,44 @@ function restoredUpdatedAt(filePath: string, envelopes: PersistedLogEnvelope[]):
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Delete delta sidecars whose canonical conversation log no longer exists.
+ *
+ * Deliberately **not** keyed on lock liveness. A sidecar with no held lock is
+ * the crash case — the session died mid-turn — and its deltas are exactly what
+ * `--resume` needs to reconstruct the interrupted turn. Collecting those would
+ * destroy the data the sidecar exists to preserve.
+ *
+ * A sidecar whose `.jsonl` is gone can never be resumed, so it is unambiguous
+ * garbage. Sidecars for still-resumable crashed sessions are left alone; they
+ * are dropped by the next clean `close()` of that session.
+ *
+ * Returns the number of files removed.
+ */
+export function collectOrphanedDeltaSidecars(): number {
+  const dir = getConversationsDir();
+  if (!fs.existsSync(dir)) return 0;
+  let removed = 0;
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(dir);
+  } catch {
+    return 0;
+  }
+  for (const entry of entries) {
+    if (!entry.endsWith(DELTA_SIDECAR_SUFFIX)) continue;
+    const canonical = path.join(dir, `${entry.slice(0, -DELTA_SIDECAR_SUFFIX.length)}.jsonl`);
+    if (fs.existsSync(canonical)) continue;
+    try {
+      fs.unlinkSync(path.join(dir, entry));
+      removed += 1;
+    } catch {
+      // Best effort; a sidecar we cannot remove is inert.
+    }
+  }
+  return removed;
 }
 
 export function loadConversation(

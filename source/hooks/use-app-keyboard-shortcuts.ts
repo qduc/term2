@@ -17,6 +17,13 @@ type HandoffState = {
  */
 const INTERRUPT_CONFIRM_TIMEOUT_MS = 2000;
 
+/**
+ * The bridge survives the approval-to-composer handoff, but must never turn
+ * input owned by another surface into a rejection reason.
+ */
+export const mayConsumeRejectionReasonBridge = (inputOwner: InputOwner): boolean =>
+  inputOwner.kind === 'input' || inputOwner.kind === 'approval';
+
 export type UseAppKeyboardShortcutsResult = {
   /** True while a second Escape would interrupt the in-flight turn. */
   interruptConfirmVisible: boolean;
@@ -187,6 +194,12 @@ export const useAppKeyboardShortcuts = ({
     }
 
     if (rejectionReasonBridgeRef.current !== null) {
+      // The bridge spans the approval-to-composer handoff, but it is not a
+      // global shortcut. A higher-priority surface (such as the background
+      // task manager) must receive its own keys without them becoming part of
+      // the buffered rejection reason.
+      if (!mayConsumeRejectionReasonBridge(current.inputOwner)) return;
+
       if (key.escape) {
         rejectionReasonBridgeRef.current = null;
         current.setWaitingForRejectionReason(false);

@@ -99,6 +99,8 @@ export type BottomAreaProps = {
   getForegroundTaskTransferCandidate?: BackgroundTaskControlPort['getForegroundTransferCandidate'];
   listForegroundTaskTransferCandidates?: BackgroundTaskControlPort['listForegroundTransferCandidates'];
   moveForegroundTaskToBackground?: BackgroundTaskControlPort['moveForegroundToBackground'];
+  backgroundTaskManagerOpen: boolean;
+  onBackgroundTaskManagerOpenChange: (open: boolean) => void;
   backgroundApprovalPendingCount?: number;
   firstRunSetup?: { active: boolean; phase: FirstRunSetupPhase | null; provider: string };
   onProviderSelected?: (provider: string) => void;
@@ -170,6 +172,8 @@ const BottomArea: FC<BottomAreaProps> = ({
   getForegroundTaskTransferCandidate,
   listForegroundTaskTransferCandidates,
   moveForegroundTaskToBackground,
+  backgroundTaskManagerOpen,
+  onBackgroundTaskManagerOpenChange,
   backgroundApprovalPendingCount = 0,
   firstRunSetup,
   onProviderSelected,
@@ -179,7 +183,6 @@ const BottomArea: FC<BottomAreaProps> = ({
 }) => {
   const { controller } = useInputState();
   const [dotCount, setDotCount] = useState(1);
-  const [backgroundTaskManagerOpen, setBackgroundTaskManagerOpen] = useState(false);
   const [thinkingElapsedSeconds, setThinkingElapsedSeconds] = useState(() =>
     thinkingStartedAt == null ? 0 : Math.max(0, Math.floor((Date.now() - thinkingStartedAt) / 1000)),
   );
@@ -240,21 +243,6 @@ const BottomArea: FC<BottomAreaProps> = ({
   const showQueuePausedPrompt = inputOwner.kind === 'queue-paused';
   const showBackgroundTaskManager = inputOwner.kind === 'background-tasks';
   const foregroundTransferCandidate = getForegroundTaskTransferCandidate?.() ?? null;
-  useEffect(() => {
-    if (
-      backgroundTaskManagerOpen &&
-      (showHandoffConfirm || showStandardModeConfirm || showSurgePrompt || showLargeUncachedPrompt)
-    ) {
-      setBackgroundTaskManagerOpen(false);
-    }
-  }, [
-    backgroundTaskManagerOpen,
-    showHandoffConfirm,
-    showLargeUncachedPrompt,
-    showStandardModeConfirm,
-    showSurgePrompt,
-  ]);
-
   return (
     <Box flexDirection="column" width="100%">
       <Box flexDirection="column" marginTop={1}>
@@ -329,13 +317,14 @@ const BottomArea: FC<BottomAreaProps> = ({
             {listBackgroundTaskDetails && getBackgroundTaskDetails && stopBackgroundTask && (
               <BackgroundTaskManager
                 enabled={inputOwner.kind === 'input' || showBackgroundTaskManager}
+                open={backgroundTaskManagerOpen}
                 listDetails={listBackgroundTaskDetails}
                 getDetails={getBackgroundTaskDetails}
                 requestStop={stopBackgroundTask}
                 getForegroundTransferCandidate={getForegroundTaskTransferCandidate}
                 listForegroundTransferCandidates={listForegroundTaskTransferCandidates}
                 moveForegroundToBackground={moveForegroundTaskToBackground}
-                onOpenChange={setBackgroundTaskManagerOpen}
+                onOpenChange={onBackgroundTaskManagerOpenChange}
               />
             )}
             {showQueuePausedPrompt && (

@@ -81,7 +81,8 @@ export function parseDiffStructure(diff: string): ParsedDiffInfo {
 }
 
 export function countContextMatchesInFile(fileContent: string, contextLines: string[]): number {
-  if (contextLines.length === 0) return 1;
+  // No context means the chunk's placement cannot be verified against the file.
+  if (contextLines.length === 0) return 0;
   const fileLines = fileContent.split(/\r?\n/);
   if (fileLines.length < contextLines.length) return 0;
 
@@ -218,6 +219,15 @@ export async function healPatchOperation(
     };
   }
 
+  // The healed diff must be headerless: an envelope marker would stop parseDiffStructure
+  // at line 1, so the byte-for-byte invariants below would compare empty against empty.
+  if (/^\*\*\* (?:Begin Patch|Add File|Update File|Delete File)\b/m.test(cleaned)) {
+    return {
+      wasModified: false,
+      failureReason: 'healed diff included patch envelope headers',
+    };
+  }
+
   // Parse diff structures for invariant checks
   const origParsed = parseDiffStructure(failedDiff);
   let healedParsed: ParsedDiffInfo;
@@ -262,6 +272,12 @@ export async function healPatchOperation(
 
   // Invariant 4: Repaired context for each chunk must match exactly 1 location in file
   for (const chunk of healedParsed.chunks) {
+    if (chunk.contextLines.length === 0) {
+      return {
+        wasModified: false,
+        failureReason: 'healed chunk has no context to verify its placement',
+      };
+    }
     const matchCount = countContextMatchesInFile(fileContent, chunk.contextLines);
     if (matchCount === 0) {
       return {

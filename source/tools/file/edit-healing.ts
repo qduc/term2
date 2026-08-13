@@ -151,7 +151,7 @@ function computeTokenCoverage(search: string, candidate: string): number {
   return matches / searchTokens.length;
 }
 
-async function runHealingPrompt(
+export async function runHealingPrompt(
   prompt: string,
   instructions: string,
   model: string,

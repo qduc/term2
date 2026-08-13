@@ -29,6 +29,10 @@ describe('patch-healing', () => {
       expect(countContextMatchesInFile(fileContent, ['function foo() {'])).toBe(2);
       expect(countContextMatchesInFile(fileContent, ['function missing() {'])).toBe(0);
     });
+
+    it('treats empty context as unverifiable rather than a unique match', () => {
+      expect(countContextMatchesInFile('function foo() {\n}', [])).toBe(0);
+    });
   });
 
   describe('healPatchOperation', () => {
@@ -157,6 +161,55 @@ describe('patch-healing', () => {
 
       expect(result.wasModified).toBe(false);
       expect(result.failureReason).toBe('healed context matched multiple locations');
+    });
+
+    it('rejects a healed chunk that carries no context to locate it', async () => {
+      const contextlessDiff = ['@@ computeTotal', '+  let sum = 10;'].join('\n');
+
+      const runModel = vi.fn().mockResolvedValue(contextlessDiff);
+
+      const result = await healPatchOperation(
+        'source/calc.ts',
+        ['@@ calculateTotal', '+  let sum = 10;'].join('\n'),
+        mockFileContent,
+        'Mismatch diagnosis',
+        'gpt-4o-mini',
+        'test-key',
+        { runModel },
+      );
+
+      expect(result.wasModified).toBe(false);
+      expect(result.failureReason).toBe('healed chunk has no context to verify its placement');
+    });
+
+    it('rejects a healed diff wrapped in patch envelope headers', async () => {
+      // parseDiffStructure stops at "***", so an enveloped diff would otherwise parse
+      // as empty and pass the byte-for-byte invariants vacuously.
+      const envelopedDiff = [
+        '*** Begin Patch',
+        '*** Update File: source/calc.ts',
+        '@@ function computeTotal',
+        ' function computeTotal(items: number[]): number {',
+        '-  let sum = 0;',
+        '+  let sum = 999;',
+        '   for (const item of items) {',
+        '*** End Patch',
+      ].join('\n');
+
+      const runModel = vi.fn().mockResolvedValue(envelopedDiff);
+
+      const result = await healPatchOperation(
+        'source/calc.ts',
+        failedDiff,
+        mockFileContent,
+        'Mismatch diagnosis',
+        'gpt-4o-mini',
+        'test-key',
+        { runModel },
+      );
+
+      expect(result.wasModified).toBe(false);
+      expect(result.failureReason).toBe('healed diff included patch envelope headers');
     });
 
     it('handles healer model errors gracefully', async () => {

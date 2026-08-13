@@ -579,9 +579,10 @@ production session contract.
 - Focused tool-ownership clusters pass: 23 files / 364 tests, plus the 4-test conversation
   integration fixture. Formatting and lint pass except the pre-existing `prefer-const` warning
   in `services/subagents/runtime.ts`.
-- After building `dist/`, full Vitest reaches 4,615 passing / 1 skipped / 1 failing. The sole
-  failure is the pre-existing sandbox terminal E2E failure in `source/cli.e2e.test.ts` (the child
-  terminal exits before rendering `Lite`); it reproduces on the baseline checkout.
+- Historical result: after building `dist/`, full Vitest reached 4,615 passing / 1 skipped / 1
+  failing. The sandbox terminal E2E failure in `source/cli.e2e.test.ts` was reproduced on that
+  baseline checkout; it is not a current failure. See the 2026-08-13
+  [validation baseline](./validation-baseline-2026-08-13.md).
 - No dependency installation was run; this worktree uses its existing `node_modules` symlink.
 - A4 lifecycle follow-up focused set passes: session access/handle, execution runner,
   root read/shell, and approval flow (6 files / 103 tests). Typecheck reaches only the
@@ -595,8 +596,9 @@ production session contract.
   one-level wrapped, and canonical forms; supported call/result spellings; wrapper-first call-ID
   precedence; provider item IDs kept distinct from tool-call correlation; original result identity;
   and unchanged missing/orphan validation.
-- Full Vitest after the chained-input slice reaches 4,723 passing / 1 skipped / 1 failing. The sole
-  failure remains the pre-existing sandbox terminal E2E failure in `source/cli.e2e.test.ts`.
+- Historical result: full Vitest after the chained-input slice reached 4,723 passing / 1 skipped /
+  1 failing, with the same sandbox terminal E2E failure in `source/cli.e2e.test.ts`. It is not a
+  current failure; see the 2026-08-13 [validation baseline](./validation-baseline-2026-08-13.md).
 - Step D adapter characterization: `ai-sdk-agents-adapter.test.ts` now pins public `Model`
   behavior with fake LanguageModelV3 implementations: request translation (instructions,
   messages, tools, named tool choice), assistant-message merging, exact streamed string tool

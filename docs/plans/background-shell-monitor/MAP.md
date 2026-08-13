@@ -392,12 +392,13 @@ independently reviewable, each in its own worktree.
   noisy unrelated output never delays a firing; `settleJob` cancels debounce,
   flushes pending firings synchronously, then retires (all before it returns,
   so the caller can emit the job's completion and no monitor firing can follow).
-- 2026-08-10: Phase 4 merged (0fc912e7). Two validation findings worth
-  recording: **the full unit suite has ~590 pre-existing failures in the Ink
-  component layer** (`act is not a function` in `renderInAct`, ink-testing.tsx)
-  that reproduce on pristine main and are unrelated to this plan — targeted
-  suites are the meaningful gate here, not the full run; and the black-box
-  suite result is unchanged from phase 1 (127 pass / 1 pre-existing
-  provider-session-resilience failure / 17 skipped). Phase 4 needed one defect
-  fix during validation: the replay `background_shell_completed` handler
-  clobbered any firings recorded before settlement — fixed to preserve them.
+- 2026-08-10: Phase 4 merged (0fc912e7). Historical validation findings at the
+  time recorded ~590 Ink-layer `act is not a function` failures and a partial
+  black-box result (127 pass / 1 provider-session-resilience failure / 17
+  skipped). They are not current baseline claims: the 2026-08-13 validation
+  baseline records the historical full unit and black-box passes and the
+  subsequent provider-gate reliability finding; see
+  [`validation-baseline-2026-08-13.md`](../validation-baseline-2026-08-13.md).
+  Phase 4 needed one defect fix during validation: the replay
+  `background_shell_completed` handler clobbered any firings recorded before
+  settlement — fixed to preserve them.

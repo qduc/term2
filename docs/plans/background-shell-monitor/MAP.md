@@ -367,10 +367,13 @@ independently reviewable, each in its own worktree.
 - 2026-08-10: Phase 1 merged. The black-box suite has one pre-existing failure
   (`provider-session-resilience` > reasoning traffic not persisted under the
   workspace's Library/Logs) reproducible on pristine main; isolated via stash +
-  rebuild during phase 1. Not caused by the phase-1 change. Resolved
-  2026-08-13: the traffic-persistence assertion in the two response-side
-  reasoning tests now `ctx.skip()`s when no traffic file exists (all other
-  assertions still run); the full suite is green (155 pass / 8 skip).
+  rebuild during phase 1. Not caused by the phase-1 change. Root cause fixed
+  2026-08-13: the test helper `readProviderTraffic` hard-coded a macOS path
+  (`join(root, 'Library', 'Logs')`); it now reads the platform-resolved
+  `workspace.paths.logDir` (`envPaths('term2').log`) and the assertion passes on
+  Linux, macOS, and Windows. One lane gap remains: the OpenAI WebSocket lane
+  records no provider traffic (unlike codex WebSocket and HTTP lanes), so that
+  single scenario still `ctx.skip()`s when no traffic file exists.
 - 2026-08-10: Overflow-kill never surfaces an error on `ShellExecutionResult` —
   the type has no `error` field. `defaultExecImpl` sets `ex`, and the wrapper
   converts the rejection into `{ exitCode: null, signal: null, timedOut: false }`

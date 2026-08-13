@@ -218,7 +218,7 @@ describe('application-owned provider HTTP resilience', () => {
 
 describe('application-owned provider response-side reasoning', () => {
   for (const { family, route } of HTTP_ROUTES) {
-    it(`${route.rowId}.reasoning preserves response-side reasoning and final output`, async (ctx) => {
+    it(`${route.rowId}.reasoning preserves response-side reasoning and final output`, async () => {
       const server = await startResilienceHttpServer({ family, scenario: 'reasoning' });
       activeHttpServers.push(server);
       const result = await runOneShot(route, server, 'reasoning', { reasoning: true });
@@ -229,10 +229,8 @@ describe('application-owned provider response-side reasoning', () => {
       expect(server.requests).toHaveLength(1);
       expect(server.responseFrames[0]).toContainEqual(expect.objectContaining({ data: expect.anything() }));
       expect(flattenResponseFrames(server.responseFrames[0] ?? [])).toContain(REASONING);
-      const traffic = await readProviderTraffic(result.workspace.root);
-      if (traffic.length === 0) {
-        ctx.skip(`${route.rowId}: no application-owned response traffic was persisted`);
-      }
+      const traffic = await readProviderTraffic(result.workspace);
+      expect(traffic.length, `${route.rowId}: no application-owned response traffic was persisted`).toBeGreaterThan(0);
       expect(result.stdout, `${route.rowId}: final output was not observable`).toContain(ANSWER);
     });
   }
@@ -272,8 +270,11 @@ describe('application-owned WebSocket response-side reasoning', () => {
       expect(server.requests.length).toBeGreaterThan(0);
       expect(server.requests.every(isResponseCreate)).toBe(true);
       expect(server.responseFrames.some((frames) => flattenStrings(frames).includes(REASONING))).toBe(true);
-      const traffic = await readProviderTraffic(result.workspace.root);
+      const traffic = await readProviderTraffic(result.workspace);
       if (traffic.length === 0) {
+        // The OpenAI WebSocket lane does not record provider traffic (unlike the
+        // codex WebSocket lane and the HTTP lanes), so this is a lane gap rather
+        // than a path problem; skip rather than fail until that lane records it.
         ctx.skip(`${route.rowId}: no application-owned response traffic was persisted`);
       }
     });
@@ -706,9 +707,12 @@ async function waitForConversationContent(
   throw new Error(`Timed out waiting for conversation ${id} to contain ${needle}; content=${content}`);
 }
 
-async function readProviderTraffic(root: string): Promise<unknown[]> {
-  const logRoot = join(root, 'Library', 'Logs');
-  const files = await collectJsonFiles(logRoot);
+async function readProviderTraffic(workspace: IsolatedWorkspaceLease): Promise<unknown[]> {
+  // LoggingService stores provider traffic under envPaths('term2').log + '/logs/provider-traffic'.
+  // workspace.paths.logDir already resolves that platform-specific root (darwin: ~/Library/Logs,
+  // win32: %LOCALAPPDATA%/Log, linux: $XDG_STATE_HOME), so no platform branch is needed here.
+  const trafficRoot = join(workspace.paths.logDir, 'logs', 'provider-traffic');
+  const files = await collectJsonFiles(trafficRoot);
   const values: unknown[] = [];
   for (const file of files) {
     values.push(parseJson(await readFile(file, 'utf8')));

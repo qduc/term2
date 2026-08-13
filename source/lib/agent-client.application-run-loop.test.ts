@@ -90,6 +90,7 @@ describe('AgentClient application-run-loop execution', () => {
         'agent.contextCompaction.mode': 'auto',
         'agent.contextCompaction.compactThreshold': 0.8,
         'agent.contextCompaction.compactThresholdTokens': 1_000,
+        'agent.reasoningEffort': 'high',
       },
     );
     const input = [
@@ -105,6 +106,7 @@ describe('AgentClient application-run-loop execution', () => {
 
     expect(requests).toHaveLength(2);
     expect(requests[0].instructions).toContain('You compact historical conversation data');
+    expect(requests[0].reasoning?.effort).toBe('high');
     expect(requests[1].input[0]).toMatchObject({ role: 'system' });
     expect(JSON.stringify(requests[1].input)).toContain('fixture local summary');
     expect(JSON.stringify(requests[1].input)).not.toContain('cold-');

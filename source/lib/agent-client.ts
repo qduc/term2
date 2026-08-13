@@ -126,6 +126,7 @@ export class AgentClient {
         const mode = this.#settings.get('agent.contextCompaction.mode') ?? 'native';
         const provider = this.#agentConfig.getProvider();
         const model = this.#agentConfig.getModel();
+        const reasoningEffort = this.#settings.get('agent.reasoningEffort');
         const nativeAvailable =
           (provider === 'openai' || provider === 'codex') &&
           supportsContextCompactionModel(model) &&
@@ -144,7 +145,7 @@ export class AgentClient {
             const result = await this.#chatService.chatDetailed(renderedInput, {
               provider,
               model,
-              reasoningEffort: 'none',
+              reasoningEffort,
               instructions: CONTEXT_COMPACTION_INSTRUCTIONS,
               maxTokens: maxOutputTokens,
             });

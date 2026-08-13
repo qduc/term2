@@ -771,6 +771,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
       settingsService?.get('agent.provider') ??
       'openai';
     const model = settingsService?.get('agent.model') ?? 'gpt-5';
+    const reasoningEffort = settingsService?.get('agent.reasoningEffort');
     const catalog = getCatalogModel(provider, model);
     const compactThreshold = settingsService?.get('agent.contextCompaction.compactThreshold') ?? 0.8;
     const configuredMaxOutput = settingsService?.get('agent.maxOutputTokens');
@@ -779,7 +780,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
         const options = {
           provider,
           model,
-          reasoningEffort: 'none' as const,
+          reasoningEffort,
           instructions: CONTEXT_COMPACTION_INSTRUCTIONS,
           maxTokens: maxOutputTokens,
         };

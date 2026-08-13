@@ -58,7 +58,7 @@ const call = async (message: string, instructions: string, maxTokens: number) =>
   const result = await client.chatDetailed(message, {
     provider,
     model,
-    reasoningEffort: 'none',
+    reasoningEffort: settings.get('agent.reasoningEffort'),
     instructions,
     maxTokens,
   });

@@ -13,6 +13,26 @@ import type { ModelRequestCost } from '../cost/model-cost.js';
 
 export const LOG_ENVELOPE_VERSION = 3;
 
+/**
+ * Streaming `assistant_journal_delta` events are written to a per-session
+ * sidecar instead of the canonical log. They are only ever read to reconstruct
+ * a turn that never produced a final `assistant_turn`, so the sidecar is
+ * dropped when a session closes with no unsettled turn.
+ *
+ * The suffix deliberately does **not** end in `.jsonl`: `listConversations`
+ * enumerates the conversations directory with a `*.jsonl` glob and would
+ * otherwise surface the sidecar as a phantom conversation.
+ */
+export const DELTA_SIDECAR_SUFFIX = '.deltas';
+
+/** Map a canonical `<sessionId>.jsonl` path to its delta sidecar path. */
+export function deltaSidecarPathFor(logFilePath: string): string {
+  return logFilePath.replace(/\.jsonl$/, '') + DELTA_SIDECAR_SUFFIX;
+}
+
+/** Event types routed to the delta sidecar rather than the canonical log. */
+export const SIDECAR_EVENT_TYPES = new Set<string>(['assistant_journal_delta']);
+
 export interface StateSnapshot {
   history: ProviderInputItem[];
   previousResponseId: string | null;

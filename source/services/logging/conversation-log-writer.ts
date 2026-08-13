@@ -4,6 +4,8 @@ import path from 'path';
 import type { ILoggingService } from '../service-interfaces.js';
 import {
   LOG_ENVELOPE_VERSION,
+  SIDECAR_EVENT_TYPES,
+  deltaSidecarPathFor,
   type LogEnvelope,
   type LogEvent,
   type TruncatedLogEvent,
@@ -78,6 +80,21 @@ interface WriterOptions {
 function logPath(dir: string, sessionId: string): string {
   return path.join(dir, `${sessionId}.jsonl`);
 }
+
+function deltaPath(dir: string, sessionId: string): string {
+  return deltaSidecarPathFor(logPath(dir, sessionId));
+}
+
+/**
+ * Event types that settle or discard the current user turn. Used to decide
+ * whether the sidecar still holds deltas recovery would need.
+ *
+ * A structural "was the last event an `assistant_turn`" test does not work:
+ * `conversationService.shutdown()` is awaited before `logWriter.close()` and
+ * appends background-shell and subagent lifecycle events after the final turn,
+ * so the sidecar would almost never be collected at close.
+ */
+const TURN_SETTLING_EVENTS = new Set<LogEvent['type']>(['assistant_turn', 'undo', 'session_cleared']);
 
 function lockPath(dir: string, sessionId: string): string {
   return path.join(dir, `${sessionId}.lock`);
@@ -269,6 +286,9 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
   #fileSystem: WriterFileSystem;
   #saveLast: typeof saveLastConversation;
   #fd: number | null = null;
+  /** Lazily opened on the first delta, so quiet sessions create no sidecar. */
+  #deltaFd: number | null = null;
+  #hasUnsettledTurn = false;
   #seq = 0;
   #closed = false;
   #failure: unknown = null;
@@ -300,7 +320,14 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
     try {
       const filePath = logPath(this.#dir, this.#sessionId);
       const tailState = readLogTailState(this.#fileSystem, filePath, recoverSequence);
-      this.#seq = tailState.seq;
+      // Sequence numbers are shared across both files so recovery can merge
+      // them by `seq`. Deltas outnumber everything else ~10:1, so after a crash
+      // the high-water mark usually lives in the sidecar; resuming from the
+      // canonical tail alone would reissue sequence numbers.
+      const deltaTailState = recoverSequence
+        ? readLogTailState(this.#fileSystem, deltaPath(this.#dir, this.#sessionId), true)
+        : { seq: 0, needsLineBreak: false };
+      this.#seq = Math.max(tailState.seq, deltaTailState.seq);
       this.#fd = this.#fileSystem.openSync(filePath, 'a');
       if (tailState.needsLineBreak) {
         try {
@@ -338,6 +365,18 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
       event: sanitizedEvent,
     };
     const line = JSON.stringify(envelope) + '\n';
+
+    if (SIDECAR_EVENT_TYPES.has(sanitizedEvent.type)) {
+      this.#appendDelta(line);
+      return;
+    }
+
+    if (sanitizedEvent.type === 'user_message') {
+      this.#hasUnsettledTurn = true;
+    } else if (TURN_SETTLING_EVENTS.has(sanitizedEvent.type)) {
+      this.#hasUnsettledTurn = false;
+    }
+
     try {
       this.#fileSystem.writeSync(this.#fd, line);
       if (FSYNC_EVENTS.has(sanitizedEvent.type)) {
@@ -350,6 +389,69 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
         throw err;
       }
       this.#logWriteFailure(err);
+    }
+  }
+
+  /**
+   * Deltas are non-critical: never fsync'd, and a write failure is logged
+   * rather than raised. Losing the sidecar tail degrades a recovered partial
+   * turn; it can never corrupt a settled one.
+   */
+  #appendDelta(line: string): void {
+    // A delta is itself evidence that a turn is streaming. Deriving the flag
+    // from the delta rather than only from the preceding `user_message` means
+    // any sidecar content keeps the sidecar alive until a turn settles it.
+    this.#hasUnsettledTurn = true;
+    try {
+      const fd = this.#ensureDeltaFd();
+      if (fd === null) return;
+      this.#fileSystem.writeSync(fd, line);
+    } catch (err: unknown) {
+      this.#logWriteFailure(err);
+    }
+  }
+
+  #ensureDeltaFd(): number | null {
+    if (this.#deltaFd !== null) return this.#deltaFd;
+    const filePath = deltaPath(this.#dir, this.#sessionId);
+    // A sidecar can already exist when resuming a crashed session; repair a
+    // torn final line the same way the canonical log does.
+    const tailState = readLogTailState(this.#fileSystem, filePath, false);
+    const fd = this.#fileSystem.openSync(filePath, 'a');
+    this.#deltaFd = fd;
+    if (tailState.needsLineBreak) {
+      this.#fileSystem.writeSync(fd, '\n');
+    }
+    return fd;
+  }
+
+  /** Close the sidecar fd, returning any failure rather than throwing. */
+  #closeDeltaFd(): unknown {
+    if (this.#deltaFd === null) return null;
+    let failure: unknown = null;
+    try {
+      this.#fileSystem.closeSync(this.#deltaFd);
+    } catch (err: unknown) {
+      failure = err;
+    }
+    this.#deltaFd = null;
+    return failure;
+  }
+
+  /**
+   * Drop the sidecar when no turn is left unsettled. Safe against a late
+   * append because `append()` no-ops once `#closed` is set, so the flag read
+   * and the unlink observe the same state.
+   */
+  #dropDeltaSidecarIfSettled(): void {
+    if (this.#hasUnsettledTurn) return;
+    try {
+      this.#fileSystem.unlinkSync(deltaPath(this.#dir, this.#sessionId));
+    } catch (err: unknown) {
+      const errorObj = err as { code?: string };
+      if (errorObj?.code !== 'ENOENT') {
+        this.#logWriteFailure(err);
+      }
     }
   }
 
@@ -369,6 +471,10 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
       }
       this.#fd = null;
     }
+    rotateFailure ??= this.#closeDeltaFd();
+    // Drop before releasing the lock, so a crash mid-rotate cannot leave an
+    // orphan the startup GC is unable to distinguish from a live sidecar.
+    this.#dropDeltaSidecarIfSettled();
     releaseLock(this.#dir, this.#sessionId, this.#fileSystem);
     if (rotateFailure !== null) {
       this.#recordFailure(rotateFailure);
@@ -376,6 +482,7 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
     }
     this.#sessionId = newSessionId;
     this.#seq = 0;
+    this.#hasUnsettledTurn = false;
     this.#writeErrorLogged = false;
     this.#initialize(meta, false);
   }
@@ -413,6 +520,10 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
       }
       this.#fd = null;
     }
+    cleanupFailure ??= this.#closeDeltaFd();
+    // Unlink before releasing the lock: a crash in between would otherwise
+    // leave a sidecar with no lock, indistinguishable from a live one.
+    this.#dropDeltaSidecarIfSettled();
     if (primaryFailure === null && cleanupFailure === null) {
       this.#saveLast(this.#sessionId, this.#projectPath, this.#sshHost);
     }

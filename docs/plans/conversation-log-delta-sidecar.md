@@ -25,14 +25,24 @@ short-circuits on `if (journal.sawFinalTurn) continue;`, so once a turn settles
 its deltas are unreachable by any code path. For a session that exits normally,
 every delta it ever wrote is garbage.
 
-Two user-facing costs:
+**Event share is not byte share.** Deltas are 91.5% of events but individually
+tiny, while tool results and assistant turns are large. Measured exactly over
+the same corpus:
 
-- **Disk.** ~91% of the conversation store is unreadable bytes. This grows
-  without bound.
-- **Analysis latency.** Any pass over the corpus (resume picker enumeration,
-  future self-improvement tooling) walks 10x more data than it needs.
-  `listConversations` (`source/services/conversation/conversation-persistence.ts:306`)
-  reads each file in full to build a list entry.
+| Measure | Deltas | Total | Share |
+| --- | ---: | ---: | ---: |
+| Events | 1,171,452 | ~1,280,000 | **91.5%** |
+| Bytes | 185 MB | 620 MB | **29.8%** |
+
+Two user-facing costs, sized honestly:
+
+- **Disk.** ~30% of the conversation store is unreadable bytes, growing without
+  bound. Real but moderate — this is not a 10x disk win.
+- **Analysis latency.** This is the larger effect. Any line-oriented pass over
+  the corpus — `listConversations`
+  (`source/services/conversation/conversation-persistence.ts:306`) reads each
+  file in full to build one list entry — iterates ~12x more records than it
+  needs, because cost there scales with line count, not bytes.
 
 ## Approach
 
@@ -242,8 +252,9 @@ sidecars. They cannot, and this is worth recording so it is not re-litigated:
 7. Startup GC removes sidecars with no held lock, and removes none with a held
    lock.
 8. fsync call count per turn is unchanged from baseline.
-9. Measured: a representative session's canonical log is ≥80% smaller than the
-   equivalent log today.
+9. Measured: the canonical log drops ~30% of bytes and ~91% of records versus
+   today. (Originally written as "≥80% smaller"; that conflated event share with
+   byte share and was corrected by measurement — see the table above.)
 10. Forking a session with a live sidecar produces a fork containing settled
     turns only, and does not error.
 11. A session whose final events are `background_shell_completed` / subagent
@@ -341,12 +352,35 @@ Still open, deferred by default:
 
 ## Resume here
 
-No production code changed yet. Step 1 (baseline) is complete and recorded under
-"Validation". Review is complete and its findings are folded in — see "Review
-outcome".
+**Steps 1–3 are implemented on `delta-sidecar-log`.** Steps 4–6 remain.
 
-Next action: step 2 (route deltas to the sidecar). Note it now also carries the
-`readLogTailState` two-file fix.
+Shipped in step 2/3:
+
+- `conversation-log-events.ts` — `DELTA_SIDECAR_SUFFIX`, `deltaSidecarPathFor`,
+  `SIDECAR_EVENT_TYPES`.
+- `conversation-log-writer.ts` — lazy `#deltaFd`, `#hasUnsettledTurn`, delta
+  routing in `append()`, two-file seq recovery in `#initialize`, sidecar
+  handling in `rotate()`/`close()` with unlink-before-unlock.
+- `conversation-persistence.ts` — `readEnvelopes` merges the sidecar by `seq`;
+  `decodeEnvelopeLines` split out.
+
+**Steps 2 and 3 were merged into one change and are NOT independently
+mergeable**, contrary to the original sequence. Shipping step 2 alone would
+route deltas to a sidecar that no reader consults, silently regressing
+interrupted-turn recovery. Do not split them when rebasing.
+
+Design change made during implementation: `#appendDelta` sets
+`#hasUnsettledTurn = true` itself. A test showed that deriving the flag only
+from `user_message` lets a delta written outside that window have its sidecar
+dropped at close. A delta is direct evidence a turn is streaming, so it is the
+better signal.
+
+Next action: **step 4 (startup GC for orphaned sidecars).** Then step 5 (fork
+decision — assert criterion 10) and step 6 (already measured; just record).
+
+Remaining risk: with steps 1–3 only, a sidecar orphaned by a hard kill is never
+collected. It is inert (recovery reads it correctly, and a later clean close of
+the same session drops it), but step 4 is what bounds accumulation.
 
 Findings already established — do not re-derive:
 
@@ -365,3 +399,6 @@ Findings already established — do not re-derive:
   fire. Use the `#hasUnsettledTurn` flag.
 - There is exactly one log writer and one journal per process. Subagents and SSH
   introduce no concurrency here.
+- **Deltas are 91.5% of events but only 29.8% of bytes** (185 MB of 620 MB,
+  measured exactly). Do not restate this as a ~90% disk saving; the disk win is
+  ~30% and the record-count win is ~91%.

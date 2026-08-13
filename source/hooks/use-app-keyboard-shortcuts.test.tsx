@@ -5,7 +5,7 @@ import { act } from 'react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { Text } from 'ink';
 import { renderInAct } from '../test-helpers/ink-testing.js';
-import { useAppKeyboardShortcuts } from './use-app-keyboard-shortcuts.js';
+import { mayConsumeRejectionReasonBridge, useAppKeyboardShortcuts } from './use-app-keyboard-shortcuts.js';
 import type { InputOwner } from '../lib/input-owner.js';
 
 const mocks = vi.hoisted(() => ({
@@ -58,37 +58,38 @@ const Harness = (props: Parameters<typeof useAppKeyboardShortcuts>[0]) => {
   return <Text>ready</Text>;
 };
 
-const renderHarness = async (overrides: Partial<Parameters<typeof useAppKeyboardShortcuts>[0]> = {}) => {
-  const props: Parameters<typeof useAppKeyboardShortcuts>[0] = {
-    exitWithUsage: mocks.exitWithUsage,
-    pendingSkillRef: mocks.pendingSkillRef as any,
-    waitingForAskUserAnswer: false,
-    setWaitingForAskUserAnswer: mocks.setWaitingForAskUserAnswer,
-    waitingForRejectionReason: false,
-    setWaitingForRejectionReason: mocks.setWaitingForRejectionReason,
-    inputMode: 'text',
-    inputValue: '',
-    isProcessing: false,
-    waitingForApproval: false,
-    stopProcessing: mocks.stopProcessing,
-    handoffState: null,
-    cancelHandoff: mocks.cancelHandoff,
-    pendingLargeUncachedTurn: null,
-    liteMode: false,
-    toggleShellMode: mocks.toggleShellMode,
-    cycleAppModes: mocks.cycleAppModes,
-    replaceInput: mocks.replaceInput,
-    approvalShortcutsEnabled: true,
-    onApprove: mocks.onApprove,
-    onReject: mocks.onReject,
-    submitRejectionReason: mocks.submitRejectionReason,
-    onSkillActivationCancelled: mocks.onSkillActivationCancelled,
-    inputOwner: { kind: 'input' } as InputOwner,
-    ...overrides,
-  };
+const createProps = (
+  overrides: Partial<Parameters<typeof useAppKeyboardShortcuts>[0]> = {},
+): Parameters<typeof useAppKeyboardShortcuts>[0] => ({
+  exitWithUsage: mocks.exitWithUsage,
+  pendingSkillRef: mocks.pendingSkillRef as any,
+  waitingForAskUserAnswer: false,
+  setWaitingForAskUserAnswer: mocks.setWaitingForAskUserAnswer,
+  waitingForRejectionReason: false,
+  setWaitingForRejectionReason: mocks.setWaitingForRejectionReason,
+  inputMode: 'text',
+  inputValue: '',
+  isProcessing: false,
+  waitingForApproval: false,
+  stopProcessing: mocks.stopProcessing,
+  handoffState: null,
+  cancelHandoff: mocks.cancelHandoff,
+  pendingLargeUncachedTurn: null,
+  liteMode: false,
+  toggleShellMode: mocks.toggleShellMode,
+  cycleAppModes: mocks.cycleAppModes,
+  replaceInput: mocks.replaceInput,
+  approvalShortcutsEnabled: true,
+  onApprove: mocks.onApprove,
+  onReject: mocks.onReject,
+  submitRejectionReason: mocks.submitRejectionReason,
+  onSkillActivationCancelled: mocks.onSkillActivationCancelled,
+  inputOwner: { kind: 'input' } as InputOwner,
+  ...overrides,
+});
 
-  return renderInAct(<Harness {...props} />);
-};
+const renderHarness = async (overrides: Partial<Parameters<typeof useAppKeyboardShortcuts>[0]> = {}) =>
+  renderInAct(<Harness {...createProps(overrides)} />);
 
 beforeEach(() => {
   mocks.useInputHandlers = [];
@@ -287,6 +288,20 @@ it.sequential('does NOT fire app shortcuts (Shift+Tab) while a prompt owns input
   expect(mocks.cycleAppModes).not.toHaveBeenCalled();
 });
 
+it.sequential('does NOT fire Escape or Shift+Tab shortcuts while the background task manager owns input', async () => {
+  await renderHarness({
+    isProcessing: true,
+    inputOwner: { kind: 'background-tasks' },
+  });
+
+  await fireInput('', { escape: true });
+  await fireInput('\u001b[Z', { shift: true, tab: true });
+
+  expect(mocks.stopProcessing).not.toHaveBeenCalled();
+  expect(mocks.toggleShellMode).not.toHaveBeenCalled();
+  expect(mocks.cycleAppModes).not.toHaveBeenCalled();
+});
+
 it.sequential('Ctrl+C still exits (global) while a prompt owns input', async () => {
   await renderHarness({ inputOwner: { kind: 'approval' } });
   const before = mocks.exitWithUsage.mock.calls.length;
@@ -315,6 +330,13 @@ it.sequential('rejects exactly once and bridges an immediate rejection reason be
   expect(mocks.replaceInput).toHaveBeenCalledWith('needs review');
   expect(mocks.submitRejectionReason).toHaveBeenCalledTimes(1);
   expect(mocks.submitRejectionReason).toHaveBeenCalledWith('needs review');
+});
+
+it.sequential('does not let the rejection-reason bridge consume manager keys', async () => {
+  expect(mayConsumeRejectionReasonBridge({ kind: 'approval' })).toBe(true);
+  expect(mayConsumeRejectionReasonBridge({ kind: 'input' })).toBe(true);
+  expect(mayConsumeRejectionReasonBridge({ kind: 'background-tasks' })).toBe(false);
+  expect(mayConsumeRejectionReasonBridge({ kind: 'menu' })).toBe(false);
 });
 
 it.sequential('approves exactly once at the stable approval boundary', async () => {

@@ -13,6 +13,7 @@ import { formatBackgroundTaskElapsed } from './BackgroundTasksPanel.js';
 
 export type BackgroundTaskManagerProps = {
   enabled?: boolean;
+  open: boolean;
   listDetails: () => readonly BackgroundTaskControlDetails[];
   getDetails: (target: BackgroundTaskControlTarget) => BackgroundTaskControlDetails | null;
   requestStop: (target: BackgroundTaskControlTarget) => BackgroundTaskStopResult;
@@ -90,6 +91,7 @@ const BackgroundTaskDetailsView: FC<{ details: BackgroundTaskControlDetails }> =
 /** Keyboard-owned modal for retained background task inspection and per-item stop. */
 const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
   enabled = true,
+  open,
   listDetails,
   getDetails,
   requestStop,
@@ -98,7 +100,6 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
   moveForegroundToBackground,
   onOpenChange,
 }) => {
-  const [open, setOpen] = useState(false);
   const [tasks, setTasks] = useState<readonly BackgroundTaskControlDetails[]>([]);
   const [foreground, setForeground] = useState<readonly ForegroundTransferCandidate[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -108,7 +109,6 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
   const [feedback, setFeedback] = useState<string | null>(null);
 
   const close = useCallback(() => {
-    setOpen(false);
     setDetailsVisible(false);
     setStopArmed(false);
     setBackgroundArmed(false);
@@ -128,7 +128,6 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
     setStopArmed(false);
     setBackgroundArmed(false);
     setFeedback(null);
-    setOpen(true);
     onOpenChange?.(true);
   }, [getForegroundTransferCandidate, listDetails, listForegroundTransferCandidates, onOpenChange]);
 

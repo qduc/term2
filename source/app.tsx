@@ -133,6 +133,7 @@ const App: FC<AppProps> = ({
   const subagentUsage = useMemo(() => subagentUsageAccumulator ?? createUsageAccumulator(), [subagentUsageAccumulator]);
   const sessionCost = useMemo(() => costAccumulator ?? createSessionCostAccumulator(), [costAccumulator]);
   const [sessionId, setSessionId] = useState(initialSessionId);
+  const [backgroundTaskManagerOpen, setBackgroundTaskManagerOpen] = useState(false);
   const handleClearConversationRef = useRef<(() => Promise<void>) | null>(null);
   const pendingSkillRef = useRef<SkillInfo | null>(null);
   const sandboxApprovalCoordinatorRef = useRef<SandboxNetworkApprovalCoordinator | null>(null);
@@ -648,6 +649,7 @@ const App: FC<AppProps> = ({
     waitingForAskUserAnswer: effectiveWaitingForAskUserAnswer,
     pendingApproval: effectivePendingApproval,
     queuePaused,
+    backgroundTaskManagerOpen,
     firstRunSetupActive: firstRunSetup.active,
     isProcessing: effectiveIsProcessing,
     menuOpen,
@@ -889,6 +891,8 @@ const App: FC<AppProps> = ({
             getForegroundTaskTransferCandidate={getForegroundTaskTransferCandidate}
             moveForegroundTaskToBackground={moveForegroundTaskToBackground}
             listForegroundTaskTransferCandidates={listForegroundTaskTransferCandidates}
+            backgroundTaskManagerOpen={backgroundTaskManagerOpen}
+            onBackgroundTaskManagerOpenChange={setBackgroundTaskManagerOpen}
             backgroundApprovalPendingCount={backgroundApprovalState.pendingCount}
             onRetractQueuedMessage={retractPendingSubmission}
             onEditQueuedMessage={editPendingSubmission}

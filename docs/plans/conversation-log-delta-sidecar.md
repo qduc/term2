@@ -108,17 +108,43 @@ conversations directory.
 streaming, that turn is unsettled and its deltas are exactly what recovery
 needs.
 
-`ConversationLogWriterImpl` is deliberately semantics-free — it appends
-envelopes and knows nothing about turns. Rather than teach it turn lifecycle,
-use a conservative structural test in `close()`:
+**A structural "last event was `assistant_turn`" test does not work.** Review
+established that shutdown appends events after the final turn settles:
+`conversationService.shutdown()` is awaited *before* `logWriter.close()`
+(`source/cli.tsx:844-845`), and that shutdown awaits `backgroundShellSettlement`
+and `backgroundSubagentSettlement` (`session-composition.ts:759-761`), each of
+which can emit `background_shell_completed` / subagent lifecycle events. Most
+real sessions would therefore end on a non-turn event, the rule would never
+fire, and every sidecar would fall through to GC — defeating the optimization.
 
-> Delete the sidecar only if the last event appended to the canonical file was
-> an `assistant_turn`. Otherwise leave it.
+**Use an explicit settlement flag instead.** The writer keeps one private
+boolean, updated in `append()` from event types it already sees:
 
-This over-retains in rare cases (a session whose final event is, say,
-`settings_changed` after a settled turn). Those are collected by the startup GC
-below. Over-retention is the safe failure direction: too much data, never too
-little.
+| Event | `#hasUnsettledTurn` |
+| --- | --- |
+| `user_message` | `true` |
+| `assistant_turn` | `false` |
+| `undo` | `false` |
+| `session_cleared` | `false` |
+| anything else | unchanged |
+
+`close()` drops the sidecar iff `#hasUnsettledTurn === false`. Trailing
+background-shell and subagent events leave it untouched, so the common clean
+exit collects the sidecar immediately.
+
+This adds two lines of turn awareness to a writer that is otherwise
+semantics-free. That is a real but small cost, and it is the minimum needed for
+the drop to ever fire. Over-retention remains the failure direction: if the flag
+is somehow stale-true, the sidecar survives and GC collects it.
+
+### 2a. No check/unlink race
+
+Review raised a race between the drop check and the `unlink`. It does not exist:
+`append()` returns early when `#closed` is true (`conversation-log-writer.ts:330`),
+and `close()` sets `#closed = true` as its first action (line 400). Ordering
+close as **set `#closed` → read flag → unlink sidecar → release lock** makes the
+check and the deletion observe the same state, because no further append can
+land in between.
 
 ### 3. Recovery merges canonical + sidecar
 
@@ -134,12 +160,18 @@ already documents deltas as "non-critical and not fsync'd", with the final
 `assistant_turn` and provider-backed items as the durable record. A truncated
 sidecar degrades a recovered partial turn; it never corrupts a settled one.
 
-### 4. Seq recovery must span both files
+### 4. Seq recovery must span both files — and this lands in step 2, not step 3
 
-`readLogTailState` resumes numbering from the highest `seq` found in the file it
-opens. With deltas relocated, the true high-water mark after a crash may live in
-the sidecar. Resume from `max(canonical, sidecar)` or the writer will reissue
-sequence numbers and break merge ordering.
+`readLogTailState` (`conversation-log-writer.ts:104`) takes a single `filePath`
+and resumes numbering from the highest `seq` in it. With deltas relocated, the
+high-water mark after a crash will *usually* live in the sidecar, since deltas
+outnumber everything else ~10:1. Resume from `max(canonical, sidecar)` or the
+writer reissues sequence numbers and breaks merge ordering.
+
+Review is right that this cannot be deferred to the read-side step: the writer
+computes `#seq` during `#initialize`, so **step 2 must widen
+`readLogTailState` to span both files.** Shipping step 2 alone with
+single-file recovery would corrupt seq ordering for any resumed session.
 
 ### 5. `rotate()` must move in lockstep
 
@@ -155,17 +187,43 @@ session is not live. The liveness signal already exists: `<sessionId>.lock`,
 acquired in `#initialize` and released in `close()`/`rotate()`. A sidecar with no
 held lock is either consumed by recovery or deleted.
 
-Note the existing lock is also stale-prone after a kill (`acquireLock` throws
-`LockConflictError` on `EEXIST` with no staleness check). Do not widen that
-problem; GC should be read-only with respect to lock semantics.
+Order the operations in `close()` as **unlink sidecar → release lock**, not the
+reverse. Review flagged a window where a crash between `releaseLock` and
+`unlinkSync` leaves an orphan the GC cannot distinguish from a live sidecar;
+unlinking first removes that window entirely, with no marker file needed.
+
+Note the existing lock is already stale-prone after a kill (`acquireLock` throws
+`LockConflictError` on `EEXIST` with no staleness check). A crash mid-close
+therefore leaves both a stale lock and a sidecar. That is a **pre-existing**
+condition this plan neither fixes nor worsens. Do not widen scope to fix it
+here; GC should be read-only with respect to lock semantics, and should treat
+"lock present" as "skip".
 
 ### 7. `forkConversation` copies by id
 
 `forkConversation` (`conversation-persistence.ts:403`) copies
 `<sourceId>.jsonl` to `<newId>.jsonl`. Forking a session with a live sidecar
-would silently drop its unsettled deltas. Decide explicitly: either copy the
-sidecar too, or document that forking only carries settled turns. Recommend the
-latter — a fork of an in-flight turn is not a coherent thing to want.
+would silently drop its unsettled deltas.
+
+**Decision: do not copy the sidecar.** A fork of a half-streamed turn is not a
+coherent artifact, and copying would hand the new session deltas whose `seq`
+numbering belongs to the source. Forking carries settled turns only. This is now
+acceptance criterion 10 so the behavior is asserted rather than assumed.
+
+### 8. Single writer, single journal — no concurrency to reason about
+
+Review asked whether SSH sessions or subagents can produce concurrent writers or
+sidecars. They cannot, and this is worth recording so it is not re-litigated:
+
+- `createConversationLogWriter` has exactly **one** call site,
+  `source/cli.tsx:743`. One process, one writer.
+- `AssistantTurnJournal` is constructed exactly once,
+  `session-composition.ts:429`, for the main session.
+- Subagents append lifecycle events (`subagent_started`, `subagent_completed`, …)
+  to the parent's log but **never emit `assistant_journal_delta`** — they have no
+  journal of their own. So the sidecar only ever holds main-agent deltas.
+- SSH mode runs the app locally and executes remotely; the log is local, so the
+  per-session `<sessionId>.lock` remains sufficient.
 
 ## Acceptance criteria
 
@@ -186,6 +244,12 @@ latter — a fork of an in-flight turn is not a coherent thing to want.
 8. fsync call count per turn is unchanged from baseline.
 9. Measured: a representative session's canonical log is ≥80% smaller than the
    equivalent log today.
+10. Forking a session with a live sidecar produces a fork containing settled
+    turns only, and does not error.
+11. A session whose final events are `background_shell_completed` / subagent
+    lifecycle events **after** a settled `assistant_turn` still drops its
+    sidecar at close. This is the regression test for the defect that the
+    structural drop rule would have introduced.
 
 ## Validation
 
@@ -236,36 +300,53 @@ Each step should be independently mergeable and independently tested.
 1. ~~**Baseline.** Capture validation output. No code changes.~~ **Done** — see
    the baseline table under "Validation".
 2. **Route deltas to the sidecar.** Second fd in `ConversationLogWriterImpl`,
-   shared `#seq`, sidecar never fsync'd. Handle `rotate()` and `close()`.
-   Drop rule (2) included. Tests: writer unit tests for routing, rotation,
-   clean-close deletion, mid-turn retention.
+   shared `#seq`, sidecar never fsync'd. Widen `readLogTailState` to span both
+   files (hazard 4 — required here, not in step 3). Handle `rotate()` and
+   `close()` ordering per hazards 2, 2a, and 6. Tests: routing, rotation,
+   clean-close deletion, mid-turn retention, trailing-shutdown-event deletion
+   (criterion 11), seq recovery from a sidecar-dominant tail.
 3. **Merge on read.** Recovery reads sidecar when present and merges by `seq`.
-   Fix `readLogTailState` to span both files. Tests: replay equivalence for
-   clean, crashed-mid-turn, and crashed-post-settle sessions.
+   Tests: replay equivalence for clean, crashed-mid-turn, and crashed-post-settle
+   sessions.
 4. **Startup GC** for orphaned sidecars, keyed on lock liveness.
 5. **Fork decision** — implement whichever branch of hazard (7) review settles on.
 6. **Measure** and record the real size reduction against criterion (9).
 
-## Open questions for review
+## Review outcome (2026-08-13)
 
-- Is the structural drop rule in hazard (2) — "last canonical event is
-  `assistant_turn`" — actually sufficient, or does some flow append events after
-  a settled turn often enough that sidecars would rarely be collected at close
-  and would lean on GC instead? If so, is that acceptable?
+Reviewed adversarially against the code. Confirmed unchanged: deltas have a
+single reader, `seq` contiguity is not assumed anywhere, the `.jsonl` naming
+hazard is real, and deltas are excluded from `FSYNC_EVENTS`.
+
+Changes made in response:
+
+| Finding | Disposition |
+| --- | --- |
+| Structural drop rule never fires (shutdown appends after last turn) | **Accepted.** Replaced with the `#hasUnsettledTurn` flag, hazard 2. Regression test added as criterion 11. |
+| `readLogTailState` must span both files, and in step 2 | **Accepted.** Moved into step 2; shipping step 2 alone would corrupt seq. |
+| Check/unlink race | **Rejected as stated.** `append()` already no-ops once `#closed` is set (line 330). Recorded as hazard 2a with the required close ordering. |
+| GC race between `releaseLock` and `unlink` | **Accepted, simpler fix.** Unlink before releasing the lock; no marker file. |
+| Fork semantics undecided | **Accepted.** Decided: sidecar is not copied. Criterion 10. |
+| SSH concurrency / subagent log isolation | **Not applicable.** One writer (`cli.tsx:743`), one journal (`session-composition.ts:429`); subagents emit no deltas. Recorded as hazard 8. |
+
+Still open, deferred by default:
+
 - Should the sidecar be truncated at each turn settle rather than at session
-  close? It bounds disk during long-running sessions and is O(1), but adds a
-  turn-lifecycle dependency to a writer that currently has none. Deferred by
-  default; flag if review disagrees.
+  close? It bounds disk during long sessions and is O(1). Now cheaper than when
+  first deferred, since hazard 2 already gives the writer turn-settlement
+  awareness. Revisit after step 3 if long-session disk use proves to matter.
 - Does anything outside `source/` (log viewer at `tools/log_viewer/`, eval
-  scripts) read conversation logs and assume deltas are inline?
+  scripts) read conversation logs and assume deltas are inline? Review did not
+  confirm this either way. **Check before step 3.**
 
 ## Resume here
 
 No production code changed yet. Step 1 (baseline) is complete and recorded under
-"Validation". The doc is under review.
+"Validation". Review is complete and its findings are folded in — see "Review
+outcome".
 
-Next action: apply review findings, then start at step 2 (route deltas to the
-sidecar).
+Next action: step 2 (route deltas to the sidecar). Note it now also carries the
+`readLogTailState` two-file fix.
 
 Findings already established — do not re-derive:
 
@@ -278,3 +359,9 @@ Findings already established — do not re-derive:
 - Mirroring the full stream to two files was considered and rejected: it doubles
   fsync on the critical path. Splitting by event type keeps writes at exactly one
   per event.
+- A structural "last event was `assistant_turn`" drop rule was considered and
+  **disproven**: shutdown appends shell/subagent events after the final turn
+  (`cli.tsx:844-845`, `session-composition.ts:759-761`), so it would almost never
+  fire. Use the `#hasUnsettledTurn` flag.
+- There is exactly one log writer and one journal per process. Subagents and SSH
+  introduce no concurrency here.

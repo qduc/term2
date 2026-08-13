@@ -4,14 +4,49 @@ import fs from 'fs';
 import { createRequire } from 'module';
 import os from 'os';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { resolveSettingsDirectory } from './services/settings/settings-path.js';
 
 const require = createRequire(import.meta.url);
 
-// Run the CLI from TypeScript source via tsx instead of spawning dist/cli.js:
 // dist/ is a gitignored build artifact, so a fresh worktree has no compiled
-// CLI and these tests would fail until someone runs `pnpm build`.
-const cliArgs = ['--import', require.resolve('tsx'), path.resolve('source/cli.tsx')];
+// CLI and these tests would fail until someone runs `pnpm build`. Instead of
+// spawning tsx per test (which pays a ~2s compile per process), compile the
+// CLI once into a per-worktree cache with the same compiler and config as
+// `pnpm build` (incremental, so unchanged work is a fast no-op) and spawn
+// that for every test.
+const projectRoot = fileURLToPath(new URL('..', import.meta.url));
+const typescriptDir = path.resolve(path.dirname(require.resolve('typescript-7')), '..');
+const cliBuildDir = path.join(projectRoot, 'node_modules', '.cache', 'term2-cli-test-build');
+
+let compiledCliPath: string | undefined;
+function cliPath(): string {
+  if (compiledCliPath) return compiledCliPath;
+  fs.mkdirSync(cliBuildDir, { recursive: true });
+  try {
+    execFileSync(
+      process.execPath,
+      [
+        path.join(typescriptDir, 'bin', 'tsc'),
+        '--project',
+        'tsconfig.build.json',
+        '--outDir',
+        cliBuildDir,
+        '--incremental',
+        '--tsBuildInfoFile',
+        path.join(cliBuildDir, 'tsconfig.tsbuildinfo'),
+      ],
+      { cwd: projectRoot, stdio: 'pipe' },
+    );
+  } catch (error: any) {
+    throw new Error(`Failed to build CLI for tests: ${error.stderr?.toString?.() ?? error}`);
+  }
+  // `pnpm build` copies the prompts next to the compiled output; do the same
+  // so import.meta.dirname-based prompt resolution works from the cache dir.
+  fs.cpSync(path.join(projectRoot, 'source', 'prompts'), path.join(cliBuildDir, 'prompts'), { recursive: true });
+  compiledCliPath = path.join(cliBuildDir, 'cli.js');
+  return compiledCliPath;
+}
 
 let testDir = '';
 
@@ -26,7 +61,7 @@ afterEach(() => {
 });
 
 it('CLI --help documents the available command-line options', () => {
-  const help = execFileSync('node', [...cliArgs, '--help'], {
+  const help = execFileSync('node', [cliPath(), '--help'], {
     env: {
       ...process.env,
       DISABLE_LOGGING: '1',
@@ -105,7 +140,7 @@ it('CLI --resume ls prints list of conversations and exits', () => {
   fs.utimesSync(filePath, now, now);
   fs.utimesSync(otherFilePath, now, now);
 
-  const stdout = execFileSync('node', [...cliArgs, '--resume', 'ls'], {
+  const stdout = execFileSync('node', [cliPath(), '--resume', 'ls'], {
     env: {
       ...process.env,
       TERM2_CONVERSATIONS_DIR: testDir,
@@ -144,7 +179,7 @@ it('CLI --resume list also works', () => {
   const now = new Date();
   fs.utimesSync(filePath, now, now);
 
-  const stdout = execFileSync('node', [...cliArgs, '--resume', 'list'], {
+  const stdout = execFileSync('node', [cliPath(), '--resume', 'list'], {
     env: {
       ...process.env,
       TERM2_CONVERSATIONS_DIR: testDir,
@@ -160,7 +195,7 @@ it('CLI --resume prints message and exits when no conversation is found', () => 
   let error: any;
   let stderr = '';
   try {
-    execFileSync('node', [...cliArgs, '--resume', 'dummy'], {
+    execFileSync('node', [cliPath(), '--resume', 'dummy'], {
       env: {
         ...process.env,
         TERM2_CONVERSATIONS_DIR: testDir,
@@ -185,7 +220,7 @@ it('CLI prompts before starting in non-lite mode from home directory', () => {
   let error: any;
   let stderr = '';
   try {
-    execFileSync('node', cliArgs, {
+    execFileSync('node', [cliPath()], {
       env: {
         ...process.env,
         HOME: tempHome,
@@ -215,7 +250,7 @@ it('CLI prompts before starting in non-lite mode from root directory', () => {
   let error: any;
   let stderr = '';
   try {
-    execFileSync('node', cliArgs, {
+    execFileSync('node', [cliPath()], {
       env: {
         ...process.env,
         HOME: tempHome,
@@ -272,7 +307,7 @@ it('CLI accepts a custom provider from settings.json in non-interactive mode', (
   let stderr = '';
 
   try {
-    execFileSync('node', [...cliArgs, '--provider', providerName, 'hello'], {
+    execFileSync('node', [cliPath(), '--provider', providerName, 'hello'], {
       env: {
         ...process.env,
         HOME: tempHome,

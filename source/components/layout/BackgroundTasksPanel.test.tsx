@@ -2,6 +2,7 @@
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import { expect, it } from 'vitest';
 import React from 'react';
+import { renderToString } from 'ink';
 import { renderInAct, rerenderInAct } from '../../test-helpers/ink-testing.js';
 import type { BackgroundSubagentTask, BackgroundTask } from '../../services/subagents/subagent-notification-store.js';
 import BackgroundTasksPanel from './BackgroundTasksPanel.js';
@@ -62,7 +63,7 @@ it.sequential('shows active count, short task label, role badge, status, and ela
   expect(output).toContain('Worker');
   expect(output).toContain('ui_fix');
   expect(output).toContain('Explorer');
-  expect(output).toContain('implement the narrow background lif…');
+  expect(output).toContain('ui_fix implement the narrow backgr…');
   expect(output).toContain('Running · 1m 05s');
   expect(output).toContain('Running · 5s');
   expect(output).not.toContain('model');
@@ -113,19 +114,129 @@ it.sequential('uses explicit wide, medium, and narrow information budgets withou
     expect(renderer.lastFrame() ?? '').toContain('no activity observed for 10s');
     expect(renderer.lastFrame() ?? '').toContain('Ctx 120k / 128k (93.8%)');
     await rerenderInAct(renderer, <BackgroundTasksPanel tasks={[task]} now={11_000} columns={72} />);
-    expect(renderer.lastFrame() ?? '').toContain('audit provider fixtures for stalled…');
+    expect(renderer.lastFrame() ?? '').toContain('audit provider fixtures for stalle…');
     expect(renderer.lastFrame() ?? '').toContain(' · Waiting');
     expect(renderer.lastFrame() ?? '').toContain('Request handed to model runtime');
     expect(renderer.lastFrame() ?? '').not.toContain('Awaiting provider response');
     expect(renderer.lastFrame() ?? '').not.toContain('Ctx 120k');
     await rerenderInAct(renderer, <BackgroundTasksPanel tasks={[task]} now={11_000} columns={71} />);
-    expect(renderer.lastFrame() ?? '').toContain('audit provider fixtures…');
-    expect(renderer.lastFrame() ?? '').toContain('Awaiting provider response');
+    expect(renderer.lastFrame() ?? '').toContain('audit provider fixture…');
+    expect(renderer.lastFrame() ?? '').toContain('Waiting');
     await rerenderInAct(renderer, <BackgroundTasksPanel tasks={[task]} now={11_000} columns={40} />);
-    expect(renderer.lastFrame() ?? '').toContain('audit provider fixtures');
+    expect(renderer.lastFrame() ?? '').toContain('audit provider …');
     expect(renderer.lastFrame() ?? '').not.toContain('Request handed to model runtime');
   }
 });
+
+it.each([
+  {
+    columns: 40,
+    task: {
+      kind: 'subagent' as const,
+      id: 'named-narrow',
+      name: 'critical_identity',
+      role: 'explorer',
+      task: 'audit every provider lifecycle boundary',
+      taskPreview: 'audit every provider lifecycle boundary',
+      status: 'running' as const,
+      startedAt: 1_000,
+      elapsedMs: 10_000,
+      toolCounts: {},
+      activity: {
+        phase: 'waiting' as const,
+        reason: 'provider' as const,
+        lastObservation: { kind: 'request_dispatched' as const, at: 1_000 },
+        liveness: { state: 'quiet' as const, lastObservedAt: 1_000, ageMs: 10_000 },
+      },
+    },
+    identity: 'critical',
+    phase: 'Waiting',
+  },
+  {
+    columns: 71,
+    task: mergeLiveTaskRows({
+      foreground: [
+        {
+          kind: 'subagent' as const,
+          runId: 'foreground-width',
+          role: 'worker',
+          task: 'inspect foreground transfer ownership',
+          status: 'running' as const,
+          startedAt: 1_000,
+        },
+      ],
+    }),
+    identity: 'inspect foreground',
+    phase: 'Running',
+    foreground: true,
+  },
+  {
+    columns: 72,
+    task: {
+      kind: 'shell' as const,
+      id: 'shell-width',
+      command: 'pnpm test -- source/components/layout with a deliberately long suffix',
+      status: 'running' as const,
+      startedAt: 1_000,
+      activity: {
+        phase: 'active' as const,
+        lastObservation: { kind: 'shell_output_received' as const, at: 1_000 },
+        liveness: { state: 'recent' as const, lastObservedAt: 1_000, ageMs: 1_000 },
+      },
+    },
+    identity: 'pnpm test',
+    phase: 'Active',
+  },
+  {
+    columns: 103,
+    task: runningTask({
+      status: 'completed',
+      completedAt: 2_000,
+      task: 'retained terminal identity remains visible',
+    }),
+    identity: 'retained terminal identity',
+    phase: 'Completed',
+  },
+  {
+    columns: 104,
+    task: {
+      kind: 'subagent' as const,
+      id: 'wide-context',
+      name: 'wide_identity',
+      role: 'explorer',
+      task: 'audit provider fixtures for exact wide threshold behavior',
+      taskPreview: 'audit provider fixtures for exact wide threshold behavior',
+      status: 'running' as const,
+      startedAt: 1_000,
+      elapsedMs: 10_000,
+      toolCounts: {},
+      model: { provider: 'openai', id: 'gpt-4o', contextWindow: 128_000 },
+      latestUsage: { prompt_tokens: 120_000 },
+      activity: {
+        phase: 'waiting' as const,
+        reason: 'provider' as const,
+        lastObservation: { kind: 'request_dispatched' as const, at: 1_000 },
+        liveness: { state: 'quiet' as const, lastObservedAt: 1_000, ageMs: 10_000 },
+      },
+    },
+    identity: 'wide_identity',
+    phase: 'Awaiting provider response',
+    context: 'Ctx 120k / 128k (93.8%)',
+  },
+])(
+  'reserves identity and phase within a real $columns-column Ink layout',
+  ({ columns, task, identity, phase, foreground, context }) => {
+    const tasks = (Array.isArray(task) ? task : [task]) as React.ComponentProps<typeof BackgroundTasksPanel>['tasks'];
+    const output = renderToString(<BackgroundTasksPanel tasks={tasks} now={11_000} columns={columns} />, { columns });
+    const taskLine = output.split('\n').find((line) => line.startsWith('• ')) ?? '';
+    expect(taskLine).toContain(identity);
+    expect(taskLine).toContain(phase);
+    expect(taskLine.length).toBeLessThanOrEqual(columns);
+    if (foreground) expect(taskLine).toContain('foreground');
+    if (context) expect(output).toContain(context);
+    for (const line of output.split('\n')) expect(line.length).toBeLessThanOrEqual(columns);
+  },
+);
 
 it.sequential('updates elapsed duration when time advances', async () => {
   const task = runningTask();

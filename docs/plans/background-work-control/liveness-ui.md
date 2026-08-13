@@ -24,6 +24,22 @@ passes 166 tests with one intentional skip; lint/Prettier passes with 46 existin
 warnings and no errors; and `git diff --check` passes. Merge remains gated on
 review of the correction commit.
 
+Closure note (2026-08-13): the final presentation audit also closed two sink
+gaps. Manager tool-count keys are sanitized individually without changing the
+raw accounting map, capped at 24 terminal cells per name, and summarized in an
+80-cell aggregate with `… +N more`. The compact first line now reserves the
+lifecycle phase before allocating the remaining physical terminal cells to
+task identity. Ink `renderToString` regressions use matching policy and physical
+widths at 40, 71, 72, 103, and 104 columns across named, foreground, shell,
+retained-terminal, and wide-context rows. The complete five-member command
+status union is parameterized through the registry contract; no lower-layer
+behavior changed in this closure pass. The closure focus passes 100 tests;
+typecheck and build pass; the full suite passes 6,133 tests with two skips;
+lint/Prettier passes with the same 46 existing warnings and no errors; and
+`git diff --check` passes. Provider black-box was not repeated because the
+closure production diff is confined to Ink presentation and a local text-
+budget helper; the registry/runtime/event implementations are unchanged.
+
 Implementation note (2026-08-13): all six original slices are implemented. The shared observation protocol now lives in
 `source/services/background-task-activity.ts`; the control port projects phase,
 last observation, and derived liveness separately. Async runs retain launch-time

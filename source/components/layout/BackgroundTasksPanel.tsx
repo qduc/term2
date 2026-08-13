@@ -9,6 +9,7 @@ import type {
   ForegroundTransferCandidate,
 } from '../../services/session/background-task-control.js';
 import { normalizeLiveTaskRows, type LiveTaskRow } from './live-task-rows.js';
+import { terminalTextWidth, truncateTerminalText } from './terminal-text-budget.js';
 
 type Props = {
   tasks: readonly LiveTaskRow[] | readonly (BackgroundTask | BackgroundTaskControlDetails)[];
@@ -25,9 +26,9 @@ const NAME_LIMIT = 24;
 export const BACKGROUND_TASK_PANEL_MEDIUM_COLUMNS = 72;
 export const BACKGROUND_TASK_PANEL_WIDE_COLUMNS = 104;
 export const BACKGROUND_TASK_PANEL_HIGH_CONTEXT_RATIO = 0.8;
+const BACKGROUND_TASK_PANEL_MIN_IDENTITY_COLUMNS = 6;
 
-const truncate = (value: string, limit: number): string =>
-  value.length > limit ? `${value.slice(0, limit - 1)}…` : value;
+const truncate = truncateTerminalText;
 
 // Multi-line prompts are common for subagent tasks; only the first line is a label.
 const firstLine = (value: string): string =>
@@ -45,13 +46,13 @@ type PanelTask = BackgroundTask | BackgroundTaskControlDetails | ForegroundTrans
 
 const isControlTask = (task: PanelTask): task is BackgroundTaskControlDetails => 'id' in task;
 
-const formatTaskLabel = (task: PanelTask, limit: number): string => {
+const formatTaskLabel = (task: PanelTask): string => {
   if (task.kind === 'shell') {
-    return truncate(firstLine(task.command).replaceAll(/\s+/g, ' '), limit);
+    return firstLine(task.command).replaceAll(/\s+/g, ' ');
   }
   const normalized = firstLine('taskPreview' in task ? task.taskPreview : task.task).replaceAll(/\s+/g, ' ');
   const label = normalized || `${formatRole(task.role)} background task`;
-  return truncate(label, limit);
+  return 'name' in task && task.name ? `${truncate(task.name, NAME_LIMIT)} ${label}` : label;
 };
 
 const formatContextTokens = (tokens: number): string => {
@@ -118,13 +119,72 @@ const formatPhase = (task: BackgroundTaskControlDetails): string => {
   return 'Active';
 };
 
-const formatMediumPhase = (task: BackgroundTaskControlDetails): string => {
+const formatCompactPhase = (task: BackgroundTaskControlDetails): string => {
   const activity = task.activity;
   if (!activity) return 'Running';
   if (activity.phase === 'waiting') return 'Waiting';
   if (activity.phase === 'cancelling') return 'Cancelling';
   if (activity.phase === 'settled') return formatTerminalStatus(task);
   return 'Active';
+};
+
+const formatCompactTerminalStatus = (task: PanelTask): string => {
+  switch (task.status) {
+    case 'completed':
+      return 'Completed';
+    case 'failed':
+      return 'Failed';
+    case 'cancelled':
+      return 'Cancelled';
+    case 'timed_out':
+      return 'Timed out';
+    default:
+      return 'Running';
+  }
+};
+
+const formatFirstLine = ({
+  task,
+  placement,
+  columns,
+  now,
+  isWide,
+  isNarrow,
+}: {
+  task: PanelTask;
+  placement: 'foreground' | 'background';
+  columns: number;
+  now: number;
+  isWide: boolean;
+  isNarrow: boolean;
+}): { badge: string; identity: string; phase: string } => {
+  const controlTask = isControlTask(task) ? task : undefined;
+  const badge = `[${task.kind === 'shell' ? 'Shell' : formatRole(task.role)}${
+    placement === 'foreground' ? ' · foreground' : ''
+  }]`;
+  const rawPhase = isTerminal(task)
+    ? isNarrow
+      ? formatCompactTerminalStatus(task)
+      : formatTerminalStatus(task)
+    : controlTask
+    ? isWide
+      ? formatPhase(controlTask)
+      : formatCompactPhase(controlTask)
+    : isNarrow
+    ? 'Running'
+    : formatLiveStatus(task, now);
+  const fixedColumns = 2 + terminalTextWidth(badge) + 1 + 3;
+  const phase = truncate(rawPhase, Math.max(1, columns - fixedColumns - BACKGROUND_TASK_PANEL_MIN_IDENTITY_COLUMNS));
+  // "• " + badge + " " + identity + " · " + phase. Reserve every
+  // mandatory cell except identity before allocating the task label.
+  const mandatoryColumns = fixedColumns + terminalTextWidth(phase);
+  const physicalBudget = Math.max(1, columns - mandatoryColumns);
+  const classBudget = isNarrow
+    ? BACKGROUND_TASK_PANEL_NARROW_LABEL_LIMIT
+    : isWide
+    ? BACKGROUND_TASK_PANEL_WIDE_LABEL_LIMIT
+    : BACKGROUND_TASK_PANEL_MEDIUM_LABEL_LIMIT;
+  return { badge, identity: truncate(formatTaskLabel(task), Math.min(physicalBudget, classBudget)), phase };
 };
 
 const formatLiveness = (task: BackgroundTaskControlDetails): string => {
@@ -210,33 +270,13 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now, columns: testColumns }) =
           ratio >= BACKGROUND_TASK_PANEL_HIGH_CONTEXT_RATIO;
         const isNarrow = columns < BACKGROUND_TASK_PANEL_MEDIUM_COLUMNS;
         const isWide = columns >= BACKGROUND_TASK_PANEL_WIDE_COLUMNS;
-        const taskLabelLimit = isNarrow
-          ? BACKGROUND_TASK_PANEL_NARROW_LABEL_LIMIT
-          : isWide
-          ? BACKGROUND_TASK_PANEL_WIDE_LABEL_LIMIT
-          : BACKGROUND_TASK_PANEL_MEDIUM_LABEL_LIMIT;
-        const status = !isTerminal(task) ? formatLiveStatus(task, now) : formatTerminalStatus(task);
+        const firstLine = formatFirstLine({ task, placement, columns, now, isWide, isNarrow });
         return (
           <Box key={key} flexDirection="column">
-            <Text wrap="truncate-end">
+            <Text>
               <Text color="#64748b">• </Text>
-              <Text color="#a5b4fc">
-                [{task.kind === 'shell' ? 'Shell' : formatRole(task.role)}
-                {placement === 'foreground' ? ' · foreground' : ''}]
-              </Text>
-              {task.kind !== 'shell' && 'name' in task && task.name && (
-                <Text color="#c4b5fd"> {truncate(task.name, NAME_LIMIT)}</Text>
-              )}{' '}
-              <Text>
-                {formatTaskLabel(task, taskLabelLimit)} ·{' '}
-                {isNarrow
-                  ? status
-                  : controlTask
-                  ? isWide
-                    ? formatPhase(controlTask)
-                    : formatMediumPhase(controlTask)
-                  : status}
-              </Text>
+              <Text color="#a5b4fc">{firstLine.badge}</Text> <Text>{firstLine.identity}</Text> ·{' '}
+              <Text>{firstLine.phase}</Text>
             </Text>
             {!isNarrow && controlTask && !isTerminal(task) && (
               <Text color="#94a3b8" wrap="truncate-end">

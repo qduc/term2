@@ -84,8 +84,8 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   re-review before merge). It separates lifecycle phase/reason, locally
   observed facts, and recent/quiet liveness; captures truthful launch-time
   model/context metadata; and gives the panel and manager explicit, live
-  information budgets without changing execution, cancellation, or transfer
-  semantics.
+  physical-width information budgets plus bounded presentation labels without
+  changing execution, cancellation, or transfer semantics.
 
 - `docs/plans/provider-neutral-context-compaction.md` — **Milestones 1–6 fully implemented and verified.** Preserves the OpenAI-native opaque lane and adds an opt-in local fallback built around safe request-boundary cutting, ratio plus an optional raw-token automatic threshold, manual `/compact`, sequential cold-prefix summaries with load-bearing facts copied verbatim, a verbatim hot tail, durable replacement checkpoints, and tool-ledger/continuity safety.
 

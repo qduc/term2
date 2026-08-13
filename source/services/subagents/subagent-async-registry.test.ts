@@ -190,7 +190,7 @@ describe('background observations', () => {
     registry.dispose();
   });
 
-  it('retains bounded terminal-safe tool labels and reports completion only for terminal command messages', () => {
+  it('retains bounded terminal-safe tool labels', () => {
     const registry = make(() => new Promise<SubagentResult>(() => undefined));
     const handle = registry.startRun({ role: 'worker', task: 'inspect' });
     const rawName = `shell\n\u001b[31m${'x'.repeat(120)}`;
@@ -205,20 +205,18 @@ describe('background observations', () => {
     expect(started.lastObservation).toMatchObject({ kind: 'tool_started', toolName: started.lastToolName });
     expect(started.lastToolName).not.toMatch(/[\n\u001b]/);
     expect(started.lastToolName.length).toBeLessThanOrEqual(80);
-    registry.handleSubagentEvent({
-      type: 'subagent_command_message',
-      agentId: handle.runId,
-      role: 'worker',
-      message: { id: 'command', sender: 'command', status: 'running', command: 'work', output: '' },
-    });
-    expect(registry.getRunStatus(handle.runId)).toMatchObject({ lastObservation: { kind: 'tool_started' } });
-    registry.handleSubagentEvent({
-      type: 'subagent_command_message',
-      agentId: handle.runId,
-      role: 'worker',
-      message: { id: 'command', sender: 'command', status: 'completed', command: 'work', output: '' },
-    });
-    expect(registry.getRunStatus(handle.runId)).toMatchObject({ lastObservation: { kind: 'tool_completed' } });
+    registry.dispose();
+  });
+
+  it.each([
+    ['pending', 'tool_started'],
+    ['running', 'tool_started'],
+    ['completed', 'tool_completed'],
+    ['failed', 'tool_completed'],
+    ['aborted', 'tool_completed'],
+  ] as const)('maps the closed %s command status truthfully and starts the next response boundary', (status, kind) => {
+    const registry = make(() => new Promise<SubagentResult>(() => undefined));
+    const handle = registry.startRun({ role: 'worker', task: 'inspect' });
     registry.handleSubagentEvent({
       type: 'subagent_tool_started',
       agentId: handle.runId,
@@ -230,10 +228,17 @@ describe('background observations', () => {
       type: 'subagent_command_message',
       agentId: handle.runId,
       role: 'worker',
-      message: { id: 'failed-command', sender: 'command', status: 'failed', command: 'work', output: 'failed' },
+      message: { id: `command-${status}`, sender: 'command', status, command: 'work', output: '' },
+    });
+    expect(registry.getRunStatus(handle.runId)).toMatchObject({ lastObservation: { kind, toolName: 'shell' } });
+
+    registry.handleSubagentEvent({
+      type: 'subagent_streaming_text',
+      agentId: handle.runId,
+      text: `response after ${status}`,
     });
     expect(registry.getRunStatus(handle.runId)).toMatchObject({
-      lastObservation: { kind: 'tool_completed', toolName: 'shell' },
+      lastObservation: { kind: 'response_started' },
     });
     registry.dispose();
   });

@@ -2,7 +2,7 @@
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import React, { act, useState } from 'react';
 import { expect, it, vi } from 'vitest';
-import { renderInAct, rerenderInAct } from '../../test-helpers/ink-testing.js';
+import { renderInAct, rerenderInAct, toVisibleText } from '../../test-helpers/ink-testing.js';
 import BackgroundTaskManagerView, { type BackgroundTaskManagerProps } from './BackgroundTaskManager.js';
 
 type TestManagerProps = Omit<BackgroundTaskManagerProps, 'open' | 'onOpenChange'> & {
@@ -256,6 +256,43 @@ it.sequential('renders diagnostic model, context, retry, and observation fields 
   expect(output).toContain('Context: 12.3k / 128k (9.6%)');
   expect(output).toContain('Retries: 1 of 3');
   expect(output).toContain('Last tool: read_file');
+});
+
+it.sequential('bounds and sanitizes every toolCounts key in the rendered Tools row', async () => {
+  const unsafeName = `shell\nline\u001b]8;;https://example.invalid\u0007link\u001b]8;;\u0007${'x'.repeat(160)}`;
+  const manyCounts = Object.fromEntries([
+    ['unicode_工具', 2],
+    [unsafeName, 7],
+    ...Array.from({ length: 18 }, (_, index) => [`unicode_工具_${index}_${'y'.repeat(32)}`, index + 1] as const),
+  ]);
+  const detailed = { ...subagent, toolCounts: manyCounts };
+  const view = await renderInAct(
+    <BackgroundTaskManager
+      listDetails={() => [detailed]}
+      getDetails={() => detailed}
+      requestStop={() => ({ ok: false as const, code: 'not_active' as const })}
+    />,
+  );
+
+  await writeInput(view.stdin, '\x07');
+  await writeInput(view.stdin, '\r');
+  const raw = view.lastFrame() ?? '';
+  const toolsLine =
+    toVisibleText(raw)
+      .split('\n')
+      .find((line) => line.includes('Tools:')) ?? '';
+  const toolsContent = toolsLine
+    .slice(toolsLine.indexOf('Tools:') + 'Tools:'.length)
+    .replace(/\s*│$/, '')
+    .trim();
+  expect(raw).not.toContain('\u001b]8;;');
+  expect(raw).not.toContain('\u0007');
+  expect(toolsLine).not.toContain('shell\nline');
+  expect(toolsLine).toContain('shell line');
+  expect(toolsLine).toContain('×7');
+  expect(toolsLine).toContain('工具');
+  expect(toolsContent).toMatch(/… \+\d+ more$/);
+  expect(toolsContent.length).toBeLessThanOrEqual(80);
 });
 
 it.sequential('shows provider and approval waits separately from quiet and terminal failure', async () => {

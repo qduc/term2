@@ -9,7 +9,9 @@ import type {
   ForegroundTaskControlTarget,
   MoveForegroundToBackgroundResult,
 } from '../../services/session/background-task-control.js';
+import { sanitizeBackgroundTaskToolLabel } from '../../services/background-task-activity.js';
 import { formatBackgroundTaskElapsed } from './BackgroundTasksPanel.js';
+import { terminalTextWidth, truncateTerminalText } from './terminal-text-budget.js';
 
 export type BackgroundTaskManagerProps = {
   enabled?: boolean;
@@ -95,10 +97,33 @@ const formatContext = (promptTokens: number, contextWindow?: number): string => 
   return `${tokens} / ${max} (${((promptTokens / contextWindow) * 100).toFixed(1)}%)`;
 };
 
-const formatToolCounts = (counts: Record<string, number>): string =>
-  Object.entries(counts)
-    .map(([name, count]) => `${name} ×${count}`)
-    .join(', ');
+export const BACKGROUND_TASK_MANAGER_TOOLS_ROW_LIMIT = 80;
+const BACKGROUND_TASK_MANAGER_TOOL_NAME_LIMIT = 24;
+
+const formatToolCounts = (counts: Record<string, number>): string => {
+  const entries = Object.entries(counts).map(([name, count]) => ({
+    name: truncateTerminalText(
+      sanitizeBackgroundTaskToolLabel(name) || 'tool',
+      BACKGROUND_TASK_MANAGER_TOOL_NAME_LIMIT,
+    ),
+    count: ` ×${count}`,
+  }));
+  let rendered = '';
+  let renderedCount = 0;
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index]!;
+    const separator = rendered ? ', ' : '';
+    const remaining = entries.length - index - 1;
+    const omitted = remaining > 0 ? `, … +${remaining} more` : '';
+    const next = `${rendered}${separator}${entry.name}${entry.count}`;
+    if (terminalTextWidth(next) + terminalTextWidth(omitted) > BACKGROUND_TASK_MANAGER_TOOLS_ROW_LIMIT) break;
+    rendered = next;
+    renderedCount += 1;
+  }
+  const omittedCount = entries.length - renderedCount;
+  if (!rendered) return `… +${omittedCount} more`;
+  return omittedCount > 0 ? `${rendered}, … +${omittedCount} more` : rendered;
+};
 
 const BackgroundTaskDetailsView: FC<{ details: BackgroundTaskControlDetails }> = ({ details }) => (
   <Box flexDirection="column" marginTop={1} paddingLeft={2}>

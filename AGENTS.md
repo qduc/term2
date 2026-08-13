@@ -44,11 +44,6 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   than a ceiling, that per-request USD accounting already exists (so the
   `maxCost` "unsupported" rejection is stale), and that identical-failure
   detection is already in the loop as a silent retry suppressor.
-- Background-task liveness UI — the initial compact panel and Ctrl+G shortcut
-  are merged; the remaining presentation-contract work is planned in
-  `docs/plans/background-work-control/liveness-ui.md`. It separates lifecycle
-  phase from evidence-age/liveness and adds context-use detail without changing
-  execution or cancellation lifecycle.
 - UI/business layer separation — completed through settings transaction,
   handoff workflow, provider management, and model catalog milestones. See
   `docs/plans/ui-business-layer-separation/MAP.md` for the merged commits and
@@ -83,6 +78,14 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   event routing: a transferred transcript card settles as `backgrounded`, and
   unadopted work may appear on the compact strip only with an explicit
   foreground tag.
+
+- `docs/plans/background-work-control/liveness-ui.md` — **implemented and
+  verified with adversarial-review corrections** (2026-08-13; awaiting branch
+  re-review before merge). It separates lifecycle phase/reason, locally
+  observed facts, and recent/quiet liveness; captures truthful launch-time
+  model/context metadata; and gives the panel and manager explicit, live
+  physical-width information budgets plus bounded presentation labels without
+  changing execution, cancellation, or transfer semantics.
 
 - `docs/plans/provider-neutral-context-compaction.md` — **Milestones 1–6 fully implemented and verified.** Preserves the OpenAI-native opaque lane and adds an opt-in local fallback built around safe request-boundary cutting, ratio plus an optional raw-token automatic threshold, manual `/compact`, sequential cold-prefix summaries with load-bearing facts copied verbatim, a verbatim hot tail, durable replacement checkpoints, and tool-ledger/continuity safety.
 

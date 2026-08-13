@@ -1,5 +1,5 @@
 import React, { useRef, type FC } from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text, useStdout } from 'ink';
 import type {
   BackgroundTask,
   BackgroundSubagentTaskTool,
@@ -9,18 +9,26 @@ import type {
   ForegroundTransferCandidate,
 } from '../../services/session/background-task-control.js';
 import { normalizeLiveTaskRows, type LiveTaskRow } from './live-task-rows.js';
+import { terminalTextWidth, truncateTerminalText } from './terminal-text-budget.js';
 
 type Props = {
   tasks: readonly LiveTaskRow[] | readonly (BackgroundTask | BackgroundTaskControlDetails)[];
   now: number;
+  /** Deterministic test seam; production uses Ink's stdout width. */
+  columns?: number;
 };
 
-const TASK_LABEL_LIMIT = 60;
+export const BACKGROUND_TASK_PANEL_NARROW_LABEL_LIMIT = 24;
+export const BACKGROUND_TASK_PANEL_MEDIUM_LABEL_LIMIT = 36;
+export const BACKGROUND_TASK_PANEL_WIDE_LABEL_LIMIT = 60;
 const TOOL_LABEL_LIMIT = 60;
 const NAME_LIMIT = 24;
+export const BACKGROUND_TASK_PANEL_MEDIUM_COLUMNS = 72;
+export const BACKGROUND_TASK_PANEL_WIDE_COLUMNS = 104;
+export const BACKGROUND_TASK_PANEL_HIGH_CONTEXT_RATIO = 0.8;
+const BACKGROUND_TASK_PANEL_MIN_IDENTITY_COLUMNS = 6;
 
-const truncate = (value: string, limit: number): string =>
-  value.length > limit ? `${value.slice(0, limit - 1)}…` : value;
+const truncate = truncateTerminalText;
 
 // Multi-line prompts are common for subagent tasks; only the first line is a label.
 const firstLine = (value: string): string =>
@@ -40,11 +48,11 @@ const isControlTask = (task: PanelTask): task is BackgroundTaskControlDetails =>
 
 const formatTaskLabel = (task: PanelTask): string => {
   if (task.kind === 'shell') {
-    return truncate(firstLine(task.command).replaceAll(/\s+/g, ' '), TASK_LABEL_LIMIT);
+    return firstLine(task.command).replaceAll(/\s+/g, ' ');
   }
   const normalized = firstLine('taskPreview' in task ? task.taskPreview : task.task).replaceAll(/\s+/g, ' ');
   const label = normalized || `${formatRole(task.role)} background task`;
-  return truncate(label, TASK_LABEL_LIMIT);
+  return 'name' in task && task.name ? `${truncate(task.name, NAME_LIMIT)} ${label}` : label;
 };
 
 const formatContextTokens = (tokens: number): string => {
@@ -70,8 +78,121 @@ export const formatBackgroundTaskElapsed = (elapsedMs: number): string => {
   return minutes > 0 ? `${minutes}m ${String(seconds).padStart(2, '0')}s` : `${seconds}s`;
 };
 
-const formatBackgroundTaskActivityAge = (now: number, lastActivityAt: number): string =>
-  `last activity ${formatBackgroundTaskElapsed(now - lastActivityAt)} ago`;
+const formatObservation = (task: BackgroundTaskControlDetails): string => {
+  const observation = task.activity?.lastObservation;
+  if (!observation) return 'No observation recorded';
+  switch (observation.kind) {
+    case 'request_dispatched':
+      return 'Request handed to model runtime';
+    case 'response_started':
+      return 'Response started';
+    case 'text_received':
+      return 'Text received';
+    case 'tool_started':
+      return `Tool started: ${observation.toolName}`;
+    case 'tool_completed': {
+      return observation.toolName ? `Tool completed: ${observation.toolName}` : 'Tool completed';
+    }
+    case 'retrying':
+      return `Retrying ${observation.attempt} of ${observation.maxRetries}`;
+    case 'approval_requested':
+      return 'Approval requested';
+    case 'question_asked':
+      return 'Question asked';
+    case 'shell_started':
+      return 'Shell started';
+    case 'shell_output_received':
+      return 'Shell output received';
+    case 'stop_requested':
+      return 'Stop requested';
+    case 'settled':
+      return 'Task settled';
+  }
+};
+
+const formatPhase = (task: BackgroundTaskControlDetails): string => {
+  const activity = task.activity;
+  if (!activity) return 'Running';
+  if (activity.phase === 'waiting') return `Awaiting ${activity.reason ?? 'provider'} response`;
+  if (activity.phase === 'cancelling') return 'Cancelling';
+  if (activity.phase === 'settled') return formatTerminalStatus(task);
+  return 'Active';
+};
+
+const formatCompactPhase = (task: BackgroundTaskControlDetails): string => {
+  const activity = task.activity;
+  if (!activity) return 'Running';
+  if (activity.phase === 'waiting') return 'Waiting';
+  if (activity.phase === 'cancelling') return 'Cancelling';
+  if (activity.phase === 'settled') return formatTerminalStatus(task);
+  return 'Active';
+};
+
+const formatCompactTerminalStatus = (task: PanelTask): string => {
+  switch (task.status) {
+    case 'completed':
+      return 'Completed';
+    case 'failed':
+      return 'Failed';
+    case 'cancelled':
+      return 'Cancelled';
+    case 'timed_out':
+      return 'Timed out';
+    default:
+      return 'Running';
+  }
+};
+
+const formatFirstLine = ({
+  task,
+  placement,
+  columns,
+  now,
+  isWide,
+  isNarrow,
+}: {
+  task: PanelTask;
+  placement: 'foreground' | 'background';
+  columns: number;
+  now: number;
+  isWide: boolean;
+  isNarrow: boolean;
+}): { badge: string; identity: string; phase: string } => {
+  const controlTask = isControlTask(task) ? task : undefined;
+  const badge = `[${task.kind === 'shell' ? 'Shell' : formatRole(task.role)}${
+    placement === 'foreground' ? ' · foreground' : ''
+  }]`;
+  const rawPhase = isTerminal(task)
+    ? isNarrow
+      ? formatCompactTerminalStatus(task)
+      : formatTerminalStatus(task)
+    : controlTask
+    ? isWide
+      ? formatPhase(controlTask)
+      : formatCompactPhase(controlTask)
+    : isNarrow
+    ? 'Running'
+    : formatLiveStatus(task, now);
+  const fixedColumns = 2 + terminalTextWidth(badge) + 1 + 3;
+  const phase = truncate(rawPhase, Math.max(1, columns - fixedColumns - BACKGROUND_TASK_PANEL_MIN_IDENTITY_COLUMNS));
+  // "• " + badge + " " + identity + " · " + phase. Reserve every
+  // mandatory cell except identity before allocating the task label.
+  const mandatoryColumns = fixedColumns + terminalTextWidth(phase);
+  const physicalBudget = Math.max(1, columns - mandatoryColumns);
+  const classBudget = isNarrow
+    ? BACKGROUND_TASK_PANEL_NARROW_LABEL_LIMIT
+    : isWide
+    ? BACKGROUND_TASK_PANEL_WIDE_LABEL_LIMIT
+    : BACKGROUND_TASK_PANEL_MEDIUM_LABEL_LIMIT;
+  return { badge, identity: truncate(formatTaskLabel(task), Math.min(physicalBudget, classBudget)), phase };
+};
+
+const formatLiveness = (task: BackgroundTaskControlDetails): string => {
+  const liveness = task.activity?.liveness;
+  if (!liveness) return '';
+  const age = formatBackgroundTaskElapsed(liveness.ageMs);
+  return liveness.state === 'quiet' ? `no activity observed for ${age}` : `${age} ago`;
+};
 
 const formatTerminalStatus = (task: PanelTask): string => {
   switch (task.status) {
@@ -101,25 +222,15 @@ const isTerminal = (task: PanelTask): boolean =>
 const formatLiveStatus = (task: PanelTask, now: number): string => {
   const startedAt = 'startedAt' in task && typeof task.startedAt === 'number' ? task.startedAt : now;
   if (!isControlTask(task) || !task.activity) return `Running · ${formatBackgroundTaskElapsed(now - startedAt)}`;
-  const activityAge = formatBackgroundTaskActivityAge(now, task.activity.lastActivityAt);
-  switch (task.activity.state) {
-    case 'active':
-      return `Active · ${formatBackgroundTaskElapsed(now - task.startedAt)} · ${activityAge}`;
-    case 'waiting':
-      return `Waiting for ${task.activity.reason ?? 'provider'} · ${activityAge}`;
-    case 'quiet':
-      return `Quiet · no observed progress · ${activityAge} · still running`;
-    case 'cancelling':
-      return `Cancelling · ${activityAge}`;
-    case 'settled':
-      return formatTerminalStatus(task);
-  }
+  return `${formatPhase(task)} · ${formatLiveness(task)}`;
 };
 
 /** How long a settled task stays on the panel after it finishes. */
 export const BACKGROUND_TASKS_PANEL_GRACE_MS = 5_000;
 
-const BackgroundTasksPanel: FC<Props> = ({ tasks, now }) => {
+const BackgroundTasksPanel: FC<Props> = ({ tasks, now, columns: testColumns }) => {
+  const { stdout } = useStdout();
+  const columns = testColumns ?? stdout.columns ?? BACKGROUND_TASK_PANEL_MEDIUM_COLUMNS;
   const rows = normalizeLiveTaskRows(tasks);
   // The registry keeps terminal entries around indefinitely, so each settled row
   // lingers briefly — long enough to read its outcome — then drops off on its own.
@@ -145,48 +256,58 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now }) => {
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Text color="#94a3b8">Tasks · {activeCount} active · Ctrl+G manage</Text>
-      {visible.map(({ key, placement, task }) => (
-        <Box key={key} flexDirection="column">
-          <Box flexDirection="row">
-            <Box flexGrow={1} flexShrink={1} minWidth={0}>
-              <Text wrap="truncate-end">
-                <Text color="#64748b">• </Text>
-                <Text color="#a5b4fc">
-                  [{task.kind === 'shell' ? 'Shell' : formatRole(task.role)}
-                  {placement === 'foreground' ? ' · foreground' : ''}]
-                </Text>
-                {task.kind !== 'shell' && 'name' in task && task.name && (
-                  <Text color="#c4b5fd"> {truncate(task.name, NAME_LIMIT)}</Text>
-                )}
-                <Text> {formatTaskLabel(task)}</Text>
-              </Text>
-            </Box>
-            <Box flexShrink={0}>
+      {visible.map(({ key, placement, task }) => {
+        const controlTask = isControlTask(task) ? task : undefined;
+        const subagentTask = controlTask?.kind === 'subagent' ? controlTask : undefined;
+        const context = subagentTask?.latestUsage?.prompt_tokens;
+        const ratio =
+          context !== undefined && subagentTask?.model?.contextWindow
+            ? context / subagentTask.model.contextWindow
+            : undefined;
+        const showHighContext =
+          columns >= BACKGROUND_TASK_PANEL_WIDE_COLUMNS &&
+          ratio !== undefined &&
+          ratio >= BACKGROUND_TASK_PANEL_HIGH_CONTEXT_RATIO;
+        const isNarrow = columns < BACKGROUND_TASK_PANEL_MEDIUM_COLUMNS;
+        const isWide = columns >= BACKGROUND_TASK_PANEL_WIDE_COLUMNS;
+        const firstLine = formatFirstLine({ task, placement, columns, now, isWide, isNarrow });
+        return (
+          <Box key={key} flexDirection="column">
+            <Text>
+              <Text color="#64748b">• </Text>
+              <Text color="#a5b4fc">{firstLine.badge}</Text> <Text>{firstLine.identity}</Text> ·{' '}
+              <Text>{firstLine.phase}</Text>
+            </Text>
+            {!isNarrow && controlTask && !isTerminal(task) && (
               <Text color="#94a3b8" wrap="truncate-end">
-                {'  '}
-                {!isTerminal(task) ? formatLiveStatus(task, now) : formatTerminalStatus(task)}
-                {task.kind !== 'shell' && !isControlTask(task) && 'usage' in task && task.usage?.prompt_tokens != null
-                  ? ` · Ctx ${formatContextTokens(task.usage.prompt_tokens)}`
+                {' '}
+                {columns >= BACKGROUND_TASK_PANEL_WIDE_COLUMNS
+                  ? `${formatObservation(controlTask)} · ${formatLiveness(controlTask)}`
+                  : formatObservation(controlTask)}
+                {showHighContext
+                  ? ` · Ctx ${formatContextTokens(context!)} / ${formatContextTokens(
+                      subagentTask!.model!.contextWindow!,
+                    )} (${(ratio! * 100).toFixed(1)}%)`
                   : ''}
               </Text>
-            </Box>
-          </Box>
-          {task.kind !== 'shell' &&
-            !isControlTask(task) &&
-            task.status === 'running' &&
-            'lastTool' in task &&
-            task.lastTool && (
-              <Box flexDirection="row">
-                <Text color="#475569">{'  └ '}</Text>
-                <Box flexGrow={1} flexShrink={1} minWidth={0}>
-                  <Text color="#64748b" wrap="truncate-end">
-                    {TOOL_STATE_MARKER[task.lastTool.state]} {formatToolLabel(task.lastTool)}
-                  </Text>
-                </Box>
-              </Box>
             )}
-        </Box>
-      ))}
+            {task.kind !== 'shell' &&
+              !isControlTask(task) &&
+              task.status === 'running' &&
+              'lastTool' in task &&
+              task.lastTool && (
+                <Box flexDirection="row">
+                  <Text color="#475569">{'  └ '}</Text>
+                  <Box flexGrow={1} flexShrink={1} minWidth={0}>
+                    <Text color="#64748b" wrap="truncate-end">
+                      {TOOL_STATE_MARKER[task.lastTool.state]} {formatToolLabel(task.lastTool)}
+                    </Text>
+                  </Box>
+                </Box>
+              )}
+          </Box>
+        );
+      })}
     </Box>
   );
 };

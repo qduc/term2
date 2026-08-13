@@ -139,6 +139,12 @@ export function createSubagentRuntime(deps: SubagentRuntimeDeps): SubagentRuntim
     ttlMs: deps.settings.get('subagent.asyncSessionTtlMs') ?? 30 * 60 * 1000,
     messageCap: deps.settings.get('subagent.asyncMessageCap') ?? 50,
     sessionForRole: (role) => (role === 'mentor' ? mentorSession : undefined),
+    modelForRole: (role) => {
+      const mentorPool = role === 'mentor' ? deps.settings.get('agent.mentorPool') : undefined;
+      if (Array.isArray(mentorPool) && mentorPool.length > 0) return undefined;
+      const definition = loadRoleDefinition(role as SupportedSubagentRole, deps.settings);
+      return { provider: definition.provider, id: definition.model };
+    },
   });
 
   return {

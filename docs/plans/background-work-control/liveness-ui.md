@@ -1,10 +1,50 @@
 # Background-task observation and liveness UI
 
-Status: implementation plan. Ready for implementation authorization.
+Status: completed with adversarial-review corrections (2026-08-13); awaiting branch re-review before merge.
 
 Research: [waiting-for-provider-ui-research.md](waiting-for-provider-ui-research.md).
 
 ## Resume here
+
+Review correction note (2026-08-13): adversarial review found identity drift in
+the live manager snapshot, presentation-observation races after cancellation,
+premature tool completion, mutable foreground model resolution, pooled mentor
+model ambiguity, unbounded provider-derived labels, response-stream boundary
+drift, and an ineffective medium-width budget. Public-seam regressions now cover
+reordered/removed stop and transfer targets; buffered subagent and shell events
+after cancellation; running, successful, and failed commands; immutable
+foreground launch metadata (including a later resolver failure); a two-model
+mentor pool; bounded control-character-safe tool labels; three-chunk and next-
+boundary text streams; and exact medium/narrow width thresholds.
+
+Final correction verification is green: the six exact focused commands below
+pass 122 tests; the expanded correction focus passes 128 tests; typecheck and
+build pass; the full suite passes 6,122 tests with two skips; provider black-box
+passes 166 tests with one intentional skip; lint/Prettier passes with 46 existing
+warnings and no errors; and `git diff --check` passes. Merge remains gated on
+review of the correction commit.
+
+Closure note (2026-08-13): the final presentation audit also closed two sink
+gaps. Manager tool-count keys are sanitized individually without changing the
+raw accounting map, capped at 24 terminal cells per name, and summarized in an
+80-cell aggregate with `… +N more`. The compact first line now reserves the
+lifecycle phase before allocating the remaining physical terminal cells to
+task identity. Ink `renderToString` regressions use matching policy and physical
+widths at 40, 71, 72, 103, and 104 columns across named, foreground, shell,
+retained-terminal, and wide-context rows. The complete five-member command
+status union is parameterized through the registry contract; no lower-layer
+behavior changed in this closure pass. The closure focus passes 100 tests;
+typecheck and build pass; the full suite passes 6,133 tests with two skips;
+lint/Prettier passes with the same 46 existing warnings and no errors; and
+`git diff --check` passes. Provider black-box was not repeated because the
+closure production diff is confined to Ink presentation and a local text-
+budget helper; the registry/runtime/event implementations are unchanged.
+
+Implementation note (2026-08-13): all six original slices are implemented. The shared observation protocol now lives in
+`source/services/background-task-activity.ts`; the control port projects phase,
+last observation, and derived liveness separately. Async runs retain launch-time
+model metadata and latest request usage. The focused contract/registry/control/UI
+suites, full test suite, typecheck, build, lint/Prettier, and provider black-box suite are green.
 
 The first liveness delivery is already merged: the session control port projects
 registry activity, the compact panel distinguishes active/waiting/quiet work,

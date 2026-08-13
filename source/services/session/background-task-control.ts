@@ -10,6 +10,7 @@ import {
   normalizeBackgroundTaskActivity,
   type BackgroundTaskActivity,
 } from './background-task-liveness.js';
+import { getCatalogModel } from '../../providers/model-catalog/catalog.js';
 
 export { BACKGROUND_SHELL_QUIET_AFTER_MS, BACKGROUND_SUBAGENT_QUIET_AFTER_MS } from './background-task-liveness.js';
 export type {
@@ -39,6 +40,8 @@ export type BackgroundTaskControlDetails =
       turnHistory?: SubagentRunStatus['turnHistory'];
       currentText?: string;
       pendingToolCounts?: Record<string, number>;
+      model?: { provider: string; id: string; contextWindow?: number };
+      latestUsage?: SubagentRunStatus['latestUsage'];
     }
   | {
       kind: 'shell';
@@ -179,7 +182,14 @@ export class BackgroundTaskControl implements BackgroundTaskControlPort {
       const details = {
         ...before,
         status: 'cancelling' as const,
-        activity: { ...before.activity, state: 'cancelling' as const, lastActivityAt: this.#now() },
+        activity: normalizeBackgroundTaskActivity({
+          status: 'cancelling',
+          activityState: 'cancelling',
+          lastObservation: { kind: 'stop_requested', at: this.#now() },
+          now: this.#now(),
+          quietAfterMs:
+            target.kind === 'subagent' ? BACKGROUND_SUBAGENT_QUIET_AFTER_MS : BACKGROUND_SHELL_QUIET_AFTER_MS,
+        }),
       };
       this.#notifyStop(target, details);
       return { ok: true, details };
@@ -191,7 +201,13 @@ export class BackgroundTaskControl implements BackgroundTaskControlPort {
     const details = {
       ...before,
       status: 'cancelling' as const,
-      activity: { ...before.activity, state: 'cancelling' as const, lastActivityAt: this.#now() },
+      activity: normalizeBackgroundTaskActivity({
+        status: 'cancelling',
+        activityState: 'cancelling',
+        lastObservation: { kind: 'stop_requested', at: this.#now() },
+        now: this.#now(),
+        quietAfterMs: BACKGROUND_SHELL_QUIET_AFTER_MS,
+      }),
     };
     this.#notifyStop(target, details);
     return { ok: true, details };
@@ -285,7 +301,7 @@ export class BackgroundTaskControl implements BackgroundTaskControlPort {
 
   #subagentDetails(status: SubagentRunStatus): Extract<BackgroundTaskControlDetails, { kind: 'subagent' }> | null {
     if (status.status === 'not_found') return null;
-    const { runId, activityState, waitingReason, lastActivityAt, ...details } = status;
+    const { runId, activityState, waitingReason, lastActivityAt, lastObservation, model, ...details } = status;
     return {
       kind: 'subagent',
       id: runId,
@@ -301,15 +317,27 @@ export class BackgroundTaskControl implements BackgroundTaskControlPort {
             : status.status === 'waiting_for_answer'
             ? 'answer'
             : waitingReason,
-        lastActivityAt: lastActivityAt ?? status.startedAt,
+        ...(lastObservation === undefined
+          ? { lastActivityAt: lastActivityAt ?? status.startedAt }
+          : { lastObservation }),
         now: this.#now(),
         quietAfterMs: BACKGROUND_SUBAGENT_QUIET_AFTER_MS,
       }),
+      ...(model === undefined
+        ? {}
+        : {
+            model: {
+              ...model,
+              ...(getCatalogModel(model.provider, model.id)?.contextWindow === undefined
+                ? {}
+                : { contextWindow: getCatalogModel(model.provider, model.id)?.contextWindow }),
+            },
+          }),
     };
   }
 
   #shellDetails(job: BackgroundShellJob<unknown>): Extract<BackgroundTaskControlDetails, { kind: 'shell' }> {
-    const { id, result, lastActivityAt, ...details } = job;
+    const { id, result, lastActivityAt, lastObservation, ...details } = job;
     const output =
       result && typeof result === 'object' && 'output' in result && typeof result.output === 'string'
         ? result.output
@@ -320,7 +348,7 @@ export class BackgroundTaskControl implements BackgroundTaskControlPort {
       ...details,
       activity: normalizeBackgroundTaskActivity({
         status: job.status,
-        lastActivityAt: lastActivityAt ?? job.startedAt,
+        ...(lastObservation === undefined ? { lastActivityAt: lastActivityAt ?? job.startedAt } : { lastObservation }),
         now: this.#now(),
         quietAfterMs: BACKGROUND_SHELL_QUIET_AFTER_MS,
       }),

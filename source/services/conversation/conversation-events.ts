@@ -40,6 +40,8 @@ export type ConversationEvent =
 
 export interface RetryEvent {
   type: 'retry';
+  /** Present when an async subagent owns this retry; root retries remain valid without it. */
+  agentId?: string;
   toolName: string;
   attempt: number;
   maxRetries: number;

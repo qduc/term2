@@ -28,7 +28,7 @@ ran the ordinary package commands with ambient `NODE_ENV=production`:
 
 | Command | Result |
 | --- | --- |
-| `NODE_ENV=production pnpm test scripts/package-scripts.test.ts --reporter=verbose` | Passed: 1 file, 1 test. The command output showed `NODE_ENV=test vitest ...`. |
+| `NODE_ENV=production pnpm test scripts/package-scripts.test.ts --reporter=verbose` | Passed: 1 file, 1 test. The package scripts use `cross-env NODE_ENV=test` so the override is portable to Windows as well as POSIX shells. |
 | `NODE_ENV=production pnpm test` | Passed: 478 files, 6,107 tests; 1 file and 2 tests skipped; 16.01s. It also emitted the non-fatal `TimeoutNaNWarning`. |
 | `NODE_ENV=production pnpm test:provider-black-box` before serializing files | Did not pass on two consecutive runs: 17 files passed / 1 failed, 161 tests passed / 1 failed / 1 skipped. The exact failure was `provider-session-resilience.blackbox.ts` — `does not re-execute a tool after its turn is replaced by compaction` — timing out waiting for PTY child exit after 7,500ms. |
 | Focused resilience reproduction | Passed: the same test passed in isolation in 1.20s (1 passed, 36 skipped). |

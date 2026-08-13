@@ -13,7 +13,7 @@ const testRunnerScripts = [
   'test:vitest:coverage',
 ] as const;
 
-it('pins NODE_ENV=test for every Vitest-facing package script', async () => {
+it('pins NODE_ENV=test cross-platform for every Vitest-facing package script', async () => {
   const { scripts } = JSON.parse(await readFile('package.json', 'utf8')) as { scripts: Record<string, string> };
   const directVitestScripts = Object.entries(scripts)
     .filter(([, command]) => command.includes('vitest'))
@@ -23,6 +23,7 @@ it('pins NODE_ENV=test for every Vitest-facing package script', async () => {
   expect(directVitestScripts).toEqual(testRunnerScripts.filter((name) => name !== 'test:provider-black-box').sort());
 
   for (const name of testRunnerScripts) {
-    expect(scripts[name]).toMatch(/^NODE_ENV=test(?:\s|$)/);
+    expect(scripts[name]).toMatch(/^cross-env NODE_ENV=test(?:\s|$)/);
+    expect(scripts[name]).not.toMatch(/^(?:NODE_ENV|RUN_[A-Z_]+)=/);
   }
 });

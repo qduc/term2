@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { createContinuationHandle } from '../../contracts/continuation-handle.js';
 import { BackgroundSubagentApprovalController } from './background-subagent-approval-controller.js';
 import type { BackgroundSubagentApprovalPause } from '../subagents/foreground-subagent-lease.js';
+import { ToolOwnershipRegistry } from './tool-ownership-registry.js';
+import { PARENT_TOOL_OWNER } from './tool-owner.js';
 
 const logger = {
   getCorrelationId: () => 'trace-test',
@@ -22,7 +24,13 @@ describe('BackgroundSubagentApprovalController', () => {
           interruption: { name: 'shell', callId: 'child-tool', arguments: '{"command":"pwd"}' },
         }),
     );
-    const controller = new BackgroundSubagentApprovalController({ logger: logger as any, sessionId: 'session-1' });
+    const toolOwnership = new ToolOwnershipRegistry();
+    toolOwnership.claim(['child-tool'], { kind: 'subagent', agentId: 'child-run', role: 'worker' });
+    const controller = new BackgroundSubagentApprovalController({
+      logger: logger as any,
+      sessionId: 'session-1',
+      toolOwnership,
+    });
     controller.publish({
       runId: 'child-run',
       generation: 1,
@@ -41,5 +49,27 @@ describe('BackgroundSubagentApprovalController', () => {
     expect(approve).toHaveBeenCalledOnce();
     expect(apply).toHaveBeenCalledOnce();
     expect(controller.getSnapshot().current).toBeNull();
+    expect(toolOwnership.ownerOf('child-tool')).toEqual(PARENT_TOOL_OWNER);
+  });
+
+  it('releases an unresolved claimed call when the session queue closes', () => {
+    const toolOwnership = new ToolOwnershipRegistry();
+    toolOwnership.claim(['queued-tool'], { kind: 'subagent', agentId: 'child-run', role: 'worker' });
+    const controller = new BackgroundSubagentApprovalController({
+      logger: logger as any,
+      sessionId: 'session-1',
+      toolOwnership,
+    });
+    controller.publish({
+      runId: 'child-run',
+      generation: 1,
+      role: 'worker',
+      interruption: { name: 'shell', callId: 'queued-tool', arguments: '{"command":"pwd"}' },
+      apply: () => false,
+    });
+
+    controller.close();
+
+    expect(toolOwnership.ownerOf('queued-tool')).toEqual(PARENT_TOOL_OWNER);
   });
 });

@@ -566,6 +566,10 @@ export class NestedSubagentRunner {
       runId: candidateRunId,
       parentSignal: parentComposite?.signal,
       model: roleTool.model,
+      onPendingApprovalReleased: (interruption) => {
+        const callId = getCallIdFromObject(interruption);
+        if (callId) this.#toolOwnership.release(callId);
+      },
     });
     this.#foregroundLeases.set(candidateRunId, {
       lease,

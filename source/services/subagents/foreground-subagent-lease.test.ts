@@ -68,21 +68,27 @@ describe('ForegroundSubagentLease', () => {
   });
 
   it('unblocks a pending approval when cancelled', async () => {
-    const lease = new ForegroundSubagentLease({ runId: 'child' });
+    const release = vi.fn();
+    const lease = new ForegroundSubagentLease({ runId: 'child', onPendingApprovalReleased: release });
     lease.adopt();
-    const waiting = lease.waitForBackgroundApproval(createContinuationHandle({}), { callId: 'call-3' });
+    const interruption = { callId: 'call-3' };
+    const waiting = lease.waitForBackgroundApproval(createContinuationHandle({}), interruption);
     lease.cancel();
     await expect(waiting).resolves.toBe(false);
     expect(lease.getPendingApproval()).toBeUndefined();
+    expect(release).toHaveBeenCalledExactlyOnceWith(interruption);
   });
 
   it('unblocks a pending approval when settled', async () => {
-    const lease = new ForegroundSubagentLease({ runId: 'child' });
+    const release = vi.fn();
+    const lease = new ForegroundSubagentLease({ runId: 'child', onPendingApprovalReleased: release });
     lease.adopt();
-    const waiting = lease.waitForBackgroundApproval(createContinuationHandle({}), { callId: 'call-4' });
+    const interruption = { callId: 'call-4' };
+    const waiting = lease.waitForBackgroundApproval(createContinuationHandle({}), interruption);
     lease.settle();
     await expect(waiting).resolves.toBe(false);
     expect(lease.getPendingApproval()).toBeUndefined();
+    expect(release).toHaveBeenCalledExactlyOnceWith(interruption);
   });
 
   it('makes adoption one-shot and fails closed when continuation capabilities are absent', async () => {

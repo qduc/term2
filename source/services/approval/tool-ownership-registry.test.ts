@@ -74,20 +74,30 @@ it('clear drops every claim', () => {
   expect(registry.ownerOf('nested-a')).toEqual(PARENT_TOOL_OWNER);
 });
 
-it('claims are bounded, evicting the oldest first', () => {
+it('does not evict an unreleased pending ownership claim', () => {
+  const registry = new ToolOwnershipRegistry({ limit: 2 });
+
+  registry.claim(['pending'], worker);
+  registry.claim(['later-a'], explorer);
+  registry.claim(['later-b'], explorer);
+
+  expect(registry.ownerOf('pending')).toEqual(worker);
+});
+
+it('retains every live claim until its owner releases it', () => {
   const registry = new ToolOwnershipRegistry({ limit: 2 });
 
   registry.claim(['first'], worker);
   registry.claim(['second'], worker);
   registry.claim(['third'], explorer);
 
-  expect(registry.size).toBe(2);
-  expect(registry.ownerOf('first')).toEqual(PARENT_TOOL_OWNER);
+  expect(registry.size).toBe(3);
+  expect(registry.ownerOf('first')).toEqual(worker);
   expect(registry.ownerOf('second')).toEqual(worker);
   expect(registry.ownerOf('third')).toEqual(explorer);
 });
 
-it('re-claiming a call id refreshes its eviction order', () => {
+it('re-claiming a call id preserves its live ownership', () => {
   const registry = new ToolOwnershipRegistry({ limit: 2 });
 
   registry.claim(['first'], worker);
@@ -96,6 +106,6 @@ it('re-claiming a call id refreshes its eviction order', () => {
   registry.claim(['third'], explorer);
 
   expect(registry.ownerOf('first')).toEqual(worker);
-  expect(registry.ownerOf('second')).toEqual(PARENT_TOOL_OWNER);
+  expect(registry.ownerOf('second')).toEqual(worker);
   expect(registry.ownerOf('third')).toEqual(explorer);
 });

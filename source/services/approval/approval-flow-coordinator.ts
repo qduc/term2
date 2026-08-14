@@ -57,6 +57,7 @@ export class ApprovalFlowCoordinator {
     this.#decisionExecutor = new ApprovalDecisionExecutor({
       logger: deps.logger,
       sessionId: deps.sessionId,
+      toolOwnership: deps.toolOwnership,
       sessionAccess: deps.sessionAccess,
       nestedCompatibility: deps.nestedCompatibility,
       hookLifecycle: deps.hookLifecycle,
@@ -91,6 +92,7 @@ export class ApprovalFlowCoordinator {
     const pending = this.deps.approvalState.getPending();
     const callId = pending ? getCallIdFromObject(pending.interruption) : undefined;
     if (this.deps.approvalState.abortPending()) {
+      if (callId) this.#toolOwnership.release(callId);
       this.deps.toolTracker.markOpenCallsAborted('Tool execution was not approved.', callId);
       this.deps.logger.debug('Aborted approval - abandoning pending tool before next message', {
         eventType: 'approval.aborted',

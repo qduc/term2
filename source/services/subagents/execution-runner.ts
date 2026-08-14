@@ -343,7 +343,7 @@ export class ExecutionSubagentRunner {
               type: 'subagent_run_budget',
               agentId,
               role: request.role,
-              event: event.event,
+              event: event.evidence,
             });
             break;
           case 'error':

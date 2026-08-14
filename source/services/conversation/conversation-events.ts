@@ -138,7 +138,7 @@ export interface CostUpdateEvent {
 /** Evidence produced by the root run-loop sensor; judgement remains outside it. */
 export interface RunBudgetEventNotice {
   type: 'run_budget';
-  event: RunBudgetEvent;
+  evidence: RunBudgetEvent;
 }
 
 export interface CommandMessageEvent {

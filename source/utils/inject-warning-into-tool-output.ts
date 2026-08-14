@@ -17,7 +17,25 @@ export interface TurnLimitContext {
 export interface RunBudgetWarningContext {
   readonly budget?: {
     takeSoftEvidence?: () => RunBudgetEvidence | undefined;
+    takeStallEvidence?: () => RunBudgetStallEvidence | undefined;
   };
+}
+
+export interface RunBudgetStallEvidence {
+  readonly toolName: string;
+  readonly count: number;
+  readonly threshold: number;
+}
+
+/**
+ * State the repetition as a fact and stop there.
+ *
+ * A red test rerun between edits looks identical to a stall from outside, so
+ * this must not tell the model it is stuck or what to do instead. The run has
+ * the context to decide whether the repetition means anything.
+ */
+export function buildToolStallWarning(evidence: RunBudgetStallEvidence): string {
+  return `\n\n[Note: This is call ${evidence.count} of \`${evidence.toolName}\` with byte-identical arguments, with no file-modifying call in between. If those calls are making progress, carry on; if they are not, change the approach rather than repeating it.]`;
 }
 
 export function buildRunBudgetWarning(evidence: RunBudgetEvidence): string {
@@ -62,17 +80,21 @@ export function injectTurnLimitWarning(output: string, context: unknown): string
 }
 
 /**
- * Inject the nearest soft-stage budget evidence into exactly one tool result.
- * The legacy turn warning remains as a compatibility fallback for callers that
- * have not moved onto an application-owned run budget yet.
+ * Deliver this run's pending budget and stall evidence on one tool result.
+ *
+ * Both are sensation for the run itself, which is the only judge that can act
+ * before the next request. The legacy turn warning remains as a compatibility
+ * fallback for callers not yet on an application-owned run budget.
  */
 export function injectRunBudgetWarning(output: string, context: unknown): string {
   const budget = (context as RunBudgetWarningContext | undefined)?.budget;
-  if (budget) {
-    const evidence = budget.takeSoftEvidence?.();
-    return evidence ? injectWarningIntoToolOutput(output, buildRunBudgetWarning(evidence)) : output;
-  }
-  return injectTurnLimitWarning(output, resolveTurnLimitContext(context));
+  if (!budget) return injectTurnLimitWarning(output, resolveTurnLimitContext(context));
+  let result = output;
+  const stall = budget.takeStallEvidence?.();
+  if (stall) result = injectWarningIntoToolOutput(result, buildToolStallWarning(stall));
+  const evidence = budget.takeSoftEvidence?.();
+  if (evidence) result = injectWarningIntoToolOutput(result, buildRunBudgetWarning(evidence));
+  return result;
 }
 
 export const injectWarningIntoToolOutput = (output: string, warning: string): string => {

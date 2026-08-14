@@ -203,15 +203,18 @@ export class AgentHandleImpl implements AgentHandle {
     }
 
     // ── maxCost preflight rejection ──
-    // maxCost cannot be enforced at runtime because reliable provider-neutral
-    // pricing is unavailable. Requesting it produces a typed fatal error
-    // before any execution occurs.
+    // Provider-neutral pricing now exists (`ModelRequestCost.usdMicros`), so
+    // the old "cannot be priced" reason is obsolete. What is still missing is a
+    // path from this per-handle limit to the run's envelope: USD containment is
+    // configured process-wide through `agent.runBudget`. Rejecting is the
+    // honest answer — silently accepting an unenforced ceiling is worse than
+    // refusing one.
     if (this.#definition.limits.maxCost !== undefined) {
       return errorResult<T>(
         'failed',
         'limit_validation_error',
-        'maxCost is not supported. Reliable provider-neutral pricing is unavailable. ' +
-          'Remove maxCost from AgentLimits to proceed.',
+        'maxCost is not enforced per agent handle. Per-run USD containment is configured through ' +
+          'agent.runBudget.maxUsdMicros. Remove maxCost from AgentLimits to proceed.',
       );
     }
 

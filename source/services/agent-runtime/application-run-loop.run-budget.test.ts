@@ -81,7 +81,7 @@ it('pauses a main run at critical evidence until a finite extension resumes its 
   expect(resumed.finalOutput).toBe('done');
 });
 
-it('offers finite extensions through the loop without exposing mutable run state', async () => {
+it('caps parent-granted extensions but leaves the human as the uncapped terminal judge', async () => {
   const loop = new ApplicationRunLoop({
     resolveModel: () => ({
       stream: async function* () {
@@ -91,10 +91,48 @@ it('offers finite extensions through the loop without exposing mutable run state
   });
   const stream = loop.startStream(agent, 'go', { runBudget: policy });
 
-  expect(loop.grantRunBudgetExtension()).toEqual({ granted: true, extensionsGranted: 1 });
-  expect(loop.grantRunBudgetExtension()).toEqual({ granted: true, extensionsGranted: 2 });
-  expect(loop.grantRunBudgetExtension()).toEqual({ granted: false, extensionsGranted: 2 });
+  expect(loop.grantRunBudgetExtension('parent')).toEqual({ granted: true, extensionsGranted: 1 });
+  expect(loop.grantRunBudgetExtension('parent')).toEqual({ granted: true, extensionsGranted: 2 });
+  expect(loop.grantRunBudgetExtension('parent')).toEqual({ granted: false, extensionsGranted: 2 });
+  // The plan routes the third grant past the parent to the human, so the human
+  // path must still be able to grant after the parent cap is spent.
+  expect(loop.grantRunBudgetExtension('human')).toEqual({ granted: true, extensionsGranted: 3 });
   await stream.completed;
+});
+
+it('charges a finite extension when an unattended continuation answers the interaction', async () => {
+  let calls = 0;
+  const loop = new ApplicationRunLoop({
+    resolveModel: () => ({
+      stream: async function* () {
+        calls += 1;
+        yield { type: 'tool_call' as const, id: `call-${calls}`, name: 'read_file', arguments: '{"path":"a"}' };
+        yield { type: 'completion' as const, responseId: `resp-${calls}`, output: [] };
+      },
+    }),
+  });
+  // maxParentExtensions is 2: an --auto-approve style resume may buy two more
+  // envelopes and must then stop rather than run unbounded.
+  let stream = loop.startStream(agent, 'go', { runBudget: { ...policy, turnBackstop: 1 } });
+  await stream.completed;
+  expect(calls).toBe(1);
+
+  for (const expectedCalls of [2, 3]) {
+    expect(stream.interruptions?.length).toBe(1);
+    // No grantRunBudgetExtension() call: this is the bare approve() that the
+    // continuation applier and non-interactive mode issue.
+    stream.state!.approve?.(stream.interruptions![0]);
+    stream = loop.continueRunStream(stream.state!);
+    await stream.completed;
+    expect(calls).toBe(expectedCalls);
+  }
+
+  expect(stream.interruptions?.length).toBe(1);
+  stream.state!.approve?.(stream.interruptions![0]);
+  const refused = loop.continueRunStream(stream.state!);
+  await refused.completed;
+
+  expect(calls).toBe(3);
 });
 
 it('settles a stopped budget interaction without dispatching another model request', async () => {

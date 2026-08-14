@@ -255,6 +255,8 @@ type RunState = {
   /** Main-agent evidence that must be resolved before another request or tool dispatch. */
   pendingRunBudgetInteraction?: RunBudgetInteraction;
   runBudgetInteractionDecision?: 'continue' | 'stop';
+  /** Whether the current interaction's finite extension has already been taken. */
+  runBudgetGrantConsumed?: boolean;
   /** A critical check-in already counted the next model request before pausing. */
   requestBoundaryReady?: boolean;
   /** Cumulative model-request cost records for this run, preserved across continuation. */
@@ -354,7 +356,8 @@ export class ApplicationRunLoop {
    */
   #turnOpen = false;
   #pendingSteers: PendingSteer[] = [];
-  #activeRunBudget: RunBudget | undefined;
+  /** The run whose budget an out-of-band grant applies to, held across a pause. */
+  #activeRunBudgetState: RunState | undefined;
 
   constructor(deps: ApplicationRunLoopDeps) {
     this.#deps = deps;
@@ -403,9 +406,35 @@ export class ApplicationRunLoop {
     this.#activeAbortController = null;
   }
 
-  /** Grant one finite continuation extension to the current logical run. */
-  grantRunBudgetExtension(): { granted: boolean; extensionsGranted: number } {
-    return this.#activeRunBudget?.grantExtension() ?? { granted: false, extensionsGranted: 0 };
+  /**
+   * Grant one finite continuation extension to the current logical run.
+   *
+   * The interactive prompt calls this before resuming because it has to show
+   * the human a refusal rather than a silent stop. The grant is recorded so the
+   * matching `approve` does not charge a second one.
+   */
+  grantRunBudgetExtension(grantedBy: 'parent' | 'human' = 'human'): { granted: boolean; extensionsGranted: number } {
+    const state = this.#activeRunBudgetState;
+    if (!state?.runBudget) return { granted: false, extensionsGranted: 0 };
+    const grant = state.runBudget.grantExtension(grantedBy);
+    if (grant.granted) state.runBudgetGrantConsumed = true;
+    return grant;
+  }
+
+  /**
+   * Charge this interaction's extension unless a caller already took it.
+   *
+   * An ungranted arrival here means nobody was prompted — the continuation
+   * applier, non-interactive mode, `--auto-approve`. That is a parent-class
+   * grant, so it is capped and eventually refuses.
+   */
+  #takeRunBudgetGrant(state: RunState): boolean {
+    if (state.runBudgetGrantConsumed) {
+      state.runBudgetGrantConsumed = false;
+      return true;
+    }
+    if (!state.runBudget) return true;
+    return state.runBudget.grantExtension('parent').granted;
   }
 
   /**
@@ -552,7 +581,14 @@ export class ApplicationRunLoop {
     };
     state.approve = (interruption) => {
       if (isRunBudgetInteraction(interruption)) {
-        state.runBudgetInteractionDecision = 'continue';
+        // Continuing past an exhausted envelope must cost a finite extension no
+        // matter which surface answered. A caller that already took the grant
+        // (the interactive prompt, which needs the outcome before resuming)
+        // marks it consumed; every other path — the continuation applier,
+        // non-interactive, --auto-approve — lands here ungranted and takes it
+        // now. Without this, an auto-approved 'y' would resume with every stage
+        // still latched and never check in again.
+        state.runBudgetInteractionDecision = this.#takeRunBudgetGrant(state) ? 'continue' : 'stop';
         return;
       }
       state.approvalDecision = 'approved';
@@ -656,7 +692,13 @@ export class ApplicationRunLoop {
         return { count: state.turnCount, max: state.maxTurns };
       },
       get budget() {
-        return state.runBudget ? { takeSoftEvidence: () => state.runBudget?.takeSoftEvidence() } : undefined;
+        return state.runBudget
+          ? {
+              takeSoftEvidence: () => state.runBudget?.takeSoftEvidence(),
+              takeStallEvidence: () => state.runBudget?.takeStallEvidence(),
+              remainingPolicy: () => state.runBudget?.remainingPolicy(),
+            }
+          : undefined;
       },
     };
     const output: ApplicationRunEvent[] = [];
@@ -702,7 +744,7 @@ export class ApplicationRunLoop {
         const cancelled = stream.cancelled === true;
         this.#turnPaused = (pendingApprovals > 0 || pendingBudgetInteraction) && !cancelled && exitError === undefined;
         if (this.#turnPaused) return;
-        if (this.#activeRunBudget === state.runBudget) this.#activeRunBudget = undefined;
+        if (this.#activeRunBudgetState === state) this.#activeRunBudgetState = undefined;
         // A declared turn outlives its segments — this one may be about to be
         // retried, or resumed past a post-execute gate. Its owner says when it
         // is over.
@@ -715,7 +757,7 @@ export class ApplicationRunLoop {
           turnCount: state.turnCount,
         });
       });
-    this.#activeRunBudget = state.runBudget;
+    this.#activeRunBudgetState = state.runBudget ? state : undefined;
     return stream;
   }
 
@@ -1202,7 +1244,7 @@ export class ApplicationRunLoop {
       const stallEvent = state.runBudget?.observeToolCall({
         name: event.name,
         argumentsText: event.arguments,
-        effect: toolEffect(definition),
+        effect: definition.effect,
       });
       if (stallEvent) {
         this.#emitRunBudgetEvent(state, stallEvent, 'Tool stall evidence', stream, queue);
@@ -1468,8 +1510,9 @@ export class ApplicationRunLoop {
       this.#requiresHumanBudgetDecision(event)
     ) {
       state.pendingRunBudgetInteraction = { type: 'run_budget_interaction', event };
+      state.runBudgetGrantConsumed = false;
     }
-    if (stream && queue) outputPush(stream, queue, { type: 'run_budget', event });
+    if (stream && queue) outputPush(stream, queue, { type: 'run_budget', evidence: event });
     try {
       state.onRunBudgetEvent?.(event);
     } catch {
@@ -1500,12 +1543,6 @@ export class ApplicationRunLoop {
       // execution or turn recovery semantics.
     }
   }
-}
-
-/** Existing file-write tool identities remain mutations while factories migrate to `effect`. */
-function toolEffect(definition: AnyToolDefinition): 'mutating' | undefined {
-  if (definition.effect === 'mutating') return 'mutating';
-  return ['apply_patch', 'create_file', 'search_replace'].includes(definition.name) ? 'mutating' : undefined;
 }
 
 function outputPush(stream: AgentStream, queue: EventQueue, item: ApplicationRunEvent): void {

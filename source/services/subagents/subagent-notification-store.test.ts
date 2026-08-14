@@ -176,6 +176,33 @@ it('queues structured budget and stall evidence through the same exact-once noti
   ]);
 });
 
+it('does not escalate a soft stage, which the child receives in its own tool output', () => {
+  const store = makeStore({ now: () => 4_242 });
+
+  expect(
+    store.enqueue(
+      budget({
+        type: 'budget_stage',
+        stage: 'soft',
+        evidence: { dimension: 'usd', used: 90, limit: 100, headroom: 10 },
+      }),
+    ),
+  ).toBe(false);
+  expect(
+    store.enqueue(
+      budget({
+        type: 'tool_stall',
+        toolName: 'shell',
+        argumentsText: '{"command":"ls"}',
+        count: 3,
+        threshold: 3,
+      }),
+    ),
+  ).toBe(true);
+
+  expect(store.drain()).toEqual([expect.objectContaining({ kind: 'budget', runId: 'run-1' })]);
+});
+
 it('projects a shell job and enqueues its bounded completion independently of subagent runs', () => {
   const store = makeStore({ now: () => 4_242 });
 

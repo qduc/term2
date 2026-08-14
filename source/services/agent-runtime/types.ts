@@ -79,16 +79,17 @@ export interface ResolvedAgentPermissions {
  *   accounted across the tree via ExecutionBudget; aggregate usage
  *   exceeding the budget cancels/cancels further child work. Not a
  *   hard pre-call token count.
- * - `maxCost` is a typed preflight rejection only. No provider-neutral
- *   pricing is available; requesting `maxCost` when unsupported by the
- *   runner produces a `limit_validation_error`.
+ * - `maxCost` is a typed preflight rejection only. Per-request USD is now
+ *   priced (`ModelRequestCost.usdMicros`), but no route carries this
+ *   per-handle limit into the run's envelope; use `agent.runBudget` for USD
+ *   containment. Requesting `maxCost` produces a `limit_validation_error`.
  */
 export interface AgentLimits {
   /** Maximum model turns before forced termination. */
   maxTurns?: number;
   /** Maximum total tokens across all model calls (provider cap + post-usage tree enforcement). */
   maxTokens?: number;
-  /** Maximum estimated cost in USD (typed preflight rejection only, not enforced). */
+  /** Maximum cost in USD (typed preflight rejection; use `agent.runBudget` instead). */
   maxCost?: number;
   /** Hard timeout in milliseconds enforced via AbortSignal. */
   timeoutMs?: number;

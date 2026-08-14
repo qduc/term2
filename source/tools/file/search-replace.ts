@@ -285,6 +285,7 @@ export function createSearchReplaceToolDefinition(deps: {
   return {
     name: 'search_replace',
     description: SEARCH_REPLACE_DESCRIPTION,
+    effect: 'mutating',
     parameters: searchReplaceParametersSchema,
     approvalPresentation: getApprovalPresentationCapability('search_replace'),
     needsApproval: async (params) => {

@@ -81,7 +81,15 @@ export const AgentSettingsSchema = z.object({
   maxTurns: z.number().int().positive().default(100),
   maxOutputTokens: z.number().int().positive().default(32_000),
   maxStreamOutputChars: z.number().int().positive().default(100_000),
-  maxModelRequestDurationMs: z.number().int().positive().default(300_000),
+  // A deadline of 0 was the previous default and was never usable: it reaches
+  // `setTimeout(…, 0)` and aborts the first request immediately. Repair it to
+  // the real default instead of rejecting, because a schema error here fails
+  // the whole settings file and every config written before this setting became
+  // positive-only would refuse to start.
+  maxModelRequestDurationMs: z.preprocess(
+    (value) => (value === 0 ? undefined : value),
+    z.number().int().positive().default(300_000),
+  ),
   retryAttempts: z.number().int().nonnegative().default(2),
   transport: z.enum(['websocket', 'http']).default('websocket'),
   maxParallelToolCalls: z

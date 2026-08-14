@@ -4,7 +4,7 @@ import {
   type ApplicationRequestPreparation,
   type SteerOutcome,
 } from '../services/agent-runtime/application-run-loop.js';
-import { readRunBudgetPolicy, type RunBudgetEvent } from '../services/agent-runtime/run-budget.js';
+import { readRunBudgetPolicy, type RunBudgetPolicy } from '../services/agent-runtime/run-budget.js';
 import type { ContinuationHandle } from '../contracts/continuation-handle.js';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { JsonSchemaDefinition } from '../contracts/model-types.js';
@@ -584,6 +584,20 @@ export class AgentClient {
     this.#applicationRunLoop.closeTurn();
   }
 
+  /**
+   * The settings envelope, with the turn backstop honoring `agent.maxTurns`.
+   *
+   * A run budget suppresses the loop's `MaxTurnsExceededError`, so without this
+   * a configured `agent.maxTurns: 10` would silently stop meaning anything and
+   * the run would go all the way to `turnBackstop`. Taking the tighter of the
+   * two keeps the live setting effective while leaving the backstop's role as
+   * the infinite-loop tripwire intact.
+   */
+  #runBudgetPolicy(): RunBudgetPolicy {
+    const policy = readRunBudgetPolicy(this.#settings);
+    return { ...policy, turnBackstop: Math.min(policy.turnBackstop, this.#maxTurns) };
+  }
+
   /** Grant one finite extension to the active run-budget envelope. */
   grantRunBudgetExtension(): { granted: boolean; extensionsGranted: number } {
     return this.#applicationRunLoop.grantRunBudgetExtension();
@@ -841,7 +855,7 @@ export class AgentClient {
       const agent = this.#agentConfig.getApplicationAgent(options.sessionId);
       const requestPreparation = this.#openAIRequestPreparation(options);
       const boundaryCompaction = this.#boundaryCompaction();
-      const runBudget = readRunBudgetPolicy(this.#settings);
+      const runBudget = this.#runBudgetPolicy();
       const run = () => {
         return this.#applicationRunLoop.startStream(agent, userInput, {
           ...(boundaryCompaction ? { boundaryCompaction } : {}),
@@ -877,7 +891,7 @@ export class AgentClient {
     const supportsChaining = getProvider(provider)?.capabilities?.supportsConversationChaining === true;
     const requestPreparation = this.#openAIRequestPreparation(options);
     const boundaryCompaction = this.#boundaryCompaction();
-    const runBudget = readRunBudgetPolicy(this.#settings);
+    const runBudget = this.#runBudgetPolicy();
     const stream = this.#applicationRunLoop.continueRunStream(state, {
       ...(boundaryCompaction ? { boundaryCompaction } : {}),
       ...(requestPreparation ? { requestPreparation } : {}),
@@ -939,7 +953,6 @@ export class AgentClient {
   getSettings(): ISettingsService {
     return this.#settings;
   }
-
 }
 
 export function backgroundShellEventToConversationEvent(

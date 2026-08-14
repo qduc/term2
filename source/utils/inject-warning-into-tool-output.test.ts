@@ -215,3 +215,24 @@ it('injects the nearest soft-stage budget evidence only once', () => {
     'active-time budget',
   );
 });
+
+it('delivers stall evidence to the run that produced it, alongside a soft nudge', () => {
+  const takeStallEvidence = vi.fn().mockReturnValueOnce({ toolName: 'shell', count: 3, threshold: 3 });
+  const takeSoftEvidence = vi
+    .fn()
+    .mockReturnValueOnce({ dimension: 'usd', used: 4_800_000, limit: 5_000_000, headroom: 200_000 });
+
+  const result = injectRunBudgetWarning('tool result', { budget: { takeStallEvidence, takeSoftEvidence } });
+
+  expect(result).toContain('call 3 of `shell`');
+  expect(result).toContain('priced USD budget');
+  // The note reports the repetition; judging whether it means anything is the
+  // run's job, so it must not be phrased as a verdict.
+  expect(result).not.toContain('stuck');
+});
+
+it('leaves a tool result untouched when the run has no pending evidence', () => {
+  const budget = { takeStallEvidence: () => undefined, takeSoftEvidence: () => undefined };
+
+  expect(injectRunBudgetWarning('tool result', { budget })).toBe('tool result');
+});

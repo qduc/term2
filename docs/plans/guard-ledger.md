@@ -46,9 +46,11 @@ Open work, in order:
   merge `f12181e0`); results are recorded below.
 - **Completed:** the four repair dispositions below were approved on
   2026-08-14. This approval changes no runtime or test behavior.
-- **Next session:** implement each approved repair in its own worktree and
-  independently revertible commit. Re-run the recorded red proof first and
-  follow the verification gates below.
+- **In progress:** the subagent steering mailbox repair is implemented and
+  verified on branch `guard-steering-mailbox`; merge disposition is pending.
+- **Next:** implement the remaining three approved repairs in separate worktrees
+  and independently revertible commits. Re-run each recorded red proof first
+  and follow the verification gates below.
 
 ## Guard classes
 
@@ -295,6 +297,71 @@ runtime or test behavior.
    invalidates the capability and sends the replacement through normal admission
    and confirmation. Preserve the existing decline, stale-confirmation, repeated-
    confirmation, and caller-supplied-bypass protections.
+
+### Subagent steering mailbox repair
+
+Disposition: **implemented and verified on branch `guard-steering-mailbox`; merge
+pending.** `SubagentRunControl` now treats its four-message and 4,000-character
+bounds as admission limits. `enqueueSteering` returns false before either bound
+would be exceeded, without mutating the mailbox or interrupting the active
+segment. `SubagentAsyncRegistry.sendMessage` translates that result into the
+typed `mailbox_full` non-success acknowledgement with the effective limits and
+current occupancy. Already admitted messages retain their order and are all
+delivered in the next continuation.
+
+```text
+Harm prevented: acknowledged user steering being silently discarded.
+Scope and execution paths: active async subagent runs addressed by run id or name.
+Guard class: admission limit with a secondary retention consequence.
+Enforcement owner: SubagentRunControl mailbox admission.
+Recovery owner: SubagentAsyncRegistry acknowledgement and normal continuation settlement.
+Measured signal and observation boundary: queued message count and summed message characters before enqueue.
+Direct evidence or proxy: direct mailbox occupancy.
+Legitimate work that can produce the same signal: a burst of valid steering while tools remain active.
+Configuration sources and precedence: SubagentRunControl constructor injection over hardcoded defaults.
+Effective default and clamping: 4 messages and 4,000 characters; unchanged, with no persisted setting.
+Action and why the signal justifies it: reject only the new message before admission and report capacity.
+Partial-work settlement: admitted guidance remains ordered and the active segment is untouched by rejection.
+Retry, fallback, and provider-continuity semantics: unchanged; the caller may retry after continuation drains the mailbox.
+Observability fields: mailbox_full, target, effective limits, and current occupancy; no guidance text.
+Persisted-setting migration, if any: none.
+Rollback boundary: one independently revertible commit.
+Ledger row: subagent steering mailbox.
+```
+
+Red proof before production changes:
+
+```text
+NODE_ENV=test pnpm test source/services/subagents/subagent-async-registry.test.ts \
+  -t "rejects a fifth steering message before overflow"
+FAIL: expected mailbox_full; received { ok: true, delivery: "queued" }
+```
+
+Detection gap: the prior unit tests asserted the truncation marker and therefore
+encoded information loss as intended behavior. No public-registry test paired
+successful queue acknowledgements with the exact guidance later delivered. The
+new tests cover both effective bounds, preservation and ordering of admitted
+messages, no active-segment interruption on rejection, typed tool output, and
+the public acknowledgement shape.
+
+Verification:
+
+```text
+NODE_ENV=test pnpm test source/services/subagents/subagent-run-control.test.ts \
+  source/services/subagents/subagent-async-registry.test.ts \
+  source/tools/agent/run-subagent-async.test.ts
+PASS 3 files, 109 tests
+
+pnpm typecheck
+PASS
+
+pnpm test:provider-black-box
+PASS 19 files, 166 tests; 1 skipped
+
+NODE_ENV=test pnpm test
+PASS 480 files; 1 skipped. 6153 tests; 2 skipped.
+Note: emitted the existing TimeoutNaNWarning; no test failed.
+```
 
 ### Test contracts by class
 

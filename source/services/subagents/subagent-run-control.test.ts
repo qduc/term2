@@ -30,25 +30,31 @@ describe('SubagentRunControl', () => {
     expect(control.activeToolCount).toBe(0);
   });
 
-  it('bounds and coalesces steering messages without exposing its mailbox', () => {
+  it('rejects a steering message that would exceed the message bound without losing admitted guidance', () => {
     const control = new SubagentRunControl({ maxMailboxMessages: 2, maxMailboxCharacters: 50 });
 
-    control.enqueueSteering('first instruction');
-    control.enqueueSteering('second instruction');
-    control.enqueueSteering('third instruction');
+    expect(control.enqueueSteering('first instruction')).toBe(true);
+    expect(control.enqueueSteering('second instruction')).toBe(true);
+    expect(control.enqueueSteering('third instruction')).toBe(false);
 
-    expect(control.consumeSteering()).toBe('[Earlier steering omitted]\nsecond instruction\nthird instruction');
+    expect(control.mailboxLimits).toEqual({ messages: 2, characters: 50 });
+    expect(control.mailboxOccupancy).toEqual({ messages: 2, characters: 35 });
+    expect(control.consumeSteering()).toBe('first instruction\nsecond instruction');
     expect(control.consumeSteering()).toBeUndefined();
   });
 
-  it('drops oldest mailbox content when its character bound is exceeded', () => {
+  it('rejects a steering message that would exceed the character bound without interrupting the segment', () => {
     const control = new SubagentRunControl({ maxMailboxCharacters: 20 });
+    const controller = control.beginSegment();
+    control.onToolStart();
 
-    control.enqueueSteering('1234567890');
-    control.enqueueSteering('abcdefghij');
-    control.enqueueSteering('K');
+    expect(control.enqueueSteering('1234567890')).toBe(true);
+    expect(control.enqueueSteering('abcdefghij')).toBe(true);
+    expect(control.enqueueSteering('K')).toBe(false);
 
-    expect(control.consumeSteering()).toBe('[Earlier steering omitted]\nabcdefghij\nK');
+    expect(control.mailboxOccupancy).toEqual({ messages: 2, characters: 20 });
+    expect(controller.signal.aborted).toBe(false);
+    expect(control.consumeSteering()).toBe('1234567890\nabcdefghij');
   });
 
   it('allows one question waiter and rejects it during terminal cleanup', async () => {

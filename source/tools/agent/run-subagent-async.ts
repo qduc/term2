@@ -7,7 +7,12 @@ import {
   getCallIdFromItem,
   safeJsonParse,
 } from '../format-helpers.js';
-import type { SubagentResult, SubagentRunHandle, SubagentRunStatus } from '../../services/subagents/types.js';
+import type {
+  SubagentResult,
+  SubagentRunHandle,
+  SubagentRunStatus,
+  SubagentSteerAcknowledgement,
+} from '../../services/subagents/types.js';
 import { SUBAGENT_RUN_NAME_PATTERN, SubagentRegistryError } from '../../services/subagents/subagent-async-registry.js';
 import { isAbortLike, truncatePreview, formatSubagentResult } from '../../services/subagents/utils.js';
 
@@ -65,9 +70,7 @@ export type GetSubagentResultParams = z.infer<typeof getSubagentResultSchema>;
 export type SendMessageParams = z.infer<typeof sendMessageSchema>;
 export type CancelRunParams = z.infer<typeof cancelRunSchema>;
 
-export type SendMessageAcknowledgement =
-  | { ok: true; runId: string; status: 'running'; delivery: 'queued' | 'answered' }
-  | { ok: false; code: string; target: string };
+export type SendMessageAcknowledgement = SubagentSteerAcknowledgement;
 
 export type CancelRunAcknowledgement =
   | { ok: true; runId: string; status: 'cancelling' }
@@ -379,8 +382,11 @@ export const formatSendMessageCommandMessage: FormatCommandMessage = (item, inde
   const command = successfulAcknowledgement
     ? `send_message [${target}] — ${acknowledgement.delivery}`
     : `send_message [${target}] — ${failureCode ?? 'failed'}`;
+  const mailboxFull = acknowledgement !== null && !acknowledgement.ok && acknowledgement.code === 'mailbox_full';
   const output = successfulAcknowledgement
     ? `Message ${acknowledgement.delivery} for ${acknowledgement.runId}; run remains ${acknowledgement.status}.`
+    : mailboxFull
+    ? `Message was not delivered: mailbox full (${acknowledgement.occupancy.messages}/${acknowledgement.limits.messages} messages, ${acknowledgement.occupancy.characters}/${acknowledgement.limits.characters} characters).`
     : `Message was not delivered: ${failureCode ?? rawOutput ?? 'unknown error'}.`;
 
   return [
@@ -431,6 +437,7 @@ export function createSendMessageToolDefinition(
     description:
       'Queue non-blocking steering for an active async execution run addressed by its active name or canonical runId; this does NOT wait for a result. ' +
       'Steering is delivered by safely ending the current model stream (never an active tool) and starting a bounded fresh session turn; it is not live SDK input injection. ' +
+      'Each continuation mailbox admits at most four messages totaling 4,000 characters; a full mailbox returns mailbox_full without delivering the new message. ' +
       'A logical run permits at most three steering continuation segments. Do not immediately call get_subagent_result after this acknowledgement; the completion notification inlines the full result. ' +
       'To answer a waiting ask_orchestrator question, provide its messageId as reply_to; the message then answers that exact question and its tool call continues. ' +
       'While a question is waiting, steering without reply_to is refused with question_pending, because only an answer can resume the blocked tool call: answer it or cancel_run. ' +

@@ -165,8 +165,12 @@ export interface ApplicationRunLoopDeps {
    * the client is constructed.
    */
   readonly getOnToolDispatch?: () => ((callId: string) => void) | undefined;
-  /** Conservative cap for independent calls from one response; child budgets remain authoritative. */
-  readonly maxParallelToolCalls?: number;
+  /**
+   * Resolves the conservative cap for independent calls from one response.
+   * Read when settling a completed response so runtime settings apply at the
+   * next request boundary; child budgets remain authoritative.
+   */
+  readonly resolveMaxParallelToolCalls?: () => number | undefined;
   /**
    * Diagnostics sink. Optional so no construction site or test has to supply
    * one. Used to report the fate of steers, which is otherwise invisible: a
@@ -304,7 +308,7 @@ class EventQueue {
  */
 let nextCostRequestSeq = 0;
 let nextToolBatchSeq = 0;
-const DEFAULT_MAX_PARALLEL_TOOL_CALLS = 4;
+const DEFAULT_MAX_PARALLEL_TOOL_CALLS = 3;
 
 /**
  * Small provider-neutral agent loop. It owns model-turn sequencing and tool
@@ -313,7 +317,6 @@ const DEFAULT_MAX_PARALLEL_TOOL_CALLS = 4;
 export class ApplicationRunLoop {
   readonly #deps: ApplicationRunLoopDeps;
   readonly #contextCompactionSessionState: ContextCompactionSessionState;
-  readonly #maxParallelToolCalls: number;
   #activeAbortController: AbortController | null = null;
   #runInFlight = false;
   #segmentGeneration = 0;
@@ -340,7 +343,6 @@ export class ApplicationRunLoop {
   constructor(deps: ApplicationRunLoopDeps) {
     this.#deps = deps;
     this.#contextCompactionSessionState = deps.contextCompactionSessionState ?? { disabled: false };
-    this.#maxParallelToolCalls = Math.max(1, Math.floor(deps.maxParallelToolCalls ?? DEFAULT_MAX_PARALLEL_TOOL_CALLS));
   }
 
   /**
@@ -1139,6 +1141,10 @@ export class ApplicationRunLoop {
   ): Promise<void> {
     const plan = state.toolPlan;
     if (!plan) return;
+    const maxParallelToolCalls = Math.max(
+      1,
+      Math.floor(this.#deps.resolveMaxParallelToolCalls?.() ?? DEFAULT_MAX_PARALLEL_TOOL_CALLS),
+    );
 
     while (true) {
       const firstPending = plan.find((entry) => entry.status !== 'completed');
@@ -1152,10 +1158,7 @@ export class ApplicationRunLoop {
       for (const entry of plan) {
         if (entry.status === 'completed') continue;
         if (entry.status === 'approval_pending') break;
-        if (
-          group.length > 0 &&
-          (!entry.parallelSafe || !group[0].parallelSafe || group.length >= this.#maxParallelToolCalls)
-        )
+        if (group.length > 0 && (!entry.parallelSafe || !group[0].parallelSafe || group.length >= maxParallelToolCalls))
           break;
         group.push(entry);
         if (!entry.parallelSafe) break;
@@ -1166,6 +1169,7 @@ export class ApplicationRunLoop {
         batchId,
         callIds: group.map((entry) => entry.event.id),
         parallel: group.length > 1,
+        maxParallelToolCalls,
         dispatchOrder: group.map((entry) => entry.event.id),
       });
       if (group.length > 1) {

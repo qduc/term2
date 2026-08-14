@@ -374,6 +374,7 @@ export class AgentClient {
       toolLifecycle: this.#toolLifecycle,
       getOnToolDispatch: () => this.#onToolDispatch,
       contextCompactionSessionState: this.#contextCompactionSessionState,
+      resolveMaxParallelToolCalls: () => deps.settings.get('agent.maxParallelToolCalls'),
       logDiagnostic: (message, meta) => deps.logger.info(message, meta),
       resolveModel: (selectedModel) => {
         const providerId = this.#agentConfig.getProvider();

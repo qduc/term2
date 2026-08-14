@@ -273,6 +273,108 @@ describe('AgentClient application-run-loop execution', () => {
     instance.dispose();
   });
 
+  it('applies a changed maxParallelToolCalls setting to the next request', async () => {
+    const provider = `parallel-setting-${Date.now()}`;
+    providers.add(provider);
+    const starts: string[] = [];
+    const deferred = new Map<string, { resolve: (result: NestedSubagentResult) => void }>();
+    let modelCalls = 0;
+
+    registerProvider({
+      id: provider,
+      label: 'Parallel setting test provider',
+      createStreamedModel: () => ({
+        async *stream() {
+          modelCalls += 1;
+          if (modelCalls === 1) {
+            yield {
+              type: 'completion',
+              responseId: 'limited-response',
+              output: [
+                {
+                  type: 'tool_call',
+                  id: 'call-first',
+                  name: 'run_subagent',
+                  arguments: JSON.stringify({ execution: 'foreground', role: 'explorer', task: 'first' }),
+                },
+                {
+                  type: 'tool_call',
+                  id: 'call-second',
+                  name: 'run_subagent',
+                  arguments: JSON.stringify({ execution: 'foreground', role: 'explorer', task: 'second' }),
+                },
+                {
+                  type: 'tool_call',
+                  id: 'call-third',
+                  name: 'run_subagent',
+                  arguments: JSON.stringify({ execution: 'foreground', role: 'explorer', task: 'third' }),
+                },
+              ],
+            };
+            return;
+          }
+          yield {
+            type: 'completion',
+            responseId: 'limited-done',
+            output: [{ type: 'message', content: [{ type: 'text', text: 'done' }] }],
+          };
+        },
+      }),
+      fetchModels: async () => [],
+    });
+
+    const settings = makeSettings(provider, { 'agent.maxParallelToolCalls': 3 });
+    const runSubagent = async ({ task }: { task: string }): Promise<NestedSubagentResult> => {
+      starts.push(task);
+      return await new Promise((resolve) => deferred.set(task, { resolve }));
+    };
+    const tool = createRunSubagentToolDefinition({ runSubagent: runSubagent as any });
+    const instance = new AgentClient({
+      agentOverride: { name: 'override', model: 'test-model', instructions: 'test', tools: [tool] },
+      maxTurns: 2,
+      deps: { logger, settings, sessionContextService },
+      toolOwnership: new ToolOwnershipRegistry(),
+    });
+
+    settings.set('agent.maxParallelToolCalls', 2);
+    const stream = await instance.startStream('run');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(starts).toEqual(['first', 'second']);
+
+    deferred.get('first')?.resolve({
+      agentId: 'first',
+      role: 'explorer',
+      status: 'completed',
+      finalText: 'first result',
+      filesChanged: [],
+      toolsUsed: [],
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(starts).toEqual(['first', 'second']);
+
+    deferred.get('second')?.resolve({
+      agentId: 'second',
+      role: 'explorer',
+      status: 'completed',
+      finalText: 'second result',
+      filesChanged: [],
+      toolsUsed: [],
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(starts).toEqual(['first', 'second', 'third']);
+
+    deferred.get('third')?.resolve({
+      agentId: 'third',
+      role: 'explorer',
+      status: 'completed',
+      finalText: 'third result',
+      filesChanged: [],
+      toolsUsed: [],
+    });
+    await stream.completed;
+    instance.dispose();
+  });
+
   it('executes an override agent with its original tool definitions', async () => {
     const provider = `override-direct-${Date.now()}`;
     providers.add(provider);

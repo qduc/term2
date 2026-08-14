@@ -95,6 +95,78 @@ effective value through the public owner, and use the `setting-wiring` skill.
 every `SETTING_KEYS` entry has a consumer outside the schema, source map, and
 settings UI would catch this defect class automatically.
 
+### Approved repair contract (2026-08-14)
+
+```text
+Harm prevented: configured concurrency silently exceeding the user's limit.
+Scope and execution paths: root, nested-subagent, and mentor run loops.
+Guard class: concurrency containment (admission batching; calls are deferred, not rejected).
+Enforcement owner: ApplicationRunLoop tool-plan settlement.
+Recovery owner: ApplicationRunLoop ordered batch settlement.
+Measured signal and observation boundary: contiguous parallel-safe calls in one completed model response.
+Direct evidence or proxy: direct count of calls admitted to the current batch.
+Legitimate work that can produce the same signal: a response containing many independent safe calls.
+Configuration sources and precedence: ISettingsService resolution, including persisted/user values over schema default.
+Effective default and clamping: 3; floor to an integer and clamp to at least 1 at each response settlement.
+Action and why the signal justifies it: dispatch at most the effective width and defer the remainder to later batches.
+Partial-work settlement: unchanged; results remain ordered and every admitted call settles once.
+Retry, fallback, and provider-continuity semantics: unchanged.
+Observability fields: batch diagnostic includes call ids, order, parallel flag, and effective width.
+Persisted-setting migration, if any: none; no stored value is rewritten.
+Rollback boundary: one independently revertible commit.
+Ledger row: confirmed defect, agent.maxParallelToolCalls.
+```
+
+Approval: user approved changing the effective default from 4 to 3 on
+2026-08-14. Red proof before production changes:
+
+```text
+NODE_ENV=test pnpm test source/lib/agent-client.application-run-loop.test.ts
+FAIL applies a changed maxParallelToolCalls setting to the next request
+expected ["first"], received ["first", "second"]
+```
+
+Disposition: **repaired and verified on branch
+`codex/guard-ledger-parallel-setting`; merge pending.** The run loop now resolves
+the effective setting at each completed-response settlement, so a runtime
+change applies to the next dispatch boundary without resizing a batch already
+in flight. Root, nested, and mentor construction paths all supply the resolver;
+the owner fallback now agrees with the schema default of 3.
+
+Detection gap: schema, persistence, and settings-command tests proved only that
+the value existed and could be changed. Nothing exercised the configured value
+through the execution owner. The new AgentClient public-boundary regression
+covers both runtime refresh and the exact-width/one-over boundary. The proposed
+all-settings consumer contract remains coupled to the `maxTurns` divergence
+owned by `run-budget-stall-escalation.md`, so it was not introduced here.
+
+Verification (2026-08-14):
+
+```text
+NODE_ENV=test pnpm test source/lib/agent-client.application-run-loop.test.ts \
+  source/tools/agent/run-subagent.test.ts \
+  source/services/subagents/nested-runner.test.ts \
+  source/services/subagents/mentor-runner.test.ts \
+  source/hooks/settings-completion-logic.test.ts \
+  source/components/menu/SettingsSelectionMenu.test.tsx \
+  source/utils/settings-command.test.ts \
+  source/services/settings/settings-schema.test.ts
+PASS 8 files, 111 tests
+
+pnpm typecheck
+PASS
+
+pnpm exec prettier --check <changed-files>
+PASS
+
+pnpm test:provider-black-box
+PASS 19 files, 166 tests; 1 skipped
+
+NODE_ENV=test pnpm test
+PASS 480 files; 1 skipped. 6149 tests; 2 skipped.
+Note: emitted an existing TimeoutNaNWarning; no test failed.
+```
+
 ## Candidates to characterize
 
 Each names a mechanism-level contradiction, not a hunch. Status is `candidate`:

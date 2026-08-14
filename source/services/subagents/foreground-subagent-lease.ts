@@ -44,6 +44,7 @@ export class ForegroundSubagentLease {
   readonly #controller = new AbortController();
   readonly #runId: string;
   readonly #model: { provider: string; id: string } | undefined;
+  readonly #onPendingApprovalReleased: ((interruption: unknown) => void) | undefined;
   #detachParentAbort: (() => void) | undefined;
   #adopted = false;
   #settled = false;
@@ -68,13 +69,17 @@ export class ForegroundSubagentLease {
     runId,
     parentSignal,
     model,
+    onPendingApprovalReleased,
   }: {
     runId: string;
     parentSignal?: AbortSignal;
     model?: { provider: string; id: string };
+    /** Called once if a pending approval is cancelled or the lease settles. */
+    onPendingApprovalReleased?: (interruption: unknown) => void;
   }) {
     this.#runId = runId;
     this.#model = model;
+    this.#onPendingApprovalReleased = onPendingApprovalReleased;
     const abortFromParent = () => this.#controller.abort();
     if (parentSignal?.aborted) abortFromParent();
     else parentSignal?.addEventListener('abort', abortFromParent, { once: true });
@@ -226,6 +231,7 @@ export class ForegroundSubagentLease {
   #releasePending(resumed: boolean): void {
     const pending = this.#pending;
     this.#pending = undefined;
+    if (pending) this.#onPendingApprovalReleased?.(pending.interruption);
     pending?.resolve(resumed);
   }
 }

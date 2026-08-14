@@ -133,9 +133,11 @@ it('abort delegates to agentClient and approvalState', () => {
   let abortCalled = false;
   const client: any = { abort: () => (abortCalled = true) };
   const approvalState = new ApprovalState();
+  const toolOwnership = new ToolOwnershipRegistry();
+  toolOwnership.claim(['abort-call'], { kind: 'subagent', agentId: 'worker-1', role: 'worker' });
   approvalState.setPending({
     state: {} as any,
-    interruption: {},
+    interruption: { callId: 'abort-call' },
     emittedCommandIds: new Set(),
     toolCallArgumentsById: new Map(),
   });
@@ -146,11 +148,13 @@ it('abort delegates to agentClient and approvalState', () => {
     sessionId: 's1',
     toolTracker: mockToolTracker,
     generationGuard: mockGenerationGuard,
+    toolOwnership,
   });
 
   const result = coord.abort();
   expect(abortCalled).toBe(true);
   expect(result.aborted).toBe(true);
+  expect(toolOwnership.ownerOf('abort-call')).toEqual(PARENT_TOOL_OWNER);
 });
 
 it('abort with a pending approval aborts the foreground stream without cancelling background runs', () => {
@@ -789,6 +793,36 @@ it('prepareAbortResolution calls state.reject with the correct rejection message
     message: 'Tool execution was not approved. User provided new input instead: a new question',
   });
   expect(plan.abortedContext).toBe(aborted);
+});
+
+it('keeps a call released when abort resolution rejects the aborted continuation', () => {
+  const toolOwnership = new ToolOwnershipRegistry();
+  toolOwnership.claim(['abort-resolution-call'], { kind: 'subagent', agentId: 'worker-1', role: 'worker' });
+  const approvalState = new ApprovalState();
+  approvalState.setPending({
+    state: { reject: () => undefined } as any,
+    interruption: { name: 'shell', callId: 'abort-resolution-call', arguments: { command: 'pwd' } },
+    emittedCommandIds: new Set(),
+    toolCallArgumentsById: new Map(),
+  });
+  const { client } = makeMockAgentClient();
+  const coord = new ApprovalFlowCoordinator({
+    agentClient: client,
+    approvalState,
+    logger,
+    sessionId: 's1',
+    toolTracker: mockToolTracker,
+    generationGuard: mockGenerationGuard,
+    toolOwnership,
+  });
+
+  expect(coord.abort()).toMatchObject({ aborted: true, callId: 'abort-resolution-call' });
+  const aborted = coord.consumeAborted();
+  expect(aborted).not.toBeNull();
+  coord.prepareAbortResolution(aborted!, 'a new question');
+
+  expect(toolOwnership.ownerOf('abort-resolution-call')).toEqual(PARENT_TOOL_OWNER);
+  expect(toolOwnership.size).toBe(0);
 });
 
 it('retargetPendingInterruption preserves batch context', () => {

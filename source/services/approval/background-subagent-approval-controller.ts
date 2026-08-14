@@ -10,6 +10,7 @@ import {
 } from './background-subagent-approval-queue.js';
 import type { PendingApprovalContext } from './approval-state.js';
 import type { BackgroundSubagentApprovalPause } from '../subagents/foreground-subagent-lease.js';
+import type { ToolOwnershipRegistry } from './tool-ownership-registry.js';
 
 /**
  * Session-owned policy/control boundary for approvals paused by adopted child
@@ -20,17 +21,21 @@ import type { BackgroundSubagentApprovalPause } from '../subagents/foreground-su
 export class BackgroundSubagentApprovalController {
   readonly #queue = new BackgroundSubagentApprovalQueue();
   readonly #executor: ApprovalDecisionExecutor;
+  readonly #toolOwnership: ToolOwnershipRegistry;
 
   constructor({
     logger,
     sessionId,
+    toolOwnership,
     nestedCompatibility,
   }: {
     logger: ILoggingService;
     sessionId: string;
+    toolOwnership: ToolOwnershipRegistry;
     nestedCompatibility?: NestedToolCompatibilityState;
   }) {
-    this.#executor = new ApprovalDecisionExecutor({ logger, sessionId, nestedCompatibility });
+    this.#toolOwnership = toolOwnership;
+    this.#executor = new ApprovalDecisionExecutor({ logger, sessionId, toolOwnership, nestedCompatibility });
   }
 
   getSnapshot(): BackgroundSubagentApprovalSnapshot {
@@ -66,8 +71,9 @@ export class BackgroundSubagentApprovalController {
           ? { kind: 'applied' as const }
           : { kind: 'rejected' as const },
       onRelease: () => {
-        // Queue closure/removal is a terminal ownership event. The lease owns
-        // cancellation and will release its own pending continuation.
+        // Queue closure/removal is terminal for this arbitration path. It must
+        // not leave attribution for a pause the session no longer presents.
+        this.#toolOwnership.release(toolCallId);
       },
     });
   };

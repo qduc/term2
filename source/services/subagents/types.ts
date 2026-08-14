@@ -49,6 +49,14 @@ export type SubagentSteerErrorCode =
   | 'question_not_pending'
   | 'question_pending';
 
+export type SubagentSteerMailboxFullAcknowledgement = {
+  ok: false;
+  code: 'mailbox_full';
+  target: string;
+  limits: { messages: number; characters: number };
+  occupancy: { messages: number; characters: number };
+};
+
 /** Immediate, non-blocking outcome of queueing a steering instruction. */
 export type SubagentSteerAcknowledgement =
   | {
@@ -57,6 +65,7 @@ export type SubagentSteerAcknowledgement =
       status: 'running';
       delivery: 'queued' | 'answered';
     }
+  | SubagentSteerMailboxFullAcknowledgement
   | {
       ok: false;
       code: SubagentSteerErrorCode;

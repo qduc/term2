@@ -4,7 +4,6 @@ const DEFAULT_MAX_MAILBOX_MESSAGES = 4;
 const DEFAULT_MAX_MAILBOX_CHARACTERS = 4_000;
 const DEFAULT_MAX_CONTINUATION_SEGMENTS = 3;
 const MAX_QUESTION_CHARACTERS = 1_200;
-const TRUNCATION_MARKER = '[Earlier steering omitted]';
 
 export interface SubagentRunControlOptions {
   maxMailboxMessages?: number;
@@ -43,7 +42,6 @@ export class SubagentRunControl {
   #cancellationRequested = false;
   #mailbox: string[] = [];
   #mailboxCharacters = 0;
-  #mailboxTruncated = false;
   #continuationSegments = 0;
   #question: QuestionWaiter | undefined;
 
@@ -68,6 +66,14 @@ export class SubagentRunControl {
 
   get hasQueuedSteering(): boolean {
     return this.#mailbox.length > 0;
+  }
+
+  get mailboxLimits(): { messages: number; characters: number } {
+    return { messages: this.#maxMailboxMessages, characters: this.#maxMailboxCharacters };
+  }
+
+  get mailboxOccupancy(): { messages: number; characters: number } {
+    return { messages: this.#mailbox.length, characters: this.#mailboxCharacters };
   }
 
   get currentSegmentAbortReason(): 'steer' | 'cancel' | undefined {
@@ -119,29 +125,26 @@ export class SubagentRunControl {
     if (this.#activeToolCount === 0 && this.#interruptWhenToolsIdle) this.#abortCurrentSegment();
   }
 
-  enqueueSteering(message: string): void {
+  enqueueSteering(message: string): boolean {
+    if (
+      this.#mailbox.length + 1 > this.#maxMailboxMessages ||
+      this.#mailboxCharacters + message.length > this.#maxMailboxCharacters
+    ) {
+      return false;
+    }
     this.#mailbox.push(message);
     this.#mailboxCharacters += message.length;
-    while (
-      this.#mailbox.length > this.#maxMailboxMessages ||
-      (this.#mailbox.length > 1 && this.#mailboxCharacters > this.#maxMailboxCharacters)
-    ) {
-      const removed = this.#mailbox.shift();
-      this.#mailboxCharacters -= removed?.length ?? 0;
-      this.#mailboxTruncated = true;
-    }
     this.#interruptWhenToolsIdle = true;
     if (this.#activeToolCount === 0) this.#abortCurrentSegment();
+    return true;
   }
 
   consumeSteering(): string | undefined {
     if (this.#mailbox.length === 0) return undefined;
     const messages = this.#mailbox;
-    const truncated = this.#mailboxTruncated;
     this.#mailbox = [];
     this.#mailboxCharacters = 0;
-    this.#mailboxTruncated = false;
-    return [truncated ? TRUNCATION_MARKER : undefined, ...messages].filter(Boolean).join('\n');
+    return messages.join('\n');
   }
 
   ask(question: string): AskedSubagentQuestion {
@@ -173,7 +176,6 @@ export class SubagentRunControl {
     this.#cancellationRequested = true;
     this.#mailbox = [];
     this.#mailboxCharacters = 0;
-    this.#mailboxTruncated = false;
     this.#rejectPendingQuestion(new Error('The subagent run was cancelled.'));
     this.#abortCurrentSegment('cancel');
   }
@@ -181,7 +183,6 @@ export class SubagentRunControl {
   settle(reason = new Error('The subagent run was cancelled.')): void {
     this.#mailbox = [];
     this.#mailboxCharacters = 0;
-    this.#mailboxTruncated = false;
     this.#rejectPendingQuestion(reason);
   }
 

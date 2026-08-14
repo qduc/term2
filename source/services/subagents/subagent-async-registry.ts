@@ -620,7 +620,15 @@ export class SubagentAsyncRegistry {
     // of stranding the run on an acknowledgement the orchestrator reads as handled.
     if (run.control.pendingQuestion) return { ok: false, code: 'question_pending', target };
     if (!run.control.canStartContinuation()) return { ok: false, code: 'steer_limit_reached', target };
-    run.control.enqueueSteering(message);
+    if (!run.control.enqueueSteering(message)) {
+      return {
+        ok: false,
+        code: 'mailbox_full',
+        target,
+        limits: run.control.mailboxLimits,
+        occupancy: run.control.mailboxOccupancy,
+      };
+    }
     return { ok: true, runId: run.runId, status: 'running', delivery: 'queued' };
   }
 

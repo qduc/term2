@@ -139,6 +139,14 @@ export class ConversationLogger {
             : {}),
         });
         return;
+      case 'subagent_interrupted':
+        this.log({
+          type: 'subagent_interrupted',
+          agentId: event.agentId,
+          role: event.role,
+          finalText: event.finalText,
+        });
+        return;
       case 'subagent_transferred':
         this.log({
           type: 'subagent_transferred',

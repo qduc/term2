@@ -732,6 +732,13 @@ export class NestedSubagentRunner {
       if (parsed.status !== 'interrupted' && parsed.status !== 'running') {
         const completed: SubagentResult = { ...parsed, status: parsed.status };
         safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result: completed });
+      } else if (parsed.status === 'interrupted') {
+        safeEmit(this.#logger, this.#onEvent, {
+          type: 'subagent_interrupted',
+          agentId: parsed.agentId,
+          role: parsed.role,
+          finalText: parsed.finalText,
+        });
       }
       return parsed;
     } catch (error: any) {

@@ -6,6 +6,15 @@ Sibling of [liveness-ui.md](liveness-ui.md), not a replacement.
 
 ## Resume here
 
+2026-08-14 follow-up: a foreground nested run that terminalizes at an approval
+pause now emits `subagent_interrupted`. The transcript card settles as
+`interrupted`, persists/replays that status, and enters static history instead
+of remaining `running` and pinning the rest of the transcript in Ink's live
+region. The matching foreground `command_message` is also an idempotent fallback
+settlement boundary when a lifecycle event is missed; arbitrary later messages
+never settle a card, and background cards are unaffected. This does not make the
+child resumable; approval relay remains separate product work.
+
 Foreground and background subagents already share a public tool name
 (`run_subagent`) and a status alphabet (`▶` / `✔` / `✖`). They still look like
 two products because they use different hosts and different data.

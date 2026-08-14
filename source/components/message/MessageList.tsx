@@ -93,6 +93,7 @@ const canRenderStatically = (message: MessageLike) => {
       message.status === 'completed' ||
       message.status === 'failed' ||
       message.status === 'cancelled' ||
+      message.status === 'interrupted' ||
       message.status === 'backgrounded'
     );
   }

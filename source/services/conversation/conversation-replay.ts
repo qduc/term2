@@ -663,6 +663,15 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
       });
       return;
     }
+    case 'subagent_interrupted': {
+      state.messages = state.messages.map((message) => {
+        if (message.sender === 'subagent' && message.agentId === event.agentId && message.status === 'running') {
+          return { ...message, status: 'interrupted', finalText: event.finalText };
+        }
+        return message;
+      });
+      return;
+    }
     case 'subagent_tool_started': {
       const existing = state.messages.find(
         (message): message is SubagentActivityMessage =>

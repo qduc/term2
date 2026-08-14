@@ -466,6 +466,80 @@ Current behavior: foreground default 120s, background 30m, per-call `timeout_ms`
 wins, SIGTERM then SIGKILL; foreground retained-buffer overflow (1MiB) kills
 while background truncates and keeps running.
 
+### Foreground nested shell approval false positive
+
+Disposition: **repaired locally on 2026-08-14; not yet committed or merged.**
+Foreground nested workers now honor `shell.autoApproveMode=always` at the same
+subagent tool-policy boundary as ordinary and background workers. Hard execution
+constraints remain in `execute`: subagents still reject an explicit
+`sandbox: "unsandboxed"`, out-of-workspace write targets, and lock conflicts.
+
+```text
+Harm prevented: a legitimate foreground nested worker test or shell command terminalizing the worker at an approval pause while YOLO mode is active.
+Scope and execution paths: foreground nested worker shell calls built with nestedApprovals=true.
+Guard class: advisory approval gate; this is a false-positive removal, not an authority expansion.
+Enforcement owner: SubagentToolPolicy.wrapNestedShellTool.
+Recovery owner: NestedSubagentRunner only for genuine non-YOLO approval pauses; unchanged.
+Measured signal and observation boundary: the effective shell.autoApproveMode setting at each shell approval check.
+Direct evidence or proxy: direct effective setting value.
+Legitimate work that can produce the old signal: validation commands while YOLO has disabled the sandbox.
+Configuration sources and precedence: ISettingsService effective shell.autoApproveMode resolution.
+Effective default and clamping: unchanged; only the exact always value bypasses the underlying approval decision.
+Action and why the signal justifies it: return needsApproval=false in always mode, matching ordinary worker and root shell policy.
+Partial-work settlement: unchanged; the command executes and settles normally instead of returning an interrupted partial result.
+Retry, fallback, and provider-continuity semantics: unchanged.
+Observability fields: unchanged.
+Persisted-setting migration, if any: none.
+Rollback boundary: SubagentToolPolicy nested-shell wrapper plus its focused contract tests.
+Ledger row: foreground nested shell approval false positive.
+```
+
+Red proof before the production change:
+
+```text
+NODE_ENV=test pnpm exec vitest run source/services/subagents/tool-policy.test.ts \
+  --testNamePattern='foreground nested worker shell auto-approval'
+FAIL: expected false, received true
+```
+
+Detection gap: always-mode coverage exercised `wrapShellTool`, while foreground
+nested execution selects the separate `wrapNestedShellTool`; no test compared
+the effective approval policy across those sibling execution paths.
+
+The observed approval pause exposed a second settlement gap: interrupted
+foreground runs deliberately emitted no `subagent_completed` event, but had no
+truthful alternative terminal event. Their transcript card therefore remained
+`running`, kept all later messages outside Ink's static region, and eventually
+triggered `Static blocked: subagent/running`. The repair adds a distinct
+`subagent_interrupted` event through runner, bridge, logging/replay, handler,
+and rendering. The matching parent-tool `command_message` provides an
+idempotent call-ID-scoped fallback if that lifecycle event is missed; unrelated
+later messages and background cards cannot settle the row. The repair does not
+mislabel the run completed or make it resumable.
+
+Verification:
+
+```text
+NODE_ENV=test pnpm exec vitest run source/services/subagents/tool-policy.test.ts \
+  source/services/subagents/subagent-manager.security.test.ts \
+  source/services/subagents/nested-runner.test.ts
+PASS 3 files, 71 tests
+
+pnpm typecheck
+PASS
+
+pnpm exec prettier --check <changed-files>
+PASS
+
+NODE_ENV=test pnpm test
+PASS unrestricted: 483 files passed; 1 skipped. 6202 tests passed; 2 skipped.
+Restricted run: 68 environment failures from listen EPERM, PTY/subprocess IPC,
+and missing child-process output; the same suite passed with those facilities enabled.
+
+pnpm test:provider-black-box
+PASS 19 files, 166 tests; 1 skipped
+```
+
 ## Reference: catalogued guards
 
 Recorded so the next reader does not re-derive them. **No row here owes a test.**

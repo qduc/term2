@@ -307,6 +307,22 @@ it.sequential('SubagentActivityMessage freezes a transferred card with its last 
   expect(output).not.toContain('should not replace the peek');
 });
 
+it.sequential('SubagentActivityMessage renders an interrupted foreground card as terminal', async () => {
+  const { lastFrame } = await renderInAct(
+    <SubagentActivityMessage
+      msg={{
+        role: 'worker',
+        task: 'run the focused tests',
+        status: 'interrupted',
+        tools: ['apply_patch source/example.ts (Success)'],
+      }}
+    />,
+  );
+
+  expect(lastFrame()).toContain('— interrupted');
+  expect(lastFrame()).toContain('✔ apply_patch source/example.ts');
+});
+
 it.sequential('SubagentActivityMessage appends failure reason to status suffix when error is present', async () => {
   const props = {
     msg: {

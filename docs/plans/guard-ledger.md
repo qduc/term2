@@ -48,8 +48,8 @@ Open work, in order:
   2026-08-14. This approval changes no runtime or test behavior.
 - **In progress:** the subagent steering mailbox repair is implemented and
   verified and merged (`74323696`, merge `fa328291`).
-- **In progress:** tool ownership lifecycle repair is implemented and undergoing
-  final verification on branch `guard-tool-ownership`.
+- **Completed:** tool ownership lifecycle repair is implemented and merged
+  (`184db508`, merge `faa737c5`).
 - **Next:** implement the remaining two approved repairs in separate worktrees
   and independently revertible commits. Re-run each recorded red proof first
   and follow the verification gates below.
@@ -367,7 +367,7 @@ Note: emitted the existing TimeoutNaNWarning; no test failed.
 
 ### Tool ownership lifecycle repair
 
-Disposition: **implemented on branch `guard-tool-ownership`; merge pending.**
+Disposition: **repaired in `184db508` and merged in `faa737c5`.**
 `ToolOwnershipRegistry` no longer count-evicts live claims. Claims remain until
 an approval decision, abort, adopted-child cancellation or settlement, queue
 closure, or session-handle cleanup releases them. Decision settlement releases

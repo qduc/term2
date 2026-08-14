@@ -30,6 +30,13 @@ import type { Term2HookScope } from '../hooks/hook-contracts.js';
 import { normalizeToolParameters } from '../../lib/tool-invoke.js';
 import { isCancellationError, isHarnessInvariantError } from '../../lib/harness-invariant-error.js';
 import { ApprovalLedger, type ToolInvocationContext } from './tool-invocation-context.js';
+import {
+  RunBudget,
+  isRunBudgetInteraction,
+  type RunBudgetEvent,
+  type RunBudgetInteraction,
+  type RunBudgetPolicy,
+} from './run-budget.js';
 import { addTokenUsage, normalizeUsage } from '../../utils/ai/token-usage.js';
 import { computeModelCost, type ModelRequestCost, type ServiceTier } from '../../services/cost/model-cost.js';
 import { getCatalogPricingVersion, getModelPricing } from '../../services/cost/pricing.js';
@@ -118,12 +125,17 @@ export interface ApplicationRunLoopOptions {
    */
   readonly approvals?: ApprovalLedger;
   /**
-   * Maximum model turns for this run. One turn is one model call, matching the
-   * removed SDK's accounting. Exceeding it throws {@link MaxTurnsExceededError}.
-   * Omitted means unbounded — callers that had a limit under the SDK (the chat
-   * client, subagents, the mentor) must pass theirs.
+   * Legacy model-turn ceiling. With `runBudget`, the policy's `turnBackstop`
+   * owns staged behavior while this value remains visible to legacy tools;
+   * without one it preserves {@link MaxTurnsExceededError} compatibility.
    */
   readonly maxTurns?: number;
+  /** Settings-backed staged containment policy. Omit only for legacy callers. */
+  readonly runBudget?: RunBudgetPolicy;
+  /** Observational escalation events; delivery and judgment remain outside the loop. */
+  readonly onRunBudgetEvent?: (event: RunBudgetEvent) => void;
+  /** Subagent containment: critical evidence gets one tool-free terminal call. */
+  readonly wrapUpOnCriticalRunBudget?: boolean;
   /** Root-only provider request preparation, retained by continuations. */
   readonly requestPreparation?: ApplicationRequestPreparation;
   /** Application-owned local compaction evaluated at each request boundary. */
@@ -142,8 +154,9 @@ export interface ApplicationRunLoopOptions {
 }
 
 /**
- * Raised when a run exceeds its `maxTurns` budget. The loop owns turn counting
- * — the SDK-era `callModelInputFilter` hook is deliberately not reintroduced.
+ * Compatibility error for legacy callers without a staged run budget. The loop
+ * owns turn counting — the SDK-era `callModelInputFilter` hook is deliberately
+ * not reintroduced.
  */
 export class MaxTurnsExceededError extends Error {
   readonly maxTurns: number;
@@ -237,14 +250,21 @@ type RunState = {
   automaticCompactionsThisRun?: number;
   /** Turn budget for the run; undefined means unbounded. */
   maxTurns?: number;
+  /** Per-run staged budget and deterministic stall sensor, retained across approval continuation. */
+  runBudget?: RunBudget;
+  onRunBudgetEvent?: (event: RunBudgetEvent) => void;
+  wrapUpOnCriticalRunBudget?: boolean;
+  criticalWrapUpPending?: boolean;
+  criticalWrapUpDispatched?: boolean;
+  /** Main-agent evidence that must be resolved before another request or tool dispatch. */
+  pendingRunBudgetInteraction?: RunBudgetInteraction;
+  runBudgetInteractionDecision?: 'continue' | 'stop';
+  /** Whether the current interaction's finite extension has already been taken. */
+  runBudgetGrantConsumed?: boolean;
+  /** A critical check-in already counted the next model request before pausing. */
+  requestBoundaryReady?: boolean;
   /** Cumulative model-request cost records for this run, preserved across continuation. */
   costRecords?: ModelRequestCost[];
-  /**
-   * Identical failing tool calls seen so far, keyed by tool + arguments +
-   * error. Preserved across continuation so an approval round-trip does not
-   * reset the retry budget.
-   */
-  toolFailureCounts?: Map<string, number>;
   /** Keep provider response IDs out of requests for providers that do not support them. */
   supportsConversationChaining: boolean;
   /** Provider currently executing this continuation. */
@@ -339,6 +359,8 @@ export class ApplicationRunLoop {
    */
   #turnOpen = false;
   #pendingSteers: PendingSteer[] = [];
+  /** The run whose budget an out-of-band grant applies to, held across a pause. */
+  #activeRunBudgetState: RunState | undefined;
 
   constructor(deps: ApplicationRunLoopDeps) {
     this.#deps = deps;
@@ -384,6 +406,37 @@ export class ApplicationRunLoop {
   abortSegment(): void {
     this.#activeAbortController?.abort();
     this.#activeAbortController = null;
+  }
+
+  /**
+   * Grant one finite continuation extension to the current logical run.
+   *
+   * The interactive prompt calls this before resuming because it has to show
+   * the human a refusal rather than a silent stop. The grant is recorded so the
+   * matching `approve` does not charge a second one.
+   */
+  grantRunBudgetExtension(grantedBy: 'parent' | 'human' = 'human'): { granted: boolean; extensionsGranted: number } {
+    const state = this.#activeRunBudgetState;
+    if (!state?.runBudget) return { granted: false, extensionsGranted: 0 };
+    const grant = state.runBudget.grantExtension(grantedBy);
+    if (grant.granted) state.runBudgetGrantConsumed = true;
+    return grant;
+  }
+
+  /**
+   * Charge this interaction's extension unless a caller already took it.
+   *
+   * An ungranted arrival here means nobody was prompted — the continuation
+   * applier, non-interactive mode, `--auto-approve`. That is a parent-class
+   * grant, so it is capped and eventually refuses.
+   */
+  #takeRunBudgetGrant(state: RunState): boolean {
+    if (state.runBudgetGrantConsumed) {
+      state.runBudgetGrantConsumed = false;
+      return true;
+    }
+    if (!state.runBudget) return true;
+    return state.runBudget.grantExtension('parent').granted;
   }
 
   /**
@@ -519,13 +572,35 @@ export class ApplicationRunLoop {
       approvals: options.approvals ?? new ApprovalLedger(),
       turnCount: 0,
       maxTurns: options.maxTurns,
+      ...(options.runBudget
+        ? {
+            runBudget: new RunBudget(options.runBudget),
+            onRunBudgetEvent: options.onRunBudgetEvent,
+            wrapUpOnCriticalRunBudget: options.wrapUpOnCriticalRunBudget,
+          }
+        : {}),
       automaticCompactionsThisRun: 0,
     };
     state.approve = (interruption) => {
+      if (isRunBudgetInteraction(interruption)) {
+        // Continuing past an exhausted envelope must cost a finite extension no
+        // matter which surface answered. A caller that already took the grant
+        // (the interactive prompt, which needs the outcome before resuming)
+        // marks it consumed; every other path — the continuation applier,
+        // non-interactive, --auto-approve — lands here ungranted and takes it
+        // now. Without this, an auto-approved 'y' would resume with every stage
+        // still latched and never check in again.
+        state.runBudgetInteractionDecision = this.#takeRunBudgetGrant(state) ? 'continue' : 'stop';
+        return;
+      }
       state.approvalDecision = 'approved';
       state.approvalDecisionCallId = getInterruptionCallId(interruption);
     };
     state.reject = (interruption, approvalOptions) => {
+      if (isRunBudgetInteraction(interruption)) {
+        state.runBudgetInteractionDecision = 'stop';
+        return;
+      }
       state.approvalDecision = 'rejected';
       state.approvalDecisionCallId = getInterruptionCallId(interruption);
       state.approvalMessage = approvalOptions?.message;
@@ -549,6 +624,11 @@ export class ApplicationRunLoop {
     }
     // Handles created before cost accounting existed have no record list.
     if (!state.costRecords) state.costRecords = [];
+    if (!state.runBudget && options.runBudget) {
+      state.runBudget = new RunBudget(options.runBudget);
+    }
+    if (options.onRunBudgetEvent) state.onRunBudgetEvent = options.onRunBudgetEvent;
+    if (options.wrapUpOnCriticalRunBudget) state.wrapUpOnCriticalRunBudget = true;
     // Response IDs are provider-owned. A handle from before provenance was
     // recorded, a missing providerId, or a provider switch must never forward
     // its opaque ID. In particular, do not use previousResponseId as a
@@ -596,6 +676,7 @@ export class ApplicationRunLoop {
     const controller = new AbortController();
     this.#activeAbortController = controller;
     this.#runInFlight = true;
+    state.runBudget?.resume();
     // This segment is running, so the turn is no longer paused between them.
     this.#turnPaused = false;
     if (options.signal) {
@@ -611,6 +692,15 @@ export class ApplicationRunLoop {
       // tools read it while deciding whether to warn about the turn budget.
       get turn() {
         return { count: state.turnCount, max: state.maxTurns };
+      },
+      get budget() {
+        return state.runBudget
+          ? {
+              takeSoftEvidence: () => state.runBudget?.takeSoftEvidence(),
+              takeStallEvidence: () => state.runBudget?.takeStallEvidence(),
+              remainingPolicy: () => state.runBudget?.remainingPolicy(),
+            }
+          : undefined;
       },
     };
     const output: ApplicationRunEvent[] = [];
@@ -642,6 +732,7 @@ export class ApplicationRunLoop {
         throw error;
       })
       .finally(() => {
+        state.runBudget?.pause();
         if (segmentGeneration !== this.#segmentGeneration) return;
         if (this.#activeAbortController === controller) this.#activeAbortController = null;
         this.#runInFlight = false;
@@ -651,20 +742,24 @@ export class ApplicationRunLoop {
         // that ends with nothing outstanding has truly finished the turn, and
         // then anything still waiting has to be sent as its own turn instead.
         const pendingApprovals = state.pendingApprovals?.length ?? 0;
+        const pendingBudgetInteraction = state.pendingRunBudgetInteraction !== undefined;
         const cancelled = stream.cancelled === true;
-        this.#turnPaused = pendingApprovals > 0 && !cancelled && exitError === undefined;
+        this.#turnPaused = (pendingApprovals > 0 || pendingBudgetInteraction) && !cancelled && exitError === undefined;
         if (this.#turnPaused) return;
+        if (this.#activeRunBudgetState === state) this.#activeRunBudgetState = undefined;
         // A declared turn outlives its segments — this one may be about to be
         // retried, or resumed past a post-execute gate. Its owner says when it
         // is over.
         if (this.#turnOpen) return;
         this.#releasePendingSteers({
           pendingApprovals,
+          pendingBudgetInteraction,
           cancelled,
           error: exitError instanceof Error ? exitError.name : exitError ? String(exitError) : undefined,
           turnCount: state.turnCount,
         });
       });
+    this.#activeRunBudgetState = state.runBudget ? state : undefined;
     return stream;
   }
 
@@ -678,6 +773,20 @@ export class ApplicationRunLoop {
   ): Promise<unknown> {
     while (true) {
       if (options.signal?.aborted) throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
+
+      if (state.pendingRunBudgetInteraction) {
+        if (state.runBudgetInteractionDecision === 'stop') {
+          state.pendingRunBudgetInteraction = undefined;
+          state.runBudgetInteractionDecision = undefined;
+          return finish(stream, state, queue);
+        }
+        if (state.runBudgetInteractionDecision === 'continue') {
+          state.pendingRunBudgetInteraction = undefined;
+          state.runBudgetInteractionDecision = undefined;
+        } else {
+          return this.#pauseForRunBudgetInteraction(state, stream, queue);
+        }
+      }
 
       state.pendingApprovals ??= state.pendingApproval ? [state.pendingApproval] : [];
       if (state.pendingApprovals.length > 0 && state.approvalDecision) {
@@ -720,55 +829,83 @@ export class ApplicationRunLoop {
         if (options.stopAfterApprovalResolution) return finish(stream, state, queue);
       }
 
+      // A budget interaction can park a response after its tool calls are
+      // recorded but before any body runs. Resume those retained calls only
+      // after processing an ordinary approval decision for that same plan.
+      if (state.toolPlan) {
+        await this.#settleToolPlan(state, stream, queue, toolContext);
+        if (state.pendingApprovals?.length) {
+          stream.interruptions = state.pendingApprovals.map((item) => item.interruption);
+          this.#turnPaused = true;
+          return finish(stream, state, queue);
+        }
+      }
+
       // The request boundary: every tool result of the previous round is in
       // history, and the next request has not been built. A user message
       // admitted here reaches the model in sequence, mid-turn.
-      this.#admitPendingSteers(state, stream, queue);
+      if (!state.requestBoundaryReady) {
+        this.#admitPendingSteers(state, stream, queue);
+        this.#evaluateRunBudget(state, stream, queue);
+        if (state.pendingRunBudgetInteraction) return this.#pauseForRunBudgetInteraction(state, stream, queue);
 
-      if (options.boundaryCompaction) {
-        const compactionStartedAt = Date.now();
-        const compaction = await options.boundaryCompaction.compact({
-          history: state.history,
-          automaticCompactionsThisRun: state.automaticCompactionsThisRun ?? 0,
-          signal: options.signal,
-          onStarted: (provider) =>
-            outputPush(stream, queue, { type: 'context_compaction_started', provider, strategy: 'local' }),
-        });
-        if (compaction.kind === 'compacted') {
-          state.history.splice(0, state.history.length, ...compaction.history);
-          state.input.splice(0, state.input.length, ...normalizeApplicationInput(compaction.modelInput));
-          state.responseId = undefined;
-          state.responseProviderId = undefined;
-          if (compaction.costRecords?.length) {
-            state.costRecords ??= [];
-            state.costRecords.push(...compaction.costRecords);
+        if (options.boundaryCompaction) {
+          const compactionStartedAt = Date.now();
+          const compaction = await options.boundaryCompaction.compact({
+            history: state.history,
+            automaticCompactionsThisRun: state.automaticCompactionsThisRun ?? 0,
+            signal: options.signal,
+            onStarted: (provider) =>
+              outputPush(stream, queue, { type: 'context_compaction_started', provider, strategy: 'local' }),
+          });
+          if (compaction.kind === 'compacted') {
+            state.history.splice(0, state.history.length, ...compaction.history);
+            state.input.splice(0, state.input.length, ...normalizeApplicationInput(compaction.modelInput));
+            state.responseId = undefined;
+            state.responseProviderId = undefined;
+            if (compaction.costRecords?.length) {
+              state.costRecords ??= [];
+              state.costRecords.push(...compaction.costRecords);
+            }
+            state.automaticCompactionsThisRun = (state.automaticCompactionsThisRun ?? 0) + 1;
+            outputPush(stream, queue, {
+              type: 'context_compaction_completed',
+              provider: state.currentProviderId ?? 'unknown',
+              strategy: 'local',
+              durationMs: Math.max(0, Date.now() - compactionStartedAt),
+            });
+          } else if (compaction.kind === 'failed') {
+            outputPush(stream, queue, {
+              type: 'context_compaction_failed',
+              provider: compaction.provider,
+              strategy: 'local',
+              durationMs: Math.max(0, Date.now() - compactionStartedAt),
+            });
           }
-          state.automaticCompactionsThisRun = (state.automaticCompactionsThisRun ?? 0) + 1;
-          outputPush(stream, queue, {
-            type: 'context_compaction_completed',
-            provider: state.currentProviderId ?? 'unknown',
-            strategy: 'local',
-            durationMs: Math.max(0, Date.now() - compactionStartedAt),
-          });
-        } else if (compaction.kind === 'failed') {
-          outputPush(stream, queue, {
-            type: 'context_compaction_failed',
-            provider: compaction.provider,
-            strategy: 'local',
-            durationMs: Math.max(0, Date.now() - compactionStartedAt),
-          });
+
+          // Summarization is an asynchronous part of this same request
+          // boundary. Admit anything that arrived while it was in flight after
+          // applying a replacement, so the steer cannot be overwritten by the
+          // checkpoint or miss a terminal model request.
+          this.#admitPendingSteers(state, stream, queue);
+          this.#evaluateRunBudget(state, stream, queue);
+          if (state.pendingRunBudgetInteraction) return this.#pauseForRunBudgetInteraction(state, stream, queue);
         }
 
-        // Summarization is an asynchronous part of this same request
-        // boundary. Admit anything that arrived while it was in flight after
-        // applying a replacement, so the steer cannot be overwritten by the
-        // checkpoint or miss a terminal model request.
-        this.#admitPendingSteers(state, stream, queue);
-      }
-
-      state.turnCount += 1;
-      if (state.maxTurns !== undefined && state.turnCount > state.maxTurns) {
-        throw new MaxTurnsExceededError(state.maxTurns);
+        state.turnCount += 1;
+        this.#evaluateRunBudget(state, stream, queue);
+        if (state.pendingRunBudgetInteraction) {
+          state.requestBoundaryReady = true;
+          return this.#pauseForRunBudgetInteraction(state, stream, queue);
+        }
+        // Retain the legacy error only for callers that have not adopted staged
+        // budgets. A configured run budget turns the same count into critical
+        // evidence and lets the decision surface choose what happens next.
+        if (!state.runBudget && state.maxTurns !== undefined && state.turnCount > state.maxTurns) {
+          throw new MaxTurnsExceededError(state.maxTurns);
+        }
+      } else {
+        state.requestBoundaryReady = undefined;
       }
 
       const model = await this.#deps.resolveModel(state.agent.model);
@@ -780,8 +917,12 @@ export class ApplicationRunLoop {
       // so a cost record can be settled exactly once (success or failure).
       const requestId = this.#nextRequestId();
 
+      const criticalWrapUp = state.criticalWrapUpPending === true && state.criticalWrapUpDispatched !== true;
+      if (criticalWrapUp) state.criticalWrapUpDispatched = true;
       const request: StreamedModelTurnRequest = {
-        instructions: state.agent.instructions,
+        instructions: criticalWrapUp
+          ? `${state.agent.instructions}\n\nBudget containment is terminal. Do not call tools. In this one final response, summarize what you completed, the evidence you have, and what remains.`
+          : state.agent.instructions,
         ...(state.supportsConversationChaining &&
         state.responseId &&
         state.responseProviderId !== undefined &&
@@ -789,8 +930,8 @@ export class ApplicationRunLoop {
           ? { previousResponseId: state.responseId }
           : {}),
         input: state.input,
-        tools: toModelTools(state.agent.tools),
-        applicationTools: state.agent.tools,
+        tools: toModelTools(criticalWrapUp ? [] : state.agent.tools),
+        applicationTools: criticalWrapUp ? [] : state.agent.tools,
         ...(state.agent.modelSettings?.temperature !== undefined
           ? { temperature: state.agent.modelSettings.temperature as number }
           : {}),
@@ -904,6 +1045,7 @@ export class ApplicationRunLoop {
         // persistence and replay, and a cost event must never become a
         // restored history item.
         queue.push({ type: 'cost_update', record });
+        this.#evaluateRunBudget(state, stream, queue);
         throw error;
       }
 
@@ -914,6 +1056,7 @@ export class ApplicationRunLoop {
         // the calls through the same ordered dispatcher. An empty stream still
         // fails closed as an incomplete model turn.
         if (streamedToolCalls.length === 0) throw new Error('Application model turn ended without completion');
+        if (criticalWrapUp) return finish(stream, state, queue);
         await this.#dispatchToolCalls(state, stream, queue, streamedToolCalls, toolContext);
         if (state.pendingApprovals && state.pendingApprovals.length > 0) {
           stream.interruptions = state.pendingApprovals.map((item) => item.interruption);
@@ -980,6 +1123,7 @@ export class ApplicationRunLoop {
         providerUsd: completion.costUsd,
       });
       queue.push({ type: 'cost_update', record });
+      this.#evaluateRunBudget(state, stream, queue);
       stream.lastResponseId = completion.responseId;
       stream.rawResponses?.push(completion);
       // Some provider adapters report function calls only in the terminal
@@ -997,7 +1141,9 @@ export class ApplicationRunLoop {
           toolCalls.push(item);
         }
       }
-      if (toolCalls.length > 0) await this.#dispatchToolCalls(state, stream, queue, toolCalls, toolContext);
+      if (!state.criticalWrapUpPending && toolCalls.length > 0) {
+        await this.#dispatchToolCalls(state, stream, queue, toolCalls, toolContext);
+      }
       // A native reasoning item belongs to the completed assistant turn even
       // when no tool call follows it. Commit it before assistant text so both
       // stateless continuation and persisted canonical history retain the
@@ -1037,12 +1183,24 @@ export class ApplicationRunLoop {
         state.input.push({ type: 'message', role: 'assistant', content: [{ type: 'text', text: assistantText }] });
       }
 
+      // A critical subagent gets exactly this final tool-free model call.
+      if (criticalWrapUp) return finish(stream, state, queue);
+
+      if (state.pendingRunBudgetInteraction && toolCalls.length > 0) {
+        return this.#pauseForRunBudgetInteraction(state, stream, queue);
+      }
+
       if (state.pendingApprovals.length > 0) {
         stream.interruptions = state.pendingApprovals.map((item) => item.interruption);
         this.#turnPaused = true;
         return finish(stream, state, queue);
       }
-      if (!sawToolCall) return finish(stream, state, queue);
+      if (!sawToolCall) {
+        // Evidence discovered when a response has already completed needs no
+        // human boundary: there is no later request or tool to block.
+        state.pendingRunBudgetInteraction = undefined;
+        return finish(stream, state, queue);
+      }
     }
   }
 
@@ -1085,6 +1243,14 @@ export class ApplicationRunLoop {
       // would apply schema defaults before execute. web_fetch relies on its
       // executor fallbacks on the strict JSON-schema path.
       entry.params = normalizeToolParameters(parseArguments(event.arguments), definition.parameters);
+      const stallEvent = state.runBudget?.observeToolCall({
+        name: event.name,
+        argumentsText: event.arguments,
+        effect: definition.effect,
+      });
+      if (stallEvent) {
+        this.#emitRunBudgetEvent(state, stallEvent, 'Tool stall evidence', stream, queue);
+      }
 
       // Consult this run's ledger before prompting: a decision already taken
       // (in the parent run and replayed in, or earlier in this run) must not
@@ -1130,7 +1296,11 @@ export class ApplicationRunLoop {
         approvalPending: entry.status === 'approval_pending',
       })),
     });
-    await this.#settleToolPlan(state, stream, queue, toolContext);
+    // A main-agent budget escalation is a real boundary: retain the planned
+    // calls, but do not execute one more tool while human judgement is pending.
+    if (!state.pendingRunBudgetInteraction) {
+      await this.#settleToolPlan(state, stream, queue, toolContext);
+    }
   }
 
   async #settleToolPlan(
@@ -1219,6 +1389,7 @@ export class ApplicationRunLoop {
     state.history.push(resultItem);
     state.input.push({ type: 'tool_result', id: entry.event.id, output });
     outputPush(stream, queue, { type: 'item', item: resultItem });
+    this.#evaluateRunBudget(state, stream, queue);
   }
 
   /**
@@ -1277,17 +1448,6 @@ export class ApplicationRunLoop {
       }
 
       const message = error instanceof Error ? error.message : String(error);
-      // Feeding the same failure back forever is its own failure mode: some
-      // errors no argument can fix. Repeat the identical result once, then say
-      // so plainly rather than inviting a third identical attempt.
-      const repeated = state ? countRepeatedFailure(state, definition.name, params, message) : 1;
-      if (repeated > MAX_IDENTICAL_TOOL_FAILURES) {
-        const result = `Error: ${message}\n\nThis exact call has now failed ${repeated} times with the same error. Do not call ${definition.name} with these arguments again — either change your approach or report the problem to the user.`;
-        await this.#notifyToolLifecycle(() =>
-          this.#deps.toolLifecycle?.error(lifecycleContext, error, Date.now() - startedAt, true),
-        );
-        return result;
-      }
       const result = `Error: ${message}`;
       await this.#notifyToolLifecycle(() =>
         this.#deps.toolLifecycle?.error(lifecycleContext, error, Date.now() - startedAt, true),
@@ -1328,6 +1488,56 @@ export class ApplicationRunLoop {
     return record;
   }
 
+  #evaluateRunBudget(state: RunState, stream?: AgentStream, queue?: EventQueue): void {
+    if (!state.runBudget) return;
+    for (const event of state.runBudget.evaluate({
+      turns: state.turnCount,
+      costRecords: state.costRecords ?? [],
+    })) {
+      this.#emitRunBudgetEvent(state, event, 'Run budget evidence', stream, queue);
+    }
+  }
+
+  #emitRunBudgetEvent(
+    state: RunState,
+    event: RunBudgetEvent,
+    message: string,
+    stream?: AgentStream,
+    queue?: EventQueue,
+  ): void {
+    if (event.type === 'budget_stage' && event.stage === 'critical' && state.wrapUpOnCriticalRunBudget) {
+      state.criticalWrapUpPending = true;
+    }
+    if (
+      !state.wrapUpOnCriticalRunBudget &&
+      !state.pendingRunBudgetInteraction &&
+      this.#requiresHumanBudgetDecision(event)
+    ) {
+      state.pendingRunBudgetInteraction = { type: 'run_budget_interaction', event };
+      state.runBudgetGrantConsumed = false;
+    }
+    if (stream && queue) outputPush(stream, queue, { type: 'run_budget', evidence: event });
+    try {
+      state.onRunBudgetEvent?.(event);
+    } catch {
+      // Evidence observers are delivery adapters, not budget owners.
+      this.#deps.logDiagnostic?.('Run budget event observer failed', { type: event.type });
+    }
+    this.#deps.logDiagnostic?.(message, event);
+  }
+
+  #requiresHumanBudgetDecision(event: RunBudgetEvent): boolean {
+    return event.type === 'tool_stall' || (event.type === 'budget_stage' && event.stage !== 'soft');
+  }
+
+  #pauseForRunBudgetInteraction(state: RunState, stream: AgentStream, queue: EventQueue): unknown {
+    const interaction = state.pendingRunBudgetInteraction;
+    if (!interaction) return finish(stream, state, queue);
+    stream.interruptions = [interaction];
+    this.#turnPaused = true;
+    return finish(stream, state, queue);
+  }
+
   async #notifyToolLifecycle(operation: (() => void | Promise<void>) | undefined): Promise<void> {
     if (!operation) return;
     try {
@@ -1337,28 +1547,6 @@ export class ApplicationRunLoop {
       // execution or turn recovery semantics.
     }
   }
-}
-
-/**
- * How many times an identical failing call is fed back before the loop stops
- * inviting retries. One repeat is worth allowing: a transient failure resolves,
- * and a model given the error often corrects on its second attempt.
- */
-const MAX_IDENTICAL_TOOL_FAILURES = 2;
-
-function countRepeatedFailure(state: RunState, toolName: string, params: unknown, message: string): number {
-  let key: string;
-  try {
-    key = JSON.stringify([toolName, params, message]);
-  } catch {
-    // Unserializable params cannot be compared for identity; treat every such
-    // failure as distinct rather than collapsing unrelated calls together.
-    return 1;
-  }
-  state.toolFailureCounts ??= new Map<string, number>();
-  const count = (state.toolFailureCounts.get(key) ?? 0) + 1;
-  state.toolFailureCounts.set(key, count);
-  return count;
 }
 
 function outputPush(stream: AgentStream, queue: EventQueue, item: ApplicationRunEvent): void {

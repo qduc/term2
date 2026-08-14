@@ -105,6 +105,63 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
     { value: 'concise', description: 'Concise output (no reasoning, one-line tool calls)' },
   ],
   'agent.maxTurns': [{ value: '10' }, { value: '20' }, { value: '50' }],
+  'agent.runBudget.maxUsdMicros': [
+    { value: '1000000', description: '$1' },
+    { value: '5000000', description: '$5 (default)' },
+    { value: '10000000', description: '$10' },
+  ],
+  'agent.runBudget.maxUnpricedTokens': [
+    { value: '100000', description: '100k tokens' },
+    { value: '500000', description: '500k tokens (default)' },
+    { value: '1000000', description: '1m tokens' },
+  ],
+  'agent.runBudget.maxActiveTimeMs': [
+    { value: '1800000', description: '30m' },
+    { value: '3600000', description: '1h (default)' },
+    { value: '7200000', description: '2h' },
+  ],
+  'agent.runBudget.warningHeadroomUsdMicros': [
+    { value: '500000', description: '$0.50' },
+    { value: '1000000', description: '$1 (default)' },
+    { value: '2000000', description: '$2' },
+  ],
+  'agent.runBudget.warningHeadroomUnpricedTokens': [
+    { value: '50000', description: '50k tokens' },
+    { value: '100000', description: '100k tokens (default)' },
+    { value: '200000', description: '200k tokens' },
+  ],
+  'agent.runBudget.warningHeadroomActiveTimeMs': [
+    { value: '300000', description: '5m' },
+    { value: '900000', description: '15m (default)' },
+    { value: '1800000', description: '30m' },
+  ],
+  'agent.runBudget.softHeadroomUsdMicros': [
+    { value: '100000', description: '$0.10' },
+    { value: '250000', description: '$0.25 (default)' },
+    { value: '500000', description: '$0.50' },
+  ],
+  'agent.runBudget.softHeadroomUnpricedTokens': [
+    { value: '10000', description: '10k tokens' },
+    { value: '25000', description: '25k tokens (default)' },
+    { value: '50000', description: '50k tokens' },
+  ],
+  'agent.runBudget.softHeadroomActiveTimeMs': [
+    { value: '120000', description: '2m' },
+    { value: '300000', description: '5m (default)' },
+    { value: '600000', description: '10m' },
+  ],
+  'agent.runBudget.turnBackstop': [{ value: '100' }, { value: '150', description: 'default' }, { value: '200' }],
+  'agent.runBudget.extensionPercent': [
+    { value: '25', description: 'quarter budget' },
+    { value: '50', description: 'half budget (default)' },
+    { value: '100', description: 'full budget' },
+  ],
+  'agent.runBudget.maxParentExtensions': [{ value: '1' }, { value: '2', description: 'default' }, { value: '3' }],
+  'agent.runBudget.identicalToolCallThreshold': [
+    { value: '2' },
+    { value: '3', description: 'default' },
+    { value: '5' },
+  ],
   'agent.retryAttempts': [{ value: '1' }, { value: '2' }, { value: '3' }],
   'agent.transport': [
     { value: 'websocket', description: 'WebSocket transport with response chaining' },

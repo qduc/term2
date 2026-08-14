@@ -523,10 +523,10 @@ const ApprovalPrompt: FC<Props> = ({
           {approval.argumentsText}
         </Text>
         <Box flexDirection="column" marginTop={1}>
-          <Text>Do you want to continue?</Text>
+          <Text>Continue with one finite extension, or stop?</Text>
           <Box flexDirection="column" marginLeft={1}>
-            <Text color={selectedIndex === 0 ? 'green' : undefined}>{selectedIndex === 0 ? '❯ ' : '  '}Yes</Text>
-            <Text color={selectedIndex === 1 ? 'red' : undefined}>{selectedIndex === 1 ? '❯ ' : '  '}No</Text>
+            <Text color={selectedIndex === 0 ? 'green' : undefined}>{selectedIndex === 0 ? '❯ ' : '  '}Continue</Text>
+            <Text color={selectedIndex === 1 ? 'red' : undefined}>{selectedIndex === 1 ? '❯ ' : '  '}Stop</Text>
           </Box>
         </Box>
       </Box>

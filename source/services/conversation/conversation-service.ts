@@ -419,6 +419,16 @@ export class ConversationService {
     return this.#adapter.editSubmission(id, turn);
   }
 
+  /**
+   * Grants one bounded continuation increment to the currently running root budget.
+   *
+   * This is the human-answered prompt path, so the grant is not subject to the
+   * parent cap. Unattended continuations take a capped grant inside the loop.
+   */
+  grantRunBudgetExtension(): { granted: boolean; extensionsGranted: number } {
+    return this.#clientHandle.agentClient.grantRunBudgetExtension?.() ?? { granted: false, extensionsGranted: 0 };
+  }
+
   getPendingInteractionSnapshot(): PendingInteractionSnapshot | null {
     return this.#runtime.pendingInteraction.getSnapshot();
   }

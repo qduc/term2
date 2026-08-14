@@ -36,21 +36,22 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 ## Active or deferred
 
 - Scheduled live provider canaries — a deferred follow-up requiring CI, secret/billing, and OAuth-storage decisions. No plan doc, and nobody is on it.
-- Run budgets as staged escalation — designed in
-  `docs/plans/run-budget-stall-escalation.md`, awaiting implementation approval;
-  nobody is on it. The Goal is that the harness provides sensation (cost, time,
-  stall), not decisions. Read it before changing `maxTurns` handling in
-  `ApplicationRunLoop`, `AgentLimits`/`resolveLimits`, `ExecutionBudget`, or the
-  `max_turns_exceeded` prompt: it records why the turn cap is a check-in rather
-  than a ceiling, that per-request USD accounting already exists (so the
-  `maxCost` "unsupported" rejection is stale), and that identical-failure
-  detection is already in the loop as a silent retry suppressor.
 - UI/business layer separation — completed through settings transaction,
   handoff workflow, provider management, and model catalog milestones. See
   `docs/plans/ui-business-layer-separation/MAP.md` for the merged commits and
   ownership boundaries.
 
 ## Completed — still read before touching these areas
+
+- `docs/plans/run-budget-stall-escalation.md` — **implemented and merged**, with
+  all 13 review findings resolved in
+  `docs/plans/run-budget-stall-escalation-review.md`. Read both before changing
+  `RunBudget`, run-budget grants, stall detection, the `max_turns_exceeded`
+  prompt, or `agent.runBudget` settings: extensions are charged in the run loop
+  so unattended resumes stay bounded, parent grants are capped while human
+  grants are not, stall evidence re-arms for the run but not for its parent, and
+  the stream payload is named `evidence` because `event.event` trips the
+  stream-boundary guard.
 
 - `docs/plans/parallel-safe-tool-dispatch.md` — **implemented and merged**
   (`b7eada1e`). It dispatches contiguous auto-approved safe tool calls from one

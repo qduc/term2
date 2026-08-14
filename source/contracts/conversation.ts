@@ -2,6 +2,7 @@ import type { CommandMessage } from '../tools/types.js';
 import type { NormalizedUsage } from '../utils/ai/token-usage.js';
 import type { ModelRequestCost } from '../services/cost/model-cost.js';
 import type { Item } from './conversation-items.js';
+import type { RunBudgetEvent } from '../services/agent-runtime/run-budget.js';
 
 export type ReasoningEffortSetting = 'default' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
@@ -109,6 +110,8 @@ export interface ApprovalDescriptor {
   dockerHostControl?: boolean;
   /** Application-owned post-execute gate; never pass this through SDK approval APIs. */
   postExecute?: PostExecuteApprovalToken;
+  /** Main-run budget/stall evidence held at a real continuation boundary. */
+  runBudgetEvent?: RunBudgetEvent;
 }
 
 export interface PostExecuteApprovalToken {
@@ -146,4 +149,6 @@ export type ConversationTerminal = ApprovalRequiredTerminal | FinalTerminal;
 
 export interface PendingApproval extends ApprovalDescriptor {
   isMaxTurnsPrompt?: boolean;
+  /** Human judgement request produced by the staged budget/stall sensor. */
+  runBudgetEvent?: RunBudgetEvent;
 }

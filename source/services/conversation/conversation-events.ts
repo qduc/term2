@@ -5,6 +5,7 @@ import type { ModelRequestCost } from '../../services/cost/model-cost.js';
 import type { SubagentResult } from '../subagents/types.js';
 import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
 import type { CodexRateLimitInfo } from '../../contracts/streamed-model-turn.js';
+import type { RunBudgetEvent } from '../agent-runtime/run-budget.js';
 export type { CodexRateLimitInfo, CodexRateLimitWindow } from '../../contracts/streamed-model-turn.js';
 
 export type ConversationEvent =
@@ -36,7 +37,9 @@ export type ConversationEvent =
   | ContextCompactionStartedEvent
   | ContextCompactionCompletedEvent
   | ContextCompactionFailedEvent
-  | CostUpdateEvent;
+  | CostUpdateEvent
+  | RunBudgetEventNotice
+  | SubagentRunBudgetEvent;
 
 export interface RetryEvent {
   type: 'retry';
@@ -130,6 +133,12 @@ export interface CostUpdateEvent {
   type: 'cost_update';
   /** The settled cost record for one dispatched model request. */
   record: ModelRequestCost;
+}
+
+/** Evidence produced by the root run-loop sensor; judgement remains outside it. */
+export interface RunBudgetEventNotice {
+  type: 'run_budget';
+  evidence: RunBudgetEvent;
 }
 
 export interface CommandMessageEvent {
@@ -248,6 +257,14 @@ export interface SubagentQuestionEvent {
   name?: string;
   role: string;
   question: string;
+}
+
+/** Budget/stall evidence from a child, routed through the existing subagent lane. */
+export interface SubagentRunBudgetEvent {
+  type: 'subagent_run_budget';
+  agentId: string;
+  role: string;
+  event: RunBudgetEvent;
 }
 
 /** A session-scoped shell job began after its launch acknowledgement returned. */

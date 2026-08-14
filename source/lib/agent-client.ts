@@ -4,6 +4,7 @@ import {
   type ApplicationRequestPreparation,
   type SteerOutcome,
 } from '../services/agent-runtime/application-run-loop.js';
+import { readRunBudgetPolicy, type RunBudgetPolicy } from '../services/agent-runtime/run-budget.js';
 import type { ContinuationHandle } from '../contracts/continuation-handle.js';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import type { JsonSchemaDefinition } from '../contracts/model-types.js';
@@ -106,6 +107,7 @@ export class AgentClient {
   #hookScope: Term2HookScope = 'root';
   #backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
   #backgroundShellOutput?: BackgroundShellOutputBundle;
+  #wrapUpOnCriticalRunBudget = false;
 
   #boundaryCompaction() {
     const enabled = this.#settings.get('agent.contextCompaction.enabled');
@@ -294,6 +296,7 @@ export class AgentClient {
     backgroundShellRegistry,
     backgroundShellOutput,
     allowBackgroundShell = true, // Retained for session-factory compatibility; direct execution no longer
+    wrapUpOnCriticalRunBudget = false,
     // projects chained input through the legacy mode.
     continuationProjectionMode: _continuationProjectionMode = 'legacy',
   }: {
@@ -329,6 +332,8 @@ export class AgentClient {
     backgroundShellOutput?: BackgroundShellOutputBundle;
     /** False for one-shot/non-interactive callers until their lifecycle is supported. */
     allowBackgroundShell?: boolean;
+    /** Transient subagents terminate through one tool-free summary call at critical. */
+    wrapUpOnCriticalRunBudget?: boolean;
     continuationProjectionMode?: ContinuationProjectionMode;
   }) {
     this.#logger = deps.logger;
@@ -339,6 +344,7 @@ export class AgentClient {
     this.#hookScope = hookScope ?? 'root';
     this.#backgroundShellRegistry = allowBackgroundShell ? backgroundShellRegistry : undefined;
     this.#backgroundShellOutput = allowBackgroundShell ? backgroundShellOutput : undefined;
+    this.#wrapUpOnCriticalRunBudget = wrapUpOnCriticalRunBudget;
     this.#askUserAnswerStore = new AskUserAnswerStore();
 
     // Create AgentConfiguration (handles editor, model, provider, reasoning, etc.)
@@ -441,6 +447,7 @@ export class AgentClient {
             agentOverride: agent,
             providerOverride: provider,
             toolOwnership,
+            wrapUpOnCriticalRunBudget: true,
             ...(this.#toolLifecycle && agentId
               ? {
                   toolLifecycle: createScopedToolLifecycle(this.#toolLifecycle, {
@@ -576,6 +583,25 @@ export class AgentClient {
 
   closeTurn(): void {
     this.#applicationRunLoop.closeTurn();
+  }
+
+  /**
+   * The settings envelope, with the turn backstop honoring `agent.maxTurns`.
+   *
+   * A run budget suppresses the loop's `MaxTurnsExceededError`, so without this
+   * a configured `agent.maxTurns: 10` would silently stop meaning anything and
+   * the run would go all the way to `turnBackstop`. Taking the tighter of the
+   * two keeps the live setting effective while leaving the backstop's role as
+   * the infinite-loop tripwire intact.
+   */
+  #runBudgetPolicy(): RunBudgetPolicy {
+    const policy = readRunBudgetPolicy(this.#settings);
+    return { ...policy, turnBackstop: Math.min(policy.turnBackstop, this.#maxTurns) };
+  }
+
+  /** Grant one finite extension to the active run-budget envelope. */
+  grantRunBudgetExtension(): { granted: boolean; extensionsGranted: number } {
+    return this.#applicationRunLoop.grantRunBudgetExtension();
   }
 
   /**
@@ -830,6 +856,7 @@ export class AgentClient {
       const agent = this.#agentConfig.getApplicationAgent(options.sessionId);
       const requestPreparation = this.#openAIRequestPreparation(options);
       const boundaryCompaction = this.#boundaryCompaction();
+      const runBudget = this.#runBudgetPolicy();
       const run = () => {
         return this.#applicationRunLoop.startStream(agent, userInput, {
           ...(boundaryCompaction ? { boundaryCompaction } : {}),
@@ -842,6 +869,9 @@ export class AgentClient {
           hookScope: this.#hookScope,
           ...(options.sessionId ? { context: { sessionId: options.sessionId } } : {}),
           maxTurns: this.#maxTurns,
+          runBudget,
+          ...(this.#wrapUpOnCriticalRunBudget ? { wrapUpOnCriticalRunBudget: true } : {}),
+          ...(options.onRunBudgetEvent ? { onRunBudgetEvent: options.onRunBudgetEvent } : {}),
         });
       };
       const stream = run();
@@ -862,6 +892,7 @@ export class AgentClient {
     const supportsChaining = getProvider(provider)?.capabilities?.supportsConversationChaining === true;
     const requestPreparation = this.#openAIRequestPreparation(options);
     const boundaryCompaction = this.#boundaryCompaction();
+    const runBudget = this.#runBudgetPolicy();
     const stream = this.#applicationRunLoop.continueRunStream(state, {
       ...(boundaryCompaction ? { boundaryCompaction } : {}),
       ...(requestPreparation ? { requestPreparation } : {}),
@@ -872,6 +903,9 @@ export class AgentClient {
       turnId: options.hookTurnId,
       hookScope: this.#hookScope,
       maxTurns: this.#maxTurns,
+      runBudget,
+      ...(this.#wrapUpOnCriticalRunBudget ? { wrapUpOnCriticalRunBudget: true } : {}),
+      ...(options.onRunBudgetEvent ? { onRunBudgetEvent: options.onRunBudgetEvent } : {}),
       ...(options.stopAfterApprovalResolution ? { stopAfterApprovalResolution: true } : {}),
     });
     this.#observeCompletion(stream, state, provider, this.#agentConfig.getModel());

@@ -100,6 +100,7 @@ export function createCreateFileToolDefinition(deps: {
   return {
     name: TOOL_NAME_CREATE_FILE,
     description: CREATE_FILE_DESCRIPTION,
+    effect: 'mutating',
     parameters: createFileParametersSchema,
     needsApproval: async (params) => {
       try {

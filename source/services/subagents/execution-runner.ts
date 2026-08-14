@@ -338,6 +338,14 @@ export class ExecutionSubagentRunner {
             });
             emittedUsageUpdate = true;
             break;
+          case 'run_budget':
+            safeEmit(this.#logger, onEvent, {
+              type: 'subagent_run_budget',
+              agentId,
+              role: request.role,
+              event: event.evidence,
+            });
+            break;
           case 'error':
             error = new Error(event.message);
             loopProcessedError = true;

@@ -1,7 +1,9 @@
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import {
   injectWarningIntoToolOutput,
   injectTurnLimitWarning,
+  injectRunBudgetWarning,
+  buildRunBudgetWarning,
   buildTurnLimitWarning,
   resolveTurnLimitContext,
 } from './inject-warning-into-tool-output.js';
@@ -193,4 +195,44 @@ it('warns through the loop turn budget, which was unreachable while nothing coun
   const result = injectTurnLimitWarning('tool result', resolveTurnLimitContext(toolContext));
 
   expect(result.includes('2 turns left')).toBe(true);
+});
+
+it('injects the nearest soft-stage budget evidence only once', () => {
+  const takeSoftEvidence = vi
+    .fn()
+    .mockReturnValueOnce({ dimension: 'usd', used: 4_800_000, limit: 5_000_000, headroom: 200_000 })
+    .mockReturnValueOnce(undefined);
+
+  const first = injectRunBudgetWarning('tool result', { budget: { takeSoftEvidence } });
+  const second = injectRunBudgetWarning('tool result', {
+    budget: { takeSoftEvidence },
+    turn: { count: 99, max: 100 },
+  });
+
+  expect(first).toContain('priced USD budget');
+  expect(second).toBe('tool result');
+  expect(buildRunBudgetWarning({ dimension: 'active_time', used: 10, limit: 20, headroom: 10 })).toContain(
+    'active-time budget',
+  );
+});
+
+it('delivers stall evidence to the run that produced it, alongside a soft nudge', () => {
+  const takeStallEvidence = vi.fn().mockReturnValueOnce({ toolName: 'shell', count: 3, threshold: 3 });
+  const takeSoftEvidence = vi
+    .fn()
+    .mockReturnValueOnce({ dimension: 'usd', used: 4_800_000, limit: 5_000_000, headroom: 200_000 });
+
+  const result = injectRunBudgetWarning('tool result', { budget: { takeStallEvidence, takeSoftEvidence } });
+
+  expect(result).toContain('call 3 of `shell`');
+  expect(result).toContain('priced USD budget');
+  // The note reports the repetition; judging whether it means anything is the
+  // run's job, so it must not be phrased as a verdict.
+  expect(result).not.toContain('stuck');
+});
+
+it('leaves a tool result untouched when the run has no pending evidence', () => {
+  const budget = { takeStallEvidence: () => undefined, takeSoftEvidence: () => undefined };
+
+  expect(injectRunBudgetWarning('tool result', { budget })).toBe('tool result');
 });

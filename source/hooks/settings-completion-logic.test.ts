@@ -26,6 +26,8 @@ it('getSettingCategory maps known keys to expected categories', () => {
   expect(getSettingCategory(SETTING_KEYS.AGENT_MAX_OUTPUT_TOKENS).id).toBe('safety');
   expect(getSettingCategory(SETTING_KEYS.AGENT_MAX_STREAM_OUTPUT_CHARS).id).toBe('safety');
   expect(getSettingCategory(SETTING_KEYS.AGENT_MAX_MODEL_REQUEST_DURATION_MS).id).toBe('safety');
+  expect(getSettingCategory(SETTING_KEYS.AGENT_RUN_BUDGET_MAX_USD_MICROS).id).toBe('safety');
+  expect(getSettingCategory(SETTING_KEYS.AGENT_RUN_BUDGET_IDENTICAL_TOOL_CALL_THRESHOLD).id).toBe('safety');
   expect(getSettingCategory('agent.autoApproveReasoningEffort').id).toBe('safety');
   expect(getSettingCategory('shell.timeout').id).toBe('tools');
   expect(getSettingCategory(SETTING_KEYS.SHELL_BACKGROUND_TIMEOUT).id).toBe('tools');

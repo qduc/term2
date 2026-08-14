@@ -10,7 +10,7 @@ import type { ILoggingService, ISettingsService } from '../services/service-inte
 import { ExecutionContext } from '../services/execution-context.js';
 import { trimToolOutput } from '../utils/output/trim-tool-output.js';
 import { SkillsService } from '../services/skills/skills-service.js';
-import { injectTurnLimitWarning, resolveTurnLimitContext } from '../utils/inject-warning-into-tool-output.js';
+import { injectRunBudgetWarning } from '../utils/inject-warning-into-tool-output.js';
 import { toOpenAIStrictToolSchema } from './openai-strict-tool-schema.js';
 import {
   shouldUseNativePatchTool as shouldUseNativePatchToolPolicy,
@@ -171,7 +171,7 @@ export function buildAgentTools({
               })
             : result;
           const trimmedResult = trimToolOutput(finalResult, undefined, maxOutputLengthValue ?? undefined);
-          return injectTurnLimitWarning(trimmedResult, resolveTurnLimitContext(_context));
+          return injectRunBudgetWarning(trimmedResult, _context);
         },
       };
       const shim: ToolInvokeShim = {

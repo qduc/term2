@@ -94,6 +94,29 @@ it('buildSettingsList - exposes persistent Docker host-control grants for revoca
   expect(getSettingCategory(SETTING_KEYS.SANDBOX_DOCKER_HOST_CONTROL_PROJECTS).id).toBe('safety');
 });
 
+it('buildSettingsList exposes run-budget policy settings under Safety with descriptions', () => {
+  const result = buildSettingsList(SETTING_KEYS, SETTING_DESCRIPTIONS);
+
+  for (const key of [
+    SETTING_KEYS.AGENT_RUN_BUDGET_MAX_USD_MICROS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_MAX_UNPRICED_TOKENS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_MAX_ACTIVE_TIME_MS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_USD_MICROS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_UNPRICED_TOKENS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_ACTIVE_TIME_MS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_USD_MICROS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_UNPRICED_TOKENS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_ACTIVE_TIME_MS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_TURN_BACKSTOP,
+    SETTING_KEYS.AGENT_RUN_BUDGET_EXTENSION_PERCENT,
+    SETTING_KEYS.AGENT_RUN_BUDGET_MAX_PARENT_EXTENSIONS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_IDENTICAL_TOOL_CALL_THRESHOLD,
+  ]) {
+    expect(result).toContainEqual(expect.objectContaining({ key, description: expect.any(String) }));
+    expect(getSettingCategory(key).id).toBe('safety');
+  }
+});
+
 it('buildSettingsList - exposes flat ancillary model tiers and hides legacy model settings', () => {
   const result = buildSettingsList(SETTING_KEYS, SETTING_DESCRIPTIONS);
 

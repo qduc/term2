@@ -82,7 +82,7 @@ export interface AgentRuntimeDeps {
  * limits actual nested agents, not the root itself.
  *
  * Unsupported limits produce typed preflight rejections:
- * - `maxCost` → `limit_validation_error` (no provider-neutral pricing)
+ * - `maxCost` → `limit_validation_error` (use `agent.runBudget` for USD)
  * - `agents.allowedModels` → `unsupported_permission_scope`
  * - `web_fetch` with finite host scope → runtime `Permission denied` error
  *   (redirect-following not enforceable; use `hosts: ['*']`)

@@ -27,6 +27,21 @@ const baseSettings = {
     retryAttempts: { value: 2, source: 'default' },
     transport: { value: 'websocket', source: 'default' },
     maxParallelToolCalls: { value: 3, source: 'default' },
+    runBudget: {
+      maxUsdMicros: { value: 5_000_000, source: 'default' },
+      maxUnpricedTokens: { value: 500_000, source: 'default' },
+      maxActiveTimeMs: { value: 3_600_000, source: 'default' },
+      warningHeadroomUsdMicros: { value: 1_000_000, source: 'default' },
+      warningHeadroomUnpricedTokens: { value: 100_000, source: 'default' },
+      warningHeadroomActiveTimeMs: { value: 900_000, source: 'default' },
+      softHeadroomUsdMicros: { value: 250_000, source: 'default' },
+      softHeadroomUnpricedTokens: { value: 25_000, source: 'default' },
+      softHeadroomActiveTimeMs: { value: 300_000, source: 'default' },
+      turnBackstop: { value: 150, source: 'default' },
+      extensionPercent: { value: 50, source: 'default' },
+      maxParentExtensions: { value: 2, source: 'default' },
+      identicalToolCallThreshold: { value: 3, source: 'default' },
+    },
   },
   shell: {
     timeout: { value: 120000, source: 'default' },
@@ -106,6 +121,8 @@ it('formatSettingsSummary renders values with sources', () => {
   expect(summary.includes('agent.contextCompaction.compactThreshold: 0.8 (default)')).toBe(true);
   expect(summary.includes('agent.contextCompaction.mode: native (default)')).toBe(true);
   expect(summary.includes('agent.contextCompaction.compactThresholdTokens: null (default)')).toBe(true);
+  expect(summary.includes('agent.runBudget.maxUsdMicros: 5000000 (default)')).toBe(true);
+  expect(summary.includes('agent.runBudget.identicalToolCallThreshold: 3 (default)')).toBe(true);
   expect(summary.includes('memory.enabled: true (default)')).toBe(true);
 });
 

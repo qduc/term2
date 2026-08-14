@@ -112,6 +112,9 @@ const shellOutput = (
     ...overrides,
   } as ConversationEvent);
 
+const budget = (event: Extract<ConversationEvent, { type: 'subagent_run_budget' }>['event']): ConversationEvent =>
+  ({ type: 'subagent_run_budget', agentId: 'run-1', role: 'explorer', event } as ConversationEvent);
+
 const makeStore = (options: { now?: () => number; deliveredIdCap?: number } = {}) =>
   new SubagentNotificationStore({ now: () => 1_000, ...options });
 
@@ -138,6 +141,66 @@ it('records one notification carrying the run identity, status and preview', () 
       completedAt: 4_242,
     },
   ]);
+});
+
+it('queues structured budget and stall evidence through the same exact-once notification lane', () => {
+  const store = makeStore({ now: () => 4_242 });
+
+  expect(
+    store.enqueue(
+      budget({
+        type: 'budget_stage',
+        stage: 'warning',
+        evidence: { dimension: 'turns', used: 101, limit: 100, headroom: -1 },
+      }),
+    ),
+  ).toBe(true);
+  expect(
+    store.enqueue(
+      budget({
+        type: 'budget_stage',
+        stage: 'warning',
+        evidence: { dimension: 'turns', used: 101, limit: 100, headroom: -1 },
+      }),
+    ),
+  ).toBe(false);
+
+  expect(store.drain()).toEqual([
+    expect.objectContaining({
+      kind: 'budget',
+      messageId: 'budget:run-1:budget_stage:warning:turns',
+      runId: 'run-1',
+      role: 'explorer',
+      recordedAt: 4_242,
+    }),
+  ]);
+});
+
+it('does not escalate a soft stage, which the child receives in its own tool output', () => {
+  const store = makeStore({ now: () => 4_242 });
+
+  expect(
+    store.enqueue(
+      budget({
+        type: 'budget_stage',
+        stage: 'soft',
+        evidence: { dimension: 'usd', used: 90, limit: 100, headroom: 10 },
+      }),
+    ),
+  ).toBe(false);
+  expect(
+    store.enqueue(
+      budget({
+        type: 'tool_stall',
+        toolName: 'shell',
+        argumentsText: '{"command":"ls"}',
+        count: 3,
+        threshold: 3,
+      }),
+    ),
+  ).toBe(true);
+
+  expect(store.drain()).toEqual([expect.objectContaining({ kind: 'budget', runId: 'run-1' })]);
 });
 
 it('projects a shell job and enqueues its bounded completion independently of subagent runs', () => {

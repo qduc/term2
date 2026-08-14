@@ -1,3 +1,5 @@
+import type { RunBudgetEvidence } from '../services/agent-runtime/run-budget.js';
+
 const MAX_TURNS_LEFT_THRESHOLD = 5;
 
 export function buildTurnLimitWarning(turnsLeft: number): string {
@@ -9,6 +11,43 @@ export function buildTurnLimitWarning(turnsLeft: number): string {
 export interface TurnLimitContext {
   turnCount?: number;
   maxTurns?: number;
+}
+
+/** The run-loop budget context a tool wrapper can use without knowing budget state. */
+export interface RunBudgetWarningContext {
+  readonly budget?: {
+    takeSoftEvidence?: () => RunBudgetEvidence | undefined;
+    takeStallEvidence?: () => RunBudgetStallEvidence | undefined;
+  };
+}
+
+export interface RunBudgetStallEvidence {
+  readonly toolName: string;
+  readonly count: number;
+  readonly threshold: number;
+}
+
+/**
+ * State the repetition as a fact and stop there.
+ *
+ * A red test rerun between edits looks identical to a stall from outside, so
+ * this must not tell the model it is stuck or what to do instead. The run has
+ * the context to decide whether the repetition means anything.
+ */
+export function buildToolStallWarning(evidence: RunBudgetStallEvidence): string {
+  return `\n\n[Note: This is call ${evidence.count} of \`${evidence.toolName}\` with byte-identical arguments, with no file-modifying call in between. If those calls are making progress, carry on; if they are not, change the approach rather than repeating it.]`;
+}
+
+export function buildRunBudgetWarning(evidence: RunBudgetEvidence): string {
+  const labels: Record<RunBudgetEvidence['dimension'], string> = {
+    usd: 'priced USD budget',
+    unpriced_tokens: 'unpriced-token budget',
+    active_time: 'active-time budget',
+    turns: 'turn backstop',
+  };
+  return `\n\n[Warning: The ${labels[evidence.dimension]} is approaching exhaustion (${
+    evidence.headroom
+  } remaining). Please prepare to wrap up your work and provide a situation update describing what has been completed and what remains.]`;
 }
 
 /**
@@ -38,6 +77,24 @@ export function injectTurnLimitWarning(output: string, context: unknown): string
     }
   }
   return output;
+}
+
+/**
+ * Deliver this run's pending budget and stall evidence on one tool result.
+ *
+ * Both are sensation for the run itself, which is the only judge that can act
+ * before the next request. The legacy turn warning remains as a compatibility
+ * fallback for callers not yet on an application-owned run budget.
+ */
+export function injectRunBudgetWarning(output: string, context: unknown): string {
+  const budget = (context as RunBudgetWarningContext | undefined)?.budget;
+  if (!budget) return injectTurnLimitWarning(output, resolveTurnLimitContext(context));
+  let result = output;
+  const stall = budget.takeStallEvidence?.();
+  if (stall) result = injectWarningIntoToolOutput(result, buildToolStallWarning(stall));
+  const evidence = budget.takeSoftEvidence?.();
+  if (evidence) result = injectWarningIntoToolOutput(result, buildRunBudgetWarning(evidence));
+  return result;
 }
 
 export const injectWarningIntoToolOutput = (output: string, warning: string): string => {

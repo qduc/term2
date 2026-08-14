@@ -13,6 +13,7 @@ import type { NestedToolCompatibilityState } from '../session/nested-tool-compat
 import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
 import { ApprovalDecisionExecutor, type ApprovalDecisionSource } from './approval-decision-executor.js';
+import { isRunBudgetInteraction } from '../agent-runtime/run-budget.js';
 
 export interface ApprovalFlowCoordinatorDeps {
   agentClient: ConversationAgentClient;
@@ -155,6 +156,12 @@ export class ApprovalFlowCoordinator {
     const pendingApprovalContext = this.deps.approvalState.getPending();
     if (!pendingApprovalContext) {
       return null;
+    }
+
+    // A run-budget check-in is deliberately carried by the same continuation
+    // state as tool approvals, but it has no capability decision to apply.
+    if (isRunBudgetInteraction(pendingApprovalContext.interruption)) {
+      return { pendingApprovalContext };
     }
 
     const result = this.#decisionExecutor.resolve({

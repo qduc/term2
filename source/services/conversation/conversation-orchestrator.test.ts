@@ -115,6 +115,46 @@ function makeUIPort(): UIPort {
   };
 }
 
+it('grants a finite extension when the paused run returns its budget interaction terminal', async () => {
+  const cfg = makeConfig();
+  const orchestrator = new ConversationOrchestrator(cfg);
+  const grant = vi.fn(() => ({ granted: true, extensionsGranted: 1 }));
+  (cfg.conversationService as any).grantRunBudgetExtension = grant;
+  vi.mocked(cfg.conversationService.sendMessage).mockImplementation(async (_input: any, options: any) => {
+    options.onEvent({
+      type: 'run_budget',
+      evidence: { type: 'tool_stall', toolName: 'read_file', argumentsText: '{"path":"a"}', count: 3, threshold: 3 },
+    });
+    const approval = {
+      agentName: 'System',
+      toolName: 'max_turns_exceeded',
+      argumentsText: 'Repeated tool call',
+      rawInterruption: { type: 'run_budget_interaction' },
+      isMaxTurnsPrompt: true,
+      runBudgetEvent: {
+        type: 'tool_stall' as const,
+        toolName: 'read_file',
+        argumentsText: '{"path":"a"}',
+        count: 3,
+        threshold: 3,
+      },
+    };
+    cfg.conversationService.presentPendingInteraction?.(approval);
+    return { type: 'approval_required', approval };
+  });
+
+  await orchestrator.sendUserMessage('go');
+
+  const interaction = cfg.conversationService.getPendingInteractionSnapshot?.();
+  expect(interaction?.approval).toMatchObject({
+    toolName: 'max_turns_exceeded',
+    runBudgetEvent: { type: 'tool_stall' },
+  });
+  await orchestrator.handleApprovalDecision('y', undefined, undefined, interaction!.interactionId);
+  expect(grant).toHaveBeenCalledOnce();
+  expect(cfg.conversationService.handleApprovalDecision).toHaveBeenCalledWith('y', undefined, expect.any(Object));
+});
+
 function makeUsageAccumulator(): UsageAccumulator {
   let current: NormalizedUsage = {};
   return {

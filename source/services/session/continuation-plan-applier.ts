@@ -3,6 +3,7 @@ import type { ApprovalFlowCoordinator } from '../approval/approval-flow-coordina
 import type { SessionToolTracker } from './session-tool-tracker.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import { getCallIdFromObject } from '../interruption-info.js';
+import { isRunBudgetInteraction } from '../agent-runtime/run-budget.js';
 import type { ContinuationInit, ContinuationState, PreparedContinuation } from './continuation-state.js';
 import type { ContinuationPlan } from '../approval/approval-flow-coordinator.js';
 import type { ApprovalContext } from '../approval/approval-decision-policy.js';
@@ -24,6 +25,27 @@ export class ContinuationPlanApplier {
       const plan = this.deps.approvalFlow.prepareContinuation(init.answer, init.rejectionReason);
       if (!plan) {
         throw new Error('No pending approval for continuation');
+      }
+
+      // Budget evidence uses the continuation transport but is not a tool
+      // approval. Tell the retained run whether to continue or settle; do not
+      // manufacture a tool_started event or run normal approval policy.
+      if (isRunBudgetInteraction(plan.pendingApprovalContext.interruption)) {
+        if (init.answer === 'y') plan.pendingApprovalContext.state.approve?.(plan.pendingApprovalContext.interruption);
+        else plan.pendingApprovalContext.state.reject?.(plan.pendingApprovalContext.interruption);
+        return {
+          state: plan.pendingApprovalContext.state,
+          interruption: plan.pendingApprovalContext.interruption,
+          toolCallArgumentsById: plan.pendingApprovalContext.toolCallArgumentsById,
+          previouslyEmittedCommandIds: plan.pendingApprovalContext.emittedCommandIds,
+          toolStartedEvent: undefined,
+          source: 'continueRunStream',
+          token: plan.pendingApprovalContext.token,
+          inputMode: plan.pendingApprovalContext.inputMode,
+          cumulativeUsage: plan.pendingApprovalContext.cumulativeUsage,
+          cumulativeCommandMessages: plan.pendingApprovalContext.cumulativeCommandMessages,
+          cumulativeTurnItems: plan.pendingApprovalContext.cumulativeTurnItems,
+        };
       }
 
       if (init.answer !== 'y') {

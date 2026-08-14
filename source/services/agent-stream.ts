@@ -56,7 +56,8 @@ function projectProviderItems(items: readonly unknown[]): unknown[] {
       event.type === 'context_compaction_started' ||
       event.type === 'context_compaction_completed' ||
       event.type === 'usage_update' ||
-      event.type === 'cost_update'
+      event.type === 'cost_update' ||
+      event.type === 'run_budget'
     ) {
       return [];
     }

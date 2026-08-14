@@ -1,6 +1,8 @@
 # Run budgets as staged escalation, and stall evidence instead of turn caps
 
-Status: **design only, awaiting implementation approval.** Nobody is on it.
+Status: **implemented and merged.** All 13 review findings are resolved; see
+`docs/plans/run-budget-stall-escalation-review.md` for the per-issue
+dispositions and for what deliberately stayed open.
 
 ## Goal
 
@@ -38,13 +40,41 @@ right ones.
 
 ## Resume here
 
-Today the turn budget conflates sensation and decision —
-`ApplicationRunLoop` counts turns and, on overrun, throws
-(`application-run-loop.ts:684`), which unwinds the run and discards its work.
-The count is a bad proxy for "too much work" and the throw is a harness
-verdict. Split the jobs: the harness detects, a judge decides.
+The sensors exist. Read the review's Dispositions section before changing this
+area — it records why several obvious-looking moves were rejected.
 
-Replace the throw with two sensors feeding one escalation surface:
+The load-bearing decisions, in the code:
+
+- **Extensions are charged in the run loop**, in `state.approve` for a
+  `run_budget_interaction`, not in the UI. Every unattended path — the
+  continuation applier, non-interactive, `--auto-approve` — is bounded because
+  of this. The interactive prompt takes its grant up front and marks it
+  consumed; do not add a second grant site.
+- **Parent grants are capped, human grants are not.** The human is the terminal
+  judge, and each of their grants already costs a fresh blocking prompt.
+- **Stall evidence goes to the run itself, re-armed on every recurrence**, and
+  to the parent exactly once. The old `MAX_IDENTICAL_TOOL_FAILURES` suppressor
+  is gone and must not come back as a silent harness decision.
+- **The parent is never told it can grant a child an extension**, because no
+  child-targeted grant API exists. Do not restore that wording without building
+  the API.
+- **The stream payload is `evidence`, not `event`.** `event.event` trips the
+  `application-stream-boundary` guard, which reads it as a retired SDK envelope.
+- **`agent.maxModelRequestDurationMs: 0` means "no deadline"** and must stay
+  `nonnegative`. `GenerationDeadline` returns early on a non-positive timeout;
+  an earlier attempt here to make the setting positive-only broke startup for
+  every config holding the old default.
+
+Still open: no child-targeted grant API; mentor and async runs are unclamped;
+siblings can still sum past a parent's remainder.
+
+The change this plan made: **the harness detects mechanically and escalates
+evidence; an agent with broader context decides what to do about it.** Before
+it, the turn budget conflated those two jobs — `ApplicationRunLoop` counted
+turns and, on overrun, threw, unwinding the run and discarding its work. The
+count was a bad proxy for "too much work" and the throw was a harness verdict.
+
+The throw is replaced by two sensors feeding one escalation surface:
 
 1. **Staged budgets** on dimensions a run can actually feel — USD, wall clock,
    with tokens only as the unpriced fallback — and three latched stages: the

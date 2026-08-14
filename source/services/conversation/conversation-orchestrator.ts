@@ -32,8 +32,17 @@ import type {
   BackgroundSubagentNotification,
   BackgroundSubagentNotificationPort,
 } from '../subagents/subagent-notification-store.js';
+import type { RunBudgetEvent } from '../agent-runtime/run-budget.js';
 
 const REASONING_RESPONSE_THROTTLE_MS = 200;
+
+function formatRunBudgetEvidence(event: RunBudgetEvent): string {
+  if (event.type === 'tool_stall') {
+    return `Repeated tool call: ${event.toolName} (${event.count}/${event.threshold})\narguments: ${event.argumentsText}`;
+  }
+  const { evidence } = event;
+  return `${event.stage} budget stage: ${evidence.dimension}; used ${evidence.used}/${evidence.limit}; headroom ${evidence.headroom}`;
+}
 
 /**
  * Render settled background runs as one instruction to the main agent. Previews
@@ -48,6 +57,10 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
   const questions = notifications.filter(
     (notification): notification is Extract<BackgroundSubagentNotification, { kind: 'question' }> =>
       notification.kind === 'question',
+  );
+  const budgets = notifications.filter(
+    (notification): notification is Extract<BackgroundSubagentNotification, { kind: 'budget' }> =>
+      notification.kind === 'budget',
   );
   const shellCompletions = notifications.filter(
     (notification): notification is Extract<BackgroundNotification, { kind: 'shell_completion' }> =>
@@ -105,6 +118,28 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
         ...entries,
         '',
         'Decide the answer, investigate it yourself, or escalate to the user if needed. To answer a specific waiting subagent, call send_message({ target, reply_to: messageId, message }). The subagent has no direct user channel; an answer resumes only its waiting tool call.',
+      ].join('\n'),
+    );
+  }
+
+  if (budgets.length > 0) {
+    const entries = budgets.map((notification) => {
+      const target = notification.name ?? notification.runId;
+      return `- target: ${target} | runId: ${notification.runId} | role: ${
+        notification.role
+      }\n  ${formatRunBudgetEvidence(notification.event)}`;
+    });
+    sections.push(
+      [
+        `Background subagent budget/stall evidence (${budgets.length}). This is an automatic system notification, not a user message.`,
+        '',
+        ...entries,
+        '',
+        // Do not offer continue-with-extension: no child-targeted grant API
+        // exists, so the run keeps going inside its own envelope regardless.
+        // Promising an action the parent cannot take produces confident,
+        // ineffective replies and teaches it to ignore this lane.
+        'Judge the evidence and act only if the run is going wrong: steer it with specific corrective guidance via send_message({ target, message }), or stop it with the background task controls. Doing nothing is a valid judgement — the run continues within its own budget and, at critical, ends itself with a summary of what it completed.',
       ].join('\n'),
     );
   }
@@ -219,6 +254,12 @@ function formatBackgroundSubagentNotificationDisplay(notifications: readonly Bac
         return [
           `messageId: ${notification.messageId} | target: ${target} | runId: ${notification.runId} | role: ${notification.role}`,
           `question: ${notification.question}`,
+        ].join('\n');
+      }
+      if (notification.kind === 'budget') {
+        return [
+          `- runId: ${notification.runId} | role: ${notification.role}`,
+          `  ${formatRunBudgetEvidence(notification.event)}`,
         ].join('\n');
       }
       if (notification.kind === 'shell_completion') {
@@ -721,6 +762,7 @@ export class ConversationOrchestrator {
 
     const pendingApproval = resolution.approval;
     const isMaxTurnsPrompt = pendingApproval.isMaxTurnsPrompt;
+    const runBudgetEvent = pendingApproval.runBudgetEvent;
 
     this.config.ui.onApprovalResolved();
 
@@ -731,12 +773,12 @@ export class ConversationOrchestrator {
       };
     }
 
-    if (isMaxTurnsPrompt && answer === 'n') {
+    if (isMaxTurnsPrompt && !runBudgetEvent && answer === 'n') {
       this.#endTurn();
       return;
     }
 
-    if (isMaxTurnsPrompt && answer === 'y') {
+    if (isMaxTurnsPrompt && !runBudgetEvent && answer === 'y') {
       const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =
         this.#beginTurn('maxTurnsContinuation');
 
@@ -764,6 +806,23 @@ export class ConversationOrchestrator {
       }
 
       return;
+    }
+
+    // Steer is part of the judge's vocabulary, but no human surface produces it
+    // here: the prompt offers Continue and Stop only, and collecting corrective
+    // text would need an input surface this prompt does not own. A human steers
+    // by continuing and then typing. Parent agents steer with send_message.
+    if (runBudgetEvent && answer === 'y') {
+      // Take the grant here rather than leaving it to the resume, because a
+      // refusal has to be shown to the human instead of silently stopping.
+      const grant = this.config.conversationService.grantRunBudgetExtension?.() ?? {
+        granted: false,
+        extensionsGranted: 0,
+      };
+      if (!grant.granted) {
+        this.#presentRunBudgetInteraction(runBudgetEvent, 'No further budget extension is available.');
+        return;
+      }
     }
 
     const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =
@@ -892,7 +951,7 @@ export class ConversationOrchestrator {
     }
     const subagentNotifications = newlyDisplayed.filter(
       (notification): notification is BackgroundSubagentNotification =>
-        notification.kind === 'completion' || notification.kind === 'question',
+        notification.kind === 'completion' || notification.kind === 'question' || notification.kind === 'budget',
     );
     const runs = subagentNotifications
       .filter(
@@ -1268,6 +1327,22 @@ export class ConversationOrchestrator {
       eventType === 'tool_call_streaming_delta' ||
       eventType === 'final'
     );
+  }
+
+  /** Reuse the established pending-approval surface for human budget judgement. */
+  #presentRunBudgetInteraction(event: RunBudgetEvent, prefix?: string): void {
+    if (this.config.conversationService.getPendingInteractionSnapshot?.()) return;
+    const approval: PendingApproval = {
+      agentName: 'System',
+      toolName: 'max_turns_exceeded',
+      argumentsText: `${prefix ? `${prefix}\n\n` : ''}${formatRunBudgetEvidence(event)}`,
+      rawInterruption: null,
+      isMaxTurnsPrompt: true,
+      runBudgetEvent: event,
+    };
+    this.config.conversationService.presentPendingInteraction?.(approval);
+    this.config.ui.onApprovalRequested(approval);
+    this.config.notifier?.approvalNeeded();
   }
 
   private appendBotError(errorMessage: string): void {

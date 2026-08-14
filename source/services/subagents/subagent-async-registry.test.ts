@@ -1206,6 +1206,68 @@ describe('outbound steering', () => {
     registry.dispose();
   });
 
+  it('rejects a fifth steering message before overflow and delivers every acknowledged message', async () => {
+    const segments: RunParams[] = [];
+    const resolutions: Array<(value: SubagentResult) => void> = [];
+    const registry = new SubagentAsyncRegistry({
+      logger: createMockLogger(),
+      run: (params) => {
+        segments.push(params);
+        return new Promise<SubagentResult>((resolve) => resolutions.push(resolve));
+      },
+    });
+    const run = registry.startRun({ role: 'worker', task: 'Make the change.' });
+    segments[0].control.onToolStart();
+
+    for (const message of ['first', 'second', 'third', 'fourth']) {
+      expect(registry.sendMessage(run.runId, message)).toMatchObject({ ok: true, delivery: 'queued' });
+    }
+    expect(registry.sendMessage(run.runId, 'fifth')).toEqual({
+      ok: false,
+      code: 'mailbox_full',
+      target: run.runId,
+      limits: { messages: 4, characters: 4_000 },
+      occupancy: { messages: 4, characters: 22 },
+    });
+    expect(segments[0].signal.aborted).toBe(false);
+
+    segments[0].control.onToolComplete();
+    expect(segments[0].signal.aborted).toBe(true);
+    resolutions[0](result('worker', 'cancelled'));
+    await vi.waitFor(() => expect(segments).toHaveLength(2));
+    expect(segments[1].input).toContain('first\nsecond\nthird\nfourth');
+    expect(segments[1].input).not.toContain('fifth');
+
+    resolutions[1](result('worker'));
+    await expect(registry.getResult(run.runId)).resolves.toMatchObject({ status: 'completed' });
+    registry.dispose();
+  });
+
+  it('rejects steering before the 4,000-character mailbox bound and reports its current occupancy', () => {
+    const segments: RunParams[] = [];
+    const registry = new SubagentAsyncRegistry({
+      logger: createMockLogger(),
+      run: (params) => {
+        segments.push(params);
+        return new Promise<SubagentResult>(() => undefined);
+      },
+    });
+    const run = registry.startRun({ role: 'worker', task: 'Make the change.' });
+    segments[0].control.onToolStart();
+
+    expect(registry.sendMessage(run.runId, 'a'.repeat(2_000))).toMatchObject({ ok: true, delivery: 'queued' });
+    expect(registry.sendMessage(run.runId, 'b'.repeat(2_000))).toMatchObject({ ok: true, delivery: 'queued' });
+    expect(registry.sendMessage(run.runId, 'c')).toEqual({
+      ok: false,
+      code: 'mailbox_full',
+      target: run.runId,
+      limits: { messages: 4, characters: 4_000 },
+      occupancy: { messages: 2, characters: 4_000 },
+    });
+    expect(segments[0].signal.aborted).toBe(false);
+    registry.dispose();
+  });
+
   it('waits for every active tool before aborting a segment and coalesces all guidance into one continuation', async () => {
     const segments: RunParams[] = [];
     const resolutions: Array<(value: SubagentResult) => void> = [];

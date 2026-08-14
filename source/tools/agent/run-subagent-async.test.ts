@@ -481,4 +481,35 @@ describe('async run control tools', () => {
     expect(cancel.command).toContain('code_scan');
     expect(cancel.output).toContain('awaiting normal completion');
   });
+
+  it('formats a typed full-mailbox acknowledgement with its effective capacity', () => {
+    const tool = createSendMessageToolDefinition(() => ({
+      ok: false,
+      code: 'mailbox_full',
+      target: 'code_scan',
+      limits: { messages: 4, characters: 4_000 },
+      occupancy: { messages: 4, characters: 22 },
+    }));
+
+    const formatted = tool.formatCommandMessage(
+      {
+        rawItem: {
+          arguments: JSON.stringify({ target: 'code_scan', message: 'One more instruction.' }),
+          output: JSON.stringify({
+            ok: false,
+            code: 'mailbox_full',
+            target: 'code_scan',
+            limits: { messages: 4, characters: 4_000 },
+            occupancy: { messages: 4, characters: 22 },
+          }),
+        },
+      },
+      0,
+      new Map(),
+    )[0];
+
+    expect(formatted.command).toContain('mailbox_full');
+    expect(formatted.output).toContain('4/4 messages');
+    expect(formatted.output).toContain('22/4000 characters');
+  });
 });

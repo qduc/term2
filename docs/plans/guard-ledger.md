@@ -1,6 +1,7 @@
 # Term2 Guard Ledger and Remediation Plan
 
-Status: **Discovery complete (2026-08-14, documentation only). Next action is to
+Status: **Discovery complete; the confirmed `maxParallelToolCalls` defect is
+repaired and merged (`f09b55ec`, merge `87b7224c`). Next action is to
 characterize the five candidates below.**
 
 ## Goal
@@ -36,9 +37,9 @@ Two consequences, both deliberate:
 
 Open work, in order:
 
-- **Now:** decide the `agent.maxParallelToolCalls` repair (below). It changes an
-  effective default, so it needs a yes/no, not a queue position.
-- **Then:** characterize the five candidates. Each behavior change gets its own
+- **Completed:** `agent.maxParallelToolCalls` repair approved, verified, and
+  merged (`f09b55ec`, merge `87b7224c`).
+- **Now:** characterize the five candidates. Each behavior change gets its own
   worktree and commit.
 
 ## Guard classes
@@ -126,12 +127,11 @@ FAIL applies a changed maxParallelToolCalls setting to the next request
 expected ["first"], received ["first", "second"]
 ```
 
-Disposition: **repaired and verified on branch
-`codex/guard-ledger-parallel-setting`; merge pending.** The run loop now resolves
-the effective setting at each completed-response settlement, so a runtime
-change applies to the next dispatch boundary without resizing a batch already
-in flight. Root, nested, and mentor construction paths all supply the resolver;
-the owner fallback now agrees with the schema default of 3.
+Disposition: **repaired in `f09b55ec` and merged in `87b7224c`.** The run loop
+now resolves the effective setting at each completed-response settlement, so a
+runtime change applies to the next dispatch boundary without resizing a batch
+already in flight. Root, nested, and mentor construction paths all supply the
+resolver; the owner fallback now agrees with the schema default of 3.
 
 Detection gap: schema, persistence, and settings-command tests proved only that
 the value existed and could be changed. Nothing exercised the configured value

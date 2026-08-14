@@ -7,6 +7,7 @@ import type { SubagentResult } from './types.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import { formatToolCommand, parseToolArguments } from '../../utils/conversation/conversation-utils.js';
 import { formatSubagentResult, truncatePreview } from './utils.js';
+import type { RunBudgetEvent } from '../agent-runtime/run-budget.js';
 
 /** A completed background run that still owes the main agent a notification. */
 export interface BackgroundSubagentCompletionNotification {
@@ -36,10 +37,22 @@ export interface BackgroundSubagentQuestionNotification {
   askedAt: number;
 }
 
+/** Budget/stall evidence requiring the parent agent's judgement. */
+export interface BackgroundSubagentBudgetNotification {
+  kind: 'budget';
+  messageId: string;
+  runId: string;
+  name?: string;
+  role: string;
+  event: RunBudgetEvent;
+  recordedAt: number;
+}
+
 /** A message-id-keyed queue item for a background async subagent. */
 export type BackgroundSubagentNotification =
   | BackgroundSubagentCompletionNotification
-  | BackgroundSubagentQuestionNotification;
+  | BackgroundSubagentQuestionNotification
+  | BackgroundSubagentBudgetNotification;
 
 /** A settled shell job that still owes the main agent a notification. */
 export interface BackgroundShellCompletionNotification {
@@ -514,6 +527,22 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
         role: event.role,
         question: event.question,
         askedAt: this.#now(),
+      };
+    }
+    if (event.type === 'subagent_run_budget') {
+      const task = this.#tasks.get(event.agentId);
+      const eventKey =
+        event.event.type === 'budget_stage'
+          ? `${event.event.type}:${event.event.stage}:${event.event.evidence.dimension}`
+          : `${event.event.type}:${event.event.toolName}:${event.event.argumentsText}`;
+      return {
+        kind: 'budget',
+        messageId: `budget:${event.agentId}:${eventKey}`,
+        runId: event.agentId,
+        ...(task?.kind !== 'shell' && task?.name !== undefined ? { name: task.name } : {}),
+        role: event.role,
+        event: event.event,
+        recordedAt: this.#now(),
       };
     }
     return undefined;

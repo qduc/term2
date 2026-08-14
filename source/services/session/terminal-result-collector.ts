@@ -115,6 +115,7 @@ export async function collectTerminalResult(
             callId: event.approval.callId,
             llmAdvisory: event.approval.llmAdvisory,
             postExecute: event.approval.postExecute,
+            runBudgetEvent: event.approval.runBudgetEvent,
           },
           ...(usage ? { usage } : {}),
           ...(costRecords?.length ? { costRecords } : {}),

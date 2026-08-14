@@ -112,6 +112,9 @@ const shellOutput = (
     ...overrides,
   } as ConversationEvent);
 
+const budget = (event: Extract<ConversationEvent, { type: 'subagent_run_budget' }>['event']): ConversationEvent =>
+  ({ type: 'subagent_run_budget', agentId: 'run-1', role: 'explorer', event } as ConversationEvent);
+
 const makeStore = (options: { now?: () => number; deliveredIdCap?: number } = {}) =>
   new SubagentNotificationStore({ now: () => 1_000, ...options });
 
@@ -137,6 +140,39 @@ it('records one notification carrying the run identity, status and preview', () 
       formattedResult: expect.stringMatching(/^Status: completed/),
       completedAt: 4_242,
     },
+  ]);
+});
+
+it('queues structured budget and stall evidence through the same exact-once notification lane', () => {
+  const store = makeStore({ now: () => 4_242 });
+
+  expect(
+    store.enqueue(
+      budget({
+        type: 'budget_stage',
+        stage: 'warning',
+        evidence: { dimension: 'turns', used: 101, limit: 100, headroom: -1 },
+      }),
+    ),
+  ).toBe(true);
+  expect(
+    store.enqueue(
+      budget({
+        type: 'budget_stage',
+        stage: 'warning',
+        evidence: { dimension: 'turns', used: 101, limit: 100, headroom: -1 },
+      }),
+    ),
+  ).toBe(false);
+
+  expect(store.drain()).toEqual([
+    expect.objectContaining({
+      kind: 'budget',
+      messageId: 'budget:run-1:budget_stage:warning:turns',
+      runId: 'run-1',
+      role: 'explorer',
+      recordedAt: 4_242,
+    }),
   ]);
 });
 

@@ -585,6 +585,10 @@ it('set() modifies runtime-modifiable settings', async () => {
   service.set('agent.maxParallelToolCalls', 5);
   expect(service.get('agent.maxParallelToolCalls')).toBe(5);
   expect(service.getSource('agent.maxParallelToolCalls')).toBe('cli');
+
+  service.set('agent.runBudget.maxUsdMicros', 7_500_000);
+  expect(service.get('agent.runBudget.maxUsdMicros')).toBe(7_500_000);
+  expect(service.getSource('agent.runBudget.maxUsdMicros')).toBe('cli');
 });
 
 it('set() throws for startup-only settings', async () => {
@@ -642,6 +646,8 @@ it('isRuntimeModifiable identifies correct settings', async () => {
   expect(service.isRuntimeModifiable('agent.maxStreamOutputChars')).toBe(true);
   expect(service.isRuntimeModifiable('agent.maxModelRequestDurationMs')).toBe(true);
   expect(service.isRuntimeModifiable('agent.maxParallelToolCalls')).toBe(true);
+  expect(service.isRuntimeModifiable('agent.runBudget.maxUsdMicros')).toBe(true);
+  expect(service.isRuntimeModifiable('agent.runBudget.identicalToolCallThreshold')).toBe(true);
   expect(service.isRuntimeModifiable('tools.editHealingModel')).toBe(true);
   expect(service.isRuntimeModifiable('tools.editHealingProvider')).toBe(true);
   expect(service.isRuntimeModifiable('shell.timeout')).toBe(true);

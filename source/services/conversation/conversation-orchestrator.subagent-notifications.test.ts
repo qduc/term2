@@ -41,6 +41,14 @@ const question = (
     ...overrides,
   } as ConversationEvent);
 
+const budget = (): ConversationEvent =>
+  ({
+    type: 'subagent_run_budget',
+    agentId: 'run-1',
+    role: 'explorer',
+    event: { type: 'tool_stall', toolName: 'read_file', argumentsText: '{"path":"a"}', count: 3, threshold: 3 },
+  } as ConversationEvent);
+
 const shellCompletion = (
   overrides: Partial<Extract<ConversationEvent, { type: 'background_shell_completed' }>> = {},
 ): ConversationEvent =>
@@ -218,6 +226,19 @@ function makeHarness(options: { queueActive?: boolean; injects?: boolean } = {})
 }
 
 describe('ConversationOrchestrator background subagent notifications mid-turn', () => {
+  it('formats background subagent stall evidence as a parent judgement notification', async () => {
+    const h = makeHarness({ queueActive: true });
+
+    h.emit(budget());
+    await settle();
+
+    expect(h.injectedTexts()[0]).toContain('budget/stall evidence');
+    expect(h.injectedTexts()[0]).toContain('Repeated tool call: read_file (3/3)');
+    expect(h.config.messages.getMessages()).toContainEqual(
+      expect.objectContaining({ sender: 'command', toolName: 'background_subagent_notification' }),
+    );
+  });
+
   it('hands a user-requested background stop to the active turn and renders one concise command row', async () => {
     const h = makeHarness({ queueActive: true });
 

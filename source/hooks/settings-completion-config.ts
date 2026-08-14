@@ -64,6 +64,31 @@ export const SETTING_DESCRIPTIONS: Record<string, string> = {
     'Optional hard duration limit for one model request, in milliseconds (0 disables)',
   [SETTING_KEYS.AGENT_RETRY_ATTEMPTS]: 'Number of retry attempts for failed requests',
   [SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS]: 'Maximum number of tool calls allowed to run at the same time',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_USD_MICROS]:
+    'Per-run priced-request budget in USD micros (1,000,000 = $1; default $5)',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_UNPRICED_TOKENS]:
+    'Per-run token budget used when request pricing is unavailable (default 500,000)',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_ACTIVE_TIME_MS]:
+    'Per-run active-time budget in milliseconds; approval wait time is excluded (default 1 hour)',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_USD_MICROS]:
+    'Priced-budget headroom that triggers a warning escalation (USD micros)',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_UNPRICED_TOKENS]:
+    'Unpriced-token headroom that triggers a warning escalation',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_ACTIVE_TIME_MS]:
+    'Active-time headroom that triggers a warning escalation, in milliseconds',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_USD_MICROS]:
+    'Priced-budget headroom that injects a soft wrap-up nudge (USD micros)',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_UNPRICED_TOKENS]:
+    'Unpriced-token headroom that injects a soft wrap-up nudge',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_ACTIVE_TIME_MS]:
+    'Active-time headroom that injects a soft wrap-up nudge, in milliseconds',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_TURN_BACKSTOP]:
+    'High turn-count backstop that detects an infinite loop without setting the operating budget',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_EXTENSION_PERCENT]: 'Budget percentage granted for each finite continuation extension',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_PARENT_EXTENSIONS]:
+    'Maximum finite extensions a parent may grant before escalation reaches the human',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_IDENTICAL_TOOL_CALL_THRESHOLD]:
+    'Identical tool calls without an intervening mutation required to report stall evidence',
   [SETTING_KEYS.AGENT_CODEX_WEBSOCKET_FIRST_FRAME_TIMEOUT_MS]:
     'Codex WebSocket timeout before the first response frame, in milliseconds',
   [SETTING_KEYS.AGENT_CODEX_WEBSOCKET_INTER_FRAME_TIMEOUT_MS]:
@@ -210,6 +235,19 @@ export const CATEGORY_KEYS = {
     SETTING_KEYS.AGENT_MAX_OUTPUT_TOKENS,
     SETTING_KEYS.AGENT_MAX_STREAM_OUTPUT_CHARS,
     SETTING_KEYS.AGENT_MAX_MODEL_REQUEST_DURATION_MS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_MAX_USD_MICROS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_MAX_UNPRICED_TOKENS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_MAX_ACTIVE_TIME_MS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_USD_MICROS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_UNPRICED_TOKENS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_ACTIVE_TIME_MS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_USD_MICROS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_UNPRICED_TOKENS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_ACTIVE_TIME_MS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_TURN_BACKSTOP,
+    SETTING_KEYS.AGENT_RUN_BUDGET_EXTENSION_PERCENT,
+    SETTING_KEYS.AGENT_RUN_BUDGET_MAX_PARENT_EXTENSIONS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_IDENTICAL_TOOL_CALL_THRESHOLD,
     SETTING_KEYS.SHELL_AUTO_APPROVE_MODE,
     SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL,
     SETTING_KEYS.AGENT_AUTO_APPROVE_REASONING_EFFORT,

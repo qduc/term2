@@ -160,8 +160,15 @@ export class SubagentBridge {
       this.#backgroundRunIds.add(agentId);
     }
 
+    // Budget/stall judgement is parent-facing even for a foreground nested
+    // child. Reuse the durable notification lane rather than making its
+    // delivery depend on the parent tool call still owning an active UI sink.
     const scope: SubagentEventScope =
-      explicitlyAsync || (agentId !== undefined && this.#backgroundRunIds.has(agentId)) ? 'background' : 'foreground';
+      event.type === 'subagent_run_budget' ||
+      explicitlyAsync ||
+      (agentId !== undefined && this.#backgroundRunIds.has(agentId))
+        ? 'background'
+        : 'foreground';
     const sink = scope === 'background' ? this.#backgroundEventSink : this.#subagentEventSink;
     if (sink) {
       sink(event);

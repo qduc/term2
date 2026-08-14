@@ -1,216 +1,414 @@
-# Roadmap: finish deliberately without getting lost
+# Roadmap: stabilize before expanding
 
-The key is to stop treating “all known improvements” as one backlog. Use a **single active outcome**, with every other item explicitly parked.
+Status: **Feature expansion paused for a bounded stabilization tranche.**
 
-## Operating rules
+## Goal
 
-1. **One product initiative in flight at a time.**
-   Allow parallel implementation only within that initiative when tasks are independently mergeable.
+Make the behavior already implemented trustworthy before adding another broad
+feature surface.
 
-2. **Make `docs/plans/` the source of truth.**
-   Each active plan must begin with:
-  - current status and owner,
-  - user-facing problem,
-  - explicit non-goals,
-  - acceptance criteria,
-  - validation commands and baseline failures,
-  - a “Resume here” section updated at every handoff.
+This tranche will:
 
-3. **No “done” without observable proof.**
-   A feature is complete only when its acceptance criteria, focused tests, and applicable black-box/provider tests pass—or when any exclusions are documented with an owner and expiry.
+1. define the contracts at the system's highest-risk ownership seams;
+2. turn those contracts into deterministic public-boundary tests;
+3. repair only demonstrated violations, one independently revertible change at
+   a time; and
+4. make contract-first implementation and change-surface quality gates the
+   normal workflow for future work.
 
-4. **Treat test instability as capacity debt.**
-   Do not let known timeouts and environment-sensitive failures become permanent background noise. A failing test suite makes future feature work harder to trust.
+This is not a rewrite, a coverage-percentage campaign, or a permanent feature
+freeze. Existing ownership boundaries remain in force unless a red-proven
+contract violation shows that an interface cannot uphold its responsibility.
 
-5. **Use a fixed WIP limit.**
-   At most:
-  - one implementation milestone,
-  - one investigation,
-  - one deferred design awaiting a decision.
+## Operating mode during stabilization
 
----
+### Allowed
 
-## Phase 0 — Re-establish a trustworthy baseline
+- Critical security, data-loss, effect-safety, and release-blocking repairs.
+- Contract characterization, test infrastructure, and deterministic baseline
+  repairs.
+- Fixes for violations proven through an owning public boundary.
+- Small release and maintenance work that does not introduce a new runtime
+  boundary.
 
-**Goal:** make it obvious which validation signals are real before expanding behavior.
+### Paused
 
-### Work
+- New product features or provider capabilities.
+- Broad refactors justified only by code shape or defect counts.
+- New `Manager`, `Coordinator`, `Runner`, `Handler`, state machine, or generic
+  scope container without a demonstrated ownership gap.
+- Threshold tuning or guard weakening without a written guard contract and red
+  false-positive evidence.
+- Opportunistic cleanup mixed into a contract repair.
 
-- Confirm the current status of documented validation debt:
-  - Ink `act is not a function` failures caused by test environment / `ink-prompt` behavior.
-  - the Responses-lifecycle PTY timeout in provider black-box testing.
-  - the environment-sensitive `source/cli.e2e.test.ts` terminal-output timeout.
-- Separate failures into:
-  - fixed,
-  - reproducible product/test defects,
-  - environment limitations,
-  - intentionally skipped coverage.
-- Ensure standard test commands pin `NODE_ENV=test`, as required by `AGENTS.md`.
-- Update old plan records that only describe historical failures, so they do not masquerade as current regressions.
+### Working rules
 
-### Exit criteria
+1. Keep one stabilization outcome active at a time. Parallel work is allowed
+   only when branches touch independent owners and are independently mergeable.
+2. Use an isolated worktree for every non-trivial repair. Preserve unrelated
+   work in the primary checkout.
+3. Write the contract and the public-boundary red proof before changing
+   production behavior.
+4. Treat every failure as one of: product defect, test defect, fixture defect,
+   dependency defect, environment limitation, or known baseline. Do not repair
+   production code to hide a failure owned elsewhere.
+5. A regression test is the floor. Every non-trivial fix must also examine
+   sibling paths and the detection gap that allowed the defect class.
+6. Run tests with `NODE_ENV=test`. Never report a check as passing unless it was
+   run and succeeded.
 
-- A clean, dated baseline report says exactly:
-  - which suites are green,
-  - which failures remain,
-  - whether each is a product defect, test defect, or environmental constraint,
-  - the owner and next action for each remaining item.
+## Ownership model to preserve
 
-**Why first:** otherwise every subsequent milestone has ambiguous validation, which is the fastest way to lose confidence and context.
+Stabilization strengthens the protocols between existing owners; it does not
+collapse them into a universal controller.
 
----
+| Concern | Current owner |
+| --- | --- |
+| Queued submission state and admission | `QueueController` |
+| Request identity and executable payload routing | `ConversationAdapter` |
+| Turn admission and status | `TurnCoordinator` and `TurnStatusMachine` |
+| Turn execution workflow | `TurnWorkflow` |
+| Request boundaries, steering, model streaming, and tool dispatch | `ApplicationRunLoop` |
+| Interactive projection | `ConversationOrchestrator` and Ink |
+| Approval decisions | `services/approval/` |
+| Retry and recovery decisions | `services/retry/` |
+| Provider transport details | `providers/` and `lib/` |
+| Session composition | `services/session/session-composition.ts` |
+| Subagent composition | `services/subagents/runtime.ts` |
 
-## Phase 1 — Finish the small, bounded background-work experience gap
+An extraction earns its place only when deleting it would spread a stable
+policy or invariant across callers. A module that merely forwards calls or
+mirrors another owner's state does not qualify.
 
-**Source:** `docs/plans/background-work-control/liveness-ui.md`
+## Phase 0 — Establish a trustworthy baseline
 
-**Goal:** make background task state honest: lifecycle, recent evidence, and context use must be independently visible.
-
-### Work
-
-- Split the current exclusive activity state into separate concepts:
-  - lifecycle phase and reason,
-  - last observation time/source,
-  - derived liveness or evidence age.
-- Expose provider-wait plus “no recent evidence” simultaneously.
-- Add background subagent model/context-window and latest-request usage to the control projection.
-- Update compact and manager views while preserving narrow-width identity and existing cancellation semantics.
-- Add regression tests for:
-  - provider-waiting task that becomes quiet,
-  - recently active task,
-  - context usage display,
-  - narrow terminal layouts,
-  - no change to task execution, cancellation, or transfer lifecycle.
-
-### Exit criteria
-
-Every acceptance criterion already listed in the plan is met, focused UI tests pass, and existing background-task control behavior remains unchanged.
-
-**Why second:** it is intentionally presentation-only, has a bounded contract, and resolves a real user-trust problem without entangling execution policy.
-
----
-
-## Phase 2 — Replace “budget exceeded” failure with controlled escalation
-
-**Source:** `docs/plans/run-budget-stall-escalation.md`
-
-**Goal:** the harness provides sensation (cost, time, stall), not decisions. Limits become evidence a judge can act on, not a throw that silently loses an otherwise recoverable run. See the Goal section of the source plan.
-
-### First make the unresolved decisions explicit
-
-Before implementation, decide and record:
-
-1. **Budget denominator:** model turns, model requests, wall-clock duration, cost, tool count, or a defined combination.
-2. **Escalation policy:** warning threshold, check-in threshold, hard-stop policy, and whether the user can extend or terminate.
-3. **Cost behavior:** priced requests use available accounting; unpriced requests use an explicit fallback and are never treated as free.
-4. **Failure-loop policy:** what evidence constitutes repetition, when it is surfaced, and when retry suppression is appropriate.
-5. **Ownership:** one authoritative budget policy; other components report observations rather than independently enforcing limits.
-6. **No-limit behavior:** preserve the existing wrap-up/continuity behavior when `maxTurns` is unset.
-
-### Then implement in vertical slices
-
-1. Establish the budget/evidence model and its unit tests.
-2. Reconcile `ApplicationRunLoop`, `ExecutionBudget`, `AgentLimits` / `resolveLimits`, and the `max_turns_exceeded` prompt around that model.
-3. Add user-visible warnings/check-ins at safe request boundaries.
-4. Implement cost and unpriced-request behavior.
-5. Surface repeated-failure evidence rather than making it a silent local intervention.
-6. Add run-loop and provider black-box scenarios for escalation, continuation, decline, tool debt, and recovery.
-
-### Exit criteria
-
-- Exceeding a soft turn budget does **not** discard run work.
-- Users receive actionable, evidence-based escalation.
-- Cost accounting behaves safely for both priced and unpriced requests.
-- Exactly one component owns budget enforcement.
-- Run-loop/provider changes pass the required provider black-box suite.
-
-**Why third:** this is the highest-value known correctness issue, but it is also the deepest cross-cutting change. It deserves the focused attention of a single active initiative.
-
----
-
-## Phase 3 — Complete and harden public hooks
-
-**Source:** `docs/plans/public-hooks-system.md`
-
-**Goal:** graduate hooks from “core implementation complete” to a reliable public extension contract.
+**Outcome:** failures discovered during stabilization can be classified against
+a dated, reproducible baseline.
 
 ### Work
 
-- Resolve or isolate the remaining validation failures so hook behavior is tested against a credible suite.
-- Test:
-  - discovery and loading,
-  - registration and cleanup,
-  - callback ordering,
-  - TypeScript loading,
-  - filesystem write protection,
-  - shutdown behavior,
-  - malformed or throwing user hooks.
-- Define compatibility policy:
-  - stable hook names and payload schemas,
-  - deprecation window,
-  - explicit behavior when a hook fails.
-- Publish a small reference extension plus contract documentation.
+- Record the current results of:
+  - focused tests for each critical seam;
+  - `NODE_ENV=test pnpm test`;
+  - `pnpm typecheck`;
+  - `pnpm test:provider-black-box`;
+  - formatting and lint checks used by the release path.
+- Separate source failures from fixture, dependency, sandbox, PTY, network, and
+  environment failures.
+- Remove stale status text from completed plans or label historical failures as
+  historical with their disposition.
+- Recast `docs/plans/escaped-defects-30d/` as an evidence inventory until its
+  sampling unit, discovery stage, and taxonomy are corrected. Do not use its
+  percentages to choose architecture work.
 
 ### Exit criteria
 
-The hooks integration tests and associated validation pass; hook contracts, error semantics, and compatibility expectations are documented; a user can create a supported hook without relying on internal code.
+- One dated baseline records the exact commands, results, environment-only
+  limitations, and owner of every unresolved failure.
+- No stabilization repair begins from an unexplained red baseline.
 
-**Why fourth:** public extension points magnify defects. Hardening them after the run-loop policy settles prevents extensions from binding to unstable behavior.
+## Phase 1 — Define executable seam contracts
 
----
+**Outcome:** the most failure-prone cross-owner behavior is stated in observable
+terms and has a deterministic contract matrix.
 
-## Phase 4 — Add live provider canaries
+Each contract record must name:
 
-**Source:** deferred item in `AGENTS.md`
+- the invariant and user-visible harm it prevents;
+- enforcement owner and recovery owner;
+- all execution paths that share it;
+- identities and state that cross the boundary;
+- success, failure, cancellation, retry, and ambiguous-outcome settlement;
+- observability needed to diagnose a violation;
+- the public boundary through which it will be tested; and
+- the focused and broader verification commands.
 
-**Goal:** find integration breakage against real providers before users do, without turning CI into a secret-leaking or cost-unbounded system.
+### 1. Conversation submission and turn lifecycle
 
-### Decisions required
+Owners: `QueueController`, `ConversationAdapter`, `TurnCoordinator`,
+`TurnStatusMachine`, and the `ConversationOrchestrator` projection.
 
-- Which providers/models are covered initially.
-- CI secret storage and access policy.
-- OAuth credential storage/refresh strategy.
-- Per-run and monthly spend ceilings.
-- Schedule, retry policy, alert destination, and human owner.
-- What payloads/logs are retained and how sensitive fields are redacted.
+Contract:
 
-### Initial scope
+- A submission has stable identity from admission through terminal settlement.
+- Queued, activating, active, awaiting-approval, continuing, and terminal states
+  cannot be mistaken for one another.
+- Every accepted request promise settles exactly once on success, rejection,
+  removal, cancellation, recovery, or failure.
+- UI pending and active projections follow domain events and cannot keep a
+  settled request visible as queued or running.
+- A steer belongs to a declared turn until its next request boundary or is
+  truthfully admitted as a separate queued turn; stream-segment gaps cannot
+  silently drop it.
 
-Keep the first canary small:
+Minimum matrix:
 
-- one low-cost request per supported provider transport,
-- a basic streaming assertion,
-- one tool-call round-trip where applicable,
-- request/response schema and auth failures captured as redacted diagnostics,
-- strict timeout and spend cap,
-- a non-blocking alert rather than a release-blocking gate at first.
+- immediate execution and deferred queue execution;
+- remove or edit before start;
+- cancel with zero, one, and multiple retained items;
+- repeated approval continuations;
+- stale approval identity;
+- retry or recovery before stream start and after partial stream output;
+- UI projection with start callbacks delayed, skipped, or replayed.
+
+### 2. Provider input, continuity, and effect settlement
+
+Owners: tool ledger and history projection, `ProviderContinuity`,
+`SessionInputPlanner`, chained-input filtering, and retry/recovery policy.
+
+Contract:
+
+- Every provider-facing tool result has one matching call in the applicable
+  full-history request or live provider chain.
+- Ledger reconciliation cannot duplicate, reorder, or resurrect a settled pair
+  across replay or compaction boundaries.
+- A live chain with unpaid tool debt is either paid completely or dropped before
+  the next request.
+- Chained delta validation and full-history validation remain distinct; a
+  transport downgrade is allowed only after local history, continuity, and
+  effect state are safe for replay.
+- Never-dispatched effects settle as `aborted`; dispatched-but-unobserved effects
+  settle as `unknown` and are never blindly re-executed.
+- Provider-native opaque state remains provider-scoped.
+
+Minimum matrix:
+
+- complete and partial parallel tool-call batches;
+- pre-stream and mid-stream transport failure;
+- failure before dispatch and after dispatch;
+- approval pause and continuation;
+- compacted history, replacement boundaries, save/resume, and stateless replay;
+- orphan, duplicate, missing, and out-of-order call/result items;
+- chained, forced-full-history, and transport-downgrade requests.
+
+### 3. Child-run identity, authority, and lifecycle
+
+Owner: `createSubagentRuntime` and its strategy-specific runners, with event
+routing in `SubagentBridge` and provider traffic identity in session context.
+
+Contract:
+
+- Every child run receives an identity distinct from the parent and stable
+  across its own continuations.
+- Foreground, background, adopted, mentor, evaluator, and nested-child events
+  reach only their owning sink.
+- Global settings intended to apply to children are resolved consistently, while
+  permissions and execution budgets may only stay equal or attenuate.
+- Parent, turn, conversation, and explicit-user cancellation affect exactly the
+  child scopes they own.
+- Every started child emits a truthful terminal state: completed, failed,
+  cancelled, or interrupted.
+- Admission failures preserve typed error codes and do not mutate running work.
+
+Minimum matrix:
+
+- foreground and background runs;
+- nested child-of-child runs;
+- evaluator traffic;
+- continuation of persistent roles;
+- provider session identity;
+- inherited approval settings and attenuated capabilities;
+- parent abort, turn abort, adopted transfer, explicit stop, and session dispose;
+- duplicate role/name admission and structured error round-trip.
+
+### 4. Settings consumption
+
+Owners: settings schema and source resolution plus the runtime owner consuming
+each setting.
+
+Contract:
+
+- Every user-facing setting has a runtime consumer or is explicitly marked as
+  presentation-only or restart-only.
+- Schema default, runtime fallback, persisted value, environment override, role
+  override, and per-invocation override have one documented precedence order.
+- A runtime-modifiable setting takes effect at its promised boundary.
+- The effective value—not merely schema presence or UI mutation—is tested.
+
+Minimum matrix:
+
+- default, customized, minimum, maximum, invalid, and migrated values;
+- root, nested, mentor, background, workflow, and non-interactive consumers
+  where applicable;
+- runtime change at the request boundary promised by `/settings`.
+
+### 5. Runtime guards and retention
+
+Owners and contracts remain recorded in `docs/plans/guard-ledger.md` and any
+linked owner plan.
+
+Contract:
+
+- Admission limits reject only new work and leave admitted work untouched.
+- Retention bounds remove only state proven dead or preserve omitted material
+  through a retrieval path.
+- Inactivity watchdogs observe meaningful activity at their named boundary.
+- Containment budgets remain finite and use staged escalation where authorized.
+- Security and authority boundaries stay fail-closed.
+- Every destructive action is justified by direct evidence, settles partial work
+  truthfully, and reports a typed recovery classification.
+
+Minimum matrix:
+
+- threshold minus one, threshold, and threshold plus one;
+- a genuine harmful case;
+- legitimate work that resembles the signal;
+- cancellation, retry, fallback, and ambiguous outcomes;
+- every shared root, child, workflow, non-interactive, and shell path.
 
 ### Exit criteria
 
-Canaries run on schedule with bounded cost, no secret exposure, redacted evidence, actionable alerts, and documented ownership. Promote selected canaries to release gates only after several weeks of reliable signal.
+- Every contract above has an owner-approved record and a focused test command.
+- Existing green behavior is characterized before any production repair.
+- Every discovered failure is classified; only product defects proceed to
+  Phase 2.
 
-**Why last:** it needs organizational and infrastructure decisions, not merely code. Implementing it early risks producing an expensive, noisy, unowned job.
+## Phase 2 — Repair demonstrated violations
 
----
+**Outcome:** current behavior satisfies the contracts without speculative
+architecture work.
 
-## Maintenance lane: keep the map usable
+### Priority order
 
-At the end of each completed phase:
+Prioritize by potential harm and replay risk, not by raw defect frequency:
 
-1. Mark the plan complete in `AGENTS.md`.
-2. Move its design record under **Completed** only if it contains enduring constraints future work must respect.
-3. Remove stale failure notes or label them historical with a fix reference.
-4. Create exactly one next active plan; do not activate every deferred idea.
-5. Record a short release note: behavior changed, compatibility implications, validation evidence, and follow-ups.
+1. authority bypass, data loss, and ambiguous external effects;
+2. invalid provider history and unsafe recovery;
+3. non-settling or misattributed queue and turn state;
+4. child identity, event, permission, and cancellation leaks;
+5. settings divergence and destructive guard false positives;
+6. presentation-only inconsistencies.
 
-## Priority order
+### Repair loop
 
-| Order | Initiative | Reason |
-|---|---|---|
-| 0 | Validation baseline | Restores trust in every later result |
-| 1 | Background liveness UI | Bounded, user-visible, low execution risk |
-| 2 | Budget escalation | Largest known behavior/correctness gap |
-| 3 | Public-hook hardening | Makes extension surface dependable |
-| 4 | Provider canaries | Ongoing production confidence, requires external decisions |
+For each violation:
 
-This gives the project a finish line without pretending it has a final endpoint: **first make the signals trustworthy, then fix the user-visible ambiguity, then repair the deep run-control policy, then stabilize extensibility, and finally automate real-world confidence.**
+1. Reproduce it deterministically through the owning public boundary.
+2. Record why types, tests, review, and observability did not catch it.
+3. Search sibling owners and execution paths for the same mechanism.
+4. Choose the smallest owner-level repair that satisfies the contract.
+5. Keep the behavior change and its test independently revertible.
+6. Run focused tests during development.
+7. Run `pnpm typecheck`, formatting for changed files, and the broader suite
+   proportional to the affected surface.
+8. Run `pnpm test:provider-black-box` during development for provider, bridge,
+   run-loop, registry, or non-interactive changes.
+9. Record confirmed checks, baseline failures, and remaining risks separately.
+
+Do not convert an unproven remaining risk into implementation work. First give
+it a red characterization or retain it as an explicit hypothesis.
+
+### Exit criteria
+
+- Every red contract test has a merged repair, an approved deferral with owner
+  and rationale, or evidence that the failure belongs outside production code.
+- No repair weakens an authority boundary, loses admitted work, fabricates
+  failure, or blindly replays an ambiguous effect.
+- Focused, broad, and provider gates required by each change have truthful
+  recorded outcomes.
+
+## Phase 3 — Install the future implementation workflow
+
+**Outcome:** future features cannot cross an important boundary without naming
+and testing the contract they change.
+
+### Step 1: Frame the change
+
+Before implementation, record:
+
+- user-visible outcome;
+- owning module and public boundary;
+- invariant being added or changed;
+- affected root, child, workflow, UI, provider, and non-interactive paths;
+- failure, cancellation, retry, and recovery semantics;
+- explicit non-goals;
+- acceptance criteria and exact verification commands.
+
+If ownership is unclear, stop at design. Do not resolve uncertainty by creating
+a generic coordinator or placing policy in a convenient caller.
+
+### Step 2: Prove the contract red
+
+- Write deterministic tests through the owning public interface.
+- Mock only true boundaries.
+- Assert typed state, codes, identity, and settlement rather than broad strings
+  or snapshots unless text itself is the contract.
+- Cover the meaningful boundary cases before production code.
+
+### Step 3: Implement a vertical slice
+
+- Make the minimum production change at the owner.
+- Preserve policy, transport, persistence, and presentation boundaries.
+- Keep unrelated cleanup out of the branch.
+- Use an isolated worktree for non-trivial work.
+
+### Step 4: Close the defect class
+
+Before declaring the change complete:
+
+- inspect sibling implementations and execution paths;
+- ask what made the invalid state representable;
+- add an owner-level contract, exhaustive type, lint rule, or CI check when it
+  proportionally prevents the class;
+- document any residual hypothesis without presenting it as observed evidence.
+
+### Step 5: Pass change-surface gates
+
+| Change surface | Required gate |
+| --- | --- |
+| Local implementation | Focused owner tests with `NODE_ENV=test` |
+| Shared utility or architectural boundary | Relevant contract matrix plus full test suite |
+| Provider, bridge, run loop, registry, non-interactive | Focused tests, typecheck, and provider black-box suite |
+| Ink input or modal ownership | App-dispatcher ownership tests and focused Ink tests |
+| Setting | Effective runtime-consumption test plus settings UI/schema coverage |
+| Runtime guard | Written guard contract, red false-positive/true-positive matrix, and guard-ledger update |
+| Non-trivial bug fix | Specimen regression, sibling-path audit, and detection-gap disposition |
+| Prompt or tool description | Behavioral test preserving non-obvious prompt/tool contract |
+
+### Step 6: Review and hand off
+
+- Review both repository standards and the originating specification.
+- Report exact commands and results; separate known baselines and environment
+  limitations.
+- Update the plan's `Resume here` section before a handoff.
+- Merge only intended files; do not commit or push unrelated user work.
+- After merge, update durable ownership or workflow documentation when the
+  contract changed.
+
+### Institutionalization work
+
+- Encode the workflow's non-negotiable gates in `AGENTS.md`.
+- Add lightweight change templates for contract, recovery, test matrix, and
+  verification evidence.
+- Automate stable mechanical checks in CI; keep environment-sensitive or paid
+  live canaries separate until their signal and ownership are proven.
+- Keep `docs/plans/` current: completed plans retain only constraints that still
+  prevent reintroducing a defect.
+
+## Phase 4 — Exit stabilization deliberately
+
+Feature work resumes only when all of the following are true:
+
+1. The five critical seam contracts have authoritative owners and executable
+   baseline tests.
+2. Every red characterization has a recorded disposition.
+3. The standard suite, typecheck, and applicable provider black-box suite have a
+   dated trustworthy result; remaining limitations are classified and owned.
+4. The future implementation workflow and change-surface gates are recorded in
+   the repository's authoritative agent instructions and review process.
+5. No open security, data-loss, ambiguous-effect, or provider-continuity defect
+   remains hidden inside a general backlog.
+6. One bounded feature is selected to exercise the new workflow end to end.
+
+The first feature after stabilization is a calibration run. Its plan and review
+must show that the new workflow catches boundary mistakes before merge without
+requiring a universal controller or an unbounded test campaign.
+
+## Definition of success
+
+The project is ready to expand again when confidence comes from executable
+contracts rather than familiarity with the implementation:
+
+> Preserve the existing owners, make their boundary invariants observable,
+> repair demonstrated violations, and require every future feature to prove the
+> contracts it changes before it merges.

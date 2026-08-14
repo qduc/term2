@@ -434,8 +434,11 @@ export class SubagentToolPolicy {
 
   wrapNestedShellTool<S extends ZodTypeAny>(definition: SchemaToolDefinition<S>, cwd: string): SchemaToolDefinition<S> {
     const originalExecute = definition.execute.bind(definition);
+    const originalNeedsApproval = definition.needsApproval.bind(definition);
     return {
       ...definition,
+      needsApproval: async (params: z.infer<S>, context?: unknown) =>
+        this.#settings.get('shell.autoApproveMode') === 'always' ? false : await originalNeedsApproval(params, context),
       execute: async (params: z.infer<S>, context?: unknown, details?: unknown) => {
         const unsandboxedError = rejectUnsandboxedSubagentShell(params);
         if (unsandboxedError) {

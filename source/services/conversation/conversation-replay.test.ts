@@ -468,6 +468,25 @@ it('replayEvents: subagent_transferred freezes the existing card and ignores a l
   expect(cards[0]).not.toHaveProperty('finalText');
 });
 
+it('replayEvents: subagent_interrupted restores a terminal foreground card', () => {
+  const restored = replayEvents([
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'subagent_started', agentId: 'a1', role: 'worker', task: 'run tests' }),
+    env({
+      type: 'subagent_interrupted',
+      agentId: 'a1',
+      role: 'worker',
+      finalText: 'Paused before running tests.',
+    }),
+  ]);
+
+  expect(restored.messages.find((message) => message.sender === 'subagent')).toMatchObject({
+    agentId: 'a1',
+    status: 'interrupted',
+    finalText: 'Paused before running tests.',
+  });
+});
+
 it('replayEvents: restores one settled background shell notification without recreating a job', () => {
   const restored = replayEvents([
     env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),

@@ -404,6 +404,12 @@ it('dispatchEventToLog logs event-specific records', () => {
     role: 'worker',
   });
   conversationLogger.dispatchEventToLog({
+    type: 'subagent_interrupted',
+    agentId: 'agent-2',
+    role: 'worker',
+    finalText: 'Paused before running tests.',
+  });
+  conversationLogger.dispatchEventToLog({
     type: 'subagent_completed',
     result: {
       agentId: 'agent-1',
@@ -460,6 +466,12 @@ it('dispatchEventToLog logs event-specific records', () => {
       agentId: 'agent-1',
       runId: 'agent-1',
       role: 'worker',
+    },
+    {
+      type: 'subagent_interrupted',
+      agentId: 'agent-2',
+      role: 'worker',
+      finalText: 'Paused before running tests.',
     },
     {
       type: 'subagent_completed',

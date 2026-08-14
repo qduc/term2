@@ -128,6 +128,31 @@ it('delivers a transfer event to the turn sink before the async start pins later
   expect(background.events.map((event) => event.type)).toEqual(['subagent_started', 'subagent_command_message']);
 });
 
+it('delivers a foreground interruption to the turn sink', () => {
+  const { bridge, emit } = makeBridge();
+  const turn = collector();
+  const background = collector();
+
+  bridge.setEventSink(turn.sink);
+  bridge.setBackgroundEventSink(background.sink);
+  emit({
+    type: 'subagent_interrupted',
+    agentId: 'foreground-run',
+    role: 'worker',
+    finalText: 'Paused before running tests.',
+  });
+
+  expect(turn.events).toEqual([
+    {
+      type: 'subagent_interrupted',
+      agentId: 'foreground-run',
+      role: 'worker',
+      finalText: 'Paused before running tests.',
+    },
+  ]);
+  expect(background.events).toEqual([]);
+});
+
 it('keeps synchronous events on the turn sink and async lifecycle events on the background sink', () => {
   const { bridge, emit } = makeBridge();
   const turn = collector();

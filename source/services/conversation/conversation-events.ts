@@ -27,6 +27,7 @@ export type ConversationEvent =
   | SubagentCommandMessageEvent
   | SubagentApprovalRequiredEvent
   | SubagentCompletedEvent
+  | SubagentInterruptedEvent
   | SubagentTransferredEvent
   | SubagentQuestionEvent
   | BackgroundShellStartedEvent
@@ -237,6 +238,14 @@ export interface SubagentCompletedEvent {
   result: SubagentResult;
   /** True when this completion finishes a background-owned run. */
   async?: boolean;
+}
+
+/** A foreground nested run terminalized at an approval pause without completing. */
+export interface SubagentInterruptedEvent {
+  type: 'subagent_interrupted';
+  agentId: string;
+  role: string;
+  finalText: string;
 }
 
 /** The foreground transcript card is no longer the live owner of this run. */

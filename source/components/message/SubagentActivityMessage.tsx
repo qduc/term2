@@ -105,7 +105,7 @@ const SubagentActivityMessage: FC<Props> = ({ msg }) => {
       ? 'green'
       : msg.status === 'failed'
       ? 'red'
-      : msg.status === 'cancelled' || msg.status === 'backgrounded'
+      : msg.status === 'cancelled' || msg.status === 'interrupted' || msg.status === 'backgrounded'
       ? 'gray'
       : 'yellow';
 

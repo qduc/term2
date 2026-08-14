@@ -1,8 +1,18 @@
 # Run budgets as staged escalation, and stall evidence instead of turn caps
 
-Status: **design only, awaiting implementation approval.** Nobody is on it.
+Status: **implementation in progress** on `run-budget-stall-escalation`
+(`5436679c`). First-cut review is in
+`docs/plans/run-budget-stall-escalation-review.md` — 5 open bugs, 8 open
+suggestions. Fix those before merge.
 
 ## Resume here
+
+A first-cut implementation is on this branch. Start from the review, not by
+re-deriving the sensors: `docs/plans/run-budget-stall-escalation-review.md`.
+Priority bugs: grant extensions on the continuation path (not only the UI
+orchestrator), clamp child envelopes in `resolveLimits`, keep `run_budget` out
+of provider history, park subagents at warning/stall so a parent can judge, and
+do not escalate soft-stage events to the parent.
 
 The change this plan makes: **the harness detects mechanically and escalates
 evidence; an agent with broader context decides what to do about it.** Today the

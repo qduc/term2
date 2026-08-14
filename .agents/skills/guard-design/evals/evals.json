@@ -1,0 +1,29 @@
+{
+  "skill_name": "guard-design",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Add a five-minute watchdog that kills a background workflow if it has not produced user-visible text. The workflow emits provider lifecycle events and tool progress while reasoning, so please implement the timeout and tests.",
+      "expected_output": "Classifies inactivity separately from total runtime, identifies the correct observation boundary, challenges user-visible text as a proxy, specifies typed settlement and partial-work behavior, writes red boundary and slow-valid tests first, and updates the guard ledger.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Our repetition protection rejected a valid generated migration containing thousands of similar SQL rows. Increase the repetition threshold enough that this cannot happen again.",
+      "expected_output": "Reproduces the false positive before tuning, traces both repetition owners, tests legitimate periodic output above each threshold and genuine runaway output, prefers a single typed enforcement owner, and preserves unsafe-to-replay recovery semantics.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Add a maxChildren setting to the agent runtime. Once the limit is reached, reject the new child without disturbing already-running siblings, expose the effective parent clamp, and make it configurable in settings.",
+      "expected_output": "Classifies the guard as admission, traces default/persisted/parent/runtime precedence, tests rejection before launch and exact capacity release, invokes setting wiring and applicable provider testing, and records the ledger row.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "The command palette flickers when users type quickly. Add a 150 ms UI debounce and test the rendered suggestions.",
+      "expected_output": "Recognizes that presentation-only UI timing is outside guard-design scope and does not impose the guard ledger workflow.",
+      "files": []
+    }
+  ]
+}

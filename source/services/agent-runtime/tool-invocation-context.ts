@@ -1,4 +1,5 @@
 import type { ApprovalRecord } from '../approval/approval-replay.js';
+import type { RunBudgetEvidence } from './run-budget.js';
 
 /**
  * A tool call identified for approval decisions. Typed replacement for the
@@ -92,9 +93,15 @@ export interface ToolInvocationContext<T = unknown> {
    * Tools read this to warn the model as the budget runs out.
    */
   readonly turn?: TurnBudget;
+  /** Per-run staged budget. A soft nudge is consumed by the nearest tool result. */
+  readonly budget?: RunBudgetToolContext;
 }
 
 export interface TurnBudget {
   readonly count: number;
   readonly max?: number;
+}
+
+export interface RunBudgetToolContext {
+  takeSoftEvidence(): RunBudgetEvidence | undefined;
 }

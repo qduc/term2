@@ -90,6 +90,38 @@ export const AgentSettingsSchema = z.object({
     .positive()
     .default(3)
     .describe('Maximum number of tool calls allowed to run at the same time'),
+  runBudget: z
+    .object({
+      maxUsdMicros: z.number().int().positive().finite().default(5_000_000),
+      maxUnpricedTokens: z.number().int().positive().finite().default(500_000),
+      maxActiveTimeMs: z.number().int().positive().finite().default(3_600_000),
+      warningHeadroomUsdMicros: z.number().int().nonnegative().finite().default(1_000_000),
+      warningHeadroomUnpricedTokens: z.number().int().nonnegative().finite().default(100_000),
+      warningHeadroomActiveTimeMs: z.number().int().nonnegative().finite().default(900_000),
+      softHeadroomUsdMicros: z.number().int().nonnegative().finite().default(250_000),
+      softHeadroomUnpricedTokens: z.number().int().nonnegative().finite().default(25_000),
+      softHeadroomActiveTimeMs: z.number().int().nonnegative().finite().default(300_000),
+      turnBackstop: z.number().int().positive().finite().default(150),
+      extensionPercent: z.number().int().positive().finite().default(50),
+      maxParentExtensions: z.number().int().nonnegative().finite().default(2),
+      identicalToolCallThreshold: z.number().int().positive().finite().default(3),
+    })
+    .default({
+      maxUsdMicros: 5_000_000,
+      maxUnpricedTokens: 500_000,
+      maxActiveTimeMs: 3_600_000,
+      warningHeadroomUsdMicros: 1_000_000,
+      warningHeadroomUnpricedTokens: 100_000,
+      warningHeadroomActiveTimeMs: 900_000,
+      softHeadroomUsdMicros: 250_000,
+      softHeadroomUnpricedTokens: 25_000,
+      softHeadroomActiveTimeMs: 300_000,
+      turnBackstop: 150,
+      extensionPercent: 50,
+      maxParentExtensions: 2,
+      identicalToolCallThreshold: 3,
+    })
+    .describe('Per-run staged budget and stall-detection policy'),
   // NOTE: We do NOT validate provider existence here because the provider
   // registry can be extended at runtime from settings.json (custom providers).
   // We validate/fallback after SettingsService loads and registers runtime providers.
@@ -563,6 +595,21 @@ export interface SettingsWithSources {
     retryAttempts: SettingWithSource<number>;
     transport: SettingWithSource<'websocket' | 'http'>;
     maxParallelToolCalls: SettingWithSource<number>;
+    runBudget: {
+      maxUsdMicros: SettingWithSource<number>;
+      maxUnpricedTokens: SettingWithSource<number>;
+      maxActiveTimeMs: SettingWithSource<number>;
+      warningHeadroomUsdMicros: SettingWithSource<number>;
+      warningHeadroomUnpricedTokens: SettingWithSource<number>;
+      warningHeadroomActiveTimeMs: SettingWithSource<number>;
+      softHeadroomUsdMicros: SettingWithSource<number>;
+      softHeadroomUnpricedTokens: SettingWithSource<number>;
+      softHeadroomActiveTimeMs: SettingWithSource<number>;
+      turnBackstop: SettingWithSource<number>;
+      extensionPercent: SettingWithSource<number>;
+      maxParentExtensions: SettingWithSource<number>;
+      identicalToolCallThreshold: SettingWithSource<number>;
+    };
     provider: SettingWithSource<string>;
     openrouter: SettingWithSource<any>;
     openai: SettingWithSource<any>;
@@ -708,6 +755,19 @@ export const SETTING_KEYS = {
   AGENT_RETRY_ATTEMPTS: 'agent.retryAttempts',
   AGENT_TRANSPORT: 'agent.transport',
   AGENT_MAX_PARALLEL_TOOL_CALLS: 'agent.maxParallelToolCalls',
+  AGENT_RUN_BUDGET_MAX_USD_MICROS: 'agent.runBudget.maxUsdMicros',
+  AGENT_RUN_BUDGET_MAX_UNPRICED_TOKENS: 'agent.runBudget.maxUnpricedTokens',
+  AGENT_RUN_BUDGET_MAX_ACTIVE_TIME_MS: 'agent.runBudget.maxActiveTimeMs',
+  AGENT_RUN_BUDGET_WARNING_HEADROOM_USD_MICROS: 'agent.runBudget.warningHeadroomUsdMicros',
+  AGENT_RUN_BUDGET_WARNING_HEADROOM_UNPRICED_TOKENS: 'agent.runBudget.warningHeadroomUnpricedTokens',
+  AGENT_RUN_BUDGET_WARNING_HEADROOM_ACTIVE_TIME_MS: 'agent.runBudget.warningHeadroomActiveTimeMs',
+  AGENT_RUN_BUDGET_SOFT_HEADROOM_USD_MICROS: 'agent.runBudget.softHeadroomUsdMicros',
+  AGENT_RUN_BUDGET_SOFT_HEADROOM_UNPRICED_TOKENS: 'agent.runBudget.softHeadroomUnpricedTokens',
+  AGENT_RUN_BUDGET_SOFT_HEADROOM_ACTIVE_TIME_MS: 'agent.runBudget.softHeadroomActiveTimeMs',
+  AGENT_RUN_BUDGET_TURN_BACKSTOP: 'agent.runBudget.turnBackstop',
+  AGENT_RUN_BUDGET_EXTENSION_PERCENT: 'agent.runBudget.extensionPercent',
+  AGENT_RUN_BUDGET_MAX_PARENT_EXTENSIONS: 'agent.runBudget.maxParentExtensions',
+  AGENT_RUN_BUDGET_IDENTICAL_TOOL_CALL_THRESHOLD: 'agent.runBudget.identicalToolCallThreshold',
   AGENT_OPENROUTER_API_KEY: 'agent.openrouter.apiKey',
   AGENT_OPENAI_API_KEY: 'agent.openai.apiKey',
   AGENT_OPENROUTER_BASE_URL: 'agent.openrouter.baseUrl', // Sensitive - env only
@@ -826,6 +886,19 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_MAX_MODEL_REQUEST_DURATION_MS,
   SETTING_KEYS.AGENT_TRANSPORT,
   SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS,
+  SETTING_KEYS.AGENT_RUN_BUDGET_MAX_USD_MICROS,
+  SETTING_KEYS.AGENT_RUN_BUDGET_MAX_UNPRICED_TOKENS,
+  SETTING_KEYS.AGENT_RUN_BUDGET_MAX_ACTIVE_TIME_MS,
+  SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_USD_MICROS,
+  SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_UNPRICED_TOKENS,
+  SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_ACTIVE_TIME_MS,
+  SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_USD_MICROS,
+  SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_UNPRICED_TOKENS,
+  SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_ACTIVE_TIME_MS,
+  SETTING_KEYS.AGENT_RUN_BUDGET_TURN_BACKSTOP,
+  SETTING_KEYS.AGENT_RUN_BUDGET_EXTENSION_PERCENT,
+  SETTING_KEYS.AGENT_RUN_BUDGET_MAX_PARENT_EXTENSIONS,
+  SETTING_KEYS.AGENT_RUN_BUDGET_IDENTICAL_TOOL_CALL_THRESHOLD,
   SETTING_KEYS.AGENT_MENTOR_MODEL,
   SETTING_KEYS.AGENT_MENTOR_PROVIDER,
   SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT,
@@ -954,6 +1027,21 @@ export const DEFAULT_SETTINGS: SettingsData = {
     retryAttempts: 2,
     transport: 'websocket',
     maxParallelToolCalls: 3,
+    runBudget: {
+      maxUsdMicros: 5_000_000,
+      maxUnpricedTokens: 500_000,
+      maxActiveTimeMs: 3_600_000,
+      warningHeadroomUsdMicros: 1_000_000,
+      warningHeadroomUnpricedTokens: 100_000,
+      warningHeadroomActiveTimeMs: 900_000,
+      softHeadroomUsdMicros: 250_000,
+      softHeadroomUnpricedTokens: 25_000,
+      softHeadroomActiveTimeMs: 300_000,
+      turnBackstop: 150,
+      extensionPercent: 50,
+      maxParentExtensions: 2,
+      identicalToolCallThreshold: 3,
+    },
     provider: 'openai',
     openrouter: {
       // defaults empty; can be provided via env or config

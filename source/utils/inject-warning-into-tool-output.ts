@@ -1,3 +1,5 @@
+import type { RunBudgetEvidence } from '../services/agent-runtime/run-budget.js';
+
 const MAX_TURNS_LEFT_THRESHOLD = 5;
 
 export function buildTurnLimitWarning(turnsLeft: number): string {
@@ -9,6 +11,25 @@ export function buildTurnLimitWarning(turnsLeft: number): string {
 export interface TurnLimitContext {
   turnCount?: number;
   maxTurns?: number;
+}
+
+/** The run-loop budget context a tool wrapper can use without knowing budget state. */
+export interface RunBudgetWarningContext {
+  readonly budget?: {
+    takeSoftEvidence?: () => RunBudgetEvidence | undefined;
+  };
+}
+
+export function buildRunBudgetWarning(evidence: RunBudgetEvidence): string {
+  const labels: Record<RunBudgetEvidence['dimension'], string> = {
+    usd: 'priced USD budget',
+    unpriced_tokens: 'unpriced-token budget',
+    active_time: 'active-time budget',
+    turns: 'turn backstop',
+  };
+  return `\n\n[Warning: The ${labels[evidence.dimension]} is approaching exhaustion (${
+    evidence.headroom
+  } remaining). Please prepare to wrap up your work and provide a situation update describing what has been completed and what remains.]`;
 }
 
 /**
@@ -38,6 +59,20 @@ export function injectTurnLimitWarning(output: string, context: unknown): string
     }
   }
   return output;
+}
+
+/**
+ * Inject the nearest soft-stage budget evidence into exactly one tool result.
+ * The legacy turn warning remains as a compatibility fallback for callers that
+ * have not moved onto an application-owned run budget yet.
+ */
+export function injectRunBudgetWarning(output: string, context: unknown): string {
+  const budget = (context as RunBudgetWarningContext | undefined)?.budget;
+  if (budget) {
+    const evidence = budget.takeSoftEvidence?.();
+    return evidence ? injectWarningIntoToolOutput(output, buildRunBudgetWarning(evidence)) : output;
+  }
+  return injectTurnLimitWarning(output, resolveTurnLimitContext(context));
 }
 
 export const injectWarningIntoToolOutput = (output: string, warning: string): string => {

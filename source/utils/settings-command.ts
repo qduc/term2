@@ -124,6 +124,71 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
       source: settings.agent.maxParallelToolCalls.source,
     },
     {
+      key: SETTING_KEYS.AGENT_RUN_BUDGET_MAX_USD_MICROS,
+      value: settings.agent.runBudget.maxUsdMicros.value,
+      source: settings.agent.runBudget.maxUsdMicros.source,
+    },
+    {
+      key: SETTING_KEYS.AGENT_RUN_BUDGET_MAX_UNPRICED_TOKENS,
+      value: settings.agent.runBudget.maxUnpricedTokens.value,
+      source: settings.agent.runBudget.maxUnpricedTokens.source,
+    },
+    {
+      key: SETTING_KEYS.AGENT_RUN_BUDGET_MAX_ACTIVE_TIME_MS,
+      value: settings.agent.runBudget.maxActiveTimeMs.value,
+      source: settings.agent.runBudget.maxActiveTimeMs.source,
+    },
+    {
+      key: SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_USD_MICROS,
+      value: settings.agent.runBudget.warningHeadroomUsdMicros.value,
+      source: settings.agent.runBudget.warningHeadroomUsdMicros.source,
+    },
+    {
+      key: SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_UNPRICED_TOKENS,
+      value: settings.agent.runBudget.warningHeadroomUnpricedTokens.value,
+      source: settings.agent.runBudget.warningHeadroomUnpricedTokens.source,
+    },
+    {
+      key: SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_ACTIVE_TIME_MS,
+      value: settings.agent.runBudget.warningHeadroomActiveTimeMs.value,
+      source: settings.agent.runBudget.warningHeadroomActiveTimeMs.source,
+    },
+    {
+      key: SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_USD_MICROS,
+      value: settings.agent.runBudget.softHeadroomUsdMicros.value,
+      source: settings.agent.runBudget.softHeadroomUsdMicros.source,
+    },
+    {
+      key: SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_UNPRICED_TOKENS,
+      value: settings.agent.runBudget.softHeadroomUnpricedTokens.value,
+      source: settings.agent.runBudget.softHeadroomUnpricedTokens.source,
+    },
+    {
+      key: SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_ACTIVE_TIME_MS,
+      value: settings.agent.runBudget.softHeadroomActiveTimeMs.value,
+      source: settings.agent.runBudget.softHeadroomActiveTimeMs.source,
+    },
+    {
+      key: SETTING_KEYS.AGENT_RUN_BUDGET_TURN_BACKSTOP,
+      value: settings.agent.runBudget.turnBackstop.value,
+      source: settings.agent.runBudget.turnBackstop.source,
+    },
+    {
+      key: SETTING_KEYS.AGENT_RUN_BUDGET_EXTENSION_PERCENT,
+      value: settings.agent.runBudget.extensionPercent.value,
+      source: settings.agent.runBudget.extensionPercent.source,
+    },
+    {
+      key: SETTING_KEYS.AGENT_RUN_BUDGET_MAX_PARENT_EXTENSIONS,
+      value: settings.agent.runBudget.maxParentExtensions.value,
+      source: settings.agent.runBudget.maxParentExtensions.source,
+    },
+    {
+      key: SETTING_KEYS.AGENT_RUN_BUDGET_IDENTICAL_TOOL_CALL_THRESHOLD,
+      value: settings.agent.runBudget.identicalToolCallThreshold.value,
+      source: settings.agent.runBudget.identicalToolCallThreshold.source,
+    },
+    {
       key: SETTING_KEYS.SHELL_TIMEOUT,
       value: settings.shell.timeout.value,
       source: settings.shell.timeout.source,

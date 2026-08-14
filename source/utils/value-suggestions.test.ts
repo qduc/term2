@@ -250,3 +250,32 @@ it('buildSettingValueSuggestions returns transport suggestions', () => {
     'http',
   ]);
 });
+
+it('buildSettingValueSuggestions offers tuned run-budget policy values', () => {
+  expect(buildSettingValueSuggestions('agent.runBudget.maxUsdMicros').map((suggestion) => suggestion.value)).toEqual([
+    '1000000',
+    '5000000',
+    '10000000',
+  ]);
+  expect(buildSettingValueSuggestions('agent.runBudget.turnBackstop').map((suggestion) => suggestion.value)).toEqual([
+    '100',
+    '150',
+    '200',
+  ]);
+
+  for (const key of [
+    'agent.runBudget.maxUnpricedTokens',
+    'agent.runBudget.maxActiveTimeMs',
+    'agent.runBudget.warningHeadroomUsdMicros',
+    'agent.runBudget.warningHeadroomUnpricedTokens',
+    'agent.runBudget.warningHeadroomActiveTimeMs',
+    'agent.runBudget.softHeadroomUsdMicros',
+    'agent.runBudget.softHeadroomUnpricedTokens',
+    'agent.runBudget.softHeadroomActiveTimeMs',
+    'agent.runBudget.extensionPercent',
+    'agent.runBudget.maxParentExtensions',
+    'agent.runBudget.identicalToolCallThreshold',
+  ]) {
+    expect(buildSettingValueSuggestions(key)).not.toEqual([]);
+  }
+});

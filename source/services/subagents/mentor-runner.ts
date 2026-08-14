@@ -15,6 +15,7 @@ import type { ModelRequestCost } from '../../services/cost/model-cost.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
 import type { ExecutionBudget } from '../agent-runtime/execution-budget.js';
+import { readRunBudgetPolicy } from '../agent-runtime/run-budget.js';
 
 /** Upper bound on `agent.mentorSamples`; each sample is a full mentor call. */
 const MAX_MENTOR_SAMPLES = 8;
@@ -305,6 +306,10 @@ export class MentorRunner {
     const stream = loop.startStream(mentorAgent, input, {
       ...(signal ? { signal } : {}),
       maxTurns: definition.maxTurns,
+      runBudget: readRunBudgetPolicy(this.#settings),
+      wrapUpOnCriticalRunBudget: true,
+      onRunBudgetEvent: (event) =>
+        safeEmit(this.#logger, this.#onEvent, { type: 'subagent_run_budget', agentId, role: 'mentor', event }),
       ...(supportsChaining && mentorSession.previousResponseId
         ? { previousResponseId: mentorSession.previousResponseId }
         : {}),

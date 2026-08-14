@@ -21,6 +21,7 @@ import { buildPersistedAssistantTurnItems } from './conversation-turn-items.js';
 import { type GenerationToken } from '../generation-guard.js';
 import { type CommandMessage } from '../../tools/types.js';
 import { toolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
+import { isRunBudgetInteraction } from '../agent-runtime/run-budget.js';
 import {
   isDockerHostControlShellApproval,
   isUnsandboxedShell,
@@ -77,6 +78,7 @@ export function createApprovalRequiredTerminal(options: {
   dockerHostControl?: boolean;
   outsideWorkspaceEdit?: { path: string; folder: string };
   postExecute?: PostExecuteApprovalToken;
+  runBudgetEvent?: import('../agent-runtime/run-budget.js').RunBudgetEvent;
   usage?: NormalizedUsage;
   costRecords?: ModelRequestCost[];
 }): ApprovalRequiredTerminal {
@@ -93,6 +95,7 @@ export function createApprovalRequiredTerminal(options: {
       ...(options.dockerHostControl ? { dockerHostControl: true } : {}),
       ...(options.outsideWorkspaceEdit ? { outsideWorkspaceEdit: options.outsideWorkspaceEdit } : {}),
       ...(options.postExecute ? { postExecute: options.postExecute } : {}),
+      ...(options.runBudgetEvent ? { runBudgetEvent: options.runBudgetEvent } : {}),
     },
     ...(options.usage ? { usage: options.usage } : {}),
     ...(options.costRecords && options.costRecords.length > 0 ? { costRecords: options.costRecords } : {}),
@@ -118,6 +121,36 @@ export async function buildConversationResult(
   const { result, finalOutputOverride, reasoningOutputOverride, emittedCommandIds, usage, toolCallArgumentsById } =
     input;
   const { approvalFlow, shellAutoApproval, logger, sessionId, sessionAccess, nestedCompatibility } = deps;
+
+  const runBudgetInteraction = result.interruptions?.find(isRunBudgetInteraction);
+  if (runBudgetInteraction) {
+    approvalFlow.recordPending({
+      state: result.state ?? createContinuationHandle(undefined),
+      interruption: runBudgetInteraction,
+      interruptions: result.interruptions,
+      decisionsByCallId: new Map(),
+      emittedCommandIds: emittedCommandIds ?? new Set(),
+      toolCallArgumentsById: new Map(toolCallArgumentsById),
+      owner: approvalFlow.resolveOwner(runBudgetInteraction),
+      token: input.token,
+      inputMode: input.inputMode,
+      cumulativeUsage: input.cumulativeUsage ?? usage ?? extractUsage(result),
+      cumulativeCommandMessages: input.cumulativeCommandMessages,
+      cumulativeTurnItems: input.cumulativeTurnItems,
+    });
+    return {
+      kind: 'approval_required',
+      result: createApprovalRequiredTerminal({
+        agentName: 'System',
+        toolName: 'max_turns_exceeded',
+        argumentsText: formatRunBudgetInteraction(runBudgetInteraction.event),
+        rawInterruption: runBudgetInteraction,
+        usage: usage ?? extractUsage(result),
+        costRecords: result.runCostRecords as ModelRequestCost[] | undefined,
+        runBudgetEvent: runBudgetInteraction.event,
+      }),
+    };
+  }
 
   if (result.interruptions && result.interruptions.length > 0) {
     const interruption = result.interruptions[0];
@@ -315,6 +348,14 @@ export async function buildConversationResult(
   };
 }
 
+function formatRunBudgetInteraction(event: import('../agent-runtime/run-budget.js').RunBudgetEvent): string {
+  if (event.type === 'tool_stall') {
+    return `Run budget/stall check-in\nRepeated tool call: ${event.toolName} (${event.count}/${event.threshold})`;
+  }
+  const { evidence } = event;
+  return `Run budget ${event.stage} check-in\n${evidence.dimension}: ${evidence.used}/${evidence.limit} (headroom ${evidence.headroom})`;
+}
+
 function resolveOutsideWorkspaceEdit(
   toolName: string | undefined,
   args: unknown,
@@ -346,6 +387,7 @@ export const toTerminalEvent = (result: ConversationTerminal): ConversationEvent
         ...(result.approval.llmAdvisory ? { llmAdvisory: result.approval.llmAdvisory } : {}),
         ...(result.approval.deniedRead ? { deniedRead: result.approval.deniedRead } : {}),
         ...(result.approval.dockerHostControl ? { dockerHostControl: true } : {}),
+        ...(result.approval.runBudgetEvent ? { runBudgetEvent: result.approval.runBudgetEvent } : {}),
       },
       ...(result.usage ? { usage: result.usage } : {}),
       ...(result.costRecords && result.costRecords.length > 0 ? { costRecords: result.costRecords } : {}),

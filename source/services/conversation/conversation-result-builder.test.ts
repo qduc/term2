@@ -109,6 +109,40 @@ const makeDeps = (
   return { approvalFlow, shellAutoApproval, logger, sessionId: 's1', nestedCompatibility };
 };
 
+it('turns a parked main-run budget interaction into a resumable pending terminal', async () => {
+  const stream = makeStream({
+    interruptions: [
+      {
+        type: 'run_budget_interaction',
+        event: {
+          type: 'budget_stage',
+          stage: 'critical',
+          evidence: { dimension: 'turns', used: 2, limit: 1, headroom: -1 },
+        },
+      },
+    ],
+    state: {},
+  });
+
+  const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, makeDeps());
+
+  expect(outcome).toMatchObject({
+    kind: 'approval_required',
+    result: {
+      approval: {
+        toolName: 'max_turns_exceeded',
+        runBudgetEvent: { type: 'budget_stage', stage: 'critical' },
+      },
+    },
+  });
+  if (outcome.kind === 'approval_required') {
+    expect(toTerminalEvent(outcome.result)).toMatchObject({
+      type: 'approval_required',
+      approval: { runBudgetEvent: { type: 'budget_stage', stage: 'critical' } },
+    });
+  }
+});
+
 it('classifies an indirect Docker denial from its injected access state, not another session singleton', async () => {
   const access = new SessionAccessState(createMockSettingsService({ 'sandbox.dockerHostControlProjects': [] }));
   access.recordDockerDenial('indirect-command');

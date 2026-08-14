@@ -14,6 +14,7 @@ import type { ForegroundSubagentCandidate } from './subagents/nested-runner.js';
 import type { NestedToolCompatibilityState } from './session/nested-tool-compatibility-state.js';
 import type { NormalizedUsage } from '../utils/ai/token-usage.js';
 import type { ModelRequestCost } from './cost/model-cost.js';
+import type { RunBudgetEvent } from './agent-runtime/run-budget.js';
 
 export type AgentClientRunOptions = {
   previousResponseId?: string | null;
@@ -31,6 +32,8 @@ export type AgentClientRunOptions = {
    * a further model call. See `ApplicationRunLoopOptions.stopAfterApprovalResolution`.
    */
   stopAfterApprovalResolution?: boolean;
+  /** Observational run-budget/stall evidence; delivery policy belongs to the caller. */
+  onRunBudgetEvent?: (event: RunBudgetEvent) => void;
 };
 
 export type AgentClientChatOptions = {
@@ -89,6 +92,8 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
    */
   openTurn?(): void;
   closeTurn?(): void;
+  /** Grant one finite extension to the active staged run budget. */
+  grantRunBudgetExtension?(): { granted: boolean; extensionsGranted: number };
   /** Admit a user message into the running turn at its next request boundary. */
   steer?(items: readonly ProviderInputItem[], options?: { id?: string }): Promise<SteerOutcome>;
   /** Drop a still-waiting steer. False when it was already admitted. */

@@ -89,6 +89,40 @@ it('returns final text and usage from a settled stream (F4 regression)', async (
   });
 });
 
+it('passes the settings-backed policy to direct mentor runs and activates critical tool-free wrap-up', async () => {
+  const requests: any[] = [];
+  const providerId = registerTestProvider({
+    label: 'Critical mentor provider',
+    createStreamedModel: () => ({
+      async *stream(request: any) {
+        requests.push(request);
+        yield {
+          type: 'completion',
+          responseId: 'mentor-wrap-up',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'Budget wrap-up summary.' }] }],
+        };
+      },
+    }),
+    fetchModels: async () => [{ id: 'mentor-model' }],
+  });
+  const runner = new MentorRunner({
+    logger: createMockLogger(),
+    settings: createMockSettings({
+      'agent.mentorModel': 'mentor-model',
+      'agent.mentorProvider': providerId,
+      'agent.runBudget.turnBackstop': 0,
+      'agent.runBudget.extensionPercent': 0,
+    }),
+    sessionContextService: createSessionContextService(),
+  });
+
+  const result = await runner.run('mentor-run', 'Review this change.');
+
+  expect(result.finalText).toBe('Budget wrap-up summary.');
+  expect(requests).toHaveLength(1);
+  expect(requests[0].tools).toEqual([]);
+});
+
 /**
  * Sampling exists to get independent opinions. A shared session would let each
  * sample read the previous one's answer and anchor on it, which is the one

@@ -1,7 +1,9 @@
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import {
   injectWarningIntoToolOutput,
   injectTurnLimitWarning,
+  injectRunBudgetWarning,
+  buildRunBudgetWarning,
   buildTurnLimitWarning,
   resolveTurnLimitContext,
 } from './inject-warning-into-tool-output.js';
@@ -193,4 +195,23 @@ it('warns through the loop turn budget, which was unreachable while nothing coun
   const result = injectTurnLimitWarning('tool result', resolveTurnLimitContext(toolContext));
 
   expect(result.includes('2 turns left')).toBe(true);
+});
+
+it('injects the nearest soft-stage budget evidence only once', () => {
+  const takeSoftEvidence = vi
+    .fn()
+    .mockReturnValueOnce({ dimension: 'usd', used: 4_800_000, limit: 5_000_000, headroom: 200_000 })
+    .mockReturnValueOnce(undefined);
+
+  const first = injectRunBudgetWarning('tool result', { budget: { takeSoftEvidence } });
+  const second = injectRunBudgetWarning('tool result', {
+    budget: { takeSoftEvidence },
+    turn: { count: 99, max: 100 },
+  });
+
+  expect(first).toContain('priced USD budget');
+  expect(second).toBe('tool result');
+  expect(buildRunBudgetWarning({ dimension: 'active_time', used: 10, limit: 20, headroom: 10 })).toContain(
+    'active-time budget',
+  );
 });

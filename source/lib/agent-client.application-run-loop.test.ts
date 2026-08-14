@@ -304,7 +304,8 @@ describe('AgentClient application-run-loop execution', () => {
     turn = 0;
     const defaultInstance = client(provider, { agentOverride: overrideAgent });
     const defaultStream = await defaultInstance.startStream('run');
-    await expect(defaultStream.completed).rejects.toThrow('Max turns (1) exceeded');
+    await defaultStream.completed;
+    expect(executed).toBe(2);
     defaultInstance.dispose();
   });
 

@@ -2141,7 +2141,7 @@ describe('ApplicationRunLoop turn budget', () => {
     expect(stream.finalOutput).toBe('recovered');
   });
 
-  it('stops inviting retries once an identical call fails repeatedly', async () => {
+  it('returns each repeated failure unchanged; stall judgment is emitted separately by the run budget', async () => {
     let calls = 0;
     const parameters = z.object({ path: z.string() });
     const tool: ToolDefinition<typeof parameters> = {
@@ -2184,8 +2184,7 @@ describe('ApplicationRunLoop turn budget', () => {
     expect(outputs).toHaveLength(3);
     expect(outputs[0]).toBe('Error: Search failed: no such file');
     expect(outputs[1]).toBe('Error: Search failed: no such file');
-    expect(outputs[2]).toContain('failed 3 times with the same error');
-    expect(outputs[2]).toContain('Do not call grep with these arguments again');
+    expect(outputs[2]).toBe('Error: Search failed: no such file');
   });
 
   it('still fails the run when a tool reports a harness invariant violation', async () => {

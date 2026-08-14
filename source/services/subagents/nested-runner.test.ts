@@ -49,6 +49,8 @@ function buildNestedRunner(
     maxTokens?: number;
     /** Script a model that never stops calling tools, so only a budget ends it. */
     alwaysCallsTool?: boolean;
+    /** Make the settings-backed staged budget force its terminal wrap-up request. */
+    turnBackstop?: number;
     /** Fail the exact continuation after an approved child tool. */
     failAfterApproval?: boolean;
     /** Simulate mutable settings becoming invalid after launch-time role resolution. */
@@ -66,6 +68,14 @@ function buildNestedRunner(
     createStreamedModel: () => ({
       async *stream(request: any) {
         requests.push(request);
+        if (request.tools.length === 0) {
+          yield {
+            type: 'completion',
+            responseId: 'wrap-up',
+            output: [{ type: 'message', content: [{ type: 'text', text: 'Budget wrap-up summary.' }] }],
+          };
+          return;
+        }
         if (options.failAfterApproval && request.input.some((item: any) => item.type === 'tool_result')) {
           throw new Error('late nested provider failure');
         }
@@ -111,7 +121,16 @@ function buildNestedRunner(
   let roleResolutions = 0;
   const runner = new NestedSubagentRunner({
     logger: options.logger ?? createMockLogger(),
-    settings: createMockSettings({ 'agent.model': 'nested-model', 'agent.provider': providerId }),
+    settings: createMockSettings({
+      'agent.model': 'nested-model',
+      'agent.provider': providerId,
+      'agent.runBudget.extensionPercent': 0,
+      ...(options.turnBackstop !== undefined
+        ? { 'agent.runBudget.turnBackstop': options.turnBackstop }
+        : options.alwaysCallsTool
+        ? { 'agent.runBudget.turnBackstop': options.maxTurns ?? 8 }
+        : {}),
+    }),
     sessionContextService: createSessionContextService(),
     toolFactory: stubToolFactory,
     roleToolCache: new Map(),
@@ -442,6 +461,18 @@ describe('NestedSubagentRunner end to end', () => {
     expect(result.finalText).toBe('Summary: updated notes.');
   });
 
+  it('passes the settings-backed policy to direct nested runs and activates critical tool-free wrap-up', async () => {
+    const { runner, requests } = buildNestedRunner({ turnBackstop: 0 });
+
+    const result = await runner.runAsTool({ role: 'worker', task: 'update notes' }, parentToolContext(), {
+      toolCall: { callId: 'parent-call-1' },
+    });
+
+    expect(result.finalText).toBe('Budget wrap-up summary.');
+    expect(requests).toHaveLength(1);
+    expect(requests[0].tools).toEqual([]);
+  });
+
   it('reports an interrupted nested run as interrupted rather than completed', async () => {
     const events: ConversationEvent[] = [];
     const { runner } = buildNestedRunner({ needsApproval: true, onEvent: (event) => events.push(event) });
@@ -458,7 +489,7 @@ describe('NestedSubagentRunner end to end', () => {
     expect(events.some((event) => event.type === 'subagent_completed')).toBe(false);
   });
 
-  it("enforces the role's turn budget instead of running as long as the model keeps calling tools", async () => {
+  it('uses the staged policy to contain a looping role with one tool-free wrap-up', async () => {
     const events: ConversationEvent[] = [];
     const warn = vi.fn();
     const { runner } = buildNestedRunner({
@@ -472,20 +503,16 @@ describe('NestedSubagentRunner end to end', () => {
       toolCall: { callId: 'parent-call-1' },
     });
 
-    // Budget stop is containment, not a crash: settle a completed report with
+    // Budget containment is not a crash: one final tool-free report preserves
     // partial side effects instead of throwing / status failed.
     expect(result.status).toBe('completed');
     expect(result.error).toBeUndefined();
-    expect(result.finalText).toContain('Turn budget exhausted (3)');
-    expect(result.finalText).toContain('budget stop, not a task failure');
+    expect(result.finalText).toBe('Budget wrap-up summary.');
     expect(result.filesChanged).toEqual(['notes.md']);
     expect(result.toolsUsed).toEqual([{ toolName: 'fake_tool', count: 3 }]);
     expect(events.find((event) => event.type === 'subagent_completed')).toMatchObject({
       result: { status: 'completed', agentId: 'parent-call-1' },
     });
-    expect(warn).toHaveBeenCalledWith(
-      'Subagent turn budget exhausted',
-      expect.objectContaining({ role: 'worker', maxTurns: 3 }),
-    );
+    expect(warn).not.toHaveBeenCalled();
   });
 });

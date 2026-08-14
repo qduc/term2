@@ -31,7 +31,7 @@ import { createAskOrchestratorToolDefinition } from '../../tools/agent/ask-orche
 import type { SkillsService } from '../skills/skills-service.js';
 import { registerToolFormatters } from '../../tools/command-message-formatters.js';
 import { trimToolOutput } from '../../utils/output/trim-tool-output.js';
-import { injectTurnLimitWarning, resolveTurnLimitContext } from '../../utils/inject-warning-into-tool-output.js';
+import { injectRunBudgetWarning } from '../../utils/inject-warning-into-tool-output.js';
 import { tryAcquireFileLock } from '../../tools/file/file-locks.js';
 import { classifyCommand, SafetyStatus } from '../../utils/shell/command-safety/index.js';
 import { evaluateShellAutoApprovalAdvisories } from '../approval/shell-auto-approval-evaluator.js';
@@ -1039,7 +1039,7 @@ export class SubagentToolFactory {
             options.onToolComplete?.(definition.name, result, context, details);
           }
           const trimmedResult = trimToolOutput(result, undefined, maxOutputLength ?? undefined);
-          return injectTurnLimitWarning(trimmedResult, resolveTurnLimitContext(context));
+          return injectRunBudgetWarning(trimmedResult, context);
         },
       };
       return wrapToolInvoke(

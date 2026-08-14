@@ -88,6 +88,54 @@ it('context compaction defaults to disabled with a conservative ratio and reject
   }
 });
 
+it('run-budget policy defaults are runtime-modifiable and reject invalid limits', () => {
+  expect(AgentSettingsSchema.parse({}).runBudget).toEqual({
+    maxUsdMicros: 5_000_000,
+    maxUnpricedTokens: 500_000,
+    maxActiveTimeMs: 3_600_000,
+    warningHeadroomUsdMicros: 1_000_000,
+    warningHeadroomUnpricedTokens: 100_000,
+    warningHeadroomActiveTimeMs: 900_000,
+    softHeadroomUsdMicros: 250_000,
+    softHeadroomUnpricedTokens: 25_000,
+    softHeadroomActiveTimeMs: 300_000,
+    turnBackstop: 150,
+    extensionPercent: 50,
+    maxParentExtensions: 2,
+    identicalToolCallThreshold: 3,
+  });
+  expect(DEFAULT_SETTINGS.agent.runBudget).toEqual(AgentSettingsSchema.parse({}).runBudget);
+
+  const configured = SettingsSchema.parse({
+    agent: { runBudget: { maxUsdMicros: 7_500_000, identicalToolCallThreshold: 4 } },
+  }).agent?.runBudget;
+  expect(configured).toMatchObject({ maxUsdMicros: 7_500_000, identicalToolCallThreshold: 4 });
+
+  for (const key of [
+    SETTING_KEYS.AGENT_RUN_BUDGET_MAX_USD_MICROS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_MAX_UNPRICED_TOKENS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_MAX_ACTIVE_TIME_MS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_USD_MICROS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_UNPRICED_TOKENS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_ACTIVE_TIME_MS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_USD_MICROS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_UNPRICED_TOKENS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_SOFT_HEADROOM_ACTIVE_TIME_MS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_TURN_BACKSTOP,
+    SETTING_KEYS.AGENT_RUN_BUDGET_EXTENSION_PERCENT,
+    SETTING_KEYS.AGENT_RUN_BUDGET_MAX_PARENT_EXTENSIONS,
+    SETTING_KEYS.AGENT_RUN_BUDGET_IDENTICAL_TOOL_CALL_THRESHOLD,
+  ]) {
+    expect(RUNTIME_MODIFIABLE_SETTINGS.has(key)).toBe(true);
+  }
+
+  for (const value of [0, -1, 1.5, Infinity, Number.NaN]) {
+    expect(() => SettingsSchema.parse({ agent: { runBudget: { maxUsdMicros: value } } })).toThrow();
+    expect(() => SettingsSchema.parse({ agent: { runBudget: { turnBackstop: value } } })).toThrow();
+  }
+  expect(() => SettingsSchema.parse({ agent: { runBudget: { maxParentExtensions: -1 } } })).toThrow();
+});
+
 it('memory settings default to enabled local storage with bounded retrieval and context budgets', () => {
   const parsed = SettingsSchema.parse({});
   expect(parsed.memory).toMatchObject({

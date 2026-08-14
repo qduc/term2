@@ -90,6 +90,10 @@ export async function* processStreamEvents(
       yield { type: 'cost_update', record: event.record };
       continue;
     }
+    if (event.type === 'run_budget') {
+      yield { type: 'run_budget', event: event.event };
+      continue;
+    }
     if (event.type === 'codex_rate_limits') {
       yield event;
       continue;

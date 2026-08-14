@@ -60,6 +60,8 @@ it('buildSettingsWithSources maps nested values and sources including optional u
   expect(result.app.orchestratorMode.source).toBe('default');
   expect(result.agent.maxParallelToolCalls.value).toBe(settings.agent.maxParallelToolCalls);
   expect(result.agent.maxParallelToolCalls.source).toBe('default');
+  expect(result.agent.runBudget.maxUsdMicros.value).toBe(settings.agent.runBudget.maxUsdMicros);
+  expect(result.agent.runBudget.maxUsdMicros.source).toBe('default');
   expect(result.sandbox.dockerHostControlProjects.value).toEqual([]);
   expect(result.sandbox.dockerHostControlProjects.source).toBe('default');
   const codex = result.agent.codex as unknown as {
@@ -88,4 +90,19 @@ it('reports a source and value for shell.backgroundTimeout', () => {
   expect(withSources.shell.backgroundTimeout).toBeDefined();
   expect(withSources.shell.backgroundTimeout.value).toBe(30 * 60 * 1000);
   expect(withSources.shell.backgroundTimeout.source).toBe('default');
+});
+
+it('reports individual sources for run-budget policy settings', () => {
+  const withSources = buildSettingsWithSources(DEFAULT_SETTINGS, (key) =>
+    key === 'agent.runBudget.warningHeadroomUsdMicros' ? 'config' : 'default',
+  );
+
+  expect(withSources.agent.runBudget.warningHeadroomUsdMicros).toEqual({
+    value: 1_000_000,
+    source: 'config',
+  });
+  expect(withSources.agent.runBudget.identicalToolCallThreshold).toEqual({
+    value: 3,
+    source: 'default',
+  });
 });

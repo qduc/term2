@@ -353,6 +353,57 @@ describe('worker shell auto-approval in always mode', () => {
   });
 });
 
+describe('foreground nested worker shell auto-approval', () => {
+  function buildNestedShell(mode: 'off' | 'always') {
+    const settings = createMockSettings({
+      'shell.autoApproveMode': mode,
+      'sandbox.enabled': false,
+    });
+    const policy = new SubagentToolPolicy({
+      settings,
+      logger: createMockLogger(),
+      sessionContextService: createSessionContextService(),
+    });
+    const tools = new SubagentToolFactory({
+      settings,
+      logger: createMockLogger(),
+      toolPolicy: policy,
+    }).buildToolDefinitions(createDefinition({ role: 'worker', canRunShell: true }), [], '', false, true);
+    return tools.find((tool) => tool.name === 'shell')!;
+  }
+
+  it('does not pause a foreground nested worker shell command in always mode', async () => {
+    const shell = buildNestedShell('always');
+
+    await expect(
+      shell.needsApproval({
+        command: 'NODE_ENV=test pnpm test source/services/approval/tool-ownership-registry.test.ts',
+      }),
+    ).resolves.toBe(false);
+  });
+
+  it('preserves the underlying shell approval decision outside always mode', async () => {
+    const shell = buildNestedShell('off');
+
+    await expect(
+      shell.needsApproval({
+        command: 'NODE_ENV=test pnpm test source/services/approval/tool-ownership-registry.test.ts',
+      }),
+    ).resolves.toBe(true);
+  });
+
+  it('still rejects an explicit unsandboxed request in always mode', async () => {
+    const shell = buildNestedShell('always');
+
+    await expect(
+      shell.execute({
+        command: 'pnpm test',
+        sandbox: 'unsandboxed',
+      }),
+    ).resolves.toContain('unsandboxed shell execution is not available to subagents');
+  });
+});
+
 describe('shell-edit-hole measurement (plan D2)', () => {
   // Documents the coverage gap of extractPathsFromCommand: it only captures
   // redirection (>/>>/tee), so most shell-edit commands are invisible to

@@ -482,11 +482,17 @@ describe('NestedSubagentRunner end to end', () => {
     });
 
     // The run paused at an approval with work outstanding. Calling that
-    // 'completed' told the parent model the opposite of what the event stream
-    // said — the completion event is deliberately withheld here.
+    // 'completed' would tell the parent model the opposite of what happened,
+    // but the foreground transcript still needs a truthful terminal event.
     expect(result.status).toBe('interrupted');
     expect(result.interrupted).toBe(true);
     expect(events.some((event) => event.type === 'subagent_completed')).toBe(false);
+    expect(events).toContainEqual({
+      type: 'subagent_interrupted',
+      agentId: result.agentId,
+      role: 'worker',
+      finalText: result.finalText,
+    });
   });
 
   it('uses the staged policy to contain a looping role with one tool-free wrap-up', async () => {

@@ -126,6 +126,44 @@ it('subagent_completed updates the status of the live peek', () => {
   ]);
 });
 
+it('subagent_interrupted settles the live peek without calling it completed', () => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'subagent_interrupted',
+    agentId: 'agent-1',
+    role: 'worker',
+    finalText: 'Paused before running tests.',
+  } as ConversationEvent);
+
+  const result = deps.calls.setMessagesCalls[0]([
+    {
+      id: 'subagent-agent-1',
+      sender: 'subagent',
+      status: 'running',
+      agentId: 'agent-1',
+      role: 'worker',
+      task: 'make the change',
+      tools: ['apply_patch'],
+    },
+  ]);
+
+  expect(result).toEqual([
+    {
+      id: 'subagent-agent-1',
+      sender: 'subagent',
+      status: 'interrupted',
+      agentId: 'agent-1',
+      role: 'worker',
+      task: 'make the change',
+      finalText: 'Paused before running tests.',
+      tools: ['apply_patch'],
+    },
+  ]);
+});
+
 it('subagent_tool_started does not downgrade a finished subagent row back to running', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
@@ -214,8 +252,8 @@ it('subagent_started links callId from tool_started and command_message replaces
     },
   } as ConversationEvent);
 
-  // 4. command_message for run_subagent is now skipped (SubagentActivityMessage
-  //    handles display), so no additional setMessages call is made.
+  // 4. command_message for run_subagent reconciles the matching card as a
+  //    fallback, but must not overwrite the dedicated terminal event.
   handler({
     type: 'command_message',
     message: {
@@ -229,14 +267,94 @@ it('subagent_started links callId from tool_started and command_message replaces
     },
   } as ConversationEvent);
 
-  // Only one setMessages call: from subagent_completed, not from command_message
-  expect(deps.calls.setMessagesCalls.length).toBe(1);
+  expect(deps.calls.setMessagesCalls.length).toBe(2);
 
-  // The subagent message remains intact (not replaced by command message)
+  // The subagent message remains intact (not replaced by command message).
   const completedMsg = deps.calls.setMessagesCalls[0]!([subagentMsg]);
-  expect(completedMsg.length).toBe(1);
-  expect(completedMsg[0].sender).toBe('subagent');
-  expect(completedMsg[0].status).toBe('completed');
+  const reconciledMsg = deps.calls.setMessagesCalls[1]!(completedMsg);
+  expect(reconciledMsg.length).toBe(1);
+  expect(reconciledMsg[0].sender).toBe('subagent');
+  expect(reconciledMsg[0].status).toBe('completed');
+  expect(reconciledMsg[0]).toHaveProperty('finalText', 'done');
+});
+
+it('command_message settles its matching foreground subagent when the lifecycle event was missed', () => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'tool_started',
+    toolCallId: 'call-sa-interrupted',
+    toolName: 'run_subagent',
+    arguments: { role: 'worker', task: 'run tests' },
+  } as ConversationEvent);
+  handler({
+    type: 'subagent_started',
+    agentId: 'agent-sa-interrupted',
+    role: 'worker',
+    task: 'run tests',
+  } as ConversationEvent);
+
+  const subagentMsg = deps.calls.appendedMessages[0][0];
+  handler({
+    type: 'command_message',
+    message: {
+      id: 'result-sa-interrupted',
+      sender: 'command',
+      status: 'completed',
+      command: 'run_subagent [worker] run tests',
+      output: 'Status: interrupted\n\nTools used: apply_patch(1)',
+      callId: 'call-sa-interrupted',
+      toolName: 'run_subagent',
+    },
+  } as ConversationEvent);
+
+  expect(deps.calls.setMessagesCalls).toHaveLength(1);
+  expect(deps.calls.setMessagesCalls[0]([subagentMsg])).toEqual([
+    expect.objectContaining({
+      sender: 'subagent',
+      callId: 'call-sa-interrupted',
+      status: 'interrupted',
+    }),
+  ]);
+});
+
+it('command_message fallback never settles a different foreground subagent card', () => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'tool_started',
+    toolCallId: 'call-sa-target',
+    toolName: 'run_subagent',
+    arguments: { role: 'worker', task: 'run tests' },
+  } as ConversationEvent);
+  handler({
+    type: 'command_message',
+    message: {
+      id: 'result-sa-target',
+      sender: 'command',
+      status: 'completed',
+      command: 'run_subagent [worker] run tests',
+      output: 'Status: completed',
+      callId: 'call-sa-target',
+      toolName: 'run_subagent',
+    },
+  } as ConversationEvent);
+
+  const otherCard = {
+    id: 'subagent-other-agent',
+    sender: 'subagent' as const,
+    status: 'running' as const,
+    callId: 'call-sa-other',
+    agentId: 'other-agent',
+    role: 'worker',
+    task: 'other work',
+    tools: [],
+  };
+  expect(deps.calls.setMessagesCalls[0]([otherCard])).toEqual([otherCard]);
 });
 
 it('subagent_transferred freezes the existing card and ignores a later completion', () => {

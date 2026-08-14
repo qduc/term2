@@ -470,6 +470,27 @@ it.sequential('splitStaticHistory moves a transferred subagent card to static hi
   expect(active).toEqual([]);
 });
 
+it.sequential('splitStaticHistory moves an interrupted foreground subagent to static history', async () => {
+  const messages = [
+    { id: 'older', sender: 'bot', text: 'older', status: 'finalized' },
+    {
+      id: 'interrupted-subagent',
+      sender: 'subagent',
+      status: 'interrupted',
+      agentId: 'agent-1',
+      role: 'worker',
+      task: 'inspect the module',
+      tools: ['read_file'],
+    },
+    { id: 'after', sender: 'bot', text: 'after', status: 'finalized' },
+  ];
+
+  const { history, active } = splitStaticHistory(messages);
+
+  expect(history.map((message) => message.id)).toEqual(['older', 'interrupted-subagent', 'after']);
+  expect(active).toEqual([]);
+});
+
 it.sequential('splitStaticHistory keeps bot text before a running command active', async () => {
   const messages = [
     { id: 'older', sender: 'bot', text: 'older', status: 'finalized' },

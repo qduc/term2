@@ -44,7 +44,7 @@ export interface ReasoningMessage {
 export interface SubagentActivityMessage {
   id: string;
   sender: 'subagent';
-  status: 'running' | 'completed' | 'failed' | 'cancelled' | 'backgrounded';
+  status: 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted' | 'backgrounded';
   callId?: string;
   agentId: string;
   role: string;

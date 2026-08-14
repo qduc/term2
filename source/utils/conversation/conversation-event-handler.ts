@@ -325,14 +325,39 @@ export function createConversationEventHandler(
 
         const wasForegroundSubagent =
           cmdMsg.callId !== undefined && foregroundSubagentToolCallIds.delete(cmdMsg.callId);
+        if (wasForegroundSubagent && cmdMsg.callId !== undefined) {
+          const statusText =
+            typeof cmdMsg.output === 'string'
+              ? cmdMsg.output.match(/^Status:\s*(\w+)/im)?.[1]?.toLowerCase()
+              : undefined;
+          const fallbackStatus =
+            cmdMsg.status === 'failed'
+              ? 'failed'
+              : statusText === 'interrupted'
+              ? 'interrupted'
+              : statusText === 'cancelled'
+              ? 'cancelled'
+              : statusText === 'failed'
+              ? 'failed'
+              : statusText === 'running'
+              ? 'backgrounded'
+              : 'completed';
+          setMessages((prev) =>
+            trimMessages(
+              prev.map((msg) =>
+                isSubagentActivityMessage(msg) && msg.callId === cmdMsg.callId && msg.status === 'running'
+                  ? { ...msg, status: fallbackStatus }
+                  : msg,
+              ),
+            ),
+          );
+          return;
+        }
         // Foreground run_subagent is displayed via SubagentActivityMessage;
         // skip its completion so we do not create a duplicate CommandMessage.
         // Calls from legacy records without a preceding tool_started are also
         // foreground unless their arguments explicitly choose background.
-        if (
-          wasForegroundSubagent ||
-          (!hadPendingCommand && isForegroundSubagentDelegationTool(cmdMsg.toolName, cmdMsg.toolArgs))
-        ) {
+        if (!hadPendingCommand && isForegroundSubagentDelegationTool(cmdMsg.toolName, cmdMsg.toolArgs)) {
           return;
         }
 
@@ -567,6 +592,24 @@ export function createConversationEventHandler(
                   ...msg,
                   status: event.result.status,
                   finalText: event.result.finalText,
+                };
+              }
+              return msg;
+            }),
+          );
+        });
+        return;
+      }
+
+      case 'subagent_interrupted': {
+        setMessages((prev) => {
+          return trimMessages(
+            prev.map((msg) => {
+              if (isSubagentActivityMessage(msg) && msg.agentId === event.agentId && msg.status === 'running') {
+                return {
+                  ...msg,
+                  status: 'interrupted',
+                  finalText: event.finalText,
                 };
               }
               return msg;

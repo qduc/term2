@@ -3,8 +3,9 @@
 Status: **Discovery and candidate characterization complete. The
 `maxParallelToolCalls` defect is repaired and merged (`f09b55ec`, merge
 `87b7224c`); characterization is merged (`b75e36db`, merge `f12181e0`), with
-four confirmed defects and one downgraded candidate. Next action is to approve
-repair dispositions before changing behavior.**
+four confirmed defects and one downgraded candidate. The four repair
+dispositions were approved on 2026-08-14; implementation is deferred to a new
+session.**
 
 ## Goal
 
@@ -43,8 +44,11 @@ Open work, in order:
   merged (`f09b55ec`, merge `87b7224c`).
 - **Completed:** all five candidates characterized and merged (`b75e36db`,
   merge `f12181e0`); results are recorded below.
-- **Now:** present and approve repair dispositions. Each behavior change gets
-  its own worktree and commit.
+- **Completed:** the four repair dispositions below were approved on
+  2026-08-14. This approval changes no runtime or test behavior.
+- **Next session:** implement each approved repair in its own worktree and
+  independently revertible commit. Re-run the recorded red proof first and
+  follow the verification gates below.
 
 ## Guard classes
 
@@ -258,6 +262,39 @@ pnpm exec prettier --check docs/plans/guard-ledger.md \
   source/services/logging/conversation-log-writer.test.ts
 PASS
 ```
+
+### Approved repair dispositions
+
+Approved on 2026-08-14 for implementation in a new session. This decision
+record does not authorize unrelated guard changes and does not itself change
+runtime or test behavior.
+
+1. **Subagent steering mailbox — reject before overflow.** Treat the four-message
+   and 4,000-character bounds as admission limits. Reject a new steering message
+   before enqueueing it when either effective bound would be exceeded, and
+   return a typed non-success acknowledgement that reports the effective limits
+   and current occupancy. Never acknowledge a message as queued and then discard
+   it. Preserve already admitted guidance and the current active-tool and
+   continuation semantics.
+2. **Tool ownership claims — make retention lifecycle-aware.** Pending ownership
+   claims must not be count-evicted. Release each claim exactly once when its
+   approval settles through success, rejection, cancellation, failure, or
+   session cleanup. Bounded cleanup may remove only released or otherwise proven
+   dead claims. Public-owner tests must cover each settlement path and prove the
+   oldest live claim retains its owner under pressure.
+3. **Duplicate repetition detectors — remove destructive repetition inference.**
+   Remove both repetition-only abort paths: the foreground 200-character/8-copy
+   detector and the shared 4,096-character/3-copy detector. Retain the explicit
+   100,000-character generation-output containment limit. Repetition may remain
+   diagnostic or advisory, but must not fabricate a terminal failure or an
+   `unsafeToReplay` classification. Tests must prove valid periodic output
+   survives and genuine unbounded output reaches the retained containment owner.
+4. **`InputSurgeGuard` bypass — bind approval to immutable submitted content.**
+   Replace the free/leaky bypass boolean with an approval capability bound to the
+   exact submitted turn identity and content. Editing or replacing that content
+   invalidates the capability and sends the replacement through normal admission
+   and confirmation. Preserve the existing decline, stale-confirmation, repeated-
+   confirmation, and caller-supplied-bypass protections.
 
 ### Test contracts by class
 

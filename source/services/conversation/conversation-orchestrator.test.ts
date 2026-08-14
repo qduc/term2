@@ -123,7 +123,7 @@ it('grants a finite extension when the paused run returns its budget interaction
   vi.mocked(cfg.conversationService.sendMessage).mockImplementation(async (_input: any, options: any) => {
     options.onEvent({
       type: 'run_budget',
-      event: { type: 'tool_stall', toolName: 'read_file', argumentsText: '{"path":"a"}', count: 3, threshold: 3 },
+      evidence: { type: 'tool_stall', toolName: 'read_file', argumentsText: '{"path":"a"}', count: 3, threshold: 3 },
     });
     const approval = {
       agentName: 'System',

@@ -1,9 +1,8 @@
 # Run budgets as staged escalation, and stall evidence instead of turn caps
 
-Status: **implementation in progress** on `run-budget-stall-escalation`
-(`5436679c`). First-cut review is in
-`docs/plans/run-budget-stall-escalation-review.md` — 5 open bugs, 8 open
-suggestions. Fix those before merge.
+Status: **implemented and merged.** All 13 review findings are resolved; see
+`docs/plans/run-budget-stall-escalation-review.md` for the per-issue
+dispositions and for what deliberately stayed open.
 
 ## Goal
 
@@ -41,12 +40,29 @@ right ones.
 
 ## Resume here
 
-A first-cut implementation is on this branch. Start from the review, not by
-re-deriving the sensors: `docs/plans/run-budget-stall-escalation-review.md`.
-Priority bugs: grant extensions on the continuation path (not only the UI
-orchestrator), clamp child envelopes in `resolveLimits`, keep `run_budget` out
-of provider history, park subagents at warning/stall so a parent can judge, and
-do not escalate soft-stage events to the parent.
+The sensors exist. Read the review's Dispositions section before changing this
+area — it records why several obvious-looking moves were rejected.
+
+The load-bearing decisions, in the code:
+
+- **Extensions are charged in the run loop**, in `state.approve` for a
+  `run_budget_interaction`, not in the UI. Every unattended path — the
+  continuation applier, non-interactive, `--auto-approve` — is bounded because
+  of this. The interactive prompt takes its grant up front and marks it
+  consumed; do not add a second grant site.
+- **Parent grants are capped, human grants are not.** The human is the terminal
+  judge, and each of their grants already costs a fresh blocking prompt.
+- **Stall evidence goes to the run itself, re-armed on every recurrence**, and
+  to the parent exactly once. The old `MAX_IDENTICAL_TOOL_FAILURES` suppressor
+  is gone and must not come back as a silent harness decision.
+- **The parent is never told it can grant a child an extension**, because no
+  child-targeted grant API exists. Do not restore that wording without building
+  the API.
+- **The stream payload is `evidence`, not `event`.** `event.event` trips the
+  `application-stream-boundary` guard, which reads it as a retired SDK envelope.
+
+Still open: no child-targeted grant API; mentor and async runs are unclamped;
+siblings can still sum past a parent's remainder.
 
 The change this plan made: **the harness detects mechanically and escalates
 evidence; an agent with broader context decides what to do about it.** Before

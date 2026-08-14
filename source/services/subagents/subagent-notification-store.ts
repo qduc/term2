@@ -530,6 +530,10 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
       };
     }
     if (event.type === 'subagent_run_budget') {
+      // Soft is a wrap-up nudge for the child itself, delivered through its own
+      // tool output. Escalating it would ask the parent to judge a run that has
+      // not yet reached anything abnormal.
+      if (event.event.type === 'budget_stage' && event.event.stage === 'soft') return undefined;
       const task = this.#tasks.get(event.agentId);
       const eventKey =
         event.event.type === 'budget_stage'

@@ -135,7 +135,11 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
         '',
         ...entries,
         '',
-        'Judge the evidence. Continue only with a finite extension when justified, steer the run with specific corrective guidance, or stop it. Use send_message({ target, message }) for guidance and the background task controls to stop a run.',
+        // Do not offer continue-with-extension: no child-targeted grant API
+        // exists, so the run keeps going inside its own envelope regardless.
+        // Promising an action the parent cannot take produces confident,
+        // ineffective replies and teaches it to ignore this lane.
+        'Judge the evidence and act only if the run is going wrong: steer it with specific corrective guidance via send_message({ target, message }), or stop it with the background task controls. Doing nothing is a valid judgement — the run continues within its own budget and, at critical, ends itself with a summary of what it completed.',
       ].join('\n'),
     );
   }
@@ -804,26 +808,20 @@ export class ConversationOrchestrator {
       return;
     }
 
-    if (runBudgetEvent) {
-      if (answer === 'y' || answer === 'steer') {
-        const grant = this.config.conversationService.grantRunBudgetExtension?.() ?? {
-          granted: false,
-          extensionsGranted: 0,
-        };
-        if (!grant.granted) {
-          // A capped grant is another human decision, never an implicit
-          // unbounded continuation after the prompt disappears.
-          this.#presentRunBudgetInteraction(runBudgetEvent, 'All finite budget extensions have been used.');
-          return;
-        }
-        if (answer === 'steer' && approvalAnswer?.trim()) {
-          // Queue the correction before resuming. Do not await it here: it is
-          // admitted at the continuation's next request boundary, which is
-          // precisely the boundary this call is about to reopen.
-          void this.config.conversationService
-            .steerActiveTurn?.(approvalAnswer)
-            .catch((error) => this.logError('Error steering a run-budget continuation', error));
-        }
+    // Steer is part of the judge's vocabulary, but no human surface produces it
+    // here: the prompt offers Continue and Stop only, and collecting corrective
+    // text would need an input surface this prompt does not own. A human steers
+    // by continuing and then typing. Parent agents steer with send_message.
+    if (runBudgetEvent && answer === 'y') {
+      // Take the grant here rather than leaving it to the resume, because a
+      // refusal has to be shown to the human instead of silently stopping.
+      const grant = this.config.conversationService.grantRunBudgetExtension?.() ?? {
+        granted: false,
+        extensionsGranted: 0,
+      };
+      if (!grant.granted) {
+        this.#presentRunBudgetInteraction(runBudgetEvent, 'No further budget extension is available.');
+        return;
       }
     }
 
@@ -831,15 +829,11 @@ export class ConversationOrchestrator {
       this.#beginTurn('approvalDecision');
 
     try {
-      const result = await this.config.conversationService.handleApprovalDecision(
-        runBudgetEvent && answer === 'steer' ? 'y' : answer,
-        rejectionReason,
-        {
-          onEvent: this.createOnEventHandler(applyConversationEvent),
-          approvalAnswer: resolution.approvalAnswer,
-          ...(options.stopAfterApprovalResolution ? { stopAfterApprovalResolution: true } : {}),
-        },
-      );
+      const result = await this.config.conversationService.handleApprovalDecision(answer, rejectionReason, {
+        onEvent: this.createOnEventHandler(applyConversationEvent),
+        approvalAnswer: resolution.approvalAnswer,
+        ...(options.stopAfterApprovalResolution ? { stopAfterApprovalResolution: true } : {}),
+      });
       applyConversationEvent({ type: 'final', finalText: '' });
       botResponseUpdater.flush();
       this.applyServiceResult(result, streamingState, streamingState.latestUsage);

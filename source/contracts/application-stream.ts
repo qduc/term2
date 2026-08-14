@@ -36,6 +36,7 @@ export type ApplicationRunEvent =
   /** One settled cost record per dispatched model request, emitted as soon as it is known. */
   | { readonly type: 'cost_update'; readonly record: ModelRequestCost }
   /** Staged budget/stall evidence, kept out of provider history. */
-  | { readonly type: 'run_budget'; readonly event: RunBudgetEvent };
+  /** Named `evidence`, not `event`: an `event.event` payload reads as a retired SDK envelope. */
+  | { readonly type: 'run_budget'; readonly evidence: RunBudgetEvent };
 
 export type ApplicationRunStream = AsyncIterable<ApplicationRunEvent>;

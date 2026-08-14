@@ -17,7 +17,7 @@ import type {
   SupportedSubagentRole,
   SubagentDefinition,
 } from './types.js';
-import { readRunBudgetPolicy } from '../agent-runtime/run-budget.js';
+import { clampRunBudgetPolicy, readRunBudgetPolicy } from '../agent-runtime/run-budget.js';
 import type { SkillsService } from '../skills/skills-service.js';
 import { SUBAGENT_ROLES } from './types.js';
 import { SubagentToolFactory, getSubagentRunContext, type SubagentRunContext } from './tool-policy.js';
@@ -414,7 +414,7 @@ export class NestedSubagentRunner {
           // Without this the role's configured budget is advisory only and the
           // nested run is bounded solely by the model choosing to stop.
           maxTurns: definition.maxTurns,
-          runBudget: readRunBudgetPolicy(this.#settings),
+          runBudget: clampRunBudgetPolicy(readRunBudgetPolicy(this.#settings), toolContext?.budget?.remainingPolicy()),
           wrapUpOnCriticalRunBudget: true,
           onRunBudgetEvent: (event) =>
             safeEmit(this.#logger, this.#onEvent, {

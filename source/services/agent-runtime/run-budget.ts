@@ -40,6 +40,27 @@ export function readRunBudgetPolicy(settings: RunBudgetSettingsReader): RunBudge
   };
 }
 
+/**
+ * Clamp a child's envelope to what the parent has left.
+ *
+ * `resolveLimits` does this for `AgentLimits`; the staged dimensions are read
+ * from process settings, so without this every child of every depth would start
+ * with the full settings envelope no matter how much the parent had spent. The
+ * containment this restores is per-child: N siblings can still sum past the
+ * parent's remainder, which is the tree-aggregate job `ExecutionBudget` owns.
+ */
+export function clampRunBudgetPolicy(child: RunBudgetPolicy, parent?: RunBudgetPolicy): RunBudgetPolicy {
+  if (!parent) return child;
+  return {
+    ...child,
+    maxUsdMicros: Math.min(child.maxUsdMicros, parent.maxUsdMicros),
+    maxUnpricedTokens: Math.min(child.maxUnpricedTokens, parent.maxUnpricedTokens),
+    maxActiveTimeMs: Math.min(child.maxActiveTimeMs, parent.maxActiveTimeMs),
+    turnBackstop: Math.min(child.turnBackstop, parent.turnBackstop),
+    maxParentExtensions: Math.min(child.maxParentExtensions, parent.maxParentExtensions),
+  };
+}
+
 export type RunBudgetStage = 'soft' | 'warning' | 'critical';
 export type RunBudgetDimension = 'usd' | 'unpriced_tokens' | 'active_time' | 'turns';
 
@@ -109,10 +130,12 @@ export class RunBudget {
   #unpricedTokens = 0;
   #turns = 0;
   #extensionsGranted = 0;
+  #parentExtensionsGranted = 0;
   #latchedStages = new Set<RunBudgetStage>();
   #stallCounts = new Map<string, number>();
   #latchedStalls = new Set<string>();
   #softEvidence: RunBudgetEvidence | undefined;
+  #pendingStallEvidence: Extract<RunBudgetEvent, { type: 'tool_stall' }> | undefined;
 
   constructor(policy: RunBudgetPolicy, now = Date.now()) {
     this.#policy = policy;
@@ -208,10 +231,20 @@ export class RunBudget {
     return evidence;
   }
 
-  grantExtension(): { granted: boolean; extensionsGranted: number } {
-    if (this.#extensionsGranted >= this.#policy.maxParentExtensions) {
+  /**
+   * Grant one finite extension.
+   *
+   * `maxParentExtensions` caps grants that arrive without a human — a parent
+   * agent judging a child, or an unattended continuation. A human answering a
+   * blocking prompt is the terminal judge and is not capped: the plan routes
+   * the grant past the parent to them precisely because the cap has run out,
+   * and each human grant already costs a fresh prompt.
+   */
+  grantExtension(grantedBy: 'parent' | 'human' = 'parent'): { granted: boolean; extensionsGranted: number } {
+    if (grantedBy === 'parent' && this.#parentExtensionsGranted >= this.#policy.maxParentExtensions) {
       return { granted: false, extensionsGranted: this.#extensionsGranted };
     }
+    if (grantedBy === 'parent') this.#parentExtensionsGranted += 1;
     this.#extensionsGranted += 1;
     // Critical is latched per finite envelope. A larger envelope must be able
     // to reach its own critical boundary and ask again; otherwise the second
@@ -229,14 +262,45 @@ export class RunBudget {
     const key = `${observation.name}\u0000${observation.argumentsText}`;
     const count = (this.#stallCounts.get(key) ?? 0) + 1;
     this.#stallCounts.set(key, count);
-    if (count !== this.#policy.identicalToolCallThreshold || this.#latchedStalls.has(key)) return undefined;
-    this.#latchedStalls.add(key);
-    return {
+    // Re-arm every further threshold rather than latching once. The run itself
+    // is the nearest judge and the only one that can act mid-stream; telling it
+    // once and then going quiet lets a loop run to the envelope's end in
+    // silence. The parent's copy stays exact-once, deduplicated below.
+    if (count === 0 || count % this.#policy.identicalToolCallThreshold !== 0) return undefined;
+    const event = {
       type: 'tool_stall',
       toolName: observation.name,
       argumentsText: observation.argumentsText,
       count,
       threshold: this.#policy.identicalToolCallThreshold,
+    } as const;
+    // Sensation for the run: delivered on its next tool result, every time.
+    this.#pendingStallEvidence = event;
+    if (this.#latchedStalls.has(key)) return undefined;
+    this.#latchedStalls.add(key);
+    return event;
+  }
+
+  /** Returns the pending stall notice for this run's next tool result. */
+  takeStallEvidence(): Extract<RunBudgetEvent, { type: 'tool_stall' }> | undefined {
+    const evidence = this.#pendingStallEvidence;
+    this.#pendingStallEvidence = undefined;
+    return evidence;
+  }
+
+  /**
+   * This run's envelope expressed as what is still unspent, for clamping a
+   * child. Thresholds carry over unchanged: they describe what counts as
+   * alarming, not how much room exists.
+   */
+  remainingPolicy(now = Date.now()): RunBudgetPolicy {
+    const limits = this.#limits();
+    return {
+      ...this.#policy,
+      maxUsdMicros: Math.max(0, limits.maxUsdMicros - this.#pricedUsdMicros),
+      maxUnpricedTokens: Math.max(0, limits.maxUnpricedTokens - this.#unpricedTokens),
+      maxActiveTimeMs: Math.max(0, limits.maxActiveTimeMs - this.#currentActiveTime(now)),
+      turnBackstop: Math.max(0, limits.turnBackstop - this.#turns),
     };
   }
 

@@ -450,3 +450,12 @@ it('startup normalization: persisted orchestratorMode=true with implicit lite (p
   expect(result.planMode).toBe(false);
   expect(result.mentorMode).toBe(false);
 });
+
+it('repairs the unusable zero request deadline instead of rejecting the settings file', () => {
+  // Zero was the previous default, so real config files carry it. Rejecting
+  // would fail the whole file and refuse to start.
+  expect(AgentSettingsSchema.parse({ maxModelRequestDurationMs: 0 }).maxModelRequestDurationMs).toBe(300_000);
+  expect(AgentSettingsSchema.parse({}).maxModelRequestDurationMs).toBe(300_000);
+  expect(AgentSettingsSchema.parse({ maxModelRequestDurationMs: 45_000 }).maxModelRequestDurationMs).toBe(45_000);
+  expect(() => AgentSettingsSchema.parse({ maxModelRequestDurationMs: -1 })).toThrow();
+});

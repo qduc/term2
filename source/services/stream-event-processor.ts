@@ -91,7 +91,7 @@ export async function* processStreamEvents(
       continue;
     }
     if (event.type === 'run_budget') {
-      yield { type: 'run_budget', event: event.event };
+      yield { type: 'run_budget', evidence: event.evidence };
       continue;
     }
     if (event.type === 'codex_rate_limits') {

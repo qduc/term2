@@ -581,13 +581,15 @@ export class ConversationAdapter {
   #startQueuedTurn(execution: ActiveExecution<QueuedMessageSnapshot>): void {
     // Notify the orchestrator/UI before kicking off the run so that the user
     // message can be appended to the message list with the correct timeline.
+    // Recovered items have no #messagesById entry; still fire so a delivered
+    // row cannot stay in the pending list after the queue has started it.
     const message = this.#messagesById.get(execution.snapshot.requestId);
-    if (message && this.#queuedTurnStartObserver) {
+    if (this.#queuedTurnStartObserver) {
       try {
         this.#queuedTurnStartObserver({
           requestId: execution.snapshot.requestId,
-          input: message.input,
-          suppressUserMessageDisplay: message.options.suppressUserMessageDisplay,
+          input: message?.input ?? execution.item.text,
+          suppressUserMessageDisplay: message?.options.suppressUserMessageDisplay,
         });
       } catch (error) {
         this.#logger.error('queuedTurnStartObserver threw', {

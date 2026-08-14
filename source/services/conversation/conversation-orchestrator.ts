@@ -341,6 +341,9 @@ export class ConversationOrchestrator {
     if (typeof config.conversationService.setQueuedTurnStartObserver === 'function') {
       config.conversationService.setQueuedTurnStartObserver((execution) => {
         if (execution.suppressUserMessageDisplay) {
+          // Still retire any matching pending row. A suppressed start is a
+          // real delivery; leaving the queued indicator would lie.
+          this.config.ui.onQueuedMessageStarted?.(execution.requestId);
           return;
         }
         // Deferred submissions activate their orchestrator turn here — the only
@@ -736,6 +739,14 @@ export class ConversationOrchestrator {
       this.#deferredTurnActivators.delete(userMessage.id);
       reasoningUpdater.flush();
       botResponseUpdater.cancel();
+      // The start observer is the normal way a queued row leaves the pending
+      // list. If that callback is skipped — recovered snapshot, suppressed
+      // display, or a test/service path that settles sendMessage without
+      // starting — the submission has still left the queue. Drop the row
+      // here so a delivered message cannot stay painted as queued.
+      if (queueOwnsSubmission) {
+        this.config.ui.onQueuedMessageStarted?.(userMessage.id);
+      }
       if (turnActivated) {
         this.#endTurn();
       }

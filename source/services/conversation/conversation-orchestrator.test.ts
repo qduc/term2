@@ -725,6 +725,54 @@ describe('ConversationOrchestrator', () => {
     expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledTimes(1);
   });
 
+  it('clears a delivered queue row even when the queue-start observer never fires', async () => {
+    const cfg = makeConfig();
+    vi.mocked(cfg.conversationService.isQueueOwningSubmissions).mockReturnValue(true);
+    (cfg.conversationService as any).steerActiveTurn = vi.fn(async () => false);
+    vi.mocked(cfg.conversationService.sendMessage).mockResolvedValue({
+      type: 'response',
+      finalText: 'ok',
+      commandMessages: [],
+    });
+    const orchestrator = new ConversationOrchestrator(cfg);
+
+    await orchestrator.sendUserMessage('already sent', { busyMode: 'steer' });
+
+    const pendingId = vi.mocked(cfg.ui.onQueuedMessagePending!).mock.calls[0]?.[0];
+    expect(pendingId).toBeDefined();
+    expect(cfg.ui.onQueuedMessageStarted).toHaveBeenCalledWith(pendingId);
+  });
+
+  it('clears a matching pending row when a suppressed queued turn starts', async () => {
+    const cfg = makeConfig();
+    vi.mocked(cfg.conversationService.isQueueOwningSubmissions).mockReturnValue(true);
+    let release!: (terminal: ConversationTerminal) => void;
+    vi.mocked(cfg.conversationService.sendMessage).mockReturnValue(
+      new Promise<ConversationTerminal>((resolve) => {
+        release = resolve;
+      }) as any,
+    );
+    const orchestrator = new ConversationOrchestrator(cfg);
+    const observer = vi.mocked(cfg.conversationService.setQueuedTurnStartObserver).mock.calls[0]?.[0] as (execution: {
+      requestId: string;
+      input: string;
+      suppressUserMessageDisplay?: boolean;
+    }) => void;
+
+    const inFlight = orchestrator.sendUserMessage('visible until started');
+    await Promise.resolve();
+    await Promise.resolve();
+    const pendingId = vi.mocked(cfg.ui.onQueuedMessagePending!).mock.calls[0]?.[0];
+    expect(pendingId).toBeDefined();
+
+    observer({ requestId: pendingId!, input: 'visible until started', suppressUserMessageDisplay: true });
+    expect(cfg.ui.onQueuedMessageStarted).toHaveBeenCalledWith(pendingId);
+    expect(cfg.messages.appendMessages).not.toHaveBeenCalled();
+
+    release({ type: 'response', finalText: 'ok', commandMessages: [] });
+    await inFlight;
+  });
+
   it('reports a rejected queue submission instead of letting the pending message vanish', async () => {
     const cfg = makeConfig();
     vi.mocked(cfg.conversationService.isQueueOwningSubmissions).mockReturnValue(true);

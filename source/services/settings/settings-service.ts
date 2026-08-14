@@ -68,6 +68,18 @@ function changedSettingPaths(before: unknown, after: unknown, prefix = ''): Arra
   return prefix ? [[prefix, after]] : [];
 }
 
+function migrateFormerRequestDeadlineDefault(
+  config: Partial<SettingsData>,
+  rawConfig: unknown,
+): { config: Partial<SettingsData>; migrated: boolean } {
+  const persistedDeadline = (rawConfig as any)?.agent?.maxModelRequestDurationMs;
+  if (persistedDeadline !== 300_000) return { config, migrated: false };
+
+  const migratedConfig = structuredClone(config) as Record<string, any>;
+  setSettingValue(migratedConfig, 'agent.maxModelRequestDurationMs', 0);
+  return { config: migratedConfig as Partial<SettingsData>, migrated: true };
+}
+
 /**
  * Service for managing application settings.
  * Follows singleton pattern and supports:
@@ -152,11 +164,13 @@ export class SettingsService {
       throw new Error(`Failed to parse settings file at ${settingsFilePath}${details}`);
     }
 
-    const { config: fileConfig, migrated: migratedLegacyAncillarySettings } = migrateLegacyAncillarySettings(
-      validated,
+    const { config: ancillarySettingsConfig, migrated: migratedLegacyAncillarySettings } =
+      migrateLegacyAncillarySettings(validated, rawFileConfig);
+    const { config: fileConfig, migrated: migratedRequestDeadlineDefault } = migrateFormerRequestDeadlineDefault(
+      ancillarySettingsConfig,
       rawFileConfig,
     );
-    if (migratedLegacyAncillarySettings) {
+    if (migratedLegacyAncillarySettings || migratedRequestDeadlineDefault) {
       this.startupMigrations = changedSettingPaths(validated, fileConfig);
     }
     this.settings = mergeSettings(DEFAULT_SETTINGS, fileConfig, env, cli, {
@@ -259,6 +273,7 @@ export class SettingsService {
       (shouldUpdateFile ||
         shouldMigrateLegacyProviderFormat ||
         migratedLegacyAncillarySettings ||
+        migratedRequestDeadlineDefault ||
         normalizedSandboxAutoApproveConflict) &&
       !fileHadErrors
     ) {

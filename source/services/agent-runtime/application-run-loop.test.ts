@@ -470,6 +470,37 @@ describe('ApplicationRunLoop generation guard', () => {
     }
   });
 
+  it('does not impose a default wall-clock deadline on an active model request', async () => {
+    vi.useFakeTimers();
+    try {
+      let started!: () => void;
+      let release!: () => void;
+      const startedPromise = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      const releasePromise = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const model: StreamedModelTurn = {
+        async *stream() {
+          started();
+          await releasePromise;
+          yield { type: 'completion' as const, responseId: 'slow-but-valid', output: [] };
+        },
+      };
+      const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'prompt');
+      const completion = expect(stream.completed).resolves.toBeDefined();
+      await startedPromise;
+
+      await vi.advanceTimersByTimeAsync(300_001);
+      release();
+
+      await completion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // A subagent re-throws this failure from a tool-output string, so the message
   // is the only part that reaches the log where the failure is noticed.
   it('reports how much the request had streamed when its deadline expired', async () => {

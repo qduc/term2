@@ -1,6 +1,9 @@
 # Run budgets as staged escalation, and stall evidence instead of turn caps
 
-Status: **design only, awaiting implementation approval.** Nobody is on it.
+Status: **implementation in progress** on `run-budget-stall-escalation`
+(`5436679c`). First-cut review is in
+`docs/plans/run-budget-stall-escalation-review.md` — 5 open bugs, 8 open
+suggestions. Fix those before merge.
 
 ## Goal
 
@@ -38,13 +41,20 @@ right ones.
 
 ## Resume here
 
-Today the turn budget conflates sensation and decision —
-`ApplicationRunLoop` counts turns and, on overrun, throws
-(`application-run-loop.ts:684`), which unwinds the run and discards its work.
-The count is a bad proxy for "too much work" and the throw is a harness
-verdict. Split the jobs: the harness detects, a judge decides.
+A first-cut implementation is on this branch. Start from the review, not by
+re-deriving the sensors: `docs/plans/run-budget-stall-escalation-review.md`.
+Priority bugs: grant extensions on the continuation path (not only the UI
+orchestrator), clamp child envelopes in `resolveLimits`, keep `run_budget` out
+of provider history, park subagents at warning/stall so a parent can judge, and
+do not escalate soft-stage events to the parent.
 
-Replace the throw with two sensors feeding one escalation surface:
+The change this plan made: **the harness detects mechanically and escalates
+evidence; an agent with broader context decides what to do about it.** Before
+it, the turn budget conflated those two jobs — `ApplicationRunLoop` counted
+turns and, on overrun, threw, unwinding the run and discarding its work. The
+count was a bad proxy for "too much work" and the throw was a harness verdict.
+
+The throw is replaced by two sensors feeding one escalation surface:
 
 1. **Staged budgets** on dimensions a run can actually feel — USD, wall clock,
    with tokens only as the unpriced fallback — and three latched stages: the

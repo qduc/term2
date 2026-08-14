@@ -2,8 +2,9 @@
 
 Status: **Discovery and candidate characterization complete. The
 `maxParallelToolCalls` defect is repaired and merged (`f09b55ec`, merge
-`87b7224c`); four candidates are confirmed defects and one is downgraded. Next
-action is to approve repair dispositions before changing behavior.**
+`87b7224c`); characterization is merged (`b75e36db`, merge `f12181e0`), with
+four confirmed defects and one downgraded candidate. Next action is to approve
+repair dispositions before changing behavior.**
 
 ## Goal
 
@@ -40,7 +41,8 @@ Open work, in order:
 
 - **Completed:** `agent.maxParallelToolCalls` repair approved, verified, and
   merged (`f09b55ec`, merge `87b7224c`).
-- **Completed:** all five candidates characterized; results are recorded below.
+- **Completed:** all five candidates characterized and merged (`b75e36db`,
+  merge `f12181e0`); results are recorded below.
 - **Now:** present and approve repair dispositions. Each behavior change gets
   its own worktree and commit.
 

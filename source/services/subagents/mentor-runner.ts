@@ -301,7 +301,10 @@ export class MentorRunner {
 
     const supportsChaining = providerDef.capabilities?.supportsConversationChaining ?? false;
     const input = mentorSession.getInput(task, supportsChaining);
-    const loop = new ApplicationRunLoop({ resolveModel: () => streamedModel });
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => streamedModel,
+      resolveMaxParallelToolCalls: () => this.#settings.get('agent.maxParallelToolCalls'),
+    });
     const stream = loop.startStream(mentorAgent, input, {
       ...(signal ? { signal } : {}),
       maxTurns: definition.maxTurns,

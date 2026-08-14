@@ -395,6 +395,7 @@ export class NestedSubagentRunner {
         // launch instead of inheriting that unrelated caller context.
         const trafficContext = this.#sessionContextService.getContext();
         const loop = new ApplicationRunLoop({
+          resolveMaxParallelToolCalls: () => this.#settings.get('agent.maxParallelToolCalls'),
           resolveModel: (model) =>
             createStreamedModel(model, {
               settingsService: this.#settings,

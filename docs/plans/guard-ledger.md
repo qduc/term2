@@ -1,8 +1,9 @@
 # Term2 Guard Ledger and Remediation Plan
 
-Status: **Discovery complete; the confirmed `maxParallelToolCalls` defect is
-repaired and merged (`f09b55ec`, merge `87b7224c`). Next action is to
-characterize the five candidates below.**
+Status: **Discovery and candidate characterization complete. The
+`maxParallelToolCalls` defect is repaired and merged (`f09b55ec`, merge
+`87b7224c`); four candidates are confirmed defects and one is downgraded. Next
+action is to approve repair dispositions before changing behavior.**
 
 ## Goal
 
@@ -39,8 +40,9 @@ Open work, in order:
 
 - **Completed:** `agent.maxParallelToolCalls` repair approved, verified, and
   merged (`f09b55ec`, merge `87b7224c`).
-- **Now:** characterize the five candidates. Each behavior change gets its own
-  worktree and commit.
+- **Completed:** all five candidates characterized; results are recorded below.
+- **Now:** present and approve repair dispositions. Each behavior change gets
+  its own worktree and commit.
 
 ## Guard classes
 
@@ -169,8 +171,9 @@ Note: emitted an existing TimeoutNaNWarning; no test failed.
 
 ## Candidates to characterize
 
-Each names a mechanism-level contradiction, not a hunch. Status is `candidate`:
-a concrete false-positive scenario exists but has not gone red.
+This is the original candidate list. Each named a mechanism-level contradiction,
+not a hunch; the characterization results below supersede its initial
+`candidate` status.
 
 | Guard | Source | Contradiction | Test to write |
 | --- | --- | --- | --- |
@@ -186,6 +189,73 @@ examples in ad-hoc shell probes — keep them as data in fixture files.
 **Gate:** each candidate has one fast deterministic command already run red
 against the exact suspected false positive, or is downgraded with evidence.
 Present the results before any behavior change.
+
+### Characterization results
+
+- **Subagent steering mailbox — confirmed defect (2026-08-14).** A public
+  `SubagentAsyncRegistry` characterization queued five messages while one tool
+  was active. Every `sendMessage` returned `{ ok: true, delivery: "queued" }`,
+  but the continuation contained only messages 2–5 plus
+  `[Earlier steering omitted]`; message 1 was neither delivered nor
+  retrievable. Red command:
+  `NODE_ENV=test pnpm test source/services/subagents/subagent-async-registry.test.ts -t "delivers every steering message it acknowledges as queued"`.
+  The temporary characterization test was removed after recording the failure;
+  no behavior change has been made.
+- **Conversation log event size — downgraded; no runtime guard (2026-08-14).**
+  `truncateForLog` and `MAX_EVENT_BYTES` have no production caller; the helper
+  is only exposed through `__testing`. `ConversationLogWriter.append` serializes
+  the sanitized event directly. A writer-to-decoder-to-replay test persisted a
+  300,000-character `tool_result` with a tail retrieval reference and recovered
+  that reference successfully. Green command:
+  `NODE_ENV=test pnpm test source/services/logging/conversation-log-writer.test.ts -t "preserves a large tool result retrieval reference through replay"`.
+  The regression test is retained; the dead helper may be removed separately
+  but cannot truncate replay state today.
+- **Tool ownership claim eviction — confirmed defect (2026-08-14).** Claims
+  are created only when a nested approval is surfaced, but production has no
+  `ToolOwnershipRegistry.release` caller. The registry therefore has no
+  liveness evidence when count overflow evicts its oldest claim. A temporary
+  characterization with `limit: 2` kept the first claim unreleased, added two
+  later claims, and observed `ownerOf("pending")` fall back from the worker to
+  `{ kind: "parent" }`. Red command:
+  `NODE_ENV=test pnpm test source/services/approval/tool-ownership-registry.test.ts -t "does not evict an unreleased pending ownership claim"`.
+  The temporary test was removed; no behavior change has been made.
+- **Duplicate repetition detectors — confirmed defect (2026-08-14).** Both
+  owners reject legitimate exact-periodic fixed-width data based on repetition
+  alone. The foreground `RepetitionDetector` returned `true` for a
+  200-character block (`"..........##########"` repeated ten times); its
+  existing split-chunk test already pins 195 characters as allowed and 200 as
+  rejected. Red command:
+  `NODE_ENV=test pnpm test source/services/session/repetition-detector.test.ts -t "does not flag a legitimate fixed-width periodic data block at 200 characters"`.
+  The shared `ApplicationRunLoop` guard rejected a 4,096-character block with
+  `GenerationGuardError { code: "repetitive_text", unsafeToReplay: true }`.
+  Red command:
+  `NODE_ENV=test pnpm test source/services/agent-runtime/application-run-loop.test.ts -t "allows a legitimate fixed-width periodic data block at the default repetition boundary"`.
+  Existing tests retain genuine-runaway coverage. The temporary false-positive
+  tests were removed; no behavior change has been made.
+- **`InputSurgeGuard` bypass scope — confirmed replacement leak
+  (2026-08-14).** Existing `ConversationAdmissionWorkflow` tests prove that a
+  caller-supplied bypass is stripped, only a matching surge approval creates
+  one, decline sends nothing, and stale/repeated confirmation IDs cannot create
+  a later bypass. The queued edit path is different: `editSubmission` replaces
+  the message input but preserves its options. A temporary adapter test edited
+  an approved queued surge and observed the replacement start with
+  `bypassInputSurgeGuard: true`. Red command:
+  `NODE_ENV=test pnpm test source/services/conversation/conversation-adapter.test.ts -t "does not attach an approved input-surge bypass to replacement queued content"`.
+  The temporary test was removed; no behavior change has been made.
+
+Characterization checkpoint verification:
+
+```text
+NODE_ENV=test pnpm test source/services/logging/conversation-log-writer.test.ts
+PASS 1 file, 15 tests
+
+pnpm typecheck
+PASS
+
+pnpm exec prettier --check docs/plans/guard-ledger.md \
+  source/services/logging/conversation-log-writer.test.ts
+PASS
+```
 
 ### Test contracts by class
 

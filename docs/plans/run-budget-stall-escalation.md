@@ -2,25 +2,60 @@
 
 Status: **design only, awaiting implementation approval.** Nobody is on it.
 
+## Goal
+
+**The harness provides sensation, not decisions.**
+
+A model can feel context: the window is physical, compaction keeps that surface
+honest, and a request that does not fit fails in a way the run can observe.
+A model cannot feel a *run*. Elapsed wall time, cumulative USD, and "I have
+issued the same tool call four times" exist only in harness state. Without this
+plan those facts never reach anyone who can act, so every request is treated as
+free and timeless. The only backstop is `maxTurns` — a count that is neither
+time nor money, and that today's loop answers by throwing.
+
+So the product change is not a smarter limiter. It is a sensory channel:
+
+- **Cost** — priced requests already carry `usdMicros`; unpriced ones must not
+  look free.
+- **Time** — wall clock, excluding time spent blocked on approval.
+- **Stuck** — same tool + same arguments, no intervening mutation.
+
+The harness measures those, latches a stage when remaining room becomes
+alarming, and delivers the evidence. Someone with broader context — the parent
+agent, or the human — decides *continue with a finite extension*, *steer*, or
+*stop*.
+
+The test for every later choice: **if the harness is choosing what the work
+means, the design has slipped.** Sensation can be loud. It cannot be a verdict.
+
+This is why compaction and this plan are complementary, not substitutes.
+Compaction answers "will the next request fit?" This plan answers "has this run
+become something a judge should see?" After compaction, context pressure eases
+while the bill and the clock keep rising. Tokens in the next prompt are the
+wrong sensation for this channel; cumulative spend and elapsed work are the
+right ones.
+
 ## Resume here
 
-The change this plan makes: **the harness detects mechanically and escalates
-evidence; an agent with broader context decides what to do about it.** Today the
-turn budget conflates those two jobs — `ApplicationRunLoop` counts turns and, on
-overrun, throws (`application-run-loop.ts:684`), which unwinds the run and
-discards its work. The count is a bad proxy for "too much work" and the throw is
-a bad response to it.
+Today the turn budget conflates sensation and decision —
+`ApplicationRunLoop` counts turns and, on overrun, throws
+(`application-run-loop.ts:684`), which unwinds the run and discards its work.
+The count is a bad proxy for "too much work" and the throw is a harness
+verdict. Split the jobs: the harness detects, a judge decides.
 
-Replace it with two triggers feeding one escalation surface:
+Replace the throw with two sensors feeding one escalation surface:
 
-1. **Staged budgets** on dimensions that actually mean something — tokens, USD,
-   wall clock — with three latched stages: nudge, escalate, terminate.
-2. **Deterministic stall evidence** — identical tool call and arguments repeated
-   with no intervening mutation — reported as evidence, never as a verdict.
+1. **Staged budgets** on dimensions a run can actually feel — USD, wall clock,
+   with tokens only as the unpriced fallback — and three latched stages: the
+   run feels remaining room, a judge is shown evidence, the envelope is empty.
+2. **Deterministic stall evidence** — identical tool call and arguments
+   repeated with no intervening mutation — reported as evidence, never as a
+   verdict.
 
-Both produce the same event with the same decision vocabulary: *continue with a
-finite extension*, *steer*, *stop*. One emitter (the run loop), one judgment
-surface.
+Both produce the same event with the same *decision* vocabulary, which belongs
+to the judge, not the detector: *continue with a finite extension*, *steer*,
+*stop*. One emitter (the run loop), one judgment surface.
 
 Decisions already taken, so they are not re-litigated:
 
@@ -77,14 +112,29 @@ rebuild the plan on them:
 
 ## Destination
 
-A long-running agent is bounded by what it spends and by whether it is making
-progress, not by how many times it called a model. When either bound is
-approached, someone with enough context to judge — the parent agent, or the
-human — is shown concrete evidence and given a finite decision. Runs that must
-end, end with a report rather than an exception.
+A long-running agent can feel what it spends and whether it is stuck, the same
+way it can already feel a context window. The harness is the sense organ. When
+a sensation crosses a stage, a judge sees the evidence and makes a finite
+decision. The harness does not decide that the work is done, failed, or worth
+continuing. Runs that must end because the envelope is empty, end with a
+report rather than an exception.
 
 ## Decided
 
+- **The harness senses; it does not judge.** Detectors emit evidence. Judges
+  choose continue / steer / stop. Soft is sensation delivered back into the
+  run ("about one wrap-up of room left"), not the harness deciding to wrap up.
+  Warning is sensation delivered to a judge. A silent local intervention that
+  suppresses a retry, picks a strategy, or throws away work is a harness
+  decision and is out of this design — including today's `maxTurns` throw and
+  today's `MAX_IDENTICAL_TOOL_FAILURES` suppressor, until the Open item on
+  that suppressor is closed.
+- **Empty envelope is containment, not a quality verdict.** Critical-stage
+  summarize-then-stop (subagent) or blocking prompt (main agent) fires only
+  when sensation has already been delivered and no further grant exists. The
+  harness is not deciding the work was bad; it is refusing to invent more
+  room. If a judge is present for that moment, they get the same evidence
+  rather than a new policy.
 - **A budget is a containment envelope, not a workload estimate.** Defaults are
   set deliberately generous: a healthy run rarely reaches Warning and almost
   never reaches Critical. The envelope answers "what would be alarming?", never
@@ -96,11 +146,11 @@ end, end with a report rather than an exception.
   near done, so it is noise. Each stage is defined by how much room is left —
   enough to wrap up, and not much more.
 
-  | Stage | Trigger | Who acts | Effect |
+  | Stage | Trigger | Who receives the sensation | Effect |
   | --- | --- | --- | --- |
-  | Soft | Headroom left is roughly one wrap-up's worth | The run itself | Wrap-up nudge injected into tool output. No escalation, nobody interrupted. |
-  | Warning | Headroom left is roughly one more work segment | Parent agent (or human, for the main agent) | Evidence notification; decision is continue-with-extension / steer / stop. |
-  | Critical | Envelope exhausted, including granted extensions | Harness | Subagent: forced summarize-then-terminate. Main agent: blocking prompt. |
+  | Soft | Headroom left is roughly one wrap-up's worth | The run itself | Evidence injected into tool output. No judge interrupted, no verdict. |
+  | Warning | Headroom left is roughly one more work segment | Parent agent (or human, for the main agent) | Evidence notification; the *judge* chooses continue-with-extension / steer / stop. |
+  | Critical | Envelope exhausted, including granted extensions | No remaining grant | Containment: subagent summarize-then-stop; main agent blocking prompt. Not a judgment of the work. |
 
   Each stage fires once per run, latched. A run hovering at a threshold must not
   notify its parent every turn.
@@ -156,8 +206,10 @@ end, end with a report rather than an exception.
 
 ## Open
 
-- **Budget denominator** — Tokens, USD, or both. Unpriced requests must degrade
-  to token accounting rather than counting as zero cost.
+- **Budget denominator** — USD and wall clock are the sensations a run cannot
+  feel without the harness; tokens are the unpriced fallback and must not count
+  as zero cost. Confirm that split (the Goal already argues against "tokens in
+  the next prompt") and record the concrete units.
 - **What "one wrap-up's worth" and "one work segment" are in absolute units** —
   the stage triggers are defined in headroom, so they need concrete numbers per
   dimension. These are the only figures that should come from observing real
@@ -172,7 +224,9 @@ end, end with a report rather than an exception.
   whether the run loop reports into it, before writing either.
 - **Whether `MAX_IDENTICAL_TOOL_FAILURES` stays as a local intervention** once
   the same signal escalates. Two mechanisms on one signal risks the loop
-  suppressing the retry before the evidence ever gets judged.
+  suppressing the retry before the evidence ever gets judged. Under the Goal
+  this suppressor is already a harness decision; the default leaning is to
+  stop deciding and only emit.
 - **Where a foreground subagent's warning lands** when its parent is mid-turn and
   the user is watching — the parent's judgment costs a model call the user did
   not ask for.
@@ -182,7 +236,8 @@ end, end with a report rather than an exception.
 - Whether the parent agent is actually good at this judgment. The design assumes
   broader context produces a better call than a threshold does; nothing has
   tested that, and a parent that always answers "continue" makes the whole
-  mechanism theater.
+  mechanism theater. If that happens, the fix is better evidence or a human
+  in the loop — not moving the verdict back into the harness.
 - Whether soft-stage nudges change subagent behavior at all, or just add tokens.
 - How stall evidence should read for a model versus for a human. The same
   payload probably cannot serve both.
@@ -190,6 +245,8 @@ end, end with a report rather than an exception.
 ## Out of scope
 
 - Predicting cost before a request. Accounting stays post-hoc.
+- A harness policy that judges whether the work is good, done, or worth
+  continuing. That is the Goal's negative space.
 - A new notification channel, a new approval surface, or a second decision
   vocabulary.
 - Cross-session or per-day spend caps. This is per-run.

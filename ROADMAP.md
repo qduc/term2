@@ -94,7 +94,7 @@ Every acceptance criterion already listed in the plan is met, focused UI tests p
 
 **Source:** `docs/plans/run-budget-stall-escalation.md`
 
-**Goal:** make limits a transparent check-in mechanism, not a mechanism that silently loses an otherwise recoverable run.
+**Goal:** the harness provides sensation (cost, time, stall), not decisions. Limits become evidence a judge can act on, not a throw that silently loses an otherwise recoverable run. See the Goal section of the source plan.
 
 ### First make the unresolved decisions explicit
 

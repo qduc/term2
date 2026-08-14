@@ -38,7 +38,8 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 - Scheduled live provider canaries — a deferred follow-up requiring CI, secret/billing, and OAuth-storage decisions. No plan doc, and nobody is on it.
 - Run budgets as staged escalation — designed in
   `docs/plans/run-budget-stall-escalation.md`, awaiting implementation approval;
-  nobody is on it. Read it before changing `maxTurns` handling in
+  nobody is on it. The Goal is that the harness provides sensation (cost, time,
+  stall), not decisions. Read it before changing `maxTurns` handling in
   `ApplicationRunLoop`, `AgentLimits`/`resolveLimits`, `ExecutionBudget`, or the
   `max_turns_exceeded` prompt: it records why the turn cap is a check-in rather
   than a ceiling, that per-request USD accounting already exists (so the

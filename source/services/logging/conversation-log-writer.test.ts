@@ -169,6 +169,30 @@ describe('ConversationLogWriter delta sidecar', () => {
 });
 
 describe('ConversationLogWriter sequence continuity', () => {
+  it('preserves a large tool result retrieval reference through replay', async () => {
+    const dir = tempDir();
+    const sessionId = 'large-tool-result';
+    const filePath = path.join(dir, `${sessionId}.jsonl`);
+    const writer = createConversationLogWriter({ sessionId, dir, logger, saveLast: vi.fn() });
+    const output = `${'x'.repeat(300_000)}\nFull output: /tmp/tool-result-artifact.txt`;
+
+    writer.init({ id: sessionId, createdAt: '2026-06-01T00:00:00.000Z' });
+    writer.append({ type: 'tool_result', callId: 'call-1', toolName: 'read_file', status: 'completed', output });
+    await writer.close();
+
+    const envelopes = fs
+      .readFileSync(filePath, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => decodeLogEnvelope(JSON.parse(line)))
+      .filter((envelope) => envelope !== null);
+    const restored = replayEvents(envelopes);
+
+    expect(restored.toolLedger.find((entry) => entry.callId === 'call-1')?.output).toContain(
+      'Full output: /tmp/tool-result-artifact.txt',
+    );
+  });
+
   it('continues sequence numbers when reopening a log with legacy and malformed trailing records', async () => {
     const dir = tempDir();
     const sessionId = 'resumed-session';

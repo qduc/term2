@@ -3,9 +3,12 @@ import { AgentClient } from './agent-client.js';
 import { registerProvider } from '../providers/registry.js';
 import { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
+import { z } from 'zod';
 import { createRunSubagentToolDefinition } from '../tools/agent/run-subagent.js';
+import { toOpenAIStrictToolSchema } from './openai-strict-tool-schema.js';
 import type { NestedSubagentResult } from '../services/subagents/types.js';
 import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
+import type { AnyToolDefinition } from '../tools/types.js';
 
 const providers = new Set<string>();
 const makeSettings = (provider: string, overrides: Record<string, unknown> = {}): ISettingsService => {
@@ -192,13 +195,23 @@ describe('AgentClient application-run-loop execution', () => {
                   type: 'tool_call',
                   id: 'call-first',
                   name: 'run_subagent',
-                  arguments: JSON.stringify({ execution: 'foreground', role: 'explorer', task: 'first' }),
+                  arguments: JSON.stringify({
+                    execution: 'foreground',
+                    role: 'explorer',
+                    task: 'first',
+                    worktree: null,
+                  }),
                 },
                 {
                   type: 'tool_call',
                   id: 'call-second',
                   name: 'run_subagent',
-                  arguments: JSON.stringify({ execution: 'foreground', role: 'explorer', task: 'second' }),
+                  arguments: JSON.stringify({
+                    execution: 'foreground',
+                    role: 'explorer',
+                    task: 'second',
+                    worktree: null,
+                  }),
                 },
               ],
             };
@@ -219,8 +232,15 @@ describe('AgentClient application-run-loop execution', () => {
       return await new Promise((resolve) => deferred.set(task, { resolve }));
     };
     const tool = createRunSubagentToolDefinition({ runSubagent: runSubagent as any });
+    // OpenAI/Codex replace the Zod schema with JSON Schema, so optional
+    // `worktree` arrives as null instead of being omitted. Eligibility must
+    // still treat that as a read-only explorer batch.
+    const strictTool = {
+      ...tool,
+      parameters: z.toJSONSchema(toOpenAIStrictToolSchema(tool.parameters)),
+    } as AnyToolDefinition;
     const instance = client(provider, {
-      agentOverride: { name: 'override', model: 'test-model', instructions: 'test', tools: [tool] },
+      agentOverride: { name: 'override', model: 'test-model', instructions: 'test', tools: [strictTool] },
       maxTurns: 2,
     });
 

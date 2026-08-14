@@ -30,8 +30,25 @@ it('describes explorer tasks as evidence collection rather than delegated reason
 
   expect(tool.description).toContain('For explorer, request concrete evidence to collect');
   expect(tool.description).toContain('Do not ask explorer to diagnose, recommend a fix, choose an approach');
+  expect(tool.description).toContain(
+    'Independent foreground explorer and librarian calls in the same model response may run in parallel',
+  );
+  expect(tool.description).not.toContain('when they do not use a worktree');
   expect(roles).toContain('evidence collection');
   expect(roles).not.toContain('answering codebase questions');
+});
+
+it('marks foreground explorer and librarian parallel-safe regardless of a worktree placeholder', () => {
+  const tool = createRunSubagentToolDefinition(async () => makeResult());
+  expect(typeof tool.parallelSafe).toBe('function');
+  const parallelSafe = tool.parallelSafe as (params: unknown) => boolean;
+
+  expect(parallelSafe({ execution: 'foreground', role: 'explorer', task: 'inspect' })).toBe(true);
+  expect(parallelSafe({ execution: 'foreground', role: 'explorer', task: 'inspect', worktree: null })).toBe(true);
+  expect(parallelSafe({ execution: 'foreground', role: 'explorer', task: 'inspect', worktree: '' })).toBe(true);
+  expect(parallelSafe({ execution: 'foreground', role: 'librarian', task: 'lookup', worktree: null })).toBe(true);
+  expect(parallelSafe({ execution: 'foreground', role: 'worker', task: 'edit' })).toBe(false);
+  expect(parallelSafe({ execution: 'background', role: 'explorer', task: 'inspect' })).toBe(false);
 });
 
 it('requires an explicit execution mode and dispatches foreground work to the nested runner', async () => {

@@ -9,6 +9,8 @@ import {
 } from '../../utils/shell/sandbox/denied-read-stores.js';
 import { ApprovalDecisionExecutor } from './approval-decision-executor.js';
 import type { PendingApprovalContext } from './approval-state.js';
+import { ToolOwnershipRegistry } from './tool-ownership-registry.js';
+import { PARENT_TOOL_OWNER } from './tool-owner.js';
 import { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
 import { SessionAccessState } from '../session/session-access-state.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
@@ -49,6 +51,7 @@ function createExecutor(
       security: () => undefined,
     } as any,
     sessionId,
+    toolOwnership: new ToolOwnershipRegistry(),
     ...options,
   });
 }
@@ -122,6 +125,38 @@ describe('ApprovalDecisionExecutor', () => {
     expect(pending.decisionsByCallId).toEqual(new Map([['deny-call', 'rejected']]));
     expect(nestedCompatibility.executionOverrides.consume(command)).toBeNull();
     expect(getProjectAllowReadStore(process.cwd()).load()).toEqual([]);
+  });
+
+  it.each([
+    ['y', 'approved'],
+    ['deny', 'rejected'],
+  ] as const)('releases the claimed call after it is %s', (answer, decision) => {
+    const toolOwnership = new ToolOwnershipRegistry();
+    toolOwnership.claim(['settled-call'], { kind: 'subagent', agentId: 'worker-1', role: 'worker' });
+    const pending = makePending({ name: 'shell', callId: 'settled-call', arguments: '{"command":"pwd"}' });
+
+    createExecutor({ toolOwnership }).resolve({ pendingApprovalContext: pending, answer });
+
+    expect(pending.decisionsByCallId).toEqual(new Map([['settled-call', decision]]));
+    expect(toolOwnership.ownerOf('settled-call')).toEqual(PARENT_TOOL_OWNER);
+  });
+
+  it('releases a claimed call when continuation settlement throws', () => {
+    const toolOwnership = new ToolOwnershipRegistry();
+    toolOwnership.claim(['throwing-call'], { kind: 'subagent', agentId: 'worker-1', role: 'worker' });
+    const pending = makePending(
+      { name: 'shell', callId: 'throwing-call', arguments: '{"command":"pwd"}' },
+      {
+        approve: () => {
+          throw new Error('continuation failed');
+        },
+      },
+    );
+
+    expect(() => createExecutor({ toolOwnership }).resolve({ pendingApprovalContext: pending, answer: 'y' })).toThrow(
+      'continuation failed',
+    );
+    expect(toolOwnership.ownerOf('throwing-call')).toEqual(PARENT_TOOL_OWNER);
   });
 
   it.each([

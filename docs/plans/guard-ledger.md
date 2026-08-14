@@ -47,8 +47,10 @@ Open work, in order:
 - **Completed:** the four repair dispositions below were approved on
   2026-08-14. This approval changes no runtime or test behavior.
 - **In progress:** the subagent steering mailbox repair is implemented and
-  verified on branch `guard-steering-mailbox`; merge disposition is pending.
-- **Next:** implement the remaining three approved repairs in separate worktrees
+  verified and merged (`74323696`, merge `fa328291`).
+- **In progress:** tool ownership lifecycle repair is implemented and undergoing
+  final verification on branch `guard-tool-ownership`.
+- **Next:** implement the remaining two approved repairs in separate worktrees
   and independently revertible commits. Re-run each recorded red proof first
   and follow the verification gates below.
 
@@ -300,8 +302,8 @@ runtime or test behavior.
 
 ### Subagent steering mailbox repair
 
-Disposition: **implemented and verified on branch `guard-steering-mailbox`; merge
-pending.** `SubagentRunControl` now treats its four-message and 4,000-character
+Disposition: **repaired in `74323696` and merged in `fa328291`.**
+`SubagentRunControl` now treats its four-message and 4,000-character
 bounds as admission limits. `enqueueSteering` returns false before either bound
 would be exceeded, without mutating the mailbox or interrupting the active
 segment. `SubagentAsyncRegistry.sendMessage` translates that result into the
@@ -361,6 +363,73 @@ PASS 19 files, 166 tests; 1 skipped
 NODE_ENV=test pnpm test
 PASS 480 files; 1 skipped. 6153 tests; 2 skipped.
 Note: emitted the existing TimeoutNaNWarning; no test failed.
+```
+
+### Tool ownership lifecycle repair
+
+Disposition: **implemented on branch `guard-tool-ownership`; merge pending.**
+`ToolOwnershipRegistry` no longer count-evicts live claims. Claims remain until
+an approval decision, abort, adopted-child cancellation or settlement, queue
+closure, or session-handle cleanup releases them. Decision settlement releases
+in a `finally` block, so callback failures cannot strand ownership.
+
+```text
+Harm prevented: a still-pending nested approval silently losing its subagent owner.
+Scope and execution paths: foreground nested approvals, adopted background-subagent approvals, and session cleanup.
+Guard class: retention bound with lifecycle-owned release.
+Enforcement owner: ToolOwnershipRegistry claim retention.
+Recovery owner: approval decision, approval abort, foreground lease, background approval queue, and session handle lifecycle owners.
+Measured signal and observation boundary: explicit pending-call claim and terminal lifecycle events.
+Direct evidence or proxy: direct claim identity and settlement events; no count proxy remains.
+Legitimate work that can produce the old signal: more than 500 simultaneously or historically claimed approvals.
+Configuration sources and precedence: legacy constructor limit injection is retained for source compatibility but no longer evicts live claims.
+Effective default and clamping: no live-claim count limit; lifecycle release and session clear bound retention.
+Action and why the signal justifies it: delete only the exact claim proven settled or all claims during session-handle disposal.
+Partial-work settlement: approval continuation and child lease settlement remain unchanged; only attribution retention changes.
+Retry, fallback, and provider-continuity semantics: unchanged.
+Observability fields: unchanged; ownership remains queryable while live.
+Persisted-setting migration, if any: none.
+Rollback boundary: one independently revertible commit.
+Ledger row: tool ownership claim eviction.
+```
+
+Red proof before production changes:
+
+```text
+NODE_ENV=test pnpm test source/services/approval/tool-ownership-registry.test.ts \
+  -t "does not evict an unreleased pending ownership claim"
+FAIL: expected worker owner; received parent fallback
+```
+
+Detection gap: registry tests encoded oldest-first count eviction as intended,
+while no public approval lifecycle test asserted that ownership survived until
+settlement or was released afterward. The repair adds pressure retention plus
+approve, reject, callback failure, abort, abort resolution, adopted-background
+resolution, queue close, lease cancellation, and lease settlement coverage.
+
+Focused verification:
+
+```text
+NODE_ENV=test pnpm test source/services/approval/tool-ownership-registry.test.ts \
+  source/services/approval/approval-decision-executor.test.ts \
+  source/services/approval/approval-flow-coordinator.test.ts \
+  source/services/approval/background-subagent-approval-controller.test.ts \
+  source/services/subagents/foreground-subagent-lease.test.ts \
+  source/services/subagents/nested-runner.test.ts \
+  source/services/session/session-composition.test.ts
+PASS 7 files, 111 tests
+
+pnpm typecheck
+PASS
+
+NODE_ENV=test pnpm test
+PASS 480 files; 1 skipped. 6159 tests; 2 skipped.
+Note: emitted the existing TimeoutNaNWarning; no test failed.
+
+pnpm test:provider-black-box
+UNVERIFIED: two attempts each failed a different 15-second PTY wait
+(interactive public-hook startup, then Runtime OpenAI stateless startup). The
+focused and full suites passed; neither timeout exercised tool ownership.
 ```
 
 ### Test contracts by class

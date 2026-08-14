@@ -20,6 +20,7 @@ import type { NestedToolCompatibilityState } from '../session/nested-tool-compat
 import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
 import { getActiveWorkspaceRoot } from '../workspace/active-workspace-root.js';
+import type { ToolOwnershipRegistry } from './tool-ownership-registry.js';
 
 export type ApprovalDecisionSource = 'user' | 'policy' | 'system';
 
@@ -32,6 +33,8 @@ export type ApprovalDecisionResolution = {
 export type ApprovalDecisionExecutorDeps = {
   logger: ILoggingService;
   sessionId: string;
+  /** Session-owned ownership claims for approval calls. */
+  toolOwnership: ToolOwnershipRegistry;
   /** Handle-owned root capability. Do not replace this with a fresh access state. */
   sessionAccess?: SessionAccessState;
   /** Explicit isolated compatibility state for a nested execution. */
@@ -56,7 +59,16 @@ export type ResolveApprovalDecisionInput = {
 export class ApprovalDecisionExecutor {
   constructor(private readonly deps: ApprovalDecisionExecutorDeps) {}
 
-  resolve({
+  resolve(input: ResolveApprovalDecisionInput): ApprovalDecisionResolution {
+    const decisionCallId = getCallIdFromObject(input.pendingApprovalContext.interruption);
+    try {
+      return this.#resolve(input);
+    } finally {
+      if (decisionCallId) this.deps.toolOwnership.release(decisionCallId);
+    }
+  }
+
+  #resolve({
     pendingApprovalContext,
     answer,
     rejectionReason,

@@ -381,6 +381,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   const backgroundSubagentApprovals = new BackgroundSubagentApprovalController({
     logger,
     sessionId: id,
+    toolOwnership,
     nestedCompatibility: getMethod<
       [],
       import('./nested-tool-compatibility-state.js').NestedToolCompatibilityState | undefined

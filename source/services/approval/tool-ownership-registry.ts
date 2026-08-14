@@ -1,13 +1,6 @@
 import { PARENT_TOOL_OWNER, type ToolOwner } from './tool-owner.js';
 
 /**
- * How many claims to retain before evicting the oldest. Claims are only ever
- * read while their tool call is awaiting approval, so anything still resident
- * long after that is dead weight rather than state we depend on.
- */
-const DEFAULT_LIMIT = 500;
-
-/**
  * Answers "which agent owns this pending tool call?".
  *
  * A nested subagent run claims the call IDs of the approvals it is blocked on
@@ -20,11 +13,12 @@ const DEFAULT_LIMIT = 500;
  */
 export class ToolOwnershipRegistry {
   readonly #owners = new Map<string, ToolOwner>();
-  readonly #limit: number;
 
-  constructor(options: { limit?: number } = {}) {
-    this.#limit = options.limit ?? DEFAULT_LIMIT;
-  }
+  /**
+   * Retained only for source compatibility with callers that once configured
+   * count eviction. Live claims are now released by their lifecycle owners.
+   */
+  constructor(_options: { limit?: number } = {}) {}
 
   /** Record `owner` as responsible for each of `callIds`. */
   claim(callIds: Iterable<string>, owner: ToolOwner): void {
@@ -32,12 +26,9 @@ export class ToolOwnershipRegistry {
       if (!callId) {
         continue;
       }
-      // Re-inserting moves the key to the end of the Map's iteration order, so
-      // eviction stays oldest-first even for a re-claimed call.
       this.#owners.delete(callId);
       this.#owners.set(callId, owner);
     }
-    this.#evictOverflow();
   }
 
   ownerOf(callId: string | undefined): ToolOwner {
@@ -57,15 +48,5 @@ export class ToolOwnershipRegistry {
 
   get size(): number {
     return this.#owners.size;
-  }
-
-  #evictOverflow(): void {
-    while (this.#owners.size > this.#limit) {
-      const oldest = this.#owners.keys().next();
-      if (oldest.done) {
-        return;
-      }
-      this.#owners.delete(oldest.value);
-    }
   }
 }

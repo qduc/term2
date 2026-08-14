@@ -81,7 +81,7 @@ export const AgentSettingsSchema = z.object({
   maxTurns: z.number().int().positive().default(100),
   maxOutputTokens: z.number().int().positive().default(32_000),
   maxStreamOutputChars: z.number().int().positive().default(100_000),
-  maxModelRequestDurationMs: z.number().int().positive().default(300_000),
+  maxModelRequestDurationMs: z.number().int().nonnegative().default(0),
   retryAttempts: z.number().int().nonnegative().default(2),
   transport: z.enum(['websocket', 'http']).default('websocket'),
   maxParallelToolCalls: z
@@ -950,7 +950,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     maxTurns: 100,
     maxOutputTokens: 32_000,
     maxStreamOutputChars: 100_000,
-    maxModelRequestDurationMs: 300_000,
+    maxModelRequestDurationMs: 0,
     retryAttempts: 2,
     transport: 'websocket',
     maxParallelToolCalls: 3,

@@ -80,7 +80,7 @@ it('SettingsService initializes with defaults', async () => {
   expect(service.get('agent.maxTurns')).toBe(100);
   expect(service.get('agent.maxOutputTokens')).toBe(32_000);
   expect(service.get('agent.maxStreamOutputChars')).toBe(100_000);
-  expect(service.get('agent.maxModelRequestDurationMs')).toBe(300_000);
+  expect(service.get('agent.maxModelRequestDurationMs')).toBe(0);
   expect(service.get('agent.retryAttempts')).toBe(2);
   expect(service.get('agent.maxParallelToolCalls')).toBe(3);
   expect(service.get('shell.timeout')).toBe(120000);
@@ -89,6 +89,34 @@ it('SettingsService initializes with defaults', async () => {
   expect(service.get('shell.maxOutputChars')).toBe(40000);
   expect(service.get('ui.historySize')).toBe(1000);
   expect(service.get('logging.logLevel')).toBe('info');
+});
+
+it.sequential('migrates the former persisted request-deadline default to disabled', async () => {
+  await withNonTestEnvironment(async () => {
+    const settingsDir = getTestSettingsDir();
+    fs.mkdirSync(settingsDir, { recursive: true });
+    const settingsFile = getSettingsFilePath(settingsDir);
+    fs.writeFileSync(settingsFile, JSON.stringify({ agent: { maxModelRequestDurationMs: 300_000 } }), 'utf-8');
+
+    const service = new SettingsService({ settingsDir, disableLogging: true });
+
+    expect(service.get('agent.maxModelRequestDurationMs')).toBe(0);
+    expect(JSON.parse(fs.readFileSync(settingsFile, 'utf-8')).agent.maxModelRequestDurationMs).toBe(0);
+  });
+});
+
+it('preserves a customized model-request deadline', () => {
+  const settingsDir = getTestSettingsDir();
+  fs.mkdirSync(settingsDir, { recursive: true });
+  fs.writeFileSync(
+    getSettingsFilePath(settingsDir),
+    JSON.stringify({ agent: { maxModelRequestDurationMs: 600_000 } }),
+    'utf-8',
+  );
+
+  const service = new SettingsService({ settingsDir, disableLogging: true, disableFilePersistence: true });
+
+  expect(service.get('agent.maxModelRequestDurationMs')).toBe(600_000);
 });
 
 it('skips file writes in test environment (constructor + set)', async () => {

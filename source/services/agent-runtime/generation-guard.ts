@@ -22,6 +22,7 @@ export interface GenerationGuardOptions {
   readonly maxReasoningCharacters?: number;
   readonly maxToolArgumentCharacters?: number;
   readonly maxCumulativeToolArgumentCharacters?: number;
+  /** Optional hard wall-clock limit; 0 disables it. */
   readonly requestDeadlineMs?: number;
   readonly repetition?: Partial<GenerationRepetitionOptions>;
 }
@@ -48,7 +49,10 @@ export const DEFAULT_GENERATION_GUARD_OPTIONS: Readonly<Required<Omit<Generation
   maxReasoningCharacters: 100_000,
   maxToolArgumentCharacters: 100_000,
   maxCumulativeToolArgumentCharacters: 100_000,
-  requestDeadlineMs: 300_000,
+  // Slow reasoning requests can legitimately remain silent for many minutes.
+  // A total wall-clock deadline cannot distinguish that from a stalled
+  // provider, so keep it opt-in; transport watchdogs own inactivity failures.
+  requestDeadlineMs: 0,
   repetition: DEFAULT_GENERATION_REPETITION_OPTIONS,
 };
 
@@ -335,13 +339,14 @@ function describeDeadlineExpiry(timeoutMs: number, progress: GenerationProgress 
   );
 }
 
-/** Race one iterator read with a deadline that aborts the active provider signal. */
+/** Race iterator reads with an explicitly enabled deadline that aborts the active provider signal. */
 export class GenerationDeadline {
   #error: GenerationGuardError | undefined;
   #timer: ReturnType<typeof setTimeout> | undefined;
   readonly #waitingRejectors = new Set<(error: GenerationGuardError) => void>();
 
   constructor(timeoutMs: number, abortActiveRequest: () => void, describeProgress?: () => GenerationProgress) {
+    if (timeoutMs <= 0) return;
     this.#timer = setTimeout(() => {
       this.#error = new GenerationGuardError(
         'request_deadline',

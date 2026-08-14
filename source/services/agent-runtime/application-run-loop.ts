@@ -52,7 +52,7 @@ export interface AgentModelSettings {
   maxTokens?: number;
   /** Hard per-request stream-output budget across text, reasoning, and tool arguments. */
   maxStreamOutputChars?: number;
-  /** Total wall-clock limit for each individual provider request. */
+  /** Optional total wall-clock limit for each provider request; 0 disables it. */
   maxModelRequestDurationMs?: number;
   retry?: { maxRetries?: number };
   providerData?: Record<string, unknown>;

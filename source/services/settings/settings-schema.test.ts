@@ -11,6 +11,12 @@ import {
   normalizeAppModes,
 } from './settings-schema.js';
 
+it('disables the model-request wall-clock deadline by default while allowing an explicit limit', () => {
+  expect(AgentSettingsSchema.parse({}).maxModelRequestDurationMs).toBe(0);
+  expect(AgentSettingsSchema.parse({ maxModelRequestDurationMs: 600_000 }).maxModelRequestDurationMs).toBe(600_000);
+  expect(() => AgentSettingsSchema.parse({ maxModelRequestDurationMs: -1 })).toThrow();
+});
+
 it('Codex websocket receive timeouts default to transport-safe values and reject invalid values', () => {
   expect(AgentSettingsSchema.parse({}).codex).toEqual({
     websocketFirstFrameTimeoutMs: 90_000,

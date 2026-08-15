@@ -118,12 +118,10 @@ invocations plus one retained expected-failure characterization).
 The Phase 0 Seam 2–4 command discrepancy was a test-record defect: nonexistent
 paths let Vitest silently skip coverage. The authoritative baseline now records
 the corrected commands and retains the discovery as a dated correction note.
-All minimum-matrix cells are characterized. One product/design defect is
-demonstrated and queued for Phase 2: a WebSocket receive-watchdog timeout
-terminates as an ambiguous outcome instead of reaching the previously documented
-HTTP/full-history fallback. Any repair must first prove that the failed request
-was unsent and define an explicit transport-rebind policy; blind replay remains
-forbidden.
+All minimum-matrix cells are characterized. One product/design defect was
+demonstrated and queued for Phase 2 — a WebSocket receive-watchdog timeout
+terminating as an ambiguous outcome instead of reaching the documented
+HTTP/full-history fallback — and it was repaired on 2026-08-15 (see Phase 2).
 
 **Outcome:** the most failure-prone cross-owner behavior is stated in observable
 terms and has a deterministic contract matrix.
@@ -280,6 +278,26 @@ Minimum matrix:
   Phase 2.
 
 ## Phase 2 — Repair demonstrated violations
+
+Status: **the one demonstrated violation is repaired (2026-08-15).** A
+first-frame WebSocket watchdog timeout that the send path proves never reached
+the wire now recovers through the existing bounded `transport_downgrade` →
+`retry_fresh` / `full_history` path instead of terminating the turn. Evidence is
+recorded by the send path in `providers/websocket-request-dispatch.ts`, never
+inferred from error text, and an unrecorded request reads as `unknown` so a
+missing record cannot authorize a replay. A timeout after the frame was flushed
+to an OPEN socket remains ambiguous and still terminates: that is an approved
+deferral, not a gap, because the protocol offers no resume signal that could
+distinguish an unseen request from an accepted one. Both sides are now covered
+by passing tests at the initial-turn recovery boundary; the retained
+expected-failure characterization is retired. See
+[`docs/contracts/05-runtime-guards-and-retention.md`](./docs/contracts/05-runtime-guards-and-retention.md) §10.
+
+Supporting observability landed alongside it: the watchdog now reports the
+first-frame latency, largest inter-frame gap, and expired wait it measured,
+together with the budgets it judged them against, into the provider traffic log.
+Before this, the guard's own margin was unobservable, so a threshold could only
+be found wrong by a live request losing its turn.
 
 **Outcome:** current behavior satisfies the contracts without speculative
 architecture work.

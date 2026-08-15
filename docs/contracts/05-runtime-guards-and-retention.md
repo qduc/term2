@@ -1,7 +1,8 @@
 # Contract 05 — Runtime guards and retention
 
-Status: **owner-reviewed 2026-08-14; focused command green; one red product
-defect classified for Phase 2.** Owners: the guard
+Status: **owner-reviewed 2026-08-14; focused command green. The one red product
+defect was repaired in Phase 2 on 2026-08-15; its residual ambiguous case is an
+approved deferral recorded in §10.** Owners: the guard
 inventory and contracts recorded in [`docs/plans/guard-ledger.md`](../plans/guard-ledger.md)
 plus the linked owner plans (`run-budget-stall-escalation`, `tool-output-and-effect-safety`,
 `chain-settlement`, `background-shell-monitor`, `provider-neutral-context-compaction`).
@@ -191,20 +192,40 @@ false-positive/true-positive matrix per `ROADMAP.md` Phase 3 Step 5, with the
 
 ## 10. Known gaps and classification
 
-1. **Fallback recovery classification — demonstrated safety/design product
-   defect, queued for Phase 2.** The retained expected-failure characterization
-   in `initial-turn-recovery-handler.test.ts` drives a real first-frame watchdog
-   timeout through the provider and initial-turn recovery public boundary. It
-   asserts the intended `retry_fresh` / `full_history` plan, and currently
-   fails because `CodexResponsesWSModel` produces `AmbiguousModelOutcomeError`
-   and the classifier safely returns `terminate`. The expected failure is
-   deliberate evidence, not permission for blind replay: no trustworthy unsent
-   proof or runtime transport rebind exists today. A Phase 2 repair first needs
-   (a) trusted, machine-readable pre-send/unsent evidence that distinguishes
-   safe retry from a possibly accepted request, and (b) an explicit
-   transport-rebind policy that rebuilds from full history with truthful
-   continuity and tool-ledger settlement. Until both prerequisites are proven,
-   `terminate` remains the safe fallback for ambiguous outcomes.
+1. **Fallback recovery classification — repaired in Phase 2 for the provable
+   half; the ambiguous half is an approved deferral.** The former
+   expected-failure characterization in `initial-turn-recovery-handler.test.ts`
+   is now two passing tests, one per side of the evidence line.
+
+   Prerequisite (a), machine-readable unsent evidence, is satisfied by
+   `providers/websocket-request-dispatch.ts`: the send path records `flushed`
+   only for a frame written to an OPEN socket, `unsent` while the frame is
+   still the client's, and `unknown` when the socket cannot be observed.
+   Unrecorded requests read as `unknown`, so a missing record never authorizes
+   a replay. Prerequisite (b) needed no new work — `transport_downgrade`
+   already plans a bounded `retry_fresh` / `full_history` rebuild
+   (`recovery-policy.ts:25-26`, `:60-65`).
+
+   `CodexResponsesWSModel` raises the typed `UnsentWebSocketRequestError` only
+   when three independent conditions hold: the failure is the watchdog's own,
+   `frameCount === 0`, and the dispatch record is positively `unsent`. Each
+   rules out one way of being wrong.
+
+   **Approved deferral (owner: providers).** A timeout after the frame was
+   flushed to an OPEN socket stays `AmbiguousModelOutcomeError` and still
+   terminates. This is not a coverage gap but a property of the transport: the
+   Responses WebSocket protocol offers no resume or idempotency signal, so
+   "server never saw it" and "server accepted it and went quiet" are
+   indistinguishable from the client. Replaying would risk a duplicated turn.
+   Revisit only if the protocol gains a resume token or the SDK's
+   `ResponsesWS` reconnect send-queue (`UnsentMessage[]`, `internal/ws.ts`) is
+   adopted, which would widen the provably-unsent set without closing this
+   case.
+
+   The pre-existing string sniffing in `isDefinitelyUnsentWebSocketError`
+   (`before opening`, `ECONNREFUSED`, `ENOTFOUND`) still serves non-watchdog
+   connection errors. It is no longer load-bearing for the watchdog path and
+   should not be extended; new unsent evidence belongs in the dispatch record.
 2. **Ledger completeness limitation — non-gating.** The ledger itself states that keyword
    sweeps cannot find inline literal comparisons, so "every runtime guard" is
    bounded by the ledger's inventory, not by a proof of completeness

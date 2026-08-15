@@ -1,6 +1,7 @@
 import { it, expect, beforeEach, afterEach } from 'vitest';
 import { fetchModels, clearModelCache, filterModels } from './model-service.js';
 import { createMockSettingsService } from './settings/settings-service.mock.js';
+import { registerProvider, unregisterProvider } from '../providers/index.js';
 
 const originalApiKey = process.env.OPENAI_API_KEY;
 
@@ -322,4 +323,66 @@ it.sequential('fetchModels logs and throws the standard error message when there
   expect(warnCalls.length).toBe(1);
   expect(warnCalls[0].msg).toBe('Failed to fetch models');
   expect(warnCalls[0].meta.error).toBe('Some standard error');
+});
+
+it.sequential('a providers config change evicts only the changed provider cache entry', async () => {
+  const settingsService = createMockSettingsService();
+  const changedId = `cache-changed-${Date.now()}-${Math.random()}`;
+  const keptId = `cache-kept-${Date.now()}-${Math.random()}`;
+  const changedConfig = {
+    id: changedId,
+    name: changedId,
+    type: 'openai-compatible',
+    baseUrl: 'http://127.0.0.1:43121/v1',
+  };
+  const keptConfig = {
+    id: keptId,
+    name: keptId,
+    type: 'openai-compatible',
+    baseUrl: 'http://127.0.0.1:43122/v1',
+  };
+  let changedFetches = 0;
+  let keptFetches = 0;
+
+  registerProvider({
+    id: changedId,
+    label: changedId,
+    fetchModels: async () => {
+      changedFetches++;
+      return [{ id: 'changed-model' }];
+    },
+  });
+  registerProvider({
+    id: keptId,
+    label: keptId,
+    fetchModels: async () => {
+      keptFetches++;
+      return [{ id: 'kept-model' }];
+    },
+  });
+
+  try {
+    settingsService.setPersistentDynamic('providers', [changedConfig, keptConfig]);
+
+    await fetchModels({ settingsService, loggingService: { warn: () => {} } as any }, changedId);
+    await fetchModels({ settingsService, loggingService: { warn: () => {} } as any }, keptId);
+    expect(changedFetches).toBe(1);
+    expect(keptFetches).toBe(1);
+
+    // Same-id config update: only the changed provider's cached models are
+    // evicted at the settings boundary; the untouched provider keeps its cache.
+    settingsService.setPersistentDynamic('providers', [
+      { ...changedConfig, baseUrl: 'http://127.0.0.1:43123/v1' },
+      keptConfig,
+    ]);
+
+    await fetchModels({ settingsService, loggingService: { warn: () => {} } as any }, changedId);
+    await fetchModels({ settingsService, loggingService: { warn: () => {} } as any }, keptId);
+    expect(changedFetches).toBe(2);
+    expect(keptFetches).toBe(1);
+  } finally {
+    unregisterProvider(changedId);
+    unregisterProvider(keptId);
+    clearModelCache();
+  }
 });

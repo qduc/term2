@@ -9,7 +9,7 @@ import { useModelSelection } from './use-model-selection.js';
 import { createMockSettingsService } from '../services/settings/settings-service.mock.js';
 import { Text } from 'ink';
 import { clearModelCache } from '../services/model-service.js';
-import { getProviderIds, registerProvider } from '../providers/index.js';
+import { getProviderIds, registerProvider, unregisterProvider } from '../providers/index.js';
 
 type TestComponentProps = {
   onResults: (results: any) => void;
@@ -431,6 +431,78 @@ it.sequential('modelSettingConfig is undefined for command-backed triggers', asy
     await flush(() => {});
   }
 });
+
+it.sequential(
+  "invalidates the changed custom provider's cached models after a config change under the same id",
+  async () => {
+    clearModelCache();
+    const providerId = `cache-provider-${Date.now()}-${Math.random()}`;
+    const initialProviderConfig = {
+      id: providerId,
+      name: providerId,
+      type: 'openai-compatible',
+      baseUrl: 'http://127.0.0.1:43121/v1',
+    };
+    const changedProviderConfig = {
+      ...initialProviderConfig,
+      baseUrl: 'http://127.0.0.1:43122/v1',
+    };
+    const settingsService = createMockSettingsService();
+    let modelsResponse = [{ id: 'model-a', name: 'Model A' }];
+    let fetchCount = 0;
+
+    registerProvider({
+      id: providerId,
+      label: providerId,
+      fetchModels: async () => {
+        fetchCount++;
+        await Promise.resolve();
+        return modelsResponse;
+      },
+    });
+
+    settingsService.setPersistentDynamic('providers', [initialProviderConfig]);
+    settingsService.setPersistentDynamic('agent.provider', providerId);
+
+    let capturedModels: any;
+    let renderer: any;
+    try {
+      await flush(() => {
+        renderer = render(
+          <InputProvider>
+            <TestComponent
+              settingsService={settingsService}
+              initialInput="/model "
+              onResults={(m) => {
+                capturedModels = m;
+              }}
+            />
+          </InputProvider>,
+        );
+      });
+      await waitForIdle(() => capturedModels);
+
+      expect(capturedModels.filteredModels.map((model: any) => model.id)).toEqual(['model-a']);
+      expect(fetchCount).toBe(1);
+
+      await flush(() => {
+        settingsService.setPersistentDynamic('providers', [changedProviderConfig]);
+        modelsResponse = [{ id: 'model-b', name: 'Model B' }];
+      });
+      await waitForIdle(() => capturedModels);
+
+      expect({
+        fetchCount,
+        modelIds: capturedModels.filteredModels.map((model: any) => model.id),
+      }).toEqual({ fetchCount: 2, modelIds: ['model-b'] });
+      expect(capturedModels.filteredModels.map((model: any) => model.id)).toEqual(['model-b']);
+    } finally {
+      await flush(() => renderer?.unmount());
+      unregisterProvider(providerId);
+      clearModelCache();
+    }
+  },
+);
 
 it.sequential('model selection query strips provider suffix from input', async () => {
   let capturedModels: any;

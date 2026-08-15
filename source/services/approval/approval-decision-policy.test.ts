@@ -28,9 +28,6 @@ const createMockAgentClient = () => {
       return result;
     },
     abort() {},
-    getStreamMaxRetries() {
-      return 3;
-    },
     shouldRetryWithoutFlexServiceTier() {
       return false;
     },

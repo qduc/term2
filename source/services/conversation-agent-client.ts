@@ -102,6 +102,11 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   editSteer?(id: string, items: readonly ProviderInputItem[]): boolean;
   setModel(model: string): void;
   addToolInterceptor(interceptor: ToolInterceptor): () => void;
+  /**
+   * Wire session tool-ledger dispatch marking. Called after composition creates
+   * the tracker so mid-tool stream recovery can settle as `unknown`.
+   */
+  setOnToolDispatch?(handler: ((callId: string) => void) | undefined): void;
   /** Conversation-scoped lifecycle sink for root background shell jobs. */
   setBackgroundShellEventSink?(sink: ((event: ConversationEvent) => void) | null): void;
 
@@ -122,7 +127,6 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   requestBackgroundSubagentStop?(runId: string): SubagentCancelAcknowledgement;
   /** Foreground candidates that may be transferred without restarting. */
   listForegroundSubagentCandidates?(): ForegroundSubagentCandidate[];
-  getForegroundSubagentCandidate?(runId: string): ForegroundSubagentCandidate | undefined;
   /** Atomically adopts one foreground child into the background registry. */
   moveForegroundSubagent?(
     runId: string,
@@ -146,4 +150,9 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   setReasoningEffort?(effort?: ReasoningEffortSetting): void;
   setRetryCallback?(callback: () => void): void;
   setTemperature?(temperature?: number): void;
+  /**
+   * Force the next request to the standard (non-flex) service tier. The
+   * override is one-shot: it is consumed by the next request it applies to.
+   */
+  useStandardServiceTierForNextRequest?(): void;
 }

@@ -661,10 +661,6 @@ export class AgentClient {
     return this.#subagentBridge?.listForegroundSubagentCandidates() ?? [];
   }
 
-  getForegroundSubagentCandidate(runId: string): ForegroundSubagentCandidate | undefined {
-    return this.listForegroundSubagentCandidates().find((candidate) => candidate.runId === runId);
-  }
-
   /** Atomically hands one live nested child to the background registry. */
   moveForegroundSubagent(runId: string): SubagentRunHandle | undefined {
     return this.#subagentBridge?.moveForegroundSubagent(runId);

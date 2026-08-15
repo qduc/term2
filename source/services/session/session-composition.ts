@@ -604,8 +604,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     if (typeof configured === 'number' && Number.isInteger(configured) && configured >= 0) {
       return configured;
     }
-    const clientLimit = getMethod<[], number>(agentClient, 'getStreamMaxRetries')?.call(agentClient);
-    return typeof clientLimit === 'number' && Number.isInteger(clientLimit) && clientLimit >= 0 ? clientLimit : 2;
+    return 2;
   };
   const attemptFactory = new TurnAttemptFactory({
     agentClient,

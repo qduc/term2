@@ -3,6 +3,7 @@ import { ProviderContinuity } from '../provider-continuity.js';
 import type { ProviderHistorySnapshot } from '../conversation/conversation-store.js';
 import { getSerializedInputBytes } from '../large-uncached-input-guard.js';
 import { combineHistoryAndDraftBytes, SessionInputPlanner } from './session-input-planner.js';
+import { getProvider } from '../../providers/index.js';
 
 it('carries the authoritative immutable history snapshot alongside the unchanged input plan', () => {
   const snapshot: ProviderHistorySnapshot = Object.freeze({
@@ -22,6 +23,33 @@ it('carries the authoritative immutable history snapshot alongside the unchanged
   expect(plan.providerHistorySnapshot).toBe(snapshot);
   expect(plan.streamInput).toBe('hello');
   expect(plan.inputSurgeKind).toBe('delta');
+});
+
+it('uses provider chaining policy when the client omits its chaining capability', () => {
+  const registrySupportsChaining = getProvider('openai')?.capabilities?.supportsConversationChaining ?? false;
+  const planner = new SessionInputPlanner({
+    agentClient: { getProvider: () => 'openai' } as any,
+    toolTracker: { getReconciledHistory: () => [] } as any,
+    providerContinuity: new ProviderContinuity(),
+  });
+
+  const plan = planner.build({ text: 'hello' }, { includeTurn: true, pendingModeNotice: null });
+
+  expect(plan.inputSurgeKind).toBe(registrySupportsChaining ? 'delta' : 'full_history');
+});
+
+it('uses full history when the client explicitly disables chaining', () => {
+  const planner = new SessionInputPlanner({
+    agentClient: { getProvider: () => 'openai', supportsConversationChaining: () => false } as any,
+    toolTracker: { getReconciledHistory: () => [] } as any,
+    providerContinuity: new ProviderContinuity(),
+  });
+
+  const plan = planner.build({ text: 'hello' }, { includeTurn: true, pendingModeNotice: null });
+
+  expect(plan.inputSurgeKind).toBe('full_history');
+  expect(Array.isArray(plan.streamInput)).toBe(true);
+  expect(plan.streamInput).toEqual([{ role: 'user', type: 'message', content: 'hello' }]);
 });
 
 it('drops chaining and uses full history when the previous response still has unpaid tool debt', () => {

@@ -1860,3 +1860,33 @@ it('keeps the pending-interaction observer attached when the session is reset', 
 
   expect(snapshots).toEqual([null, null, 'shell']);
 });
+
+// ── Run-budget grant facade ────────────────────────────────────────
+
+it('returns the client run-budget grant result', () => {
+  const grantResult = { granted: true, extensionsGranted: 2 };
+  let grantCalls = 0;
+  const service = new ConversationService({
+    agentClient: partialClient({
+      grantRunBudgetExtension: () => {
+        grantCalls++;
+        return grantResult;
+      },
+    }),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  const result = service.grantRunBudgetExtension();
+
+  expect(result).toBe(grantResult);
+  expect(grantCalls).toBe(1);
+});
+
+it('returns the unavailable run-budget grant result when the client lacks the capability', () => {
+  const service = new ConversationService({
+    agentClient: partialClient(),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  expect(service.grantRunBudgetExtension()).toEqual({ granted: false, extensionsGranted: 0 });
+});

@@ -1,4 +1,5 @@
 import { expect, it, vi } from 'vitest';
+import { PLAN_MODE_ENTER_NOTICE, PLAN_MODE_EXIT_NOTICE } from './mode-notices.js';
 import { ConversationConfigurationService } from './runtime-setting-router.js';
 
 const makeService = (overrides: Record<string, unknown> = {}) => {
@@ -46,4 +47,20 @@ it('does not invoke runtime effects when the settings transaction rejects', () =
 
   expect(() => service.apply([{ key: 'agent.provider', value: 'bad', persistence: 'runtime' }])).toThrow('invalid');
   expect(conversationService.switchProvider).not.toHaveBeenCalled();
+});
+
+it('queues the plan-mode enter notice when app.planMode becomes true', () => {
+  const { service, conversationService } = makeService();
+
+  service.apply([{ key: 'app.planMode', value: true, persistence: 'runtime' }]);
+
+  expect(conversationService.queueModeNotice).toHaveBeenCalledWith(PLAN_MODE_ENTER_NOTICE);
+});
+
+it('queues the plan-mode exit notice when app.planMode becomes false', () => {
+  const { service, conversationService } = makeService();
+
+  service.apply([{ key: 'app.planMode', value: false, persistence: 'runtime' }]);
+
+  expect(conversationService.queueModeNotice).toHaveBeenCalledWith(PLAN_MODE_EXIT_NOTICE);
 });

@@ -11,6 +11,7 @@ import { SessionContextService } from '../services/session/session-context-servi
 import { wrapCodexStream } from './codex-responses-model.js';
 import { RetryingModel } from './retrying-model.js';
 import { AmbiguousModelOutcomeError } from '../services/retry/retry-errors.js';
+import { recordWebSocketDispatch, UnsentWebSocketRequestError } from './websocket-request-dispatch.js';
 // Fixture mirrors the SSE shape that codex's responses endpoint emits: deltas
 // and output_item.done carry the assistant message, but the terminal
 // response.completed frame ships an empty `output` array. The wrapper has to
@@ -3248,6 +3249,170 @@ it('CodexResponsesWSModel records how long a first-frame timeout waited against 
       firstFrameBudgetMs: 25,
       interFrameBudgetMs: 50,
     });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// Phase 2 of ROADMAP.md: a first-frame watchdog timeout is only safe to retry
+// when the send path proves the frame never reached the wire. Positive evidence
+// unlocks recovery; anything less stays ambiguous and terminates.
+it('CodexResponsesWSModel reports a first-frame timeout as provably unsent when the frame never reached an open socket', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  vi.useFakeTimers();
+  transport.fetchResponse = async function (request: any) {
+    recordWebSocketDispatch(request, 'unsent');
+    return {
+      [Symbol.asyncIterator]: () => ({
+        next: () =>
+          new Promise((_resolve, reject) => {
+            request.signal?.addEventListener('abort', () => reject(request.signal.reason), { once: true });
+          }),
+        return: async () => ({ done: true, value: undefined }),
+      }),
+    };
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+      'gpt-5-codex',
+      { getOrRefreshAccessToken: async () => 'token', getAccountId: () => undefined } as any,
+      undefined,
+      undefined,
+      undefined,
+      { firstFrameMs: 25, interFrameMs: 50 },
+      transport,
+    );
+    const pending = collect(model.stream({ input: [], tools: [] } as any));
+    void pending.catch(() => {});
+    await vi.advanceTimersByTimeAsync(25);
+    const error = await pending.catch((reason) => reason);
+
+    expect(error).toBeInstanceOf(UnsentWebSocketRequestError);
+    expect(error).not.toBeInstanceOf(AmbiguousModelOutcomeError);
+    expect((error as Error).cause).toBeInstanceOf(Error);
+    expect(((error as Error).cause as Error).message).toBe('WebSocket first frame timeout');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('CodexResponsesWSModel keeps a first-frame timeout ambiguous once the frame was flushed to an open socket', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  vi.useFakeTimers();
+  transport.fetchResponse = async function (request: any) {
+    recordWebSocketDispatch(request, 'flushed');
+    return {
+      [Symbol.asyncIterator]: () => ({
+        next: () =>
+          new Promise((_resolve, reject) => {
+            request.signal?.addEventListener('abort', () => reject(request.signal.reason), { once: true });
+          }),
+        return: async () => ({ done: true, value: undefined }),
+      }),
+    };
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+      'gpt-5-codex',
+      { getOrRefreshAccessToken: async () => 'token', getAccountId: () => undefined } as any,
+      undefined,
+      undefined,
+      undefined,
+      { firstFrameMs: 25, interFrameMs: 50 },
+      transport,
+    );
+    const pending = collect(model.stream({ input: [], tools: [] } as any));
+    void pending.catch(() => {});
+    await vi.advanceTimersByTimeAsync(25);
+    const error = await pending.catch((reason) => reason);
+
+    expect(error).toBeInstanceOf(AmbiguousModelOutcomeError);
+    expect(error).not.toBeInstanceOf(UnsentWebSocketRequestError);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// Fail-closed: a send path that recorded nothing is not evidence of anything.
+it('CodexResponsesWSModel keeps a first-frame timeout ambiguous when the send path observed nothing', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  vi.useFakeTimers();
+  transport.fetchResponse = async function (request: any) {
+    return {
+      [Symbol.asyncIterator]: () => ({
+        next: () =>
+          new Promise((_resolve, reject) => {
+            request.signal?.addEventListener('abort', () => reject(request.signal.reason), { once: true });
+          }),
+        return: async () => ({ done: true, value: undefined }),
+      }),
+    };
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+      'gpt-5-codex',
+      { getOrRefreshAccessToken: async () => 'token', getAccountId: () => undefined } as any,
+      undefined,
+      undefined,
+      undefined,
+      { firstFrameMs: 25, interFrameMs: 50 },
+      transport,
+    );
+    const pending = collect(model.stream({ input: [], tools: [] } as any));
+    void pending.catch(() => {});
+    await vi.advanceTimersByTimeAsync(25);
+    const error = await pending.catch((reason) => reason);
+
+    expect(error).toBeInstanceOf(AmbiguousModelOutcomeError);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// An idle timeout mid-stream cannot be unsent: frames already arrived.
+it('CodexResponsesWSModel keeps an idle timeout ambiguous even if a stale unsent record survives', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  vi.useFakeTimers();
+  transport.fetchResponse = async function (request: any) {
+    recordWebSocketDispatch(request, 'unsent');
+    let reads = 0;
+    return {
+      [Symbol.asyncIterator]: () => ({
+        next: () => {
+          reads += 1;
+          if (reads === 1) return Promise.resolve({ done: false, value: { type: 'response.created' } });
+          return new Promise((_resolve, reject) => {
+            request.signal?.addEventListener('abort', () => reject(request.signal.reason), { once: true });
+          });
+        },
+        return: async () => ({ done: true, value: undefined }),
+      }),
+    };
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+      'gpt-5-codex',
+      { getOrRefreshAccessToken: async () => 'token', getAccountId: () => undefined } as any,
+      undefined,
+      undefined,
+      undefined,
+      { firstFrameMs: 25, interFrameMs: 50 },
+      transport,
+    );
+    const pending = collect(model.stream({ input: [], tools: [] } as any));
+    void pending.catch(() => {});
+    await vi.advanceTimersByTimeAsync(75);
+    const error = await pending.catch((reason) => reason);
+
+    expect(error).not.toBeInstanceOf(UnsentWebSocketRequestError);
   } finally {
     vi.useRealTimers();
   }

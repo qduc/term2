@@ -26,6 +26,11 @@ import {
   type WebSocketReceiveTimeouts,
   type WebSocketReceiveTiming,
 } from './websocket-receive-watchdog.js';
+import {
+  readWebSocketDispatch,
+  recordWebSocketDispatch,
+  UnsentWebSocketRequestError,
+} from './websocket-request-dispatch.js';
 import { markContextCompactionFailure, resolveContextManagement } from './openai-responses-model.js';
 
 const DUMMY_PROVIDER_TRAFFIC: IProviderTraffic = {
@@ -42,6 +47,10 @@ function toCodexToolChoice(choice: unknown): unknown {
   }
   throw new Error('Unsupported Codex tool choice.');
 }
+
+// RFC 6455 readyState values, named so the send path's evidence is readable.
+const WEBSOCKET_CONNECTING = 0;
+const WEBSOCKET_OPEN = 1;
 
 export type CodexResponsesTransportOptions = {
   supportsContextCompaction?: boolean;
@@ -113,10 +122,21 @@ export class CodexResponsesTransport {
         );
         const messages = socket.stream();
         const requestEvent = { type: 'response.create', ...requestData } as any;
-        if ((socket as any).socket?.readyState === 0) {
-          (socket as any).socket.once('open', () => socket.send(requestEvent));
-        } else {
+        // Until the frame is written to an OPEN socket it is still ours, so a
+        // receive timeout before that point is provably unsent. `send` on a
+        // connecting or closing socket only queues, which proves nothing —
+        // record what the socket actually was, and `unknown` when it cannot be
+        // observed at all.
+        recordWebSocketDispatch(request, 'unsent');
+        const dispatchRequestEvent = () => {
+          const readyState = (socket as any).socket?.readyState;
           socket.send(requestEvent);
+          recordWebSocketDispatch(request, readyState === WEBSOCKET_OPEN ? 'flushed' : 'unknown');
+        };
+        if ((socket as any).socket?.readyState === WEBSOCKET_CONNECTING) {
+          (socket as any).socket.once('open', dispatchRequestEvent);
+        } else {
+          dispatchRequestEvent();
         }
         const sessionState = this.options.contextCompactionSessionState;
         return (async function* () {
@@ -857,10 +877,29 @@ const isDefinitelyUnsentWebSocketError = (error: unknown, seen = new Set<unknown
   return isDefinitelyUnsentWebSocketError(record.message, seen) || isDefinitelyUnsentWebSocketError(record.cause, seen);
 };
 
+/**
+ * A receive-watchdog timeout that the send path proved never reached the wire.
+ *
+ * Three conditions must all hold, and each rules out a way of being wrong: the
+ * failure is the watchdog's own (not a provider error wearing a timeout
+ * message), no frame ever arrived (a single frame means the server had the
+ * request), and the send path positively recorded `unsent` (an unrecorded
+ * request is not evidence). Anything less stays ambiguous and terminates.
+ */
+const asProvablyUnsentTimeout = (
+  timeoutError: Error | undefined,
+  timing: WebSocketReceiveTiming,
+  request: object,
+): UnsentWebSocketRequestError | undefined => {
+  if (!timeoutError || timing.frameCount > 0) return undefined;
+  if (readWebSocketDispatch(request) !== 'unsent') return undefined;
+  return new UnsentWebSocketRequestError(timeoutError.message, { cause: timeoutError });
+};
+
 const asAmbiguousModelOutcome = (error: unknown): AmbiguousModelOutcomeError | undefined => {
   // Connection never carried the request: safe to let outer retry / transport
   // fallback policies decide. Do not pretend the model may have run.
-  if (isDefinitelyUnsentWebSocketError(error)) {
+  if (error instanceof UnsentWebSocketRequestError || isDefinitelyUnsentWebSocketError(error)) {
     return undefined;
   }
   // Incomplete stream terminals keep transportFallback=false so Codex does not
@@ -1047,6 +1086,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     wireStateToken?: ChainedRequestToken,
     signal?: AbortSignal,
     receiveTiming?: () => WebSocketReceiveTiming,
+    asProvablyUnsent?: () => UnsentWebSocketRequestError | undefined,
   ): Promise<AsyncIterable<any>> {
     const logReceived = this.#logTrafficReceived.bind(this);
     const logFailed = this.#logTrafficFailed.bind(this);
@@ -1095,8 +1135,12 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         if (wireStateKey && !isWebSocketConnectionLimitReachedError(error)) {
           wireState.invalidate(wireStateKey);
         }
-        logFailed(requestId, requestData, error, receiveTiming?.());
-        throw error;
+        // The watchdog's own timeout may carry proof that the request never
+        // reached the wire; the wire-state decision above still keys off the
+        // error as thrown.
+        const failure = asProvablyUnsent?.() ?? error;
+        logFailed(requestId, requestData, failure, receiveTiming?.());
+        throw failure;
       } finally {
         if (!sawTerminalEvent && !sourceExhausted && !streamFailed) {
           // A consumer-closed stream ended because we stopped reading, which is
@@ -1653,7 +1697,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         const timeoutError = watchdog.timeoutError();
         const receiveTiming = watchdog.receiveTiming();
         watchdog.close();
-        const failure = timeoutError ?? error;
+        const failure = asProvablyUnsentTimeout(timeoutError, receiveTiming, updatedRequest) ?? timeoutError ?? error;
         if (wireStateKey) {
           if (isWebSocketConnectionLimitReachedError(failure)) {
             if (wireStateToken) this.chainedWireState.abandon(wireStateKey, wireStateToken);
@@ -1677,12 +1721,13 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         wireStateToken,
         updatedRequest.signal,
         () => watchdog.receiveTiming(),
+        () => asProvablyUnsentTimeout(watchdog.timeoutError(), watchdog.receiveTiming(), updatedRequest),
       );
     } catch (error) {
       const timeoutError = watchdog.timeoutError();
       const receiveTiming = watchdog.receiveTiming();
       watchdog.close();
-      const failure = timeoutError ?? error;
+      const failure = asProvablyUnsentTimeout(timeoutError, receiveTiming, updatedRequest) ?? timeoutError ?? error;
       if (wireStateKey) {
         if (isWebSocketConnectionLimitReachedError(failure)) {
           if (wireStateToken) this.chainedWireState.abandon(wireStateKey, wireStateToken);

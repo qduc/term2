@@ -12,7 +12,7 @@ import {
   type SessionInitEvent,
 } from './conversation-log-events.js';
 import { decodeLogEnvelope } from '../conversation/conversation-decoder.js';
-import { saveLastConversation } from '../conversation/conversation-persistence.js';
+import { isPidAlive, saveLastConversation } from '../conversation/conversation-persistence.js';
 
 const FSYNC_EVENTS = new Set<LogEvent['type']>([
   'user_message',
@@ -75,6 +75,12 @@ interface WriterOptions {
   logger: ILoggingService;
   fileSystem?: WriterFileSystem;
   saveLast?: typeof saveLastConversation;
+  /**
+   * Deterministic PID-liveness probe for the stale-lock liveness path.
+   * Defaults to the production `process.kill(pid, 0)` probe; tests inject a
+   * controlled predicate so proofs never probe real processes.
+   */
+  isPidAlive?: (pid: number) => boolean;
 }
 
 function logPath(dir: string, sessionId: string): string {
@@ -241,7 +247,12 @@ function truncateForLog(event: LogEvent): LogEvent | TruncatedLogEvent {
   };
 }
 
-function acquireLock(dir: string, sessionId: string, fileSystem: WriterFileSystem = fs): void {
+function acquireLock(
+  dir: string,
+  sessionId: string,
+  fileSystem: WriterFileSystem = fs,
+  isPidAliveFn: (pid: number) => boolean = isPidAlive,
+): void {
   const lp = lockPath(dir, sessionId);
   const payload = JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString(), host: os.hostname() });
   let fd: number;
@@ -256,9 +267,30 @@ function acquireLock(dir: string, sessionId: string, fileSystem: WriterFileSyste
       } catch {
         info = null;
       }
-      throw new LockConflictError(sessionId, lp, info);
+      // Owner-decided liveness path: a lock from this host whose PID is
+      // demonstrably dead is stale and is reclaimed. Corrupt payloads, live
+      // PIDs, and foreign-host locks still raise LockConflictError.
+      if (info !== null && info.host === os.hostname() && !isPidAliveFn(info.pid)) {
+        try {
+          fileSystem.unlinkSync(lp);
+        } catch {
+          // Fall through to a conflict if the stale lock cannot be removed.
+        }
+        try {
+          fd = fileSystem.openSync(lp, 'wx');
+        } catch (err2: unknown) {
+          const errorObj2 = err2 as { code?: string };
+          if (errorObj2?.code === 'EEXIST') {
+            throw new LockConflictError(sessionId, lp, info);
+          }
+          throw err2;
+        }
+      } else {
+        throw new LockConflictError(sessionId, lp, info);
+      }
+    } else {
+      throw err;
     }
-    throw err;
   }
   try {
     fileSystem.writeSync(fd, payload);
@@ -295,6 +327,7 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
   #writeErrorLogged = false;
   #projectPath: string | undefined;
   #sshHost: string | undefined;
+  #isPidAlive: (pid: number) => boolean;
 
   constructor(opts: WriterOptions) {
     this.#sessionId = opts.sessionId;
@@ -302,6 +335,7 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
     this.#logger = opts.logger;
     this.#fileSystem = opts.fileSystem ?? fs;
     this.#saveLast = opts.saveLast ?? saveLastConversation;
+    this.#isPidAlive = opts.isPidAlive ?? isPidAlive;
   }
 
   get sessionId(): string {
@@ -316,7 +350,7 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
     this.#projectPath = meta.projectPath;
     this.#sshHost = meta.sshHost;
     ensureDir(this.#fileSystem, this.#dir);
-    acquireLock(this.#dir, this.#sessionId, this.#fileSystem);
+    acquireLock(this.#dir, this.#sessionId, this.#fileSystem, this.#isPidAlive);
     try {
       const filePath = logPath(this.#dir, this.#sessionId);
       const tailState = readLogTailState(this.#fileSystem, filePath, recoverSequence);

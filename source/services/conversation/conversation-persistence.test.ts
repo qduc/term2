@@ -1,7 +1,8 @@
-import { it, expect, beforeEach, afterEach } from 'vitest';
+import { it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 
 import * as persistenceModule from './conversation-persistence.js';
 import { createConversationLogWriter, LockConflictError } from '../logging/conversation-log-writer.js';
@@ -79,6 +80,7 @@ beforeEach(() => {
 afterEach(cleanupAll);
 afterEach(() => {
   persistenceModule.setConversationsDirForTest(null);
+  persistenceModule.setPidAlivenessCheckForTest(null);
   testDir = '';
 });
 
@@ -290,8 +292,15 @@ it.sequential('lock: released on writer close, second writer succeeds', async ()
   w1.init({ id, createdAt: '2026-05-26T00:00:00.000Z' });
   await w1.close();
   const w2 = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
-  expect(() => w2.init({ id, createdAt: '2026-05-26T00:00:00.000Z' }));
+  expect(() => w2.init({ id, createdAt: '2026-05-26T00:00:00.000Z' })).not.toThrow();
   await w2.close();
+});
+
+it.sequential('lock: writer init against existing corrupt lockfile still throws LockConflictError', () => {
+  const id = persistenceModule.generateId();
+  fs.writeFileSync(path.join(testDir, `${id}.lock`), '{corrupt-lock-data', 'utf-8');
+  const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
+  expect(() => writer.init({ id, createdAt: '2026-05-26T00:00:00.000Z' })).toThrow(LockConflictError);
 });
 
 it.sequential('forkConversation: immediately persists the fork identity, provenance, and source history', () => {
@@ -433,19 +442,38 @@ it.sequential('loadConversationForProject: not_found for missing', () => {
 
 it.sequential('loadLastConversation: returns the last written conversation', () => {
   const id1 = persistenceModule.generateId();
-  const w1 = createConversationLogWriter({ sessionId: id1, dir: testDir, logger: stubLogger });
-  w1.init({ id: id1, createdAt: '2026-05-26T00:00:00.000Z' });
-  w1.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hi' } });
-  void w1.close();
-  const target = Date.now() + 20;
-  while (Date.now() < target) {
-    /* spin */
-  }
+  const filePath1 = path.join(testDir, `${id1}.jsonl`);
+  fs.writeFileSync(
+    filePath1,
+    [
+      envelopeLine(1, { type: 'session_init', id: id1, createdAt: '2026-05-26T00:00:00.000Z' }),
+      envelopeLine(2, { type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hi' } }),
+    ].join(''),
+    'utf-8',
+  );
+
   const id2 = persistenceModule.generateId();
-  const w2 = createConversationLogWriter({ sessionId: id2, dir: testDir, logger: stubLogger });
-  w2.init({ id: id2, createdAt: '2026-05-26T00:00:00.000Z' });
-  w2.append({ type: 'user_message', message: { id: 'u2', sender: 'user', text: 'hi2' } });
-  void w2.close();
+  const filePath2 = path.join(testDir, `${id2}.jsonl`);
+  fs.writeFileSync(
+    filePath2,
+    [
+      envelopeLine(1, { type: 'session_init', id: id2, createdAt: '2026-05-26T01:00:00.000Z' }),
+      envelopeLine(2, { type: 'user_message', message: { id: 'u2', sender: 'user', text: 'hi2' } }),
+    ].join(''),
+    'utf-8',
+  );
+
+  // Seed last.json with deterministic updatedAt order
+  fs.writeFileSync(
+    path.join(testDir, 'last.json'),
+    JSON.stringify({
+      entries: [
+        { id: id1, updatedAt: '2026-05-26T00:00:00.000Z' },
+        { id: id2, updatedAt: '2026-05-26T01:00:00.000Z' },
+      ],
+    }),
+    'utf-8',
+  );
 
   const last = persistenceModule.loadLastConversation();
   expect(last).toBeTruthy();
@@ -1471,4 +1499,475 @@ it.sequential('delta sidecar: forking a session with a live sidecar carries sett
   const texts = forked!.messages.map((m) => ('text' in m ? m.text : undefined));
   expect(texts).toContain('settled answer');
   expect(texts.some((t) => t?.includes('never finished'))).toBe(false);
+});
+
+// --- Durability & Recovery Contract 08 Characterizations & Proofs ---
+
+it.sequential('loadConversation: collapses an injected read failure to null without throwing', () => {
+  const id = 'read-fail-null';
+  const filePath = path.join(testDir, `${id}.jsonl`);
+  fs.writeFileSync(
+    filePath,
+    envelopeLine(1, { type: 'session_init', id, createdAt: '2026-06-01T00:00:00.000Z' }),
+    'utf-8',
+  );
+
+  const originalReadFileSync = fs.readFileSync;
+  const spy = vi.spyOn(fs, 'readFileSync').mockImplementation((targetPath, ...args) => {
+    if (typeof targetPath === 'string' && targetPath.includes(`${id}.jsonl`)) {
+      const err = new Error('EACCES: permission denied');
+      (err as unknown as { code: string }).code = 'EACCES';
+      throw err;
+    }
+    return originalReadFileSync(targetPath, ...args);
+  });
+
+  let result: unknown;
+  try {
+    expect(() => {
+      result = persistenceModule.loadConversation(id);
+    }).not.toThrow();
+    expect(result).toBeNull();
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+it.sequential('deleteConversation: synchronously removes the residual delta sidecar with the canonical log', () => {
+  const id = 'delete-sidecar-removal';
+  fs.writeFileSync(
+    path.join(testDir, `${id}.jsonl`),
+    envelopeLine(1, { type: 'session_init', id, createdAt: '2026-06-01T00:00:00.000Z' }),
+    'utf-8',
+  );
+  fs.writeFileSync(
+    path.join(testDir, `${id}.deltas`),
+    envelopeLine(2, { type: 'assistant_journal_delta', turnId: 't1', seq: 1, kind: 'text', delta: 'streaming' }),
+    'utf-8',
+  );
+
+  // Explicit user delete removes canonical log, lockfile, and residual sidecar
+  // synchronously through the public persistence boundary.
+  expect(persistenceModule.deleteConversation(id)).toBe(true);
+  expect(fs.existsSync(path.join(testDir, `${id}.jsonl`))).toBe(false);
+  expect(fs.existsSync(path.join(testDir, `${id}.deltas`))).toBe(false);
+  expect(fs.existsSync(path.join(testDir, `${id}.lock`))).toBe(false);
+});
+
+it.sequential('saveLastConversation: leaves a parseable last.json file with no residual temporary files', () => {
+  const id = 'last-session-clean';
+  const filePath = path.join(testDir, `${id}.jsonl`);
+  fs.writeFileSync(
+    filePath,
+    [
+      envelopeLine(1, { type: 'session_init', id, createdAt: '2026-06-01T00:00:00.000Z' }),
+      envelopeLine(2, { type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hi' } }),
+    ].join(''),
+    'utf-8',
+  );
+
+  const stagedPaths: string[] = [];
+  const origWrite = fs.writeFileSync;
+  const spy = vi.spyOn(fs, 'writeFileSync').mockImplementation((targetPath, data, options) => {
+    if (
+      typeof targetPath === 'string' &&
+      targetPath.startsWith(testDir) &&
+      targetPath !== path.join(testDir, 'last.json')
+    ) {
+      stagedPaths.push(targetPath);
+    }
+    return origWrite(targetPath, data, options);
+  });
+
+  try {
+    persistenceModule.saveLastConversation(id, '/test/project/path');
+  } finally {
+    spy.mockRestore();
+  }
+
+  const lastJsonPath = path.join(testDir, 'last.json');
+  expect(fs.existsSync(lastJsonPath)).toBe(true);
+  expect(stagedPaths.length).toBeGreaterThan(0);
+  for (const stagingPath of stagedPaths) {
+    expect(fs.existsSync(stagingPath)).toBe(false);
+  }
+
+  const parsed = JSON.parse(fs.readFileSync(lastJsonPath, 'utf-8')) as { entries: Array<{ id: string }> };
+  expect(parsed.entries.some((e) => e.id === id)).toBe(true);
+});
+
+it.sequential(
+  'ensureConversationsDir: migration moves only .jsonl and last.json and does not migrate .lock or .deltas',
+  () => {
+    const prevLog = process.env['TERM2_TEST_LOG_DIR'];
+    const prevDb = process.env['TERM2_TEST_DB_DIR'];
+    const logDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-test-log-scope-'));
+    const dbDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-test-db-scope-'));
+
+    try {
+      fs.writeFileSync(path.join(logDir, 'valid.jsonl'), 'data', 'utf-8');
+      fs.writeFileSync(path.join(logDir, 'last.json'), 'last', 'utf-8');
+      fs.writeFileSync(path.join(logDir, 'active.lock'), 'lock', 'utf-8');
+      fs.writeFileSync(path.join(logDir, 'interrupted.deltas'), 'deltas', 'utf-8');
+      fs.writeFileSync(path.join(logDir, 'other.txt'), 'other', 'utf-8');
+
+      process.env['TERM2_TEST_LOG_DIR'] = logDir;
+      process.env['TERM2_TEST_DB_DIR'] = dbDir;
+      persistenceModule.setConversationsDirForTest(dbDir);
+
+      persistenceModule.loadConversation('trigger-migration-id');
+
+      // Migrated files present in dbDir, absent from logDir
+      expect(fs.existsSync(path.join(dbDir, 'valid.jsonl'))).toBe(true);
+      expect(fs.existsSync(path.join(dbDir, 'last.json'))).toBe(true);
+      expect(fs.existsSync(path.join(logDir, 'valid.jsonl'))).toBe(false);
+      expect(fs.existsSync(path.join(logDir, 'last.json'))).toBe(false);
+
+      // Excluded files absent from dbDir, remain in logDir
+      expect(fs.existsSync(path.join(dbDir, 'active.lock'))).toBe(false);
+      expect(fs.existsSync(path.join(dbDir, 'interrupted.deltas'))).toBe(false);
+      expect(fs.existsSync(path.join(dbDir, 'other.txt'))).toBe(false);
+      expect(fs.existsSync(path.join(logDir, 'active.lock'))).toBe(true);
+      expect(fs.existsSync(path.join(logDir, 'interrupted.deltas'))).toBe(true);
+      expect(fs.existsSync(path.join(logDir, 'other.txt'))).toBe(true);
+    } finally {
+      if (prevLog !== undefined) process.env['TERM2_TEST_LOG_DIR'] = prevLog;
+      else delete process.env['TERM2_TEST_LOG_DIR'];
+      if (prevDb !== undefined) process.env['TERM2_TEST_DB_DIR'] = prevDb;
+      else delete process.env['TERM2_TEST_DB_DIR'];
+      fs.rmSync(logDir, { recursive: true, force: true });
+      fs.rmSync(dbDir, { recursive: true, force: true });
+    }
+  },
+);
+
+it.sequential('loadLastConversation: unpublished last.json temp sibling is ignored', () => {
+  const idA = 'sess-valid-a';
+  const idB = 'sess-valid-b';
+  for (const id of [idA, idB]) {
+    fs.writeFileSync(
+      path.join(testDir, `${id}.jsonl`),
+      [
+        envelopeLine(1, { type: 'session_init', id, createdAt: '2026-06-01T00:00:00.000Z', projectPath: '/workspace' }),
+        envelopeLine(2, { type: 'user_message', message: { id: 'u1', sender: 'user', text: `hi ${id}` } }),
+      ].join(''),
+      'utf-8',
+    );
+  }
+
+  // Canonical last.json selects conversation A
+  fs.writeFileSync(
+    path.join(testDir, 'last.json'),
+    JSON.stringify({ entries: [{ id: idA, updatedAt: '2026-06-01T00:00:00.000Z', projectPath: '/workspace' }] }),
+    'utf-8',
+  );
+
+  // Stray unpublished temp sibling selects conversation B with a newer timestamp
+  fs.writeFileSync(
+    path.join(testDir, 'last.json.tmp'),
+    JSON.stringify({ entries: [{ id: idB, updatedAt: '2099-01-01T00:00:00.000Z', projectPath: '/workspace' }] }),
+    'utf-8',
+  );
+
+  const last = persistenceModule.loadLastConversation('/workspace');
+  expect(last).toBeTruthy();
+  expect(last!.id).toBe(idA);
+});
+
+it.sequential('saveLastConversation: failed rename/publish leaves previous valid last.json loadable', () => {
+  const id1 = 'sess-valid-1';
+  const id2 = 'sess-valid-2';
+  for (const id of [id1, id2]) {
+    fs.writeFileSync(
+      path.join(testDir, `${id}.jsonl`),
+      [
+        envelopeLine(1, { type: 'session_init', id, createdAt: '2026-06-01T00:00:00.000Z', projectPath: '/workspace' }),
+        envelopeLine(2, { type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hi' } }),
+      ].join(''),
+      'utf-8',
+    );
+  }
+  persistenceModule.saveLastConversation(id1, '/workspace');
+
+  const originalRenameSync = fs.renameSync;
+  const spy = vi.spyOn(fs, 'renameSync').mockImplementationOnce((src, dst) => {
+    if (typeof dst === 'string' && dst.includes('last.json')) {
+      throw new Error('EPERM: operation not permitted');
+    }
+    return originalRenameSync(src, dst);
+  });
+
+  try {
+    persistenceModule.saveLastConversation(id2, '/workspace');
+  } finally {
+    spy.mockRestore();
+  }
+
+  const last = persistenceModule.loadLastConversation('/workspace');
+  expect(last).toBeTruthy();
+  expect(last!.id).toBe(id1);
+});
+
+it.sequential('loadConversation: unreadable sidecar degrades to canonical settled conversation', () => {
+  const id = 'sidecar-eisdir';
+  fs.writeFileSync(
+    path.join(testDir, `${id}.jsonl`),
+    [
+      envelopeLine(1, { type: 'session_init', id, createdAt: '2026-06-01T00:00:00.000Z' }),
+      envelopeLine(2, { type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hi' } }),
+      envelopeLine(3, assistantTurn('hello settled')),
+    ].join(''),
+    'utf-8',
+  );
+  // Create sidecar as directory to force EISDIR on sidecar read
+  fs.mkdirSync(path.join(testDir, `${id}.deltas`));
+
+  const restored = persistenceModule.loadConversation(id);
+  expect(restored).toBeTruthy();
+  expect(restored!.messages.some((m) => m.sender === 'bot' && m.text === 'hello settled')).toBe(true);
+});
+
+it.sequential(
+  'forkConversation: failed publish leaves destination untouched and unlinks temporary staging file',
+  () => {
+    const srcId = 'fork-publish-fail-src';
+    const dstId = 'fork-publish-fail-dst';
+    fs.writeFileSync(
+      path.join(testDir, `${srcId}.jsonl`),
+      envelopeLine(1, { type: 'session_init', id: srcId, createdAt: '2026-06-01T00:00:00.000Z' }),
+      'utf-8',
+    );
+
+    const stagedPaths: string[] = [];
+    const origWrite = fs.writeFileSync;
+    const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation((targetPath, data, options) => {
+      if (
+        typeof targetPath === 'string' &&
+        targetPath.startsWith(testDir) &&
+        targetPath.includes(dstId) &&
+        targetPath.endsWith('.tmp')
+      ) {
+        stagedPaths.push(targetPath);
+      }
+      return origWrite(targetPath, data, options);
+    });
+
+    const origRename = fs.renameSync;
+    const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementation((src, dst) => {
+      if (typeof dst === 'string' && dst.includes(dstId)) {
+        const err = new Error('EPERM: fork publish failed');
+        (err as unknown as { code: string }).code = 'EPERM';
+        throw err;
+      }
+      return origRename(src, dst);
+    });
+
+    try {
+      expect(() => persistenceModule.forkConversation(srcId, dstId)).toThrow('EPERM: fork publish failed');
+      expect(fs.existsSync(path.join(testDir, `${dstId}.jsonl`))).toBe(false);
+      expect(stagedPaths.length).toBe(1);
+      expect(fs.existsSync(stagedPaths[0]!)).toBe(false);
+    } finally {
+      writeSpy.mockRestore();
+      renameSpy.mockRestore();
+    }
+  },
+);
+
+it.sequential(
+  'loadConversationForProject: isolates sessions by sshHost when matching or differing from expected host',
+  () => {
+    const id = 'ssh-isolation-sess';
+    const filePath = path.join(testDir, `${id}.jsonl`);
+    fs.writeFileSync(
+      filePath,
+      [
+        envelopeLine(1, {
+          type: 'session_init',
+          id,
+          createdAt: '2026-06-01T00:00:00.000Z',
+          projectPath: '/workspace',
+          sshHost: 'user@remote-box-1',
+        }),
+        envelopeLine(2, { type: 'user_message', message: { id: 'u1', sender: 'user', text: 'ssh command' } }),
+      ].join(''),
+      'utf-8',
+    );
+
+    // Matching project path but differing sshHost returns project_mismatch
+    const mismatchResult = persistenceModule.loadConversationForProject(id, '/workspace', 'user@remote-box-2');
+    expect(mismatchResult).toMatchObject({ status: 'project_mismatch' });
+
+    // Matching project path with missing sshHost when conversation is remote returns project_mismatch
+    const localMismatchResult = persistenceModule.loadConversationForProject(id, '/workspace', undefined);
+    expect(localMismatchResult).toMatchObject({ status: 'project_mismatch' });
+
+    // Matching project path and exact sshHost returns loaded
+    const loadedResult = persistenceModule.loadConversationForProject(id, '/workspace', 'user@remote-box-1');
+    expect(loadedResult).toMatchObject({ status: 'loaded' });
+    if (loadedResult.status === 'loaded') {
+      expect(loadedResult.conversation.id).toBe(id);
+      expect(loadedResult.conversation.sshHost).toBe('user@remote-box-1');
+    }
+  },
+);
+
+// Retained red defect proofs:
+
+it.sequential(
+  'loadConversationForProject: returns a typed unreadable result when read fails instead of propagating raw fs error',
+  () => {
+    const id = 'proj-read-failure';
+    const filePath = path.join(testDir, `${id}.jsonl`);
+    fs.writeFileSync(
+      filePath,
+      envelopeLine(1, { type: 'session_init', id, createdAt: '2026-06-01T00:00:00.000Z' }),
+      'utf-8',
+    );
+
+    const originalReadFileSync = fs.readFileSync;
+    const spy = vi.spyOn(fs, 'readFileSync').mockImplementation((targetPath, ...args) => {
+      if (typeof targetPath === 'string' && targetPath.includes(`${id}.jsonl`)) {
+        const err = new Error('EACCES: permission denied');
+        (err as unknown as { code: string }).code = 'EACCES';
+        throw err;
+      }
+      return originalReadFileSync(targetPath, ...args);
+    });
+
+    try {
+      // D1 invariant: read errors must not escape raw; must return a distinct typed unreadable status and error
+      const result = persistenceModule.loadConversationForProject(id, '/test/project');
+      expect(result).toMatchObject({
+        status: 'unreadable',
+        error: expect.anything(),
+      });
+    } finally {
+      spy.mockRestore();
+    }
+  },
+);
+
+it.sequential('saveLastConversation: uses a distinct temporary staging path for each save call', () => {
+  const id1 = 'sess-1';
+  const id2 = 'sess-2';
+  for (const id of [id1, id2]) {
+    fs.writeFileSync(
+      path.join(testDir, `${id}.jsonl`),
+      [
+        envelopeLine(1, { type: 'session_init', id, createdAt: '2026-06-01T00:00:00.000Z' }),
+        envelopeLine(2, { type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hi' } }),
+      ].join(''),
+      'utf-8',
+    );
+  }
+
+  const tempWrites: string[] = [];
+  const origWrite = fs.writeFileSync;
+  const spy = vi.spyOn(fs, 'writeFileSync').mockImplementation((targetPath, data, options) => {
+    if (
+      typeof targetPath === 'string' &&
+      targetPath.startsWith(testDir) &&
+      targetPath !== path.join(testDir, 'last.json')
+    ) {
+      tempWrites.push(targetPath);
+    }
+    return origWrite(targetPath, data, options);
+  });
+
+  try {
+    persistenceModule.saveLastConversation(id1, '/proj-1');
+    persistenceModule.saveLastConversation(id2, '/proj-2');
+
+    expect(tempWrites.length).toBe(2);
+    // D3 invariant: temp staging file path for last.json writes must be distinct per call/process
+    // rather than colliding on a fixed path
+    expect(tempWrites[0]).not.toBe(tempWrites[1]);
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+it.sequential('isConversationLocked: diagnostically distinguishes corrupt lockfile payload from live lock', () => {
+  const id = 'corrupt-lock-sess';
+  const lockFilePath = path.join(testDir, `${id}.lock`);
+  fs.writeFileSync(lockFilePath, '{corrupt-json-payload', 'utf-8');
+
+  // D4 invariant: corrupt lockfile must return a discriminated status/result indicating corruption
+  // rather than masquerading as a live lock ({ pid: -1 }) or evaluating as unlocked (null)
+  const lockInfo = persistenceModule.isConversationLocked(id);
+  expect(lockInfo).toMatchObject({ status: 'corrupt' });
+});
+
+it.sequential('isConversationLocked: reports stale for a same-host lock whose PID is demonstrably dead', () => {
+  const id = 'stale-lock-sess';
+  fs.writeFileSync(
+    path.join(testDir, `${id}.lock`),
+    JSON.stringify({ pid: 424242, startedAt: '2026-06-01T00:00:00.000Z', host: os.hostname() }),
+    'utf-8',
+  );
+
+  // Deterministic liveness control: an injected check reports every PID dead, so
+  // this proof never probes a real process.
+  persistenceModule.setPidAlivenessCheckForTest(() => false);
+  try {
+    const lockInfo = persistenceModule.isConversationLocked(id);
+    expect(lockInfo).toMatchObject({
+      status: 'stale',
+      pid: 424242,
+      startedAt: '2026-06-01T00:00:00.000Z',
+      host: os.hostname(),
+    });
+  } finally {
+    persistenceModule.setPidAlivenessCheckForTest(null);
+  }
+});
+
+it.sequential(
+  'isConversationLocked: same-host lock whose PID was reaped is stale through the production liveness path',
+  async () => {
+    const id = 'stale-lock-reaped-sess';
+    // Spawn and fully reap a real child so the lock records a PID that is provably
+    // dead. The production default liveness probe signals only this controlled PID.
+    const child = spawn(process.execPath, ['-e', '']);
+    const deadPid = child.pid!;
+    await new Promise<void>((resolve, reject) => {
+      child.once('error', reject);
+      child.once('close', () => resolve());
+    });
+
+    fs.writeFileSync(
+      path.join(testDir, `${id}.lock`),
+      JSON.stringify({ pid: deadPid, startedAt: '2026-06-01T00:00:00.000Z', host: os.hostname() }),
+      'utf-8',
+    );
+
+    expect(persistenceModule.isPidAlive(deadPid)).toBe(false);
+    expect(persistenceModule.isConversationLocked(id)).toMatchObject({ status: 'stale', pid: deadPid });
+  },
+);
+
+it.sequential('isConversationLocked: reports held for a same-host lock whose PID is alive', () => {
+  const id = 'held-lock-sess';
+  fs.writeFileSync(
+    path.join(testDir, `${id}.lock`),
+    JSON.stringify({ pid: process.pid, startedAt: '2026-06-01T00:00:00.000Z', host: os.hostname() }),
+    'utf-8',
+  );
+
+  const lockInfo = persistenceModule.isConversationLocked(id);
+  expect(lockInfo).toMatchObject({ status: 'held', pid: process.pid, host: os.hostname() });
+});
+
+it.sequential('isConversationLocked: cross-host lock is reported held even with an unprovable PID', () => {
+  const id = 'remote-lock-sess';
+  fs.writeFileSync(
+    path.join(testDir, `${id}.lock`),
+    JSON.stringify({ pid: 424242, startedAt: '2026-06-01T00:00:00.000Z', host: 'some-other-host' }),
+    'utf-8',
+  );
+
+  // Liveness cannot be proven for a foreign host; the lock is treated as held.
+  const lockInfo = persistenceModule.isConversationLocked(id);
+  expect(lockInfo).toMatchObject({ status: 'held', pid: 424242, host: 'some-other-host' });
 });

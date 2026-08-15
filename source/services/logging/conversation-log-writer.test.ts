@@ -1,10 +1,12 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { decodeLogEnvelope } from '../conversation/conversation-decoder.js';
 import { replayEvents } from '../conversation/conversation-replay.js';
-import { createConversationLogWriter } from './conversation-log-writer.js';
+import type { LogEvent } from './conversation-log-events.js';
+import { createConversationLogWriter, LockConflictError } from './conversation-log-writer.js';
 
 const dirs: string[] = [];
 const logger = { error: vi.fn() } as never;
@@ -90,6 +92,23 @@ describe('ConversationLogWriter delta sidecar', () => {
     expect(readEventTypes(sidecar)).toEqual(['assistant_journal_delta']);
   });
 
+  it('session_cleared settles in-flight turn and removes delta sidecar on close', async () => {
+    const dir = tempDir();
+    const sessionId = 'session-cleared-settle';
+    const writer = createConversationLogWriter({ sessionId, dir, logger, saveLast: vi.fn() });
+    writer.init({ id: sessionId, createdAt: '2026-06-01T00:00:00.000Z' });
+    writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'start' } });
+    writer.append({ type: 'assistant_journal_delta', turnId: 't1', seq: 1, kind: 'text', delta: 'streaming' });
+    expect(fs.existsSync(path.join(dir, `${sessionId}.deltas`))).toBe(true);
+
+    // Appending session_cleared marks turn as settled
+    writer.append({ type: 'session_cleared' });
+    await writer.close();
+
+    // Sidecar must be unlinked upon close because session_cleared settled the turn
+    expect(fs.existsSync(path.join(dir, `${sessionId}.deltas`))).toBe(false);
+  });
+
   it('creates no sidecar for a session that never streams a delta', async () => {
     const dir = tempDir();
     const sessionId = 'quiet-session';
@@ -118,7 +137,7 @@ describe('ConversationLogWriter delta sidecar', () => {
     expect(fs.readdirSync(dir).filter((f) => f.endsWith('.jsonl'))).toEqual([`${sessionId}.jsonl`]);
   });
 
-  it('resumes sequence numbering past a sidecar-dominant tail after a crash', async () => {
+  it('resumes sequence numbering past a retained sidecar-dominant tail after an unsettled orderly close', async () => {
     const dir = tempDir();
     const sessionId = 'crashed-session';
     const first = createConversationLogWriter({ sessionId, dir, logger, saveLast: vi.fn() });
@@ -479,5 +498,241 @@ describe('ConversationLogWriter never echoes opaque content to the app log', () 
     // keeps the full, unredacted value.
     const line = fs.readFileSync(path.join(dir, 'opaque-session.jsonl'), 'utf-8');
     expect(line).toContain(encryptedContent);
+  });
+});
+
+describe('ConversationLogWriter stale lock recovery', () => {
+  it('init reclaims a same-host lock whose PID is demonstrably dead', async () => {
+    const dir = tempDir();
+    const sessionId = 'stale-lock-session';
+    fs.writeFileSync(
+      path.join(dir, `${sessionId}.lock`),
+      JSON.stringify({ pid: 424242, startedAt: '2026-06-01T00:00:00.000Z', host: os.hostname() }),
+      'utf-8',
+    );
+
+    // Deterministic liveness control: an injected check reports every PID dead,
+    // so this proof never probes a real process.
+    const writer = createConversationLogWriter({
+      sessionId,
+      dir,
+      logger,
+      saveLast: vi.fn(),
+      isPidAlive: () => false,
+    });
+
+    expect(() => writer.init({ id: sessionId, createdAt: '2026-06-01T00:00:00.000Z' })).not.toThrow();
+
+    // The reclaimed lock now names the live writer process.
+    const lockPayload = JSON.parse(fs.readFileSync(path.join(dir, `${sessionId}.lock`), 'utf-8')) as {
+      pid: number;
+      host: string;
+    };
+    expect(lockPayload.pid).toBe(process.pid);
+    expect(lockPayload.host).toBe(os.hostname());
+    await writer.close();
+  });
+
+  it('init reclaims a same-host lock whose PID was reaped, through the production liveness path', async () => {
+    const dir = tempDir();
+    const sessionId = 'stale-lock-reaped-session';
+    // Spawn and fully reap a real child so the lock records a PID that is
+    // provably dead; the production default liveness probe signals only this
+    // controlled PID.
+    const child = spawn(process.execPath, ['-e', '']);
+    const deadPid = child.pid!;
+    await new Promise<void>((resolve, reject) => {
+      child.once('error', reject);
+      child.once('close', () => resolve());
+    });
+    fs.writeFileSync(
+      path.join(dir, `${sessionId}.lock`),
+      JSON.stringify({ pid: deadPid, startedAt: '2026-06-01T00:00:00.000Z', host: os.hostname() }),
+      'utf-8',
+    );
+
+    const writer = createConversationLogWriter({ sessionId, dir, logger, saveLast: vi.fn() });
+    expect(() => writer.init({ id: sessionId, createdAt: '2026-06-01T00:00:00.000Z' })).not.toThrow();
+
+    const lockPayload = JSON.parse(fs.readFileSync(path.join(dir, `${sessionId}.lock`), 'utf-8')) as {
+      pid: number;
+      host: string;
+    };
+    expect(lockPayload.pid).toBe(process.pid);
+    expect(lockPayload.host).toBe(os.hostname());
+    await writer.close();
+  });
+
+  it('init still throws LockConflictError for a same-host lock whose PID is alive', async () => {
+    const dir = tempDir();
+    const sessionId = 'live-lock-session';
+    fs.writeFileSync(
+      path.join(dir, `${sessionId}.lock`),
+      JSON.stringify({ pid: process.pid, startedAt: '2026-06-01T00:00:00.000Z', host: os.hostname() }),
+      'utf-8',
+    );
+
+    const writer = createConversationLogWriter({ sessionId, dir, logger, saveLast: vi.fn() });
+    expect(() => writer.init({ id: sessionId, createdAt: '2026-06-01T00:00:00.000Z' })).toThrow(LockConflictError);
+  });
+});
+
+describe('ConversationLogWriter post-close policy', () => {
+  it('append after close silently drops events, writes nothing to disk, and does not invoke saveLast', async () => {
+    const dir = tempDir();
+    const sessionId = 'closed-session';
+    const saveLastMock = vi.fn();
+    const writer = createConversationLogWriter({ sessionId, dir, logger, saveLast: saveLastMock });
+    writer.init({ id: sessionId, createdAt: '2026-06-01T00:00:00.000Z' });
+    writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'initial message' } });
+    await writer.close();
+
+    const saveLastCallsAfterClose = saveLastMock.mock.calls.length;
+    const dirEntriesBefore = fs.readdirSync(dir).sort();
+    const contentsBefore = dirEntriesBefore.map((f) => ({
+      file: f,
+      data: fs.readFileSync(path.join(dir, f), 'utf-8'),
+    }));
+
+    // Appending after close must silently drop
+    expect(() => {
+      writer.append({ type: 'user_message', message: { id: 'u2', sender: 'user', text: 'dropped message' } });
+    }).not.toThrow();
+
+    const dirEntriesAfter = fs.readdirSync(dir).sort();
+    expect(dirEntriesAfter).toEqual(dirEntriesBefore);
+    for (const before of contentsBefore) {
+      expect(fs.readFileSync(path.join(dir, before.file), 'utf-8')).toBe(before.data);
+    }
+    expect(saveLastMock).toHaveBeenCalledTimes(saveLastCallsAfterClose);
+  });
+
+  it('successful writer close is idempotent and triggers no redundant saveLast or mutations on second close', async () => {
+    const dir = tempDir();
+    const sessionId = 'idempotent-close-session';
+    const saveLastMock = vi.fn();
+    const writer = createConversationLogWriter({ sessionId, dir, logger, saveLast: saveLastMock });
+    writer.init({ id: sessionId, createdAt: '2026-06-01T00:00:00.000Z' });
+    writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hello' } });
+
+    await expect(writer.close()).resolves.toBeUndefined();
+    const saveLastCalls = saveLastMock.mock.calls.length;
+    const dirEntries = fs.readdirSync(dir).sort();
+    const dirContents = dirEntries.map((f) => fs.readFileSync(path.join(dir, f), 'utf-8'));
+
+    // Second close must also resolve without double-releasing or extra saveLast/disk writes
+    await expect(writer.close()).resolves.toBeUndefined();
+    expect(saveLastMock).toHaveBeenCalledTimes(saveLastCalls);
+    expect(fs.readdirSync(dir).sort()).toEqual(dirEntries);
+    expect(dirEntries.map((f) => fs.readFileSync(path.join(dir, f), 'utf-8'))).toEqual(dirContents);
+  });
+});
+
+describe('ConversationLogWriter event fsync classification', () => {
+  it('exact FSYNC_EVENTS classification: only specified critical events trigger fsyncSync and saveLast', () => {
+    const dir = tempDir();
+    const sessionId = 'fsync-classification-session';
+    const saveLastMock = vi.fn();
+    let fsyncCount = 0;
+    const fileSystem = {
+      ...fs,
+      fsyncSync(fd: number) {
+        fsyncCount += 1;
+        return fs.fsyncSync(fd);
+      },
+    };
+    const writer = createConversationLogWriter({
+      sessionId,
+      dir,
+      logger,
+      fileSystem,
+      saveLast: saveLastMock,
+    });
+
+    // init() issues acquireLock (1 fsync) + session_init (1 fsync + 1 saveLast)
+    writer.init({ id: sessionId, createdAt: '2026-06-01T00:00:00.000Z' });
+    expect(fsyncCount).toBe(2);
+    expect(saveLastMock).toHaveBeenCalledTimes(1);
+
+    // Table of critical events that MUST trigger fsyncSync and saveLast
+    const criticalEvents: LogEvent[] = [
+      { type: 'user_message', message: { id: 'u1', sender: 'user', text: 'hi' } },
+      { type: 'assistant_turn', turn: { items: [{ type: 'assistant_text', text: 'reply' }] } },
+      { type: 'undo', removedUserTurns: 1, snapshot: { history: [], previousResponseId: null, toolLedger: [] } },
+      { type: 'tool_started', toolCallId: 'c1', toolName: 'read_file', arguments: {} },
+      { type: 'tool_result', callId: 'c1', toolName: 'read_file', status: 'completed', output: 'ok' },
+      {
+        type: 'approval_required',
+        approval: { callId: 'c2', toolName: 'bash', argumentsText: '{}', agentName: 'root' },
+      },
+      { type: 'assistant_journal_item', turnId: 't1', seq: 10, item: { type: 'assistant_text', text: 'journal' } },
+    ];
+
+    for (const event of criticalEvents) {
+      const prevFsync = fsyncCount;
+      const prevSaveLast = saveLastMock.mock.calls.length;
+      writer.append(event);
+      expect(fsyncCount).toBe(prevFsync + 1);
+      expect(saveLastMock).toHaveBeenCalledTimes(prevSaveLast + 1);
+    }
+
+    // Non-fsync events MUST NOT trigger fsyncSync or saveLast
+    const nonFsyncEvents: LogEvent[] = [
+      { type: 'approval_resolved', answer: 'y' },
+      { type: 'settings_changed', key: 'model', value: 'gpt-5' },
+      { type: 'assistant_journal_delta', turnId: 't2', seq: 20, kind: 'text', delta: 'chunk' },
+    ];
+
+    for (const event of nonFsyncEvents) {
+      const prevFsync = fsyncCount;
+      const prevSaveLast = saveLastMock.mock.calls.length;
+      writer.append(event);
+      expect(fsyncCount).toBe(prevFsync);
+      expect(saveLastMock).toHaveBeenCalledTimes(prevSaveLast);
+    }
+  });
+});
+
+describe('ConversationLogWriter observability', () => {
+  it('emits structured conversation_log.write_failed once with category persistence and sessionId on critical write error', () => {
+    const dir = tempDir();
+    const sessionId = 'obs-failed-session';
+    const mockLogger = { error: vi.fn() };
+    const writeError = new Error('EIO: write failure');
+    let writeCalls = 0;
+    const fileSystem = {
+      ...fs,
+      writeSync(fd: number, buffer: unknown, ...args: unknown[]) {
+        writeCalls += 1;
+        // The first write is acquireLock payload. Throw on subsequent log append.
+        if (writeCalls >= 2) throw writeError;
+        return (fs.writeSync as (...a: unknown[]) => number)(fd, buffer, ...args);
+      },
+    };
+    const writer = createConversationLogWriter({
+      sessionId,
+      dir,
+      logger: mockLogger as never,
+      fileSystem,
+      saveLast: vi.fn(),
+    });
+
+    expect(() => writer.init({ id: sessionId, createdAt: '2026-06-01T00:00:00.000Z' })).toThrow(writeError);
+
+    // Subsequent append rethrows the latched failure without logging a second error
+    expect(() =>
+      writer.append({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'second attempt' } }),
+    ).toThrow(writeError);
+
+    // Verify structured logging was called exactly once
+    expect(mockLogger.error).toHaveBeenCalledTimes(1);
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'Conversation log write failed',
+      expect.objectContaining({
+        eventType: 'conversation_log.write_failed',
+        category: 'persistence',
+        sessionId,
+      }),
+    );
   });
 });

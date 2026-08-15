@@ -38,7 +38,7 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
 - Transport downgrade (WebSocket lifetime error -> HTTP fallback).
 - Compaction and replacement boundaries (OpenAI opaque compaction, local
   summary checkpoints).
-- Save/resume and stateless replay.
+- Save/resume and stateless replay (local envelope durability, sidecar recovery, and atomic replacement are governed by [Contract 08](./08-conversation-durability-and-recovery.md); Contract 02 governs provider-facing item and ledger semantics of replayed turns).
 - Complete and partial parallel tool-call batches.
 - Pre-stream and mid-stream transport failure; failure before and after
   dispatch.

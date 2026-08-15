@@ -319,6 +319,12 @@ if (resumeRequested) {
       }
       process.exit(1);
     }
+    if (result.status === 'unreadable') {
+      const detail = result.error instanceof Error ? result.error.message : String(result.error);
+      console.error(`Error: Could not read conversation ${resumeTarget} (${detail}).`);
+      console.error('The conversation log is unreadable; it may be missing permissions or disk-backed.');
+      process.exit(1);
+    }
     resumedConversation = result.status === 'loaded' ? result.conversation : null;
     resumedSourceId = resumeTarget;
   } else {
@@ -679,22 +685,42 @@ if (resumedConversation) {
   process.exit(1);
 }
 
-// Refuse to open a session whose log file is locked by another writer (live or stale).
+// Refuse to open a session whose log file is locked by another writer (live or
+// corrupt). A same-host stale lock (holder PID demonstrably dead) is reclaimed
+// by the writer on open, so it proceeds with a notice.
 // --fork (handled above) is the documented escape hatch.
 if (!forkRequested) {
   const lockInfo = isConversationLocked(effectiveSessionId);
-  if (lockInfo) {
-    const pid = lockInfo.pid;
-    const host = lockInfo.host;
-    const startedAt = lockInfo.startedAt;
+  if (lockInfo !== null) {
+    if (lockInfo.status === 'corrupt') {
+      console.error(
+        `Conversation ${effectiveSessionId} has a corrupt lockfile.\n` +
+          `- If another terminal still has it open, close that one first.\n` +
+          `- Otherwise delete the lockfile manually, or fork into a new\n` +
+          `  conversation that branches from the same state:\n` +
+          `      term2 --resume ${effectiveSessionId} --fork\n`,
+      );
+      process.exit(1);
+    }
+    if (lockInfo.status === 'held') {
+      const pid = lockInfo.pid;
+      const host = lockInfo.host;
+      const startedAt = lockInfo.startedAt;
+      console.error(
+        `Conversation ${effectiveSessionId} is locked (pid ${pid}, started ${startedAt}, host ${host}).\n` +
+          `- If another terminal still has it open, close that one first.\n` +
+          `- If a previous run crashed and left the lock behind, fork into a new\n` +
+          `  conversation that branches from the same state:\n` +
+          `      term2 --resume ${effectiveSessionId} --fork\n`,
+      );
+      process.exit(1);
+    }
+    // status === 'stale': same-host holder PID is demonstrably dead; the
+    // writer reclaims the lock when the session opens.
     console.error(
-      `Conversation ${effectiveSessionId} is locked (pid ${pid}, started ${startedAt}, host ${host}).\n` +
-        `- If another terminal still has it open, close that one first.\n` +
-        `- If a previous run crashed and left the lock behind, fork into a new\n` +
-        `  conversation that branches from the same state:\n` +
-        `      term2 --resume ${effectiveSessionId} --fork\n`,
+      `Conversation ${effectiveSessionId} was left locked by a dead process ` +
+        `(pid ${lockInfo.pid}, started ${lockInfo.startedAt}); reclaiming the stale lock.`,
     );
-    process.exit(1);
   }
 }
 

@@ -6,6 +6,9 @@ for background, `NestedSubagentRunner` for foreground, `ExecutionSubagentRunner`
 `MentorRunner`), with event routing in `SubagentBridge` (`source/lib/subagent-bridge.ts`)
 and provider traffic identity in session context (`session-context-service`).
 
+**C3.7 extension landed docs-only 2026-08-16** under the remaining-SB slice I
+grant; the owner-reviewed 2026-08-14 baseline rows C3.1–C3.6 are unchanged.
+
 ## 1. Contract
 
 | # | Invariant | User-visible harm it prevents |
@@ -16,6 +19,7 @@ and provider traffic identity in session context (`session-context-service`).
 | C3.4 | Parent, turn, conversation, and explicit-user cancellation affect exactly the child scopes they own. | A parent turn abort kills surviving background work; an adopted run is cancelled by its detached old parent; session dispose strands children. |
 | C3.5 | Every started child emits a truthful terminal state: completed, failed, cancelled, or interrupted. | The UI reports a cancelled run as completed (or vice versa); stop requests silently lost. |
 | C3.6 | Admission failures preserve typed error codes and do not mutate running work. | Callers cannot distinguish failure causes; a failed admission disturbs active runs. |
+| C3.7 | A read-access child subject (explorer, worker) receives no mutating memory tool. | A read-access child edits or deletes durable memory entries, corrupting shared persistent facts. |
 
 ## 2. Owners
 
@@ -23,7 +27,10 @@ and provider traffic identity in session context (`session-context-service`).
   cancellation, settlement); `NestedSubagentRunner` (foreground identity and
   lease); `SubagentToolPolicy` (permission attenuation); run-budget clamping
   (`nested-runner.ts:408-425`); `SubagentBridge` (sink routing); traffic
-  context derivation (bridge + registry).
+  context derivation (bridge + registry); `MemoryCapabilityBuilder`
+  (`source/services/memory/memory-capabilities.ts`) — enforcement owner for the
+  memory tool-set slice: a subagent subject's memory tool set is derived from
+  its role (C3.7).
 - **Recovery:** bridge abort controllers and `dispose()`; registry
   `cancelAllRuns`/`disposeAndWaitForAdoptedLeases`; `ForegroundSubagentLease`
   detach/adopt; session composition disposal ordering
@@ -34,6 +41,10 @@ and provider traffic identity in session context (`session-context-service`).
 - Foreground runs (`runSubagent`), background async runs
   (`runSubagentAsync`), adopted transfers, mentor consultations, evaluator
   traffic, nested child-of-child runs.
+- Memory capability build for subagent subjects: explorer and worker receive
+  the read-only memory tool set, librarian receives the write set by design,
+  and mentor receives no memory tools (`memory-capabilities.ts` `build()`
+  subject role dispatch).
 - Continuation of persistent roles (`mentor`, `librarian`, `explorer`;
   `continue_run_id`).
 - Cancellation: parent abort, turn abort, explicit stop, session dispose.
@@ -59,6 +70,12 @@ and provider traffic identity in session context (`session-context-service`).
   `subagent-bridge.test.ts:340-370`).
 - Approval authority: parent `ApprovalLedger` snapshot is replayed into a fresh
   nested ledger (`nested-runner.ts:95-98`, `:623-635`).
+- Memory tool-set slicing: subject kind/role maps to the memory tool set
+  crossing the boundary — `kind: 'main'` and `role: 'librarian'` receive the
+  full write set (`memory_create`, `memory_update`, `memory_delete` included);
+  `role: 'explorer' | 'worker'` receive exactly
+  `memory_list, memory_get, memory_search, memory_retrieve`; any other
+  subagent role receives no memory tools.
 
 ## 5. Settlement semantics
 
@@ -158,6 +175,7 @@ and provider traffic identity in session context (`session-context-service`).
 | Session dispose | `subagent-async-registry.test.ts:337-356`, `:646-664`; `subagent-bridge.test.ts:172` "dispose cancels session work and clears manager-owned state once" | covered |
 | Duplicate role/name admission | `subagent-async-registry.test.ts:399-410` (invalid/duplicate active names), `:586-590` (fresh run targeting an active shared session), `:507-517` (active continuation restrictions) | covered |
 | Structured error round-trip | `subagent-async-registry.test.ts:399-410`, `:607-615`, `:666-680` (typed registry errors); `subagent-bridge.test.ts:554` "runSubagentAsync preserves a typed duplicate-name rejection without disturbing the active run" | covered |
+| Read-access child memory authority | `source/services/memory/memory-capabilities.test.ts:22-31` "grants %s the expected enabled-memory access" — explorer and worker rows assert `capability.tools` equals exactly `memory_list, memory_get, memory_search, memory_retrieve` (no `memory_create`/`memory_update`/`memory_delete`); `:43` "gives %s on-demand read access without injecting memory context" (explorer/worker) | covered |
 
 ## 9. Verification commands
 
@@ -196,7 +214,21 @@ bridge/run-loop/registry change — `NODE_ENV=test pnpm test:provider-black-box`
 
 All minimum-matrix cells are covered.
 
+**C3.7 classified coverage note:** the stricter on-main-vs-child comparison —
+`gives %s a strict read-only subset of main
+memory tools` — is drafted in
+`.worktrees/sb08-memory-local-disposition/source/services/memory/memory-capabilities.test.ts`
+but is **not on main**. The on-main tests above already pin the exact read
+tool set for explorer and worker, so current behavior is characterized at the
+tool-set boundary; the unmerged test additionally proves strict subset
+membership against the main subject's set. **Classification: coverage gap,
+not a product defect.**
+
 The current child-result union has no `unknown` or `ambiguous` terminal state;
 as recorded in §5, ambiguous external-effect settlement remains the child
 session's tool-ledger responsibility. This is a non-matrix result-union
 limitation, not a product defect or uncharacterized matrix cell.
+
+> **Status-line note (2026-08-16):** C3.7 landed docs-only under the
+> remaining-SB slice I grant; the owner-reviewed 2026-08-14 baseline rows are
+> unchanged.

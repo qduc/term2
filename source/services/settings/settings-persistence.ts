@@ -16,6 +16,57 @@ const LOCK_RETRY_MS = 10;
 const LOCK_TIMEOUT_MS = 2_000;
 const STALE_LOCK_MS = 30_000;
 
+/**
+ * Evidence that a syntactically corrupt settings file was salvaged by
+ * {@link scanForRecoverableJson} before schema validation ran. The file itself
+ * is unchanged here: `hadErrors` stays true and the original bytes remain on
+ * disk until the SettingsService boundary decides to quarantine them.
+ */
+export type SettingsFileRecovery = {
+  recovered: true;
+  reason: string;
+  recoveredSectionKeys: string[];
+};
+
+/**
+ * Bounded scan fallback for a settings file whose bytes are not valid JSON:
+ * salvage the longest complete JSON object embedded in the corrupt content by
+ * trying every object/array start and every matching close candidate. Leading
+ * or trailing garbage (for example a prepended log line or an appended crash
+ * fragment) is skipped. The iteration cap keeps a pathological all-brackets
+ * file from stalling startup; when the cap is hit the file is treated as
+ * unrecoverable (the original bytes are preserved untouched).
+ */
+export function scanForRecoverableJson(content: string): { recovered: unknown; reason: string } | null {
+  const MAX_SCAN_ITERATIONS = 20_000;
+  let iterations = 0;
+
+  for (let start = 0; start < content.length; start++) {
+    const open = content[start];
+    if (open !== '{' && open !== '[') continue;
+    const close = open === '{' ? '}' : ']';
+
+    for (let end = content.length - 1; end > start; end--) {
+      if (++iterations > MAX_SCAN_ITERATIONS) return null;
+      if (content[end] !== close) continue;
+      const candidate = content.slice(start, end + 1);
+      try {
+        const parsed: unknown = JSON.parse(candidate);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return {
+            recovered: parsed,
+            reason: `recovered a JSON object at byte offset ${start} inside corrupt content`,
+          };
+        }
+      } catch {
+        // Try the next candidate end; the longer candidate did not parse.
+      }
+    }
+  }
+
+  return null;
+}
+
 type SettingsMutation = (current: SettingsData) => SettingsData;
 
 type LockOptions = {
@@ -117,6 +168,7 @@ export function loadSettingsFromFile(opts: {
   raw: unknown;
   hadErrors: boolean;
   errorDetails?: string[];
+  recovery?: SettingsFileRecovery;
 } {
   try {
     const settingsFile = path.join(opts.settingsDir, 'settings.json');
@@ -126,13 +178,45 @@ export function loadSettingsFromFile(opts: {
     }
 
     const content = fs.readFileSync(settingsFile, 'utf-8');
-    const parsed: unknown = JSON.parse(content);
+
+    let parsed: unknown;
+    let recovery: SettingsFileRecovery | undefined;
+    let errorDetails: string[] = [];
+    try {
+      parsed = JSON.parse(content);
+    } catch (error: unknown) {
+      const syntaxError = error instanceof Error ? error.message : String(error);
+      const scanned = scanForRecoverableJson(content);
+      if (!scanned) {
+        if (!opts.disableLogging) {
+          opts.loggingService?.error('Failed to load settings file', {
+            error: syntaxError,
+            settingsFile,
+          });
+        }
+        return { validated: {}, raw: {}, hadErrors: true, errorDetails: [syntaxError] };
+      }
+      parsed = scanned.recovered;
+      errorDetails = [syntaxError];
+      recovery = {
+        recovered: true,
+        reason: `invalid JSON syntax (${syntaxError}); ${scanned.reason}`,
+        recoveredSectionKeys: Object.keys(scanned.recovered as Record<string, unknown>),
+      };
+      if (!opts.disableLogging) {
+        opts.loggingService?.warn('Recovered settings content from a corrupt file', {
+          settingsFile,
+          reason: recovery.reason,
+          recoveredSectionKeys: recovery.recoveredSectionKeys,
+        });
+      }
+    }
 
     // Validate and parse with Zod
     const validated = opts.schema.safeParse(parsed);
 
     if (!validated.success) {
-      const errorDetails = validated.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`);
+      const schemaIssues = validated.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`);
       if (!opts.disableLogging) {
         opts.loggingService?.warn('Settings file contains invalid values', {
           errors: validated.error.issues.map((issue) => ({
@@ -148,11 +232,20 @@ export function loadSettingsFromFile(opts: {
         validated: parsePartialSections(parsed, opts.schema),
         raw: parsed,
         hadErrors: true,
-        errorDetails,
+        errorDetails: [...errorDetails, ...schemaIssues],
+        recovery,
       };
     }
 
-    return { validated: validated.data as Partial<SettingsData>, raw: parsed, hadErrors: false };
+    return {
+      validated: validated.data as Partial<SettingsData>,
+      raw: parsed,
+      // A recovered file still had errors: the caller must not treat a salvage
+      // as a clean load (for example by overwriting the corrupt file in place).
+      hadErrors: recovery !== undefined,
+      errorDetails: recovery ? errorDetails : undefined,
+      recovery,
+    };
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     if (!opts.disableLogging) {
@@ -163,6 +256,24 @@ export function loadSettingsFromFile(opts: {
     }
 
     return { validated: {}, raw: {}, hadErrors: true, errorDetails: [errorMsg] };
+  }
+}
+
+/**
+ * Move a corrupt `settings.json` aside so its original bytes remain available
+ * for diagnosis, leaving the settings directory ready for a fresh atomic
+ * replacement. Returns the quarantine path, or undefined when the file could
+ * not be moved (the corrupt file then stays in place and later writes refuse
+ * to overwrite it).
+ */
+export function quarantineCorruptSettingsFile(settingsDir: string): string | undefined {
+  const settingsFile = path.join(settingsDir, 'settings.json');
+  const quarantinePath = path.join(settingsDir, `settings.json.corrupt-${Date.now()}`);
+  try {
+    fs.renameSync(settingsFile, quarantinePath);
+    return quarantinePath;
+  } catch {
+    return undefined;
   }
 }
 

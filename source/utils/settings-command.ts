@@ -1,10 +1,40 @@
 import type { SlashCommand } from '../slash-commands.js';
 import { SETTINGS_RESET_TRIGGER, SETTINGS_TRIGGER } from '../components/input/triggers.js';
-import type { SettingsService, SettingsWithSources } from '../services/settings/settings-service.js';
+import type {
+  SettingsService,
+  SettingsWithSources,
+  DurableWriteResult,
+} from '../services/settings/settings-service.js';
 import { SETTING_KEYS } from '../services/settings/settings-service.js';
 import { getProvider } from '../providers/index.js';
 import { parseModelProviderArg } from './ai/model-provider-arg.js';
 import { getModelSettingConfig } from './ai/model-settings.js';
+
+/**
+ * Render the durable settlement of a mutation truthfully. Only a `saved`
+ * result (or a caller that provided no settlement evidence) reports the
+ * unqualified success line; a failed replacement is reported as memory-only so
+ * the user is never told the value survived a restart.
+ */
+function formatDurableSetMessage(result: DurableWriteResult | undefined, key: string, value: unknown): string {
+  if (result?.status === 'not-persisted') {
+    if (result.reason === 'failed') {
+      return `Error: failed to save ${key} to disk; the change is applied in memory only and will be lost on restart.`;
+    }
+    return `Set ${key} to ${value} (memory only - persistence is disabled).`;
+  }
+  return `Set ${key} to ${value}`;
+}
+
+function formatDurableResetMessage(result: DurableWriteResult | undefined, key: string): string {
+  if (result?.status === 'not-persisted') {
+    if (result.reason === 'failed') {
+      return `Error: failed to save the reset of ${key} to disk; the reset is applied in memory only and will be lost on restart.`;
+    }
+    return `Reset ${key} to default (memory only - persistence is disabled).`;
+  }
+  return `Reset ${key} to default`;
+}
 
 export function parseSettingValue(raw: string): any {
   const value = raw.trim();
@@ -280,8 +310,8 @@ export function createSettingsCommand({
 
       if (parts[0] === 'reset' && parts[1]) {
         const keyToReset = parts.slice(1).join(' ');
-        settingsService.reset(keyToReset);
-        addSystemMessage(`Reset ${keyToReset} to default`);
+        const durableResult = settingsService.reset(keyToReset);
+        addSystemMessage(formatDurableResetMessage(durableResult, keyToReset));
 
         // Apply runtime effects if applicable after reset
         const resetValue = settingsService.getDynamic(keyToReset);
@@ -367,8 +397,8 @@ export function createSettingsCommand({
           addSystemMessage(`Error: ${key} must be a JSON array of paths`);
           return true;
         }
-        settingsService.setPersistentDynamic(key, parsedValue);
-        addSystemMessage(`Set ${key} to ${JSON.stringify(parsedValue)}`);
+        const durableResult = settingsService.setPersistentDynamic(key, parsedValue);
+        addSystemMessage(formatDurableSetMessage(durableResult, key, JSON.stringify(parsedValue)));
         return true;
       }
 
@@ -377,11 +407,11 @@ export function createSettingsCommand({
         return true;
       }
 
-      settingsService.setDynamic(key, parsedValue);
+      const durableResult = settingsService.setDynamic(key, parsedValue);
       if (applyRuntimeSetting) {
         applyRuntimeSetting(key, parsedValue);
       }
-      addSystemMessage(`Set ${key} to ${parsedValue}`);
+      addSystemMessage(formatDurableSetMessage(durableResult, key, parsedValue));
       if (key === SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS) {
         addSystemMessage('agent.maxParallelToolCalls takes effect on the next request.');
       }

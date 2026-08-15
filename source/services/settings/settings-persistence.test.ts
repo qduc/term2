@@ -9,6 +9,7 @@ import {
   hasMissingKeys,
   loadSettingsFromFile,
   saveSettingsToFile,
+  scanForRecoverableJson,
   stripSensitiveSettings,
 } from './settings-persistence.js';
 
@@ -131,6 +132,58 @@ it('loadSettingsFromFile: hadErrors is true when file contains invalid JSON synt
   expect(out.hadErrors).toBe(true);
   expect(out.errorDetails).toBeDefined();
   expect(out.errorDetails?.length).toBeGreaterThan(0);
+  expect(out.recovery).toBeUndefined();
+});
+
+it('loadSettingsFromFile: scan fallback recovers a JSON document from trailing garbage', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
+
+  fs.writeFileSync(
+    path.join(dir, 'settings.json'),
+    '{"agent":{"model":"gpt-5.1"},"app":{"liteMode":true}} trailing garbage {',
+    'utf-8',
+  );
+
+  const out = loadSettingsFromFile({
+    settingsDir: dir,
+    schema: SettingsSchema,
+    disableLogging: true,
+  });
+
+  expect(out.hadErrors).toBe(true);
+  expect(out.recovery?.recovered).toBe(true);
+  expect(out.recovery?.recoveredSectionKeys).toEqual(['agent', 'app']);
+  expect(out.validated.agent?.model).toBe('gpt-5.1');
+  expect(out.raw).toEqual({ agent: { model: 'gpt-5.1' }, app: { liteMode: true } });
+});
+
+it('loadSettingsFromFile: scan fallback recovers a JSON document from leading garbage', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
+
+  fs.writeFileSync(
+    path.join(dir, 'settings.json'),
+    'corrupt log line before the document {"agent":{"model":"gpt-5.1"}}',
+    'utf-8',
+  );
+
+  const out = loadSettingsFromFile({
+    settingsDir: dir,
+    schema: SettingsSchema,
+    disableLogging: true,
+  });
+
+  expect(out.hadErrors).toBe(true);
+  expect(out.recovery?.recovered).toBe(true);
+  expect(out.validated.agent?.model).toBe('gpt-5.1');
+});
+
+it('scanForRecoverableJson: bounded scan gives up on a pathological all-brackets file', () => {
+  const garbage = '{'.repeat(40_000);
+  expect(scanForRecoverableJson(garbage)).toBeNull();
+});
+
+it('scanForRecoverableJson: returns null when only a non-object value is embedded', () => {
+  expect(scanForRecoverableJson('prefix [1, 2, 3] suffix')).toBeNull();
 });
 
 it('saveSettingsToFile: writes stripped settings', () => {
@@ -213,7 +266,7 @@ it('saveSettingsToFile: removes its temp file when atomic rename fails', () => {
   }
 });
 
-it('saveSettingsToFile: gives up on a live lock without overwriting its settings file', () => {
+it('saveSettingsToFile: respects a fresh-mtime lock within its timeout budget without overwriting its settings file', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
   const settingsFile = path.join(dir, 'settings.json');
   fs.writeFileSync(settingsFile, JSON.stringify({ agent: { model: 'gpt-5.1' } }), 'utf-8');

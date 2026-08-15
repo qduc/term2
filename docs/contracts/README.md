@@ -21,6 +21,7 @@ Phase 2 and only on a red proof through an owning public boundary.
 | 03 | [Child-run identity, authority, and lifecycle](./03-child-run-identity-authority-and-lifecycle.md) | `createSubagentRuntime` runners, `SubagentBridge`, session traffic context | 12 files, 262 tests — green 2026-08-14 |
 | 04 | [Settings consumption](./04-settings-consumption.md) | Settings schema/resolution, runtime consumers, `ConversationConfigurationService` + `runtime-setting-router`, `/settings` | 14 files, 303 tests — green 2026-08-14 |
 | 05 | [Runtime guards and retention](./05-runtime-guards-and-retention.md) | Guard owners per `docs/plans/guard-ledger.md` and linked owner plans | 26 files, 423 passing tests — 2026-08-14; the retained expected-failure characterization became two passing tests when Phase 2 repaired it on 2026-08-15 |
+| 10 | [Settings durability, migration, and sensitive bytes](./10-settings-durability-migration-and-sensitive-bytes.md) | `settings-persistence.ts` bytes/lock/recovery, `SettingsService` settlement + recovery result, `/settings` command rendering, settings schema/merger/migration | 9-file Contract 10 matrix — 189 passing tests, 1 expected fail (R10.2, excluded), 1 known schema baseline failure; black-box 166 passed / 1 skipped — repaired 2026-08-16 |
 
 All focused commands re-ran with exit code 0 on 2026-08-14 (76 file
 invocations / 1,683 passing test invocations plus one retained expected-failure

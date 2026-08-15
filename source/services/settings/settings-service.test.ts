@@ -1,4 +1,4 @@
-import { it, expect, beforeAll, afterAll } from 'vitest';
+import { it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -497,6 +497,96 @@ it.sequential('startup rewrites legacy provider format to new format in settings
   });
 });
 
+it.sequential('durably normalizes the selected provider when provider records already use modern ids', async () => {
+  await withNonTestEnvironment(async () => {
+    const settingsDir = getTestSettingsDir();
+    const configFile = path.join(settingsDir, 'settings.json');
+
+    if (!fs.existsSync(settingsDir)) {
+      fs.mkdirSync(settingsDir, { recursive: true });
+    }
+
+    fs.writeFileSync(
+      configFile,
+      JSON.stringify(
+        {
+          providers: [
+            {
+              id: 'My_Local_Provider',
+              name: 'My Local Provider',
+              type: 'openai-compatible',
+              baseUrl: 'http://localhost:1234',
+            },
+          ],
+          agent: { provider: 'My Local Provider' },
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    const service = new SettingsService({ settingsDir, disableLogging: true });
+
+    expect(service.get('agent.provider')).toBe('My_Local_Provider');
+
+    const rewritten = JSON.parse(fs.readFileSync(configFile, 'utf-8'));
+    expect(rewritten.agent.provider).toBe('My_Local_Provider');
+
+    const freshService = new SettingsService({ settingsDir, disableLogging: true });
+    expect(freshService.get('agent.provider')).toBe('My_Local_Provider');
+  });
+});
+
+it.sequential('setDynamic returns a saved settlement and a fresh service sees the durable value', async () => {
+  await withNonTestEnvironment(async () => {
+    const settingsDir = getTestSettingsDir();
+    const service = new SettingsService({ settingsDir, disableLogging: true });
+
+    const result = service.setDynamic('agent.model', 'durable-model');
+    expect(result.status).toBe('saved');
+
+    const freshService = new SettingsService({ settingsDir, disableLogging: true });
+    expect(freshService.get('agent.model')).toBe('durable-model');
+  });
+});
+
+it.sequential('setDynamic reports a failed settlement and the predecessor survives a restart', async () => {
+  await withNonTestEnvironment(async () => {
+    const settingsDir = getTestSettingsDir();
+    const service = new SettingsService({ settingsDir, disableLogging: true });
+    service.set('agent.model', 'predecessor-model');
+
+    const rename = vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => {
+      throw new Error('rename failed');
+    });
+
+    try {
+      const result = service.setDynamic('agent.model', 'replacement-model');
+      expect(result.status).toBe('not-persisted');
+      if (result.status === 'not-persisted') {
+        expect(result.reason).toBe('failed');
+      }
+
+      const freshService = new SettingsService({ settingsDir, disableLogging: true });
+      expect(freshService.get('agent.model')).toBe('predecessor-model');
+    } finally {
+      rename.mockRestore();
+    }
+  });
+});
+
+it('setDynamic reports not-persisted when file persistence is disabled', () => {
+  const settingsDir = getTestSettingsDir();
+  const service = new SettingsService({ settingsDir, disableLogging: true });
+
+  const result = service.setDynamic('agent.model', 'gpt-5.1');
+  expect(result.status).toBe('not-persisted');
+  if (result.status === 'not-persisted') {
+    expect(result.reason).toBe('disabled');
+  }
+});
+
 it('migrates legacy ancillary settings into tier settings without overwriting new values', () => {
   const settingsDir = getTestSettingsDir();
   fs.mkdirSync(settingsDir, { recursive: true });
@@ -821,6 +911,32 @@ it('refuses to start on invalid config file (invalid JSON)', async () => {
       }),
   ).toThrow(/Failed to parse settings file/);
 });
+
+it.sequential(
+  'recovers a salvageable corrupt settings file through the public boundary and preserves the original bytes',
+  async () => {
+    await withNonTestEnvironment(async () => {
+      const settingsDir = getTestSettingsDir();
+      fs.mkdirSync(settingsDir, { recursive: true });
+      const settingsFile = getSettingsFilePath(settingsDir);
+      const corrupt = '{"agent":{"model":"gpt-5.1"},"app":{"liteMode":true}} trailing garbage {';
+      fs.writeFileSync(settingsFile, corrupt, 'utf-8');
+
+      const service = new SettingsService({ settingsDir, disableLogging: true });
+
+      const recovery = service.getRecoveryResult();
+      expect(recovery.recovered).toBe(true);
+      if (recovery.recovered) {
+        expect(recovery.recoveredSectionKeys).toContain('agent');
+        expect(recovery.recoveredSectionKeys).toContain('app');
+        expect(recovery.quarantinedPath).toBeDefined();
+        expect(fs.readFileSync(recovery.quarantinedPath!, 'utf-8')).toBe(corrupt);
+        expect(service.get('agent.model')).toBe('gpt-5.1');
+        expect(fs.existsSync(settingsFile)).toBe(true);
+      }
+    });
+  },
+);
 
 it('refuses to start on invalid schema in config file', async () => {
   const settingsDir = getTestSettingsDir();

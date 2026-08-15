@@ -15,7 +15,7 @@ import {
 } from './logging-contract.js';
 import { truncateLogText, sanitizeLogMetadata } from '../../utils/output/log-truncation.js';
 import { ProviderTraffic, ProviderTrafficArtifactStore } from './provider-traffic.js';
-import type { ISessionContextService } from '../service-interfaces.js';
+import type { ISessionContextService, LogMetadataContract } from '../service-interfaces.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../session/session-context-service.js';
 
 const LOG_RETENTION_DAYS = 7;
@@ -170,7 +170,7 @@ export class LoggingService {
     // Add custom log levels to logger if they don't exist
     Object.keys(LOG_LEVELS).forEach((level) => {
       if (typeof (this.logger as any)[level] !== 'function') {
-        (this.logger as any)[level] = (message: string, meta?: any) => {
+        (this.logger as any)[level] = (message: string, meta?: LogMetadataContract) => {
           this.logger.log(level, message, meta);
         };
       }
@@ -221,35 +221,35 @@ export class LoggingService {
   /**
    * Log error-level message
    */
-  error(message: string, meta?: Record<string, any>): void {
+  error(message: string, meta?: LogMetadataContract): void {
     this.#log('error', message, meta);
   }
 
   /**
    * Log warn-level message
    */
-  warn(message: string, meta?: Record<string, any>): void {
+  warn(message: string, meta?: LogMetadataContract): void {
     this.#log('warn', message, meta);
   }
 
   /**
    * Log info-level message
    */
-  info(message: string, meta?: Record<string, any>): void {
+  info(message: string, meta?: LogMetadataContract): void {
     this.#log('info', message, meta);
   }
 
   /**
    * Log security event (custom level)
    */
-  security(message: string, meta?: Record<string, any>): void {
+  security(message: string, meta?: LogMetadataContract): void {
     this.#log('security', message, meta);
   }
 
   /**
    * Log debug-level message
    */
-  debug(message: string, meta?: Record<string, any>): void {
+  debug(message: string, meta?: LogMetadataContract): void {
     this.#log('debug', message, meta);
   }
 
@@ -328,7 +328,7 @@ export class LoggingService {
     }
   }
 
-  private log(level: string, message: string, meta?: Record<string, any>): void {
+  private log(level: string, message: string, meta?: LogMetadataContract): void {
     try {
       // Callers that own an asynchronous operation can provide its correlation
       // explicitly. That must beat the mutable process-wide fallback, otherwise
@@ -409,7 +409,7 @@ export class LoggingService {
     }
   }
 
-  #log(level: string, message: string, meta?: Record<string, any>): void {
+  #log(level: string, message: string, meta?: LogMetadataContract): void {
     this.log(level, message, meta);
   }
 

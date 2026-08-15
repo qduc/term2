@@ -1,5 +1,36 @@
 import type { SettingKey, SettingValue } from './settings/settings-schema.js';
 
+/**
+ * Structured metadata contract for application log records (Contract 07, C7.5).
+ *
+ * Callers pass arbitrary diagnostic keys — `RuntimeLogSchema` passes them
+ * through to the winston record — but the fields that drive log behavior are
+ * typed explicitly so misuse fails at compile time instead of silently
+ * corrupting records: `eventType` gates redaction and category filtering,
+ * `correlationId` is the explicit per-call override that beats the ambient
+ * process-wide id, and the canonical record fields feed
+ * `buildRuntimeLogRecord`. Values are `unknown`-typed (never `any`) so
+ * consumers must narrow before reading.
+ */
+export type LogMetadataContract = {
+  eventType?: string;
+  correlationId?: string;
+  traceId?: string;
+  sessionId?: string;
+  provider?: string;
+  model?: string;
+  messageId?: string;
+  category?: string;
+  phase?: string;
+  direction?: string;
+  requestId?: string;
+  toolName?: string;
+  toolCallId?: string;
+  errorCode?: string;
+  errorMessage?: string;
+  [key: string]: unknown;
+};
+
 export type SessionTrafficContext = {
   sessionId: string;
   sessionStartedAt: string;
@@ -11,11 +42,11 @@ export type SessionTrafficContext = {
 };
 
 export interface ILoggingService {
-  info(message: string, meta?: any): void;
-  warn(message: string, meta?: any): void;
-  error(message: string, meta?: any): void;
-  debug(message: string, meta?: any): void;
-  security(message: string, meta?: any): void;
+  info(message: string, meta?: LogMetadataContract): void;
+  warn(message: string, meta?: LogMetadataContract): void;
+  error(message: string, meta?: LogMetadataContract): void;
+  debug(message: string, meta?: LogMetadataContract): void;
+  security(message: string, meta?: LogMetadataContract): void;
   setCorrelationId(id: string | undefined): void;
   getCorrelationId(): string | undefined;
   clearCorrelationId(): void;

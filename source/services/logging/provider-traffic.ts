@@ -702,66 +702,81 @@ export class ProviderTrafficArtifactStore {
   recordRequestStart(input: RequestStartInput): void {
     const { dayDir, requestPath, sessionDirName } = this.#pathsFor(input);
     this.#requestPaths.set(input.requestId, requestPath);
-    const sentRecord = {
-      direction: 'sent',
-      requestId: input.requestId,
-      timestamp: input.timestamp,
-      provider: input.provider,
-      model: input.model,
-      ...(input.modelClass ? { modelClass: input.modelClass } : {}),
-      ...(input.modelWrapperClass ? { modelWrapperClass: input.modelWrapperClass } : {}),
-      sessionId: input.sessionId,
-      mode: input.mode ?? 'unknown',
-      ...(input.headers ? { headers: input.headers } : {}),
-      body: sanitizeSentTrafficBody(input.sentBody),
-    };
-    writeTrafficEnvelope(requestPath, { sent: sentRecord, received: emptyTrafficRecord() });
-    this.#upsertDailyIndex(dayDir, {
-      sessionId: input.sessionId,
-      sessionDir: sessionDirName,
-      firstRequestAt: input.timestamp,
-      lastRequestAt: input.timestamp,
-      requestCount: 1,
-      firstUserMessagePreview: normalizePreview(input.firstUserMessagePreview),
-      latestProvider: input.provider,
-      latestModel: input.model,
-      providersSeen: [input.provider],
-      modelsSeen: [input.model],
-      latestMode: input.mode ?? 'unknown',
-      modesSeen: [input.mode ?? 'unknown'],
-    });
+    try {
+      const sentRecord = {
+        direction: 'sent',
+        requestId: input.requestId,
+        timestamp: input.timestamp,
+        provider: input.provider,
+        model: input.model,
+        ...(input.modelClass ? { modelClass: input.modelClass } : {}),
+        ...(input.modelWrapperClass ? { modelWrapperClass: input.modelWrapperClass } : {}),
+        sessionId: input.sessionId,
+        mode: input.mode ?? 'unknown',
+        ...(input.headers ? { headers: input.headers } : {}),
+        body: sanitizeSentTrafficBody(input.sentBody),
+      };
+      writeTrafficEnvelope(requestPath, { sent: sentRecord, received: emptyTrafficRecord() });
+      this.#upsertDailyIndex(dayDir, {
+        sessionId: input.sessionId,
+        sessionDir: sessionDirName,
+        firstRequestAt: input.timestamp,
+        lastRequestAt: input.timestamp,
+        requestCount: 1,
+        firstUserMessagePreview: normalizePreview(input.firstUserMessagePreview),
+        latestProvider: input.provider,
+        latestModel: input.model,
+        providersSeen: [input.provider],
+        modelsSeen: [input.model],
+        latestMode: input.mode ?? 'unknown',
+        modesSeen: [input.mode ?? 'unknown'],
+      });
+    } catch (error) {
+      // A start that did not fully land must not retain a stale correlation
+      // entry: a later completion falls back to #pathsFor and writes a fresh
+      // artifact instead of reusing a path the failed start never proved.
+      this.#requestPaths.delete(input.requestId);
+      throw error;
+    }
   }
 
   recordRequestComplete(input: RequestCompleteInput): void {
     const { dayDir, requestPath: fallbackRequestPath, sessionDirName } = this.#pathsFor(input);
     const requestPath = this.#requestPaths.get(input.requestId) ?? fallbackRequestPath;
-    const receivedRecord = {
-      direction: 'received',
-      requestId: input.requestId,
-      timestamp: input.timestamp,
-      provider: input.provider,
-      model: input.model,
-      ...(input.modelClass ? { modelClass: input.modelClass } : {}),
-      ...(input.modelWrapperClass ? { modelWrapperClass: input.modelWrapperClass } : {}),
-      sessionId: input.sessionId,
-      mode: input.mode ?? 'unknown',
-      ...(input.receivedSummary ? { summary: input.receivedSummary } : {}),
-      ...(input.error ? { error: input.error } : {}),
-    };
-    const envelope = parseTrafficEnvelope(requestPath);
-    writeTrafficEnvelope(requestPath, {
-      sent: envelope.sent,
-      received: receivedRecord,
-    });
-    this.#requestPaths.delete(input.requestId);
-    this.#touchDailyIndex(dayDir, {
-      sessionId: input.sessionId,
-      sessionDir: sessionDirName,
-      lastRequestAt: input.timestamp,
-      latestProvider: input.provider,
-      latestModel: input.model,
-      latestMode: input.mode ?? 'unknown',
-    });
+    try {
+      const receivedRecord = {
+        direction: 'received',
+        requestId: input.requestId,
+        timestamp: input.timestamp,
+        provider: input.provider,
+        model: input.model,
+        ...(input.modelClass ? { modelClass: input.modelClass } : {}),
+        ...(input.modelWrapperClass ? { modelWrapperClass: input.modelWrapperClass } : {}),
+        sessionId: input.sessionId,
+        mode: input.mode ?? 'unknown',
+        ...(input.receivedSummary ? { summary: input.receivedSummary } : {}),
+        ...(input.error ? { error: input.error } : {}),
+      };
+      const envelope = parseTrafficEnvelope(requestPath);
+      writeTrafficEnvelope(requestPath, {
+        sent: envelope.sent,
+        received: receivedRecord,
+      });
+      this.#touchDailyIndex(dayDir, {
+        sessionId: input.sessionId,
+        sessionDir: sessionDirName,
+        lastRequestAt: input.timestamp,
+        latestProvider: input.provider,
+        latestModel: input.model,
+        latestMode: input.mode ?? 'unknown',
+      });
+    } finally {
+      // Completion is the owner cleanup path for request correlation: the
+      // entry is released whether the artifact write succeeded or failed, so
+      // an abandoned or partially-written completion cannot leak map entries
+      // for the life of the process.
+      this.#requestPaths.delete(input.requestId);
+    }
   }
 
   #pathsFor(input: {
@@ -791,11 +806,19 @@ export class ProviderTrafficArtifactStore {
   #readDailyIndex(dayDir: string): DailySessionIndexEntry[] {
     const indexPath = `${dayDir}/index.jsonl`;
     if (!fs.existsSync(indexPath)) return [];
-    return fs
-      .readFileSync(indexPath, 'utf8')
-      .split('\n')
-      .filter((line) => line.trim())
-      .map((line) => JSON.parse(line) as DailySessionIndexEntry);
+    const entries: DailySessionIndexEntry[] = [];
+    for (const line of fs.readFileSync(indexPath, 'utf8').split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      // An unclean shutdown, disk-full write, or crash can leave a partial or
+      // malformed line behind. Recover by scanning and keeping only entries
+      // that parse as objects; the next index rewrite drops the bad lines.
+      const parsed = tryParseJson(trimmed);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        entries.push(parsed as DailySessionIndexEntry);
+      }
+    }
+    return entries;
   }
 
   #writeDailyIndex(dayDir: string, entries: DailySessionIndexEntry[]): void {
@@ -993,6 +1016,32 @@ export class ProviderTraffic implements IProviderTraffic {
     private readonly store: ProviderTrafficArtifactStore,
   ) {}
 
+  /**
+   * Runs a diagnostic artifact-store operation, converting any store failure
+   * into exactly one structured warning so the primary provider operation
+   * proceeds unimpeded (Contract 07, C7.1). The warning itself must never
+   * throw back into the caller, so it carries its own residual boundary.
+   */
+  #runArtifactStoreOperation(operation: string, requestId: string, run: () => void): void {
+    try {
+      run();
+    } catch (error) {
+      try {
+        this.loggingService.warn('Provider traffic artifact write failed', {
+          eventType: 'provider.traffic.artifact_write_failed',
+          category: 'provider',
+          phase: 'artifact_write',
+          operation,
+          requestId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      } catch {
+        // Residual error boundary: if even the warning cannot be logged, the
+        // primary operation still must not fail.
+      }
+    }
+  }
+
   recordRequestStart(input: ProviderTrafficRequest): void {
     const trafficContext = this.sessionContextService.getContext() ?? null;
     const isEvaluator = trafficContext?.evaluator === true;
@@ -1005,20 +1054,22 @@ export class ProviderTraffic implements IProviderTraffic {
     const firstUserMessagePreview = trafficContext?.firstUserMessagePreview;
 
     // 1. Write the sent request to artifact store directly
-    this.store.recordRequestStart({
-      requestId: input.requestId,
-      timestamp,
-      provider: input.provider,
-      model: input.model,
-      modelClass: input.modelClass,
-      modelWrapperClass: input.modelWrapperClass,
-      sessionId,
-      sessionStartedAt,
-      mode,
-      firstUserMessagePreview,
-      sentBody: input.sentBody,
-      headers: input.headers,
-      evaluator: isEvaluator,
+    this.#runArtifactStoreOperation('recordRequestStart', input.requestId, () => {
+      this.store.recordRequestStart({
+        requestId: input.requestId,
+        timestamp,
+        provider: input.provider,
+        model: input.model,
+        modelClass: input.modelClass,
+        modelWrapperClass: input.modelWrapperClass,
+        sessionId,
+        sessionStartedAt,
+        mode,
+        firstUserMessagePreview,
+        sentBody: input.sentBody,
+        headers: input.headers,
+        evaluator: isEvaluator,
+      });
     });
 
     const baseMeta = {
@@ -1075,18 +1126,20 @@ export class ProviderTraffic implements IProviderTraffic {
 
     if (input.error) {
       // 1. Write failure to artifact store
-      this.store.recordRequestComplete({
-        requestId: input.requestId,
-        timestamp,
-        provider: input.provider,
-        model: input.model,
-        modelClass: input.modelClass,
-        modelWrapperClass: input.modelWrapperClass,
-        sessionId,
-        sessionStartedAt,
-        mode,
-        error: input.error,
-        evaluator: isEvaluator,
+      this.#runArtifactStoreOperation('recordRequestComplete', input.requestId, () => {
+        this.store.recordRequestComplete({
+          requestId: input.requestId,
+          timestamp,
+          provider: input.provider,
+          model: input.model,
+          modelClass: input.modelClass,
+          modelWrapperClass: input.modelWrapperClass,
+          sessionId,
+          sessionStartedAt,
+          mode,
+          error: input.error,
+          evaluator: isEvaluator,
+        });
       });
 
       // 2. Log failure to winston
@@ -1151,18 +1204,20 @@ export class ProviderTraffic implements IProviderTraffic {
     }
 
     // 1. Write complete payload to artifact store
-    this.store.recordRequestComplete({
-      requestId: input.requestId,
-      timestamp,
-      provider: input.provider,
-      model: input.model,
-      modelClass: input.modelClass,
-      modelWrapperClass: input.modelWrapperClass,
-      sessionId,
-      sessionStartedAt,
-      mode,
-      receivedSummary: summary,
-      evaluator: isEvaluator,
+    this.#runArtifactStoreOperation('recordRequestComplete', input.requestId, () => {
+      this.store.recordRequestComplete({
+        requestId: input.requestId,
+        timestamp,
+        provider: input.provider,
+        model: input.model,
+        modelClass: input.modelClass,
+        modelWrapperClass: input.modelWrapperClass,
+        sessionId,
+        sessionStartedAt,
+        mode,
+        receivedSummary: summary,
+        evaluator: isEvaluator,
+      });
     });
 
     // 2. Log response received via logging service for winston
@@ -1202,18 +1257,20 @@ export class ProviderTraffic implements IProviderTraffic {
       ...(input.diagnostics ? input.diagnostics : {}),
     };
 
-    this.store.recordRequestComplete({
-      requestId: input.requestId,
-      timestamp,
-      provider: input.provider,
-      model: input.model,
-      modelClass: input.modelClass,
-      modelWrapperClass: input.modelWrapperClass,
-      sessionId,
-      sessionStartedAt,
-      mode,
-      receivedSummary: summary,
-      evaluator: isEvaluator,
+    this.#runArtifactStoreOperation('recordRequestComplete', input.requestId, () => {
+      this.store.recordRequestComplete({
+        requestId: input.requestId,
+        timestamp,
+        provider: input.provider,
+        model: input.model,
+        modelClass: input.modelClass,
+        modelWrapperClass: input.modelWrapperClass,
+        sessionId,
+        sessionStartedAt,
+        mode,
+        receivedSummary: summary,
+        evaluator: isEvaluator,
+      });
     });
 
     // The retained transcript belongs in the traffic artifact, not the app log.
@@ -1290,18 +1347,20 @@ export class ProviderTraffic implements IProviderTraffic {
     }
 
     // 1. Write failure to artifact store
-    this.store.recordRequestComplete({
-      requestId: input.requestId,
-      timestamp,
-      provider: input.provider,
-      model: input.model,
-      modelClass: input.modelClass,
-      modelWrapperClass: input.modelWrapperClass,
-      sessionId,
-      sessionStartedAt,
-      mode,
-      error: errorDetails,
-      evaluator: isEvaluator,
+    this.#runArtifactStoreOperation('recordRequestComplete', input.requestId, () => {
+      this.store.recordRequestComplete({
+        requestId: input.requestId,
+        timestamp,
+        provider: input.provider,
+        model: input.model,
+        modelClass: input.modelClass,
+        modelWrapperClass: input.modelWrapperClass,
+        sessionId,
+        sessionStartedAt,
+        mode,
+        error: errorDetails,
+        evaluator: isEvaluator,
+      });
     });
 
     // 2. Log failure to winston

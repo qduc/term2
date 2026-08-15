@@ -3,6 +3,7 @@ import { composeFetch, FetchMiddleware } from './compose.js';
 import { createLoggingMiddleware } from './logging-middleware.js';
 import { createProviderFetch } from './composer.js';
 import { createRateLimitMiddleware } from './rate-limit-middleware.js';
+import { ProviderTraffic, ProviderTrafficArtifactStore } from '../../services/logging/provider-traffic.js';
 
 import type { ILoggingService, ISessionContextService } from '../../services/service-interfaces.js';
 
@@ -818,4 +819,93 @@ it('createLoggingMiddleware handles error in fire-and-forget logging gracefully'
   expect(logs[0]).toMatchObject({
     message: 'openai ai sdk request',
   });
+});
+
+class CompletionOnlyThrowingStore extends ProviderTrafficArtifactStore {
+  override recordRequestStart(): void {
+    // Succeed on start so request proceeds to next(ctx) and fails on network
+  }
+  override recordRequestComplete(): void {
+    throw new Error('Diagnostic store write failed: ENOSPC');
+  }
+}
+
+class StartThrowingStore extends ProviderTrafficArtifactStore {
+  override recordRequestStart(): void {
+    throw new Error('Diagnostic store write failed: ENOSPC');
+  }
+  override recordRequestComplete(): void {
+    // No-op to prevent real filesystem I/O after next(ctx) succeeds
+  }
+}
+
+it('createLoggingMiddleware preserves original provider error when recordRequestFailed throws', async () => {
+  const sessionContextService = makeSessionContextService({
+    sessionId: 'session-fetch-test',
+    sessionStartedAt: '2026-08-15T10:00:00.000Z',
+    mode: 'standard',
+  });
+  const loggingService = makeLoggingService(
+    {
+      debug: () => {},
+      warn: () => {},
+      error: () => {},
+    },
+    sessionContextService,
+  );
+  const store = new CompletionOnlyThrowingStore({ rootDir: '/fake/root' });
+  const providerTraffic = new ProviderTraffic(loggingService, sessionContextService, store);
+
+  const middleware = createLoggingMiddleware({
+    provider: 'openai',
+    model: 'gpt-4o',
+    providerTraffic,
+  });
+
+  const originalNetworkError = new TypeError('fetch failed: network timeout');
+  const failingFetch: typeof fetch = async () => {
+    throw originalNetworkError;
+  };
+
+  const composed = composeFetch(failingFetch, [middleware]);
+
+  // When recordRequestFailed throws, middleware should not replace originalNetworkError with store error
+  await expect(composed('https://example.test/', { method: 'POST' })).rejects.toThrow(originalNetworkError);
+});
+
+it('createLoggingMiddleware does not abort network dispatch when recordRequestStart throws', async () => {
+  const sessionContextService = makeSessionContextService({
+    sessionId: 'session-fetch-test',
+    sessionStartedAt: '2026-08-15T10:00:00.000Z',
+    mode: 'standard',
+  });
+  const loggingService = makeLoggingService(
+    {
+      debug: () => {},
+      warn: () => {},
+      error: () => {},
+    },
+    sessionContextService,
+  );
+  const store = new StartThrowingStore({ rootDir: '/fake/root' });
+  const providerTraffic = new ProviderTraffic(loggingService, sessionContextService, store);
+
+  const middleware = createLoggingMiddleware({
+    provider: 'openai',
+    model: 'gpt-4o',
+    providerTraffic,
+  });
+
+  let fetchDispatched = false;
+  const baseFetch: typeof fetch = async () => {
+    fetchDispatched = true;
+    return new Response('ok', { status: 200 });
+  };
+
+  const composed = composeFetch(baseFetch, [middleware]);
+
+  // Diagnostic request-start failure should not prevent fetch dispatch
+  const res = await composed('https://example.test/', { method: 'POST', body: '{}' });
+  expect(fetchDispatched).toBe(true);
+  expect(res.status).toBe(200);
 });

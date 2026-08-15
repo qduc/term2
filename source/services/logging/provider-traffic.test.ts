@@ -8,6 +8,7 @@ import {
   ProviderTrafficArtifactStore,
   ProviderTraffic,
   TRAFFIC_TEXT_LIMIT,
+  type DailySessionIndexEntry,
 } from './provider-traffic.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../session/session-context-service.js';
 
@@ -696,7 +697,7 @@ it('ProviderTrafficArtifactStore appends received line, upserts newest-first ind
   expect(fs.readFileSync(legacyFile, 'utf8')).toBe('{"legacy":true}\n');
 });
 
-it('ProviderTrafficArtifactStore places evaluator requests under evaluator subfolder', () => {
+it('ProviderTrafficArtifactStore places evaluator requests with evaluator_ filename prefix', () => {
   const rootDir = makeTempDir();
   const store = new ProviderTrafficArtifactStore({ rootDir });
 
@@ -1033,4 +1034,318 @@ it('ProviderTraffic retains the receive timing of a failed websocket request', (
       interFrameBudgetMs: 600_000,
     },
   });
+});
+
+// --- Contract 07 Diagnostic Logging Safety & Fault Tolerance Characterizations ---
+
+class ThrowingStore extends ProviderTrafficArtifactStore {
+  override recordRequestStart(): void {
+    throw new Error('Simulated store write error: ENOSPC');
+  }
+  override recordRequestComplete(): void {
+    throw new Error('Simulated store write error: ENOSPC');
+  }
+}
+
+type WarningRecord = { message: string; meta?: Record<string, unknown> };
+
+it('ProviderTraffic.recordRequestStart does not throw when artifact store fails', () => {
+  const warnings: WarningRecord[] = [];
+  const store = new ThrowingStore({ rootDir: '/fake/root' });
+  const traffic = new ProviderTraffic(
+    {
+      debug: vi.fn(),
+      warn: vi.fn((message: string, meta?: Record<string, unknown>) => {
+        warnings.push({ message, meta });
+      }),
+      error: vi.fn(),
+      getCorrelationId: () => undefined,
+    },
+    NULL_SESSION_CONTEXT_SERVICE,
+    store,
+  );
+
+  expect(() => {
+    traffic.recordRequestStart({
+      requestId: 'req-fail-proof-1',
+      provider: 'openai',
+      model: 'gpt-4o',
+      sentBody: { messages: [{ role: 'user', content: 'hello' }] },
+    });
+  }).not.toThrow();
+
+  expect(warnings).toHaveLength(1);
+  expect(warnings[0].meta?.eventType).toBe('provider.traffic.artifact_write_failed');
+  expect(warnings[0].meta?.requestId).toBe('req-fail-proof-1');
+});
+
+it('ProviderTraffic.recordResponseReceived does not reject when artifact store fails', async () => {
+  const warnings: WarningRecord[] = [];
+  const store = new ThrowingStore({ rootDir: '/fake/root' });
+  const traffic = new ProviderTraffic(
+    {
+      debug: vi.fn(),
+      warn: vi.fn((message: string, meta?: Record<string, unknown>) => {
+        warnings.push({ message, meta });
+      }),
+      error: vi.fn(),
+      getCorrelationId: () => undefined,
+    },
+    NULL_SESSION_CONTEXT_SERVICE,
+    store,
+  );
+
+  await expect(
+    traffic.recordResponseReceived({
+      requestId: 'req-fail-proof-2',
+      provider: 'openai',
+      model: 'gpt-4o',
+      status: 200,
+      response: { choices: [{ message: { content: 'hello world' } }] },
+    }),
+  ).resolves.toBeUndefined();
+
+  expect(warnings).toHaveLength(1);
+  expect(warnings[0].meta?.eventType).toBe('provider.traffic.artifact_write_failed');
+  expect(warnings[0].meta?.requestId).toBe('req-fail-proof-2');
+});
+
+it('ProviderTraffic.recordResponseClosed does not throw when artifact store fails', () => {
+  const warnings: WarningRecord[] = [];
+  const store = new ThrowingStore({ rootDir: '/fake/root' });
+  const traffic = new ProviderTraffic(
+    {
+      debug: vi.fn(),
+      warn: vi.fn((message: string, meta?: Record<string, unknown>) => {
+        warnings.push({ message, meta });
+      }),
+      error: vi.fn(),
+      getCorrelationId: () => undefined,
+    },
+    NULL_SESSION_CONTEXT_SERVICE,
+    store,
+  );
+
+  expect(() => {
+    traffic.recordResponseClosed({
+      requestId: 'req-fail-proof-closed',
+      provider: 'openai',
+      model: 'gpt-4o',
+      outcome: 'consumer_closed',
+      eventCount: 5,
+    });
+  }).not.toThrow();
+
+  expect(warnings).toHaveLength(1);
+  expect(warnings[0].meta?.eventType).toBe('provider.traffic.artifact_write_failed');
+  expect(warnings[0].meta?.requestId).toBe('req-fail-proof-closed');
+});
+
+it('ProviderTraffic.recordRequestFailed does not throw when artifact store fails', () => {
+  const warnings: WarningRecord[] = [];
+  const store = new ThrowingStore({ rootDir: '/fake/root' });
+  const traffic = new ProviderTraffic(
+    {
+      debug: vi.fn(),
+      warn: vi.fn((message: string, meta?: Record<string, unknown>) => {
+        warnings.push({ message, meta });
+      }),
+      error: vi.fn(),
+      getCorrelationId: () => undefined,
+    },
+    NULL_SESSION_CONTEXT_SERVICE,
+    store,
+  );
+
+  expect(() => {
+    traffic.recordRequestFailed({
+      requestId: 'req-fail-proof-3',
+      provider: 'anthropic',
+      model: 'claude-3-5-sonnet',
+      error: new Error('Upstream timeout 504'),
+    });
+  }).not.toThrow();
+
+  expect(warnings).toHaveLength(1);
+  expect(warnings[0].meta?.eventType).toBe('provider.traffic.artifact_write_failed');
+  expect(warnings[0].meta?.requestId).toBe('req-fail-proof-3');
+});
+
+it('ProviderTrafficArtifactStore ignores malformed lines in daily index.jsonl without crashing', () => {
+  const rootDir = makeTempDir();
+  const dateKey = '2026-08-15';
+  const dayDir = path.join(rootDir, dateKey);
+
+  fs.mkdirSync(dayDir, { recursive: true });
+  const validEntry: DailySessionIndexEntry = {
+    sessionId: 'session-valid-1',
+    sessionDir: '10-00-00_sessi',
+    firstRequestAt: '2026-08-15T10:00:00.000Z',
+    lastRequestAt: '2026-08-15T10:00:00.000Z',
+    requestCount: 1,
+    firstUserMessagePreview: 'hello',
+    latestProvider: 'openai',
+    latestModel: 'gpt-4o',
+    providersSeen: ['openai'],
+    modelsSeen: ['gpt-4o'],
+    latestMode: 'code',
+    modesSeen: ['code'],
+  };
+
+  // Seed one valid line and one malformed line
+  fs.writeFileSync(path.join(dayDir, 'index.jsonl'), `${JSON.stringify(validEntry)}\n{CORRUPTED_JSON_LINE\n`, 'utf8');
+
+  const store = new ProviderTrafficArtifactStore({ rootDir });
+
+  expect(() => {
+    store.recordRequestStart({
+      requestId: 'req-new-1',
+      timestamp: '2026-08-15T10:05:00.000Z',
+      provider: 'openai',
+      model: 'gpt-4o',
+      sessionId: 'session-new-2',
+      sessionStartedAt: '2026-08-15T10:05:00.000Z',
+      sentBody: {},
+    });
+  }).not.toThrow();
+
+  const lines = fs
+    .readFileSync(path.join(dayDir, 'index.jsonl'), 'utf8')
+    .split('\n')
+    .filter((l) => l.trim());
+  const parsed: DailySessionIndexEntry[] = lines.map((l) => JSON.parse(l));
+  expect(parsed.some((entry) => entry.sessionId === 'session-valid-1')).toBe(true);
+  expect(parsed.some((entry) => entry.sessionId === 'session-new-2')).toBe(true);
+
+  // Positively assert the new request artifact file exists with truncated requestId suffix (_req-n.json)
+  const sessionDir = path.join(dayDir, '10-05-00_sessi');
+  const requestFiles = fs.existsSync(sessionDir) ? fs.readdirSync(sessionDir) : [];
+  expect(requestFiles.some((f) => f.endsWith('_req-n.json'))).toBe(true);
+});
+
+// --- Contract 07 Bounded request-path lifecycle ---
+//
+// `ProviderTrafficArtifactStore.#requestPaths` maps requestId -> artifact path
+// so `recordRequestComplete` can rewrite the envelope the start created.
+// Completion is the selected owner cleanup path (proven above by
+// 'recordRequestComplete removes completed request path from map...'). These
+// proofs pin the failure-side of that lifecycle: a start or completion that
+// fails part-way must release the correlation entry rather than leak it for
+// the life of the process, while entries for live in-flight requests stay
+// (that is the non-discard half of the decision).
+
+it('ProviderTrafficArtifactStore releases a request path when recordRequestStart fails part-way', () => {
+  const rootDir = makeTempDir();
+  const dayDir = path.join(rootDir, '2026-06-02');
+  fs.mkdirSync(dayDir, { recursive: true });
+  // The daily index is a directory, so the start writes its envelope (mkdir +
+  // file succeed) and then fails during the index upsert/read.
+  fs.mkdirSync(path.join(dayDir, 'index.jsonl'));
+
+  const store = new ProviderTrafficArtifactStore({ rootDir });
+  const requestId = 'leak-check-req';
+  const startedAt = '2026-06-02T10:00:00.000Z';
+
+  expect(() => {
+    store.recordRequestStart({
+      requestId,
+      timestamp: '2026-06-02T10:00:01.000Z',
+      provider: 'openai',
+      model: 'gpt-4o',
+      sessionId: 'session-leak',
+      sessionStartedAt: startedAt,
+      mode: 'standard',
+      sentBody: { messages: [{ role: 'user', content: 'hello' }] },
+    });
+  }).toThrow();
+
+  // Unblock the index so a later completion can land.
+  fs.rmdirSync(path.join(dayDir, 'index.jsonl'));
+
+  // If the failed start had retained its correlation entry, this completion
+  // would reuse the stale start path; a released entry falls back to #pathsFor
+  // and writes a fresh artifact keyed by the completion timestamp.
+  store.recordRequestComplete({
+    requestId,
+    timestamp: '2026-06-02T10:00:05.000Z',
+    provider: 'openai',
+    model: 'gpt-4o',
+    sessionId: 'session-leak',
+    sessionStartedAt: startedAt,
+    mode: 'standard',
+    receivedSummary: { status: 200 },
+  });
+
+  const sessionDir = path.join(dayDir, '10-00-00_sessi');
+  const completeFile = path.join(sessionDir, '10-00-05.000Z_leak-.json');
+  expect(fs.existsSync(completeFile)).toBe(true);
+
+  // The partial start artifact must not have been touched by the completion.
+  const startFile = path.join(sessionDir, '10-00-01.000Z_leak-.json');
+  const startRecords = readRequestFile(startFile);
+  expect((startRecords.sent as Record<string, unknown>)?.direction).toBe('sent');
+  expect((startRecords.received as Record<string, unknown>) ?? {}).toEqual({});
+});
+
+it('ProviderTrafficArtifactStore releases a request path when recordRequestComplete fails part-way', () => {
+  const rootDir = makeTempDir();
+  const dayDir = path.join(rootDir, '2026-06-03');
+  const store = new ProviderTrafficArtifactStore({ rootDir });
+  const requestId = 'complete-leak-req';
+  const startedAt = '2026-06-03T11:00:00.000Z';
+
+  store.recordRequestStart({
+    requestId,
+    timestamp: '2026-06-03T11:00:01.000Z',
+    provider: 'openai',
+    model: 'gpt-4o',
+    sessionId: 'session-complete-leak',
+    sessionStartedAt: startedAt,
+    mode: 'standard',
+    sentBody: { messages: [{ role: 'user', content: 'hello' }] },
+  });
+
+  const sessionDir = path.join(dayDir, '11-00-00_sessi');
+  const startFile = path.join(sessionDir, '11-00-01.000Z_compl.json');
+
+  // Turn the start artifact into a directory so the completion's envelope read
+  // throws (EISDIR) before any write: the entry must still be released.
+  fs.rmSync(startFile, { force: true });
+  fs.mkdirSync(startFile, { recursive: true });
+
+  expect(() => {
+    store.recordRequestComplete({
+      requestId,
+      timestamp: '2026-06-03T11:00:05.000Z',
+      provider: 'openai',
+      model: 'gpt-4o',
+      sessionId: 'session-complete-leak',
+      sessionStartedAt: startedAt,
+      mode: 'standard',
+      receivedSummary: { status: 200 },
+    });
+  }).toThrow();
+
+  // Restore the artifact path to a normal file so a second completion can land.
+  fs.rmdirSync(startFile);
+
+  // If the failed completion had retained its correlation entry, this second
+  // completion would rewrite the stale start path; a released entry falls back
+  // to #pathsFor and writes a fresh artifact keyed by this timestamp.
+  store.recordRequestComplete({
+    requestId,
+    timestamp: '2026-06-03T11:00:10.000Z',
+    provider: 'openai',
+    model: 'gpt-4o',
+    sessionId: 'session-complete-leak',
+    sessionStartedAt: startedAt,
+    mode: 'standard',
+    receivedSummary: { status: 200 },
+  });
+
+  const secondFile = path.join(sessionDir, '11-00-10.000Z_compl.json');
+  expect(fs.existsSync(secondFile)).toBe(true);
+  const secondRecords = readRequestFile(secondFile);
+  expect((secondRecords.sent as Record<string, unknown>) ?? {}).toEqual({});
+  expect((secondRecords.received as Record<string, unknown>)?.timestamp).toBe('2026-06-03T11:00:10.000Z');
 });

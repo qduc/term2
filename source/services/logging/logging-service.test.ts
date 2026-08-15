@@ -580,3 +580,118 @@ it.sequential('respects LOG_CATEGORIES filter while preserving errors', async ()
     }
   }
 });
+
+// --- Contract 07 Logging Boundary & Redaction Defect Characterizations ---
+
+it.sequential(
+  'LoggingService handles unwritable logDir (ENOTDIR) during construction and logging without throwing synchronously',
+  () => {
+    const tempDir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-enotdir-test-')));
+    const filePathAsParent = path.join(tempDir, 'plain-file');
+    fs.writeFileSync(filePathAsParent, 'not a directory', 'utf8');
+    const invalidLogDir = path.join(filePathAsParent, 'nested-logs');
+
+    expect(() => {
+      const logger = new LoggingService({
+        logDir: invalidLogDir,
+        disableLogging: false,
+        suppressConsoleOutput: true,
+      });
+
+      logger.info('test message to unwritable log dir', { eventType: 'test.unwritable' });
+      logger.warn('test warn to unwritable log dir', { eventType: 'test.warn' });
+      logger.error('test error to unwritable log dir', { eventType: 'test.error' });
+      logger.debug('test debug to unwritable log dir', { eventType: 'test.debug' });
+      logger.security('test security to unwritable log dir', { eventType: 'test.security' });
+    }).not.toThrow();
+  },
+);
+
+it.sequential(
+  'LoggingService.error handles schema-invalid metadata by falling back to log.contract_validation_failed without throwing',
+  async () => {
+    const logDir = getTestLogDir();
+    const logger = new LoggingService({ logDir, disableLogging: false, suppressConsoleOutput: true });
+
+    // Pass invalid metadata (retryAttempt must be non-negative integer)
+    logger.error('invalid record', {
+      eventType: 'custom.error.event',
+      retryAttempt: -5,
+    });
+
+    const entry = await waitForMainLogEntry(logDir, (e) => e.eventType === 'log.contract_validation_failed');
+    expect(entry.eventType).toBe('log.contract_validation_failed');
+    expect(entry.errorCode).toBe('LOG_SCHEMA_VALIDATION_FAILED');
+  },
+);
+
+it.sequential.fails(
+  'LoggingService providerTraffic.recordRequestStart redacts encrypted_content from app log payloads even with LOG_VERBOSE_PAYLOADS=1',
+  async () => {
+    const prev = process.env.LOG_VERBOSE_PAYLOADS;
+    process.env.LOG_VERBOSE_PAYLOADS = '1';
+    try {
+      const logDir = getTestLogDir();
+      const logger = new LoggingService({
+        logDir,
+        logLevel: 'debug',
+        disableLogging: false,
+        suppressConsoleOutput: true,
+      });
+
+      logger.providerTraffic.recordRequestStart({
+        requestId: 'req-verbose-redact-1',
+        provider: 'openai',
+        model: 'gpt-4o',
+        sentBody: {
+          messages: [
+            {
+              role: 'assistant',
+              content: 'thinking',
+              encrypted_content: 'SUPER_SECRET_ENCRYPTED_PAYLOAD',
+            },
+          ],
+        },
+      });
+
+      const entry = await waitForMainLogEntry(logDir, (e) => e.eventType === 'provider.request.started');
+      const raw = JSON.stringify(entry);
+      expect(raw.includes('SUPER_SECRET_ENCRYPTED_PAYLOAD')).toBe(false);
+    } finally {
+      if (prev !== undefined) {
+        process.env.LOG_VERBOSE_PAYLOADS = prev;
+      } else {
+        delete process.env.LOG_VERBOSE_PAYLOADS;
+      }
+    }
+  },
+);
+
+it.sequential.fails(
+  'LoggingService.info sanitizes evaluator.request.started messages identically to provider.request.started',
+  async () => {
+    const logDir = getTestLogDir();
+    const logger = new LoggingService({ logDir, disableLogging: false, suppressConsoleOutput: true });
+
+    const base64Data =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='.repeat(5);
+    logger.info('evaluator request started', {
+      eventType: 'evaluator.request.started',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image_url',
+              image_url: { url: `data:image/png;base64,${base64Data}` },
+            },
+          ],
+        },
+      ],
+    });
+
+    const entry = await waitForMainLogEntry(logDir, (e) => e.eventType === 'evaluator.request.started');
+    const raw = JSON.stringify(entry);
+    expect(raw.includes(base64Data)).toBe(false);
+  },
+);

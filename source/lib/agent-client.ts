@@ -783,7 +783,7 @@ export class AgentClient {
           eventType: 'provider.response.failed',
           category: 'provider',
           phase: 'provider_response',
-          traceId: correlationId,
+          traceId: correlationId ?? undefined,
           provider,
           model,
           error: error instanceof Error ? error.message : String(error),

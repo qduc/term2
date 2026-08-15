@@ -24,7 +24,13 @@ import {
   createWebSocketReceiveWatchdog,
   DEFAULT_WEBSOCKET_RECEIVE_TIMEOUTS,
   type WebSocketReceiveTimeouts,
+  type WebSocketReceiveTiming,
 } from './websocket-receive-watchdog.js';
+import {
+  readWebSocketDispatch,
+  recordWebSocketDispatch,
+  UnsentWebSocketRequestError,
+} from './websocket-request-dispatch.js';
 import { markContextCompactionFailure, resolveContextManagement } from './openai-responses-model.js';
 
 const DUMMY_PROVIDER_TRAFFIC: IProviderTraffic = {
@@ -41,6 +47,10 @@ function toCodexToolChoice(choice: unknown): unknown {
   }
   throw new Error('Unsupported Codex tool choice.');
 }
+
+// RFC 6455 readyState values, named so the send path's evidence is readable.
+const WEBSOCKET_CONNECTING = 0;
+const WEBSOCKET_OPEN = 1;
 
 export type CodexResponsesTransportOptions = {
   supportsContextCompaction?: boolean;
@@ -112,10 +122,21 @@ export class CodexResponsesTransport {
         );
         const messages = socket.stream();
         const requestEvent = { type: 'response.create', ...requestData } as any;
-        if ((socket as any).socket?.readyState === 0) {
-          (socket as any).socket.once('open', () => socket.send(requestEvent));
-        } else {
+        // Until the frame is written to an OPEN socket it is still ours, so a
+        // receive timeout before that point is provably unsent. `send` on a
+        // connecting or closing socket only queues, which proves nothing —
+        // record what the socket actually was, and `unknown` when it cannot be
+        // observed at all.
+        recordWebSocketDispatch(request, 'unsent');
+        const dispatchRequestEvent = () => {
+          const readyState = (socket as any).socket?.readyState;
           socket.send(requestEvent);
+          recordWebSocketDispatch(request, readyState === WEBSOCKET_OPEN ? 'flushed' : 'unknown');
+        };
+        if ((socket as any).socket?.readyState === WEBSOCKET_CONNECTING) {
+          (socket as any).socket.once('open', dispatchRequestEvent);
+        } else {
+          dispatchRequestEvent();
         }
         const sessionState = this.options.contextCompactionSessionState;
         return (async function* () {
@@ -856,10 +877,29 @@ const isDefinitelyUnsentWebSocketError = (error: unknown, seen = new Set<unknown
   return isDefinitelyUnsentWebSocketError(record.message, seen) || isDefinitelyUnsentWebSocketError(record.cause, seen);
 };
 
+/**
+ * A receive-watchdog timeout that the send path proved never reached the wire.
+ *
+ * Three conditions must all hold, and each rules out a way of being wrong: the
+ * failure is the watchdog's own (not a provider error wearing a timeout
+ * message), no frame ever arrived (a single frame means the server had the
+ * request), and the send path positively recorded `unsent` (an unrecorded
+ * request is not evidence). Anything less stays ambiguous and terminates.
+ */
+const asProvablyUnsentTimeout = (
+  timeoutError: Error | undefined,
+  timing: WebSocketReceiveTiming,
+  request: object,
+): UnsentWebSocketRequestError | undefined => {
+  if (!timeoutError || timing.frameCount > 0) return undefined;
+  if (readWebSocketDispatch(request) !== 'unsent') return undefined;
+  return new UnsentWebSocketRequestError(timeoutError.message, { cause: timeoutError });
+};
+
 const asAmbiguousModelOutcome = (error: unknown): AmbiguousModelOutcomeError | undefined => {
   // Connection never carried the request: safe to let outer retry / transport
   // fallback policies decide. Do not pretend the model may have run.
-  if (isDefinitelyUnsentWebSocketError(error)) {
+  if (error instanceof UnsentWebSocketRequestError || isDefinitelyUnsentWebSocketError(error)) {
     return undefined;
   }
   // Incomplete stream terminals keep transportFallback=false so Codex does not
@@ -974,7 +1014,12 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     });
   }
 
-  #logTrafficReceived(requestId: string, requestData: Record<string, unknown>, response: unknown): void {
+  #logTrafficReceived(
+    requestId: string,
+    requestData: Record<string, unknown>,
+    response: unknown,
+    receiveTiming?: WebSocketReceiveTiming,
+  ): void {
     const providerTraffic = this.providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
     const model = typeof requestData.model === 'string' ? requestData.model : this.#modelNameFallback();
 
@@ -985,12 +1030,18 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       status: 200,
       response: response as any,
       transport: 'websocket',
+      ...(receiveTiming ? { receiveTiming } : {}),
       modelClass: WS_RESPONSE_MODEL_CLASS,
       modelWrapperClass: WS_RESPONSE_WRAPPER_CLASS,
     });
   }
 
-  #logTrafficFailed(requestId: string, requestData: Record<string, unknown>, error: unknown): void {
+  #logTrafficFailed(
+    requestId: string,
+    requestData: Record<string, unknown>,
+    error: unknown,
+    receiveTiming?: WebSocketReceiveTiming,
+  ): void {
     const providerTraffic = this.providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
     const model = typeof requestData.model === 'string' ? requestData.model : this.#modelNameFallback();
 
@@ -999,6 +1050,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       provider: 'codex',
       model,
       error,
+      ...(receiveTiming ? { receiveTiming } : {}),
       modelClass: WS_RESPONSE_MODEL_CLASS,
       modelWrapperClass: WS_RESPONSE_WRAPPER_CLASS,
     });
@@ -1033,6 +1085,8 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     wireStateKey?: ChainedWireStateKey,
     wireStateToken?: ChainedRequestToken,
     signal?: AbortSignal,
+    receiveTiming?: () => WebSocketReceiveTiming,
+    asProvablyUnsent?: () => UnsentWebSocketRequestError | undefined,
   ): Promise<AsyncIterable<any>> {
     const logReceived = this.#logTrafficReceived.bind(this);
     const logFailed = this.#logTrafficFailed.bind(this);
@@ -1071,7 +1125,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
             if (wireStateKey && wireStateToken && typeof response.id === 'string' && response.id.length > 0) {
               wireState.recordResponse(wireStateKey, wireStateToken, response.id, response.output);
             }
-            logReceived(requestId, requestData, response);
+            logReceived(requestId, requestData, response, receiveTiming?.());
           }
           yield event;
         }
@@ -1081,8 +1135,12 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         if (wireStateKey && !isWebSocketConnectionLimitReachedError(error)) {
           wireState.invalidate(wireStateKey);
         }
-        logFailed(requestId, requestData, error);
-        throw error;
+        // The watchdog's own timeout may carry proof that the request never
+        // reached the wire; the wire-state decision above still keys off the
+        // error as thrown.
+        const failure = asProvablyUnsent?.() ?? error;
+        logFailed(requestId, requestData, failure, receiveTiming?.());
+        throw failure;
       } finally {
         if (!sawTerminalEvent && !sourceExhausted && !streamFailed) {
           // A consumer-closed stream ended because we stopped reading, which is
@@ -1633,12 +1691,13 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         if (wireStateKey && wireStateToken && typeof response?.id === 'string' && response.id.length > 0) {
           this.chainedWireState.recordResponse(wireStateKey, wireStateToken, response.id, response.output);
         }
-        this.#logTrafficReceived(requestId, requestData, response);
+        this.#logTrafficReceived(requestId, requestData, response, watchdog.receiveTiming());
         return response;
       } catch (error) {
         const timeoutError = watchdog.timeoutError();
+        const receiveTiming = watchdog.receiveTiming();
         watchdog.close();
-        const failure = timeoutError ?? error;
+        const failure = asProvablyUnsentTimeout(timeoutError, receiveTiming, updatedRequest) ?? timeoutError ?? error;
         if (wireStateKey) {
           if (isWebSocketConnectionLimitReachedError(failure)) {
             if (wireStateToken) this.chainedWireState.abandon(wireStateKey, wireStateToken);
@@ -1646,7 +1705,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
             this.chainedWireState.invalidate(wireStateKey);
           }
         }
-        this.#logTrafficFailed(requestId, requestData, failure);
+        this.#logTrafficFailed(requestId, requestData, failure, receiveTiming);
         throw failure;
       }
     }
@@ -1661,11 +1720,14 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         wireStateKey,
         wireStateToken,
         updatedRequest.signal,
+        () => watchdog.receiveTiming(),
+        () => asProvablyUnsentTimeout(watchdog.timeoutError(), watchdog.receiveTiming(), updatedRequest),
       );
     } catch (error) {
       const timeoutError = watchdog.timeoutError();
+      const receiveTiming = watchdog.receiveTiming();
       watchdog.close();
-      const failure = timeoutError ?? error;
+      const failure = asProvablyUnsentTimeout(timeoutError, receiveTiming, updatedRequest) ?? timeoutError ?? error;
       if (wireStateKey) {
         if (isWebSocketConnectionLimitReachedError(failure)) {
           if (wireStateToken) this.chainedWireState.abandon(wireStateKey, wireStateToken);
@@ -1673,7 +1735,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
           this.chainedWireState.invalidate(wireStateKey);
         }
       }
-      this.#logTrafficFailed(requestId, requestData, failure);
+      this.#logTrafficFailed(requestId, requestData, failure, receiveTiming);
       throw failure;
     }
   }

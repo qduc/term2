@@ -20,7 +20,7 @@ Phase 2 and only on a red proof through an owning public boundary.
 | 02 | [Provider input, continuity, and effect settlement](./02-provider-input-continuity-and-effect-settlement.md) | `ToolExecutionLedger` + history projection, `ProviderContinuity`, `SessionInputPlanner`, `ChainedInputFilter`, `SessionStreamProcessor`, retry/recovery policy | 14 files, 355 tests — green 2026-08-14 |
 | 03 | [Child-run identity, authority, and lifecycle](./03-child-run-identity-authority-and-lifecycle.md) | `createSubagentRuntime` runners, `SubagentBridge`, session traffic context | 12 files, 262 tests — green 2026-08-14 |
 | 04 | [Settings consumption](./04-settings-consumption.md) | Settings schema/resolution, runtime consumers, `ConversationConfigurationService` + `runtime-setting-router`, `/settings` | 14 files, 303 tests — green 2026-08-14 |
-| 05 | [Runtime guards and retention](./05-runtime-guards-and-retention.md) | Guard owners per `docs/plans/guard-ledger.md` and linked owner plans | 26 files, 423 passing tests plus one retained expected-failure characterization — 2026-08-14 |
+| 05 | [Runtime guards and retention](./05-runtime-guards-and-retention.md) | Guard owners per `docs/plans/guard-ledger.md` and linked owner plans | 26 files, 423 passing tests — 2026-08-14; the retained expected-failure characterization became two passing tests when Phase 2 repaired it on 2026-08-15 |
 
 All focused commands re-ran with exit code 0 on 2026-08-14 (76 file
 invocations / 1,683 passing test invocations plus one retained expected-failure
@@ -29,8 +29,10 @@ characterization). The authoritative Phase 0 baseline
 results, alongside its full-suite, typecheck, lint, and provider black-box
 results for the same production-source commit. Phase 1 added tests but made no
 production changes, so those broader results remain the truthful recorded
-source baseline. Contract 05 separately retains the expected-failure proof that
-queues the watchdog-fallback defect for Phase 2.
+source baseline. Contract 05's expected-failure proof queued the
+watchdog-fallback defect for Phase 2; that repair merged on 2026-08-15 and the
+proof is now two passing tests. See §10 of that record for the approved
+deferral covering the residual ambiguous case.
 
 ## How to read a record
 

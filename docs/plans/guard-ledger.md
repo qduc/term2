@@ -583,7 +583,7 @@ Catalogued, no hypothesized failure mode:
 | Background shell watch match text | 4096 chars / 1500 ms idle | watch options |
 | Turns-left advisory | threshold 5 | no |
 | Terminal result exhaustion | typed `TerminalResultCollectorExhaustionError extends AmbiguousModelOutcomeError`; preserves `unsafeToReplay` and local-vs-provider provenance | no |
-| Codex WebSocket watchdog | 90s to first raw event, 600s between; retryable abort with HTTP fallback | no |
+| Codex WebSocket watchdog | 90s to first raw event, 600s between; a first-frame expiry recovers as `retry_fresh`/`full_history` only when the send path recorded the frame as provably `unsent`, otherwise it stays ambiguous and terminates; reports measured latencies and its budgets to the traffic log | `agent.codex.websocketFirstFrameTimeoutMs` / `…InterFrameTimeoutMs` |
 | Queue/background registry capacity | owner-specific | varies |
 
 "Injectable" means a constructor or deps field exists but no settings key feeds

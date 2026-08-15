@@ -3,6 +3,7 @@ import { InitialTurnRecoveryHandler } from './initial-turn-recovery-handler.js';
 import { TurnAttempt } from './turn-attempt.js';
 import { CodexResponsesTransport, CodexResponsesWSModel } from '../../providers/codex-responses-model.js';
 import { AmbiguousModelOutcomeError } from '../retry/retry-errors.js';
+import { recordWebSocketDispatch, UnsentWebSocketRequestError } from '../../providers/websocket-request-dispatch.js';
 import { DefaultConversationRecoveryPolicy } from '../retry/recovery-policy.js';
 import { DefaultRetryClassifier } from '../retry/retry-classifier.js';
 
@@ -21,69 +22,104 @@ function createAttempt() {
   });
 }
 
-it.fails(
-  'characterizes the unimplemented watchdog timeout fallback at the initial-turn recovery boundary',
-  async () => {
-    vi.useFakeTimers();
-    try {
-      const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
-      transport.fetchResponse = async (request: any) => ({
-        [Symbol.asyncIterator]: () => ({
-          next: () =>
-            new Promise((_, reject) => {
-              request.signal.addEventListener('abort', () => reject(request.signal.reason), { once: true });
-            }),
-          return: async () => ({ done: true, value: undefined }),
-        }),
-      });
-      const model = new CodexResponsesWSModel(
-        { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
-        'gpt-5-codex',
-        { getOrRefreshAccessToken: async () => 'token', getAccountId: () => undefined } as any,
-        undefined,
-        undefined,
-        undefined,
-        { firstFrameMs: 10, interFrameMs: 20 },
-        transport,
-      );
-      const pending = (async () => {
-        for await (const _event of model.stream({ input: [], tools: [] } as any)) {
-          // The watchdog must fail before the provider yields any raw frame.
-        }
-      })();
-      void pending.catch(() => {});
-      await vi.advanceTimersByTimeAsync(10);
-      const error = await pending.catch((reason) => reason);
-      expect(error).toBeInstanceOf(AmbiguousModelOutcomeError);
-
-      const handler = new InitialTurnRecoveryHandler({
-        conversationStore: { getHistory: () => [] } as any,
-        freshStartRetriesAllowed: true,
-        generationGuard: { isCurrent: () => true } as any,
-        inputPlanner: { recordSuccess: () => {} } as any,
-        logger: { warn: () => {}, error: () => {}, getCorrelationId: () => undefined } as any,
-        recoveryExecutor: {
-          apply: ({ plan }: any) => {
-            // Intended behavior, deliberately retained as a red proof: a
-            // trustworthy unsent watchdog timeout would permit a fresh,
-            // full-history retry after transport rebind. Today the ambiguous
-            // outcome safely reaches this seam as `terminate` instead.
-            expect(plan).toEqual({ kind: 'retry_fresh', inputMode: 'full_history' });
-            return { kind: 'run', instruction: { skipUserMessage: true }, events: [] };
-          },
-        } as any,
-        recoveryPolicy: new DefaultConversationRecoveryPolicy(),
-        retryClassifier: new DefaultRetryClassifier({} as any, () => 0),
-        retryEventPresenter: { present: () => ({ event: {}, logMessage: '', logFields: {} }) } as any,
-        sessionId: 'watchdog-characterization',
-      });
-
-      await handler.handle({ error, attempt: createAttempt(), stream: null }).next();
-    } finally {
-      vi.useRealTimers();
+async function watchdogTimeoutError(dispatch: 'unsent' | 'flushed'): Promise<unknown> {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  transport.fetchResponse = async (request: any) => {
+    recordWebSocketDispatch(request, dispatch);
+    return {
+      [Symbol.asyncIterator]: () => ({
+        next: () =>
+          new Promise((_, reject) => {
+            request.signal.addEventListener('abort', () => reject(request.signal.reason), { once: true });
+          }),
+        return: async () => ({ done: true, value: undefined }),
+      }),
+    };
+  };
+  const model = new CodexResponsesWSModel(
+    { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+    'gpt-5-codex',
+    { getOrRefreshAccessToken: async () => 'token', getAccountId: () => undefined } as any,
+    undefined,
+    undefined,
+    undefined,
+    { firstFrameMs: 10, interFrameMs: 20 },
+    transport,
+  );
+  const pending = (async () => {
+    for await (const _event of model.stream({ input: [], tools: [] } as any)) {
+      // The watchdog must fail before the provider yields any raw frame.
     }
-  },
-);
+  })();
+  void pending.catch(() => {});
+  await vi.advanceTimersByTimeAsync(10);
+  return pending.catch((reason) => reason);
+}
+
+async function drain(generator: AsyncGenerator<unknown, unknown, void>): Promise<unknown> {
+  // The handler yields presentation events before it reaches the recovery
+  // executor, so a single step would never observe the plan.
+  let step = await generator.next();
+  while (!step.done) step = await generator.next();
+  return step.value;
+}
+
+function recoveryHandlerRecordingPlans(plans: unknown[]) {
+  return new InitialTurnRecoveryHandler({
+    conversationStore: { getHistory: () => [] } as any,
+    freshStartRetriesAllowed: true,
+    generationGuard: { isCurrent: () => true } as any,
+    inputPlanner: { recordSuccess: () => {} } as any,
+    logger: { warn: () => {}, error: () => {}, getCorrelationId: () => undefined } as any,
+    recoveryExecutor: {
+      apply: ({ plan }: any) => {
+        plans.push(plan);
+        return { kind: 'run', instruction: { skipUserMessage: true }, events: [] };
+      },
+    } as any,
+    recoveryPolicy: new DefaultConversationRecoveryPolicy(),
+    retryClassifier: new DefaultRetryClassifier({} as any, () => 0),
+    retryEventPresenter: { present: () => ({ event: {}, logMessage: '', logFields: {} }) } as any,
+    sessionId: 'watchdog-recovery',
+  });
+}
+
+// ROADMAP.md Phase 2: a first-frame watchdog timeout the send path proved never
+// reached the wire is safe to rebuild from durable history, because no model
+// work can have started. This is the repair of the retained red proof.
+it('recovers a provably unsent watchdog timeout as a fresh full-history retry', async () => {
+  vi.useFakeTimers();
+  try {
+    const error = await watchdogTimeoutError('unsent');
+    expect(error).toBeInstanceOf(UnsentWebSocketRequestError);
+    expect(error).not.toBeInstanceOf(AmbiguousModelOutcomeError);
+
+    const plans: unknown[] = [];
+    await drain(recoveryHandlerRecordingPlans(plans).handle({ error, attempt: createAttempt(), stream: null }) as any);
+
+    expect(plans).toEqual([{ kind: 'retry_fresh', inputMode: 'full_history' }]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// The other half stays closed: once the frame was flushed to an open socket the
+// server may already have accepted it, so the turn ends rather than risking a
+// duplicated request.
+it('still terminates a watchdog timeout whose request may have been accepted', async () => {
+  vi.useFakeTimers();
+  try {
+    const error = await watchdogTimeoutError('flushed');
+    expect(error).toBeInstanceOf(AmbiguousModelOutcomeError);
+
+    const plans: unknown[] = [];
+    await drain(recoveryHandlerRecordingPlans(plans).handle({ error, attempt: createAttempt(), stream: null }) as any);
+
+    expect(plans).toEqual([{ kind: 'terminate', events: [] }]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
 
 it('returns the scheduled delay for bounded conversation-state recovery', async () => {
   const nextCounts = {

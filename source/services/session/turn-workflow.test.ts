@@ -109,6 +109,108 @@ it('executes initial turn successfully', async () => {
   expect(Object.isFrozen(receivedProviderHistorySnapshot)).toBe(true);
 });
 
+it('requests the standard tier before starting a flagged initial attempt', async () => {
+  const calls: string[] = [];
+  const stream = new MockStream([{ type: 'text_delta', text: 'standard tier response' }]);
+  stream.finalOutput = 'standard tier response';
+  const mockClient: any = {
+    getProvider() {
+      return 'openai';
+    },
+    useStandardServiceTierForNextRequest() {
+      calls.push('standard-tier');
+    },
+    async startStream() {
+      calls.push('start-stream');
+      return stream;
+    },
+  };
+  const { workflow, composition } = setupWorkflow(mockClient);
+  const token = composition.generationGuard.capture();
+  const attempt = new TurnAttempt({
+    turn: { text: 'hello' },
+    token,
+    initialRetryCounts: defaultRetryCounts,
+    initialJournalSnapshot: [],
+    maxTransientRetries: 3,
+  });
+
+  const { outcome } = await collect(workflow.executeInitial(attempt, { useStandardServiceTier: true }));
+
+  expect(outcome).toMatchObject({
+    kind: 'response',
+    terminal: { type: 'response', finalText: 'standard tier response' },
+  });
+  expect(calls).toEqual(['standard-tier', 'start-stream']);
+});
+
+it('starts a flagged initial attempt when the tier override capability is absent', async () => {
+  const calls: string[] = [];
+  const stream = new MockStream([{ type: 'text_delta', text: 'no override response' }]);
+  stream.finalOutput = 'no override response';
+  const mockClient: any = {
+    getProvider() {
+      return 'openai';
+    },
+    async startStream() {
+      calls.push('start-stream');
+      return stream;
+    },
+  };
+  const { workflow, composition } = setupWorkflow(mockClient);
+  const token = composition.generationGuard.capture();
+  const attempt = new TurnAttempt({
+    turn: { text: 'hello' },
+    token,
+    initialRetryCounts: defaultRetryCounts,
+    initialJournalSnapshot: [],
+    maxTransientRetries: 3,
+  });
+
+  const { outcome } = await collect(workflow.executeInitial(attempt, { useStandardServiceTier: true }));
+
+  expect(outcome).toMatchObject({
+    kind: 'response',
+    terminal: { type: 'response', finalText: 'no override response' },
+  });
+  expect(calls).toEqual(['start-stream']);
+});
+
+it('does not request the standard tier for an unflagged initial attempt', async () => {
+  const calls: string[] = [];
+  const stream = new MockStream([{ type: 'text_delta', text: 'normal response' }]);
+  stream.finalOutput = 'normal response';
+  const mockClient: any = {
+    getProvider() {
+      return 'openai';
+    },
+    useStandardServiceTierForNextRequest() {
+      calls.push('standard-tier');
+    },
+    async startStream() {
+      calls.push('start-stream');
+      return stream;
+    },
+  };
+  const { workflow, composition } = setupWorkflow(mockClient);
+  const token = composition.generationGuard.capture();
+  const attempt = new TurnAttempt({
+    turn: { text: 'hello' },
+    token,
+    initialRetryCounts: defaultRetryCounts,
+    initialJournalSnapshot: [],
+    maxTransientRetries: 3,
+  });
+
+  const { outcome } = await collect(workflow.executeInitial(attempt));
+
+  expect(outcome).toMatchObject({
+    kind: 'response',
+    terminal: { type: 'response', finalText: 'normal response' },
+  });
+  expect(calls).toEqual(['start-stream']);
+});
+
 it('observes eligible owned-root OpenAI parity while preserving the legacy outgoing response ID', async () => {
   const stream = new MockStream([{ type: 'text_delta', text: 'hello' }]);
   stream.finalOutput = 'hello';

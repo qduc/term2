@@ -102,3 +102,32 @@ it('switchProvider uses setProvider behavior and resets before invoking supporte
 
   expect(calls).toEqual(['afterProviderChanged', 'setProvider:openai']);
 });
+
+it('leaves retry callback configuration alone when the client lacks the setter', () => {
+  const calls: string[] = [];
+  const controller = makeController(makeAgentClient(), calls);
+
+  controller.setRetryCallback(() => {});
+
+  expect(calls).toEqual([]);
+});
+
+it('forwards the exact retry callback when the client supports it', () => {
+  const calls: string[] = [];
+  let recorded: (() => void) | undefined;
+  const controller = makeController(
+    makeAgentClient({
+      setRetryCallback: (callback) => {
+        recorded = callback;
+        calls.push('setRetryCallback');
+      },
+    }),
+    calls,
+  );
+  const callback = () => {};
+
+  controller.setRetryCallback(callback);
+
+  expect(recorded).toBe(callback);
+  expect(calls).toEqual(['setRetryCallback']);
+});

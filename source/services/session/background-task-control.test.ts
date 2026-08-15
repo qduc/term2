@@ -339,4 +339,81 @@ describe('BackgroundTaskControl', () => {
       }),
     ]);
   });
+
+  it('reports unavailable when a stop target reader capability is absent', () => {
+    const notifications = new SubagentNotificationStore();
+    const requestSubagentStop = vi.fn();
+    const requestShellStop = vi.fn();
+    const control = new BackgroundTaskControl({
+      client: {
+        requestBackgroundSubagentStop: requestSubagentStop,
+        requestBackgroundShellStop: requestShellStop,
+      },
+      notifications,
+    });
+
+    expect(control.requestStop({ kind: 'subagent', id: 'run-1' })).toEqual({ ok: false, code: 'unavailable' });
+    expect(control.requestStop({ kind: 'shell', id: 'shell-1' })).toEqual({ ok: false, code: 'unavailable' });
+    expect(requestSubagentStop).not.toHaveBeenCalled();
+    expect(requestShellStop).not.toHaveBeenCalled();
+    expect(notifications.pendingCount).toBe(0);
+  });
+
+  it('reports unavailable when a discovered foreground shell cannot be moved', () => {
+    const notifications = new SubagentNotificationStore();
+    const control = new BackgroundTaskControl({
+      client: {
+        getForegroundShellTransferCandidate: () => ({
+          callId: 'call-1',
+          jobId: 'shell-1',
+          command: 'pnpm test',
+          status: 'running',
+          startedAt: 200,
+        }),
+      },
+      notifications,
+    });
+
+    expect(control.moveForegroundToBackground({ kind: 'shell', callId: 'call-1' })).toEqual({
+      ok: false,
+      code: 'unavailable',
+    });
+    expect(notifications.pendingCount).toBe(0);
+  });
+
+  it('reports unavailable when a discovered foreground subagent cannot be moved', () => {
+    const notifications = new SubagentNotificationStore();
+    const control = new BackgroundTaskControl({
+      client: {
+        listForegroundSubagentCandidates: () => [
+          { runId: 'child-1', role: 'worker', task: 'inspect tests', parentTool: 'run_subagent', startedAt: 1_000 },
+        ],
+      },
+      notifications,
+    });
+
+    expect(control.moveForegroundToBackground({ kind: 'subagent', runId: 'child-1' })).toEqual({
+      ok: false,
+      code: 'unavailable',
+    });
+    expect(notifications.pendingCount).toBe(0);
+  });
+
+  it('reports unavailable rather than not found when foreground discovery is unsupported', () => {
+    const notifications = new SubagentNotificationStore();
+    const control = new BackgroundTaskControl({
+      client: {},
+      notifications,
+    });
+
+    expect(control.moveForegroundToBackground({ kind: 'shell', callId: 'call-1' })).toEqual({
+      ok: false,
+      code: 'unavailable',
+    });
+    expect(control.moveForegroundToBackground({ kind: 'subagent', runId: 'child-1' })).toEqual({
+      ok: false,
+      code: 'unavailable',
+    });
+    expect(notifications.pendingCount).toBe(0);
+  });
 });

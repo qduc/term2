@@ -46,6 +46,7 @@ Draft contracts represent workstream records and characterization tests currentl
 | 07 | [Logging and provider-traffic lifecycle](./07-logging-and-provider-traffic.md) | `LoggingService`, `ProviderTraffic`, `ProviderTrafficArtifactStore` | 4 files, 91 tests (89 passing, 2 President-held expected failures) — draft under review; VP-decided repairs landed 2026-08-16 (fail-open boundary, corrupt-index recovery, bounded request-path lifecycle, typed metadata) |
 | 08 | [Conversation durability and recovery](./08-conversation-durability-and-recovery.md) | `ConversationLogWriter`, `conversation-persistence`, `HistoryService`, `conversation-decoder`/`replay` | 4 files, 166 tests (166 passed, 0 expected failures) — draft under review 2026-08-15; VP-decided repairs landed (D1/D3/D4/D5/D6 plus synchronous sidecar removal and stale-lock liveness) |
 | 09 | [Execution-root authority and workspace lease](./09-execution-root-authority-and-workspace-lease.md) | `ExecutionContext`, worktree admission (`workspace/worktree-transition.ts`), active-root fallback (`workspace/active-workspace-root.ts`) | docs-only landing 2026-08-16 — prettier/diff-check/touch-set gates; 8-file characterization gate pending |
+| 12 | [Queue persistence and recovery](./12-queue-persistence-and-recovery.md) | `QueueController` (`queue-controller.ts`), `createSessionQueuePersistence` (`queue-persistence.ts`) | 3 files, 93 tests — R1 flipped green, merged 2026-08-16; residual decisions recorded as retain-current |
 
 ## How to read a record
 

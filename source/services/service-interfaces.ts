@@ -151,19 +151,55 @@ export interface ISettingsService {
   onChange?: (listener: (key?: string) => void) => () => void;
 }
 
+/**
+ * Per-invocation options for a remote command. Absent options preserve the
+ * pre-existing behavior: no timeout is armed and no abort listener is
+ * attached. Both `timeoutMs` and `signal` are opt-in containment/cancellation
+ * levers, not default watchdogs.
+ */
+export interface SSHCommandOptions {
+  /** Remote working directory the command runs in (`cd <cwd> && <cmd>`). */
+  cwd?: string;
+  /**
+   * Opt-in wall-clock bound on how long the caller waits for settlement.
+   * When the bound elapses, the pending promise rejects with a typed
+   * `SSHTransportError` of kind `'timeout'`; no default is applied when the
+   * option is absent. The remote process is NOT killed or replayed — its
+   * effect is reported as `'unknown'`.
+   */
+  timeoutMs?: number;
+  /**
+   * Opt-in cancellation signal. Aborting settles the pending promise with a
+   * typed `SSHTransportError` of kind `'aborted'`; a signal that is already
+   * aborted before dispatch rejects with `remoteEffect: 'none'` and sends no
+   * command. No default signal is applied when the option is absent.
+   */
+  signal?: AbortSignal;
+}
+
+export interface SSHCommandResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number | null;
+  timedOut: boolean;
+}
+
 export interface ISSHService {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   isConnected(): boolean;
-  executeCommand(
-    cmd: string,
-    opts?: { cwd?: string },
-  ): Promise<{
-    stdout: string;
-    stderr: string;
-    exitCode: number | null;
-    timedOut: boolean;
-  }>;
+  /**
+   * Resolves with the remote result on terminal channel close. Rejects with a
+   * typed {@link SSHTransportError} (from `source/services/ssh-service.ts`) on
+   * pre-dispatch failure (`'not_connected'`, pre-aborted `'aborted'`), exec
+   * dispatch failure (`'exec_failed'`), transport drop while in flight
+   * (`'connection_error'`, `'connection_end'`, `'connection_close'`,
+   * `'channel_error'`), explicit disconnect (`'explicit_disconnect'`),
+   * mid-flight abort (`'aborted'`), or elapsed `timeoutMs` (`'timeout'`).
+   * Transport-level settlement never claims a safe blind replay: the error
+   * carries `remoteEffect: 'unknown'` when the remote process may have run.
+   */
+  executeCommand(cmd: string, opts?: SSHCommandOptions): Promise<SSHCommandResult>;
   readFile(path: string): Promise<string>;
   writeFile(path: string, content: string): Promise<void>;
   mkdir(path: string, opts?: { recursive?: boolean }): Promise<void>;

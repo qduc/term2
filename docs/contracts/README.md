@@ -41,6 +41,7 @@ Draft contracts represent workstream records and characterization tests currentl
 
 | # | Contract record | Owners (enforcement / recovery) | Focused verification command |
 | --- | --- | --- | --- |
+| 06 | [SSH transport lifecycle](./06-ssh-transport-lifecycle.md) | `SSHService`, `ExecutionContext` | 2 files, 59 tests all passing — 2026-08-16 (pre-repair baseline 2026-08-15: 47 tests, 37 passing, 10 expected failures); typed settlement, in-flight drop handling, opt-in timeout/abort |
 | 07 | [Logging and provider-traffic lifecycle](./07-logging-and-provider-traffic.md) | `LoggingService`, `ProviderTraffic`, `ProviderTrafficArtifactStore` | 4 files, 91 tests (89 passing, 2 President-held expected failures) — draft under review; VP-decided repairs landed 2026-08-16 (fail-open boundary, corrupt-index recovery, bounded request-path lifecycle, typed metadata) |
 | 08 | [Conversation durability and recovery](./08-conversation-durability-and-recovery.md) | `ConversationLogWriter`, `conversation-persistence`, `HistoryService`, `conversation-decoder`/`replay` | 4 files, 166 tests (166 passed, 0 expected failures) — draft under review 2026-08-15; VP-decided repairs landed (D1/D3/D4/D5/D6 plus synchronous sidecar removal and stale-lock liveness) |
 

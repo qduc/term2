@@ -299,3 +299,38 @@ it('deleteFile succeeds even when file does not exist (force: true)', async () =
   // rm with force:true doesn't fail for missing files
   expect(result.status).toBe('completed');
 });
+
+it('deleteFile encodes the remote rm target with POSIX single-quote escaping', async () => {
+  const executedCommands: string[] = [];
+  const sshService = {
+    connect: async () => {},
+    disconnect: async () => {},
+    isConnected: () => true,
+    executeCommand: async (cmd: string) => {
+      executedCommands.push(cmd);
+      return { stdout: '', stderr: '', exitCode: 0, timedOut: false };
+    },
+    readFile: async () => '',
+    writeFile: async () => {},
+    mkdir: async () => {},
+  };
+  const logger = createMockLogger();
+  const settings = createMockSettings({ 'tools.logFileOperations': false });
+  const editor = createEditorImpl({
+    loggingService: logger,
+    settingsService: settings,
+    executionContext: {
+      getCwd: () => '/remote/workspace',
+      isRemote: () => true,
+      getSSHService: () => sshService,
+    } as any,
+  });
+
+  const hostilePath = 'dir with "double" and \'single\' and $(whoami); rm -rf /';
+  const result = await editor.deleteFile({ type: 'delete_file', path: hostilePath });
+
+  expect(result.status).toBe('completed');
+  expect(executedCommands).toEqual([
+    "rm -f '/remote/workspace/dir with \"double\" and '\\''single'\\'' and $(whoami); rm -rf '",
+  ]);
+});

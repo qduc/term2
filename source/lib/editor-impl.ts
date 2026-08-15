@@ -3,6 +3,7 @@ import path from 'path';
 import { applyDiff } from '../utils/apply-diff.js';
 import type { ApplyPatchOperation, ApplyPatchResult } from '../contracts/patch.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
+import { quoteShellArg } from '../services/ssh-service.js';
 import { ExecutionContext } from '../services/execution-context.js';
 
 /**
@@ -241,10 +242,10 @@ export function createEditorImpl(deps: {
         }
 
         if (isRemote && sshService) {
-          // SSHService doesn't have rm yet? It has executeCommand.
-          // But wait, I didn't see rm in ISSHService definition I read in summary?
-          // I will use executeCommand('rm -f ...')
-          await sshService.executeCommand(`rm -f "${targetPath}"`);
+          // The target path is strictly data: canonical POSIX single-quote
+          // escaping keeps quotes, $VAR, $(...), and shell operators from
+          // breaking out of the remote `rm` command (C6.4).
+          await sshService.executeCommand(`rm -f ${quoteShellArg(targetPath)}`);
         } else {
           await rm(targetPath, { force: true });
         }

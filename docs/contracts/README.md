@@ -23,10 +23,10 @@ Phase 2 and only on a red proof through an owning public boundary.
 | 05 | [Runtime guards and retention](./05-runtime-guards-and-retention.md) | Guard owners per `docs/plans/guard-ledger.md` and linked owner plans | 26 files, 423 passing tests — 2026-08-14; the retained expected-failure characterization became two passing tests when Phase 2 repaired it on 2026-08-15 |
 | 11 | [Destructive approval authority](./11-destructive-approval-authority.md) | `ToolApprovalBatchCoordinator`, `ApprovalDecisionExecutor`, `ConversationAdapter`, `SubagentToolPolicy`, durable log events | audit draft 2026-08-15; 3 retained public-boundary reds (C11-D5/D8/D10), tests/docs-only |
 
-All focused commands re-ran with exit code 0 on 2026-08-14 (76 file
+All focused commands for completed contracts 01–05 re-ran with exit code 0 on 2026-08-14 (76 file
 invocations / 1,683 passing test invocations plus one retained expected-failure
 characterization). The authoritative Phase 0 baseline
-(`docs/plans/validation-baseline-2026-08-14.md`) now records these commands and
+(`docs/plans/validation-baseline-2026-08-14.md`) records these commands and
 results, alongside its full-suite, typecheck, lint, and provider black-box
 results for the same production-source commit. Phase 1 added tests but made no
 production changes, so those broader results remain the truthful recorded
@@ -34,6 +34,14 @@ source baseline. Contract 05's expected-failure proof queued the
 watchdog-fallback defect for Phase 2; that repair merged on 2026-08-15 and the
 proof is now two passing tests. See §10 of that record for the approved
 deferral covering the residual ambiguous case.
+
+## Draft records under review
+
+Draft contracts represent workstream records and characterization tests currently under review; they are tracked separately from the completed 2026-08-14 baseline:
+
+| # | Contract record | Owners (enforcement / recovery) | Focused verification command |
+| --- | --- | --- | --- |
+| 08 | [Conversation durability and recovery](./08-conversation-durability-and-recovery.md) | `ConversationLogWriter`, `conversation-persistence`, `HistoryService`, `conversation-decoder`/`replay` | 4 files, 166 tests (166 passed, 0 expected failures) — draft under review 2026-08-15; VP-decided repairs landed (D1/D3/D4/D5/D6 plus synchronous sidecar removal and stale-lock liveness) |
 
 ## How to read a record
 

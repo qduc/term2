@@ -1,4 +1,5 @@
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
 import envPaths from 'env-paths';
@@ -15,11 +16,13 @@ const CONVERSATIONS_DIR = path.join(paths.data, 'conversations');
 const LOG_CONVERSATIONS_DIR = path.join(paths.log, 'conversations');
 const MIGRATION_SENTINEL = '.migrated-from-log';
 let conversationsDirOverride: string | null = null;
+let pidAlivenessOverride: ((pid: number) => boolean) | null = null;
 
 export type LoadConversationForProjectResult =
   | { status: 'loaded'; conversation: RestoredState }
   | { status: 'not_found' }
-  | { status: 'project_mismatch'; conversation: RestoredState };
+  | { status: 'project_mismatch'; conversation: RestoredState }
+  | { status: 'unreadable'; error: unknown };
 
 export function getConversationsDir(): string {
   return conversationsDirOverride ?? process.env['TERM2_CONVERSATIONS_DIR'] ?? CONVERSATIONS_DIR;
@@ -31,6 +34,29 @@ export function getConversationsDirForTest(): string {
 
 export function setConversationsDirForTest(dir: string | null): void {
   conversationsDirOverride = dir;
+}
+
+/**
+ * Deterministic process-liveness probe used by the advisory-lock liveness
+ * path. Signal 0 never delivers a signal: `ESRCH` means the PID is gone,
+ * `EPERM` means a process exists that this user may not own. Only same-host
+ * lock PIDs are ever probed.
+ */
+export function isPidAlive(pid: number): boolean {
+  if (pidAlivenessOverride !== null) {
+    return pidAlivenessOverride(pid);
+  }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+/** Test-only override so liveness proofs never probe real processes. */
+export function setPidAlivenessCheckForTest(check: ((pid: number) => boolean) | null): void {
+  pidAlivenessOverride = check;
 }
 
 function ensureConversationsDir(): string {
@@ -275,16 +301,22 @@ export function loadConversationForProject(
   if (!fs.existsSync(filePath)) {
     return { status: 'not_found' };
   }
-  const envelopes = readEnvelopes(filePath);
-  const conversation = replayEvents(envelopes);
-  conversation.updatedAt = restoredUpdatedAt(filePath, envelopes);
-  if (!conversation.id) {
-    conversation.id = id;
+  try {
+    const envelopes = readEnvelopes(filePath);
+    const conversation = replayEvents(envelopes);
+    conversation.updatedAt = restoredUpdatedAt(filePath, envelopes);
+    if (!conversation.id) {
+      conversation.id = id;
+    }
+    if (!conversationMatchesProject(conversation, expectedProjectPath, expectedSshHost)) {
+      return { status: 'project_mismatch', conversation };
+    }
+    return { status: 'loaded', conversation };
+  } catch (error) {
+    // A raw read failure must settle as a typed unreadable result so the CLI
+    // can print an actionable diagnostic instead of crashing with an fs stack.
+    return { status: 'unreadable', error };
   }
-  if (!conversationMatchesProject(conversation, expectedProjectPath, expectedSshHost)) {
-    return { status: 'project_mismatch', conversation };
-  }
-  return { status: 'loaded', conversation };
 }
 
 export function loadLastConversation(expectedProjectPath?: string, expectedSshHost?: string): RestoredState | null {
@@ -307,21 +339,46 @@ export function loadLastConversation(expectedProjectPath?: string, expectedSshHo
   return null;
 }
 
-export function isConversationLocked(id: string): { pid: number; startedAt: string; host: string } | null {
+export type ConversationLockDiagnostic =
+  | { status: 'held'; pid: number; startedAt: string; host: string }
+  | { status: 'stale'; pid: number; startedAt: string; host: string }
+  | { status: 'corrupt' };
+
+export function isConversationLocked(id: string): ConversationLockDiagnostic | null {
   const lp = getLockPath(id);
   if (!fs.existsSync(lp)) {
     return null;
   }
+  let payload: unknown;
   try {
-    return JSON.parse(fs.readFileSync(lp, 'utf-8'));
+    payload = JSON.parse(fs.readFileSync(lp, 'utf-8'));
   } catch {
-    return { pid: -1, startedAt: '', host: '' };
+    // Unparseable lock payloads must not masquerade as a live holder or as an
+    // absent lock; they are reported as corrupt.
+    return { status: 'corrupt' };
   }
+  if (payload === null || typeof payload !== 'object') {
+    return { status: 'corrupt' };
+  }
+  const { pid, startedAt, host } = payload as Record<string, unknown>;
+  if (typeof pid !== 'number' || pid <= 0 || typeof startedAt !== 'string' || typeof host !== 'string') {
+    // A non-positive PID is not a valid writer payload and must never reach the
+    // liveness probe (process.kill(0, ...) would probe the caller's process group).
+    return { status: 'corrupt' };
+  }
+  const base = { pid, startedAt, host };
+  // Liveness is only provable for a lock from this host. A lock from another
+  // machine may legitimately be held, so it is reported as held.
+  if (host === os.hostname() && !isPidAlive(pid)) {
+    return { status: 'stale', ...base };
+  }
+  return { status: 'held', ...base };
 }
 
 export function deleteConversation(id: string): boolean {
   const filePath = getConversationPath(id);
   const lockFile = getLockPath(id);
+  const deltaFile = deltaSidecarPathFor(filePath);
   let removed = false;
   try {
     if (fs.existsSync(filePath)) {
@@ -334,6 +391,16 @@ export function deleteConversation(id: string): boolean {
   try {
     if (fs.existsSync(lockFile)) {
       fs.unlinkSync(lockFile);
+    }
+  } catch {
+    // ignore
+  }
+  // The residual `.deltas` sidecar is removed synchronously with the explicit
+  // delete: deletion is the user's privacy boundary and must not leave turn
+  // text behind for the next launch's orphan GC.
+  try {
+    if (fs.existsSync(deltaFile)) {
+      fs.unlinkSync(deltaFile);
     }
   } catch {
     // ignore
@@ -579,12 +646,20 @@ function readLastConversationFile(): LastConversationFile {
 
 function writeLastConversationFile(file: LastConversationFile): void {
   const lp = getLastConversationPath();
-  const tmp = `${lp}.tmp`;
+  // Distinct staging path per save invocation so consecutive or concurrent
+  // saves never collide on one fixed temp file.
+  const tmp = `${lp}.${crypto.randomUUID()}.tmp`;
   try {
     fs.writeFileSync(tmp, JSON.stringify(file, null, 2), 'utf-8');
     fs.renameSync(tmp, lp);
   } catch {
-    // best-effort
+    // best-effort; the previously published file remains loadable
+  } finally {
+    try {
+      fs.unlinkSync(tmp);
+    } catch {
+      // Rename succeeded or there is no temp file to clean up.
+    }
   }
 }
 

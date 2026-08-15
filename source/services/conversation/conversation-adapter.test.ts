@@ -471,6 +471,65 @@ it('ConversationAdapter fires queuedTurnStartObserver for a recovered item with 
   );
 });
 
+it('fails closed for a recovered non-text placeholder before calling turnFlow.start', async () => {
+  const starts: Array<string | UserTurn> = [];
+  const turnFlow = {
+    async *start(input: string | UserTurn) {
+      starts.push(input);
+      yield { type: 'final' as const, finalText: 'must not run' };
+    },
+    async *continueAfterApproval() {
+      yield { type: 'final' as const, finalText: 'done' };
+    },
+  };
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: '2026-08-14T00:00:00.000Z',
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+    turnFlow,
+    queueForeground: true,
+    queuePersistence: {
+      load: () => ({
+        version: 1,
+        nextSequence: 3,
+        queue: [
+          {
+            id: 'recovered-non-text',
+            text: '[queued non-text user turn]',
+            sequence: 1,
+            submittedAt: '2026-08-14T00:00:00.000Z',
+          },
+          {
+            id: 'retained-after-failure',
+            text: 'retained after failure',
+            sequence: 2,
+            submittedAt: '2026-08-14T00:00:01.000Z',
+          },
+        ],
+      }),
+      replace: () => {},
+    },
+  });
+
+  let resolveFailure!: () => void;
+  const failure = new Promise<void>((resolve) => {
+    resolveFailure = resolve;
+  });
+  adapter.setQueueStateObserver((state) => {
+    if (state.stateKind === 'paused' && state.pauseReason === 'failure') resolveFailure();
+  });
+
+  await adapter.resumeQueue();
+  await failure;
+
+  expect(starts).toEqual([]);
+  expect(adapter.queueStateKind()).toBe('paused');
+});
+
 it('ConversationAdapter marks system-initiated queue turns so the UI does not render them as user messages', async () => {
   const turnFlow = {
     async *start() {

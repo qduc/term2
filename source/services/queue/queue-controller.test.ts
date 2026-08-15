@@ -542,6 +542,123 @@ it('recovers queued work conservatively after an interrupted active execution', 
   expect(recoveredStarts).toEqual(['execution-2']);
 });
 
+it('reports a load throw as invalid persisted queue and quarantines it without loading state', () => {
+  let quarantined = false;
+  const controller = new QueueController({
+    driver: { start: () => undefined, cancel: async () => undefined },
+    snapshotFactory: () => ({}),
+    persistence: {
+      load: () => {
+        throw new Error('queue sidecar unreadable');
+      },
+      replace: () => undefined,
+      quarantine: () => {
+        quarantined = true;
+      },
+    },
+  });
+
+  expect(controller.state()).toMatchObject({
+    kind: 'idle',
+    queue: [],
+    recovery: { kind: 'invalid_persisted_queue', detail: 'queue sidecar unreadable' },
+  });
+  expect(quarantined).toBe(true);
+});
+
+it('retains an in-memory mutation and reports persistence_failed when replace throws synchronously', async () => {
+  const controller = new QueueController({
+    driver: { start: () => undefined, cancel: async () => undefined },
+    snapshotFactory: () => ({}),
+    preflightEvaluator: () => ({ preflight: { actionId: 'action-1' as ActionId, kind: 'input_surge' } }),
+    persistence: {
+      load: () => null,
+      replace: () => {
+        throw new Error('sidecar replace failed');
+      },
+    },
+  });
+
+  await expect(controller.command({ kind: 'submit', text: 'retained in memory' })).resolves.toEqual({
+    kind: 'accepted',
+  });
+  expect(controller.state()).toMatchObject({
+    kind: 'awaiting_preflight',
+    queue: [{ text: 'retained in memory' }],
+    recovery: { kind: 'persistence_failed', detail: 'sidecar replace failed' },
+  });
+});
+
+it.each(['failure', 'manual'] as const)(
+  'restores a saved %s pause without auto-starting retained work',
+  async (reason) => {
+    const starts: string[] = [];
+    const controller = new QueueController({
+      driver: {
+        start: ({ item }) => {
+          starts.push(item.text);
+        },
+        cancel: async () => undefined,
+      },
+      snapshotFactory: () => ({}),
+      persistence: {
+        load: () => ({
+          version: 1,
+          nextSequence: 2,
+          queue: [{ id: 'queued-1', text: 'retained', sequence: 1, submittedAt: '2026-01-01T00:00:00.000Z' }],
+          pause: { reason },
+        }),
+        replace: () => undefined,
+      },
+    });
+
+    expect(controller.state()).toMatchObject({ kind: 'paused', reason, queue: [{ text: 'retained' }] });
+    expect(starts).toEqual([]);
+    await controller.command({ kind: 'resume_queue' });
+    expect(starts).toEqual(['retained']);
+  },
+);
+
+it('restores an empty record with no active work or pause as idle', () => {
+  const controller = new QueueController({
+    driver: { start: () => undefined, cancel: async () => undefined },
+    snapshotFactory: () => ({}),
+    persistence: {
+      load: () => ({ version: 1, nextSequence: 1, queue: [] }),
+      replace: () => undefined,
+    },
+  });
+
+  expect(controller.state()).toMatchObject({ kind: 'idle', queue: [] });
+});
+
+it('restores an interrupted active execution with no retained queue as idle', () => {
+  const controller = new QueueController({
+    driver: { start: () => undefined, cancel: async () => undefined },
+    snapshotFactory: () => ({}),
+    persistence: {
+      load: () => ({
+        version: 1,
+        nextSequence: 2,
+        queue: [],
+        active: {
+          executionId: 'execution-interrupted' as ExecutionId,
+          item: { id: 'active-1', text: 'interrupted', sequence: 1, submittedAt: '2026-01-01T00:00:00.000Z' },
+          snapshot: {},
+          phase: 'running',
+        },
+      }),
+      replace: () => undefined,
+    },
+  });
+
+  expect(controller.state()).toMatchObject({
+    kind: 'idle',
+    queue: [],
+    recovery: { kind: 'recovered_interrupted', interruptedExecutionId: 'execution-interrupted' },
+  });
+});
+
 it('quarantines an invalid persisted record and exposes the recovery failure without loading it', () => {
   let quarantined = false;
   const controller = new QueueController({

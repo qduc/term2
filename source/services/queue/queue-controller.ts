@@ -650,9 +650,16 @@ export class QueueController<Snapshot, Terminal = unknown> {
       return queueItem;
     });
     if (record.active) {
-      this.#phase = 'paused';
-      this.#pauseReason = 'recovered_interrupted';
+      // The interrupted active item is dropped, never replayed (C12.3): no
+      // driver start, no tool/approval re-dispatch. Its execution id survives
+      // only as a recovery diagnostic. When no queued work was retained, settle
+      // idle rather than an empty paused controller that would block the
+      // composer behind "0 item(s) pending" (C12.4).
       this.#recovery = { kind: 'recovered_interrupted', interruptedExecutionId: record.active.executionId };
+      if (this.#queue.length > 0) {
+        this.#phase = 'paused';
+        this.#pauseReason = 'recovered_interrupted';
+      }
       return;
     }
     if (record.pause) {

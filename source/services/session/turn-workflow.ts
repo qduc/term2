@@ -5,7 +5,7 @@ import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
 import type { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
-import type { ConversationAgentClient } from '../conversation-agent-client.js';
+import type { AgentClientRunOptions, ConversationAgentClient } from '../conversation-agent-client.js';
 import type { TurnItemAccumulator } from './turn-item-accumulator.js';
 import type { GenerationGuard } from '../generation-guard.js';
 import { TurnAttempt } from './turn-attempt.js';
@@ -16,8 +16,13 @@ import type { InitialInputPreparer } from './initial-input-preparer.js';
 import type { InitialTurnRecoveryHandler } from './initial-turn-recovery-handler.js';
 import { AssistantTurnJournal } from '../logging/assistant-turn-journal.js';
 import type { TurnOutcome } from './turn-status-machine.js';
-import type { ConversationTerminal, LLMAdvisory } from '../../contracts/conversation.js';
+import type { ConversationTerminal } from '../../contracts/conversation.js';
 import type { RetryCounts } from '../retry/retry-contracts.js';
+
+/** One completed post-execute live-run drain: the modeled stream outcome plus the turn generation it was captured under. */
+type CompletedLiveRunResult = { kind: 'completed'; outcome: BuildResultOutcome; generation: number };
+
+type LiveRunResult = CompletedLiveRunResult | { kind: 'stale' };
 
 export type InternalTurnOutcome =
   | { kind: 'response'; terminal: ConversationTerminal }
@@ -42,7 +47,7 @@ import type { ApprovalDecisionPolicy } from '../approval/approval-decision-polic
 import { ShellAutoApprovalDecisionPolicy } from '../approval/approval-decision-policy.js';
 import type { ConversationStore } from '../conversation/conversation-store.js';
 import type { SessionInputPlanner } from './session-input-planner.js';
-import type { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
+import type { ApprovalFlowCoordinator, ContinuationPlan } from '../approval/approval-flow-coordinator.js';
 import { describeError } from '../../utils/error-helpers.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { ContinuationPlanApplier } from './continuation-plan-applier.js';
@@ -52,6 +57,7 @@ import { ToolApprovalBatchCoordinator } from '../approval/tool-approval-batch-co
 import {
   createApprovalRequiredTerminal,
   buildConversationResult,
+  type BuildResultOutcome,
 } from '../conversation/conversation-result-builder.js';
 import type { ProviderContinuity } from '../provider-continuity.js';
 import type { SessionStreamProcessor } from './session-stream-processor.js';
@@ -109,7 +115,7 @@ export interface TurnWorkflowDeps {
 export class TurnWorkflow {
   readonly #batchCoordinator: ToolApprovalBatchCoordinator;
   readonly #liveAttemptOwners = new WeakSet<TurnAttempt>();
-  #liveRun: LiveRun<ConversationEvent, { kind: 'completed'; outcome: any } | { kind: 'stale' }> | null = null;
+  #liveRun: LiveRun<ConversationEvent, LiveRunResult> | null = null;
   #nextLiveRunId = 0;
   #hookTurnId: string | undefined;
 
@@ -496,9 +502,7 @@ export class TurnWorkflow {
     },
   ): AsyncGenerator<
     ConversationEvent,
-    | { kind: 'completed'; outcome: any }
-    | { kind: 'stale' }
-    | { kind: 'post_execute_approval_required'; entries: readonly PostExecutePendingEntry[] },
+    LiveRunResult | { kind: 'post_execute_approval_required'; entries: readonly PostExecutePendingEntry[] },
     void
   > {
     // Establish ownership before asking the client for a stream. Some clients
@@ -514,30 +518,24 @@ export class TurnWorkflow {
     }
     attempt.attachStream(stream);
 
-    const liveRun = new LiveRun<ConversationEvent, { kind: 'completed'; outcome: any } | { kind: 'stale' }>(
-      runId,
-      this.deps.postExecutePending,
-      async (emit) => {
-        try {
-          return await this.#consumeInitialStream(stream, attempt, emit);
-        } finally {
-          this.#liveAttemptOwners.delete(attempt);
-          attempt.close();
-        }
-      },
-    );
+    const liveRun = new LiveRun<ConversationEvent, LiveRunResult>(runId, this.deps.postExecutePending, async (emit) => {
+      try {
+        return await this.#consumeInitialStream(stream, attempt, emit);
+      } finally {
+        this.#liveAttemptOwners.delete(attempt);
+        attempt.close();
+      }
+    });
     this.#liveAttemptOwners.add(attempt);
     this.#liveRun = liveRun;
     return yield* this.#drainLiveRun(liveRun);
   }
 
   async *#drainLiveRun(
-    liveRun: LiveRun<ConversationEvent, { kind: 'completed'; outcome: any } | { kind: 'stale' }>,
+    liveRun: LiveRun<ConversationEvent, LiveRunResult>,
   ): AsyncGenerator<
     ConversationEvent,
-    | { kind: 'completed'; outcome: any }
-    | { kind: 'stale' }
-    | { kind: 'post_execute_approval_required'; entries: readonly PostExecutePendingEntry[] },
+    LiveRunResult | { kind: 'post_execute_approval_required'; entries: readonly PostExecutePendingEntry[] },
     void
   > {
     while (true) {
@@ -575,7 +573,7 @@ export class TurnWorkflow {
     stream: AgentStream,
     attempt: TurnAttempt,
     emit: (event: ConversationEvent) => void,
-  ): Promise<{ kind: 'completed'; outcome: any } | { kind: 'stale' }> {
+  ): Promise<LiveRunResult> {
     const processor = this.deps.streamProcessor.process(stream, {
       gen: attempt.token,
       source: 'startStream',
@@ -629,7 +627,7 @@ export class TurnWorkflow {
         : { kind: attempt.inputMode!, previousInput: attempt.streamInput! },
     );
 
-    return { kind: 'completed', outcome };
+    return { kind: 'completed', outcome, generation: attempt.token };
   }
 
   /**
@@ -677,9 +675,40 @@ export class TurnWorkflow {
       if (result.kind === 'post_execute_approval_required') {
         return { kind: 'approval_required', terminal: this.#postExecuteApprovalTerminal(result.entries) };
       }
-      const { outcome } = result;
+      const { outcome, generation } = result;
       if (outcome.kind === 'response') return { kind: 'response', terminal: outcome.result };
       if (outcome.kind === 'approval_required') return { kind: 'approval_required', terminal: outcome.result };
+      if (outcome.kind === 'auto_approve') {
+        // Initial-path parity (`turn-workflow.test.ts:685`): the resumed live
+        // run ended on a shell interruption the auto-approval policy already
+        // approved, so settle exactly as the initial path settles an
+        // `auto_approve` stream result — drive the auto-approval continuation
+        // instead of re-prompting a decision the policy has made. The
+        // generation travels with the live run so the init-less
+        // `continuePostExecute` observer path uses the same token.
+        if (outcome.advisory?.source === 'llm') {
+          markToolCallAsLlmAutoApproved(outcome.callId);
+        }
+        this.deps.logger.debug('Shell command auto-approved by LLM', {
+          eventType: 'approval.auto_approved',
+          category: 'approval',
+          phase: 'approval',
+          sessionId: this.deps.sessionId,
+          traceId: this.deps.logger.getCorrelationId(),
+          callId: outcome.callId,
+          command: outcome.argumentsText,
+          model: outcome.advisory?.model,
+          reasoning: outcome.advisory?.reasoning,
+        });
+        const driveResult = yield* this.executeContinuationAttempt(
+          { kind: 'approval_decision', answer: 'y', generation },
+          new ShellAutoApprovalDecisionPolicy(this.deps.shellAutoApproval),
+        );
+        if (driveResult.kind !== 'fresh_start_required') {
+          return driveResult as TurnOutcome;
+        }
+        return yield* this.#replayFromFreshStart(generation, driveResult);
+      }
       throw new Error('Post-execute live run finished without a terminal outcome.');
     } catch (error) {
       this.#liveRun = null;
@@ -717,7 +746,7 @@ export class TurnWorkflow {
     },
   ): Promise<AgentStream> {
     if (options.resumeState && typeof this.deps.agentClient.continueRunStream === 'function') {
-      const resumeOptions: any = {
+      const resumeOptions: AgentClientRunOptions = {
         previousResponseId: options.resumePreviousResponseId ?? this.deps.providerContinuity.previousResponseId,
         sessionId: this.deps.sessionId,
         providerHistorySnapshot: this.deps.conversationStore.getProviderHistorySnapshot(),
@@ -760,7 +789,7 @@ export class TurnWorkflow {
         // Parity must never change the established request path on failure.
       }
     }
-    const startOptions: any = {
+    const startOptions: AgentClientRunOptions = {
       previousResponseId: selectedPreviousResponseId,
       sessionId: this.deps.sessionId,
       providerHistorySnapshot: attempt.providerHistorySnapshot,
@@ -964,15 +993,13 @@ export class TurnWorkflow {
   }
 
   async #handleApprovalOutcome(
-    outcome: any,
+    outcome: Exclude<BuildResultOutcome, { kind: 'response' }>,
     state: ContinuationState,
     activePolicy: ApprovalDecisionPolicy,
     nextCumulativeUsage?: NormalizedUsage,
     previousInputForSurge?: unknown,
   ): Promise<
-    | { action: 'return'; result: TurnOutcome }
-    | { action: 'loop'; nextPlan: any; isApproved: boolean }
-    | { action: 'continue' }
+    { action: 'return'; result: TurnOutcome } | { action: 'loop'; nextPlan: ContinuationPlan; isApproved: boolean }
   > {
     const { kind } = outcome;
 
@@ -1063,7 +1090,7 @@ export class TurnWorkflow {
     | { kind: 'stale' }
     | {
         kind: 'completed';
-        outcome: any;
+        outcome: BuildResultOutcome;
         nextCumulativeMessages: any[];
         nextCumulativeUsage?: NormalizedUsage;
         nextCumulativeTurnItems: any[];
@@ -1071,7 +1098,7 @@ export class TurnWorkflow {
       },
     void
   > {
-    const continuationOptions: any = {
+    const continuationOptions: AgentClientRunOptions = {
       previousResponseId: state.currentResumePreviousResponseId ?? this.deps.providerContinuity.previousResponseId,
       sessionId: this.deps.sessionId,
       toolResultCallIds: state.currentCallIds,
@@ -1212,7 +1239,7 @@ export class TurnWorkflow {
   }
 
   #createApprovalRequiredFromAutoApprove(
-    outcome: { kind: 'auto_approve'; advisory: LLMAdvisory; callId: string | undefined; argumentsText: string },
+    outcome: Extract<BuildResultOutcome, { kind: 'auto_approve' }>,
     usage?: NormalizedUsage,
   ): ConversationTerminal {
     const pending = this.deps.approvalFlow.getPending();

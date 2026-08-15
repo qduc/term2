@@ -1,6 +1,6 @@
 # Contract 01 — Conversation submission and turn lifecycle
 
-Status: **owner-reviewed 2026-08-14; focused command green.**
+Status: **owner-reviewed 2026-08-14; focused command all-green 2026-08-15 after the SB-01 repair (B1 flipped).**
 
 ## 1. Contract
 
@@ -105,6 +105,14 @@ Status: **owner-reviewed 2026-08-14; focused command green.**
   `application-run-loop.test.ts`.
 - `TurnCoordinator.start/continueAfterApproval` and `TurnStatusMachine`
   transitions — `turn-coordinator.test.ts`, `turn-status-machine.test.ts`.
+- `TurnWorkflow.executeContinuation` post-execute settlement and the public
+  `TurnCoordinator` hook projection — B1,
+  `turn-workflow.outcome-contract.test.ts:190` "settles a post-execute resume
+  whose completed stream auto-approves a shell interruption" (initial-path
+  parity proof); A1, `turn-outcome-boundary.test.ts:125` "emits a
+  hook-contract-valid turn.end for every modeled outcome"; A2,
+  `turn-outcome-boundary.test.ts:157` "keeps one hook turn id across an
+  approval pause and its continuation".
 
 ## 8. Deterministic contract matrix
 
@@ -124,10 +132,12 @@ Status: **owner-reviewed 2026-08-14; focused command green.**
 | UI projection — start callbacks delayed | `conversation-orchestrator.test.ts:636` (unresolved `sendMessage`, manual observer dispatch; no `onTurnStart` before callback) | covered |
 | UI projection — start callbacks skipped | `conversation-orchestrator.test.ts:728` "clears a delivered queue row even when the queue-start observer never fires" (regression for commit `80a48390`) | covered |
 | UI projection — start callbacks replayed | `conversation-orchestrator.test.ts:813` "does not double-append when the observer fires for an already-directly-appended message" | covered |
+| Post-execute pause followed by an auto-approvable shell interruption | `turn-workflow.outcome-contract.test.ts:190` "settles a post-execute resume whose completed stream auto-approves a shell interruption" | covered (initial-path parity) |
+| Modeled outcomes project hook-contract-valid `turn.end` events and retain correlation across approval continuation | `turn-outcome-boundary.test.ts:125` "emits a hook-contract-valid turn.end for every modeled outcome"; `:157` "keeps one hook turn id across an approval pause and its continuation" | covered |
 
 ## 9. Verification commands
 
-Focused (verified 2026-08-14, all green):
+Focused (verified 2026-08-14, all green; re-verified 2026-08-15 with the SB-01 files — 1 retained-red expected fail; re-verified 2026-08-15 after the SB-01 repair — all green):
 
 ```sh
 NODE_ENV=test pnpm test \
@@ -140,13 +150,18 @@ NODE_ENV=test pnpm test \
   source/services/session/turn-status-machine.test.ts \
   source/services/session/conversation-session.characterization.test.ts \
   source/services/retry/recovery-policy.test.ts \
-  source/services/session/conversation-session.stream.test.ts
+  source/services/session/conversation-session.stream.test.ts \
+  source/services/session/turn-outcome-boundary.test.ts \
+  source/services/session/turn-workflow.outcome-contract.test.ts
 ```
 
-Result: **10 files / 340 tests passed.** The Phase 0 baseline command had five
+Result: **12 files / 346 tests passed, all green** (verified 2026-08-15 after
+flipping the retained B1 proof through the SB-01 initial-path parity repair).
+The Phase 0 baseline command had five
 valid paths, but under-covered this matrix. This command adds the turn
 coordinator, status machine, continuation characterization, recovery-policy,
-and partial-stream recovery boundaries.
+partial-stream recovery boundaries, and the SB-01 outcome/continuation
+characterizations; the former §8 B1 gap is now covered.
 
 Broader gates: `NODE_ENV=test pnpm test` (full suite, 6,205 tests green at
 baseline commit), `pnpm typecheck`, and — for any provider/bridge/run-loop
@@ -154,7 +169,12 @@ change — `NODE_ENV=test pnpm test:provider-black-box`.
 
 ## 10. Known gaps and classification
 
-All minimum-matrix cells are covered.
+All minimum-matrix cells are covered, including the former B1 gap: a real
+post-execute approval pause whose resumed stream completes with an
+auto-approvable shell interruption now settles with initial-path parity
+(`turn-workflow.ts` `#continuePostExecuteRun` drives the same auto-approval
+continuation the initial path uses; proof at
+`turn-workflow.outcome-contract.test.ts:190`).
 
 The Phase 0 Seam 1 command named only valid paths but under-covered this
 contract; that historical scope limitation is not a product or coverage gap.

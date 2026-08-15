@@ -22,6 +22,14 @@ Phase 2 and only on a red proof through an owning public boundary.
 | 04 | [Settings consumption](./04-settings-consumption.md) | Settings schema/resolution, runtime consumers, `ConversationConfigurationService` + `runtime-setting-router`, `/settings` | 14 files, 303 tests — green 2026-08-14 |
 | 05 | [Runtime guards and retention](./05-runtime-guards-and-retention.md) | Guard owners per `docs/plans/guard-ledger.md` and linked owner plans | 26 files, 423 passing tests — 2026-08-14; the retained expected-failure characterization became two passing tests when Phase 2 repaired it on 2026-08-15 |
 
+## Draft records under review
+
+These draft contracts extend the five owner-reviewed Phase 1 contracts to additional service boundaries identified in `docs/plans/service-boundary-contract-completion.md`. They remain in progress pending owner review. Contract 06's retained expected-failure proofs (in-flight transport drop settlement, POSIX single-quote escaping, `isConnected` after client `close`) were repaired through `SSHService` on 2026-08-16 and are now passing tests:
+
+| # | Contract record | Owners (enforcement / recovery) | Focused verification command |
+| --- | --- | --- | --- |
+| 06 | [SSH transport lifecycle](./06-ssh-transport-lifecycle.md) | `SSHService`, `ExecutionContext` | 2 files, 59 tests all passing — 2026-08-16 (pre-repair baseline 2026-08-15: 47 tests, 37 passing, 10 expected failures) |
+
 All focused commands re-ran with exit code 0 on 2026-08-14 (76 file
 invocations / 1,683 passing test invocations plus one retained expected-failure
 characterization). The authoritative Phase 0 baseline

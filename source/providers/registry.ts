@@ -18,7 +18,8 @@ export interface ProviderDeps {
   contextCompactionSessionState?: ContextCompactionSessionState;
 }
 
-export type ProviderFetch = (url: string, options?: any) => Promise<any>;
+/** The real fetch contract used by provider model listing and token refresh. */
+export type ProviderFetch = typeof fetch;
 
 /**
  * Defines the interface for a provider in the registry.

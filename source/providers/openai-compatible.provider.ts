@@ -172,7 +172,7 @@ export class OpencodeAnthropicFormatProvider {
           sessionContextService: this.deps.sessionContextService,
           fallbackSessionIdOverride: this.fallbackSessionId,
         }),
-      ]) as any,
+      ]),
     });
     return new OpenAIResponsesModelWithPromptCacheKey(openAIClient, resolvedModel);
   }
@@ -190,7 +190,7 @@ export class OpencodeAnthropicFormatProvider {
           sessionContextService: this.deps.sessionContextService,
           fallbackSessionIdOverride: this.fallbackSessionId,
         }),
-      ]) as any,
+      ]),
     });
     const costCapture: CostTrailerCapture = {};
     applyClientResponseNormalization(openAIClient, this.deps.loggingService, costCapture);
@@ -227,7 +227,7 @@ export function createCustomProviderModelProvider(config: CustomProviderConfig, 
         apiKey: config.apiKey,
         baseURL: config.baseUrl ? normalizeBaseUrl(config.baseUrl) : undefined,
         maxRetries: normalizedDeps.settingsService?.get('agent.retryAttempts') ?? 2,
-        fetch: buildProviderFetch(config, normalizedDeps, [createOpenAIResponsesMiddleware()]) as any,
+        fetch: buildProviderFetch(config, normalizedDeps, [createOpenAIResponsesMiddleware()]),
       });
       return new OpenAIChatCompletionsModel(
         openAIClient,
@@ -277,7 +277,7 @@ export function createCustomProviderModelProvider(config: CustomProviderConfig, 
           createOpenAICompatibleMiddleware(providerType, runtimeConfig.baseUrl, {
             sessionContextService: normalizedDeps.sessionContextService,
           }),
-        ]) as any,
+        ]),
       });
       const costCapture: CostTrailerCapture = {};
       applyClientResponseNormalization(openAIClient, normalizedDeps.loggingService, costCapture);
@@ -315,7 +315,7 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
       }
       return provider.getStreamedModel(model);
     },
-    fetchModels: async (deps: ProviderDeps, fetchImpl: ProviderFetch = fetch as any) => {
+    fetchModels: async (deps: ProviderDeps, fetchImpl: ProviderFetch = fetch) => {
       const resolved = findConfigFromSettings(deps.settingsService, providerId);
       if (!resolved) {
         throw new Error(`Custom provider '${providerId}' is not configured in settings.json`);

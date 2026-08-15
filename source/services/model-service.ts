@@ -13,7 +13,7 @@ export type ModelInfo = {
   contextWindow?: number;
 };
 
-type FetchFn = (url: string, options?: any) => Promise<any>;
+type FetchFn = typeof fetch;
 
 const cache = new Map<string, ModelInfo[]>();
 
@@ -24,7 +24,7 @@ export async function fetchModels(
     signal?: AbortSignal;
   },
   providerOverride?: string,
-  fetchImpl: FetchFn = fetch as any,
+  fetchImpl: FetchFn = fetch,
 ): Promise<ModelInfo[]> {
   const { settingsService, loggingService } = deps;
   const provider = providerOverride || settingsService.get('agent.provider');

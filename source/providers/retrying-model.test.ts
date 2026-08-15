@@ -120,6 +120,15 @@ it('stream uses the larger upstream backoff schedule for retries', async () => {
   expect(delays).toEqual([3000, 24000]);
 });
 
+it('RetryingModel does not expose getResponse when the wrapped model has none', () => {
+  const inner: StreamedModelTurn = {
+    async *stream() {},
+  };
+  expect(inner).not.toHaveProperty('getResponse');
+  const wrapper = new RetryingModel(inner, { retryAttempts: 0, sleep: async () => {} });
+  expect(wrapper).not.toHaveProperty('getResponse');
+});
+
 async function collect<T>(iterable: AsyncIterable<T>): Promise<T[]> {
   const events: T[] = [];
   for await (const event of iterable) events.push(event);

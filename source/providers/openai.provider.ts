@@ -51,7 +51,7 @@ export function createRetryAwareFetch(
 
 async function fetchOpenAIModels(
   deps: ProviderDeps,
-  fetchImpl: ProviderFetch = fetch as any,
+  fetchImpl: ProviderFetch = fetch,
 ): Promise<Array<{ id: string; name?: string }>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -108,7 +108,7 @@ registerProvider({
           providerId: 'openai',
           defaultModel,
           deps: { loggingService, sessionContextService: sessionContextService ?? NULL_SESSION_CONTEXT_SERVICE },
-        }) as any,
+        }),
         onRetry,
         configuredRetries,
       ),

@@ -72,7 +72,7 @@ export const openRouterPreprocessingMiddleware: FetchMiddleware = async (ctx, ne
 
 async function fetchOpenRouterModels(
   deps: ProviderDeps,
-  fetchImpl: ProviderFetch = fetch as any,
+  fetchImpl: ProviderFetch = fetch,
 ): Promise<Array<{ id: string; name?: string }>> {
   const { settingsService } = deps;
 

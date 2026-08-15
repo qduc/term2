@@ -222,8 +222,8 @@ it('resolves a stored provider config by legacy name alias when the stored id di
   });
 
   let capturedUrl = '';
-  const fakeFetch = async (url: string, _options?: any) => {
-    capturedUrl = url;
+  const fakeFetch = async (url: RequestInfo | URL, _options?: RequestInit) => {
+    capturedUrl = String(url);
     return new Response(JSON.stringify({ data: [{ id: 'model-a' }] }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -273,8 +273,8 @@ it('resolves a stored provider config by legacy name alias when the stored id di
 it('passes an optional stored key to a local runtime provider', async () => {
   const provider = createOpenAICompatibleProviderDefinition({ name: 'local-with-optional-key' });
   let capturedHeaders: Record<string, string> | undefined;
-  const fakeFetch = async (_url: string, options?: any) => {
-    capturedHeaders = options?.headers;
+  const fakeFetch = async (_url: RequestInfo | URL, options?: RequestInit) => {
+    capturedHeaders = options?.headers as Record<string, string> | undefined;
     return new Response(JSON.stringify({ data: [{ id: 'model-a' }] }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },

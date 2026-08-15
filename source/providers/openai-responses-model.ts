@@ -567,7 +567,9 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
     this.contextCompactionSessionState = contextCompactionSessionState;
   }
 
-  async getResponse(request: StreamedModelTurnRequest): Promise<any> {
+  async getResponse(
+    request: StreamedModelTurnRequest,
+  ): Promise<Extract<StreamedModelTurnEvent, { type: 'completion' }>> {
     this.lifecycle.begin(request, 'http', this._model, this._client);
     this.lifecycle.bind(request, this.capture);
     try {

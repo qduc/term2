@@ -205,6 +205,19 @@ export class ConversationService {
     this.#runtime.backgroundSubagentNotifications.setObserver(this.#backgroundSubagentNotificationObserver);
     this.#runtime.backgroundSubagentTasks.setObserver(this.#backgroundSubagentTaskObserver);
     this.#runtime.pendingInteraction.setObserver(this.#pendingInteractionObserver);
+    // The new adapter starts with no observers; re-attach the queue lifecycle
+    // observers so queued submissions still notify their UI after a reset.
+    if (this.#queueStateObserver) {
+      this.#adapter.setQueueStateObserver(this.#queueStateObserver);
+    }
+    if (this.#queuedTurnStartObserver) {
+      this.#adapter.setQueuedTurnStartObserver(this.#queuedTurnStartObserver);
+    }
+    // The replacement factory-owned client never saw the retry callback;
+    // re-install it so retries keep surfacing through the same hook.
+    if (this.#retryCallback) {
+      this.#runtime.settings.setRetryCallback(this.#retryCallback);
+    }
   }
 
   #logSink: ((event: LogEvent) => void) | null = null;
@@ -272,7 +285,10 @@ export class ConversationService {
     this.#runtime.settings.switchProvider(provider);
   }
 
+  #retryCallback: (() => void) | null = null;
+
   setRetryCallback(callback: () => void): void {
+    this.#retryCallback = callback;
     this.#runtime.settings.setRetryCallback(callback);
   }
 
@@ -496,8 +512,12 @@ export class ConversationService {
     return this.#adapter.queueStateKind();
   }
 
+  #queueStateObserver: QueueStateObserver | null = null;
+  #queuedTurnStartObserver: QueuedTurnStartObserver | null = null;
+
   /** Set an observer for queue state changes. The observer fires immediately with current state. */
   setQueueStateObserver(observer: QueueStateObserver | null): void {
+    this.#queueStateObserver = observer;
     this.#adapter.setQueueStateObserver(observer);
   }
 
@@ -508,6 +528,7 @@ export class ConversationService {
    * caller can render the message in the UI at the correct timeline.
    */
   setQueuedTurnStartObserver(observer: QueuedTurnStartObserver | null): void {
+    this.#queuedTurnStartObserver = observer;
     this.#adapter.setQueuedTurnStartObserver(observer);
   }
 

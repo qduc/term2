@@ -1,4 +1,5 @@
 import { it, expect } from 'vitest';
+import { CONTRACT_04_CONSUMER_INVENTORY } from './test-helpers/settings-consumer-inventory.js';
 import {
   AgentSettingsSchema,
   CustomProviderSchema,
@@ -10,6 +11,17 @@ import {
   SETTING_KEYS,
   normalizeAppModes,
 } from './settings-schema.js';
+
+it('keeps the structured Contract 04 consumer inventory complete and duplicate-free', () => {
+  const inventoryKeys = Object.values(CONTRACT_04_CONSUMER_INVENTORY).flat();
+  const exportedKeys = Object.values(SETTING_KEYS);
+
+  expect(exportedKeys).toHaveLength(126);
+  expect(new Set(exportedKeys).size).toBe(126);
+  expect(inventoryKeys).toHaveLength(exportedKeys.length);
+  expect(new Set(inventoryKeys).size).toBe(inventoryKeys.length);
+  expect([...inventoryKeys].sort()).toEqual([...exportedKeys].sort());
+});
 
 it('disables the model-request wall-clock deadline by default while allowing an explicit limit', () => {
   expect(AgentSettingsSchema.parse({}).maxModelRequestDurationMs).toBe(0);
@@ -140,6 +152,17 @@ it('run-budget policy defaults are runtime-modifiable and reject invalid limits'
     expect(() => SettingsSchema.parse({ agent: { runBudget: { turnBackstop: value } } })).toThrow();
   }
   expect(() => SettingsSchema.parse({ agent: { runBudget: { maxParentExtensions: -1 } } })).toThrow();
+});
+
+it('accepts the exact maximum mentor samples and mentor pool size', () => {
+  const mentorPool = Array.from({ length: 8 }, (_, index) => ({ model: `mentor-${index + 1}` }));
+
+  expect(SettingsSchema.parse({ agent: { mentorSamples: 8, mentorPool } }).agent).toMatchObject({
+    mentorSamples: 8,
+    mentorPool,
+  });
+  expect(() => SettingsSchema.parse({ agent: { mentorSamples: 9 } })).toThrow();
+  expect(() => SettingsSchema.parse({ agent: { mentorPool: [...mentorPool, { model: 'mentor-9' }] } })).toThrow();
 });
 
 it('memory settings default to enabled local storage with bounded retrieval and context budgets', () => {

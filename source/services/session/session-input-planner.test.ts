@@ -51,6 +51,35 @@ it('drops chaining and uses full history when the previous response still has un
   expect(items[items.length - 1]).toMatchObject({ role: 'user' });
 });
 
+it('uses self-contained full history for a partial parallel tool batch', () => {
+  const continuity = new ProviderContinuity();
+  continuity.update('resp-with-partial-parallel-batch');
+  continuity.replaceOutstandingToolCallIds(['call-b']);
+  const planner = new SessionInputPlanner({
+    agentClient: { getProvider: () => 'openai', supportsConversationChaining: () => true } as any,
+    toolTracker: {
+      getReconciledHistory: () => [
+        { role: 'user', type: 'message', content: 'run both' },
+        { type: 'function_call', call_id: 'call-a', name: 'read_file', arguments: '{}' },
+        { type: 'function_call', call_id: 'call-b', name: 'shell', arguments: '{}' },
+        { type: 'function_call_output', call_id: 'call-a', output: 'contents' },
+      ],
+    } as any,
+    providerContinuity: continuity,
+  });
+
+  const plan = planner.build({ text: 'continue' }, { includeTurn: true, pendingModeNotice: null });
+
+  expect(plan.inputSurgeKind).toBe('full_history');
+  expect(plan.streamInput).toEqual([
+    { role: 'user', type: 'message', content: 'run both' },
+    { type: 'function_call', call_id: 'call-a', name: 'read_file', arguments: '{}' },
+    { type: 'function_call_output', call_id: 'call-a', output: 'contents' },
+    { role: 'user', type: 'message', content: 'continue' },
+  ]);
+  expect(continuity.previousResponseId).toBe(null);
+});
+
 it('combineHistoryAndDraftBytes matches JSON.stringify of history-plus-draft', () => {
   const history = [
     { role: 'user', type: 'message', content: 'prior' },

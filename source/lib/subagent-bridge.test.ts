@@ -3,6 +3,7 @@ import { SubagentBridge as ProductionSubagentBridge } from './subagent-bridge.js
 import { SessionContextService } from '../services/session/session-context-service.js';
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
 import { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
+import { SubagentAsyncRegistry } from '../services/subagents/subagent-async-registry.js';
 
 class SubagentBridge extends ProductionSubagentBridge {
   constructor(options: Omit<ConstructorParameters<typeof ProductionSubagentBridge>[0], 'toolOwnership'>) {
@@ -548,6 +549,51 @@ it('runSubagentAsync forwards an optional active-run name to the registry reques
   await bridge.runSubagentAsync({ role: 'explorer', task: 'find files', name: 'code_scan' });
 
   expect(trackStartRunAsync.lastArgs.name).toBe('code_scan');
+});
+
+it('runSubagentAsync preserves a typed duplicate-name rejection without disturbing the active run', async () => {
+  const registry = new SubagentAsyncRegistry({
+    logger: noopLogger as any,
+    run: ({ request, runId, signal }) =>
+      new Promise((resolve) => {
+        signal.addEventListener(
+          'abort',
+          () =>
+            resolve({
+              agentId: runId,
+              role: request.role,
+              status: 'cancelled',
+              finalText: '',
+              filesChanged: [],
+              toolsUsed: [],
+            }),
+          { once: true },
+        );
+      }),
+  });
+  const bridge = makeBridge({
+    startRunAsync: (request: any) => registry.startRun(request),
+    resetMentorSession: () => {},
+    clearCache: () => {},
+  });
+
+  try {
+    const active = await bridge.runSubagentAsync({ role: 'explorer', task: 'inspect', name: 'code_scan' });
+
+    await expect(
+      bridge.runSubagentAsync({ role: 'explorer', task: 'duplicate launch', name: 'code_scan' }),
+    ).rejects.toMatchObject({
+      name: 'SubagentRegistryError',
+      code: 'name_in_use',
+    });
+    expect(registry.getRunStatus(active.runId)).toMatchObject({
+      runId: active.runId,
+      name: 'code_scan',
+      status: 'running',
+    });
+  } finally {
+    registry.dispose();
+  }
 });
 
 it('runSubagentAsync forwards worktree into the async request', async () => {

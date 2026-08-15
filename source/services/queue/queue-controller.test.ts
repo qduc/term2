@@ -247,6 +247,47 @@ it('awaits cancellation cleanup, ignores late terminal events, and retains queue
   expect(controller.state()).toMatchObject({ kind: 'paused', reason: 'manual', queue: [{ text: 'queued' }] });
 });
 
+it('manual cancel retains multiple queued items and resumes them FIFO', async () => {
+  const starts: string[] = [];
+  const controller = new QueueController({
+    driver: {
+      start: ({ item }) => {
+        starts.push(item.text);
+      },
+      cancel: async () => undefined,
+    },
+    snapshotFactory: () => ({}),
+    ids: {
+      item: (() => {
+        let number = 0;
+        return () => `item-${++number}`;
+      })(),
+      execution: (() => {
+        let number = 0;
+        return () => `execution-${++number}`;
+      })(),
+    },
+  });
+
+  await controller.command({ kind: 'submit', text: 'active' });
+  await controller.command({ kind: 'submit', text: 'second' });
+  await controller.command({ kind: 'submit', text: 'third' });
+  await controller.command({ kind: 'cancel' });
+
+  expect(controller.state()).toMatchObject({
+    kind: 'paused',
+    reason: 'manual',
+    queue: [{ text: 'second' }, { text: 'third' }],
+  });
+  expect(starts).toEqual(['active']);
+
+  await controller.command({ kind: 'resume_queue' });
+  expect(starts).toEqual(['active', 'second']);
+
+  await controller.event({ kind: 'completed', executionId: 'execution-2' as ExecutionId, terminal: {} });
+  expect(starts).toEqual(['active', 'second', 'third']);
+});
+
 it('manual cancel with no retained queue returns to idle so the next submission runs immediately', async () => {
   const starts: string[] = [];
   let releaseCleanup!: () => void;

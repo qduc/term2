@@ -1,8 +1,11 @@
 import { it, expect } from 'vitest';
 import { Writable } from 'node:stream';
 import { runNonInteractive, runWithSession, createNonInteractiveSessionId } from './non-interactive.js';
-import { MockStream } from './services/test-helpers/mock-stream.js';
+import { MockStream, createMockStream } from './services/test-helpers/mock-stream.js';
 import { ToolOwnershipRegistry } from './services/approval/tool-ownership-registry.js';
+import { AgentClient } from './lib/agent-client.js';
+import { registerProvider, unregisterProvider } from './providers/registry.js';
+import { z } from 'zod';
 
 const createStringWritable = () => {
   let output = '';
@@ -18,6 +21,19 @@ const createStringWritable = () => {
     getOutput: () => output,
   };
 };
+
+const createNoopLogger = () => ({
+  info() {},
+  warn() {},
+  error() {},
+  debug() {},
+  security() {},
+  getCorrelationId() {
+    return undefined;
+  },
+  setCorrelationId() {},
+  clearCorrelationId() {},
+});
 
 it('streams text_delta events to stdout and appends newline', async () => {
   const stdout = createStringWritable();
@@ -599,6 +615,72 @@ it('with autoApprove=true: uses LLM to evaluate YELLOW commands', async () => {
   expect(calls).toEqual([{ answer: 'y', rejectionReason: undefined }]);
 });
 
+it('runNonInteractive exposes configured provider and model through its session lifecycle', async () => {
+  const stdout = createStringWritable();
+  const stderr = createStringWritable();
+  const lifecycleEvents: any[] = [];
+  const logger: any = createNoopLogger();
+  const settingsService: any = {
+    get(key: string) {
+      if (key === 'agent.provider') return 'configured-provider';
+      if (key === 'agent.model') return 'configured-model';
+      return undefined;
+    },
+    getDynamic() {
+      return undefined;
+    },
+  };
+  const hookLifecycle: any = {
+    async emit(event: unknown) {
+      lifecycleEvents.push(event);
+    },
+    async shutdown() {},
+  };
+  const hookEvents: any = {
+    create(type: string, payload: unknown) {
+      return { type, ...(payload as object) };
+    },
+  };
+
+  const exitCode = await runNonInteractive({
+    prompt: 'hello',
+    autoApprove: false,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+    logger,
+    settingsService,
+    hookLifecycle,
+    sessionClientFactory: {
+      create() {
+        return {
+          agentClient: {
+            chat: async () => '',
+            abort() {},
+            setModel() {},
+            addToolInterceptor() {
+              return () => {};
+            },
+            startStream: async () => createMockStream([]),
+            continueRunStream: async () => createMockStream([]),
+          },
+          continuationProjectionMode: 'legacy',
+          toolOwnership: new ToolOwnershipRegistry(),
+          hookEvents,
+          dispose() {},
+        };
+      },
+    },
+  });
+
+  expect(exitCode).toBe(0);
+  expect(lifecycleEvents[0]).toMatchObject({
+    type: 'session.start',
+    mode: 'non-interactive',
+    providerName: 'configured-provider',
+    modelName: 'configured-model',
+  });
+});
+
 it('runNonInteractive() disposes its factory-owned client after the runtime', async () => {
   const disposed: string[] = [];
   const createOptions: unknown[] = [];
@@ -606,18 +688,7 @@ it('runNonInteractive() disposes its factory-owned client after the runtime', as
   let removedInterceptors = 0;
   const stdout = createStringWritable();
   const stderr = createStringWritable();
-  const logger: any = {
-    info() {},
-    warn() {},
-    error() {},
-    debug() {},
-    security() {},
-    getCorrelationId() {
-      return undefined;
-    },
-    setCorrelationId() {},
-    clearCorrelationId() {},
-  };
+  const logger: any = createNoopLogger();
   const settingsService: any = {
     get() {
       return undefined;
@@ -676,18 +747,7 @@ it('runNonInteractive() blocks background shell execution for caller-owned clien
   let removedInterceptors = 0;
   const stdout = createStringWritable();
   const stderr = createStringWritable();
-  const logger: any = {
-    info() {},
-    warn() {},
-    error() {},
-    debug() {},
-    security() {},
-    getCorrelationId() {
-      return undefined;
-    },
-    setCorrelationId() {},
-    clearCorrelationId() {},
-  };
+  const logger: any = createNoopLogger();
   const settingsService: any = {
     get() {
       return undefined;
@@ -728,6 +788,135 @@ it('runNonInteractive() blocks background shell execution for caller-owned clien
   expect(await toolInterceptors[0]?.('shell', { command: 'safe' })).toBeNull();
   expect(removedInterceptors).toBe(1);
 });
+
+it('runNonInteractive auto-approves only the finite parent run-budget extensions', async () => {
+  const provider = 'non-interactive-run-budget-boundary';
+  const stdout = createStringWritable();
+  const stderr = createStringWritable();
+  const toolOwnership = new ToolOwnershipRegistry();
+  const requests: unknown[] = [];
+  let toolExecutions = 0;
+  const logger: any = createNoopLogger();
+  const values: Record<string, unknown> = {
+    'agent.provider': provider,
+    'agent.model': 'budget-model',
+    'agent.retryAttempts': 0,
+    'agent.reasoningEffort': 'default',
+    'agent.maxParallelToolCalls': 1,
+    'agent.contextCompaction.enabled': false,
+    'agent.runBudget.maxUsdMicros': 1_000_000,
+    'agent.runBudget.maxUnpricedTokens': 1_000_000,
+    'agent.runBudget.maxActiveTimeMs': 1_000_000,
+    'agent.runBudget.warningHeadroomUsdMicros': 0,
+    'agent.runBudget.warningHeadroomUnpricedTokens': 0,
+    'agent.runBudget.warningHeadroomActiveTimeMs': 0,
+    'agent.runBudget.softHeadroomUsdMicros': 0,
+    'agent.runBudget.softHeadroomUnpricedTokens': 0,
+    'agent.runBudget.softHeadroomActiveTimeMs': 0,
+    'agent.runBudget.turnBackstop': 1,
+    'agent.runBudget.extensionPercent': 100,
+    'agent.runBudget.maxParentExtensions': 2,
+    'agent.runBudget.identicalToolCallThreshold': 10,
+  };
+  const settingsService: any = {
+    get(key: string) {
+      return values[key];
+    },
+    getDynamic(key: string) {
+      return values[key];
+    },
+    set(key: string, value: unknown) {
+      values[key] = value;
+    },
+    setDynamic(key: string, value: unknown) {
+      values[key] = value;
+    },
+    setPersistent(key: string, value: unknown) {
+      values[key] = value;
+    },
+    setPersistentDynamic(key: string, value: unknown) {
+      values[key] = value;
+    },
+  };
+  const sessionContextService: any = {
+    runWithContext(_context: unknown, fn: () => unknown) {
+      return fn();
+    },
+    getContext() {
+      return null;
+    },
+  };
+
+  unregisterProvider(provider);
+  registerProvider({
+    id: provider,
+    label: 'Non-interactive run-budget test provider',
+    createStreamedModel: () => ({
+      async *stream(request: unknown) {
+        requests.push(request);
+        const call = requests.length;
+        yield { type: 'tool_call' as const, id: `call-${call}`, name: 'read_file', arguments: '{"path":"test"}' };
+        yield { type: 'completion' as const, responseId: `response-${call}`, output: [] };
+      },
+    }),
+    fetchModels: async () => [],
+  });
+
+  const agentClient = new AgentClient({
+    maxTurns: 100,
+    agentOverride: {
+      name: 'budget-test',
+      model: 'budget-model',
+      instructions: 'test',
+      tools: [
+        {
+          name: 'read_file',
+          description: 'read',
+          parameters: z.object({ path: z.string() }),
+          needsApproval: () => false,
+          execute: () => {
+            toolExecutions += 1;
+            return 'ok';
+          },
+          formatCommandMessage: () => [],
+        },
+      ],
+    },
+    deps: { logger, settings: settingsService, sessionContextService },
+    toolOwnership,
+  });
+
+  try {
+    const exitCode = await runNonInteractive({
+      prompt: 'continue until the budget stops you',
+      autoApprove: true,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      logger,
+      settingsService,
+      sessionContextService,
+      sessionClientFactory: {
+        create() {
+          return {
+            agentClient,
+            continuationProjectionMode: 'legacy',
+            toolOwnership,
+            dispose: () => agentClient.dispose(),
+          };
+        },
+      },
+    });
+
+    expect(exitCode).toBe(0);
+    expect(toolExecutions).toBe(3);
+    expect(requests).toHaveLength(3);
+    expect(stdout.getOutput()).toBe('Done.\n');
+    expect(stderr.getOutput()).toContain('--auto-approve enabled');
+  } finally {
+    unregisterProvider(provider);
+  }
+});
+
 it('returns non-zero and prints the hard-fit diagnostic when local compaction cannot fit', async () => {
   const stdout = createStringWritable();
   const stderr = createStringWritable();

@@ -589,6 +589,31 @@ it('rejects a fresh run targeting an active shared session', () => {
   expect(() => registry.startRun({ role: 'mentor', task: 'two' })).toThrowError(/already active/);
 });
 
+it.each(['failed', 'cancelled'] as const)(
+  'releases shared-session admission after %s terminal settlement',
+  async (terminalStatus) => {
+    let launches = 0;
+    const registry = make(({ request, signal }) => {
+      launches++;
+      if (launches > 1) return Promise.resolve(result(request.role));
+      if (terminalStatus === 'failed') return Promise.resolve(result(request.role, 'failed'));
+      return new Promise<SubagentResult>((_, reject) =>
+        signal.addEventListener('abort', () => reject(new Error('cancelled')), { once: true }),
+      );
+    });
+    const first = registry.startRun({ role: 'mentor', task: 'first' });
+
+    expect(() => registry.startRun({ role: 'mentor', task: 'blocked while active' })).toThrowError(/already active/);
+    if (terminalStatus === 'cancelled') registry.cancelRun(first.runId);
+    await expect(registry.getResult(first.runId)).resolves.toMatchObject({ status: terminalStatus });
+
+    const replacement = registry.startRun({ role: 'mentor', task: 'replacement after settlement' });
+    await expect(registry.getResult(replacement.runId)).resolves.toMatchObject({ status: 'completed' });
+    expect(launches).toBe(2);
+    registry.dispose();
+  },
+);
+
 it('returns terminal failures and cancellations instead of rejecting', async () => {
   const failed = make(async ({ request }) => result(request.role, 'failed'));
   const failedRun = failed.startRun({ role: 'explorer', task: 'fail' });

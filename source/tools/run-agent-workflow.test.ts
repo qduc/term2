@@ -34,6 +34,25 @@ it('runs two concurrent child agents and returns both results in one tool respon
   });
 });
 
+it('enforces the maxRuns guard at the run_agent_workflow tool boundary', async () => {
+  const run = vi.fn(async () => ({ status: 'completed', output: 'first result' }));
+  const tool = createRunAgentWorkflowToolDefinition({
+    runtime: { agent: () => ({ run }) } as any,
+    parentTools: [],
+    limits: { maxRuns: 1 },
+  });
+
+  const response = await tool.execute({
+    code: "const child = agent({ instructions: 'review' }); await child.run({ task: 'first' }); return child.run({ task: 'second' });",
+  });
+
+  expect(JSON.parse(response as string)).toMatchObject({
+    ok: false,
+    error: { code: 'limit_exceeded' },
+  });
+  expect(run).toHaveBeenCalledTimes(1);
+});
+
 it('documents the complete workflow contract while retaining code-only parameters', () => {
   const tool = createRunAgentWorkflowToolDefinition({ runtime: {} as any, parentTools: [] });
   expect(Object.keys((tool.parameters as any).shape)).toEqual(['code']);

@@ -82,32 +82,48 @@ mirrors another owner's state does not qualify.
 
 ## Phase 0 — Establish a trustworthy baseline
 
+Status: **Completed (2026-08-14).** Baseline results documented in [`docs/plans/validation-baseline-2026-08-14.md`](./docs/plans/validation-baseline-2026-08-14.md).
+
 **Outcome:** failures discovered during stabilization can be classified against
 a dated, reproducible baseline.
 
-### Work
+### Work completed
 
-- Record the current results of:
-  - focused tests for each critical seam;
-  - `NODE_ENV=test pnpm test`;
-  - `pnpm typecheck`;
-  - `pnpm test:provider-black-box`;
-  - formatting and lint checks used by the release path.
-- Separate source failures from fixture, dependency, sandbox, PTY, network, and
-  environment failures.
-- Remove stale status text from completed plans or label historical failures as
-  historical with their disposition.
-- Recast `docs/plans/escaped-defects-30d/` as an evidence inventory until its
-  sampling unit, discovery stage, and taxonomy are corrected. Do not use its
-  percentages to choose architecture work.
+- Recorded the original Phase 0 baseline and the final Phase 1 verification of:
+  - focused tests for each critical seam (76 file invocations / 1,683 passing
+    test invocations plus one retained expected-failure characterization in the
+    completed Phase 1 matrices);
+  - `NODE_ENV=test pnpm test` (final Phase 1 run: 483 files passing, 1 skipped;
+    6,221 tests passing, 1 expected failure, 2 skipped);
+  - `pnpm typecheck` (clean, 0 errors);
+  - `NODE_ENV=test pnpm test:provider-black-box` (19 files / 166 tests passing);
+  - formatting and lint checks used by the release path (`pnpm lint` clean).
+- Classified environment-only behaviors (Node `TimeoutNaNWarning`, expected `openai-websocket.reasoning` fixture skip, non-interactive e2e harness skips).
+- Recast `docs/plans/escaped-defects-30d/` as an unnormalized empirical evidence inventory with methodological disclaimers.
 
-### Exit criteria
+### Exit criteria met
 
 - One dated baseline records the exact commands, results, environment-only
-  limitations, and owner of every unresolved failure.
-- No stabilization repair begins from an unexplained red baseline.
+  limitations, and owner of every unresolved failure (`docs/plans/validation-baseline-2026-08-14.md`).
+- At baseline establishment, all recorded gates were green and no product
+  failure had yet been demonstrated. The later Phase 1 red characterization is
+  classified separately and queues its repair in Phase 2.
 
 ## Phase 1 — Define executable seam contracts
+
+Status: **Completed (2026-08-14).** Contract records and deterministic matrices
+are owner-reviewed in [`docs/contracts/`](./docs/contracts/README.md); all five
+focused test commands exit green (76 file invocations / 1,683 passing test
+invocations plus one retained expected-failure characterization).
+The Phase 0 Seam 2–4 command discrepancy was a test-record defect: nonexistent
+paths let Vitest silently skip coverage. The authoritative baseline now records
+the corrected commands and retains the discovery as a dated correction note.
+All minimum-matrix cells are characterized. One product/design defect is
+demonstrated and queued for Phase 2: a WebSocket receive-watchdog timeout
+terminates as an ambiguous outcome instead of reaching the previously documented
+HTTP/full-history fallback. Any repair must first prove that the failed request
+was unsent and define an explicit transport-rebind policy; blind replay remains
+forbidden.
 
 **Outcome:** the most failure-prone cross-owner behavior is stated in observable
 terms and has a deterministic contract matrix.
@@ -291,7 +307,7 @@ For each violation:
 6. Run focused tests during development.
 7. Run `pnpm typecheck`, formatting for changed files, and the broader suite
    proportional to the affected surface.
-8. Run `pnpm test:provider-black-box` during development for provider, bridge,
+8. Run `NODE_ENV=test pnpm test:provider-black-box` during development for provider, bridge,
    run-loop, registry, or non-interactive changes.
 9. Record confirmed checks, baseline failures, and remaining risks separately.
 

@@ -87,6 +87,66 @@ describe('SubagentToolFactory editor capability selection', () => {
   });
 });
 
+describe('SubagentToolPolicy fine-grained scope attenuation', () => {
+  function policy() {
+    return new SubagentToolPolicy({
+      settings: createMockSettings(),
+      logger: createMockLogger(),
+      sessionContextService: createSessionContextService(),
+    });
+  }
+
+  function tool(name: string) {
+    const execute = vi.fn(async () => 'underlying tool executed');
+    return {
+      definition: {
+        name,
+        description: `${name} test tool`,
+        parameters: z.object({}),
+        needsApproval: () => false,
+        execute,
+      } as any,
+      execute,
+    };
+  }
+
+  it.each([
+    {
+      name: 'finite filesystem scope disables shell',
+      build: (scopePolicy: SubagentToolPolicy, definition: any) =>
+        scopePolicy.wrapShellToolWithScope(definition, ['source/**']),
+      parameters: { command: 'pwd' },
+      expected: 'Shell access is not permitted when filesystem scopes are configured.',
+    },
+    {
+      name: 'empty network scope denies network',
+      build: (scopePolicy: SubagentToolPolicy, definition: any) =>
+        scopePolicy.wrapNetworkToolWithScope(definition, [], () => undefined),
+      parameters: { query: 'term2' },
+      expected: 'Network access denied: no allowed hosts configured.',
+      toolName: 'web_search',
+    },
+    {
+      name: 'finite non-wildcard host scope rejects web_fetch',
+      build: (scopePolicy: SubagentToolPolicy, definition: any) =>
+        scopePolicy.wrapNetworkToolWithScope(
+          definition,
+          ['docs.example.test'],
+          (params: unknown) => (params as { url?: string }).url,
+        ),
+      parameters: { url: 'https://docs.example.test/guide' },
+      expected: 'web_fetch cannot be used with finite host scopes',
+      toolName: 'web_fetch',
+    },
+  ])('fails closed when $name', async ({ build, parameters, expected, toolName = 'shell' }) => {
+    const { definition, execute } = tool(toolName);
+    const wrapped = build(policy(), definition);
+
+    await expect(wrapped.execute(parameters)).resolves.toContain(expected);
+    expect(execute).not.toHaveBeenCalled();
+  });
+});
+
 describe('SubagentToolFactory search tool descriptions', () => {
   function buildTools(definition: SubagentDefinition, searchViaShell: boolean) {
     const settings = createMemorySettings();

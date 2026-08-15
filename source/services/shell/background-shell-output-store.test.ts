@@ -122,6 +122,15 @@ describe('BackgroundShellOutputStore', () => {
     expect(store.readTail('job-1')?.text).toBe('x'.repeat(16));
   });
 
+  it('retains an unterminated chunk one byte below the byte cap without eviction', () => {
+    const store = new BackgroundShellOutputStore({ maxBytes: 16 });
+    store.open('job-1');
+    store.push('job-1', 'stdout', 'x'.repeat(15));
+
+    expect(store.readLines('job-1')).toEqual({ lines: [], droppedBytes: 0, droppedLines: 0, closed: false });
+    expect(store.readTail('job-1')).toEqual({ text: 'x'.repeat(15), droppedBytes: 0, droppedLines: 0, closed: false });
+  });
+
   it('surfaces the same dropped counters through every read', () => {
     const store = new BackgroundShellOutputStore({ maxBytes: 8 });
     store.open('job-1');

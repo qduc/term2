@@ -103,6 +103,31 @@ it('projectProviderHistory does not reinsert tool pairs behind a compaction mark
   expect(projected.warnings).toEqual([]);
 });
 
+it('projectProviderHistory preserves a pre-boundary tool fragment instead of reinserting its ledger pair', () => {
+  const preBoundaryResult = {
+    type: 'function_call_result',
+    id: 'fcr_1',
+    callId: 'call-read',
+    output: 'contents',
+  } as AgentInputItem;
+  const history: AgentInputItem[] = [
+    { role: 'user', type: 'message', content: 'run the tool' },
+    preBoundaryResult,
+    {
+      type: 'compaction',
+      id: 'cmp-1',
+      encrypted_content: 'cipher',
+      providerOpaque: { provider: 'openai' },
+    } as AgentInputItem,
+    { role: 'user', type: 'message', content: 'continue from the checkpoint' },
+  ];
+
+  const projected = projectProviderHistory({ history, toolLedger: [completedLedgerEntry()] });
+
+  expect(projected.history).toEqual(history);
+  expect(projected.warnings).toEqual([]);
+});
+
 it('keeps genuine turns in additive projections but omits them from model requests after a local checkpoint', () => {
   const checkpoint = {
     role: 'system',

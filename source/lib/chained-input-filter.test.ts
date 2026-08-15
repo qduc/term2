@@ -416,6 +416,22 @@ it('filterChainedModelInput accepts expected tool outputs whose function_call is
   ]);
 });
 
+it('filterChainedModelInput forwards only the completed result from a partial parallel batch', () => {
+  const completedResult = { type: 'function_call_output', callId: 'call-a', output: 'contents' };
+  const result = filterChainedModelInput(
+    {
+      input: [
+        { type: 'function_call', callId: 'call-a', name: 'read_file', arguments: '{}' },
+        { type: 'function_call', callId: 'call-b', name: 'shell', arguments: '{}' },
+        completedResult,
+      ],
+    },
+    { toolResultCallIds: ['call-a'], knownToolCallIds: ['call-a', 'call-b'] },
+  );
+
+  expect(result.input).toEqual([completedResult]);
+});
+
 it('filterChainedModelInput skips the orphan check when the input carries no tool calls', () => {
   // A pre-trimmed delta holds only the outputs; the matching calls live in the
   // chain the provider already has, so absence proves nothing here.

@@ -1,8 +1,11 @@
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { createSettingsCommand, formatSettingsSummary, parseSettingValue } from './settings-command.js';
 import { upsertProvider } from '../providers/index.js';
 import type { SettingsWithSources } from '../services/settings/settings-schema.js';
-import type { SettingsService } from '../services/settings/settings-service.js';
+import { SettingsService } from '../services/settings/settings-service.js';
 
 const baseSettings = {
   agent: {
@@ -151,6 +154,79 @@ it('viewing a single setting shows value and source', () => {
 
   expect(deps.messages.length).toBe(1);
   expect(deps.messages[0].includes('agent.model: gpt-4o (cli)')).toBe(true);
+});
+
+it('does not claim a failed durable replacement succeeded', () => {
+  const settingsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-command-'));
+  const messages: string[] = [];
+  const service = new SettingsService({
+    settingsDir,
+    disableLogging: true,
+    disableFilePersistence: false,
+  });
+  service.set('agent.model', 'predecessor-model');
+
+  const rename = vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => {
+    throw new Error('rename failed');
+  });
+
+  try {
+    const command = createSettingsCommand({
+      settingsService: service,
+      addSystemMessage: (message) => messages.push(message),
+      applyRuntimeSetting: () => {},
+      replaceInput: () => {},
+    });
+
+    command.action('agent.model replacement-model');
+
+    const freshService = new SettingsService({
+      settingsDir,
+      disableLogging: true,
+      disableFilePersistence: false,
+    });
+    expect(freshService.get('agent.model')).toBe('predecessor-model');
+    expect(messages).not.toContain('Set agent.model to replacement-model');
+    expect(messages.some((message) => message.includes('failed to save agent.model to disk'))).toBe(true);
+  } finally {
+    rename.mockRestore();
+    fs.rmSync(settingsDir, { recursive: true, force: true });
+  }
+});
+
+it('reports a memory-only outcome when persistence is disabled', () => {
+  const settingsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-command-'));
+  const messages: string[] = [];
+  const service = new SettingsService({
+    settingsDir,
+    disableLogging: true,
+  });
+
+  try {
+    const command = createSettingsCommand({
+      settingsService: service,
+      addSystemMessage: (message) => messages.push(message),
+      applyRuntimeSetting: () => {},
+      replaceInput: () => {},
+    });
+
+    command.action('agent.model gpt-5.1');
+
+    expect(messages.some((message) => message.includes('memory only'))).toBe(true);
+  } finally {
+    fs.rmSync(settingsDir, { recursive: true, force: true });
+  }
+});
+
+it.fails('redacts credential bytes from direct /settings queries', () => {
+  const secret = 'sk-direct-leaf-secret';
+  const deps = createDeps({ values: { 'agent.openai.apiKey': secret } });
+  const command = createSettingsCommand(deps);
+
+  command.action('agent.openai.apiKey');
+
+  expect(deps.messages).toHaveLength(1);
+  expect(deps.messages.every((message) => !message.includes(secret))).toBe(true);
 });
 
 it('setting runtime-modifiable values updates service and applies runtime hook', () => {

@@ -24,10 +24,37 @@ import { migrateLegacyAncillarySettings } from './ancillary-settings-migration.j
 import {
   hasMissingKeys,
   loadSettingsFromFile,
+  quarantineCorruptSettingsFile,
   saveSettingsToFile,
   stripSensitiveSettings,
+  type SettingsFileRecovery,
 } from './settings-persistence.js';
 import { resolveSettingsDirectory } from './settings-path.js';
+
+/**
+ * Result of a public settings mutation at the SettingsService owner boundary.
+ * A caller may only claim a durable replacement succeeded when this says
+ * `saved`; `not-persisted` means the in-memory value changed but no committed
+ * replacement settles on disk (persistence disabled, or the write failed).
+ */
+export type DurableWriteResult = { status: 'saved' } | { status: 'not-persisted'; reason: 'disabled' | 'failed' };
+
+/**
+ * Truthful outcome of startup corruption recovery, exposed through the
+ * SettingsService public boundary. `recovered: true` means the file was
+ * syntactically corrupt and a scan salvaged a JSON object from its bytes;
+ * `quarantinedPath` names the sibling file that preserves the original bytes
+ * when persistence is enabled (undefined when the file could not be moved or
+ * persistence is disabled and the corrupt file is left untouched).
+ */
+export type SettingsCorruptionRecovery =
+  | { recovered: false }
+  | {
+      recovered: true;
+      reason: string;
+      quarantinedPath?: string;
+      recoveredSectionKeys: string[];
+    };
 
 function cloneSettingValue<T>(value: T): T {
   if (value == null || typeof value !== 'object') {
@@ -103,6 +130,8 @@ export class SettingsService {
   private runtimeOverrides = new Map<string, unknown>();
   private runtimeOverrideSources = new Map<string, SettingSource>();
   private resetAllAtRuntime = false;
+  private lastDurableWrite: DurableWriteResult | undefined;
+  private recoveryResult: SettingsCorruptionRecovery = { recovered: false };
 
   constructor(options?: {
     settingsDir?: string;
@@ -157,11 +186,32 @@ export class SettingsService {
     // Load settings with precedence: CLI > Env > Config > Default
     const settingsFilePath = path.join(this.settingsDir, 'settings.json');
     const configFileExisted = fs.existsSync(settingsFilePath);
-    const { validated, raw: rawFileConfig, hadErrors: fileHadErrors, errorDetails } = this.loadFromFile();
+    const { validated, raw: rawFileConfig, hadErrors: fileHadErrors, errorDetails, recovery } = this.loadFromFile();
 
     if (configFileExisted && fileHadErrors) {
-      const details = errorDetails && errorDetails.length > 0 ? `:\n  - ${errorDetails.join('\n  - ')}` : '';
-      throw new Error(`Failed to parse settings file at ${settingsFilePath}${details}`);
+      if (!recovery?.recovered) {
+        const details = errorDetails && errorDetails.length > 0 ? `:\n  - ${errorDetails.join('\n  - ')}` : '';
+        throw new Error(`Failed to parse settings file at ${settingsFilePath}${details}`);
+      }
+
+      // The file was syntactically corrupt but a scan salvaged a JSON object
+      // from its bytes. Move the original bytes aside for diagnosis (only when
+      // persistence is enabled; otherwise the corrupt file is left untouched
+      // and every startup re-recovers), then continue with the salvaged state.
+      const quarantinedPath = this.disableFilePersistence ? undefined : quarantineCorruptSettingsFile(this.settingsDir);
+      this.recoveryResult = {
+        recovered: true,
+        reason: recovery.reason,
+        quarantinedPath,
+        recoveredSectionKeys: recovery.recoveredSectionKeys,
+      };
+      if (!this.disableLogging) {
+        this.loggingService.warn('Recovered settings from a corrupt file; original bytes preserved', {
+          settingsFile: settingsFilePath,
+          quarantinedPath,
+          recoveredSectionKeys: recovery.recoveredSectionKeys,
+        });
+      }
     }
 
     const { config: ancillarySettingsConfig, migrated: migratedLegacyAncillarySettings } =
@@ -220,8 +270,10 @@ export class SettingsService {
     this.registerRuntimeProviders();
 
     // Migrate legacy selected provider values (for example values with spaces)
-    // to the normalized provider id form before validation fallback runs.
-    this.migrateSelectedProviderId();
+    // to the normalized provider id form before validation fallback runs. The
+    // normalization is recorded as a startup migration so the durable file is
+    // rewritten with the normalized identity and a fresh service restart sees it.
+    const normalizedSelectedProviderId = this.migrateSelectedProviderId();
 
     // Validate selected provider and fall back if invalid (without rejecting the
     // entire settings file).
@@ -269,9 +321,21 @@ export class SettingsService {
           });
         }
       }
+    } else if (this.recoveryResult.recovered) {
+      // The corrupt file was quarantined above; write a fresh replacement now
+      // so the recovery happens once instead of on every startup.
+      if (!this.disableFilePersistence) {
+        this.saveToFile();
+        if (!this.disableLogging) {
+          this.loggingService.debug('Rewrote settings file after corruption recovery', {
+            settingsFile: settingsFilePath,
+          });
+        }
+      }
     } else if (
       (shouldUpdateFile ||
         shouldMigrateLegacyProviderFormat ||
+        normalizedSelectedProviderId ||
         migratedLegacyAncillarySettings ||
         migratedRequestDeadlineDefault ||
         normalizedSandboxAutoApproveConflict) &&
@@ -353,27 +417,32 @@ export class SettingsService {
     }
   }
 
-  private migrateSelectedProviderId(): void {
+  private migrateSelectedProviderId(): boolean {
     const current = this.settings?.agent?.provider;
     if (!current || typeof current !== 'string') {
-      return;
+      return false;
     }
 
     if (getProvider(current)) {
-      return;
+      return false;
     }
 
     const normalized = resolveProviderId({ name: current });
     if (!normalized || normalized === current) {
-      return;
+      return false;
     }
 
     if (!getProvider(normalized)) {
-      return;
+      return false;
     }
 
     this.settings.agent.provider = normalized;
     this.sources.set('agent.provider', 'config');
+    // Durable normalization: a fresh restart must see the same identity that
+    // the current process resolved, so the replacement is part of the startup
+    // rewrite instead of living only in memory.
+    this.startupMigrations.push(['agent.provider', normalized]);
+    return true;
   }
 
   private validateSelectedProvider(): void {
@@ -515,7 +584,7 @@ export class SettingsService {
     this.setDynamic(key, value, options);
   }
 
-  setDynamic(key: string, value: unknown, options?: { persist?: boolean }): void {
+  setDynamic(key: string, value: unknown, options?: { persist?: boolean }): DurableWriteResult {
     if (this.isSensitive(key)) {
       throw new Error(
         `Cannot modify '${key}' - it is a sensitive setting that can only be configured via environment variables.`,
@@ -583,16 +652,20 @@ export class SettingsService {
       }
     }
 
-    // Persist to file unless the caller explicitly opts out
+    // Persist to file unless the caller explicitly opts out. The durable
+    // settlement is the caller's evidence: only a `saved` result may be
+    // reported as a durable replacement.
     const persist = options?.persist !== false;
-    if (persist && !this.disableFilePersistence) {
-      this.saveToFile((current) => this.applyPersistedSetting(current, key, value));
-    }
+    const durableResult: DurableWriteResult = persist
+      ? this.saveToFile((current) => this.applyPersistedSetting(current, key, value))
+      : { status: 'not-persisted', reason: 'disabled' };
+    this.lastDurableWrite = durableResult;
 
     this.notifyChange(key);
     if (coupledKey) {
       this.notifyChange(coupledKey);
     }
+    return durableResult;
   }
 
   /**
@@ -654,7 +727,7 @@ export class SettingsService {
     this.setPersistentDynamic(key, value);
   }
 
-  setPersistentDynamic(key: string, value: unknown): void {
+  setPersistentDynamic(key: string, value: unknown): DurableWriteResult {
     if (this.isSensitive(key)) {
       throw new Error(
         `Cannot modify '${key}' - it is a sensitive setting that can only be configured via environment variables.`,
@@ -670,21 +743,21 @@ export class SettingsService {
 
     const coupledKey = this.normalizeSandboxAutoApproveExclusivity(key, value);
 
-    if (!this.disableFilePersistence) {
-      this.saveToFile((current) => this.applyPersistedSetting(current, key, value));
-    }
+    const durableResult = this.saveToFile((current) => this.applyPersistedSetting(current, key, value));
+    this.lastDurableWrite = durableResult;
 
     this.notifyChange(key);
     if (coupledKey) {
       this.notifyChange(coupledKey);
     }
+    return durableResult;
   }
 
   /**
    * Reset a setting to its default value.
    * Sensitive settings cannot be reset as they should only come from env.
    */
-  reset(key?: string): void {
+  reset(key?: string): DurableWriteResult {
     if (key && this.isSensitive(key)) {
       throw new Error(
         `Cannot reset '${key}' - it is a sensitive setting that can only be configured via environment variables.`,
@@ -729,17 +802,37 @@ export class SettingsService {
       this.runtimeOverrideSources.clear();
     }
 
-    if (!this.disableFilePersistence) {
-      this.saveToFile((current) => {
-        if (!key) return structuredClone(DEFAULT_SETTINGS);
-        return this.applyPersistedSetting(current, key, this.defaultValueFor(key));
-      });
-    }
+    const durableResult = this.saveToFile((current) => {
+      if (!key) return structuredClone(DEFAULT_SETTINGS);
+      return this.applyPersistedSetting(current, key, this.defaultValueFor(key));
+    });
+    this.lastDurableWrite = durableResult;
 
     this.notifyChange(key);
     if (key && coupledKey) {
       this.notifyChange(coupledKey);
     }
+    return durableResult;
+  }
+
+  /**
+   * The durable settlement recorded by the most recent public mutation. A
+   * caller that did not receive the mutation's return value (for example
+   * {@link setDynamicTransaction}) reads the same evidence here.
+   */
+  getLastDurableWrite(): DurableWriteResult | undefined {
+    return this.lastDurableWrite;
+  }
+
+  /**
+   * Truthful startup corruption-recovery outcome. `recovered: false` is the
+   * ordinary state; `recovered: true` means the file was syntactically
+   * corrupt, a scan salvaged a JSON object from its bytes, and (when
+   * persistence is enabled) the original bytes were moved to `quarantinedPath`
+   * before a fresh replacement was written.
+   */
+  getRecoveryResult(): SettingsCorruptionRecovery {
+    return this.recoveryResult;
   }
 
   /**
@@ -783,6 +876,7 @@ export class SettingsService {
     raw: any;
     hadErrors: boolean;
     errorDetails?: string[];
+    recovery?: SettingsFileRecovery;
   } {
     return loadSettingsFromFile({
       settingsDir: this.settingsDir,
@@ -899,9 +993,9 @@ export class SettingsService {
     return next as SettingsData;
   }
 
-  private saveToFile(mutate?: (current: SettingsData) => SettingsData): void {
+  private saveToFile(mutate?: (current: SettingsData) => SettingsData): DurableWriteResult {
     if (this.disableFilePersistence) {
-      return;
+      return { status: 'not-persisted', reason: 'disabled' };
     }
     const committed = saveSettingsToFile({
       settingsDir: this.settingsDir,
@@ -916,7 +1010,9 @@ export class SettingsService {
     });
     if (committed) {
       this.reconcileCommittedSettings(committed);
+      return { status: 'saved' };
     }
+    return { status: 'not-persisted', reason: 'failed' };
   }
 
   /**

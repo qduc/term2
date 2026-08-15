@@ -35,7 +35,7 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
       }
       return provider.getStreamedModel(model);
     },
-    fetchModels: async (deps: ProviderDeps, fetchImpl: ProviderFetch = fetch as any) => {
+    fetchModels: async (deps: ProviderDeps, fetchImpl: ProviderFetch = fetch) => {
       const { createOpenAICompatibleProviderDefinition: getRealDefinition } = await import(
         './openai-compatible.provider.js'
       );

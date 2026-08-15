@@ -373,3 +373,29 @@ it('refuses to serialize a provider_opaque item through the AI SDK', async () =>
     ),
   ).rejects.toThrow(/provider_opaque/);
 });
+
+it('AI SDK getResponse refuses a provider_opaque item', async () => {
+  let generateCalls = 0;
+  const model = createAiSdkStreamedModel({
+    provider: 'example',
+    modelId: 'model',
+    specificationVersion: 'v3',
+    supportedUrls: {},
+    async doGenerate() {
+      generateCalls += 1;
+      throw new Error('should not be reached');
+    },
+    async doStream() {
+      throw new Error('should not be reached');
+    },
+  } as unknown as LanguageModelV3);
+
+  expect(typeof model.getResponse).toBe('function');
+  await expect(
+    model.getResponse!({
+      input: [{ type: 'provider_opaque', provider: 'openai', item: { type: 'compaction', encrypted_content: 'blob' } }],
+      tools: [],
+    }),
+  ).rejects.toThrow(/provider_opaque from 'openai'/);
+  expect(generateCalls).toBe(0);
+});

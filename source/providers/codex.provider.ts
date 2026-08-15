@@ -98,7 +98,7 @@ export class CodexTokenManager {
 
   constructor(options?: { tokenPathResolver?: () => string | null; fetchImpl?: typeof fetch }) {
     this.tokenPathResolver = options?.tokenPathResolver || resolveTokenPath;
-    this.fetchImpl = options?.fetchImpl || (globalThis.fetch as any);
+    this.fetchImpl = options?.fetchImpl || globalThis.fetch;
   }
 
   getAccountId(): string | null {
@@ -253,7 +253,7 @@ async function getLocalCodexVersion(
   }
 }
 
-async function getNpmCodexVersion(fetchImpl: ProviderFetch = globalThis.fetch as any): Promise<string | null> {
+async function getNpmCodexVersion(fetchImpl: ProviderFetch = globalThis.fetch): Promise<string | null> {
   try {
     const response = await fetchImpl('https://registry.npmjs.org/@openai/codex/latest');
     if (!response.ok) return null;
@@ -269,7 +269,7 @@ export async function resolveCodexClientVersion(options?: {
   cacheDir?: string;
   execImpl?: (command: string) => Promise<{ stdout: string }>;
 }): Promise<string> {
-  const fetchImpl = options?.fetchImpl || (globalThis.fetch as any);
+  const fetchImpl = options?.fetchImpl || globalThis.fetch;
   const execImpl = options?.execImpl || (execAsync as any);
   const dir = options?.cacheDir || process.env.TERM2_CACHE_DIR || envPaths('term2').cache;
   const cachePath = path.join(dir, 'codex-client-version.json');
@@ -380,9 +380,9 @@ export function addCodexResponsesLiteHeader(url: unknown, init?: RequestInit): R
 
 async function fetchCodexModels(
   deps: ProviderDeps,
-  fetchImpl: ProviderFetch = fetch as any,
+  fetchImpl: ProviderFetch = fetch,
 ): Promise<Array<{ id: string; name?: string; default_reasoning_level?: string }>> {
-  const tokenManager = new CodexTokenManager({ fetchImpl: fetchImpl as any });
+  const tokenManager = new CodexTokenManager({ fetchImpl });
   const accessToken = await tokenManager.getOrRefreshAccessToken();
 
   const headers: Record<string, string> = {
@@ -629,7 +629,7 @@ registerProvider({
           codexSanitizeRequestMiddleware,
           codexHeadersMiddleware(sessionContextService),
         ],
-      }) as any,
+      }),
     });
 
     const provider = new CodexProvider(

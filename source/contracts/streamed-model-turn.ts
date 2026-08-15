@@ -60,11 +60,26 @@ export interface CodexRateLimitInfo {
   readonly secondary?: CodexRateLimitWindow;
 }
 
+/**
+ * One unary completion payload as returned by adapters that expose `getResponse`.
+ *
+ * Shared by the adapters that actually support the unary path: OpenAI Responses
+ * returns the tagged `completion` event (`completedEvent`), which is a subtype
+ * of this shape; AI SDK returns the same untagged `{ responseId, output, usage }`
+ * object. Optional fields stay optional so both adapters satisfy the type as-is.
+ */
+export type StreamedModelUnaryResult = {
+  readonly responseId: string;
+  readonly output: readonly StreamedModelTurnOutput[];
+  readonly usage?: StreamedModelUsage;
+  readonly finishReason?: string;
+};
+
 /** One application-owned streamed model invocation. */
 export interface StreamedModelTurn {
   stream(request: StreamedModelTurnRequest): AsyncIterable<StreamedModelTurnEvent>;
   /** Optional unary fast path for providers whose native API is non-streaming. */
-  getResponse?(request: StreamedModelTurnRequest): Promise<any>;
+  getResponse?(request: StreamedModelTurnRequest): Promise<StreamedModelUnaryResult>;
 }
 
 export interface StreamedModelTurnRequest {

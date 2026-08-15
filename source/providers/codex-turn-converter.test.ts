@@ -126,4 +126,12 @@ describe('provider_opaque rejection', () => {
       ]),
     ).toThrow(/provider_opaque/);
   });
+
+  it('toCodexResponsesInput refuses a Codex-tagged provider_opaque item', () => {
+    expect(() =>
+      toCodexResponsesInput([
+        { type: 'provider_opaque', provider: 'codex', item: { type: 'compaction', encrypted_content: 'blob' } },
+      ]),
+    ).toThrow(/provider_opaque from 'codex'/);
+  });
 });

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { LoggingService } from '../logging/logging-service.js';
+import { clearModelCache } from '../model-service.js';
 import { getProvider, upsertProvider } from '../../providers/registry.js';
 import { createOpenAICompatibleProviderDefinition } from '../../providers/openai-compatible-lazy.js';
 import { resolveProviderId, resolveProviderName } from './custom-provider-normalization.js';
@@ -62,6 +63,24 @@ function cloneSettingValue<T>(value: T): T {
   }
 
   return structuredClone(value);
+}
+
+/** Canonical JSON comparison for provider config entries (key order does not matter). */
+function providerConfigsEqual(a: unknown, b: unknown): boolean {
+  return JSON.stringify(sortObjectKeys(a)) === JSON.stringify(sortObjectKeys(b));
+}
+
+function sortObjectKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortObjectKeys);
+  if (value !== null && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.keys(record)
+        .sort()
+        .map((key) => [key, sortObjectKeys(record[key])]),
+    );
+  }
+  return value;
 }
 
 function setSettingValue(target: Record<string, any>, key: string, value: unknown): void {
@@ -417,6 +436,43 @@ export class SettingsService {
     }
   }
 
+  /**
+   * Invalidate the process-global model cache for exactly the custom providers
+   * whose persisted configuration changed at the settings boundary (added,
+   * removed, or modified under the same id). Providers whose configuration is
+   * untouched keep their cached model lists; there is deliberately no global
+   * wipe here. This runs at the provider-update boundary (before the settings
+   * change is broadcast), so the next model-selection load re-fetches the new
+   * configuration instead of presenting stale models from the previous one.
+   */
+  private invalidateChangedProviderModelCaches(previous: unknown, next: unknown): void {
+    const indexById = (list: unknown): Map<string, unknown> => {
+      const byId = new Map<string, unknown>();
+      if (!Array.isArray(list)) return byId;
+      for (const entry of list) {
+        const id = resolveProviderId(entry);
+        if (id) byId.set(id, entry);
+      }
+      return byId;
+    };
+
+    const prevById = indexById(previous);
+    const nextById = indexById(next);
+
+    const affected = new Set<string>();
+    for (const [id, prevEntry] of prevById) {
+      const nextEntry = nextById.get(id);
+      if (!nextEntry || !providerConfigsEqual(prevEntry, nextEntry)) affected.add(id);
+    }
+    for (const id of nextById.keys()) {
+      if (!prevById.has(id)) affected.add(id);
+    }
+
+    for (const id of affected) {
+      clearModelCache(id);
+    }
+  }
+
   private migrateSelectedProviderId(): boolean {
     const current = this.settings?.agent?.provider;
     if (!current || typeof current !== 'string') {
@@ -734,8 +790,18 @@ export class SettingsService {
       );
     }
 
+    // The persisted provider list is the provider-update boundary: any runtime
+    // save/delete flows through here. Capture the pre-change list so a same-id
+    // config change can be detected and only the affected providers' model
+    // caches evicted.
+    const previousProviders = key === 'providers' ? this.settings.providers : undefined;
+
     this.validateAndApplySetting(key, value);
     this.normalizeExclusiveAppModes(key, value);
+
+    if (key === 'providers') {
+      this.invalidateChangedProviderModelCaches(previousProviders, value);
+    }
 
     this.recordRuntimeOverride(key, value, 'cli');
 
@@ -789,13 +855,19 @@ export class SettingsService {
         defaultValue = defaultValue[k];
       }
 
+      const previousProviders = key === 'providers' ? this.settings.providers : undefined;
       obj[lastKey] = cloneSettingValue(defaultValue);
+      if (key === 'providers') {
+        this.invalidateChangedProviderModelCaches(previousProviders, defaultValue);
+      }
       this.sources.set(key, 'default');
       this.recordRuntimeOverride(key, defaultValue, 'default');
       coupledKey = this.normalizeSandboxAutoApproveExclusivity(key, defaultValue);
     } else {
       // Reset all settings
+      const previousProviders = this.settings.providers;
       this.settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+      this.invalidateChangedProviderModelCaches(previousProviders, DEFAULT_SETTINGS.providers);
       this.sources.clear();
       this.resetAllAtRuntime = true;
       this.runtimeOverrides.clear();

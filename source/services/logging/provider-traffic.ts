@@ -10,6 +10,7 @@ import type {
   ISessionContextService,
   IProviderTraffic,
   ProviderTrafficClosedResponse,
+  ProviderTrafficReceiveTiming,
   ProviderTrafficRequest,
   ProviderTrafficResponse,
 } from '../service-interfaces.js';
@@ -41,6 +42,7 @@ export type ReceivedTrafficSummary = {
   }>;
   fallbackBody?: unknown;
   payload?: unknown;
+  receiveTiming?: ProviderTrafficReceiveTiming;
 };
 
 export type DailySessionIndexEntry = {
@@ -1142,6 +1144,12 @@ export class ProviderTraffic implements IProviderTraffic {
       };
     }
 
+    // The receive timing describes the exchange, not the payload, so it rides
+    // on the summary rather than being folded into any transport's parse.
+    if (input.receiveTiming) {
+      summary = { ...summary, receiveTiming: input.receiveTiming };
+    }
+
     // 1. Write complete payload to artifact store
     this.store.recordRequestComplete({
       requestId: input.requestId,
@@ -1239,6 +1247,7 @@ export class ProviderTraffic implements IProviderTraffic {
     modelWrapperClass?: string;
     wsAttempt?: number;
     wsMaxAttempts?: number;
+    receiveTiming?: ProviderTrafficReceiveTiming;
   }): void {
     const trafficContext = this.sessionContextService.getContext() ?? null;
     const isEvaluator = trafficContext?.evaluator === true;
@@ -1273,6 +1282,11 @@ export class ProviderTraffic implements IProviderTraffic {
     }
     if (input.wsMaxAttempts !== undefined) {
       errorDetails.wsMaxAttempts = input.wsMaxAttempts;
+    }
+    // A transport-liveness timeout is only interpretable next to the budget it
+    // expired on, and the budget is user-configurable.
+    if (input.receiveTiming !== undefined) {
+      errorDetails.receiveTiming = input.receiveTiming;
     }
 
     // 1. Write failure to artifact store

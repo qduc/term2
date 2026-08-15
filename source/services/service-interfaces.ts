@@ -42,6 +42,7 @@ export interface ProviderTrafficResponse {
   modelClass?: string;
   modelWrapperClass?: string;
   transport?: 'websocket';
+  receiveTiming?: ProviderTrafficReceiveTiming;
 }
 
 export interface ProviderTrafficClosedResponse {
@@ -70,6 +71,23 @@ export interface ProviderTrafficStreamDiagnostics {
   events: unknown[];
 }
 
+/**
+ * What a transport-liveness guard observed while receiving a response, in the
+ * same clock it judges expiry with.
+ *
+ * The budgets travel with the measurements because they are user-configurable:
+ * a latency logged without the deadline it was measured against cannot be read
+ * back later as margin.
+ */
+export interface ProviderTrafficReceiveTiming {
+  frameCount: number;
+  firstFrameBudgetMs: number;
+  interFrameBudgetMs: number;
+  firstFrameMs?: number;
+  maxInterFrameMs?: number;
+  waitedMs?: number;
+}
+
 export interface IProviderTraffic {
   recordRequestStart(input: ProviderTrafficRequest): void;
   recordResponseReceived(input: ProviderTrafficResponse): Promise<void>;
@@ -83,6 +101,7 @@ export interface IProviderTraffic {
     modelWrapperClass?: string;
     wsAttempt?: number;
     wsMaxAttempts?: number;
+    receiveTiming?: ProviderTrafficReceiveTiming;
   }): void;
 }
 

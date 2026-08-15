@@ -122,6 +122,78 @@ it('resets its deadline for every raw event and reports an idle timeout', async 
   vi.useRealTimers();
 });
 
+it('reports the first-frame latency and inter-frame gaps it measured, with the budgets they were judged against', async () => {
+  vi.useFakeTimers();
+  const watchdog = createWebSocketReceiveWatchdog(undefined, { firstFrameMs: 100, interFrameMs: 200 });
+  const gaps = [6, 3, 8];
+  let reads = 0;
+  const raw = {
+    next: () => {
+      const gap = gaps[reads];
+      reads += 1;
+      if (gap === undefined) return Promise.resolve({ done: true, value: undefined });
+      return new Promise<IteratorResult<unknown>>((resolve) => {
+        setTimeout(() => resolve({ done: false, value: { type: 'response.output_text.delta' } }), gap);
+      });
+    },
+    return: async () => ({ done: true, value: undefined }),
+    [Symbol.asyncIterator]() {
+      return this;
+    },
+  };
+
+  expect(watchdog.receiveTiming()).toEqual({
+    frameCount: 0,
+    firstFrameBudgetMs: 100,
+    interFrameBudgetMs: 200,
+  });
+
+  const consume = (async () => {
+    for await (const _event of watchdog.wrap(raw)) {
+      // drain
+    }
+  })();
+  await vi.advanceTimersByTimeAsync(50);
+  await consume;
+
+  expect(watchdog.receiveTiming()).toEqual({
+    frameCount: 3,
+    firstFrameMs: 6,
+    maxInterFrameMs: 8,
+    firstFrameBudgetMs: 100,
+    interFrameBudgetMs: 200,
+  });
+  vi.useRealTimers();
+});
+
+it('reports how long it waited when a first-frame timeout expires', async () => {
+  vi.useFakeTimers();
+  const watchdog = createWebSocketReceiveWatchdog(undefined, { firstFrameMs: 10, interFrameMs: 20 });
+  const raw = {
+    next: () =>
+      new Promise<IteratorResult<unknown>>((_, reject) => {
+        watchdog.signal.addEventListener('abort', () => reject(watchdog.signal.reason), { once: true });
+      }),
+    return: async () => ({ done: true, value: undefined }),
+    [Symbol.asyncIterator]() {
+      return this;
+    },
+  };
+
+  const result = watchdog.wrap(raw)[Symbol.asyncIterator]().next();
+  const rejection = expect(result).rejects.toThrow('WebSocket first frame timeout');
+  await vi.advanceTimersByTimeAsync(10);
+  await rejection;
+
+  expect(watchdog.receiveTiming()).toEqual({
+    frameCount: 0,
+    waitedMs: 10,
+    firstFrameBudgetMs: 10,
+    interFrameBudgetMs: 20,
+  });
+  vi.useRealTimers();
+});
+
 it('preserves an external abort instead of rewriting it as a timeout', async () => {
   vi.useFakeTimers();
   const external = new AbortController();

@@ -944,3 +944,93 @@ it("ProviderTraffic writes an aborted stream's transcript to the artifact and ke
   expect(JSON.stringify(warn.mock.calls)).not.toContain('looping forever');
   expect(error).not.toHaveBeenCalled();
 });
+
+// A transport-liveness guard that never records its own margin can only be
+// calibrated by losing a live turn to a false positive, so the measured
+// latencies and the budgets they were judged against are retained per request.
+it('ProviderTraffic retains the receive timing of a successful websocket response', async () => {
+  const rootDir = makeTempDir();
+  const store = new ProviderTrafficArtifactStore({ rootDir });
+  const traffic = new ProviderTraffic(
+    { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), getCorrelationId: () => undefined },
+    NULL_SESSION_CONTEXT_SERVICE,
+    store,
+  );
+  const requestId = 'ws-timing-req';
+
+  traffic.recordRequestStart({ requestId, provider: 'codex', model: 'gpt-5.6-luna', sentBody: { input: [] } });
+  await traffic.recordResponseReceived({
+    requestId,
+    provider: 'codex',
+    model: 'gpt-5.6-luna',
+    status: 200,
+    transport: 'websocket',
+    response: { id: 'resp_1', output: [] },
+    receiveTiming: {
+      frameCount: 41,
+      firstFrameMs: 2_318,
+      maxInterFrameMs: 4_002,
+      firstFrameBudgetMs: 90_000,
+      interFrameBudgetMs: 600_000,
+    },
+  });
+
+  const dayDir = fs.readdirSync(rootDir).find((entry) => /^\d{4}-\d{2}-\d{2}$/.test(entry));
+  const sessionDir = fs.readdirSync(path.join(rootDir, dayDir!))[0];
+  const requestFile = fs.readdirSync(path.join(rootDir, dayDir!, sessionDir)).find((name) => name.endsWith('.json'))!;
+  const received = readRequestFile(path.join(rootDir, dayDir!, sessionDir, requestFile)).received as Record<
+    string,
+    unknown
+  >;
+
+  expect((received.summary as Record<string, unknown>).receiveTiming).toEqual({
+    frameCount: 41,
+    firstFrameMs: 2_318,
+    maxInterFrameMs: 4_002,
+    firstFrameBudgetMs: 90_000,
+    interFrameBudgetMs: 600_000,
+  });
+});
+
+it('ProviderTraffic retains the receive timing of a failed websocket request', () => {
+  const rootDir = makeTempDir();
+  const store = new ProviderTrafficArtifactStore({ rootDir });
+  const traffic = new ProviderTraffic(
+    { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), getCorrelationId: () => undefined },
+    NULL_SESSION_CONTEXT_SERVICE,
+    store,
+  );
+  const requestId = 'ws-timeout-req';
+
+  traffic.recordRequestStart({ requestId, provider: 'codex', model: 'gpt-5.6-luna', sentBody: { input: [] } });
+  traffic.recordRequestFailed({
+    requestId,
+    provider: 'codex',
+    model: 'gpt-5.6-luna',
+    error: new Error('WebSocket first frame timeout'),
+    receiveTiming: {
+      frameCount: 0,
+      waitedMs: 90_000,
+      firstFrameBudgetMs: 90_000,
+      interFrameBudgetMs: 600_000,
+    },
+  });
+
+  const dayDir = fs.readdirSync(rootDir).find((entry) => /^\d{4}-\d{2}-\d{2}$/.test(entry));
+  const sessionDir = fs.readdirSync(path.join(rootDir, dayDir!))[0];
+  const requestFile = fs.readdirSync(path.join(rootDir, dayDir!, sessionDir)).find((name) => name.endsWith('.json'))!;
+  const received = readRequestFile(path.join(rootDir, dayDir!, sessionDir, requestFile)).received as Record<
+    string,
+    unknown
+  >;
+
+  expect(received.error).toMatchObject({
+    message: 'WebSocket first frame timeout',
+    receiveTiming: {
+      frameCount: 0,
+      waitedMs: 90_000,
+      firstFrameBudgetMs: 90_000,
+      interFrameBudgetMs: 600_000,
+    },
+  });
+});

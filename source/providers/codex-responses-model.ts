@@ -24,6 +24,7 @@ import {
   createWebSocketReceiveWatchdog,
   DEFAULT_WEBSOCKET_RECEIVE_TIMEOUTS,
   type WebSocketReceiveTimeouts,
+  type WebSocketReceiveTiming,
 } from './websocket-receive-watchdog.js';
 import { markContextCompactionFailure, resolveContextManagement } from './openai-responses-model.js';
 
@@ -974,7 +975,12 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     });
   }
 
-  #logTrafficReceived(requestId: string, requestData: Record<string, unknown>, response: unknown): void {
+  #logTrafficReceived(
+    requestId: string,
+    requestData: Record<string, unknown>,
+    response: unknown,
+    receiveTiming?: WebSocketReceiveTiming,
+  ): void {
     const providerTraffic = this.providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
     const model = typeof requestData.model === 'string' ? requestData.model : this.#modelNameFallback();
 
@@ -985,12 +991,18 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       status: 200,
       response: response as any,
       transport: 'websocket',
+      ...(receiveTiming ? { receiveTiming } : {}),
       modelClass: WS_RESPONSE_MODEL_CLASS,
       modelWrapperClass: WS_RESPONSE_WRAPPER_CLASS,
     });
   }
 
-  #logTrafficFailed(requestId: string, requestData: Record<string, unknown>, error: unknown): void {
+  #logTrafficFailed(
+    requestId: string,
+    requestData: Record<string, unknown>,
+    error: unknown,
+    receiveTiming?: WebSocketReceiveTiming,
+  ): void {
     const providerTraffic = this.providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
     const model = typeof requestData.model === 'string' ? requestData.model : this.#modelNameFallback();
 
@@ -999,6 +1011,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       provider: 'codex',
       model,
       error,
+      ...(receiveTiming ? { receiveTiming } : {}),
       modelClass: WS_RESPONSE_MODEL_CLASS,
       modelWrapperClass: WS_RESPONSE_WRAPPER_CLASS,
     });
@@ -1033,6 +1046,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     wireStateKey?: ChainedWireStateKey,
     wireStateToken?: ChainedRequestToken,
     signal?: AbortSignal,
+    receiveTiming?: () => WebSocketReceiveTiming,
   ): Promise<AsyncIterable<any>> {
     const logReceived = this.#logTrafficReceived.bind(this);
     const logFailed = this.#logTrafficFailed.bind(this);
@@ -1071,7 +1085,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
             if (wireStateKey && wireStateToken && typeof response.id === 'string' && response.id.length > 0) {
               wireState.recordResponse(wireStateKey, wireStateToken, response.id, response.output);
             }
-            logReceived(requestId, requestData, response);
+            logReceived(requestId, requestData, response, receiveTiming?.());
           }
           yield event;
         }
@@ -1081,7 +1095,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         if (wireStateKey && !isWebSocketConnectionLimitReachedError(error)) {
           wireState.invalidate(wireStateKey);
         }
-        logFailed(requestId, requestData, error);
+        logFailed(requestId, requestData, error, receiveTiming?.());
         throw error;
       } finally {
         if (!sawTerminalEvent && !sourceExhausted && !streamFailed) {
@@ -1633,10 +1647,11 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         if (wireStateKey && wireStateToken && typeof response?.id === 'string' && response.id.length > 0) {
           this.chainedWireState.recordResponse(wireStateKey, wireStateToken, response.id, response.output);
         }
-        this.#logTrafficReceived(requestId, requestData, response);
+        this.#logTrafficReceived(requestId, requestData, response, watchdog.receiveTiming());
         return response;
       } catch (error) {
         const timeoutError = watchdog.timeoutError();
+        const receiveTiming = watchdog.receiveTiming();
         watchdog.close();
         const failure = timeoutError ?? error;
         if (wireStateKey) {
@@ -1646,7 +1661,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
             this.chainedWireState.invalidate(wireStateKey);
           }
         }
-        this.#logTrafficFailed(requestId, requestData, failure);
+        this.#logTrafficFailed(requestId, requestData, failure, receiveTiming);
         throw failure;
       }
     }
@@ -1661,9 +1676,11 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         wireStateKey,
         wireStateToken,
         updatedRequest.signal,
+        () => watchdog.receiveTiming(),
       );
     } catch (error) {
       const timeoutError = watchdog.timeoutError();
+      const receiveTiming = watchdog.receiveTiming();
       watchdog.close();
       const failure = timeoutError ?? error;
       if (wireStateKey) {
@@ -1673,7 +1690,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
           this.chainedWireState.invalidate(wireStateKey);
         }
       }
-      this.#logTrafficFailed(requestId, requestData, failure);
+      this.#logTrafficFailed(requestId, requestData, failure, receiveTiming);
       throw failure;
     }
   }

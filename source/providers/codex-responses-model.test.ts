@@ -3141,3 +3141,114 @@ it('CodexResponsesWSModel applies configured websocket receive timeouts', async 
     vi.useRealTimers();
   }
 });
+
+// The watchdog is the only component that knows both what it measured and what
+// budget it measured against; if that never reaches the traffic log, the guard's
+// margin can only be discovered by a live turn dying to a false positive.
+it('CodexResponsesWSModel records the watchdog receive timing of a completed websocket response', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const trafficCalls: Array<{ method: string; args: any }> = [];
+  const mockProviderTraffic: IProviderTraffic = {
+    recordRequestStart(input) {
+      trafficCalls.push({ method: 'recordRequestStart', args: input });
+    },
+    async recordResponseReceived(input) {
+      trafficCalls.push({ method: 'recordResponseReceived', args: input });
+    },
+    recordResponseClosed(input) {
+      trafficCalls.push({ method: 'recordResponseClosed', args: input });
+    },
+    recordRequestFailed(input) {
+      trafficCalls.push({ method: 'recordRequestFailed', args: input });
+    },
+  };
+
+  transport.fetchResponse = async function () {
+    return makeStream([
+      { type: 'response.created', response: { id: 'resp_timing' } },
+      { type: 'response.output_text.delta', delta: 'hi' },
+      { type: 'response.completed', response: { id: 'resp_timing', output: [], status: 'completed' } },
+    ]);
+  };
+
+  const model = new CodexResponsesWSModel(
+    { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+    'gpt-5-codex',
+    { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+    undefined,
+    mockProviderTraffic,
+    undefined,
+    { firstFrameMs: 90_000, interFrameMs: 600_000 },
+    transport,
+  );
+
+  await collect(model.stream({ input: [], tools: [] }));
+
+  const received = trafficCalls.find(({ method }) => method === 'recordResponseReceived');
+  expect(received?.args.receiveTiming).toMatchObject({
+    frameCount: 3,
+    firstFrameBudgetMs: 90_000,
+    interFrameBudgetMs: 600_000,
+  });
+  expect(typeof received?.args.receiveTiming.firstFrameMs).toBe('number');
+});
+
+it('CodexResponsesWSModel records how long a first-frame timeout waited against its budget', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const trafficCalls: Array<{ method: string; args: any }> = [];
+  const mockProviderTraffic: IProviderTraffic = {
+    recordRequestStart(input) {
+      trafficCalls.push({ method: 'recordRequestStart', args: input });
+    },
+    async recordResponseReceived(input) {
+      trafficCalls.push({ method: 'recordResponseReceived', args: input });
+    },
+    recordResponseClosed(input) {
+      trafficCalls.push({ method: 'recordResponseClosed', args: input });
+    },
+    recordRequestFailed(input) {
+      trafficCalls.push({ method: 'recordRequestFailed', args: input });
+    },
+  };
+
+  vi.useFakeTimers();
+  transport.fetchResponse = async function (request: any) {
+    return {
+      [Symbol.asyncIterator]: () => ({
+        next: () =>
+          new Promise((_resolve, reject) => {
+            request.signal?.addEventListener('abort', () => reject(request.signal.reason), { once: true });
+          }),
+        return: async () => ({ done: true, value: undefined }),
+      }),
+    };
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+      'gpt-5-codex',
+      { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+      undefined,
+      mockProviderTraffic,
+      undefined,
+      { firstFrameMs: 25, interFrameMs: 50 },
+      transport,
+    );
+    const pending = collect(model.stream({ input: [], tools: [] }));
+    void pending.catch(() => {});
+
+    await vi.advanceTimersByTimeAsync(25);
+    await expect(pending).rejects.toThrow('WebSocket first frame timeout');
+
+    const failed = trafficCalls.find(({ method }) => method === 'recordRequestFailed');
+    expect(failed?.args.receiveTiming).toEqual({
+      frameCount: 0,
+      waitedMs: 25,
+      firstFrameBudgetMs: 25,
+      interFrameBudgetMs: 50,
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+});

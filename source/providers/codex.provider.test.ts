@@ -312,7 +312,7 @@ it('Codex provider is registered in the registry', () => {
   expect(typeof provider?.createStreamedModel).toBe('function');
   expect(provider?.capabilities).toEqual({
     supportsConversationChaining: true,
-    supportsContextCompaction: true,
+    supportsContextCompaction: false,
     usesStrictToolSchema: true,
     supportsPromptCacheKey: true,
   });

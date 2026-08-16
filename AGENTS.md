@@ -35,38 +35,20 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 
 ## Active or deferred
 
-- Known-red on `main` as of 2026-08-16, pre-existing and unowned — do not
-  assume you broke these:
-  - `source/services/conversation/conversation-replay.test.ts` — "reconstructs
-    history and ledger on mid-turn interruption" expects a 3-item history and
-    gets 2. Verified failing at `ecbc5016`, before that day's worktree merges.
-  - `pnpm typecheck` reports 3 errors, all in test files:
-    `source/components/InputBox.test.tsx` (2) and
-    `source/services/agent-runtime/application-run-loop.test.ts` (1).
 - Test suite audit — foundation merged, milestone still non-destructive:
   build the evidence graph, not cleanup. Do not remove, rewrite, retier, or
   consolidate tests, and do not dispatch explorers, without the approval
   `docs/plans/test-suite-audit.md` describes. The graph and its vocabulary live
   in `docs/test-audit/`; run it with `pnpm test-audit`.
-- Service-boundary contract completion (SB-00 / SB-08) — a batch of audit
-  records and characterization-test packets was merged to `main` on 2026-08-16
-  from worktrees that have since been removed. **The merge did not complete
-  this work.** Each record still carries its own pending status, and several
-  say "no commit or merge" as their disposition — that line describes the state
-  they were written in, not the state of the repo. Read the record before
-  acting on the area it covers:
-  - `docs/plans/service-boundary-contract-completion-sb08-workspace.md` and
-    `docs/contracts/09-execution-root-authority-and-workspace-lease.md` — audit
-    draft, **not owner-reviewed**. Its 8-file characterization gate now passes.
-  - `docs/plans/service-boundary-contract-completion-sb08-rtk.md` — **owner
-    decision pending**; an audit note and test packet, not a repair.
-  - `docs/plans/service-boundary-contract-completion-sb08-memory.md` and
-    `docs/plans/2026-08-15T16:39:06Z--vp-engineering-deepseek--sb00-gap-1.md` —
-    characterization tests plus a disposition note; no production change.
-  - `docs/plans/service-boundary-contract-completion-sb00-close-record.md` and
-    the eight `...-sb00-*` follow-up records — audit/docs only. The tracker row
-    update in the primary plan `service-boundary-contract-completion.md`
-    remains grant-gated and was **not** applied.
+- Service-boundary contract completion (SB-00 / SB-08) — **CLOSED (program
+  complete) 2026-08-16.** All remaining-SB slices A–K landed on local `main`
+  (no push); Contracts 09/10/11/12 landed docs-only and SB-00 is closed. The
+  remaining work is the **Consolidated Implementation Backlog** at the end of
+  `docs/plans/service-boundary-contract-completion.md` — separately authorized
+  production repairs (SB-01/03/07 type-hardening, SB-02 durability, SB-04
+  port-hardening, SB-05/SB-06 repair after owner decisions), each needing its
+  own worktree and an exact red characterization before any code change. Read
+  the primary plan's Resume-here holds before touching any listed area.
 - `tools/president-decision-portal/` and `scripts/candidate-gates.ts` — merged
   on 2026-08-16 from worktrees with no plan doc and no recorded caller. Nothing
   invokes either one. The portal binds a single hard-coded LAN address and

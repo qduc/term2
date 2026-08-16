@@ -14,13 +14,27 @@ After making code changes, run tests appropriate to the scope and report the res
 ```bash
 pnpm test                          # Run all tests
 pnpm test path/to/my-file.test.ts  # Run tests in a specific file
+pnpm test:related ./source/foo.ts  # Run statically related tests for source files
+pnpm test:changed                  # Run tests affected by the current Git diff
 pnpm exec prettier --write <files> # Fix formatting in files you changed
 ```
+
+`test:related` and `test:changed` fail when they select no tests. Pass related
+paths directly to pnpm and begin every repository-relative source path with
+`./`; do not insert `--` before the path.
 
 ## Choosing scope
 
 - **Small, localized changes** — run focused tests for the affected area.
+- **Tight feedback after a coherent source change** — run the focused test,
+  then `pnpm test:related ./source/...` for every changed production source
+  file. This follows static imports only; dynamic loading and behavioral
+  coupling still need an intentionally selected test.
+- **Before handoff** — run `pnpm test:changed`. A no-tests failure means the
+  diff needs an intentionally selected broader test; it is not a green gate.
 - **Broad or architectural changes, shared utilities, anything that may affect multiple areas** — run the full suite.
+- **Project-wide inputs** — changes to `package.json`, `pnpm-lock.yaml`,
+  `tsconfig*.json`, Vitest configuration, or `scripts/` require the full suite.
 - **No relevant focused test exists** — run the smallest applicable broader command, and say why.
 - **Provider, bridge, run-loop, registry, or non-interactive changes** — these additionally require the provider black-box suite; use the `provider-testing` skill.
 

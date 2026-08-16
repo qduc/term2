@@ -1497,3 +1497,27 @@ it.sequential('backspace works after committing a setting value and returning to
   // The cursor has moved back by one: '/settings' is 9 chars, cursor at 9.
   expect(frame.includes('Cursor:9')).toBe(true);
 });
+
+it.sequential('shows Queue vs Steer guidance when turnInFlight is active', async () => {
+  const { lastFrame } = await renderAndFlush(<TestInputBox {...defaultProps} turnInFlight={true} />);
+  const output = lastFrame() ?? '';
+  expect(output.includes('Enter Steer active turn')).toBe(true);
+  expect(output.includes('Alt+Enter Queue for next turn')).toBe(true);
+});
+
+it.sequential(
+  'shows queue management hint when turnInFlight is active with pending items and empty value',
+  async () => {
+    const { lastFrame } = await renderAndFlush(
+      <TestInputBox
+        {...defaultProps}
+        turnInFlight={true}
+        pendingQueuedMessages={[{ id: 'q-1', text: 'first queued', queuedAt: 1 }]}
+      />,
+    );
+    const output = lastFrame() ?? '';
+    expect(output.includes('select queued')).toBe(true);
+    expect(output.includes('Enter Steer')).toBe(true);
+    expect(output.includes('Alt+Enter Queue')).toBe(true);
+  },
+);

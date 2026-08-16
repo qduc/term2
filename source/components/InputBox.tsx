@@ -397,6 +397,23 @@ const InputBox: FC<Props> = ({
       </Box>
       {escHintVisible && <Text color="#64748b">Press ESC again to clear input</Text>}
       {waitingForRejectionReason && <Text color="#64748b">(or ESC to cancel)</Text>}
+      {turnInFlight && queueSelectionIndex === null && !waitingForRejectionReason && !escHintVisible && (
+        <Box marginTop={0}>
+          <Text color="#64748b">
+            {(pendingQueuedMessages?.length ?? 0) > 0 && value === '' ? (
+              <>
+                <Text color="#94a3b8">↑</Text> select queued · <Text color="#22d3ee">Enter</Text> Steer ·{' '}
+                <Text color="#a78bfa">Alt+Enter</Text> Queue
+              </>
+            ) : (
+              <>
+                <Text color="#22d3ee">Enter</Text> Steer active turn · <Text color="#a78bfa">Alt+Enter</Text> Queue for
+                next turn
+              </>
+            )}
+          </Text>
+        </Box>
+      )}
     </Box>
   );
 };

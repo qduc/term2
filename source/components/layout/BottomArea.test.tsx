@@ -2,7 +2,6 @@
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import { afterEach, it, expect, vi } from 'vitest';
 import React, { act, useState } from 'react';
-import { render } from 'ink-testing-library';
 import { InputProvider } from '../../context/InputContext.js';
 import BottomArea, { type BottomAreaProps } from './BottomArea.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
@@ -74,14 +73,22 @@ const renderBottomArea = async (props: Partial<BottomAreaProps> = {}) => {
     ...props,
   };
 
-  const result = render(
+  const result = await renderInAct(
     <InputProvider>
       <ControlledBottomArea props={fullProps} />
     </InputProvider>,
   );
-
-  await new Promise((resolve) => setTimeout(resolve, 10));
   return result;
+};
+
+const waitForBottomArea = async (predicate: () => boolean, description: string): Promise<void> => {
+  const deadline = Date.now() + 1_000;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error(`Timed out waiting for ${description}.`);
+    await act(async () => {
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+  }
 };
 
 const FirstRunBottomArea = ({
@@ -163,20 +170,22 @@ it.sequential('keeps the active first-run provider menu interactive through cred
     </InputProvider>,
   );
 
-  await act(async () => {
-    for (let i = 0; i < 5; i += 1) await new Promise((resolve) => setImmediate(resolve));
-  });
+  await waitForBottomArea(
+    () =>
+      controller.getSnapshot().stack.at(-1)?.kind === 'providers' &&
+      view.lastFrame()?.includes('Provider Management') === true,
+    'the first-run provider menu',
+  );
   expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('providers');
   expect(view.lastFrame()).toContain('Provider Management');
 
-  await act(async () => {
-    view.stdin.write('\u001b[B');
-    for (let i = 0; i < 5; i += 1) await new Promise((resolve) => setImmediate(resolve));
-  });
-  await act(async () => {
-    view.stdin.write('\r');
-    for (let i = 0; i < 5; i += 1) await new Promise((resolve) => setImmediate(resolve));
-  });
+  await act(async () => view.stdin.write('\u001b[B'));
+  await act(async () => view.stdin.write('\r'));
+  await waitForBottomArea(
+    () =>
+      settingsService.get('agent.provider') === 'openrouter' && view.lastFrame()?.includes('Step 4: API Key') === true,
+    'the provider credential step',
+  );
   expect(settingsService.get('agent.provider')).toBe('openrouter');
   expect(view.lastFrame()).toContain('Step 4: API Key');
   expect(onSubmit).not.toHaveBeenCalled();
@@ -188,8 +197,8 @@ it.sequential('keeps the active first-run provider menu interactive through cred
       input: { kind: 'composer', text: 'test-key', cursor: 'test-key'.length },
       selected: undefined,
     });
-    for (let i = 0; i < 5; i += 1) await new Promise((resolve) => setImmediate(resolve));
   });
+  await waitForBottomArea(() => view.lastFrame()?.includes('Save Changes') === true, 'the save confirmation step');
   expect(view.lastFrame()).toContain('Save Changes');
 
   await act(async () => {
@@ -198,8 +207,12 @@ it.sequential('keeps the active first-run provider menu interactive through cred
       input: { kind: 'none' },
       selected: undefined,
     });
-    for (let i = 0; i < 5; i += 1) await new Promise((resolve) => setImmediate(resolve));
   });
+  await waitForBottomArea(
+    () =>
+      controller.getSnapshot().stack.at(-1)?.kind === 'model' && view.lastFrame()?.includes('Choose a model') === true,
+    'the first-run model step',
+  );
   expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('model');
   expect(view.lastFrame()).toContain('First-run setup');
   expect(view.lastFrame()).toContain('Choose a model');
@@ -253,20 +266,22 @@ it.sequential('BottomArea gives the background task manager exclusive input owne
     onBackgroundTaskManagerOpenChange,
   });
 
-  await act(async () => {
-    view.stdin.write('\x07');
-    await new Promise((resolve) => setImmediate(resolve));
-  });
+  await act(async () => view.stdin.write('\x07'));
+  await waitForBottomArea(
+    () => view.lastFrame()?.includes('Manage background tasks') === true,
+    'the background task manager',
+  );
 
   const output = view.lastFrame() ?? '';
   expect(output).toContain('Manage background tasks');
   expect(output).not.toContain('❯ Type a message');
   expect(onBackgroundTaskManagerOpenChange).toHaveBeenLastCalledWith(true);
 
-  await act(async () => {
-    view.stdin.write('\u001B');
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  });
+  await act(async () => view.stdin.write('\u001B'));
+  await waitForBottomArea(
+    () => onBackgroundTaskManagerOpenChange.mock.lastCall?.[0] === false,
+    'background task manager close',
+  );
   expect(onBackgroundTaskManagerOpenChange).toHaveBeenLastCalledWith(false);
   act(() => view.unmount());
 });

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket, WebSocketServer } from 'ws';
 import {
   createIsolatedWorkspaceLease,
+  writePtyTextAndSubmit,
   type IsolatedWorkspaceLease,
   type IsolatedWorkspacePaths,
   type PtyChildDriver,
@@ -170,7 +171,6 @@ const COMPACTION_ROUTE: ProviderRoute = {
 };
 
 const DEFAULT_TIMEOUT_MS = 7_500;
-const TERMINAL_KEY_EVENT_YIELD_MS = 50;
 const PROMPT = 'fixture resilience prompt';
 const ANSWER = 'fixture resilience answer';
 const REASONING = 'fixture response-side reasoning';
@@ -648,11 +648,7 @@ async function startInteractive(
 }
 
 async function submitPrompt(child: PtyChildDriver, prompt: string): Promise<void> {
-  await child.write(prompt);
-  // Keep terminal text and Enter as distinct key events; this bounded yield
-  // only prevents PTY input coalescing and does not wait for provider state.
-  await delay(TERMINAL_KEY_EVENT_YIELD_MS);
-  await child.write('\r');
+  await writePtyTextAndSubmit(child, prompt);
 }
 
 function countIdlePrompts(output: string): number {

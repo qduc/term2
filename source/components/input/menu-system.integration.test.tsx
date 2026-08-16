@@ -78,7 +78,7 @@ const copySelections: CopySelection[] = [
 
 const settle = async () => {
   await act(async () => {
-    for (let i = 0; i < 10; i++) await new Promise((resolve) => setImmediate(resolve));
+    for (let i = 0; i < 2; i++) await new Promise((resolve) => setImmediate(resolve));
   });
 };
 

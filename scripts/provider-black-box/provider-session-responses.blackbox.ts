@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocketServer, type WebSocket } from 'ws';
 import {
   createIsolatedWorkspaceLease,
+  writePtyTextAndSubmit,
   type IsolatedWorkspaceLease,
   type PtyChildDriver,
 } from './provider-test-harness.js';
@@ -434,11 +435,8 @@ async function waitForIdlePromptAfterResponse(
   });
 }
 
-/** Separate terminal text and Enter so PTY input coalescing cannot drop the key event. */
 async function writePrompt(child: PtyChildDriver, text: string): Promise<void> {
-  await child.write(text);
-  await delay(50);
-  await child.write('\r');
+  await writePtyTextAndSubmit(child, text);
 }
 
 /** ApprovalPrompt accepts y/n immediately; they are not text submissions. */

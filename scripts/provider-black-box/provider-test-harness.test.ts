@@ -6,6 +6,7 @@ import {
   createIsolatedWorkspaceLease,
   removeIsolatedWorkspaceRoot,
   withIsolatedWorkspace,
+  writePtyTextAndWaitForVisibleEcho,
   type IsolatedWorkspaceLease,
 } from './provider-test-harness.js';
 
@@ -55,7 +56,7 @@ describe('provider black-box harness', () => {
     await withIsolatedWorkspace({}, async (workspace) => {
       const child = await workspace.start({ command: process.execPath, args: [CHILD, 'echo'] });
       await child.waitForVisibleOutput('ready');
-      await child.write('stateful prompt\n');
+      await writePtyTextAndWaitForVisibleEcho(child, 'stateful prompt\n');
       await child.waitForState((snapshot) => snapshot.visibleOutput.includes('echo: stateful prompt'));
       await expect(child.waitForExit()).resolves.toMatchObject({ exitCode: 0 });
       expect(child.readVisible()).toContain('echo: stateful prompt');

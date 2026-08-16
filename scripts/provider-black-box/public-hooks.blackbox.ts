@@ -2,7 +2,11 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { startFakeProviderHttpServer, type FakeProviderHttpServer } from './fake-provider-http-server.js';
-import { createIsolatedWorkspaceLease, type IsolatedWorkspacePaths } from './provider-test-harness.js';
+import {
+  createIsolatedWorkspaceLease,
+  writePtyTextAndSubmit,
+  type IsolatedWorkspacePaths,
+} from './provider-test-harness.js';
 
 let server: FakeProviderHttpServer | undefined;
 
@@ -100,13 +104,9 @@ describe('public hooks through the packaged CLI', () => {
         cwd: process.cwd(),
       });
       await child.waitForVisibleOutput('❯ ', 15_000);
-      await child.write('fixture prompt');
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      await child.write('\r');
+      await writePtyTextAndSubmit(child, 'fixture prompt');
       await child.waitForVisibleOutput('hello', 15_000);
-      await child.write('/quit');
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      await child.write('\r');
+      await writePtyTextAndSubmit(child, '/quit');
       await child.waitForExit(15_000);
 
       await expect(readFile(join(workspace.root, 'hook-events.log'), 'utf8')).resolves.toContain(

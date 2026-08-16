@@ -128,6 +128,12 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   changing execution, cancellation, or transfer semantics.
 
 - `docs/plans/provider-neutral-context-compaction.md` — **Milestones 1–6 fully implemented and verified.** Preserves the OpenAI-native opaque lane and adds an opt-in local fallback built around safe request-boundary cutting, ratio plus an optional raw-token automatic threshold, manual `/compact`, sequential cold-prefix summaries with load-bearing facts copied verbatim, a verbatim hot tail, durable replacement checkpoints, and tool-ledger/continuity safety.
+  Read "Cold opaque items are droppable (2026-08-16 correction)" before touching
+  `LocalContextCompactor`'s opaque handling: the old fail-closed rule was
+  reversed because it silently disabled compaction for the rest of a
+  conversation. Cold provider-opaque items are dropped with their turn; the
+  invariant that is actually enforced is that a cut never orphans a tool result
+  in the hot tail.
 
 - `docs/plans/tool-output-and-effect-safety.md` — **Milestones 1–2 implemented**
   (branch `tool-output-effect-safety`). Read before touching `read_file` result

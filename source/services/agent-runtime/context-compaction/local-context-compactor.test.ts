@@ -94,8 +94,13 @@ it('fails before generation for an uncatalogued model without a raw threshold', 
   expect(generate).not.toHaveBeenCalled();
 });
 
-it('fails closed instead of exposing provider-opaque history to the summarizer', async () => {
-  const generate = vi.fn();
+// A cold provider-opaque item is ciphertext describing a turn the checkpoint is
+// about to replace. Preserving it would orphan it from the call it is paired
+// with, which is a provider 400; summarizing it is impossible. Refusing to
+// compact instead used to disable compaction permanently, because nothing but
+// compaction ever removes such an item from history.
+it('compacts past an encrypted provider-opaque item instead of refusing', async () => {
+  const generate = vi.fn(async () => ({ text: 'summary' }));
   const history = [
     ...turns(2),
     {
@@ -105,19 +110,103 @@ it('fails closed instead of exposing provider-opaque history to the summarizer',
     },
     ...turns(3),
   ];
-  await expect(
-    new LocalContextCompactor({ generate }).compactAtBoundary({
-      history,
-      provider: 'openai',
-      model: 'gpt-5',
-      sourceRevision: 1,
-      contextWindow: 100_000,
-      maxOutputTokens: 1_000,
-      compactThreshold: 0.8,
-      compactThresholdTokens: null,
-      manual: true,
-    }),
-  ).rejects.toThrow('provider-opaque');
+
+  const outcome = await new LocalContextCompactor({ generate }).compactAtBoundary({
+    history,
+    provider: 'openai',
+    model: 'gpt-5',
+    sourceRevision: 1,
+    contextWindow: 100_000,
+    maxOutputTokens: 1_000,
+    compactThreshold: 0.8,
+    compactThresholdTokens: null,
+    manual: true,
+  });
+
+  expect(outcome.kind).toBe('compacted');
+  if (outcome.kind !== 'compacted') return;
+  expect(outcome.droppedOpaqueItems).toBe(1);
+  expect(generate).toHaveBeenCalled();
+  for (const call of generate.mock.calls as unknown as [{ transcriptChunk: string }][]) {
+    expect(call[0].transcriptChunk).not.toContain('secret-ciphertext');
+  }
+  expect(outcome.hotTail.some((item) => (item as { providerOpaque?: unknown }).providerOpaque !== undefined)).toBe(
+    false,
+  );
+});
+
+it('keeps a reasoning/tool-call pair and its result together on the hot side of the cut', async () => {
+  const generate = vi.fn(async () => ({ text: 'summary' }));
+  // The last two genuine user turns form the hot tail. The middle turn carries a
+  // full Responses-shaped pair, which must survive the cut intact: OpenAI rejects
+  // a `function_call` without its `reasoning` item, and Gemini rejects a
+  // `functionCall` whose thought signature was stripped.
+  const history: ProviderInputItem[] = [
+    { role: 'user', type: 'message', content: `first-${'x'.repeat(4_000)}` },
+    { role: 'assistant', type: 'message', content: 'first answer' },
+    { role: 'user', type: 'message', content: `second-${'x'.repeat(4_000)}` },
+    { type: 'reasoning', id: 'rs_1', providerOpaque: { provider: 'openai' } },
+    { type: 'function_call', callId: 'call_1', name: 'shell', arguments: '{}' },
+    { type: 'function_call_result', callId: 'call_1', name: 'shell', output: 'ok' },
+    { role: 'assistant', type: 'message', content: 'second answer' },
+    { role: 'user', type: 'message', content: 'third' },
+    { role: 'assistant', type: 'message', content: 'third answer' },
+  ];
+
+  const outcome = await new LocalContextCompactor({ generate }).compactAtBoundary({
+    history,
+    provider: 'openai',
+    model: 'gpt-5',
+    sourceRevision: 1,
+    contextWindow: 100_000,
+    maxOutputTokens: 1_000,
+    compactThreshold: 0.8,
+    compactThresholdTokens: null,
+    manual: true,
+  });
+
+  expect(outcome.kind).toBe('compacted');
+  if (outcome.kind !== 'compacted') return;
+  const types = outcome.hotTail.map((item) => item.type ?? (item as { role?: string }).role);
+  // Either the whole pair is hot or the whole pair is cold — never a call whose
+  // reasoning or whose result landed on the other side.
+  const hasCall = types.includes('function_call');
+  const hasResult = types.includes('function_call_result');
+  const hasReasoning = types.includes('reasoning');
+  expect(hasResult).toBe(hasCall);
+  expect(hasReasoning).toBe(hasCall);
+});
+
+it('blocks rather than emitting a hot tail whose tool result lost its call', async () => {
+  const generate = vi.fn(async () => ({ text: 'summary' }));
+  // A tool result placed directly after a genuine user message puts the cut
+  // between a call and its result — the one shape the verbatim hot tail cannot
+  // survive on any provider.
+  const history: ProviderInputItem[] = [
+    { role: 'user', type: 'message', content: `first-${'x'.repeat(4_000)}` },
+    { role: 'assistant', type: 'message', content: 'first answer' },
+    { role: 'user', type: 'message', content: `second-${'x'.repeat(4_000)}` },
+    { type: 'function_call', callId: 'orphan', name: 'shell', arguments: '{}' },
+    { role: 'user', type: 'message', content: 'third' },
+    { type: 'function_call_result', callId: 'orphan', name: 'shell', output: 'ok' },
+    { role: 'assistant', type: 'message', content: 'third answer' },
+    { role: 'user', type: 'message', content: 'fourth' },
+    { role: 'assistant', type: 'message', content: 'fourth answer' },
+  ];
+
+  const outcome = await new LocalContextCompactor({ generate }).compactAtBoundary({
+    history,
+    provider: 'openai',
+    model: 'gpt-5',
+    sourceRevision: 1,
+    contextWindow: 100_000,
+    maxOutputTokens: 1_000,
+    compactThreshold: 0.8,
+    compactThresholdTokens: null,
+    manual: true,
+  });
+
+  expect(outcome).toMatchObject({ kind: 'blocked', reason: 'hot_tail_would_orphan_tool_result' });
   expect(generate).not.toHaveBeenCalled();
 });
 

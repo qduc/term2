@@ -197,7 +197,26 @@ export class AgentClient {
         ) {
           throw new ContextCompactionHardFitError(outcome.reason);
         }
-        if (outcome.kind !== 'compacted') return { kind: 'unchanged' as const };
+        if (outcome.kind !== 'compacted') {
+          // A blocked outcome leaves context growing, so it must be visible in
+          // the log even though it is not a failure the user can act on.
+          if (outcome.kind === 'blocked') {
+            this.#logger.warn('Local context compaction blocked; continuing with uncompacted history', {
+              provider,
+              model,
+              reason: outcome.reason,
+              renderedInputTokens: outcome.estimate.renderedInputTokens,
+            });
+          }
+          return { kind: 'unchanged' as const };
+        }
+        if (outcome.droppedOpaqueItems > 0) {
+          this.#logger.debug('Local context compaction dropped provider-opaque items with their cold turns', {
+            provider,
+            model,
+            droppedOpaqueItems: outcome.droppedOpaqueItems,
+          });
+        }
         const genuineUsers = history.filter((item) => {
           const message = projectConversationMessage(item);
           return message?.role === 'user' && !message.isSynthetic;

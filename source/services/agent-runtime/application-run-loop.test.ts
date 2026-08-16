@@ -1239,6 +1239,58 @@ describe('ApplicationRunLoop', () => {
     expect(stream.finalOutput).toBe('done');
   });
 
+  it('orders assistant text ahead of the tool call it was emitted with', async () => {
+    const parameters = z.object({});
+    const tool: ToolDefinition<typeof parameters> = {
+      name: 'work',
+      description: 'Does work',
+      parameters,
+      needsApproval: () => false,
+      execute: () => 'tool output',
+      formatCommandMessage: () => [],
+    };
+    let calls = 0;
+    const loop = new ApplicationRunLoop({
+      resolveModel: (): StreamedModelTurn => {
+        const turn = ++calls;
+        return {
+          async *stream() {
+            if (turn > 1) {
+              yield {
+                type: 'completion',
+                responseId: 'resp-final',
+                output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'done' }] }],
+              };
+              return;
+            }
+            yield { type: 'text_delta', text: 'prose' };
+            yield { type: 'tool_call', id: 'call-1', name: 'work', arguments: '{}' };
+            yield {
+              type: 'completion',
+              responseId: 'resp-1',
+              output: [
+                { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'prose' }] },
+                { type: 'tool_call', id: 'call-1', name: 'work', arguments: '{}' },
+              ],
+            };
+          },
+        };
+      },
+    });
+    const stream = loop.startStream({ ...agent, tools: [tool] }, 'go');
+    await collect(stream);
+
+    // A response carrying prose plus a tool call must serialize in that order.
+    // Committing the text after the tool result strands it behind its own call,
+    // and the assistant-message merger then attaches it to the following turn,
+    // leaving every request ending in a bare assistant message.
+    expect(
+      (stream.history as any[]).map((item: any) =>
+        item.type === 'message' ? `${item.role}:${item.content?.[0]?.text ?? item.content}` : `${item.type}`,
+      ),
+    ).toEqual(['user:go', 'assistant:prose', 'function_call', 'function_call_result', 'assistant:done']);
+  });
+
   it('admits a steer as a user message after the tool result, before the next request', async () => {
     const requests: Array<Parameters<StreamedModelTurn['stream']>[0]> = [];
     let toolStarted!: () => void;

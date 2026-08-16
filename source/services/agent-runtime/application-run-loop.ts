@@ -1141,9 +1141,6 @@ export class ApplicationRunLoop {
           toolCalls.push(item);
         }
       }
-      if (!state.criticalWrapUpPending && toolCalls.length > 0) {
-        await this.#dispatchToolCalls(state, stream, queue, toolCalls, toolContext);
-      }
       // A native reasoning item belongs to the completed assistant turn even
       // when no tool call follows it. Commit it before assistant text so both
       // stateless continuation and persisted canonical history retain the
@@ -1181,6 +1178,18 @@ export class ApplicationRunLoop {
         state.history.push(item);
         outputPush(stream, queue, { type: 'item', item });
         state.input.push({ type: 'message', role: 'assistant', content: [{ type: 'text', text: assistantText }] });
+      }
+
+      // Tool calls are dispatched only after the reasoning, provider-opaque,
+      // and assistant-text items from the same completion are committed. A
+      // response that carries both prose and a tool call must serialize as
+      // text -> function_call -> function_call_result; dispatching first left
+      // the text stranded after its own tool result, where the assistant
+      // message merger glued it onto the *next* turn's tool call and every
+      // request ended with a bare assistant message. Models read that as a
+      // turn truncated mid-sentence and restart instead of progressing.
+      if (!state.criticalWrapUpPending && toolCalls.length > 0) {
+        await this.#dispatchToolCalls(state, stream, queue, toolCalls, toolContext);
       }
 
       // A critical subagent gets exactly this final tool-free model call.

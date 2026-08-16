@@ -678,7 +678,7 @@ const ApprovalPrompt: FC<Props> = ({
         )}
         <Box flexDirection="row" width="100%" marginTop={1}>
           {/* Menu Items */}
-          <Box flexDirection="column" width={leftColWidth}>
+          <Box flexDirection="column" width={leftColWidth} flexShrink={0} flexGrow={0}>
             {askUserMenuItems.map((item, idx) => {
               const isOption = idx < askUserOptions.length;
               const isRecommended = idx === 0 && isOption;
@@ -692,7 +692,7 @@ const ApprovalPrompt: FC<Props> = ({
               const color = isSelected ? (item === ASK_USER_CUSTOM_ANSWER_LABEL ? 'cyan' : 'green') : undefined;
 
               return (
-                <Box key={item} flexDirection="row">
+                <Box key={item} flexDirection="row" width="100%">
                   <Box width={3} flexShrink={0}>
                     <Text color={color}>{isSelected ? '❯' : ' '}</Text>
                     <Text color="gray" dimColor>
@@ -714,6 +714,7 @@ const ApprovalPrompt: FC<Props> = ({
           <Box
             flexDirection="column"
             flexGrow={1}
+            flexShrink={1}
             paddingLeft={2}
             borderStyle="single"
             borderTop={false}

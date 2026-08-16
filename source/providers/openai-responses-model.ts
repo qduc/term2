@@ -9,6 +9,7 @@ import type {
   ContextCompactionSessionState,
 } from '../contracts/streamed-model-turn.js';
 import type { ProviderRequestCapture } from './provider-request-capture.js';
+import { OPENAI_RESPONSES_OPAQUE_TAG, isForeignProviderOpaque } from './provider-opaque-compatibility.js';
 import { consumeOpenAIRequestPrefixBindingWithOutcome } from './openai-request-prefix-binding.js';
 import { observeOpenAIRequestLifecycle, type OpenAIRequestLifecycleObservation } from './provider-request-capture.js';
 import { randomUUID } from 'node:crypto';
@@ -82,7 +83,11 @@ function toResponsesApiOutput(output: unknown): string {
 }
 
 function toResponsesApiInput(input: readonly StreamedModelTurnInput[]): unknown[] {
-  return input.map((item: any) => {
+  // An opaque item from another lane is inert baggage left by a provider
+  // switch, not a fault: it is dropped so the rest of the history still
+  // replays. See `provider-opaque-compatibility.ts`.
+  const replayable = input.filter((item) => !isForeignProviderOpaque(item, OPENAI_RESPONSES_OPAQUE_TAG));
+  return replayable.map((item: any) => {
     if (item?.type === 'message') {
       return {
         type: 'message',
@@ -111,11 +116,7 @@ function toResponsesApiInput(input: readonly StreamedModelTurnInput[]): unknown[
       };
     }
     if (item?.type === 'provider_opaque') {
-      if (item.provider !== 'openai') {
-        throw new Error(
-          `Refusing to splice provider_opaque from '${item.provider}' into an OpenAI request: opaque items are only valid on the provider that produced them`,
-        );
-      }
+      // Foreign tags were filtered above; anything reaching here is our own.
       return item.item;
     }
     return item;

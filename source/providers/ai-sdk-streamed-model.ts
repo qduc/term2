@@ -233,7 +233,15 @@ function toCallOptions(request: StreamedModelTurnRequest, provider: string): Cal
     ? [{ role: 'system', content: request.instructions }]
     : [];
   return {
-    prompt: [...instructions, ...request.input.map((item) => toPromptMessage(item, toolNames))],
+    prompt: [
+      ...instructions,
+      // The AI SDK lane never produces opaque items, so any it sees came from
+      // another provider and is inert baggage left by a switch, not a fault.
+      // See `provider-opaque-compatibility.ts`.
+      ...request.input
+        .filter((item) => item.type !== 'provider_opaque')
+        .map((item) => toPromptMessage(item, toolNames)),
+    ],
     ...(request.tools.length ? { tools: request.tools.map(toTool) } : {}),
     ...(request.toolChoice ? { toolChoice: toToolChoice(request.toolChoice) } : {}),
     ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
@@ -279,6 +287,8 @@ function toPromptMessage(item: StreamedModelTurnInput, toolNames: Map<string, st
       content: [{ type: 'tool-call', toolCallId: item.id, toolName: item.name, input: parseJson(item.arguments) }],
     };
   if (item.type === 'provider_opaque')
+    // Filtered out in `toCallOptions`; reaching here means a new caller bypassed
+    // that filter, which would put a foreign payload on the wire.
     throw new Error(
       `Refusing to serialize provider_opaque from '${item.provider}' through the AI SDK: opaque items are only valid on the provider that produced them`,
     );

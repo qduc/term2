@@ -599,17 +599,33 @@ it('splices an openai provider_opaque input item verbatim into the request', asy
   expect(capturedBody.input).toEqual([{ type: 'compaction', id: 'cmp_1', encrypted_content: 'opaque-blob' }]);
 });
 
-it('refuses to splice a non-openai provider_opaque item into an OpenAI request', async () => {
+// A foreign opaque item is what a provider switch leaves behind. Throwing on it
+// used to kill every later turn too, because nothing removes the item from
+// history — so the conversation became unusable rather than merely lossy.
+it('drops a non-openai provider_opaque item and still replays the rest of the history', async () => {
+  let capturedBody: any;
   const client = {
-    responses: { create: async () => ({ id: 'resp_1', output: [], usage: {} }) },
+    responses: {
+      create: async (body: any) => {
+        capturedBody = body;
+        return { id: 'resp_1', output: [], usage: {} };
+      },
+    },
   };
   const model = new OpenAIResponsesModelWithPromptCacheKey(client, 'gpt-5.4-nano');
-  await expect(
-    model.getResponse({
-      input: [{ type: 'provider_opaque', provider: 'codex', item: { type: 'compaction', encrypted_content: 'blob' } }],
-      tools: [],
-    }),
-  ).rejects.toThrow(/provider_opaque from 'codex'/);
+
+  await model.getResponse({
+    input: [
+      { type: 'provider_opaque', provider: 'codex', item: { type: 'compaction', encrypted_content: 'foreign-blob' } },
+      { type: 'message', role: 'user', content: [{ type: 'text', text: 'still here' }] },
+    ],
+    tools: [],
+  });
+
+  expect(JSON.stringify(capturedBody.input)).not.toContain('foreign-blob');
+  expect(capturedBody.input).toEqual([
+    { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'still here' }] },
+  ]);
 });
 
 it('replays native reasoning with encrypted_content and never emits provider_data', async () => {

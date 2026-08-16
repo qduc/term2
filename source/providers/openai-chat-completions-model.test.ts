@@ -673,11 +673,19 @@ it('replays reasoning captured from delta.reasoning verbatim as reasoning and re
   ]);
 });
 
-it('refuses to splice provider_opaque from another provider into an OpenAI-compatible request', async () => {
+// A continuity payload from another provider is the ordinary residue of a
+// provider switch. Refusing it used to kill every later turn as well, because
+// nothing removes the item from history — the conversation became unusable
+// rather than merely lossy.
+it('drops provider_opaque from another provider and still sends the rest of the request', async () => {
+  let capturedBody: any;
   const client = {
     chat: {
       completions: {
-        create: async () => emptyStream(),
+        create: async (body: any) => {
+          capturedBody = body;
+          return emptyStream();
+        },
       },
     },
   };
@@ -694,20 +702,31 @@ it('refuses to splice provider_opaque from another provider into an OpenAI-compa
     tools: [],
   } as any;
 
-  await expect(async () => {
-    for await (const _event of model.stream(request)) {
-      // drain
-    }
-  }).rejects.toThrow("Refusing to splice provider_opaque from 'deepseek' into 'openrouter' request");
+  for await (const _event of model.stream(request)) {
+    // drain
+  }
+
+  expect(JSON.stringify(capturedBody.messages)).not.toContain('foreign thinking');
+  expect(capturedBody.messages).toEqual([{ role: 'user', content: [{ type: 'text', text: 'hello' }] }]);
 });
 
 // Two providers of type `openai-compatible` — a deepseek endpoint and an
 // OpenRouter gateway — spell reasoning differently, so tagging opaque items with
 // the shared type rather than the configured provider let one endpoint's fields
-// be replayed into the other's request. That is the exact splice the refusal
-// exists to prevent, and the type-level tag could not see it.
-it('refuses an opaque item from a different provider of the same openai-compatible type', async () => {
-  const client = { chat: { completions: { create: async () => emptyStream() } } };
+// be replayed into the other's request. That splice is still prevented; the
+// payload is dropped rather than replayed.
+it('drops an opaque item from a different provider of the same openai-compatible type', async () => {
+  let capturedBody: any;
+  const client = {
+    chat: {
+      completions: {
+        create: async (body: any) => {
+          capturedBody = body;
+          return emptyStream();
+        },
+      },
+    },
+  };
   const model = new OpenAIChatCompletionsModel(client, 'fixture-chat', undefined, 'my-openrouter');
   const request = {
     input: [
@@ -717,11 +736,11 @@ it('refuses an opaque item from a different provider of the same openai-compatib
     tools: [],
   } as any;
 
-  await expect(async () => {
-    for await (const _event of model.stream(request)) {
-      // drain
-    }
-  }).rejects.toThrow("Refusing to splice provider_opaque from 'my-deepseek' into 'my-openrouter' request");
+  for await (const _event of model.stream(request)) {
+    // drain
+  }
+
+  expect(JSON.stringify(capturedBody.messages)).not.toContain('deepseek thinking');
 });
 
 // A continuity payload is only known once the completion arrives, so the run

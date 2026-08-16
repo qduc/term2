@@ -1,4 +1,5 @@
 import { assertValidOpenAICompatibleMessages } from './common/openai-compatible-message-contract.js';
+import { acceptsProviderOpaqueTag } from './provider-opaque-compatibility.js';
 import type { CostTrailerCapture } from './openai-compatible-response-normalizer.js';
 import type {
   StreamedModelTurn,
@@ -273,20 +274,11 @@ function mergeEntryFields(base: Record<string, unknown>, incoming: Record<string
   return merged;
 }
 
-/**
- * Opaque items persisted before the provider tag was corrected carry the
- * provider *type* rather than the configured provider, so every
- * chat-completions endpoint shared this one tag. Accept it so conversations
- * recorded in that window still replay; a genuinely foreign provider is still
- * refused.
- */
-const LEGACY_SHARED_PROVIDER_TAG = 'openai-compatible';
-
 /** The wire spellings a continuity payload may use for reasoning. */
 const REASONING_WIRE_FIELDS = ['reasoning_content', 'reasoning', 'reasoning_details'] as const;
 
 const isOwnOpaqueTag = (tag: unknown, providerId: string): boolean =>
-  tag === providerId || tag === LEGACY_SHARED_PROVIDER_TAG;
+  typeof tag === 'string' && acceptsProviderOpaqueTag(tag, providerId);
 
 const opaqueMarkerOf = (item: any): { provider: unknown } | undefined =>
   item.providerOpaque ?? (item.type === 'provider_opaque' ? { provider: item.provider } : undefined);
@@ -322,11 +314,10 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input'], prov
     const providerOpaque = opaqueMarkerOf(item);
     if (providerOpaque) {
       const tag = providerOpaque.provider;
-      if (!isOwnOpaqueTag(tag, providerId)) {
-        throw new Error(
-          `Refusing to splice provider_opaque from '${tag}' into '${providerId}' request: opaque items are only valid on the provider that produced them`,
-        );
-      }
+      // A continuity payload from another provider is inert baggage left by a
+      // provider switch, not a fault. Drop it and keep replaying the rest of
+      // the history. See `provider-opaque-compatibility.ts`.
+      if (!isOwnOpaqueTag(tag, providerId)) continue;
       const rawPayload = item.type === 'provider_opaque' ? item.item : item;
       const { providerOpaque: _marker, type: _type, ...payload } = rawPayload as any;
       opaquePayloads.push(payload);

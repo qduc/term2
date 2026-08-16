@@ -115,7 +115,11 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   reversed because it silently disabled compaction for the rest of a
   conversation. Cold provider-opaque items are dropped with their turn; the
   invariant that is actually enforced is that a cut never orphans a tool result
-  in the hot tail.
+  in the hot tail. Read "Foreign opaque items are stripped, not refused" before
+  touching any wire converter's `provider_opaque` handling: the acceptance rule
+  lives once in `providers/provider-opaque-compatibility.ts` and keys on the
+  *lane* tag, not the provider id; converters drop foreign items rather than
+  throwing, because throwing bricked every conversation that switched providers.
 
 - `docs/plans/tool-output-and-effect-safety.md` — **Milestones 1–2 implemented**
   (branch `tool-output-effect-safety`). Read before touching `read_file` result

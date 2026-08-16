@@ -231,6 +231,31 @@ it('projectProviderHistory injects unknown ledger pairs with verify-before-retry
   ]);
 });
 
+it('projectProviderHistory drops an orphan tool result when no matching call can be recovered', () => {
+  const history: AgentInputItem[] = [
+    { role: 'user', type: 'message', content: 'inspect the repo' },
+    {
+      type: 'function_call_output',
+      callId: 'call_TPLbZgMcqd0guPBWHwDh1zjK',
+      output: '/workspace',
+    } as AgentInputItem,
+    { role: 'user', type: 'message', content: 'continue' },
+  ];
+
+  const projected = projectProviderHistory({ history, toolLedger: [] });
+
+  expect(projected.history).toEqual([
+    { role: 'user', type: 'message', content: 'inspect the repo' },
+    { role: 'user', type: 'message', content: 'continue' },
+  ]);
+  expect(projected.warnings).toEqual([
+    {
+      code: ProjectionWarningCode.OrphanToolResultDropped,
+      detail: { removedCallIds: ['call_TPLbZgMcqd0guPBWHwDh1zjK'] },
+    },
+  ]);
+});
+
 it('projectProviderHistory is pure and idempotent', () => {
   const history: AgentInputItem[] = [{ role: 'user', type: 'message', content: 'continue' }];
   const ledger = [completedLedgerEntry(), abortedLedgerEntry()];

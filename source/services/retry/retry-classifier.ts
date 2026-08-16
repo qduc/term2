@@ -6,6 +6,7 @@ import {
   isWebSocketConnectionLimitReachedError,
 } from './retry-error-classification.js';
 import type { ClassificationContext, ClassifiedFailure } from './retry-contracts.js';
+import { ConversationStateNoProgressError } from './retry-errors.js';
 import { extractHistoryLength } from '../stream-snapshot.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { isMissingChainedToolOutputError, isOrphanedChainedToolOutputError } from '../../lib/chained-input-filter.js';
@@ -43,6 +44,10 @@ export class DefaultRetryClassifier {
           : undefined,
         retryEvent: hallucinationDecision.retryEvent,
       };
+    }
+
+    if (error instanceof ConversationStateNoProgressError) {
+      return { kind: 'unrecoverable' };
     }
 
     if (

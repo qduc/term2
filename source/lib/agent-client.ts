@@ -861,7 +861,10 @@ export class AgentClient {
         return this.#applicationRunLoop.startStream(agent, userInput, {
           ...(boundaryCompaction ? { boundaryCompaction } : {}),
           ...(requestPreparation ? { requestPreparation } : {}),
-          ...(supportsChaining && options.previousResponseId ? { previousResponseId: options.previousResponseId } : {}),
+          ...(supportsChaining && options.previousResponseId && !options.disableChainingForAttempt
+            ? { previousResponseId: options.previousResponseId }
+            : {}),
+          ...(options.disableChainingForAttempt ? { disableChainingForAttempt: true } : {}),
           providerId: provider,
           supportsConversationChaining: supportsChaining,
           sessionId: options.sessionId,
@@ -896,7 +899,10 @@ export class AgentClient {
     const stream = this.#applicationRunLoop.continueRunStream(state, {
       ...(boundaryCompaction ? { boundaryCompaction } : {}),
       ...(requestPreparation ? { requestPreparation } : {}),
-      ...(supportsChaining && options.previousResponseId ? { previousResponseId: options.previousResponseId } : {}),
+      ...(supportsChaining && options.previousResponseId && !options.disableChainingForAttempt
+        ? { previousResponseId: options.previousResponseId }
+        : {}),
+      ...(options.disableChainingForAttempt ? { disableChainingForAttempt: true } : {}),
       providerId: provider,
       supportsConversationChaining: supportsChaining,
       sessionId: options.sessionId,

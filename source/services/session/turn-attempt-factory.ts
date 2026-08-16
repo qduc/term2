@@ -23,6 +23,7 @@ export type InitialTurnRunOptions = {
   signal?: AbortSignal;
   delayMs?: number;
   useStandardServiceTier?: boolean;
+  disableChainingForAttempt?: boolean;
   bypassInputSurgeGuard?: boolean;
 };
 

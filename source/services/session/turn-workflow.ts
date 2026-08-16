@@ -29,7 +29,13 @@ export type InternalTurnOutcome =
   | { kind: 'approval_required'; terminal: ConversationTerminal }
   | { kind: 'stale' }
   | { kind: 'failed' }
-  | { kind: 'fresh_start_required'; retryCounts: RetryCounts; delayMs?: number; useStandardServiceTier?: boolean }
+  | {
+      kind: 'fresh_start_required';
+      retryCounts: RetryCounts;
+      delayMs?: number;
+      useStandardServiceTier?: boolean;
+      disableChainingForAttempt?: boolean;
+    }
   | {
       kind: 'abort_resolution_required';
       abortedContext: AbortedApprovalContext;
@@ -235,6 +241,7 @@ export class TurnWorkflow {
         retries: driveResult.retryCounts,
         delayMs: driveResult.delayMs,
         useStandardServiceTier: driveResult.useStandardServiceTier,
+        disableChainingForAttempt: driveResult.disableChainingForAttempt,
         token: generation,
         replayFromHistory: true,
       };
@@ -292,6 +299,7 @@ export class TurnWorkflow {
       retries: result.retryCounts,
       delayMs: result.delayMs,
       useStandardServiceTier: result.useStandardServiceTier,
+      disableChainingForAttempt: result.disableChainingForAttempt,
       token: generation,
       replayFromHistory: true,
     };
@@ -322,6 +330,7 @@ export class TurnWorkflow {
     let skipUser = options.skipUserMessage ?? false;
     let currentResumeState = options.resumeState;
     let currentResumePreviousResponseId = options.resumePreviousResponseId;
+    let currentDisableChainingForAttempt = options.disableChainingForAttempt === true;
     let currentAbortedContext = options.abortedContext ?? null;
 
     const initialCounts = attempt.retryCounts;
@@ -397,12 +406,14 @@ export class TurnWorkflow {
           const cycleResult = yield* this.#executeInitialStreamCycle(attempt, {
             resumeState: currentResumeState,
             resumePreviousResponseId: currentResumePreviousResponseId,
+            disableChainingForAttempt: currentDisableChainingForAttempt,
             observeOpenAIRootSelectorParity:
               !options.replayFromHistory &&
               !currentResumeState &&
               !currentResumePreviousResponseId &&
               this.#isFirstAttempt(attempt.retryCounts),
           });
+          currentDisableChainingForAttempt = false;
           if (cycleResult.kind === 'stale') {
             return { kind: 'stale' };
           }
@@ -468,6 +479,7 @@ export class TurnWorkflow {
             skipUser = handled.instruction.skipUserMessage;
             currentResumeState = handled.instruction.resumeState;
             currentResumePreviousResponseId = handled.instruction.resumePreviousResponseId;
+            currentDisableChainingForAttempt = handled.instruction.disableChainingForAttempt === true;
             currentAbortedContext = null;
             if (handled.delayMs && handled.delayMs > 0) {
               await new Promise((resolve) => setTimeout(resolve, handled.delayMs));
@@ -498,6 +510,7 @@ export class TurnWorkflow {
     options: {
       resumeState?: ContinuationHandle;
       resumePreviousResponseId?: string | null;
+      disableChainingForAttempt?: boolean;
       observeOpenAIRootSelectorParity: boolean;
     },
   ): AsyncGenerator<
@@ -742,6 +755,7 @@ export class TurnWorkflow {
     options: {
       resumeState?: ContinuationHandle;
       resumePreviousResponseId?: string | null;
+      disableChainingForAttempt?: boolean;
       observeOpenAIRootSelectorParity: boolean;
     },
   ): Promise<AgentStream> {
@@ -790,10 +804,11 @@ export class TurnWorkflow {
       }
     }
     const startOptions: AgentClientRunOptions = {
-      previousResponseId: selectedPreviousResponseId,
+      previousResponseId: options.disableChainingForAttempt ? undefined : selectedPreviousResponseId,
       sessionId: this.deps.sessionId,
       providerHistorySnapshot: attempt.providerHistorySnapshot,
       hookTurnId: this.#hookTurnId,
+      ...(options.disableChainingForAttempt ? { disableChainingForAttempt: true } : {}),
     };
     Object.defineProperty(startOptions, 'providerContinuityLineage', {
       value: this.deps.providerContinuity.lineage,
@@ -908,6 +923,7 @@ export class TurnWorkflow {
               retryCounts: recovery.retryCounts,
               ...(recovery.delayMs !== undefined ? { delayMs: recovery.delayMs } : {}),
               ...(recovery.useStandardServiceTier ? { useStandardServiceTier: true } : {}),
+              ...(recovery.disableChainingForAttempt ? { disableChainingForAttempt: true } : {}),
             };
           }
           // recovery.kind === 'resume' -> continue loop

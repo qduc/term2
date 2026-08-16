@@ -81,11 +81,13 @@ export class DefaultRecoveryExecutor implements RecoveryExecutor {
           skipUserMessage: true,
           retryCounts,
           maxModelRetries,
+          ...(plan.disableChainingForAttempt ? { disableChainingForAttempt: true } : {}),
         };
         return {
           kind: 'run',
           instruction,
           ...(plan.useStandardServiceTier ? { useStandardServiceTier: true } : {}),
+          ...(plan.disableChainingForAttempt ? { disableChainingForAttempt: true } : {}),
           events: [],
         };
       }

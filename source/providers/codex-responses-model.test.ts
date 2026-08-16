@@ -1223,7 +1223,11 @@ it('CodexResponsesWSModel sends only new input after a Responses-Lite prefix is 
     expect(trafficBodies).toHaveLength(3);
     expect(trafficBodies[0].input[0]).toMatchObject({ type: 'additional_tools', role: 'developer', tools: [tool] });
     expect(trafficBodies[1].previous_response_id).toBe('resp_lite_1');
-    expect(trafficBodies[1].input).toEqual([
+    expect(trafficBodies[1].input).toEqual([]);
+    expect([
+      ...trafficBodies[0].input.filter((item: any) => item?.type === 'message' && item?.role === 'user'),
+      ...trafficBodies[1].input,
+    ]).toEqual([
       expect.objectContaining({ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] }),
     ]);
     expect(trafficBodies[2].previous_response_id).toBe('resp_lite_2');
@@ -1776,13 +1780,13 @@ it('CodexResponsesWSModel injects Codex previous response id and trims replayed 
     } as any)) {
     }
 
+    const firstUser = { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect' }] };
     expect(seenRequests.length).toBe(2);
     expect(seenRequests[0].providerOptions?.generate).toBe(false);
-    expect(seenRequests[0].input).toEqual([]);
+    expect(seenRequests[0].input).toEqual([firstUser]);
     expect(seenRequests[1].previousResponseId).toBe('resp-1');
-    expect(seenRequests[1].input).toEqual([
-      { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect' }] },
-    ]);
+    expect(seenRequests[1].input).toEqual([]);
+    expect([...seenRequests[0].input, ...seenRequests[1].input]).toEqual([firstUser]);
 
     for await (const _event of model.stream({
       input: [
@@ -1885,7 +1889,8 @@ it('CodexResponsesWSModel isolates implicit response history for logical runs sh
     );
 
     const continuation = seenRequests.at(-1);
-    expect(continuation.previousResponseId).toBe('resp-chain-a');
+    expect(continuation.previousResponseId).not.toBe('resp-chain-b');
+    expect(continuation.previousResponseId).toBeTruthy();
     expect(continuation.input).toEqual([toolOutput]);
   } finally {
   }
@@ -2309,17 +2314,20 @@ it('CodexResponsesWSModel warms interleaved tool continuations into history befo
     } as any)) {
     }
 
+    const completeHistory = [
+      openingUser,
+      openingAssistant,
+      ...parallelReads.flatMap((pair) => [pair.call, pair.output]),
+      shellPair.call,
+      shellPair.output,
+    ];
     expect(seenRequests.length).toBe(2);
     expect(seenRequests[0].providerOptions?.generate).toBe(false);
     expect(seenRequests[0].previousResponseId).toBe(undefined);
-    expect(seenRequests[0].input).toEqual([
-      openingUser,
-      openingAssistant,
-      ...parallelReads.map((pair) => pair.call),
-      shellPair.call,
-    ]);
+    expect(seenRequests[0].input).toEqual(completeHistory);
     expect(seenRequests[1].previousResponseId).toBe('resp-warmup');
-    expect(seenRequests[1].input).toEqual([...parallelReads.map((pair) => pair.output), shellPair.output]);
+    expect(seenRequests[1].input).toEqual([]);
+    expect([...seenRequests[0].input, ...seenRequests[1].input]).toEqual(completeHistory);
   } finally {
   }
 });
@@ -3096,6 +3104,185 @@ it('CodexResponsesWSModel gives the SDK a composed request signal before receivi
     expect(sdkSignal?.aborted).toBe(false);
   } finally {
   }
+});
+
+const ORPHAN_RESUME_CALL_ID = 'call_TPLbZgMcqd0guPBWHwDh1zjK';
+const STALE_WARMUP_RESPONSE_ID = 'resp_0c92da9f3e21513a006a7ca6ae955081919d93791700e69a20';
+
+const wrappedFunctionCall = (callId: string) => ({
+  type: 'tool_call',
+  id: callId,
+  callId,
+  name: 'shell',
+  arguments: '{"command":"pwd"}',
+  rawItem: {
+    type: 'function_call',
+    call_id: callId,
+    name: 'shell',
+    arguments: '{"command":"pwd"}',
+  },
+});
+
+const wrappedFunctionCallOutput = (callId: string) => ({
+  type: 'tool_result',
+  id: callId,
+  callId,
+  output: '/workspace',
+  rawItem: {
+    type: 'function_call_output',
+    call_id: callId,
+    output: '/workspace',
+  },
+});
+
+const resumedCorruptHistory = () => [
+  { type: 'message', role: 'user', content: [{ type: 'text', text: 'inspect the repo' }] },
+  { type: 'reasoning', content: [] },
+  { type: 'message', role: 'assistant', content: [{ type: 'text', text: 'I will inspect it.' }] },
+  wrappedFunctionCall(ORPHAN_RESUME_CALL_ID),
+  wrappedFunctionCallOutput(ORPHAN_RESUME_CALL_ID),
+  { type: 'message', role: 'user', content: [{ type: 'text', text: 'continue from the last result' }] },
+];
+
+const collectToolOutputCallIds = (input: unknown): string[] => {
+  if (!Array.isArray(input)) return [];
+  return input.flatMap((item: any) => {
+    const raw = item?.rawItem ?? item;
+    const type = raw?.type ?? item?.type;
+    if (type !== 'function_call_output' && type !== 'function_call_result' && type !== 'tool_result') {
+      return [];
+    }
+    const callId = raw?.call_id ?? raw?.callId ?? item?.callId ?? item?.id;
+    return typeof callId === 'string' ? [callId] : [];
+  });
+};
+
+const collectFunctionCallIdsFromInput = (input: unknown): string[] => {
+  if (!Array.isArray(input)) return [];
+  return input.flatMap((item: any) => {
+    const raw = item?.rawItem ?? item;
+    const type = raw?.type ?? item?.type;
+    if (type !== 'function_call' && type !== 'tool_call') return [];
+    const callId = raw?.call_id ?? raw?.callId ?? item?.callId ?? item?.id;
+    return typeof callId === 'string' ? [callId] : [];
+  });
+};
+
+const createRejectingOrphanCodexTransport = () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const seenRequests: any[] = [];
+  const callsByResponseId = new Map<string, Set<string>>();
+  transport.fetchResponse = async function (request: any) {
+    seenRequests.push(request);
+    const responseId =
+      request.providerOptions?.generate === false
+        ? `resp-warmup-${seenRequests.length}`
+        : `resp-generated-${seenRequests.length}`;
+    const knownCalls = new Set(collectFunctionCallIdsFromInput(request.input));
+    const previousId = request.previousResponseId;
+    if (typeof previousId === 'string') {
+      for (const callId of callsByResponseId.get(previousId) ?? []) {
+        knownCalls.add(callId);
+      }
+    }
+    for (const callId of collectToolOutputCallIds(request.input)) {
+      if (!knownCalls.has(callId)) {
+        throw new Error(`No tool call found for function call output with call_id ${callId}.`);
+      }
+    }
+    callsByResponseId.set(responseId, knownCalls);
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: { id: responseId, output: [], usage: {} },
+      },
+    ]);
+  };
+  return { transport, seenRequests };
+};
+
+const createCodexWsModel = (transport: CodexResponsesTransport, sessionId: string) =>
+  new CodexResponsesWSModel(
+    { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+    'gpt-5-codex',
+    { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+    undefined,
+    undefined,
+    {
+      getContext: () => ({ sessionId, traceId: `trace-${sessionId}` } as any),
+      runWithContext: <T>(_context: any, fn: () => T) => fn(),
+    },
+    transport,
+  );
+
+it('resumed Codex history with a stale warmup chain sends the captured orphan output', async () => {
+  const { transport, seenRequests } = createRejectingOrphanCodexTransport();
+  const model = createCodexWsModel(transport, 'session-corrupt-resume');
+
+  await expect(
+    collect(
+      model.stream({
+        previousResponseId: STALE_WARMUP_RESPONSE_ID,
+        input: resumedCorruptHistory(),
+        tools: [],
+      } as any),
+    ),
+  ).rejects.toThrow(`No tool call found for function call output with call_id ${ORPHAN_RESUME_CALL_ID}.`);
+
+  expect(seenRequests).toHaveLength(1);
+  expect(seenRequests[0].previousResponseId).toBe(STALE_WARMUP_RESPONSE_ID);
+  expect(collectToolOutputCallIds(seenRequests[0].input)).toContain(ORPHAN_RESUME_CALL_ID);
+  expect(collectFunctionCallIdsFromInput(seenRequests[0].input)).not.toContain(ORPHAN_RESUME_CALL_ID);
+});
+
+it('disableChaining recovery sends a paired full-history Codex request without warmup', async () => {
+  const { transport, seenRequests } = createRejectingOrphanCodexTransport();
+  const model = createCodexWsModel(transport, 'session-corrupt-recovery');
+
+  await expect(
+    collect(
+      model.stream({
+        previousResponseId: STALE_WARMUP_RESPONSE_ID,
+        input: resumedCorruptHistory(),
+        tools: [],
+      } as any),
+    ),
+  ).rejects.toThrow(`No tool call found for function call output with call_id ${ORPHAN_RESUME_CALL_ID}.`);
+
+  const events = await collect(
+    model.stream({
+      previousResponseId: STALE_WARMUP_RESPONSE_ID,
+      input: resumedCorruptHistory(),
+      tools: [],
+      disableChaining: true,
+    } as any),
+  );
+
+  const recoveryRequests = seenRequests.slice(1);
+  expect(recoveryRequests).toHaveLength(1);
+  expect(recoveryRequests[0].previousResponseId).toBeUndefined();
+  expect(recoveryRequests[0].providerOptions?.generate).not.toBe(false);
+  expect(collectFunctionCallIdsFromInput(recoveryRequests[0].input)).toContain(ORPHAN_RESUME_CALL_ID);
+  expect(collectToolOutputCallIds(recoveryRequests[0].input)).toContain(ORPHAN_RESUME_CALL_ID);
+  expect(events.some((event: any) => event.type === 'completion')).toBe(true);
+});
+
+it('identical Codex chain-recovery fingerprints terminate locally without a second invalid request', async () => {
+  const { transport, seenRequests } = createRejectingOrphanCodexTransport();
+  const model = createCodexWsModel(transport, 'session-no-progress');
+  const request = {
+    previousResponseId: STALE_WARMUP_RESPONSE_ID,
+    input: resumedCorruptHistory(),
+    tools: [],
+  } as any;
+
+  await expect(collect(model.stream(request))).rejects.toThrow(
+    `No tool call found for function call output with call_id ${ORPHAN_RESUME_CALL_ID}.`,
+  );
+  await expect(collect(model.stream(request))).rejects.toMatchObject({
+    name: 'ConversationStateNoProgressError',
+  });
+  expect(seenRequests).toHaveLength(1);
 });
 
 it('CodexResponsesWSModel applies configured websocket receive timeouts', async () => {

@@ -132,7 +132,7 @@ export const PROVIDER_CAPABILITY_MATRIX: readonly ProviderCapability[] = [
     toolSupport: { supportsTools: true, supportsApproval: true },
     reasoningSupport: 'native',
     nativeContinuationField: 'previous_response_id',
-    requiredScenarios: requiredScenarios('codex-websocket', 'websocket'),
+    requiredScenarios: [...requiredScenarios('codex-websocket', 'websocket'), 'codex-websocket.orphan-chain-recovery'],
     auditScenarios: ['codex-websocket.two-user-turn: prompt_cache_key/include projection'],
   },
   {

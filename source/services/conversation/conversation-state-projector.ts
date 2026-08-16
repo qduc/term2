@@ -1,10 +1,15 @@
 import { isLocalContextSummary, type ProviderInputItem } from '../../contracts/provider-input.js';
 import type { StateSnapshot } from '../logging/conversation-log-events.js';
-import { reconcileHistoryWithToolLedger, type SavedToolExecution } from '../tool-execution-ledger.js';
+import {
+  dropUnpairedFunctionCalls,
+  reconcileHistoryWithToolLedger,
+  type SavedToolExecution,
+} from '../tool-execution-ledger.js';
 
 export enum ProjectionWarningCode {
   CompletedToolHistoryInserted = 'completed_tool_history_inserted',
   IncompleteToolHistoryDropped = 'incomplete_tool_history_dropped',
+  OrphanToolResultDropped = 'orphan_tool_result_dropped',
 }
 
 export type ProjectionWarning = {
@@ -101,11 +106,42 @@ export function projectProviderHistory(input: {
     return { history: clone([...input.history]) as ProviderInputItem[], warnings: [] };
   }
   const reconciled = reconcileHistoryWithToolLedger(input.history, input.toolLedger);
+  const paired = dropUnpairedFunctionCalls(reconciled.history);
+  const removedCallIds = collectRemovedToolCallIds(reconciled.history, paired);
+  const warnings = warningsFromReconciliation(reconciled);
+  if (removedCallIds.length > 0) {
+    warnings.push({
+      code: ProjectionWarningCode.OrphanToolResultDropped,
+      detail: { removedCallIds },
+    });
+  }
   return {
-    history: reconciled.history as ProviderInputItem[],
-    warnings: warningsFromReconciliation(reconciled),
+    history: paired as ProviderInputItem[],
+    warnings,
   };
 }
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+
+const toolCallIdOf = (item: unknown): string | undefined => {
+  const record = asRecord(item);
+  const raw = record ? asRecord(record.rawItem) ?? record : null;
+  const callId = raw?.callId ?? raw?.call_id ?? raw?.tool_call_id ?? raw?.id;
+  return typeof callId === 'string' && callId.length > 0 ? callId : undefined;
+};
+
+const collectRemovedToolCallIds = (original: readonly unknown[], filtered: readonly unknown[]): string[] => {
+  const remaining = new Set(filtered.map(toolCallIdOf).filter((id): id is string => Boolean(id)));
+  const removed: string[] = [];
+  for (const item of original) {
+    const callId = toolCallIdOf(item);
+    if (callId && !remaining.has(callId) && !removed.includes(callId)) {
+      removed.push(callId);
+    }
+  }
+  return removed;
+};
 
 /**
  * Lossy projection used only when constructing a model request. Durable

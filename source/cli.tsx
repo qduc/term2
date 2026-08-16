@@ -55,6 +55,7 @@ import {
   shouldWarnOnHomeDirectoryStart,
 } from './utils/home-directory-start-guard.js';
 import { createRootHookRuntime } from './services/hooks/hook-composition.js';
+import { pruneStaleTempArtifacts } from './utils/shell/temp-sweep.js';
 
 const sessionUsageAccumulator = createUsageAccumulator();
 const subagentUsageAccumulator = createUsageAccumulator();
@@ -575,6 +576,9 @@ const history = new HistoryService({
 const skillsService = new SkillsService(logger, executionContext.getCwd());
 skillsService.discoverSkills();
 const terminalTitleBase = buildProjectFolderTitle(executionContext.getCwd());
+
+// Non-blocking sweep of dead-PID and stale temp artifacts from prior sessions.
+void pruneStaleTempArtifacts().catch(() => {});
 
 // Hooks are trusted in-process code, not sandboxed tools. Discovery is done
 // once at startup; untrusted project roots are skipped rather than prompting

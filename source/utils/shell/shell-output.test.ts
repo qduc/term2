@@ -103,6 +103,6 @@ it('formatShellExecutionOutput reuses one temp directory and randomizes artifact
 
   expect(path.dirname(firstPath)).toBe(path.dirname(secondPath));
   expect(path.basename(firstPath)).not.toBe(path.basename(secondPath));
-  expect(path.basename(firstPath)).toMatch(/^output-[a-f0-9]{6}\.txt$/);
-  expect(path.basename(secondPath)).toMatch(/^output-[a-f0-9]{6}\.txt$/);
+  expect(path.basename(firstPath)).toMatch(/^output-\d+-\d+-[a-f0-9]{6}\.txt$/);
+  expect(path.basename(secondPath)).toMatch(/^output-\d+-\d+-[a-f0-9]{6}\.txt$/);
 });

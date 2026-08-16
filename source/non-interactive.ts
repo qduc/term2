@@ -19,6 +19,7 @@ import { ToolOwnershipRegistry } from './services/approval/tool-ownership-regist
 import { NonInteractiveApprovalPolicy } from './services/approval/non-interactive-approval-policy.js';
 import type { HookLifecyclePort } from './services/hooks/hook-service.js';
 import type { HookEventFactory } from './services/hooks/hook-event-factory.js';
+import { pruneStaleTempArtifacts } from './utils/shell/temp-sweep.js';
 
 export interface NonInteractiveConfig {
   prompt: string;
@@ -201,6 +202,9 @@ export async function runNonInteractive(
   if (!config.sessionClientFactory && !config.toolOwnership) {
     throw new Error('runNonInteractive requires toolOwnership with an agentClient');
   }
+  // Non-blocking sweep of dead-PID and stale temp artifacts from prior sessions.
+  void pruneStaleTempArtifacts().catch(() => {});
+
   const clientFactory =
     config.sessionClientFactory ?? createCallerOwnedSessionClientFactory(config.agentClient!, config.toolOwnership!);
   const sessionId = createNonInteractiveSessionId();

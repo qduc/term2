@@ -17,8 +17,8 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
 | C2.5 | Never-dispatched effects settle as `aborted`; dispatched-but-unobserved effects settle as `unknown` and are never blindly re-executed. | Blindly re-running a command whose execution outcome is unknown (duplicate side effects, data loss). |
 | C2.6 | Provider-native opaque state remains provider-scoped. | Another provider reserializes opaque state it does not understand and corrupts the conversation or breaks resume. |
 | C2.6a | A foreign `provider_opaque` item never serializes into another provider's request. | Resume/compaction blob sent to the wrong vendor; provider 400 or silent history corruption. |
-| C2.6b | Same-provider opaque is allowed **only** on adapters that own an opaque lane: OpenAI Responses (`provider === 'openai'`) and Chat Completions / runtime-compatible (`tag === providerId` **or** legacy `'openai-compatible'`). Codex and AI SDK refuse **every** opaque item, including their own tag. | “Allow own tag” on Codex/AI SDK would be a lie: they have no opaque round-trip. Codex output conversion throws on unknown item types (`codex-responses-model.ts:326-349`) and never emits `provider_opaque`. |
-| C2.6c | Production turns use `stream()`. Missing `getResponse` is not a defect. If `getResponse` exists, it must apply the **same** splice/refuse rules and must not treat `failed`/`incomplete` as success. | Unary success on a failed Responses body would look like a completed turn to any future caller. |
+| C2.6b | Same-provider opaque is allowed **only** on adapters that own an opaque lane: OpenAI Responses (`provider === 'openai'`) and Chat Completions / runtime-compatible (`tag === providerId` **or** legacy `'openai-compatible'`). Codex and AI SDK do not own an opaque lane: their public adapters drop every `provider_opaque` item before serialization, while their lower-level serializers reject a bypassed item. | “Allow own tag” on Codex/AI SDK would be a lie: they have no opaque round-trip. The four adapter/converter proofs below establish fail-closed non-serialization; Codex output conversion also rejects unknown item types (`codex-responses-model.ts:326-349`) and never emits `provider_opaque`. |
+| C2.6c | Production turns use `stream()`. Missing `getResponse` is not a defect. If `getResponse` exists, it must apply the **same** splice/non-serialization rules and must not treat `failed`/`incomplete` as success. | Unary success on a failed Responses body would look like a completed turn to any future caller. |
 
 ## 2. Owners
 
@@ -74,7 +74,7 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
 - Adapter lane ownership: Responses splices only `provider === 'openai'`; Chat Completions
   splices `tag === providerId` or legacy `'openai-compatible'`, where the runtime-compatible
   tag is `opaqueProviderTag(config)` = `config.name || config.type || 'openai-compatible'`
-  (`openai-compatible.provider.ts:45-46`); AI SDK and Codex refuse every tag.
+  (`openai-compatible.provider.ts:45-46`); AI SDK and Codex drop every tag at their public request boundary, with lower-level serializer guards for bypasses.
 
 ## 5. Settlement semantics
 
@@ -101,13 +101,14 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
   call/result pairs are dropped before history commit with a
   `conversation.stream_history.replay_dropped` event
   (`session-stream-processor.ts:367-385`).
-- **Opaque refusal (C2.6):** success = own-tag spliced verbatim (Responses/Chat only);
-  failure = untyped `Error` thrown before the HTTP/WS/SDK call, message always containing
-  `provider_opaque` and the offending tag; cancellation = `request.signal` aborts an
-  in-flight Responses create; retry = `RetryingModel` retries only pre-event network/upstream
-  errors and an opaque refusal throws before events, so it is never replayed as a transport
-  retry (`retrying-model.ts`; `AmbiguousModelOutcomeError` is likewise not retried,
-  `retrying-model.test.ts:31`).
+- **Opaque isolation (C2.6):** success = own-tag spliced verbatim (Responses/Chat only);
+  a foreign or unsupported item is dropped before the HTTP/WS/SDK call at the public
+  adapter boundary; the lower-level AI SDK and Codex serializers throw an untyped `Error`
+  if a caller bypasses that filter, with a message containing `provider_opaque` and the
+  offending tag. Cancellation = `request.signal` aborts an in-flight Responses create;
+  retry = `RetryingModel` retries only pre-event network/upstream errors, so opaque
+  non-serialization is never replayed as a transport retry (`retrying-model.ts`;
+  `AmbiguousModelOutcomeError` is likewise not retried, `retrying-model.test.ts:31`).
 
 ## 6. Observability
 
@@ -144,12 +145,14 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
 - Local compaction boundaries — `local-context-compactor.test.ts`.
 - Retry classification/policy — `retry-classifier.test.ts`,
   `recovery-policy.test.ts`.
-- C2.6 adapter opaque lanes — `openai-responses-model.test.ts` (unary + HTTP + WS
-  splice/refuse), `openai-chat-completions-model.test.ts`,
-  `openai-compatible.provider.test.ts` (runtime-compatible tag = config name),
-  `ai-sdk-streamed-model.test.ts` (stream + unary refuse),
-  `codex-turn-converter.test.ts` (foreign + own-tag refuse),
-  `retrying-model.test.ts` (stream retry + unary absence).
+- C2.6 adapter opaque lanes — `openai-responses-model.test.ts` (unary own-tag
+  splice and foreign-item drop), `openai-chat-completions-model.test.ts` (foreign
+  and same-type/different-id drops), `openai-compatible.provider.test.ts`
+  (runtime-compatible tag = config name), `ai-sdk-streamed-model.test.ts` (unary
+  foreign-item drop), and `codex-turn-converter.test.ts` (foreign/own-tag drops
+  plus direct converter rejection). These four adapter/converter files are the
+  fail-closed provider_opaque proofs; `retrying-model.test.ts` covers stream retry
+  and unary absence.
 
 ## 8. Deterministic contract matrix
 
@@ -179,19 +182,17 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
 | C2.6 cell | Evidence (file:title) | Status |
 | --- | --- | --- |
 | OpenAI Responses own-tag splice | `openai-responses-model.test.ts:576` "splices an openai provider_opaque input item verbatim into the request" (unary) | covered |
-| OpenAI Responses foreign refuse | `openai-responses-model.test.ts:602` "refuses to splice a non-openai provider_opaque item into an OpenAI request" | covered |
-| OpenAI Responses unary `failed`/`incomplete` rejected | `openai-responses-model.test.ts:693` "rejects unary %s responses before lifecycle terminal success" | covered |
-| OpenAI Responses stream without terminal | `openai-responses-model.test.ts:713` "fails when an HTTP stream ends without a terminal completion" | covered |
+| OpenAI Responses foreign fail-closed handling | `openai-responses-model.test.ts:605` "drops a non-openai provider_opaque item and still replays the rest of the history"; `openai-responses-model.ts:85-90` filters it before projection | covered |
+| OpenAI Responses unary `failed`/`incomplete` rejected | `openai-responses-model.test.ts:712` "rejects unary %s responses before lifecycle terminal success" | covered |
+| OpenAI Responses stream without terminal | `openai-responses-model.test.ts:734` "fails when an HTTP stream ends without a terminal completion" | covered |
 | OpenAI Responses unknown output becomes opaque | `openai-responses-model.test.ts:537` "turns an unknown Responses output item into provider_opaque instead of throwing" | covered |
 | Chat Completions exposes no unary | `openai-chat-completions-model.test.ts:13` "Chat model exposes only the application-owned streamed-turn contract" | covered |
-| Chat Completions foreign refuse | `openai-chat-completions-model.test.ts:676` "refuses to splice provider_opaque from another provider into an OpenAI-compatible request" | covered |
-| Chat Completions same-type different-id refuse | `openai-chat-completions-model.test.ts:709` "refuses an opaque item from a different provider of the same openai-compatible type" | covered |
-| Chat Completions own-tag splice | `openai-chat-completions-model.test.ts:732` "splices a trailing opaque payload onto its own turn, not an earlier assistant message"; `:773` "replaces reconstructed reasoning_content with the payload spelling rather than sending both" | covered |
+| Chat Completions foreign fail-closed handling | `openai-chat-completions-model.test.ts:680` "drops provider_opaque from another provider and still sends the rest of the request"; `openai-chat-completions-model.ts:286-320` drops non-owned tags | covered |
+| Chat Completions same-type different-id fail-closed handling | `openai-chat-completions-model.test.ts:718` "drops an opaque item from a different provider of the same openai-compatible type" | covered |
+| Chat Completions own-tag splice | `openai-chat-completions-model.test.ts:747` "splices a trailing opaque payload onto its own turn, not an earlier assistant message"; `:788` "replaces reconstructed reasoning_content with the payload spelling rather than sending both" | covered |
 | Runtime-compatible tag = config name | `openai-compatible.provider.test.ts:414` / `:455` emit `provider: 'provider-test'` | covered |
-| AI SDK stream refuse | `ai-sdk-streamed-model.test.ts:351` "refuses to serialize a provider_opaque item through the AI SDK" | covered |
-| AI SDK unary refuse | `ai-sdk-streamed-model.test.ts:377` "AI SDK getResponse refuses a provider_opaque item" | covered |
-| Codex foreign refuse | `codex-turn-converter.test.ts:122` "refuses to serialize a provider_opaque item into a Codex request" | covered |
-| Codex same-tag refuse | `codex-turn-converter.test.ts:130` "toCodexResponsesInput refuses a Codex-tagged provider_opaque item" | covered |
+| AI SDK fail-closed handling | `ai-sdk-streamed-model.test.ts:355` "drops a provider_opaque item and still sends the rest of the history"; `ai-sdk-streamed-model.ts:228-244` filters before both stream/unary call options, while `:289-294` rejects a bypass | covered |
+| Codex fail-closed handling | `codex-turn-converter.test.ts:126` / `:136` drop foreign and own-tag items; `:146` "still refuses a provider_opaque item handed straight to the per-item converter"; `codex-turn-converter.ts:13-17,46-55` filters then guards bypasses | covered |
 | RetryingModel unary absence (green characterization) | `retrying-model.test.ts:123` "RetryingModel does not expose getResponse when the wrapped model has none" | covered |
 | Persistence/replay of opaque items | `conversation-replay.test.ts:2075` "a provider_opaque item round-trips byte-identical through persistence and replay"; `:2122` "two provider_opaque items across turns both survive independently"; `application-run-loop.test.ts:27` "carries a providerOpaque-marked item through untouched as provider_opaque" | covered |
 
@@ -230,7 +231,8 @@ It also includes every practical matrix-evidence boundary, including
 **test defect in the baseline record, not a product defect.**
 
 Supplementary C2.6 adapter-isolation command (C2.6 focused gate, verified
-2026-08-15 in `.worktrees/sb07-c26-adapter-isolation`):
+2026-08-16 in `.worktrees/sb07-type-hardening`; the four adapter/converter
+proof files are the required fail-closed subset):
 
 ```sh
 NODE_ENV=test pnpm test \
@@ -244,11 +246,10 @@ NODE_ENV=test pnpm test \
   source/services/provider-continuity.test.ts
 ```
 
-Result: **8 files / 170 tests passed** (167 baseline + 3 new C2.6
-characterizations: Codex same-tag refuse `codex-turn-converter.test.ts:130`,
-AI SDK unary refuse `ai-sdk-streamed-model.test.ts:377`, `RetryingModel` unary
-absence `retrying-model.test.ts:123`). The historical 14-file command above
-remains the C2.1–C2.5 / minimum-matrix gate and is untouched.
+Result: **8 files / 170 tests passed**. The four-file adapter/converter
+subset independently passed **81 tests**; the historical 14-file command above
+passed **14 files / 368 tests** in this checkout and remains the C2.1–C2.5 /
+minimum-matrix gate.
 
 Broader gates: `NODE_ENV=test pnpm test`, `pnpm typecheck`, and — mandatory
 for provider/bridge/run-loop/registry/non-interactive changes per `AGENTS.md` —
@@ -261,30 +262,24 @@ future violation still requires a red proof through the public boundaries above
 before a Phase 2 repair. The C2.6 additions are green characterizations of
 current production behavior — no `it.fails` was written in this workstream.
 
-- **Type gaps closed (SB-07, 2026-08-15, type-only — no red test needed):**
-  `ProviderFetch` is now the real fetch contract, `typeof fetch` (`registry.ts:22`), and the
-  duplicate `FetchFn` alias is the same contract (`model-service.ts:16,27`); every call site
-  was verified against `response.ok`/`response.json()` with `RequestInit` options. The
-  `fetch as any` defaults are gone (`openai.provider.ts:54`, `openrouter.provider.ts:75`,
-  `codex.provider.ts:383`, `openai-compatible.provider.ts:318`, `openai-compatible-lazy.ts:38`),
-  and the OpenAI SDK client-assembly casts are gone too (`openai.provider.ts:107`,
-  `codex.provider.ts:620`, `openai-compatible.provider.ts:170,188,230,276`) because `typeof fetch`
-  is structurally identical to the SDK's `Fetch` (`(input: string | URL | Request,
-  init?: RequestInit) => Promise<Response>`). Remaining `as any` in provider paths are
-  non-fetch SDK/transport impedance: `execAsync` promisify (`codex.provider.ts:245,273`),
-  Codex model/WS client params (`codex.provider.ts:471-480`), websocket message duck-typing
-  (`codex-responses-model.ts:124-147,1031,1111-1124`), `provider_opaque` payload destructuring
-  (`openai-chat-completions-model.ts:312-331`), `providerOptions` typed-record field access
-  (`openai-responses-model.ts:162-339,580-648`), response-normalizer monkey-patch
-  (`openai-compatible-response-normalizer.ts:83`), and AI SDK param/model shims
-  (`ai-sdk-anthropic.provider.ts:71,125`).
-- **Owner decision (SB-07) — unary return shape:** `getResponse` now returns
-  `Promise<StreamedModelUnaryResult>` (`streamed-model-turn.ts:64-84`) — the shared
-  `{ responseId, output, usage?, finishReason? }` shape both supported adapters already
-  return: OpenAI Responses yields the tagged `completion` event (`openai-responses-model.ts:570-593`,
-  a subtype), AI SDK yields the untagged `{ responseId, output, usage }`
-  (`ai-sdk-streamed-model.ts:38-63`). Type-only: C2.6 splice/refuse and `failed`/`incomplete`
-  rejection semantics are untouched, and `RetryingModel` still exposes no unary.
+- **Deferred type gap (SB-07, documentation-only; no repair authorized in this slice):**
+  The reviewed baseline declaration for `ProviderFetch` was
+  `(url: string, options?: any) => Promise<any>` at `source/providers/registry.ts:21`.
+  It leaves the catalog/token-refresh fetch boundary structurally untyped. Record this
+  as an owner decision; do not invent a second fetch seam or retype the declaration here.
+- **Deferred unary decorator gap (SB-07, documentation-only; no repair authorized in
+  this slice):** The reviewed baseline declaration was
+  `StreamedModelTurn.getResponse?(...): Promise<any>` at
+  `source/contracts/streamed-model-turn.ts:67`, and `RetryingModel` does not forward
+  the optional unary method (`source/providers/retrying-model.ts`). The run loop uses
+  `model.stream(request)` (`application-run-loop.ts:975`), and the green characterization
+  at `retrying-model.test.ts:123` proves absence when the wrapped model has no unary
+  capability. This records the type/decorator gap without retyping `getResponse`, adding
+  a production unary seam, or changing runtime behavior.
+- **Owner decision (SB-07) — unary return shape and forwarding:** A common unary
+  return shape and whether `RetryingModel` should forward an optional unary capability
+  remain deferred. This documentation slice does not retype `getResponse`, invent a
+  production unary seam, or change the existing stream-owned runtime path.
 - **Type/decorator residual hypothesis (green characterization, not a defect):**
   `RetryingModel` does not forward `getResponse` (`retrying-model.ts`). Its only production
   wrap is Codex (`codex.provider.ts:490`), whose model implements `stream` only

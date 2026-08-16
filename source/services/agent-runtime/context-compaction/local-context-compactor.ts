@@ -96,6 +96,24 @@ const checkpointSummaryText = (item: ProviderInputItem): string | null => {
   return match?.[1]?.trim() ?? item.content;
 };
 
+/**
+ * Chat Completions reasoning fields are provider-local continuation metadata,
+ * but they describe one completed assistant turn. Once that whole cold turn is
+ * replaced by a local checkpoint, replaying the metadata without its assistant
+ * message would be invalid; it must be omitted rather than summarized.
+ *
+ * Keep this deliberately narrow. Encrypted/native provider checkpoints and
+ * mixed metadata remain non-reducible and therefore fail closed.
+ */
+const isDiscardableColdChatReasoning = (item: ProviderInputItem): boolean => {
+  if (item.providerOpaque === undefined) return false;
+  const keys = Object.keys(item).filter((key) => key !== 'providerOpaque');
+  return (
+    keys.length > 0 &&
+    keys.every((key) => key === 'reasoning_content' || key === 'reasoning' || key === 'reasoning_details')
+  );
+};
+
 const chunkColdPrefix = (items: readonly ProviderInputItem[], maxCharacters: number): string[] => {
   const turns: ProviderInputItem[][] = [];
   for (const item of items) {
@@ -126,9 +144,6 @@ export class LocalContextCompactor {
   }
 
   async compactAtBoundary(input: LocalCompactionInput): Promise<LocalCompactionOutcome> {
-    if (input.history.some((item) => item.providerOpaque !== undefined)) {
-      throw new Error('Local compaction cannot summarize indispensable provider-opaque history');
-    }
     const threshold = resolveCompactionThreshold({
       contextWindow: input.contextWindow,
       compactThreshold: input.compactThreshold,
@@ -161,10 +176,16 @@ export class LocalContextCompactor {
     const plan = planLocalCompaction({ history: input.history, usableInputTokens });
     if (plan.kind === 'blocked') return { kind: 'blocked', reason: plan.reason, estimate };
 
+    if (plan.coldPrefix.some((item) => item.providerOpaque !== undefined && !isDiscardableColdChatReasoning(item))) {
+      throw new Error('Local compaction cannot summarize indispensable provider-opaque history');
+    }
+
     // Leave the remaining 10% of the half-window budget for the bounded
     // running summary carried into every chunk after the first.
     const priorCheckpoint = plan.coldPrefix.find(isLocalContextSummary);
-    const coldItems = plan.coldPrefix.filter((item) => !isLocalContextSummary(item));
+    const coldItems = plan.coldPrefix.filter(
+      (item) => !isLocalContextSummary(item) && !isDiscardableColdChatReasoning(item),
+    );
     const maxChunkCharacters = Math.max(4_000, Math.floor(usableInputTokens * 0.4 * 4));
     const chunks = chunkColdPrefix(coldItems, maxChunkCharacters);
     const summaryOutputCap = Math.max(

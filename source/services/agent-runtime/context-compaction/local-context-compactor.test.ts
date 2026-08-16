@@ -121,6 +121,45 @@ it('fails closed instead of exposing provider-opaque history to the summarizer',
   expect(generate).not.toHaveBeenCalled();
 });
 
+it.each([
+  ['reasoning', 'opaque provider reasoning that belongs to a completed cold turn'],
+  ['reasoning_content', 'opaque provider reasoning that belongs to a completed cold turn'],
+  [
+    'reasoning_details',
+    [{ type: 'reasoning_text', text: 'opaque provider reasoning that belongs to a completed cold turn' }],
+  ],
+] as const)(
+  'compacts cold Chat Completions %s metadata without exposing it to the summarizer',
+  async (field, value) => {
+    const generate = vi.fn(async () => ({ text: 'summary' }));
+    const history = [
+      ...turns(2),
+      {
+        [field]: value,
+        providerOpaque: { provider: 'opencode' },
+      },
+      ...turns(2),
+    ];
+
+    const outcome = await new LocalContextCompactor({ generate }).compactAtBoundary({
+      history,
+      provider: 'opencode',
+      model: 'deepseek-v4-pro',
+      sourceRevision: 1,
+      contextWindow: 100_000,
+      maxOutputTokens: 1_000,
+      compactThreshold: 0.8,
+      compactThresholdTokens: null,
+      manual: true,
+    });
+
+    expect(outcome.kind).toBe('compacted');
+    expect(generate).toHaveBeenCalledOnce();
+    const firstCall = generate.mock.calls[0] as unknown as [{ transcriptChunk: string }];
+    expect(firstCall[0].transcriptChunk).not.toContain('opaque provider reasoning');
+  },
+);
+
 it('uses the existing local checkpoint as the running-summary seed on a later compaction', async () => {
   const generate = vi.fn(async () => ({ text: 'updated summary' }));
   const checkpoint: ProviderInputItem = {

@@ -348,54 +348,37 @@ it('preserves missing token totals without turning them into zero', async () => 
   ]);
 });
 
-it('refuses to serialize a provider_opaque item through the AI SDK', async () => {
+// A foreign opaque item is what a provider switch leaves behind. The AI SDK
+// lane produces none of its own, so every one it sees belongs to another lane.
+// Throwing used to kill every later turn too, because nothing removes the item
+// from history.
+it('drops a provider_opaque item and still sends the rest of the history', async () => {
+  let capturedPrompt: any;
   const model = createAiSdkStreamedModel({
     provider: 'example',
     modelId: 'model',
     specificationVersion: 'v3',
     supportedUrls: {},
-    async doGenerate() {
-      return {} as unknown as Awaited<ReturnType<LanguageModelV3['doGenerate']>>;
+    async doGenerate(options: any) {
+      capturedPrompt = options.prompt;
+      return { content: [], finishReason: 'stop', usage: {} } as unknown as Awaited<
+        ReturnType<LanguageModelV3['doGenerate']>
+      >;
     },
     async doStream() {
       throw new Error('should not be reached');
     },
   } as unknown as LanguageModelV3);
 
-  await expect(
-    collect(
-      model.stream({
-        input: [
-          { type: 'provider_opaque', provider: 'openai', item: { type: 'compaction', encrypted_content: 'blob' } },
-        ],
-        tools: [],
-      }),
-    ),
-  ).rejects.toThrow(/provider_opaque/);
-});
+  await model.getResponse!({
+    input: [
+      { type: 'provider_opaque', provider: 'openai', item: { type: 'compaction', encrypted_content: 'foreign-blob' } },
+      { type: 'message', role: 'user', content: [{ type: 'text', text: 'still here' }] },
+    ],
+    tools: [],
+  });
 
-it('AI SDK getResponse refuses a provider_opaque item', async () => {
-  let generateCalls = 0;
-  const model = createAiSdkStreamedModel({
-    provider: 'example',
-    modelId: 'model',
-    specificationVersion: 'v3',
-    supportedUrls: {},
-    async doGenerate() {
-      generateCalls += 1;
-      throw new Error('should not be reached');
-    },
-    async doStream() {
-      throw new Error('should not be reached');
-    },
-  } as unknown as LanguageModelV3);
-
-  expect(typeof model.getResponse).toBe('function');
-  await expect(
-    model.getResponse!({
-      input: [{ type: 'provider_opaque', provider: 'openai', item: { type: 'compaction', encrypted_content: 'blob' } }],
-      tools: [],
-    }),
-  ).rejects.toThrow(/provider_opaque from 'openai'/);
-  expect(generateCalls).toBe(0);
+  expect(JSON.stringify(capturedPrompt)).not.toContain('foreign-blob');
+  expect(capturedPrompt).toHaveLength(1);
+  expect(capturedPrompt[0].role).toBe('user');
 });

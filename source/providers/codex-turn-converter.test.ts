@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toCodexResponsesInput, toCodexToolResultOutput } from './codex-turn-converter.js';
+import { toCodexResponsesInput, toCodexResponsesItem, toCodexToolResultOutput } from './codex-turn-converter.js';
 
 describe('Codex streamed-turn conversion', () => {
   it('converts each supported input item and rich tool result without string coercion', () => {
@@ -118,20 +118,38 @@ describe('Codex streamed-turn conversion', () => {
   });
 });
 
-describe('provider_opaque rejection', () => {
-  it('refuses to serialize a provider_opaque item into a Codex request', () => {
-    expect(() =>
-      toCodexResponsesInput([
-        { type: 'provider_opaque', provider: 'openai', item: { type: 'compaction', encrypted_content: 'blob' } },
-      ]),
-    ).toThrow(/provider_opaque/);
+describe('provider_opaque handling', () => {
+  // The Codex lane produces no opaque items of its own, so every opaque item it
+  // sees is another lane's — the ordinary residue of a provider switch. It is
+  // dropped rather than thrown on, because throwing killed every later turn too:
+  // nothing removes the item from history.
+  it('drops a foreign provider_opaque item and still serializes the rest', () => {
+    const input = toCodexResponsesInput([
+      { type: 'provider_opaque', provider: 'openai', item: { type: 'compaction', encrypted_content: 'foreign-blob' } },
+      { type: 'message', role: 'user', content: [{ type: 'text', text: 'still here' }] },
+    ]);
+
+    expect(JSON.stringify(input)).not.toContain('foreign-blob');
+    expect(input).toHaveLength(1);
   });
 
-  it('toCodexResponsesInput refuses a Codex-tagged provider_opaque item', () => {
-    expect(() =>
+  it('drops even a Codex-tagged provider_opaque item, which this lane never produces', () => {
+    expect(
       toCodexResponsesInput([
         { type: 'provider_opaque', provider: 'codex', item: { type: 'compaction', encrypted_content: 'blob' } },
       ]),
-    ).toThrow(/provider_opaque from 'codex'/);
+    ).toEqual([]);
+  });
+
+  // The per-item converter keeps throwing so a future caller that bypasses the
+  // filter cannot put a foreign payload on the wire unnoticed.
+  it('still refuses a provider_opaque item handed straight to the per-item converter', () => {
+    expect(() =>
+      toCodexResponsesItem({
+        type: 'provider_opaque',
+        provider: 'openai',
+        item: { type: 'compaction', encrypted_content: 'blob' },
+      } as never),
+    ).toThrow(/provider_opaque/);
   });
 });

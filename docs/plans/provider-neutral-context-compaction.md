@@ -435,8 +435,37 @@ degradation nobody has observed yet because nothing is implemented. Milestone
   in the session.
 - Local fallback must not send an opaque item to a different provider or pretend
   encrypted content was summarized.
-- For a provider switch, existing cross-provider invalidation runs first. Local
-  compaction operates only on the resulting application-modeled history.
+- For a provider switch, foreign opaque items are stripped at the wire
+  converters. Local compaction operates only on the resulting
+  application-modeled history. See "Foreign opaque items are stripped, not
+  refused" below — there was no cross-provider invalidation before 2026-08-16,
+  only four adapters that threw.
+
+### Foreign opaque items are stripped, not refused (2026-08-16)
+
+Four wire converters — `openai-responses-model`, `openai-chat-completions-model`,
+`codex-turn-converter`, `ai-sdk-streamed-model` — each threw
+`Refusing to splice/serialize provider_opaque from '<tag>'` when handed an item
+from another lane. Nothing stripped such items first, so switching providers on
+a conversation that carried any opaque item **bricked it**: the item stays in
+history forever, so every subsequent turn threw again before reaching the wire.
+
+The refusal conflated two different things. "A foreign opaque item must not be
+sent" is a hard rule. "Encountering one is an error" is false — it is the
+ordinary residue of a provider switch. The items are now dropped at each
+converter's input boundary and the turn proceeds.
+
+`providers/provider-opaque-compatibility.ts` states the acceptance rule once.
+The tag is a **lane** identity, not a provider id: the Responses lane tags every
+item `openai` regardless of which configured provider routes to it, while Chat
+Completions tags by configured provider name because two `openai-compatible`
+providers spell reasoning differently. The legacy shared `openai-compatible` tag
+is honoured on chat lanes only.
+
+The per-item converters (`toCodexResponsesItem`, `toPromptMessage`) still throw.
+They are unreachable through the public API now, and kept as backstops so a
+future caller that bypasses the filter cannot put a foreign payload on the wire
+unnoticed.
 - ~~Forced `local` mode encountering an indispensable opaque-only prefix fails
   closed with an explanation; it does not discard that provider state.~~
   **Reversed 2026-08-16.** This rule rested on a false premise and made local

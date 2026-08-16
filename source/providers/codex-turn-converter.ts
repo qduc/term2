@@ -11,7 +11,10 @@ import type {
  * or rejected before it can become malformed Responses input.
  */
 export function toCodexResponsesInput(input: readonly StreamedModelTurnInput[]): unknown[] {
-  return input.map(toCodexResponsesItem);
+  // The Codex lane never produces opaque items, so any it sees came from
+  // another provider and is inert baggage left by a switch, not a fault. Drop
+  // it and keep replaying the rest. See `provider-opaque-compatibility.ts`.
+  return input.filter((item) => item.type !== 'provider_opaque').map(toCodexResponsesItem);
 }
 
 export function toCodexResponsesItem(item: StreamedModelTurnInput): unknown {
@@ -45,6 +48,9 @@ export function toCodexResponsesItem(item: StreamedModelTurnInput): unknown {
         output: toCodexToolResultOutput(item.output),
       };
     case 'provider_opaque':
+      // Filtered out in `toCodexResponsesInput`; reaching here means a new
+      // caller bypassed that filter, which would put a foreign payload on the
+      // wire.
       throw new Error(
         `Refusing to serialize provider_opaque from '${item.provider}' into a Codex request: opaque items are only valid on the provider that produced them`,
       );

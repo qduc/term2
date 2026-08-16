@@ -419,14 +419,19 @@ describe('application-owned context compaction black-box lifecycle', () => {
     });
   });
 
-  it('rejects an OpenAI compaction item safely after switching providers', async () => {
+  // Switching providers leaves the previous lane's opaque compaction item in
+  // history forever -- nothing but compaction removes it. Refusing to serialize
+  // it therefore did not merely lose the item, it made every later turn on the
+  // new provider fail, permanently. The item must be dropped so the rest of the
+  // history still reaches the wire.
+  it('drops an OpenAI compaction item and still reaches the wire after switching providers', async () => {
     const server = await startResilienceHttpServer({ family: 'openai-responses', scenario: 'compaction-restart' });
     activeHttpServers.push(server);
     const workspace = await createWorkspace(COMPACTION_ROUTE, server);
     activeWorkspaces.push(workspace);
 
     const first = await startInteractive(workspace, COMPACTION_ROUTE);
-    await first.waitForVisibleOutput('❯ ');
+    await first.waitForVisibleOutput('\u276f ');
     const firstIdlePrompt = captureIdlePrompt(first);
     await submitPrompt(first, 'create an OpenAI compaction item');
     await first.waitForVisibleOutput('COMPACTION-FIRST');
@@ -451,11 +456,15 @@ describe('application-owned context compaction black-box lifecycle', () => {
         `${error instanceof Error ? error.message : String(error)} output=${switched.getVisibleOutput()}`,
       );
     }
-    await switched.waitForVisibleOutput('❯ ');
+    await switched.waitForVisibleOutput('\u276f ');
     await submitPrompt(switched, 'try the switched provider');
+
+    // The alternate provider is a different wire family pointed at the same
+    // fixture, so the turn cannot succeed. What matters is that the request is
+    // now built and sent at all, carrying none of the foreign ciphertext.
     try {
       await switched.waitForState(
-        (snapshot) => /provider_opaque|opaque item/i.test(snapshot.visibleOutput),
+        (snapshot) => server.requests.length > 1 || /error/i.test(snapshot.visibleOutput),
         DEFAULT_TIMEOUT_MS,
       );
     } catch (error) {
@@ -464,8 +473,9 @@ describe('application-owned context compaction black-box lifecycle', () => {
       );
     }
 
-    expect(server.requests).toHaveLength(1);
-    expect(switched.getVisibleOutput()).not.toContain('COMPACTION-RESUMED');
+    expect(server.requests.length).toBeGreaterThan(1);
+    expect(JSON.stringify(server.requests.slice(1))).not.toContain(COMPACTION_CIPHERTEXT);
+    expect(switched.getVisibleOutput()).not.toMatch(/provider_opaque|opaque item/i);
     await switched.write('\u0003');
     await switched.waitForExit(DEFAULT_TIMEOUT_MS);
   });

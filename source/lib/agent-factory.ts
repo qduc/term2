@@ -18,6 +18,7 @@ import {
 } from './tool-selection-policy.js';
 import { getModelDefaultReasoningLevel, getProviderDefaultReasoningLevel } from '../services/model-service.js';
 import { toolApprovalPolicyRegistry } from '../services/approval/tool-approval-policy-registry.js';
+import { shouldBypassToolApproval } from '../services/approval/shell-auto-approval-resolver.js';
 import type { AgentRuntime } from '../services/agent-runtime/agent-runtime.js';
 import { isZodToolParameterSchema } from '../tools/types.js';
 import { isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../tools/utils.js';
@@ -136,6 +137,7 @@ export function buildAgentTools({
         needsApproval: wrapNeedsApproval(definition, {
           checkInterceptors: (params) => deps.checkToolInterceptors(definition.name, params),
           toolName: definition.name,
+          bypassApproval: () => shouldBypassToolApproval(definition.name, deps.settings.get('shell.autoApproveMode')),
           registry: toolApprovalPolicyRegistry,
         }),
         execute: async (params, _context: unknown, details: unknown) => {
@@ -163,7 +165,11 @@ export function buildAgentTools({
 
           const executeOriginal = () => Promise.resolve(definition.execute(normalizedParams, _context, details));
           const result = await executeOriginal();
-          const postExecute = definition.postExecute ?? deps.postExecutePauseCapability?.forTool(definition);
+          const postExecute =
+            definition.postExecute ??
+            (shouldBypassToolApproval(definition.name, deps.settings.get('shell.autoApproveMode'))
+              ? undefined
+              : deps.postExecutePauseCapability?.forTool(definition));
           const finalResult = postExecute
             ? await postExecute({
                 params: normalizedParams,
@@ -192,6 +198,9 @@ export function buildAgentTools({
     const applyPatch = tools.find((tool) => tool.name === 'apply_patch');
     if (applyPatch) {
       applyPatch.needsApproval = async (params, context) => {
+        if (shouldBypassToolApproval(applyPatch.name, deps.settings.get('shell.autoApproveMode'))) {
+          return false;
+        }
         const operation = context ?? params;
         const operationPath =
           operation && typeof operation === 'object' ? (operation as { path?: unknown }).path : undefined;

@@ -251,6 +251,26 @@ it('wrapNeedsApproval still bypasses approval when an interceptor rejects execut
   expect(originalPolicyCalled).toBe(false);
 });
 
+it('wrapNeedsApproval bypasses the original approval policy when YOLO is active', async () => {
+  let originalPolicyCalled = false;
+  const wrapped = wrapNeedsApproval(
+    {
+      name: 'apply_patch',
+      parameters: z.object({ path: z.string() }),
+      needsApproval: async () => {
+        originalPolicyCalled = true;
+        return true;
+      },
+    },
+    {
+      bypassApproval: () => true,
+    },
+  );
+
+  await expect(wrapped({ path: '../outside.txt' }, {})).resolves.toBe(false);
+  expect(originalPolicyCalled).toBe(false);
+});
+
 // ---------------------------------------------------------------------------
 // wrapToolInvoke
 // ---------------------------------------------------------------------------

@@ -124,6 +124,34 @@ it('ShellAutoApprovalDecisionPolicy approves always-mode shell commands without 
   ).resolves.toBe('approve');
 });
 
+it('ShellAutoApprovalDecisionPolicy approves every tool except ask_user in always mode', async () => {
+  const client = createMockAgentClient();
+  const conversationStore = new ConversationStore();
+
+  const shellAutoApproval = new ShellAutoApprovalResolver({
+    conversationStore,
+    agentClient: client as any,
+    logger,
+    settingsService: {
+      get: <T>(key: string): T | undefined =>
+        key === 'shell.autoApproveMode' ? ('always' as unknown as T) : undefined,
+    } as any,
+    sessionContextService: {
+      runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      getContext: () => null,
+    },
+  });
+
+  const policy = new ShellAutoApprovalDecisionPolicy(shellAutoApproval);
+
+  await expect(policy.decide({ toolName: 'apply_patch', argumentsText: 'patch', callId: 'patch-yolo' })).resolves.toBe(
+    'approve',
+  );
+  await expect(policy.decide({ toolName: 'ask_user', argumentsText: 'question', callId: 'ask-yolo' })).resolves.toBe(
+    'prompt',
+  );
+});
+
 it('ShellAutoApprovalDecisionPolicy returns prompt for non-shell tool', async () => {
   const client = createMockAgentClient();
   const conversationStore = new ConversationStore();

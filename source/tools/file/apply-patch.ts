@@ -225,6 +225,12 @@ export function createApplyPatchToolDefinition(deps: {
     parameters: applyPatchParametersSchema,
     strictParameters: applyPatchStrictParametersSchema,
     needsApproval: async (params) => {
+      if (settingsService.get('shell.autoApproveMode') === 'always') {
+        loggingService.security('apply_patch needsApproval: auto-approved in YOLO mode', {
+          operationCount: getApplyPatchOperations(params).length,
+        });
+        return false;
+      }
       try {
         const workspaceRoot = executionContext?.getCwd() || process.cwd();
         const sshService = executionContext?.getSSHService();
@@ -374,9 +380,8 @@ export function createApplyPatchToolDefinition(deps: {
       };
 
       const runOperation = async ({ type, path: filePath, diff }: ApplyPatchOperation) => {
-        // The workspace boundary was already enforced by `needsApproval` (which
-        // returns true and pauses the SDK for an out-of-workspace path). If we
-        // reach `execute` after the user approved, the write must proceed.
+        // Standard modes enforce the workspace boundary in `needsApproval`;
+        // YOLO deliberately reaches execute without a permission prompt.
         const targetPath = resolveWorkspacePath(filePath, cwd, { allowOutsideWorkspace: true });
 
         if (enableFileLogging) {

@@ -35,6 +35,7 @@ import { injectRunBudgetWarning } from '../../utils/inject-warning-into-tool-out
 import { tryAcquireFileLock } from '../../tools/file/file-locks.js';
 import { classifyCommand, SafetyStatus } from '../../utils/shell/command-safety/index.js';
 import { evaluateShellAutoApprovalAdvisories } from '../approval/shell-auto-approval-evaluator.js';
+import { shouldBypassToolApproval } from '../approval/shell-auto-approval-resolver.js';
 import type { ISubagentClient } from './subagent-client-types.js';
 import { MemoryCapabilityBuilder } from '../memory/memory-capabilities.js';
 import type { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
@@ -521,6 +522,9 @@ export class SubagentToolPolicy {
       ...definition,
       needsApproval: nestedApprovals
         ? async (params: z.infer<S>, context?: unknown) => {
+            if (shouldBypassToolApproval(definition.name, this.#settings.get('shell.autoApproveMode'))) {
+              return false;
+            }
             const paths = extractPaths(params);
             if (paths.some((filePath) => !this.isWithinWriteBoundary(filePath, cwd))) {
               return false;
@@ -1023,7 +1027,9 @@ export class SubagentToolFactory {
           useStrictSchema && isZodToolParameterSchema(definition.parameters)
             ? toOpenAIStrictToolSchema(definition.parameters)
             : definition.parameters,
-        needsApproval: wrapNeedsApproval(definition),
+        needsApproval: wrapNeedsApproval(definition, {
+          bypassApproval: () => shouldBypassToolApproval(definition.name, this.#settings.get('shell.autoApproveMode')),
+        }),
         execute: async (params, context, details) => {
           options.onToolStart?.(
             definition.name,

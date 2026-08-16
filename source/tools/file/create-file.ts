@@ -103,6 +103,12 @@ export function createCreateFileToolDefinition(deps: {
     effect: 'mutating',
     parameters: createFileParametersSchema,
     needsApproval: async (params) => {
+      if (settingsService.get('shell.autoApproveMode') === 'always') {
+        loggingService.security('create_file needsApproval: auto-approved in YOLO mode', {
+          path: params.path,
+        });
+        return false;
+      }
       try {
         const { path: filePath } = params;
         const cwd = executionContext?.getCwd() || process.cwd();
@@ -128,9 +134,8 @@ export function createCreateFileToolDefinition(deps: {
       try {
         const { path: filePath, content, overwrite = false } = params;
         const cwd = executionContext?.getCwd() || process.cwd();
-        // The workspace boundary was already enforced by `needsApproval` (which
-        // returns true and pauses the SDK for an out-of-workspace path). If we
-        // reach `execute` after the user approved, the write must proceed.
+        // Standard modes enforce the workspace boundary in `needsApproval`;
+        // YOLO deliberately reaches execute without a permission prompt.
         const targetPath = resolveWorkspacePath(filePath, cwd, { allowOutsideWorkspace: true });
 
         const sshService = executionContext?.getSSHService();

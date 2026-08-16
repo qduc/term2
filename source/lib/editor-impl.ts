@@ -8,10 +8,9 @@ import { ExecutionContext } from '../services/execution-context.js';
 
 /**
  * Resolves a relative path and ensures it's within the workspace, unless the
- * caller opts out via `allowOutsideWorkspace: true`. Opting out is reserved
- * for paths that have already cleared the workspace boundary upstream
- * (e.g. via the SDK's `needsApproval` gate). Matches the same option in
- * `source/tools/utils.resolveWorkspacePath`.
+ * caller opts out via `allowOutsideWorkspace: true`. The opt-out is used by
+ * tool execution after either normal approval or the explicit YOLO bypass.
+ * Matches the same option in `source/tools/utils.resolveWorkspacePath`.
  */
 function resolveWorkspacePath(
   relativePath: string,
@@ -56,9 +55,8 @@ export function createEditorImpl(deps: {
       const isRemote = executionContext?.isRemote() && !!sshService;
 
       try {
-        // The workspace boundary was already enforced upstream by the SDK's
-        // `needsApproval` gate (see `source/lib/agent-factory.ts`). If we reach this
-        // method, the user has approved the operation, so the write must proceed.
+        // Standard modes enforce the workspace boundary in `needsApproval`;
+        // YOLO deliberately reaches this execution path without a prompt.
         const targetPath = resolveWorkspacePath(filePath, cwd, { allowOutsideWorkspace: true });
 
         if (enableFileLogging) {
@@ -134,9 +132,8 @@ export function createEditorImpl(deps: {
       const isRemote = executionContext?.isRemote() && !!sshService;
 
       try {
-        // The workspace boundary was already enforced upstream by the SDK's
-        // `needsApproval` gate (see `source/lib/agent-factory.ts`). If we reach this
-        // method, the user has approved the operation, so the write must proceed.
+        // Standard modes enforce the workspace boundary in `needsApproval`;
+        // YOLO deliberately reaches this execution path without a prompt.
         const targetPath = resolveWorkspacePath(filePath, cwd, { allowOutsideWorkspace: true });
 
         if (enableFileLogging) {
@@ -229,9 +226,8 @@ export function createEditorImpl(deps: {
       const isRemote = executionContext?.isRemote() && !!sshService;
 
       try {
-        // The workspace boundary was already enforced upstream by the SDK's
-        // `needsApproval` gate (see `source/lib/agent-factory.ts`). If we reach this
-        // method, the user has approved the operation, so the write must proceed.
+        // Standard modes enforce the workspace boundary in `needsApproval`;
+        // YOLO deliberately reaches this execution path without a prompt.
         const targetPath = resolveWorkspacePath(filePath, cwd, { allowOutsideWorkspace: true });
 
         if (enableFileLogging) {

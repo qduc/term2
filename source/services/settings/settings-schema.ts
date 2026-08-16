@@ -286,7 +286,7 @@ export const ShellSettingsSchema = z.object({
   autoApproveMode: z
     .enum(['off', 'advisory', 'auto', 'always'])
     .default('off')
-    .describe('Mode for shell command auto-approval'),
+    .describe('Mode for tool approval; always bypasses permission prompts except ask_user'),
   useRtkCompression: z.boolean().optional().default(false).describe('Use RTK to compress shell command output'),
 });
 

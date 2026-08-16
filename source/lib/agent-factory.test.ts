@@ -283,6 +283,36 @@ it.sequential('application run loop pauses an opted-in root tool pending approva
   expect((nextRequestResults[0][0] as any).output).toBe('approved result');
 });
 
+it.sequential('YOLO bypasses root post-execute permission pauses', async () => {
+  const pending = new PostExecutePendingRegistry({ sessionId: 'session-yolo', epoch: 'epoch-yolo' });
+  const capability = new PostExecutePauseCapability(pending);
+  capability.setActiveRunId('run-yolo');
+  const { deps } = createDeps({
+    settingsValues: { 'shell.autoApproveMode': 'always' },
+    postExecutePauseCapability: capability,
+  });
+  const tool = buildTestTool(
+    createToolDefinition({
+      postExecutePause: {
+        describe: () => ({ toolName: 'post_execute_test', argumentsText: '{}' }),
+      },
+    }),
+    deps,
+  );
+
+  const result = await Promise.race([
+    tool.invoke({}, JSON.stringify({ value: 'yolo' }), { toolCall: { callId: 'call-yolo' } }),
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error('YOLO tool invocation remained blocked by a post-execute permission gate')),
+        100,
+      ),
+    ),
+  ]);
+  expect(result).toBe('original:yolo');
+  expect(pending.snapshot().entries).toEqual([]);
+});
+
 it.sequential('post-execute capability accepts a schema-typed definition through forTool', () => {
   const pending = new PostExecutePendingRegistry({ sessionId: 'session-a', epoch: 'epoch-a' });
   const capability = new PostExecutePauseCapability(pending);
@@ -402,6 +432,22 @@ it.sequential('native apply_patch needsApproval requires approval for paths outs
     diff: '@@ -0,0 +1 @@\n+x',
   });
   expect(outsideResult).toBe(true);
+});
+
+it.sequential('YOLO bypasses native apply_patch approval for paths outside the workspace', async () => {
+  const { deps } = createDeps({ providerId: 'openai', settingsValues: { 'shell.autoApproveMode': 'always' } });
+
+  const result = buildAgent({ model: 'gpt-5.1' }, deps);
+  const applyPatch = result.agent.tools.find((tool: any) => tool.name === 'apply_patch') as any;
+
+  expect(applyPatch).toBeTruthy();
+  await expect(
+    applyPatch.needsApproval(undefined, {
+      type: 'create_file',
+      path: '../outside.txt',
+      diff: '@@ -0,0 +1 @@\n+x',
+    }),
+  ).resolves.toBe(false);
 });
 
 it.sequential('buildAgent resolves codex default_reasoning_level', async () => {

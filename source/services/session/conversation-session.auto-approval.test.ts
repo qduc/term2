@@ -293,6 +293,31 @@ it('always mode skips evaluator calls for later shell interruptions in the appro
   expect(chatCalls).toHaveLength(0);
 });
 
+it('always mode bypasses editor approval prompts at the session boundary', async () => {
+  const initialStream = createInterruptedStream([
+    createNonShellInterruption({
+      callId: 'call-always-editor',
+      toolName: 'apply_patch',
+      argumentsValue: { path: '../outside.txt', diff: '@@ -0,0 +1 @@\n+x' },
+    }),
+  ]);
+  const finalStream = createFinalStream('Editor completed without approval.');
+
+  const { bundle, chatCalls } = createSessionHarness({
+    settingsOverrides: {
+      'shell.autoApproveMode': 'always',
+      'sandbox.enabled': false,
+    },
+    startStreams: [initialStream],
+    continuationStreams: [finalStream],
+  });
+
+  const result = await bundle.terminalAdapter.sendMessage('edit the file without prompting');
+
+  expect(getResponseResult(result).finalText).toBe('Editor completed without approval.');
+  expect(chatCalls).toHaveLength(0);
+});
+
 it('RED-classified shell command includes LLM rationale but remains a system rejection advisory', async () => {
   const initialStream = createInterruptedStream([createShellInterruption({ callId: 'call-red', command: 'rm -rf /' })]);
   const { bundle, chatCalls } = createSessionHarness({

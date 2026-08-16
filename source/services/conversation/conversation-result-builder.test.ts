@@ -65,7 +65,7 @@ const makeStream = (extras: any = {}): AgentStream =>
   });
 
 const makeDeps = (
-  mode: 'off' | 'advisory' | 'auto' = 'off',
+  mode: 'off' | 'advisory' | 'auto' | 'always' = 'off',
   toolOwnership?: ToolOwnershipRegistry,
   sandboxEnabled: boolean = true,
   chat: () => Promise<string> = async () => '{"results":[]}',
@@ -348,6 +348,51 @@ it('auto_approve outcome for valid read-only interruptions registered with the p
     expect(outcome.callId).toBe('read-1');
     expect(outcome.advisory).toBeUndefined();
   }
+});
+
+it('always mode auto-approves editor interruptions without consulting the policy registry', async () => {
+  const stream = makeStream({
+    interruptions: [
+      {
+        name: 'apply_patch',
+        callId: 'patch-yolo',
+        arguments: { operations: [{ type: 'create_file', path: '../outside.txt', diff: '@@ -0,0 +1 @@\n+x' }] },
+        agent: { name: 'TestAgent' },
+      },
+    ],
+    state: { id: 'state-1' },
+  });
+
+  const outcome = await buildConversationResult(
+    { result: stream, toolCallArgumentsById: new Map() },
+    makeDeps('always'),
+  );
+
+  expect(outcome.kind).toBe('auto_approve');
+  if (outcome.kind === 'auto_approve') {
+    expect(outcome.callId).toBe('patch-yolo');
+  }
+});
+
+it('always mode leaves ask_user as a user-input interaction', async () => {
+  const stream = makeStream({
+    interruptions: [
+      {
+        name: 'ask_user',
+        callId: 'ask-yolo',
+        arguments: { questions: [{ question: 'Which option?' }] },
+        agent: { name: 'TestAgent' },
+      },
+    ],
+    state: { id: 'state-1' },
+  });
+
+  const outcome = await buildConversationResult(
+    { result: stream, toolCallArgumentsById: new Map() },
+    makeDeps('always'),
+  );
+
+  expect(outcome.kind).toBe('approval_required');
 });
 
 it('unsandboxed shell is not auto-approved by the policy registry', async () => {

@@ -104,6 +104,16 @@ _Avoid_: Jail, container
 A runtime posture that changes what the agent is permitted to do — most notably Plan Mode, which makes the workspace read-only.
 _Avoid_: State, flag, setting
 
+### Test suite stewardship
+
+**Behavior Contract**:
+A user- or system-observable rule for which a test provides evidence. A Behavior Contract may be protected by several tests and may span several system boundaries.
+_Avoid_: Assertion, coverage item
+
+**Audit Decision**:
+A reviewable judgment about how a test should be maintained, supported by explicit evidence and kept separate from measurements and facts about the test.
+_Avoid_: Quality score, test label
+
 ### Model access
 
 **Provider**:

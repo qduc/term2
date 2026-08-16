@@ -1,0 +1,268 @@
+schemaVersion: 2
+domains:
+  - id: probe
+    label: Independent calibration review of the assigned test files
+suites:
+  - id: probe-vitest-unit
+    label: Vitest unit tests at a production boundary
+  - id: probe-ink-integration
+    label: React Ink terminal integration tests
+  - id: probe-application-integration
+    label: AgentClient application run-loop integration tests
+seams:
+  - id: probe-sandbox-classification
+    label: Sandbox failure classification consumed by shell execution
+  - id: probe-shell-execution
+    label: Shell tool handling of sandbox failures and retries
+  - id: probe-approval-policy
+    label: Approval decision policy for shell and non-shell tools
+  - id: probe-approval-routing
+    label: Approval resolver and conversation routing
+  - id: probe-terminal-input-boundary
+    label: Ink stdin boundary across editor and menu surfaces
+  - id: probe-menu-controller
+    label: Menu stack, editor binding, and successor transitions
+  - id: probe-agent-client-run-loop
+    label: AgentClient wrapper over the application-owned run loop
+  - id: probe-provider-stream
+    label: Provider streamed-model factory and abort signal boundary
+risks:
+  - id: probe-wrong-sandbox-retry
+    label: A failed command is offered the wrong retry or approval path
+    severity: high
+  - id: probe-false-sandbox-failure
+    label: Successful or already-authorized command output is replaced by a false sandbox failure
+    severity: high
+  - id: probe-unsafe-approval
+    label: A tool is approved without the required policy or advisory conditions
+    severity: critical
+  - id: probe-stale-menu-input
+    label: A key during menu transitions leaves stale command text or a stuck menu
+    severity: high
+  - id: probe-wrong-editor-state
+    label: Menu selection loses surrounding text or restores the wrong cursor position
+    severity: medium
+  - id: probe-lost-menu-activation
+    label: A settings or skill selection fails to reach its successor or callback
+    severity: medium
+  - id: probe-lost-steer
+    label: A user message accepted for an active turn is lost across a run-loop boundary
+    severity: high
+  - id: probe-uncontrolled-stream
+    label: An active provider stream cannot be aborted or a provider setup failure is opaque
+    severity: high
+fixtures:
+  - id: probe-sandbox-runtime-annotation
+    label: Annotated sandbox violation stderr
+  - id: probe-network-allowlist-stderr
+    label: Proxy allowlist block stderr without a runtime annotation
+  - id: probe-strict-denied-read
+    label: Strict file-read denial with path and sensitivity metadata
+  - id: probe-docker-daemon-stderr
+    label: Docker daemon connection failure stderr and execution flags
+  - id: probe-shell-approval-resolver
+    label: ShellAutoApprovalResolver with mode-specific settings
+  - id: probe-approval-contexts
+    label: Shell, bash, non-shell, and advisory approval contexts
+  - id: probe-ink-stdin
+    label: Ink stdin writes and the menu handoff event emitter
+  - id: probe-menu-services
+    label: Mock workspace, settings, skills, and slash-command services
+  - id: probe-application-provider
+    label: Timestamp-isolated registered streamed-model provider
+  - id: probe-override-tool
+    label: Override agent with an executable tool definition
+  - id: probe-approval-interruption
+    label: Tool interruption that pauses a turn for approval
+  - id: probe-abortable-provider-request
+    label: Provider request exposing retry and AbortSignal behavior
+contracts:
+  - id: probe-sandbox-failure-routing
+    statement: >-
+      When a sandboxed command fails, the shell-facing result identifies the actionable failure class needed for the next user decision: generic sandbox block, network block, denied read, or Docker daemon block.
+    seamIds:
+      - probe-sandbox-classification
+      - probe-shell-execution
+    riskIds:
+      - probe-wrong-sandbox-retry
+  - id: probe-strict-read-details
+    statement: >-
+      A strict-policy read denial exposes the denied path, a usable parent, and sensitivity so an approval flow can offer the appropriate retry choices.
+    seamIds:
+      - probe-sandbox-classification
+      - probe-approval-routing
+    riskIds:
+      - probe-wrong-sandbox-retry
+  - id: probe-no-false-sandbox-attribution
+    statement: >-
+      A successful command, a command already running with Docker host control, or ordinary stderr without a sandbox signal is not replaced by a sandbox failure result.
+    seamIds:
+      - probe-sandbox-classification
+      - probe-shell-execution
+    riskIds:
+      - probe-false-sandbox-failure
+  - id: probe-approval-policy-routing
+    statement: >-
+      Manual approval always asks the user, while shell and bash can be auto-approved only when the shell resolver authorizes them; non-shell tools remain prompts.
+    seamIds:
+      - probe-approval-policy
+      - probe-approval-routing
+    riskIds:
+      - probe-unsafe-approval
+  - id: probe-approval-fail-closed
+    statement: >-
+      Always-mode shell and bash approval succeeds without an advisory, while missing or negative advisories in non-always mode fail closed to a prompt.
+    seamIds:
+      - probe-approval-policy
+      - probe-approval-routing
+    riskIds:
+      - probe-unsafe-approval
+  - id: probe-menu-escape-ownership
+    statement: >-
+      Pressing Escape at the terminal input boundary closes a transient menu and clears its slash-command buffer, including the handoff between editor and menu surfaces.
+    seamIds:
+      - probe-terminal-input-boundary
+      - probe-menu-controller
+    riskIds:
+      - probe-stale-menu-input
+  - id: probe-menu-text-and-successors
+    statement: >-
+      Accepting exact, prefix, or autocomplete triggers opens the intended successor, and path selection replaces only the trigger while preserving surrounding text and the resulting cursor position.
+    seamIds:
+      - probe-terminal-input-boundary
+      - probe-menu-controller
+    riskIds:
+      - probe-wrong-editor-state
+      - probe-lost-menu-activation
+  - id: probe-menu-nested-and-skill-actions
+    statement: >-
+      Escape from a settings value returns to its filtered parent with the edited text and cursor intact, while selecting a skill invokes its callbacks and clears the command buffer.
+    seamIds:
+      - probe-terminal-input-boundary
+      - probe-menu-controller
+    riskIds:
+      - probe-wrong-editor-state
+      - probe-lost-menu-activation
+  - id: probe-steer-survives-boundaries
+    statement: >-
+      A user message steered into an open turn is admitted to a later model request across startup, approval pause, or retry, and is released for a separate turn if the original turn closes first.
+    seamIds:
+      - probe-agent-client-run-loop
+    riskIds:
+      - probe-lost-steer
+  - id: probe-agent-client-stream-control
+    statement: >-
+      An override agent's tool executes through AgentClient, a missing streamed-model factory reports a clear setup error, and abort propagates to the active provider stream.
+    seamIds:
+      - probe-agent-client-run-loop
+      - probe-provider-stream
+    riskIds:
+      - probe-uncontrolled-stream
+
+tests:
+  - kind: file
+    id: probe-sandbox-failure-classifier-test
+    file: source/utils/shell/sandbox/sandbox-failure-classifier.test.ts
+    domainId: probe
+    suiteId: probe-vitest-unit
+    contractIds:
+      - probe-sandbox-failure-routing
+      - probe-strict-read-details
+      - probe-no-false-sandbox-attribution
+    fixtureIds:
+      - probe-sandbox-runtime-annotation
+      - probe-network-allowlist-stderr
+      - probe-strict-denied-read
+      - probe-docker-daemon-stderr
+  - kind: file
+    id: probe-approval-decision-policy-test
+    file: source/services/approval/approval-decision-policy.test.ts
+    domainId: probe
+    suiteId: probe-vitest-unit
+    contractIds:
+      - probe-approval-policy-routing
+      - probe-approval-fail-closed
+    fixtureIds:
+      - probe-shell-approval-resolver
+      - probe-approval-contexts
+  - kind: file
+    id: probe-menu-system-integration-test
+    file: source/components/input/menu-system.integration.test.tsx
+    domainId: probe
+    suiteId: probe-ink-integration
+    contractIds:
+      - probe-menu-escape-ownership
+      - probe-menu-text-and-successors
+      - probe-menu-nested-and-skill-actions
+    fixtureIds:
+      - probe-ink-stdin
+      - probe-menu-services
+  - kind: file
+    id: probe-agent-client-application-run-loop-test
+    file: source/lib/agent-client.application-run-loop.test.ts
+    domainId: probe
+    suiteId: probe-application-integration
+    contractIds:
+      - probe-steer-survives-boundaries
+      - probe-agent-client-stream-control
+    fixtureIds:
+      - probe-application-provider
+      - probe-override-tool
+      - probe-approval-interruption
+      - probe-abortable-provider-request
+
+decisions:
+  - id: probe-sandbox-failure-classifier-test-second-opinion
+    testId: probe-sandbox-failure-classifier-test
+    role: second_opinion
+    reviewer: probe-codex-b
+    recommendation: keep
+    confidence: high
+    reason: The file provides a compact branch matrix for distinctions that drive different user retry paths, and its direct classification checks complement rather than replace the shell-level consumer coverage.
+    evidence:
+      - "The file exercises annotated generic blocks, unannotated proxy allowlist blocks, strict denied reads with path/suggestedParent/sensitive data, two Docker daemon forms, successful stderr, active Docker host control, and ordinary stderr (source/utils/shell/sandbox/sandbox-failure-classifier.test.ts:4-133)."
+      - "Named consumer coverage exists in source/tools/system/shell.test.ts:1323-1366 for annotated and proxy blocks, source/tools/system/shell.test.ts:1444-1474 for strict denied reads, and source/tools/system/shell.test.ts:608-654 for Docker retry behavior."
+      - "If this matrix vanished, a regression could turn an ordinary or successful command into a Docker/sandbox failure, or omit denied-read details needed for the approval flow to choose the right retry."
+    replacementTestIds: []
+    status: proposed
+  - id: probe-approval-decision-policy-test-second-opinion
+    testId: probe-approval-decision-policy-test
+    role: second_opinion
+    reviewer: probe-codex-b
+    recommendation: keep
+    confidence: high
+    reason: This is the narrow policy boundary that combines tool-name routing with the resolver result, including the important always-mode no-advisory path; sibling resolver and session tests do not make this policy delegation redundant.
+    evidence:
+      - "The file invokes the real ShellAutoApprovalResolver behind the policy and covers manual prompt, shell approval from a valid advisory, bash approval in always mode without an advisory, non-shell prompt, missing-advisory prompt, and rejected-advisory prompt (source/services/approval/approval-decision-policy.test.ts:35-210)."
+      - "source/services/approval/shell-auto-approval-resolver.test.ts:127-169 covers resolver predicates directly, while source/services/conversation/conversation-result-builder.test.ts:495-760 and source/services/approval/tool-approval-batch-coordinator.test.ts:11-128 cover higher approval routing seams."
+      - "If this file vanished, the policy could accidentally approve a non-shell tool, fail to pass an undefined advisory to always mode, or stop fail-closed behavior from reaching a prompt."
+    replacementTestIds: []
+    status: proposed
+  - id: probe-menu-system-integration-test-second-opinion
+    testId: probe-menu-system-integration-test
+    role: second_opinion
+    reviewer: probe-codex-b
+    recommendation: keep
+    confidence: high
+    reason: The file tests real Ink stdin and rendering through ApplicationInputSurface, so its terminal-boundary evidence is stronger than the nearby controller-only and mount-only tests.
+    evidence:
+      - "The harness renders InputProvider and ApplicationInputSurface, writes keys through stdin, and separately emits Escape during the replacement-surface handoff before passive effects run (source/components/input/menu-system.integration.test.tsx:74-182)."
+      - "The file checks path replacement and cursor position, three settings trigger forms, root and nested settings Escape behavior, model and skills successors, and skill callbacks plus command-buffer clearing (source/components/input/menu-system.integration.test.tsx:184-327)."
+      - "Sibling coverage is named in source/components/input/ApplicationInputSurface.test.tsx:51-108 for a narrower Escape/mount seam, source/components/input/menu-controller.test.ts for controller state transitions, and source/components/InputBox.menu-logic.test.ts for completion logic."
+      - "If this integration file vanished, a regression could drop Escape during the editor/menu ownership handoff, restore the wrong settings cursor, or activate a successor without updating the visible editor and callbacks."
+    replacementTestIds: []
+    status: proposed
+  - id: probe-agent-client-application-run-loop-test-second-opinion
+    testId: probe-agent-client-application-run-loop-test
+    role: second_opinion
+    reviewer: probe-codex-b
+    recommendation: keep
+    confidence: high
+    reason: The tests exercise the public AgentClient seam over real application-run-loop streams and cover distinct lifecycle gaps that direct run-loop tests or generic public-method tests do not jointly replace.
+    evidence:
+      - "The file registers isolated streamed providers and drives AgentClient.startStream/continueRunStream, covering steer admission across an approval pause, before the first request, after a retry, release at turn close, override-tool execution, missing streamed-model factory errors, retry callback forwarding, and AbortSignal cancellation (source/lib/agent-client.application-run-loop.test.ts:38-324)."
+      - "source/lib/agent-client.application-continuity.test.ts:1-25 covers provider chaining capability, and source/lib/openai-agent-client.public-methods.test.ts:845-878 covers retry callback forwarding, but neither covers the AgentClient steer lifecycle across startup, pause, retry, and close."
+      - "The process-global provider registry and timestamped provider IDs are explicit test setup coupling, while the tests still reach the production AgentClient/run-loop/provider boundary rather than mocking the loop."
+      - "If this file vanished, a wrapper-level abort or stream restart could discard a message already accepted for the turn, release it incorrectly, lose the override tool, or hide a provider setup/cancellation regression."
+    replacementTestIds: []
+    status: proposed

@@ -35,6 +35,11 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 
 ## Active or deferred
 
+- Test suite audit — foundation merged, milestone still non-destructive:
+  build the evidence graph, not cleanup. Do not remove, rewrite, retier, or
+  consolidate tests, and do not dispatch explorers, without the approval
+  `docs/plans/test-suite-audit.md` describes. The graph and its vocabulary live
+  in `docs/test-audit/`; run it with `pnpm test-audit`.
 
 # Parallel Work Isolation
 

@@ -65,6 +65,7 @@
     "test:related": "cross-env NODE_ENV=test vitest related --run --reporter=minimal --passWithNoTests=false",
     "test:vitest:watch": "cross-env NODE_ENV=test vitest",
     "test:vitest:coverage": "cross-env NODE_ENV=test vitest run --coverage",
+    "test-audit": "tsx scripts/test-audit/cli.ts",
     "lint": "eslint . && prettier --check .",
     "lint-fix": "eslint --fix . && prettier --write .",
     "post-build": "cp -r source/prompts dist/ && chmod +x dist/cli.js",

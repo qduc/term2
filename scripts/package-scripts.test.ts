@@ -9,6 +9,8 @@ const testRunnerScripts = [
   'provider:fixture:scan',
   'test:docker-host-control-integration',
   'test:verbose',
+  'test:changed',
+  'test:related',
   'test:vitest:watch',
   'test:vitest:coverage',
 ] as const;

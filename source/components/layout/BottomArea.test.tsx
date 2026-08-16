@@ -271,6 +271,53 @@ it.sequential('BottomArea gives the background task manager exclusive input owne
   act(() => view.unmount());
 });
 
+it.sequential('BottomArea closes the manager when a higher-priority prompt preempts it', async () => {
+  const details = {
+    kind: 'subagent' as const,
+    id: 'run-worker',
+    role: 'worker',
+    task: 'implement the background overview',
+    taskPreview: 'implement the background overview',
+    status: 'running' as const,
+    startedAt: Date.now(),
+    elapsedMs: 0,
+    toolCounts: {},
+  };
+  const onBackgroundTaskManagerOpenChange = vi.fn();
+  const props: BottomAreaProps = {
+    ...baseProps,
+    listBackgroundTaskDetails: () => [details],
+    getBackgroundTaskDetails: () => details,
+    stopBackgroundTask: () => ({ ok: false, code: 'not_active' }),
+    onBackgroundTaskManagerOpenChange,
+  };
+  const view = render(
+    <InputProvider>
+      <ControlledBottomArea props={props} />
+    </InputProvider>,
+  );
+
+  await act(async () => {
+    view.stdin.write('\x07');
+    await new Promise((resolve) => setImmediate(resolve));
+  });
+  expect(view.lastFrame()).toContain('Manage background tasks');
+
+  await act(async () => {
+    view.rerender(
+      <InputProvider>
+        <ControlledBottomArea props={{ ...props, handoffState: { capturedText: '', stage: 'confirm_model' } }} />
+      </InputProvider>,
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+  });
+
+  expect(view.lastFrame()).toContain('Change model?');
+  expect(view.lastFrame()).not.toContain('Manage background tasks');
+  expect(onBackgroundTaskManagerOpenChange).toHaveBeenLastCalledWith(false);
+  act(() => view.unmount());
+});
+
 it.sequential('BottomArea shows approval prompt when waiting for approval', async () => {
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,

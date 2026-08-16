@@ -157,12 +157,14 @@ it('CLI --resume list also works', () => {
 });
 
 it('CLI --resume prints message and exits when no conversation is found', () => {
+  const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
   let error: any;
   let stderr = '';
   try {
     execFileSync('node', [...cliArgs, '--resume', 'dummy'], {
       env: {
         ...process.env,
+        HOME: tempHome,
         TERM2_CONVERSATIONS_DIR: testDir,
         DISABLE_LOGGING: '1',
       },
@@ -171,6 +173,8 @@ it('CLI --resume prints message and exits when no conversation is found', () => 
   } catch (err: any) {
     error = err;
     stderr = err.stderr.toString();
+  } finally {
+    fs.rmSync(tempHome, { recursive: true, force: true });
   }
 
   expect(error).toBeTruthy();

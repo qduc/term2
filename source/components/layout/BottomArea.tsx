@@ -243,6 +243,26 @@ const BottomArea: FC<BottomAreaProps> = ({
   const showQueuePausedPrompt = inputOwner.kind === 'queue-paused';
   const showBackgroundTaskManager = inputOwner.kind === 'background-tasks';
   const foregroundTransferCandidate = getForegroundTaskTransferCandidate?.() ?? null;
+
+  // A higher-priority prompt replaces this branch and unmounts the manager.
+  // Close the lifted owner state with it so reopening the branch cannot leave
+  // an empty manager with its previous local task snapshot gone.
+  useEffect(() => {
+    if (
+      backgroundTaskManagerOpen &&
+      (showHandoffConfirm || showStandardModeConfirm || showSurgePrompt || showLargeUncachedPrompt)
+    ) {
+      onBackgroundTaskManagerOpenChange(false);
+    }
+  }, [
+    backgroundTaskManagerOpen,
+    onBackgroundTaskManagerOpenChange,
+    showHandoffConfirm,
+    showLargeUncachedPrompt,
+    showStandardModeConfirm,
+    showSurgePrompt,
+  ]);
+
   return (
     <Box flexDirection="column" width="100%">
       <Box flexDirection="column" marginTop={1}>

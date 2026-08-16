@@ -1034,14 +1034,18 @@ export class ConversationOrchestrator {
               success: true,
               toolName: 'background_shell_output_notification',
               toolArgs: {
-                firings: shellOutputs.map(({ jobId, command, watchId, seq, matchedLines, droppedBytes }) => ({
-                  jobId,
-                  command,
-                  watchId,
-                  seq,
-                  matchedLines,
-                  ...(droppedBytes !== undefined ? { droppedBytes } : {}),
-                })),
+                firings: shellOutputs.map(
+                  ({ jobId, command, watchId, seq, matchedLines, coalescedCount, seqRange, droppedBytes }) => ({
+                    jobId,
+                    command,
+                    watchId,
+                    seq,
+                    matchedLines,
+                    ...(coalescedCount !== undefined ? { coalescedCount } : {}),
+                    ...(seqRange !== undefined ? { seqRange } : {}),
+                    ...(droppedBytes !== undefined ? { droppedBytes } : {}),
+                  }),
+                ),
               },
             },
           ]

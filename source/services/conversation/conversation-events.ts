@@ -304,6 +304,19 @@ export interface BackgroundShellOutputEvent {
   seq: number;
   /** Bounded, complete-line match text carried by the firing. */
   matchedLines: string;
+  /**
+   * Number of distinct complete lines the firing carried, including any that
+   * were dropped from `matchedLines` by the byte cap. Surfaces bursts that
+   * the idle window collapsed into one notification.
+   */
+  coalescedCount?: number;
+  /**
+   * Inclusive per-watch seq range this firing represents. Today every
+   * firing has `first === last === seq`; the field is published so that
+   * if the engine later coalesces across idle windows, consumers already
+   * have one field to read for "what was collapsed."
+   */
+  seqRange?: { first: number; last: number };
   /** Present when the job's retained buffer evicted bytes before this firing. */
   droppedBytes?: number;
 }

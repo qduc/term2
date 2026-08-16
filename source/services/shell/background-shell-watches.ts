@@ -22,8 +22,8 @@ export interface BackgroundShellOutputBundle {
  * carrying the burst, not 200 firings. The idle window is quiet *for this
  * watch*: only new matching lines extend it; unrelated output does not delay
  * the firing. Firings are counted per watch (`seq` 1, 2, …); a watch retires
- * when it has fired `notifyLimit` times, when its job settles, or when
- * cancelled by id.
+ * when it has fired `notifyLimit` times (`notifyLimit: 0` means the firing
+ * count never retires it), when its job settles, or when cancelled by id.
  *
  * Watches replay the job's retained buffer from `fromOffset` (default 0 = the
  * head of the buffer), which is the whole reason no launch-time monitor
@@ -54,7 +54,12 @@ export interface ShellOutputWatch {
   stream: ShellOutputWatchStream;
   /** Coalescing window in ms; default 1500. */
   idleMs: number;
-  /** Firing budget; default 1 when a pattern is set, 5 otherwise. */
+  /**
+   * Firing budget; 0 means unlimited (retire only on job settlement or
+   * explicit cancel). Defaults to 0 — the previous "1 with a pattern,
+   * 5 otherwise" default retired long-running watches before consumers
+   * could tell anything was being clipped.
+   */
   notifyLimit: number;
   /**
    * Number of retained complete lines to skip from the head of the job's
@@ -86,6 +91,21 @@ export interface ShellOutputFiring {
    * newest text.
    */
   matchedLines: string;
+  /**
+   * Number of distinct complete lines that were coalesced into this firing.
+   * Always >= 1; equal to `matchedLines.split('\n').length` while the cap
+   * is not engaged. Surfaces bursts the idle window collapsed into one
+   * delivery so consumers can detect coalescing without parsing the text.
+   */
+  coalescedCount: number;
+  /**
+   * The inclusive range of per-watch seqs this firing represents. Today
+   * every firing represents exactly one seq, so `{ first, last }` always
+   * equals `{ seq, seq }`; the explicit range is published up front so that
+   * if the engine later evolves to coalesce *across* idle windows (one
+   * firing for seqs 1..3), consumers already have a single field to read.
+   */
+  seqRange: { first: number; last: number };
   /** Store evictions since the job opened, from the store read at delivery. */
   droppedBytes: number;
   command?: string;
@@ -125,6 +145,19 @@ interface WatchRecord {
   /** Matched, undelivered line texts; kept within {@link MAX_MATCHED_TEXT} (newest wins). */
   pending: string[];
   pendingBytes: number;
+  /**
+   * Total distinct complete lines matched into this batch, including those
+   * evicted from `pending` by the byte cap. Equals `pending.length` while
+   * the cap is not engaged; `coalescedCount` on the firing surfaces this so
+   * consumers see the true burst size, not just the retained tail.
+   */
+  pendingTotalLines: number;
+  /**
+   * `seq` that the first line currently in `pending` corresponds to.
+   * Tracked so the firing payload can publish a coalesced seq range
+   * without re-deriving it after delivery clears `pending`.
+   */
+  pendingSeqStart: number;
   /** Firings delivered so far; the next firing carries seq `firedCount + 1`. */
   firedCount: number;
   /** Scheduled debounce delivery, if any. */
@@ -183,14 +216,17 @@ export class BackgroundShellWatches {
    */
   registerWatch(options: RegisterShellOutputWatchOptions): string {
     const idleMs = options.idleMs ?? DEFAULT_IDLE_MS;
-    const notifyLimit = options.notifyLimit ?? (options.pattern === undefined ? 5 : 1);
+    // 0 = unlimited (default). The previous 1-with-pattern / 5-without-pattern
+    // defaults quietly retired long-running watches; consumers wanting a cap
+    // pass it explicitly.
+    const notifyLimit = options.notifyLimit ?? 0;
     const fromOffset = options.fromOffset ?? 0;
     const stream = options.stream ?? 'both';
     if (!Number.isInteger(idleMs) || idleMs < 0) {
       throw new RangeError('idleMs must be a non-negative integer.');
     }
-    if (!Number.isInteger(notifyLimit) || notifyLimit < 1) {
-      throw new RangeError('notifyLimit must be a positive integer.');
+    if (!Number.isInteger(notifyLimit) || notifyLimit < 0) {
+      throw new RangeError('notifyLimit must be a non-negative integer (0 = unlimited).');
     }
     if (!Number.isInteger(fromOffset) || fromOffset < 0) {
       throw new RangeError('fromOffset must be a non-negative integer.');
@@ -217,6 +253,9 @@ export class BackgroundShellWatches {
       lastDroppedLines: read.droppedLines,
       pending: [],
       pendingBytes: 0,
+      pendingTotalLines: 0,
+      // The first line matched (now or during replay) belongs to seq 1.
+      pendingSeqStart: 1,
       firedCount: 0,
       timer: null,
     };
@@ -290,8 +329,18 @@ export class BackgroundShellWatches {
       if (!streamAllows(watch.stream, line.stream)) continue;
       if (watch.pattern !== undefined && !patternMatches(watch.pattern, line.text)) continue;
       matched = true;
+      if (record.pending.length === 0) {
+        // First line of a fresh batch: anchor its seq so the firing can
+        // publish the range this batch will cover. After delivery, the next
+        // line is seq (firedCount + 1) again.
+        record.pendingSeqStart = record.firedCount + 1;
+      }
       record.pending.push(line.text);
       record.pendingBytes += line.text.length;
+      record.pendingTotalLines += 1;
+      // The cap evicts from the head to keep `matchedLines` bounded; the
+      // dropped lines were part of the same firing anyway, so the seq range
+      // this batch will cover is unchanged.
       while (record.pendingBytes > MAX_MATCHED_TEXT && record.pending.length > 1) {
         const dropped = record.pending.shift();
         if (dropped !== undefined) record.pendingBytes -= dropped.length;
@@ -318,23 +367,29 @@ export class BackgroundShellWatches {
 
   /**
    * Delivers one firing (the next `seq`), then retires the watch if it has
-   * reached `notifyLimit` — delivering the last firing is what retires it.
+   * reached `notifyLimit` (and `notifyLimit` is not 0, the unlimited sentinel)
+   * — delivering the last firing is what retires it.
    */
   #fire(record: WatchRecord): void {
     const { watch } = record;
     record.firedCount += 1;
+    const seq = record.firedCount;
     const firing: ShellOutputFiring = {
       jobId: watch.jobId,
       watchId: watch.watchId,
-      seq: record.firedCount,
+      seq,
       matchedLines: joinPending(record.pending),
+      coalescedCount: record.pendingTotalLines,
+      seqRange: { first: record.pendingSeqStart, last: seq },
       droppedBytes: this.#store.readLines(watch.jobId)?.droppedBytes ?? 0,
       ...(record.command === undefined ? {} : { command: record.command }),
     };
     record.pending = [];
     record.pendingBytes = 0;
+    record.pendingTotalLines = 0;
+    record.pendingSeqStart = seq + 1;
     this.#emit(firing);
-    if (record.firedCount >= watch.notifyLimit) this.#retire(watch.watchId);
+    if (watch.notifyLimit !== 0 && record.firedCount >= watch.notifyLimit) this.#retire(watch.watchId);
   }
 
   #retire(watchId: string): void {

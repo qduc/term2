@@ -137,10 +137,10 @@ const monitorShellJobParameters = z.object({
     ),
   notify_limit: relaxedNumber
     .int()
-    .positive()
+    .nonnegative()
     .optional()
     .describe(
-      'Maximum number of notifications this watch may deliver before retiring. Defaults to 1 with a pattern, 5 without.',
+      'Maximum number of notifications this watch may deliver before retiring. 0 means unlimited (the watch only retires when its job settles or cancel_shell_monitor is called); defaults to 0.',
     ),
   once: z.boolean().optional().describe('Retire the watch after its first notification (notify_limit 1).'),
 });
@@ -406,7 +406,7 @@ export function createBackgroundShellJobToolDefinitions(
     definitions.monitor = {
       name: 'monitor_shell_job',
       description:
-        "Attach a watch to a running background shell job. The watch replays the job's retained output, and each time a complete line in the selected stream matches `pattern` (or any line arrives when `pattern` is absent) and the output has been quiet for `idle_ms`, a `shell_output` notification carrying the matched lines is delivered through the conversation; the job keeps running. Returns a watchId; stop the watch with cancel_shell_monitor.",
+        "Attach a watch to a running background shell job. The watch replays the job's retained output, and each time a complete line in the selected stream matches `pattern` (or any line arrives when `pattern` is absent) and the output has been quiet for `idle_ms`, a `shell_output` notification carrying the matched lines is delivered through the conversation; the job keeps running. Returns a watchId; stop the watch with cancel_shell_monitor. Each notification includes the number of distinct lines coalesced into it (`coalescedCount`) and the inclusive seq range (`seqRange`), so bursts hidden by `idle_ms` are visible.",
       parameters: monitorShellJobParameters,
       needsApproval: () => false,
       execute: ({ job_id, pattern, stream, idle_ms, notify_limit, once }) => {

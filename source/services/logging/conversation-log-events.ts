@@ -262,6 +262,10 @@ export interface BackgroundShellOutputLogEvent {
   seq: number;
   /** Bounded, complete-line match text carried by the firing. */
   matchedLines: string;
+  /** Distinct complete lines coalesced into this firing (incl. byte-cap evictions). */
+  coalescedCount?: number;
+  /** Inclusive per-watch seq range this firing represents. */
+  seqRange?: { first: number; last: number };
   /** Present when the job's retained buffer evicted bytes before this firing. */
   droppedBytes?: number;
 }

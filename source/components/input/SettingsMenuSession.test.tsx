@@ -48,6 +48,16 @@ const buildController = (intentHost?: IntentHost) => {
   return controller;
 };
 
+const waitForSettingsSession = async (predicate: () => boolean, description: string): Promise<void> => {
+  const deadline = Date.now() + 1_000;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error(`Timed out waiting for ${description}.`);
+    await act(async () => {
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+  }
+};
+
 it('selecting a plain key pushes a settings_value child as one transaction, restoring the pre-selection filter on Escape', async () => {
   const controller = buildController();
   const settingsService = createMockSettingsService();
@@ -177,8 +187,11 @@ it('selecting agent.mentorPool opens the structured mentor pool editor and saves
     controller.escape();
     await Promise.resolve();
     await Promise.resolve();
-    await new Promise((resolve) => setTimeout(resolve, 20));
   });
+  await waitForSettingsSession(
+    () => intentHost.mock.calls.length === 1 && controller.getSnapshot().stack[0]?.kind === 'settings',
+    'mentor pool escape transaction',
+  );
 
   expect(intentHost).toHaveBeenCalledTimes(1);
   expect(intentHost.mock.calls[0]?.[0].intentRequest.intent).toEqual({
@@ -300,8 +313,8 @@ it.skip('edits an entry model locally before persisting the complete pool', asyn
   await act(async () => {
     controller.escape();
     await Promise.resolve();
-    await new Promise((resolve) => setTimeout(resolve, 20));
   });
+  await waitForSettingsSession(() => intentHost.mock.calls.length > 0, 'mentor pool save transaction');
 
   expect(intentHost.mock.calls.at(-1)?.[0].intentRequest.intent).toEqual({
     type: 'apply-settings',

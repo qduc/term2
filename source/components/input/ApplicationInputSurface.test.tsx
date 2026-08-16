@@ -63,21 +63,34 @@ const renderSurface = async (controller: MenuControllerImpl) => {
   return result;
 };
 
+const waitForInputSurface = async (predicate: () => boolean, description: string): Promise<void> => {
+  const deadline = Date.now() + 1_000;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error(`Timed out waiting for ${description}.`);
+    await act(async () => {
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+  }
+};
+
 it.sequential('routes Escape through the active slash session and clears the trigger buffer', async () => {
   const controller = new MenuControllerImpl();
   const { stdin } = await renderSurface(controller);
 
   await act(async () => {
     controller.applyEditorEdit({ type: 'set-text', text: '/', cursor: 1 });
-    await new Promise((resolve) => setTimeout(resolve, 20));
   });
+  await waitForInputSurface(() => controller.getSnapshot().stack.at(-1)?.kind === 'slash', 'slash menu open');
 
   expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('slash');
 
   await act(async () => {
     stdin.write('\u001b');
-    await new Promise((resolve) => setTimeout(resolve, 20));
   });
+  await waitForInputSurface(
+    () => controller.getSnapshot().stack.length === 0 && controller.getSnapshot().editor.text === '',
+    'slash menu close',
+  );
 
   expect(controller.getSnapshot().stack).toHaveLength(0);
   expect(controller.getSnapshot().editor.text).toBe('');
@@ -99,13 +112,19 @@ it.sequential('unmounts InputBox while a menu is visible and restores the empty 
       initialDisposition: 'edit',
     });
   });
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  await waitForInputSurface(
+    () => !(lastFrame() ?? '').includes('INPUT_BOX') && inputBoxMounts.unmounted === 1,
+    'rewind menu open',
+  );
 
   expect(lastFrame()).not.toContain('INPUT_BOX');
   expect(inputBoxMounts.unmounted).toBe(1);
 
   await act(async () => controller.close());
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  await waitForInputSurface(
+    () => controller.getSnapshot().stack.length === 0 && inputBoxMounts.unmounted === 1,
+    'rewind menu close',
+  );
 
   expect(controller.getSnapshot().stack).toHaveLength(0);
   expect(inputBoxMounts.unmounted).toBe(1);

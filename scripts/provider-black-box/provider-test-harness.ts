@@ -10,6 +10,7 @@ import { resolveSettingsDirectory } from '../../source/services/settings/setting
 
 const DEFAULT_TIMEOUT_MS = 20_000;
 const DEFAULT_WRITE_TIMEOUT_MS = 5_000;
+const PTY_INPUT_SETTLE_MS = 50;
 const DEFAULT_TERMINATE_GRACE_MS = 500;
 const DEFAULT_TERMINATE_TIMEOUT_MS = 2_000;
 const ROOT_REMOVAL_MAX_RETRIES = 5;
@@ -423,6 +424,7 @@ function createPtyChild(options: {
   liveTerminals.add(terminal);
 
   let output = '';
+  let visibleOutput = '';
   let exitState: ChildExit | null = null;
   let spawnError: Error | null = null;
   let terminationPromise: Promise<ChildExit> | undefined;
@@ -431,12 +433,13 @@ function createPtyChild(options: {
     resolveExit = resolve;
   });
 
-  terminal.stdout?.on('data', (chunk: Buffer | string) => {
+  const appendOutput = (chunk: Buffer | string): void => {
     output += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
-  });
-  terminal.stderr?.on('data', (chunk: Buffer | string) => {
-    output += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
-  });
+    visibleOutput = stripVTControlCharacters(output);
+  };
+
+  terminal.stdout?.on('data', appendOutput);
+  terminal.stderr?.on('data', appendOutput);
   terminal.on('error', (error) => {
     spawnError = error instanceof Error ? error : new Error(String(error));
   });
@@ -449,36 +452,80 @@ function createPtyChild(options: {
 
   const snapshot = (): ChildSnapshot => ({
     output,
-    visibleOutput: stripVTControlCharacters(output),
+    visibleOutput,
     exit: exitState,
   });
 
-  const waitForState = async (
+  const waitForState = (
     predicate: (value: ChildSnapshot) => boolean,
     timeoutMs = DEFAULT_TIMEOUT_MS,
-  ): Promise<ChildSnapshot> => {
-    const startedAt = Date.now();
-    while (true) {
-      const current = snapshot();
-      if (predicate(current)) return current;
-      if (spawnError) throw spawnError;
-      if (current.exit) {
+  ): Promise<ChildSnapshot> =>
+    new Promise<ChildSnapshot>((resolve, reject) => {
+      let settled = false;
+      let timer: NodeJS.Timeout | undefined;
+
+      const cleanup = (): void => {
+        terminal.stdout?.off('data', onStateChange);
+        terminal.stderr?.off('data', onStateChange);
+        terminal.off('error', onStateChange);
+        terminal.off('close', onStateChange);
+        if (timer) clearTimeout(timer);
+      };
+      const finish = (result: { value: ChildSnapshot } | { error: Error }): void => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        if ('error' in result) reject(result.error);
+        else resolve(result.value);
+      };
+      const failForExit = (current: ChildSnapshot): void => {
         const visible = current.visibleOutput;
         const tail = visible.length > 2_000 ? visible.slice(-2_000) : visible;
-        throw new Error(
-          `PTY child exited before the requested state appeared (code=${current.exit.exitCode}, signal=${current.exit.signal}).\nchild visible output (tail):\n${tail}`,
-        );
-      }
-      if (Date.now() - startedAt >= timeoutMs) {
+        finish({
+          error: new Error(
+            `PTY child exited before the requested state appeared (code=${current.exit?.exitCode}, signal=${current.exit?.signal}).\nchild visible output (tail):\n${tail}`,
+          ),
+        });
+      };
+      const failForTimeout = (): void => {
+        const current = snapshot();
         const visible = current.visibleOutput;
         const tail = visible.length > 2_000 ? visible.slice(-2_000) : visible;
-        throw new Error(
-          `Timed out waiting for PTY child state after ${timeoutMs}ms.\nchild visible output (tail):\n${tail}`,
-        );
-      }
-      await delay(25);
-    }
-  };
+        finish({
+          error: new Error(
+            `Timed out waiting for PTY child state after ${timeoutMs}ms.\nchild visible output (tail):\n${tail}`,
+          ),
+        });
+      };
+      const evaluate = (): void => {
+        if (settled) return;
+        const current = snapshot();
+        try {
+          if (predicate(current)) {
+            finish({ value: current });
+            return;
+          }
+        } catch (error) {
+          finish({ error: error instanceof Error ? error : new Error(String(error)) });
+          return;
+        }
+        if (spawnError) {
+          finish({ error: spawnError });
+          return;
+        }
+        if (current.exit) failForExit(current);
+      };
+      const onStateChange = (): void => evaluate();
+
+      terminal.stdout?.on('data', onStateChange);
+      terminal.stderr?.on('data', onStateChange);
+      terminal.on('error', onStateChange);
+      terminal.on('close', onStateChange);
+      timer = setTimeout(failForTimeout, timeoutMs);
+      // Check after subscribing so output/events that arrived just before this
+      // call cannot be missed, while still avoiding a polling interval.
+      evaluate();
+    });
 
   const waitForExit = async (timeoutMs = DEFAULT_TIMEOUT_MS): Promise<ChildExit> => {
     if (exitState) return exitState;
@@ -562,11 +609,11 @@ function createPtyChild(options: {
   return {
     pid: terminal.pid,
     read: () => output,
-    readVisible: () => stripVTControlCharacters(output),
+    readVisible: () => visibleOutput,
     readOutput: () => output,
-    readVisibleOutput: () => stripVTControlCharacters(output),
+    readVisibleOutput: () => visibleOutput,
     getOutput: () => output,
-    getVisibleOutput: () => stripVTControlCharacters(output),
+    getVisibleOutput: () => visibleOutput,
     write,
     waitForOutput: (needle, timeoutMs) =>
       waitForState((value) => value.visibleOutput.includes(needle), timeoutMs).then(() => undefined),
@@ -581,6 +628,42 @@ function createPtyChild(options: {
     cleanup,
     dispose: cleanup,
   };
+}
+
+/**
+ * Write ordinary terminal text and wait for the PTY to render that text back.
+ * The pre-write visible-output marker prevents an older matching prompt from
+ * acknowledging the new input.
+ */
+export async function writePtyTextAndWaitForVisibleEcho(
+  child: PtyChildDriver,
+  text: string,
+  timeoutMs = DEFAULT_WRITE_TIMEOUT_MS,
+): Promise<void> {
+  // Ink redraws the frame rather than appending a stable visible transcript,
+  // so the acknowledgement marker must be taken from the raw PTY stream.
+  const outputLength = child.getOutput().length;
+  await child.write(text, timeoutMs);
+  const expected = text.replace(/\r\n?/g, '\n');
+  await child.waitForState(
+    (snapshot) =>
+      stripVTControlCharacters(snapshot.output.slice(outputLength)).replace(/\r\n?/g, '\n').includes(expected),
+    timeoutMs,
+  );
+}
+
+/** Write ordinary terminal text, wait for its rendered echo, then submit it. */
+export async function writePtyTextAndSubmit(
+  child: PtyChildDriver,
+  text: string,
+  timeoutMs = DEFAULT_WRITE_TIMEOUT_MS,
+): Promise<void> {
+  await child.write(text, timeoutMs);
+  // The PTY exposes local echo before the Ink input handler has consumed the
+  // line. This is the smallest verified bridge settle window; it is not a
+  // provider/application-state wait.
+  await new Promise<void>((resolve) => setTimeout(resolve, PTY_INPUT_SETTLE_MS));
+  await child.write('\r', timeoutMs);
 }
 
 async function runCapturedCli(options: {
@@ -715,10 +798,6 @@ async function finishWritable(stream: Writable): Promise<void> {
   } catch {
     /* read/cleanup errors are reported by the owning operation */
   }
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function collectStream<T>(stream: AsyncIterable<T>): Promise<T[]> {

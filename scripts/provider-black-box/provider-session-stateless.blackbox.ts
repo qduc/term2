@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   createIsolatedWorkspaceLease,
+  writePtyTextAndSubmit,
   type IsolatedWorkspaceLease,
   type PtyChildDriver,
 } from './provider-test-harness.js';
@@ -190,15 +191,8 @@ async function sendApprovalTurn(
   await waitForCompletedTurn(child, response, outputMarker);
 }
 
-const TERMINAL_KEY_EVENT_GAP_MS = 50;
-
 async function writeAndSubmitText(child: PtyChildDriver, text: string): Promise<void> {
-  await child.write(text);
-  // Keep ordinary text and Enter as separate terminal key events. This short
-  // bounded gap lets Ink consume the text update before the submit event; it
-  // does not wait for provider or application state.
-  await waitForMilliseconds(TERMINAL_KEY_EVENT_GAP_MS);
-  await child.write('\r');
+  await writePtyTextAndSubmit(child, text);
 }
 
 async function writeApprovalShortcut(child: PtyChildDriver, decision: 'y' | 'n'): Promise<void> {
@@ -252,10 +246,6 @@ async function waitForNewVisibleOutput(
 
 function countIdlePromptFrames(visibleOutput: string): number {
   return visibleOutput.split(/\r?\n/).filter((line) => line.trim() === '❯').length;
-}
-
-async function waitForMilliseconds(milliseconds: number): Promise<void> {
-  await new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 }
 
 async function writeStatelessSettings(settingsDir: string, row: StatelessProviderRow, baseUrl: string): Promise<void> {

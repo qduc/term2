@@ -1,8 +1,15 @@
-import { it, expect } from 'vitest';
+import { afterEach, it, expect, vi } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
+import process from 'node:process';
 import { promises as fs } from 'node:fs';
-import { scanWorkspaceEntries } from './file-service.js';
+import { ExecutionContext } from './execution-context.js';
+import { getActiveWorkspaceRoot, publishActiveWorkspaceRoot } from './workspace/active-workspace-root.js';
+import { getWorkspaceEntries, scanWorkspaceEntries } from './file-service.js';
+
+afterEach(() => {
+  publishActiveWorkspaceRoot(undefined);
+});
 
 it('scanWorkspaceEntries prioritizes breadth over depth when capped', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-file-service-'));
@@ -46,6 +53,32 @@ it('scanWorkspaceEntries lists every entry in a directory, with no per-directory
     expect(result.truncatedByTotalLimit).toBe(false);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+it('getWorkspaceEntries follows an active lease without an explicit cache refresh', async () => {
+  const rootA = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-file-service-a-'));
+  const rootB = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-file-service-b-'));
+  const cwd = vi.spyOn(process, 'cwd').mockReturnValue(rootA);
+  const context = new ExecutionContext();
+
+  try {
+    await fs.writeFile(path.join(rootA, 'from-a.txt'), 'a');
+    await fs.writeFile(path.join(rootB, 'from-b.txt'), 'b');
+
+    expect(await getWorkspaceEntries()).toEqual([{ path: 'from-a.txt', type: 'file' }]);
+    expect(getActiveWorkspaceRoot()).toBe(rootA);
+
+    context.enterWorkspace(rootB);
+    expect(await getWorkspaceEntries()).toEqual([{ path: 'from-b.txt', type: 'file' }]);
+
+    context.exitWorkspace();
+    expect(await getWorkspaceEntries()).toEqual([{ path: 'from-a.txt', type: 'file' }]);
+  } finally {
+    context.exitWorkspace();
+    cwd.mockRestore();
+    await fs.rm(rootA, { recursive: true, force: true });
+    await fs.rm(rootB, { recursive: true, force: true });
   }
 });
 

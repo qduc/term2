@@ -150,6 +150,27 @@ const toolResultItemTypes = new Set([
   'computer_call_result',
   'apply_patch_call_output',
 ]);
+const pushChatToolCallItems = (target: Item[], item: unknown): void => {
+  const raw = rawItem(item);
+  if (!raw || !Array.isArray(raw.tool_calls)) return;
+
+  for (const candidate of raw.tool_calls) {
+    const call = asRecord(candidate);
+    if (!call) continue;
+    const functionRecord = asRecord(call.function);
+    const callId =
+      getString(call.id) ?? getString(call.callId) ?? getString(call.call_id) ?? getString(call.tool_call_id);
+    if (!callId) continue;
+
+    target.push({
+      type: 'tool_call',
+      callId,
+      toolName: getString(functionRecord?.name) ?? getString(call.name) ?? 'unknown',
+      arguments: functionRecord?.arguments ?? call.arguments ?? call.args,
+      providerItem: clone(call),
+    });
+  }
+};
 const pushToolCallItem = (target: Item[], item: unknown): void => {
   const raw = rawItem(item);
   if (!raw) return;
@@ -235,8 +256,10 @@ export function normalizeRunItem(item: unknown): Item[] {
     return reasoning ? [reasoning] : [];
   }
   const normalized: Item[] = [];
-  if (role === 'assistant' && type === 'message') pushAssistantMessageItems(normalized, item);
-  else if (type === 'function_call' || type === 'apply_patch_call') pushToolCallItem(normalized, item);
+  if (role === 'assistant' && type === 'message') {
+    pushAssistantMessageItems(normalized, item);
+    pushChatToolCallItems(normalized, item);
+  } else if (type === 'function_call' || type === 'apply_patch_call') pushToolCallItem(normalized, item);
   else if (toolResultItemTypes.has(type)) pushToolResultItem(normalized, item);
   return normalized;
 }

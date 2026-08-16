@@ -54,6 +54,7 @@ type TestProps = {
   settingsService: SettingsService;
   loggingService: LoggingService;
   historyService: HistoryService;
+  turnInFlight?: boolean;
   waitingForRejectionReason?: boolean;
   allowEmptySubmit?: boolean;
   promptLabel?: string;

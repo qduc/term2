@@ -3,6 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { createCodeContextSearchToolDefinition, createReadCodeOutlineToolDefinition } from './code-context.js';
+import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 
 async function withTempWorkspace(run: (dir: string) => Promise<void>) {
   const originalCwd = process.cwd;
@@ -38,6 +39,19 @@ it.sequential('needsApproval: code context tools are read-only', async () => {
     expect(await codeContextSearchToolDefinition.needsApproval({ query_type: 'symbol', symbol: 'example' })).toBe(
       false,
     );
+  });
+});
+
+it.sequential('needsApproval: yolo mode bypasses the workspace boundary for code-context reads', async () => {
+  await withTempWorkspace(async () => {
+    const outline = createReadCodeOutlineToolDefinition({
+      settingsService: createMockSettingsService({ 'shell.autoApproveMode': 'always', 'sandbox.enabled': false }),
+    });
+    const search = createCodeContextSearchToolDefinition({
+      settingsService: createMockSettingsService({ 'shell.autoApproveMode': 'always', 'sandbox.enabled': false }),
+    });
+    expect(await outline.needsApproval({ path: '/etc/outside.ts' })).toBe(false);
+    expect(await search.needsApproval({ query_type: 'related', path: '/etc/outside.ts' })).toBe(false);
   });
 });
 

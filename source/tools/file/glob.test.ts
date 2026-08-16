@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { createFindFilesToolDefinition } from './glob.js';
 import { SessionAccessState } from '../../services/session/session-access-state.js';
+import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import { ExecutionContext } from '../../services/execution-context.js';
 import { wrapToolInvoke } from '../../lib/tool-invoke.js';
 import type { ToolDefinition } from '../../tools/types.js';
@@ -239,6 +240,20 @@ it.sequential('needsApproval: prompts for path outside workspace', async () => {
     });
 
     expect(result).toBe(true);
+  });
+});
+
+it.sequential('needsApproval: yolo mode bypasses the workspace boundary for glob reads', async () => {
+  await withTempDir(async () => {
+    const tool = createFindFilesToolDefinition({
+      settingsService: createMockSettingsService({ 'shell.autoApproveMode': 'always', 'sandbox.enabled': false }),
+    });
+    const result = await tool.needsApproval({
+      pattern: '*.ts',
+      path: '/etc/outside',
+    });
+
+    expect(result).toBe(false);
   });
 });
 

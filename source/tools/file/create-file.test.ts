@@ -514,6 +514,18 @@ it.sequential('needsApproval requires approval and handles error when path is ou
   });
 });
 
+it.sequential('needsApproval yolo mode does not bypass outside-workspace writes', async () => {
+  await withTempDir(async () => {
+    const tool = createTool(createMockSettingsService({ 'shell.autoApproveMode': 'always', 'sandbox.enabled': false }));
+    const result = await tool.needsApproval({
+      path: '../outside-file.txt',
+      content: 'initial content',
+    });
+
+    expect(result).toBe(true);
+  });
+});
+
 it.sequential('execute writes outside workspace when the call has been approved', async () => {
   // Use a workspace dir outside /tmp so the /tmp exception in resolveWorkspacePath
   // does not mask the workspace boundary check.

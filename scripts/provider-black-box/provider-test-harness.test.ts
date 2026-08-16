@@ -52,6 +52,33 @@ describe('provider black-box harness', () => {
     });
   });
 
+  it('waits for composer idle through the harness file, not a prompt glyph', async () => {
+    await withIsolatedWorkspace({}, async (workspace) => {
+      expect(workspace.env.TERM2_HARNESS_IDLE_PATH).toBe(workspace.paths.idlePath);
+
+      const child = await workspace.start({ command: process.execPath, args: [CHILD, 'hang'] });
+      await child.waitForVisibleOutput('hanging');
+      const pending = child.waitForIdleInput({ after: 0, timeoutMs: 1_000 });
+
+      const previous = process.env.TERM2_HARNESS_IDLE_PATH;
+      process.env.TERM2_HARNESS_IDLE_PATH = workspace.paths.idlePath;
+      try {
+        const { publishHarnessInputState, resetHarnessInputIdleForTests } = await import(
+          '../../source/lib/harness-input-idle.js'
+        );
+        resetHarnessInputIdleForTests();
+        publishHarnessInputState({ owner: 'input', processing: false });
+      } finally {
+        if (previous === undefined) delete process.env.TERM2_HARNESS_IDLE_PATH;
+        else process.env.TERM2_HARNESS_IDLE_PATH = previous;
+      }
+
+      await expect(pending).resolves.toBe(1);
+      expect(child.readIdleGeneration()).toBe(1);
+      await child.terminate();
+    });
+  });
+
   it('writes through the PTY and waits for visible state before exit', async () => {
     await withIsolatedWorkspace({}, async (workspace) => {
       const child = await workspace.start({ command: process.execPath, args: [CHILD, 'echo'] });

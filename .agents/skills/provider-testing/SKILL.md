@@ -47,6 +47,11 @@ scenario is the one whose CLI never reached the state it waits for.
 - `scripts/provider-black-box/provider-test-harness.ts` owns child-process,
   stateful PTY, isolated-workspace, restart, and temporary-environment lifecycle.
   Keep it asynchronous; synchronous child execution can deadlock the fake server.
+  Interactive ready/idle waits use `child.waitForIdleInput()`, not a prompt
+  glyph. The shipped CLI publishes an incrementing generation to
+  `TERM2_HARNESS_IDLE_PATH` when the composer owns the keyboard and no turn is
+  in flight (`source/lib/harness-input-idle.ts`). A PTY-stripped `❯` is not a
+  readiness signal, and first-run/menu ownership must not count as idle.
 - `scripts/provider-black-box/provider-capability-matrix.ts` and
   `provider-session-capability-manifest.ts` own the test-side capability rows,
   typed lifecycle ledgers, and aggregate accounting.

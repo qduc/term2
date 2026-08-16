@@ -152,7 +152,7 @@ describe('assembled stateless provider lifecycle black-box', () => {
         rows: 40,
       });
 
-      await activeChild.waitForVisibleOutput('❯ ', 15_000);
+      await activeChild.waitForIdleInput({ timeoutMs: 15_000 });
 
       await sendUserTurn(activeChild, 'first stateless user turn', 'first-response');
       await sendUserTurn(activeChild, 'second stateless user turn', 'second-response');
@@ -168,9 +168,9 @@ describe('assembled stateless provider lifecycle black-box', () => {
 });
 
 async function sendUserTurn(child: PtyChildDriver, prompt: string, response: string): Promise<void> {
-  const outputMarker = captureOutputMarker(child);
+  const idle = child.readIdleGeneration();
   await writeAndSubmitText(child, prompt);
-  await waitForCompletedTurn(child, response, outputMarker);
+  await waitForCompletedTurn(child, response, idle);
 }
 
 async function sendApprovalTurn(
@@ -179,6 +179,7 @@ async function sendApprovalTurn(
   response: string,
   decision: 'y' | 'n',
 ): Promise<void> {
+  const idle = child.readIdleGeneration();
   const outputMarker = captureOutputMarker(child);
   await writeAndSubmitText(child, prompt);
   await waitForNewVisibleOutput(child, 'Allow this action?', outputMarker, 15_000);
@@ -188,7 +189,7 @@ async function sendApprovalTurn(
   if (decision === 'n') {
     await writeAndSubmitText(child, 'black-box rejection');
   }
-  await waitForCompletedTurn(child, response, outputMarker);
+  await waitForCompletedTurn(child, response, idle);
 }
 
 async function writeAndSubmitText(child: PtyChildDriver, text: string): Promise<void> {
@@ -202,22 +203,11 @@ async function writeApprovalShortcut(child: PtyChildDriver, decision: 'y' | 'n')
 type ChildOutputMarker = {
   outputLength: number;
   visibleLength: number;
-  idlePromptFrames: number;
 };
 
-async function waitForCompletedTurn(
-  child: PtyChildDriver,
-  response: string,
-  outputMarker: ChildOutputMarker,
-): Promise<void> {
+async function waitForCompletedTurn(child: PtyChildDriver, response: string, idle: number): Promise<void> {
   await child.waitForVisibleOutput(response, 15_000);
-  await child.waitForState(
-    (snapshot) =>
-      snapshot.output.length > outputMarker.outputLength &&
-      snapshot.visibleOutput.length > outputMarker.visibleLength &&
-      countIdlePromptFrames(snapshot.visibleOutput) > outputMarker.idlePromptFrames,
-    15_000,
-  );
+  await child.waitForIdleInput({ after: idle, timeoutMs: 15_000 });
 }
 
 function captureOutputMarker(child: PtyChildDriver): ChildOutputMarker {
@@ -225,7 +215,6 @@ function captureOutputMarker(child: PtyChildDriver): ChildOutputMarker {
   return {
     outputLength: child.getOutput().length,
     visibleLength: visibleOutput.length,
-    idlePromptFrames: countIdlePromptFrames(visibleOutput),
   };
 }
 
@@ -242,10 +231,6 @@ async function waitForNewVisibleOutput(
       snapshot.output.slice(outputMarker.outputLength).includes(text),
     timeoutMs,
   );
-}
-
-function countIdlePromptFrames(visibleOutput: string): number {
-  return visibleOutput.split(/\r?\n/).filter((line) => line.trim() === '❯').length;
 }
 
 async function writeStatelessSettings(settingsDir: string, row: StatelessProviderRow, baseUrl: string): Promise<void> {

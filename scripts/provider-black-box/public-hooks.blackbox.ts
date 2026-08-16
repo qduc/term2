@@ -105,7 +105,7 @@ describe('public hooks through the packaged CLI', () => {
         cols: 120,
         rows: 40,
       });
-      await child.waitForVisibleOutput('❯ ', 15_000);
+      await child.waitForIdleInput({ timeoutMs: 15_000 });
       await writePtyTextAndSubmit(child, 'fixture prompt');
       await child.waitForVisibleOutput('hello', 15_000);
       await writePtyTextAndSubmit(child, '/quit');

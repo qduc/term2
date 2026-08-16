@@ -110,11 +110,10 @@ describe('application-owned Responses lifecycle through the shipped CLI', () => 
     const child = await startCli(workspace);
     activeChild = child;
 
-    await child.waitForVisibleOutput('❯');
-    const firstTurnOutputLength = child.getVisibleOutput().length;
+    const firstIdle = await child.waitForIdleInput();
     await writePrompt(child, 'first user turn');
     await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 1);
-    await waitForIdlePromptAfterResponse(child, firstTurnOutputLength, 'FIRST-RESPONSE');
+    await waitForIdleAfterResponse(child, firstIdle, 'FIRST-RESPONSE');
     await waitForRequests(server, child, () => server.served.some((item) => item.responseId === FIRST_RESPONSE_ID));
 
     await writePrompt(child, 'second user turn');
@@ -163,7 +162,7 @@ describe('application-owned Responses lifecycle through the shipped CLI', () => 
       const child = await startCli(workspace);
       activeChild = child;
 
-      await child.waitForVisibleOutput('❯');
+      await child.waitForIdleInput();
       await writePrompt(child, 'run the approval fixture');
       await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 1);
       await child.waitForVisibleOutput('Allow this action?');
@@ -184,7 +183,7 @@ describe('application-owned Responses lifecycle through the shipped CLI', () => 
     const child = await startCli(workspace);
     activeChild = child;
 
-    await child.waitForVisibleOutput('❯');
+    await child.waitForIdleInput();
     await writePrompt(child, 'run the rejection fixture');
     await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 1);
     await child.waitForVisibleOutput('Allow this action?');
@@ -207,7 +206,7 @@ describe('application-owned Responses lifecycle through the shipped CLI', () => 
     const child = await startCli(workspace);
     activeChild = child;
 
-    await child.waitForVisibleOutput('❯');
+    await child.waitForIdleInput();
     await writePrompt(child, 'launch the background shell fixture');
     await child.waitForVisibleOutput('Allow this action?');
     await writeApprovalShortcut(child, 'y');
@@ -267,7 +266,7 @@ async function runFailureScenario(
   const child = await startCli(workspace);
   activeChild = child;
 
-  await child.waitForVisibleOutput('❯');
+  await child.waitForIdleInput();
   await writePrompt(child, `exercise ${mode}`);
   await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 1);
   const failureSignal = mode === 'native-error' ? /error|failed/i : /PARTIAL|error|failed|closed/i;
@@ -418,21 +417,9 @@ async function waitForRequests(
   }
 }
 
-async function waitForIdlePromptAfterResponse(
-  child: PtyChildDriver,
-  outputLength: number,
-  marker: string,
-): Promise<void> {
-  await child.waitForState((snapshot) => {
-    const appended = snapshot.visibleOutput.slice(outputLength);
-    const markerIndex = appended.lastIndexOf(marker);
-    const promptIndex = appended.lastIndexOf('❯');
-    if (markerIndex < 0 || promptIndex <= markerIndex) return false;
-    const promptFrame = appended.slice(promptIndex);
-    return (
-      !promptFrame.includes('processing') && !promptFrame.includes('Thinking') && !promptFrame.includes('Calling ')
-    );
-  });
+async function waitForIdleAfterResponse(child: PtyChildDriver, idle: number, marker: string): Promise<void> {
+  await child.waitForVisibleOutput(marker);
+  await child.waitForIdleInput({ after: idle });
 }
 
 async function writePrompt(child: PtyChildDriver, text: string): Promise<void> {

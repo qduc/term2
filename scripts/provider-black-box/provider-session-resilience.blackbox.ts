@@ -292,27 +292,23 @@ describe('application-owned provider restart continuity', () => {
     activeWorkspaces.push(workspace);
 
     const first = await startInteractive(workspace, route);
-    await first.waitForVisibleOutput('❯ ');
-    const firstIdlePrompt = captureIdlePrompt(first);
+    const firstIdle = await first.waitForIdleInput();
     await submitPrompt(first, 'first persisted prompt');
     await first.waitForVisibleOutput('restart-answer-1');
-    await waitForNextIdlePrompt(first, firstIdlePrompt);
+    await first.waitForIdleInput({ after: firstIdle });
     const conversationId = await waitForConversationId(workspace);
     await first.write('\u0003');
     await first.waitForExit(DEFAULT_TIMEOUT_MS);
 
     const resumed = await startInteractive(workspace, route, ['--resume']);
     await resumed.waitForVisibleOutput(`Resumed conversation: ${conversationId}`);
-    await resumed.waitForVisibleOutput('❯ ');
-    const resumedIdlePrompt = captureIdlePrompt(resumed);
+    const resumedIdle = await resumed.waitForIdleInput();
     await submitPrompt(resumed, 'resumed full-history prompt');
     await resumed.waitForVisibleOutput('restart-answer-2');
-    await waitForNextIdlePrompt(resumed, resumedIdlePrompt);
-    await resumed.waitForVisibleOutput('❯ ');
-    const chainedIdlePrompt = captureIdlePrompt(resumed);
+    const chainedIdle = await resumed.waitForIdleInput({ after: resumedIdle });
     await submitPrompt(resumed, 'fresh chained prompt');
     await resumed.waitForVisibleOutput('restart-answer-3');
-    await waitForNextIdlePrompt(resumed, chainedIdlePrompt);
+    await resumed.waitForIdleInput({ after: chainedIdle });
     await resumed.write('\u0003');
     await resumed.waitForExit(DEFAULT_TIMEOUT_MS);
 
@@ -340,7 +336,7 @@ describe('application-owned provider restart continuity', () => {
     activeWorkspaces.push(workspace);
 
     const first = await startInteractive(workspace, route);
-    await first.waitForVisibleOutput('❯ ');
+    await first.waitForIdleInput();
     await submitPrompt(first, 'interrupt while tool approval is pending');
     await first.waitForVisibleOutput('Allow this action?');
     const conversationId = await waitForConversationId(workspace);
@@ -355,11 +351,10 @@ describe('application-owned provider restart continuity', () => {
     const resumed = await startInteractive(workspace, route, ['--resume', conversationId, '--fork']);
     await resumed.waitForVisibleOutput(`Forked conversation ${conversationId} → `);
     await resumed.waitForVisibleOutput('Resumed conversation: ');
-    await resumed.waitForVisibleOutput('❯ ');
-    const resumedIdlePrompt = captureIdlePrompt(resumed);
+    const resumedIdle = await resumed.waitForIdleInput();
     await submitPrompt(resumed, 'repair interrupted tool history');
     await resumed.waitForVisibleOutput('restart-repaired-answer');
-    await waitForNextIdlePrompt(resumed, resumedIdlePrompt);
+    await resumed.waitForIdleInput({ after: resumedIdle });
     await resumed.write('\u0003');
     await resumed.waitForExit(DEFAULT_TIMEOUT_MS);
 
@@ -385,11 +380,10 @@ describe('application-owned context compaction black-box lifecycle', () => {
     activeWorkspaces.push(workspace);
 
     const first = await startInteractive(workspace, COMPACTION_ROUTE);
-    await first.waitForVisibleOutput('❯ ');
-    const firstIdlePrompt = captureIdlePrompt(first);
+    const firstIdle = await first.waitForIdleInput();
     await submitPrompt(first, 'persist this compacted turn');
     await first.waitForVisibleOutput('COMPACTION-FIRST');
-    await waitForNextIdlePrompt(first, firstIdlePrompt);
+    await first.waitForIdleInput({ after: firstIdle });
     const conversationId = await waitForConversationId(workspace);
     const persisted = await waitForConversationContent(workspace.paths, conversationId, COMPACTION_CIPHERTEXT);
     expect(persisted).toContain('provider_opaque');
@@ -399,11 +393,10 @@ describe('application-owned context compaction black-box lifecycle', () => {
 
     const resumed = await startInteractive(workspace, COMPACTION_ROUTE, ['--resume', conversationId]);
     await resumed.waitForVisibleOutput(`Resumed conversation: ${conversationId}`);
-    await resumed.waitForVisibleOutput('❯ ');
-    const resumedIdlePrompt = captureIdlePrompt(resumed);
+    const resumedIdle = await resumed.waitForIdleInput();
     await submitPrompt(resumed, 'continue after saved compaction');
     await resumed.waitForVisibleOutput('COMPACTION-RESUMED');
-    await waitForNextIdlePrompt(resumed, resumedIdlePrompt);
+    await resumed.waitForIdleInput({ after: resumedIdle });
     await resumed.write('\u0003');
     await resumed.waitForExit(DEFAULT_TIMEOUT_MS);
 
@@ -431,11 +424,10 @@ describe('application-owned context compaction black-box lifecycle', () => {
     activeWorkspaces.push(workspace);
 
     const first = await startInteractive(workspace, COMPACTION_ROUTE);
-    await first.waitForVisibleOutput('\u276f ');
-    const firstIdlePrompt = captureIdlePrompt(first);
+    const firstIdle = await first.waitForIdleInput();
     await submitPrompt(first, 'create an OpenAI compaction item');
     await first.waitForVisibleOutput('COMPACTION-FIRST');
-    await waitForNextIdlePrompt(first, firstIdlePrompt);
+    await first.waitForIdleInput({ after: firstIdle });
     const conversationId = await waitForConversationId(workspace);
     await waitForConversationContent(workspace.paths, conversationId, COMPACTION_CIPHERTEXT);
     await first.write('\u0003');
@@ -456,7 +448,7 @@ describe('application-owned context compaction black-box lifecycle', () => {
         `${error instanceof Error ? error.message : String(error)} output=${switched.getVisibleOutput()}`,
       );
     }
-    await switched.waitForVisibleOutput('\u276f ');
+    await switched.waitForIdleInput();
     await submitPrompt(switched, 'try the switched provider');
 
     // The alternate provider is a different wire family pointed at the same
@@ -487,8 +479,7 @@ describe('application-owned context compaction black-box lifecycle', () => {
     activeWorkspaces.push(workspace);
 
     const first = await startInteractive(workspace, COMPACTION_ROUTE);
-    await first.waitForVisibleOutput('❯ ');
-    const firstIdlePrompt = captureIdlePrompt(first);
+    const firstIdle = await first.waitForIdleInput();
     await submitPrompt(first, 'run the side effect once');
     await first.waitForVisibleOutput('Allow this action?');
     // ApprovalPrompt handles y as a complete single-key action. Sending an
@@ -497,7 +488,7 @@ describe('application-owned context compaction black-box lifecycle', () => {
     await first.write('y');
     await server.waitForRequests(2);
     await first.waitForVisibleOutput('COMPACTION-TOOL-FINAL');
-    await waitForNextIdlePrompt(first, firstIdlePrompt);
+    await first.waitForIdleInput({ after: firstIdle });
     const conversationId = await waitForConversationId(workspace);
     await submitPrompt(first, '/quit');
     await first.waitForExit(DEFAULT_TIMEOUT_MS);
@@ -512,11 +503,10 @@ describe('application-owned context compaction black-box lifecycle', () => {
     } catch (error) {
       throw new Error(`${error instanceof Error ? error.message : String(error)} output=${resumed.getVisibleOutput()}`);
     }
-    await resumed.waitForVisibleOutput('❯ ');
-    const resumedIdlePrompt = captureIdlePrompt(resumed);
+    const resumedIdle = await resumed.waitForIdleInput();
     await submitPrompt(resumed, 'continue without repeating the tool');
     await resumed.waitForVisibleOutput('COMPACTION-TOOL-RESUMED');
-    await waitForNextIdlePrompt(resumed, resumedIdlePrompt);
+    await resumed.waitForIdleInput({ after: resumedIdle });
     await resumed.terminate();
 
     expect(server.requests).toHaveLength(3);
@@ -556,18 +546,16 @@ describe('Codex WebSocket corrupt-history recovery', () => {
 
     const child = await startInteractive(workspace, route, ['--resume', conversationId]);
     await child.waitForVisibleOutput(`Resumed conversation: ${conversationId}`);
-    await child.waitForVisibleOutput('❯ ');
-    const idle = captureIdlePrompt(child);
+    const idle = await child.waitForIdleInput();
     await submitPrompt(child, 'continue from the last result');
     await child.waitForState(
       (snapshot) =>
         snapshot.visibleOutput.includes('recovered-after-orphan') ||
         snapshot.visibleOutput.includes('follow-up-chained'),
     );
-    await waitForNextIdlePrompt(child, idle);
-    const followUpIdle = captureIdlePrompt(child);
+    const recoveredIdle = await child.waitForIdleInput({ after: idle });
     await submitPrompt(child, 'and then confirm continuity');
-    await waitForNextIdlePrompt(child, followUpIdle);
+    await child.waitForIdleInput({ after: recoveredIdle });
     await child.terminate();
 
     const created = server.requests.filter(isResponseCreate);
@@ -793,25 +781,6 @@ async function startInteractive(
 
 async function submitPrompt(child: PtyChildDriver, prompt: string): Promise<void> {
   await writePtyTextAndSubmit(child, prompt);
-}
-
-function countIdlePrompts(output: string): number {
-  return output.split('❯ ').length - 1;
-}
-
-type IdlePromptMarker = { outputLength: number; promptCount: number };
-
-function captureIdlePrompt(child: PtyChildDriver): IdlePromptMarker {
-  const output = child.getVisibleOutput();
-  return { outputLength: output.length, promptCount: countIdlePrompts(output) };
-}
-
-async function waitForNextIdlePrompt(child: PtyChildDriver, previous: IdlePromptMarker): Promise<void> {
-  await child.waitForState(
-    (snapshot) =>
-      snapshot.visibleOutput.length > previous.outputLength &&
-      countIdlePrompts(snapshot.visibleOutput) > previous.promptCount,
-  );
 }
 
 async function waitForConversationId(

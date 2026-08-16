@@ -1,7 +1,6 @@
-import { mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { mkdtempSync } from 'node:fs';
 import { describe, expect, it, afterEach } from 'vitest';
 import { MemoryCapabilityBuilder } from './memory-capabilities.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
@@ -31,7 +30,8 @@ const writeTools = [
   'memory_update',
   'memory_delete',
 ];
-const readTools = writeTools.slice(0, 4);
+const readTools = ['memory_list', 'memory_get', 'memory_search', 'memory_retrieve'];
+const mutatingTools = new Set(['memory_create', 'memory_update', 'memory_delete']);
 
 describe('MemoryCapabilityBuilder', () => {
   it.each([
@@ -53,6 +53,30 @@ describe('MemoryCapabilityBuilder', () => {
       access === 'none' ? '' : expect.stringMatching(/Persistent memory|Memory librarian/),
     );
     if (access === 'none') expect(capability.context).toBe('');
+  });
+
+  it.each(['explorer', 'worker'] as const)('gives %s a strict read-only subset of main memory tools', (role) => {
+    const directory = mkdtempSync(join(tmpdir(), 'term2-memory-capability-'));
+    try {
+      const capability = new MemoryCapabilityBuilder(
+        createMockSettingsService({ 'memory.directory': directory }),
+      ).build({
+        kind: 'subagent',
+        role,
+      });
+      const mainTools = new Set(
+        new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': directory }))
+          .build({ kind: 'main' })
+          .tools.map((tool) => tool.name),
+      );
+      const readToolNames = new Set(capability.tools.map((tool) => tool.name));
+
+      expect([...readToolNames].some((name) => mutatingTools.has(name))).toBe(false);
+      expect([...readToolNames].every((name) => mainTools.has(name))).toBe(true);
+      expect(readToolNames.size).toBeLessThan(mainTools.size);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it.each(['explorer', 'worker'] as const)(

@@ -587,23 +587,27 @@ it.sequential(
   'LoggingService handles unwritable logDir (ENOTDIR) during construction and logging without throwing synchronously',
   () => {
     const tempDir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-enotdir-test-')));
-    const filePathAsParent = path.join(tempDir, 'plain-file');
-    fs.writeFileSync(filePathAsParent, 'not a directory', 'utf8');
-    const invalidLogDir = path.join(filePathAsParent, 'nested-logs');
+    try {
+      const filePathAsParent = path.join(tempDir, 'plain-file');
+      fs.writeFileSync(filePathAsParent, 'not a directory', 'utf8');
+      const invalidLogDir = path.join(filePathAsParent, 'nested-logs');
 
-    expect(() => {
-      const logger = new LoggingService({
-        logDir: invalidLogDir,
-        disableLogging: false,
-        suppressConsoleOutput: true,
-      });
+      expect(() => {
+        const logger = new LoggingService({
+          logDir: invalidLogDir,
+          disableLogging: false,
+          suppressConsoleOutput: true,
+        });
 
-      logger.info('test message to unwritable log dir', { eventType: 'test.unwritable' });
-      logger.warn('test warn to unwritable log dir', { eventType: 'test.warn' });
-      logger.error('test error to unwritable log dir', { eventType: 'test.error' });
-      logger.debug('test debug to unwritable log dir', { eventType: 'test.debug' });
-      logger.security('test security to unwritable log dir', { eventType: 'test.security' });
-    }).not.toThrow();
+        logger.info('test message to unwritable log dir', { eventType: 'test.unwritable' });
+        logger.warn('test warn to unwritable log dir', { eventType: 'test.warn' });
+        logger.error('test error to unwritable log dir', { eventType: 'test.error' });
+        logger.debug('test debug to unwritable log dir', { eventType: 'test.debug' });
+        logger.security('test security to unwritable log dir', { eventType: 'test.security' });
+      }).not.toThrow();
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   },
 );
 

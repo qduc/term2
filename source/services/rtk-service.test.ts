@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest';
+import { it, expect, afterEach } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -17,12 +17,22 @@ import type { ILoggingService } from './service-interfaces.js';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
+const tempDirs: string[] = [];
+
 function makeTmpDir(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-rtk-test-'));
-
-  // TODO: // TODO: t.teardown(() => fs.rmSync(dir, { recursive: true, force: true })) needs manual try/finally conversion;
+  tempDirs.push(dir);
   return dir;
 }
+
+afterEach(() => {
+  for (const dir of tempDirs) {
+    if (fs.existsSync(dir)) {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+  tempDirs.length = 0;
+});
 
 function noopLogger(): ILoggingService {
   return {

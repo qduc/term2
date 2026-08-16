@@ -60,11 +60,22 @@ function createNoopLogger(overrides: Partial<ILoggingService> = {}): ILoggingSer
 const createNestedCompatibility = () =>
   new NestedToolCompatibilityState(createMockSettingsService({ 'sandbox.dockerHostControlProjects': [] }));
 
+const tempDirs: string[] = [];
+
 function createTmpDir(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-shell-test-'));
-
+  tempDirs.push(dir);
   return dir;
 }
+
+afterEach(() => {
+  for (const dir of tempDirs) {
+    if (fs.existsSync(dir)) {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+  tempDirs.length = 0;
+});
 
 function createFakeRtk(): string {
   const dir = createTmpDir();

@@ -1,4 +1,4 @@
-import { createWriteStream } from 'node:fs';
+import { createWriteStream, rmSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,6 +7,18 @@ import { finished } from 'node:stream/promises';
 import type { Writable } from 'node:stream';
 import { stripVTControlCharacters } from 'node:util';
 import { resolveSettingsDirectory } from '../../source/services/settings/settings-path.js';
+
+const openWorkspaceRoots = new Set<string>();
+
+process.on('exit', () => {
+  for (const root of openWorkspaceRoots) {
+    try {
+      rmSync(root, { recursive: true, force: true });
+    } catch {
+      // Process is terminating; ignore errors
+    }
+  }
+});
 
 const DEFAULT_TIMEOUT_MS = 20_000;
 const DEFAULT_WRITE_TIMEOUT_MS = 5_000;
@@ -172,6 +184,7 @@ export async function createIsolatedWorkspaceLease(
   let root: string | undefined;
   try {
     root = await mkdtemp(join(tmpdir(), options.prefix ?? 'term2-provider-blackbox-'));
+    openWorkspaceRoots.add(root);
     const paths = createWorkspacePaths(root);
     await mkdir(paths.outputsDir, { recursive: true });
     const env = createWorkspaceEnvironment(root, paths, options.env);
@@ -249,6 +262,7 @@ export async function createIsolatedWorkspaceLease(
           }
           try {
             await removeIsolatedWorkspaceRoot(root!, options.removeRoot);
+            openWorkspaceRoots.delete(root!);
           } catch (error) {
             failures.push(error);
           }
@@ -273,6 +287,7 @@ export async function createIsolatedWorkspaceLease(
     if (root) {
       try {
         await removeIsolatedWorkspaceRoot(root, options.removeRoot);
+        openWorkspaceRoots.delete(root);
       } catch (cleanupError) {
         throw new AggregateError([error, cleanupError], 'Failed to prepare and clean up isolated workspace lease.');
       }

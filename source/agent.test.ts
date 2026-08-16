@@ -59,49 +59,53 @@ const orchestratorSubagentDeps = {
 };
 
 it('adds memory tools and summary-only context when memory is enabled, and neither when disabled', async () => {
-  const { mkdtemp, writeFile, mkdir } = await import('node:fs/promises');
+  const { mkdtemp, writeFile, mkdir, rm } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const root = await mkdtemp(join(tmpdir(), 'term2-agent-memory-'));
-  await mkdir(join(root, 'items'));
-  await writeFile(
-    join(root, 'index.json'),
-    JSON.stringify({
-      version: 1,
-      memories: [
-        {
-          id: 'project-rules',
-          title: 'Rules',
-          summary: 'Durable rules.',
-          tags: [],
-          createdAt: '2026-01-01T00:00:00.000Z',
-          updatedAt: '2026-01-01T00:00:00.000Z',
-        },
-      ],
-    }),
-  );
-  const enabled = getAgentDefinition({
-    settingsService: createMockSettingsService({ 'memory.directory': root }),
-    loggingService: mockLogger,
-  });
-  const disabled = getAgentDefinition({
-    settingsService: createMockSettingsService({ 'memory.enabled': false, 'memory.directory': root }),
-    loggingService: mockLogger,
-  });
-  expect(enabled.tools.map((tool) => tool.name).filter((name) => name.startsWith('memory_'))).toEqual([
-    'memory_list',
-    'memory_get',
-    'memory_search',
-    'memory_retrieve',
-    'memory_create',
-    'memory_update',
-    'memory_delete',
-  ]);
-  expect(enabled.instructions).toContain('Durable rules.');
-  expect(enabled.instructions).not.toContain('full memory content');
-  expect(disabled.tools.map((tool) => tool.name).filter((name) => name.startsWith('memory_'))).toEqual([]);
-  expect(disabled.instructions).not.toContain('## Persistent memory');
-  expect(disabled.instructions).not.toContain('Durable rules.');
+  try {
+    await mkdir(join(root, 'items'));
+    await writeFile(
+      join(root, 'index.json'),
+      JSON.stringify({
+        version: 1,
+        memories: [
+          {
+            id: 'project-rules',
+            title: 'Rules',
+            summary: 'Durable rules.',
+            tags: [],
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      }),
+    );
+    const enabled = getAgentDefinition({
+      settingsService: createMockSettingsService({ 'memory.directory': root }),
+      loggingService: mockLogger,
+    });
+    const disabled = getAgentDefinition({
+      settingsService: createMockSettingsService({ 'memory.enabled': false, 'memory.directory': root }),
+      loggingService: mockLogger,
+    });
+    expect(enabled.tools.map((tool) => tool.name).filter((name) => name.startsWith('memory_'))).toEqual([
+      'memory_list',
+      'memory_get',
+      'memory_search',
+      'memory_retrieve',
+      'memory_create',
+      'memory_update',
+      'memory_delete',
+    ]);
+    expect(enabled.instructions).toContain('Durable rules.');
+    expect(enabled.instructions).not.toContain('full memory content');
+    expect(disabled.tools.map((tool) => tool.name).filter((name) => name.startsWith('memory_'))).toEqual([]);
+    expect(disabled.instructions).not.toContain('## Persistent memory');
+    expect(disabled.instructions).not.toContain('Durable rules.');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 it('advertises librarian delegation when memory and subagent delegation are enabled', () => {
@@ -121,21 +125,25 @@ it('advertises librarian delegation when memory and subagent delegation are enab
 });
 
 it('starts without injected memory context and warns when the memory index is corrupted', async () => {
-  const { mkdtemp, writeFile } = await import('node:fs/promises');
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const root = await mkdtemp(join(tmpdir(), 'term2-agent-memory-corrupt-'));
-  await writeFile(join(root, 'index.json'), '{ malformed');
+  try {
+    await writeFile(join(root, 'index.json'), '{ malformed');
 
-  const warn = vi.fn();
-  const definition = getAgentDefinition({
-    settingsService: createMockSettingsService({ 'memory.directory': root }),
-    loggingService: { ...mockLogger, warn },
-  });
+    const warn = vi.fn();
+    const definition = getAgentDefinition({
+      settingsService: createMockSettingsService({ 'memory.directory': root }),
+      loggingService: { ...mockLogger, warn },
+    });
 
-  expect(definition.tools.map((tool) => tool.name)).toContain('memory_search');
-  expect(definition.instructions).not.toContain('The following memories are summaries');
-  expect(warn).toHaveBeenCalledWith(expect.stringMatching(/memory context.*corrupted/i));
+    expect(definition.tools.map((tool) => tool.name)).toContain('memory_search');
+    expect(definition.instructions).not.toContain('The following memories are summaries');
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/memory context.*corrupted/i));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 it('registers run_agent_workflow only when enable_agent_workflow is enabled', () => {
@@ -957,7 +965,7 @@ it('getAgentDefinition includes AGENTS.md and full envInfo for orchestrator mode
 });
 
 it('getAgentsInstructions loads the global ~/.agents/AGENTS.md when present, before the project file', async () => {
-  const { mkdtemp, mkdir, writeFile } = await import('node:fs/promises');
+  const { mkdtemp, mkdir, writeFile, rm } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
 
@@ -978,11 +986,13 @@ it('getAgentsInstructions loads the global ~/.agents/AGENTS.md when present, bef
     expect(instructions.indexOf('Global agent guidance')).toBeLessThan(instructions.indexOf('Project agent guidance'));
   } finally {
     spy.mockRestore();
+    await rm(home, { recursive: true, force: true });
+    await rm(project, { recursive: true, force: true });
   }
 });
 
 it('getAgentsInstructions loads only the project AGENTS.md when no global file exists', async () => {
-  const { mkdtemp, writeFile } = await import('node:fs/promises');
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
 
@@ -998,11 +1008,13 @@ it('getAgentsInstructions loads only the project AGENTS.md when no global file e
     expect(instructions).toContain('Project only guidance');
   } finally {
     spy.mockRestore();
+    await rm(home, { recursive: true, force: true });
+    await rm(project, { recursive: true, force: true });
   }
 });
 
 it('getAgentsInstructions skips an empty global AGENTS.md but still loads the project file', async () => {
-  const { mkdtemp, mkdir, writeFile } = await import('node:fs/promises');
+  const { mkdtemp, mkdir, writeFile, rm } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
 
@@ -1020,6 +1032,8 @@ it('getAgentsInstructions skips an empty global AGENTS.md but still loads the pr
     expect(instructions).toContain('Project guidance only');
   } finally {
     spy.mockRestore();
+    await rm(home, { recursive: true, force: true });
+    await rm(project, { recursive: true, force: true });
   }
 });
 

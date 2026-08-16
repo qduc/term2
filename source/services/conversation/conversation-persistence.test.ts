@@ -25,6 +25,8 @@ function cleanupAll() {
   }
 }
 
+process.on('exit', cleanupAll);
+
 const stubLogger = {
   error: () => {},
   warn: () => {},
@@ -77,8 +79,10 @@ beforeEach(() => {
   testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-conversations-test-'));
   persistenceModule.setConversationsDirForTest(testDir);
 });
-afterEach(cleanupAll);
 afterEach(() => {
+  if (testDir && fs.existsSync(testDir)) {
+    fs.rmSync(testDir, { recursive: true, force: true });
+  }
   persistenceModule.setConversationsDirForTest(null);
   persistenceModule.setPidAlivenessCheckForTest(null);
   testDir = '';

@@ -1,4 +1,4 @@
-import { it, expect, vi } from 'vitest';
+import { it, expect, vi, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,6 +12,22 @@ import {
   scanForRecoverableJson,
   stripSensitiveSettings,
 } from './settings-persistence.js';
+
+const tempDirs: string[] = [];
+const makeTempDir = (): string => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
+  tempDirs.push(dir);
+  return dir;
+};
+
+afterEach(() => {
+  for (const dir of tempDirs) {
+    if (fs.existsSync(dir)) {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+  tempDirs.length = 0;
+});
 
 it('stripSensitiveSettings: removes shellPath and openrouter secrets, preserving apiKey', () => {
   const settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
@@ -35,9 +51,7 @@ it('hasMissingKeys: true when defaults introduce new key', () => {
 });
 
 it('loadSettingsFromFile: preserves valid sections when another section has an invalid value', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
-
-  // TODO: // TODO: t.teardown(() => fs.rmSync(dir, { recursive: true, force: true })) needs manual try/finally conversion;
+  const dir = makeTempDir();
 
   // agent section is invalid (maxTurns must be positive); app section is valid
   const raw = { agent: { maxTurns: -1 }, app: { liteMode: true } };
@@ -57,9 +71,7 @@ it('loadSettingsFromFile: preserves valid sections when another section has an i
 });
 
 it('loadSettingsFromFile: falls back to default for a section containing invalid array items', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
-
-  // TODO: // TODO: t.teardown(() => fs.rmSync(dir, { recursive: true, force: true })) needs manual try/finally conversion;
+  const dir = makeTempDir();
 
   // providers array is invalid (one item has unknown type); app section is valid
   const raw = {
@@ -85,9 +97,7 @@ it('loadSettingsFromFile: falls back to default for a section containing invalid
 });
 
 it('loadSettingsFromFile: returns empty validated when top-level value is not an object', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
-
-  // TODO: // TODO: t.teardown(() => fs.rmSync(dir, { recursive: true, force: true })) needs manual try/finally conversion;
+  const dir = makeTempDir();
 
   fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify('not-an-object'), 'utf-8');
 
@@ -103,9 +113,7 @@ it('loadSettingsFromFile: returns empty validated when top-level value is not an
 });
 
 it('loadSettingsFromFile: hadErrors is false when file is valid', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
-
-  // TODO: // TODO: t.teardown(() => fs.rmSync(dir, { recursive: true, force: true })) needs manual try/finally conversion;
+  const dir = makeTempDir();
 
   fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({ app: { liteMode: true } }, null, 2), 'utf-8');
 
@@ -119,7 +127,7 @@ it('loadSettingsFromFile: hadErrors is false when file is valid', () => {
 });
 
 it('loadSettingsFromFile: hadErrors is true when file contains invalid JSON syntax', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
+  const dir = makeTempDir();
 
   fs.writeFileSync(path.join(dir, 'settings.json'), 'invalid json {', 'utf-8');
 
@@ -136,7 +144,7 @@ it('loadSettingsFromFile: hadErrors is true when file contains invalid JSON synt
 });
 
 it('loadSettingsFromFile: scan fallback recovers a JSON document from trailing garbage', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
+  const dir = makeTempDir();
 
   fs.writeFileSync(
     path.join(dir, 'settings.json'),
@@ -158,7 +166,7 @@ it('loadSettingsFromFile: scan fallback recovers a JSON document from trailing g
 });
 
 it('loadSettingsFromFile: scan fallback recovers a JSON document from leading garbage', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
+  const dir = makeTempDir();
 
   fs.writeFileSync(
     path.join(dir, 'settings.json'),
@@ -187,9 +195,7 @@ it('scanForRecoverableJson: returns null when only a non-object value is embedde
 });
 
 it('saveSettingsToFile: writes stripped settings', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
-
-  // TODO: // TODO: t.teardown(() => fs.rmSync(dir, { recursive: true, force: true })) needs manual try/finally conversion;
+  const dir = makeTempDir();
 
   const settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
   settings.app.shellPath = '/bin/zsh';
@@ -208,7 +214,7 @@ it('saveSettingsToFile: writes stripped settings', () => {
 });
 
 it('saveSettingsToFile: recovers a stale lock and leaves a complete JSON document', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
+  const dir = makeTempDir();
   const lockFile = path.join(dir, 'settings.json.lock');
   fs.writeFileSync(lockFile, 'abandoned', 'utf-8');
   const staleAt = new Date(Date.now() - 60_000);
@@ -229,7 +235,7 @@ it('saveSettingsToFile: recovers a stale lock and leaves a complete JSON documen
 });
 
 it('acquireSettingsLock: a stale owner cannot release its successor lock', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
+  const dir = makeTempDir();
   const lockFile = path.join(dir, 'settings.json.lock');
   const releaseStaleOwner = acquireSettingsLock(dir);
   const staleAt = new Date(Date.now() - 60_000);
@@ -244,7 +250,7 @@ it('acquireSettingsLock: a stale owner cannot release its successor lock', () =>
 });
 
 it('saveSettingsToFile: removes its temp file when atomic rename fails', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
+  const dir = makeTempDir();
   const rename = vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => {
     throw new Error('rename failed');
   });
@@ -267,7 +273,7 @@ it('saveSettingsToFile: removes its temp file when atomic rename fails', () => {
 });
 
 it('saveSettingsToFile: respects a fresh-mtime lock within its timeout budget without overwriting its settings file', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-settings-'));
+  const dir = makeTempDir();
   const settingsFile = path.join(dir, 'settings.json');
   fs.writeFileSync(settingsFile, JSON.stringify({ agent: { model: 'gpt-5.1' } }), 'utf-8');
   fs.writeFileSync(path.join(dir, 'settings.json.lock'), 'active', 'utf-8');

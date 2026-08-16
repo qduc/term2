@@ -1,4 +1,4 @@
-import { it, expect, vi } from 'vitest';
+import { it, expect, vi, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,7 +12,21 @@ import {
 } from './provider-traffic.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../session/session-context-service.js';
 
-const makeTempDir = (): string => fs.mkdtempSync(path.join(os.tmpdir(), 'term2-provider-traffic-'));
+const tempDirs: string[] = [];
+const makeTempDir = (): string => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-provider-traffic-'));
+  tempDirs.push(dir);
+  return dir;
+};
+
+afterEach(() => {
+  for (const dir of tempDirs) {
+    if (fs.existsSync(dir)) {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+  tempDirs.length = 0;
+});
 
 const readRequestFile = (filePath: string): Record<string, unknown> =>
   JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<string, unknown>;

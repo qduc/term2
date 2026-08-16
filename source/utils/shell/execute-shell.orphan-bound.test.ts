@@ -13,6 +13,15 @@ const LARGE_OUTPUT = fileURLToPath(new URL('./test-fixtures/large-output.mjs', i
 
 const spawnedHolders: number[] = [];
 
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 afterEach(() => {
   for (const pid of spawnedHolders.splice(0)) {
     try {
@@ -58,6 +67,31 @@ describe.skipIf(process.platform === 'win32')('executeShellCommand process bound
 
     expect(elapsed).toBeLessThan(5_000);
     expect(result.timedOut).toBe(true);
+
+    // Bounding the call is not enough: the child must not outlive it.
+    const pid = Number(/ignoring-sigterm:(\d+)/.exec(result.stdout)?.[1]);
+    expect(Number.isInteger(pid)).toBe(true);
+    spawnedHolders.push(pid);
+    await expect.poll(() => isProcessAlive(pid), { timeout: 5_000 }).toBe(false);
+  });
+
+  it('kills a SIGTERM-ignoring child even when the call settles before the escalation is due', async () => {
+    // The drain grace is shorter than the termination grace on purpose: that is
+    // the ordering under which settling used to cancel the pending SIGKILL and
+    // orphan the child to init.
+    const result = await executeShellCommand(`node ${IGNORES_SIGTERM}`, {
+      timeout: 300,
+      terminationGraceMs: 500,
+      drainGraceMs: 100,
+    });
+
+    expect(result.timedOut).toBe(true);
+
+    const pid = Number(/ignoring-sigterm:(\d+)/.exec(result.stdout)?.[1]);
+    expect(Number.isInteger(pid)).toBe(true);
+    spawnedHolders.push(pid);
+
+    await expect.poll(() => isProcessAlive(pid), { timeout: 5_000 }).toBe(false);
   });
 
   it('latches timedOut even when the killed command then reports success', async () => {

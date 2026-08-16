@@ -373,11 +373,14 @@ async function executeShellCommandUnleased(
         }
         timeoutStartedAt = undefined;
       };
+      /**
+       * Settling does not cancel a pending SIGKILL. The direct child can exit
+       * from SIGTERM while a descendant that ignored it still holds the pipe;
+       * the drain grace then settles this call before the escalation is due.
+       * Cancelling here would orphan that descendant permanently, so the timer
+       * is left running to serve out the rest of its grace and fire.
+       */
       const clearTerminationTimers = () => {
-        if (killTimer) {
-          clearTimeout(killTimer);
-          killTimer = undefined;
-        }
         if (hardFinishTimer) {
           clearTimeout(hardFinishTimer);
           hardFinishTimer = undefined;
@@ -399,6 +402,7 @@ async function executeShellCommandUnleased(
         killTimer = setTimeout(() => {
           killTimer = undefined;
           signalChildProcess(child, 'SIGKILL');
+          if (spawnedChild) liveChildren.delete(spawnedChild);
         }, terminationGraceMs);
         hardFinishTimer = setTimeout(() => {
           hardFinishTimer = undefined;
@@ -414,7 +418,18 @@ async function executeShellCommandUnleased(
       };
       const stopChild = () => beginTermination();
       const cleanupListeners = () => {
-        if (spawnedChild) liveChildren.delete(spawnedChild);
+        // The termination grace is owed to the direct child. Once it has exited,
+        // anything still in its group ignored SIGTERM or never saw it, and there
+        // is nothing left to wait for -- escalate now rather than betting on a
+        // timer that a short-lived host process may never live to fire.
+        if (killTimer && (child.exitCode != null || child.signalCode != null)) {
+          clearTimeout(killTimer);
+          killTimer = undefined;
+          signalChildProcess(child, 'SIGKILL');
+        }
+        // A child still inside its grace stays tracked so the exit hook can take
+        // its group down if we exit before the SIGKILL is due.
+        if (spawnedChild && !killTimer) liveChildren.delete(spawnedChild);
         clearCommandTimeout();
         clearTerminationTimers();
         signal?.removeEventListener('abort', stopChild);

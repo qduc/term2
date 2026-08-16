@@ -5,7 +5,7 @@ import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import { getAgentDefinition } from '../agent.js';
 import { getProvider } from '../providers/index.js';
 import { createEditorImpl } from './editor-impl.js';
-import { normalizeToolParameters, wrapNeedsApproval } from './tool-invoke.js';
+import { normalizeToolParameters, wrapNeedsApproval, wrapToolInvoke } from './tool-invoke.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { ExecutionContext } from '../services/execution-context.js';
 import { trimToolOutput } from '../utils/output/trim-tool-output.js';
@@ -182,14 +182,25 @@ export function buildAgentTools({
           return injectRunBudgetWarning(trimmedResult, _context);
         },
       };
+      // Validate arguments against the tool's own schema before execute, the
+      // same guard the subagent registry applies in `tool-policy.ts`. Without
+      // it a model response carrying empty or malformed arguments reached the
+      // executor, which dereferenced a missing required field and returned a
+      // raw TypeError the model could not act on. `wrapToolInvoke` turns that
+      // into a schema diagnostic naming the offending fields.
+      const validatedDefinition = wrapToolInvoke(
+        wrappedDefinition,
+        isZodToolParameterSchema(definition.parameters) ? definition.parameters : undefined,
+        { argumentParsing: definition.argumentParsing },
+      );
       const shim: ToolInvokeShim = {
         type: 'function',
         invoke: async (context: unknown, input: unknown, details?: unknown) => {
           const parsed = typeof input === 'string' ? JSON.parse(input) : input;
-          return wrappedDefinition.execute(parsed, context, details);
+          return validatedDefinition.execute(parsed, context, details);
         },
       };
-      return { ...wrappedDefinition, ...shim };
+      return { ...validatedDefinition, ...shim };
     });
 
   // The application-owned apply_patch definition remains in the tool list.

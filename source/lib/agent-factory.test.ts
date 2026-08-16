@@ -708,3 +708,35 @@ it.sequential('buildModelSettings clamps the configured token cap to the model c
 
   expect(result.agent.modelSettings?.maxTokens).toBe(16_384);
 });
+
+it.sequential('root tools reject arguments that do not match the schema instead of executing', async () => {
+  // Regression: a provider response carrying empty tool arguments reached the
+  // executor, which dereferenced a missing required field and returned a raw
+  // TypeError ("Cannot read properties of undefined (reading 'startsWith')")
+  // that the model could not act on. Subagent tools were already guarded.
+  const executions: unknown[] = [];
+  const definition = createToolDefinition({
+    execute: async (params) => {
+      executions.push(params);
+      return 'executed';
+    },
+  });
+  const { deps } = createDeps();
+  const tool = buildTestTool(definition, deps);
+
+  const result = await tool.invoke({}, JSON.stringify({}), { toolCall: { callId: 'call-empty-args' } });
+
+  expect(executions).toEqual([]);
+  expect(String(result)).toContain('did not match schema for post_execute_test');
+  expect(String(result)).toContain('value');
+});
+
+it.sequential('root tools still execute when arguments match the schema', async () => {
+  const definition = createToolDefinition();
+  const { deps } = createDeps();
+  const tool = buildTestTool(definition, deps);
+
+  const result = await tool.invoke({}, JSON.stringify({ value: 'ok' }), { toolCall: { callId: 'call-valid' } });
+
+  expect(result).toBe('original:ok');
+});

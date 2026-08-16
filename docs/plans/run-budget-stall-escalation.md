@@ -60,6 +60,10 @@ The load-bearing decisions, in the code:
   the API.
 - **The stream payload is `evidence`, not `event`.** `event.event` trips the
   `application-stream-boundary` guard, which reads it as a retired SDK envelope.
+- **`agent.maxModelRequestDurationMs: 0` means "no deadline"** and must stay
+  `nonnegative`. `GenerationDeadline` returns early on a non-positive timeout;
+  an earlier attempt here to make the setting positive-only broke startup for
+  every config holding the old default.
 
 Still open: no child-targeted grant API; mentor and async runs are unclamped;
 siblings can still sum past a parent's remainder.

@@ -142,6 +142,14 @@ This is a substantial, coherent first cut of staged run budgets and stall eviden
   never usable — but it threw on any config still holding the old default, failing
   the whole settings file and refusing to start. Zero is now repaired to the
   default instead of rejected.
+- **The branch made an unrelated breaking settings change, now reverted.**
+  `agent.maxModelRequestDurationMs` went from `nonnegative().default(0)` to
+  `positive().default(300_000)`, which threw on any config still holding the old
+  default — failing the whole settings file and refusing to start. The branch's
+  premise was that 0 was unusable because it reaches `setTimeout(…, 0)`. That
+  was true when the branch was cut and is no longer: main has since added
+  `if (timeoutMs <= 0) return` to `GenerationDeadline`, so 0 deliberately means
+  "no deadline" and is covered by a test. Main's schema stands.
 
 ### Still open after this pass
 

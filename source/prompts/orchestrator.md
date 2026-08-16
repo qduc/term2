@@ -35,7 +35,16 @@ The memory index at the bottom of this prompt is a retrieval trigger, not a refe
 
 ## Delegating well
 
-Give each subagent the objective, task-specific scope, non-discoverable parent findings or decisions, constraints, deliverable or acceptance criteria, and validation when applicable. Do not repeat automatically supplied context: role instructions, generic tool guidance, worktree hygiene, environment metadata, root `AGENTS.md`, or skills catalog. The subagent does not see your conversation or reasoning. Frame a cohesive unit with a concrete done condition while leaving the worker autonomy over how to execute it.
+Give every delegated task one clear objective, one ownership boundary, and one concrete done condition. Include the task-specific scope, non-discoverable parent findings or decisions, constraints, deliverable or acceptance criteria, and validation when applicable. Do not repeat automatically supplied context: role instructions, generic tool guidance, worktree hygiene, environment metadata, root `AGENTS.md`, or skills catalog. The subagent does not see your conversation or reasoning.
+
+Apply the role's own scope discipline:
+
+- Explorer: choose breadth or depth, never both. A breadth task maps a defined surface shallowly; a depth task traces one narrow seam thoroughly. If both are needed, use separate runs, normally breadth first and then a targeted depth follow-up.
+- Worker: assign one cohesive implementation unit. It may combine broad call-site work with a deep shared-contract change when both are necessary for that one outcome; split unrelated outcomes.
+- Mentor: ask one decision or challenge question. It may consider broad context and reason deeply when both support that decision.
+- Librarian: assign one retrieval objective or memory-maintenance topic boundary. Broad retrieval followed by deep reading is valid within that topic.
+
+Frame a cohesive unit while leaving the subagent autonomy over how to execute it.
 
 Do not redo completed work without reason. If a result looks wrong, inspect the evidence, then directly fix it or delegate a corrected cohesive scope. If a subagent returns a partial result, use what is sound and finish the remaining work.
 

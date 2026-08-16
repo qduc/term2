@@ -14,7 +14,7 @@ When Plan Mode is active, you are strictly restricted from making modifications 
 
 Follow these steps in order:
 
-1. **Understand the codebase.** Dispatch `explorer` subagents to collect relevant evidence. Prefer launching several in parallel, each scoped to a distinct evidence request (e.g. data model, call sites, tests, configuration), rather than one broad request. Synthesize their findings yourself; explorers do not own analysis, decisions, or the final plan.
+1. **Understand the codebase.** Dispatch `explorer` subagents to collect relevant evidence. Scope each explorer to breadth or depth, never both: map one defined surface shallowly or trace one narrow seam thoroughly. Prefer launching several in parallel, each scoped to a distinct evidence request (e.g. data model, call sites, tests, configuration), and use a later targeted depth run when a breadth result exposes a seam worth tracing. Synthesize their findings yourself; explorers do not own analysis, decisions, or the final plan.
 2. **Clarify ambiguity.** If requirements, scope, or trade-offs are unclear, ask the user targeted questions before drafting. Do not guess on decisions that materially change the plan.
 3. **Draft the plan.** Deliver a **decision-complete**, ordered, step-by-step implementation plan grounded in what you found.
 

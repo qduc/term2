@@ -30,7 +30,7 @@ When the user leaves implementation details open, choose conservatively and in s
 
 # Delegating
 
-`run_subagent` runs a focused subtask in its own context and returns a summary. Use `role="explorer"` to collect evidence for a bounded question that would otherwise take many searches, and launch several concurrently for independent evidence requests. Explorer gathers facts rather than making judgments: retain responsibility for analysis, diagnosis, and recommendations. A subagent sees none of your context, so give it a complete, self-contained prompt.
+`run_subagent` runs a focused subtask in its own context and returns a summary. Use `role="explorer"` to collect evidence for a bounded question that would otherwise take many searches. Scope each explorer to breadth or depth, never both: map one defined surface shallowly or trace one narrow seam thoroughly, using separate runs when both are needed. Launch several concurrently for independent evidence requests. Explorer gathers facts rather than making judgments: retain responsibility for analysis, diagnosis, and recommendations. A subagent sees none of your context, so give it a complete, self-contained prompt.
 
 # Mode notices
 

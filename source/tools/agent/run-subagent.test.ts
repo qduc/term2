@@ -29,12 +29,17 @@ it('describes explorer tasks as evidence collection rather than delegated reason
   const roles = getSubagentsRolesSection();
 
   expect(tool.description).toContain('For explorer, request concrete evidence to collect');
+  expect(tool.description).toContain('breadth or depth, never both');
+  expect(tool.description).toContain('one cohesive implementation unit');
+  expect(tool.description).toContain('one decision or challenge question');
+  expect(tool.description).toContain('one retrieval objective or memory-maintenance topic boundary');
   expect(tool.description).toContain('Do not ask explorer to diagnose, recommend a fix, choose an approach');
   expect(tool.description).toContain(
     'Independent foreground explorer and librarian calls in the same model response may run in parallel',
   );
   expect(tool.description).not.toContain('when they do not use a worktree');
   expect(roles).toContain('evidence collection');
+  expect(roles).toContain('never both in one run');
   expect(roles).not.toContain('answering codebase questions');
 });
 

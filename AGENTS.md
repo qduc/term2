@@ -40,6 +40,89 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   consolidate tests, and do not dispatch explorers, without the approval
   `docs/plans/test-suite-audit.md` describes. The graph and its vocabulary live
   in `docs/test-audit/`; run it with `pnpm test-audit`.
+- Scheduled live provider canaries — a deferred follow-up requiring CI, secret/billing, and OAuth-storage decisions. No plan doc, and nobody is on it.
+- UI/business layer separation — completed through settings transaction,
+  handoff workflow, provider management, and model catalog milestones. See
+  `docs/plans/ui-business-layer-separation/MAP.md` for the merged commits and
+  ownership boundaries.
+
+## Completed — still read before touching these areas
+
+- `docs/plans/run-budget-stall-escalation.md` — **implemented and merged**, with
+  all 13 review findings resolved in
+  `docs/plans/run-budget-stall-escalation-review.md`. Read both before changing
+  `RunBudget`, run-budget grants, stall detection, the `max_turns_exceeded`
+  prompt, or `agent.runBudget` settings: extensions are charged in the run loop
+  so unattended resumes stay bounded, parent grants are capped while human
+  grants are not, stall evidence re-arms for the run but not for its parent, and
+  the stream payload is named `evidence` because `event.event` trips the
+  stream-boundary guard.
+
+- `docs/plans/parallel-safe-tool-dispatch.md` — **implemented and merged**
+  (`b7eada1e`). It dispatches contiguous auto-approved safe tool calls from one
+  completed model response in parallel while preserving result order and the
+  existing approval and budget owners.
+
+- `docs/plans/exclusive-menu-input.md` — **implemented and merged**
+  (`517b74bc`). Read it before changing Ink input ownership, menu composition,
+  `InputBox`, or the session-owned menu surface.
+
+- `docs/plans/chat-completions-reasoning-roundtrip.md` — **implemented and
+  merged** (`65746671`, `af85266f`, plus review fixes). Read it before changing
+  `OpenAIChatCompletionsModel` or `openai-compatible-middleware.ts` reasoning:
+  the `reasoning` → `reasoning_content` rewrite is intentional, and reading
+  `reasoning_details` as reasoning text would double every token.
+
+- `docs/plans/background-work-control/MAP.md` — **background inspection,
+  per-item stop, action notifications, root-shell transfer, and
+  foreground-subagent transfer are implemented.** Read it before changing the
+  background registries, task-control port, transfer leases, or adopted-child
+  approval handling. Remaining liveness presentation work is tracked separately
+  in `docs/plans/background-work-control/liveness-ui.md`.
+- `docs/plans/background-work-control/unified-subagent-ui.md` — **implemented
+  and merged.** Read it before changing `SubagentActivityMessage`,
+  `BackgroundTasksPanel`, `BackgroundTaskManager`, or foreground-to-background
+  event routing: a transferred transcript card settles as `backgrounded`, and
+  unadopted work may appear on the compact strip only with an explicit
+  foreground tag.
+
+- `docs/plans/background-work-control/liveness-ui.md` — **implemented and
+  verified with adversarial-review corrections** (2026-08-13; awaiting branch
+  re-review before merge). It separates lifecycle phase/reason, locally
+  observed facts, and recent/quiet liveness; captures truthful launch-time
+  model/context metadata; and gives the panel and manager explicit, live
+  physical-width information budgets plus bounded presentation labels without
+  changing execution, cancellation, or transfer semantics.
+
+- `docs/plans/provider-neutral-context-compaction.md` — **Milestones 1–6 fully implemented and verified.** Preserves the OpenAI-native opaque lane and adds an opt-in local fallback built around safe request-boundary cutting, ratio plus an optional raw-token automatic threshold, manual `/compact`, sequential cold-prefix summaries with load-bearing facts copied verbatim, a verbatim hot tail, durable replacement checkpoints, and tool-ledger/continuity safety.
+
+- `docs/plans/tool-output-and-effect-safety.md` — **Milestones 1–2 implemented**
+  (branch `tool-output-effect-safety`). Read before touching `read_file` result
+  size, `utils/shell/shell-output.ts` / `utils/output/bound-tool-result.ts`,
+  `ToolExecutionStatus`, stream-failure settlement in
+  `services/retry/recovery-executor.ts`, or tool dispatch marking: tool results
+  are byte-bounded with the shell spool note; dispatched-but-unobserved calls
+  settle as `unknown` (not failed) so recovery does not invite blind re-dispatch.
+
+- `docs/plans/background-shell-monitor/MAP.md` — **all six phases merged**
+  (2026-08-10; last merge `78e5a08c`). Read before touching the shell tool's
+  background path, `BackgroundShellRegistry`, `BackgroundShellOutputStore`,
+  `BackgroundShellWatches`, the `background_shell_output` notification lane,
+  or `shell.backgroundTimeout`: it records the overflow-kill result shape, the
+  watch-layer pins, and the pre-existing ink-layer / black-box failures.
+
+- `docs/plans/openai-context-compaction.md` — OpenAI context compaction (server-side
+  `context_management`). **All steps are fully merged (`baf07fe0`).** Read the plan before
+  touching the OpenAI adapter, the run loop, `ConversationStore`/`conversation-turn-items`, or
+  settings schema: it records the closed-union/throw-site findings, the
+  `provider_opaque` marker contract, and Round 3's live measurements.
+
+- `docs/plans/queue-editing.md` — editing and deleting a prompt submitted while a turn is in
+  flight. **Steps 1–4 are fully merged (`a7a0d677`).** Read it before touching `ApplicationRunLoop.steer`, `ConversationAdapter`'s queue path, `QueueController`, `PendingQueueList`, or `InputBox`.
+
+- `docs/plans/mid-turn-injection.md` — steering and background-subagent notifications reaching a turn already in flight. Read it before touching the run loop, `AgentClient`, the turn coordinator, or notification delivery: it defines the vocabulary those areas are described in (**Segment**, **Request Boundary**, **Injection**, **Background Notification**, now in `CONTEXT.md`), and the bug it fixed was invisible for want of those words.
+
+- `docs/plans/chain-settlement.md` — unpaid tool debt after a mid-stream failure must not leave a live `previousResponseId`. Read before changing `ProviderContinuity`, stream finalize debt sync, terminate recovery, `SessionInputPlanner` chaining, or “No tool output found for function call” classification: a text-only continue against an open chain is a server 400.
 
 # Parallel Work Isolation
 

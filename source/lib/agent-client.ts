@@ -129,8 +129,10 @@ export class AgentClient {
         const provider = this.#agentConfig.getProvider();
         const model = this.#agentConfig.getModel();
         const reasoningEffort = this.#settings.get('agent.reasoningEffort');
+        // Native compaction is admitted only by the provider capability. Codex
+        // remains false because its Responses-Lite endpoint rejects this field.
         const nativeAvailable =
-          (provider === 'openai' || provider === 'codex') &&
+          getProvider(provider)?.capabilities?.supportsContextCompaction === true &&
           supportsContextCompactionModel(model) &&
           !this.#contextCompactionSessionState.disabled;
         if (mode === 'auto' && nativeAvailable) return { kind: 'unchanged' as const };

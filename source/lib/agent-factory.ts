@@ -66,6 +66,7 @@ export interface AgentBuildResult {
 
 type ProviderCapabilities = {
   supportsConversationChaining: boolean;
+  supportsContextCompaction?: boolean;
   supportsPromptCacheKey?: boolean;
   usesStrictToolSchema?: boolean;
   nativePatchModelPrefixes?: string[];
@@ -75,6 +76,7 @@ function getProviderCapabilities(providerId: string): ProviderCapabilities {
   const providerDef = getProvider(providerId);
   return {
     supportsConversationChaining: providerDef?.capabilities?.supportsConversationChaining ?? false,
+    supportsContextCompaction: providerDef?.capabilities?.supportsContextCompaction,
     supportsPromptCacheKey: providerDef?.capabilities?.supportsPromptCacheKey,
     usesStrictToolSchema: providerDef?.capabilities?.usesStrictToolSchema,
     nativePatchModelPrefixes: providerDef?.capabilities?.nativePatchModelPrefixes,
@@ -294,13 +296,14 @@ function buildModelSettings({
 
   const contextCompactionEnabled = deps.settings.get('agent.contextCompaction.enabled');
   const contextCompactionMode = deps.settings.get('agent.contextCompaction.mode') ?? 'native';
-  // OpenAI and Codex both speak Responses `context_management`; other providers
-  // either do not, or have not been measured. Model-level allowlisting still
-  // gates the wire parameter inside each adapter.
+  // This capability is provider-owned: Codex's Responses-Lite shim accepts the
+  // endpoint shape but rejects this parameter, so its registry capability is
+  // deliberately false.
+  const providerCapabilities = getProviderCapabilities(deps.providerId);
   if (
     contextCompactionEnabled &&
     contextCompactionMode !== 'local' &&
-    (deps.providerId === 'openai' || deps.providerId === 'codex')
+    providerCapabilities.supportsContextCompaction === true
   ) {
     const thresholdTokens = deps.settings.get('agent.contextCompaction.compactThresholdTokens');
     modelSettings.providerData = {

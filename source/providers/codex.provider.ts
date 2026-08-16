@@ -433,7 +433,9 @@ async function fetchCodexModels(
 
 const CODEX_CAPABILITIES = {
   supportsConversationChaining: true,
-  supportsContextCompaction: true,
+  // Codex's Responses-Lite shim accepts the Responses shape but rejects
+  // server-side context_management with a 400 unsupported_value response.
+  supportsContextCompaction: false,
   supportsPromptCacheKey: true,
   usesStrictToolSchema: true,
 } as const;

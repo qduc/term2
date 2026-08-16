@@ -437,8 +437,59 @@ degradation nobody has observed yet because nothing is implemented. Milestone
   encrypted content was summarized.
 - For a provider switch, existing cross-provider invalidation runs first. Local
   compaction operates only on the resulting application-modeled history.
-- Forced `local` mode encountering an indispensable opaque-only prefix fails
-  closed with an explanation; it does not discard that provider state.
+- ~~Forced `local` mode encountering an indispensable opaque-only prefix fails
+  closed with an explanation; it does not discard that provider state.~~
+  **Reversed 2026-08-16.** This rule rested on a false premise and made local
+  compaction unusable in practice — see "Cold opaque items are droppable"
+  below.
+
+### Cold opaque items are droppable (2026-08-16 correction)
+
+The original rule treated every provider-opaque item as indispensable, so
+`LocalContextCompactor` threw whenever one appeared in the cold prefix.
+`AgentClient` caught that throw and returned `unchanged` with only a `warn`,
+which meant local compaction **silently disabled itself for the rest of the
+conversation** — nothing but compaction ever removes an opaque item from
+history. It was easy to reach: the Responses adapter turns *any* unmodeled item
+into `provider_opaque`, and a session that used native compaction first leaves a
+`type: 'compaction'` item in the prefix forever.
+
+The premise was wrong. No provider requires an opaque item to be preserved
+indefinitely; they require it to be **paired with the call it precedes inside
+one assistant turn**:
+
+- OpenAI Responses rejects both `'reasoning' … without its required following
+  item` and `'function_call'`/`'web_search_call' … without its required
+  'reasoning' item`. Reasoning items are documented as optional in ordinary
+  multi-turn chat, and the compaction guide explicitly permits dropping "items
+  that came before the most recent compaction item".
+- Gemini 3 rejects a `functionCall` whose `thoughtSignature` is missing, but the
+  signature travels on the call itself.
+- Anthropic validates thinking-block signatures within a tool-use loop; prior
+  turns are stripped server-side on 4.5 and earlier.
+
+Because `planLocalCompaction` cuts only at a genuine user message, a cut never
+splits a pair — so dropping whole cold turns, opaque items included, is safe on
+every lane. Note that Anthropic, Google, and OpenRouter go through the AI SDK
+and never produce opaque items at all; their signatures ride in
+`providerMetadata`, which the compactor already discarded without complaint.
+
+What replaced the blanket refusal:
+
+- All cold-prefix opaque items are dropped with their turn and excluded from the
+  summarizer input (they are ciphertext; summarizing them is impossible and
+  leaks provider-private state into a prompt). The count is reported as
+  `droppedOpaqueItems` on the `compacted` outcome and logged.
+- The real invariant is now enforced instead: `assertHotTailPairsIntact` returns
+  a typed `blocked` outcome with reason `hot_tail_would_orphan_tool_result` if a
+  cut would ever leave a tool result in the verbatim hot tail without its call.
+- Blocked outcomes are logged with their reason rather than vanishing into an
+  `unchanged` return.
+
+One accepted loss: if a native `compaction` item sits in the cold prefix, the
+model state it encoded is discarded rather than summarized, because it is
+encrypted. That is strictly better than never compacting again, and it only
+arises when a session mixes native and local modes.
 
 ## Implementation milestones
 

@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from 'vitest';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FileMemoryStore, InvalidMemoryError, MemoryStorageError } from './memory-store.js';
@@ -100,6 +100,7 @@ it('recovers a corrupted index from the last durable backup', async () => {
 
 it('rejects corrupted index metadata with invalid field types', async () => {
   const memory = await store();
+  await memory.create(input);
   await writeFile(
     join(roots[0], 'index.json'),
     JSON.stringify({
@@ -118,6 +119,25 @@ it('rejects corrupted index metadata with invalid field types', async () => {
   );
   await expect(memory.list()).rejects.toBeInstanceOf(MemoryStorageError);
   await expect(memory.list()).rejects.toThrow(/Memory index\.json/);
+});
+
+it('settles a failed create without leaving metadata when the content path is a directory', async () => {
+  const memory = await store();
+  await memory.list();
+  const id = 'blocked-memory';
+  await mkdir(join(roots[0], 'items', `${id}.md`));
+
+  await expect(memory.create({ ...input, id })).rejects.toBeDefined();
+  expect((await memory.list()).find((entry) => entry.id === id)).toBeUndefined();
+});
+
+it('settles remove when content is already missing and omits the metadata', async () => {
+  const memory = await store();
+  await memory.create(input);
+  await rm(join(roots[0], 'items', `${input.id}.md`));
+
+  await expect(memory.remove(input.id)).resolves.toBe(true);
+  expect((await memory.list()).find((entry) => entry.id === input.id)).toBeUndefined();
 });
 
 it('marks search results whose full content is unavailable', async () => {

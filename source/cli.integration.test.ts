@@ -220,28 +220,30 @@ it('CLI prompts before starting in non-lite mode from home directory', () => {
   let error: any;
   let stderr = '';
   try {
-    execFileSync('node', [cliPath()], {
-      env: {
-        ...process.env,
-        HOME: tempHome,
-        TERM2_CONVERSATIONS_DIR: testDir,
-        DISABLE_LOGGING: '1',
-      },
-      cwd: tempHome,
-      input: 'n\n',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-  } catch (err: any) {
-    error = err;
-    stderr = err.stderr.toString();
+    try {
+      execFileSync('node', [cliPath()], {
+        env: {
+          ...process.env,
+          HOME: tempHome,
+          TERM2_CONVERSATIONS_DIR: testDir,
+          DISABLE_LOGGING: '1',
+        },
+        cwd: tempHome,
+        input: 'n\n',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+    } catch (err: any) {
+      error = err;
+      stderr = err.stderr.toString();
+    }
+
+    expect(error).toBeTruthy();
+    expect(error.status).toBe(1);
+    expect(stderr.includes('Warning: you are starting term2 in non-lite mode from your home directory.')).toBe(true);
+    expect(stderr.includes('Cancelled.')).toBe(true);
+  } finally {
+    fs.rmSync(tempHome, { recursive: true, force: true });
   }
-
-  fs.rmSync(tempHome, { recursive: true, force: true });
-
-  expect(error).toBeTruthy();
-  expect(error.status).toBe(1);
-  expect(stderr.includes('Warning: you are starting term2 in non-lite mode from your home directory.')).toBe(true);
-  expect(stderr.includes('Cancelled.')).toBe(true);
 });
 
 it('CLI prompts before starting in non-lite mode from root directory', () => {
@@ -250,28 +252,30 @@ it('CLI prompts before starting in non-lite mode from root directory', () => {
   let error: any;
   let stderr = '';
   try {
-    execFileSync('node', [cliPath()], {
-      env: {
-        ...process.env,
-        HOME: tempHome,
-        TERM2_CONVERSATIONS_DIR: testDir,
-        DISABLE_LOGGING: '1',
-      },
-      cwd: '/',
-      input: 'n\n',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-  } catch (err: any) {
-    error = err;
-    stderr = err.stderr.toString();
+    try {
+      execFileSync('node', [cliPath()], {
+        env: {
+          ...process.env,
+          HOME: tempHome,
+          TERM2_CONVERSATIONS_DIR: testDir,
+          DISABLE_LOGGING: '1',
+        },
+        cwd: '/',
+        input: 'n\n',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+    } catch (err: any) {
+      error = err;
+      stderr = err.stderr.toString();
+    }
+
+    expect(error).toBeTruthy();
+    expect(error.status).toBe(1);
+    expect(stderr.includes('Warning: you are starting term2 in non-lite mode from your home directory.')).toBe(true);
+    expect(stderr.includes('Cancelled.')).toBe(true);
+  } finally {
+    fs.rmSync(tempHome, { recursive: true, force: true });
   }
-
-  fs.rmSync(tempHome, { recursive: true, force: true });
-
-  expect(error).toBeTruthy();
-  expect(error.status).toBe(1);
-  expect(stderr.includes('Warning: you are starting term2 in non-lite mode from your home directory.')).toBe(true);
-  expect(stderr.includes('Cancelled.')).toBe(true);
 });
 
 it('CLI accepts a custom provider from settings.json in non-interactive mode', () => {

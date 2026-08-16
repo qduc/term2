@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { startFakeProviderHttpServer, type FakeProviderHttpServer } from './fake-provider-http-server.js';
 import {
@@ -15,7 +16,7 @@ afterEach(async () => {
   server = undefined;
 });
 
-const BUILT_CLI = join(process.cwd(), 'dist/cli.js');
+const BUILT_CLI = fileURLToPath(new URL('../../dist/cli.js', import.meta.url));
 
 async function writeFixtureSettings(paths: IsolatedWorkspacePaths, options: { trustedProjectRoots?: string[] } = {}) {
   await mkdir(paths.logDir, { recursive: true });
@@ -99,9 +100,10 @@ describe('public hooks through the packaged CLI', () => {
     });
     try {
       const child = await workspace.start({
-        command: process.execPath,
-        args: [BUILT_CLI, '--lite', '--provider', 'fixture-provider', '--model', 'fixture'],
+        args: ['--lite', '--provider', 'fixture-provider', '--model', 'fixture'],
         cwd: process.cwd(),
+        cols: 120,
+        rows: 40,
       });
       await child.waitForVisibleOutput('❯ ', 15_000);
       await writePtyTextAndSubmit(child, 'fixture prompt');

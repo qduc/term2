@@ -26,16 +26,20 @@ it('formatShellExecutionOutput saves the full output when truncation occurs', as
   expect(result.text.includes('FULL-ONLY-SENTINEL')).toBe(false);
 
   const artifactPath = result.artifactPath as string;
-  const artifactContents = fs.readFileSync(artifactPath, 'utf8');
+  try {
+    const artifactContents = fs.readFileSync(artifactPath, 'utf8');
 
-  expect(artifactContents.includes('Command: demo --long-output')).toBe(true);
-  expect(artifactContents.includes('Working directory: /workspace')).toBe(true);
-  expect(artifactContents.includes('Runtime: 1234ms')).toBe(true);
-  expect(artifactContents.includes('STDOUT:')).toBe(true);
-  expect(artifactContents.includes('STDERR:')).toBe(true);
-  expect(artifactContents.includes('FULL-ONLY-SENTINEL')).toBe(true);
-
-  // TODO: // TODO: t.teardown(() => fs.rmSync(path.dirname(artifactPath), { recursive: true, force: true })) needs manual try/finally conversion;
+    expect(artifactContents.includes('Command: demo --long-output')).toBe(true);
+    expect(artifactContents.includes('Working directory: /workspace')).toBe(true);
+    expect(artifactContents.includes('Runtime: 1234ms')).toBe(true);
+    expect(artifactContents.includes('STDOUT:')).toBe(true);
+    expect(artifactContents.includes('STDERR:')).toBe(true);
+    expect(artifactContents.includes('FULL-ONLY-SENTINEL')).toBe(true);
+  } finally {
+    if (fs.existsSync(artifactPath)) {
+      fs.unlinkSync(artifactPath);
+    }
+  }
 });
 
 it('formatShellExecutionOutput leaves short output unchanged', async () => {
@@ -101,8 +105,13 @@ it('formatShellExecutionOutput reuses one temp directory and randomizes artifact
   const firstPath = first.artifactPath as string;
   const secondPath = second.artifactPath as string;
 
-  expect(path.dirname(firstPath)).toBe(path.dirname(secondPath));
-  expect(path.basename(firstPath)).not.toBe(path.basename(secondPath));
-  expect(path.basename(firstPath)).toMatch(/^output-\d+-\d+-[a-f0-9]{6}\.txt$/);
-  expect(path.basename(secondPath)).toMatch(/^output-\d+-\d+-[a-f0-9]{6}\.txt$/);
+  try {
+    expect(path.dirname(firstPath)).toBe(path.dirname(secondPath));
+    expect(path.basename(firstPath)).not.toBe(path.basename(secondPath));
+    expect(path.basename(firstPath)).toMatch(/^output-\d+-\d+-[a-f0-9]{6}\.txt$/);
+    expect(path.basename(secondPath)).toMatch(/^output-\d+-\d+-[a-f0-9]{6}\.txt$/);
+  } finally {
+    if (fs.existsSync(firstPath)) fs.unlinkSync(firstPath);
+    if (fs.existsSync(secondPath)) fs.unlinkSync(secondPath);
+  }
 });

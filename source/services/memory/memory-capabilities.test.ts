@@ -1,10 +1,26 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { mkdtempSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, afterEach } from 'vitest';
 import { MemoryCapabilityBuilder } from './memory-capabilities.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
+
+const tempDirs: string[] = [];
+function makeTempDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'term2-memory-capability-'));
+  tempDirs.push(dir);
+  return dir;
+}
+
+afterEach(() => {
+  for (const dir of tempDirs) {
+    if (existsSync(dir)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+  tempDirs.length = 0;
+});
 
 const writeTools = [
   'memory_list',
@@ -42,7 +58,7 @@ describe('MemoryCapabilityBuilder', () => {
   it.each(['explorer', 'worker'] as const)(
     'gives %s on-demand read access without injecting memory context',
     (role) => {
-      const directory = mkdtempSync(join(tmpdir(), 'term2-memory-capability-'));
+      const directory = makeTempDir();
       mkdirSync(join(directory, 'items'));
       writeFileSync(
         join(directory, 'index.json'),
@@ -83,7 +99,7 @@ describe('MemoryCapabilityBuilder', () => {
   });
 
   it('injects summary context for a main agent with write access', () => {
-    const directory = mkdtempSync(join(tmpdir(), 'term2-memory-capability-'));
+    const directory = makeTempDir();
     mkdirSync(join(directory, 'items'));
     writeFileSync(
       join(directory, 'index.json'),
@@ -111,7 +127,7 @@ describe('MemoryCapabilityBuilder', () => {
   });
 
   it('isolates project memories by project path and injects both scopes', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'term2-memory-capability-'));
+    const directory = makeTempDir();
     const first = new MemoryCapabilityBuilder(createMockSettingsService({ 'memory.directory': directory })).build(
       { kind: 'main' },
       { projectPath: '/workspace/first' },

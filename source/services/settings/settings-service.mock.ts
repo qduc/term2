@@ -1,7 +1,8 @@
 import { SettingsService } from './settings-service.js';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { mkdtempSync } from 'fs';
+
+const MOCK_SETTINGS_DIR = join(tmpdir(), 'term2-mock-settings');
 
 /**
  * Helper to unflatten dot-notation keys into nested objects.
@@ -27,7 +28,7 @@ function unflatten(data: Record<string, any>): Record<string, any> {
 /**
  * Creates a mock SettingsService instance for testing.
  * This prevents tests from modifying the user's actual settings file
- * and ensures test isolation by using unique temporary directories.
+ * and ensures test isolation by disabling disk persistence.
  *
  * @param overrides - Optional settings to override defaults (supports dot-notation keys)
  * @returns A mock SettingsService instance
@@ -37,17 +38,13 @@ export function createMockSettingsService(
     [key: string]: any;
   }> = {},
 ): SettingsService {
-  // Create a unique temporary directory for each mock instance
-  // This ensures tests running in parallel don't interfere with each other
-  const tempDir = mkdtempSync(join(tmpdir(), 'term2-test-'));
-
   // Unflatten overrides so they match the nested structure expected by SettingsService
   // This allows passing {'agent.model': 'val'} convenience keys
   const nestedOverrides = unflatten(overrides);
 
   // Create a mock settings service with isolated storage
   return new SettingsService({
-    settingsDir: tempDir,
+    settingsDir: MOCK_SETTINGS_DIR,
     disableLogging: true, // Disable logging for tests
     disableFilePersistence: true, // Never write settings.json during tests
     cli: nestedOverrides, // Apply any overrides

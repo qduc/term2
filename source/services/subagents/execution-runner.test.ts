@@ -177,11 +177,17 @@ describe('ExecutionSubagentRunner text-turn peek events', () => {
 
     const result = await runner.run('run-1', { role: 'explorer', task: 'inspect' }, definition);
 
-    expect(result.finalTextTruncated).toBe(true);
-    expect(result.finalTextArtifactPath).toBeTruthy();
-    expect(result.finalText).not.toContain('FULL-RESULT-SENTINEL');
-    expect(result.finalText).toContain('Full subagent result saved to');
-    expect(fs.readFileSync(result.finalTextArtifactPath!, 'utf8')).toBe(fullText);
+    try {
+      expect(result.finalTextTruncated).toBe(true);
+      expect(result.finalTextArtifactPath).toBeTruthy();
+      expect(result.finalText).not.toContain('FULL-RESULT-SENTINEL');
+      expect(result.finalText).toContain('Full subagent result saved to');
+      expect(fs.readFileSync(result.finalTextArtifactPath!, 'utf8')).toBe(fullText);
+    } finally {
+      if (result.finalTextArtifactPath && fs.existsSync(result.finalTextArtifactPath)) {
+        fs.unlinkSync(result.finalTextArtifactPath);
+      }
+    }
   });
 
   it('keeps results slightly larger than the previous 4,000-character limit intact', async () => {

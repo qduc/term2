@@ -1,5 +1,5 @@
 import { it, expect } from 'vitest';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -52,38 +52,46 @@ it('createCacheKey changes when prompt version changes', () => {
 
 it('loadModelRunsFromYaml expands provider keys into ordered provider/model pairs', () => {
   const dir = mkdtempSync(join(tmpdir(), 'term2-eval-'));
-  const yamlPath = join(dir, 'models.yaml');
+  try {
+    const yamlPath = join(dir, 'models.yaml');
 
-  writeFileSync(
-    yamlPath,
-    `
+    writeFileSync(
+      yamlPath,
+      `
 openai:
   - gpt-4o
   - gpt-4o-mini
 openrouter:
   - anthropic/claude-3.5-sonnet
 `,
-  );
+    );
 
-  expect(loadModelRunsFromYaml(yamlPath)).toEqual([
-    { provider: 'openai', model: 'gpt-4o' },
-    { provider: 'openai', model: 'gpt-4o-mini' },
-    { provider: 'openrouter', model: 'anthropic/claude-3.5-sonnet' },
-  ]);
+    expect(loadModelRunsFromYaml(yamlPath)).toEqual([
+      { provider: 'openai', model: 'gpt-4o' },
+      { provider: 'openai', model: 'gpt-4o-mini' },
+      { provider: 'openrouter', model: 'anthropic/claude-3.5-sonnet' },
+    ]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 it('loadModelRunsFromYaml rejects providers without a model list', () => {
   const dir = mkdtempSync(join(tmpdir(), 'term2-eval-'));
-  const yamlPath = join(dir, 'models.yaml');
+  try {
+    const yamlPath = join(dir, 'models.yaml');
 
-  writeFileSync(
-    yamlPath,
-    `
+    writeFileSync(
+      yamlPath,
+      `
 openai: gpt-4o
 `,
-  );
+    );
 
-  expect(() => loadModelRunsFromYaml(yamlPath)).toThrow(/must map to a list of models/);
+    expect(() => loadModelRunsFromYaml(yamlPath)).toThrow(/must map to a list of models/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 it('retryOnRateLimit retries twice and respects x-ratelimit-reset before succeeding', async () => {

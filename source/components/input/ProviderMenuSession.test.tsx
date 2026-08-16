@@ -99,36 +99,40 @@ it('directly opens credential setup for a missing provider', async () => {
 
 it('does not block logged-in Codex in ordinary provider management', async () => {
   const codexHome = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-codex-auth-'));
-  fs.writeFileSync(path.join(codexHome, 'auth.json'), '{}');
-  vi.stubEnv('CHATGPT_LOCAL_HOME', '');
-  vi.stubEnv('CODEX_HOME', codexHome);
+  try {
+    fs.writeFileSync(path.join(codexHome, 'auth.json'), '{}');
+    vi.stubEnv('CHATGPT_LOCAL_HOME', '');
+    vi.stubEnv('CODEX_HOME', codexHome);
 
-  const controller = new MenuControllerImpl();
-  const settingsService = createMockSettingsService();
-  const view = await renderInAct(
-    <InputProvider controller={controller}>
-      <ControllerHost controller={controller} settingsService={settingsService} />
-    </InputProvider>,
-  );
+    const controller = new MenuControllerImpl();
+    const settingsService = createMockSettingsService();
+    const view = await renderInAct(
+      <InputProvider controller={controller}>
+        <ControllerHost controller={controller} settingsService={settingsService} />
+      </InputProvider>,
+    );
 
-  await act(async () => {
-    controller.open({ kind: 'providers' });
-    await Promise.resolve();
-  });
-  await act(async () => {
-    controller.dispatchActiveEvent({ type: 'move', direction: 'down' });
-    await Promise.resolve();
-  });
-  await act(async () => {
-    controller.dispatchActiveEvent({ type: 'move', direction: 'down' });
-    await Promise.resolve();
-  });
-  await act(async () => {
-    controller.dispatchActiveEvent({ type: 'accept', input: { kind: 'none' }, selected: undefined });
-    await Promise.resolve();
-  });
+    await act(async () => {
+      controller.open({ kind: 'providers' });
+      await Promise.resolve();
+    });
+    await act(async () => {
+      controller.dispatchActiveEvent({ type: 'move', direction: 'down' });
+      await Promise.resolve();
+    });
+    await act(async () => {
+      controller.dispatchActiveEvent({ type: 'move', direction: 'down' });
+      await Promise.resolve();
+    });
+    await act(async () => {
+      controller.dispatchActiveEvent({ type: 'accept', input: { kind: 'none' }, selected: undefined });
+      await Promise.resolve();
+    });
 
-  expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('providers');
-  expect(toVisibleText(view.lastFrame() ?? '')).not.toContain('Not logged in on this host');
-  vi.unstubAllEnvs();
+    expect(controller.getSnapshot().stack.at(-1)?.kind).toBe('providers');
+    expect(toVisibleText(view.lastFrame() ?? '')).not.toContain('Not logged in on this host');
+    vi.unstubAllEnvs();
+  } finally {
+    fs.rmSync(codexHome, { recursive: true, force: true });
+  }
 });

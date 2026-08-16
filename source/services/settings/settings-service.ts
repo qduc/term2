@@ -189,7 +189,7 @@ export class SettingsService {
     this.disableFilePersistence = disableFilePersistence ?? isTestEnvironment();
 
     // Ensure settings directory exists
-    if (!fs.existsSync(this.settingsDir)) {
+    if (disableFilePersistence !== true && !fs.existsSync(this.settingsDir)) {
       try {
         fs.mkdirSync(this.settingsDir, { recursive: true });
       } catch (error: any) {

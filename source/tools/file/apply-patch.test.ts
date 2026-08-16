@@ -210,6 +210,18 @@ it.sequential('needsApproval: requires approval for outside workspace', async ()
   });
 });
 
+it.sequential('needsApproval: yolo mode does not bypass outside-workspace writes', async () => {
+  await withTempDir(async () => {
+    const tool = createTool(createMockSettingsService({ 'shell.autoApproveMode': 'always', 'sandbox.enabled': false }));
+    const result = await tool.needsApproval({
+      type: 'create_file',
+      path: '../outside.txt',
+      diff: '@@ -0,0 +1 @@\n+content',
+    });
+    expect(result).toBe(true);
+  });
+});
+
 it.sequential('needsApproval: auto-approves for create/update inside cwd', async () => {
   await withTempDir(async () => {
     const tool = createTool(createMockSettingsService());

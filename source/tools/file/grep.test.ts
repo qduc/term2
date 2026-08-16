@@ -6,6 +6,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createGrepToolDefinition, formatGrepCommandMessage } from './grep.js';
 import { SessionAccessState } from '../../services/session/session-access-state.js';
+import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import { wrapToolInvoke } from '../../lib/tool-invoke.js';
 import type { ToolDefinition } from '../../tools/types.js';
 import { ExecutionContext } from '../../services/execution-context.js';
@@ -360,6 +361,19 @@ it('grep requires approval for a path outside the workspace', async () => {
   expect(inside).toBe(false);
   expect(outside).toBe(true);
   expect(traversal).toBe(true);
+});
+
+it('grep does not require approval outside the workspace in yolo mode', async () => {
+  const definition = createGrepToolDefinition({
+    executionContext: { getCwd: () => '/tmp/some-workspace' } as any,
+    settingsService: createMockSettingsService({ 'shell.autoApproveMode': 'always', 'sandbox.enabled': false }),
+  });
+
+  const outside = await definition.needsApproval!({ pattern: 'x', path: '/etc' } as any, {} as any);
+  const traversal = await definition.needsApproval!({ pattern: 'x', path: '../../..' } as any, {} as any);
+
+  expect(outside).toBe(false);
+  expect(traversal).toBe(false);
 });
 
 it('grep does not require approval for a folder allowed for the session', async () => {

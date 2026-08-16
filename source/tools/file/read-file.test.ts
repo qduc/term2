@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { createReadFileToolDefinition } from './read-file.js';
 import { SessionAccessState } from '../../services/session/session-access-state.js';
+import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 
 it('orchestrator read_file description permits direct inspection', () => {
   const tool = createReadFileToolDefinition({ orchestratorMode: true });
@@ -129,6 +130,16 @@ it.sequential('needsApproval: prompts for path outside workspace', async () => {
     });
 
     expect(result).toBe(true);
+  });
+});
+
+it.sequential('needsApproval: yolo mode bypasses the workspace boundary for reads', async () => {
+  await withTempDir(async () => {
+    const tool = createReadFileToolDefinition({
+      settingsService: createMockSettingsService({ 'shell.autoApproveMode': 'always', 'sandbox.enabled': false }),
+    });
+    const result = await tool.needsApproval({ path: '/etc/outside.txt' });
+    expect(result).toBe(false);
   });
 });
 

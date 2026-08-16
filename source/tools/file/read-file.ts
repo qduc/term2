@@ -3,6 +3,7 @@ import * as fs from 'fs/promises';
 import { resolveWorkspacePath, relaxedNumber } from '../utils.js';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import { isSessionReadGranted } from '../../services/approval/session-read-access.js';
+import type { ISettingsService } from '../../services/service-interfaces.js';
 import type { SessionAccessState } from '../../services/session/session-access-state.js';
 import type { NestedToolCompatibilityState } from '../../services/session/nested-tool-compatibility-state.js';
 import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from '../format-helpers.js';
@@ -90,6 +91,8 @@ export const createReadFileToolDefinition = (
     sessionAccess?: SessionAccessState;
     /** Isolated legacy protocol for nested tools only. */
     nestedCompatibility?: NestedToolCompatibilityState;
+    /** YOLO (autoApproveMode 'always') read bypass. */
+    settingsService?: ISettingsService;
     /** Optional override for the result byte cap (tests). */
     maxResultBytes?: number;
   } = {},
@@ -100,6 +103,7 @@ export const createReadFileToolDefinition = (
     orchestratorMode = false,
     sessionAccess,
     nestedCompatibility,
+    settingsService,
     maxResultBytes,
   } = deps;
   return {
@@ -113,6 +117,13 @@ export const createReadFileToolDefinition = (
     parallelSafe: true,
     needsApproval: async (params, context) => {
       if (allowOutsideWorkspace) {
+        return false;
+      }
+
+      // YOLO mode ('always') approves read-only operations without a prompt,
+      // even outside the workspace. Write tools never consult this mode, so
+      // write authority is unchanged.
+      if (settingsService?.get('shell.autoApproveMode') === 'always') {
         return false;
       }
 

@@ -352,8 +352,13 @@ export const getAgentDefinition = (
         backgroundShellRegistry: rootBackgroundShellRegistry,
         backgroundShellWatches: rootBackgroundShellOutput?.watches,
       }),
-      createReadFileToolDefinition({ executionContext, allowOutsideWorkspace: true, orchestratorMode: true }),
-      createGrepToolDefinition({ executionContext, orchestratorMode: true, globAvailable: false }),
+      createReadFileToolDefinition({
+        executionContext,
+        allowOutsideWorkspace: true,
+        orchestratorMode: true,
+        settingsService,
+      }),
+      createGrepToolDefinition({ executionContext, orchestratorMode: true, globAvailable: false, settingsService }),
     );
     if (rootBackgroundShellRegistry) {
       const backgroundTools = createBackgroundShellJobToolDefinitions(
@@ -366,8 +371,8 @@ export const getAgentDefinition = (
     }
     if (codeContextEnabled) {
       tools.push(
-        createReadCodeOutlineToolDefinition({ executionContext }),
-        createCodeContextSearchToolDefinition({ executionContext, globAvailable: false }),
+        createReadCodeOutlineToolDefinition({ executionContext, settingsService }),
+        createCodeContextSearchToolDefinition({ executionContext, globAvailable: false, settingsService }),
       );
     }
     if (isGpt5) {
@@ -457,8 +462,8 @@ export const getAgentDefinition = (
 
   if (codeContextEnabled) {
     tools.push(
-      createReadCodeOutlineToolDefinition({ executionContext }),
-      createCodeContextSearchToolDefinition({ executionContext, globAvailable }),
+      createReadCodeOutlineToolDefinition({ executionContext, settingsService }),
+      createCodeContextSearchToolDefinition({ executionContext, globAvailable, settingsService }),
     );
   }
 
@@ -466,10 +471,11 @@ export const getAgentDefinition = (
     // Lite mode keeps lightweight context and delegation policy, but still allows file edits.
     if (!searchViaShell) {
       tools.push(
-        createGrepToolDefinition({ executionContext, globAvailable, allowOutsideWorkspace: true }),
+        createGrepToolDefinition({ executionContext, globAvailable, allowOutsideWorkspace: true, settingsService }),
         createFindFilesToolDefinition({
           executionContext,
           allowOutsideWorkspace: true,
+          settingsService,
         }),
       );
     }
@@ -477,6 +483,7 @@ export const getAgentDefinition = (
       createReadFileToolDefinition({
         executionContext,
         allowOutsideWorkspace: true,
+        settingsService,
       }),
     );
     if (isGpt5) {
@@ -494,12 +501,12 @@ export const getAgentDefinition = (
     } else {
       if (!searchViaShell) {
         tools.push(
-          createGrepToolDefinition({ executionContext, globAvailable, sessionAccess }),
-          createFindFilesToolDefinition({ executionContext, sessionAccess }),
+          createGrepToolDefinition({ executionContext, globAvailable, sessionAccess, settingsService }),
+          createFindFilesToolDefinition({ executionContext, sessionAccess, settingsService }),
         );
       }
       tools.push(
-        createReadFileToolDefinition({ executionContext, sessionAccess }),
+        createReadFileToolDefinition({ executionContext, sessionAccess, settingsService }),
         createCreateFileToolDefinition({
           settingsService,
           loggingService,

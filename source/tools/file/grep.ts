@@ -13,6 +13,7 @@ import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import { isSessionReadGranted } from '../../services/approval/session-read-access.js';
 import type { SessionAccessState } from '../../services/session/session-access-state.js';
 import type { NestedToolCompatibilityState } from '../../services/session/nested-tool-compatibility-state.js';
+import type { ISettingsService } from '../../services/service-interfaces.js';
 import { resolveWorkspacePath } from '../utils.js';
 import {
   getOutputText,
@@ -172,6 +173,8 @@ export const createGrepToolDefinition = (
     sessionAccess?: SessionAccessState;
     /** Isolated legacy protocol for nested tools only. */
     nestedCompatibility?: NestedToolCompatibilityState;
+    /** YOLO (autoApproveMode 'always') read bypass. */
+    settingsService?: ISettingsService;
   } = {},
 ): ToolDefinition<typeof searchParametersSchema> => {
   const {
@@ -181,6 +184,7 @@ export const createGrepToolDefinition = (
     allowOutsideWorkspace = false,
     sessionAccess,
     nestedCompatibility,
+    settingsService,
   } = deps;
   return {
     name: 'grep',
@@ -193,6 +197,13 @@ export const createGrepToolDefinition = (
     // unapproved filesystem read. Mirrors the glob tool's boundary check.
     needsApproval: async (params, context) => {
       if (allowOutsideWorkspace) {
+        return false;
+      }
+
+      // YOLO mode ('always') approves read-only operations without a prompt,
+      // even outside the workspace. Write tools never consult this mode, so
+      // write authority is unchanged.
+      if (settingsService?.get('shell.autoApproveMode') === 'always') {
         return false;
       }
 

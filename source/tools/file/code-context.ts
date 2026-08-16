@@ -13,6 +13,7 @@ import {
   type ToolResultItem,
 } from '../format-helpers.js';
 import { ExecutionContext } from '../../services/execution-context.js';
+import type { ISettingsService } from '../../services/service-interfaces.js';
 import {
   DeclEntry,
   ImportEntry,
@@ -118,15 +119,21 @@ const RELATION_DISPLAY_ORDER: RelationToken[] = [
 ];
 
 export const createReadCodeOutlineToolDefinition = (
-  deps: { executionContext?: ExecutionContext } = {},
+  deps: { executionContext?: ExecutionContext; settingsService?: ISettingsService } = {},
 ): ToolDefinition<typeof readCodeOutlineParametersSchema> => {
-  const { executionContext } = deps;
+  const { executionContext, settingsService } = deps;
   return {
     name: 'read_code_outline',
     description: READ_CODE_OUTLINE_DESCRIPTION,
     parameters: readCodeOutlineParametersSchema,
     parallelSafe: true,
     needsApproval: async ({ path: filePath }) => {
+      // YOLO mode ('always') approves read-only operations without a prompt,
+      // even outside the workspace. Write tools never consult this mode, so
+      // write authority is unchanged.
+      if (settingsService?.get('shell.autoApproveMode') === 'always') {
+        return false;
+      }
       try {
         const cwd = executionContext?.getCwd() || process.cwd();
         resolveWorkspacePath(filePath, cwd);
@@ -161,15 +168,22 @@ export const createReadCodeOutlineToolDefinition = (
 };
 
 export const createCodeContextSearchToolDefinition = (
-  deps: { executionContext?: ExecutionContext; globAvailable?: boolean } = {},
+  deps: { executionContext?: ExecutionContext; globAvailable?: boolean; settingsService?: ISettingsService } = {},
 ): ToolDefinition<typeof codeContextSearchParametersSchema> => {
-  const { executionContext, globAvailable = true } = deps;
+  const { executionContext, globAvailable = true, settingsService } = deps;
   return {
     name: 'code_context_search',
     description: buildCodeContextSearchDescription(globAvailable),
     parameters: codeContextSearchParametersSchema,
     parallelSafe: true,
     needsApproval: async (params) => {
+      // YOLO mode ('always') approves read-only operations without a prompt,
+      // even outside the workspace. Write tools never consult this mode, so
+      // write authority is unchanged.
+      if (settingsService?.get('shell.autoApproveMode') === 'always') {
+        return false;
+      }
+
       if (params.query_type !== 'related') {
         return false;
       }

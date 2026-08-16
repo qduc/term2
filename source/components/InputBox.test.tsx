@@ -198,7 +198,7 @@ const flushReactUpdates = async (iterations = 5) => {
 
 const renderAndFlush = async (element: React.ReactElement, context?: Parameters<typeof renderInAct>[1]) => {
   const result = await renderInAct(element, context);
-  await flushReactUpdates(10);
+  await flushReactUpdates(2);
   return result;
 };
 
@@ -206,7 +206,7 @@ const renderAndFlush = async (element: React.ReactElement, context?: Parameters<
 const writeInput = async (stdin: { write: (input: string) => void }, input: string) => {
   await act(async () => {
     stdin.write(input);
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 2; i++) {
       await new Promise((resolve) => setImmediate(resolve));
     }
   });
@@ -364,24 +364,29 @@ it.sequential('InputBox recognizes Alt+Enter when terminal input arrives in spli
 it.sequential(
   'clears stale trailing Escape in stdin buffer after delay so separate Enter is not misclassified as Alt+Enter',
   async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     const submissions: Array<{ turn: UserTurn; options?: { busyMode?: 'steer' | 'follow_up' } }> = [];
-    const { stdin } = await renderAndFlush(
-      <TestInputBox
-        {...defaultProps}
-        allowEmptySubmit={true}
-        onSubmit={(turn: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) =>
-          submissions.push({ turn, options })
-        }
-      />,
-    );
+    try {
+      const { stdin } = await renderAndFlush(
+        <TestInputBox
+          {...defaultProps}
+          allowEmptySubmit={true}
+          onSubmit={(turn: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) =>
+            submissions.push({ turn, options })
+          }
+        />,
+      );
 
-    await writeInput(stdin, '\x1b');
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 150));
-    });
-    await writeInput(stdin, '\r');
+      await writeInput(stdin, '\x1b');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(150);
+      });
+      await writeInput(stdin, '\r');
 
-    expect(submissions).toEqual([{ turn: { text: '' }, options: { busyMode: 'steer' } }]);
+      expect(submissions).toEqual([{ turn: { text: '' }, options: { busyMode: 'steer' } }]);
+    } finally {
+      vi.useRealTimers();
+    }
   },
 );
 

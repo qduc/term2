@@ -1259,7 +1259,7 @@ describe('ApplicationRunLoop', () => {
               yield {
                 type: 'completion',
                 responseId: 'resp-final',
-                output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'done' }] }],
+                output: [{ type: 'message', role: 'assistant', content: [{ type: 'text', text: 'done' }] }],
               };
               return;
             }
@@ -1269,7 +1269,7 @@ describe('ApplicationRunLoop', () => {
               type: 'completion',
               responseId: 'resp-1',
               output: [
-                { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'prose' }] },
+                { type: 'message', role: 'assistant', content: [{ type: 'text', text: 'prose' }] },
                 { type: 'tool_call', id: 'call-1', name: 'work', arguments: '{}' },
               ],
             };

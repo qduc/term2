@@ -6,11 +6,16 @@ admission tool (`source/services/execution-context.ts`,
 `source/tools/system/worktree.ts`), with the active-root fallback in
 `source/services/workspace/active-workspace-root.ts`.
 
-This landing changes documentation only: no production source or test file was
-touched. The three characterization tests cited in §8 as coverage gaps (G2 file
-completion, G5 sandbox allow-write, G6 command path classification) remain
-unmerged in `.worktrees/sb08-workspace-authority` and are separately authorized;
-the 8-file characterization gate in §9 is pending until they land.
+The original landing changed documentation only. The three characterization
+tests cited in §8 as coverage gaps (G2 file completion, G5 sandbox allow-write,
+G6 command path classification) have since landed: the
+`.worktrees/sb08-workspace-authority` packet was merged to `main` on 2026-08-16
+and that worktree no longer exists. The 8-file characterization gate in §9 has
+been run and passes.
+
+**Still unfinished:** this contract remains an audit draft that has not been
+owner-reviewed. Merging the packet settled the coverage gaps; it did not confer
+the review the draft is waiting on.
 
 ## 1. Contract
 
@@ -223,11 +228,17 @@ gaps with their pending characterizations.
 
 ## 9. Verification commands
 
-**No test gate applies to this docs-only landing:** no production source or
-test file changes, so there is no focused test command and the full suite is
-not required. The 8-file characterization gate below is **pending** and will
-apply once the three characterization tests (G2, G5, G6) land from
-`.worktrees/sb08-workspace-authority`.
+The 8-file characterization gate below **passed on 2026-08-16** after G2, G5,
+and G6 landed from `.worktrees/sb08-workspace-authority`:
+
+```text
+NODE_ENV=test pnpm vitest run <the 8 files listed below>
+PASS 8 files, 101 tests
+```
+
+The docs-only gates recorded below describe the original landing and reference
+worktrees that have since been removed; they are kept as a historical record,
+not as commands to re-run.
 
 Docs-only gates (all pass for this landing):
 
@@ -241,7 +252,7 @@ git -C /home/qduc/term2/.worktrees/sb09-slice-i-docs diff --check
 git -C /home/qduc/term2/.worktrees/sb09-slice-i-docs diff --name-only main
 ```
 
-Pending characterization gate (once G2/G5/G6 land):
+Characterization gate (passing):
 
 ```sh
 NODE_ENV=test pnpm test \

@@ -93,7 +93,14 @@ interface ReplayedBackgroundShellJob {
    * on a dead job. Idempotent per watchId:seq, mirroring the notification
    * messageId dedupe.
    */
-  firings?: { watchId: string; seq: number; matchedLines: string; droppedBytes?: number }[];
+  firings?: {
+    watchId: string;
+    seq: number;
+    matchedLines: string;
+    coalescedCount?: number;
+    seqRange?: { first: number; last: number };
+    droppedBytes?: number;
+  }[];
 }
 
 /**
@@ -743,6 +750,8 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
         watchId: event.watchId,
         seq: event.seq,
         matchedLines: event.matchedLines,
+        ...(event.coalescedCount !== undefined ? { coalescedCount: event.coalescedCount } : {}),
+        ...(event.seqRange !== undefined ? { seqRange: event.seqRange } : {}),
         ...(event.droppedBytes !== undefined ? { droppedBytes: event.droppedBytes } : {}),
       };
       const firings = job.firings ?? [];
@@ -859,6 +868,8 @@ function appendReplayedBackgroundShellJobs(state: ReplayState): void {
           watchId: firing.watchId,
           seq: firing.seq,
           matchedLines: firing.matchedLines,
+          ...(firing.coalescedCount !== undefined ? { coalescedCount: firing.coalescedCount } : {}),
+          ...(firing.seqRange !== undefined ? { seqRange: firing.seqRange } : {}),
           ...(firing.droppedBytes !== undefined ? { droppedBytes: firing.droppedBytes } : {}),
         },
       });

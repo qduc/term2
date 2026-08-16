@@ -91,6 +91,8 @@ describe('BackgroundShellWatches', () => {
         watchId,
         seq: 1,
         matchedLines: 'server listening on 3000',
+        coalescedCount: 1,
+        seqRange: { first: 1, last: 1 },
         droppedBytes: 0,
         command: 'npm run dev',
       },
@@ -141,7 +143,7 @@ describe('BackgroundShellWatches', () => {
     scheduler.advance(1500);
 
     expect(firings).toHaveLength(1);
-    expect(firings[0]).toMatchObject({ watchId, seq: 1 });
+    expect(firings[0]).toMatchObject({ watchId, seq: 1, coalescedCount: 200, seqRange: { first: 1, last: 1 } });
     expect(firings[0].matchedLines.split('\n')).toHaveLength(200);
   });
 
@@ -176,23 +178,54 @@ describe('BackgroundShellWatches', () => {
     expect(firings.map((firing) => firing.seq)).toEqual([1, 2]);
   });
 
-  it('defaults notifyLimit to 1 when a pattern is set and 5 otherwise', () => {
+  it('defaults notifyLimit to 0 (unlimited) regardless of whether a pattern is set', () => {
     const { store, scheduler, watches, firings } = setup();
     store.open('job-1');
 
     const patterned = watches.registerWatch({ jobId: 'job-1', pattern: /hit/ });
-    watches.push('job-1', 'stdout', 'hit\n');
-    scheduler.advance(1500);
-    watches.push('job-1', 'stdout', 'hit\n');
-    scheduler.advance(1500);
-    expect(firings.filter((firing) => firing.watchId === patterned)).toHaveLength(1);
+    for (let i = 0; i < 6; i++) {
+      watches.push('job-1', 'stdout', 'hit\n');
+      scheduler.advance(1500);
+    }
+    expect(firings.filter((firing) => firing.watchId === patterned)).toHaveLength(6);
 
     const anyLine = watches.registerWatch({ jobId: 'job-1' });
     for (let i = 0; i < 6; i++) {
       watches.push('job-1', 'stdout', `line ${i}\n`);
       scheduler.advance(1500);
     }
-    expect(firings.filter((firing) => firing.watchId === anyLine)).toHaveLength(5);
+    expect(firings.filter((firing) => firing.watchId === anyLine)).toHaveLength(6);
+  });
+
+  it('treats notifyLimit: 0 as unlimited: the watch keeps firing past any prior cap', () => {
+    const { store, scheduler, watches, firings } = setup();
+    store.open('job-1');
+    const watchId = watches.registerWatch({ jobId: 'job-1', pattern: /tick/, notifyLimit: 0 });
+
+    for (let i = 1; i <= 50; i++) {
+      watches.push('job-1', 'stdout', `tick ${i}\n`);
+      scheduler.advance(1500);
+    }
+
+    expect(firings).toHaveLength(50);
+    expect(firings.at(-1)).toMatchObject({ watchId, seq: 50 });
+  });
+
+  it('reports coalescedCount including lines evicted from the matched text by the byte cap', () => {
+    const { store, scheduler, watches, firings } = setup();
+    store.open('job-1');
+    const watchId = watches.registerWatch({ jobId: 'job-1', pattern: /x+/ });
+
+    // A burst whose total bytes exceed MAX_MATCHED_TEXT (4 KB) by an order of
+    // magnitude; only the newest 4 KB of joined text should be retained.
+    const line = `${'x'.repeat(50)}\n`;
+    for (let i = 0; i < 200; i++) watches.push('job-1', 'stdout', line);
+
+    scheduler.advance(1500);
+
+    expect(firings).toHaveLength(1);
+    expect(firings[0]).toMatchObject({ watchId, seq: 1, coalescedCount: 200, seqRange: { first: 1, last: 1 } });
+    expect(firings[0].matchedLines.length).toBeLessThanOrEqual(4096);
   });
 
   it('flushes undelivered matches during settleJob, before it returns, and never after terminal', () => {
@@ -379,7 +412,10 @@ describe('BackgroundShellWatches', () => {
 
     expect(() => watches.registerWatch({ jobId: 'job-1', idleMs: -1 })).toThrow(RangeError);
     expect(() => watches.registerWatch({ jobId: 'job-1', idleMs: 1.5 })).toThrow(RangeError);
-    expect(() => watches.registerWatch({ jobId: 'job-1', notifyLimit: 0 })).toThrow(RangeError);
+    expect(() => watches.registerWatch({ jobId: 'job-1', notifyLimit: -1 })).toThrow(RangeError);
+    expect(() => watches.registerWatch({ jobId: 'job-1', notifyLimit: 1.5 })).toThrow(RangeError);
+    // notifyLimit: 0 is the unlimited sentinel, not an error.
+    expect(() => watches.registerWatch({ jobId: 'job-1', notifyLimit: 0 })).not.toThrow();
     expect(() => watches.registerWatch({ jobId: 'job-1', fromOffset: -2 })).toThrow(RangeError);
     expect(() => watches.registerWatch({ jobId: 'job-unknown' })).toThrow(BackgroundShellWatchesError);
   });

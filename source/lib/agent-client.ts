@@ -264,6 +264,8 @@ export class AgentClient {
                 watchId: firing.watchId,
                 seq: firing.seq,
                 matchedLines: firing.matchedLines,
+                coalescedCount: firing.coalescedCount,
+                seqRange: firing.seqRange,
                 ...(firing.droppedBytes !== undefined ? { droppedBytes: firing.droppedBytes } : {}),
               }),
             );
@@ -968,6 +970,8 @@ export function backgroundShellEventToConversationEvent(
       watchId: event.watchId,
       seq: event.seq,
       matchedLines: event.matchedLines,
+      ...(event.coalescedCount !== undefined ? { coalescedCount: event.coalescedCount } : {}),
+      ...(event.seqRange !== undefined ? { seqRange: event.seqRange } : {}),
       ...(event.droppedBytes !== undefined ? { droppedBytes: event.droppedBytes } : {}),
     };
   }

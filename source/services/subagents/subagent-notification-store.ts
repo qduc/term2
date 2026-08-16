@@ -82,6 +82,10 @@ export interface BackgroundShellOutputNotification {
   seq: number;
   /** Bounded, complete-line match text carried by the firing. */
   matchedLines: string;
+  /** Distinct complete lines coalesced into this firing (incl. byte-cap evictions). */
+  coalescedCount?: number;
+  /** Inclusive per-watch seq range this firing represents. */
+  seqRange?: { first: number; last: number };
   /** Present only when the firing carried it. */
   droppedBytes?: number;
   recordedAt: number;
@@ -492,6 +496,8 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
         watchId: event.watchId,
         seq: event.seq,
         matchedLines: event.matchedLines,
+        ...(event.coalescedCount !== undefined ? { coalescedCount: event.coalescedCount } : {}),
+        ...(event.seqRange !== undefined ? { seqRange: event.seqRange } : {}),
         ...(event.droppedBytes !== undefined ? { droppedBytes: event.droppedBytes } : {}),
         recordedAt: this.#now(),
       };

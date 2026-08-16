@@ -186,6 +186,8 @@ export class ConversationLogger {
           watchId: event.watchId,
           seq: event.seq,
           matchedLines: event.matchedLines,
+          ...(event.coalescedCount !== undefined ? { coalescedCount: event.coalescedCount } : {}),
+          ...(event.seqRange !== undefined ? { seqRange: event.seqRange } : {}),
           ...(event.droppedBytes !== undefined ? { droppedBytes: event.droppedBytes } : {}),
         });
         return;

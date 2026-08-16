@@ -325,6 +325,8 @@ describe('ConversationOrchestrator', () => {
     await orchestrator.sendUserMessage('hello');
 
     expect(cfg.messages.appendMessages).toHaveBeenCalledTimes(1);
+    expect(cfg.loggingService.error).not.toHaveBeenCalled();
+    expect(cfg.loggingService.debug).toHaveBeenCalledWith('Suppressing abort error in sendUserMessage');
     expect(cfg.ui.onTurnEnd).toHaveBeenCalled();
   });
 

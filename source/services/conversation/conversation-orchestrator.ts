@@ -1371,6 +1371,11 @@ export class ConversationOrchestrator {
   }
 
   private logError(message: string, error: unknown): void {
+    // Abort-like failures are expected control flow for user cancellation and
+    // must not be emitted as application errors. Keep this at the logging
+    // boundary so every orchestrator call site shares the same classification.
+    if (isAbortLikeError(error)) return;
+
     this.config.loggingService.error(message, {
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,

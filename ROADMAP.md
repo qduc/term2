@@ -411,6 +411,12 @@ Before declaring the change complete:
 
 ### Institutionalization work
 
+- Complete the remaining service-seam dispositions as parallel read-only
+  audits through
+  [`docs/plans/service-boundary-contract-completion.md`](./docs/plans/service-boundary-contract-completion.md).
+  Synthesize their evidence before proposing separately authorized changes.
+  This follow-up does not broaden Phase 4's release gate: only a demonstrated
+  contract violation can become repair work or block stabilization exit.
 - Encode the workflow's non-negotiable gates in `AGENTS.md`.
 - Add lightweight change templates for contract, recovery, test matrix, and
   verification evidence.

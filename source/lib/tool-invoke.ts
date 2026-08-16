@@ -477,6 +477,8 @@ export function wrapNeedsApproval(
     // prompt must be suppressed — execute() returns the rejection to the model.
     checkInterceptors?: (params: unknown) => Promise<string | null>;
     toolName?: string;
+    /** Dynamic mode gate for policies such as YOLO that suppress approval prompts. */
+    bypassApproval?: () => boolean;
     registry?: {
       register: (registration: {
         toolName: string;
@@ -529,6 +531,9 @@ export function wrapNeedsApproval(
     }
 
     if (isZodToolParameterSchema(definition.parameters) && !definition.parameters.safeParse(normalized).success) {
+      return false;
+    }
+    if (options?.bypassApproval?.()) {
       return false;
     }
     try {

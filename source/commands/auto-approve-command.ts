@@ -15,7 +15,7 @@ export function createAutoApproveSlashCommand({
 }: CreateAutoApproveSlashCommandDeps): SlashCommand {
   return {
     name: 'auto-approve',
-    description: 'Set or cycle shell auto-approval mode (off, advisory, auto, always)',
+    description: 'Set or cycle tool auto-approval mode (off, advisory, auto, always)',
     expectsArgs: true,
     completion: { type: 'setting-value', trigger: AUTO_APPROVE_TRIGGER, settingKey: 'shell.autoApproveMode' },
     action: (args?: string) => {
@@ -48,10 +48,10 @@ export function createAutoApproveSlashCommand({
 
       if (newValue === 'always') {
         addSystemMessage(
-          'Shell auto-approval mode set to: ALWAYS. Sandbox disabled — every command runs without prompting (YOLO).',
+          'Tool auto-approval mode set to: ALWAYS. Sandbox disabled — every tool runs without a permission prompt (YOLO). Clarifying questions still use ask_user.',
         );
       } else {
-        addSystemMessage(`Shell auto-approval mode set to: ${newValue.toUpperCase()}`);
+        addSystemMessage(`Tool auto-approval mode set to: ${newValue.toUpperCase()}`);
       }
       return true;
     },

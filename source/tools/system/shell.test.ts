@@ -812,6 +812,15 @@ it('shell needsApproval always prompts for unsandboxed execution', async () => {
   expect(await tool.needsApproval({ command: 'ls', sandbox: 'unsandboxed' })).toBe(true);
 });
 
+it('shell needsApproval bypasses even unsandboxed execution in YOLO mode', async () => {
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'shell.autoApproveMode': 'always', 'sandbox.enabled': false }),
+  });
+
+  expect(await tool.needsApproval({ command: 'ls', sandbox: 'unsandboxed' })).toBe(false);
+});
+
 it('shell needsApproval prompts for Docker commands in the sandbox', async () => {
   const nestedCompatibility = createNestedCompatibility();
   const tool = createShellToolDefinition({

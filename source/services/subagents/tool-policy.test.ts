@@ -356,6 +356,32 @@ describe('worker shell sandbox approval parity', () => {
   });
 });
 
+describe('worker editor approval parity', () => {
+  it('bypasses nested editor approval in YOLO mode', async () => {
+    const policy = new SubagentToolPolicy({
+      settings: createMockSettings({ 'shell.autoApproveMode': 'always' }),
+      logger: createMockLogger(),
+      sessionContextService: createSessionContextService(),
+    });
+    const wrapped = policy.wrapWriteTool(
+      {
+        name: 'apply_patch',
+        description: 'patch',
+        parameters: z.object({ path: z.string() }),
+        needsApproval: () => true,
+        execute: async () => 'executed',
+        formatCommandMessage: () => [],
+      },
+      process.cwd(),
+      [],
+      (params: { path: string }) => [params.path],
+      true,
+    );
+
+    await expect(wrapped.needsApproval({ path: '../outside.txt' }, {})).resolves.toBe(false);
+  });
+});
+
 describe('worker shell auto-approval in always mode', () => {
   function wrapShell(mode: string | undefined, needsApproval: () => boolean | Promise<boolean>) {
     const execute = vi.fn(async () => 'executed');

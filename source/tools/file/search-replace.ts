@@ -289,6 +289,12 @@ export function createSearchReplaceToolDefinition(deps: {
     parameters: searchReplaceParametersSchema,
     approvalPresentation: getApprovalPresentationCapability('search_replace'),
     needsApproval: async (params) => {
+      if (settingsService.get('shell.autoApproveMode') === 'always') {
+        loggingService.security('search_replace needsApproval: auto-approved in YOLO mode', {
+          operationCount: getSearchReplaceOperations(params).length,
+        });
+        return false;
+      }
       try {
         const operations = getSearchReplaceOperations(params);
         const cwd = executionContext?.getCwd() || process.cwd();
@@ -540,9 +546,8 @@ export function createSearchReplaceToolDefinition(deps: {
         const indexedOperations = operations.map((operation, index) => ({
           operation,
           index,
-          // The workspace boundary was already enforced by `needsApproval` (which
-          // returns true and pauses the SDK for an out-of-workspace path). If we
-          // reach `execute` after the user approved, the write must proceed.
+          // Standard modes enforce the workspace boundary in `needsApproval`;
+          // YOLO deliberately reaches execute without a permission prompt.
           targetPath: resolveWorkspacePath(operation.path, cwd, { allowOutsideWorkspace: true }),
         }));
         const groups = new Map<string, typeof indexedOperations>();

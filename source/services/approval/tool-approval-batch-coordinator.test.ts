@@ -182,7 +182,12 @@ const makePending = (interruption: any) => ({
 
 const runBatch = async (
   interruption: any,
-  opts: { eligible?: boolean; policyDecision?: 'approve' | 'prompt'; registryAutoApprove?: boolean } = {},
+  opts: {
+    eligible?: boolean;
+    policyDecision?: 'approve' | 'prompt';
+    registryAutoApprove?: boolean;
+    mode?: 'off' | 'always';
+  } = {},
 ) => {
   if (opts.registryAutoApprove) {
     toolApprovalPolicyRegistry.clear();
@@ -214,6 +219,7 @@ const runBatch = async (
         source: 'llm',
       }),
       isUnsandboxedApprovalEligible: () => opts.eligible === true,
+      getAutoApproveMode: () => opts.mode ?? 'off',
     } as any,
     logger: { getCorrelationId: () => undefined } as any,
     sessionId: 's1',
@@ -230,6 +236,21 @@ const runBatch = async (
   toolApprovalPolicyRegistry.clear();
   return { result, appliedPlan };
 };
+
+it('always mode auto-approves editor interruptions in a continuation batch', async () => {
+  const { result, appliedPlan } = await runBatch(
+    {
+      name: 'apply_patch',
+      callId: 'batch-patch-yolo',
+      arguments: { operations: [{ type: 'create_file', path: '../outside.txt', diff: '@@ -0,0 +1 @@\n+x' }] },
+      agent: { name: 'TestAgent' },
+    },
+    { mode: 'always', policyDecision: 'prompt' },
+  );
+
+  expect(result.kind).toBe('ready');
+  expect(appliedPlan).toBe(true);
+});
 
 it('unsandboxed shell in a batch auto-approves via LLM when eligible and the policy approves', async () => {
   const { result, appliedPlan } = await runBatch(

@@ -159,7 +159,7 @@ it.sequential('needsApproval requires approval for a symlink target outside the 
   });
 });
 
-it.sequential('needsApproval yolo mode does not bypass outside-workspace writes', async () => {
+it.sequential('needsApproval yolo mode bypasses outside-workspace write approval', async () => {
   await withTempDir(async (workspaceDir) => {
     const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-search-replace-outside-'));
     try {
@@ -180,7 +180,7 @@ it.sequential('needsApproval yolo mode does not bypass outside-workspace writes'
         ],
       });
 
-      expect(result).toBe(true);
+      expect(result).toBe(false);
       await expect(fs.readFile(outsidePath, 'utf8')).resolves.toBe('hello outside');
     } finally {
       await fs.rm(outsideDir, { recursive: true, force: true });

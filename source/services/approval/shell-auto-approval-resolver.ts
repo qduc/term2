@@ -7,8 +7,17 @@ import {
 } from './shell-auto-approval-evaluator.js';
 import { getCallIdFromObject, getToolInfoFromInterruption } from '../interruption-info.js';
 import type { ShellAutoApprovalAgentClient } from '../conversation-agent-client.js';
+import { TOOL_NAME_ASK_USER } from '../../tools/tool-names.js';
 
 export type AutoApproveMode = 'off' | 'advisory' | 'auto' | 'always';
+
+/**
+ * YOLO suppresses approval prompts for every tool. `ask_user` is different:
+ * it is the model's user-input interaction, not an authority decision.
+ */
+export function shouldBypassToolApproval(toolName: string | undefined, mode: AutoApproveMode | undefined): boolean {
+  return mode === 'always' && toolName !== TOOL_NAME_ASK_USER;
+}
 
 const MAX_TRACKED_MANUAL_DECISIONS = 20;
 

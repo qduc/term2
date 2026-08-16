@@ -121,8 +121,8 @@ export const createReadFileToolDefinition = (
       }
 
       // YOLO mode ('always') approves read-only operations without a prompt,
-      // even outside the workspace. Write tools never consult this mode, so
-      // write authority is unchanged.
+      // even outside the workspace. The shared tool wrapper applies the same
+      // mode to mutating tools.
       if (settingsService?.get('shell.autoApproveMode') === 'always') {
         return false;
       }

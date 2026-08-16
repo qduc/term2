@@ -14,7 +14,7 @@ import { asRecord, getCallIdFromObject, getString, getToolInfoFromInterruption }
 import { selectAgentStreamItems, type AgentStream } from '../agent-stream.js';
 import { createContinuationHandle } from '../../contracts/continuation-handle.js';
 import type { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
-import type { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
+import { shouldBypassToolApproval, type ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
 import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
 import { parseToolCallArguments } from '../tool-call-arguments.js';
 import { buildPersistedAssistantTurnItems } from './conversation-turn-items.js';
@@ -226,6 +226,22 @@ export async function buildConversationResult(
 
     const agent = asRecord(interruptionRecord?.agent);
     const runContext = asRecord(asRecord(result.state)?._context);
+
+    if (shouldBypassToolApproval(toolName, shellAutoApproval.getAutoApproveMode())) {
+      logger.debug('Tool auto-approved in YOLO mode', {
+        eventType: 'approval.auto_approved',
+        category: 'approval',
+        phase: 'approval',
+        sessionId,
+        callId,
+        toolName,
+      });
+      return {
+        kind: 'auto_approve',
+        callId,
+        argumentsText,
+      };
+    }
 
     const registryDecision = await toolApprovalPolicyRegistry.evaluate({
       toolName,

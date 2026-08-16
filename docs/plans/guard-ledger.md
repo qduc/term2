@@ -540,6 +540,70 @@ pnpm test:provider-black-box
 PASS 19 files, 166 tests; 1 skipped
 ```
 
+### Global YOLO approval bypass with ask_user exception
+
+Disposition: **repaired locally on 2026-08-16; pending commit and merge.**
+shell.autoApproveMode=always is now a shared no-permission policy for root
+turns, continuations, nested workers, native and application editor tools,
+direct shell definitions, and application-owned post-execute permission gates.
+The ask_user tool is deliberately excluded because it collects user input; it
+is not an authority decision and must still suspend for an answer.
+
+```text
+Harm prevented: a YOLO turn stopping on an editor, nested-worker, direct-shell, or post-execute permission prompt after shell approval had already been disabled.
+Scope and execution paths: root buildAgentTools, native apply_patch, conversation result building, continuation batches, SubagentToolFactory and nested editor policy, direct file/shell definitions, and the root post-execute pause capability.
+Guard class: advisory approval gate; this removes false-positive permission prompts without removing tool execution/interceptor failures.
+Enforcement owner: shouldBypassToolApproval plus the shared needsApproval wrapper, result builder, batch coordinator, and root tool factory.
+Recovery owner: unchanged for genuine ask_user interactions, non-YOLO approvals, tool rejection results, sandbox/command failures, and lifecycle cancellation.
+Measured signal and observation boundary: the effective shell.autoApproveMode value at each approval boundary and the exact tool name.
+Direct evidence or proxy: centralized helper result and focused seam tests; no UI state is used as proof.
+Legitimate work that can produce the old signal: any mutating editor, unsandboxed shell request, nested worker tool, or application post-execute gate while always mode is effective.
+Configuration sources and precedence: ISettingsService effective shell.autoApproveMode; settings normalization still couples always mode to sandbox.enabled=false.
+Effective default and clamping: unchanged; only exact always bypasses, and ask_user is always excluded.
+Action and why the signal justifies it: return no approval requirement or policy approval in always mode, while preserving execution and interceptor paths.
+Partial-work settlement: unchanged; tools execute or return their own structured failure, and ask_user remains resumable.
+Retry, fallback, and provider-continuity semantics: unchanged.
+Observability fields: YOLO bypasses emit approval.auto_approved debug/security evidence at the existing approval boundary; no new user-visible prompt is synthesized.
+Persisted-setting migration, if any: none.
+Rollback boundary: the shared helper and its callers, plus focused approval/editor/shell tests.
+Ledger row: global YOLO approval bypass with ask_user exception.
+```
+
+Red proof before the shared production repair:
+
+```text
+NODE_ENV=test pnpm exec vitest run <focused approval/editor tests>
+FAIL: native apply_patch, generic needsApproval wrapping, non-shell continuation policy,
+      continuation batch, and conversation-result editor cases still prompted in always mode.
+```
+
+Detection gap: YOLO had been implemented as a shell/bash evaluator shortcut and
+read-tool bypass. Mutating editor definitions, the native apply_patch override,
+continuation policy, and nested worker wrappers each had independent approval
+owners, so shell-focused coverage did not prove a global contract. The new tests
+cover the shared wrapper, root and nested seams, the direct tool definitions,
+both initial and continuation paths, the post-execute capability, and the
+ask_user exception.
+
+Verification:
+
+```text
+NODE_ENV=test pnpm exec vitest run <11 focused files>
+PASS 11 files, 378 tests
+
+pnpm typecheck
+PASS
+
+pnpm exec prettier --check <changed-files>
+PASS
+
+git diff --check
+PASS
+
+NODE_ENV=test pnpm test
+PASS 496 files passed, 1 skipped; 6418 tests passed, 6 expected failures, 2 skipped
+```
+
 ## Reference: catalogued guards
 
 Recorded so the next reader does not re-derive them. **No row here owes a test.**

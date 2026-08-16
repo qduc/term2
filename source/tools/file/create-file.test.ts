@@ -514,7 +514,7 @@ it.sequential('needsApproval requires approval and handles error when path is ou
   });
 });
 
-it.sequential('needsApproval yolo mode does not bypass outside-workspace writes', async () => {
+it.sequential('needsApproval yolo mode bypasses outside-workspace write approval', async () => {
   await withTempDir(async () => {
     const tool = createTool(createMockSettingsService({ 'shell.autoApproveMode': 'always', 'sandbox.enabled': false }));
     const result = await tool.needsApproval({
@@ -522,7 +522,7 @@ it.sequential('needsApproval yolo mode does not bypass outside-workspace writes'
       content: 'initial content',
     });
 
-    expect(result).toBe(true);
+    expect(result).toBe(false);
   });
 });
 

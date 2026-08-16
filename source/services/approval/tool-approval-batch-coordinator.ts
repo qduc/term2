@@ -4,6 +4,7 @@ import { createApprovalRequiredTerminal } from '../conversation/conversation-res
 import type { ApprovalDecisionPolicy } from './approval-decision-policy.js';
 import type { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
 import type { ShellAutoApprovalResolver } from './shell-auto-approval-resolver.js';
+import { shouldBypassToolApproval } from './shell-auto-approval-resolver.js';
 import type { ContinuationPlanApplier } from '../session/continuation-plan-applier.js';
 import type { ContinuationState } from '../session/continuation-state.js';
 import {
@@ -112,18 +113,21 @@ export class ToolApprovalBatchCoordinator {
         sessionId: this.deps.sessionId,
         traceId: this.deps.logger.getCorrelationId() ?? 'trace-unknown',
       });
-      const forceHumanApproval = requiresHumanShellApproval(
-        toolName,
-        parseResult.arguments,
-        this.deps.sessionId,
-        this.deps.sessionAccess,
-        this.deps.nestedCompatibility,
-        {
-          // Unsandboxed escapes may be evaluated by the LLM auto-approval path
-          // when the sandbox is enabled and auto-approval is in advisory/auto mode.
-          llmMayEvaluateUnsandboxed: this.deps.shellAutoApproval.isUnsandboxedApprovalEligible(),
-        },
-      );
+      const yolo = shouldBypassToolApproval(toolName, this.deps.shellAutoApproval.getAutoApproveMode?.());
+      const forceHumanApproval = yolo
+        ? false
+        : requiresHumanShellApproval(
+            toolName,
+            parseResult.arguments,
+            this.deps.sessionId,
+            this.deps.sessionAccess,
+            this.deps.nestedCompatibility,
+            {
+              // Unsandboxed escapes may be evaluated by the LLM auto-approval path
+              // when the sandbox is enabled and auto-approval is in advisory/auto mode.
+              llmMayEvaluateUnsandboxed: this.deps.shellAutoApproval.isUnsandboxedApprovalEligible(),
+            },
+          );
       const dockerHostControl = isDockerHostControlShellApproval(
         toolName,
         parseResult.arguments,
@@ -132,15 +136,19 @@ export class ToolApprovalBatchCoordinator {
         this.deps.nestedCompatibility,
       );
 
-      const registryDecision = await this.#policyRegistry.evaluate({
-        toolName,
-        args: parseResult.arguments,
-        context: runContext,
-      });
+      const registryDecision = yolo
+        ? { kind: 'auto_approve' as const }
+        : await this.#policyRegistry.evaluate({
+            toolName,
+            args: parseResult.arguments,
+            context: runContext,
+          });
 
       let decision: 'approve' | 'reject' | 'prompt';
       let llmAdvisory;
-      if (forceHumanApproval) {
+      if (yolo) {
+        decision = 'approve';
+      } else if (forceHumanApproval) {
         decision = 'prompt';
       } else if (registryDecision.kind === 'auto_approve' && !isUnsandboxedShell(toolName, parseResult.arguments)) {
         decision = 'approve';

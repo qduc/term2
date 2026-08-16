@@ -707,6 +707,12 @@ export function createShellToolDefinition(deps: {
     description: shellDescription,
     parameters: shellParametersSchema,
     needsApproval: async (params, context) => {
+      if (settingsService.get('shell.autoApproveMode') === 'always') {
+        loggingService.security('Shell tool needsApproval: auto-approved in YOLO mode', {
+          command: typeof params?.command === 'string' ? params.command.substring(0, 100) : String(params?.command),
+        });
+        return false;
+      }
       try {
         if (params.sandbox === 'unsandboxed') {
           return true;

@@ -1208,6 +1208,139 @@ it.sequential('shell execute stops a running command when the tool invocation is
   expect(output.includes('finished')).toBe(false);
 });
 
+it.sequential('shell execute characterizes the post-approval RTK command boundary', async () => {
+  const rtkPath = '/tmp/rtk/rtk';
+  const executedCommands: string[] = [];
+  let installerCalls = 0;
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'shell.useRtkCompression': true, 'sandbox.enabled': false }),
+    rtkInstaller: async () => {
+      installerCalls += 1;
+      return rtkPath;
+    },
+    executeShellCommandImpl: async (command) => {
+      executedCommands.push(command);
+      return { stdout: 'stubbed', stderr: '', exitCode: 0, timedOut: false };
+    },
+  });
+
+  const corpus = [
+    {
+      command: 'ls package.json',
+      expected: '"/tmp/rtk/rtk" ls package.json',
+    },
+    {
+      command: 'printf hello',
+      expected: 'printf hello',
+    },
+    {
+      command: 'curl https://example.com',
+      expected: 'curl https://example.com',
+    },
+    {
+      command: 'git log | grep x',
+      expected: 'git log | grep x',
+    },
+    {
+      command: 'git status > out.txt',
+      expected: 'git status > out.txt',
+    },
+    {
+      command: 'curl https://example.com && git log',
+      expected: 'curl https://example.com && "/tmp/rtk/rtk" git log',
+    },
+  ];
+
+  for (const { command, expected } of corpus) {
+    await tool.execute({ command, timeout_ms: 60_000, max_output_length: 10_000 });
+    expect(executedCommands.at(-1)).toBe(expected);
+  }
+
+  // The installer has no command argument: the exact corpus above is the
+  // supported-command admission evidence, while the executor spy proves the
+  // corresponding rewrite strings independently of the AST helper.
+  expect(installerCalls).toBe(2);
+});
+
+it.sequential(
+  'shell execute leaves an eligible local command unchanged when RTK installation resolves null',
+  async () => {
+    let executedCommand: string | undefined;
+    let installerCalls = 0;
+    const tool = createShellToolDefinition({
+      loggingService: createNoopLogger(),
+      settingsService: createMockSettingsService({ 'shell.useRtkCompression': true, 'sandbox.enabled': false }),
+      rtkInstaller: async () => {
+        installerCalls += 1;
+        return null;
+      },
+      executeShellCommandImpl: async (command) => {
+        executedCommand = command;
+        return { stdout: 'stubbed', stderr: '', exitCode: 0, timedOut: false };
+      },
+    });
+
+    await tool.execute({ command: 'ls package.json', timeout_ms: 60_000, max_output_length: 10_000 });
+
+    expect(installerCalls).toBe(1);
+    expect(executedCommand).toBe('ls package.json');
+  },
+);
+
+it.sequential('shell execute bypasses RTK for SSH through the remote execution seam', async () => {
+  let installerCalls = 0;
+  let remoteCommand: string | undefined;
+  const sshService: ISSHService = {
+    connect: async () => {},
+    disconnect: async () => {},
+    isConnected: () => true,
+    executeCommand: async (command) => {
+      remoteCommand = command;
+      return { stdout: 'stubbed remote', stderr: '', exitCode: 0, timedOut: false };
+    },
+    readFile: async () => '',
+    writeFile: async () => {},
+    mkdir: async () => {},
+  };
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'shell.useRtkCompression': true }),
+    executionContext: new ExecutionContext(sshService, '/remote/workspace'),
+    rtkInstaller: async () => {
+      installerCalls += 1;
+      return '/tmp/rtk/rtk';
+    },
+    executeShellCommandImpl: async (command, options) => {
+      expect(options?.sshService).toBe(sshService);
+      return sshService.executeCommand(command);
+    },
+  });
+
+  await tool.execute({ command: 'ls package.json', timeout_ms: 60_000, max_output_length: 10_000 });
+
+  expect(installerCalls).toBe(0);
+  expect(remoteCommand).toBe('ls package.json');
+});
+
+it.sequential('shell execute propagates an injected RTK installer rejection', async () => {
+  let executorCalled = false;
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'shell.useRtkCompression': true, 'sandbox.enabled': false }),
+    rtkInstaller: async () => {
+      throw new Error('installer seam failed');
+    },
+    executeShellCommandImpl: async () => {
+      executorCalled = true;
+      return { stdout: 'stubbed', stderr: '', exitCode: 0, timedOut: false };
+    },
+  });
+
+  await expect(tool.execute({ command: 'ls package.json' })).rejects.toThrow('installer seam failed');
+  expect(executorCalled).toBe(false);
+});
+
 it.sequential('shell execute does not install RTK for unsupported commands', async () => {
   let installCalled = false;
 

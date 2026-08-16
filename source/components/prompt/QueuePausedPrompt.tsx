@@ -11,12 +11,12 @@ export interface QueuePausedPromptProps {
 
 const QueuePausedPrompt: FC<QueuePausedPromptProps> = ({ queueLength, pauseReason, onResume, onDiscard }) => {
   useInput((input, key) => {
-    if (input === 'r') {
+    if (input === 'r' || input === 'R') {
       onResume();
       return;
     }
 
-    if (input === 'd') {
+    if (input === 'd' || input === 'D') {
       onDiscard();
       return;
     }
@@ -28,11 +28,16 @@ const QueuePausedPrompt: FC<QueuePausedPromptProps> = ({ queueLength, pauseReaso
   });
 
   return (
-    <Box flexDirection="column">
-      <Text color="yellow">
-        Queue paused: {queueLength} item(s) pending.
-        {pauseReason === 'failure' ? ' Last turn failed.' : ''} <Text color="green">[R]esume</Text>{' '}
-        <Text color="red">[D]iscard</Text>
+    <Box flexDirection="column" marginY={1}>
+      <Text color="#fbbf24">
+        ⏸ Queue paused: {queueLength} item(s) pending.
+        {pauseReason === 'failure' ? ' Last turn failed.' : ''}{' '}
+        <Text color="#22c55e" bold>
+          [<Text color="#4ade80">R</Text>]esume
+        </Text>{' '}
+        <Text color="#ef4444" bold>
+          [<Text color="#f87171">D</Text>]iscard
+        </Text>
       </Text>
     </Box>
   );

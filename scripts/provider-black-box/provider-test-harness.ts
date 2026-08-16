@@ -1,4 +1,4 @@
-import { createWriteStream, rmSync } from 'node:fs';
+import { createWriteStream, existsSync, rmSync, unlinkSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,6 +7,11 @@ import { finished } from 'node:stream/promises';
 import type { Writable } from 'node:stream';
 import { stripVTControlCharacters } from 'node:util';
 import { resolveSettingsDirectory } from '../../source/services/settings/settings-path.js';
+import {
+  HARNESS_IDLE_ENV,
+  readHarnessIdleGeneration,
+  waitForHarnessIdleGeneration,
+} from '../../source/lib/harness-input-idle.js';
 
 const openWorkspaceRoots = new Set<string>();
 
@@ -93,6 +98,7 @@ export interface IsolatedWorkspacePaths {
   conversationsDir: string;
   logDir: string;
   outputsDir: string;
+  idlePath: string;
 }
 
 export interface ChildExit {
@@ -118,6 +124,10 @@ export interface PtyChildDriver {
   waitForOutput(needle: string, timeoutMs?: number): Promise<void>;
   waitForVisibleOutput(needle: string, timeoutMs?: number): Promise<void>;
   waitForState(predicate: (snapshot: ChildSnapshot) => boolean, timeoutMs?: number): Promise<ChildSnapshot>;
+  /** Latest composer-idle generation, or 0 before the child has accepted input. */
+  readIdleGeneration(): number;
+  /** Wait until the child publishes an idle generation greater than `after`. */
+  waitForIdleInput(options?: { after?: number; timeoutMs?: number }): Promise<number>;
   waitForExit(timeoutMs?: number): Promise<ChildExit>;
   terminate(options?: { signal?: NodeJS.Signals; graceMs?: number; timeoutMs?: number }): Promise<ChildExit>;
   kill(signal?: NodeJS.Signals): void;
@@ -361,6 +371,7 @@ function createWorkspacePaths(root: string): IsolatedWorkspacePaths {
       env: { XDG_STATE_HOME: stateDir, LOCALAPPDATA: join(root, 'AppData', 'Local') },
     }),
     outputsDir: join(root, 'outputs'),
+    idlePath: join(stateDir, 'input-idle'),
   };
 }
 
@@ -390,6 +401,7 @@ function createWorkspaceEnvironment(
     TERM2_CONVERSATIONS_DIR: paths.conversationsDir,
     TERM2_LOG_DIR: paths.logDir,
     TERM2_CACHE_DIR: paths.cacheDir,
+    [HARNESS_IDLE_ENV]: paths.idlePath,
   });
   return env;
 }
@@ -422,6 +434,9 @@ function createPtyChild(options: {
   cols?: number;
   rows?: number;
 }): PtyChildDriver {
+  const idlePath = options.env[HARNESS_IDLE_ENV];
+  if (idlePath && existsSync(idlePath)) unlinkSync(idlePath);
+
   const terminal = spawn('python3', ['-u', '-c', PYTHON_PTY_BRIDGE, options.command, ...options.args], {
     cwd: options.cwd,
     env: {
@@ -635,6 +650,18 @@ function createPtyChild(options: {
     waitForVisibleOutput: (needle, timeoutMs) =>
       waitForState((value) => value.visibleOutput.includes(needle), timeoutMs).then(() => undefined),
     waitForState,
+    readIdleGeneration: () => {
+      const idlePath = options.env[HARNESS_IDLE_ENV];
+      if (!idlePath) return 0;
+      return readHarnessIdleGeneration(idlePath);
+    },
+    waitForIdleInput: async ({ after = 0, timeoutMs } = {}) => {
+      const idlePath = options.env[HARNESS_IDLE_ENV];
+      if (!idlePath) {
+        throw new Error(`${HARNESS_IDLE_ENV} is required to wait for composer idle.`);
+      }
+      return waitForHarnessIdleGeneration(idlePath, { after, timeoutMs });
+    },
     waitForExit,
     terminate,
     kill: (signal = 'SIGTERM') => {

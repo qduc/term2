@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnTerminal, type TerminalSession } from './test-helpers/terminal-e2e.js';
+import { HARNESS_IDLE_ENV, waitForHarnessIdleGeneration } from './lib/harness-input-idle.js';
 
 const E2E_TIMEOUT_MS = 45_000;
 
@@ -29,6 +30,7 @@ it.sequential('starts the terminal UI and exits on Ctrl+C', { timeout: E2E_TIMEO
   tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-e2e-home-'));
   tempConversationsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-e2e-conversations-'));
 
+  const idlePath = path.join(tempHome, 'input-idle');
   session = spawnTerminal('node', ['--import', 'tsx', 'source/cli.tsx', '--lite'], {
     cwd: process.cwd(),
     env: {
@@ -36,16 +38,16 @@ it.sequential('starts the terminal UI and exits on Ctrl+C', { timeout: E2E_TIMEO
       OPENAI_API_KEY: 'test-key',
       TERM2_CONVERSATIONS_DIR: tempConversationsDir,
       DISABLE_LOGGING: '1',
+      [HARNESS_IDLE_ENV]: idlePath,
     },
   });
 
   await session.waitForOutput('Lite', E2E_TIMEOUT_MS);
-  await session.waitForOutput('❯ ', E2E_TIMEOUT_MS);
+  await waitForHarnessIdleGeneration(idlePath, { timeoutMs: E2E_TIMEOUT_MS });
 
   session.write('\x03');
 
   const exit = await session.waitForExit(E2E_TIMEOUT_MS);
   expect(exit.exitCode).toBe(0);
   expect(session.getVisibleOutput()).toContain('Lite');
-  expect(session.getVisibleOutput()).toContain('❯ ');
 });

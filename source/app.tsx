@@ -42,6 +42,7 @@ import { tryExecuteSlashCommand } from './utils/slash-command-dispatch.js';
 import type { SkillsService, SkillInfo } from './services/skills/skills-service.js';
 import { buildTerminalTitleLabel, setTerminalTitle } from './utils/output/terminal-title.js';
 import { deriveInputOwner } from './lib/input-owner.js';
+import { publishHarnessInputState } from './lib/harness-input-idle.js';
 import { handleSettingsIntent } from './components/input/settings-intent-host.js';
 import {
   registerSandboxNetworkApprovalHandler,
@@ -697,6 +698,10 @@ const App: FC<AppProps> = ({
   useEffect(() => {
     setTerminalTitle(buildTerminalTitleLabel(terminalTitleBase, effectiveIsProcessing));
   }, [effectiveIsProcessing, terminalTitleBase]);
+
+  useEffect(() => {
+    publishHarnessInputState({ owner: inputOwner.kind, processing: effectiveIsProcessing });
+  }, [effectiveIsProcessing, inputOwner.kind]);
 
   const handleNavigateQuestion = useCallback(
     (direction: 'prev' | 'next') => {

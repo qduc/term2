@@ -36,7 +36,10 @@ export const renderInAct = async (element: React.ReactElement, context?: Teardow
 
   await act(async () => {
     result = render(element);
-    await new Promise((resolve) => realSetTimeout(resolve, 10));
+    // Ink renders synchronously; yield once so effects and stream writes can
+    // settle without imposing a fixed 10ms delay on every render. Use the
+    // real timer because callers may have enabled fake timers.
+    await new Promise((resolve) => realSetTimeout(resolve, 0));
   });
 
   const schedule =

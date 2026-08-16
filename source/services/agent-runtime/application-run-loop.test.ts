@@ -1138,6 +1138,75 @@ describe('ApplicationRunLoop', () => {
     });
   });
 
+  it('emits a per-request usage_update as each dispatched request settles', async () => {
+    let turns = 0;
+    const model: StreamedModelTurn = {
+      async *stream() {
+        turns++;
+        if (turns === 1) {
+          yield { type: 'tool_call', id: 'call-usage', name: 'usage_tool', arguments: '{}' };
+          yield {
+            type: 'completion',
+            responseId: 'resp-tool',
+            output: [{ type: 'tool_call', id: 'call-usage', name: 'usage_tool', arguments: '{}' }],
+            usage: { inputTokens: 10, outputTokens: 2, cachedInputTokens: 4 },
+          };
+          return;
+        }
+        yield {
+          type: 'completion',
+          responseId: 'resp-final',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'done' }] }],
+          usage: { inputTokens: 20, outputTokens: 3, cachedInputTokens: 5 },
+        };
+      },
+    };
+    const tool: ToolDefinition = {
+      name: 'usage_tool',
+      description: 'Reports usage',
+      parameters: z.object({}),
+      needsApproval: () => false,
+      execute: () => 'ok',
+      formatCommandMessage: () => [],
+    };
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(
+      { ...agent, tools: [tool] },
+      'use the tool',
+    );
+
+    const events = await collect(stream);
+    const updates = events.filter((event) => (event as { type?: string }).type === 'usage_update');
+
+    // Each update carries that request's own usage, not the accumulating run total.
+    expect(updates).toEqual([
+      {
+        type: 'usage_update',
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cache_read_tokens: 4 },
+      },
+      {
+        type: 'usage_update',
+        usage: { prompt_tokens: 20, completion_tokens: 3, total_tokens: 23, cache_read_tokens: 5 },
+      },
+    ]);
+  });
+
+  it('emits no usage_update for a request whose completion reports no usage', async () => {
+    const model: StreamedModelTurn = {
+      async *stream() {
+        yield {
+          type: 'completion',
+          responseId: 'resp-no-usage',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'done' }] }],
+        };
+      },
+    };
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'no usage please');
+
+    const events = await collect(stream);
+
+    expect(events.filter((event) => (event as { type?: string }).type === 'usage_update')).toEqual([]);
+  });
+
   it('owns a text turn without an SDK runner', async () => {
     const loop = new ApplicationRunLoop({ resolveModel: () => textModel('hello', 'resp-1') });
     const stream = loop.startStream(agent, 'say hello', {

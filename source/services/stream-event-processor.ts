@@ -231,13 +231,16 @@ export async function* processStreamEvents(
   // the run) and stays authoritative for the terminal result, the session
   // accumulator, and persisted turn usage. The footer, though, is a
   // per-model-turn indicator: it should keep showing the most recent request's
-  // own usage rather than the accumulated run total. The live `usage_update`
-  // path never fires for application run-loop streams (usage is only carried on
-  // terminal completions), so without this the footer falls back to the run
-  // total and reads as an accumulated stat. Surface the last raw response's
-  // per-request usage as one final `usage_update` so the UI's per-turn path
-  // receives a true per-request figure. Providers without per-request usage
-  // emit nothing here and the footer falls back to the run total as before.
+  // own usage rather than the accumulated run total. Surface the last raw
+  // response's per-request usage as one final `usage_update` so the UI's
+  // per-turn path receives a true per-request figure even when no live update
+  // fired. Providers without per-request usage emit nothing here and the footer
+  // falls back to the run total as before.
+  //
+  // The application run loop emits a live `usage_update` as each request
+  // settles, so for those streams this restates the last request's usage
+  // harmlessly. It stays for stream sources that carry usage only on the
+  // terminal completion.
   if (usageFromRawResponses) {
     yield { type: 'usage_update', usage: usageFromRawResponses };
   }

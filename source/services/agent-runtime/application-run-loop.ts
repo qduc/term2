@@ -1143,6 +1143,10 @@ export class ApplicationRunLoop {
         providerUsd: completion.costUsd,
       });
       queue.push({ type: 'cost_update', record });
+      // Cost and usage arrive in the same completion metadata, so surface both
+      // live. The footer is a per-request indicator: emit this request's own
+      // usage, never the run accumulator in `state.usage`.
+      if (normalizedCompletionUsage) queue.push({ type: 'usage_update', usage: normalizedCompletionUsage });
       this.#evaluateRunBudget(state, stream, queue);
       stream.lastResponseId = completion.responseId;
       stream.rawResponses?.push(completion);

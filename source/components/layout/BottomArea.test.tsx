@@ -9,7 +9,7 @@ import type { SlashCommand } from '../../slash-commands.js';
 import { MenuControllerImpl } from '../input/menu-controller.js';
 import { useFirstRunSetupGate } from '../../hooks/use-first-run-setup.js';
 import { getProvider } from '../../providers/index.js';
-import { renderInAct } from '../../test-helpers/ink-testing.js';
+import { renderInAct, rerenderInAct } from '../../test-helpers/ink-testing.js';
 import {
   conversationUIReducer,
   createInitialUIState,
@@ -282,6 +282,47 @@ it.sequential('BottomArea gives the background task manager exclusive input owne
     () => onBackgroundTaskManagerOpenChange.mock.lastCall?.[0] === false,
     'background task manager close',
   );
+  expect(onBackgroundTaskManagerOpenChange).toHaveBeenLastCalledWith(false);
+  act(() => view.unmount());
+});
+
+it.sequential('BottomArea closes the manager when a higher-priority prompt preempts it', async () => {
+  const details = {
+    kind: 'subagent' as const,
+    id: 'run-worker',
+    role: 'worker',
+    task: 'implement the background overview',
+    taskPreview: 'implement the background overview',
+    status: 'running' as const,
+    startedAt: Date.now(),
+    elapsedMs: 0,
+    toolCounts: {},
+  };
+  const onBackgroundTaskManagerOpenChange = vi.fn();
+  const props = {
+    ...baseProps,
+    listBackgroundTaskDetails: () => [details],
+    getBackgroundTaskDetails: () => details,
+    stopBackgroundTask: () => ({ ok: false as const, code: 'not_active' as const }),
+    onBackgroundTaskManagerOpenChange,
+  };
+  const view = await renderBottomArea(props);
+
+  await act(async () => view.stdin.write('\x07'));
+  await waitForBottomArea(
+    () => view.lastFrame()?.includes('Manage background tasks') === true,
+    'the background task manager',
+  );
+
+  await rerenderInAct(
+    view,
+    <InputProvider>
+      <ControlledBottomArea props={{ ...props, handoffState: { capturedText: '', stage: 'confirm_model' } }} />
+    </InputProvider>,
+  );
+
+  expect(view.lastFrame()).toContain('Change model?');
+  expect(view.lastFrame()).not.toContain('Manage background tasks');
   expect(onBackgroundTaskManagerOpenChange).toHaveBeenLastCalledWith(false);
   act(() => view.unmount());
 });

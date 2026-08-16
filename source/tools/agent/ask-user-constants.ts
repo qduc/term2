@@ -1,4 +1,4 @@
-export const ASK_USER_CUSTOM_ANSWER_LABEL = 'Type custom answer...';
+export const ASK_USER_CUSTOM_ANSWER_LABEL = 'Something else… (type your answer)';
 export const ASK_USER_DECLINE_LABEL = 'Decline to answer';
 export const ASK_USER_DECLINE_RESULT = 'User declined to answer.';
 export const ASK_USER_NO_ANSWER_RESULT = 'User did not provide an answer.';

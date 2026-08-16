@@ -9,14 +9,7 @@ import {
 import { resolveSessionReadFolder } from '../../services/approval/session-read-grant-target.js';
 import { generateDiff } from '../../utils/output/diff.js';
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_ASK_USER, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
-import {
-  ASK_USER_CUSTOM_ANSWER_LABEL,
-  ASK_USER_DECLINE_LABEL,
-  ASK_USER_DECLINE_RESULT,
-  ASK_USER_SUBMIT_LABEL,
-  ASK_USER_PREV_QUESTION_LABEL,
-  ASK_USER_NEXT_QUESTION_LABEL,
-} from '../../tools/agent/ask-user-constants.js';
+import { ASK_USER_CUSTOM_ANSWER_LABEL, ASK_USER_SUBMIT_LABEL } from '../../tools/agent/ask-user-constants.js';
 import DiffView from '../layout/DiffView.js';
 import { requestsDockerHostControl } from '../../utils/shell/sandbox/docker-host-control.js';
 
@@ -374,22 +367,13 @@ const ApprovalPrompt: FC<Props> = ({
       return deniedReadMenuItems;
     }
 
-    const items = isMultiSelect
-      ? [...askUserOptionLabels, ASK_USER_SUBMIT_LABEL, ASK_USER_CUSTOM_ANSWER_LABEL, ASK_USER_DECLINE_LABEL]
-      : [...askUserOptionLabels, ASK_USER_CUSTOM_ANSWER_LABEL, ASK_USER_DECLINE_LABEL];
-
-    // Add navigation items only when there are multiple questions
-    if (hasMultipleQuestions) {
-      items.push(ASK_USER_PREV_QUESTION_LABEL);
-      items.push(ASK_USER_NEXT_QUESTION_LABEL);
-    }
-
-    return items;
+    return isMultiSelect
+      ? [...askUserOptionLabels, ASK_USER_SUBMIT_LABEL, ASK_USER_CUSTOM_ANSWER_LABEL]
+      : [...askUserOptionLabels, ASK_USER_CUSTOM_ANSWER_LABEL];
   }, [
     isAskUser,
     isMultiSelect,
     askUserOptionLabels,
-    hasMultipleQuestions,
     deniedReadMenuItems,
     isDeniedReadShell,
     isFolderReadApproval,
@@ -419,15 +403,58 @@ const ApprovalPrompt: FC<Props> = ({
       return;
     }
 
-    // `n` lets the user keep the highlighted predefined answer and append a
-    // free-form note in the composer. It is intentionally unavailable for
-    // multi-select and non-answer menu items.
-    if (isAskUser && !isMultiSelect && input.toLowerCase() === 'n' && selectedIndex < askUserOptions.length) {
-      const selectedAnswer = askUserOptions[selectedIndex]?.label;
-      if (selectedAnswer) {
-        onTypeAnswer?.(selectedAnswer);
+    if (isAskUser) {
+      // Question navigation with p / n or left / right arrow keys
+      if (hasMultipleQuestions) {
+        if (input.toLowerCase() === 'p' || key.leftArrow) {
+          onNavigateQuestion?.('prev');
+          return;
+        }
+        if (input.toLowerCase() === 'n' || key.rightArrow) {
+          onNavigateQuestion?.('next');
+          return;
+        }
       }
-      return;
+
+      // Direct number key selection: '1'..'9'
+      const num = parseInt(input, 10);
+      if (!isNaN(num) && num >= 1 && num <= askUserMenuItems.length && String(num) === input) {
+        const targetIndex = num - 1;
+        const selected = askUserMenuItems[targetIndex];
+
+        if (selected === ASK_USER_CUSTOM_ANSWER_LABEL) {
+          onTypeAnswer?.();
+          return;
+        }
+
+        if (isMultiSelect) {
+          if (selected === ASK_USER_SUBMIT_LABEL) {
+            const chosen = Array.from(selectedIndices)
+              .map((idx) => askUserOptions[idx]?.label)
+              .filter((label): label is string => typeof label === 'string');
+            onApprove(JSON.stringify(chosen));
+            return;
+          }
+          if (targetIndex < askUserOptions.length) {
+            setSelectedIndices((prev) => {
+              const next = new Set(prev);
+              if (next.has(targetIndex)) {
+                next.delete(targetIndex);
+              } else {
+                next.add(targetIndex);
+              }
+              return next;
+            });
+            setSelectedIndex(targetIndex);
+            return;
+          }
+        } else {
+          if (targetIndex < askUserOptions.length) {
+            onApprove(askUserOptions[targetIndex]?.label);
+            return;
+          }
+        }
+      }
     }
 
     if (key.upArrow) {
@@ -440,7 +467,7 @@ const ApprovalPrompt: FC<Props> = ({
 
     // Spacebar for multi-select toggle
     if (input === ' ' && isMultiSelect) {
-      // Only toggle if it's an actual option (not a navigation/submit/custom/decline item)
+      // Only toggle if it's an actual option (not submit/custom item)
       if (selectedIndex < askUserOptions.length) {
         setSelectedIndices((prev) => {
           const next = new Set(prev);
@@ -489,12 +516,6 @@ const ApprovalPrompt: FC<Props> = ({
 
         if (selected === ASK_USER_CUSTOM_ANSWER_LABEL) {
           onTypeAnswer?.();
-        } else if (selected === ASK_USER_DECLINE_LABEL) {
-          onApprove(ASK_USER_DECLINE_RESULT);
-        } else if (selected === ASK_USER_PREV_QUESTION_LABEL) {
-          onNavigateQuestion?.('prev');
-        } else if (selected === ASK_USER_NEXT_QUESTION_LABEL) {
-          onNavigateQuestion?.('next');
         } else if (isMultiSelect) {
           if (selected === ASK_USER_SUBMIT_LABEL) {
             const chosen = Array.from(selectedIndices)
@@ -608,44 +629,45 @@ const ApprovalPrompt: FC<Props> = ({
     // Provide default descriptions for built-in actions
     if (!highlightedDescription) {
       if (highlightedMenuItem === ASK_USER_CUSTOM_ANSWER_LABEL) {
-        highlightedDescription = 'Type a custom write-in response.';
-      } else if (highlightedMenuItem === ASK_USER_DECLINE_LABEL) {
-        highlightedDescription = 'Decline to answer and skip this question.';
+        highlightedDescription =
+          'Discuss or provide a custom response. The agent will respond and can re-ask if needed.';
       } else if (highlightedMenuItem === ASK_USER_SUBMIT_LABEL) {
         highlightedDescription = 'Submit the selected options.';
-      } else if (highlightedMenuItem === ASK_USER_PREV_QUESTION_LABEL) {
-        highlightedDescription = 'Navigate to the previous question.';
-      } else if (highlightedMenuItem === ASK_USER_NEXT_QUESTION_LABEL) {
-        highlightedDescription = 'Navigate to the next question.';
       }
     }
+
+    const rightPaneTitle = isOptionHighlighted
+      ? highlightedOption?.label ?? 'Option'
+      : highlightedMenuItem === ASK_USER_CUSTOM_ANSWER_LABEL
+      ? 'Something else…'
+      : highlightedMenuItem === ASK_USER_SUBMIT_LABEL
+      ? 'Submit answer'
+      : highlightedMenuItem ?? 'Details';
 
     // Calculate dynamic left column width
     const leftColWidth = Math.max(
       ...askUserMenuItems.map((item, idx) => {
         const isOption = idx < askUserOptions.length;
-        const isRecommended = idx === 0 && isOption;
-        const isNavigation = item === ASK_USER_PREV_QUESTION_LABEL || item === ASK_USER_NEXT_QUESTION_LABEL;
-
-        let label = item;
-        if (item === ASK_USER_CUSTOM_ANSWER_LABEL || item === ASK_USER_DECLINE_LABEL || isNavigation) {
-          // leave as is
-        } else if (isMultiSelect && isOption) {
-          const checkbox = selectedIndices.has(idx) ? '[x] ' : '[ ] ';
-          label = checkbox + item + (isRecommended ? ' (recommended)' : '');
-        } else {
-          label = item + (isRecommended ? ' (recommended)' : '');
+        let label = `${idx + 1}. ${item}`;
+        if (isMultiSelect && isOption) {
+          label = `${idx + 1}. [x] ${item}`;
         }
-        return label.length + 4; // Add padding/arrow prefix
+        return label.length + 6; // Add padding/gutter prefix
       }),
-      40, // minimum width
+      36, // minimum width
     );
 
     content = (
       <Box flexDirection="column">
+        {totalQuestions > 1 && (
+          <Box marginLeft={1}>
+            <Text color="yellow" dimColor>
+              ┌─ Question {currentQuestionIndex + 1} of {totalQuestions} ─
+            </Text>
+          </Box>
+        )}
         <Box borderStyle="round" borderColor="yellow" paddingX={1} paddingY={0}>
           <Text color="yellow" bold>
-            {totalQuestions > 1 ? `[Question ${currentQuestionIndex + 1}/${totalQuestions}] ` : ''}
             {questionText}
           </Text>
         </Box>
@@ -660,44 +682,35 @@ const ApprovalPrompt: FC<Props> = ({
             {askUserMenuItems.map((item, idx) => {
               const isOption = idx < askUserOptions.length;
               const isRecommended = idx === 0 && isOption;
-              const isNavigation = item === ASK_USER_PREV_QUESTION_LABEL || item === ASK_USER_NEXT_QUESTION_LABEL;
+              const isSelected = selectedIndex === idx;
 
-              let label = item;
-              if (item === ASK_USER_CUSTOM_ANSWER_LABEL || item === ASK_USER_DECLINE_LABEL) {
-                // leave as is
-              } else if (isNavigation) {
-                // leave as is
-              } else if (isMultiSelect && isOption) {
-                const checkbox = selectedIndices.has(idx) ? '[x] ' : '[ ] ';
-                label = checkbox + item + (isRecommended ? ' (recommended)' : '');
-              } else {
-                label = item + (isRecommended ? ' (recommended)' : '');
+              let checkbox = '';
+              if (isMultiSelect && isOption) {
+                checkbox = selectedIndices.has(idx) ? '[x] ' : '[ ] ';
               }
 
-              const color = isNavigation
-                ? selectedIndex === idx
-                  ? 'cyan'
-                  : undefined
-                : selectedIndex === idx
-                ? item === ASK_USER_DECLINE_LABEL
-                  ? 'red'
-                  : item === ASK_USER_CUSTOM_ANSWER_LABEL
-                  ? 'cyan'
-                  : 'green'
-                : isRecommended
-                ? 'yellow'
-                : undefined;
+              const color = isSelected ? (item === ASK_USER_CUSTOM_ANSWER_LABEL ? 'cyan' : 'green') : undefined;
 
               return (
-                <Text key={item} color={color}>
-                  {selectedIndex === idx ? '❯ ' : '  '}
-                  {label}
-                </Text>
+                <Box key={item} flexDirection="row">
+                  <Box width={3} flexShrink={0}>
+                    <Text color={color}>{isSelected ? '❯' : ' '}</Text>
+                    <Text color="gray" dimColor>
+                      {isRecommended ? '★' : ' '}{' '}
+                    </Text>
+                  </Box>
+                  <Box flexDirection="row" flexShrink={1} flexWrap="wrap">
+                    <Text color={color} bold={isSelected}>
+                      {idx + 1}. {checkbox}
+                      {item}
+                    </Text>
+                  </Box>
+                </Box>
               );
             })}
           </Box>
 
-          {/* Help & details for the highlighted menu item */}
+          {/* Details for the highlighted menu item */}
           <Box
             flexDirection="column"
             flexGrow={1}
@@ -710,7 +723,7 @@ const ApprovalPrompt: FC<Props> = ({
             borderColor="#334155"
           >
             <Text bold color="yellow">
-              HELP & DETAILS
+              {rightPaneTitle}
             </Text>
             <Box marginTop={1}>
               {highlightedDescription ? (
@@ -723,13 +736,32 @@ const ApprovalPrompt: FC<Props> = ({
             </Box>
           </Box>
         </Box>
-        {isOptionHighlighted && !isMultiSelect && (
-          <Box marginTop={1} marginLeft={1}>
-            <Text color="#7dd3fc" dimColor italic>
-              Press n to append a custom note.
-            </Text>
-          </Box>
-        )}
+        {/* Consolidated footer hints */}
+        {(() => {
+          const footerItems: string[] = [];
+          if (isMultiSelect) {
+            footerItems.push(`1-${askUserOptions.length} toggle`);
+          } else {
+            footerItems.push(`1-${askUserMenuItems.length} select`);
+          }
+          if (hasMultipleQuestions) {
+            footerItems.push('◄ p prev', 'n next ►');
+          }
+          if (isMultiSelect) {
+            footerItems.push('space toggle', 'enter submit');
+          } else {
+            footerItems.push('enter confirm');
+          }
+          footerItems.push('esc cancel');
+
+          return (
+            <Box marginTop={1} marginLeft={1}>
+              <Text color="#64748b" dimColor>
+                {footerItems.join('   ')}
+              </Text>
+            </Box>
+          );
+        })()}
       </Box>
     );
   }

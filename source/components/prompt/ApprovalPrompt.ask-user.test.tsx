@@ -43,17 +43,17 @@ it.sequential('ApprovalPrompt renders ask_user question and options', async () =
 
   const output = lastFrame() ?? '';
   expect(output.includes('Which option should I use?')).toBe(true);
-  expect(output.includes('Use the safe default')).toBe(true);
+  expect(output.includes('1. Use the safe default')).toBe(true);
+  expect(output.includes('★')).toBe(true);
   expect(output.includes('Recommended by the agent')).toBe(true);
-  expect(output.includes('Use the faster option')).toBe(true);
+  expect(output.includes('2. Use the faster option')).toBe(true);
   expect(output.includes('Optimizes for speed')).toBe(false);
   expect(output.includes(ASK_USER_CUSTOM_ANSWER_LABEL)).toBe(true);
-  expect(output.includes(ASK_USER_DECLINE_LABEL)).toBe(true);
-  const outputLines = output.split('\n');
-  const menuEndLine = outputLines.findIndex((line) => line.includes(ASK_USER_DECLINE_LABEL));
-  const noteHintLine = outputLines.findIndex((line) => line.includes('Press n to append a custom note.'));
-  expect(noteHintLine).toBeGreaterThan(menuEndLine);
-  expect(output.includes('HELP & DETAILS')).toBe(true);
+  expect(output.includes('1-3 select')).toBe(true);
+  expect(output.includes('enter confirm')).toBe(true);
+  expect(output.includes('esc cancel')).toBe(true);
+  expect(output.includes('Use the safe default')).toBe(true);
+  expect(output.includes('HELP & DETAILS')).toBe(false);
   expect(output.includes('Allow this action?')).toBe(false);
   expect(output.includes('Approve')).toBe(false);
 });
@@ -275,10 +275,10 @@ it.sequential('ApprovalPrompt ask_user navigation wraps around menu items', asyn
   );
 
   await writeInput(stdin, '\u001b[A');
-  expect((lastFrame() ?? '').includes(`\u276f ${ASK_USER_DECLINE_LABEL}`)).toBe(true);
+  expect((lastFrame() ?? '').includes('Something else…')).toBe(true);
 
   await writeInput(stdin, '\u001b[B');
-  expect((lastFrame() ?? '').includes('❯ Use the safe default (recommended)')).toBe(true);
+  expect((lastFrame() ?? '').includes('1. Use the safe default')).toBe(true);
 });
 
 it.sequential('ApprovalPrompt ask_user Enter on an option calls onApprove with the option text', async () => {
@@ -298,9 +298,10 @@ it.sequential('ApprovalPrompt ask_user Enter on an option calls onApprove with t
   expect(approved).toBe('Use the safe default');
 });
 
-it.sequential('ApprovalPrompt ask_user Enter on Decline to answer calls the decline approval value', async () => {
+it.sequential('ApprovalPrompt ask_user direct number keys select options immediately', async () => {
   let approved: string | undefined;
-  const { stdin } = await renderInAct(
+  let typed = false;
+  const { stdin: stdin1 } = await renderInAct(
     <ApprovalPrompt
       approval={baseApproval}
       onApprove={(answer) => {
@@ -311,10 +312,36 @@ it.sequential('ApprovalPrompt ask_user Enter on Decline to answer calls the decl
     />,
   );
 
-  await writeInput(stdin, '\u001b[A');
-  await writeInput(stdin, '\r');
+  await writeInput(stdin1, '1');
+  expect(approved).toBe('Use the safe default');
 
-  expect(approved).toBe(ASK_USER_DECLINE_RESULT);
+  const { stdin: stdin2 } = await renderInAct(
+    <ApprovalPrompt
+      approval={baseApproval}
+      onApprove={(answer) => {
+        approved = answer;
+      }}
+      onReject={() => {}}
+      onTypeAnswer={() => {}}
+    />,
+  );
+
+  await writeInput(stdin2, '2');
+  expect(approved).toBe('Use the faster option');
+
+  const { stdin: stdin3 } = await renderInAct(
+    <ApprovalPrompt
+      approval={baseApproval}
+      onApprove={() => {}}
+      onReject={() => {}}
+      onTypeAnswer={() => {
+        typed = true;
+      }}
+    />,
+  );
+
+  await writeInput(stdin3, '3');
+  expect(typed).toBe(true);
 });
 
 it.sequential('ApprovalPrompt ask_user Enter on Type custom answer calls onTypeAnswer', async () => {
@@ -345,30 +372,12 @@ it.sequential('ApprovalPrompt ask_user Enter on Type custom answer calls onTypeA
     />,
   );
 
-  // Menu: Option 0, Option 1, Type custom answer...(index 2), Decline(index 3)
+  // Menu: Option 0, Option 1, Something else...(index 2)
   await writeInput(stdin, '\u001B[B'); // down to Option 1
-  await writeInput(stdin, '\u001B[B'); // down to Type custom answer...
+  await writeInput(stdin, '\u001B[B'); // down to Something else...
   await writeInput(stdin, '\r');
 
   expect(typedAnswer).toBe(1);
-});
-
-it.sequential('ApprovalPrompt n appends a note to the highlighted ask_user answer', async () => {
-  let initialAnswer: string | undefined;
-  const { stdin } = await renderInAct(
-    <ApprovalPrompt
-      approval={baseApproval}
-      onApprove={() => {}}
-      onReject={() => {}}
-      onTypeAnswer={(answer) => {
-        initialAnswer = answer;
-      }}
-    />,
-  );
-
-  await writeInput(stdin, 'n');
-
-  expect(initialAnswer).toBe('Use the safe default');
 });
 
 it.sequential('ApprovalPrompt ignores y for ask_user', async () => {
@@ -389,26 +398,22 @@ it.sequential('ApprovalPrompt ignores y for ask_user', async () => {
   expect(approveCount).toBe(0);
 });
 
-it.sequential(
-  'ApprovalPrompt ask_user still shows custom answer and decline options without predefined options',
-  async () => {
-    const approval: ApprovalDescriptor = {
-      ...baseApproval,
-      argumentsText: JSON.stringify({
-        questions: [{ question: 'Please answer this question' }],
-      }),
-    };
+it.sequential('ApprovalPrompt ask_user still shows custom answer option without predefined options', async () => {
+  const approval: ApprovalDescriptor = {
+    ...baseApproval,
+    argumentsText: JSON.stringify({
+      questions: [{ question: 'Please answer this question' }],
+    }),
+  };
 
-    const { lastFrame } = await renderInAct(
-      <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => {}} onTypeAnswer={() => {}} />,
-    );
+  const { lastFrame } = await renderInAct(
+    <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => {}} onTypeAnswer={() => {}} />,
+  );
 
-    const output = lastFrame() ?? '';
-    expect(output.includes('Please answer this question')).toBe(true);
-    expect(output.includes(ASK_USER_CUSTOM_ANSWER_LABEL)).toBe(true);
-    expect(output.includes(ASK_USER_DECLINE_LABEL)).toBe(true);
-  },
-);
+  const output = lastFrame() ?? '';
+  expect(output.includes('Please answer this question')).toBe(true);
+  expect(output.includes('Something else…')).toBe(true);
+});
 
 it.sequential('ApprovalPrompt renders multi-select options with checkboxes', async () => {
   const approval: ApprovalDescriptor = {
@@ -525,6 +530,43 @@ it.sequential('ApprovalPrompt toggles multi-select options with Enter key', asyn
   expect((lastFrame() ?? '').includes('[ ] git')).toBe(true);
 });
 
+it.sequential('ApprovalPrompt toggles multi-select options with direct number keys', async () => {
+  const approval: ApprovalDescriptor = {
+    agentName: 'Agent',
+    toolName: 'ask_user',
+    argumentsText: JSON.stringify({
+      questions: [
+        {
+          question: 'Select tools to use',
+          options: [
+            { label: 'git', description: 'Version control' },
+            { label: 'npm', description: 'JavaScript package manager' },
+            { label: 'cargo', description: 'Rust package manager' },
+          ],
+          is_multi_select: true,
+        },
+      ],
+    }),
+    rawInterruption: { type: 'ask_user' },
+  };
+
+  const { lastFrame, stdin } = await renderInAct(
+    <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => {}} onTypeAnswer={() => {}} />,
+  );
+
+  // Press 2 to toggle npm
+  await writeInput(stdin, '2');
+  expect((lastFrame() ?? '').includes('[x] npm')).toBe(true);
+
+  // Press 2 again to deselect npm
+  await writeInput(stdin, '2');
+  expect((lastFrame() ?? '').includes('[ ] npm')).toBe(true);
+
+  // Press 1 to toggle git
+  await writeInput(stdin, '1');
+  expect((lastFrame() ?? '').includes('[x] git')).toBe(true);
+});
+
 it.sequential('ApprovalPrompt renders question index prefix for multiple questions', async () => {
   const approval: ApprovalDescriptor = {
     agentName: 'Agent',
@@ -549,13 +591,14 @@ it.sequential('ApprovalPrompt renders question index prefix for multiple questio
   );
 
   const output = lastFrame() ?? '';
-  expect(output.includes('[Question 2/2] Second question')).toBe(true);
-  // Navigation items should be present for multiple questions
-  expect(output.includes('◀ Previous question')).toBe(true);
-  expect(output.includes('Next question ▶')).toBe(true);
+  expect(output.includes('Question 2 of 2')).toBe(true);
+  expect(output.includes('Second question')).toBe(true);
+  // Navigation hints should be in the footer
+  expect(output.includes('◄ p prev')).toBe(true);
+  expect(output.includes('n next ►')).toBe(true);
 });
 
-it.sequential('ApprovalPrompt calls onNavigateQuestion when Previous is selected', async () => {
+it.sequential('ApprovalPrompt calls onNavigateQuestion when p or left arrow is pressed', async () => {
   const approval: ApprovalDescriptor = {
     agentName: 'Agent',
     toolName: 'ask_user',
@@ -582,18 +625,15 @@ it.sequential('ApprovalPrompt calls onNavigateQuestion when Previous is selected
     />,
   );
 
-  // Navigate to "Previous question" (last item before "Next question")
-  // Menu: C (0), D (1), Custom answer (2), Decline (3), Previous (4), Next (5)
-  await writeInput(stdin, '\u001b[B'); // D
-  await writeInput(stdin, '\u001b[B'); // Custom answer
-  await writeInput(stdin, '\u001b[B'); // Decline
-  await writeInput(stdin, '\u001b[B'); // Previous
-  await writeInput(stdin, '\r');
+  await writeInput(stdin, 'p');
+  expect(navigated).toBe('prev');
 
+  navigated = undefined;
+  await writeInput(stdin, '\u001b[D'); // left arrow
   expect(navigated).toBe('prev');
 });
 
-it.sequential('ApprovalPrompt calls onNavigateQuestion when Next is selected', async () => {
+it.sequential('ApprovalPrompt calls onNavigateQuestion when n or right arrow is pressed', async () => {
   const approval: ApprovalDescriptor = {
     agentName: 'Agent',
     toolName: 'ask_user',
@@ -620,15 +660,11 @@ it.sequential('ApprovalPrompt calls onNavigateQuestion when Next is selected', a
     />,
   );
 
-  // Navigate to "Next question" (last item)
-  // Menu: A (0), B (1), Custom answer (2), Decline (3), Previous (4), Next (5)
-  await writeInput(stdin, '\u001b[B'); // B
-  await writeInput(stdin, '\u001b[B'); // Custom answer
-  await writeInput(stdin, '\u001b[B'); // Decline
-  await writeInput(stdin, '\u001b[B'); // Previous
-  await writeInput(stdin, '\u001b[B'); // Next
-  await writeInput(stdin, '\r');
+  await writeInput(stdin, 'n');
+  expect(navigated).toBe('next');
 
+  navigated = undefined;
+  await writeInput(stdin, '\u001b[C'); // right arrow
   expect(navigated).toBe('next');
 });
 
@@ -647,8 +683,8 @@ it.sequential('ApprovalPrompt does not show navigation items for single question
   );
 
   const output = lastFrame() ?? '';
-  expect(output.includes('◀ Previous question')).toBe(false);
-  expect(output.includes('Next question ▶')).toBe(false);
+  expect(output.includes('◄ p prev')).toBe(false);
+  expect(output.includes('n next ►')).toBe(false);
 });
 
 it.sequential('ApprovalPrompt keeps the question UI visible while waiting for a custom answer', async () => {
@@ -690,10 +726,10 @@ it.sequential('ApprovalPrompt dynamically updates description on navigation', as
   expect((lastFrame() ?? '').includes('Recommended by the agent')).toBe(false);
   expect((lastFrame() ?? '').includes('Optimizes for speed')).toBe(true);
 
-  // Down arrow to Custom Answer (default custom description)
+  // Down arrow to Something else (default custom description)
   await writeInput(stdin, '\u001b[B');
   expect((lastFrame() ?? '').includes('Optimizes for speed')).toBe(false);
-  expect((lastFrame() ?? '').includes('Type a custom write-in response.')).toBe(true);
+  expect((lastFrame() ?? '').includes('Discuss or provide a custom response')).toBe(true);
 });
 
 it.sequential('ApprovalPrompt renders network access approval menu options', async () => {

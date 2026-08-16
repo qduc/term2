@@ -79,6 +79,8 @@ export interface RegisterShellOutputWatchOptions {
   fromOffset?: number;
   /** Passed through to every firing so the consumer can name the job. */
   command?: string;
+  /** Defer replay delivery to the scheduler so a launching tool can publish its result first. */
+  deferInitialDelivery?: boolean;
 }
 
 export interface ShellOutputFiring {
@@ -269,8 +271,16 @@ export class BackgroundShellWatches {
         this.#scheduler.cancel(record.timer);
         record.timer = null;
       }
-      if (record.pending.length > 0) this.#fire(record);
-      this.#retire(watch.watchId);
+      if (record.pending.length > 0 && options.deferInitialDelivery) {
+        record.timer = this.#scheduler.schedule(() => {
+          record.timer = null;
+          if (record.pending.length > 0) this.#fire(record);
+          this.#retire(watch.watchId);
+        }, 0);
+      } else {
+        if (record.pending.length > 0) this.#fire(record);
+        this.#retire(watch.watchId);
+      }
     } else if (record.pending.length > 0) {
       this.#reschedule(record);
     }

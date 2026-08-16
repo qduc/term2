@@ -60,6 +60,27 @@ import type {
 
 const shellSandboxModeSchema = z.enum(['default', 'unsandboxed']).optional().default('default');
 
+const monitorOptionsSchema = z.object({
+  pattern: z
+    .string()
+    .optional()
+    .describe('Regular expression matched against each complete output line; absent matches any line.'),
+  stream: z.enum(['stdout', 'stderr', 'both']).optional().describe('Which output stream to monitor. Defaults to both.'),
+  idle_ms: relaxedNumber
+    .int()
+    .nonnegative()
+    .optional()
+    .describe(
+      'Quiet window in milliseconds that coalesces a burst of matches into one notification. Defaults to 1500.',
+    ),
+  notify_limit: relaxedNumber
+    .int()
+    .nonnegative()
+    .optional()
+    .describe('Maximum number of notifications before the watch retires. 0 means unlimited; defaults to 0.'),
+  once: z.boolean().optional().describe('Retire the watch after its first notification (notify_limit 1).'),
+});
+
 const shellParametersSchema = z.object({
   command: z.string().min(1).describe('Single shell command to execute.'),
   timeout_ms: relaxedNumber
@@ -84,6 +105,11 @@ const shellParametersSchema = z.object({
     .optional()
     .default(false)
     .describe('Run locally in the background and return a job ID immediately. Defaults to false.'),
+  monitor: monitorOptionsSchema
+    .optional()
+    .describe(
+      'When background is true, attach an output monitor in this same call. The job keeps running and matching output is delivered as shell_output notifications.',
+    ),
 });
 
 // Tool invocation normalizes shape but does not apply Zod defaults before
@@ -121,29 +147,11 @@ const getBackgroundShellJobParameters = z.object({
   job_id: z.string().min(1).describe('The background shell job ID.'),
 });
 
-const monitorShellJobParameters = z.object({
-  job_id: z.string().min(1).describe('The background shell job ID to monitor.'),
-  pattern: z
-    .string()
-    .optional()
-    .describe('Regular expression matched against each complete output line; absent matches any line.'),
-  stream: z.enum(['stdout', 'stderr', 'both']).optional().describe('Which output stream to monitor. Defaults to both.'),
-  idle_ms: relaxedNumber
-    .int()
-    .nonnegative()
-    .optional()
-    .describe(
-      'Quiet window in milliseconds that coalesces a burst of matches into one notification. Defaults to 1500.',
-    ),
-  notify_limit: relaxedNumber
-    .int()
-    .nonnegative()
-    .optional()
-    .describe(
-      'Maximum number of notifications this watch may deliver before retiring. 0 means unlimited (the watch only retires when its job settles or cancel_shell_monitor is called); defaults to 0.',
-    ),
-  once: z.boolean().optional().describe('Retire the watch after its first notification (notify_limit 1).'),
-});
+const monitorShellJobParameters = z
+  .object({
+    job_id: z.string().min(1).describe('The background shell job ID to monitor.'),
+  })
+  .merge(monitorOptionsSchema);
 
 const cancelShellMonitorParameters = z.object({
   watch_id: z.string().min(1).describe('The watch ID returned by monitor_shell_job.'),
@@ -637,10 +645,11 @@ const getShellDescription = (searchViaShell: boolean) =>
     ? 'Do NOT use this to write. Use the specialized tools for those tasks. '
     : 'Do NOT use this to read, write or search. Use the specialized tools for those tasks. ') +
   'Do NOT write multi-line inline scripts, it is prone to escaping mistakes. Create a temporary script then use this tool to run it. ' +
-  'Do NOT use this for complex multi-step edits or broad codebase exploration; use `run_subagent` instead.';
+  'Do NOT use this for complex multi-step edits or broad codebase exploration; use `run_subagent` instead. ' +
+  'For a background job whose output should trigger notifications, set background: true and provide monitor in the same call; wait for shell_output notifications instead of polling.';
 const SHELL_DESCRIPTION_ORCHESTRATOR =
   'Execute a single shell command. Directly inspect, test, or perform a small clear operation when that is the most efficient path. By default, local shell commands run inside the sandbox when available. Use sandbox: "unsandboxed" only for network or outside-host access; it requires explicit user approval and must be run by the main agent. Long output is truncated, the full output is saved to a file; ' +
-  'delegate complex, risky, or separable work when specialization, context compression, or safe parallelism provides meaningful leverage.';
+  'delegate complex, risky, or separable work when specialization, context compression, or safe parallelism provides meaningful leverage. For background output notifications, set background: true and monitor in the same call, then wait for shell_output rather than polling.';
 
 export function createShellToolDefinition(deps: {
   loggingService: ILoggingService;
@@ -774,7 +783,7 @@ export function createShellToolDefinition(deps: {
       }
     },
     execute: async (
-      { command, timeout_ms, max_output_length, sandbox = 'default', background = false },
+      { command, timeout_ms, max_output_length, sandbox = 'default', background = false, monitor },
       _context,
       details,
     ) => {
@@ -808,6 +817,9 @@ export function createShellToolDefinition(deps: {
         return `Error: plan mode is read-only. Command not executed: ${command}`;
       }
       const sshService = executionContext?.getSSHService();
+      if (monitor !== undefined && !background) {
+        return 'Error: shell.monitor requires background: true.';
+      }
       if (background && !backgroundShellRegistry) {
         return 'Error: Background shell execution is unavailable in this session.';
       }
@@ -822,6 +834,15 @@ export function createShellToolDefinition(deps: {
       let backgroundCleanupDeferred = false;
       let transferred = false;
       let observedJobId: string | undefined;
+      let monitorPattern: RegExp | undefined;
+      let monitorSetupError: string | undefined;
+      if (monitor?.pattern !== undefined) {
+        try {
+          monitorPattern = new RegExp(monitor.pattern);
+        } catch (error) {
+          return `Error: Invalid monitor pattern: ${error instanceof Error ? error.message : String(error)}`;
+        }
+      }
       // Background-only monitor seam: set when the background branch opens the
       // job's output stream, so the shared onOutputChunk never touches the
       // store for a foreground lease job.
@@ -1194,7 +1215,37 @@ export function createShellToolDefinition(deps: {
               resultToStatus: (result) => result.status,
             });
             backgroundCleanupDeferred = true;
-            return JSON.stringify({ jobId: job.id, status: job.status });
+            let watchId: string | undefined;
+            if (monitor !== undefined) {
+              if (!backgroundShellWatches) {
+                monitorSetupError = 'Background shell monitoring is unavailable in this session.';
+              } else {
+                try {
+                  watchId = backgroundShellWatches.registerWatch({
+                    jobId: job.id,
+                    pattern: monitorPattern,
+                    stream: monitor.stream,
+                    idleMs: monitor.idle_ms,
+                    notifyLimit: monitor.once ? 1 : monitor.notify_limit,
+                    command: job.command,
+                    deferInitialDelivery: true,
+                  });
+                } catch (error) {
+                  monitorSetupError = error instanceof Error ? error.message : String(error);
+                }
+              }
+            }
+            return JSON.stringify({
+              jobId: job.id,
+              status: job.status,
+              ...(monitor === undefined
+                ? {}
+                : {
+                    monitor: watchId
+                      ? { status: 'monitoring', watchId }
+                      : { status: 'setup_failed', error: monitorSetupError ?? 'Monitor setup failed.' },
+                  }),
+            });
           } catch (error) {
             return `Error: ${error instanceof Error ? error.message : String(error)}`;
           }

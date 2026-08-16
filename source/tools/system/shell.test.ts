@@ -270,6 +270,77 @@ describe('background shell monitor tools', () => {
     expect(firings).toHaveLength(1);
     expect(firings[0]).toMatchObject({ jobId: 'seam-job', seq: 1, matchedLines: 'server listening on 3000' });
   });
+
+  it('launches and monitors a background job in one shell call', async () => {
+    const { scheduler, watches, firings } = createMonitorBundle();
+    const registry = createSettledRegistry(() => 'inline-monitor-job');
+    const shell = createShellToolDefinition({
+      loggingService: createNoopLogger(),
+      settingsService: createMockSettingsService({ 'sandbox.enabled': false }),
+      backgroundShellRegistry: registry,
+      backgroundShellWatches: watches,
+      executeShellCommandImpl: async (_command, options) => {
+        options?.onOutputChunk?.('stdout', 'server listening on 3000\n');
+        return { stdout: 'server listening on 3000\n', stderr: '', exitCode: 0, timedOut: false };
+      },
+    });
+
+    const result = JSON.parse(
+      await shell.execute({
+        command: 'npm run dev',
+        background: true,
+        monitor: { pattern: 'listening on', once: true },
+      }),
+    );
+
+    expect(result).toMatchObject({
+      jobId: 'inline-monitor-job',
+      monitor: { status: 'monitoring' },
+    });
+    expect(result.monitor.watchId).toBeTypeOf('string');
+
+    await registry.whenSettled('inline-monitor-job');
+    scheduler.advance(0);
+
+    expect(firings).toHaveLength(1);
+    expect(firings[0]).toMatchObject({
+      jobId: 'inline-monitor-job',
+      matchedLines: 'server listening on 3000',
+    });
+  });
+
+  it('rejects inline monitoring for foreground commands before execution', async () => {
+    let executed = false;
+    const shell = createShellToolDefinition({
+      loggingService: createNoopLogger(),
+      settingsService: createMockSettingsService({ 'sandbox.enabled': false }),
+      executeShellCommandImpl: async () => {
+        executed = true;
+        return { stdout: '', stderr: '', exitCode: 0, timedOut: false };
+      },
+    });
+
+    await expect(shell.execute({ command: 'echo hi', monitor: {} })).resolves.toContain('requires background: true');
+    expect(executed).toBe(false);
+  });
+
+  it('reports monitor setup failure without hiding a launched job', async () => {
+    const registry = createSettledRegistry(() => 'monitor-failure-job');
+    const shell = createShellToolDefinition({
+      loggingService: createNoopLogger(),
+      settingsService: createMockSettingsService({ 'sandbox.enabled': false }),
+      backgroundShellRegistry: registry,
+      executeShellCommandImpl: async () => ({ stdout: '', stderr: '', exitCode: 0, timedOut: false }),
+    });
+
+    const result = JSON.parse(await shell.execute({ command: 'echo hi', background: true, monitor: {} }));
+
+    expect(result).toMatchObject({
+      jobId: 'monitor-failure-job',
+      monitor: { status: 'setup_failed' },
+    });
+    await registry.whenSettled('monitor-failure-job');
+  });
 });
 
 describe('background timeout and overflow policy', () => {

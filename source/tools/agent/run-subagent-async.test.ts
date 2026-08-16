@@ -75,6 +75,7 @@ it('run_subagent_async schema accepts supported roles', () => {
 it('run_subagent_async requires a task', () => {
   const tool = createRunSubagentAsyncToolDefinition(async () => makeHandle());
 
+  expect(tool.parameters.shape.task.description).toContain('breadth or depth, never both');
   expect(tool.parameters.safeParse({ role: 'explorer', task: 'find files' }).success).toBe(true);
   expect(tool.parameters.safeParse({ role: 'explorer' }).success).toBe(false);
 });

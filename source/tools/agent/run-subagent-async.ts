@@ -20,7 +20,11 @@ const ASYNC_ROLES = ['explorer', 'worker', 'mentor', 'librarian'] as const;
 
 const runSubagentAsyncSchema = z.object({
   role: z.enum(ASYNC_ROLES).describe('The subagent role to use: explorer, worker, mentor, or librarian.'),
-  task: z.string().describe('The full task description.'),
+  task: z
+    .string()
+    .describe(
+      'One bounded task with one objective, ownership boundary, and done condition. Explorer tasks must choose breadth or depth, never both.',
+    ),
   name: z
     .string()
     .regex(SUBAGENT_RUN_NAME_PATTERN)

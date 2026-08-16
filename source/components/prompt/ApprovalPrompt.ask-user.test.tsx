@@ -49,6 +49,11 @@ it.sequential('ApprovalPrompt renders ask_user question and options', async () =
   expect(output.includes('Optimizes for speed')).toBe(false);
   expect(output.includes(ASK_USER_CUSTOM_ANSWER_LABEL)).toBe(true);
   expect(output.includes(ASK_USER_DECLINE_LABEL)).toBe(true);
+  const outputLines = output.split('\n');
+  const menuEndLine = outputLines.findIndex((line) => line.includes(ASK_USER_DECLINE_LABEL));
+  const noteHintLine = outputLines.findIndex((line) => line.includes('Press n to append a custom note.'));
+  expect(noteHintLine).toBeGreaterThan(menuEndLine);
+  expect(output.includes('HELP & DETAILS')).toBe(true);
   expect(output.includes('Allow this action?')).toBe(false);
   expect(output.includes('Approve')).toBe(false);
 });
@@ -348,27 +353,40 @@ it.sequential('ApprovalPrompt ask_user Enter on Type custom answer calls onTypeA
   expect(typedAnswer).toBe(1);
 });
 
-it.sequential('ApprovalPrompt ignores y and n keys for ask_user', async () => {
+it.sequential('ApprovalPrompt n appends a note to the highlighted ask_user answer', async () => {
+  let initialAnswer: string | undefined;
+  const { stdin } = await renderInAct(
+    <ApprovalPrompt
+      approval={baseApproval}
+      onApprove={() => {}}
+      onReject={() => {}}
+      onTypeAnswer={(answer) => {
+        initialAnswer = answer;
+      }}
+    />,
+  );
+
+  await writeInput(stdin, 'n');
+
+  expect(initialAnswer).toBe('Use the safe default');
+});
+
+it.sequential('ApprovalPrompt ignores y for ask_user', async () => {
   let approveCount = 0;
-  let rejectCount = 0;
   const { stdin } = await renderInAct(
     <ApprovalPrompt
       approval={baseApproval}
       onApprove={() => {
         approveCount += 1;
       }}
-      onReject={() => {
-        rejectCount += 1;
-      }}
+      onReject={() => {}}
       onTypeAnswer={() => {}}
     />,
   );
 
   await writeInput(stdin, 'y');
-  await writeInput(stdin, 'n');
 
   expect(approveCount).toBe(0);
-  expect(rejectCount).toBe(0);
 });
 
 it.sequential(
@@ -633,31 +651,30 @@ it.sequential('ApprovalPrompt does not show navigation items for single question
   expect(output.includes('Next question ▶')).toBe(false);
 });
 
-it.sequential(
-  'ApprovalPrompt displays custom typing message and suppresses keys when waitingForAskUserAnswer is true',
-  async () => {
-    let approved: string | undefined;
-    const { lastFrame, stdin } = await renderInAct(
-      <ApprovalPrompt
-        approval={baseApproval}
-        onApprove={(answer) => {
-          approved = answer;
-        }}
-        onReject={() => {}}
-        onTypeAnswer={() => {}}
-        waitingForAskUserAnswer={true}
-      />,
-    );
+it.sequential('ApprovalPrompt keeps the question UI visible while waiting for a custom answer', async () => {
+  let approved: string | undefined;
+  const { lastFrame, stdin } = await renderInAct(
+    <ApprovalPrompt
+      approval={baseApproval}
+      onApprove={(answer) => {
+        approved = answer;
+      }}
+      onReject={() => {}}
+      onTypeAnswer={() => {}}
+      waitingForAskUserAnswer={true}
+    />,
+  );
 
-    const output = lastFrame() ?? '';
-    expect(output.includes('Type your custom answer in the prompt below')).toBe(true);
-    expect(output.includes('Use the safe default')).toBe(false);
+  const output = lastFrame() ?? '';
+  expect(output.includes('Which option should I use?')).toBe(true);
+  expect(output.includes('Type your custom answer in the prompt below')).toBe(true);
+  expect(output.includes('Use the safe default')).toBe(true);
+  expect(output.includes(ASK_USER_CUSTOM_ANSWER_LABEL)).toBe(true);
 
-    // Pressing Enter should do nothing because key input is suppressed
-    await writeInput(stdin, '\r');
-    expect(approved).toBe(undefined);
-  },
-);
+  // Pressing Enter should do nothing because key input is suppressed
+  await writeInput(stdin, '\r');
+  expect(approved).toBe(undefined);
+});
 
 it.sequential('ApprovalPrompt dynamically updates description on navigation', async () => {
   const { lastFrame, stdin } = await renderInAct(

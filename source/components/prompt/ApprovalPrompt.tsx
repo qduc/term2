@@ -25,7 +25,7 @@ type Props = {
   onApprove: (answer?: string) => void;
   onReject: () => void;
   onCancel?: () => void;
-  onTypeAnswer?: () => void;
+  onTypeAnswer?: (initialAnswer?: string) => void;
   onNavigateQuestion?: (direction: 'prev' | 'next') => void;
   currentQuestionIndex?: number;
   waitingForAskUserAnswer?: boolean;
@@ -406,12 +406,27 @@ const ApprovalPrompt: FC<Props> = ({
   }, [currentQuestionIndex, approval.argumentsText, approval.toolName]);
 
   useInput((input, key) => {
-    if (isAskUser && key.escape) {
+    if (key.escape) {
+      // Escape cancels/interrupts the pending action for every approval type.
+      // The parent routes it (ask_user → graceful cancel; anything else →
+      // interrupt the turn). Kept ahead of the `waitingForAskUserAnswer` guard
+      // to match the historical ask_user Esc behavior exactly.
       onCancel?.();
       return;
     }
 
     if (waitingForAskUserAnswer) {
+      return;
+    }
+
+    // `n` lets the user keep the highlighted predefined answer and append a
+    // free-form note in the composer. It is intentionally unavailable for
+    // multi-select and non-answer menu items.
+    if (isAskUser && !isMultiSelect && input.toLowerCase() === 'n' && selectedIndex < askUserOptions.length) {
+      const selectedAnswer = askUserOptions[selectedIndex]?.label;
+      if (selectedAnswer) {
+        onTypeAnswer?.(selectedAnswer);
+      }
       return;
     }
 
@@ -634,79 +649,85 @@ const ApprovalPrompt: FC<Props> = ({
             {questionText}
           </Text>
         </Box>
-        {waitingForAskUserAnswer ? (
+        {waitingForAskUserAnswer && (
           <Box marginTop={1} marginLeft={1}>
             <Text color="cyan">❯ Type your custom answer in the prompt below...</Text>
           </Box>
-        ) : (
-          <Box flexDirection="row" width="100%" marginTop={1}>
-            {/* Left Column: Menu Items */}
-            <Box flexDirection="column" width={leftColWidth}>
-              {askUserMenuItems.map((item, idx) => {
-                const isOption = idx < askUserOptions.length;
-                const isRecommended = idx === 0 && isOption;
-                const isNavigation = item === ASK_USER_PREV_QUESTION_LABEL || item === ASK_USER_NEXT_QUESTION_LABEL;
+        )}
+        <Box flexDirection="row" width="100%" marginTop={1}>
+          {/* Menu Items */}
+          <Box flexDirection="column" width={leftColWidth}>
+            {askUserMenuItems.map((item, idx) => {
+              const isOption = idx < askUserOptions.length;
+              const isRecommended = idx === 0 && isOption;
+              const isNavigation = item === ASK_USER_PREV_QUESTION_LABEL || item === ASK_USER_NEXT_QUESTION_LABEL;
 
-                let label = item;
-                if (item === ASK_USER_CUSTOM_ANSWER_LABEL || item === ASK_USER_DECLINE_LABEL) {
-                  // leave as is
-                } else if (isNavigation) {
-                  // leave as is
-                } else if (isMultiSelect && isOption) {
-                  const checkbox = selectedIndices.has(idx) ? '[x] ' : '[ ] ';
-                  label = checkbox + item + (isRecommended ? ' (recommended)' : '');
-                } else {
-                  label = item + (isRecommended ? ' (recommended)' : '');
-                }
+              let label = item;
+              if (item === ASK_USER_CUSTOM_ANSWER_LABEL || item === ASK_USER_DECLINE_LABEL) {
+                // leave as is
+              } else if (isNavigation) {
+                // leave as is
+              } else if (isMultiSelect && isOption) {
+                const checkbox = selectedIndices.has(idx) ? '[x] ' : '[ ] ';
+                label = checkbox + item + (isRecommended ? ' (recommended)' : '');
+              } else {
+                label = item + (isRecommended ? ' (recommended)' : '');
+              }
 
-                const color = isNavigation
-                  ? selectedIndex === idx
-                    ? 'cyan'
-                    : undefined
-                  : selectedIndex === idx
-                  ? item === ASK_USER_DECLINE_LABEL
-                    ? 'red'
-                    : item === ASK_USER_CUSTOM_ANSWER_LABEL
-                    ? 'cyan'
-                    : 'green'
-                  : isRecommended
-                  ? 'yellow'
-                  : undefined;
+              const color = isNavigation
+                ? selectedIndex === idx
+                  ? 'cyan'
+                  : undefined
+                : selectedIndex === idx
+                ? item === ASK_USER_DECLINE_LABEL
+                  ? 'red'
+                  : item === ASK_USER_CUSTOM_ANSWER_LABEL
+                  ? 'cyan'
+                  : 'green'
+                : isRecommended
+                ? 'yellow'
+                : undefined;
 
-                return (
-                  <Text key={item} color={color}>
-                    {selectedIndex === idx ? '❯ ' : '  '}
-                    {label}
-                  </Text>
-                );
-              })}
+              return (
+                <Text key={item} color={color}>
+                  {selectedIndex === idx ? '❯ ' : '  '}
+                  {label}
+                </Text>
+              );
+            })}
+          </Box>
+
+          {/* Help & details for the highlighted menu item */}
+          <Box
+            flexDirection="column"
+            flexGrow={1}
+            paddingLeft={2}
+            borderStyle="single"
+            borderTop={false}
+            borderBottom={false}
+            borderRight={false}
+            borderLeft={true}
+            borderColor="#334155"
+          >
+            <Text bold color="yellow">
+              HELP & DETAILS
+            </Text>
+            <Box marginTop={1}>
+              {highlightedDescription ? (
+                <Text color="white">{highlightedDescription}</Text>
+              ) : (
+                <Text color="#64748b" italic>
+                  No description available.
+                </Text>
+              )}
             </Box>
-
-            {/* Right Column: Description of Highlighted Option */}
-            <Box
-              flexDirection="column"
-              flexGrow={1}
-              paddingLeft={2}
-              borderStyle="single"
-              borderTop={false}
-              borderBottom={false}
-              borderRight={false}
-              borderLeft={true}
-              borderColor="#334155"
-            >
-              <Text bold color="yellow">
-                HELP & DETAILS
-              </Text>
-              <Box marginTop={1}>
-                {highlightedDescription ? (
-                  <Text color="white">{highlightedDescription}</Text>
-                ) : (
-                  <Text color="#64748b" italic>
-                    No description available.
-                  </Text>
-                )}
-              </Box>
-            </Box>
+          </Box>
+        </Box>
+        {isOptionHighlighted && !isMultiSelect && (
+          <Box marginTop={1} marginLeft={1}>
+            <Text color="#7dd3fc" dimColor italic>
+              Press n to append a custom note.
+            </Text>
           </Box>
         )}
       </Box>

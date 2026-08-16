@@ -307,6 +307,35 @@ it.sequential('BottomArea shows approval prompt when waiting for approval', asyn
   });
 });
 
+it.sequential('BottomArea keeps the ask_user question visible while collecting a custom answer', async () => {
+  const { lastFrame, unmount } = await renderBottomArea({
+    ...baseProps,
+    pendingApproval: {
+      agentName: 'Agent',
+      toolName: 'ask_user',
+      argumentsText: JSON.stringify({
+        questions: [
+          {
+            question: 'Which option should I use?',
+            options: [{ label: 'Use the safe default' }],
+          },
+        ],
+      }),
+      rawInterruption: null,
+    },
+    waitingForApproval: true,
+    waitingForAskUserAnswer: true,
+  });
+
+  const output = lastFrame() ?? '';
+  expect(output).toContain('Which option should I use?');
+  expect(output).toContain('Use the safe default');
+  expect(output).toContain('Type your custom answer in the prompt below');
+  act(() => {
+    unmount();
+  });
+});
+
 it.sequential('BottomArea shows the FIFO count for adopted-subagent approvals', async () => {
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,

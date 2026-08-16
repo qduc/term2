@@ -57,7 +57,7 @@ export type BottomAreaProps = {
   onApprove: (answer?: string) => void;
   onReject: () => void;
   onCancel?: () => void;
-  onTypeAnswer?: () => void;
+  onTypeAnswer?: (initialAnswer?: string) => void;
   onNavigateQuestion?: (direction: 'prev' | 'next') => void;
   sshInfo?: SSHInfo;
   onSettingChange?: (key: string, value: any) => void;
@@ -218,9 +218,9 @@ const BottomArea: FC<BottomAreaProps> = ({
   }, [thinkingStartedAt]);
 
   // `inputOwner` is the single source of truth for which surface owns keyboard
-  // input, derived from the same state that drives rendering. It mirrors the
-  // mutual-exclusivity chain below so "what is rendered" and "who owns input"
-  // stay in sync. See source/lib/input-owner.ts.
+  // input. Most prompt rendering follows it, but the ask_user prompt remains
+  // visible as context while its custom-answer composer owns input. See
+  // source/lib/input-owner.ts.
   const inputOwner = deriveInputOwner({
     handoffStage: handoffState?.stage ?? null,
     pendingSurgeTurn,
@@ -239,7 +239,10 @@ const BottomArea: FC<BottomAreaProps> = ({
   const showStandardModeConfirm = inputOwner.kind === 'standard-mode-confirm';
   const showSurgePrompt = inputOwner.kind === 'input-surge';
   const showLargeUncachedPrompt = inputOwner.kind === 'large-uncached';
-  const showApprovalPrompt = inputOwner.kind === 'approval';
+  // Ask-user answers are typed in the composer, so inputOwner intentionally
+  // becomes `input`; keep the question rendered as context while that happens.
+  const showApprovalPrompt =
+    inputOwner.kind === 'approval' || (waitingForAskUserAnswer && pendingApproval?.toolName === 'ask_user');
   const showQueuePausedPrompt = inputOwner.kind === 'queue-paused';
   const showBackgroundTaskManager = inputOwner.kind === 'background-tasks';
   const foregroundTransferCandidate = getForegroundTaskTransferCandidate?.() ?? null;

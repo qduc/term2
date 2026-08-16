@@ -40,6 +40,27 @@ it.sequential('outside-workspace read approval offers session folder access', as
   expect(answer).toBe('allow-folder-session');
 });
 
+it.sequential('Escape on a regular (non-ask_user) approval cancels the prompt', async () => {
+  let cancelled = false;
+  const result = await renderInAct(
+    <ApprovalPrompt
+      approval={approval}
+      onApprove={() => {}}
+      onReject={() => {}}
+      onCancel={() => {
+        cancelled = true;
+      }}
+    />,
+  );
+
+  await writeInput(result.stdin, '\u001B');
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 60));
+  });
+
+  expect(cancelled).toBe(true);
+});
+
 it.sequential(
   'outside-workspace edit approval names the permission and offers file and folder session scopes',
   async () => {

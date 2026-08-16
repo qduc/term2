@@ -537,6 +537,18 @@ const App: FC<AppProps> = ({
     [rewindToTarget, redrawMessageList, replaceInput, restoreTurnToInput, sendUserMessage, setImages],
   );
 
+  const handleTypeAnswer = useCallback(
+    (initialAnswer?: string) => {
+      if (initialAnswer !== undefined) {
+        // Seed the composer with the selected answer and a separator so the
+        // next characters become an appended note rather than joining words.
+        setInput(`${initialAnswer} `);
+      }
+      onTypeAnswer();
+    },
+    [onTypeAnswer, setInput],
+  );
+
   const handleApprove = useCallback(
     async (answer?: string) => {
       if (sandboxPromptRequest) {
@@ -583,10 +595,37 @@ const App: FC<AppProps> = ({
     setWaitingForRejectionReason,
   ]);
 
-  const handleCancelAskUser = useCallback(() => {
-    if (sandboxPromptRequest || pendingApproval?.toolName !== 'ask_user') return;
-    cancelAskUser();
-  }, [cancelAskUser, pendingApproval, sandboxPromptRequest]);
+  const handleCancelApproval = useCallback(() => {
+    if (sandboxPromptRequest) {
+      sandboxApprovalCoordinatorRef.current?.resolve(sandboxPromptRequest, 'deny');
+      return;
+    }
+    if (backgroundApprovalEntry) {
+      resolveBackgroundSubagentApproval({
+        revision: backgroundApprovalState.revision,
+        entry: backgroundApprovalEntry,
+        decision: { answer: 'no', rejectionReason: undefined },
+      });
+      return;
+    }
+    if (pendingApproval?.toolName === 'ask_user') {
+      // Graceful cancel: resolve the question with no answer while keeping the
+      // turn's record (see use-conversation cancelAskUser).
+      cancelAskUser();
+      return;
+    }
+    // Escape in a regular approval prompt means “cancel/interrupt the turn”:
+    // abort the run loop and drop the pending tool call.
+    stopProcessing();
+  }, [
+    sandboxPromptRequest,
+    backgroundApprovalEntry,
+    backgroundApprovalState.revision,
+    resolveBackgroundSubagentApproval,
+    cancelAskUser,
+    pendingApproval,
+    stopProcessing,
+  ]);
 
   const submitBridgedRejectionReason = useCallback(
     async (reason: string) => {
@@ -905,8 +944,8 @@ const App: FC<AppProps> = ({
             historyService={historyService}
             onApprove={handleApprove}
             onReject={handleReject}
-            onCancel={handleCancelAskUser}
-            onTypeAnswer={onTypeAnswer}
+            onCancel={handleCancelApproval}
+            onTypeAnswer={handleTypeAnswer}
             onNavigateQuestion={handleNavigateQuestion}
             sshInfo={sshInfo}
             lastCodexRateLimit={lastCodexRateLimit}

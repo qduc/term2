@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
-import { mkdtemp, writeFile } from 'node:fs/promises';
-import os from 'node:os';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
 import type { ApplicationAgent } from '../agent-runtime/application-run-loop.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
 import type { ExecutionContext } from '../execution-context.js';
@@ -494,6 +494,7 @@ function resolveSafe(p: string): string {
 }
 
 const MAX_FINAL_TEXT_CHARS = 40_000;
+const SUBAGENT_RESULT_DIR = path.join(SANDBOX_TEMP_DIR, 'subagent-result');
 let subagentResultTempDirPromise: Promise<string> | undefined;
 
 async function truncateResultText(
@@ -511,9 +512,13 @@ async function truncateResultText(
 }
 
 async function saveSubagentResultArtifact(text: string): Promise<string> {
-  subagentResultTempDirPromise ??= mkdtemp(path.join(os.tmpdir(), 'term2-subagent-result-'));
+  subagentResultTempDirPromise ??= (async () => {
+    await mkdir(SUBAGENT_RESULT_DIR, { recursive: true, mode: 0o700 });
+    return SUBAGENT_RESULT_DIR;
+  })();
   const tempDir = await subagentResultTempDirPromise;
-  const artifactPath = path.join(tempDir, `result-${randomBytes(3).toString('hex')}.md`);
+  const suffix = randomBytes(3).toString('hex');
+  const artifactPath = path.join(tempDir, `result-${process.pid}-${Date.now()}-${suffix}.md`);
   await writeFile(artifactPath, text, 'utf8');
   return artifactPath;
 }

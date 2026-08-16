@@ -1,8 +1,8 @@
-import { mkdtemp, writeFile } from 'fs/promises';
+import { mkdir, writeFile } from 'fs/promises';
 import { randomBytes } from 'crypto';
-import os from 'os';
 import path from 'path';
 import { trimOutput } from '../output/output-trim.js';
+import { SANDBOX_TEMP_DIR } from './temp-dir.js';
 
 export interface FormatShellExecutionOutputParams {
   command: string;
@@ -24,7 +24,8 @@ export interface FormatShellExecutionOutputResult {
 /** Load-bearing prose: the agent reads this path back with an ordinary file read. */
 export const FULL_OUTPUT_SAVED_NOTE_PREFIX = 'Full output saved to';
 
-let outputArtifactTempDirPromise: Promise<string> | undefined;
+const TOOL_OUTPUT_DIR = path.join(SANDBOX_TEMP_DIR, 'tool-output');
+let toolOutputDirPromise: Promise<string> | undefined;
 
 function buildArtifactContents(params: {
   command: string;
@@ -58,11 +59,14 @@ function buildArtifactContents(params: {
  * Shared by shell, read_file, web_fetch, and other bounded producers.
  */
 export async function saveOutputArtifact(contents: string, options?: { filenamePrefix?: string }): Promise<string> {
-  outputArtifactTempDirPromise ??= mkdtemp(path.join(os.tmpdir(), 'term2-tool-output-'));
-  const tempDir = await outputArtifactTempDirPromise;
+  toolOutputDirPromise ??= (async () => {
+    await mkdir(TOOL_OUTPUT_DIR, { recursive: true, mode: 0o700 });
+    return TOOL_OUTPUT_DIR;
+  })();
+  const tempDir = await toolOutputDirPromise;
   const suffix = randomBytes(3).toString('hex');
   const prefix = options?.filenamePrefix ?? 'output';
-  const artifactPath = path.join(tempDir, `${prefix}-${suffix}.txt`);
+  const artifactPath = path.join(tempDir, `${prefix}-${process.pid}-${Date.now()}-${suffix}.txt`);
   await writeFile(artifactPath, contents, 'utf8');
   return artifactPath;
 }

@@ -23,8 +23,8 @@ it('keeps the structured Contract 04 consumer inventory complete and duplicate-f
   expect([...inventoryKeys].sort()).toEqual([...exportedKeys].sort());
 });
 
-it('disables the model-request wall-clock deadline by default while allowing an explicit limit', () => {
-  expect(AgentSettingsSchema.parse({}).maxModelRequestDurationMs).toBe(0);
+it('defaults the model-request wall-clock deadline to 300_000 while allowing an explicit limit', () => {
+  expect(AgentSettingsSchema.parse({}).maxModelRequestDurationMs).toBe(300_000);
   expect(AgentSettingsSchema.parse({ maxModelRequestDurationMs: 600_000 }).maxModelRequestDurationMs).toBe(600_000);
   expect(() => AgentSettingsSchema.parse({ maxModelRequestDurationMs: -1 })).toThrow();
 });

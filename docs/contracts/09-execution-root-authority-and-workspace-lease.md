@@ -211,9 +211,9 @@ turn it into a red/green characterization.
 | Successful parent publication | `source/services/workspace/active-workspace-root.test.ts:13` — `entering a workspace publishes the leased root to code that cannot reach the context` | covered |
 | Exit restores the fallback | `source/services/workspace/active-workspace-root.test.ts:19` — `exiting a workspace restores the process cwd for those callers` | covered |
 | Rejected entry does not publish | `source/services/workspace/active-workspace-root.test.ts:27` — `does not publish a root when entry is rejected` | covered |
-| File completion follows a lease and returns after exit | Pending characterization: `getWorkspaceEntries follows an active lease without an explicit cache refresh` (G2), drafted at `.worktrees/sb08-workspace-authority/source/services/file-service.test.ts:59` — **not on main** | **coverage gap** (not a product defect) |
-| Sandbox default allow-write follows a lease | Pending characterization: `sandbox allowWrite follows the leased root when cwd is omitted` (G5), drafted at `.worktrees/sb08-workspace-authority/source/services/workspace/workspace-lease-authority.test.ts:15` — **not on main** | **coverage gap** (not a product defect) |
-| Command path classification follows a lease | Pending characterization: `command path classification follows the leased root when no cwd is supplied` (G6), drafted at `.worktrees/sb08-workspace-authority/source/services/workspace/workspace-lease-authority.test.ts:33` — **not on main** | **coverage gap** (not a product defect) |
+| File completion follows a lease and returns after exit | `source/services/file-service.test.ts:59` — `getWorkspaceEntries follows an active lease without an explicit cache refresh` (G2) — **on main** | covered |
+| Sandbox default allow-write follows a lease | `source/services/workspace/workspace-lease-authority.test.ts:15` — `sandbox allowWrite follows the leased root when cwd is omitted` (G5) — **on main** | covered |
+| Command path classification follows a lease | `source/services/workspace/workspace-lease-authority.test.ts:33` — `command path classification follows the leased root when no cwd is supplied` (G6) — **on main** | covered |
 | Parent versus child pin publication | `source/services/execution-context.test.ts:110-126` — `pin leases a root without publishing the process-wide active workspace`; `pin does not retarget a parent session context that entered a different root` | covered |
 | Runtime worktree admission outcomes | `source/services/workspace/worktree-transition.test.ts` — entered (`:31`,`:35`,`:80`), already-active (`:76`), not-found (`:39`), ambiguous (`:51`,`:59`), unavailable (`:65`,`:70`), and busy (`:84`) entry cases; exited (`:89`), not-in-worktree (`:96`), and busy (`:103`) exit cases | covered |
 | `enter_worktree`/`exit_worktree` tool coupling | `source/tools/system/worktree.test.ts:24-40,58-71` — `enter_worktree` publishes the selected root and `exit_worktree` releases it; rejected transitions leave the context unchanged | covered |
@@ -223,8 +223,7 @@ turn it into a red/green characterization.
 The existing execution-context tests already provide the stronger parent-versus-
 child case required by C9.3. No G4 test is added. The existing active-root and
 worktree-transition suites provide fallback/publication and C9.4/C9.5 outcome
-coverage; G2, G5, and G6 remain unmerged and are recorded above as coverage
-gaps with their pending characterizations.
+coverage; **G2, G5, and G6 landed on main and are covered** (see rows above).
 
 ## 9. Verification commands
 
@@ -271,13 +270,12 @@ bridge, run loop, registry, nor non-interactive production path.
 
 ## 10. Known gaps and classification
 
-- **G2/G5/G6 lease-following characterizations are unmerged.** The exact
-  pending tests (`getWorkspaceEntries follows an active lease without an
-  explicit cache refresh`; `sandbox allowWrite follows the leased root when cwd
-  is omitted`; `command path classification follows the leased root when no cwd
-  is supplied`) exist only in `.worktrees/sb08-workspace-authority` and are
-  separately authorized. Current behavior may be correct but is uncharacterized
-  at those boundaries. **Classification: coverage gap, not a product defect.**
+- **G2/G5/G6 lease-following characterizations are on main.** The tests
+  (`getWorkspaceEntries follows an active lease without an explicit cache
+  refresh`; `sandbox allowWrite follows the leased root when cwd is omitted`;
+  `command path classification follows the leased root when no cwd is
+  supplied`) landed 2026-08-16 merged from `.worktrees/sb08-workspace-authority`
+  and are covered in §8. **Classification: covered; superseded by the §8 rows.**
 - The active-root publisher is conventionally single-writer, not capability-
   enforced, because the exported publisher is required for deterministic test
   reset. **Classification: intentional test/reset escape hatch; no product

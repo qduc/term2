@@ -1,6 +1,8 @@
 # Contract 12 — Queue Persistence and Recovery
 
-**Status:** audit draft; awaiting owner review
+**Status:** audit draft — **owner-reviewed 2026-08-16** (replaces the stale
+“awaiting owner review” header; the three residual decisions below are
+confirmed retain-current by the President).
 
 ## 1. Contract
 
@@ -141,6 +143,6 @@ Full-suite and gate results are reported with the implementation packet. The kno
 | No `fsync`, crash-killed writer, or two-process simulation | **Out of scope and unobservable in this characterization slice.** |
 | Adapter observer omits `recovery.kind` | **Presentation/coverage gap; pause reason remains observable.** |
 | Snapshot richer in behavior prose than current `{requestId,recovered?}` | **Spec-vs-code characterization, not a durability claim or red.** |
-| `queuedTurnStartObserver` ordering | **Retain-current decision (VP):** the observer fires before placeholder validation and may expose a recovered marker before failure. Kept as-is; not a product defect and not a new red in this packet. |
-| Lone recovered non-text placeholder | **Retain-current decision (VP):** it may return `idle` after failure because there is no retained work and no parked pre-restart promise. Kept as-is; not a product defect and not a new red in this packet. |
-| Legitimate text equal to the reserved placeholder marker | **Retain-current decision (VP):** it is indistinguishable from the reserved non-text marker after restart. Kept as-is; not a product defect and not a new red in this packet. |
+| `queuedTurnStartObserver` ordering | **Retain-current decision — confirmed by President 2026-08-16:** the observer fires before placeholder validation and may expose a recovered marker before failure. Kept as-is; not a product defect and not a new red in this packet. |
+| Lone recovered non-text placeholder | **Retain-current decision — confirmed by President 2026-08-16:** it may return `idle` after failure because there is no retained work and no parked pre-restart promise. Kept as-is; not a product defect and not a new red in this packet. |
+| Legitimate text equal to the reserved placeholder marker | **Retain-current decision — confirmed by President 2026-08-16:** it is indistinguishable from the reserved non-text marker after restart. Kept as-is; not a product defect and not a new red in this packet. |

@@ -218,7 +218,11 @@ it('reports a memory-only outcome when persistence is disabled', () => {
   }
 });
 
-it.fails('redacts credential bytes from direct /settings queries', () => {
+// President decision 2026-08-16: direct credential display in `/settings` is
+// accepted policy (no redaction for direct leaf queries). This green test
+// characterizes the decided behavior so a later redaction change is a
+// deliberate, recorded decision rather than an accidental one.
+it('renders direct credential bytes in /settings queries (President decision: display accepted)', () => {
   const secret = 'sk-direct-leaf-secret';
   const deps = createDeps({ values: { 'agent.openai.apiKey': secret } });
   const command = createSettingsCommand(deps);
@@ -226,7 +230,7 @@ it.fails('redacts credential bytes from direct /settings queries', () => {
   command.action('agent.openai.apiKey');
 
   expect(deps.messages).toHaveLength(1);
-  expect(deps.messages.every((message) => !message.includes(secret))).toBe(true);
+  expect(deps.messages[0]).toContain(secret);
 });
 
 it('setting runtime-modifiable values updates service and applies runtime hook', () => {

@@ -1,7 +1,8 @@
 # Service Boundary Contract Completion
 
-Status: **CLOSED (program complete) 2026-08-16.** All remaining-SB slices A–K
-landed on local `main` (no push). Slice I (memory C3.3 child-authority
+Status: **CLOSED (program complete) 2026-08-16; all residual decisions resolved
+2026-08-16.** All remaining-SB slices A–K landed on `main` and are pushed
+(origin/main == main at `1212799e`). Slice I (memory C3.3 child-authority
 extension + Contract 09 workspace-authority record, docs-only) landed
 2026-08-16 as merge `53c70323` via `sb09-slice-i-docs`; closing inbox record
 `REMAINING_SB_CLOSED` published to `/home/qduc/.agents/runtime/root-inbox/pending/`
@@ -11,27 +12,35 @@ workstream's drafts, gates, and retained proofs; treat pre-close
 "awaiting owner decisions" wording as historical except where a hold is
 re-stated here.
 
-**Holds that still hold (unchanged):** the three President-held secret items
-(Contract 10 credential-at-rest policy; Contract 10 `/settings` direct
-credential-display reveal policy; SB-05 recursive ciphertext/evaluator
-sanitization depth) and the Contract 10 R10.2 President-held retained red
-(`it.fails`, byte-identical). Also still open: the separately authorized
-follow-ups in the Consolidated Implementation Backlog below (SB-01 closed-union
-repair, SB-03 role-interface partition, SB-02/SB-06 repair decisions, SB-04
-runtime port hardening), Contract 10 selected-provider normalization and
-corruption-recovery policy, Contract 12 residual queue decisions recorded as
-retain-current, the three Contract 09 lease-following characterizations
-(G2/G5/G6) unmerged in `.worktrees/sb08-workspace-authority` awaiting separate
-authorization, the stricter memory strict-subset characterization unmerged in
-`.worktrees/sb08-memory-local-disposition`, and Contract 12's record header
-status line ("awaiting owner review") left stale by the owning lane's next
-touch.
+**Owner decisions 2026-08-16 (President):** Contract 10 credential-at-rest
+(plaintext storage accepted); Contract 10 `/settings` direct credential display
+(accepted — R10.2 red retired, replaced by a green characterization test);
+SB-05 recursive ciphertext/evaluator sanitization depth (single-level depth and
+the unsanitized evaluator lane accepted — both C7.2 reds retired); Contract 12
+residual queue decisions (all three confirmed retain-current, header status
+updated). Delegated decisions (coordinator): SB-01/SB-03/SB-04/SB-07 hardening
+either already landed or declined by decision — composite facade and concrete
+runtime retained; no production code changed; the two dead-code candidates
+(`getStreamMaxRetries`, `getForegroundSubagentCandidate`) no longer exist in
+source. See the backlog at the bottom and the individual contract records.
+
+**Holds that held (resolved 2026-08-16):** the three President-held secret
+items and the R10.2 retained red are all resolved by the decisions above; the
+Contract 10 selected-provider normalization and corruption-recovery policy
+landed with the non-secret repairs (`adbcfc85`); the three Contract 09
+lease-following characterizations (G2/G5/G6) merged to `main` 2026-08-16 with
+the workspace-authority worktree (on-disk at `file-service.test.ts:59` and
+`workspace-lease-authority.test.ts:15/33`); Contract 12.s record header status
+line is updated in this pass. The stricter memory strict-subset
+characterization merged with `sb08-memory-local-disposition` (on-disk at
+`memory-capabilities.test.ts:58`). No SB-shaped follow-up remains open.
 
 ## Resume here
 
-Program closed. Nothing is dispatched or in flight. Read the hold list above
-before touching any listed area; none of the holds were resolved by the
-program's closure.
+Program closed and all residual decisions resolved 2026-08-16 (see the
+owner-decision block in the header). Nothing is dispatched or in flight. The
+long workstream narratives below are the dated audit record; treat their
+pre-close "awaiting owner decisions" wording as historical.
 
 - **Reviewed implementation awaiting owner decisions/integration:** SB-02 —
   conversation persistence and input-history durability Contract 08 in
@@ -408,7 +417,7 @@ Use a separate `docs/contracts/NN-*.md` draft only when this full structure is e
 | SB-05 | Logging and provider-traffic ports | reviewed; awaiting owner | Accepted metadata, response variants, write-failure behavior, redaction, observability, boundary-level `any`, and schema enforcement are mapped with verified test citations. | Draft Contract 07 plus 89 focused tests in `sb05-logging-contract-tests` |
 | SB-06 | SSH transport lifecycle | reviewed; awaiting owner | Current connect/disconnect/`executeCommand` behavior, timeout/cancellation gaps, command wrapping, error outcomes, consumers, and test coverage form a draft lifecycle matrix. | Draft Contract 06 plus 47 public-boundary tests in `sb06-ssh-contract-tests` |
 | SB-07 | Provider registry fetch and unary response types | reviewed; awaiting owner | Adapter opaque-lane ownership, unary behavior, retry decoration, catalog fetch typing, provider implementations, and black-box coverage are inventoried; three missing green public-boundary proofs now protect C2.6. | Reviewed Contract 02 C2.6 extension plus 170 focused tests in `sb07-c26-adapter-isolation` |
-| SB-08 | Peripheral service disposition | closed | Handoff, model/provider management, file/workspace discovery, skills, notifications, cost, memory, RTK, and local shell sessions each have deletion/two-adapter evaluations and verified test citations. | Dispositions recorded; memory C3.7 + Contract 09 landed docs-only 2026-08-16 (slice I); hooks disposition tracker-only; RTK/provider-cache packets landed; G2/G5/G6 + memory strict-subset characterizations unmerged (separately authorized) |
+| SB-08 | Peripheral service disposition | closed | Handoff, model/provider management, file/workspace discovery, skills, notifications, cost, memory, RTK, and local shell sessions each have deletion/two-adapter evaluations and verified test citations. | Dispositions recorded; memory C3.7 + Contract 09 landed docs-only 2026-08-16 (slice I); hooks disposition tracker-only; RTK/provider-cache packets landed; G2/G5/G6 + memory strict-subset characterizations merged 2026-08-16 |
 
 ---
 
@@ -758,19 +767,41 @@ this is not evidence that no governing contract exists elsewhere.
 
 ---
 
-## Consolidated Implementation Backlog (Separately Authorized Follow-ups)
+## Consolidated Implementation Backlog (Resolved 2026-08-16)
 
-*Note: All items below are prospective follow-ups awaiting owner review; each requires a dedicated worktree and an exact red characterization test before production code changes.*
+*Historical note: these were prospective follow-ups awaiting owner review. All
+items are now resolved by landing or by decision — no production code changed
+in this pass; see the owner-decision block in the header.*
 
 1. **Type & Seam Hardening (Low Risk / High ROI):**
-   - [ ] SB-01: Close `TurnWorkflow` internal outcome types; replace `outcome: any`, `nextPlan: any`, and untyped option bags with `BuildResultOutcome`, `ContinuationPlan`, and `AgentClientRunOptions`; remove dead `{ action: 'continue' }` at `turn-workflow.ts:975`.
-   - [ ] SB-03: Decompose `ConversationAgentClient` into role interfaces (`StreamExecutionPort`, `TurnSteeringPort`, `ProviderConfigPort`) and declare missing methods (`setOnToolDispatch`, `useStandardServiceTierForNextRequest`).
-   - [ ] SB-07: Extend Contract 02 C2.6 with adapter-level `provider_opaque` proofs; record `ProviderFetch`, unary `getResponse`, and `RetryingModel` as type/decorator gaps without inventing a production unary seam.
+   - [x] SB-01: **Landed with the slice merges.** `outcome`/`nextPlan`/option
+     bags are typed (`BuildResultOutcome`, `ContinuationPlan`,
+     `AgentClientRunOptions`); the dead `{ action: 'continue' }` is removed.
+   - [x] SB-03: **Decision (coordinator, 2026-08-16): retain the composite
+     facade.** `setOnToolDispatch` and `useStandardServiceTierForNextRequest`
+     are declared on the composite; the role-interface partition
+     (`StreamExecutionPort`/`TurnSteeringPort`/`ProviderConfigPort`) is declined
+     as a type-only refactor with no proven defect; `getStreamMaxRetries` and
+     `getForegroundSubagentCandidate` no longer exist in source — deletion
+     decision moot.
+   - [x] SB-07: **Landed (docs).** Contract 02 C2.6 adapter-level `provider_opaque`
+     proofs and the `ProviderFetch`/unary `getResponse`/`RetryingModel` type gaps
+     recorded (`98921cad`); no production unary seam invented.
 2. **Durability & Error Boundary Fixes (Medium Risk):**
-   - [ ] SB-02: Characterize unhandled errors in `loadConversationForProject` and evaluate try/catch wrapper; evaluate atomic temp-file rename in `HistoryService.save()`; characterize residual `.deltas` on `deleteConversation`.
-   - [x] SB-05: Characterize provider-traffic fail-open, error masking, index corruption, schema, correlation, and redaction behavior in reviewed Contract 07.
-   - [ ] SB-05 repair: after owner decisions, repair the nine proven violations through their owning public boundaries and flip each retained red proof.
+   - [x] SB-02: **Landed (repair `9fa1ed5d`).** Unreadable loads settle,
+     corrupt history quarantined, stale locks reclaimed, atomic writes;
+     D1/D3–D6 reds flipped.
+   - [x] SB-05: **Characterization landed** in reviewed Contract 07.
+   - [x] SB-05 repair: **Landed (repair `c7f54ace`).** Nine violations repaired
+     through their owning public boundaries and reds flipped; the two C7.2
+     reds retired by President decision 2026-08-16 (single-level depth and
+     unsanitized evaluator lane accepted, now green characterizations).
 3. **Transport & Lifecycle Contracts (Higher Risk / Dedicated Follow-ups):**
-   - [x] SB-06: Build and independently review dedicated SSH Contract 06 with deterministic lifecycle and escaping characterizations.
-   - [ ] SB-06 repair: after owner decisions, repair the ten proven transport violations and flip each retained red proof.
-   - [ ] SB-04: Port-harden `SessionRuntime` by defining narrowed interfaces (`ISessionStatePort`, `ISessionSettingsPort`, `IPendingInteractionPort`) to replace concrete class leakage.
+   - [x] SB-06: **Contract 06 built, independently reviewed.**
+   - [x] SB-06 repair: **Landed (repair `8b8a20bf`).** Ten transport violations
+     repaired and reds flipped.
+   - [x] SB-04: **Reds repaired** (observer/retry reattachment, green on main)
+     and **port-hardening declined by decision (coordinator, 2026-08-16):** the
+     facade and `SessionRuntime` boundaries are characterized and green;
+     introducing `ISessionStatePort`/`ISessionSettingsPort`/
+     `IPendingInteractionPort` is a type-only refactor with no proven defect.

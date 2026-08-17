@@ -1,13 +1,13 @@
 # Contract 10 — Settings durability, migration, and sensitive bytes
 
-Status: **repaired and verified in the `sb10-settings-durability-contract`
-worktree (base `11758c77`); not yet owner-reviewed.** The three authorized
+Status: **repaired, verified, and owner-reviewed 2026-08-16.** The three authorized
 non-secret repairs landed: R10.1 durable settlement through a small owner-level
 API, corruption recovery through the `SettingsService` public boundary, and
 durable selected-provider normalization for already-modern provider records.
-R10.2 (credential display) remains a retained red by president-held exclusion;
-credential-at-rest classification/storage/persistence policy is unchanged; no
-encryption, keychain, or secret logging was added.
+President decisions 2026-08-16 (recorded below in §8): direct credential
+display in `/settings` is accepted policy (R10.2 retired, replaced by a green
+characterization test); plaintext credential-at-rest in `settings.json` is
+accepted policy; single-level sanitization depth elsewhere is accepted.
 
 This contract owns local durable representation and recovery: `settings.json`,
 lock and temporary siblings, migration/reconciliation, and settings/provider
@@ -183,12 +183,13 @@ repair record).
 | Durable settlement disabled | service: `setDynamic reports not-persisted when file persistence is disabled`; command: `reports a memory-only outcome when persistence is disabled` | green repaired |
 | Current classifier stripping | persistence: `stripSensitiveSettings: removes shellPath and openrouter secrets, preserving apiKey`; service: `sensitive settings are never saved to config file` | green existing, limited classifier |
 | Credential-source behavior | `provider-credentials.test.ts`: `requires credentials for remote custom providers and resolves stored or type environment keys`; `preserves explicitly no-auth local custom providers` | green existing |
-| Credential display | **R10.2 retained red:** `settings-command.test.ts`: `it.fails('redacts credential bytes from direct /settings queries')` for `agent.openai.apiKey`. No aggregate `providers` query is used. | retained red by president-held exclusion, unchanged |
-| Credential bytes at rest | Decision test: persist only credential classes approved for local plaintext storage through provider session and fresh service, or never write credential-bearing bytes to `settings.json`. | blocked on policy decision, unchanged |
+| Credential display | **Decided (2026-08-16): direct display is accepted policy.** `settings-command.test.ts` green test `renders direct credential bytes in /settings queries (President decision: display accepted)` replaces the former R10.2 retained red. No aggregate `providers` query is used. | green (R10.2 retired by owner decision) |
+| Credential bytes at rest | **Decided (2026-08-16): plaintext local storage accepted.** Provider-session credential classes persist locally in `settings.json`; no encryption/keychain added. | decided policy (no change) |
 
-Only the single excluded public red (R10.2) is retained. No red is added for
-directory durability, PID liveness, recursive log redaction, or plaintext
-storage without an owner policy.
+Only the single excluded public red (R10.2) was retained; it is now retired by
+the 2026-08-16 President decision above. No red is added for directory
+durability, PID liveness, recursive log redaction (Contract 07 owns that), or
+plaintext storage.
 
 ## 9. Verification and repair record
 
@@ -200,7 +201,8 @@ Repair scope (this worktree):
   `settings-persistence.test.ts`, `settings-service.test.ts`,
   `settings-command.test.ts`.
 
-No credential-at-rest policy, display behavior (R10.2), encryption, keychain,
+Credential-at-rest policy (2026-08-16 President decision: plaintext accepted),
+display behavior (R10.2, retired by the same decision), encryption, keychain,
 secret logging, lock-mtime policy, timeout/cancel semantics, or
 directory-fsync claim was changed.
 

@@ -629,8 +629,11 @@ it.sequential(
   },
 );
 
-it.sequential.fails(
-  'LoggingService providerTraffic.recordRequestStart redacts encrypted_content from app log payloads even with LOG_VERBOSE_PAYLOADS=1',
+// President decision 2026-08-16: single-level sanitization depth accepted;
+// nested `encrypted_content` persistence under verbose payloads is decided
+// behavior. The green test characterizes it, replacing the former retained red.
+it.sequential(
+  'characterizes nested encrypted_content persistence in app log payloads under LOG_VERBOSE_PAYLOADS=1 (President decision: single-level depth accepted)',
   async () => {
     const prev = process.env.LOG_VERBOSE_PAYLOADS;
     process.env.LOG_VERBOSE_PAYLOADS = '1';
@@ -660,7 +663,8 @@ it.sequential.fails(
 
       const entry = await waitForMainLogEntry(logDir, (e) => e.eventType === 'provider.request.started');
       const raw = JSON.stringify(entry);
-      expect(raw.includes('SUPER_SECRET_ENCRYPTED_PAYLOAD')).toBe(false);
+      // Accepted behavior: the nested payload is not stripped to empty string.
+      expect(raw.includes('SUPER_SECRET_ENCRYPTED_PAYLOAD')).toBe(true);
     } finally {
       if (prev !== undefined) {
         process.env.LOG_VERBOSE_PAYLOADS = prev;
@@ -671,8 +675,10 @@ it.sequential.fails(
   },
 );
 
-it.sequential.fails(
-  'LoggingService.info sanitizes evaluator.request.started messages identically to provider.request.started',
+// President decision 2026-08-16: the evaluator request lane is exempt from
+// app-log payload sanitization. The green test characterizes that decision.
+it.sequential(
+  'characterizes evaluator.request.started payload persistence in app logs (President decision: evaluator lane unsanitized)',
   async () => {
     const logDir = getTestLogDir();
     const logger = new LoggingService({ logDir, disableLogging: false, suppressConsoleOutput: true });
@@ -696,6 +702,7 @@ it.sequential.fails(
 
     const entry = await waitForMainLogEntry(logDir, (e) => e.eventType === 'evaluator.request.started');
     const raw = JSON.stringify(entry);
-    expect(raw.includes(base64Data)).toBe(false);
+    // Accepted behavior: the evaluator lane is not routed through sanitizeLogMetadata.
+    expect(raw.includes(base64Data)).toBe(true);
   },
 );

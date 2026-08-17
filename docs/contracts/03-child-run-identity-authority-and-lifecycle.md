@@ -214,15 +214,14 @@ bridge/run-loop/registry change — `NODE_ENV=test pnpm test:provider-black-box`
 
 All minimum-matrix cells are covered.
 
-**C3.7 classified coverage note:** the stricter on-main-vs-child comparison —
-`gives %s a strict read-only subset of main
-memory tools` — is drafted in
-`.worktrees/sb08-memory-local-disposition/source/services/memory/memory-capabilities.test.ts`
-but is **not on main**. The on-main tests above already pin the exact read
-tool set for explorer and worker, so current behavior is characterized at the
-tool-set boundary; the unmerged test additionally proves strict subset
-membership against the main subject's set. **Classification: coverage gap,
-not a product defect.**
+**C3.7 classified coverage note (updated 2026-08-16):** the stricter
+on-main-vs-child comparison — `gives %s a strict read-only subset of main
+memory tools` — **is on main** at
+`source/services/memory/memory-capabilities.test.ts:58` (it.each over
+`explorer`/`worker`), merged with the `sb08-memory-local-disposition`
+worktree. The on-main tests pin the exact read tool set for explorer and
+worker and prove strict subset membership against the main subject's set.
+**Classification: covered; the formerly drafted gap is closed.**
 
 The current child-result union has no `unknown` or `ambiguous` terminal state;
 as recorded in §5, ambiguous external-effect settlement remains the child

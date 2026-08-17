@@ -41,14 +41,19 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   `docs/plans/test-suite-audit.md` describes. The graph and its vocabulary live
   in `docs/test-audit/`; run it with `pnpm test-audit`.
 - Service-boundary contract completion (SB-00 / SB-08) — **CLOSED (program
-  complete) 2026-08-16.** All remaining-SB slices A–K landed on local `main`
-  (no push); Contracts 09/10/11/12 landed docs-only and SB-00 is closed. The
-  remaining work is the **Consolidated Implementation Backlog** at the end of
-  `docs/plans/service-boundary-contract-completion.md` — separately authorized
-  production repairs (SB-01/03/07 type-hardening, SB-02 durability, SB-04
-  port-hardening, SB-05/SB-06 repair after owner decisions), each needing its
-  own worktree and an exact red characterization before any code change. Read
-  the primary plan's Resume-here holds before touching any listed area.
+  complete) 2026-08-16; all residual decisions resolved 2026-08-16.** All
+  remaining-SB slices A–K landed and are pushed; Contracts 09/10/11/12 landed
+  docs-only and SB-00 is closed. The Consolidated Implementation Backlog at the
+  end of `docs/plans/service-boundary-contract-completion.md` is fully
+  resolved: SB-01/02/05/06/07 landed as repairs or docs; SB-03/SB-04 hardening
+  was declined by decision (composite facade and concrete runtime retained; no
+  proven defect); President decisions 2026-08-16 settled the three held secret
+  items (credential-at-rest plaintext, direct `/settings` credential display,
+  single-level log-sanitization depth), retiring the R10.2 and both C7.2 reds
+  as green characterizations. No SB-shaped follow-up remains open: the memory
+  strict-subset characterization merged with its worktree
+  (`memory-capabilities.test.ts:58`). Read the primary plan's header
+  before touching any listed area.
 - `tools/president-decision-portal/` and `scripts/candidate-gates.ts` — merged
   on 2026-08-16 from worktrees with no plan doc and no recorded caller. Nothing
   invokes either one. The portal binds a single hard-coded LAN address and

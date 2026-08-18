@@ -1,6 +1,6 @@
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useInputActions, useInputState } from './context/InputContext.js';
-import { clearTerminalForRedraw, messagesHaveNonSystemContent } from './app-helpers.js';
+import { clearTerminalForRedraw, clearVisibleForResize, messagesHaveNonSystemContent } from './app-helpers.js';
 
 import { Box, useApp, useStdout } from 'ink';
 import { useConversation } from './hooks/use-conversation.js';
@@ -58,6 +58,7 @@ import type { CopySelection } from './utils/copy-selections.js';
 export {
   appendStartupBannerId,
   clearTerminalForRedraw,
+  clearVisibleForResize,
   messagesHaveNonSystemContent,
   scheduleExitSideEffects,
   TERMINAL_REDRAW_CLEAR,
@@ -70,6 +71,9 @@ export {
  * still looking at the text that triggered it.
  */
 const LARGE_UNCACHED_PREVIEW_DEBOUNCE_MS = 250;
+
+/** How long after the last resize event the terminal must stay quiet before a redraw fires. */
+const RESIZE_SETTLED_MS = 300;
 
 interface AppProps {
   conversationService: ConversationService;
@@ -408,6 +412,58 @@ const App: FC<AppProps> = ({
     clearTerminalForRedraw(stdout);
     setMessageListEpoch((epoch) => epoch + 1);
   }, [stdout]);
+
+  // Resize redraw: Ink's <Static> renders committed messages once and never
+  // re-renders them, so old messages retain their old width after a terminal
+  // resize. When the terminal resizes, clear the visible screen and remount
+  // MessageList (via epoch bump) to re-render everything at the new width.
+  //
+  // Gate on !isProcessing to avoid clearing while Ink's log-update is
+  // diff-updating the live region mid-stream, which causes visual artifacts.
+  // A settled debounce (300ms of quiet after the last resize event) coalesces
+  // resize storms from tmux pane drags or window snaps.
+  const pendingResizeRedrawRef = useRef(false);
+  const isProcessingRef = useRef(isProcessing);
+  isProcessingRef.current = isProcessing;
+
+  useEffect(() => {
+    // Guard: test mocks may not provide EventEmitter methods on stdout.
+    if (
+      typeof (stdout as unknown as { on?: unknown }).on !== 'function' ||
+      typeof (stdout as unknown as { off?: unknown }).off !== 'function'
+    )
+      return;
+    const emitter = stdout as unknown as {
+      on: (e: string, fn: () => void) => void;
+      off: (e: string, fn: () => void) => void;
+    };
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const handleResize = () => {
+      if (timer !== null) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        if (isProcessingRef.current) {
+          pendingResizeRedrawRef.current = true;
+          return;
+        }
+        clearVisibleForResize(stdout);
+        setMessageListEpoch((epoch) => epoch + 1);
+      }, RESIZE_SETTLED_MS);
+    };
+    emitter.on('resize', handleResize);
+    return () => {
+      emitter.off('resize', handleResize);
+      if (timer !== null) clearTimeout(timer);
+    };
+  }, [stdout]);
+
+  // When processing ends and a resize redraw was deferred, apply it now.
+  useEffect(() => {
+    if (isProcessing || !pendingResizeRedrawRef.current) return;
+    pendingResizeRedrawRef.current = false;
+    clearVisibleForResize(stdout);
+    setMessageListEpoch((epoch) => epoch + 1);
+  }, [isProcessing, stdout]);
 
   const getSessionUsage = useCallback(() => {
     const tokenUsage = formatSessionUsageBreakdown(sessionUsage.get(), getSubagentUsage());

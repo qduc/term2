@@ -122,9 +122,8 @@ describe('application-owned Responses lifecycle through the shipped CLI', () => 
 
     const requests = normalRequests(server.requests);
     expect(requests).toHaveLength(2);
-    expect(requests[0]?.body.previous_response_id).toBe(
-      expectedInitialPreviousResponseId(providerCase.provider, providerCase.transport),
-    );
+    // The opening turn is cold for every provider and transport: nothing to chain onto.
+    expect(requests[0]?.body.previous_response_id).toBeUndefined();
     expect(requests[1]?.body.previous_response_id).toBe(FIRST_RESPONSE_ID);
     expect(
       server.served
@@ -283,12 +282,6 @@ async function runFailureScenario(
   await child.terminate({ timeoutMs: 2_000 });
 }
 
-function expectedInitialPreviousResponseId(provider: ProviderId, transport: Transport): string | undefined {
-  // Codex WebSocket's Responses Lite path seeds its server-managed wire chain
-  // with a generate:false warmup before the first generated turn.
-  return provider === 'codex' && transport === 'websocket' ? 'resp-warmup-0' : undefined;
-}
-
 function assertApprovalResume(
   server: ResponsesFixtureServer,
   providerCase: ProviderTransportCase,
@@ -296,9 +289,7 @@ function assertApprovalResume(
 ): void {
   const first = normalRequests(server.requests)[0];
   expect(first).toBeDefined();
-  expect(first?.body.previous_response_id).toBe(
-    expectedInitialPreviousResponseId(providerCase.provider, providerCase.transport),
-  );
+  expect(first?.body.previous_response_id).toBeUndefined();
 
   const resumed = toolResultRequests(server.requests);
   expect(resumed).toHaveLength(1);
@@ -399,8 +390,17 @@ function fixtureJwt(): string {
   return `${encode({ alg: 'none', typ: 'JWT' })}.${encode({ exp: Math.floor(Date.now() / 1_000) + 3_600 })}.fixture`;
 }
 
+/**
+ * Every captured request, with an assertion that none of them is a warmup.
+ *
+ * This used to filter `generate:false` legs out. Codex no longer sends them --
+ * a warmup immediately before the request it prepares bought a serial round
+ * trip and a duplicate, uncached prompt charge -- so filtering would now only
+ * serve to hide the reappearance of one.
+ */
 function normalRequests(requests: readonly CapturedResponsesRequest[]): CapturedResponsesRequest[] {
-  return requests.filter((request) => request.body.generate !== false);
+  expect(requests.filter((request) => request.body.generate === false)).toEqual([]);
+  return [...requests];
 }
 
 async function waitForRequests(

@@ -928,20 +928,8 @@ const asAmbiguousModelOutcome = (error: unknown): AmbiguousModelOutcomeError | u
 
 const hasGenerateFalse = (request: StreamedModelTurnRequest): boolean => request.providerOptions?.generate === false;
 
-const withProviderOptions = (
-  request: StreamedModelTurnRequest,
-  providerOptions: Record<string, unknown>,
-): StreamedModelTurnRequest => ({
-  ...request,
-  providerOptions: {
-    ...request.providerOptions,
-    ...providerOptions,
-  },
-});
-
 type PreparedCodexRequest = {
   request: any;
-  warmupRequest?: any;
 };
 
 type CodexWebSocketIdentity = {
@@ -1180,31 +1168,6 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     return wrapped();
   }
 
-  async #warmupCodexUnary(request: any | undefined): Promise<string | undefined> {
-    if (!request) {
-      return undefined;
-    }
-    const response = await super.fetchUnaryResponse(request);
-    const responseId = getResponseIdFromResponse(response);
-    this.#rememberCodexResponseId(responseId, asRecord(response)?.output, request.input, true);
-    return responseId;
-  }
-
-  async #warmupCodexStream(request: any | undefined): Promise<string | undefined> {
-    if (!request) {
-      return undefined;
-    }
-    let responseId: string | undefined;
-    for await (const event of super.rawStream(request)) {
-      const eventResponseId = getResponseIdFromStreamEvent(event);
-      if (eventResponseId) {
-        responseId = eventResponseId;
-        this.#rememberCodexResponseId(responseId, getResponseOutputFromStreamEvent(event), request.input, true);
-      }
-    }
-    return responseId;
-  }
-
   #prepareCodexServerHistoryRequest(request: any): any {
     const explicitPreviousResponseId =
       typeof request.previousResponseId === 'string' && request.previousResponseId.length > 0
@@ -1276,23 +1239,36 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       return { request: preparedRequest };
     }
 
+    // No usable server-held anchor, so this request carries its full history.
+    //
+    // Codex's `generate:false` warmup is deliberately not used here. It is only
+    // a win when it can be issued ahead of an upcoming turn, and this call site
+    // sits immediately before the request it would prepare -- so it bought a
+    // serial round trip while the paired generate call still reported the full
+    // uncached prompt (`cached_tokens: 0`), counting the prompt twice. The
+    // response ID that anchors the next turn comes from the generate response
+    // either way, so dropping warmup costs no chaining.
     const input = Array.isArray(request.input) ? dropUnpairedCodexToolItems(request.input) : request.input;
-    const replayRequest = input === request.input ? request : { ...request, input };
-    if (!Array.isArray(input) || input.length === 0) {
-      return { request: replayRequest };
-    }
-
-    return {
-      warmupRequest: withProviderOptions(replayRequest, { generate: false }),
-      request: replayRequest,
-    };
+    return { request: input === request.input ? request : { ...request, input } };
   }
 
+  /**
+   * Records a response ID as the anchor for the next turn's `previous_response_id`.
+   *
+   * The chain anchor -- the set of function call IDs a response is known to hold
+   * -- is recorded only for a full-history request, meaning one sent without
+   * `previous_response_id`. That condition used to be implicit: only the
+   * `generate:false` warmup leg recorded an anchor, and warmup always carried
+   * complete history. Recording it from a chained request instead would be a
+   * false-positive machine, because a chained request's `input` is only the
+   * delta -- the orphan guard below would then reject every genuinely new tool
+   * output as unknown to the chain.
+   */
   #rememberCodexResponseId(
     responseId: string | undefined,
     output?: unknown,
     input?: unknown,
-    recordChainAnchor = false,
+    sentAsFullHistory = false,
   ): void {
     if (!responseId) {
       return;
@@ -1308,7 +1284,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         responseId,
       });
     }
-    if (recordChainAnchor && (Array.isArray(output) || Array.isArray(input))) {
+    if (sentAsFullHistory && (Array.isArray(output) || Array.isArray(input))) {
       this.codexFunctionCallIdsByResponseId.set(
         responseId,
         new Set([...collectFunctionCallIds(output), ...collectFunctionCallIds(input)]),
@@ -1483,31 +1459,6 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     };
   }
 
-  #getEffectiveCodexRequestAfterWarmup(
-    originalRequest: any,
-    preparedRequest: PreparedCodexRequest,
-    warmupResponseId: string | undefined,
-  ): any {
-    if (!preparedRequest.warmupRequest) {
-      return preparedRequest.request;
-    }
-    if (!warmupResponseId) {
-      return originalRequest;
-    }
-
-    const warmupInput = Array.isArray(preparedRequest.warmupRequest.input) ? preparedRequest.warmupRequest.input : [];
-    const currentInput = Array.isArray(preparedRequest.request.input) ? preparedRequest.request.input : [];
-    if (isExactInputPrefix(currentInput, warmupInput)) {
-      return {
-        ...preparedRequest.request,
-        previousResponseId: warmupResponseId,
-        input: currentInput.slice(warmupInput.length),
-      };
-    }
-
-    return this.#withoutCodexServerHistory(preparedRequest.request);
-  }
-
   #withoutCodexServerHistory(request: any): any {
     if (!request || typeof request !== 'object') {
       return request;
@@ -1522,16 +1473,18 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       let attemptedWithServerHistory = false;
       try {
         const preparedRequest = this.#prepareCodexServerHistoryRequests(request);
-        attemptedWithServerHistory = Boolean(
-          preparedRequest.warmupRequest || preparedRequest.request?.previousResponseId,
-        );
-        const warmupResponseId = await this.#warmupCodexUnary(preparedRequest.warmupRequest);
-        const effectiveRequest = this.#getEffectiveCodexRequestAfterWarmup(request, preparedRequest, warmupResponseId);
+        attemptedWithServerHistory = Boolean(preparedRequest.request?.previousResponseId);
+        const effectiveRequest = preparedRequest.request;
         this.#assertChainRequestMakesProgress(effectiveRequest);
 
         const response = await super.fetchUnaryResponse(effectiveRequest);
         const responseId = getResponseIdFromResponse(response);
-        this.#rememberCodexResponseId(responseId, asRecord(response)?.output, request.input);
+        this.#rememberCodexResponseId(
+          responseId,
+          asRecord(response)?.output,
+          request.input,
+          !effectiveRequest.previousResponseId,
+        );
         this.#rememberConsumedToolResultCallIds(
           responseId,
           effectiveRequest.previousResponseId,
@@ -1548,7 +1501,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
           const fallbackRequest = this.#withoutCodexServerHistory(request);
           const response = await super.fetchUnaryResponse(fallbackRequest);
           const responseId = getResponseIdFromResponse(response);
-          this.#rememberCodexResponseId(responseId, asRecord(response)?.output, fallbackRequest.input);
+          this.#rememberCodexResponseId(responseId, asRecord(response)?.output, fallbackRequest.input, true);
           this.#rememberConsumedToolResultCallIds(responseId, undefined, fallbackRequest.input);
           return response;
         }
@@ -1567,11 +1520,8 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     let attemptedWithServerHistory = false;
     try {
       const preparedRequest = this.#prepareCodexServerHistoryRequests(request);
-      attemptedWithServerHistory = Boolean(
-        preparedRequest.warmupRequest || preparedRequest.request?.previousResponseId,
-      );
-      const warmupResponseId = await this.#warmupCodexStream(preparedRequest.warmupRequest);
-      const effectiveRequest = this.#getEffectiveCodexRequestAfterWarmup(request, preparedRequest, warmupResponseId);
+      attemptedWithServerHistory = Boolean(preparedRequest.request?.previousResponseId);
+      const effectiveRequest = preparedRequest.request;
       this.#assertChainRequestMakesProgress(effectiveRequest);
 
       let responseId: string | undefined;
@@ -1579,7 +1529,12 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         const eventResponseId = getResponseIdFromStreamEvent(event);
         if (eventResponseId) {
           responseId = eventResponseId;
-          this.#rememberCodexResponseId(responseId, getResponseOutputFromStreamEvent(event), request.input);
+          this.#rememberCodexResponseId(
+            responseId,
+            getResponseOutputFromStreamEvent(event),
+            request.input,
+            !effectiveRequest.previousResponseId,
+          );
         }
         if (TERMINAL_RESPONSE_EVENT_TYPES.has(event?.type)) {
           this.#rememberConsumedToolResultCallIds(
@@ -1607,7 +1562,12 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
             const eventResponseId = getResponseIdFromStreamEvent(event);
             if (eventResponseId) {
               responseId = eventResponseId;
-              this.#rememberCodexResponseId(responseId, getResponseOutputFromStreamEvent(event), fallbackRequest.input);
+              this.#rememberCodexResponseId(
+                responseId,
+                getResponseOutputFromStreamEvent(event),
+                fallbackRequest.input,
+                true,
+              );
             }
             if (TERMINAL_RESPONSE_EVENT_TYPES.has(event?.type)) {
               this.#rememberConsumedToolResultCallIds(responseId, undefined, fallbackRequest.input);

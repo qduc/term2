@@ -1,6 +1,38 @@
 # Codex WebSocket warmup and corrupt-history recovery
 
-Status: **implemented.** Recovery sends a fresh full-history inference request; healthy WebSocket warmup is the complete logical request.
+Status: **implemented, then warmup removed (2026-08-18).** Recovery sends a fresh full-history inference request. Healthy WebSocket warmup no longer exists.
+
+## Warmup was removed (2026-08-18 correction)
+
+Read this before reintroducing a `generate:false` leg. The plan below aligned term2's
+warmup with official Codex, which was the right correction at the time; the leg has
+since been deleted outright because term2 called it at the wrong moment.
+
+Warmup pays for itself only when it is issued ahead of an *upcoming* turn, so the
+upload overlaps idle time. Term2 issued it inline, immediately before the request it
+prepared, with nothing in between. Measured on real traffic
+(`provider-traffic/2026-08-18/01-06-00_01306/`), that cost a serial round trip *and*
+a duplicate prompt charge: the warmup reported 4,191 input tokens, and the paired
+generate call reported the same 4,191 with `cached_tokens: 0`. No cache credit. The
+prompt was counted twice on every cold request, and every mentor-pool consultation
+is cold by construction, since each gets a throwaway session with no second turn.
+
+Removing it costs no chaining. The response ID that anchors the next turn comes from
+the generate response either way.
+
+One trap this created, caught by `does not chain a tool output whose call is absent
+from a rebuilt response chain`: the chain anchor in `codexFunctionCallIdsByResponseId`
+-- the orphan guard's authority on which calls a response holds -- was recorded *only*
+on the warmup leg. Deleting warmup silently disarmed the guard. It is now recorded by
+the generate path, but **only for a full-history request** (`sentAsFullHistory`).
+Recording it from a chained request would be a false-positive machine: a chained
+request's `input` is just the delta, so the guard would reject every genuinely new
+tool output as unknown to the chain.
+
+If a future change wants the latency win back, the safe shape is Codex's *preconnect*
+(<https://github.com/openai/codex/pull/10698>) -- a handshake-only warm socket opened
+at session start that sends no `response.create` and therefore costs no tokens. That
+is a different mechanism from the `generate:false` frame removed here.
 
 ## Resume here
 

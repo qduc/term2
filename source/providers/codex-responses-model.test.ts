@@ -1213,29 +1213,29 @@ it('CodexResponsesWSModel sends only new input after a Responses-Lite prefix is 
     );
     await collect(
       model.stream({
-        previousResponseId: 'resp_lite_2',
-        input: [secondUserMessage],
+        // The opening turn is one request now, so it is `resp_lite_1` that the
+        // second turn chains onto.
+        previousResponseId: 'resp_lite_1',
+        input: [firstUserMessage, secondUserMessage],
         instructions: 'Follow the repository instructions.',
         tools: [tool],
       } as any),
     );
 
-    expect(trafficBodies).toHaveLength(3);
+    // One request per turn: the opening turn carries full history, the second
+    // chains off it. There is no `generate:false` warmup leg.
+    expect(trafficBodies).toHaveLength(2);
     expect(trafficBodies[0].input[0]).toMatchObject({ type: 'additional_tools', role: 'developer', tools: [tool] });
-    expect(trafficBodies[1].previous_response_id).toBe('resp_lite_1');
-    expect(trafficBodies[1].input).toEqual([]);
-    expect([
-      ...trafficBodies[0].input.filter((item: any) => item?.type === 'message' && item?.role === 'user'),
-      ...trafficBodies[1].input,
-    ]).toEqual([
+    expect(trafficBodies[0].previous_response_id).toBeUndefined();
+    expect(trafficBodies[0].input.filter((item: any) => item?.type === 'message' && item?.role === 'user')).toEqual([
       expect.objectContaining({ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] }),
     ]);
-    expect(trafficBodies[2].previous_response_id).toBe('resp_lite_2');
-    expect(trafficBodies[2].input).toEqual([
+    expect(trafficBodies[1].previous_response_id).toBe('resp_lite_1');
+    expect(trafficBodies[1].input).toEqual([
       expect.objectContaining({ role: 'user', content: [{ type: 'input_text', text: 'how are you?' }] }),
     ]);
     expect(captures.map((capture) => capture.requestData)).toEqual(trafficBodies);
-    expect(captures.map((capture) => capture.transport)).toEqual(['websocket', 'websocket', 'websocket']);
+    expect(captures.map((capture) => capture.transport)).toEqual(['websocket', 'websocket']);
   } finally {
   }
 });
@@ -1291,22 +1291,23 @@ it('CodexResponsesWSModel correlates Responses-Lite state across sequential stre
       } as any),
     );
 
-    // Second turn chains off the first.
+    // Second turn chains off the first, which is `resp_token_1` now that the
+    // opening turn is a single request.
     await collect(
       model.stream({
-        previousResponseId: 'resp_token_2',
-        input: [msg2],
+        previousResponseId: 'resp_token_1',
+        input: [msg1, msg2],
         instructions: 'Do it.',
         tools: [tool],
       } as any),
     );
 
     // Traffic captures tell us the delta is correctly computed across turns.
-    expect(trafficBodies).toHaveLength(3);
-    // The third body (second turn's final request) should carry just the
-    // new user message as a delta.
-    expect(trafficBodies[2].previous_response_id).toBe('resp_token_2');
-    expect(trafficBodies[2].input).toEqual([
+    expect(trafficBodies).toHaveLength(2);
+    // The second body (the second turn) should carry just the new user message
+    // as a delta.
+    expect(trafficBodies[1].previous_response_id).toBe('resp_token_1');
+    expect(trafficBodies[1].input).toEqual([
       expect.objectContaining({ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'second' }] }),
     ]);
   } finally {
@@ -1781,12 +1782,10 @@ it('CodexResponsesWSModel injects Codex previous response id and trims replayed 
     }
 
     const firstUser = { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect' }] };
-    expect(seenRequests.length).toBe(2);
-    expect(seenRequests[0].providerOptions?.generate).toBe(false);
+    // The opening turn is a single full-history request -- no warmup leg.
+    expect(seenRequests.length).toBe(1);
+    expect(seenRequests[0].previousResponseId).toBeUndefined();
     expect(seenRequests[0].input).toEqual([firstUser]);
-    expect(seenRequests[1].previousResponseId).toBe('resp-1');
-    expect(seenRequests[1].input).toEqual([]);
-    expect([...seenRequests[0].input, ...seenRequests[1].input]).toEqual([firstUser]);
 
     for await (const _event of model.stream({
       input: [
@@ -1799,9 +1798,9 @@ it('CodexResponsesWSModel injects Codex previous response id and trims replayed 
     } as any)) {
     }
 
-    expect(seenRequests.length).toBe(3);
-    expect(seenRequests[2].previousResponseId).toBe('resp-2');
-    expect(seenRequests[2].input).toEqual([toolOutput]);
+    expect(seenRequests.length).toBe(2);
+    expect(seenRequests[1].previousResponseId).toBe('resp-1');
+    expect(seenRequests[1].input).toEqual([toolOutput]);
 
     const latestUser = { type: 'message', role: 'user', content: [{ type: 'text', text: 'summarize' }] };
     for await (const _event of model.stream({
@@ -1815,9 +1814,9 @@ it('CodexResponsesWSModel injects Codex previous response id and trims replayed 
     } as any)) {
     }
 
-    expect(seenRequests.length).toBe(4);
-    expect(seenRequests[3].previousResponseId).toBe('resp-explicit');
-    expect(seenRequests[3].input).toEqual([latestUser]);
+    expect(seenRequests.length).toBe(3);
+    expect(seenRequests[2].previousResponseId).toBe('resp-explicit');
+    expect(seenRequests[2].input).toEqual([latestUser]);
   } finally {
   }
 });
@@ -2246,7 +2245,7 @@ it('CodexResponsesWSModel keeps interleaved outputs when function calls only car
   }
 });
 
-it('CodexResponsesWSModel warms interleaved tool continuations into history before sending the delta', async () => {
+it('CodexResponsesWSModel sends interleaved tool continuations as one complete logical request', async () => {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const seenRequests: any[] = [];
   transport.fetchResponse = async function (request: any) {
@@ -2321,18 +2320,65 @@ it('CodexResponsesWSModel warms interleaved tool continuations into history befo
       shellPair.call,
       shellPair.output,
     ];
-    expect(seenRequests.length).toBe(2);
-    expect(seenRequests[0].providerOptions?.generate).toBe(false);
+    // Interleaved tool continuations go out as one complete logical request.
+    expect(seenRequests.length).toBe(1);
     expect(seenRequests[0].previousResponseId).toBe(undefined);
     expect(seenRequests[0].input).toEqual(completeHistory);
-    expect(seenRequests[1].previousResponseId).toBe('resp-warmup');
-    expect(seenRequests[1].input).toEqual([]);
-    expect([...seenRequests[0].input, ...seenRequests[1].input]).toEqual(completeHistory);
   } finally {
   }
 });
 
-it('CodexResponsesWSModel leaves warmup connection failures to the outer retry policy', async () => {
+it('CodexResponsesWSModel sends a cold request once, with no generate:false warmup leg', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const seenRequests: any[] = [];
+  transport.fetchResponse = async function (request: any) {
+    seenRequests.push(request);
+    return makeStream([
+      { type: 'response.completed', response: { id: `resp-${seenRequests.length}`, output: [], usage: {} } } as any,
+    ]);
+  };
+
+  const history = [
+    { role: 'user', type: 'message', content: [{ type: 'text', text: 'first' }] },
+    { role: 'assistant', type: 'message', content: [{ type: 'text', text: 'first response' }] },
+    { role: 'user', type: 'message', content: [{ type: 'text', text: 'second' }] },
+  ];
+
+  const model = new CodexResponsesWSModel(
+    { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+    'gpt-5-codex',
+    { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+    undefined,
+    undefined,
+    {
+      getContext: () => ({ sessionId: 'session-no-warmup', traceId: 'trace-no-warmup' } as any),
+      runWithContext: <T>(_context: any, fn: () => T) => fn(),
+    },
+    transport,
+  );
+
+  await collect(model.stream({ input: history, tools: [] } as any));
+
+  // A warmup leg would upload this same history a second time. Codex reports the
+  // paired generate call's prompt as fully uncached, so the duplicate is charged
+  // rather than deduplicated -- which is why there is exactly one request here.
+  expect(seenRequests).toHaveLength(1);
+  expect(seenRequests[0].providerOptions?.generate).toBeUndefined();
+  expect(seenRequests[0].previousResponseId).toBeUndefined();
+  expect(seenRequests[0].input).toEqual(history);
+
+  // The single generate response still anchors the next turn's chain.
+  await collect(
+    model.stream({
+      input: [...history, { role: 'user', type: 'message', content: [{ type: 'text', text: 'third' }] }],
+      tools: [],
+    } as any),
+  );
+  expect(seenRequests).toHaveLength(2);
+  expect(seenRequests[1].previousResponseId).toBe('resp-1');
+});
+
+it('CodexResponsesWSModel leaves connection failures to the outer retry policy', async () => {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const seenRequests: any[] = [];
   const networkError = Object.assign(new Error('Responses websocket connection closed before opening.'), {
@@ -2394,7 +2440,8 @@ it('CodexResponsesWSModel leaves warmup connection failures to the outer retry p
     }).rejects.toBe(networkError);
 
     expect(seenRequests.length).toBe(1);
-    expect(seenRequests[0].providerOptions?.generate).toBe(false);
+    expect(seenRequests[0].providerOptions?.generate).toBeUndefined();
+    expect(seenRequests[0].input).toEqual(fullInput);
   } finally {
   }
 });
@@ -2616,12 +2663,12 @@ it('CodexResponsesWSModel preserves tool output when a user steer message follow
     } as any),
   );
 
-  expect(trafficBodies).toHaveLength(3);
-  expect(trafficBodies[2].previous_response_id).toBe('resp-tool-call');
-  expect(trafficBodies[2].input).toEqual([
-    expect.objectContaining({
-      type: 'additional_tools',
-    }),
+  expect(trafficBodies).toHaveLength(2);
+  expect(trafficBodies[1].previous_response_id).toBe('resp-tool-call');
+  // The Responses-Lite `additional_tools` prefix is not re-sent: turn 1 is now a
+  // single request, so the response this turn chains onto is the same one that
+  // already carries the prefix.
+  expect(trafficBodies[1].input).toEqual([
     expect.objectContaining({
       type: 'function_call_output',
       call_id: 'call_dUY49XDM2PcYLUlN0vQzCeKO',
@@ -2937,7 +2984,7 @@ it('CodexResponsesWSModel does not chain a tool output whose call is absent from
       callIds: [orphanedCallId],
     });
 
-    expect(seenRequests).toHaveLength(2);
+    expect(seenRequests).toHaveLength(1);
     expect(seenRequests).not.toContainEqual(
       expect.objectContaining({
         input: expect.arrayContaining([expect.objectContaining({ id: orphanedCallId })]),
@@ -3053,17 +3100,17 @@ it('CodexResponsesWSModel unary path records Luna wire state response with corre
 
     // Second unary call chains off first and should produce a delta.
     await (model as any).fetchUnaryResponse({
-      previousResponseId: 'resp_unary_luna_2',
-      input: [msg2],
+      previousResponseId: 'resp_unary_luna_1',
+      input: [msg1, msg2],
       instructions: 'Do it.',
       tools: [],
     } as any);
 
-    // The second call's final request body (third traffic entry) should
-    // carry only the new user message as a delta.
-    expect(trafficBodies).toHaveLength(3);
-    expect(trafficBodies[2].previous_response_id).toBe('resp_unary_luna_2');
-    expect(trafficBodies[2].input).toEqual([
+    // The second call (the second traffic entry, now that the first call is a
+    // single request) should carry only the new user message as a delta.
+    expect(trafficBodies).toHaveLength(2);
+    expect(trafficBodies[1].previous_response_id).toBe('resp_unary_luna_1');
+    expect(trafficBodies[1].input).toEqual([
       expect.objectContaining({
         type: 'message',
         role: 'user',

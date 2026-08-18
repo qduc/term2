@@ -3,10 +3,12 @@ import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import {
   computeModelCost,
   createSessionCostAccumulator,
+  formatModelUsageBreakdown,
   formatUsdMicros,
   parseUsdMicros,
   resolveBillableTokens,
   summarizeCost,
+  summarizeModelUsage,
   type CatalogPrice,
   type ModelCostInput,
   type ModelRequestCost,
@@ -336,5 +338,55 @@ describe('createSessionCostAccumulator', () => {
     accumulator.addRecord(computeModelCost(baseInput({ requestId: 'x', providerUsdMicros: 100 })));
     accumulator.addRecord(computeModelCost(baseInput({ requestId: 'y', providerUsdMicros: 100 })));
     expect(accumulator.getSummary()).toMatchObject({ knownUsdMicros: 200, pricedRequests: 2 });
+  });
+
+  it('groups token usage and cost by provider/model without double-counting duplicate records', () => {
+    const accumulator = createSessionCostAccumulator();
+    const first = computeModelCost(
+      baseInput({ requestId: 'first', usage: { prompt_tokens: 100, completion_tokens: 20 }, providerUsdMicros: 100 }),
+    );
+    const second = computeModelCost(
+      baseInput({ requestId: 'second', usage: { prompt_tokens: 300, completion_tokens: 40 }, providerUsdMicros: 250 }),
+    );
+    const otherModel = computeModelCost(
+      baseInput({
+        requestId: 'other',
+        provider: 'anthropic',
+        model: 'claude-sonnet',
+        usage: { prompt_tokens: 50, completion_tokens: 10 },
+        providerUsdMicros: 75,
+      }),
+    );
+    accumulator.addRecords([first, second, otherModel, first]);
+
+    expect(accumulator.getModelUsageBreakdown()).toEqual([
+      expect.objectContaining({
+        provider: 'openai',
+        model: 'gpt-4.1',
+        usage: { prompt_tokens: 400, completion_tokens: 60 },
+        cost: expect.objectContaining({ knownUsdMicros: 350, pricedRequests: 2, state: 'exact' }),
+      }),
+      expect.objectContaining({
+        provider: 'anthropic',
+        model: 'claude-sonnet',
+        usage: { prompt_tokens: 50, completion_tokens: 10 },
+        cost: expect.objectContaining({ knownUsdMicros: 75, pricedRequests: 1, state: 'exact' }),
+      }),
+    ]);
+  });
+
+  it('formats each model with token usage and its cost', () => {
+    const records = [
+      computeModelCost(
+        baseInput({
+          usage: { prompt_tokens: 1200, completion_tokens: 80, cache_read_tokens: 300 },
+          providerUsdMicros: 420000,
+        }),
+      ),
+    ];
+
+    expect(formatModelUsageBreakdown(summarizeModelUsage(records))).toBe(
+      'By model:\n  openai/gpt-4.1: 1,200 input (300 cached), 80 output; Cost $0.42',
+    );
   });
 });

@@ -20,7 +20,11 @@ import { ExecutionContext } from './services/execution-context.js';
 import { ISSHService } from './services/service-interfaces.js';
 import { resolveSSHHost } from './utils/ssh-config-parser.js';
 import { createUsageAccumulator, formatSessionUsageBreakdown } from './utils/ai/token-usage.js';
-import { createSessionCostAccumulator, formatUsdMicros } from './services/cost/model-cost.js';
+import {
+  createSessionCostAccumulator,
+  formatModelUsageBreakdown,
+  formatUsdMicros,
+} from './services/cost/model-cost.js';
 import { buildProjectFolderTitle, setTerminalTitle } from './utils/output/terminal-title.js';
 import {
   generateId,
@@ -71,10 +75,15 @@ const printUsage = () => {
       : costSummary.state === 'partial'
       ? `Est ${formatUsdMicros(costSummary.knownUsdMicros)}+`
       : null;
+  const modelUsage = formatModelUsageBreakdown(sessionCostAccumulator.getModelUsageBreakdown());
   process.stdout.write(
-    `\n${formatSessionUsageBreakdown(sessionUsageAccumulator.get(), subagentUsageAccumulator.get())}${
-      costLine ? `\n${costLine}` : ''
-    }\n`,
+    `\n${[
+      formatSessionUsageBreakdown(sessionUsageAccumulator.get(), subagentUsageAccumulator.get()),
+      modelUsage,
+      costLine,
+    ]
+      .filter(Boolean)
+      .join('\n')}\n`,
   );
 };
 const printUsageOnce = () => {

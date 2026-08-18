@@ -32,6 +32,7 @@ import type { Message } from './types/message.js';
 import { createUsageAccumulator, formatSessionUsageBreakdown, type UsageAccumulator } from './utils/ai/token-usage.js';
 import {
   createSessionCostAccumulator,
+  formatModelUsageBreakdown,
   formatUsdMicros,
   type SessionCostAccumulator,
 } from './services/cost/model-cost.js';
@@ -467,17 +468,18 @@ const App: FC<AppProps> = ({
 
   const getSessionUsage = useCallback(() => {
     const tokenUsage = formatSessionUsageBreakdown(sessionUsage.get(), getSubagentUsage());
+    const modelUsage = formatModelUsageBreakdown(sessionCost.getModelUsageBreakdown());
     const summary = getCostSummary();
     if (!summary || summary.state === 'unavailable') {
-      return tokenUsage;
+      return modelUsage ? `${tokenUsage}\n${modelUsage}` : tokenUsage;
     }
 
     const costLabel = summary.state === 'exact' ? 'Cost' : 'Estimated cost';
     const costAmount = `${formatUsdMicros(summary.knownUsdMicros)}${summary.state === 'partial' ? '+' : ''}`;
     const lowerBound = summary.state === 'partial' ? ' (lower bound)' : '';
     const costUsage = `${costLabel}: ${costAmount}${lowerBound} (${summary.pricedRequests} priced, ${summary.unpricedRequests} unpriced requests)`;
-    return `${tokenUsage}\n${costUsage}`;
-  }, [getCostSummary, getSubagentUsage, sessionUsage]);
+    return [tokenUsage, modelUsage, costUsage].filter(Boolean).join('\n');
+  }, [getCostSummary, getSubagentUsage, sessionCost, sessionUsage]);
 
   const staticCommitBlocker = useMemo(
     () => detectStaticCommitBlocker(messages, { displayMode }),

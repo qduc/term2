@@ -11,7 +11,7 @@
  * arithmetic; each model request is rounded exactly once, then integers are
  * added.
  */
-import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
+import { addTokenUsage, formatUsageLine, type NormalizedUsage } from '../../utils/ai/token-usage.js';
 
 /** Where a request's USD charge came from. */
 export type CostSource = 'provider' | 'catalog';
@@ -60,6 +60,14 @@ export interface SessionCostSummary {
   pricedRequests: number;
   unpricedRequests: number;
   state: 'exact' | 'estimated' | 'partial' | 'unavailable';
+}
+
+/** Token and cost totals for one provider/model pair in a session. */
+export interface ModelUsageBreakdown {
+  provider: string;
+  model: string;
+  usage: NormalizedUsage;
+  cost: SessionCostSummary;
 }
 
 /** Non-overlapping per-million-token rates in USD. */
@@ -268,6 +276,56 @@ export function summarizeCost(records: readonly ModelRequestCost[]): SessionCost
   return { knownUsdMicros, pricedRequests, unpricedRequests, state };
 }
 
+/** Group request records by provider/model while preserving first-seen order. */
+export function summarizeModelUsage(records: readonly ModelRequestCost[]): ModelUsageBreakdown[] {
+  const groups = new Map<
+    string,
+    { provider: string; model: string; usage: NormalizedUsage; records: ModelRequestCost[] }
+  >();
+
+  for (const record of records) {
+    const key = `${record.provider}\u0000${record.model}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = { provider: record.provider, model: record.model, usage: {}, records: [] };
+      groups.set(key, group);
+    }
+    group.usage = addTokenUsage(group.usage, record.usage);
+    group.records.push(record);
+  }
+
+  return [...groups.values()].map((group) => ({
+    provider: group.provider,
+    model: group.model,
+    usage: group.usage,
+    cost: summarizeCost(group.records),
+  }));
+}
+
+function formatModelCost(cost: SessionCostSummary): string {
+  switch (cost.state) {
+    case 'exact':
+      return `Cost ${formatUsdMicros(cost.knownUsdMicros)}`;
+    case 'estimated':
+      return `Estimated cost ${formatUsdMicros(cost.knownUsdMicros)}`;
+    case 'partial':
+      return `Estimated cost ${formatUsdMicros(cost.knownUsdMicros)}+`;
+    case 'unavailable':
+      return 'Cost unavailable';
+  }
+}
+
+/** Format token and cost totals for each model in a session. */
+export function formatModelUsageBreakdown(breakdowns: readonly ModelUsageBreakdown[]): string {
+  if (breakdowns.length === 0) return '';
+
+  const lines = breakdowns.map(({ provider, model, usage, cost }) => {
+    const usageText = Object.keys(usage).length > 0 ? formatUsageLine('', usage) : 'tokens unavailable';
+    return `  ${provider}/${model}: ${usageText}; ${formatModelCost(cost)}`;
+  });
+  return `By model:\n${lines.join('\n')}`;
+}
+
 /**
  * Format integer micros as USD.
  *
@@ -303,6 +361,7 @@ export interface SessionCostAccumulator {
   addRecords(records: readonly ModelRequestCost[]): void;
   reset(): void;
   getSummary(): SessionCostSummary;
+  getModelUsageBreakdown(): readonly ModelUsageBreakdown[];
 }
 
 const EMPTY_SUMMARY: SessionCostSummary = {
@@ -351,6 +410,9 @@ export function createSessionCostAccumulator(options?: {
     },
     getSummary() {
       return summary;
+    },
+    getModelUsageBreakdown() {
+      return summarizeModelUsage(records);
     },
   };
 }

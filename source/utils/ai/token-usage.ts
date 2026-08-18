@@ -396,13 +396,14 @@ export function formatSessionTokenUsage(usage: NormalizedUsage | null | undefine
   return `Token usage: ${promptTokens.toLocaleString()} input${cachedPart}, ${completionTokens.toLocaleString()} output`;
 }
 
-function formatUsageLine(label: string, usage: NormalizedUsage | null | undefined): string {
+export function formatUsageLine(label: string, usage: NormalizedUsage | null | undefined): string {
   const promptTokens = usage?.prompt_tokens ?? 0;
   const completionTokens = usage?.completion_tokens ?? 0;
   const cachedTokens = usage?.cache_read_tokens ?? 0;
 
   const cachedPart = cachedTokens > 0 ? ` (${cachedTokens.toLocaleString()} cached)` : '';
-  return `${label}: ${promptTokens.toLocaleString()} input${cachedPart}, ${completionTokens.toLocaleString()} output`;
+  const value = `${promptTokens.toLocaleString()} input${cachedPart}, ${completionTokens.toLocaleString()} output`;
+  return label ? `${label}: ${value}` : value;
 }
 
 /**

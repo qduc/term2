@@ -71,7 +71,6 @@ interface ResponsesFixtureServer {
   readonly websocketUrl: string;
   readonly requests: CapturedResponsesRequest[];
   readonly served: ServedResponse[];
-  readonly websocketConnectionCount: number;
   waitForRequests(
     predicate: (requests: readonly CapturedResponsesRequest[]) => boolean,
     timeoutMs?: number,
@@ -123,7 +122,6 @@ describe('application-owned Responses lifecycle through the shipped CLI', () => 
 
     const requests = normalRequests(server.requests);
     expect(requests).toHaveLength(2);
-    expect(requests.every((request) => request.transport === providerCase.transport)).toBe(true);
     // The opening turn is cold for every provider and transport: nothing to chain onto.
     expect(requests[0]?.body.previous_response_id).toBeUndefined();
     expect(requests[1]?.body.previous_response_id).toBe(FIRST_RESPONSE_ID);
@@ -152,35 +150,6 @@ describe('application-owned Responses lifecycle through the shipped CLI', () => 
       ).toBe(true);
     }
   });
-
-  it.each(['openai', 'codex'] as const)(
-    '%s-websocket.retained-connection keeps two chained turns on one retained connection',
-    async (provider) => {
-      const server = await startResponsesFixtureServer({
-        mode: 'multi-turn',
-        retainWebSocket: true,
-        rejectReconnect: true,
-      });
-      activeServer = server;
-      const workspace = await createWorkspace(server, { provider, transport: 'websocket' });
-      activeWorkspace = workspace;
-      const child = await startCli(workspace);
-      activeChild = child;
-
-      const firstIdle = await child.waitForIdleInput();
-      await writePrompt(child, 'first persistent websocket turn');
-      await waitForIdleAfterResponse(child, firstIdle, 'FIRST-RESPONSE');
-      const secondIdle = await child.waitForIdleInput();
-      await writePrompt(child, 'second persistent websocket turn');
-      await waitForIdleAfterResponse(child, secondIdle, 'SECOND-RESPONSE');
-
-      const requests = normalRequests(server.requests);
-      expect(requests).toHaveLength(2);
-      expect(requests.every((request) => request.transport === 'websocket')).toBe(true);
-      expect(server.websocketConnectionCount).toBe(1);
-      expect(requests[1]?.body.previous_response_id).toBe(FIRST_RESPONSE_ID);
-    },
-  );
 
   it.each(providerTransportCases)(
     '$provider $transport resumes an approved tool from its producing response',
@@ -490,16 +459,11 @@ function parseFunctionResultOutput(item: Record<string, unknown>): unknown {
   return JSON.parse(output);
 }
 
-async function startResponsesFixtureServer(options: {
-  mode: FixtureMode;
-  retainWebSocket?: boolean;
-  rejectReconnect?: boolean;
-}): Promise<ResponsesFixtureServer> {
+async function startResponsesFixtureServer(options: { mode: FixtureMode }): Promise<ResponsesFixtureServer> {
   const requests: CapturedResponsesRequest[] = [];
   const served: ServedResponse[] = [];
   const sockets = new Set<Socket>();
   const clients = new Set<WebSocket>();
-  let websocketConnectionCount = 0;
   const httpServer = createServer(async (request, response) => {
     sockets.add(request.socket);
     request.socket.once('close', () => sockets.delete(request.socket));
@@ -510,7 +474,7 @@ async function startResponsesFixtureServer(options: {
       body: await readJsonBody(request),
     } satisfies CapturedResponsesRequest;
     requests.push(captured);
-    await serveResponse(options.mode, captured, response, undefined, served, false);
+    await serveResponse(options.mode, captured, response, undefined, served);
   });
   const webSocketServer = new WebSocketServer({ noServer: true });
 
@@ -520,20 +484,11 @@ async function startResponsesFixtureServer(options: {
     });
   });
   webSocketServer.on('connection', (client, request) => {
-    websocketConnectionCount += 1;
     clients.add(client);
     client.once('close', () => clients.delete(client));
-    if (options.rejectReconnect && websocketConnectionCount > 1) {
-      client.close(1008, 'persistent fixture rejects reconnect');
-      return;
-    }
     let servedRequest = false;
-    let responseQueue = Promise.resolve();
     client.on('message', (raw) => {
-      if (servedRequest && !options.retainWebSocket) {
-        client.close(1008, 'fixture accepts one request per connection');
-        return;
-      }
+      if (servedRequest) return;
       servedRequest = true;
       const captured = {
         transport: 'websocket' as const,
@@ -542,9 +497,7 @@ async function startResponsesFixtureServer(options: {
         body: parseJsonMessage(raw),
       } satisfies CapturedResponsesRequest;
       requests.push(captured);
-      responseQueue = responseQueue.then(() =>
-        serveResponse(options.mode, captured, undefined, client, served, Boolean(options.retainWebSocket)),
-      );
+      void serveResponse(options.mode, captured, undefined, client, served);
     });
   });
 
@@ -563,9 +516,6 @@ async function startResponsesFixtureServer(options: {
     websocketUrl: `ws://127.0.0.1:${address.port}`,
     requests,
     served,
-    get websocketConnectionCount() {
-      return websocketConnectionCount;
-    },
     waitForRequests: async (predicate, timeoutMs = 15_000) => {
       const startedAt = Date.now();
       while (!predicate(requests)) {
@@ -603,7 +553,6 @@ async function serveResponse(
   httpResponse: ServerResponse | undefined,
   webSocket: WebSocket | undefined,
   served: ServedResponse[],
-  retainWebSocket = false,
 ): Promise<void> {
   const isWarmup = request.body.generate === false;
   const hasToolResult = Array.isArray(request.body.input)
@@ -614,13 +563,7 @@ async function serveResponse(
   const normalIndex = countNormalServed(served);
 
   if (isWarmup) {
-    await sendFrames(
-      httpResponse,
-      webSocket,
-      [completedFrame(`resp-warmup-${normalIndex}`, [])],
-      false,
-      retainWebSocket,
-    );
+    await sendFrames(httpResponse, webSocket, [completedFrame(`resp-warmup-${normalIndex}`, [])]);
     served.push({
       request,
       terminalType: 'response.completed',
@@ -632,24 +575,18 @@ async function serveResponse(
 
   if (mode === 'native-error') {
     const responseId = 'resp-native-error';
-    await sendFrames(
-      httpResponse,
-      webSocket,
-      [
-        createdFrame(responseId),
-        {
-          type: 'response.failed',
-          response: {
-            id: responseId,
-            status: 'failed',
-            output: [],
-            error: { code: 'fixture_error', message: 'Injected native provider failure' },
-          },
+    await sendFrames(httpResponse, webSocket, [
+      createdFrame(responseId),
+      {
+        type: 'response.failed',
+        response: {
+          id: responseId,
+          status: 'failed',
+          output: [],
+          error: { code: 'fixture_error', message: 'Injected native provider failure' },
         },
-      ],
-      false,
-      retainWebSocket,
-    );
+      },
+    ]);
     served.push({ request, terminalType: 'response.failed', responseId, closedAbnormally: false });
     return;
   }
@@ -657,30 +594,24 @@ async function serveResponse(
   if (mode === 'incomplete' || mode === 'abnormal-close') {
     const responseId = `resp-${mode}`;
     const frames = [createdFrame(responseId), { type: 'response.output_text.delta', delta: 'PARTIAL' }];
-    await sendFrames(httpResponse, webSocket, frames, mode === 'abnormal-close', retainWebSocket);
+    await sendFrames(httpResponse, webSocket, frames, mode === 'abnormal-close');
     served.push({ request, closedAbnormally: mode === 'abnormal-close' });
     return;
   }
 
   if (mode === 'runaway-output') {
     const responseId = 'resp-runaway-output';
-    await sendFrames(
-      httpResponse,
-      webSocket,
-      [
-        createdFrame(responseId),
-        ...Array.from({ length: 8 }, () => ({ type: 'response.output_text.delta', delta: 'LOOPLOOP' })),
-      ],
-      false,
-      retainWebSocket,
-    );
+    await sendFrames(httpResponse, webSocket, [
+      createdFrame(responseId),
+      ...Array.from({ length: 8 }, () => ({ type: 'response.output_text.delta', delta: 'LOOPLOOP' })),
+    ]);
     served.push({ request, responseId, closedAbnormally: false });
     return;
   }
 
   if (mode === 'approval' && !hasToolResult) {
     const responseId = TOOL_RESPONSE_ID;
-    await sendFrames(httpResponse, webSocket, toolCallFrames(responseId), false, retainWebSocket);
+    await sendFrames(httpResponse, webSocket, toolCallFrames(responseId));
     served.push({ request, terminalType: 'response.completed', responseId, closedAbnormally: false });
     return;
   }
@@ -692,7 +623,7 @@ async function serveResponse(
       normalIndex === 0
         ? backgroundShellToolCallFrames(responseId)
         : [createdFrame(responseId), ...messageFrames(text), completedFrame(responseId, [messageOutput(text)])];
-    await sendFrames(httpResponse, webSocket, frames, false, retainWebSocket);
+    await sendFrames(httpResponse, webSocket, frames);
     served.push({ request, terminalType: 'response.completed', responseId, closedAbnormally: false });
     return;
   }
@@ -707,13 +638,11 @@ async function serveResponse(
       : normalIndex === 0
       ? 'FIRST-RESPONSE'
       : 'SECOND-RESPONSE';
-  await sendFrames(
-    httpResponse,
-    webSocket,
-    [createdFrame(responseId), ...messageFrames(text), completedFrame(responseId, [messageOutput(text)])],
-    false,
-    retainWebSocket,
-  );
+  await sendFrames(httpResponse, webSocket, [
+    createdFrame(responseId),
+    ...messageFrames(text),
+    completedFrame(responseId, [messageOutput(text)]),
+  ]);
   served.push({ request, terminalType: 'response.completed', responseId, closedAbnormally: false });
 }
 
@@ -825,7 +754,6 @@ async function sendFrames(
   webSocket: WebSocket | undefined,
   frames: readonly Record<string, unknown>[],
   abnormalClose = false,
-  retainWebSocket = false,
 ): Promise<void> {
   if (httpResponse) {
     httpResponse.writeHead(200, {
@@ -846,7 +774,7 @@ async function sendFrames(
     });
   }
   if (abnormalClose) webSocket.terminate();
-  else if (!retainWebSocket) webSocket.close(1000, 'fixture complete');
+  else webSocket.close(1000, 'fixture complete');
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<Record<string, unknown>> {

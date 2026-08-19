@@ -812,3 +812,19 @@ it('stops consuming the websocket after a terminal response event', async () => 
 
   expect(result).not.toBe('timed-out');
 });
+
+it('reuses the persistent websocket across sequential completed streams and closes on close()', async () => {
+  fakeResponsesWSStream = async function* () {
+    yield { type: 'message', message: { type: 'response.completed', response: { id: 'resp_1' } } };
+  };
+  const client = { responses: { create: async () => ({}) } };
+  const model = new OpenAIResponsesWSModelWithPromptCacheKey(client, 'gpt-5.4-nano');
+
+  const events1 = await collect(model.stream({ input: [], tools: [] }));
+  expect(events1).toHaveLength(1);
+
+  const events2 = await collect(model.stream({ input: [], tools: [] }));
+  expect(events2).toHaveLength(1);
+
+  await model.close();
+});

@@ -3743,3 +3743,10 @@ it('CodexResponsesWSModel keeps an idle timeout ambiguous even if a stale unsent
     vi.useRealTimers();
   }
 });
+
+it('CodexResponsesTransport and OpenAIResponsesModel support close() without error', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', true);
+  transport.close();
+  const model = new OpenAIResponsesModel({} as any, 'gpt-5-codex', transport, true);
+  await model.close();
+});

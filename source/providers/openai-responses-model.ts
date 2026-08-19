@@ -633,11 +633,45 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
 }
 
 export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesModelWithPromptCacheKey {
+  #activeSocket: ResponsesWS | null = null;
+  #activeSocketHeaders: string | null = null;
+
+  async close(): Promise<void> {
+    if (this.#activeSocket) {
+      try {
+        this.#activeSocket.close();
+      } catch {
+        /* best effort */
+      }
+      this.#activeSocket = null;
+      this.#activeSocketHeaders = null;
+    }
+  }
+
   async *stream(request: StreamedModelTurnRequest): AsyncIterable<StreamedModelTurnEvent> {
     this.lifecycle.begin(request, 'websocket', this._model, this._client);
     this.lifecycle.bind(request, this.capture);
     const headers = (request.providerOptions as any)?.extraHeaders;
-    const socket = new ResponsesWS(this._client, headers ? { headers } : undefined);
+    const serializedHeaders = headers ? JSON.stringify(headers) : null;
+
+    let socket: ResponsesWS;
+    const isSocketLive =
+      this.#activeSocket &&
+      ((this.#activeSocket as any).socket?.readyState === 1 || (this.#activeSocket as any).socket?.readyState === 0);
+
+    if (isSocketLive && this.#activeSocket && this.#activeSocketHeaders === serializedHeaders) {
+      socket = this.#activeSocket;
+    } else {
+      if (this.#activeSocket) {
+        try {
+          this.#activeSocket.close();
+        } catch {}
+      }
+      socket = new ResponsesWS(this._client, headers ? { headers } : undefined);
+      this.#activeSocket = socket;
+      this.#activeSocketHeaders = serializedHeaders;
+    }
+
     let terminal = false;
     try {
       socket.send({
@@ -659,15 +693,30 @@ export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesMod
       }
       if (!terminal) throw new Error('OpenAI WebSocket closed before a terminal response event.');
     } catch (error) {
-      markContextCompactionFailure(error, request, this.contextCompactionSessionState);
-      if (!terminal) this.lifecycle.finish(request, 'failed', this.capture);
-      throw error;
-    } finally {
-      if (!terminal) this.lifecycle.finish(request, 'abandoned', this.capture);
+      if (this.#activeSocket === socket) {
+        this.#activeSocket = null;
+        this.#activeSocketHeaders = null;
+      }
       try {
         socket.close();
       } catch {
         /* best effort */
+      }
+      markContextCompactionFailure(error, request, this.contextCompactionSessionState);
+      if (!terminal) this.lifecycle.finish(request, 'failed', this.capture);
+      throw error;
+    } finally {
+      if (!terminal) {
+        if (this.#activeSocket === socket) {
+          this.#activeSocket = null;
+          this.#activeSocketHeaders = null;
+        }
+        try {
+          socket.close();
+        } catch {
+          /* best effort */
+        }
+        this.lifecycle.finish(request, 'abandoned', this.capture);
       }
     }
   }

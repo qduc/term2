@@ -49,6 +49,13 @@ function toCodexToolChoice(choice: unknown): unknown {
   throw new Error('Unsupported Codex tool choice.');
 }
 
+const TERMINAL_RESPONSE_EVENT_TYPES = new Set([
+  'response.completed',
+  'response.failed',
+  'response.incomplete',
+  'response.error',
+]);
+
 // RFC 6455 readyState values, named so the send path's evidence is readable.
 const WEBSOCKET_CONNECTING = 0;
 const WEBSOCKET_OPEN = 1;
@@ -60,12 +67,27 @@ export type CodexResponsesTransportOptions = {
 
 /** Provider-owned transport seam used by Codex's HTTP and WebSocket models. */
 export class CodexResponsesTransport {
+  #activeSocket: ResponsesWS | null = null;
+  #activeSocketHeaders: string | null = null;
+
   constructor(
     private readonly client: any = {},
     private readonly model = '',
     private readonly websocket = false,
     private readonly options: CodexResponsesTransportOptions = {},
   ) {}
+
+  close(): void {
+    if (this.#activeSocket) {
+      try {
+        this.#activeSocket.close();
+      } catch {
+        /* best effort */
+      }
+      this.#activeSocket = null;
+      this.#activeSocketHeaders = null;
+    }
+  }
 
   buildResponsesCreateRequest(request: StreamedModelTurnRequest, stream: boolean): any {
     const providerOptions = request.providerOptions ?? {};
@@ -117,10 +139,29 @@ export class CodexResponsesTransport {
           return this.client.responses.create(requestData);
         }
         const headers = request.providerOptions?.extraHeaders;
-        const socket = new ResponsesWS(
-          this.client,
-          headers ? { headers: headers as Record<string, string> } : undefined,
-        );
+        const serializedHeaders = headers ? JSON.stringify(headers) : null;
+
+        let socket: ResponsesWS;
+        const isSocketLive =
+          this.#activeSocket &&
+          ((this.#activeSocket as any).socket?.readyState === WEBSOCKET_OPEN ||
+            (this.#activeSocket as any).socket?.readyState === WEBSOCKET_CONNECTING);
+
+        if (isSocketLive && this.#activeSocket && this.#activeSocketHeaders === serializedHeaders) {
+          socket = this.#activeSocket;
+        } else {
+          if (this.#activeSocket) {
+            try {
+              this.#activeSocket.close();
+            } catch {
+              /* best effort */
+            }
+          }
+          socket = new ResponsesWS(this.client, headers ? { headers: headers as Record<string, string> } : undefined);
+          this.#activeSocket = socket;
+          this.#activeSocketHeaders = serializedHeaders;
+        }
+
         const messages = socket.stream();
         const requestEvent = { type: 'response.create', ...requestData } as any;
         // Until the frame is written to an OPEN socket it is still ours, so a
@@ -140,24 +181,53 @@ export class CodexResponsesTransport {
           dispatchRequestEvent();
         }
         const sessionState = this.options.contextCompactionSessionState;
+        const self = this;
         return (async function* () {
+          let terminalReceived = false;
           try {
             for await (const message of messages) {
-              if (message.type === 'message') yield message.message;
-              else if ((message as any).event) yield (message as any).event;
-              else if (message.type === 'error') throw (message as any).error;
-              else if (message.type === 'close')
+              if (message.type === 'message') {
+                const event = message.message;
+                if (TERMINAL_RESPONSE_EVENT_TYPES.has(event?.type) || event?.type === 'response.completed') {
+                  terminalReceived = true;
+                }
+                yield event;
+              } else if ((message as any).event) {
+                const event = (message as any).event;
+                if (TERMINAL_RESPONSE_EVENT_TYPES.has(event?.type) || event?.type === 'response.completed') {
+                  terminalReceived = true;
+                }
+                yield event;
+              } else if (message.type === 'error') {
+                throw (message as any).error;
+              } else if (message.type === 'close') {
                 throw new Error('Codex WebSocket connection closed before a terminal response event.');
+              }
             }
           } catch (error) {
-            const normalizedError = normalizeExplicitCodexServerError(error);
-            markContextCompactionFailure(normalizedError, request, sessionState);
-            throw normalizedError;
-          } finally {
+            if (self.#activeSocket === socket) {
+              self.#activeSocket = null;
+              self.#activeSocketHeaders = null;
+            }
             try {
               socket.close();
             } catch {
               /* best effort */
+            }
+            const normalizedError = normalizeExplicitCodexServerError(error);
+            markContextCompactionFailure(normalizedError, request, sessionState);
+            throw normalizedError;
+          } finally {
+            if (!terminalReceived) {
+              if (self.#activeSocket === socket) {
+                self.#activeSocket = null;
+                self.#activeSocketHeaders = null;
+              }
+              try {
+                socket.close();
+              } catch {
+                /* best effort */
+              }
             }
           }
         })();
@@ -181,6 +251,10 @@ export class OpenAIResponsesModel implements StreamedModelTurn {
     this.client = client;
     this.model = model;
     this.transport = transport ?? new CodexResponsesTransport(client, model, websocket);
+  }
+
+  async close(): Promise<void> {
+    this.transport.close?.();
   }
 
   protected buildResponsesCreateRequest(request: StreamedModelTurnRequest, stream: boolean): any {
@@ -402,12 +476,6 @@ type DiagnosticLogger = {
 };
 
 const SUSPICIOUS_RECONSTRUCTED_OUTPUT_ITEM_COUNT = 20;
-const TERMINAL_RESPONSE_EVENT_TYPES = new Set([
-  'response.completed',
-  'response.failed',
-  'response.incomplete',
-  'response.error',
-]);
 
 const WS_RESPONSE_MODEL_CLASS = 'OpenAIResponsesWSModel';
 const WS_RESPONSE_WRAPPER_CLASS = 'CodexResponsesWSModel';

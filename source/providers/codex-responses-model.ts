@@ -1229,6 +1229,11 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       return { request: input === rest.input ? rest : { ...rest, input } };
     }
 
+    if (RESPONSES_LITE_MODELS.has(this.modelId)) {
+      const input = Array.isArray(request.input) ? dropUnpairedCodexToolItems(request.input) : request.input;
+      return { request: input === request.input ? request : { ...request, input } };
+    }
+
     const key = this.#getCodexServerHistoryKey();
     if (!key || hasGenerateFalse(request)) {
       return { request };

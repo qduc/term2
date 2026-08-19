@@ -624,6 +624,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     state,
   });
   const recoveryHandler = new InitialTurnRecoveryHandler({
+    breakChaining,
     conversationStore,
     freshStartRetriesAllowed: retryOptions?.allowFreshStartRetries ?? true,
     generationGuard,
@@ -645,6 +646,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   });
 
   const continuationRecoveryHandler = new ContinuationRecoveryHandler({
+    breakChaining,
     logger,
     sessionId: id,
     generationGuard,

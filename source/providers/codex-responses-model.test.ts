@@ -1222,8 +1222,8 @@ it('CodexResponsesWSModel sends only new input after a Responses-Lite prefix is 
       } as any),
     );
 
-    // One request per turn: the opening turn carries full history, the second
-    // chains off it. There is no `generate:false` warmup leg.
+    // One request per turn: each turn carries the full history formatted with
+    // Responses-Lite developer tools and instructions prefix, without previous_response_id.
     expect(trafficBodies).toHaveLength(2);
     expect(trafficBodies[0].input[0]).toMatchObject({ type: 'additional_tools', role: 'developer', tools: [tool] });
     expect(trafficBodies[0].previous_response_id).toBeUndefined();
@@ -1240,7 +1240,7 @@ it('CodexResponsesWSModel sends only new input after a Responses-Lite prefix is 
   }
 });
 
-it('CodexResponsesWSModel correlates Responses-Lite state across sequential streamed requests', async () => {
+it('CodexResponsesWSModel correlates server-managed state across sequential streamed requests for standard models', async () => {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const trafficBodies: any[] = [];
   let responseCount = 0;
@@ -1267,7 +1267,7 @@ it('CodexResponsesWSModel correlates Responses-Lite state across sequential stre
   try {
     const model = new CodexResponsesWSModel(
       { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
-      'gpt-5.6-luna',
+      'gpt-5-codex',
       { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
       undefined,
       mockProviderTraffic,
@@ -2514,7 +2514,7 @@ it('CodexResponsesWSModel preserves a tool-call chain when the websocket connect
   try {
     const model = new CodexResponsesWSModel(
       { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
-      'gpt-5.6-luna',
+      'gpt-5-codex',
       { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
       undefined,
       mockProviderTraffic,
@@ -2572,7 +2572,7 @@ it('CodexResponsesWSModel preserves a tool-call chain when the websocket connect
 });
 
 it('CodexResponsesWSModel preserves tool output when a user steer message follows tool results mid-turn', async () => {
-  const transport = new CodexResponsesTransport({} as any, 'gpt-5.6-luna', false);
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const trafficBodies: any[] = [];
   let requestCount = 0;
   transport.fetchResponse = async function (request: any, stream: boolean, requestData: any) {
@@ -2628,7 +2628,7 @@ it('CodexResponsesWSModel preserves tool output when a user steer message follow
 
   const model = new CodexResponsesWSModel(
     { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
-    'gpt-5.6-luna',
+    'gpt-5-codex',
     { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
     undefined,
     mockProviderTraffic,
@@ -3169,7 +3169,7 @@ it('CodexResponsesWSModel unary path records Luna wire state response with corre
   try {
     const model = new CodexResponsesWSModel(
       { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
-      'gpt-5.6-luna',
+      'gpt-5-codex',
       { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
       undefined,
       mockProviderTraffic,

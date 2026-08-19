@@ -18,6 +18,7 @@ export type InitialTurnRecoveryResult =
   | { kind: 'stale' };
 
 export type InitialTurnRecoveryHandlerDeps = {
+  breakChaining?: () => void;
   conversationStore: ConversationStore;
   freshStartRetriesAllowed: boolean;
   generationGuard: GenerationGuard;
@@ -123,6 +124,10 @@ export class InitialTurnRecoveryHandler {
 
     if (!this.deps.generationGuard.isCurrent(attempt.token)) {
       return { kind: 'stale' };
+    }
+
+    if (classified.kind === 'chain_recovery') {
+      this.deps.breakChaining?.();
     }
 
     attempt.advanceRetry(this.deps.recoveryPolicy.nextRetryCounts(attempt.retryCounts, classified));

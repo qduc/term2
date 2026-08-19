@@ -10,6 +10,7 @@ import type { ContinuationState } from './continuation-state.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
 
 export type ContinuationRecoveryHandlerDeps = {
+  breakChaining?: () => void;
   logger: ILoggingService;
   sessionId: string;
   generationGuard: GenerationGuard;
@@ -50,6 +51,10 @@ export class ContinuationRecoveryHandler {
       stream: retryStream,
       maxTransientRetries,
     });
+
+    if (classified.kind === 'chain_recovery') {
+      this.deps.breakChaining?.();
+    }
 
     if (classified.kind === 'unrecoverable') {
       return { kind: 'terminated' };

@@ -871,7 +871,7 @@ export class AgentClient {
         throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
       }
       const provider = this.#agentConfig.getProvider();
-      const supportsChaining = getProvider(provider)?.capabilities?.supportsConversationChaining === true;
+      const supportsChaining = this.supportsConversationChaining();
       const agent = this.#agentConfig.getApplicationAgent(options.sessionId);
       const requestPreparation = this.#openAIRequestPreparation(options);
       const boundaryCompaction = this.#boundaryCompaction();
@@ -911,7 +911,7 @@ export class AgentClient {
     // The turn is resuming, not ending: keep anything waiting for this segment.
     this.#abortActiveWork(() => this.#applicationRunLoop.abortSegment());
     const provider = this.#agentConfig.getProvider();
-    const supportsChaining = getProvider(provider)?.capabilities?.supportsConversationChaining === true;
+    const supportsChaining = this.supportsConversationChaining();
     const requestPreparation = this.#openAIRequestPreparation(options);
     const boundaryCompaction = this.#boundaryCompaction();
     const runBudget = this.#runBudgetPolicy();

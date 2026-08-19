@@ -49,12 +49,18 @@ export function isPreviousResponseNotFoundError(error: unknown, seen = new Set<u
   seen.add(error);
 
   if (typeof error === 'string') {
-    return /["']?code["']?\s*:\s*["']previous_response_not_found["']/.test(error);
+    return (
+      /["']?code["']?\s*:\s*["']previous_response_not_found["']/.test(error) ||
+      /invalid\s+[`'"]?previous_response_id[`'"]?/i.test(error)
+    );
   }
   if (typeof error !== 'object') return false;
 
   const value = error as Record<string, unknown>;
   if (value.code === 'previous_response_not_found') return true;
+  if (typeof value.message === 'string' && /invalid\s+[`'"]?previous_response_id[`'"]?/i.test(value.message)) {
+    return true;
+  }
   if (isPreviousResponseNotFoundError(value.message, seen)) return true;
   if (isPreviousResponseNotFoundError(value.body, seen)) return true;
   if (isPreviousResponseNotFoundError(value.error, seen)) return true;

@@ -6,6 +6,7 @@ import {
   isIncompleteStreamTerminalError,
   isMissingServerToolOutputError,
   isNetworkProtocolError,
+  isPreviousResponseNotFoundError,
   isRetryableTransportError,
   isTransientRetryableError,
 } from './retry-error-classification.js';
@@ -202,6 +203,27 @@ it('recognizes a provider rejection for an orphaned function call output', () =>
       error: { message: 'No tool call found for function call output with call_id call_abc.' },
     }),
   ).toBe(true);
+});
+
+it('recognizes previous_response_not_found errors across error formats', () => {
+  expect(isPreviousResponseNotFoundError({ code: 'previous_response_not_found' })).toBe(true);
+  expect(
+    isPreviousResponseNotFoundError(
+      'Unexpected server response: 400 {"error":{"code":"previous_response_not_found","message":"Previous response not found"}}',
+    ),
+  ).toBe(true);
+  expect(
+    isPreviousResponseNotFoundError(
+      'Error: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"Invalid `previous_response_id`."}}',
+    ),
+  ).toBe(true);
+  expect(
+    isPreviousResponseNotFoundError({
+      status: 400,
+      error: { type: 'invalid_request_error', message: 'Invalid `previous_response_id`.' },
+    }),
+  ).toBe(true);
+  expect(isPreviousResponseNotFoundError(new Error('some random 400 error'))).toBe(false);
 });
 
 it('isTransientRetryableError: OpenRouter 429/5xx are retryable', () => {

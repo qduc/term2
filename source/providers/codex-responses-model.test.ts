@@ -2773,6 +2773,98 @@ it('CodexResponsesWSModel invalidates Luna wire state on previous_response_not_f
   }
 });
 
+it('CodexResponsesWSModel invalidates Luna wire state on invalid previous_response_id error payload', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const seenRequests: any[] = [];
+  let rejectedChainedContinuation = false;
+  const invalidPrevResponseIdError = Object.assign(
+    new Error(
+      'Error: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"Invalid `previous_response_id`."}}',
+    ),
+    { status: 400 },
+  );
+  transport.fetchResponse = async function (request: any) {
+    seenRequests.push(request);
+
+    const isChainedContinuation =
+      request.previousResponseId === 'resp_luna_ok' &&
+      request.input?.some((item: any) => item?.content?.[0]?.text === 'continue');
+    if (isChainedContinuation && !rejectedChainedContinuation) {
+      rejectedChainedContinuation = true;
+      throw invalidPrevResponseIdError;
+    }
+
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: { id: 'resp_luna_ok', output: [], usage: {} },
+      } as any,
+    ]);
+  };
+
+  const mockClient = {
+    baseURL: 'https://api.openai.com',
+    apiKey: 'test-key',
+    _options: {},
+  };
+  const tokenManager = {
+    getOrRefreshAccessToken: async () => 'token',
+    getAccountId: () => 'acc_123',
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      mockClient as any,
+      'gpt-5.6-luna',
+      tokenManager as any,
+      undefined,
+      undefined,
+      {
+        getContext: () => ({ sessionId: 'session-luna-invalid-err', traceId: 'trace-luna-invalid-err' } as any),
+        runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      },
+      transport,
+    );
+
+    const userMsg = { type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] };
+    const userMsg2 = { type: 'message', role: 'user', content: [{ type: 'text', text: 'continue' }] };
+
+    // First request: succeeds, establishes stored state.
+    await collect(
+      model.stream({
+        input: [userMsg],
+        instructions: 'Do it.',
+        tools: [],
+      } as any),
+    );
+
+    // Second request: chains off the first, but fails with invalid previous_response_id.
+    // The error triggers invalidation, then the fallback sends full input.
+    await collect(
+      model.stream({
+        previousResponseId: 'resp_luna_ok',
+        input: [userMsg, userMsg2],
+        instructions: 'Do it.',
+        tools: [],
+      } as any),
+    );
+
+    expect(rejectedChainedContinuation).toBe(true);
+    const failedRequestIndex = seenRequests.findIndex(
+      (candidate) =>
+        candidate.previousResponseId === 'resp_luna_ok' &&
+        candidate.input?.some((item: any) => item?.content?.[0]?.text === 'continue'),
+    );
+    const fallbackRequests = seenRequests.slice(failedRequestIndex + 1);
+    expect(fallbackRequests).not.toHaveLength(0);
+    expect(fallbackRequests[0].previousResponseId).toBeUndefined();
+    expect(fallbackRequests.flatMap((candidate) => candidate.input)).toEqual(
+      expect.arrayContaining([userMsg, userMsg2]),
+    );
+  } finally {
+  }
+});
+
 it('CodexResponsesWSModel propagates stale tool continuations instead of replaying orphaned outputs', async () => {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const seenRequests: any[] = [];

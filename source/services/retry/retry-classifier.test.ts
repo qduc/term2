@@ -142,6 +142,18 @@ it('classify returns bounded chain recovery for previous_response_not_found webs
   expect(classifier.classify(baseContext({ error }))).toMatchObject({ kind: 'chain_recovery', attempt: 1 });
 });
 
+it('classify returns bounded chain recovery for Invalid previous_response_id websocket 400 payload', () => {
+  const classifier = makeClassifier();
+  const error = Object.assign(
+    new Error(
+      'Error: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"Invalid `previous_response_id`."}}',
+    ),
+    { status: 400 },
+  );
+
+  expect(classifier.classify(baseContext({ error }))).toMatchObject({ kind: 'chain_recovery', attempt: 1 });
+});
+
 it('classify returns transport_downgrade when the Responses websocket reaches its connection lifetime', () => {
   const classifier = makeClassifier();
   const error = Object.assign(

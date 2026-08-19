@@ -21,7 +21,10 @@ describe('provider capability matrix', () => {
       expect(row.requiredScenarios, row.id).toContain(`${row.id}.approval-approve`);
       expect(row.requiredScenarios, row.id).toContain(`${row.id}.approval-reject`);
       if (row.transport === 'http-sse') expect(row.requiredScenarios, row.id).not.toContain(`${row.id}.abnormal-close`);
-      if (row.transport === 'websocket') expect(row.requiredScenarios, row.id).toContain(`${row.id}.abnormal-close`);
+      if (row.transport === 'websocket') {
+        expect(row.requiredScenarios, row.id).toContain(`${row.id}.abnormal-close`);
+        expect(row.requiredScenarios, row.id).toContain(`${row.id}.retained-connection`);
+      }
       expect(typeof row.toolSupport.supportsTools, row.id).toBe('boolean');
       expect(typeof row.toolSupport.supportsApproval, row.id).toBe('boolean');
       expect(row.nativeContinuationField === null || typeof row.nativeContinuationField === 'string', row.id).toBe(

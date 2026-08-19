@@ -37,6 +37,8 @@ export const RESPONSES_CAPABILITY_EXECUTIONS = [
   { rowId: 'codex-websocket', scenarioId: 'codex-websocket.incomplete-stream' },
   { rowId: 'openai-websocket', scenarioId: 'openai-websocket.abnormal-close' },
   { rowId: 'codex-websocket', scenarioId: 'codex-websocket.abnormal-close' },
+  { rowId: 'openai-websocket', scenarioId: 'openai-websocket.retained-connection' },
+  { rowId: 'codex-websocket', scenarioId: 'codex-websocket.retained-connection' },
 ] as const satisfies readonly CapabilityExecution[];
 
 export const STATELESS_CAPABILITY_EXECUTIONS = [

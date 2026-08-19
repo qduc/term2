@@ -62,9 +62,11 @@ const REQUIRED_SCENARIO_SUFFIXES = [
 ] as const;
 
 function requiredScenarios(rowId: string, transport: CapabilityTransport): readonly string[] {
-  return REQUIRED_SCENARIO_SUFFIXES.filter((suffix) => transport === 'websocket' || suffix !== 'abnormal-close').map(
-    (suffix) => `${rowId}.${suffix}`,
-  );
+  const suffixes = [
+    ...REQUIRED_SCENARIO_SUFFIXES.filter((suffix) => transport === 'websocket' || suffix !== 'abnormal-close'),
+    ...(transport === 'websocket' ? ['retained-connection'] : []),
+  ];
+  return suffixes.map((suffix) => `${rowId}.${suffix}`);
 }
 
 function sharedTerminalExclusion(

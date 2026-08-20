@@ -14,12 +14,15 @@ const OPENCODE_MODEL_TRANSPORT_RULES: readonly OpencodeModelTransportRule[] = [
 ];
 
 export function selectOpencodeModelTransport(modelId: string): OpencodeModelTransport {
+  return findKnownOpencodeModelTransport(modelId) ?? 'openai-chat-completions';
+}
+
+/** Returns only an explicit local rule; callers may safely defer unknown IDs to discovery. */
+export function findKnownOpencodeModelTransport(modelId: string): OpencodeModelTransport | undefined {
   const normalizedModelId = modelId.trim().toLowerCase();
-  return (
-    OPENCODE_MODEL_TRANSPORT_RULES.find(({ modelIdFragments }) =>
-      modelIdFragments.some((fragment) => normalizedModelId.includes(fragment)),
-    )?.transport ?? 'openai-chat-completions'
-  );
+  return OPENCODE_MODEL_TRANSPORT_RULES.find(({ modelIdFragments }) =>
+    modelIdFragments.some((fragment) => normalizedModelId.includes(fragment)),
+  )?.transport;
 }
 
 export function shouldApplyOpencodeAnthropicPromptCaching(modelId: string): boolean {

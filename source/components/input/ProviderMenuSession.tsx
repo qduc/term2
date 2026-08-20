@@ -33,6 +33,8 @@ export function ProviderMenuSession({ frame, active, controller, interactions, s
   const providers = useProviderSelection(settingsService!, {
     onProviderSelected,
     allowCodexSelection: codexSelectable,
+    onRequestNewConversation: services.onRequestNewConversation as (() => void) | undefined,
+    onSystemMessage: services.onSystemMessage as ((message: string) => void) | undefined,
   });
   useEffect(() => {
     if (!active) return;

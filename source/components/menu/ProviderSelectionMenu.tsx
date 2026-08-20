@@ -34,6 +34,8 @@ const ProviderSelectionMenu: FC<Props> = ({
     switch (phase) {
       case 'list':
         return 'Provider Management';
+      case 'accounts':
+        return `Accounts: ${selectedProviderName ?? 'Provider'}`;
       case 'wizard_type':
         return 'Step 2: Provider Type';
       case 'edit_fields':
@@ -59,6 +61,8 @@ const ProviderSelectionMenu: FC<Props> = ({
     switch (phase) {
       case 'list':
         return 'Enter → Edit custom provider · Del → Delete custom provider · Esc → Close Menu · ↑↓ → Navigate';
+      case 'accounts':
+        return 'Enter → Switch account (starts a new conversation) · Del → Sign out · Esc → Back · ↑↓ → Navigate';
       case 'confirm_delete':
       case 'confirm_discard':
       case 'wizard_type':
@@ -223,6 +227,14 @@ const ProviderSelectionMenu: FC<Props> = ({
             if (item.kind === 'field' && item.detail) {
               label = `${item.label}: ${item.detail}`;
             }
+          } else if (item.kind === 'account') {
+            prefix = item.isActive ? '● ' : '  ';
+            color = item.isActive ? 'green' : isSelected ? 'green' : 'white';
+            bold = item.isActive;
+            suffix = item.isActive ? 'active' : '';
+          } else if (item.kind === 'note') {
+            prefix = '  ';
+            color = 'gray';
           } else if (item.kind === 'reorder-item') {
             prefix = '  ';
             suffix = index === 0 ? '↑' : isSelected ? '↓' : '';

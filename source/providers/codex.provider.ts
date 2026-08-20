@@ -22,39 +22,15 @@ import {
   readStoredCodexTokens,
   resolveCodexTokenPath,
   resolveTerm2CodexAuthPath,
-  saveCodexTokens,
+  createCodexAccountStore,
 } from './codex-auth.js';
 import type { CodexTokens } from './codex-auth.js';
+import { getJwtClaims, getJwtExpiry } from './jwt-claims.js';
 
 const DEFAULT_CODEX_MODEL = 'gpt-5.3-codex';
 
-// Decodes the JWT and extracts expiration timestamp in milliseconds
-export function getJwtExpiry(token: string): number | null {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    const payloadJson = Buffer.from(parts[1], 'base64').toString('utf8');
-    const payload = JSON.parse(payloadJson);
-    if (typeof payload.exp === 'number') {
-      return payload.exp * 1000;
-    }
-  } catch {
-    // ignore
-  }
-  return null;
-}
-
-// Decodes the JWT and returns all its claims
-export function getJwtClaims(token: string): any {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    const payloadJson = Buffer.from(parts[1], 'base64').toString('utf8');
-    return JSON.parse(payloadJson);
-  } catch {
-    return null;
-  }
-}
+// Re-exported so the provider's existing callers and tests keep one import site.
+export { getJwtClaims, getJwtExpiry } from './jwt-claims.js';
 
 // Extracts accountId from claims in the order of precedence
 export function extractAccountIdFromClaims(claims: any): string | null {
@@ -222,15 +198,13 @@ export class CodexTokenManager {
           this.accountId = refreshedAccountId;
         }
 
-        saveCodexTokens(
-          {
-            access_token: newAccessToken,
-            refresh_token: resBody.refresh_token || refreshToken,
-            id_token: newIdToken,
-            ...(refreshedAccountId ? { account_id: refreshedAccountId } : {}),
-          },
-          this.authPath,
-        );
+        // Update in place: a refresh must not change which account is active.
+        createCodexAccountStore(this.authPath).updateActiveTokens({
+          access_token: newAccessToken,
+          refresh_token: resBody.refresh_token || refreshToken,
+          id_token: newIdToken,
+          ...(refreshedAccountId ? { account_id: refreshedAccountId } : {}),
+        });
 
         return newAccessToken;
       } finally {

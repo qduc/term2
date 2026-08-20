@@ -292,13 +292,16 @@ it('CodexTokenManager refreshes its own credential into its own store', async ()
   expect(fetchPayload.refresh_token).toBe('old-refresh-token');
   expect(fetchPayload.client_id).toBe('app_EMoamEEZ73f0CkXaXp7hrann');
 
-  // The refresh lands in term2's store...
+  // The refresh lands in term2's store, against the account that was active.
+  // The legacy single-credential file is migrated into an account on read.
   const updatedContent = JSON.parse(fs.readFileSync(authPath, 'utf8'));
-  expect(updatedContent.tokens.access_token).toBe(newToken);
-  expect(updatedContent.tokens.refresh_token).toBe('new-refresh-token');
-  expect(updatedContent.tokens.id_token).toBe('new-id-token');
-  expect(updatedContent.tokens.account_id).toBe('account-123'); // preserved
-  expect(updatedContent.last_refresh).toBeTruthy();
+  expect(updatedContent.accounts).toHaveLength(1);
+  expect(updatedContent.activeAccountId).toBe(updatedContent.accounts[0].id);
+  const storedTokens = updatedContent.accounts[0].tokens;
+  expect(storedTokens.access_token).toBe(newToken);
+  expect(storedTokens.refresh_token).toBe('new-refresh-token');
+  expect(storedTokens.id_token).toBe('new-id-token');
+  expect(storedTokens.account_id).toBe('account-123'); // preserved
 
   // ...and never in the codex CLI's.
   expect(fs.readFileSync(cliPath, 'utf8')).toBe(cliContents);

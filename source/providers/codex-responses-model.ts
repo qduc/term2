@@ -32,6 +32,12 @@ import {
   recordWebSocketDispatch,
   UnsentWebSocketRequestError,
 } from './websocket-request-dispatch.js';
+import {
+  WebSocketClosedEarlyError,
+  webSocketCloseError,
+  findWebSocketClosedEarly,
+  readWebSocketCloseFrame,
+} from './websocket-close-evidence.js';
 import { markContextCompactionFailure, resolveContextManagement } from './openai-responses-model.js';
 import { ResponsesWebSocketSessions } from './responses-websocket-sessions.js';
 
@@ -180,7 +186,7 @@ export class CodexResponsesTransport {
               } else if (message.type === 'error') {
                 throw (message as any).error;
               } else if (message.type === 'close') {
-                throw new Error('Codex WebSocket connection closed before a terminal response event.');
+                throw webSocketCloseError(message, readWebSocketDispatch(request));
               }
             }
           } catch (error) {
@@ -249,8 +255,7 @@ export class OpenAIResponsesModel implements StreamedModelTurn {
         }
         const event = next.value;
         if (event?.type === 'error') throw new Error(event.error?.message ?? 'Codex WebSocket provider error');
-        if (event?.type === 'close')
-          throw new Error('Codex WebSocket connection closed before a terminal response event.');
+        if (event?.type === 'close') throw new WebSocketClosedEarlyError(readWebSocketCloseFrame(event));
         terminal =
           event?.type === 'response.completed' ||
           event?.type === 'response.incomplete' ||
@@ -1607,6 +1612,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       }
       this.#rememberConsumedToolResultCallIds(responseId, effectiveRequest.previousResponseId, effectiveRequest.input);
     } catch (error) {
+      this.#logWebSocketClosedEarly(error, receivedRawFrame);
       this.#recordRejectedChainRequest(error);
       if (isPreviousResponseUnavailableError(error) && attemptedWithServerHistory && !receivedRawFrame) {
         this.#forgetCodexResponseId();
@@ -1644,6 +1650,27 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       }
       throw asAmbiguousModelOutcome(error) ?? error;
     }
+  }
+
+  /**
+   * The close code is the only field that distinguishes a network drop from a
+   * deliberate server close, and it is discarded once the error is wrapped for
+   * recovery. Record it here, where the retry decision that follows can be read
+   * against it.
+   */
+  #logWebSocketClosedEarly(error: unknown, receivedRawFrame: boolean): void {
+    const closed = findWebSocketClosedEarly(error);
+    if (!closed) return;
+    this.diagnosticLogger?.warn?.('Codex WebSocket closed before a terminal response event', {
+      eventType: 'codex.websocket.closed_early',
+      category: 'provider',
+      model: this.modelId,
+      closeCode: closed.closeCode ?? null,
+      closeReason: closed.closeReason ?? null,
+      unsentCount: closed.unsentCount,
+      receivedRawFrame,
+      provablyUnsent: error instanceof UnsentWebSocketRequestError,
+    });
   }
 
   override buildResponsesCreateRequest(request: StreamedModelTurnRequest, stream: boolean): any {

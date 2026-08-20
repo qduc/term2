@@ -418,3 +418,36 @@ it('classify returns unrecoverable for plain Error with message "TypeError" but 
 
   expect(result.kind).toBe('unrecoverable');
 });
+
+it('classify recovers the chain when an ambiguous outcome wraps a flaky websocket close', () => {
+  const classifier = makeClassifier();
+  const error = new AmbiguousModelOutcomeError(
+    'Codex WebSocket connection closed before a terminal response event. (code=1006 reason="" unsent=0)',
+  );
+
+  const result = classifier.classify(baseContext({ error }));
+
+  expect(result.kind).toBe('chain_recovery');
+});
+
+it('classify keeps an ambiguous outcome unrecoverable when the server closed deliberately', () => {
+  const classifier = makeClassifier();
+  const error = new AmbiguousModelOutcomeError(
+    'Codex WebSocket connection closed before a terminal response event. (code=1008 reason="policy violation" unsent=0)',
+  );
+
+  expect(classifier.classify(baseContext({ error })).kind).toBe('unrecoverable');
+});
+
+it('classify stops recovering a flaky close once the transient budget is spent', () => {
+  const classifier = makeClassifier();
+  const error = new AmbiguousModelOutcomeError(
+    'Codex WebSocket connection closed before a terminal response event. (code=1006 reason="" unsent=0)',
+  );
+
+  const result = classifier.classify(
+    baseContext({ error, retryCounts: { ...baseCounts(), transientRetryCount: 5 }, maxTransientRetries: 5 }),
+  );
+
+  expect(result.kind).toBe('unrecoverable');
+});

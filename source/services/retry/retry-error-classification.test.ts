@@ -7,9 +7,11 @@ import {
   isMissingServerToolOutputError,
   isNetworkProtocolError,
   isPreviousResponseNotFoundError,
+  isRecoverableIncompleteStreamClose,
   isRetryableTransportError,
   isTransientRetryableError,
 } from './retry-error-classification.js';
+import { AmbiguousModelOutcomeError } from './retry-errors.js';
 
 function asInstanceOf<T extends object>(prototype: object, props: Partial<T>): T {
   return Object.assign(Object.create(prototype), props) as T;
@@ -552,4 +554,18 @@ it('isNetworkProtocolError and isTransientRetryableError handle 520 status code 
   const stringErr = 'Error: 520 status code (no body)';
   expect(isNetworkProtocolError(stringErr)).toBe(true);
   expect(isTransientRetryableError(stringErr)).toBe(true);
+});
+
+it('recoverable incomplete stream closes are gated on the websocket close code', () => {
+  const closeWith = (details: string) =>
+    new AmbiguousModelOutcomeError(`Codex WebSocket connection closed before a terminal response event. (${details})`);
+
+  // Abnormal close — a network drop with no close frame.
+  expect(isRecoverableIncompleteStreamClose(closeWith('code=1006 reason="" unsent=0'))).toBe(true);
+  // Policy violation — the server closed us on purpose, so retrying repeats it.
+  expect(isRecoverableIncompleteStreamClose(closeWith('code=1008 reason="policy" unsent=0'))).toBe(false);
+  // No code at all: an HTTP/SSE body that simply stopped carries no evidence
+  // of a deliberate close, so it stays recoverable.
+  expect(isRecoverableIncompleteStreamClose(new Error('Streamed response ended without a finish reason'))).toBe(true);
+  expect(isRecoverableIncompleteStreamClose(new Error('Unexpected server response: 400'))).toBe(false);
 });

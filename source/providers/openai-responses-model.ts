@@ -16,6 +16,7 @@ import { randomUUID } from 'node:crypto';
 import { ResponsesWS } from 'openai/resources/responses/ws';
 import { getModelContextWindow } from './model-catalog/catalog.js';
 import { ResponsesWebSocketSessions } from './responses-websocket-sessions.js';
+import { WebSocketClosedEarlyError, readWebSocketCloseFrame } from './websocket-close-evidence.js';
 
 const endpointOf = (client: any): string => {
   const value = client?.baseURL ?? client?._options?.baseURL;
@@ -672,7 +673,9 @@ export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesMod
         }
         const message = next.value;
         if (message.type === 'error') throw (message as any).error ?? new Error('OpenAI WebSocket provider error');
-        if (message.type === 'close') throw new Error('OpenAI WebSocket closed before a terminal response event.');
+        // This model never records a dispatch state, so a close is only ever
+        // ambiguous here: capture the code, but never claim it was unsent.
+        if (message.type === 'close') throw new WebSocketClosedEarlyError(readWebSocketCloseFrame(message));
         if (message.type !== 'message') continue;
         const normalized = normalizeResponseEvent(message.message, normalizationState);
         if (normalized?.type === 'completion') {
@@ -682,7 +685,9 @@ export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesMod
         if (normalized) yield normalized;
         if (terminal) return;
       }
-      if (!terminal) throw new Error('OpenAI WebSocket closed before a terminal response event.');
+      // The iterator ended with no close frame, so there is no close code to
+      // read: an unexplained end is treated the same as an unexplained close.
+      if (!terminal) throw new WebSocketClosedEarlyError({});
     } catch (error) {
       release(false);
       markContextCompactionFailure(error, request, this.contextCompactionSessionState);

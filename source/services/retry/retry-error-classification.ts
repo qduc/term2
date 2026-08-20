@@ -340,6 +340,29 @@ export function isIncompleteStreamTerminalError(error: unknown): boolean {
   );
 }
 
+/**
+ * Whether an incomplete stream terminal is worth recovering from.
+ *
+ * `isRetryableTransportError` refuses every `AmbiguousModelOutcomeError`,
+ * because replaying a request the server may already have accepted is unsafe
+ * *against the same chain*. Rebuilding from full history is not a replay, so
+ * this predicate exists for the caller that can break chaining first.
+ *
+ * A close code is the only evidence that separates a flaky drop from a
+ * deliberate server close. When the code is absent — an HTTP/SSE body that
+ * simply stopped, or a close frame that carried none — there is nothing
+ * pointing at a deliberate rejection, so recovery is allowed.
+ */
+export const isRecoverableIncompleteStreamClose = (error: unknown, logger?: Pick<ILoggingService, 'info'>): boolean => {
+  if (!isIncompleteStreamTerminalError(error)) return false;
+  const closeCode = extractWebSocketCloseCode(getMessage(error));
+  if (closeCode) {
+    logWebSocketCloseCode(logger, error, closeCode);
+    return RETRYABLE_WEBSOCKET_CLOSE_CODES.has(closeCode);
+  }
+  return true;
+};
+
 export const isRetryableTransportError = (
   error: unknown,
   logger?: Pick<ILoggingService, 'info'>,

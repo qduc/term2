@@ -160,12 +160,13 @@ it.sequential('resolveTokenPath resolves paths in correct order', () => {
 it('CodexTokenManager throws if no token file found', async () => {
   // Use a manager with empty/non-existent paths
   const manager = new CodexTokenManager({
+    authPath: path.join(TEST_DIR, `term2-auth-1.json`),
     tokenPathResolver: () => null,
   });
 
   await expect(async () => {
     await manager.getOrRefreshAccessToken();
-  }).rejects.toThrow(/Codex token file not found/);
+  }).rejects.toThrow(/--codex-login/);
 });
 
 it('CodexTokenManager reads the Codex installation ID beside auth.json', () => {
@@ -174,6 +175,7 @@ it('CodexTokenManager reads the Codex installation ID beside auth.json', () => {
   fs.writeFileSync(path.join(TEST_DIR, 'installation_id'), 'installation-123\n');
 
   const manager = new CodexTokenManager({
+    authPath: path.join(TEST_DIR, `term2-auth-2.json`),
     tokenPathResolver: () => tokenPath,
   });
 
@@ -203,6 +205,7 @@ it('CodexTokenManager does not refresh if access token is valid and refresh is r
   };
 
   const manager = new CodexTokenManager({
+    authPath: path.join(TEST_DIR, `term2-auth-3.json`),
     tokenPathResolver: () => tokenPath,
     fetchImpl: mockFetch as any,
   });
@@ -212,20 +215,55 @@ it('CodexTokenManager does not refresh if access token is valid and refresh is r
   expect(fetchCalled).toBe(false);
 });
 
-it('CodexTokenManager refreshes if access token is expired or within 5 minutes of expiry', async () => {
-  const tokenPath = path.join(TEST_DIR, 'auth_expired.json');
-  const expiredToken = createFakeJwt(120); // 2 minutes expiry (within 5 minutes boundary)
+it("CodexTokenManager refuses to spend the codex CLI's refresh token, and leaves its file untouched", async () => {
+  // The CLI store is import-only: we take its access token but never its
+  // refresh token, because OpenAI rotates refresh tokens and two writers on one
+  // rotation chain silently log one of them out.
+  const tokenPath = path.join(TEST_DIR, 'auth_cli_expired.json');
   const initialTokens = {
     tokens: {
-      access_token: expiredToken,
-      refresh_token: 'old-refresh-token',
-      id_token: 'old-id-token',
-      account_id: 'account-123',
+      access_token: createFakeJwt(120), // within the 5-minute refresh window
+      refresh_token: 'cli-refresh-token',
+      id_token: 'cli-id-token',
     },
     last_refresh: new Date().toISOString(),
   };
+  const original = JSON.stringify(initialTokens);
+  fs.writeFileSync(tokenPath, original);
 
-  fs.writeFileSync(tokenPath, JSON.stringify(initialTokens));
+  let fetchCalled = false;
+  const manager = new CodexTokenManager({
+    authPath: path.join(TEST_DIR, 'term2-auth-cli-expired.json'),
+    tokenPathResolver: () => tokenPath,
+    fetchImpl: (async () => {
+      fetchCalled = true;
+      return new Response('{}', { status: 200 });
+    }) as any,
+  });
+
+  await expect(manager.getOrRefreshAccessToken()).rejects.toThrow(/--codex-login/);
+  expect(fetchCalled).toBe(false);
+  expect(fs.readFileSync(tokenPath, 'utf8')).toBe(original);
+});
+
+it('CodexTokenManager refreshes its own credential into its own store', async () => {
+  const cliPath = path.join(TEST_DIR, 'auth_cli_untouched.json');
+  const cliContents = JSON.stringify({ tokens: { access_token: createFakeJwt(3600), refresh_token: 'cli-refresh' } });
+  fs.writeFileSync(cliPath, cliContents);
+
+  const authPath = path.join(TEST_DIR, 'term2-auth-refresh.json');
+  const expiredToken = createFakeJwt(120); // 2 minutes expiry (within 5 minutes boundary)
+  fs.writeFileSync(
+    authPath,
+    JSON.stringify({
+      tokens: {
+        access_token: expiredToken,
+        refresh_token: 'old-refresh-token',
+        id_token: 'old-id-token',
+        account_id: 'account-123',
+      },
+    }),
+  );
 
   const newToken = createFakeJwt(3600);
   let fetchPayload: any = null;
@@ -242,30 +280,31 @@ it('CodexTokenManager refreshes if access token is expired or within 5 minutes o
   };
 
   const manager = new CodexTokenManager({
-    tokenPathResolver: () => tokenPath,
+    authPath,
+    tokenPathResolver: () => cliPath,
     fetchImpl: mockFetch as any,
   });
 
   const token = await manager.getOrRefreshAccessToken();
   expect(token).toBe(newToken);
 
-  // Verify fetch payload
   expect(fetchPayload.grant_type).toBe('refresh_token');
   expect(fetchPayload.refresh_token).toBe('old-refresh-token');
   expect(fetchPayload.client_id).toBe('app_EMoamEEZ73f0CkXaXp7hrann');
 
-  // Verify file update & mode
-  const updatedContent = JSON.parse(fs.readFileSync(tokenPath, 'utf8'));
+  // The refresh lands in term2's store...
+  const updatedContent = JSON.parse(fs.readFileSync(authPath, 'utf8'));
   expect(updatedContent.tokens.access_token).toBe(newToken);
   expect(updatedContent.tokens.refresh_token).toBe('new-refresh-token');
   expect(updatedContent.tokens.id_token).toBe('new-id-token');
   expect(updatedContent.tokens.account_id).toBe('account-123'); // preserved
   expect(updatedContent.last_refresh).toBeTruthy();
 
-  // Check file mode 0600 on non-windows
+  // ...and never in the codex CLI's.
+  expect(fs.readFileSync(cliPath, 'utf8')).toBe(cliContents);
+
   if (process.platform !== 'win32') {
-    const stat = fs.statSync(tokenPath);
-    expect(stat.mode & 0o777).toBe(0o600);
+    expect(fs.statSync(authPath).mode & 0o777).toBe(0o600);
   }
 });
 
@@ -295,6 +334,7 @@ it('CodexTokenManager refreshes if last_refresh is more than 55 minutes ago', as
   };
 
   const manager = new CodexTokenManager({
+    authPath: path.join(TEST_DIR, `term2-auth-5.json`),
     tokenPathResolver: () => tokenPath,
     fetchImpl: mockFetch as any,
   });
@@ -694,6 +734,7 @@ it.sequential('CodexTokenManager extracts and stores accountId from file and ref
   fs.writeFileSync(tokenPath, JSON.stringify(initialTokens));
 
   const manager = new CodexTokenManager({
+    authPath: path.join(TEST_DIR, `term2-auth-6.json`),
     tokenPathResolver: () => tokenPath,
   });
 
@@ -716,6 +757,7 @@ it.sequential('CodexTokenManager extracts and stores accountId from file and ref
   fs.writeFileSync(tokenPathFallback, JSON.stringify(initialTokensFallback));
 
   const managerFallback = new CodexTokenManager({
+    authPath: path.join(TEST_DIR, `term2-auth-7.json`),
     tokenPathResolver: () => tokenPathFallback,
   });
   await managerFallback.getOrRefreshAccessToken();

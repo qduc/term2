@@ -1,10 +1,9 @@
-import crypto from 'node:crypto';
 import fs from 'node:fs';
-import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
 import envPaths from 'env-paths';
+import { runPkceLoopbackLogin } from './oauth-pkce.js';
+import type { PkceLoginConfig } from './oauth-pkce.js';
 
 /**
  * Grok (xAI) OAuth 2.0 + PKCE login and token storage.
@@ -46,11 +45,9 @@ export type GrokTokens = {
   email?: string;
   user_id?: string;
   team_id?: string;
+  /** True when this came from the grok CLI's store, so we hold no refresh token. */
+  imported?: boolean;
 };
-
-function base64url(buf: Buffer): string {
-  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
 
 /** term2's own credential file. We never write to the grok CLI's store. */
 export function resolveGrokAuthPath(): string {
@@ -83,7 +80,16 @@ function parseExpiry(value: unknown): number | undefined {
   return undefined;
 }
 
-/** Read a grok-CLI auth.json entry, preferring one that carries a refresh token. */
+/**
+ * Import a credential from the grok CLI's store — **the access token only.**
+ *
+ * xAI rotates refresh tokens: each refresh invalidates the one before it. If
+ * term2 carried the CLI's refresh token, the two processes would be two writers
+ * on one rotation chain and the loser would be silently logged out. So this is
+ * a one-way, short-lived grace: an already-logged-in host works immediately,
+ * and once that access token expires the user runs `term2 --grok-login` to get
+ * a rotation chain of our own.
+ */
 export function readGrokCliTokens(filePath: string): GrokTokens | null {
   let parsed: any;
   try {
@@ -94,15 +100,23 @@ export function readGrokCliTokens(filePath: string): GrokTokens | null {
   const entries = Object.values(parsed ?? {}).filter(
     (entry: any) => entry && typeof entry === 'object' && typeof entry.key === 'string' && entry.key,
   ) as any[];
-  const entry = entries.find((candidate) => typeof candidate.refresh_token === 'string') ?? entries[0];
+  // Prefer an unexpired entry; a stale one is useless to us now that we cannot
+  // refresh it, but returning it still beats returning nothing when it is all
+  // the host has (the caller reports the expiry as a login prompt).
+  const now = Date.now();
+  const isLive = (candidate: any) => {
+    const expiry = parseExpiry(candidate.expires_at);
+    return expiry === undefined || expiry > now;
+  };
+  const entry = entries.find(isLive) ?? entries[0];
   if (!entry) return null;
   return {
     access_token: entry.key,
-    refresh_token: typeof entry.refresh_token === 'string' ? entry.refresh_token : undefined,
     expires_at: parseExpiry(entry.expires_at),
     email: typeof entry.email === 'string' ? entry.email : undefined,
     user_id: typeof entry.user_id === 'string' ? entry.user_id : undefined,
     team_id: typeof entry.team_id === 'string' ? entry.team_id : undefined,
+    imported: true,
   };
 }
 
@@ -129,7 +143,9 @@ export function saveGrokTokens(tokens: GrokTokens, filePath = resolveGrokAuthPat
 export function hasGrokLogin(): boolean {
   if (readStoredGrokTokens()) return true;
   const cliPath = resolveGrokCliAuthPath();
-  return Boolean(cliPath && readGrokCliTokens(cliPath));
+  const imported = cliPath ? readGrokCliTokens(cliPath) : null;
+  // An imported token cannot be refreshed, so an expired one is not a login.
+  return Boolean(imported && (imported.expires_at === undefined || imported.expires_at > Date.now()));
 }
 
 function toTokens(body: any, previous?: GrokTokens): GrokTokens {
@@ -179,7 +195,11 @@ export class GrokTokenManager {
     if (!expiringSoon) return tokens.access_token;
 
     if (!tokens.refresh_token) {
-      throw new Error('Grok access token expired and no refresh token is stored. Run `term2 --grok-login` again.');
+      throw new Error(
+        tokens.imported
+          ? 'The access token imported from the `grok` CLI has expired. Run `term2 --grok-login` so term2 holds its own credential.'
+          : 'Grok access token expired and no refresh token is stored. Run `term2 --grok-login` again.',
+      );
     }
 
     if (this.activeRefresh) return this.activeRefresh;
@@ -214,21 +234,21 @@ export class GrokTokenManager {
   }
 }
 
-function openInBrowser(url: string): void {
-  const command = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open';
-  const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url];
-  try {
-    spawn(command, args, { stdio: 'ignore', detached: true }).unref();
-  } catch {
-    // The caller always prints the URL, so a failed launcher is not fatal.
-  }
-}
+export const GROK_PKCE_CONFIG: PkceLoginConfig = {
+  label: 'Grok',
+  clientId: GROK_OIDC_CLIENT_ID,
+  authorizeEndpoint: GROK_AUTHORIZE_ENDPOINT,
+  tokenEndpoint: GROK_TOKEN_ENDPOINT,
+  redirectUri: GROK_REDIRECT_URI,
+  redirectPort: GROK_REDIRECT_PORT,
+  callbackPath: '/callback',
+  scopes: GROK_SCOPES,
+  portConflictHint: 'often a running `grok login`',
+};
 
 /**
- * Runs the browser OAuth + PKCE flow and persists the resulting tokens.
- *
- * Resolves only after the authorization server redirects back to the loopback
- * listener, so callers should treat this as a long, human-paced operation.
+ * Runs the browser OAuth + PKCE flow and persists the resulting tokens into
+ * term2's own store. Resolves only after the human finishes in the browser.
  */
 export async function loginToGrok(options?: {
   fetchImpl?: typeof fetch;
@@ -237,99 +257,12 @@ export async function loginToGrok(options?: {
   onPrompt?: (url: string) => void;
   signal?: AbortSignal;
 }): Promise<GrokTokens> {
-  const fetchImpl = options?.fetchImpl || globalThis.fetch;
-  const openBrowser = options?.openBrowser || openInBrowser;
-
-  const verifier = base64url(crypto.randomBytes(32));
-  const challenge = base64url(crypto.createHash('sha256').update(verifier).digest());
-  const expectedState = base64url(crypto.randomBytes(16));
-
-  const authUrl = new URL(GROK_AUTHORIZE_ENDPOINT);
-  authUrl.searchParams.set('client_id', GROK_OIDC_CLIENT_ID);
-  authUrl.searchParams.set('response_type', 'code');
-  authUrl.searchParams.set('redirect_uri', GROK_REDIRECT_URI);
-  authUrl.searchParams.set('code_challenge', challenge);
-  authUrl.searchParams.set('code_challenge_method', 'S256');
-  authUrl.searchParams.set('scope', GROK_SCOPES.join(' '));
-  authUrl.searchParams.set('state', expectedState);
-
-  const code = await new Promise<string>((resolve, reject) => {
-    // The callback is single-use. A retried or duplicated request after the
-    // socket has been torn down must not run the handler a second time.
-    let settled = false;
-    const server = http.createServer((req, res) => {
-      if (settled) {
-        res.destroy();
-        return;
-      }
-      const requestUrl = new URL(req.url || '/', GROK_REDIRECT_URI);
-      if (requestUrl.pathname !== '/callback') {
-        res.writeHead(404).end();
-        return;
-      }
-      settled = true;
-      const error = requestUrl.searchParams.get('error');
-      const received = requestUrl.searchParams.get('code');
-      const state = requestUrl.searchParams.get('state');
-      const failure = error
-        ? new Error(`Grok login was rejected: ${error}`)
-        : state !== expectedState
-        ? // A mismatched state means this callback did not come from the
-          // authorization request we started; the code may be an attacker's.
-          new Error('Grok login failed: OAuth state mismatch')
-        : !received
-        ? new Error('Grok login failed: no authorization code in callback')
-        : null;
-
-      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', Connection: 'close' });
-      res.end(failure ? `${failure.message}\nYou can close this tab.` : 'Login complete. You can close this tab.');
-      // Free the fixed callback port immediately: a keep-alive browser socket
-      // would otherwise hold it and make the next login attempt fail.
-      server.close();
-      server.closeAllConnections?.();
-      if (failure) reject(failure);
-      else resolve(received!);
-    });
-
-    server.on('error', (err: NodeJS.ErrnoException) => {
-      reject(
-        err.code === 'EADDRINUSE'
-          ? new Error(
-              `Port ${GROK_REDIRECT_PORT} is in use. Grok only accepts that exact redirect, so close whatever holds it (often a running \`grok login\`) and retry.`,
-            )
-          : err,
-      );
-    });
-
-    options?.signal?.addEventListener('abort', () => {
-      server.close();
-      reject(new Error('Grok login cancelled'));
-    });
-
-    server.listen(GROK_REDIRECT_PORT, '127.0.0.1', () => {
-      options?.onPrompt?.(authUrl.toString());
-      openBrowser(authUrl.toString());
-    });
+  const body = await runPkceLoopbackLogin(GROK_PKCE_CONFIG, {
+    fetchImpl: options?.fetchImpl,
+    openBrowser: options?.openBrowser,
+    onPrompt: options?.onPrompt,
+    signal: options?.signal,
   });
-
-  const response = await fetchImpl(GROK_TOKEN_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: GROK_REDIRECT_URI,
-      code_verifier: verifier,
-      client_id: GROK_OIDC_CLIENT_ID,
-    }).toString(),
-  });
-  if (!response.ok) {
-    throw new Error(`Grok token exchange failed with status ${response.status}`);
-  }
-  const body = await response.json();
-  if (!body?.access_token) {
-    throw new Error('Grok token exchange response did not contain access_token');
-  }
 
   const tokens = toTokens(body);
   saveGrokTokens(tokens, options?.authPath ?? resolveGrokAuthPath());

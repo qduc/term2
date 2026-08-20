@@ -204,8 +204,8 @@ const ProviderSelectionMenu: FC<Props> = ({
             color = isInactive ? 'gray' : unavailable ? 'yellow' : isSelected ? 'green' : 'white';
             if (item.id === 'codex') {
               suffix = unavailable
-                ? 'Not logged in on this host · Run `npx @openai/codex login`'
-                : 'Run `npx @openai/codex login` to login to Codex';
+                ? 'Not logged in on this host · Run `term2 --codex-login`'
+                : 'Run `term2 --codex-login` to login to Codex';
             } else if (item.id === 'grok') {
               suffix = unavailable ? 'Not logged in on this host · Run `term2 --grok-login`' : '';
             } else if (unavailable) {

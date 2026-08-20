@@ -1,15 +1,31 @@
 # Own the OAuth flow and the credential store for Grok and Codex
 
-Status: **not started.** The Grok provider shipped (`831bae86`) with a login
-flow of its own *and* a fallback that reads the `grok` CLI's credential file.
-This plan is about removing the shared-file coupling that fallback represents,
-in both providers.
+Status: **backlog items 1–3 implemented (2026-08-20).** Item 4 (device flow)
+remains open, and the port question below is still unsettled.
 
 ## Resume here
 
 Read this section before touching `source/providers/grok-auth.ts`,
+`source/providers/codex-auth.ts`, `source/providers/oauth-pkce.ts`,
 `source/providers/codex.provider.ts` (`CodexTokenManager`), or
 `source/utils/ai/provider-credentials.ts`.
+
+**What already landed.** Both hazards below are closed, and Codex has its own
+login:
+
+- `CodexTokenManager` reads term2's own store at
+  `envPaths('term2').config/codex-auth.json` first and writes refreshes only
+  there. It **never** writes `~/.codex/auth.json` again.
+- Both CLI fallbacks are access-token-only imports, marked `imported: true`.
+  When an imported token expires the manager refuses to refresh and tells the
+  user to run `term2 --grok-login` / `term2 --codex-login`.
+- `term2 --codex-login` runs the same PKCE flow Grok has. The flow itself now
+  lives once in `source/providers/oauth-pkce.ts`
+  (`runPkceLoopbackLogin`); each provider contributes only endpoints, scopes,
+  redirect, and body encoding.
+
+Do not "restore" the write-back or the refresh-token import as a convenience —
+they are the double-spend this plan exists to remove.
 
 **The problem is writes and refresh tokens, not "dependency" in the abstract.**
 xAI and OpenAI both rotate refresh tokens: each refresh invalidates the one
@@ -72,6 +88,9 @@ works over SSH and on headless hosts — which matters because term2 has an
 `--ssh` mode where opening a browser cannot work.
 
 ## Backlog, ranked by value (not by effort)
+
+Items 1–3 are **done**; item 4 is open.
+
 
 1. **Stop writing to other tools' credential files.** Codex refreshes land in
    term2's own store. Highest value: it retires the live double-spend hazard

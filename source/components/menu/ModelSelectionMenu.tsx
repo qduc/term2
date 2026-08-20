@@ -117,7 +117,7 @@ const ModelSelectionMenu: FC<Props> = ({
         <Text color="yellow">
           ⚠ {activeTab.label} unavailable:{' '}
           {activeTab.unavailableReason === 'missing-codex-login'
-            ? 'Not logged in on this host. Run `npx @openai/codex login` to log in to Codex.'
+            ? 'Not logged in on this host. Run `term2 --codex-login` to log in to Codex.'
             : activeTab.unavailableReason === 'missing-grok-login'
             ? 'Not logged in on this host. Run `term2 --grok-login` to log in to Grok.'
             : 'API key not configured on this host. Use Provider Management to configure it.'}
@@ -148,7 +148,7 @@ const ModelSelectionMenu: FC<Props> = ({
               {item.id}
             </Text>
             {item.unavailableReason === 'missing-codex-login' ? (
-              <Text color="yellow"> — unavailable: Not logged in on this host. Run `npx @openai/codex login`.</Text>
+              <Text color="yellow"> — unavailable: Not logged in on this host. Run `term2 --codex-login`.</Text>
             ) : item.unavailableReason === 'missing-grok-login' ? (
               <Text color="yellow"> — unavailable: Not logged in on this host. Run `term2 --grok-login`.</Text>
             ) : item.unavailableReason === 'missing-credentials' ? (

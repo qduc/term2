@@ -16,7 +16,7 @@ it('guides a blank install through provider credentials before model selection',
 it('gives Codex login guidance while the provider is being configured', async () => {
   const { lastFrame } = await renderInAct(<FirstRunSetupPrompt phase="provider" provider="codex" />);
 
-  expect(lastFrame()).toContain('npx @openai/codex login');
+  expect(lastFrame()).toContain('term2 --codex-login');
   expect(lastFrame()).toContain('reselect Codex to');
   expect(lastFrame()).toContain('retry.');
 });

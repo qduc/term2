@@ -129,7 +129,7 @@ it.sequential('ModelSelectionMenu gives Codex login guidance for an unavailable 
 
   const output = lastFrame()!;
   expect(output).toContain('Not logged in on this host');
-  expect(output).toContain('npx @openai/codex login');
+  expect(output).toContain('term2 --codex-login');
   expect(output).toContain('(login required)');
   expect(output).not.toContain('API key not configured on this host');
 });
@@ -148,7 +148,7 @@ it.sequential('ModelSelectionMenu retains API-key guidance for unavailable API-k
   const output = lastFrame()!;
   expect(output).toContain('API key not configured on this host');
   expect(output).toContain('Use Provider Management to configure it');
-  expect(output).not.toContain('npx @openai/codex login');
+  expect(output).not.toContain('term2 --codex-login');
 });
 
 it.sequential('ModelSelectionMenu provider tabs include custom providers from settings', async () => {

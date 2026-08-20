@@ -201,6 +201,42 @@ function textModel(text: string, responseId: string): StreamedModelTurn {
   };
 }
 
+describe('ApplicationRunLoop terminal provider events', () => {
+  it('drains the adapter stream after completion so its terminal cleanup can settle', async () => {
+    let returned = false;
+    let nextCalls = 0;
+    const model: StreamedModelTurn = {
+      stream() {
+        let emittedCompletion = false;
+        return {
+          [Symbol.asyncIterator]() {
+            return {
+              next: async () => {
+                nextCalls += 1;
+                if (!emittedCompletion) {
+                  emittedCompletion = true;
+                  return { done: false, value: { type: 'completion' as const, responseId: 'persistent', output: [] } };
+                }
+                return { done: true, value: undefined };
+              },
+              return: async () => {
+                returned = true;
+                return { done: true, value: undefined };
+              },
+            };
+          },
+        };
+      },
+    };
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'prompt');
+
+    await stream.completed;
+
+    expect(nextCalls).toBe(2);
+    expect(returned).toBe(false);
+  });
+});
+
 describe('ApplicationRunLoop generation guard', () => {
   const guard = {
     maxOutputCharacters: 100,

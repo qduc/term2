@@ -34,6 +34,38 @@ async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
   return out;
 }
 
+it('settles a terminal response when the retained WebSocket iterator never closes', async () => {
+  let emittedCompletion = false;
+  fakeResponsesWSStream = () => ({
+    [Symbol.asyncIterator]() {
+      return {
+        next: async () => {
+          if (!emittedCompletion) {
+            emittedCompletion = true;
+            return {
+              done: false,
+              value: { type: 'message', message: { type: 'response.completed', response: { id: 'ws-terminal' } } },
+            };
+          }
+          return new Promise<IteratorResult<any>>(() => undefined);
+        },
+        return: () => new Promise<IteratorResult<any>>(() => undefined),
+      };
+    },
+  });
+  const model = new OpenAIResponsesWSModelWithPromptCacheKey(
+    { responses: { create: async () => ({}) } },
+    'gpt-5.6-luna',
+  );
+
+  const result = await Promise.race([
+    collect(model.stream({ input: [], tools: [] })).then(() => 'settled' as const),
+    new Promise<'timed-out'>((resolve) => setTimeout(() => resolve('timed-out'), 100)),
+  ]);
+
+  expect(result).toBe('settled');
+});
+
 it('normalizes streamed Responses tool argument progress for the UI', () => {
   const state = createResponseEventNormalizationState();
   expect(

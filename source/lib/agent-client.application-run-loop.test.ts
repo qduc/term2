@@ -64,6 +64,117 @@ afterEach(() => {
 });
 
 describe('AgentClient application-run-loop execution', () => {
+  it('retains the direct streamed model across completed user turns', async () => {
+    const provider = `retained-direct-model-${Date.now()}`;
+    providers.add(provider);
+    let created = 0;
+    registerProvider({
+      id: provider,
+      label: 'Retained direct model test provider',
+      createStreamedModel: () => {
+        created += 1;
+        return {
+          async *stream() {
+            yield {
+              type: 'completion' as const,
+              responseId: `response-${created}`,
+              output: [{ type: 'message' as const, content: [{ type: 'text' as const, text: 'done' }] }],
+            };
+          },
+        };
+      },
+      fetchModels: async () => [],
+    });
+    const instance = client(provider, {
+      agentOverride: { name: 'override', model: 'test-model', instructions: 'test', tools: [] },
+    });
+
+    await (
+      await instance.startStream('first turn')
+    ).completed;
+    await (
+      await instance.startStream('second turn')
+    ).completed;
+
+    expect(created).toBe(1);
+    instance.dispose();
+  });
+
+  it('retries a streamed-model factory after its cached promise rejects', async () => {
+    const provider = `retry-streamed-model-factory-${Date.now()}`;
+    providers.add(provider);
+    let created = 0;
+    registerProvider({
+      id: provider,
+      label: 'Retry streamed model factory test provider',
+      createStreamedModel: async () => {
+        created += 1;
+        if (created === 1) throw new Error('first model factory failed');
+        return {
+          async *stream() {
+            yield { type: 'completion' as const, responseId: 'recovered', output: [] };
+          },
+        };
+      },
+      fetchModels: async () => [],
+    });
+    const instance = client(provider);
+
+    await expect((await instance.startStream('first turn')).completed).rejects.toThrow('first model factory failed');
+    await (
+      await instance.startStream('second turn')
+    ).completed;
+
+    expect(created).toBe(2);
+    instance.dispose();
+  });
+
+  it('does not let an obsolete factory rejection evict a replacement model', async () => {
+    const provider = `stale-streamed-model-factory-${Date.now()}`;
+    providers.add(provider);
+    let created = 0;
+    let rejectFirst: ((reason?: unknown) => void) | undefined;
+    let firstCreated: (() => void) | undefined;
+    const firstCreatedPromise = new Promise<void>((resolve) => {
+      firstCreated = resolve;
+    });
+    registerProvider({
+      id: provider,
+      label: 'Stale streamed model factory test provider',
+      createStreamedModel: () => {
+        created += 1;
+        if (created === 1) {
+          firstCreated?.();
+          return new Promise<StreamedModelTurn>((_resolve, reject) => {
+            rejectFirst = reject;
+          });
+        }
+        return {
+          async *stream() {
+            yield { type: 'completion' as const, responseId: `replacement-${created}`, output: [] };
+          },
+        };
+      },
+      fetchModels: async () => [],
+    });
+    const instance = client(provider);
+    const first = await instance.startStream('first turn');
+    await firstCreatedPromise;
+
+    instance.clearConversations();
+    await (
+      await instance.startStream('replacement turn', { previousResponseId: 'replacement-parent' })
+    ).completed;
+    rejectFirst?.(new Error('obsolete model factory failed'));
+    await expect(first.completed).rejects.toThrow('obsolete model factory failed');
+    await (
+      await instance.startStream('third turn', { previousResponseId: 'replacement-parent' })
+    ).completed;
+
+    expect(created).toBe(2);
+    instance.dispose();
+  });
+
   it('uses local compaction for an unsupported provider only when auto mode is selected', async () => {
     const provider = `local-compaction-auto-${Date.now()}`;
     providers.add(provider);

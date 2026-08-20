@@ -151,6 +151,36 @@ describe('application-owned Responses lifecycle through the shipped CLI', () => 
     }
   });
 
+  it.each(['openai', 'codex'] as const)(
+    '%s-websocket.retained-connection keeps two chained turns on one retained connection',
+    async (provider) => {
+      const server = await startResponsesFixtureServer({
+        mode: 'multi-turn',
+        retainWebSocket: true,
+        rejectReconnect: true,
+      });
+      activeServer = server;
+      const workspace = await createWorkspace(server, { provider, transport: 'websocket' });
+      activeWorkspace = workspace;
+      const child = await startCli(workspace);
+      activeChild = child;
+
+      const firstIdle = await child.waitForIdleInput();
+      await writePrompt(child, 'first persistent websocket turn');
+      await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 1);
+      await waitForIdleAfterResponse(child, firstIdle, 'FIRST-RESPONSE');
+      const secondIdle = await child.waitForIdleInput();
+      await writePrompt(child, 'second persistent websocket turn');
+      await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 2);
+      await waitForIdleAfterResponse(child, secondIdle, 'SECOND-RESPONSE');
+
+      const requests = normalRequests(server.requests);
+      expect(requests).toHaveLength(2);
+      expect(requests.every((request) => request.transport === 'websocket')).toBe(true);
+      expect(server.websocketConnectionCount).toBe(1);
+      expect(requests[1]?.body.previous_response_id).toBe(FIRST_RESPONSE_ID);
+    },
+  );
   it.each(providerTransportCases)(
     '$provider $transport resumes an approved tool from its producing response',
     async (providerCase) => {

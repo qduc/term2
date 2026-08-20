@@ -276,17 +276,42 @@ export class OpenAIResponsesModel implements StreamedModelTurn {
 
   protected async *rawStream(request: StreamedModelTurnRequest): AsyncIterable<any> {
     const source = await this.fetchResponse(request, true);
-    for await (const event of source) {
-      if (event?.type === 'error') throw new Error(event.error?.message ?? 'Codex WebSocket provider error');
-      if (event?.type === 'close')
-        throw new Error('Codex WebSocket connection closed before a terminal response event.');
-      yield event;
-      if (
-        event?.type === 'response.completed' ||
-        event?.type === 'response.incomplete' ||
-        event?.type === 'response.failed'
-      )
-        return;
+    const iterator = source[Symbol.asyncIterator]();
+    let terminal = false;
+    let iteratorFinished = false;
+    try {
+      while (true) {
+        const next = await iterator.next();
+        if (next.done) {
+          iteratorFinished = true;
+          return;
+        }
+        const event = next.value;
+        if (event?.type === 'error') throw new Error(event.error?.message ?? 'Codex WebSocket provider error');
+        if (event?.type === 'close')
+          throw new Error('Codex WebSocket connection closed before a terminal response event.');
+        terminal =
+          event?.type === 'response.completed' ||
+          event?.type === 'response.incomplete' ||
+          event?.type === 'response.failed';
+        yield event;
+        if (terminal) return;
+      }
+    } finally {
+      if (!iteratorFinished) {
+        if (terminal) {
+          // The Responses WebSocket stream is session-scoped. Detach this
+          // completed request without awaiting an SDK iterator return that
+          // waits for the retained socket to close.
+          try {
+            void iterator.return?.().catch(() => undefined);
+          } catch {
+            // Completion is authoritative; socket disposal remains best effort.
+          }
+        } else {
+          await iterator.return?.();
+        }
+      }
     }
   }
 

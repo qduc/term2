@@ -673,13 +673,22 @@ export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesMod
     }
 
     let terminal = false;
+    let iteratorFinished = false;
+    let iterator: AsyncIterator<any> | undefined;
     try {
       socket.send({
         type: 'response.create',
         ...requestBody(request, this._model, true, this.supportsContextCompaction, this.contextCompactionSessionState),
       } as any);
       const normalizationState = createResponseEventNormalizationState();
-      for await (const message of socket.stream()) {
+      iterator = socket.stream()[Symbol.asyncIterator]();
+      while (true) {
+        const next = await iterator.next();
+        if (next.done) {
+          iteratorFinished = true;
+          break;
+        }
+        const message = next.value;
         if (message.type === 'error') throw (message as any).error ?? new Error('OpenAI WebSocket provider error');
         if (message.type === 'close') throw new Error('OpenAI WebSocket closed before a terminal response event.');
         if (message.type !== 'message') continue;
@@ -689,7 +698,7 @@ export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesMod
           this.lifecycle.finish(request, 'terminal', this.capture, normalized.responseId);
         }
         if (normalized) yield normalized;
-        if (terminal) break;
+        if (terminal) return;
       }
       if (!terminal) throw new Error('OpenAI WebSocket closed before a terminal response event.');
     } catch (error) {
@@ -706,6 +715,19 @@ export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesMod
       if (!terminal) this.lifecycle.finish(request, 'failed', this.capture);
       throw error;
     } finally {
+      if (iterator && !iteratorFinished) {
+        if (terminal) {
+          // A terminal event ends one response, not the session-scoped socket.
+          // Do not await an SDK iterator return that waits for socket closure.
+          try {
+            void iterator.return?.().catch(() => undefined);
+          } catch {
+            // Terminal settlement remains authoritative.
+          }
+        } else {
+          await iterator.return?.();
+        }
+      }
       if (!terminal) {
         if (this.#activeSocket === socket) {
           this.#activeSocket = null;

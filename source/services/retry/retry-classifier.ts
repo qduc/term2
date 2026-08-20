@@ -2,11 +2,12 @@ import { decideRetry } from './conversation-retry-policy.js';
 import {
   isMissingServerToolOutputError,
   isPreviousResponseNotFoundError,
+  isRecoverableIncompleteStreamClose,
   isRetryableTransportError,
   isWebSocketConnectionLimitReachedError,
 } from './retry-error-classification.js';
 import type { ClassificationContext, ClassifiedFailure } from './retry-contracts.js';
-import { ConversationStateNoProgressError } from './retry-errors.js';
+import { AmbiguousModelOutcomeError, ConversationStateNoProgressError } from './retry-errors.js';
 import { extractHistoryLength } from '../stream-snapshot.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { isMissingChainedToolOutputError, isOrphanedChainedToolOutputError } from '../../lib/chained-input-filter.js';
@@ -56,6 +57,23 @@ export class DefaultRetryClassifier {
       isMissingChainedToolOutputError(error) ||
       isOrphanedChainedToolOutputError(error)
     ) {
+      const nextAttempt = retryCounts.transientRetryCount + 1;
+      if (nextAttempt > maxTransientRetries) {
+        return { kind: 'unrecoverable' };
+      }
+      return {
+        kind: 'chain_recovery',
+        attempt: nextAttempt,
+        delayMs: computeTransientDelayMs(nextAttempt, this.random),
+      };
+    }
+
+    // A stream cut before its terminal event is wrapped as ambiguous because it
+    // may already have been accepted server-side, and `isRetryableTransportError`
+    // refuses every ambiguous error — replaying against the open chain is unsafe.
+    // Chain recovery does not replay: it rebuilds from full history. Route the
+    // recoverable closes there rather than ending the run on one flaky drop.
+    if (error instanceof AmbiguousModelOutcomeError && isRecoverableIncompleteStreamClose(error)) {
       const nextAttempt = retryCounts.transientRetryCount + 1;
       if (nextAttempt > maxTransientRetries) {
         return { kind: 'unrecoverable' };

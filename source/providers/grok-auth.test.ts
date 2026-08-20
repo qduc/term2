@@ -29,16 +29,18 @@ describe('grok token storage', () => {
     expect(fs.statSync(file).mode & 0o777).toBe(0o600);
   });
 
-  it('reads the grok CLI store, preferring an entry that carries a refresh token', () => {
+  it('imports the grok CLI access token but never its refresh token', () => {
+    // Carrying the CLI's refresh token would make term2 a second writer on one
+    // rotation chain, silently logging the CLI out. Import is access-only.
     const file = tmpFile('auth.json');
     fs.writeFileSync(
       file,
       JSON.stringify({
-        'https://auth.x.ai::other': { key: 'no-refresh' },
+        'https://auth.x.ai::expired': { key: 'stale', expires_at: '2020-01-01T00:00:00Z' },
         'https://auth.x.ai::client': {
           key: 'access-from-cli',
           refresh_token: 'refresh-from-cli',
-          expires_at: '2026-08-20T18:59:56Z',
+          expires_at: '2099-08-20T18:59:56Z',
           email: 'user@example.com',
         },
       }),
@@ -46,11 +48,11 @@ describe('grok token storage', () => {
 
     expect(readGrokCliTokens(file)).toEqual({
       access_token: 'access-from-cli',
-      refresh_token: 'refresh-from-cli',
-      expires_at: Date.parse('2026-08-20T18:59:56Z'),
+      expires_at: Date.parse('2099-08-20T18:59:56Z'),
       email: 'user@example.com',
       user_id: undefined,
       team_id: undefined,
+      imported: true,
     });
   });
 
@@ -98,7 +100,7 @@ describe('GrokTokenManager', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to the grok CLI credential when term2 has none of its own', async () => {
+  it('falls back to the grok CLI access token when term2 has none of its own', async () => {
     const cliFile = tmpFile('auth.json');
     fs.writeFileSync(cliFile, JSON.stringify({ entry: { key: 'from-cli' } }));
 
@@ -108,6 +110,25 @@ describe('GrokTokenManager', () => {
     });
 
     await expect(manager.getOrRefreshAccessToken()).resolves.toBe('from-cli');
+  });
+
+  it('asks for a term2 login instead of refreshing an expired imported token', async () => {
+    const cliFile = tmpFile('auth.json');
+    fs.writeFileSync(
+      cliFile,
+      JSON.stringify({ entry: { key: 'from-cli', refresh_token: 'cli-refresh', expires_at: Date.now() - 1000 } }),
+    );
+    const fetchImpl = vi.fn();
+
+    const manager = new GrokTokenManager({
+      authPath: tmpFile('grok-auth.json'),
+      cliAuthPathResolver: () => cliFile,
+      fetchImpl: fetchImpl as any,
+    });
+
+    await expect(manager.getOrRefreshAccessToken()).rejects.toThrow(/--grok-login/);
+    // The CLI's refresh token must not be spent, so no token request is made.
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it('tells the user how to log in when no credential exists anywhere', async () => {

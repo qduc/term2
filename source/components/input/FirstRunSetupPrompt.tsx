@@ -22,7 +22,7 @@ export function FirstRunSetupPrompt({ phase, provider }: FirstRunSetupPromptProp
           <Text>Choose a provider and configure its credentials to start chatting.</Text>
           {provider === 'codex' ? (
             <Text color="yellow">
-              Codex is not logged in on this host. Run `npx @openai/codex login`, then reselect Codex to retry.
+              Codex is not logged in on this host. Run `term2 --codex-login`, then reselect Codex to retry.
             </Text>
           ) : (
             <Text color="yellow">

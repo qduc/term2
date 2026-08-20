@@ -158,6 +158,7 @@ const cli = meow(
           --remote-dir <path>              Remote working directory (required for non-lite SSH sessions)
           --ssh-port <port>                SSH port (default: 22)
           --grok-login                     Log in to Grok in a browser (OAuth) and exit
+          --codex-login                    Log in to Codex/ChatGPT in a browser (OAuth) and exit
       -R, --resume [conversation-id|ls]    Resume the last conversation, a specific ID, or list recent conversations
           --fork                            Fork the resumed conversation into a new session (requires --resume)
       -h, --help                           Show help
@@ -178,6 +179,7 @@ const cli = meow(
       $ term2 --resume <conversation-id> --fork
       $ term2 --resume ls
       $ term2 --grok-login
+      $ term2 --codex-login
       $ term2 --ssh user@host --remote-dir /path/to/project
       $ term2 --ssh user@host --remote-dir /path/to/project --ssh-port 2222
   `,
@@ -228,6 +230,10 @@ const cli = meow(
         type: 'boolean',
         default: false,
       },
+      codexLogin: {
+        type: 'boolean',
+        default: false,
+      },
     },
   },
 );
@@ -247,6 +253,23 @@ if (cli.flags.grokLogin) {
     process.exit(0);
   } catch (error: any) {
     console.error(`Grok login failed: ${error?.message ?? error}`);
+    process.exit(1);
+  }
+}
+
+if (cli.flags.codexLogin) {
+  const { loginToCodex } = await import('./providers/codex-auth.js');
+  try {
+    await loginToCodex({
+      onPrompt: (url) => {
+        console.log('Opening your browser to log in to Codex.');
+        console.log(`If it does not open, visit:\n${url}\n`);
+      },
+    });
+    console.log('Logged in to Codex.');
+    process.exit(0);
+  } catch (error: any) {
+    console.error(`Codex login failed: ${error?.message ?? error}`);
     process.exit(1);
   }
 }

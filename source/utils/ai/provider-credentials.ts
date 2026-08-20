@@ -5,7 +5,7 @@ import {
   type StoredCustomProviderConfig,
 } from '../../services/settings/custom-provider-normalization.js';
 import { getProvider } from '../../providers/registry.js';
-import { resolveCodexTokenPath } from '../../providers/codex-auth.js';
+import { readStoredCodexTokens, resolveCodexTokenPath, resolveTerm2CodexAuthPath } from '../../providers/codex-auth.js';
 import { hasGrokLogin } from '../../providers/grok-auth.js';
 
 const hasConfiguredCredential = (value: unknown): boolean => typeof value === 'string' && value.trim().length > 0;
@@ -103,7 +103,10 @@ export const resolveProviderCredentials = (
   providerId: string,
 ): ProviderCredentialResolution => {
   if (providerId === 'codex') {
-    const credentialPath = resolveCodexTokenPath();
+    // term2's own store wins; the codex CLI's file still counts as readiness
+    // because we can import its access token for one grace period.
+    const term2Path = resolveTerm2CodexAuthPath();
+    const credentialPath = readStoredCodexTokens(term2Path) ? term2Path : resolveCodexTokenPath();
     return {
       required: true,
       configured: credentialPath !== null,

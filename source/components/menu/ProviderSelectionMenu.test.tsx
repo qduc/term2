@@ -91,7 +91,7 @@ it.sequential('ProviderSelectionMenu identifies missing Codex login', async () =
   );
 
   expect(lastFrame()).toContain('Not logged in on this host');
-  expect(lastFrame()).toContain('npx @openai/codex login');
+  expect(lastFrame()).toContain('term2 --codex-login');
   expect(lastFrame()).not.toContain('API key not configured');
 });
 

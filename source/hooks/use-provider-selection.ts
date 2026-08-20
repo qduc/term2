@@ -290,9 +290,7 @@ export const useProviderSelection = (
         const provider = items[index]!;
         options?.onProviderSelected?.(provider.id);
         if (provider.id === 'codex' && options?.onProviderSelected && !provider.hasCredentials) {
-          setErrorMessage(
-            'Codex is not logged in on this host. Run `npx @openai/codex login`, then select Codex again.',
-          );
+          setErrorMessage('Codex is not logged in on this host. Run `term2 --codex-login`, then select Codex again.');
           return;
         }
         if (provider.isCustom) {

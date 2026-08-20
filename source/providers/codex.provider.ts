@@ -15,7 +15,16 @@ import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session/session-contex
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import envPaths from 'env-paths';
-import { resolveCodexTokenPath } from './codex-auth.js';
+import {
+  CODEX_OAUTH_CLIENT_ID,
+  CODEX_TOKEN_ENDPOINT,
+  readCodexCliTokens,
+  readStoredCodexTokens,
+  resolveCodexTokenPath,
+  resolveTerm2CodexAuthPath,
+  saveCodexTokens,
+} from './codex-auth.js';
+import type { CodexTokens } from './codex-auth.js';
 
 const DEFAULT_CODEX_MODEL = 'gpt-5.3-codex';
 
@@ -89,15 +98,27 @@ export function extractAccountId(idToken?: string, accessToken?: string): string
 // Kept as a compatibility export for the provider's existing callers/tests.
 export const resolveTokenPath = resolveCodexTokenPath;
 
+/**
+ * Resolves a live Codex access token.
+ *
+ * term2 keeps its own credential store and **never writes to the codex CLI's
+ * `auth.json`.** OpenAI rotates refresh tokens, so two processes refreshing
+ * from one file are two writers on one rotation chain and the loser is silently
+ * logged out. The CLI's file is read as a one-way grace only: we take its
+ * short-lived access token, never its refresh token, and once that expires the
+ * user runs `term2 --codex-login` to get a rotation chain of our own.
+ */
 export class CodexTokenManager {
   private activeRefreshPromise: Promise<string> | null = null;
   private tokenPathResolver: () => string | null;
+  private authPath: string;
   private fetchImpl: typeof fetch;
   private accountId: string | null = null;
   private installationId: string | null | undefined;
 
-  constructor(options?: { tokenPathResolver?: () => string | null; fetchImpl?: typeof fetch }) {
+  constructor(options?: { tokenPathResolver?: () => string | null; authPath?: string; fetchImpl?: typeof fetch }) {
     this.tokenPathResolver = options?.tokenPathResolver || resolveTokenPath;
+    this.authPath = options?.authPath || resolveTerm2CodexAuthPath();
     this.fetchImpl = options?.fetchImpl || globalThis.fetch;
   }
 
@@ -110,6 +131,8 @@ export class CodexTokenManager {
       return this.installationId;
     }
 
+    // The installation id is a codex CLI artifact, so it is read from the CLI's
+    // directory even when the credential itself is term2's own.
     const tokenPath = this.tokenPathResolver();
     if (!tokenPath) {
       this.installationId = null;
@@ -127,32 +150,26 @@ export class CodexTokenManager {
     return this.installationId;
   }
 
+  private load(): CodexTokens | null {
+    const stored = readStoredCodexTokens(this.authPath);
+    if (stored) return stored;
+    const cliPath = this.tokenPathResolver();
+    return cliPath ? readCodexCliTokens(cliPath) : null;
+  }
+
   async getOrRefreshAccessToken(): Promise<string> {
-    const tokenPath = this.tokenPathResolver();
-    if (!tokenPath) {
+    const tokens = this.load();
+    if (!tokens) {
       throw new Error(
-        'Codex token file not found. Please log in first using `npx @openai/codex login` or set CHATGPT_LOCAL_HOME/CODEX_HOME environment variables.',
+        'Not logged in to Codex. Run `term2 --codex-login` (or `npx @openai/codex login`) first, or set CHATGPT_LOCAL_HOME/CODEX_HOME.',
       );
     }
 
-    let fileData: any;
-    try {
-      fileData = JSON.parse(fs.readFileSync(tokenPath, 'utf8'));
-    } catch (err: any) {
-      throw new Error(`Failed to read/parse Codex token file at ${tokenPath}: ${err.message}`);
-    }
+    const { access_token: accessToken, refresh_token: refreshToken, id_token: idToken } = tokens;
 
-    const accessToken = fileData?.tokens?.access_token;
-    const refreshToken = fileData?.tokens?.refresh_token;
-    const idToken = fileData?.tokens?.id_token;
-
-    const resolvedAccountId = extractAccountId(idToken, accessToken) || fileData?.tokens?.account_id;
+    const resolvedAccountId = extractAccountId(idToken, accessToken) || tokens.account_id;
     if (resolvedAccountId) {
       this.accountId = resolvedAccountId;
-    }
-
-    if (!accessToken) {
-      throw new Error(`Codex token file at ${tokenPath} is missing access_token.`);
     }
 
     const expiryMs = getJwtExpiry(accessToken);
@@ -164,7 +181,9 @@ export class CodexTokenManager {
 
     if (!refreshToken) {
       throw new Error(
-        `Codex access token is expired or expiring soon, but no refresh token is present in ${tokenPath}`,
+        tokens.imported
+          ? 'The access token imported from the `codex` CLI has expired. Run `term2 --codex-login` so term2 holds its own credential.'
+          : 'Codex access token is expired or expiring soon, but no refresh token is stored. Run `term2 --codex-login` again.',
       );
     }
 
@@ -174,7 +193,7 @@ export class CodexTokenManager {
 
     this.activeRefreshPromise = (async () => {
       try {
-        const response = await this.fetchImpl('https://auth.openai.com/oauth/token', {
+        const response = await this.fetchImpl(CODEX_TOKEN_ENDPOINT, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -182,7 +201,7 @@ export class CodexTokenManager {
           body: JSON.stringify({
             grant_type: 'refresh_token',
             refresh_token: refreshToken,
-            client_id: 'app_EMoamEEZ73f0CkXaXp7hrann',
+            client_id: CODEX_OAUTH_CLIENT_ID,
             scope: 'openid profile email offline_access',
           }),
         });
@@ -197,30 +216,21 @@ export class CodexTokenManager {
           throw new Error('Refresh response did not contain access_token');
         }
 
-        const newIdToken = resBody.id_token || fileData.tokens?.id_token;
-        const refreshedAccountId = extractAccountId(newIdToken, newAccessToken) || fileData?.tokens?.account_id;
+        const newIdToken = resBody.id_token || idToken;
+        const refreshedAccountId = extractAccountId(newIdToken, newAccessToken) || tokens.account_id;
         if (refreshedAccountId) {
           this.accountId = refreshedAccountId;
         }
 
-        const updatedData = {
-          ...fileData,
-          tokens: {
-            ...fileData.tokens,
+        saveCodexTokens(
+          {
             access_token: newAccessToken,
-            refresh_token: resBody.refresh_token || fileData.tokens?.refresh_token,
-            id_token: resBody.id_token || fileData.tokens?.id_token,
+            refresh_token: resBody.refresh_token || refreshToken,
+            id_token: newIdToken,
             ...(refreshedAccountId ? { account_id: refreshedAccountId } : {}),
           },
-          last_refresh: new Date().toISOString(),
-        };
-
-        const tmpPath = `${tokenPath}.tmp`;
-        fs.writeFileSync(tmpPath, JSON.stringify(updatedData, null, 2), {
-          mode: 0o600,
-          encoding: 'utf-8',
-        });
-        fs.renameSync(tmpPath, tokenPath);
+          this.authPath,
+        );
 
         return newAccessToken;
       } finally {

@@ -17,10 +17,25 @@ export const CODEX_OAUTH_ISSUER = 'https://auth.openai.com';
 export const CODEX_OAUTH_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann';
 export const CODEX_AUTHORIZE_ENDPOINT = `${CODEX_OAUTH_ISSUER}/oauth/authorize`;
 export const CODEX_TOKEN_ENDPOINT = `${CODEX_OAUTH_ISSUER}/oauth/token`;
-/** The authorization server only accepts this exact loopback callback. */
-export const CODEX_REDIRECT_PORT = 1455;
-export const CODEX_REDIRECT_URI = `http://localhost:${CODEX_REDIRECT_PORT}/auth/callback`;
-export const CODEX_SCOPES = ['openid', 'profile', 'email', 'offline_access'];
+/**
+ * The only loopback ports OpenAI has registered for this client. The codex CLI
+ * source calls this "the Codex CLI Hydra redirect URI allow-list" and hardcodes
+ * the same two, so the redirect is matched exactly — an unregistered port is
+ * refused, and 1457 exists purely to survive a concurrent `codex login`.
+ */
+export const CODEX_REDIRECT_PORTS = [1455, 1457];
+export const CODEX_REDIRECT_PORT = CODEX_REDIRECT_PORTS[0];
+export const codexRedirectUri = (port: number) => `http://localhost:${port}/auth/callback`;
+export const CODEX_REDIRECT_URI = codexRedirectUri(CODEX_REDIRECT_PORT);
+/** Matches the codex CLI's scope set exactly; see docs/plans/provider-oauth-independence.md. */
+export const CODEX_SCOPES = [
+  'openid',
+  'profile',
+  'email',
+  'offline_access',
+  'api.connectors.read',
+  'api.connectors.invoke',
+];
 
 export type CodexTokens = {
   access_token: string;
@@ -135,15 +150,17 @@ export const CODEX_PKCE_CONFIG: PkceLoginConfig = {
   clientId: CODEX_OAUTH_CLIENT_ID,
   authorizeEndpoint: CODEX_AUTHORIZE_ENDPOINT,
   tokenEndpoint: CODEX_TOKEN_ENDPOINT,
-  redirectUri: CODEX_REDIRECT_URI,
-  redirectPort: CODEX_REDIRECT_PORT,
+  redirectPorts: CODEX_REDIRECT_PORTS,
+  redirectUriFor: codexRedirectUri,
   callbackPath: '/auth/callback',
   scopes: CODEX_SCOPES,
-  // The codex CLI sends both; the account-id claim the request path needs is
-  // only present in the id_token when organizations are requested.
+  // All three are what the codex CLI sends. The account-id claim the request
+  // path needs is only present in the id_token when organizations are asked
+  // for, and `originator` is how the backend attributes the client.
   extraAuthorizeParams: {
     id_token_add_organizations: 'true',
     codex_cli_simplified_flow: 'true',
+    originator: 'codex_cli_rs',
   },
   portConflictHint: 'often a running `codex login`',
 };

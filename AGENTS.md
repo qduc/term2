@@ -69,7 +69,8 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   `--grok-login`, shared via `source/providers/oauth-pkce.ts`. Both providers
   store multiple accounts (`providers/oauth-account-store.ts`, surfaced through
   `providers/oauth-accounts.ts`) with a switcher in Provider Management;
-  switching accounts starts a new conversation. Read the plan's
+  selecting an account applies from the next term2 session, because a running
+  session stays pinned to the account it first resolved. Read the plan's
   **Resume here** before touching `providers/grok-auth.ts`,
   `providers/codex-auth.ts`, `providers/oauth-pkce.ts`, `CodexTokenManager`, or
   `utils/ai/provider-credentials.ts`: it records why registering our own OAuth

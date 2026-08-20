@@ -1015,7 +1015,6 @@ const App: FC<AppProps> = ({
             staticCommitBlocker={staticCommitBlocker}
             firstRunSetup={firstRunSetup}
             onProviderSelected={firstRunSetup.active ? firstRunSetup.onProviderSelected : undefined}
-            onRequestNewConversation={clearConversationAndRefreshBanner}
             onUnavailableModelSelected={firstRunSetup.requestSetup}
             onSkillSelected={handleSkillSelected}
             onCopySelection={handleCopySelection}

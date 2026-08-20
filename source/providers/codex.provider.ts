@@ -19,13 +19,13 @@ import {
   CODEX_OAUTH_CLIENT_ID,
   CODEX_TOKEN_ENDPOINT,
   readCodexCliTokens,
-  readStoredCodexTokens,
   resolveCodexTokenPath,
   resolveTerm2CodexAuthPath,
   createCodexAccountStore,
 } from './codex-auth.js';
 import type { CodexTokens } from './codex-auth.js';
 import { getJwtClaims, getJwtExpiry } from './jwt-claims.js';
+import { recordSessionAccount } from './oauth-session-account.js';
 
 const DEFAULT_CODEX_MODEL = 'gpt-5.3-codex';
 
@@ -91,6 +91,15 @@ export class CodexTokenManager {
   private fetchImpl: typeof fetch;
   private accountId: string | null = null;
   private installationId: string | null | undefined;
+  /**
+   * The account this manager resolved first, held for its whole lifetime.
+   *
+   * Selecting a different account in the UI changes the store's active pointer,
+   * but a running session keeps authenticating as whoever it started as —
+   * provider response chaining is bound to that identity, so swapping it
+   * mid-session would break the chain.
+   */
+  private pinnedAccountId: string | null = null;
 
   constructor(options?: { tokenPathResolver?: () => string | null; authPath?: string; fetchImpl?: typeof fetch }) {
     this.tokenPathResolver = options?.tokenPathResolver || resolveTokenPath;
@@ -127,10 +136,22 @@ export class CodexTokenManager {
   }
 
   private load(): CodexTokens | null {
-    const stored = readStoredCodexTokens(this.authPath);
-    if (stored) return stored;
+    const store = createCodexAccountStore(this.authPath);
+    const pinned = this.pinnedAccountId ? store.get(this.pinnedAccountId) : null;
+    // Falls back to the active account if the pinned one was signed out.
+    const account = pinned ?? store.getActive();
+    if (account) {
+      this.pinnedAccountId = account.id;
+      recordSessionAccount('codex', account.id);
+      return account.tokens;
+    }
     const cliPath = this.tokenPathResolver();
     return cliPath ? readCodexCliTokens(cliPath) : null;
+  }
+
+  /** The account id this session is authenticating as, once it has resolved one. */
+  getPinnedAccountId(): string | null {
+    return this.pinnedAccountId;
   }
 
   async getOrRefreshAccessToken(): Promise<string> {
@@ -198,13 +219,18 @@ export class CodexTokenManager {
           this.accountId = refreshedAccountId;
         }
 
-        // Update in place: a refresh must not change which account is active.
-        createCodexAccountStore(this.authPath).updateActiveTokens({
+        // Refresh the account this session is pinned to, not whichever the
+        // user has since selected.
+        const store = createCodexAccountStore(this.authPath);
+        const refreshTarget = this.pinnedAccountId;
+        const nextTokens = {
           access_token: newAccessToken,
           refresh_token: resBody.refresh_token || refreshToken,
           id_token: newIdToken,
           ...(refreshedAccountId ? { account_id: refreshedAccountId } : {}),
-        });
+        };
+        if (refreshTarget) store.updateTokens(refreshTarget, nextTokens);
+        else store.updateActiveTokens(nextTokens);
 
         return newAccessToken;
       } finally {

@@ -7,6 +7,7 @@ import type { PkceLoginConfig } from './oauth-pkce.js';
 import { OAuthAccountStore } from './oauth-account-store.js';
 import type { AccountIdentity, OAuthAccount } from './oauth-account-store.js';
 import { getJwtClaims } from './jwt-claims.js';
+import { recordSessionAccount } from './oauth-session-account.js';
 
 /**
  * Grok (xAI) OAuth 2.0 + PKCE login and token storage.
@@ -212,6 +213,15 @@ function claimedSubject(idToken: unknown): string | undefined {
  */
 export class GrokTokenManager {
   private activeRefresh: Promise<string> | null = null;
+  /**
+   * The account this manager resolved first, held for its whole lifetime.
+   *
+   * Selecting a different account in the UI changes the store's active pointer,
+   * but a running session keeps authenticating as whoever it started as —
+   * provider response chaining is bound to that identity, so swapping it
+   * mid-session would break the chain.
+   */
+  private pinnedAccountId: string | null = null;
   private readonly fetchImpl: typeof fetch;
   private readonly authPath: string;
   private readonly cliAuthPathResolver: () => string | null;
@@ -223,10 +233,22 @@ export class GrokTokenManager {
   }
 
   private load(): GrokTokens | null {
-    const stored = readStoredGrokTokens(this.authPath);
-    if (stored) return stored;
+    const store = createGrokAccountStore(this.authPath);
+    const pinned = this.pinnedAccountId ? store.get(this.pinnedAccountId) : null;
+    // Falls back to the active account if the pinned one was signed out.
+    const account = pinned ?? store.getActive();
+    if (account) {
+      this.pinnedAccountId = account.id;
+      recordSessionAccount('grok', account.id);
+      return account.tokens;
+    }
     const cliPath = this.cliAuthPathResolver();
     return cliPath ? readGrokCliTokens(cliPath) : null;
+  }
+
+  /** The account id this session is authenticating as, once it has resolved one. */
+  getPinnedAccountId(): string | null {
+    return this.pinnedAccountId;
   }
 
   async getOrRefreshAccessToken(): Promise<string> {
@@ -267,8 +289,11 @@ export class GrokTokenManager {
           throw new Error('Grok refresh response did not contain access_token');
         }
         const refreshed = toTokens(body, tokens);
-        // Update in place: a refresh must not change which account is active.
-        createGrokAccountStore(this.authPath).updateActiveTokens(refreshed);
+        // Refresh the account this session is pinned to, not whichever the
+        // user has since selected.
+        const store = createGrokAccountStore(this.authPath);
+        if (this.pinnedAccountId) store.updateTokens(this.pinnedAccountId, refreshed);
+        else store.updateActiveTokens(refreshed);
         return refreshed.access_token;
       } finally {
         this.activeRefresh = null;

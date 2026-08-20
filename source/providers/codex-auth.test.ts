@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import http from 'node:http';
 import {
+  CODEX_REDIRECT_PORTS,
   CODEX_REDIRECT_URI,
   CODEX_TOKEN_ENDPOINT,
   loginToCodex,
@@ -81,6 +83,13 @@ describe('loginToCodex', () => {
     expect(requested.searchParams.get('code_challenge_method')).toBe('S256');
     expect(requested.searchParams.get('redirect_uri')).toBe(CODEX_REDIRECT_URI);
     expect(requested.searchParams.get('id_token_add_organizations')).toBe('true');
+    expect(requested.searchParams.get('codex_cli_simplified_flow')).toBe('true');
+    expect(requested.searchParams.get('originator')).toBe('codex_cli_rs');
+    // Matching the codex CLI's scope set exactly is what buys subscription
+    // access on the client id we borrow.
+    expect(requested.searchParams.get('scope')).toBe(
+      'openid profile email offline_access api.connectors.read api.connectors.invoke',
+    );
 
     const callback = new URL(CODEX_REDIRECT_URI);
     callback.searchParams.set('code', 'auth-code');
@@ -107,5 +116,63 @@ describe('loginToCodex', () => {
     await fetch(callback);
 
     await failure;
+  });
+
+  it('falls back to the second registered port when the first is taken', async () => {
+    // OpenAI matches the redirect against an allow-list, so the fallback exists
+    // to survive a concurrent `codex login` — not to pick any free port.
+    const [primary, fallback] = CODEX_REDIRECT_PORTS;
+    const squatter = http.createServer();
+    await new Promise<void>((resolve) => squatter.listen(primary, '127.0.0.1', resolve));
+
+    try {
+      const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ access_token: 'issued' }));
+      let authorizeUrl = '';
+      const login = loginToCodex({
+        authPath: tmpFile('codex-auth.json'),
+        fetchImpl: fetchImpl as any,
+        openBrowser: () => {},
+        onPrompt: (url) => {
+          authorizeUrl = url;
+        },
+      });
+
+      await vi.waitFor(() => expect(authorizeUrl).not.toBe(''));
+      const requested = new URL(authorizeUrl);
+      // The redirect_uri must name the port we actually bound.
+      expect(requested.searchParams.get('redirect_uri')).toBe(`http://localhost:${fallback}/auth/callback`);
+
+      const callback = new URL(`http://localhost:${fallback}/auth/callback`);
+      callback.searchParams.set('code', 'auth-code');
+      callback.searchParams.set('state', requested.searchParams.get('state')!);
+      await fetch(callback);
+
+      await expect(login).resolves.toMatchObject({ access_token: 'issued' });
+      expect(new URLSearchParams(fetchImpl.mock.calls[0][1].body).get('redirect_uri')).toBe(
+        `http://localhost:${fallback}/auth/callback`,
+      );
+    } finally {
+      squatter.close();
+    }
+  });
+
+  it('reports a real cause when every registered port is taken', async () => {
+    const squatters = await Promise.all(
+      CODEX_REDIRECT_PORTS.map(
+        (port) =>
+          new Promise<http.Server>((resolve) => {
+            const server = http.createServer();
+            server.listen(port, '127.0.0.1', () => resolve(server));
+          }),
+      ),
+    );
+
+    try {
+      await expect(
+        loginToCodex({ authPath: tmpFile('codex-auth.json'), fetchImpl: vi.fn() as any, openBrowser: () => {} }),
+      ).rejects.toThrow(/registered redirect ports.*codex login/s);
+    } finally {
+      for (const server of squatters) server.close();
+    }
   });
 });

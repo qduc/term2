@@ -640,6 +640,7 @@ Catalogued, no hypothesized failure mode:
 | Async steering guidance length | 2000 chars; rejected | no |
 | Async run turn history | 5 turns / 200 chars (progress snapshot only) | no |
 | App log retention | 7 days | no |
+| OpenCode transport discovery cache | 24h successful endpoint-table snapshot; a 2s failed or invalid lookup falls back to local Chat routing | no |
 | Active-turn cancel wait | 10,000 ms | injectable |
 | Shell auto-approval evidence caps | 8 / 3000 / 500 / 10 / 1000 / 20 | no |
 | Tool argument repair caps | 200,000 / 8 / 2048 / 160 / 16 | no |

@@ -7,11 +7,16 @@ import { AiSdkGoogleProvider } from './ai-sdk-google.provider.js';
 import { createProviderFetch } from './fetch/composer.js';
 import type { FetchMiddleware } from './fetch/compose.js';
 import { buildOpenAICompatibleUrl, normalizeBaseUrl } from './common/openai-compatible-utils.js';
-import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
+import type { StreamedModelTurn, StreamedModelTurnRequest } from '../contracts/streamed-model-turn.js';
 import { isOpencodeProvider, resolveOpencodeRuntimeConfig } from './opencode.provider.js';
 import { resolveProviderCredentialValue } from '../utils/ai/provider-credentials.js';
 import { generateOpencodeSessionId } from './opencode-session.js';
-import { selectOpencodeModelTransport, shouldApplyOpencodeAnthropicPromptCaching } from './opencode-routing.js';
+import {
+  findKnownOpencodeModelTransport,
+  selectOpencodeModelTransport,
+  shouldApplyOpencodeAnthropicPromptCaching,
+} from './opencode-routing.js';
+import { CachedOpencodeTransportDiscovery, type OpencodeTransportDiscovery } from './opencode-transport-discovery.js';
 import { createAnthropicMiddleware } from './anthropic-middleware.js';
 import {
   createOpenAICompatibleMiddleware,
@@ -63,6 +68,8 @@ export type CustomProviderRuntimeDeps = {
   loggingService?: ILoggingService;
   sessionContextService?: ISessionContextService;
   settingsService?: ISettingsService;
+  /** Resolves unknown Zen model IDs from the cached official endpoint table. */
+  opencodeTransportDiscovery?: OpencodeTransportDiscovery;
 };
 
 function findConfigFromSettings(settingsService: ISettingsService, providerId: string): CustomProviderConfig | null {
@@ -120,6 +127,7 @@ function buildProviderFetch(
 
 export class OpencodeAnthropicFormatProvider {
   private readonly fallbackSessionId: string | undefined;
+  private readonly transportDiscovery: OpencodeTransportDiscovery;
 
   constructor(private readonly config: CustomProviderConfig, private readonly deps: CustomProviderRuntimeDeps) {
     const isOpencode = isOpencodeProvider(this.config);
@@ -128,6 +136,8 @@ export class OpencodeAnthropicFormatProvider {
     // the OpenCode session without sharing identity across conversations.
     const conversationSessionId = this.deps.sessionContextService?.getContext()?.sessionId;
     this.fallbackSessionId = isOpencode ? generateOpencodeSessionId(conversationSessionId) : undefined;
+    this.transportDiscovery =
+      this.deps.opencodeTransportDiscovery ?? new CachedOpencodeTransportDiscovery({ fetchImpl: this.deps.fetch });
   }
 
   private resolveRuntimeConfig(): { baseUrl: string; apiKey: string | undefined } {
@@ -200,7 +210,26 @@ export class OpencodeAnthropicFormatProvider {
   getStreamedModel(modelName?: string): StreamedModelTurn {
     const resolvedModel = (modelName || this.deps.defaultModel || '').trim();
     const runtimeConfig = this.resolveRuntimeConfig();
-    switch (selectOpencodeModelTransport(resolvedModel)) {
+    const knownTransport = findKnownOpencodeModelTransport(resolvedModel);
+    if (knownTransport) return this.buildForTransport(knownTransport, resolvedModel, runtimeConfig);
+
+    if (!isOpencodeZenBaseUrl(runtimeConfig.baseUrl)) {
+      return this.buildOpenAICompatibleModel(resolvedModel, runtimeConfig);
+    }
+
+    return deferredOpencodeTransportModel(
+      async (signal) =>
+        (await this.transportDiscovery.resolve(resolvedModel, signal)) ?? selectOpencodeModelTransport(resolvedModel),
+      (transport) => this.buildForTransport(transport, resolvedModel, runtimeConfig),
+    );
+  }
+
+  private buildForTransport(
+    transport: ReturnType<typeof selectOpencodeModelTransport>,
+    resolvedModel: string,
+    runtimeConfig: { baseUrl: string; apiKey: string | undefined },
+  ): StreamedModelTurn {
+    switch (transport) {
       case 'anthropic-messages':
         return this.buildAnthropicStreamedModel(resolvedModel, runtimeConfig);
       case 'openai-responses':
@@ -208,6 +237,27 @@ export class OpencodeAnthropicFormatProvider {
       case 'openai-chat-completions':
         return this.buildOpenAICompatibleModel(resolvedModel, runtimeConfig);
     }
+  }
+}
+
+function deferredOpencodeTransportModel(
+  resolveTransport: (signal: AbortSignal | undefined) => Promise<ReturnType<typeof selectOpencodeModelTransport>>,
+  buildModel: (transport: ReturnType<typeof selectOpencodeModelTransport>) => StreamedModelTurn,
+): StreamedModelTurn {
+  return {
+    async *stream(request: StreamedModelTurnRequest) {
+      const model = buildModel(await resolveTransport(request.signal));
+      yield* model.stream(request);
+    },
+  };
+}
+
+function isOpencodeZenBaseUrl(baseUrl: string): boolean {
+  try {
+    const url = new URL(baseUrl);
+    return url.hostname === 'opencode.ai' && url.pathname.startsWith('/zen/');
+  } catch {
+    return false;
   }
 }
 

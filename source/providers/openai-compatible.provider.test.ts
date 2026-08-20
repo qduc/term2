@@ -26,6 +26,7 @@ function buildProvider(
   baseUrl = 'https://provider.test/v1',
   loggingService?: ProviderDeps['loggingService'],
   sessionContextService?: ProviderDeps['sessionContextService'],
+  runtimeOverrides: Record<string, unknown> = {},
 ) {
   return createCustomProviderModelProvider(
     {
@@ -38,6 +39,7 @@ function buildProvider(
       defaultModel: 'provider-model',
       loggingService,
       sessionContextService,
+      ...runtimeOverrides,
       fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
         const headers: Record<string, string> = {};
         const rawHeaders = init?.headers as any;
@@ -885,6 +887,37 @@ it('opencode Responses-format models use the OpenAI Responses transport with ses
     { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] },
   ]);
   expect(captured[0].body).not.toHaveProperty('messages');
+});
+
+it('opencode Zen discovers an unmatched Responses model before its first turn', async () => {
+  const captured: CapturedRequest[] = [];
+  const provider = buildProvider(
+    captured,
+    () => responsesSuccessResponse(),
+    'opencode',
+    'https://opencode.ai/zen/v1',
+    undefined,
+    undefined,
+    {
+      opencodeTransportDiscovery: {
+        resolve: async (modelId: string) => {
+          expect(modelId).toBe('new-responses-model');
+          return 'openai-responses';
+        },
+      },
+    },
+  );
+  const model = provider.getStreamedModel('new-responses-model');
+
+  await runUnderTrace(() =>
+    collectCompletion(model, {
+      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+      tools: [],
+    }),
+  );
+
+  expect(captured).toHaveLength(1);
+  expect(captured[0]?.url).toMatch(/^https:\/\/opencode\.ai\/zen\/v1\/responses(\?|$)/);
 });
 
 it('opencode qwen models use Anthropic messages transport with session header', async () => {

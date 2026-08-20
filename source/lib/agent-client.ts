@@ -15,7 +15,7 @@ import { AgentConfiguration } from './agent-configuration.js';
 import { SkillsService } from '../services/skills/skills-service.js';
 
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
-import type { ContextCompactionSessionState } from '../contracts/streamed-model-turn.js';
+import type { ContextCompactionSessionState, StreamedModelTurn } from '../contracts/streamed-model-turn.js';
 import { SubagentBridge } from './subagent-bridge.js';
 import { ToolInterceptorRegistry } from './tool-interceptor-registry.js';
 import { AgentChatService } from './agent-chat-service.js';
@@ -108,6 +108,18 @@ export class AgentClient {
   #backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
   #backgroundShellOutput?: BackgroundShellOutputBundle;
   #wrapUpOnCriticalRunBudget = false;
+  // Application streamed models own session-scoped transport state (notably
+  // ResponsesWS), so recreate them only when the provider configuration changes.
+  #streamedModelCache = new Map<string, StreamedModelTurn | Promise<StreamedModelTurn>>();
+
+  #clearStreamedModelCache(): void {
+    for (const cached of this.#streamedModelCache.values()) {
+      void Promise.resolve(cached)
+        .then((model) => (model as StreamedModelTurn & { close?: () => void }).close?.())
+        .catch(() => undefined);
+    }
+    this.#streamedModelCache.clear();
+  }
 
   #boundaryCompaction() {
     const enabled = this.#settings.get('agent.contextCompaction.enabled');
@@ -388,8 +400,8 @@ export class AgentClient {
         backgroundShellOutput: this.#backgroundShellOutput,
         allowBackgroundShell,
         onConfigChanged: (_changedKey?: string) => {
-          // Direct streamed models capture provider/settings at creation time.
-          // Chat models are separately cached below.
+          // Models capture provider/settings at creation time.
+          this.#clearStreamedModelCache();
           this.#chatService?.clearModelCache();
           // Always clear subagent cache and reset mentor state
           this.#subagentBridge?.clearCache();
@@ -411,15 +423,28 @@ export class AgentClient {
         if (!provider?.createStreamedModel) {
           throw new Error(`Provider '${providerId}' does not expose an application streamed model.`);
         }
-        return provider.createStreamedModel(selectedModel, {
-          settingsService: deps.settings,
-          loggingService: deps.logger,
-          sessionContextService: deps.sessionContextService,
-          onRetry: () => this.#retryCallback?.(),
-          retryAttempts: this.#retryAttempts,
-          requestCapture: deps.requestCapture,
-          contextCompactionSessionState: this.#contextCompactionSessionState,
-        });
+        const cacheKey = `${providerId}\u0000${selectedModel}`;
+        let model = this.#streamedModelCache.get(cacheKey);
+        if (!model) {
+          model = provider.createStreamedModel(selectedModel, {
+            settingsService: deps.settings,
+            loggingService: deps.logger,
+            sessionContextService: deps.sessionContextService,
+            onRetry: () => this.#retryCallback?.(),
+            retryAttempts: this.#retryAttempts,
+            requestCapture: deps.requestCapture,
+            contextCompactionSessionState: this.#contextCompactionSessionState,
+          });
+          this.#streamedModelCache.set(cacheKey, model);
+          if (model instanceof Promise) {
+            void model.catch(() => {
+              // A factory may be lazy. Evict only its own failed promise: a
+              // configuration refresh can have already installed a replacement.
+              if (this.#streamedModelCache.get(cacheKey) === model) this.#streamedModelCache.delete(cacheKey);
+            });
+          }
+        }
+        return model;
       },
     });
     this.#chatService = new AgentChatService({
@@ -733,6 +758,7 @@ export class AgentClient {
 
     this.abort();
     void this.disposeBackgroundShellJobs();
+    this.#clearStreamedModelCache();
     this.#chatService.clearModelCache();
     this.#subagentBridge?.dispose();
     this.#agentConfig.dispose();

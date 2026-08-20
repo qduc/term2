@@ -31,6 +31,38 @@ async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
   return out;
 }
 
+it('settles a terminal response when its retained transport iterator never closes', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-test', true);
+  transport.fetchResponse = async () => {
+    let emittedCompletion = false;
+    return {
+      [Symbol.asyncIterator]() {
+        return {
+          next: async () => {
+            if (!emittedCompletion) {
+              emittedCompletion = true;
+              return {
+                done: false,
+                value: { type: 'response.completed', response: { id: 'response-terminal', output: [] } },
+              };
+            }
+            return new Promise<IteratorResult<any>>(() => undefined);
+          },
+          return: () => new Promise<IteratorResult<any>>(() => undefined),
+        };
+      },
+    };
+  };
+  const model = new OpenAIResponsesModel({} as any, 'gpt-test', transport);
+
+  const result = await Promise.race([
+    collect(model.stream({ input: [], tools: [] })).then(() => 'settled' as const),
+    new Promise<'timed-out'>((resolve) => setTimeout(() => resolve('timed-out'), 100)),
+  ]);
+
+  expect(result).toBe('settled');
+});
+
 it('uses isolated injected Codex transports without changing model prototypes', async () => {
   const baseFetch = Object.getOwnPropertyDescriptor(OpenAIResponsesModel.prototype, 'fetchResponse')?.value;
   const firstTransport = new CodexResponsesTransport();

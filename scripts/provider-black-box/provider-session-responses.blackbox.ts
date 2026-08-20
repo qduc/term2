@@ -169,9 +169,11 @@ describe('application-owned Responses lifecycle through the shipped CLI', () => 
 
       const firstIdle = await child.waitForIdleInput();
       await writePrompt(child, 'first persistent websocket turn');
+      await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 1);
       await waitForIdleAfterResponse(child, firstIdle, 'FIRST-RESPONSE');
       const secondIdle = await child.waitForIdleInput();
       await writePrompt(child, 'second persistent websocket turn');
+      await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 2);
       await waitForIdleAfterResponse(child, secondIdle, 'SECOND-RESPONSE');
 
       const requests = normalRequests(server.requests);

@@ -4,6 +4,9 @@ import path from 'node:path';
 import envPaths from 'env-paths';
 import { runPkceLoopbackLogin } from './oauth-pkce.js';
 import type { PkceLoginConfig } from './oauth-pkce.js';
+import { OAuthAccountStore } from './oauth-account-store.js';
+import type { AccountIdentity, OAuthAccount } from './oauth-account-store.js';
+import { getJwtClaims } from './jwt-claims.js';
 
 /**
  * Codex (ChatGPT) OAuth 2.0 + PKCE login and token storage.
@@ -86,22 +89,62 @@ export function resolveCodexTokenPath(): string | null {
   return null;
 }
 
+/**
+ * Names a Codex account from its credential. The id must be stable across
+ * logins to the same account, or switching would accumulate duplicates, so it
+ * prefers the immutable subject over the display email.
+ */
+function identifyCodexAccount(tokens: CodexTokens): AccountIdentity {
+  const claims = (tokens.id_token && getJwtClaims(tokens.id_token)) || getJwtClaims(tokens.access_token);
+  const email = typeof claims?.email === 'string' ? claims.email : undefined;
+  const subject = typeof claims?.sub === 'string' ? claims.sub : undefined;
+  const id = subject || email || tokens.account_id || 'default';
+  return { id, label: email || tokens.account_id || 'Codex account' };
+}
+
+export function createCodexAccountStore(filePath = resolveTerm2CodexAuthPath()): OAuthAccountStore<CodexTokens> {
+  return new OAuthAccountStore<CodexTokens>({
+    filePath,
+    identify: identifyCodexAccount,
+    // A v1 file was `{ tokens: {...}, last_refresh }`.
+    migrateLegacy: (body: any) => {
+      const tokens = body?.tokens;
+      return tokens && typeof tokens.access_token === 'string' && tokens.access_token
+        ? {
+            access_token: tokens.access_token,
+            refresh_token: typeof tokens.refresh_token === 'string' ? tokens.refresh_token : undefined,
+            id_token: typeof tokens.id_token === 'string' ? tokens.id_token : undefined,
+            account_id: typeof tokens.account_id === 'string' ? tokens.account_id : undefined,
+          }
+        : null;
+    },
+  });
+}
+
+/** The credential of whichever Codex account is currently selected. */
 export function readStoredCodexTokens(filePath = resolveTerm2CodexAuthPath()): CodexTokens | null {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    const tokens = parsed?.tokens ?? parsed;
-    if (tokens && typeof tokens.access_token === 'string' && tokens.access_token) {
-      return {
-        access_token: tokens.access_token,
-        refresh_token: typeof tokens.refresh_token === 'string' ? tokens.refresh_token : undefined,
-        id_token: typeof tokens.id_token === 'string' ? tokens.id_token : undefined,
-        account_id: typeof tokens.account_id === 'string' ? tokens.account_id : undefined,
-      };
-    }
-  } catch {
-    // Fall through to the CLI store.
-  }
-  return null;
+  return createCodexAccountStore(filePath).getActiveTokens();
+}
+
+/** Stores a credential as an account and makes it the active one. */
+export function saveCodexTokens(tokens: CodexTokens, filePath = resolveTerm2CodexAuthPath()): void {
+  createCodexAccountStore(filePath).upsert(tokens);
+}
+
+export function listCodexAccounts(filePath = resolveTerm2CodexAuthPath()): OAuthAccount<CodexTokens>[] {
+  return createCodexAccountStore(filePath).list();
+}
+
+export function getActiveCodexAccount(filePath = resolveTerm2CodexAuthPath()): OAuthAccount<CodexTokens> | null {
+  return createCodexAccountStore(filePath).getActive();
+}
+
+export function setActiveCodexAccount(accountId: string, filePath = resolveTerm2CodexAuthPath()): boolean {
+  return createCodexAccountStore(filePath).setActive(accountId);
+}
+
+export function removeCodexAccount(accountId: string, filePath = resolveTerm2CodexAuthPath()): boolean {
+  return createCodexAccountStore(filePath).remove(accountId);
 }
 
 /**
@@ -129,14 +172,6 @@ export function readCodexCliTokens(filePath: string): CodexTokens | null {
     account_id: typeof tokens.account_id === 'string' ? tokens.account_id : undefined,
     imported: true,
   };
-}
-
-export function saveCodexTokens(tokens: CodexTokens, filePath = resolveTerm2CodexAuthPath()): void {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  const tmpPath = `${filePath}.tmp`;
-  const payload = { tokens, last_refresh: new Date().toISOString() };
-  fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2), { mode: 0o600, encoding: 'utf8' });
-  fs.renameSync(tmpPath, filePath);
 }
 
 /** True when term2 or the codex CLI has a Codex credential on this host. */

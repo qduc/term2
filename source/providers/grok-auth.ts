@@ -4,6 +4,9 @@ import path from 'node:path';
 import envPaths from 'env-paths';
 import { runPkceLoopbackLogin } from './oauth-pkce.js';
 import type { PkceLoginConfig } from './oauth-pkce.js';
+import { OAuthAccountStore } from './oauth-account-store.js';
+import type { AccountIdentity, OAuthAccount } from './oauth-account-store.js';
+import { getJwtClaims } from './jwt-claims.js';
 
 /**
  * Grok (xAI) OAuth 2.0 + PKCE login and token storage.
@@ -120,23 +123,54 @@ export function readGrokCliTokens(filePath: string): GrokTokens | null {
   };
 }
 
-export function readStoredGrokTokens(filePath = resolveGrokAuthPath()): GrokTokens | null {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    if (parsed && typeof parsed.access_token === 'string' && parsed.access_token) {
-      return { ...parsed, expires_at: parseExpiry(parsed.expires_at) };
-    }
-  } catch {
-    // Fall through to the CLI store.
-  }
-  return null;
+/**
+ * Names a Grok account from its credential. The id must be stable across
+ * logins to the same account, or switching would accumulate duplicates, so it
+ * prefers the immutable subject over the display email.
+ */
+function identifyGrokAccount(tokens: GrokTokens): AccountIdentity {
+  const claims = tokens.id_token ? getJwtClaims(tokens.id_token) : null;
+  const email = tokens.email || (typeof claims?.email === 'string' ? claims.email : undefined);
+  const subject = tokens.user_id || (typeof claims?.sub === 'string' ? claims.sub : undefined);
+  return { id: subject || email || 'default', label: email || subject || 'Grok account' };
 }
 
+export function createGrokAccountStore(filePath = resolveGrokAuthPath()): OAuthAccountStore<GrokTokens> {
+  return new OAuthAccountStore<GrokTokens>({
+    filePath,
+    identify: identifyGrokAccount,
+    // A v1 file was a single bare credential object.
+    migrateLegacy: (body: any) =>
+      body && typeof body.access_token === 'string' && body.access_token
+        ? { ...body, expires_at: parseExpiry(body.expires_at) }
+        : null,
+  });
+}
+
+/** The credential of whichever Grok account is currently selected. */
+export function readStoredGrokTokens(filePath = resolveGrokAuthPath()): GrokTokens | null {
+  return createGrokAccountStore(filePath).getActiveTokens();
+}
+
+/** Stores a credential as an account and makes it the active one. */
 export function saveGrokTokens(tokens: GrokTokens, filePath = resolveGrokAuthPath()): void {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  const tmpPath = `${filePath}.tmp`;
-  fs.writeFileSync(tmpPath, JSON.stringify(tokens, null, 2), { mode: 0o600, encoding: 'utf8' });
-  fs.renameSync(tmpPath, filePath);
+  createGrokAccountStore(filePath).upsert(tokens);
+}
+
+export function listGrokAccounts(filePath = resolveGrokAuthPath()): OAuthAccount<GrokTokens>[] {
+  return createGrokAccountStore(filePath).list();
+}
+
+export function getActiveGrokAccount(filePath = resolveGrokAuthPath()): OAuthAccount<GrokTokens> | null {
+  return createGrokAccountStore(filePath).getActive();
+}
+
+export function setActiveGrokAccount(accountId: string, filePath = resolveGrokAuthPath()): boolean {
+  return createGrokAccountStore(filePath).setActive(accountId);
+}
+
+export function removeGrokAccount(accountId: string, filePath = resolveGrokAuthPath()): boolean {
+  return createGrokAccountStore(filePath).remove(accountId);
 }
 
 /** True when term2 or the grok CLI has a usable Grok credential on this host. */
@@ -155,10 +189,20 @@ function toTokens(body: any, previous?: GrokTokens): GrokTokens {
     refresh_token: body?.refresh_token || previous?.refresh_token,
     id_token: body?.id_token || previous?.id_token,
     expires_at: expiresIn ? Date.now() + expiresIn * 1000 : undefined,
-    email: previous?.email,
-    user_id: previous?.user_id,
+    email: previous?.email ?? claimedEmail(body?.id_token),
+    user_id: previous?.user_id ?? claimedSubject(body?.id_token),
     team_id: previous?.team_id,
   };
+}
+
+function claimedEmail(idToken: unknown): string | undefined {
+  const claims = typeof idToken === 'string' ? getJwtClaims(idToken) : null;
+  return typeof claims?.email === 'string' ? claims.email : undefined;
+}
+
+function claimedSubject(idToken: unknown): string | undefined {
+  const claims = typeof idToken === 'string' ? getJwtClaims(idToken) : null;
+  return typeof claims?.sub === 'string' ? claims.sub : undefined;
 }
 
 /**
@@ -223,7 +267,8 @@ export class GrokTokenManager {
           throw new Error('Grok refresh response did not contain access_token');
         }
         const refreshed = toTokens(body, tokens);
-        saveGrokTokens(refreshed, this.authPath);
+        // Update in place: a refresh must not change which account is active.
+        createGrokAccountStore(this.authPath).updateActiveTokens(refreshed);
         return refreshed.access_token;
       } finally {
         this.activeRefresh = null;

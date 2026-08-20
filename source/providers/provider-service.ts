@@ -11,6 +11,7 @@ import {
 
 export type ProviderSelectionPhase =
   | 'list'
+  | 'accounts'
   | 'edit_fields'
   | 'wizard_name'
   | 'wizard_type'

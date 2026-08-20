@@ -104,6 +104,7 @@ export type BottomAreaProps = {
   backgroundApprovalPendingCount?: number;
   firstRunSetup?: { active: boolean; phase: FirstRunSetupPhase | null; provider: string };
   onProviderSelected?: (provider: string) => void;
+  onRequestNewConversation?: () => void;
   onUnavailableModelSelected?: (provider: string) => void;
   onSkillSelected?: (skill: SkillInfo) => void;
   onCopySelection?: (selection: CopySelection) => void;
@@ -177,6 +178,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   backgroundApprovalPendingCount = 0,
   firstRunSetup,
   onProviderSelected,
+  onRequestNewConversation,
   onUnavailableModelSelected,
   onSkillSelected,
   onCopySelection,
@@ -378,6 +380,7 @@ const BottomArea: FC<BottomAreaProps> = ({
           onRetractQueuedMessage={onRetractQueuedMessage}
           onEditQueuedMessage={onEditQueuedMessage}
           onProviderSelected={onProviderSelected}
+          onRequestNewConversation={onRequestNewConversation}
           onUnavailableModelSelected={onUnavailableModelSelected}
           onSkillSelected={onSkillSelected}
           onCopySelection={onCopySelection}

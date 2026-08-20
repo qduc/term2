@@ -15,6 +15,15 @@ import {
 import { resolveProviderId, resolveProviderName } from '../services/settings/custom-provider-normalization.js';
 import { ProviderManagementSession } from '../services/providers/provider-management-session.js';
 import { getProviderCredentialSettingKey } from '../utils/ai/provider-credentials.js';
+import {
+  isOAuthAccountProvider,
+  listOAuthAccounts,
+  oauthLoginCommand,
+  removeOAuthAccount,
+  setActiveOAuthAccount,
+  type OAuthAccountProviderId,
+  type OAuthAccountSummary,
+} from '../providers/oauth-accounts.js';
 
 export type { ProviderSelectionPhase, CustomProviderDraft, ProviderSelectionItem };
 
@@ -50,13 +59,33 @@ export type ProviderSelectionMenuItem =
       kind: 'reorder-item';
       id: string;
       label: string;
+    }
+  | {
+      kind: 'account';
+      id: string;
+      label: string;
+      isActive: boolean;
+    }
+  | {
+      kind: 'note';
+      label: string;
     };
 
 const DELETE_CONFIRM_DEFAULT_INDEX = 1;
 
 export const useProviderSelection = (
   settingsService: SettingsService,
-  options?: { onProviderSelected?: (provider: string) => void; allowCodexSelection?: boolean },
+  options?: {
+    onProviderSelected?: (provider: string) => void;
+    allowCodexSelection?: boolean;
+    /**
+     * Switching account changes who the next request authenticates as, and
+     * provider response chaining is tied to that identity, so the switch takes
+     * effect on a fresh conversation rather than mid-turn.
+     */
+    onRequestNewConversation?: () => void;
+    onSystemMessage?: (message: string) => void;
+  },
 ) => {
   const { mode, controller, setInput, replaceInput } = useInputContext();
   const providerSession = useMemo(() => new ProviderManagementSession(settingsService), [settingsService]);
@@ -72,6 +101,8 @@ export const useProviderSelection = (
   const [draftModified, setDraftModified] = useState(false);
   const [scrollOffset, setScrollOffset] = useState(0);
   const [reorderList, setReorderList] = useState<string[]>([]);
+  const [accountProviderId, setAccountProviderId] = useState<OAuthAccountProviderId | null>(null);
+  const [accounts, setAccounts] = useState<OAuthAccountSummary[]>([]);
 
   const activeItems = useMemo((): ProviderSelectionMenuItem[] => {
     switch (phase) {
@@ -88,6 +119,32 @@ export const useProviderSelection = (
           { kind: 'add-provider' as const, label: 'Add Custom Provider' },
           { kind: 'action' as const, label: 'Reorder Providers' },
         ];
+      case 'accounts': {
+        if (accounts.length === 0) {
+          return [
+            {
+              kind: 'note' as const,
+              label: accountProviderId
+                ? `No accounts stored. Run \`${oauthLoginCommand(accountProviderId)}\` to add one.`
+                : 'No accounts stored.',
+            },
+          ];
+        }
+        return [
+          ...accounts.map((account) => ({
+            kind: 'account' as const,
+            id: account.id,
+            label: account.label,
+            isActive: account.isActive,
+          })),
+          {
+            kind: 'note' as const,
+            label: accountProviderId
+              ? `Add another with \`${oauthLoginCommand(accountProviderId)}\``
+              : 'Add another by logging in again',
+          },
+        ];
+      }
       case 'wizard_type':
         return PROVIDER_TYPES.map((type) => ({ kind: 'type' as const, label: type }));
       case 'edit_fields': {
@@ -147,10 +204,11 @@ export const useProviderSelection = (
       default:
         return [];
     }
-  }, [phase, items, draft, editingOriginalName, reorderList]);
+  }, [phase, items, draft, editingOriginalName, reorderList, accounts, accountProviderId]);
 
   const checkIsInactive = useCallback(
     (item: ProviderSelectionMenuItem) => {
+      if (item.kind === 'note') return true;
       return item.kind === 'provider' && item.id === 'codex' && !options?.allowCodexSelection;
     },
     [options?.allowCodexSelection],
@@ -293,6 +351,17 @@ export const useProviderSelection = (
           setErrorMessage('Codex is not logged in on this host. Run `term2 --codex-login`, then select Codex again.');
           return;
         }
+        if (isOAuthAccountProvider(provider.id)) {
+          // OAuth providers hold several logins rather than one key, so this is
+          // the slot where key-based providers open their key editor.
+          setErrorMessage(null);
+          setAccountProviderId(provider.id);
+          setAccounts(listOAuthAccounts(provider.id));
+          setPhase('accounts');
+          setSelectedIndex(0);
+          setInput('');
+          return;
+        }
         if (provider.isCustom) {
           setFieldErrors({});
           setDiscardFromPhase(null);
@@ -354,6 +423,24 @@ export const useProviderSelection = (
           }
         }
       }
+    } else if (phase === 'accounts') {
+      const item = activeItems[index];
+      if (!item || item.kind !== 'account' || !accountProviderId) return;
+      if (item.isActive) {
+        close();
+        return;
+      }
+      if (!setActiveOAuthAccount(accountProviderId, item.id)) {
+        setErrorMessage('That account is no longer stored.');
+        setAccounts(listOAuthAccounts(accountProviderId));
+        return;
+      }
+      const label = getProviderLabel(accountProviderId) ?? accountProviderId;
+      options?.onSystemMessage?.(`Switched ${label} account to ${item.label}. Starting a new conversation.`);
+      // The new identity only applies from a fresh conversation: provider
+      // response chaining is bound to the account that opened the chain.
+      options?.onRequestNewConversation?.();
+      close();
     } else if (phase === 'wizard_type') {
       const selectedType = PROVIDER_TYPES[index]!;
       if (draft) {
@@ -523,6 +610,9 @@ export const useProviderSelection = (
     reorderList,
     saveDraft,
     activeItems,
+    accountProviderId,
+    close,
+    options,
     setSelectedIndex,
   ]);
 
@@ -581,6 +671,12 @@ export const useProviderSelection = (
       setSelectedIndex(0);
       setDraft(null);
       setEditingOriginalName(null);
+    } else if (phase === 'accounts') {
+      setErrorMessage(null);
+      setPhase('list');
+      setSelectedIndex(0);
+      setAccountProviderId(null);
+      setAccounts([]);
     } else if (phase === 'reorder') {
       setPhase('list');
       setSelectedIndex(0);
@@ -688,10 +784,22 @@ export const useProviderSelection = (
 
       return false;
     },
-    [phase, draft, editingField, editingOriginalName, settingsService, setInput, setSelectedIndex, options],
+    [phase, draft, editingField, editingOriginalName, settingsService, setInput, setSelectedIndex],
   );
 
   const requestDelete = useCallback(() => {
+    if (phase === 'accounts') {
+      const item = activeItems[selectedIndex];
+      if (!item || item.kind !== 'account' || !accountProviderId) return;
+      // Forgetting a credential is local and re-doable with another login, so
+      // it does not get a confirmation step the way deleting a provider does.
+      removeOAuthAccount(accountProviderId, item.id);
+      const remaining = listOAuthAccounts(accountProviderId);
+      setAccounts(remaining);
+      setSelectedIndex(Math.max(0, Math.min(selectedIndex, remaining.length - 1)));
+      options?.onSystemMessage?.(`Signed out of ${item.label}.`);
+      return;
+    }
     if (phase !== 'list') return;
     const index = Math.min(selectedIndex, items.length - 1);
     if (index < 0 || index >= items.length) return;
@@ -700,7 +808,7 @@ export const useProviderSelection = (
     setEditingOriginalName(provider.id);
     setPhase('confirm_delete');
     setSelectedIndex(DELETE_CONFIRM_DEFAULT_INDEX); // default to 'No' for safety
-  }, [phase, selectedIndex, items, setSelectedIndex]);
+  }, [phase, selectedIndex, items, setSelectedIndex, activeItems, accountProviderId, options]);
 
   const getActiveItems = useCallback(() => activeItems, [activeItems]);
 
@@ -735,7 +843,10 @@ export const useProviderSelection = (
     selectionMoveDown();
   }, [phase, selectedIndex, reorderList.length, selectionMoveDown]);
 
-  const selectedProviderName = editingOriginalName ?? undefined;
+  const selectedProviderName =
+    phase === 'accounts' && accountProviderId
+      ? getProviderLabel(accountProviderId) ?? accountProviderId
+      : editingOriginalName ?? undefined;
 
   return {
     isOpen,

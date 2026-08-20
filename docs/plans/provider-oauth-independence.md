@@ -19,6 +19,13 @@ login:
 - Both CLI fallbacks are access-token-only imports, marked `imported: true`.
   When an imported token expires the manager refuses to refresh and tells the
   user to run `term2 --grok-login` / `term2 --codex-login`.
+- Both stores hold **several accounts** with one active pointer
+  (`providers/oauth-account-store.ts`). Each account owns its own refresh token,
+  so switching never crosses two rotation chains. A pre-multi-account file is
+  migrated on read, and reading alone never rewrites it. The switcher lives in
+  Provider Management, in the slot where key-based providers open their key
+  editor; switching starts a new conversation because response chaining is bound
+  to the account that opened the chain.
 - `term2 --codex-login` runs the same PKCE flow Grok has. The flow itself now
   lives once in `source/providers/oauth-pkce.ts`
   (`runPkceLoopbackLogin`); each provider contributes only endpoints, scopes,

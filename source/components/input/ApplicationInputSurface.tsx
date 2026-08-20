@@ -33,6 +33,7 @@ export type ApplicationInputSurfaceProps = {
   historyService: HistoryService;
   onSettingChange?: (key: string, value: any) => void;
   onSystemMessage?: (text: string) => void;
+  onRequestNewConversation?: () => void;
   promptLabel?: string;
   allowEmptySubmit?: boolean;
   skillsService?: SkillsService;
@@ -111,6 +112,7 @@ export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props)
     onSkillSelected: props.onSkillSelected,
     onCopySelection: props.onCopySelection,
     onSystemMessage: props.onSystemMessage,
+    onRequestNewConversation: props.onRequestNewConversation,
   };
 
   if (stack.length > 0) {

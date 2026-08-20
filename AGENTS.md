@@ -60,6 +60,14 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   writes a token and an append-only ledger under `~/.agents/runtime/`; it is
   inert unless run deliberately. Establish provenance before extending either,
   and consider reverting them if they are not wanted.
+- Provider OAuth independence (Grok and Codex) — **planned, not started.** See
+  `docs/plans/provider-oauth-independence.md`. term2 currently shares refresh
+  tokens with the `grok` and `codex` CLIs' credential files, and `CodexTokenManager`
+  writes back into `~/.codex/auth.json` without the lock those CLIs use. Read the
+  plan's **Resume here** before touching `providers/grok-auth.ts`,
+  `CodexTokenManager`, or `utils/ai/provider-credentials.ts`: it records why
+  registering our own OAuth client is a dead end for subscription access, and why
+  the loopback-port question cannot be settled with curl.
 - Scheduled live provider canaries — a deferred follow-up requiring CI, secret/billing, and OAuth-storage decisions. No plan doc, and nobody is on it.
 - UI/business layer separation — completed through settings transaction,
   handoff workflow, provider management, and model catalog milestones. See

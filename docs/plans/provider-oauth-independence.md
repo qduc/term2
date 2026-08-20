@@ -1,0 +1,107 @@
+# Own the OAuth flow and the credential store for Grok and Codex
+
+Status: **not started.** The Grok provider shipped (`831bae86`) with a login
+flow of its own *and* a fallback that reads the `grok` CLI's credential file.
+This plan is about removing the shared-file coupling that fallback represents,
+in both providers.
+
+## Resume here
+
+Read this section before touching `source/providers/grok-auth.ts`,
+`source/providers/codex.provider.ts` (`CodexTokenManager`), or
+`source/utils/ai/provider-credentials.ts`.
+
+**The problem is writes and refresh tokens, not "dependency" in the abstract.**
+xAI and OpenAI both rotate refresh tokens: each refresh invalidates the one
+before it. Two processes holding the same refresh token are two writers on one
+rotation chain, and the loser is silently logged out.
+
+Two concrete instances exist today:
+
+1. `CodexTokenManager.getOrRefreshAccessToken()` refreshes and then **writes
+   back into `~/.codex/auth.json`** (tmp + rename, no lock). The `grok` CLI
+   ships `auth.json.lock`, lock heartbeats, and explicit "sibling-rotation
+   detected" handling for exactly this hazard; the `codex` CLI presumably
+   assumes something similar. term2 does not speak that protocol.
+2. `GrokTokenManager` falls back to `~/.grok/auth.json` and, when the token is
+   stale, **refreshes using the CLI's refresh token** and stores the result in
+   term2's own file. Same double-spend, read-side. This is a defect in shipped
+   code, not a hypothetical.
+
+**Decisions already taken.**
+
+- Grok already has its own PKCE login (`loginToGrok`) and its own store at
+  `envPaths('term2').config/grok-auth.json`, mode 0600. Nothing needs
+  re-deriving there.
+- The import path is worth keeping, but only as a **one-way, access-token-only
+  grace**: copy the short-lived access token so an already-logged-in host works
+  immediately, never the refresh token, and require `--grok-login` when it
+  expires.
+
+**Premises already disproven — do not re-derive.**
+
+- *"Register our own OAuth client and pick our own redirect."* Almost certainly
+  a dead end for subscription access. The CLI chat proxy
+  (`https://cli-chat-proxy.grok.com/v1`) gates on the `grok` CLI's client id and
+  its `grok-cli:access` scope. A term2-registered client would authenticate and
+  then be refused by the proxy. Borrowing the client id is what buys access;
+  inheriting its registered redirect is the price.
+- *"Probe whether auth.x.ai honours RFC 8252 loopback-port flexibility with
+  curl."* Already tried. `GET /oauth2/authorize` returns an identical Cloudflare
+  403 for the registered port and an unregistered one, so the probe measures bot
+  protection, not redirect policy. It cannot settle the question headlessly.
+
+## Open question, and the cheapest way to settle it
+
+**Is `http://localhost:22255/callback` matched exactly, or is any loopback port
+accepted?** RFC 8252 §7.3 tells native-app servers to ignore the loopback port;
+many do. The `grok` binary hardcodes one port with no fallback range, which
+weakly suggests exact match.
+
+Settle it with one interactive login attempt using a different port. Sign-in
+page → ports are free, bind `:0` and take whatever the OS gives. "Invalid
+redirect_uri" → exact match, and the port is not negotiable.
+
+If it is exact match, **do not fight for the port — switch to the device code
+grant.** `https://auth.x.ai/.well-known/openid-configuration` advertises
+`device_authorization_endpoint` (`/oauth2/device/code`) and lists
+`urn:ietf:params:oauth:grant-type:device_code` among its grant types; the `grok`
+binary implements it. Device flow needs no listener at all, so it removes rather
+than reports the `EADDRINUSE` collision with a concurrent `grok login`, and it
+works over SSH and on headless hosts — which matters because term2 has an
+`--ssh` mode where opening a browser cannot work.
+
+## Backlog, ranked by value (not by effort)
+
+1. **Stop writing to other tools' credential files.** Codex refreshes land in
+   term2's own store. Highest value: it retires the live double-spend hazard
+   without any new login flow.
+2. **Access-token-only import.** Change `GrokTokenManager`'s CLI fallback to
+   never carry `refresh_token`, and do the same for the Codex read path.
+3. **Own login for Codex.** The same PKCE flow Grok has. Public client
+   `app_EMoamEEZ73f0CkXaXp7hrann`, loopback `http://localhost:1455/auth/callback`
+   (subject to the same port question as above).
+4. **Device flow**, if the port probe says exact match — or unconditionally, if
+   headless/SSH login is wanted for its own sake.
+
+Items 1 and 2 remove the hazard on their own. Item 3 is the part that costs a
+second login on hosts that already run both CLIs, and it is the part that breaks
+when a provider changes its flow — take it deliberately, not by momentum.
+
+## Reference: what is already known about the wire
+
+Facts established by inspecting `~/.grok/bin/grok` and live requests; they are
+not guesses, but re-verify before relying on them.
+
+- Issuer `https://auth.x.ai`; authorize `/oauth2/authorize`; token
+  `/oauth2/token`; device code `/oauth2/device/code`; PKCE `S256` only.
+- Public desktop client id `b1a00492-073a-47ea-816f-4c329264a828`; registered
+  redirect `http://localhost:22255/callback`.
+- Subscription traffic goes to `https://cli-chat-proxy.grok.com/v1`, which
+  speaks OpenAI chat completions (with a `reasoning_content` lane).
+- That proxy **rejects unrecognised clients with HTTP 426**, so
+  `x-grok-client-version` is load-bearing. term2 pins `1.0.5`
+  (`GROK_CLIENT_VERSION` in `source/providers/grok.provider.ts`); raise it when
+  the proxy starts refusing that floor.
+- Grok models are absent from the generated model catalog (it is generated from
+  models.dev), so pricing and context-window lookups fall back to defaults.

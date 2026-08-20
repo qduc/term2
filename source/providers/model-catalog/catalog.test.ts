@@ -171,6 +171,22 @@ describe('getModelContextWindow over the vendored catalog', () => {
 
   it('exposes maxTokens alongside contextWindow', () => {
     expect(getCatalogModel('openai', 'gpt-4o')).toMatchObject({ contextWindow: 128000, maxTokens: 16384 });
+    expect(getCatalogModel('openrouter', 'meta/muse-spark-1.2')).toMatchObject({
+      contextWindow: 1048576,
+      maxTokens: 131072,
+      inputPricePerMTok: 1.25,
+      outputPricePerMTok: 4.25,
+      cacheReadPricePerMTok: 0.15,
+      cacheWritePricePerMTok: 0,
+    });
+    expect(getCatalogModel('opencode', 'muse-spark-1.2-contributor')).toMatchObject({
+      contextWindow: 1048576,
+      maxTokens: 131072,
+      inputPricePerMTok: 0.1,
+      outputPricePerMTok: 0.2,
+      cacheReadPricePerMTok: 0.002,
+      cacheWritePricePerMTok: 0,
+    });
   });
 });
 

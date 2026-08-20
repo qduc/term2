@@ -71,6 +71,7 @@ interface ResponsesFixtureServer {
   readonly websocketUrl: string;
   readonly requests: CapturedResponsesRequest[];
   readonly served: ServedResponse[];
+  readonly websocketConnectionCount: number;
   waitForRequests(
     predicate: (requests: readonly CapturedResponsesRequest[]) => boolean,
     timeoutMs?: number,
@@ -489,11 +490,16 @@ function parseFunctionResultOutput(item: Record<string, unknown>): unknown {
   return JSON.parse(output);
 }
 
-async function startResponsesFixtureServer(options: { mode: FixtureMode }): Promise<ResponsesFixtureServer> {
+async function startResponsesFixtureServer(options: {
+  mode: FixtureMode;
+  retainWebSocket?: boolean;
+  rejectReconnect?: boolean;
+}): Promise<ResponsesFixtureServer> {
   const requests: CapturedResponsesRequest[] = [];
   const served: ServedResponse[] = [];
   const sockets = new Set<Socket>();
   const clients = new Set<WebSocket>();
+  let websocketConnectionCount = 0;
   const httpServer = createServer(async (request, response) => {
     sockets.add(request.socket);
     request.socket.once('close', () => sockets.delete(request.socket));
@@ -514,11 +520,16 @@ async function startResponsesFixtureServer(options: { mode: FixtureMode }): Prom
     });
   });
   webSocketServer.on('connection', (client, request) => {
+    if (options.rejectReconnect && clients.size > 0) {
+      client.close(1008, 'reconnect rejected');
+      return;
+    }
+    websocketConnectionCount += 1;
     clients.add(client);
     client.once('close', () => clients.delete(client));
     let servedRequest = false;
     client.on('message', (raw) => {
-      if (servedRequest) return;
+      if (servedRequest && !options.retainWebSocket) return;
       servedRequest = true;
       const captured = {
         transport: 'websocket' as const,
@@ -527,7 +538,7 @@ async function startResponsesFixtureServer(options: { mode: FixtureMode }): Prom
         body: parseJsonMessage(raw),
       } satisfies CapturedResponsesRequest;
       requests.push(captured);
-      void serveResponse(options.mode, captured, undefined, client, served);
+      void serveResponse(options.mode, captured, undefined, client, served, options.retainWebSocket === true);
     });
   });
 
@@ -544,6 +555,9 @@ async function startResponsesFixtureServer(options: { mode: FixtureMode }): Prom
   return {
     baseUrl,
     websocketUrl: `ws://127.0.0.1:${address.port}`,
+    get websocketConnectionCount() {
+      return websocketConnectionCount;
+    },
     requests,
     served,
     waitForRequests: async (predicate, timeoutMs = 15_000) => {
@@ -583,7 +597,10 @@ async function serveResponse(
   httpResponse: ServerResponse | undefined,
   webSocket: WebSocket | undefined,
   served: ServedResponse[],
+  retainWebSocket = false,
 ): Promise<void> {
+  const pushFrames = (frames: readonly Record<string, unknown>[], abnormalClose = false) =>
+    sendFrames(httpResponse, webSocket, frames, abnormalClose, retainWebSocket);
   const isWarmup = request.body.generate === false;
   const hasToolResult = Array.isArray(request.body.input)
     ? request.body.input.some(
@@ -593,7 +610,7 @@ async function serveResponse(
   const normalIndex = countNormalServed(served);
 
   if (isWarmup) {
-    await sendFrames(httpResponse, webSocket, [completedFrame(`resp-warmup-${normalIndex}`, [])]);
+    await pushFrames([completedFrame(`resp-warmup-${normalIndex}`, [])]);
     served.push({
       request,
       terminalType: 'response.completed',
@@ -605,7 +622,7 @@ async function serveResponse(
 
   if (mode === 'native-error') {
     const responseId = 'resp-native-error';
-    await sendFrames(httpResponse, webSocket, [
+    await pushFrames([
       createdFrame(responseId),
       {
         type: 'response.failed',
@@ -624,14 +641,14 @@ async function serveResponse(
   if (mode === 'incomplete' || mode === 'abnormal-close') {
     const responseId = `resp-${mode}`;
     const frames = [createdFrame(responseId), { type: 'response.output_text.delta', delta: 'PARTIAL' }];
-    await sendFrames(httpResponse, webSocket, frames, mode === 'abnormal-close');
+    await pushFrames(frames, mode === 'abnormal-close');
     served.push({ request, closedAbnormally: mode === 'abnormal-close' });
     return;
   }
 
   if (mode === 'runaway-output') {
     const responseId = 'resp-runaway-output';
-    await sendFrames(httpResponse, webSocket, [
+    await pushFrames([
       createdFrame(responseId),
       ...Array.from({ length: 8 }, () => ({ type: 'response.output_text.delta', delta: 'LOOPLOOP' })),
     ]);
@@ -641,7 +658,7 @@ async function serveResponse(
 
   if (mode === 'approval' && !hasToolResult) {
     const responseId = TOOL_RESPONSE_ID;
-    await sendFrames(httpResponse, webSocket, toolCallFrames(responseId));
+    await pushFrames(toolCallFrames(responseId));
     served.push({ request, terminalType: 'response.completed', responseId, closedAbnormally: false });
     return;
   }
@@ -653,7 +670,7 @@ async function serveResponse(
       normalIndex === 0
         ? backgroundShellToolCallFrames(responseId)
         : [createdFrame(responseId), ...messageFrames(text), completedFrame(responseId, [messageOutput(text)])];
-    await sendFrames(httpResponse, webSocket, frames);
+    await pushFrames(frames);
     served.push({ request, terminalType: 'response.completed', responseId, closedAbnormally: false });
     return;
   }
@@ -668,7 +685,7 @@ async function serveResponse(
       : normalIndex === 0
       ? 'FIRST-RESPONSE'
       : 'SECOND-RESPONSE';
-  await sendFrames(httpResponse, webSocket, [
+  await pushFrames([
     createdFrame(responseId),
     ...messageFrames(text),
     completedFrame(responseId, [messageOutput(text)]),
@@ -784,6 +801,7 @@ async function sendFrames(
   webSocket: WebSocket | undefined,
   frames: readonly Record<string, unknown>[],
   abnormalClose = false,
+  retainWebSocket = false,
 ): Promise<void> {
   if (httpResponse) {
     httpResponse.writeHead(200, {
@@ -804,7 +822,7 @@ async function sendFrames(
     });
   }
   if (abnormalClose) webSocket.terminate();
-  else webSocket.close(1000, 'fixture complete');
+  else if (!retainWebSocket) webSocket.close(1000, 'fixture complete');
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<Record<string, unknown>> {

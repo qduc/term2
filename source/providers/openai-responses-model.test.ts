@@ -11,10 +11,13 @@ let fakeResponsesWSStream: () => AsyncIterable<any> = async function* () {};
 let capturedWSRequest: any;
 vi.mock('openai/resources/responses/ws', () => ({
   ResponsesWS: class {
+    socket = { readyState: 1 };
     send(body: any) {
       capturedWSRequest = body;
     }
-    close() {}
+    close() {
+      this.socket.readyState = 3;
+    }
     stream() {
       return fakeResponsesWSStream();
     }
@@ -859,4 +862,50 @@ it('reuses the persistent websocket across sequential completed streams and clos
   expect(events2).toHaveLength(1);
 
   await model.close();
+});
+
+it('does not close a connecting websocket when another agent starts a concurrent stream', async () => {
+  const hang = () => new Promise<IteratorResult<any>>(() => undefined);
+  fakeResponsesWSStream = () => ({
+    [Symbol.asyncIterator]() {
+      return {
+        next: hang,
+        return: async () => ({ done: true, value: undefined }),
+      };
+    },
+  });
+  const { ResponsesWS } = await import('openai/resources/responses/ws');
+  const originalClose = ResponsesWS.prototype.close;
+  const closed: unknown[] = [];
+  ResponsesWS.prototype.close = function close(this: unknown) {
+    closed.push(this);
+    return originalClose.call(this);
+  };
+  const client = { responses: { create: async () => ({}) } };
+  const model = new OpenAIResponsesWSModelWithPromptCacheKey(client, 'gpt-5.4-nano');
+
+  try {
+    const first = collect(
+      model.stream({
+        input: [],
+        tools: [],
+        providerOptions: { extraHeaders: { 'session-id': 'agent-a' } },
+      } as any),
+    );
+    void first.catch(() => {});
+    const second = collect(
+      model.stream({
+        input: [],
+        tools: [],
+        providerOptions: { extraHeaders: { 'session-id': 'agent-b' } },
+      } as any),
+    );
+    void second.catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(closed).toEqual([]);
+  } finally {
+    ResponsesWS.prototype.close = originalClose;
+    await model.close();
+  }
 });

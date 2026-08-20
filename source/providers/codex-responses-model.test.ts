@@ -1853,6 +1853,44 @@ it('CodexResponsesWSModel injects Codex previous response id and trims replayed 
   }
 });
 
+it('CodexResponsesWSModel uses providerHistoryKey as websocket session identity', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  let seenRequest: any;
+  transport.fetchResponse = async function (request: any) {
+    seenRequest = request;
+    return makeStream([
+      { type: 'response.completed', response: { id: 'resp_nested_identity', output: [], usage: {} } },
+    ]);
+  };
+  const sessionContextService = new SessionContextService();
+  const model = new CodexResponsesWSModel(
+    { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+    'gpt-5.6-luna',
+    {
+      getOrRefreshAccessToken: async () => 'token',
+      getAccountId: () => 'acc_123',
+      getInstallationId: () => 'installation-123',
+    } as any,
+    undefined,
+    undefined,
+    sessionContextService,
+    transport,
+  );
+
+  await sessionContextService.runWithContext(
+    {
+      sessionId: 'parent-session',
+      sessionStartedAt: '2026-08-20T00:00:00.000Z',
+      providerHistoryKey: 'parent-session:subagent:call-explorer-1',
+    },
+    () => collect(model.stream({ input: [], tools: [] })),
+  );
+
+  expect(seenRequest.providerOptions.extraHeaders['session-id']).toBe('parent-session:subagent:call-explorer-1');
+  expect(seenRequest.providerOptions.extraHeaders['thread-id']).toBe('parent-session:subagent:call-explorer-1');
+  expect(seenRequest.providerOptions.client_metadata.session_id).toBe('parent-session:subagent:call-explorer-1');
+});
+
 it('CodexResponsesWSModel isolates implicit response history for logical runs sharing a foreground session', async () => {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const seenRequests: any[] = [];

@@ -260,6 +260,7 @@ export function isNetworkProtocolError(error: unknown, seen = new Set<unknown>()
   // 3. String message patterns (including restored generic and WebSocket ones)
   if (
     message.includes('websocket connection closed') ||
+    message.includes('websocket was closed before the connection was established') ||
     message.includes('websocket is not open') ||
     message.includes('websocket open timed out') ||
     message.includes('websocket idle timeout') ||

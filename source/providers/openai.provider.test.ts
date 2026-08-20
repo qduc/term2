@@ -75,6 +75,33 @@ it('retains a separate public transport class for WebSocket-configured sessions'
   );
 });
 
+it('reuses the streamed websocket model for a session so sequential turns keep one socket', async () => {
+  const { getProvider } = await import('./index.js');
+  const provider = getProvider('openai');
+  const sessionContextService = {
+    getContext: () => ({ sessionId: 'sess-1', sessionStartedAt: '2026-01-01T00:00:00.000Z' }),
+    runWithContext: <T>(_context: unknown, fn: () => T) => fn(),
+  };
+  const mockSettingsService: any = {
+    get: (key: string) => {
+      if (key === 'agent.model') return 'gpt-4o';
+      if (key === 'agent.openai.apiKey') return 'sk-test';
+      if (key === 'agent.transport') return 'websocket';
+      return undefined;
+    },
+  };
+  const deps = {
+    settingsService: mockSettingsService,
+    loggingService: {} as any,
+    sessionContextService,
+  };
+
+  const first = await provider!.createStreamedModel!('gpt-4o', deps);
+  const second = await provider!.createStreamedModel!('gpt-4o', deps);
+
+  expect(second).toBe(first);
+});
+
 it('creates a streamed model via provider registry and executes stream()', async () => {
   const { getProvider } = await import('./index.js');
   const provider = getProvider('openai');

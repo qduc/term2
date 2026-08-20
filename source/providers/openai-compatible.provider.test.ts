@@ -1,3 +1,6 @@
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { it, expect } from 'vitest';
 import type { StreamedModelTurnRequest } from '../contracts/streamed-model-turn.js';
 const setTracingDisabled = (_disabled: boolean): void => {};
@@ -7,6 +10,7 @@ import {
   createOpenAICompatibleProviderDefinition,
 } from './openai-compatible.provider.js';
 import { createOpenAICompatibleProviderDefinition as createLazyProviderDefinition } from './openai-compatible-lazy.js';
+import { CachedOpencodeTransportDiscovery } from './opencode-transport-discovery.js';
 import type { ProviderDeps } from './registry.js';
 
 setTracingDisabled(true);
@@ -891,33 +895,47 @@ it('opencode Responses-format models use the OpenAI Responses transport with ses
 
 it('opencode Zen discovers an unmatched Responses model before its first turn', async () => {
   const captured: CapturedRequest[] = [];
-  const provider = buildProvider(
-    captured,
-    () => responsesSuccessResponse(),
-    'opencode',
-    'https://opencode.ai/zen/v1',
-    undefined,
-    undefined,
-    {
-      opencodeTransportDiscovery: {
-        resolve: async (modelId: string) => {
-          expect(modelId).toBe('new-responses-model');
-          return 'openai-responses';
-        },
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'opencode-discovery-proof-'));
+  let documentationFetches = 0;
+  try {
+    const provider = buildProvider(
+      captured,
+      () => responsesSuccessResponse(),
+      'opencode',
+      'https://opencode.ai/zen/v1',
+      undefined,
+      undefined,
+      {
+        opencodeTransportDiscovery: new CachedOpencodeTransportDiscovery({
+          cachePath: path.join(directory, 'opencode-transport-cache.json'),
+          fetchImpl: async (input) => {
+            documentationFetches += 1;
+            expect(String(input)).toBe('https://opencode.ai/docs/zen.md');
+            return new Response(
+              '| Model | Model ID | Endpoint | AI SDK Package |\n' +
+                '| --- | --- | --- | --- |\n' +
+                '| Test | removed-static-model | `https://opencode.ai/zen/v1/responses` | `@ai-sdk/openai` |',
+              { status: 200 },
+            );
+          },
+        }),
       },
-    },
-  );
-  const model = provider.getStreamedModel('new-responses-model');
+    );
+    const model = provider.getStreamedModel('removed-static-model');
 
-  await runUnderTrace(() =>
-    collectCompletion(model, {
-      input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
-      tools: [],
-    }),
-  );
+    await runUnderTrace(() =>
+      collectCompletion(model, {
+        input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+        tools: [],
+      }),
+    );
 
-  expect(captured).toHaveLength(1);
-  expect(captured[0]?.url).toMatch(/^https:\/\/opencode\.ai\/zen\/v1\/responses(\?|$)/);
+    expect(documentationFetches).toBe(1);
+    expect(captured).toHaveLength(1);
+    expect(captured[0]?.url).toMatch(/^https:\/\/opencode\.ai\/zen\/v1\/responses(\?|$)/);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
 });
 
 it('opencode qwen models use Anthropic messages transport with session header', async () => {

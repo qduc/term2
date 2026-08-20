@@ -67,10 +67,25 @@ Two concrete instances exist today:
   403 for the registered port and an unregistered one, so the probe measures bot
   protection, not redirect policy. It cannot settle the question headlessly.
 
+**Settled for OpenAI (2026-08-20): the redirect is an allow-list, not RFC 8252
+port flexibility.** The codex CLI is open source, and
+`codex-rs/login/src/server.rs` hardcodes exactly two ports — 1455 with a 1457
+fallback — under the comment *"Keep in sync with the Codex CLI Hydra redirect
+URI allow-list."* A fixed two-entry fallback is only necessary if arbitrary
+ports are refused. term2 now binds the same list. This is evidence about
+`auth.openai.com` only; it makes exact-match likelier for `auth.x.ai` but does
+not prove it.
+
+Reading that source also corrected three things we had wrong: the scope set was
+missing `api.connectors.read` / `api.connectors.invoke`, the `originator`
+parameter was absent, and there was no port fallback. Prefer reading the CLI
+source over inferring the wire — it is the cheapest evidence available for the
+Codex half.
+
 ## Open question, and the cheapest way to settle it
 
-**Is `http://localhost:22255/callback` matched exactly, or is any loopback port
-accepted?** RFC 8252 §7.3 tells native-app servers to ignore the loopback port;
+**For Grok: is `http://localhost:22255/callback` matched exactly, or is any
+loopback port accepted?** (The OpenAI half is settled above.) RFC 8252 §7.3 tells native-app servers to ignore the loopback port;
 many do. The `grok` binary hardcodes one port with no fallback range, which
 weakly suggests exact match.
 

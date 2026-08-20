@@ -18,6 +18,20 @@ export const stripRgErrorLines = (output: string | undefined): string => {
     .join('\n');
 };
 
+export const extractErrorMessage = (output: string | undefined): string | undefined => {
+  if (!output || !output.trim()) return undefined;
+  try {
+    const parsed = JSON.parse(output);
+    if (parsed?.output?.[0]?.error) return parsed.output[0].error;
+    if (typeof parsed?.error?.message === 'string') return parsed.error.message;
+    if (typeof parsed?.error === 'string') return parsed.error;
+    if (parsed?.error) return JSON.stringify(parsed.error);
+  } catch {
+    /* not JSON, use as-is */
+  }
+  return output;
+};
+
 export const getFirstParagraph = (text: string | undefined, minChars = 0): string => {
   if (!text) return '';
   const trimmed = text.trim();

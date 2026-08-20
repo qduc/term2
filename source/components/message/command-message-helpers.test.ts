@@ -3,6 +3,7 @@ import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REPLACE } from '../../tools/too
 import {
   classifySearchKind,
   countDiffStats,
+  extractErrorMessage,
   formatToolArgs,
   getFirstParagraph,
   getMatchCount,
@@ -469,4 +470,27 @@ it('countDiffStats ignores diff headers and hunk markers', () => {
     added: 1,
     removed: 1,
   });
+});
+
+it('extractErrorMessage returns undefined for empty, whitespace, or undefined output', () => {
+  expect(extractErrorMessage(undefined)).toBe(undefined);
+  expect(extractErrorMessage('')).toBe(undefined);
+  expect(extractErrorMessage('   \n\t  ')).toBe(undefined);
+});
+
+it('extractErrorMessage returns error from JSON interceptor wrapper', () => {
+  expect(extractErrorMessage(JSON.stringify({ output: [{ success: false, error: 'User rejected tool' }] }))).toBe(
+    'User rejected tool',
+  );
+});
+
+it('extractErrorMessage returns error string from JSON object', () => {
+  expect(extractErrorMessage(JSON.stringify({ error: 'Permission denied' }))).toBe('Permission denied');
+  expect(extractErrorMessage(JSON.stringify({ error: { message: 'Network timeout' } }))).toBe('Network timeout');
+});
+
+it('extractErrorMessage returns plain text as-is when not JSON', () => {
+  expect(extractErrorMessage('grep: ~/.zshenv: No such file or directory')).toBe(
+    'grep: ~/.zshenv: No such file or directory',
+  );
 });

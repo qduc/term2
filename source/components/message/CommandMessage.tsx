@@ -5,6 +5,7 @@ import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE 
 import type { CommandMessage as CommandMessageData } from '../../tools/types.js';
 import {
   countDiffStats,
+  extractErrorMessage,
   formatToolArgs,
   getFirstParagraph,
   getMatchCount,
@@ -146,18 +147,10 @@ const CommandMessage: FC<Props> = ({
     [toolName, toolArgs],
   );
 
-  // Parse the denial reason from the JSON wrapper that the tool rejection interceptor
-  // produces (e.g. {"output":[{"success":false,"error":"..."}]}).
+  // Parse the denial reason from the JSON wrapper or output when isApprovalRejection is true.
+  // Falls back to the standard approval-denial message when no output was provided.
   const denialReason = useMemo(() => {
-    if (!output) return 'Tool execution was not approved.';
-    try {
-      const parsed = JSON.parse(output);
-      if (parsed?.output?.[0]?.error) return parsed.output[0].error;
-      if (parsed?.error) return parsed.error;
-    } catch {
-      /* not JSON, use as-is */
-    }
-    return output;
+    return extractErrorMessage(output) || 'Tool execution was not approved.';
   }, [output]);
 
   const formattedArgs = useMemo(() => {
@@ -450,7 +443,8 @@ const CommandMessage: FC<Props> = ({
     }
 
     if (success === false || failureReason) {
-      const errorMsg = failureReason || denialReason || 'failed';
+      const parsedOutputError = extractErrorMessage(output);
+      const errorMsg = failureReason || parsedOutputError || 'failed';
       const displayErrorMsg = isSearchLikeTool(toolName, command)
         ? stripRgErrorLines(errorMsg).trim() || 'failed'
         : errorMsg;

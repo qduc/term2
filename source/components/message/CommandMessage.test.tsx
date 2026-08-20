@@ -774,6 +774,51 @@ it('CommandMessage renders failed command on two lines in concise mode', async (
   expect(output.includes('Test suite failed')).toBe(true);
 });
 
+it('CommandMessage renders failed shell command with empty output as "failed" in concise mode without claiming approval denial', async () => {
+  // Regression test: when a shell command fails (e.g. non-zero exit code) with no output
+  // or only a runtime line that gets stripped, concise mode must NOT fall back to
+  // "Tool execution was not approved." which is reserved for actual approval rejections.
+  const props = {
+    command: "grep -rn 'LC_CTYPE' ~/.zshrc ~/.bashrc ~/.profile ~/.zshenv ~/.zprofile 2>/dev/null",
+    toolName: 'shell',
+    toolArgs: { command: "grep -rn 'LC_CTYPE' ~/.zshrc ~/.bashrc ~/.profile ~/.zshenv ~/.zprofile 2>/dev/null" },
+    status: 'completed' as const,
+    success: false,
+    displayMode: 'concise' as const,
+    output: 'Runtime: 20ms',
+  };
+
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
+  const output = toVisibleText(lastFrame() ?? '');
+
+  expect(output.includes('✖')).toBe(true);
+  expect(output.includes('grep -rn')).toBe(true);
+  expect(output.includes('(20ms)')).toBe(true);
+  expect(output.includes('failed')).toBe(true);
+  expect(output.includes('not approved')).toBe(false);
+  expect(output.includes('DENIED')).toBe(false);
+});
+
+it('CommandMessage renders failed command with empty output and no failureReason as "failed" in concise mode', async () => {
+  const props = {
+    command: 'npm test',
+    toolName: 'shell',
+    toolArgs: { command: 'npm test' },
+    status: 'completed' as const,
+    success: false,
+    displayMode: 'concise' as const,
+    output: '',
+  };
+
+  const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
+  const output = toVisibleText(lastFrame() ?? '');
+
+  expect(output.includes('✖')).toBe(true);
+  expect(output.includes('$ npm test')).toBe(true);
+  expect(output.includes('failed')).toBe(true);
+  expect(output.includes('not approved')).toBe(false);
+});
+
 it('CommandMessage renders non-shell tool concisely on a single line', async () => {
   const props = {
     command: 'create_file',

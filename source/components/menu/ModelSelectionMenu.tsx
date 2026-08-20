@@ -78,7 +78,14 @@ const ModelSelectionMenu: FC<Props> = ({
       items={tabItems}
       activeItemId={provider ?? ''}
       getItemWidth={(p) =>
-        1 + p.label.length + (!p.hasCredentials ? (p.unavailableReason === 'missing-codex-login' ? 17 : 9) : 0) + 1
+        1 +
+        p.label.length +
+        (!p.hasCredentials
+          ? p.unavailableReason === 'missing-codex-login' || p.unavailableReason === 'missing-grok-login'
+            ? 17
+            : 9
+          : 0) +
+        1
       }
       renderTab={(p, isActive) => {
         const isDisabled = !p.hasCredentials;
@@ -91,7 +98,11 @@ const ModelSelectionMenu: FC<Props> = ({
           >
             {' '}
             {p.label}
-            {isDisabled ? (p.unavailableReason === 'missing-codex-login' ? ' (login required)' : ' (no key)') : ''}{' '}
+            {isDisabled
+              ? p.unavailableReason === 'missing-codex-login' || p.unavailableReason === 'missing-grok-login'
+                ? ' (login required)'
+                : ' (no key)'
+              : ''}{' '}
           </Text>
         );
       }}
@@ -107,6 +118,8 @@ const ModelSelectionMenu: FC<Props> = ({
           ⚠ {activeTab.label} unavailable:{' '}
           {activeTab.unavailableReason === 'missing-codex-login'
             ? 'Not logged in on this host. Run `npx @openai/codex login` to log in to Codex.'
+            : activeTab.unavailableReason === 'missing-grok-login'
+            ? 'Not logged in on this host. Run `term2 --grok-login` to log in to Grok.'
             : 'API key not configured on this host. Use Provider Management to configure it.'}
         </Text>
       )}
@@ -136,6 +149,8 @@ const ModelSelectionMenu: FC<Props> = ({
             </Text>
             {item.unavailableReason === 'missing-codex-login' ? (
               <Text color="yellow"> — unavailable: Not logged in on this host. Run `npx @openai/codex login`.</Text>
+            ) : item.unavailableReason === 'missing-grok-login' ? (
+              <Text color="yellow"> — unavailable: Not logged in on this host. Run `term2 --grok-login`.</Text>
             ) : item.unavailableReason === 'missing-credentials' ? (
               <Text color="yellow"> — unavailable: API key not configured on this host</Text>
             ) : null}

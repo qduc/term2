@@ -206,6 +206,8 @@ const ProviderSelectionMenu: FC<Props> = ({
               suffix = unavailable
                 ? 'Not logged in on this host · Run `npx @openai/codex login`'
                 : 'Run `npx @openai/codex login` to login to Codex';
+            } else if (item.id === 'grok') {
+              suffix = unavailable ? 'Not logged in on this host · Run `term2 --grok-login`' : '';
             } else if (unavailable) {
               suffix = 'API key not configured on this host · Enter to configure';
             }

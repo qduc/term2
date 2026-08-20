@@ -864,10 +864,10 @@ it('opencode provider type uses default base URL and falls back to OPENCODE_API_
   }
 });
 
-it('opencode GPT models use the OpenAI Responses transport with session header', async () => {
+it('opencode Responses-format models use the OpenAI Responses transport with session header', async () => {
   const captured: CapturedRequest[] = [];
   const provider = buildProvider(captured, () => responsesSuccessResponse(), 'opencode', 'https://opencode.ai/v1');
-  const model = provider.getStreamedModel('gpt-5.4');
+  const model = provider.getStreamedModel('muse-spark-1.2-contributor');
 
   await runUnderTrace(() =>
     collectCompletion(model, {
@@ -880,7 +880,7 @@ it('opencode GPT models use the OpenAI Responses transport with session header',
   expect(captured[0].url).toMatch(/^https:\/\/opencode\.ai\/v1\/responses(\?|$)/);
   expect(captured[0].headers.authorization).toBe('Bearer provider-key');
   expect(captured[0].headers['x-opencode-session']).toMatch(/^ses_/);
-  expect(captured[0].body.model).toBe('gpt-5.4');
+  expect(captured[0].body.model).toBe('muse-spark-1.2-contributor');
   expect(captured[0].body.input).toEqual([
     { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] },
   ]);

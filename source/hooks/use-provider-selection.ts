@@ -24,6 +24,7 @@ import {
   type OAuthAccountProviderId,
   type OAuthAccountSummary,
 } from '../providers/oauth-accounts.js';
+import { getSessionAccount } from '../providers/oauth-session-account.js';
 
 export type { ProviderSelectionPhase, CustomProviderDraft, ProviderSelectionItem };
 
@@ -343,10 +344,6 @@ export const useProviderSelection = (
         // Provider selected
         const provider = items[index]!;
         options?.onProviderSelected?.(provider.id);
-        if (provider.id === 'codex' && options?.onProviderSelected && !provider.hasCredentials) {
-          setErrorMessage('Codex is not logged in on this host. Run `term2 --codex-login`, then select Codex again.');
-          return;
-        }
         if (isOAuthAccountProvider(provider.id)) {
           // OAuth providers hold several logins rather than one key, so this is
           // the slot where key-based providers open their key editor.
@@ -791,11 +788,27 @@ export const useProviderSelection = (
       if (!item || item.kind !== 'account' || !accountProviderId) return;
       // Forgetting a credential is local and re-doable with another login, so
       // it does not get a confirmation step the way deleting a provider does.
-      removeOAuthAccount(accountProviderId, item.id);
+      const wasInUse = getSessionAccount(accountProviderId) === item.id;
+      const ok = removeOAuthAccount(accountProviderId, item.id);
       const remaining = listOAuthAccounts(accountProviderId);
       setAccounts(remaining);
-      setSelectedIndex(Math.max(0, Math.min(selectedIndex, remaining.length - 1)));
-      options?.onSystemMessage?.(`Signed out of ${item.label}.`);
+      // Clamp to remaining accounts; when none remain, 0 points to the note row.
+      setSelectedIndex(Math.max(0, Math.min(selectedIndex, Math.max(0, remaining.length - 1))));
+      if (!ok) {
+        setErrorMessage('That account is no longer stored.');
+        return;
+      }
+      if (wasInUse && remaining.length > 0) {
+        options?.onSystemMessage?.(
+          `Signed out of ${item.label} (this session was using it — next request will use ${
+            remaining[0]?.label ?? 'the selected account'
+          }).`,
+        );
+      } else if (wasInUse) {
+        options?.onSystemMessage?.(`Signed out of ${item.label} (this session was using it — no accounts remain).`);
+      } else {
+        options?.onSystemMessage?.(`Signed out of ${item.label}.`);
+      }
       return;
     }
     if (phase !== 'list') return;

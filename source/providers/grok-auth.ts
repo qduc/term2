@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -133,7 +134,8 @@ function identifyGrokAccount(tokens: GrokTokens): AccountIdentity {
   const claims = tokens.id_token ? getJwtClaims(tokens.id_token) : null;
   const email = tokens.email || (typeof claims?.email === 'string' ? claims.email : undefined);
   const subject = tokens.user_id || (typeof claims?.sub === 'string' ? claims.sub : undefined);
-  return { id: subject || email || 'default', label: email || subject || 'Grok account' };
+  const fallbackId = `anon-${crypto.createHash('sha256').update(tokens.access_token).digest('hex').slice(0, 12)}`;
+  return { id: subject || email || fallbackId, label: email || subject || 'Grok account' };
 }
 
 export function createGrokAccountStore(filePath = resolveGrokAuthPath()): OAuthAccountStore<GrokTokens> {
@@ -184,12 +186,21 @@ export function hasGrokLogin(): boolean {
 }
 
 function toTokens(body: any, previous?: GrokTokens): GrokTokens {
-  const expiresIn = typeof body?.expires_in === 'number' ? body.expires_in : undefined;
+  const rawExpiresIn = body?.expires_in;
+  const expiresIn =
+    typeof rawExpiresIn === 'number'
+      ? rawExpiresIn
+      : typeof rawExpiresIn === 'string'
+      ? Number(rawExpiresIn)
+      : undefined;
+  const expiresAt = Number.isFinite(expiresIn as number)
+    ? Date.now() + (expiresIn as number) * 1000
+    : previous?.expires_at;
   return {
     access_token: body?.access_token,
     refresh_token: body?.refresh_token || previous?.refresh_token,
     id_token: body?.id_token || previous?.id_token,
-    expires_at: expiresIn ? Date.now() + expiresIn * 1000 : undefined,
+    expires_at: expiresAt,
     email: previous?.email ?? claimedEmail(body?.id_token),
     user_id: previous?.user_id ?? claimedSubject(body?.id_token),
     team_id: previous?.team_id,
@@ -292,6 +303,15 @@ export class GrokTokenManager {
         // Refresh the account this session is pinned to, not whichever the
         // user has since selected.
         const store = createGrokAccountStore(this.authPath);
+        // Cross-process guard: if another term2 instance already refreshed
+        // this account with the same single-use refresh_token, its write
+        // will have changed the stored refresh_token. Don't overwrite it.
+        const current = this.pinnedAccountId
+          ? (store.get(this.pinnedAccountId)?.tokens as GrokTokens | undefined)
+          : (store.getActive()?.tokens as GrokTokens | undefined);
+        if (current?.refresh_token && current.refresh_token !== tokens.refresh_token) {
+          return current.access_token;
+        }
         if (this.pinnedAccountId) store.updateTokens(this.pinnedAccountId, refreshed);
         else store.updateActiveTokens(refreshed);
         return refreshed.access_token;

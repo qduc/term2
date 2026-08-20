@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -98,7 +99,8 @@ function identifyCodexAccount(tokens: CodexTokens): AccountIdentity {
   const claims = (tokens.id_token && getJwtClaims(tokens.id_token)) || getJwtClaims(tokens.access_token);
   const email = typeof claims?.email === 'string' ? claims.email : undefined;
   const subject = typeof claims?.sub === 'string' ? claims.sub : undefined;
-  const id = subject || email || tokens.account_id || 'default';
+  const fallbackId = `anon-${crypto.createHash('sha256').update(tokens.access_token).digest('hex').slice(0, 12)}`;
+  const id = subject || email || tokens.account_id || fallbackId;
   return { id, label: email || tokens.account_id || 'Codex account' };
 }
 

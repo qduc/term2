@@ -122,11 +122,35 @@ function awaitCallback(
   server: http.Server,
   redirectUri: string,
   expectedState: string,
+  signal?: AbortSignal,
 ): Promise<string> {
   return new Promise<string>((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => {
+      signal?.removeEventListener('abort', onAbort);
+      server.off('error', onError);
+    };
+    const doResolve = (value: string) => {
+      cleanup();
+      resolve(value);
+    };
+    const doReject = (err: Error) => {
+      cleanup();
+      reject(err);
+    };
+    if (signal?.aborted) {
+      doReject(new Error(`${config.label} login cancelled`));
+      return;
+    }
+    const onAbort = () => {
+      settled = true;
+      server.close();
+      server.closeAllConnections?.();
+      doReject(new Error(`${config.label} login cancelled`));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
     // The callback is single-use. A retried or duplicated request after the
     // socket has been torn down must not run the handler a second time.
-    let settled = false;
     server.on('request', (req, res) => {
       if (settled) {
         res.destroy();
@@ -157,11 +181,14 @@ function awaitCallback(
       // otherwise hold it and make the next login attempt fail.
       server.close();
       server.closeAllConnections?.();
-      if (failure) reject(failure);
-      else resolve(received!);
+      if (failure) doReject(failure);
+      else doResolve(received!);
     });
 
-    server.on('error', reject);
+    const onError = (err: Error) => {
+      doReject(err);
+    };
+    server.on('error', onError);
   });
 }
 
@@ -187,25 +214,14 @@ export async function runPkceLoopbackLogin(config: PkceLoginConfig, options: Pkc
   const redirectUri = config.redirectUriFor(port);
   const authUrl = buildAuthorizeUrl(config, redirectUri, challenge, state).toString();
 
-  const callback = awaitCallback(config, server, redirectUri, state);
-  options.signal?.addEventListener('abort', () => {
-    server.close();
-    server.closeAllConnections?.();
-  });
+  const callback = awaitCallback(config, server, redirectUri, state, options.signal);
 
   options.onPrompt?.(authUrl);
   openBrowser(authUrl);
 
   let code: string;
   try {
-    code = await (options.signal
-      ? Promise.race([
-          callback,
-          new Promise<never>((_, reject) =>
-            options.signal!.addEventListener('abort', () => reject(new Error(`${config.label} login cancelled`))),
-          ),
-        ])
-      : callback);
+    code = await callback;
   } catch (error) {
     server.close();
     server.closeAllConnections?.();
@@ -220,13 +236,35 @@ export async function runPkceLoopbackLogin(config: PkceLoginConfig, options: Pkc
     client_id: config.clientId,
   };
   const useJson = config.tokenRequestEncoding === 'json';
+  // The browser already showed "Login complete" on the loopback callback, so
+  // a later exchange failure must be explicit in the terminal — the code is
+  // one-time and the user will need to retry the login.
+  // Don't create a real timer in tests — fake timers make AbortSignal.timeout warn with NaN.
+  const timeoutSignal =
+    process.env.NODE_ENV === 'test'
+      ? undefined
+      : (AbortSignal as any).timeout
+      ? (AbortSignal as any).timeout(30_000)
+      : undefined;
+  const fetchSignal = options.signal
+    ? timeoutSignal && (AbortSignal as any).any
+      ? (AbortSignal as any).any([options.signal, timeoutSignal])
+      : options.signal
+    : timeoutSignal;
   const response = await fetchImpl(config.tokenEndpoint, {
     method: 'POST',
     headers: { 'Content-Type': useJson ? 'application/json' : 'application/x-www-form-urlencoded' },
     body: useJson ? JSON.stringify(params) : new URLSearchParams(params).toString(),
+    ...(fetchSignal ? { signal: fetchSignal } : {}),
   });
   if (!response.ok) {
-    throw new Error(`${config.label} token exchange failed with status ${response.status}`);
+    throw new Error(
+      `${config.label} token exchange failed with status ${
+        response.status
+      } (the browser showed "Login complete" but the code could not be exchanged — retry ${
+        config.label.toLowerCase() === 'grok' ? 'term2 --grok-login' : 'term2 --codex-login'
+      })`,
+    );
   }
   const body = await response.json();
   if (!body?.access_token) {

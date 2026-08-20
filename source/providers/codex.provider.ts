@@ -222,7 +222,15 @@ export class CodexTokenManager {
         // Refresh the account this session is pinned to, not whichever the
         // user has since selected.
         const store = createCodexAccountStore(this.authPath);
+        // Cross-process guard: single-use refresh_token — don't overwrite a
+        // newer rotation already written by another term2 instance.
         const refreshTarget = this.pinnedAccountId;
+        const current = refreshTarget
+          ? (store.get(refreshTarget)?.tokens as CodexTokens | undefined)
+          : (store.getActive()?.tokens as CodexTokens | undefined);
+        if (current?.refresh_token && current.refresh_token !== refreshToken) {
+          return current.access_token;
+        }
         const nextTokens = {
           access_token: newAccessToken,
           refresh_token: resBody.refresh_token || refreshToken,

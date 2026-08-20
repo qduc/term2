@@ -300,12 +300,14 @@ it('selectOpencodeModelTransport routes minimax and qwen models through Anthropi
   expect(selectOpencodeModelTransport('qwen3-coder')).toBe('anthropic-messages');
 });
 
-it('selectOpencodeModelTransport routes GPT and Grok models through OpenAI Responses', () => {
+it('selectOpencodeModelTransport routes Responses-format models through OpenAI Responses', () => {
   expect(selectOpencodeModelTransport('gpt-5.4')).toBe('openai-responses');
   expect(selectOpencodeModelTransport('openai/gpt-oss-120b')).toBe('openai-responses');
   expect(selectOpencodeModelTransport('grok-2')).toBe('openai-responses');
   expect(selectOpencodeModelTransport('x-ai/grok-beta')).toBe('openai-responses');
   expect(selectOpencodeModelTransport('grok-3')).toBe('openai-responses');
+  expect(selectOpencodeModelTransport('muse-spark-1.2-contributor')).toBe('openai-responses');
+  expect(selectOpencodeModelTransport('meta/muse-spark-1.2')).toBe('openai-responses');
 });
 
 it('selectOpencodeModelTransport routes other models through OpenAI chat completions', () => {

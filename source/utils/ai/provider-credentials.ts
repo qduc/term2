@@ -6,6 +6,7 @@ import {
 } from '../../services/settings/custom-provider-normalization.js';
 import { getProvider } from '../../providers/registry.js';
 import { resolveCodexTokenPath } from '../../providers/codex-auth.js';
+import { hasGrokLogin } from '../../providers/grok-auth.js';
 
 const hasConfiguredCredential = (value: unknown): boolean => typeof value === 'string' && value.trim().length > 0;
 
@@ -34,7 +35,7 @@ export type ProviderCredentialResolution = {
   required: boolean;
   configured: boolean;
   source: 'setting' | 'environment' | 'stored' | 'token-file' | 'local' | 'external' | 'missing';
-  unavailableReason?: 'missing-credentials' | 'missing-codex-login';
+  unavailableReason?: 'missing-credentials' | 'missing-codex-login' | 'missing-grok-login';
   settingKey?: string;
   environmentKey?: string;
   credentialPath?: string | null;
@@ -109,6 +110,19 @@ export const resolveProviderCredentials = (
       source: credentialPath ? 'token-file' : 'missing',
       unavailableReason: credentialPath ? undefined : 'missing-codex-login',
       credentialPath,
+    };
+  }
+
+  if (providerId === 'grok') {
+    // Grok authenticates with an OAuth token file this app writes at login, so
+    // presence of that credential is the readiness signal — there is no key to
+    // paste into settings.
+    const configured = hasGrokLogin();
+    return {
+      required: true,
+      configured,
+      source: configured ? 'token-file' : 'missing',
+      unavailableReason: configured ? undefined : 'missing-grok-login',
     };
   }
 

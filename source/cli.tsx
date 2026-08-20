@@ -157,6 +157,7 @@ const cli = meow(
           --ssh <user@host>                Enable SSH mode for a remote host
           --remote-dir <path>              Remote working directory (required for non-lite SSH sessions)
           --ssh-port <port>                SSH port (default: 22)
+          --grok-login                     Log in to Grok in a browser (OAuth) and exit
       -R, --resume [conversation-id|ls]    Resume the last conversation, a specific ID, or list recent conversations
           --fork                            Fork the resumed conversation into a new session (requires --resume)
       -h, --help                           Show help
@@ -176,6 +177,7 @@ const cli = meow(
       $ term2 --resume <conversation-id>
       $ term2 --resume <conversation-id> --fork
       $ term2 --resume ls
+      $ term2 --grok-login
       $ term2 --ssh user@host --remote-dir /path/to/project
       $ term2 --ssh user@host --remote-dir /path/to/project --ssh-port 2222
   `,
@@ -222,9 +224,32 @@ const cli = meow(
         type: 'boolean',
         default: false,
       },
+      grokLogin: {
+        type: 'boolean',
+        default: false,
+      },
     },
   },
 );
+
+// Login is a standalone errand: it must run before any session, settings, or
+// Ink setup so a fresh host can authenticate without a usable provider.
+if (cli.flags.grokLogin) {
+  const { loginToGrok } = await import('./providers/grok-auth.js');
+  try {
+    const tokens = await loginToGrok({
+      onPrompt: (url) => {
+        console.log('Opening your browser to log in to Grok.');
+        console.log(`If it does not open, visit:\n${url}\n`);
+      },
+    });
+    console.log(`Logged in to Grok${tokens.email ? ` as ${tokens.email}` : ''}.`);
+    process.exit(0);
+  } catch (error: any) {
+    console.error(`Grok login failed: ${error?.message ?? error}`);
+    process.exit(1);
+  }
+}
 
 const resumeRequested = Boolean(cli.flags.resume);
 const forkRequested = Boolean(cli.flags.fork);

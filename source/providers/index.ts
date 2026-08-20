@@ -2,6 +2,7 @@
 import './openai.provider.js';
 import './openrouter.provider.js';
 import './codex.provider.js';
+import './grok.provider.js';
 
 // Import web search provider registration
 import './web-search/index.js';

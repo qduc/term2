@@ -33,6 +33,7 @@ import {
   UnsentWebSocketRequestError,
 } from './websocket-request-dispatch.js';
 import { markContextCompactionFailure, resolveContextManagement } from './openai-responses-model.js';
+import { ResponsesWebSocketSessions } from './responses-websocket-sessions.js';
 
 const DUMMY_PROVIDER_TRAFFIC: IProviderTraffic = {
   recordRequestStart() {},
@@ -67,8 +68,9 @@ export type CodexResponsesTransportOptions = {
 
 /** Provider-owned transport seam used by Codex's HTTP and WebSocket models. */
 export class CodexResponsesTransport {
-  #activeSocket: ResponsesWS | null = null;
-  #activeSocketHeaders: string | null = null;
+  #sessions = new ResponsesWebSocketSessions(
+    (headers) => new ResponsesWS(this.client, headers ? { headers } : undefined),
+  );
 
   constructor(
     private readonly client: any = {},
@@ -78,15 +80,7 @@ export class CodexResponsesTransport {
   ) {}
 
   close(): void {
-    if (this.#activeSocket) {
-      try {
-        this.#activeSocket.close();
-      } catch {
-        /* best effort */
-      }
-      this.#activeSocket = null;
-      this.#activeSocketHeaders = null;
-    }
+    this.#sessions.close();
   }
 
   buildResponsesCreateRequest(request: StreamedModelTurnRequest, stream: boolean): any {
@@ -138,29 +132,8 @@ export class CodexResponsesTransport {
         if (!(this.client instanceof OpenAI) && typeof this.client?.responses?.create === 'function') {
           return this.client.responses.create(requestData);
         }
-        const headers = request.providerOptions?.extraHeaders;
-        const serializedHeaders = headers ? JSON.stringify(headers) : null;
-
-        let socket: ResponsesWS;
-        const isSocketLive =
-          this.#activeSocket &&
-          ((this.#activeSocket as any).socket?.readyState === WEBSOCKET_OPEN ||
-            (this.#activeSocket as any).socket?.readyState === WEBSOCKET_CONNECTING);
-
-        if (isSocketLive && this.#activeSocket && this.#activeSocketHeaders === serializedHeaders) {
-          socket = this.#activeSocket;
-        } else {
-          if (this.#activeSocket) {
-            try {
-              this.#activeSocket.close();
-            } catch {
-              /* best effort */
-            }
-          }
-          socket = new ResponsesWS(this.client, headers ? { headers: headers as Record<string, string> } : undefined);
-          this.#activeSocket = socket;
-          this.#activeSocketHeaders = serializedHeaders;
-        }
+        const headers = request.providerOptions?.extraHeaders as Record<string, string> | undefined;
+        const socket = this.#sessions.acquire(headers);
 
         const messages = socket.stream();
         const requestEvent = { type: 'response.create', ...requestData } as any;
@@ -181,9 +154,15 @@ export class CodexResponsesTransport {
           dispatchRequestEvent();
         }
         const sessionState = this.options.contextCompactionSessionState;
-        const self = this;
+        const sessions = this.#sessions;
         return (async function* () {
           let terminalReceived = false;
+          let released = false;
+          const release = (keepAlive: boolean) => {
+            if (released) return;
+            released = true;
+            sessions.release(socket, { keepAlive });
+          };
           try {
             for await (const message of messages) {
               if (message.type === 'message') {
@@ -205,30 +184,12 @@ export class CodexResponsesTransport {
               }
             }
           } catch (error) {
-            if (self.#activeSocket === socket) {
-              self.#activeSocket = null;
-              self.#activeSocketHeaders = null;
-            }
-            try {
-              socket.close();
-            } catch {
-              /* best effort */
-            }
+            release(false);
             const normalizedError = normalizeExplicitCodexServerError(error);
             markContextCompactionFailure(normalizedError, request, sessionState);
             throw normalizedError;
           } finally {
-            if (!terminalReceived) {
-              if (self.#activeSocket === socket) {
-                self.#activeSocket = null;
-                self.#activeSocketHeaders = null;
-              }
-              try {
-                socket.close();
-              } catch {
-                /* best effort */
-              }
-            }
+            release(terminalReceived);
           }
         })();
       }
@@ -1517,7 +1478,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     }
 
     const sessionContext = this.sessionContextService?.getContext();
-    const sessionId = sessionContext?.sessionId ?? requestId;
+    const sessionId = sessionContext?.providerHistoryKey ?? sessionContext?.sessionId ?? requestId;
     const threadId = sessionId;
     const hasPreviousResponseId =
       typeof request?.previousResponseId === 'string' && request.previousResponseId.length > 0;

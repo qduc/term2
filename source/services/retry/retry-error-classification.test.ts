@@ -107,6 +107,10 @@ it('isRetryableTransportError separates retryable errors from HTTP fallback cand
     retryable: false,
     transportFallback: false,
   });
+  expect(isRetryableTransportError(new Error('WebSocket was closed before the connection was established'))).toEqual({
+    retryable: true,
+    transportFallback: true,
+  });
 });
 
 // Incomplete stream terminals: the provider closed the body after partial

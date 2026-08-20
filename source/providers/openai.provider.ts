@@ -7,6 +7,21 @@ import { registerProvider } from './registry.js';
 import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { createProviderFetch } from './fetch/composer.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session/session-context-service.js';
+import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
+
+const streamedModels = new WeakMap<object, { fingerprint: string; model: StreamedModelTurn }>();
+
+function openaiStreamedModelFingerprint(
+  settingsService: { get(key: string): unknown },
+  model: string,
+  retryAttempts?: number,
+): string {
+  return JSON.stringify([
+    settingsService.get('agent.transport') ?? 'websocket',
+    model,
+    retryAttempts ?? settingsService.get('agent.retryAttempts') ?? 2,
+  ]);
+}
 
 export {
   OpenAIResponsesModelWithPromptCacheKey,
@@ -98,6 +113,16 @@ registerProvider({
     },
   ) => {
     const defaultModel = settingsService.get('agent.model') || 'gpt-4o';
+    const resolvedModel = model || defaultModel;
+    const cacheKey = sessionContextService as object | undefined;
+    const fingerprint = openaiStreamedModelFingerprint(settingsService, resolvedModel, retryAttempts);
+    const cached = cacheKey ? streamedModels.get(cacheKey) : undefined;
+    if (cached?.fingerprint === fingerprint) {
+      return cached.model;
+    }
+    if (cached) {
+      void (cached.model as { close?: () => Promise<void> }).close?.();
+    }
     const apiKey = settingsService.get('agent.openai.apiKey') || process.env.OPENAI_API_KEY;
     const configuredRetries = retryAttempts ?? settingsService.get('agent.retryAttempts') ?? 2;
     const openAIClient = new OpenAI({
@@ -118,18 +143,19 @@ registerProvider({
       settingsService.get('agent.transport') === 'http'
         ? new OpenAIResponsesModelWithPromptCacheKey(
             openAIClient,
-            model || defaultModel,
+            resolvedModel,
             requestCapture,
             OPENAI_CAPABILITIES.supportsContextCompaction,
             contextCompactionSessionState,
           )
         : new OpenAIResponsesWSModelWithPromptCacheKey(
             openAIClient,
-            model || defaultModel,
+            resolvedModel,
             requestCapture,
             OPENAI_CAPABILITIES.supportsContextCompaction,
             contextCompactionSessionState,
           );
+    if (cacheKey) streamedModels.set(cacheKey, { fingerprint, model: selectedModel });
     return selectedModel;
   },
   fetchModels: fetchOpenAIModels,

@@ -154,7 +154,7 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 
 - `docs/plans/chain-settlement.md` — unpaid tool debt after a mid-stream failure must not leave a live `previousResponseId`. Read before changing `ProviderContinuity`, stream finalize debt sync, terminate recovery, `SessionInputPlanner` chaining, or “No tool output found for function call” classification: a text-only continue against an open chain is a server 400.
 
-- **WebSocket Responses session persistence & chain settlement:** WebSocket connections in `CodexResponsesTransport` and `OpenAIResponsesWSModelWithPromptCacheKey` are session-scoped and kept open across completed turns so the backend retains in-memory `previous_response_id` state without requiring duplicate `generate: false` warmup requests. Sockets close only on `close()`, stream failure, or cancellation. When a 400 `Invalid previous_response_id` triggers `chain_recovery`, `breakChaining()` permanently switches the session to full history for all subsequent turns.
+- **WebSocket Responses session persistence & chain settlement:** WebSocket connections in `CodexResponsesTransport` and `OpenAIResponsesWSModelWithPromptCacheKey` are kept per logical agent (`providerHistoryKey`, else conversation `sessionId`) and stay open across that agent's completed turns so the backend retains in-memory `previous_response_id` state without requiring duplicate `generate: false` warmup requests. Opening one agent's socket must not close another's connecting socket. Sockets close only on `close()`, stream failure, or cancellation. When a 400 `Invalid previous_response_id` triggers `chain_recovery`, `breakChaining()` permanently switches the session to full history for all subsequent turns.
 
 # Parallel Work Isolation
 

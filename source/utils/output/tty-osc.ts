@@ -6,7 +6,7 @@ export type TtyWriter = (data: string) => void;
  * Returns a function that writes a string to the terminal TTY.
  * Prefers process.stdout when it is a TTY; falls back to opening /dev/tty
  * directly so the sequence reaches the terminal even when stdout is redirected
- * (e.g. through the synchronized-output patch or pipe).
+ * (e.g. through a pipe or file redirect).
  */
 export function getTtyWriter(): TtyWriter | null {
   if (process.stdout.isTTY) {

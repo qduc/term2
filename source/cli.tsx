@@ -877,12 +877,12 @@ settings.onChange((key) => {
 });
 
 import { InputProvider } from './context/InputContext.js';
-import { patchStdoutForSynchronizedOutput } from './utils/output/synchronized-output.js';
 
-// Enable DEC Mode 2026 synchronized output to prevent flickering in iTerm2.
-// This wraps every stdout.write() in begin/end markers so the terminal
-// buffers the entire Ink render frame and paints it atomically.
-patchStdoutForSynchronizedOutput(process.stdout);
+// Do NOT wrap stdout writes with DEC Mode 2026 synchronized-output markers here.
+// Ink 7.0.1 already wraps each interactive frame in `\x1b[?2026h … \x1b[?2026l`
+// natively (node_modules/ink/build/write-synchronized.js). Re-wrapping each
+// individual write() breaks that frame-level atomicity and makes the terminal
+// paint blank/partial intermediate frames — visible flicker while streaming.
 
 const { waitUntilExit } = render(
   (

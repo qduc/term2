@@ -1,5 +1,6 @@
 import { getActiveCodexAccount, listCodexAccounts, removeCodexAccount, setActiveCodexAccount } from './codex-auth.js';
 import { getActiveGrokAccount, listGrokAccounts, removeGrokAccount, setActiveGrokAccount } from './grok-auth.js';
+import { getSessionAccount } from './oauth-session-account.js';
 
 /**
  * The provider-neutral view of stored OAuth logins, so the account switcher UI
@@ -14,7 +15,10 @@ export type OAuthAccountProviderId = (typeof OAUTH_ACCOUNT_PROVIDERS)[number];
 export type OAuthAccountSummary = {
   id: string;
   label: string;
-  isActive: boolean;
+  /** Selected by the user; applies from the next session onwards. */
+  isSelected: boolean;
+  /** Actually authenticating this run. Differs from `isSelected` after a switch. */
+  isInUse: boolean;
 };
 
 export function isOAuthAccountProvider(providerId: string): providerId is OAuthAccountProviderId {
@@ -31,10 +35,12 @@ export function listOAuthAccounts(providerId: OAuthAccountProviderId): OAuthAcco
     providerId === 'codex'
       ? [listCodexAccounts(), getActiveCodexAccount()]
       : [listGrokAccounts(), getActiveGrokAccount()];
+  const inUse = getSessionAccount(providerId);
   return accounts.map((account) => ({
     id: account.id,
     label: account.label,
-    isActive: account.id === active?.id,
+    isSelected: account.id === active?.id,
+    isInUse: account.id === inUse,
   }));
 }
 

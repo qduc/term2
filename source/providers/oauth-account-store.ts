@@ -102,6 +102,10 @@ export class OAuthAccountStore<TTokens> {
     return this.read().accounts;
   }
 
+  get(accountId: string): OAuthAccount<TTokens> | null {
+    return this.read().accounts.find((account) => account.id === accountId) ?? null;
+  }
+
   getActive(): OAuthAccount<TTokens> | null {
     const store = this.read();
     return store.accounts.find((account) => account.id === store.activeAccountId) ?? null;
@@ -133,22 +137,33 @@ export class OAuthAccountStore<TTokens> {
   }
 
   /**
-   * Replaces the active account's credential in place, for a token refresh.
-   * Refreshing must not change which account is active, and must not touch any
-   * other account's rotation chain.
+   * Replaces one account's credential in place, for a token refresh.
+   *
+   * The account is named explicitly rather than taken from the active pointer,
+   * because a running session stays pinned to the account it started with even
+   * after the user selects a different one. Refreshing must not change which
+   * account is active, and must not touch any other account's rotation chain.
    */
+  updateTokens(accountId: string, tokens: TTokens): void {
+    const store = this.read();
+    if (!store.accounts.some((account) => account.id === accountId)) {
+      this.upsert(tokens);
+      return;
+    }
+    this.write({
+      ...store,
+      accounts: store.accounts.map((account) => (account.id === accountId ? { ...account, tokens } : account)),
+    });
+  }
+
+  /** Convenience for the common case of refreshing whatever is active. */
   updateActiveTokens(tokens: TTokens): void {
     const store = this.read();
     if (!store.activeAccountId) {
       this.upsert(tokens);
       return;
     }
-    this.write({
-      ...store,
-      accounts: store.accounts.map((account) =>
-        account.id === store.activeAccountId ? { ...account, tokens } : account,
-      ),
-    });
+    this.updateTokens(store.activeAccountId, tokens);
   }
 
   /** Returns false when the id names no stored account. */

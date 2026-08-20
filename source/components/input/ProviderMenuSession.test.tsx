@@ -25,13 +25,11 @@ const ControllerHost = ({
   controller,
   settingsService,
   onProviderSelected,
-  onRequestNewConversation,
   onSystemMessage,
 }: {
   controller: MenuControllerImpl;
   settingsService: ReturnType<typeof createMockSettingsService>;
   onProviderSelected?: (provider: string) => void;
-  onRequestNewConversation?: () => void;
   onSystemMessage?: (message: string) => void;
 }) => {
   const { input: _input } = useInputState();
@@ -40,7 +38,7 @@ const ControllerHost = ({
       stack={controller.getSnapshot().stack}
       controller={controller}
       interactions={controller.getInteractionRegistry()}
-      services={{ settingsService, onProviderSelected, onRequestNewConversation, onSystemMessage }}
+      services={{ settingsService, onProviderSelected, onSystemMessage }}
     />
   );
 };
@@ -143,7 +141,7 @@ it('does not block logged-in Codex in ordinary provider management', async () =>
   }
 });
 
-it('switches between stored Codex accounts and starts a new conversation', async () => {
+it('records an account selection for the next session without touching this one', async () => {
   const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-switcher-'));
   try {
     vi.stubEnv('TERM2_CONFIG_DIR', configDir);
@@ -156,16 +154,10 @@ it('switches between stored Codex accounts and starts a new conversation', async
 
     const controller = new MenuControllerImpl();
     const settingsService = createMockSettingsService();
-    const onRequestNewConversation = vi.fn();
     const onSystemMessage = vi.fn();
     const view = await renderInAct(
       <InputProvider controller={controller}>
-        <ControllerHost
-          controller={controller}
-          settingsService={settingsService}
-          onRequestNewConversation={onRequestNewConversation}
-          onSystemMessage={onSystemMessage}
-        />
+        <ControllerHost controller={controller} settingsService={settingsService} onSystemMessage={onSystemMessage} />
       </InputProvider>,
     );
 
@@ -188,8 +180,10 @@ it('switches between stored Codex accounts and starts a new conversation', async
     const accountsFrame = toVisibleText(view.lastFrame() ?? '');
     expect(accountsFrame).toContain('work@example.com');
     expect(accountsFrame).toContain('personal@example.com');
-    // The most recent login is the active one, and is marked as such.
-    expect(accountsFrame).toContain('active');
+    // Nothing has authenticated yet, so the most recent login shows only as
+    // selected — not as in use.
+    expect(accountsFrame).toContain('takes effect next session');
+    expect(accountsFrame).not.toContain('in use');
 
     // Select the first account, which is not the active one.
     await act(async () => {
@@ -197,9 +191,12 @@ it('switches between stored Codex accounts and starts a new conversation', async
       await Promise.resolve();
     });
 
-    expect(listOAuthAccounts('codex').find((account) => account.isActive)?.label).toBe('work@example.com');
-    expect(onRequestNewConversation).toHaveBeenCalledTimes(1);
+    expect(listOAuthAccounts('codex').find((account) => account.isSelected)?.label).toBe('work@example.com');
+    // The running conversation is untouched; the note says when it applies.
     expect(onSystemMessage).toHaveBeenCalledWith(expect.stringContaining('work@example.com'));
+    expect(onSystemMessage).toHaveBeenCalledWith(expect.stringContaining('next term2 session'));
+    // The menu stays open so the new state is visible.
+    expect(toVisibleText(view.lastFrame() ?? '')).toContain('takes effect next session');
   } finally {
     vi.unstubAllEnvs();
     fs.rmSync(configDir, { recursive: true, force: true });

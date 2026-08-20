@@ -24,8 +24,13 @@ login:
   so switching never crosses two rotation chains. A pre-multi-account file is
   migrated on read, and reading alone never rewrites it. The switcher lives in
   Provider Management, in the slot where key-based providers open their key
-  editor; switching starts a new conversation because response chaining is bound
-  to the account that opened the chain.
+  editor. Selecting an account is **pending, not immediate**: a running session
+  stays pinned to the account it first resolved, because response chaining is
+  bound to the identity that opened the chain, so the selection applies from the
+  next term2 session. The menu shows both states — "in use" and "takes effect
+  next session" — and `providers/oauth-session-account.ts` is what lets the UI
+  tell them apart. Do not make selection take effect immediately without solving
+  the chaining problem first.
 - `term2 --codex-login` runs the same PKCE flow Grok has. The flow itself now
   lives once in `source/providers/oauth-pkce.ts`
   (`runPkceLoopbackLogin`); each provider contributes only endpoints, scopes,

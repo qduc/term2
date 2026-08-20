@@ -64,7 +64,8 @@ export type ProviderSelectionMenuItem =
       kind: 'account';
       id: string;
       label: string;
-      isActive: boolean;
+      isSelected: boolean;
+      isInUse: boolean;
     }
   | {
       kind: 'note';
@@ -78,12 +79,6 @@ export const useProviderSelection = (
   options?: {
     onProviderSelected?: (provider: string) => void;
     allowCodexSelection?: boolean;
-    /**
-     * Switching account changes who the next request authenticates as, and
-     * provider response chaining is tied to that identity, so the switch takes
-     * effect on a fresh conversation rather than mid-turn.
-     */
-    onRequestNewConversation?: () => void;
     onSystemMessage?: (message: string) => void;
   },
 ) => {
@@ -135,7 +130,8 @@ export const useProviderSelection = (
             kind: 'account' as const,
             id: account.id,
             label: account.label,
-            isActive: account.isActive,
+            isSelected: account.isSelected,
+            isInUse: account.isInUse,
           })),
           {
             kind: 'note' as const,
@@ -426,7 +422,7 @@ export const useProviderSelection = (
     } else if (phase === 'accounts') {
       const item = activeItems[index];
       if (!item || item.kind !== 'account' || !accountProviderId) return;
-      if (item.isActive) {
+      if (item.isSelected) {
         close();
         return;
       }
@@ -436,11 +432,13 @@ export const useProviderSelection = (
         return;
       }
       const label = getProviderLabel(accountProviderId) ?? accountProviderId;
-      options?.onSystemMessage?.(`Switched ${label} account to ${item.label}. Starting a new conversation.`);
-      // The new identity only applies from a fresh conversation: provider
-      // response chaining is bound to the account that opened the chain.
-      options?.onRequestNewConversation?.();
-      close();
+      // The running session stays pinned to the account it started with, so
+      // this selection is reported as pending rather than applied: provider
+      // response chaining is bound to the identity that opened the chain.
+      options?.onSystemMessage?.(
+        `Selected ${item.label} for ${label}. This session keeps using the current account; the change takes effect in your next term2 session.`,
+      );
+      setAccounts(listOAuthAccounts(accountProviderId));
     } else if (phase === 'wizard_type') {
       const selectedType = PROVIDER_TYPES[index]!;
       if (draft) {

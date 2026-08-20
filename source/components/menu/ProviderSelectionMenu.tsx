@@ -62,7 +62,7 @@ const ProviderSelectionMenu: FC<Props> = ({
       case 'list':
         return 'Enter → Edit custom provider · Del → Delete custom provider · Esc → Close Menu · ↑↓ → Navigate';
       case 'accounts':
-        return 'Enter → Switch account (starts a new conversation) · Del → Sign out · Esc → Back · ↑↓ → Navigate';
+        return 'Enter → Use from next session · Del → Sign out · Esc → Back · ↑↓ → Navigate';
       case 'confirm_delete':
       case 'confirm_discard':
       case 'wizard_type':
@@ -228,10 +228,18 @@ const ProviderSelectionMenu: FC<Props> = ({
               label = `${item.label}: ${item.detail}`;
             }
           } else if (item.kind === 'account') {
-            prefix = item.isActive ? '● ' : '  ';
-            color = item.isActive ? 'green' : isSelected ? 'green' : 'white';
-            bold = item.isActive;
-            suffix = item.isActive ? 'active' : '';
+            // "in use" is what this session is authenticating as right now;
+            // "next session" is a selection that has not taken effect yet.
+            prefix = item.isInUse ? '● ' : item.isSelected ? '○ ' : '  ';
+            color = item.isInUse ? 'green' : item.isSelected ? 'cyan' : isSelected ? 'green' : 'white';
+            bold = item.isInUse;
+            suffix = item.isInUse
+              ? item.isSelected
+                ? 'in use'
+                : 'in use · reverts next session'
+              : item.isSelected
+              ? 'selected · takes effect next session'
+              : '';
           } else if (item.kind === 'note') {
             prefix = '  ';
             color = 'gray';

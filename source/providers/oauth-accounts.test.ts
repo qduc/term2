@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { saveCodexTokens } from './codex-auth.js';
 import { saveGrokTokens } from './grok-auth.js';
+import { resetSessionAccounts } from './oauth-session-account.js';
 import {
   isOAuthAccountProvider,
   listOAuthAccounts,
@@ -23,6 +24,7 @@ let configDir: string;
 beforeEach(() => {
   configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-accounts-'));
   vi.stubEnv('TERM2_CONFIG_DIR', configDir);
+  resetSessionAccounts();
 });
 
 afterEach(() => {
@@ -44,11 +46,13 @@ describe('oauth account facade', () => {
 
     const accounts = listOAuthAccounts('codex');
     expect(accounts.map((a) => a.label)).toEqual(['work@example.com', 'personal@example.com']);
-    // The most recent login is active.
-    expect(accounts.find((a) => a.isActive)?.label).toBe('personal@example.com');
+    // The most recent login is the selected one.
+    expect(accounts.find((a) => a.isSelected)?.label).toBe('personal@example.com');
+    // Nothing is in use until a request resolves a credential.
+    expect(accounts.some((a) => a.isInUse)).toBe(false);
 
     expect(setActiveOAuthAccount('codex', 'u1')).toBe(true);
-    expect(listOAuthAccounts('codex').find((a) => a.isActive)?.label).toBe('work@example.com');
+    expect(listOAuthAccounts('codex').find((a) => a.isSelected)?.label).toBe('work@example.com');
   });
 
   it("keeps each provider's accounts separate", () => {
@@ -66,7 +70,7 @@ describe('oauth account facade', () => {
     expect(removeOAuthAccount('grok', 'u2')).toBe(true);
     const remaining = listOAuthAccounts('grok');
     expect(remaining).toHaveLength(1);
-    expect(remaining[0]).toMatchObject({ label: 'a@example.com', isActive: true });
+    expect(remaining[0]).toMatchObject({ label: 'a@example.com', isSelected: true });
   });
 
   it('reports no accounts before any login', () => {
@@ -74,4 +78,23 @@ describe('oauth account facade', () => {
     expect(listOAuthAccounts('grok')).toEqual([]);
     expect(setActiveOAuthAccount('codex', 'nobody')).toBe(false);
   });
+});
+
+it('separates the account in use from the one selected for next session', async () => {
+  const { GrokTokenManager } = await import('./grok-auth.js');
+  saveGrokTokens({ access_token: 'a', user_id: 'u1', email: 'a@example.com' });
+  saveGrokTokens({ access_token: 'b', user_id: 'u2', email: 'b@example.com' });
+
+  const manager = new GrokTokenManager({ cliAuthPathResolver: () => null });
+  await manager.getOrRefreshAccessToken();
+
+  // The session pinned the selected account on its first request...
+  expect(listOAuthAccounts('grok').find((a) => a.isInUse)?.label).toBe('b@example.com');
+
+  // ...and selecting another does not move it.
+  setActiveOAuthAccount('grok', 'u1');
+  const after = listOAuthAccounts('grok');
+  expect(after.find((a) => a.isInUse)?.label).toBe('b@example.com');
+  expect(after.find((a) => a.isSelected)?.label).toBe('a@example.com');
+  await expect(manager.getOrRefreshAccessToken()).resolves.toBe('b');
 });

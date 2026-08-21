@@ -18,6 +18,7 @@ import type { HistoryService } from '../../services/history-service.js';
 import type { SSHInfo } from '../../services/shell/shell-interaction-session.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { CodexRateLimitInfo } from '../../services/conversation/conversation-events.js';
+import type { GrokCreditUsage } from '../../providers/grok-credit-usage.js';
 import type { PendingApproval } from '../../contracts/conversation.js';
 import type { UserTurn } from '../../types/user-turn.js';
 import type { SkillInfo, SkillsService } from '../../services/skills/skills-service.js';
@@ -50,6 +51,7 @@ export type BottomAreaProps = {
   isShellMode?: boolean;
   lastUsage?: NormalizedUsage | null;
   lastCodexRateLimit?: CodexRateLimitInfo | null;
+  grokCreditUsage?: GrokCreditUsage | null;
   onSubmit: (value: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) => Promise<void>;
   onRejectionReasonInputReady?: () => void;
   slashCommands: SlashCommand[];
@@ -139,6 +141,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   sshInfo,
   lastUsage,
   lastCodexRateLimit,
+  grokCreditUsage,
   onSettingChange,
   onSystemMessage,
   handoffState,
@@ -425,6 +428,7 @@ const BottomArea: FC<BottomAreaProps> = ({
         sshInfo={sshInfo}
         lastUsage={lastUsage}
         lastCodexRateLimit={lastCodexRateLimit}
+        grokCreditUsage={grokCreditUsage}
         largeUncachedWarning={largeUncachedWarning}
         hasPendingConfirmation={
           (pendingLargeUncachedTurn !== null && pendingLargeUncachedTokens > 0) || pendingSurgeTurn !== null

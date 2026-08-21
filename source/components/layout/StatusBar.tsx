@@ -3,6 +3,7 @@ import { Box, Text } from 'ink';
 import { useSetting } from '../../hooks/use-setting.js';
 import { hasDockerHostControlProject } from '../../utils/shell/sandbox/docker-host-control-grants.js';
 import { getProvider } from '../../providers/index.js';
+import type { GrokCreditUsage } from '../../providers/grok-credit-usage.js';
 import { getModelContextWindow } from '../../providers/model-catalog/catalog.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
 import type { SSHInfo } from '../../services/shell/shell-interaction-session.js';
@@ -32,6 +33,7 @@ interface StatusBarProps {
   sshInfo?: SSHInfo;
   lastUsage?: NormalizedUsage | null;
   lastCodexRateLimit?: CodexRateLimitInfo | null;
+  grokCreditUsage?: GrokCreditUsage | null;
   largeUncachedWarning?: { estimatedTokens: number } | null;
   hasPendingConfirmation?: boolean;
   pendingLargeUncachedTokens?: number;
@@ -46,6 +48,7 @@ const StatusBar: FC<StatusBarProps> = ({
   sshInfo,
   lastUsage,
   lastCodexRateLimit,
+  grokCreditUsage,
   largeUncachedWarning,
   hasPendingConfirmation = false,
   pendingLargeUncachedTokens,
@@ -169,6 +172,25 @@ const StatusBar: FC<StatusBarProps> = ({
       .map(formatWindowUsage)
       .filter((part): part is string => part !== undefined)
       .join(' / ');
+  })();
+
+  // Grok reports one weekly credit percentage, not the rolling used/reset
+  // windows Codex reports, so it gets its own formatting in the same slot —
+  // only one provider is active at a time. `formatDate` and `formatTime` above
+  // belong to the Codex block; this one needs only the period end.
+  const grokCreditUsageText = (() => {
+    if (!grokCreditUsage || typeof grokCreditUsage.creditUsagePercent !== 'number') return '';
+
+    const percent = Math.round(grokCreditUsage.creditUsagePercent);
+    const periodEndMs = grokCreditUsage.periodEndMs;
+    if (periodEndMs === undefined) return `Credits ${percent}%`;
+
+    const resetDate = new Date(periodEndMs);
+    const reset = `${String(resetDate.getMonth() + 1).padStart(2, '0')}/${String(resetDate.getDate()).padStart(
+      2,
+      '0',
+    )}`;
+    return `Credits ${percent}% · reset ${reset}`;
   })();
 
   const staticCommitBlockerText = (() => {
@@ -306,6 +328,12 @@ const StatusBar: FC<StatusBarProps> = ({
         {codexRateLimitText && (
           <Box>
             <Text color={slate}>{codexRateLimitText}</Text>
+          </Box>
+        )}
+
+        {grokCreditUsageText && (
+          <Box>
+            <Text color={slate}>{grokCreditUsageText}</Text>
           </Box>
         )}
       </Box>

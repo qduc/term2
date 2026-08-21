@@ -633,3 +633,46 @@ it.sequential('StatusBar hides queue badge when queueLength is undefined', async
   const output = lastFrame() ?? '';
   expect(output.includes('[Q:')).toBe(false);
 });
+
+// Grok's meter is one weekly percentage, not the used/reset windows Codex
+// reports, so it renders through its own formatter in the same slot.
+it.sequential('StatusBar renders Grok credit usage with its period reset', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.provider': 'grok',
+    'agent.model': 'grok-4.6',
+  });
+
+  const { lastFrame } = await renderInAct(
+    <StatusBar
+      settingsService={settingsService}
+      grokCreditUsage={{
+        creditUsagePercent: 29,
+        periodEndMs: Date.parse('2026-08-24T06:13:52Z'),
+        productUsage: [{ product: 'GrokBuild', usagePercent: 19 }],
+      }}
+    />,
+  );
+
+  expect(lastFrame()).toContain('Credits 29% · reset 08/24');
+});
+
+it.sequential('StatusBar renders Grok credit usage without a period end', async () => {
+  const settingsService = createMockSettingsService({ 'agent.provider': 'grok' });
+
+  const { lastFrame } = await renderInAct(
+    <StatusBar settingsService={settingsService} grokCreditUsage={{ creditUsagePercent: 4.4, productUsage: [] }} />,
+  );
+
+  const output = lastFrame() ?? '';
+  expect(output).toContain('Credits 4%');
+  expect(output).not.toContain('reset');
+});
+
+// Nothing to show must show nothing, not a zero.
+it.sequential('StatusBar omits the credit slot when there is no Grok usage', async () => {
+  const settingsService = createMockSettingsService({ 'agent.provider': 'grok' });
+
+  const { lastFrame } = await renderInAct(<StatusBar settingsService={settingsService} grokCreditUsage={null} />);
+
+  expect(lastFrame() ?? '').not.toContain('Credits');
+});

@@ -544,3 +544,24 @@ it.sequential('refreshAgent is no-op for transient client', () => {
   expect(callbackCalled).toBe(false);
   expect(config.getAgent(), 'agent still returns the override').toBe(overrideAgent);
 });
+
+// The prompt-cache key was routed by provider *name*: only `openai` got the
+// `extraBody` placement its Responses adapter reads, and everything else got
+// the Codex-shaped `codex.promptCacheKey`, which only the Codex adapter reads.
+// Grok runs the OpenAI Responses adapter, so its key was silently dropped and
+// the live wire showed `prompt_cache_key: null` — losing exactly the
+// server-affinity hint xAI's caching docs say to always send.
+it.sequential('routes the prompt cache key by adapter, so Grok gets the Responses placement', () => {
+  const { deps } = createDeps({
+    settingsValues: {
+      'agent.provider': 'grok',
+      'agent.model': 'grok-4.6',
+    },
+  });
+  const config = new AgentConfiguration({}, deps);
+
+  const agent = config.getApplicationAgent('session-grok');
+
+  expect((agent.modelSettings?.providerData as any)?.extraBody?.prompt_cache_key).toBe('session-grok');
+  expect(agent.modelSettings?.codex).toBeUndefined();
+});

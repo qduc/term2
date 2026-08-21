@@ -269,6 +269,9 @@ function ensureOpenAIProviderRegistered() {
         capabilities: {
           supportsConversationChaining: true,
           supportsPromptCacheKey: true,
+          // Mirrors the real provider: the extra-body placement is what the
+          // OpenAI Responses adapter reads.
+          promptCacheKeyPlacement: 'responses-extra-body',
         },
       },
       { allowOverride: true },

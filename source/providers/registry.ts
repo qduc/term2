@@ -53,6 +53,14 @@ export interface ProviderDefinition {
     /** Supports the OpenAI Responses API's server-side context_management parameter. */
     supportsContextCompaction?: boolean;
     supportsPromptCacheKey?: boolean;
+    /**
+     * Where the prompt cache key belongs on the wire, which follows the
+     * adapter rather than the provider name. `responses-extra-body` is read by
+     * the OpenAI Responses adapter; the default Codex placement is read by the
+     * Codex adapter. Routing this by provider id silently dropped the key for
+     * any new provider on the Responses adapter.
+     */
+    promptCacheKeyPlacement?: 'responses-extra-body' | 'codex';
     usesStrictToolSchema?: boolean;
     nativePatchModelPrefixes?: string[];
   };

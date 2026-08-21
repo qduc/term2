@@ -1615,6 +1615,15 @@ type PendingNativeReasoning = {
  * Chat-Completions continuation field. Generic reasoning remains display-only
  * so providers with different native formats are not given a foreign field.
  */
+/**
+ * True when any lane namespace in the metadata carries an `encrypted_content`
+ * blob — the shape every Responses adapter produces, whichever vendor it is.
+ */
+function hasNamespacedEncryptedReasoning(metadata: StreamedModelProviderOptions | undefined): boolean {
+  if (!metadata) return false;
+  return Object.values(metadata).some((value) => asRecord(value)?.encrypted_content !== undefined);
+}
+
 function appendNativeReasoning(
   current: PendingNativeReasoning | undefined,
   event: {
@@ -1639,8 +1648,10 @@ function appendNativeReasoning(
   }
   // Responses providers return encrypted reasoning only on their terminal
   // output. Their metadata is namespaced, so retain it without turning it into
-  // the Chat-Completions-only reasoning_content convention.
-  if (asRecord(event.providerMetadata?.codex) || asRecord(event.providerMetadata?.openai)) {
+  // the Chat-Completions-only reasoning_content convention. Match on the
+  // namespaced shape rather than an allowlist of lane names: an allowlist
+  // silently drops the reasoning of every Responses lane added later.
+  if (hasNamespacedEncryptedReasoning(event.providerMetadata)) {
     return {
       ...(event.id ? { id: event.id } : current?.id ? { id: current.id } : {}),
       text: event.text,

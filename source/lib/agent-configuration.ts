@@ -129,11 +129,12 @@ export class AgentConfiguration implements AgentSource {
   // AgentSource implementation
   getAgent(sessionId?: string): ApplicationAgent {
     if (sessionId && !this.#isTransientClient) {
-      const supportsPromptCacheKey = getProvider(this.#provider)?.capabilities?.supportsPromptCacheKey;
+      const capabilities = getProvider(this.#provider)?.capabilities;
+      const supportsPromptCacheKey = capabilities?.supportsPromptCacheKey;
       if (!supportsPromptCacheKey || !sessionId) {
         return this.#agent;
       }
-      if (this.#provider !== 'openai') {
+      if (capabilities?.promptCacheKeyPlacement !== 'responses-extra-body') {
         return { ...this.#agent, modelSettings: { ...(this.#agent.modelSettings ?? {}), prompt_cache_key: sessionId } };
       }
       return {

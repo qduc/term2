@@ -97,7 +97,7 @@ it('unrecoverable produces terminate with empty events', () => {
   expect(result).toEqual({ kind: 'terminate', events: [] });
 });
 
-it('fresh-start retries disabled converts non-unrecoverable failure without stream to terminate', () => {
+it('fresh-start retries disabled converts a transient failure without stream to terminate', () => {
   const result = policy.plan(
     baseRecoveryContext({
       failure: { kind: 'transient', attempt: 1, delayMs: 500 },
@@ -107,6 +107,21 @@ it('fresh-start retries disabled converts non-unrecoverable failure without stre
   );
 
   expect(result).toEqual({ kind: 'terminate', events: [] });
+});
+
+it('fresh-start retries disabled still recovers a chain_recovery failure without a stream', () => {
+  // The block exists to stop a subagent replaying its task. Chain recovery
+  // replays nothing: it severs the response chain and rebuilds from full
+  // history, so a connect-time drop stays recoverable.
+  const result = policy.plan(
+    baseRecoveryContext({
+      failure: { kind: 'chain_recovery', attempt: 1, delayMs: 500 },
+      stream: null,
+      freshStartRetriesAllowed: false,
+    }),
+  );
+
+  expect(result).toEqual({ kind: 'retry_fresh', inputMode: 'full_history', disableChainingForAttempt: true });
 });
 
 it('fresh-start retries disabled still recovers a transient failure when a stream exists', () => {

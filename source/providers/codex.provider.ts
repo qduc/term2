@@ -26,6 +26,7 @@ import {
 import type { CodexTokens } from './codex-auth.js';
 import { getJwtClaims, getJwtExpiry } from './jwt-claims.js';
 import { recordSessionAccount } from './oauth-session-account.js';
+import { ProviderReauthenticationRequiredError } from './common/provider-errors.js';
 
 const DEFAULT_CODEX_MODEL = 'gpt-5.3-codex';
 
@@ -157,7 +158,7 @@ export class CodexTokenManager {
   async getOrRefreshAccessToken(): Promise<string> {
     const tokens = this.load();
     if (!tokens) {
-      throw new Error(
+      throw new ProviderReauthenticationRequiredError(
         'Not logged in to Codex. Run `term2 --codex-login` (or `npx @openai/codex login`) first, or set CHATGPT_LOCAL_HOME/CODEX_HOME.',
       );
     }
@@ -177,7 +178,7 @@ export class CodexTokenManager {
     }
 
     if (!refreshToken) {
-      throw new Error(
+      throw new ProviderReauthenticationRequiredError(
         tokens.imported
           ? 'The access token imported from the `codex` CLI has expired. Run `term2 --codex-login` so term2 holds its own credential.'
           : 'Codex access token is expired or expiring soon, but no refresh token is stored. Run `term2 --codex-login` again.',

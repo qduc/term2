@@ -1,5 +1,6 @@
 import { it, expect } from 'vitest';
 import { describeError, isAbortLikeError } from './error-helpers.js';
+import { ProviderReauthenticationRequiredError } from '../providers/common/provider-errors.js';
 
 // Test isAbortLikeError with AbortError name
 it('isAbortLikeError returns true for error with name AbortError', () => {
@@ -232,4 +233,18 @@ it('describeError does not misidentify plain Error with message "TypeError" as u
 
   const described = describeError(plain);
   expect(described).toBe('TypeError');
+});
+
+// A credential failure is thrown from inside the provider's fetch impl, so the
+// OpenAI SDK wraps it as `APIConnectionError('Connection error.')`. Reporting
+// the wrapper hid the one sentence that tells the user how to fix it.
+it('describeError surfaces a re-authentication cause instead of its connection wrapper', () => {
+  const cause = new ProviderReauthenticationRequiredError(
+    'The access token imported from the `grok` CLI has expired. Run `term2 --grok-login` so term2 holds its own credential.',
+  );
+  const wrapper = new Error('Connection error.', { cause });
+
+  expect(describeError(wrapper)).toBe(
+    'The access token imported from the `grok` CLI has expired. Run `term2 --grok-login` so term2 holds its own credential.',
+  );
 });

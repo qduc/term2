@@ -40,3 +40,39 @@ export class LongRetryDelayError extends Error {
     this.retryAfter = retryAfter;
   }
 }
+
+/**
+ * Thrown by a provider's auth middleware when the stored credential cannot be
+ * used and only a human re-login can fix it — no token to refresh, or an
+ * imported CLI token that has expired.
+ *
+ * It needs its own class because it is thrown from inside `fetch`. The OpenAI
+ * SDK wraps any throw from its fetch impl in `APIConnectionError('Connection
+ * error.')`, which retry classification reads as a transient network fault. The
+ * result was ~9 pointless retries across three retry layers and a user-facing
+ * "Connection error." in place of the instruction that would have fixed it.
+ */
+export class ProviderReauthenticationRequiredError extends Error {
+  readonly requiresReauthentication = true;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'ProviderReauthenticationRequiredError';
+  }
+}
+
+/**
+ * Walks the `cause` chain, because the SDK's `APIConnectionError` wrapper is
+ * what callers actually catch.
+ */
+export function findReauthenticationRequiredError(error: unknown): ProviderReauthenticationRequiredError | undefined {
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+  while (current && typeof current === 'object' && !seen.has(current)) {
+    if (current instanceof ProviderReauthenticationRequiredError) return current;
+    if ((current as any).requiresReauthentication === true) return current as ProviderReauthenticationRequiredError;
+    seen.add(current);
+    current = (current as any).cause;
+  }
+  return undefined;
+}

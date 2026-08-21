@@ -24,6 +24,7 @@ import { ConversationConfigurationService } from './services/runtime-setting-rou
 import { useShellMode } from './hooks/use-shell-mode.js';
 import { ShellInteractionSession, type SSHInfo } from './services/shell/shell-interaction-session.js';
 import { useAppCommands } from './hooks/use-app-commands.js';
+import { type PendingModeSwitch, EXCLUSIVE_MODE_KEYS } from './commands/mode-commands.js';
 import { useHandoffFlow } from './hooks/use-handoff-flow.js';
 import { useTerminalFocusNotifier } from './hooks/use-terminal-focus-notifier.js';
 import { useAppKeyboardShortcuts } from './hooks/use-app-keyboard-shortcuts.js';
@@ -398,6 +399,31 @@ const App: FC<AppProps> = ({
   const handleSurgeApprove = useCallback(() => resolveAdmission('approve'), [resolveAdmission]);
   const handleSurgeDecline = useCallback(() => resolveAdmission('decline'), [resolveAdmission]);
 
+  const [pendingModeSwitch, setPendingModeSwitch] = useState<PendingModeSwitch | null>(null);
+
+  const handleModeSwitchConfirm = useCallback(async () => {
+    if (!pendingModeSwitch) return;
+    const { modeKey, modeLabel, targetValue, enabledDetail } = pendingModeSwitch;
+    setPendingModeSwitch(null);
+    await clearConversationAndRefreshBanner();
+    if (targetValue) {
+      for (const key of EXCLUSIVE_MODE_KEYS) {
+        if (key !== modeKey && settingsService.get(key)) {
+          settingsService.set(key, false);
+          applyRuntimeSetting(key, false);
+        }
+      }
+    }
+    settingsService.set(modeKey, targetValue);
+    applyRuntimeSetting(modeKey, targetValue);
+    addSystemMessage('Welcome to term²! Type a message to start chatting.');
+    addSystemMessage(`${modeLabel} mode ${targetValue ? `enabled${enabledDetail ?? ''}` : 'disabled'}`);
+  }, [pendingModeSwitch, clearConversationAndRefreshBanner, settingsService, applyRuntimeSetting, addSystemMessage]);
+
+  const handleModeSwitchDecline = useCallback(() => {
+    setPendingModeSwitch(null);
+  }, []);
+
   const submitAdmittedTurn = useCallback(
     async (turn: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) => {
       const result = options ? submitTurnForAdmission(turn, options) : submitTurnForAdmission(turn);
@@ -577,6 +603,7 @@ const App: FC<AppProps> = ({
     sendUserMessage,
     skillsService: skillsService ?? ({ getAvailableSkills: () => [] } as unknown as SkillsService),
     onSkillSelected: handleSkillSelected,
+    requestModeSwitchConfirm: setPendingModeSwitch,
   });
 
   const handleRewindSelect = useCallback(
@@ -740,6 +767,7 @@ const App: FC<AppProps> = ({
   // prompt is rendered (Closing the Ink fan-out coupling — see input-owner.ts).
   const inputOwner = deriveInputOwner({
     handoffStage: handoff.handoffState?.stage ?? null,
+    pendingModeSwitch,
     pendingSurgeTurn,
     pendingLargeUncachedTurn,
     waitingForApproval: effectiveWaitingForApproval,
@@ -1026,6 +1054,9 @@ const App: FC<AppProps> = ({
             onHandoffCancel={handoff.cancelHandoff}
             onStandardModeConfirm={handoff.confirmStandardMode}
             onStandardModeDecline={handoff.declineStandardMode}
+            pendingModeSwitch={pendingModeSwitch}
+            onModeSwitchConfirm={handleModeSwitchConfirm}
+            onModeSwitchDecline={handleModeSwitchDecline}
             largeUncachedWarning={largeUncachedWarning}
             pendingLargeUncachedTurn={pendingLargeUncachedTurn}
             pendingLargeUncachedTokens={pendingLargeUncachedTokens}

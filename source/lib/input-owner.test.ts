@@ -164,6 +164,23 @@ describe('deriveInputOwner', () => {
     ).toBe('standard-mode-confirm');
   });
 
+  it('resolves mode-switch-confirm', () => {
+    expect(
+      deriveInputOwner({
+        handoffStage: null,
+        pendingModeSwitch: { modeKey: 'app.liteMode', modeLabel: 'Lite' },
+        pendingSurgeTurn: null,
+        pendingLargeUncachedTurn: null,
+        waitingForApproval: false,
+        pendingApproval: null,
+        queuePaused: true,
+        waitingForRejectionReason: false,
+        waitingForAskUserAnswer: false,
+        isProcessing: false,
+      }).kind,
+    ).toBe('mode-switch-confirm');
+  });
+
   it('lets the background task manager own input without outranking an urgent prompt', () => {
     const base = {
       handoffStage: null,

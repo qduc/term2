@@ -17,6 +17,7 @@
 export type InputOwner =
   | { kind: 'handoff-confirm' }
   | { kind: 'standard-mode-confirm' }
+  | { kind: 'mode-switch-confirm' }
   | { kind: 'input-surge' }
   | { kind: 'large-uncached' }
   | { kind: 'approval' }
@@ -28,6 +29,7 @@ export type InputOwner =
 
 export type InputOwnerState = {
   handoffStage?: string | null;
+  pendingModeSwitch?: unknown | null;
   pendingSurgeTurn: unknown | null;
   pendingLargeUncachedTurn: unknown | null;
   waitingForApproval: boolean;
@@ -58,6 +60,7 @@ export type InputOwnerState = {
 export const deriveInputOwner = (state: InputOwnerState): InputOwner => {
   if (state.handoffStage === 'confirm_model') return { kind: 'handoff-confirm' };
   if (state.handoffStage === 'confirm_standard_mode') return { kind: 'standard-mode-confirm' };
+  if (state.pendingModeSwitch) return { kind: 'mode-switch-confirm' };
   if (state.pendingSurgeTurn) return { kind: 'input-surge' };
   if (state.pendingLargeUncachedTurn) return { kind: 'large-uncached' };
   if (

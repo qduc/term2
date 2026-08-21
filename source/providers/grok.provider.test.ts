@@ -3,7 +3,16 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { getProvider } from './index.js';
-import { GROK_BASE_URL, GROK_CLIENT_VERSION, buildGrokFetch, fetchGrokModels } from './grok.provider.js';
+import {
+  GROK_BASE_URL,
+  GROK_CLIENT_VERSION,
+  buildGrokFetch,
+  createGrokStreamedModel,
+  fetchGrokModels,
+} from './grok.provider.js';
+import { OpenAIResponsesModelWithPromptCacheKey } from './openai-responses-model.js';
+import { OpenAIChatCompletionsModel } from './openai-chat-completions-model.js';
+import { GROK_RESPONSES_OPAQUE_TAG } from './provider-opaque-compatibility.js';
 import { GrokTokenManager, saveGrokTokens } from './grok-auth.js';
 
 const silentLogging = {
@@ -160,4 +169,49 @@ it('sends the conversation id header xAI uses to pin prompt-cache affinity', asy
 
   const headers = new Headers(seen[0].init.headers);
   expect(headers.get('x-grok-conv-id')).toBe('session-abc');
+});
+
+// Grok's proxy serves /v1/responses, which returns typed reasoning and
+// function_call items and accepts `include: ["reasoning.encrypted_content"]`.
+// Chat completions only ever gave us a reasoning *summary*, and forced the
+// lossy `content: null` + tool_calls shape.
+describe('grok Responses lane', () => {
+  it('builds a Responses model on the grok opaque lane by default', () => {
+    const model: any = createGrokStreamedModel('grok-4.6', {
+      settingsService: { get: () => undefined } as any,
+      loggingService: silentLogging,
+    } as any);
+
+    const inner = model.wrappedModel ?? model;
+    expect(inner).toBeInstanceOf(OpenAIResponsesModelWithPromptCacheKey);
+    expect(inner.lane).toBe(GROK_RESPONSES_OPAQUE_TAG);
+  });
+
+  // The proxy is a ZDR org: previous_response_id returns 404 and `store: true`
+  // is silently downgraded, so chaining and server-side compaction are not
+  // available however capable the wire format is.
+  it('declares no chaining or context compaction, but does use a prompt cache key', () => {
+    const provider = getProvider('grok');
+    expect(provider?.capabilities).toMatchObject({
+      supportsConversationChaining: false,
+      supportsContextCompaction: false,
+      supportsPromptCacheKey: true,
+    });
+  });
+
+  it('falls back to chat completions when TERM2_GROK_API=chat', () => {
+    const previous = process.env.TERM2_GROK_API;
+    process.env.TERM2_GROK_API = 'chat';
+    try {
+      const model: any = createGrokStreamedModel('grok-4.6', {
+        settingsService: { get: () => undefined } as any,
+        loggingService: silentLogging,
+      } as any);
+      const inner = model.wrappedModel ?? model;
+      expect(inner).toBeInstanceOf(OpenAIChatCompletionsModel);
+    } finally {
+      if (previous === undefined) delete process.env.TERM2_GROK_API;
+      else process.env.TERM2_GROK_API = previous;
+    }
+  });
 });

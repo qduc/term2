@@ -84,11 +84,14 @@ function toResponsesApiOutput(output: unknown): string {
   return JSON.stringify({ text: output ?? '' });
 }
 
-function toResponsesApiInput(input: readonly StreamedModelTurnInput[]): unknown[] {
+function toResponsesApiInput(
+  input: readonly StreamedModelTurnInput[],
+  lane: string = OPENAI_RESPONSES_OPAQUE_TAG,
+): unknown[] {
   // An opaque item from another lane is inert baggage left by a provider
   // switch, not a fault: it is dropped so the rest of the history still
   // replays. See `provider-opaque-compatibility.ts`.
-  const replayable = input.filter((item) => !isForeignProviderOpaque(item, OPENAI_RESPONSES_OPAQUE_TAG));
+  const replayable = input.filter((item) => !isForeignProviderOpaque(item, lane));
   return replayable.map((item: any) => {
     if (item?.type === 'message') {
       return {
@@ -107,8 +110,11 @@ function toResponsesApiInput(input: readonly StreamedModelTurnInput[]): unknown[
       return { type: 'function_call_output', call_id: item.id, output: toResponsesApiOutput(item.output) };
     }
     if (item?.type === 'reasoning') {
-      const metadata = item.providerMetadata?.openai;
-      const legacyEncryptedContent = item.providerMetadata?.encrypted_content;
+      // Read only this lane's key: a sibling lane's blob is another vendor's
+      // ciphertext, and sending it would fail the turn.
+      const metadata = item.providerMetadata?.[lane];
+      const legacyEncryptedContent =
+        lane === OPENAI_RESPONSES_OPAQUE_TAG ? item.providerMetadata?.encrypted_content : undefined;
       const encryptedContent = metadata?.encrypted_content ?? legacyEncryptedContent;
       return {
         type: 'reasoning',
@@ -208,6 +214,7 @@ function requestBody(
   stream: boolean,
   providerSupportsContextCompaction = false,
   sessionState?: ContextCompactionSessionState,
+  lane: string = OPENAI_RESPONSES_OPAQUE_TAG,
 ): any {
   const providerOptions = request.providerOptions ?? {};
   // context_management is capability-gated below. Do not let the generic
@@ -219,7 +226,7 @@ function requestBody(
     providerSupportsContextCompaction,
     sessionState,
   );
-  const projectedInput = toResponsesApiInput(request.input);
+  const projectedInput = toResponsesApiInput(request.input, lane);
   const body = {
     model,
     input: projectedInput,
@@ -275,16 +282,15 @@ function reasoningText(item: any): string {
     .join('');
 }
 
-function reasoningMetadata(item: any): StreamedModelProviderOptions | undefined {
+function reasoningMetadata(item: any, lane: string): StreamedModelProviderOptions | undefined {
   const directMetadata = item?.providerData ?? item?.provider_metadata ?? item?.provider_data;
-  const nestedOpenAI = directMetadata?.openai;
-  const encryptedContent =
-    item?.encrypted_content ?? nestedOpenAI?.encrypted_content ?? directMetadata?.encrypted_content;
+  const nested = directMetadata?.[lane];
+  const encryptedContent = item?.encrypted_content ?? nested?.encrypted_content ?? directMetadata?.encrypted_content;
   if (encryptedContent === undefined) return undefined;
-  return { openai: { encrypted_content: encryptedContent } };
+  return { [lane]: { encrypted_content: encryptedContent } };
 }
 
-function toTurnOutput(item: any): StreamedModelTurnOutput {
+function toTurnOutput(item: any, lane: string = OPENAI_RESPONSES_OPAQUE_TAG): StreamedModelTurnOutput {
   if (item?.type === 'function_call') {
     return {
       type: 'tool_call',
@@ -303,7 +309,7 @@ function toTurnOutput(item: any): StreamedModelTurnOutput {
     };
   }
   if (item?.type === 'reasoning') {
-    const providerMetadata = reasoningMetadata(item);
+    const providerMetadata = reasoningMetadata(item, lane);
     return {
       type: 'reasoning',
       ...(item.id ? { id: String(item.id) } : {}),
@@ -316,7 +322,7 @@ function toTurnOutput(item: any): StreamedModelTurnOutput {
   // future Responses item kinds flow the same way.
   return {
     type: 'provider_opaque',
-    provider: 'openai',
+    provider: lane,
     item,
   };
 }
@@ -369,11 +375,14 @@ function assertUnaryResponseCompleted(response: any): void {
   }
 }
 
-function completedEvent(response: any): Extract<StreamedModelTurnEvent, { type: 'completion' }> {
+function completedEvent(
+  response: any,
+  lane: string = OPENAI_RESPONSES_OPAQUE_TAG,
+): Extract<StreamedModelTurnEvent, { type: 'completion' }> {
   return {
     type: 'completion',
     responseId: response?.id ?? response?.responseId ?? `response-${Date.now()}`,
-    output: (response?.output ?? []).map(toTurnOutput),
+    output: (response?.output ?? []).map((item: any) => toTurnOutput(item, lane)),
     usage: normalizeUsage(response?.usage),
     ...(response?.status ? { finishReason: response.status } : {}),
   };
@@ -416,6 +425,7 @@ function compactionIndex(event: any, item: any): number | string {
 export function normalizeResponseEvent(
   event: any,
   state: ResponseEventNormalizationState = createResponseEventNormalizationState(),
+  lane: string = OPENAI_RESPONSES_OPAQUE_TAG,
 ): StreamedModelTurnEvent | null {
   if (!event || typeof event.type !== 'string') return null;
   if (event.type === 'response.output_text.delta') return { type: 'text_delta', text: event.delta ?? '' };
@@ -531,7 +541,7 @@ export function normalizeResponseEvent(
       // than inventing an interval from an unrelated clock reading.
       return {
         type: 'context_compaction_completed',
-        provider: 'openai',
+        provider: lane,
         durationMs: startedAt === undefined ? 0 : Math.max(0, Date.now() - startedAt),
       };
     }
@@ -544,7 +554,7 @@ export function normalizeResponseEvent(
       ...(event.error && !response.error ? { error: event.error } : {}),
     });
   }
-  if (event.type === 'response.completed') return completedEvent(event.response ?? event);
+  if (event.type === 'response.completed') return completedEvent(event.response ?? event, lane);
   return null;
 }
 
@@ -555,6 +565,12 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
   protected readonly capture?: ProviderRequestCapture;
   protected readonly supportsContextCompaction: boolean;
   protected readonly contextCompactionSessionState?: ContextCompactionSessionState;
+  /**
+   * Which opaque lane this adapter's items belong to. Defaults to the OpenAI
+   * lane; Grok speaks the same wire shape but is a different vendor, so its
+   * encrypted reasoning must not cross into an OpenAI request.
+   */
+  protected readonly lane: string;
 
   constructor(
     _client: any,
@@ -562,12 +578,14 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
     capture?: ProviderRequestCapture,
     supportsContextCompaction = false,
     contextCompactionSessionState?: ContextCompactionSessionState,
+    lane: string = OPENAI_RESPONSES_OPAQUE_TAG,
   ) {
     this._client = _client;
     this._model = _model.trim();
     this.capture = capture;
     this.supportsContextCompaction = supportsContextCompaction;
     this.contextCompactionSessionState = contextCompactionSessionState;
+    this.lane = lane;
   }
 
   async getResponse(
@@ -577,7 +595,14 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
     this.lifecycle.bind(request, this.capture);
     try {
       const response = await this._client.responses.create(
-        requestBody(request, this._model, false, this.supportsContextCompaction, this.contextCompactionSessionState),
+        requestBody(
+          request,
+          this._model,
+          false,
+          this.supportsContextCompaction,
+          this.contextCompactionSessionState,
+          this.lane,
+        ),
         {
           ...(request.signal ? { signal: request.signal } : {}),
           ...((request.providerOptions as any)?.extraHeaders
@@ -586,7 +611,7 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
         },
       );
       assertUnaryResponseCompleted(response);
-      const completion = completedEvent(response);
+      const completion = completedEvent(response, this.lane);
       this.lifecycle.finish(request, 'terminal', this.capture, completion.responseId);
       return completion;
     } catch (error) {
@@ -606,7 +631,14 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
     let terminal = false;
     try {
       const source = await this._client.responses.create(
-        requestBody(request, this._model, true, this.supportsContextCompaction, this.contextCompactionSessionState),
+        requestBody(
+          request,
+          this._model,
+          true,
+          this.supportsContextCompaction,
+          this.contextCompactionSessionState,
+          this.lane,
+        ),
         {
           ...(request.signal ? { signal: request.signal } : {}),
           ...((request.providerOptions as any)?.extraHeaders
@@ -616,7 +648,7 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
       );
       const normalizationState = createResponseEventNormalizationState();
       for await (const event of source) {
-        const normalized = normalizeResponseEvent(event, normalizationState);
+        const normalized = normalizeResponseEvent(event, normalizationState, this.lane);
         if (normalized?.type === 'completion') {
           terminal = true;
           this.lifecycle.finish(request, 'terminal', this.capture, normalized.responseId);
@@ -661,7 +693,14 @@ export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesMod
     try {
       socket.send({
         type: 'response.create',
-        ...requestBody(request, this._model, true, this.supportsContextCompaction, this.contextCompactionSessionState),
+        ...requestBody(
+          request,
+          this._model,
+          true,
+          this.supportsContextCompaction,
+          this.contextCompactionSessionState,
+          this.lane,
+        ),
       } as any);
       const normalizationState = createResponseEventNormalizationState();
       iterator = socket.stream()[Symbol.asyncIterator]();
@@ -677,7 +716,7 @@ export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesMod
         // ambiguous here: capture the code, but never claim it was unsent.
         if (message.type === 'close') throw new WebSocketClosedEarlyError(readWebSocketCloseFrame(message));
         if (message.type !== 'message') continue;
-        const normalized = normalizeResponseEvent(message.message, normalizationState);
+        const normalized = normalizeResponseEvent(message.message, normalizationState, this.lane);
         if (normalized?.type === 'completion') {
           terminal = true;
           this.lifecycle.finish(request, 'terminal', this.capture, normalized.responseId);

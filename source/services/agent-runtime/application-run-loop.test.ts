@@ -2427,3 +2427,62 @@ describe('ApplicationRunLoop turn budget', () => {
     await expect(stream.completed).rejects.toThrow('The operation was aborted');
   });
 });
+
+// Encrypted reasoning arrives namespaced under the lane that produced it, and
+// the run loop recognised only `codex` and `openai`. Grok speaks the Responses
+// wire but is a different vendor, so its blob lands under `grok` — and was
+// silently dropped, losing the whole reason to run Grok on the Responses lane.
+it('retains terminal-only encrypted reasoning from a Responses lane it has never seen', async () => {
+  const requests: Array<Parameters<StreamedModelTurn['stream']>[0]> = [];
+  let calls = 0;
+  const model: StreamedModelTurn = {
+    async *stream(request) {
+      requests.push(request);
+      calls++;
+      if (calls === 1) {
+        yield {
+          type: 'completion',
+          responseId: 'resp_grok_tool',
+          output: [
+            {
+              type: 'reasoning',
+              id: 'rs_grok',
+              text: 'Work out the product first.',
+              providerMetadata: { grok: { encrypted_content: 'xai-cipher' } },
+            },
+            { type: 'tool_call', id: 'call_grok', name: 'lookup', arguments: '{}' },
+          ],
+        };
+        return;
+      }
+      yield { type: 'completion', responseId: 'resp_grok_done', output: [] };
+    },
+  };
+  const loop = new ApplicationRunLoop({ resolveModel: () => model });
+  const stream = loop.startStream(
+    {
+      ...agent,
+      tools: [
+        {
+          name: 'lookup',
+          parameters: { type: 'object' },
+          needsApproval: async () => false,
+          execute: async () => 'fixture result',
+        },
+      ] as any,
+    },
+    'compute this',
+  );
+  await stream.completed;
+
+  expect(requests[1]?.input).toEqual(
+    expect.arrayContaining([
+      {
+        type: 'reasoning',
+        id: 'rs_grok',
+        text: 'Work out the product first.',
+        providerMetadata: { grok: { encrypted_content: 'xai-cipher' } },
+      },
+    ]),
+  );
+});

@@ -73,6 +73,14 @@ type Props = {
   displayMode?: 'standard' | 'concise';
   textColor?: string;
   isSubagent?: boolean;
+  /**
+   * The turn is held at an approval or check-in prompt, so nothing is executing.
+   *
+   * A card appears as soon as the model *asks* for a tool, which is before the
+   * tool is dispatched. Without this, a call waiting on a human decision reads
+   * as running and accrues an elapsed time it never spent.
+   */
+  awaitingDecision?: boolean;
 };
 
 const getConciseAskUserResponse = (output: string | undefined): string => {
@@ -106,10 +114,17 @@ const CommandMessage: FC<Props> = ({
   displayMode = 'standard',
   textColor,
   isSubagent = false,
+  awaitingDecision = false,
 }) => {
   const { isVisible, isRunning } = useCommandVisibility(status);
-  const runningElapsedSeconds = useRunningElapsedSeconds(isRunning);
-  const runningElapsedLabel = isRunning ? <Text color={COLOR_WARNING}> ({runningElapsedSeconds}s)</Text> : null;
+  const isWaiting = isRunning && awaitingDecision;
+  const isExecuting = isRunning && !awaitingDecision;
+  const runningElapsedSeconds = useRunningElapsedSeconds(isExecuting);
+  const runningElapsedLabel = isWaiting ? (
+    <Text color={COLOR_MUTED}> (waiting)</Text>
+  ) : isExecuting ? (
+    <Text color={COLOR_WARNING}> ({runningElapsedSeconds}s)</Text>
+  ) : null;
 
   const { output, runtime } = useMemo(() => {
     const isShell = !toolName || toolName === 'shell';
@@ -324,7 +339,8 @@ const CommandMessage: FC<Props> = ({
   }, [toolName, command, runtime, formattedArgs, toolArgs, isBackgroundSubagentLaunch]);
 
   const renderStandardHeader = () => {
-    const headerColor = success === false ? COLOR_ERROR : isRunning ? COLOR_WARNING : COLOR_INFO;
+    const headerColor =
+      success === false ? COLOR_ERROR : isWaiting ? COLOR_MUTED : isRunning ? COLOR_WARNING : COLOR_INFO;
     const isShell = !toolName || toolName === 'shell';
 
     if (isShell) {
@@ -403,7 +419,7 @@ const CommandMessage: FC<Props> = ({
         isApprovalRejection ||
         success === false ||
         Boolean(failureReason);
-      const statusChar = isFailed ? '✖' : isRunning ? '▶' : '✔';
+      const statusChar = isFailed ? '✖' : isWaiting ? '⏸' : isRunning ? '▶' : '✔';
       const actionText = isFailed ? command : displayAction;
       return (
         <Box>
@@ -433,8 +449,8 @@ const CommandMessage: FC<Props> = ({
     if (isRunning) {
       return (
         <Box>
-          <Text color={COLOR_WARNING}>
-            <Text bold>▶</Text> {displayAction}
+          <Text color={isWaiting ? COLOR_MUTED : COLOR_WARNING}>
+            <Text bold>{isWaiting ? '⏸' : '▶'}</Text> {displayAction}
             {runningElapsedLabel}
             {changeStatsElement}
           </Text>

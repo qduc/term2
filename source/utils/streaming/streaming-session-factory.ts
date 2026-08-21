@@ -4,6 +4,7 @@
  */
 
 import type { ConversationEvent } from '../../services/conversation/conversation-events.js';
+import type { RunBudgetEvent } from '../../services/agent-runtime/run-budget.js';
 import type { ILoggingService } from '../../services/service-interfaces.js';
 import {
   createConversationEventHandler,
@@ -24,6 +25,13 @@ export interface StreamingSessionFactoryDeps {
   loggingService: ILoggingService;
   setLastUsage: (usage: NormalizedUsage) => void;
   setCodexRateLimit?: (rateLimit: CodexRateLimitInfo) => void;
+  /**
+   * Budget evidence that did not stop the run.
+   *
+   * In warn mode the run continues past a non-soft stage, so this notice is the
+   * only place the human learns the envelope is running out.
+   */
+  setRunBudgetNotice?: (event: RunBudgetEvent) => void;
   reasoningThrottleMs: number;
   now?: () => number;
   createStreamingState?: () => StreamingState;
@@ -138,6 +146,8 @@ export function createStreamingSession(deps: StreamingSessionFactoryDeps, label:
       } else {
         deps.loggingService.debug(`UI final event has no usage (${label})`);
       }
+    } else if (event.type === 'run_budget' && deps.setRunBudgetNotice) {
+      deps.setRunBudgetNotice(event.evidence);
     } else if (event.type === 'codex_rate_limits' && deps.setCodexRateLimit) {
       deps.loggingService.debug(`UI received Codex rate limits (${label})`, { rateLimits: event.rateLimits });
       deps.setCodexRateLimit(event.rateLimits);

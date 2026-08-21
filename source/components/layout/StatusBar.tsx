@@ -7,6 +7,7 @@ import type { GrokCreditUsage } from '../../providers/grok-credit-usage.js';
 import { getModelContextWindow } from '../../providers/model-catalog/catalog.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
 import type { SSHInfo } from '../../services/shell/shell-interaction-session.js';
+import type { RunBudgetEvent } from '../../services/agent-runtime/run-budget.js';
 import { formatContextUsage, type NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { CodexRateLimitInfo, CodexRateLimitWindow } from '../../services/conversation/conversation-events.js';
 import type { StaticCommitBlocker } from '../message/MessageList.js';
@@ -40,6 +41,8 @@ interface StatusBarProps {
   staticCommitBlocker?: StaticCommitBlocker | null;
   queueLength?: number;
   costSummary?: SessionCostSummary | null;
+  /** Latest run-budget evidence that did not stop the run (warn mode). */
+  runBudgetNotice?: RunBudgetEvent | null;
 }
 
 const StatusBar: FC<StatusBarProps> = ({
@@ -55,6 +58,7 @@ const StatusBar: FC<StatusBarProps> = ({
   staticCommitBlocker = null,
   queueLength,
   costSummary,
+  runBudgetNotice = null,
 }) => {
   const mentorMode = useSetting(settingsService, 'app.mentorMode') ?? false;
   const liteMode = useSetting(settingsService, 'app.liteMode') ?? false;
@@ -94,6 +98,7 @@ const StatusBar: FC<StatusBarProps> = ({
 
   const tokenParts: string[] = [];
   if (lastUsage?.prompt_tokens != null) {
+    tokenParts.push(`↑ ${formatStatusBarTokens(lastUsage.prompt_tokens)}`);
     const cachePercentage =
       usageHasCacheRead && lastUsage.prompt_tokens > 0
         ? ((cacheReadTokens / lastUsage.prompt_tokens) * 100).toFixed(1)
@@ -191,6 +196,27 @@ const StatusBar: FC<StatusBarProps> = ({
       '0',
     )}`;
     return `Credits ${percent}% · reset ${reset}`;
+  })();
+
+  // In warn mode the run keeps going past its envelope, so this line is the
+  // only signal the human gets. It states the dimension and how far past the
+  // limit the run is, not an instruction — the decision stays with the human.
+  const runBudgetNoticeText = (() => {
+    if (!runBudgetNotice) return '';
+    if (runBudgetNotice.type === 'tool_stall') {
+      return `⚠️ Possible stall: ${runBudgetNotice.toolName} ×${runBudgetNotice.count}`;
+    }
+    const { dimension, used, limit } = runBudgetNotice.evidence;
+    const percent = limit > 0 ? Math.round((used / limit) * 100) : 100;
+    const label =
+      dimension === 'usd'
+        ? 'cost'
+        : dimension === 'unpriced_tokens'
+        ? 'tokens'
+        : dimension === 'active_time'
+        ? 'run time'
+        : 'turns';
+    return `⚠️ Run ${label} ${percent}% of budget`;
   })();
 
   const staticCommitBlockerText = (() => {
@@ -313,6 +339,13 @@ const StatusBar: FC<StatusBarProps> = ({
               <Text color={slate}>Docker host access: </Text>
               <Text color={glow} bold>
                 {dockerHostAccess}
+              </Text>
+            </Box>
+          )}
+          {runBudgetNoticeText && (
+            <Box marginRight={1}>
+              <Text color={glow} bold>
+                {runBudgetNoticeText}
               </Text>
             </Box>
           )}

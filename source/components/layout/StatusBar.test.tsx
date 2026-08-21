@@ -86,7 +86,7 @@ it.sequential('StatusBar renders cache usage', async () => {
 
   const output = lastFrame() ?? '';
 
-  expect(output.includes('(75.0% cached) / ↓ 350')).toBe(true);
+  expect(output.includes('↑ 1.2k / (75.0% cached) / ↓ 350')).toBe(true);
   expect(output.includes('│ Cache')).toBe(false);
 });
 
@@ -215,6 +215,28 @@ it.sequential('StatusBar places session cost beside token and context usage', as
   );
 
   expect(lastFrame()).toContain('↓ 350 │ Ctx 1k / 272k │ Cost $0.42');
+});
+
+it.sequential('StatusBar warns about run-budget evidence instead of the run stopping', async () => {
+  // In warn mode the run continues past its envelope, so this line is the only
+  // signal the human gets that the budget is running out.
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-5.6-sol',
+    'agent.provider': 'openai',
+    'shell.autoApproveMode': 'off',
+  });
+  const { lastFrame } = await renderInAct(
+    <StatusBar
+      settingsService={settingsService}
+      runBudgetNotice={{
+        type: 'budget_stage',
+        stage: 'critical',
+        evidence: { dimension: 'unpriced_tokens', used: 500_000, limit: 500_000, headroom: 0 },
+      }}
+    />,
+  );
+
+  expect(lastFrame()).toContain('Run tokens 100% of budget');
 });
 
 it.sequential('StatusBar hides context usage when the model is not in the catalog', async () => {

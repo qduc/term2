@@ -157,6 +157,10 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
     { value: '100', description: 'full budget' },
   ],
   'agent.runBudget.maxParentExtensions': [{ value: '1' }, { value: '2', description: 'default' }, { value: '3' }],
+  'agent.runBudget.escalation': [
+    { value: 'warn', description: 'status-bar warning only (default)' },
+    { value: 'pause', description: 'hold the run for a human decision' },
+  ],
   'agent.runBudget.identicalToolCallThreshold': [
     { value: '2' },
     { value: '3', description: 'default' },

@@ -174,6 +174,7 @@ const App: FC<AppProps> = ({
     lastUsage,
     costSummary,
     lastCodexRateLimit,
+    runBudgetNotice,
     pendingApproval,
     waitingForApproval,
     waitingForRejectionReason,
@@ -676,10 +677,19 @@ const App: FC<AppProps> = ({
       setWaitingForRejectionReason(true);
       return;
     }
+    // A check-in has no tool to deny and its decision path discards any reason.
+    // Asking "Why?" here strands the user: the composer refuses an empty
+    // submit, so Stop could only be reached by typing text nothing reads.
+    if (pendingApproval?.checkIn) {
+      void handleApprovalDecision('n', undefined);
+      return;
+    }
     setWaitingForRejectionReason(true);
   }, [
     backgroundApprovalEntry,
     backgroundApprovalState.revision,
+    handleApprovalDecision,
+    pendingApproval,
     resolveBackgroundSubagentApproval,
     sandboxPromptRequest,
     setWaitingForRejectionReason,
@@ -991,6 +1001,7 @@ const App: FC<AppProps> = ({
             settingsService={settingsService}
             isShellMode={isShellMode}
             restoredStaticMessageIds={restoredStaticMessageIds}
+            turnPaused={effectiveWaitingForApproval}
           />
         </Box>
 
@@ -1044,6 +1055,7 @@ const App: FC<AppProps> = ({
             onNavigateQuestion={handleNavigateQuestion}
             sshInfo={sshInfo}
             lastCodexRateLimit={lastCodexRateLimit}
+            runBudgetNotice={runBudgetNotice}
             grokCreditUsage={grokCreditUsage.usage}
             staticCommitBlocker={staticCommitBlocker}
             firstRunSetup={firstRunSetup}

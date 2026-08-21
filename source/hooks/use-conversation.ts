@@ -124,6 +124,7 @@ export const useConversation = ({
     toolCallStreamingInfo,
     lastUsage,
     lastCodexRateLimit,
+    runBudgetNotice,
     costSummary,
     pendingQueuedMessages,
   } = uiState;
@@ -284,6 +285,7 @@ export const useConversation = ({
         onUsageUpdate: (usage) => dispatch({ type: 'usage/updated', usage }),
         onCostUpdate: (summary) => dispatch({ type: 'cost/updated', summary }),
         onRateLimitUpdate: (rateLimit) => dispatch({ type: 'rate_limit/updated', rateLimit }),
+        onRunBudgetNotice: (event) => dispatch({ type: 'run_budget/noticed', event }),
         onRateLimitClear: () => dispatch({ type: 'rate_limit/cleared' }),
         onResetTransient: () => dispatch({ type: 'reset_transient' }),
         onResetAll: () => dispatch({ type: 'reset_all' }),
@@ -480,6 +482,7 @@ export const useConversation = ({
     lastUsage,
     costSummary,
     lastCodexRateLimit,
+    runBudgetNotice,
     pendingApproval,
     waitingForApproval,
     waitingForRejectionReason,

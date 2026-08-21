@@ -112,7 +112,28 @@ export interface ApprovalDescriptor {
   postExecute?: PostExecuteApprovalToken;
   /** Main-run budget/stall evidence held at a real continuation boundary. */
   runBudgetEvent?: RunBudgetEvent;
+  /**
+   * This pause is a system check-in, not a tool approval.
+   *
+   * Check-ins ride the approval transport because it is the only thing that can
+   * hold a run at a continuation boundary, but there is no tool to allow or
+   * deny: the only answers are continue and stop, and a denial reason has
+   * nowhere to go. Every branch that must tell the two apart reads this field.
+   */
+  checkIn?: ApprovalCheckInKind;
 }
+
+/** Which system check-in a pause represents. */
+export type ApprovalCheckInKind = 'max_turns' | 'run_budget';
+
+/**
+ * The tool name a check-in carries on the approval transport.
+ *
+ * It names no real tool. It exists because the descriptor requires a tool name
+ * and because logs and snapshots already record this string; branch on
+ * `checkIn` instead, never on this value.
+ */
+export const CHECK_IN_TOOL_NAME = 'max_turns_exceeded';
 
 export interface PostExecuteApprovalToken {
   kind: 'post_execute';
@@ -148,7 +169,6 @@ export interface FinalTerminal {
 export type ConversationTerminal = ApprovalRequiredTerminal | FinalTerminal;
 
 export interface PendingApproval extends ApprovalDescriptor {
-  isMaxTurnsPrompt?: boolean;
   /** Human judgement request produced by the staged budget/stall sensor. */
   runBudgetEvent?: RunBudgetEvent;
 }

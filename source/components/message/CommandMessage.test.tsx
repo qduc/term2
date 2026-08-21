@@ -270,6 +270,33 @@ it('CommandMessage shows the elapsed time for a running command', async () => {
   }
 });
 
+it('CommandMessage does not run an elapsed timer while the turn waits on a decision', async () => {
+  // The card appears when the model *asks* for a tool, before dispatch. While
+  // an approval or check-in prompt holds the turn, nothing is executing, so a
+  // ticking timer would be counting time the tool never spent.
+  vi.useFakeTimers();
+  try {
+    const { lastFrame, rerender, unmount } = await renderInAct(
+      <CommandMessage command="sleep 10" toolName="shell" status="running" awaitingDecision />,
+    );
+
+    await advanceTimersInAct(3_000);
+    const paused = stripAnsi(lastFrame() ?? '');
+    expect(paused).not.toContain('(3s)');
+    expect(paused).toContain('(waiting)');
+
+    // Once the decision lands, the card starts timing from that point.
+    rerender(<CommandMessage command="sleep 10" toolName="shell" status="running" />);
+    await advanceTimersInAct(2_000);
+    const resumed = stripAnsi(lastFrame() ?? '');
+    expect(resumed).toContain('(2s)');
+    expect(resumed).not.toContain('(waiting)');
+    unmount();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it('CommandMessage still shows arguments for unknown tools where command is just toolName', async () => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   const props = {

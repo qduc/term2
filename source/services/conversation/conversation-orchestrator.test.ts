@@ -130,7 +130,7 @@ it('grants a finite extension when the paused run returns its budget interaction
       toolName: 'max_turns_exceeded',
       argumentsText: 'Repeated tool call',
       rawInterruption: { type: 'run_budget_interaction' },
-      isMaxTurnsPrompt: true,
+      checkIn: 'run_budget' as const,
       runBudgetEvent: {
         type: 'tool_stall' as const,
         toolName: 'read_file',
@@ -147,7 +147,7 @@ it('grants a finite extension when the paused run returns its budget interaction
 
   const interaction = cfg.conversationService.getPendingInteractionSnapshot?.();
   expect(interaction?.approval).toMatchObject({
-    toolName: 'max_turns_exceeded',
+    checkIn: 'run_budget',
     runBudgetEvent: { type: 'tool_stall' },
   });
   await orchestrator.handleApprovalDecision('y', undefined, undefined, interaction!.interactionId);

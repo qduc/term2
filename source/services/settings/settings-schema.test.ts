@@ -16,8 +16,8 @@ it('keeps the structured Contract 04 consumer inventory complete and duplicate-f
   const inventoryKeys = Object.values(CONTRACT_04_CONSUMER_INVENTORY).flat();
   const exportedKeys = Object.values(SETTING_KEYS);
 
-  expect(exportedKeys).toHaveLength(126);
-  expect(new Set(exportedKeys).size).toBe(126);
+  expect(exportedKeys).toHaveLength(127);
+  expect(new Set(exportedKeys).size).toBe(127);
   expect(inventoryKeys).toHaveLength(exportedKeys.length);
   expect(new Set(inventoryKeys).size).toBe(inventoryKeys.length);
   expect([...inventoryKeys].sort()).toEqual([...exportedKeys].sort());
@@ -109,18 +109,19 @@ it('context compaction defaults to disabled with a conservative ratio and reject
 it('run-budget policy defaults are runtime-modifiable and reject invalid limits', () => {
   expect(AgentSettingsSchema.parse({}).runBudget).toEqual({
     maxUsdMicros: 5_000_000,
-    maxUnpricedTokens: 500_000,
+    maxUnpricedTokens: 5_000_000,
     maxActiveTimeMs: 3_600_000,
     warningHeadroomUsdMicros: 1_000_000,
-    warningHeadroomUnpricedTokens: 100_000,
+    warningHeadroomUnpricedTokens: 1_000_000,
     warningHeadroomActiveTimeMs: 900_000,
     softHeadroomUsdMicros: 250_000,
-    softHeadroomUnpricedTokens: 25_000,
+    softHeadroomUnpricedTokens: 250_000,
     softHeadroomActiveTimeMs: 300_000,
     turnBackstop: 150,
     extensionPercent: 50,
     maxParentExtensions: 2,
     identicalToolCallThreshold: 3,
+    escalation: 'warn',
   });
   expect(DEFAULT_SETTINGS.agent.runBudget).toEqual(AgentSettingsSchema.parse({}).runBudget);
 

@@ -48,6 +48,7 @@ export const CONTRACT_04_CONSUMER_INVENTORY = {
     'agent.runBudget.extensionPercent',
     'agent.runBudget.maxParentExtensions',
     'agent.runBudget.identicalToolCallThreshold',
+    'agent.runBudget.escalation',
   ],
   'Provider credentials/configuration — security-sensitive, next client/request': [
     'agent.openrouter.apiKey',

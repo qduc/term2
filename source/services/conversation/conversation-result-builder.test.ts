@@ -130,7 +130,7 @@ it('turns a parked main-run budget interaction into a resumable pending terminal
     kind: 'approval_required',
     result: {
       approval: {
-        toolName: 'max_turns_exceeded',
+        checkIn: 'run_budget',
         runBudgetEvent: { type: 'budget_stage', stage: 'critical' },
       },
     },
@@ -138,7 +138,7 @@ it('turns a parked main-run budget interaction into a resumable pending terminal
   if (outcome.kind === 'approval_required') {
     expect(toTerminalEvent(outcome.result)).toMatchObject({
       type: 'approval_required',
-      approval: { runBudgetEvent: { type: 'budget_stage', stage: 'critical' } },
+      approval: { checkIn: 'run_budget', runBudgetEvent: { type: 'budget_stage', stage: 'critical' } },
     });
   }
 });

@@ -814,6 +814,7 @@ it('runNonInteractive auto-approves only the finite parent run-budget extensions
     'agent.runBudget.softHeadroomUnpricedTokens': 0,
     'agent.runBudget.softHeadroomActiveTimeMs': 0,
     'agent.runBudget.turnBackstop': 1,
+    'agent.runBudget.escalation': 'pause',
     'agent.runBudget.extensionPercent': 100,
     'agent.runBudget.maxParentExtensions': 2,
     'agent.runBudget.identicalToolCallThreshold': 10,

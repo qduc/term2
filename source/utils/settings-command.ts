@@ -219,6 +219,11 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
       source: settings.agent.runBudget.identicalToolCallThreshold.source,
     },
     {
+      key: SETTING_KEYS.AGENT_RUN_BUDGET_ESCALATION,
+      value: settings.agent.runBudget.escalation.value,
+      source: settings.agent.runBudget.escalation.source,
+    },
+    {
       key: SETTING_KEYS.SHELL_TIMEOUT,
       value: settings.shell.timeout.value,
       source: settings.shell.timeout.source,

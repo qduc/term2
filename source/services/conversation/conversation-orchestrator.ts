@@ -6,7 +6,7 @@ import type { SubmissionMutation } from './conversation-adapter.js';
 import type { BotMessage, CommandMessage, UserMessage } from '../../types/message.js';
 import { isCommandMessage, isUserMessage } from '../../types/message.js';
 import type { ConversationTerminal, PendingApproval } from '../../contracts/conversation.js';
-import { isDeniedReadApproveAnswer } from '../../contracts/conversation.js';
+import { CHECK_IN_TOOL_NAME, isDeniedReadApproveAnswer } from '../../contracts/conversation.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { SessionCostSummary } from '../cost/model-cost.js';
 import { createStreamingSession } from '../../utils/streaming/streaming-session-factory.js';
@@ -724,10 +724,10 @@ export class ConversationOrchestrator {
       if (isMaxTurnsError(errorMessage)) {
         const pendingApproval: PendingApproval = {
           agentName: 'System',
-          toolName: 'max_turns_exceeded',
+          toolName: CHECK_IN_TOOL_NAME,
           argumentsText: errorMessage,
           rawInterruption: null,
-          isMaxTurnsPrompt: true,
+          checkIn: 'max_turns',
         };
         this.config.conversationService.presentPendingInteraction?.(pendingApproval);
         this.config.ui.onApprovalRequested(pendingApproval);
@@ -772,7 +772,7 @@ export class ConversationOrchestrator {
     if (resolution.kind === 'awaiting_next_question') return;
 
     const pendingApproval = resolution.approval;
-    const isMaxTurnsPrompt = pendingApproval.isMaxTurnsPrompt;
+    const isMaxTurnsPrompt = pendingApproval.checkIn === 'max_turns';
     const runBudgetEvent = pendingApproval.runBudgetEvent;
 
     this.config.ui.onApprovalResolved();
@@ -1170,6 +1170,7 @@ export class ConversationOrchestrator {
         loggingService: this.config.loggingService,
         setLastUsage: (usage) => this.config.ui.onUsageUpdate(usage),
         setCodexRateLimit: (rateLimit) => this.config.ui.onRateLimitUpdate(rateLimit),
+        setRunBudgetNotice: (event) => this.config.ui.onRunBudgetNotice?.(event),
         reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
         now: this.config.now,
       },
@@ -1349,10 +1350,10 @@ export class ConversationOrchestrator {
     if (this.config.conversationService.getPendingInteractionSnapshot?.()) return;
     const approval: PendingApproval = {
       agentName: 'System',
-      toolName: 'max_turns_exceeded',
+      toolName: CHECK_IN_TOOL_NAME,
       argumentsText: `${prefix ? `${prefix}\n\n` : ''}${formatRunBudgetEvidence(event)}`,
       rawInterruption: null,
-      isMaxTurnsPrompt: true,
+      checkIn: 'run_budget',
       runBudgetEvent: event,
     };
     this.config.conversationService.presentPendingInteraction?.(approval);

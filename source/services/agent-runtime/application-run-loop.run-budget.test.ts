@@ -18,6 +18,7 @@ const policy: RunBudgetPolicy = {
   turnBackstop: 2,
   extensionPercent: 50,
   maxParentExtensions: 2,
+  escalation: 'pause',
   identicalToolCallThreshold: 3,
 };
 
@@ -79,6 +80,40 @@ it('pauses a main run at critical evidence until a finite extension resumes its 
 
   expect(calls).toBe(2);
   expect(resumed.finalOutput).toBe('done');
+});
+
+it('reports critical evidence without pausing the run in warn mode', async () => {
+  // Warn mode is the default: an envelope that cannot price the request is a
+  // rough proxy, so it reports and lets real work finish instead of stopping it.
+  let calls = 0;
+  const evidence: RunBudgetEvent[] = [];
+  const model: StreamedModelTurn = {
+    async *stream() {
+      calls += 1;
+      if (calls === 1) {
+        yield { type: 'tool_call' as const, id: `call-${calls}`, name: 'read_file', arguments: '{"path":"a"}' };
+        yield { type: 'completion' as const, responseId: `resp-${calls}`, output: [] };
+        return;
+      }
+      yield {
+        type: 'completion' as const,
+        responseId: 'done',
+        output: [{ type: 'message' as const, content: [{ type: 'text' as const, text: 'done' }] }],
+      };
+    },
+  };
+  const loop = new ApplicationRunLoop({ resolveModel: () => model });
+  const stream = loop.startStream(agent, 'go', {
+    maxTurns: 2,
+    runBudget: { ...policy, turnBackstop: 1, escalation: 'warn' },
+    onRunBudgetEvent: (event) => evidence.push(event),
+  });
+
+  await stream.completed;
+
+  expect(evidence).toContainEqual(expect.objectContaining({ type: 'budget_stage', stage: 'critical' }));
+  expect(stream.interruptions ?? []).toEqual([]);
+  expect(stream.finalOutput).toBe('done');
 });
 
 it('caps parent-granted extensions but leaves the human as the uncapped terminal judge', async () => {

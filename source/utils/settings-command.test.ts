@@ -44,6 +44,7 @@ const baseSettings = {
       extensionPercent: { value: 50, source: 'default' },
       maxParentExtensions: { value: 2, source: 'default' },
       identicalToolCallThreshold: { value: 3, source: 'default' },
+      escalation: { value: 'warn', source: 'default' },
     },
   },
   shell: {
@@ -126,6 +127,7 @@ it('formatSettingsSummary renders values with sources', () => {
   expect(summary.includes('agent.contextCompaction.compactThresholdTokens: null (default)')).toBe(true);
   expect(summary.includes('agent.runBudget.maxUsdMicros: 5000000 (default)')).toBe(true);
   expect(summary.includes('agent.runBudget.identicalToolCallThreshold: 3 (default)')).toBe(true);
+  expect(summary.includes('agent.runBudget.escalation: warn (default)')).toBe(true);
   expect(summary.includes('memory.enabled: true (default)')).toBe(true);
 });
 

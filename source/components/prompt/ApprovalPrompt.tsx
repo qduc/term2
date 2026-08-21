@@ -551,15 +551,19 @@ const ApprovalPrompt: FC<Props> = ({
     }
   });
 
-  // Special handling for max turns exceeded prompt
-  if (approval.toolName === 'max_turns_exceeded') {
+  // A system check-in, not a tool approval: continue or stop, no denial reason.
+  if (approval.checkIn) {
     return (
       <Box flexDirection="column">
         <Text color="yellow" bold>
           {approval.argumentsText}
         </Text>
         <Box flexDirection="column" marginTop={1}>
-          <Text>Continue with one finite extension, or stop?</Text>
+          <Text>
+            {approval.checkIn === 'run_budget'
+              ? 'Continue with one finite budget extension, or stop?'
+              : 'Continue with one finite extension, or stop?'}
+          </Text>
           <Box flexDirection="column" marginLeft={1}>
             <Text color={selectedIndex === 0 ? 'green' : undefined}>{selectedIndex === 0 ? '❯ ' : '  '}Continue</Text>
             <Text color={selectedIndex === 1 ? 'red' : undefined}>{selectedIndex === 1 ? '❯ ' : '  '}Stop</Text>

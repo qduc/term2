@@ -1,4 +1,5 @@
 import type { ModelRequestCost } from '../cost/model-cost.js';
+import { isSubscriptionProvider } from '../cost/subscription-providers.js';
 
 /** Settings-backed containment policy for one logical agent run. */
 export interface RunBudgetPolicy {
@@ -15,6 +16,15 @@ export interface RunBudgetPolicy {
   readonly extensionPercent: number;
   readonly maxParentExtensions: number;
   readonly identicalToolCallThreshold: number;
+  /**
+   * What a non-soft stage does.
+   *
+   * `warn` reports evidence and lets the run continue; `pause` holds the run at
+   * a request boundary for a human decision. Warning is the default because a
+   * budget that cannot price the request is a rough proxy, and stopping real
+   * work on a proxy is a worse failure than overrunning it.
+   */
+  readonly escalation: 'warn' | 'pause';
 }
 
 interface RunBudgetSettingsReader {
@@ -37,6 +47,7 @@ export function readRunBudgetPolicy(settings: RunBudgetSettingsReader): RunBudge
     extensionPercent: settings.get('agent.runBudget.extensionPercent'),
     maxParentExtensions: settings.get('agent.runBudget.maxParentExtensions'),
     identicalToolCallThreshold: settings.get('agent.runBudget.identicalToolCallThreshold'),
+    escalation: settings.get('agent.runBudget.escalation') ?? 'warn',
   };
 }
 
@@ -161,7 +172,8 @@ export class RunBudget {
       0,
     );
     this.#unpricedTokens = input.costRecords.reduce(
-      (total, record) => total + (record.usdMicros === undefined ? totalTokens(record) : 0),
+      (total, record) =>
+        total + (record.usdMicros === undefined && !isSubscriptionProvider(record.provider) ? totalTokens(record) : 0),
       0,
     );
 
@@ -330,11 +342,26 @@ export class RunBudget {
   }
 }
 
+/**
+ * What a cache-read token counts for against the unpriced-token budget.
+ *
+ * The budget stands in for money on requests that carry no price, and a cache
+ * read is roughly an order of magnitude cheaper than fresh input everywhere it
+ * is priced at all. Counting it at face value made a heavily cached session —
+ * the cheap case — exhaust the envelope fastest, which is backwards.
+ */
+const CACHED_TOKEN_WEIGHT = 0.1;
+
 function totalTokens(record: ModelRequestCost): number {
   const usage = record.usage;
   if (!usage) return 0;
-  if (Number.isFinite(usage.total_tokens)) return usage.total_tokens!;
-  return (usage.prompt_tokens ?? 0) + (usage.completion_tokens ?? 0) + (usage.cache_creation_tokens ?? 0);
+  const cacheReadTokens = usage.cache_read_tokens ?? 0;
+  const total = Number.isFinite(usage.total_tokens)
+    ? usage.total_tokens!
+    : (usage.prompt_tokens ?? 0) + (usage.completion_tokens ?? 0) + (usage.cache_creation_tokens ?? 0);
+  // Cache reads are reported inside the prompt/total counts, so discount them
+  // rather than adding a separate weighted term.
+  return Math.max(0, Math.round(total - cacheReadTokens * (1 - CACHED_TOKEN_WEIGHT)));
 }
 
 function closestToExhausted<T extends { used: number; limit: number }>(candidates: readonly T[]): T {

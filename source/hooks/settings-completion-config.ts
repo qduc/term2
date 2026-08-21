@@ -67,7 +67,7 @@ export const SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_USD_MICROS]:
     'Per-run priced-request budget in USD micros (1,000,000 = $1; default $5)',
   [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_UNPRICED_TOKENS]:
-    'Per-run token budget used when request pricing is unavailable (default 500,000)',
+    'Per-run token budget used when request pricing is unavailable; cache reads count a tenth, and subscription providers are exempt (default 5,000,000)',
   [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_ACTIVE_TIME_MS]:
     'Per-run active-time budget in milliseconds; approval wait time is excluded (default 1 hour)',
   [SETTING_KEYS.AGENT_RUN_BUDGET_WARNING_HEADROOM_USD_MICROS]:
@@ -89,6 +89,8 @@ export const SETTING_DESCRIPTIONS: Record<string, string> = {
     'Maximum finite extensions a parent may grant before escalation reaches the human',
   [SETTING_KEYS.AGENT_RUN_BUDGET_IDENTICAL_TOOL_CALL_THRESHOLD]:
     'Identical tool calls without an intervening mutation required to report stall evidence',
+  [SETTING_KEYS.AGENT_RUN_BUDGET_ESCALATION]:
+    'What a budget or stall escalation does: warn in the status bar, or pause the run for a decision',
   [SETTING_KEYS.AGENT_CODEX_WEBSOCKET_FIRST_FRAME_TIMEOUT_MS]:
     'Codex WebSocket timeout before the first response frame, in milliseconds',
   [SETTING_KEYS.AGENT_CODEX_WEBSOCKET_INTER_FRAME_TIMEOUT_MS]:
@@ -248,6 +250,7 @@ export const CATEGORY_KEYS = {
     SETTING_KEYS.AGENT_RUN_BUDGET_EXTENSION_PERCENT,
     SETTING_KEYS.AGENT_RUN_BUDGET_MAX_PARENT_EXTENSIONS,
     SETTING_KEYS.AGENT_RUN_BUDGET_IDENTICAL_TOOL_CALL_THRESHOLD,
+    SETTING_KEYS.AGENT_RUN_BUDGET_ESCALATION,
     SETTING_KEYS.SHELL_AUTO_APPROVE_MODE,
     SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL,
     SETTING_KEYS.AGENT_AUTO_APPROVE_REASONING_EFFORT,

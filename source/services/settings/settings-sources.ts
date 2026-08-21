@@ -38,6 +38,7 @@ const SETTINGS_SOURCE_KEYS = {
       extensionPercent: 'agent.runBudget.extensionPercent',
       maxParentExtensions: 'agent.runBudget.maxParentExtensions',
       identicalToolCallThreshold: 'agent.runBudget.identicalToolCallThreshold',
+      escalation: 'agent.runBudget.escalation',
     },
     provider: 'agent.provider',
     openrouter: 'agent.openrouter',

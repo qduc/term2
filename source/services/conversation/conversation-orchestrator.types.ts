@@ -6,6 +6,7 @@ import type { Message } from '../../types/message.js';
 import type { NormalizedUsage, UsageAccumulator } from '../../utils/ai/token-usage.js';
 import type { SessionCostAccumulator, SessionCostSummary } from '../../services/cost/model-cost.js';
 import type { CodexRateLimitInfo } from './conversation-events.js';
+import type { RunBudgetEvent } from '../agent-runtime/run-budget.js';
 import type { QueueStateSnapshot } from './conversation-adapter.js';
 
 import type { ConversationLogWriter } from '../logging/conversation-log-writer.js';
@@ -33,6 +34,8 @@ export interface UIPort {
   /** Emitted after every session cost add so the status bar is reactive. */
   onCostUpdate?(summary: SessionCostSummary): void;
   onRateLimitUpdate(rateLimit: CodexRateLimitInfo): void;
+  /** Budget evidence that did not stop the run; shown as a status-bar warning. */
+  onRunBudgetNotice?(event: RunBudgetEvent): void;
   onRateLimitClear(): void;
   onResetTransient(): void;
   onResetAll(): void;

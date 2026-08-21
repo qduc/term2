@@ -101,33 +101,38 @@ export const AgentSettingsSchema = z.object({
   runBudget: z
     .object({
       maxUsdMicros: z.number().int().positive().finite().default(5_000_000),
-      maxUnpricedTokens: z.number().int().positive().finite().default(500_000),
+      maxUnpricedTokens: z.number().int().positive().finite().default(5_000_000),
       maxActiveTimeMs: z.number().int().positive().finite().default(3_600_000),
       warningHeadroomUsdMicros: z.number().int().nonnegative().finite().default(1_000_000),
-      warningHeadroomUnpricedTokens: z.number().int().nonnegative().finite().default(100_000),
+      warningHeadroomUnpricedTokens: z.number().int().nonnegative().finite().default(1_000_000),
       warningHeadroomActiveTimeMs: z.number().int().nonnegative().finite().default(900_000),
       softHeadroomUsdMicros: z.number().int().nonnegative().finite().default(250_000),
-      softHeadroomUnpricedTokens: z.number().int().nonnegative().finite().default(25_000),
+      softHeadroomUnpricedTokens: z.number().int().nonnegative().finite().default(250_000),
       softHeadroomActiveTimeMs: z.number().int().nonnegative().finite().default(300_000),
       turnBackstop: z.number().int().positive().finite().default(150),
       extensionPercent: z.number().int().positive().finite().default(50),
       maxParentExtensions: z.number().int().nonnegative().finite().default(2),
       identicalToolCallThreshold: z.number().int().positive().finite().default(3),
+      escalation: z
+        .enum(['warn', 'pause'])
+        .default('warn')
+        .describe('What a non-soft budget stage does: warn in the status bar, or pause the run for a decision'),
     })
     .default({
       maxUsdMicros: 5_000_000,
-      maxUnpricedTokens: 500_000,
+      maxUnpricedTokens: 5_000_000,
       maxActiveTimeMs: 3_600_000,
       warningHeadroomUsdMicros: 1_000_000,
-      warningHeadroomUnpricedTokens: 100_000,
+      warningHeadroomUnpricedTokens: 1_000_000,
       warningHeadroomActiveTimeMs: 900_000,
       softHeadroomUsdMicros: 250_000,
-      softHeadroomUnpricedTokens: 25_000,
+      softHeadroomUnpricedTokens: 250_000,
       softHeadroomActiveTimeMs: 300_000,
       turnBackstop: 150,
       extensionPercent: 50,
       maxParentExtensions: 2,
       identicalToolCallThreshold: 3,
+      escalation: 'warn',
     })
     .describe('Per-run staged budget and stall-detection policy'),
   // NOTE: We do NOT validate provider existence here because the provider
@@ -617,6 +622,7 @@ export interface SettingsWithSources {
       extensionPercent: SettingWithSource<number>;
       maxParentExtensions: SettingWithSource<number>;
       identicalToolCallThreshold: SettingWithSource<number>;
+      escalation: SettingWithSource<'warn' | 'pause'>;
     };
     provider: SettingWithSource<string>;
     openrouter: SettingWithSource<any>;
@@ -776,6 +782,7 @@ export const SETTING_KEYS = {
   AGENT_RUN_BUDGET_EXTENSION_PERCENT: 'agent.runBudget.extensionPercent',
   AGENT_RUN_BUDGET_MAX_PARENT_EXTENSIONS: 'agent.runBudget.maxParentExtensions',
   AGENT_RUN_BUDGET_IDENTICAL_TOOL_CALL_THRESHOLD: 'agent.runBudget.identicalToolCallThreshold',
+  AGENT_RUN_BUDGET_ESCALATION: 'agent.runBudget.escalation',
   AGENT_OPENROUTER_API_KEY: 'agent.openrouter.apiKey',
   AGENT_OPENAI_API_KEY: 'agent.openai.apiKey',
   AGENT_OPENROUTER_BASE_URL: 'agent.openrouter.baseUrl', // Sensitive - env only
@@ -907,6 +914,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_RUN_BUDGET_EXTENSION_PERCENT,
   SETTING_KEYS.AGENT_RUN_BUDGET_MAX_PARENT_EXTENSIONS,
   SETTING_KEYS.AGENT_RUN_BUDGET_IDENTICAL_TOOL_CALL_THRESHOLD,
+  SETTING_KEYS.AGENT_RUN_BUDGET_ESCALATION,
   SETTING_KEYS.AGENT_MENTOR_MODEL,
   SETTING_KEYS.AGENT_MENTOR_PROVIDER,
   SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT,
@@ -1037,18 +1045,19 @@ export const DEFAULT_SETTINGS: SettingsData = {
     maxParallelToolCalls: 3,
     runBudget: {
       maxUsdMicros: 5_000_000,
-      maxUnpricedTokens: 500_000,
+      maxUnpricedTokens: 5_000_000,
       maxActiveTimeMs: 3_600_000,
       warningHeadroomUsdMicros: 1_000_000,
-      warningHeadroomUnpricedTokens: 100_000,
+      warningHeadroomUnpricedTokens: 1_000_000,
       warningHeadroomActiveTimeMs: 900_000,
       softHeadroomUsdMicros: 250_000,
-      softHeadroomUnpricedTokens: 25_000,
+      softHeadroomUnpricedTokens: 250_000,
       softHeadroomActiveTimeMs: 300_000,
       turnBackstop: 150,
       extensionPercent: 50,
       maxParentExtensions: 2,
       identicalToolCallThreshold: 3,
+      escalation: 'warn',
     },
     provider: 'openai',
     openrouter: {

@@ -70,6 +70,7 @@ const mocks = vi.hoisted(() => ({
     setIntentHost: vi.fn(),
   },
   conversationState: {
+    pendingApproval: null as { toolName?: string; checkIn?: string } | null,
     waitingForApproval: false,
     waitingForRejectionReason: false,
     waitingForAskUserAnswer: false,
@@ -140,7 +141,7 @@ vi.mock('./hooks/use-conversation.js', () => ({
     messages: [],
     lastUsage: null,
     lastCodexRateLimit: null,
-    pendingApproval: null,
+    pendingApproval: mocks.conversationState.pendingApproval,
     waitingForApproval: mocks.conversationState.waitingForApproval,
     waitingForRejectionReason: mocks.conversationState.waitingForRejectionReason,
     waitingForAskUserAnswer: mocks.conversationState.waitingForAskUserAnswer,
@@ -356,6 +357,7 @@ beforeEach(() => {
   mocks.registerSandboxNetworkApprovalHandler.mockClear();
   mocks.menuController.open.mockReset();
   mocks.menuController.setIntentHost.mockReset();
+  mocks.conversationState.pendingApproval = null;
   mocks.conversationState.waitingForApproval = false;
   mocks.conversationState.waitingForRejectionReason = false;
   mocks.conversationState.waitingForAskUserAnswer = false;
@@ -479,6 +481,45 @@ describe('App orchestration', () => {
     expect(mocks.submitConversationTurn).toHaveBeenCalledWith({ text: 'needs review', images: [] });
     expect(mocks.setWaitingForRejectionReason).not.toHaveBeenCalled();
     expect(mocks.replaceInput).not.toHaveBeenCalled();
+    expect(mocks.handleApprovalDecision).not.toHaveBeenCalled();
+  });
+
+  it.sequential('stops a run-budget check-in without asking for a rejection reason', async () => {
+    // The check-in borrows the approval transport but has no tool to deny, and
+    // the reason composer refuses an empty submit — prompting "Why?" here left
+    // Stop unreachable without typing text nothing reads.
+    mocks.conversationState.pendingApproval = { checkIn: 'run_budget' };
+    mocks.conversationState.waitingForApproval = true;
+    const services = createServices();
+
+    await renderInAct(
+      <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+    );
+
+    await act(async () => {
+      mocks.bottomAreaProps.onReject();
+      await Promise.resolve();
+    });
+
+    expect(mocks.handleApprovalDecision).toHaveBeenCalledWith('n', undefined);
+    expect(mocks.setWaitingForRejectionReason).not.toHaveBeenCalled();
+  });
+
+  it.sequential('still asks for a rejection reason when denying a real tool call', async () => {
+    mocks.conversationState.pendingApproval = { toolName: 'shell' };
+    mocks.conversationState.waitingForApproval = true;
+    const services = createServices();
+
+    await renderInAct(
+      <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+    );
+
+    await act(async () => {
+      mocks.bottomAreaProps.onReject();
+      await Promise.resolve();
+    });
+
+    expect(mocks.setWaitingForRejectionReason).toHaveBeenCalledWith(true);
     expect(mocks.handleApprovalDecision).not.toHaveBeenCalled();
   });
 

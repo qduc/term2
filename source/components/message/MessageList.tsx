@@ -13,6 +13,8 @@ type Props<T extends MessageLike = Message> = {
   settingsService?: SettingsService;
   isShellMode?: boolean;
   restoredStaticMessageIds?: readonly string[];
+  /** The turn is held at an approval or check-in prompt, so no tool is executing. */
+  turnPaused?: boolean;
 };
 
 type MessageLike = {
@@ -237,6 +239,7 @@ const MessageList = <T extends MessageLike = Message>({
   settingsService,
   isShellMode = false,
   restoredStaticMessageIds = EMPTY_RESTORED_STATIC_MESSAGE_IDS,
+  turnPaused = false,
 }: Props<T>) => {
   const { stdout } = useStdout();
   const terminalColumns = stdout.columns || 80;
@@ -439,6 +442,7 @@ const MessageList = <T extends MessageLike = Message>({
             autoApprovedByLlm={msg.autoApprovedByLlm}
             hadApproval={msg.hadApproval}
             displayMode={displayMode}
+            awaitingDecision={turnPaused}
           />
         ) : msg.sender === 'subagent' ? (
           <SubagentActivityMessage msg={msg} />

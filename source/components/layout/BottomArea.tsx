@@ -17,6 +17,7 @@ import type { LoggingService } from '../../services/logging/logging-service.js';
 import type { HistoryService } from '../../services/history-service.js';
 import type { SSHInfo } from '../../services/shell/shell-interaction-session.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
+import type { RunBudgetEvent } from '../../services/agent-runtime/run-budget.js';
 import type { CodexRateLimitInfo } from '../../services/conversation/conversation-events.js';
 import type { GrokCreditUsage } from '../../providers/grok-credit-usage.js';
 import type { PendingApproval } from '../../contracts/conversation.js';
@@ -51,6 +52,7 @@ export type BottomAreaProps = {
   isShellMode?: boolean;
   lastUsage?: NormalizedUsage | null;
   lastCodexRateLimit?: CodexRateLimitInfo | null;
+  runBudgetNotice?: RunBudgetEvent | null;
   grokCreditUsage?: GrokCreditUsage | null;
   onSubmit: (value: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) => Promise<void>;
   onRejectionReasonInputReady?: () => void;
@@ -141,6 +143,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   sshInfo,
   lastUsage,
   lastCodexRateLimit,
+  runBudgetNotice,
   grokCreditUsage,
   onSettingChange,
   onSystemMessage,
@@ -428,6 +431,7 @@ const BottomArea: FC<BottomAreaProps> = ({
         sshInfo={sshInfo}
         lastUsage={lastUsage}
         lastCodexRateLimit={lastCodexRateLimit}
+        runBudgetNotice={runBudgetNotice}
         grokCreditUsage={grokCreditUsage}
         largeUncachedWarning={largeUncachedWarning}
         hasPendingConfirmation={

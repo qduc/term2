@@ -14,6 +14,7 @@
 
 import type { NormalizedUsage } from '../utils/ai/token-usage.js';
 import type { CodexRateLimitInfo } from '../services/conversation/conversation-events.js';
+import type { RunBudgetEvent } from '../services/agent-runtime/run-budget.js';
 import type { PendingApproval } from '../contracts/conversation.js';
 import type { QueuePauseReason } from '../services/queue/queue-controller.js';
 import type { PendingInteractionSnapshot } from '../services/session/pending-interaction-state.js';
@@ -82,6 +83,8 @@ export interface ConversationUIState {
   // Usage (included here so reset_all can clear them atomically)
   lastUsage: NormalizedUsage | null;
   lastCodexRateLimit: CodexRateLimitInfo | null;
+  /** Latest non-soft run-budget evidence, shown as a status-bar warning. */
+  runBudgetNotice: RunBudgetEvent | null;
   /** Reactive session cost summary, mirrored from the session cost accumulator. */
   costSummary: SessionCostSummary | null;
 
@@ -145,6 +148,7 @@ export type ConversationUIAction =
   | { type: 'usage/cleared' }
   | { type: 'cost/updated'; summary: SessionCostSummary }
   | { type: 'rate_limit/updated'; rateLimit: CodexRateLimitInfo }
+  | { type: 'run_budget/noticed'; event: RunBudgetEvent }
   | { type: 'rate_limit/cleared' }
 
   // --- Queue state ---
@@ -177,6 +181,7 @@ export function createInitialUIState(initialUsage: NormalizedUsage | null): Conv
     toolCallStreamingInfo: null,
     lastUsage: initialUsage,
     lastCodexRateLimit: null,
+    runBudgetNotice: null,
     costSummary: null,
     queueSnapshot: null,
     pendingQueuedMessages: [],
@@ -507,6 +512,9 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
 
     case 'cost/updated':
       return { ...state, costSummary: action.summary };
+
+    case 'run_budget/noticed':
+      return { ...state, runBudgetNotice: action.event };
 
     case 'rate_limit/updated':
       return { ...state, lastCodexRateLimit: action.rateLimit };

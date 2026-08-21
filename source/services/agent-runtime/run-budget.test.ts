@@ -17,6 +17,7 @@ const policy = {
   extensionPercent: 50,
   maxParentExtensions: 2,
   identicalToolCallThreshold: 3,
+  escalation: 'pause',
 } as const;
 
 const cost = (input: { requestId: string; usdMicros?: number; usage?: NormalizedUsage }): ModelRequestCost => ({
@@ -48,6 +49,44 @@ describe('RunBudget', () => {
         evidence: expect.objectContaining({ dimension: 'usd' }),
       }),
     );
+  });
+
+  it('discounts cache reads to a tenth of a fresh token', () => {
+    // A cache read is roughly an order of magnitude cheaper than fresh input, so
+    // charging it at face value made the cheapest sessions exhaust the envelope
+    // fastest.
+    const budget = new RunBudget(policy, 0);
+
+    budget.evaluate({
+      now: 10,
+      turns: 1,
+      costRecords: [
+        cost({
+          requestId: 'cached',
+          usage: { total_tokens: 1000, prompt_tokens: 900, completion_tokens: 100, cache_read_tokens: 800 },
+        }),
+      ],
+    });
+
+    // 1000 total - 800 cache reads charged at 1/10 => 1000 - 720
+    expect(budget.snapshot(10).unpricedTokens).toBe(280);
+  });
+
+  it('exempts subscription providers from the unpriced-token budget', () => {
+    // Grok and Codex are unpriced because no per-token rate applies at all, so
+    // their tokens are not a spend proxy for anything.
+    const budget = new RunBudget(policy, 0);
+
+    budget.evaluate({
+      now: 10,
+      turns: 1,
+      costRecords: [
+        { ...cost({ requestId: 'grok', usage: { total_tokens: 900 } }), provider: 'grok' },
+        { ...cost({ requestId: 'byok', usage: { total_tokens: 100 } }), provider: 'some-gateway' },
+      ],
+    });
+
+    expect(budget.snapshot(10).unpricedTokens).toBe(100);
   });
 
   it('excludes approval-paused wall time', () => {

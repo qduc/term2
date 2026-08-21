@@ -270,7 +270,7 @@ it('ask_user/advance_to_next updates index and clears waiting', () => {
 it('max_turns/approved clears approval and starts processing', () => {
   const prev = conversationUIReducer(createInitialUIState(null), {
     type: 'approval/requested',
-    approval: { ...approvalFixture, isMaxTurnsPrompt: true },
+    approval: { ...approvalFixture, checkIn: 'max_turns' as const },
   });
   const next = conversationUIReducer(prev, { type: 'max_turns/approved' });
   const flags = getConversationUIFlags(next);
@@ -282,7 +282,7 @@ it('max_turns/approved clears approval and starts processing', () => {
 it('max_turns/declined clears approval without starting processing', () => {
   const prev = conversationUIReducer(createInitialUIState(null), {
     type: 'approval/requested',
-    approval: { ...approvalFixture, isMaxTurnsPrompt: true },
+    approval: { ...approvalFixture, checkIn: 'max_turns' as const },
   });
   const next = conversationUIReducer(prev, { type: 'max_turns/declined' });
   const flags = getConversationUIFlags(next);

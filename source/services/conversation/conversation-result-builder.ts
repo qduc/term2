@@ -1,7 +1,13 @@
 import path from 'node:path';
 import type { ConversationEvent } from './conversation-events.js';
 import { ModelBehaviorError } from '../../contracts/model-errors.js';
-import type { ApprovalRequiredTerminal, ConversationTerminal, LLMAdvisory } from '../../contracts/conversation.js';
+import type {
+  ApprovalCheckInKind,
+  ApprovalRequiredTerminal,
+  ConversationTerminal,
+  LLMAdvisory,
+} from '../../contracts/conversation.js';
+import { CHECK_IN_TOOL_NAME } from '../../contracts/conversation.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { ModelRequestCost } from '../../services/cost/model-cost.js';
@@ -79,6 +85,7 @@ export function createApprovalRequiredTerminal(options: {
   outsideWorkspaceEdit?: { path: string; folder: string };
   postExecute?: PostExecuteApprovalToken;
   runBudgetEvent?: import('../agent-runtime/run-budget.js').RunBudgetEvent;
+  checkIn?: ApprovalCheckInKind;
   usage?: NormalizedUsage;
   costRecords?: ModelRequestCost[];
 }): ApprovalRequiredTerminal {
@@ -96,6 +103,7 @@ export function createApprovalRequiredTerminal(options: {
       ...(options.outsideWorkspaceEdit ? { outsideWorkspaceEdit: options.outsideWorkspaceEdit } : {}),
       ...(options.postExecute ? { postExecute: options.postExecute } : {}),
       ...(options.runBudgetEvent ? { runBudgetEvent: options.runBudgetEvent } : {}),
+      ...(options.checkIn ? { checkIn: options.checkIn } : {}),
     },
     ...(options.usage ? { usage: options.usage } : {}),
     ...(options.costRecords && options.costRecords.length > 0 ? { costRecords: options.costRecords } : {}),
@@ -142,7 +150,8 @@ export async function buildConversationResult(
       kind: 'approval_required',
       result: createApprovalRequiredTerminal({
         agentName: 'System',
-        toolName: 'max_turns_exceeded',
+        toolName: CHECK_IN_TOOL_NAME,
+        checkIn: 'run_budget',
         argumentsText: formatRunBudgetInteraction(runBudgetInteraction.event),
         rawInterruption: runBudgetInteraction,
         usage: usage ?? extractUsage(result),
@@ -404,6 +413,7 @@ export const toTerminalEvent = (result: ConversationTerminal): ConversationEvent
         ...(result.approval.deniedRead ? { deniedRead: result.approval.deniedRead } : {}),
         ...(result.approval.dockerHostControl ? { dockerHostControl: true } : {}),
         ...(result.approval.runBudgetEvent ? { runBudgetEvent: result.approval.runBudgetEvent } : {}),
+        ...(result.approval.checkIn ? { checkIn: result.approval.checkIn } : {}),
       },
       ...(result.usage ? { usage: result.usage } : {}),
       ...(result.costRecords && result.costRecords.length > 0 ? { costRecords: result.costRecords } : {}),

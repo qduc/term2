@@ -256,6 +256,8 @@ type RunState = {
   runBudget?: RunBudget;
   onRunBudgetEvent?: (event: RunBudgetEvent) => void;
   wrapUpOnCriticalRunBudget?: boolean;
+  /** Copied from the run-budget policy: 'warn' never pauses the run. */
+  runBudgetEscalation?: 'warn' | 'pause';
   criticalWrapUpPending?: boolean;
   criticalWrapUpDispatched?: boolean;
   /** Main-agent evidence that must be resolved before another request or tool dispatch. */
@@ -584,6 +586,7 @@ export class ApplicationRunLoop {
             runBudget: new RunBudget(options.runBudget),
             onRunBudgetEvent: options.onRunBudgetEvent,
             wrapUpOnCriticalRunBudget: options.wrapUpOnCriticalRunBudget,
+            runBudgetEscalation: options.runBudget.escalation,
           }
         : {}),
       automaticCompactionsThisRun: 0,
@@ -634,6 +637,7 @@ export class ApplicationRunLoop {
     if (!state.runBudget && options.runBudget) {
       state.runBudget = new RunBudget(options.runBudget);
     }
+    if (options.runBudget) state.runBudgetEscalation = options.runBudget.escalation;
     if (options.onRunBudgetEvent) state.onRunBudgetEvent = options.onRunBudgetEvent;
     if (options.wrapUpOnCriticalRunBudget) state.wrapUpOnCriticalRunBudget = true;
     // Response IDs are provider-owned. A handle from before provenance was
@@ -1544,6 +1548,7 @@ export class ApplicationRunLoop {
     if (
       !state.wrapUpOnCriticalRunBudget &&
       !state.pendingRunBudgetInteraction &&
+      state.runBudgetEscalation !== 'warn' &&
       this.#requiresHumanBudgetDecision(event)
     ) {
       state.pendingRunBudgetInteraction = { type: 'run_budget_interaction', event };

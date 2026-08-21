@@ -58,6 +58,7 @@ const mocks = vi.hoisted(() => ({
   slashCommands: [] as any[],
   slashActionReturnValue: undefined as boolean | void | undefined,
   clearConversationCallback: null as null | (() => Promise<void>),
+  requestModeSwitchConfirmCallback: null as null | ((pending: any) => void),
   messageListMounts: 0,
   inputValue: '',
   stdoutWrite: vi.fn(),
@@ -213,11 +214,14 @@ vi.mock('./hooks/use-app-commands.js', () => ({
   useAppCommands: ({
     clearConversation,
     onSkillSelected,
+    requestModeSwitchConfirm,
   }: {
     clearConversation: () => Promise<void>;
     onSkillSelected: (skill: any) => void;
+    requestModeSwitchConfirm?: (pending: any) => void;
   }) => {
     mocks.clearConversationCallback = clearConversation;
+    mocks.requestModeSwitchConfirmCallback = requestModeSwitchConfirm ?? null;
     if (mocks.selectedSkill) {
       onSkillSelected(mocks.selectedSkill);
     }
@@ -857,6 +861,80 @@ describe('App orchestration', () => {
         vi.useRealTimers();
         mocks.conversationState.isProcessing = false;
       }
+    });
+  });
+
+  describe('Mode switch confirmation flow', () => {
+    it.sequential('handles mode switch confirmation by clearing conversation and enabling mode', async () => {
+      const services = createServices();
+      services.settingsService.get = vi.fn((key: string) => (key === 'app.planMode' ? true : false));
+      services.settingsService.set = vi.fn();
+
+      await renderInAct(
+        <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+      );
+
+      expect(mocks.requestModeSwitchConfirmCallback).not.toBeNull();
+
+      // Trigger mode switch confirm request
+      await act(async () => {
+        mocks.requestModeSwitchConfirmCallback!({
+          modeKey: 'app.liteMode',
+          modeLabel: 'Lite',
+          targetValue: true,
+          enabledDetail: ' - using minimal prompt',
+        });
+      });
+
+      expect(mocks.bottomAreaProps.pendingModeSwitch).toEqual({
+        modeKey: 'app.liteMode',
+        modeLabel: 'Lite',
+        targetValue: true,
+        enabledDetail: ' - using minimal prompt',
+      });
+
+      // Confirm
+      await act(async () => {
+        await mocks.bottomAreaProps.onModeSwitchConfirm();
+      });
+
+      expect(mocks.clearConversation).toHaveBeenCalled();
+      expect(services.settingsService.set).toHaveBeenCalledWith('app.planMode', false);
+      expect(services.settingsService.set).toHaveBeenCalledWith('app.liteMode', true);
+      expect(mocks.addSystemMessage).toHaveBeenCalledWith('Welcome to term²! Type a message to start chatting.');
+      expect(mocks.addSystemMessage).toHaveBeenCalledWith('Lite mode enabled - using minimal prompt');
+      expect(mocks.bottomAreaProps.pendingModeSwitch).toBeNull();
+    });
+
+    it.sequential('handles mode switch decline without clearing conversation or changing settings', async () => {
+      const services = createServices();
+      services.settingsService.get = vi.fn(() => false);
+      services.settingsService.set = vi.fn();
+
+      await renderInAct(
+        <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+      );
+
+      // Trigger mode switch confirm request
+      await act(async () => {
+        mocks.requestModeSwitchConfirmCallback!({
+          modeKey: 'app.orchestratorMode',
+          modeLabel: 'Orchestrator',
+          targetValue: true,
+          enabledDetail: ' - tool-backed work must use subagents',
+        });
+      });
+
+      expect(mocks.bottomAreaProps.pendingModeSwitch).not.toBeNull();
+
+      // Decline
+      await act(async () => {
+        mocks.bottomAreaProps.onModeSwitchDecline();
+      });
+
+      expect(mocks.clearConversation).not.toHaveBeenCalled();
+      expect(services.settingsService.set).not.toHaveBeenCalled();
+      expect(mocks.bottomAreaProps.pendingModeSwitch).toBeNull();
     });
   });
 });

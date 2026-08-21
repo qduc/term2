@@ -689,6 +689,25 @@ it.sequential(
   },
 );
 
+it.sequential('BottomArea shows mode switch confirmation prompt when pendingModeSwitch is present', async () => {
+  const { lastFrame, unmount } = await renderBottomArea({
+    ...baseProps,
+    pendingModeSwitch: {
+      modeKey: 'app.liteMode',
+      modeLabel: 'Lite',
+      targetValue: true,
+    },
+  });
+  const output = lastFrame() ?? '';
+  expect(output.includes('Switching to Lite mode requires clearing the current session.')).toBe(true);
+  expect(output.includes('Clear session and switch to Lite mode?')).toBe(true);
+  expect(output.includes('Yes')).toBe(true);
+  expect(output.includes('❯ No')).toBe(true);
+  act(() => {
+    unmount();
+  });
+});
+
 it.sequential('BottomArea shows select model prompt when handoffState is selecting_model', async () => {
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,

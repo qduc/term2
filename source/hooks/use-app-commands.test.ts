@@ -180,12 +180,14 @@ const TestHookWrapper = ({
   onApply,
   messages = [],
   onSystemMessage,
+  requestModeSwitchConfirm,
 }: {
   settings: Map<string, any>;
   onHookResult: (res: any) => void;
   onApply?: (key: string, value: any) => void;
   messages?: Message[];
   onSystemMessage?: (text: string) => void;
+  requestModeSwitchConfirm?: (pending: any) => void;
 }) => {
   const settingsService = {
     get: (key: string) => settings.get(key) ?? false,
@@ -211,6 +213,7 @@ const TestHookWrapper = ({
     retryLastToolOutput: async () => false,
     skillsService: { getAvailableSkills: () => [] } as any,
     onSkillSelected: () => {},
+    requestModeSwitchConfirm,
   });
 
   onHookResult(hookResult);
@@ -373,6 +376,66 @@ it.sequential('useAppCommands blocks /orchestrator when the session has non-syst
   expect(systemMessages.some((message) => message.includes('/clear'))).toBe(true);
 });
 
+it.sequential('useAppCommands requests confirmation for /orchestrator when history exists', async () => {
+  const settings = new Map<string, any>();
+  let requestedPending: any = null;
+  let hookResult: any;
+
+  await renderInAct(
+    React.createElement(TestHookWrapper, {
+      settings,
+      messages: [{ id: 'msg-1', sender: 'user', text: 'inspect this' }],
+      requestModeSwitchConfirm: (pending) => {
+        requestedPending = pending;
+      },
+      onHookResult: (res) => {
+        hookResult = res;
+      },
+    }),
+  );
+
+  await act(async () => {
+    hookResult.slashCommands.find((command: any) => command.name === 'orchestrator').action();
+  });
+
+  expect(requestedPending).toEqual({
+    modeKey: 'app.orchestratorMode',
+    modeLabel: 'Orchestrator',
+    targetValue: true,
+    enabledDetail: ' - tool-backed work must use subagents',
+  });
+});
+
+it.sequential('useAppCommands requests confirmation for /lite when history exists', async () => {
+  const settings = new Map<string, any>();
+  let requestedPending: any = null;
+  let hookResult: any;
+
+  await renderInAct(
+    React.createElement(TestHookWrapper, {
+      settings,
+      messages: [{ id: 'msg-1', sender: 'user', text: 'inspect this' }],
+      requestModeSwitchConfirm: (pending) => {
+        requestedPending = pending;
+      },
+      onHookResult: (res) => {
+        hookResult = res;
+      },
+    }),
+  );
+
+  await act(async () => {
+    hookResult.slashCommands.find((command: any) => command.name === 'lite').action();
+  });
+
+  expect(requestedPending).toEqual({
+    modeKey: 'app.liteMode',
+    modeLabel: 'Lite',
+    targetValue: true,
+    enabledDetail: ' - using minimal prompt, no codebase context',
+  });
+});
+
 it.sequential(
   'useAppCommands blocks orchestrator settings changes when the session has non-system history',
   async () => {
@@ -397,6 +460,39 @@ it.sequential(
 
     expect(settings.get('app.orchestratorMode')).toBeFalsy();
     expect(systemMessages.some((message) => message.includes('/clear'))).toBe(true);
+  },
+);
+
+it.sequential(
+  'useAppCommands requests confirmation for orchestrator settings changes when history exists',
+  async () => {
+    const settings = new Map<string, any>();
+    let requestedPending: any = null;
+    let hookResult: any;
+
+    await renderInAct(
+      React.createElement(TestHookWrapper, {
+        settings,
+        messages: [{ id: 'msg-1', sender: 'user', text: 'inspect this' }],
+        requestModeSwitchConfirm: (pending) => {
+          requestedPending = pending;
+        },
+        onHookResult: (res) => {
+          hookResult = res;
+        },
+      }),
+    );
+
+    await act(async () => {
+      hookResult.slashCommands.find((command: any) => command.name === 'settings').action('app.orchestratorMode true');
+    });
+
+    expect(requestedPending).toEqual({
+      modeKey: 'app.orchestratorMode',
+      modeLabel: 'Orchestrator',
+      targetValue: true,
+      enabledDetail: ' - tool-backed work must use subagents',
+    });
   },
 );
 

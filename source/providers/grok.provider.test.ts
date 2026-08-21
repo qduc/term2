@@ -127,3 +127,37 @@ describe('grok request headers', () => {
     expect(upstream).not.toHaveBeenCalled();
   });
 });
+
+// xAI's caching docs: "Always set `x-grok-conv-id` (or `prompt_cache_key` for
+// Responses API)". The header pins a conversation to one server, and cache
+// entries live per server — omit it and a request can land on a server that
+// does not hold the prefix. We were sending `x-grok-session-id`, which xAI does
+// not document, so cache affinity was luck.
+it('sends the conversation id header xAI uses to pin prompt-cache affinity', async () => {
+  const manager = new GrokTokenManager({ authPath: tokenFile() });
+  const seen: Array<{ url: any; init: any }> = [];
+  const upstream = vi.fn(async (url: any, init: any) => {
+    seen.push({ url, init });
+    return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  });
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = upstream as any;
+  try {
+    const grokFetch = buildGrokFetch(
+      {
+        settingsService: { get: () => undefined } as any,
+        loggingService: silentLogging,
+        sessionContextService: { getContext: () => ({ sessionId: 'session-abc' }) } as any,
+      } as any,
+      manager,
+      'grok-4.6',
+    );
+    await grokFetch(`${GROK_BASE_URL}/chat/completions`, { method: 'POST', body: '{}' });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  const headers = new Headers(seen[0].init.headers);
+  expect(headers.get('x-grok-conv-id')).toBe('session-abc');
+});

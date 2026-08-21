@@ -58,7 +58,10 @@ function grokHeadersMiddleware(sessionContextService?: ISessionContextService): 
       'x-grok-client-version': GROK_CLIENT_VERSION,
       'x-grok-client-identifier': 'term2',
       'User-Agent': `term2/${installationVersion} (${os.platform()} ${os.release()}; ${os.arch()})`,
-      ...(sessionId ? { 'x-grok-session-id': sessionId } : {}),
+      // xAI pins a conversation to one server by this header, and prompt-cache
+      // entries live per server. Their caching docs say to always set it; the
+      // undocumented `x-grok-session-id` we used to send bought no affinity.
+      ...(sessionId ? { 'x-grok-conv-id': sessionId, 'x-grok-session-id': sessionId } : {}),
     });
     return next({ url: ctx.url, init: { ...ctx.init, headers } });
   };

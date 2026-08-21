@@ -146,6 +146,12 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
         item: rawContinuityMetadata,
       });
     }
+    // A choice may carry prose and tool calls together. Emitting only the tool
+    // calls erased what the assistant told the user from history, so every
+    // later request replayed the turn as a bare `content: null` tool call.
+    if (text || !calls.size) {
+      output.push({ type: 'message', content: [{ type: 'text', text }] });
+    }
     if (calls.size) {
       output.push(
         ...[...calls].map(([index, call]) => ({
@@ -155,8 +161,6 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
           arguments: call.arguments,
         })),
       );
-    } else {
-      output.push({ type: 'message', content: [{ type: 'text', text }] });
     }
 
     yield {
@@ -369,6 +373,12 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input'], prov
       const previous = messages[messages.length - 1];
       if (previous?.role === 'assistant' && Array.isArray(previous.tool_calls)) {
         previous.tool_calls.push(toolCall);
+      } else if (previous?.role === 'assistant' && previous.content != null) {
+        // Prose the same turn produced, immediately before its tool calls: a
+        // user or tool message would separate two different turns. One turn
+        // must stay one assistant message, because `attachOpaquePayloads` pairs
+        // the i-th continuity payload with the i-th assistant message.
+        previous.tool_calls = [toolCall];
       } else {
         const message = {
           role: 'assistant',

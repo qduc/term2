@@ -32,6 +32,16 @@
 export const OPENAI_RESPONSES_OPAQUE_TAG = 'openai';
 
 /**
+ * Grok speaks the Responses wire shape but is a different vendor, so its
+ * encrypted reasoning and native items are not interchangeable with OpenAI's.
+ * The lane comment above says the tag names the wire shape rather than the
+ * provider; that held only while OpenAI and Codex were the sole Responses
+ * providers, both of them OpenAI. A second vendor on the same shape needs its
+ * own lane, or a provider switch would hand one vendor another's ciphertext.
+ */
+export const GROK_RESPONSES_OPAQUE_TAG = 'grok';
+
+/**
  * Conversations recorded before Chat Completions opaque items carried the
  * configured provider name were tagged with the shared type. Items from that
  * window still replay on any openai-compatible provider; a genuinely foreign

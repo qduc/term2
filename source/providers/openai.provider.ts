@@ -33,6 +33,7 @@ const OPENAI_CAPABILITIES = {
   supportsConversationChaining: true,
   supportsContextCompaction: true,
   supportsPromptCacheKey: true,
+  promptCacheKeyPlacement: 'responses-extra-body' as const,
   usesStrictToolSchema: true,
   nativePatchModelPrefixes: ['gpt-5.1'],
 };

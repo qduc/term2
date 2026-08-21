@@ -8,6 +8,8 @@ import { injectHeaders, installationVersion } from './fetch/logging-middleware.j
 import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session/session-context-service.js';
 import type { ISessionContextService } from '../services/service-interfaces.js';
 import { OpenAIChatCompletionsModel } from './openai-chat-completions-model.js';
+import { OpenAIResponsesModelWithPromptCacheKey } from './openai-responses-model.js';
+import { GROK_RESPONSES_OPAQUE_TAG } from './provider-opaque-compatibility.js';
 import { applyClientResponseNormalization, type CostTrailerCapture } from './openai-compatible-response-normalizer.js';
 import { RetryingModel } from './retrying-model.js';
 import { GrokTokenManager } from './grok-auth.js';
@@ -28,12 +30,33 @@ export const DEFAULT_GROK_MODEL = 'grok-4.6';
  */
 export const GROK_CLIENT_VERSION = '1.0.5';
 
+/**
+ * The proxy serves `/v1/responses`, but as a Zero Data Retention org: a
+ * `previous_response_id` request returns 404 ("Previous response cannot be used
+ * for this organization due to Zero Data Retention") and `store: true` comes
+ * back downgraded to `store: false`. So chaining and server-side compaction
+ * stay off however capable the wire format is; what the Responses lane buys
+ * here is typed items and encrypted reasoning, not smaller requests.
+ *
+ * `prompt_cache_key` is the Responses-API spelling of the `x-grok-conv-id`
+ * server-affinity hint, which is how xAI's caching docs say to hold a prefix.
+ */
 const GROK_CAPABILITIES = {
   supportsConversationChaining: false,
   supportsContextCompaction: false,
-  supportsPromptCacheKey: false,
+  supportsPromptCacheKey: true,
+  promptCacheKeyPlacement: 'responses-extra-body',
   usesStrictToolSchema: false,
 } as const;
+
+/**
+ * Emergency fallback to the previous chat-completions lane. Set
+ * `TERM2_GROK_API=chat` if the Responses path misbehaves against a proxy
+ * change; there is no reason to use it otherwise.
+ */
+function grokUsesChatCompletions(): boolean {
+  return (process.env.TERM2_GROK_API || '').trim().toLowerCase() === 'chat';
+}
 
 function grokAuthMiddleware(
   tokenManager: GrokTokenManager,
@@ -131,7 +154,20 @@ export function createGrokStreamedModel(model: string, deps: ProviderDeps): Stre
   const costCapture: CostTrailerCapture = {};
   applyClientResponseNormalization(openAIClient, deps.loggingService, costCapture);
 
-  return new RetryingModel(new OpenAIChatCompletionsModel(openAIClient, resolvedModel, costCapture, 'grok'), {
+  const inner = grokUsesChatCompletions()
+    ? new OpenAIChatCompletionsModel(openAIClient, resolvedModel, costCapture, 'grok')
+    : // HTTP only: the proxy exposes no Responses WebSocket, and chaining --
+      // the reason that transport exists -- is refused for this org anyway.
+      new OpenAIResponsesModelWithPromptCacheKey(
+        openAIClient,
+        resolvedModel,
+        deps.requestCapture,
+        GROK_CAPABILITIES.supportsContextCompaction,
+        deps.contextCompactionSessionState,
+        GROK_RESPONSES_OPAQUE_TAG,
+      );
+
+  return new RetryingModel(inner, {
     retryAttempts,
     loggingService: deps.loggingService,
     onRetry: deps.onRetry,

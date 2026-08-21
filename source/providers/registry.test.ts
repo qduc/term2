@@ -80,6 +80,7 @@ it('openai provider exposes capabilities without requiring credentials', () => {
     supportsContextCompaction: true,
     usesStrictToolSchema: true,
     supportsPromptCacheKey: true,
+    promptCacheKeyPlacement: 'responses-extra-body',
     nativePatchModelPrefixes: ['gpt-5.1'],
   });
 });

@@ -5,9 +5,11 @@ import ApplicationInputSurface from '../input/ApplicationInputSurface.js';
 import StatusBar from './StatusBar.js';
 import HandoffConfirmationPrompt from '../prompt/HandoffConfirmationPrompt.js';
 import StandardModeConfirmationPrompt from '../prompt/StandardModeConfirmationPrompt.js';
+import ModeSwitchConfirmationPrompt from '../prompt/ModeSwitchConfirmationPrompt.js';
 import LargeUncachedConfirmationPrompt from '../prompt/LargeUncachedConfirmationPrompt.js';
 import InputSurgeConfirmationPrompt from '../prompt/InputSurgeConfirmationPrompt.js';
 import QueuePausedPrompt from '../prompt/QueuePausedPrompt.js';
+import type { PendingModeSwitch } from '../../commands/mode-commands.js';
 import type { HandoffState } from '../../hooks/use-handoff-flow.js';
 import type { SlashCommand } from '../../slash-commands.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
@@ -68,6 +70,9 @@ export type BottomAreaProps = {
   onHandoffCancel?: () => void;
   onStandardModeConfirm?: () => void;
   onStandardModeDecline?: () => void;
+  pendingModeSwitch?: PendingModeSwitch | null;
+  onModeSwitchConfirm?: () => void;
+  onModeSwitchDecline?: () => void;
   largeUncachedWarning?: import('../../services/large-uncached-input-guard.js').LargeUncachedInputDecision | null;
   pendingLargeUncachedTurn?: UserTurn | null;
   pendingLargeUncachedTokens?: number;
@@ -142,6 +147,9 @@ const BottomArea: FC<BottomAreaProps> = ({
   onHandoffCancel,
   onStandardModeConfirm,
   onStandardModeDecline,
+  pendingModeSwitch,
+  onModeSwitchConfirm,
+  onModeSwitchDecline,
   largeUncachedWarning,
   pendingLargeUncachedTurn,
   pendingLargeUncachedTokens = 0,
@@ -223,6 +231,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   // source/lib/input-owner.ts.
   const inputOwner = deriveInputOwner({
     handoffStage: handoffState?.stage ?? null,
+    pendingModeSwitch,
     pendingSurgeTurn,
     pendingLargeUncachedTurn,
     waitingForApproval,
@@ -237,6 +246,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   });
   const showHandoffConfirm = inputOwner.kind === 'handoff-confirm';
   const showStandardModeConfirm = inputOwner.kind === 'standard-mode-confirm';
+  const showModeSwitchConfirm = inputOwner.kind === 'mode-switch-confirm';
   const showSurgePrompt = inputOwner.kind === 'input-surge';
   const showLargeUncachedPrompt = inputOwner.kind === 'large-uncached';
   // Ask-user answers are typed in the composer, so inputOwner intentionally
@@ -253,7 +263,11 @@ const BottomArea: FC<BottomAreaProps> = ({
   useEffect(() => {
     if (
       backgroundTaskManagerOpen &&
-      (showHandoffConfirm || showStandardModeConfirm || showSurgePrompt || showLargeUncachedPrompt)
+      (showHandoffConfirm ||
+        showStandardModeConfirm ||
+        showModeSwitchConfirm ||
+        showSurgePrompt ||
+        showLargeUncachedPrompt)
     ) {
       onBackgroundTaskManagerOpenChange(false);
     }
@@ -262,6 +276,7 @@ const BottomArea: FC<BottomAreaProps> = ({
     onBackgroundTaskManagerOpenChange,
     showHandoffConfirm,
     showLargeUncachedPrompt,
+    showModeSwitchConfirm,
     showStandardModeConfirm,
     showSurgePrompt,
   ]);
@@ -283,6 +298,14 @@ const BottomArea: FC<BottomAreaProps> = ({
             onConfirm={onStandardModeConfirm || (() => {})}
             onDecline={onStandardModeDecline || (() => {})}
             onCancel={onHandoffCancel || (() => {})}
+          />
+        ) : showModeSwitchConfirm && pendingModeSwitch ? (
+          <ModeSwitchConfirmationPrompt
+            modeLabel={pendingModeSwitch.modeLabel}
+            targetValue={pendingModeSwitch.targetValue ?? true}
+            onConfirm={onModeSwitchConfirm || (() => {})}
+            onDecline={onModeSwitchDecline || (() => {})}
+            onCancel={onModeSwitchDecline || (() => {})}
           />
         ) : showSurgePrompt ? (
           <InputSurgeConfirmationPrompt

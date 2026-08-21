@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import type { SlashCommand } from '../slash-commands.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
 import type { UserTurn } from '../types/user-turn.js';
-import { useModeHelpers, createModeToggleCommand } from '../commands/mode-commands.js';
+import { useModeHelpers, createModeToggleCommand, type PendingModeSwitch } from '../commands/mode-commands.js';
 import { createCopySlashCommand } from '../commands/copy-command.js';
 import { createUsageSlashCommand } from '../commands/usage-command.js';
 import { createClearSlashCommand } from '../commands/clear-command.js';
@@ -45,6 +45,7 @@ interface UseAppCommandsProps {
   compactContext?: () => Promise<string>;
   skillsService: SkillsService;
   onSkillSelected: (skill: SkillInfo) => void;
+  requestModeSwitchConfirm?: (pending: PendingModeSwitch) => void;
 }
 
 // Re-export for backward compat
@@ -76,6 +77,7 @@ export const useAppCommands = ({
   compactContext = async () => 'Context compaction is unavailable.',
   skillsService,
   onSkillSelected,
+  requestModeSwitchConfirm,
 }: UseAppCommandsProps) => {
   const { disableOtherModes, togglePlanMode, cycleAppModes } = useModeHelpers({
     settingsService,
@@ -136,6 +138,7 @@ export const useAppCommands = ({
           addSystemMessage,
           disableOtherModes,
           messages,
+          requestModeSwitchConfirm,
         },
       ),
       createModeToggleCommand(
@@ -161,6 +164,7 @@ export const useAppCommands = ({
           addSystemMessage,
           disableOtherModes,
           messages,
+          requestModeSwitchConfirm,
         },
       ),
       createAutoApproveSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage }),
@@ -173,7 +177,14 @@ export const useAppCommands = ({
         },
       },
       createHandoffSlashCommand({ messages, addSystemMessage, onHandoff }),
-      createGuardedSettingsCommand({ settingsService, addSystemMessage, applyRuntimeSetting, replaceInput, messages }),
+      createGuardedSettingsCommand({
+        settingsService,
+        addSystemMessage,
+        applyRuntimeSetting,
+        replaceInput,
+        messages,
+        requestModeSwitchConfirm,
+      }),
       createSandboxSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage }),
       {
         name: 'providers',
@@ -210,6 +221,7 @@ export const useAppCommands = ({
     togglePlanMode,
     skillsService,
     onSkillSelected,
+    requestModeSwitchConfirm,
   ]);
 
   return {

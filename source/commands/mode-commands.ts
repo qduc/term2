@@ -62,16 +62,24 @@ export function useModeHelpers({ settingsService, applyRuntimeSetting, addSystem
 
 export type { ExclusiveModeKey };
 
-interface CreateModeToggleCommandDeps {
+export interface PendingModeSwitch {
+  modeKey: ExclusiveModeKey;
+  modeLabel: string;
+  targetValue: boolean;
+  enabledDetail?: string;
+}
+
+export interface CreateModeToggleCommandDeps {
   settingsService: SettingsService;
   applyRuntimeSetting: (key: string, value: any) => void;
   addSystemMessage: (text: string) => void;
   disableOtherModes: (except: ExclusiveModeKey) => void;
+  requestModeSwitchConfirm?: (pending: PendingModeSwitch) => void;
 }
 
 /**
  * Create a slash command for toggling an exclusive mode (lite, mentor, orchestrator).
- * When `messages` is provided, the command will block toggling mid-session.
+ * When `messages` is provided, the command will block toggling mid-session or request confirmation.
  */
 export function createModeToggleCommand(
   modeKey: ExclusiveModeKey,
@@ -84,17 +92,28 @@ export function createModeToggleCommand(
     name: label,
     description,
     action: () => {
+      const modeLabel = label.charAt(0).toUpperCase() + label.slice(1);
+      const newValue = !deps.settingsService.get(modeKey);
+
       // History guard: some modes (lite, orchestrator) can't toggle mid-session.
       const hasHistory = deps.messages ? deps.messages.some((msg) => msg.sender !== 'system') : false;
       if (hasHistory) {
+        if (deps.requestModeSwitchConfirm) {
+          deps.requestModeSwitchConfirm({
+            modeKey,
+            modeLabel,
+            targetValue: newValue,
+            enabledDetail,
+          });
+          return true;
+        }
+
         deps.addSystemMessage(
           `Cannot switch modes mid-session (tool/context mismatch). Use \`/clear\` first, then \`/${label}\`.`,
         );
         return true;
       }
 
-      const modeLabel = label.charAt(0).toUpperCase() + label.slice(1);
-      const newValue = !deps.settingsService.get(modeKey);
       if (newValue) {
         deps.disableOtherModes(modeKey);
       }

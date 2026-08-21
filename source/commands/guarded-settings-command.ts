@@ -1,6 +1,7 @@
 import type { SlashCommand } from '../slash-commands.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
-import { createSettingsCommand } from '../utils/settings-command.js';
+import { createSettingsCommand, parseSettingValue } from '../utils/settings-command.js';
+import type { ExclusiveModeKey, PendingModeSwitch } from './mode-commands.js';
 
 interface CreateGuardedSettingsCommandDeps {
   settingsService: SettingsService;
@@ -8,6 +9,7 @@ interface CreateGuardedSettingsCommandDeps {
   applyRuntimeSetting?: (key: string, value: any) => void;
   replaceInput: (value: string) => void;
   messages: { sender: string }[];
+  requestModeSwitchConfirm?: (pending: PendingModeSwitch) => void;
 }
 
 export function createGuardedSettingsCommand({
@@ -16,6 +18,7 @@ export function createGuardedSettingsCommand({
   applyRuntimeSetting,
   replaceInput,
   messages,
+  requestModeSwitchConfirm,
 }: CreateGuardedSettingsCommandDeps): SlashCommand {
   const settingsCommand = createSettingsCommand({
     settingsService,
@@ -28,11 +31,31 @@ export function createGuardedSettingsCommand({
     ...settingsCommand,
     action: (args?: string) => {
       const settingParts = args?.trim().split(/\s+/) ?? [];
-      const settingKey = settingParts[0] === 'reset' ? settingParts[1] : settingParts[0];
+      const isReset = settingParts[0] === 'reset';
+      const settingKey = isReset ? settingParts[1] : settingParts[0];
       const hasHistory = messages.some((msg) => msg.sender !== 'system');
-      if (settingKey === 'app.orchestratorMode' && hasHistory) {
+      if ((settingKey === 'app.orchestratorMode' || settingKey === 'app.liteMode') && hasHistory) {
+        if (requestModeSwitchConfirm) {
+          const rawVal = isReset ? false : parseSettingValue(settingParts.slice(1).join(' '));
+          const targetValue = typeof rawVal === 'boolean' ? rawVal : true;
+          const label = settingKey === 'app.orchestratorMode' ? 'Orchestrator' : 'Lite';
+          const enabledDetail =
+            settingKey === 'app.orchestratorMode'
+              ? ' - tool-backed work must use subagents'
+              : ' - using minimal prompt, no codebase context';
+          requestModeSwitchConfirm({
+            modeKey: settingKey as ExclusiveModeKey,
+            modeLabel: label,
+            targetValue,
+            enabledDetail,
+          });
+          return true;
+        }
+
         addSystemMessage(
-          'Cannot switch modes mid-session (tool/context mismatch). Use `/clear` first, then change orchestrator mode.',
+          `Cannot switch modes mid-session (tool/context mismatch). Use \`/clear\` first, then change ${
+            settingKey === 'app.orchestratorMode' ? 'orchestrator mode' : 'lite mode'
+          }.`,
         );
         return true;
       }

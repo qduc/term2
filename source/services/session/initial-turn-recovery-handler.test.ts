@@ -179,6 +179,75 @@ it('returns the scheduled delay for bounded conversation-state recovery', async 
   expect(attempt.retryCounts).toEqual(nextCounts);
 });
 
+// Blocking fresh starts exists to stop a subagent replaying a task it already
+// began. `chain_recovery` replays nothing — it severs the response chain and
+// rebuilds from full history — so a connect-time drop must stay recoverable
+// even for a session that forbids fresh starts. `recovery-policy.ts` was
+// narrowed to `transient` for this reason; the handler short-circuits before
+// the policy is consulted and must agree with it.
+it('recovers a chain_recovery failure without a stream even when fresh starts are blocked', async () => {
+  const plans: unknown[] = [];
+  const handler = new InitialTurnRecoveryHandler({
+    breakChaining: () => {},
+    conversationStore: { getHistory: () => [] } as any,
+    freshStartRetriesAllowed: false,
+    generationGuard: { isCurrent: () => true } as any,
+    inputPlanner: { recordSuccess: () => {} } as any,
+    logger: { warn: () => {}, error: () => {}, getCorrelationId: () => undefined } as any,
+    recoveryExecutor: {
+      apply: ({ plan }: any) => {
+        plans.push(plan);
+        return { kind: 'run', instruction: { skipUserMessage: true }, events: [] };
+      },
+    } as any,
+    recoveryPolicy: new DefaultConversationRecoveryPolicy(),
+    retryClassifier: { classify: () => ({ kind: 'chain_recovery', attempt: 1, delayMs: 5 }) } as any,
+    retryEventPresenter: { present: () => ({ event: {}, logMessage: '', logFields: {} }) } as any,
+    sessionId: 'subagent-chain-recovery',
+  });
+
+  const result: any = await drain(
+    handler.handle({ error: new Error('closed early'), attempt: createAttempt(), stream: null }) as any,
+  );
+
+  expect(result.kind).toBe('run');
+  expect(plans).toEqual([{ kind: 'retry_fresh', inputMode: 'full_history', disableChainingForAttempt: true }]);
+});
+
+// The half that stays closed. Both of these can reach a plan that replays the
+// task from the beginning -- `model_retry` maps to `replay_turn` with
+// `rollbackUserMessage` -- which is exactly what the block exists to stop.
+it.each([{ kind: 'transient', attempt: 1, delayMs: 5 }, { kind: 'model_retry' }])(
+  'still terminates a $kind failure without a stream when fresh starts are blocked',
+  async (classified) => {
+    const plans: unknown[] = [];
+    const handler = new InitialTurnRecoveryHandler({
+      conversationStore: { getHistory: () => [] } as any,
+      freshStartRetriesAllowed: false,
+      generationGuard: { isCurrent: () => true } as any,
+      inputPlanner: { recordSuccess: () => {} } as any,
+      logger: { warn: () => {}, error: () => {}, getCorrelationId: () => undefined } as any,
+      recoveryExecutor: {
+        apply: ({ plan }: any) => {
+          plans.push(plan);
+          return { kind: 'terminated', events: [] };
+        },
+      } as any,
+      recoveryPolicy: new DefaultConversationRecoveryPolicy(),
+      retryClassifier: { classify: () => classified } as any,
+      retryEventPresenter: { present: () => ({ event: {}, logMessage: '', logFields: {} }) } as any,
+      sessionId: 'subagent-blocked',
+    });
+
+    const result: any = await drain(
+      handler.handle({ error: new Error('temporary'), attempt: createAttempt(), stream: null }) as any,
+    );
+
+    expect(result.kind).toBe('terminated');
+    expect(plans).toEqual([{ kind: 'terminate', events: [] }]);
+  },
+);
+
 it('returns stale before classifying when the generation is outdated', async () => {
   const handler = new InitialTurnRecoveryHandler({
     conversationStore: {} as any,

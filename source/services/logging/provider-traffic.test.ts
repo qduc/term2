@@ -8,9 +8,32 @@ import {
   ProviderTrafficArtifactStore,
   ProviderTraffic,
   TRAFFIC_TEXT_LIMIT,
+  ENCRYPTED_CONTENT_REDACTION,
   type DailySessionIndexEntry,
 } from './provider-traffic.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../session/session-context-service.js';
+
+// These older tests are about frame parsing, not wire shape, so they read the
+// assembled payload through shape-agnostic accessors. The tests that pin the
+// shape itself live at the bottom of this file.
+const payloadText = (payload: any): string | undefined =>
+  payload?.choices?.[0]?.delta?.content ??
+  payload?.output?.find((item: any) => item.type === 'message')?.content?.[0]?.text;
+
+const payloadReasoning = (payload: any): string | undefined =>
+  payload?.choices?.[0]?.delta?.reasoning ??
+  payload?.output?.find((item: any) => item.type === 'reasoning')?.summary?.[0]?.text;
+
+const payloadToolCalls = (payload: any): Array<{ id?: string; name?: string; arguments?: string }> =>
+  payload?.choices?.[0]?.delta?.tool_calls?.map((call: any) => ({
+    id: call.id,
+    name: call.function?.name,
+    arguments: call.function?.arguments,
+  })) ??
+  payload?.output
+    ?.filter((item: any) => item.type === 'function_call')
+    .map((item: any) => ({ id: item.call_id, name: item.name, arguments: item.arguments })) ??
+  [];
 
 const tempDirs: string[] = [];
 const makeTempDir = (): string => {
@@ -203,7 +226,7 @@ it('sanitizeSentTrafficBody removes encrypted reasoning payload data from messag
   const reasoningDetails = messages[0].reasoning_details as Array<Record<string, unknown>>;
 
   expect(reasoningDetails).toEqual([
-    { type: 'reasoning.encrypted', data: '', id: 'r1' },
+    { type: 'reasoning.encrypted', data: ENCRYPTED_CONTENT_REDACTION, id: 'r1' },
     { type: 'reasoning.summary', data: 'keep-readable', id: 'r2' },
   ]);
   expect(messages[0].content).toBe('keep assistant content');
@@ -271,16 +294,10 @@ it('summarizeReceivedTraffic merges OpenAI Responses SSE text reasoning and tool
   expect(summary.transport).toBe('sse');
   expect(summary.status).toBe(200);
   expect((summary.payload as any)?.id).toBe('resp_1');
-  expect((summary.payload as any)?.choices?.[0]?.delta?.content).toBe('Hello');
-  expect((summary.payload as any)?.choices?.[0]?.delta?.reasoning).toBe('Think');
+  expect(payloadText(summary.payload)).toBe('Hello');
+  expect(payloadReasoning(summary.payload)).toBe('Think');
   expect((summary.payload as any)?.usage).toEqual({ input_tokens: 10, output_tokens: 5 });
-  expect((summary.payload as any)?.choices?.[0]?.delta?.tool_calls).toEqual([
-    {
-      id: 'fc_1',
-      type: 'function',
-      function: { arguments: '{"a":1}' },
-    },
-  ]);
+  expect(payloadToolCalls(summary.payload)).toEqual([{ id: 'fc_1', name: undefined, arguments: '{"a":1}' }]);
   expect(summary.unknownFrames).toEqual([]);
 });
 
@@ -431,7 +448,7 @@ it('summarizeReceivedTraffic sniffs SSE body when content-type is missing', asyn
 
   expect(summary.transport).toBe('sse');
   expect((summary.payload as any)?.id).toBe('resp_sniff');
-  expect((summary.payload as any)?.choices?.[0]?.delta?.content).toBe('Hi');
+  expect(payloadText(summary.payload)).toBe('Hi');
   expect(summary.fallbackBody).toBeFalsy();
 });
 
@@ -465,7 +482,7 @@ it('summarizeReceivedTraffic recognizes response.content_part.added as a lifecyc
   );
 
   expect(summary.unknownFrames).toEqual([]);
-  expect((summary.payload as any)?.choices?.[0]?.delta?.content).toBe('Hello');
+  expect(payloadText(summary.payload)).toBe('Hello');
 });
 
 it('summarizeReceivedTraffic recognizes Responses API lifecycle frames without adding to unknownFrames', async () => {
@@ -491,7 +508,7 @@ it('summarizeReceivedTraffic recognizes Responses API lifecycle frames without a
 
   expect(summary.transport).toBe('sse');
   expect((summary.payload as any)?.id).toBe('resp_abc');
-  expect((summary.payload as any)?.choices?.[0]?.delta?.content).toBe('Hello');
+  expect(payloadText(summary.payload)).toBe('Hello');
   expect(summary.unknownFrames).toEqual([]);
 });
 
@@ -517,10 +534,10 @@ it('summarizeReceivedTraffic registers tool name from response.output_item.added
   );
 
   expect(summary.unknownFrames).toEqual([]);
-  const toolCalls = (summary.payload as any)?.choices?.[0]?.delta?.tool_calls;
-  expect(toolCalls?.length).toBe(1);
-  expect(toolCalls?.[0]?.function?.name).toBe('shell');
-  expect(toolCalls?.[0]?.function?.arguments).toBe('{"cmd":"ls"}');
+  const toolCalls = payloadToolCalls(summary.payload);
+  expect(toolCalls.length).toBe(1);
+  expect(toolCalls[0]?.name).toBe('shell');
+  expect(toolCalls[0]?.arguments).toBe('{"cmd":"ls"}');
 });
 
 it('summarizeReceivedTraffic does not duplicate content from output_text.done after delta events', async () => {
@@ -545,7 +562,7 @@ it('summarizeReceivedTraffic does not duplicate content from output_text.done af
   );
 
   expect(summary.unknownFrames).toEqual([]);
-  expect((summary.payload as any)?.choices?.[0]?.delta?.content).toBe('Hello! How can I help?');
+  expect(payloadText(summary.payload)).toBe('Hello! How can I help?');
 });
 
 it('ProviderTrafficArtifactStore writes per-day per-session request files and daily index', () => {
@@ -1362,4 +1379,94 @@ it('ProviderTrafficArtifactStore releases a request path when recordRequestCompl
   const secondRecords = readRequestFile(secondFile);
   expect((secondRecords.sent as Record<string, unknown>) ?? {}).toEqual({});
   expect((secondRecords.received as Record<string, unknown>)?.timestamp).toBe('2026-06-03T11:00:10.000Z');
+});
+
+// A Responses-API SSE stream must be summarized in the Responses shape. Rendering
+// it as `choices[0].delta` (the pre-2026-08-21 behaviour) hid the two things the
+// log is opened for on that lane: whether reasoning items came back at all, and
+// whether they carried encrypted content.
+it('summarizeReceivedTraffic renders a Responses SSE stream in Responses shape with reasoning items', async () => {
+  const frames = [
+    { type: 'response.created', response: { id: 'resp_1' } },
+    {
+      type: 'response.output_item.done',
+      item: { type: 'reasoning', id: 'rs_1', encrypted_content: 'reasoning-ciphertext', summary: [] },
+    },
+    { type: 'response.output_text.delta', delta: 'hello ' },
+    { type: 'response.output_text.delta', delta: 'world' },
+    {
+      type: 'response.output_item.done',
+      item: { type: 'function_call', id: 'fc_1', call_id: 'call_1', name: 'shell' },
+    },
+    { type: 'response.function_call_arguments.delta', item_id: 'call_1', delta: '{"cmd":"ls"}' },
+    { type: 'response.completed', response: { id: 'resp_1', status: 'completed', usage: { input_tokens: 10 } } },
+  ];
+  const body = frames.map((frame) => `data: ${JSON.stringify(frame)}\n\n`).join('') + 'data: [DONE]\n\n';
+
+  const summary = await summarizeReceivedTraffic(
+    new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } }),
+  );
+
+  expect(summary.wireShape).toBe('responses');
+  const payload = summary.payload as Record<string, any>;
+  expect(payload.choices).toBeUndefined();
+  expect(payload.id).toBe('resp_1');
+
+  // The reasoning item survives, and its ciphertext is replaced by a marker that
+  // cannot be mistaken for "there was no encrypted content".
+  expect(payload.output[0]).toEqual({
+    type: 'reasoning',
+    id: 'rs_1',
+    encrypted_content: ENCRYPTED_CONTENT_REDACTION,
+    summary: [],
+  });
+  expect(JSON.stringify(payload)).not.toContain('reasoning-ciphertext');
+
+  expect(payload.output[1]).toEqual({
+    type: 'message',
+    role: 'assistant',
+    content: [{ type: 'output_text', text: 'hello world' }],
+  });
+  expect(payload.output[2]).toMatchObject({ type: 'function_call', name: 'shell', arguments: '{"cmd":"ls"}' });
+});
+
+// The chat-completions lane keeps its existing shape.
+it('summarizeReceivedTraffic still renders a chat-completions SSE stream in choices shape', async () => {
+  const frames = [
+    { id: 'cc_1', choices: [{ delta: { content: 'hi' } }] },
+    { id: 'cc_1', choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 3 } },
+  ];
+  const body = frames.map((frame) => `data: ${JSON.stringify(frame)}\n\n`).join('') + 'data: [DONE]\n\n';
+
+  const summary = await summarizeReceivedTraffic(
+    new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } }),
+  );
+
+  expect(summary.wireShape).toBe('chat_completions');
+  expect((summary.payload as any).choices[0].delta.content).toBe('hi');
+});
+
+// An empty string reads as "no encrypted content"; the marker reads as "there was some".
+it('encrypted_content is redacted to a visible marker, not an empty string', () => {
+  const sanitized = sanitizeSentTrafficBody({
+    input: [{ type: 'reasoning', id: 'r1', encrypted_content: 'ciphertext', summary: [] }],
+  });
+  const input = sanitized.input as Array<Record<string, unknown>>;
+  expect(input[0].encrypted_content).toBe(ENCRYPTED_CONTENT_REDACTION);
+  expect(ENCRYPTED_CONTENT_REDACTION).not.toBe('');
+});
+
+// The Chat Completions reasoning_details path carries the same ciphertext and
+// must use the same marker.
+it('reasoning_details encrypted data is redacted to the same visible marker', () => {
+  const sanitized = sanitizeSentTrafficBody({
+    messages: [
+      {
+        role: 'assistant',
+        reasoning_details: [{ type: 'reasoning.encrypted', data: 'ciphertext' }],
+      },
+    ],
+  });
+  const details = (sanitized.messages as any[])[0].reasoning_details;
+  expect(details[0].data).toBe(ENCRYPTED_CONTENT_REDACTION);
 });

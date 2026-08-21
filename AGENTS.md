@@ -85,6 +85,33 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 
 ## Completed — still read before touching these areas
 
+- **Grok on the Responses API** (`b065bbc9`, `40c4546a`, 2026-08-20) — no plan
+  doc; the constraints are recorded here and in those commit messages. Grok runs
+  on the Responses API so encrypted reasoning round-trips, which Chat Completions
+  could never do (it only returned a summary). Verified live against the proxy:
+  streaming SSE, function calling, usage, `prompt_cache_key`, and
+  `include: ['reasoning.encrypted_content']` all work; **chaining does not** —
+  `previous_response_id` 404s under Zero Data Retention and `store: true` comes
+  back downgraded. So Grok's capabilities declare no chaining and no server-side
+  compaction, but a prompt cache key. `TERM2_GROK_API=chat` falls back to the old
+  lane.
+
+  Three things stopped keying on provider names, and must not go back:
+  - The **opaque lane tag** was hard-coded `openai` because both Responses
+    providers happened to be OpenAI. Grok is a second vendor on the same wire
+    shape and its ciphertext is not interchangeable, so it gets its own lane;
+    the adapter takes the lane as a parameter.
+  - The **prompt cache key placement** is a capability, not a provider id.
+    Placing it by provider id put Grok on a placement no Responses adapter
+    reads, and the live wire showed `prompt_cache_key: null`.
+  - The **run loop** kept terminal encrypted reasoning only for the `codex` and
+    `openai` namespaces, silently dropping Grok's. It now matches the namespaced
+    *shape*, so the next Responses lane is not lossy either.
+
+  `x-grok-conv-id` is the documented xAI header for prompt-cache server
+  affinity; the undocumented `x-grok-session-id` is still sent alongside it
+  until something upstream is confirmed not to key on it.
+
 - `docs/plans/run-budget-stall-escalation.md` — **implemented and merged**, with
   all 13 review findings resolved in
   `docs/plans/run-budget-stall-escalation-review.md`. Read both before changing

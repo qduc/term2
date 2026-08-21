@@ -42,6 +42,11 @@ export type ReceivedTrafficSummary = {
   }>;
   fallbackBody?: unknown;
   payload?: unknown;
+  /**
+   * Which wire shape the assembled `payload` is rendered in. Only set for SSE,
+   * where the frames themselves reveal the shape.
+   */
+  wireShape?: 'responses' | 'chat_completions' | 'unknown';
   receiveTiming?: ProviderTrafficReceiveTiming;
 };
 
@@ -125,13 +130,22 @@ const sanitizeToolDefinitions = (tools: unknown): unknown => {
   });
 };
 
+/**
+ * Placeholder written in place of any `encrypted_content` ciphertext. It is a
+ * visible marker rather than `''` on purpose: an empty string is
+ * indistinguishable from an item that never carried encrypted reasoning at
+ * all, which makes the log useless for confirming that encrypted reasoning is
+ * actually round-tripping on the Responses lane.
+ */
+export const ENCRYPTED_CONTENT_REDACTION = '<redacted>';
+
 const sanitizeReasoningDetails = (reasoningDetails: unknown): unknown => {
   if (!Array.isArray(reasoningDetails)) return reasoningDetails;
   return reasoningDetails.map((item) => {
     const record = asRecord(item);
     if (!record) return item;
     if (record.type === 'reasoning.encrypted' && typeof record.data === 'string') {
-      return { ...record, data: '' };
+      return { ...record, data: ENCRYPTED_CONTENT_REDACTION };
     }
     return item;
   });
@@ -207,7 +221,8 @@ const redactEncryptedContent = (value: unknown): unknown => {
     const record = value as Record<string, unknown>;
     const out: Record<string, unknown> = {};
     for (const [key, v] of Object.entries(record)) {
-      out[key] = key === 'encrypted_content' && typeof v === 'string' ? '' : redactEncryptedContent(v);
+      out[key] =
+        key === 'encrypted_content' && typeof v === 'string' ? ENCRYPTED_CONTENT_REDACTION : redactEncryptedContent(v);
     }
     return out;
   }
@@ -393,6 +408,12 @@ export async function summarizeReceivedTraffic(response: Response): Promise<Rece
     // on-disk traffic artifact and passed to the winston debug log by
     // ProviderTraffic.recordResponseReceived, so it must be redacted here.
     const redactedParsed = redactEncryptedContent(parsed) as Record<string, unknown>;
+    summary.wireShape =
+      Array.isArray(parsed.output) || asRecord(parsed.response)
+        ? 'responses'
+        : Array.isArray(parsed.choices)
+        ? 'chat_completions'
+        : 'unknown';
     if (!extractedText && !extractedReasoning && extractedToolCalls.length === 0 && !extractedId) {
       summary.fallbackBody = redactedParsed;
     } else {
@@ -415,6 +436,15 @@ export async function summarizeReceivedTraffic(response: Response): Promise<Rece
   const toolArgsByKey = new Map<string, string>();
   const toolKeyByIndex = new Map<number, string>();
   const unknownFrameMap = new Map<string, { signature: string; count: number; firstRaw: string; lastRaw: string }>();
+  // The assembled payload is rendered in the wire shape it actually arrived in.
+  // Rendering a Responses stream as `choices[0].delta` (the old behaviour) hid
+  // exactly the things you open the log to check on that lane: whether
+  // reasoning items came back at all, and whether they carried encrypted
+  // content. See docs/plans/grok-responses-api.md.
+  let sawResponsesEvent = false;
+  let sawChatCompletionsFrame = false;
+  const responsesReasoningItems: Array<Record<string, unknown>> = [];
+  const responsesFunctionCallOrder: string[] = [];
 
   const blocks = raw.split(/\r?\n\r?\n/);
   for (const block of blocks) {
@@ -450,6 +480,9 @@ export async function summarizeReceivedTraffic(response: Response): Promise<Rece
     const response = asRecord(parsed.response);
     const choice = asRecord((parsed.choices as unknown[] | undefined)?.[0]);
     const delta = asRecord(choice?.delta);
+
+    if (typeof parsed.type === 'string' && parsed.type.startsWith('response.')) sawResponsesEvent = true;
+    if (Array.isArray(parsed.choices)) sawChatCompletionsFrame = true;
 
     sseResponseId =
       sseResponseId ?? firstDefinedString(parsed.id, response?.id, (asRecord(choice?.message) as any)?.id);
@@ -504,6 +537,14 @@ export async function summarizeReceivedTraffic(response: Response): Promise<Rece
         if (name) {
           if (typeof outputItem.id === 'string') toolNameByKey.set(outputItem.id, name);
           if (typeof outputItem.call_id === 'string') toolNameByKey.set(outputItem.call_id, name);
+        }
+        const callKey = firstDefinedString(outputItem.call_id, outputItem.id);
+        if (callKey && !responsesFunctionCallOrder.includes(callKey)) responsesFunctionCallOrder.push(callKey);
+      }
+      if (outputItem.type === 'reasoning' && eventType.includes('done')) {
+        const itemId = typeof outputItem.id === 'string' ? outputItem.id : undefined;
+        if (!responsesReasoningItems.some((item) => item.id === itemId && itemId !== undefined)) {
+          responsesReasoningItems.push(redactEncryptedContent(outputItem) as Record<string, unknown>);
         }
       }
       recognized = true;
@@ -635,22 +676,59 @@ export async function summarizeReceivedTraffic(response: Response): Promise<Rece
   summary.unknownFrames = [...unknownFrameMap.values()];
 
   const hasAssembled =
-    assembledContent !== undefined || assembledReasoning !== undefined || assembledToolCalls.length > 0;
+    assembledContent !== undefined ||
+    assembledReasoning !== undefined ||
+    assembledToolCalls.length > 0 ||
+    responsesReasoningItems.length > 0;
+  // Reasoning summary deltas are only worth re-emitting as their own item when
+  // the captured reasoning items didn't already carry the summary text.
+  const responsesReasoningItemsCarrySummary = responsesReasoningItems.some(
+    (item) => Array.isArray(item.summary) && item.summary.length > 0,
+  );
+  const wireShape: 'responses' | 'chat_completions' | 'unknown' = sawResponsesEvent
+    ? 'responses'
+    : sawChatCompletionsFrame
+    ? 'chat_completions'
+    : 'unknown';
+  summary.wireShape = wireShape;
+
   if (hasAssembled || sseResponseId || sseFinishReason || sseUsage) {
-    summary.payload = {
-      ...(sseResponseId ? { id: sseResponseId } : {}),
-      ...(sseUsage ? { usage: sseUsage } : {}),
-      choices: [
-        {
-          ...(sseFinishReason ? { finish_reason: sseFinishReason } : {}),
-          delta: {
-            ...(assembledContent !== undefined ? { content: assembledContent } : {}),
-            ...(assembledReasoning !== undefined ? { reasoning: assembledReasoning } : {}),
-            ...(assembledToolCalls.length > 0 ? { tool_calls: assembledToolCalls } : {}),
-          },
-        },
-      ],
-    };
+    summary.payload =
+      wireShape === 'responses'
+        ? {
+            ...(sseResponseId ? { id: sseResponseId } : {}),
+            ...(sseFinishReason ? { status: sseFinishReason } : {}),
+            ...(sseUsage ? { usage: sseUsage } : {}),
+            output: [
+              ...responsesReasoningItems,
+              ...(assembledReasoning !== undefined && !responsesReasoningItemsCarrySummary
+                ? [{ type: 'reasoning', summary: [{ type: 'summary_text', text: assembledReasoning }] }]
+                : []),
+              ...(assembledContent !== undefined
+                ? [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: assembledContent }] }]
+                : []),
+              ...assembledToolCalls.map((call) => ({
+                type: 'function_call',
+                call_id: call.id,
+                ...(call.function.name !== undefined ? { name: call.function.name } : {}),
+                arguments: call.function.arguments,
+              })),
+            ],
+          }
+        : {
+            ...(sseResponseId ? { id: sseResponseId } : {}),
+            ...(sseUsage ? { usage: sseUsage } : {}),
+            choices: [
+              {
+                ...(sseFinishReason ? { finish_reason: sseFinishReason } : {}),
+                delta: {
+                  ...(assembledContent !== undefined ? { content: assembledContent } : {}),
+                  ...(assembledReasoning !== undefined ? { reasoning: assembledReasoning } : {}),
+                  ...(assembledToolCalls.length > 0 ? { tool_calls: assembledToolCalls } : {}),
+                },
+              },
+            ],
+          };
   }
 
   if (!summary.payload && summary.unknownFrames.length === 0) {

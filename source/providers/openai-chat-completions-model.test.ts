@@ -917,3 +917,105 @@ it('omits costUsd when no provider cost trailer was captured', async () => {
   }
   expect(sawCompletion).toBe(true);
 });
+
+// A chat-completions response may carry assistant prose *and* tool calls in the
+// same choice. Dropping the prose from the completion output erased it from
+// history: every later request replayed the turn as a bare `content: null` tool
+// call, so the model never saw what it had told the user.
+it('stream() keeps assistant text that arrived alongside tool calls', async () => {
+  async function* textWithToolCallStream(): AsyncIterable<any> {
+    yield { choices: [{ delta: { content: "I'll check the logs." } }] };
+    yield {
+      choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_x', function: { name: 'shell', arguments: '{}' } }] } }],
+    };
+    yield { choices: [{ delta: {}, finish_reason: 'tool_calls' }] };
+  }
+
+  const client = { chat: { completions: { create: async () => textWithToolCallStream() } } };
+  const model = new OpenAIChatCompletionsModel(client, 'fixture-chat');
+  const events: any[] = [];
+  for await (const event of model.stream({ input: [], tools: [] } as any)) {
+    events.push(event);
+  }
+
+  const completion = events.find((event) => event.type === 'completion');
+  expect(completion.output).toEqual([
+    { type: 'message', content: [{ type: 'text', text: "I'll check the logs." }] },
+    { type: 'tool_call', id: 'call_x', name: 'shell', arguments: '{}' },
+  ]);
+});
+
+// One turn must stay one assistant message: `attachOpaquePayloads` pairs the
+// i-th continuity payload with the i-th assistant message, so splitting a turn
+// into a text message plus a tool-call message would hand each turn's reasoning
+// to the wrong half.
+it('replays assistant text and its turn tool calls as one assistant message', async () => {
+  const bodies: any[] = [];
+  const client = {
+    chat: {
+      completions: {
+        create: async (body: any) => {
+          bodies.push(body);
+          return emptyStream();
+        },
+      },
+    },
+  };
+  const model = new OpenAIChatCompletionsModel(client, 'fixture-chat', undefined, 'gateway');
+  const request = {
+    input: [
+      { type: 'message', role: 'user', content: [{ type: 'text', text: 'first' }] },
+      { type: 'message', role: 'assistant', content: [{ type: 'text', text: "I'll check the logs." }] },
+      { type: 'tool_call', id: 'call_a', name: 'lookup', arguments: '{}' },
+      { type: 'tool_result', id: 'call_a', output: 'a' },
+      { type: 'provider_opaque', provider: 'gateway', item: { reasoning: 'first turn thinking' } },
+    ],
+    tools: [],
+  } as any;
+
+  for await (const _event of model.stream(request)) {
+    // drain
+  }
+
+  const assistants = bodies[0].messages.filter((message: any) => message.role === 'assistant');
+  expect(assistants).toHaveLength(1);
+  expect(assistants[0].content).toEqual([{ type: 'text', text: "I'll check the logs." }]);
+  expect(assistants[0].tool_calls[0].id).toBe('call_a');
+  expect(assistants[0].reasoning).toBe('first turn thinking');
+});
+
+// A new user message ends the turn, so tool calls after it belong to a later
+// assistant message and must not be folded back onto the earlier prose.
+it('does not attach later-turn tool calls to an assistant message from an earlier turn', async () => {
+  const bodies: any[] = [];
+  const client = {
+    chat: {
+      completions: {
+        create: async (body: any) => {
+          bodies.push(body);
+          return emptyStream();
+        },
+      },
+    },
+  };
+  const model = new OpenAIChatCompletionsModel(client, 'fixture-chat', undefined, 'gateway');
+  const request = {
+    input: [
+      { type: 'message', role: 'user', content: [{ type: 'text', text: 'first' }] },
+      { type: 'message', role: 'assistant', content: [{ type: 'text', text: 'Done.' }] },
+      { type: 'message', role: 'user', content: [{ type: 'text', text: 'second' }] },
+      { type: 'tool_call', id: 'call_b', name: 'lookup', arguments: '{}' },
+      { type: 'tool_result', id: 'call_b', output: 'b' },
+    ],
+    tools: [],
+  } as any;
+
+  for await (const _event of model.stream(request)) {
+    // drain
+  }
+
+  const assistants = bodies[0].messages.filter((message: any) => message.role === 'assistant');
+  expect(assistants).toHaveLength(2);
+  expect(assistants[0].tool_calls).toBeUndefined();
+  expect(assistants[1].tool_calls[0].id).toBe('call_b');
+});

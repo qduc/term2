@@ -40,6 +40,11 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
       model: this.model,
       messages,
       stream: true,
+      // Streaming omits usage unless the request opts in. Without this the
+      // status bar has no token counts, context gauge, or cost for any
+      // chat-completions provider. Placed before `providerOptions` so a
+      // provider whose server rejects it can override.
+      stream_options: { include_usage: true },
       ...(request.tools.length ? { tools: request.tools.map((tool) => ({ type: 'function', function: tool })) } : {}),
       ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
       ...(request.topP !== undefined ? { top_p: request.topP } : {}),

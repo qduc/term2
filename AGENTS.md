@@ -112,6 +112,31 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   affinity; the undocumented `x-grok-session-id` is still sent alongside it
   until something upstream is confirmed not to key on it.
 
+- **Grok credit usage in the status bar** (2026-08-21) — no plan doc. Grok's
+  meter does *not* come from the inference lane: its Responses stream carries no
+  quota frame the way Codex pushes `codex.rate_limits`, and the proxy returns no
+  rate-limit response headers. Do not go looking for it there again. It is a
+  separate REST call, recovered from the `grok` CLI binary and verified live:
+  `GET {GROK_BASE_URL}/billing?format=credits`, bearer token alone, returning
+  `creditUsagePercent` plus a weekly `currentPeriod` and a per-product split.
+  (Omitting `?format=credits` returns monthly billing totals instead.)
+
+  It is a *percentage of a weekly period consumed*, not a requests-remaining
+  allowance, so it cannot render in Codex's used/reset window format and has its
+  own slot formatter in `StatusBar`. `lastCodexRateLimit` was deliberately not
+  renamed into a shared field: the two shapes have nothing in common beyond the
+  slot they occupy.
+
+  Cadence is owned by `services/grok/grok-credit-usage-service.ts`. It refreshes
+  on the busy → idle edge of a turn, never on a timer, so an idle terminal makes
+  no requests. Before changing the 5-minute cooldown, note why it is long: the
+  value is an integer percentage over a *week*, so freshness is nearly
+  worthless, while the endpoint is undocumented and worth treating gently. The
+  service is process-wide on purpose — the cooldown only holds if every caller
+  shares one clock, or a subagent fan-out finishing together each fetches. On a
+  401 it stops permanently rather than retrying a token that is already known
+  dead. `/usage` forces a refresh past the cooldown.
+
 - `docs/plans/run-budget-stall-escalation.md` — **implemented and merged**, with
   all 13 review findings resolved in
   `docs/plans/run-budget-stall-escalation-review.md`. Read both before changing

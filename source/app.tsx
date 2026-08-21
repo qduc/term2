@@ -16,6 +16,7 @@ import type { SettingsService } from './services/settings/settings-service.js';
 import type { HistoryService } from './services/history-service.js';
 import type { LoggingService } from './services/logging/logging-service.js';
 import { ISSHService } from './services/service-interfaces.js';
+import { useGrokCreditUsage } from './hooks/use-grok-credit-usage.js';
 import { useSetting } from './hooks/use-setting.js';
 import { useDebouncedValue } from './hooks/use-debounced-value.js';
 import type { LargeUncachedInputDecision } from './services/large-uncached-input-guard.js';
@@ -351,6 +352,8 @@ const App: FC<AppProps> = ({
   // authoritative check still runs at submit time in ConversationAdmissionWorkflow.
   // An emptied composer flushes immediately so a stale warning never outlives
   // the text it described.
+  const grokCreditUsage = useGrokCreditUsage(settingsService, isProcessing);
+
   const previewInput = useDebouncedValue(input, LARGE_UNCACHED_PREVIEW_DEBOUNCE_MS, (value) => value === '');
   const [largeUncachedPreview, setLargeUncachedPreview] = useState<LargeUncachedInputDecision | null>(null);
   useEffect(() => {
@@ -584,6 +587,7 @@ const App: FC<AppProps> = ({
     replaceInput,
     clearConversation: clearConversationAndRefreshBanner,
     getSessionUsage,
+    refreshProviderUsage: grokCreditUsage.refresh,
     exit: exitWithUsage,
     messages,
     setModel,
@@ -1040,6 +1044,7 @@ const App: FC<AppProps> = ({
             onNavigateQuestion={handleNavigateQuestion}
             sshInfo={sshInfo}
             lastCodexRateLimit={lastCodexRateLimit}
+            grokCreditUsage={grokCreditUsage.usage}
             staticCommitBlocker={staticCommitBlocker}
             firstRunSetup={firstRunSetup}
             onProviderSelected={firstRunSetup.active ? firstRunSetup.onProviderSelected : undefined}

@@ -1,5 +1,10 @@
 import { APIConnectionError, APIConnectionTimeoutError, InternalServerError, RateLimitError } from 'openai';
-import { OpenAICompatibleError, OpenRouterError, LongRetryDelayError } from '../../providers/common/provider-errors.js';
+import {
+  OpenAICompatibleError,
+  OpenRouterError,
+  LongRetryDelayError,
+  findReauthenticationRequiredError,
+} from '../../providers/common/provider-errors.js';
 import { getRetryAfterMs } from './upstream-retry-policy.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import { AmbiguousModelOutcomeError } from './retry-errors.js';
@@ -207,6 +212,11 @@ export function isUndiciSocketCloseError(error: unknown): boolean {
 export function isNetworkProtocolError(error: unknown, seen = new Set<unknown>()): boolean {
   if (!error || error instanceof AmbiguousModelOutcomeError) return false;
 
+  // Only a human re-login clears this, so no amount of retrying helps. It
+  // reaches here disguised as `APIConnectionError('Connection error.')`
+  // because the SDK wraps whatever the fetch impl throws.
+  if (findReauthenticationRequiredError(error)) return false;
+
   if (seen.has(error)) {
     return false;
   }
@@ -371,6 +381,10 @@ export const isRetryableTransportError = (
     return { retryable: false, transportFallback: false };
   }
 
+  if (findReauthenticationRequiredError(error)) {
+    return { retryable: false, transportFallback: false };
+  }
+
   // Incomplete terminals are retryable but not a network-protocol class: keep
   // transportFallback false so Codex does not force an HTTP/WS switch.
   if (isIncompleteStreamTerminalError(error)) {
@@ -395,6 +409,11 @@ export const isRetryableTransportError = (
 export const isTransientRetryableError = (error: unknown, logger?: Pick<ILoggingService, 'info'>): boolean => {
   // Rate-limit with retry-after > 60s — never retry automatically
   if (error instanceof LongRetryDelayError) {
+    return false;
+  }
+
+  // An expired or absent credential is not transient.
+  if (findReauthenticationRequiredError(error)) {
     return false;
   }
 

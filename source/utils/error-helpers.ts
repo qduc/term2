@@ -64,6 +64,14 @@ export const describeError = (error: unknown): string => {
     return 'connection closed by server mid-response';
   }
 
+  // The SDK wraps anything the fetch impl throws in a generic connection
+  // error, so the wrapper's message would hide the one sentence that tells the
+  // user how to fix this.
+  const reauthentication = findReauthenticationRequiredError(error);
+  if (reauthentication) {
+    return reauthentication.message;
+  }
+
   const messages = collectErrorMessages(error);
   if (messages.length === 0) {
     if (typeof error === 'object' && error !== null) {
@@ -130,3 +138,4 @@ export const isAbortLikeError = (error: unknown): boolean => {
   return abortPatterns.some((pattern) => pattern.test(errorMessage));
 };
 import { isUndiciSocketCloseError } from '../services/retry/retry-error-classification.js';
+import { findReauthenticationRequiredError } from '../providers/common/provider-errors.js';

@@ -9,6 +9,7 @@ import { OAuthAccountStore } from './oauth-account-store.js';
 import type { AccountIdentity, OAuthAccount } from './oauth-account-store.js';
 import { getJwtClaims } from './jwt-claims.js';
 import { recordSessionAccount } from './oauth-session-account.js';
+import { ProviderReauthenticationRequiredError } from './common/provider-errors.js';
 
 /**
  * Grok (xAI) OAuth 2.0 + PKCE login and token storage.
@@ -265,14 +266,16 @@ export class GrokTokenManager {
   async getOrRefreshAccessToken(): Promise<string> {
     const tokens = this.load();
     if (!tokens) {
-      throw new Error('Not logged in to Grok. Run `term2 --grok-login` (or `grok login`) first.');
+      throw new ProviderReauthenticationRequiredError(
+        'Not logged in to Grok. Run `term2 --grok-login` (or `grok login`) first.',
+      );
     }
 
     const expiringSoon = tokens.expires_at !== undefined && Date.now() + REFRESH_SKEW_MS >= tokens.expires_at;
     if (!expiringSoon) return tokens.access_token;
 
     if (!tokens.refresh_token) {
-      throw new Error(
+      throw new ProviderReauthenticationRequiredError(
         tokens.imported
           ? 'The access token imported from the `grok` CLI has expired. Run `term2 --grok-login` so term2 holds its own credential.'
           : 'Grok access token expired and no refresh token is stored. Run `term2 --grok-login` again.',

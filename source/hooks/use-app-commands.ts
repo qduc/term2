@@ -29,6 +29,7 @@ interface UseAppCommandsProps {
   replaceInput: (input: string) => void;
   clearConversation: () => void | Promise<void>;
   getSessionUsage: () => string;
+  refreshProviderUsage?: () => void;
   exit: () => void;
   messages: Message[];
   setModel: (model: string) => void;
@@ -62,6 +63,7 @@ export const useAppCommands = ({
   replaceInput,
   clearConversation,
   getSessionUsage,
+  refreshProviderUsage,
   exit,
   messages,
   getRewindItems,
@@ -102,7 +104,7 @@ export const useAppCommands = ({
       createEffortSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage, replaceInput }),
       createClearSlashCommand(clearConversation, addSystemMessage),
       createCopySlashCommand({ messages, addSystemMessage, openCopyMenu }),
-      createUsageSlashCommand(addSystemMessage, getSessionUsage),
+      createUsageSlashCommand(addSystemMessage, getSessionUsage, refreshProviderUsage),
       createRewindSlashCommand({
         name: 'rewind',
         defaultDisposition: 'edit',
@@ -204,6 +206,7 @@ export const useAppCommands = ({
     disableOtherModes,
     exit,
     getSessionUsage,
+    refreshProviderUsage,
     messages,
     replaceInput,
     settingsService,

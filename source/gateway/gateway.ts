@@ -363,8 +363,14 @@ export class Term2Gateway {
         if (!(session instanceof ServerSession)) return null;
         const snapshot = session.service.getPendingInteractionSnapshot();
         if (!snapshot) return null;
-        if (!session.activeTurnId) return null;
-        const binding = this.#interactionBindingFor(sessionId, snapshot, session.activeTurnId);
+        const existingBinding = this.#interactionBindings.get(sessionId);
+        const turnId = session.activeTurnId ?? existingBinding?.turnId;
+        if (!turnId) return null;
+        // A projection/read is observational. Only the approval event path
+        // may create a public binding; reconnects must never mint or replace
+        // the ID that the first viewport was given.
+        if (!existingBinding || existingBinding.expectedInteractionId !== snapshot.interactionId) return null;
+        const binding = existingBinding;
         return Promise.resolve({
           state: 'pending' as const,
           interaction: interactionDtoFromSnapshot(snapshot, binding.publicInteractionId, binding.revision),
@@ -493,11 +499,19 @@ export class Term2Gateway {
     if (!isInteractionResolveRequest(body))
       return publicError(400, 'validation_error', 'interaction request is invalid');
     const projection = await this.#projectionFor(claims.sub, claims.sessionId!);
-    if (projection.interaction?.state === 'recovered')
-      return publicError(409, 'interaction_not_resolvable', 'interaction is not resolvable');
     const session = this.#sessions.get(claims.sessionId!);
-    if (!(session instanceof ServerSession)) return publicError(404, 'not_found', 'session not found');
     const binding = this.#interactionBindings.get(claims.sessionId!);
+    const snapshot = session instanceof ServerSession ? session.service.getPendingInteractionSnapshot() : null;
+    // A live runtime owns the current interaction. A public ID from an older
+    // presentation is stale even when the durable journal still says the
+    // interaction was recovered during startup.
+    if (snapshot !== null && (!binding || binding.publicInteractionId !== interactionId)) {
+      this.#countInteraction('interaction_stale');
+      return publicError(409, 'stale_interaction', 'interaction is stale');
+    }
+    if (projection.interaction?.state === 'recovered' && snapshot === null)
+      return publicError(409, 'interaction_not_resolvable', 'interaction is not resolvable');
+    if (!(session instanceof ServerSession)) return publicError(404, 'not_found', 'session not found');
     if (projection.resolvedInteractionIds.has(interactionId)) {
       this.#countInteraction('interaction_duplicate');
       return publicError(409, 'interaction_already_resolved', 'interaction is already resolved');
@@ -506,7 +520,6 @@ export class Term2Gateway {
       this.#countInteraction('interaction_stale');
       return publicError(409, 'stale_interaction', 'interaction is stale');
     }
-    const snapshot = session.service.getPendingInteractionSnapshot();
     const resolutionCode = classifyInteractionResolution(projection.interaction, snapshot !== null);
     if (resolutionCode) {
       this.#countInteraction(
@@ -1053,8 +1066,9 @@ export function classifyInteractionResolution(
   interaction: SessionProjectionSource['interaction'],
   hasLiveSnapshot: boolean,
 ): 'interaction_not_resolvable' | 'interaction_already_resolved' | null {
+  if (hasLiveSnapshot) return null;
   if (interaction?.state === 'recovered') return 'interaction_not_resolvable';
-  return hasLiveSnapshot ? null : 'interaction_already_resolved';
+  return 'interaction_already_resolved';
 }
 
 function hasDeferredModelSelectionField(body: unknown): boolean {

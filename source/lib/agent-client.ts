@@ -23,6 +23,7 @@ import type { ToolOwnershipRegistry } from '../services/approval/tool-ownership-
 import type { PostExecutePauseCapability, ToolExecutionLifecyclePort } from '../tools/types.js';
 import type { Term2HookScope } from '../services/hooks/hook-contracts.js';
 import type { SessionAccessState } from '../services/session/session-access-state.js';
+import { ShellChildRegistry } from '../utils/shell/shell-child-registry.js';
 import type { AgentClientRunOptions } from '../services/conversation-agent-client.js';
 import type { ContinuationProjectionMode } from './continuation-projection-mode.js';
 import type { AgentStream } from '../services/agent-stream.js';
@@ -87,6 +88,7 @@ function createScopedToolLifecycle(
  */
 export class AgentClient {
   #agentConfig: AgentConfiguration;
+  #shellChildRegistry = new ShellChildRegistry();
   #toolInterceptorRegistry: ToolInterceptorRegistry;
   #applicationRunLoop: ApplicationRunLoop;
   #contextCompactionSessionState: ContextCompactionSessionState = { disabled: false };
@@ -253,8 +255,10 @@ export class AgentClient {
    * turn. The session sets this for the duration of a send and clears it
    * afterwards so events reach the UI's onEvent callback.
    */
-  setSubagentEventSink(sink: ((event: ConversationEvent) => void) | null): void {
-    this.#subagentBridge?.setEventSink(sink);
+  setSubagentEventSink(
+    sink: ((event: ConversationEvent) => void | PromiseLike<void>) | null,
+  ): void | PromiseLike<void> {
+    return this.#subagentBridge?.setEventSink(sink);
   }
 
   /**
@@ -398,6 +402,7 @@ export class AgentClient {
         sessionAccess,
         backgroundShellRegistry: this.#backgroundShellRegistry,
         backgroundShellOutput: this.#backgroundShellOutput,
+        shellChildRegistry: this.#shellChildRegistry,
         allowBackgroundShell,
         onConfigChanged: (_changedKey?: string) => {
           // Models capture provider/settings at creation time.
@@ -746,6 +751,10 @@ export class AgentClient {
     return this.#backgroundShellRegistry?.dispose() ?? Promise.resolve();
   }
 
+  disposeShellChildren(): void {
+    this.#shellChildRegistry.killAll();
+  }
+
   /** Await adopted child-run settlement before the session detaches its sinks. */
   disposeBackgroundSubagents(): Promise<void> {
     return this.#subagentBridge?.disposeBackgroundSubagents() ?? Promise.resolve();
@@ -757,6 +766,7 @@ export class AgentClient {
     this.#isDisposed = true;
 
     this.abort();
+    this.disposeShellChildren();
     void this.disposeBackgroundShellJobs();
     this.#clearStreamedModelCache();
     this.#chatService.clearModelCache();

@@ -1,13 +1,10 @@
-import { it, expect, beforeAll, beforeEach } from 'vitest';
+import { it, expect, beforeAll } from 'vitest';
 import { ConversationService as ProductionConversationService } from './conversation-service.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { createAgentStream } from '../agent-stream.js';
 import type { ConversationTerminal, FinalTerminal, ApprovalRequiredTerminal } from '../../contracts/conversation.js';
 import { MockStream, createMockStream } from '../test-helpers/mock-stream.js';
-import {
-  clearApprovalRejectionMarkers,
-  markToolCallAsApprovalRejection,
-} from '../../utils/streaming/extract-command-messages.js';
+import { ToolCallMarkerStore } from '../../utils/streaming/extract-command-messages.js';
 import { registerToolFormatters } from '../../tools/command-message-formatters.js';
 import { formatShellCommandMessage } from '../../tools/system/shell.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
@@ -66,10 +63,6 @@ function asApproval(result: ConversationTerminal): ApprovalRequiredTerminal {
 
 beforeAll(() => {
   registerToolFormatters([{ name: 'shell', formatCommandMessage: formatShellCommandMessage }]);
-});
-
-beforeEach(() => {
-  clearApprovalRejectionMarkers();
 });
 
 const flushQueue = async (): Promise<void> => {
@@ -806,7 +799,9 @@ it('forwards streamed events to a persistent event sink across approval continua
     agentClient: mockClient,
     deps: { logger: mockLogger, sessionContextService },
   });
-  service.setEventSink((event) => events.push(event));
+  service.setEventSink((event) => {
+    events.push(event);
+  });
 
   const approvalResult = await service.sendMessage('run command');
   expect(approvalResult.type).toBe('approval_required');
@@ -951,7 +946,8 @@ it('preserves approval rejection command messages', async () => {
     name: 'shell',
     arguments: JSON.stringify({ commands: ['should-not-show'] }),
   };
-  markToolCallAsApprovalRejection(rawItem.callId);
+  const toolCallMarkers = new ToolCallMarkerStore();
+  toolCallMarkers.markToolCallAsApprovalRejection(rawItem.callId);
   const commandItem = {
     type: 'tool_call_output_item',
     name: 'shell',
@@ -971,6 +967,7 @@ it('preserves approval rejection command messages', async () => {
 
   const service = new ConversationService({
     agentClient: mockClient,
+    toolCallMarkers,
     deps: { logger: mockLogger, sessionContextService },
   });
   const result = await service.sendMessage('run shell', {

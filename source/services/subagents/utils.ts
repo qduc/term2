@@ -103,11 +103,17 @@ export function aggregateContextToolUsage(
   return Object.entries(toolCounts).map(([toolName, count]) => ({ toolName, count }));
 }
 
-export function safeEmit(logger: any, onEvent: any, event: any): void {
+export async function safeEmit(
+  logger: any,
+  onEvent: ((event: any) => void | PromiseLike<void>) | undefined,
+  event: any,
+  options: { propagate?: boolean } = {},
+): Promise<void> {
   try {
-    onEvent?.(event);
+    await onEvent?.(event);
   } catch (error: any) {
     logger.debug('Subagent event emit failed', { error: error?.message });
+    if (options.propagate) throw error;
   }
 }
 

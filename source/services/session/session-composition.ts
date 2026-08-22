@@ -69,6 +69,8 @@ import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import { HookEventFactory } from '../hooks/hook-event-factory.js';
 import { PendingInteractionState } from './pending-interaction-state.js';
 import { BackgroundSubagentApprovalController } from '../approval/background-subagent-approval-controller.js';
+import { ToolCallMarkerStore } from '../../utils/streaming/extract-command-messages.js';
+import { registerSessionRuntime } from '../workspace/active-workspace-root.js';
 
 const asAskUserAnswerSink = (value: unknown): AskUserAnswerSink | null =>
   value && typeof (value as AskUserAnswerSink).setAskUserAnswer === 'function' ? (value as AskUserAnswerSink) : null;
@@ -103,6 +105,7 @@ export type SessionRuntimeInternals = {
   conversationStore: ConversationStore;
   approvalState: ApprovalState;
   toolTracker: SessionToolTracker;
+  toolCallMarkers: ToolCallMarkerStore;
   shellAutoApproval: ShellAutoApprovalResolver;
   approvalFlow: ApprovalFlowCoordinator;
 
@@ -185,6 +188,7 @@ export type CreateSessionRuntimeInternalsOptions = {
   /** Installed only on the root runtime; nested runtimes omit this port. */
   hookLifecycle?: HookLifecyclePort;
   hookEvents?: HookEventFactory;
+  toolCallMarkers?: ToolCallMarkerStore;
 };
 
 export type CreateConversationSessionOptions = Omit<CreateSessionRuntimeInternalsOptions, 'turnAccumulator'>;
@@ -317,10 +321,12 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     turnAccumulator,
     hookLifecycle,
     hookEvents: suppliedHookEvents,
+    toolCallMarkers: suppliedToolCallMarkers,
   } = options;
   const { logger, settingsService, sessionContextService } = deps;
   const startedAt = sessionStartedAt ?? new Date().toISOString();
   const resolvedTurnAccumulator = turnAccumulator ?? new TurnItemAccumulator();
+  const toolCallMarkers = suppliedToolCallMarkers ?? new ToolCallMarkerStore();
   const resolvedAskUserAnswerSink = askUserAnswerSink ?? asAskUserAnswerSink(agentClient);
   const resolvedSubagentEventSinkHost = subagentEventSinkHost ?? asSubagentEventSinkHost(agentClient);
   const resolvedBackgroundShellEventSinkHost = asBackgroundShellEventSinkHost(agentClient);
@@ -508,6 +514,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     sessionAccess,
     hookLifecycle,
     hookEvents,
+    toolCallMarkers,
   });
 
   const continuityReset = new SessionContinuityReset({
@@ -579,6 +586,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     generationGuard,
     journal,
     abortStream: () => agentClient.abort(),
+    toolCallMarkers,
   });
 
   const breakChaining = (): void => {
@@ -681,6 +689,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     sessionAccess,
     postExecutePending,
     setActivePostExecuteRunId: postExecutePauseCapability?.setActiveRunId.bind(postExecutePauseCapability),
+    toolCallMarkers,
     hookLifecycle,
     hookEvents,
   });
@@ -730,6 +739,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     // so they must be cancelled even when no turn is in flight.
     getMethod<[], void>(agentClient, 'cancelBackgroundRuns')?.call(agentClient);
     getMethod<[], void>(agentClient, 'cancelBackgroundShellJobs')?.call(agentClient);
+    getMethod<[], void>(agentClient, 'disposeShellChildren')?.call(agentClient);
     notificationObserver = null;
     taskObserver = null;
     const subagentDisposal = getMethod<[], Promise<void>>(agentClient, 'disposeBackgroundSubagents')?.call(agentClient);
@@ -847,6 +857,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     conversationStore,
     approvalState,
     toolTracker,
+    toolCallMarkers,
     shellAutoApproval,
     approvalFlow,
     inputPlanner,
@@ -971,10 +982,39 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
  * the conversation-layer adapter. Internal composition details remain private.
  */
 export function createSessionRuntime(options: CreateConversationSessionOptions): SessionRuntime {
-  return buildSessionRuntime(
-    createSessionRuntimeInternals({
-      ...options,
-      turnAccumulator: undefined,
-    }),
-  );
+  const releaseRuntime = registerSessionRuntime();
+  try {
+    const runtime = buildSessionRuntime(
+      createSessionRuntimeInternals({
+        ...options,
+        turnAccumulator: undefined,
+      }),
+    );
+    let released = false;
+    const releaseOnce = (): void => {
+      if (released) return;
+      released = true;
+      releaseRuntime();
+    };
+    const dispose = runtime.dispose;
+    runtime.dispose = (): void => {
+      try {
+        dispose();
+      } finally {
+        releaseOnce();
+      }
+    };
+    const shutdown = runtime.shutdown;
+    runtime.shutdown = async (): Promise<void> => {
+      try {
+        await shutdown();
+      } finally {
+        releaseOnce();
+      }
+    };
+    return runtime;
+  } catch (error) {
+    releaseRuntime();
+    throw error;
+  }
 }

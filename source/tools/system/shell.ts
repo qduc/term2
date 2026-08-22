@@ -6,6 +6,7 @@ import { relaxedNumber } from '../utils.js';
 import { validateCommandSafety } from '../../utils/shell/command-safety/index.js';
 import { logValidationError as logValidationErrorUtil } from '../../utils/shell/command-logger.js';
 import { executeShellCommand } from '../../utils/shell/execute-shell.js';
+import type { ShellChildRegistry } from '../../utils/shell/shell-child-registry.js';
 import {
   setTrimConfig,
   getTrimConfig,
@@ -28,6 +29,7 @@ import { ensureRtkInstalled, isRtkSupportedCommand, wrapWithRtk } from '../../se
 import { shouldPreferPatchEditingModel } from '../../lib/tool-selection-policy.js';
 import { HarnessInvariantError } from '../../lib/harness-invariant-error.js';
 import { createSandboxEnvironment } from '../../utils/shell/sandbox/sandbox-env.js';
+import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
 import {
   SANDBOX_ESCAPE_INSTRUCTION,
   createSandboxRuntimeConfig,
@@ -672,6 +674,9 @@ export function createShellToolDefinition(deps: {
   backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
   /** Root session-owned output store + watch layer for background jobs. */
   backgroundShellWatches?: BackgroundShellWatches;
+  shellChildRegistry?: ShellChildRegistry;
+  /** Gateway-only: reject any spawn that omits the sanitized env. */
+  gatewayMode?: boolean;
 }): ShellToolDefinition {
   const {
     loggingService,
@@ -688,6 +693,8 @@ export function createShellToolDefinition(deps: {
     nestedCompatibility,
     backgroundShellRegistry,
     backgroundShellWatches,
+    shellChildRegistry,
+    gatewayMode = false,
   } = deps;
   const deniedReadByCallId = new Map<string, DeniedReadInfo>();
   const overrideByCallId = new Map<string, { extraAllowRead?: string[]; forceUnsandboxed?: boolean }>();
@@ -965,6 +972,7 @@ export function createShellToolDefinition(deps: {
               const projectAllowRead = getProjectAllowReadStore(cwd).load();
               const sandboxConfig = createSandboxRuntimeConfig({
                 cwd,
+                tmpDir: SANDBOX_TEMP_DIR,
                 readPolicy: settingsService.get('sandbox.readPolicy'),
                 allowNetworking: settingsService.get('sandbox.allowNetworking') === true,
                 dockerSocketPath: dockerHostControl?.socketPath,
@@ -1023,16 +1031,19 @@ export function createShellToolDefinition(deps: {
             // buffer: drop from the head of the retained text instead of
             // killing the child. Foreground keeps the 'kill' default.
             overflow: background ? 'truncate' : 'kill',
+            ...(gatewayMode ? { gatewayMode: true as const } : {}),
             env: sandboxed
               ? createSandboxEnvironment(undefined, {
                   cwd,
                   readPolicy: settingsService.get('sandbox.readPolicy'),
                   dockerHostControl,
+                  tmpDir: SANDBOX_TEMP_DIR,
                 })
               : undefined,
             pauseOnSandboxNetworkApproval: sandboxed,
             signal,
             sshService,
+            childRegistry: shellChildRegistry,
             onOutputChunk: (stream, text) => {
               if (observedJobId) backgroundShellRegistry?.recordOutputChunk(observedJobId);
               // Monitoring is background-only: the store stream is opened only

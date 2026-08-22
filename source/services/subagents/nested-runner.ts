@@ -112,7 +112,7 @@ export class NestedSubagentRunner {
   #sessionContextService: ISessionContextService;
   #executionContext?: ExecutionContext;
   #toolFactory: SubagentToolFactory;
-  #onEvent?: (event: ConversationEvent) => void;
+  #onEvent?: (event: ConversationEvent) => void | PromiseLike<void>;
   #roleToolCache: Map<SupportedSubagentRole, CachedRoleTool>;
   #skillsService?: SkillsService;
   #toolOwnership: ToolOwnershipRegistry;
@@ -135,7 +135,7 @@ export class NestedSubagentRunner {
     sessionContextService: ISessionContextService;
     executionContext?: ExecutionContext;
     toolFactory: SubagentToolFactory;
-    onEvent?: (event: ConversationEvent) => void;
+    onEvent?: (event: ConversationEvent) => void | PromiseLike<void>;
     roleToolCache: Map<SupportedSubagentRole, CachedRoleTool>;
     /** Optional role resolver for shared resolution path. */
     resolveRole?: (role: SupportedSubagentRole) => SubagentDefinition;
@@ -542,7 +542,12 @@ export class NestedSubagentRunner {
           toolsUsed: [],
           error: pin.error,
         };
-        safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result: { ...failed, status: 'failed' } });
+        await safeEmit(
+          this.#logger,
+          this.#onEvent,
+          { type: 'subagent_completed', result: { ...failed, status: 'failed' } },
+          { propagate: true },
+        );
         return failed;
       }
       worktreePath = pin.worktreePath;
@@ -611,13 +616,18 @@ export class NestedSubagentRunner {
     runContext.task = request.task;
 
     if (!detailsRecord?.resumeState) {
-      safeEmit(this.#logger, this.#onEvent, {
-        type: 'subagent_started',
-        agentId,
-        role,
-        task: request.task,
-        parentTool: request.parentTool,
-      });
+      await safeEmit(
+        this.#logger,
+        this.#onEvent,
+        {
+          type: 'subagent_started',
+          agentId,
+          role,
+          task: request.task,
+          parentTool: request.parentTool,
+        },
+        { propagate: true },
+      );
     }
 
     const nestedLedger = new ApprovalLedger();
@@ -731,14 +741,24 @@ export class NestedSubagentRunner {
       // be `interrupted` — narrowing here keeps the event payload honest.
       if (parsed.status !== 'interrupted' && parsed.status !== 'running') {
         const completed: SubagentResult = { ...parsed, status: parsed.status };
-        safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result: completed });
+        await safeEmit(
+          this.#logger,
+          this.#onEvent,
+          { type: 'subagent_completed', result: completed },
+          { propagate: true },
+        );
       } else if (parsed.status === 'interrupted') {
-        safeEmit(this.#logger, this.#onEvent, {
-          type: 'subagent_interrupted',
-          agentId: parsed.agentId,
-          role: parsed.role,
-          finalText: parsed.finalText,
-        });
+        await safeEmit(
+          this.#logger,
+          this.#onEvent,
+          {
+            type: 'subagent_interrupted',
+            agentId: parsed.agentId,
+            role: parsed.role,
+            finalText: parsed.finalText,
+          },
+          { propagate: true },
+        );
       }
       return parsed;
     } catch (error: any) {
@@ -747,18 +767,23 @@ export class NestedSubagentRunner {
         role,
         error: error?.message || String(error),
       });
-      safeEmit(this.#logger, this.#onEvent, {
-        type: 'subagent_completed',
-        result: {
-          agentId,
-          role,
-          status: isAbortLike(error?.message, error) ? 'cancelled' : 'failed',
-          finalText: '',
-          filesChanged: [],
-          toolsUsed: [],
-          error: error?.message || String(error),
+      await safeEmit(
+        this.#logger,
+        this.#onEvent,
+        {
+          type: 'subagent_completed',
+          result: {
+            agentId,
+            role,
+            status: isAbortLike(error?.message, error) ? 'cancelled' : 'failed',
+            finalText: '',
+            filesChanged: [],
+            toolsUsed: [],
+            error: error?.message || String(error),
+          },
         },
-      });
+        { propagate: true },
+      );
       throw error;
     } finally {
       if (!transferredToBackground) {

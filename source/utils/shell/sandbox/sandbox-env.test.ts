@@ -112,6 +112,13 @@ it('creates a private stable XDG layout per workspace', () => {
   }
 });
 
+it('injects the session sandbox temp directory without mutating process.env', () => {
+  const env = createSandboxEnvironment({ PATH: '/usr/bin:/bin' }, { tmpDir: '/tmp/session-sandbox' });
+
+  expect(env.TMPDIR).toBe('/tmp/session-sandbox');
+  expect(process.env.TMPDIR).not.toBe('/tmp/session-sandbox');
+});
+
 it('leaves sandbox env unchanged in standard mode', () => {
   const env = createSandboxEnvironment(
     {

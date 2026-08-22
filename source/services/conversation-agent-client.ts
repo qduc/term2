@@ -69,7 +69,7 @@ export interface AskUserAnswerSink {
 }
 
 export interface SubagentEventSinkHost {
-  setSubagentEventSink(sink: ((event: ConversationEvent) => void) | null): void;
+  setSubagentEventSink(sink: ((event: ConversationEvent) => void | PromiseLike<void>) | null): void | PromiseLike<void>;
   /**
    * Optional conversation-scoped sink that stays attached across turns, so
    * background (async) subagent activity is still observed while idle.

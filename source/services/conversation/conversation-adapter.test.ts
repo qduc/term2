@@ -8,6 +8,7 @@ import type { UserTurn } from '../../types/user-turn.js';
 import type { SessionManager } from '../session/session-manager.js';
 import type { FinalTerminal } from '../../contracts/conversation.js';
 import type { ConversationEvent } from './conversation-events.js';
+import { PendingInteractionState } from '../session/pending-interaction-state.js';
 
 const noop = () => {};
 
@@ -50,6 +51,66 @@ it('sendMessage rejects when the turn event stream exhausts without a terminal e
     name: 'AmbiguousModelOutcomeError',
     unsafeToReplay: true,
   });
+});
+
+it('settles the owning turn when publishing its terminal error fails', async () => {
+  const persistenceError = new Error('journal fsync failed');
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: 'now',
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => null } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      async *start() {
+        yield { type: 'text_delta' as const, delta: 'partial' };
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'unused' };
+      },
+    },
+    queueForeground: true,
+  });
+  adapter.setEventSink((event) => {
+    if (event.type === 'error') throw persistenceError;
+  });
+
+  await expect(adapter.sendMessage('run')).rejects.toBeInstanceOf(AmbiguousModelOutcomeError);
+  expect(adapter.isQueueOwningSubmissions()).toBe(false);
+});
+
+it('presents the authoritative interaction snapshot before publishing approval_required', async () => {
+  const pending = new PendingInteractionState();
+  const observed: boolean[] = [];
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: 'now',
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => null } as unknown as SessionApprovalQuery,
+    pendingInteraction: pending,
+    turnFlow: {
+      async *start() {
+        yield {
+          type: 'approval_required' as const,
+          approval: { agentName: 'Agent', toolName: 'shell', argumentsText: 'echo safe' },
+        };
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+    },
+  });
+  adapter.setEventSink((event) => {
+    if (event.type === 'approval_required') observed.push(pending.getSnapshot() !== null);
+  });
+  await adapter.sendMessage('run');
+  expect(observed).toEqual([true]);
+  expect(pending.getSnapshot()).toMatchObject({ approval: { toolName: 'shell' } });
 });
 
 const postExecuteApprovalEvent = (revision: number, id: string) => ({
@@ -367,7 +428,9 @@ it('ConversationAdapter forwards streamed events to a persistent event sink', as
     turnFlow,
   });
 
-  adapter.setEventSink((event) => emitted.push(event));
+  adapter.setEventSink((event) => {
+    emitted.push(event);
+  });
 
   const result = await adapter.sendMessage('hello');
 

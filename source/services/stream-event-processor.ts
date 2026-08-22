@@ -7,6 +7,7 @@ import { createInvalidToolCallDiagnostic } from './logging/logging-contract.js';
 import { parseToolCallArguments } from './tool-call-arguments.js';
 import { assertAgentStream, type AgentStream } from './agent-stream.js';
 import type { ToolCallStreamingDeltaEvent } from './conversation/conversation-events.js';
+import { ToolCallMarkerStore } from '../utils/streaming/extract-command-messages.js';
 
 export interface StreamAccumulator {
   finalOutput: string;
@@ -43,6 +44,7 @@ export interface StreamProcessorOptions {
   onFunctionCallItem?: (item: unknown) => void;
   onFunctionResultItem?: (item: unknown) => void;
   onRunItem?: (item: unknown) => void;
+  markerStore?: ToolCallMarkerStore;
 }
 
 export interface StreamProcessorDeps {
@@ -58,6 +60,7 @@ export async function* processStreamEvents(
   deps: StreamProcessorDeps,
 ): AsyncGenerator<ConversationEvent, void, void> {
   assertAgentStream(stream);
+  const markerStore = opts.markerStore ?? new ToolCallMarkerStore();
   if (!opts.preserveExistingToolArgs) opts.toolCallArgumentsById.clear();
   acc.textDeltaCount = 0;
   acc.reasoningDeltaCount = 0;
@@ -66,6 +69,7 @@ export async function* processStreamEvents(
     emitCommandMessagesFromItems(items, {
       toolCallArgumentsById: opts.toolCallArgumentsById,
       emittedCommandIds: acc.emittedCommandIds,
+      markerStore,
     });
   const emitText = (text: string): ConversationEvent | null => {
     if (!text) return null;

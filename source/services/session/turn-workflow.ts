@@ -68,10 +68,7 @@ import {
 import type { ProviderContinuity } from '../provider-continuity.js';
 import type { SessionStreamProcessor } from './session-stream-processor.js';
 import { selectAgentStreamItems, type AgentStream } from '../agent-stream.js';
-import {
-  extractCommandMessages,
-  markToolCallAsLlmAutoApproved,
-} from '../../utils/streaming/extract-command-messages.js';
+import { extractCommandMessages, ToolCallMarkerStore } from '../../utils/streaming/extract-command-messages.js';
 import {
   collectKnownToolCallIds,
   resolveAbortedApprovalCallIds,
@@ -116,16 +113,19 @@ export interface TurnWorkflowDeps {
   setActivePostExecuteRunId?: (runId: string | null) => void;
   hookLifecycle?: HookLifecyclePort;
   hookEvents?: HookEventFactory;
+  toolCallMarkers?: ToolCallMarkerStore;
 }
 
 export class TurnWorkflow {
   readonly #batchCoordinator: ToolApprovalBatchCoordinator;
+  readonly #toolCallMarkers: ToolCallMarkerStore;
   readonly #liveAttemptOwners = new WeakSet<TurnAttempt>();
   #liveRun: LiveRun<ConversationEvent, LiveRunResult> | null = null;
   #nextLiveRunId = 0;
   #hookTurnId: string | undefined;
 
   constructor(private readonly deps: TurnWorkflowDeps) {
+    this.#toolCallMarkers = deps.toolCallMarkers ?? new ToolCallMarkerStore();
     this.#batchCoordinator =
       deps.batchCoordinator ??
       new ToolApprovalBatchCoordinator({
@@ -428,7 +428,7 @@ export class TurnWorkflow {
 
           if (outcome.kind === 'auto_approve') {
             if (outcome.advisory?.source === 'llm') {
-              markToolCallAsLlmAutoApproved(outcome.callId);
+              this.#toolCallMarkers.markToolCallAsLlmAutoApproved(outcome.callId);
             }
             this.deps.logger.debug('Shell command auto-approved by LLM', {
               eventType: 'approval.auto_approved',
@@ -630,6 +630,7 @@ export class TurnWorkflow {
         logger: this.deps.logger,
         sessionId: this.deps.sessionId,
         sessionAccess: this.deps.sessionAccess,
+        toolCallMarkers: this.#toolCallMarkers,
       },
     );
 
@@ -700,7 +701,7 @@ export class TurnWorkflow {
         // generation travels with the live run so the init-less
         // `continuePostExecute` observer path uses the same token.
         if (outcome.advisory?.source === 'llm') {
-          markToolCallAsLlmAutoApproved(outcome.callId);
+          this.#toolCallMarkers.markToolCallAsLlmAutoApproved(outcome.callId);
         }
         this.deps.logger.debug('Shell command auto-approved by LLM', {
           eventType: 'approval.auto_approved',
@@ -1021,7 +1022,7 @@ export class TurnWorkflow {
 
     if (kind === 'auto_approve') {
       if (outcome.advisory?.source === 'llm') {
-        markToolCallAsLlmAutoApproved(outcome.callId);
+        this.#toolCallMarkers.markToolCallAsLlmAutoApproved(outcome.callId);
       }
       this.deps.logger.debug('Shell command auto-approved by LLM', {
         eventType: 'approval.auto_approved',
@@ -1160,7 +1161,7 @@ export class TurnWorkflow {
 
     const mergedEmittedIds = new Set([...allEmittedIds, ...acc.emittedCommandIds]);
 
-    const streamMessages = extractCommandMessages(selectAgentStreamItems(stream));
+    const streamMessages = extractCommandMessages(selectAgentStreamItems(stream), this.#toolCallMarkers);
     const filteredMessages = streamMessages.filter((msg) => !state.previouslyEmittedIds.has(msg.id));
     const nextCumulativeMessages = [...state.cumulativeCommandMessages, ...filteredMessages];
     const nextCumulativeUsage = acc.latestUsage ?? state.cumulativeUsage;
@@ -1187,6 +1188,7 @@ export class TurnWorkflow {
         logger: this.deps.logger,
         sessionId: this.deps.sessionId,
         sessionAccess: this.deps.sessionAccess,
+        toolCallMarkers: this.#toolCallMarkers,
       },
     );
 
@@ -1243,11 +1245,17 @@ export class TurnWorkflow {
     );
   }
 
-  abortLiveRun(): void {
+  abortLiveRun(): Promise<void> {
     const liveRun = this.#liveRun;
     this.#liveRun = null;
     liveRun?.cancel();
     this.deps.setActivePostExecuteRunId?.(null);
+    return (
+      liveRun?.completion.then(
+        () => undefined,
+        () => undefined,
+      ) ?? Promise.resolve()
+    );
   }
 
   get activePostExecuteRunId(): string | null {

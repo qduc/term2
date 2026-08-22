@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'child_process';
 import process from 'process';
 import { SANDBOX_TEMP_DIR } from './temp-dir.js';
 import { registerSandboxNetworkApprovalPauseController } from './sandbox/sandbox-network-approval.js';
+import { killAllShellChildrenAtProcessExit, ShellChildRegistry } from './shell-child-registry.js';
 
 /**
  * Process completion, output completion, and descendant cleanup are three
@@ -228,11 +229,20 @@ export interface ShellExecutionResult {
 
 import { ISSHService } from '../../services/service-interfaces.js';
 
+export class GatewayShellEnvironmentError extends Error {
+  constructor() {
+    super('gateway shell execution requires an explicit sanitized environment');
+    this.name = 'GatewayShellEnvironmentError';
+  }
+}
+
 export interface ExecuteShellOptions {
   cwd?: string;
   timeout?: number;
   maxBuffer?: number;
   env?: NodeJS.ProcessEnv;
+  /** Gateway workers must never use the legacy process.env fallback. */
+  gatewayMode?: boolean;
   signal?: AbortSignal;
   sshService?: ISSHService;
   execImpl?: ExecImpl;
@@ -241,6 +251,8 @@ export interface ExecuteShellOptions {
   drainGraceMs?: number;
   /** How long SIGTERM gets before SIGKILL follows. */
   terminationGraceMs?: number;
+  /** Session-owned child registry; omitted callers use the process-exit union. */
+  childRegistry?: ShellChildRegistry;
   /**
    * Called once per output chunk as it arrives, in arrival order, per stream.
    * Chunks are raw: a chunk may split a line, and line reassembly is not this
@@ -273,27 +285,9 @@ function signalChildProcess(child: ChildProcess, signal: NodeJS.Signals): void {
   child.kill(signal);
 }
 
-/**
- * Children are spawned detached, so they own their process group and survive an
- * exit of this process. Tracking them lets the CLI's exit hook take the group
- * down with us instead of orphaning a background subagent's command.
- */
-const liveChildren = new Set<ChildProcess>();
-
 /** Synchronously SIGKILL every live child's process group. Safe in a `process.on('exit')` hook. */
 export function killLiveShellChildren(): void {
-  for (const child of liveChildren) {
-    try {
-      if (process.platform !== 'win32' && child.pid) {
-        process.kill(-child.pid, 'SIGKILL');
-      } else {
-        child.kill('SIGKILL');
-      }
-    } catch {
-      /* already gone */
-    }
-  }
-  liveChildren.clear();
+  killAllShellChildrenAtProcessExit();
 }
 
 function stopChildProcess(child: ChildProcess): void {
@@ -313,6 +307,7 @@ export async function executeShellCommand(
   command: string,
   options: ExecuteShellOptions = {},
 ): Promise<ShellExecutionResult> {
+  if (options.gatewayMode && options.env === undefined) throw new GatewayShellEnvironmentError();
   if (options.pauseOnSandboxNetworkApproval && !options.sshService) {
     return await withSandboxExecutionLease(() => executeShellCommandUnleased(command, options));
   }
@@ -329,12 +324,14 @@ async function executeShellCommandUnleased(
     timeout,
     maxBuffer,
     env,
+    gatewayMode = false,
     signal,
     sshService,
     execImpl = defaultExecImpl,
     pauseOnSandboxNetworkApproval = false,
     drainGraceMs = DEFAULT_DRAIN_GRACE_MS,
     terminationGraceMs = DEFAULT_TERMINATION_GRACE_MS,
+    childRegistry = new ShellChildRegistry(),
     onOutputChunk,
     overflow = 'kill',
   } = options;
@@ -344,8 +341,8 @@ async function executeShellCommandUnleased(
   }
 
   const childEnv: NodeJS.ProcessEnv = {
-    ...(env ?? process.env),
-    TMPDIR: SANDBOX_TEMP_DIR,
+    ...(gatewayMode ? env! : env ?? process.env),
+    TMPDIR: gatewayMode ? env!.TMPDIR : env?.TMPDIR ?? SANDBOX_TEMP_DIR,
   };
 
   // Latched the moment the deadline fires. A command that is killed and then
@@ -402,7 +399,7 @@ async function executeShellCommandUnleased(
         killTimer = setTimeout(() => {
           killTimer = undefined;
           signalChildProcess(child, 'SIGKILL');
-          if (spawnedChild) liveChildren.delete(spawnedChild);
+          if (spawnedChild) childRegistry.delete(spawnedChild);
         }, terminationGraceMs);
         hardFinishTimer = setTimeout(() => {
           hardFinishTimer = undefined;
@@ -429,7 +426,7 @@ async function executeShellCommandUnleased(
         }
         // A child still inside its grace stays tracked so the exit hook can take
         // its group down if we exit before the SIGKILL is due.
-        if (spawnedChild && !killTimer) liveChildren.delete(spawnedChild);
+        if (spawnedChild && !killTimer) childRegistry.delete(spawnedChild);
         clearCommandTimeout();
         clearTerminationTimers();
         signal?.removeEventListener('abort', stopChild);
@@ -483,7 +480,7 @@ async function executeShellCommandUnleased(
 
       if (!settled) {
         spawnedChild = child;
-        liveChildren.add(child);
+        childRegistry.add(child);
         startCommandTimeout();
         if (pauseOnSandboxNetworkApproval) {
           unregisterPauseController = registerSandboxNetworkApprovalPauseController({

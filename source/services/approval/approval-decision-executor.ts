@@ -1,7 +1,7 @@
 import path from 'node:path';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { ILoggingService } from '../service-interfaces.js';
-import { markToolCallAsApprovalRejection } from '../../utils/streaming/extract-command-messages.js';
+import { ToolCallMarkerStore } from '../../utils/streaming/extract-command-messages.js';
 import { getCallIdFromObject, getToolInfoFromInterruption } from '../interruption-info.js';
 import { parseToolCallArguments } from '../tool-call-arguments.js';
 import { createInvalidToolCallDiagnostic } from '../logging/logging-contract.js';
@@ -41,6 +41,7 @@ export type ApprovalDecisionExecutorDeps = {
   nestedCompatibility?: NestedToolCompatibilityState;
   hookLifecycle?: HookLifecyclePort;
   hookEvents?: HookEventFactory;
+  toolCallMarkers?: ToolCallMarkerStore;
 };
 
 export type ResolveApprovalDecisionInput = {
@@ -57,7 +58,11 @@ export type ResolveApprovalDecisionInput = {
  * the exact same capability policy without taking over the root interaction.
  */
 export class ApprovalDecisionExecutor {
-  constructor(private readonly deps: ApprovalDecisionExecutorDeps) {}
+  readonly #toolCallMarkers: ToolCallMarkerStore;
+
+  constructor(private readonly deps: ApprovalDecisionExecutorDeps) {
+    this.#toolCallMarkers = deps.toolCallMarkers ?? new ToolCallMarkerStore();
+  }
 
   resolve(input: ResolveApprovalDecisionInput): ApprovalDecisionResolution {
     const decisionCallId = getCallIdFromObject(input.pendingApprovalContext.interruption);
@@ -181,7 +186,7 @@ export class ApprovalDecisionExecutor {
         else this.deps.nestedCompatibility?.docker.consumeDenial(this.deps.sessionId, parsedDecisionArgs.command);
       }
 
-      markToolCallAsApprovalRejection(decisionCallId);
+      this.#toolCallMarkers.markToolCallAsApprovalRejection(decisionCallId);
       state.reject?.(interruption, { message });
       if (decisionCallId) pendingApprovalContext.decisionsByCallId.set(decisionCallId, 'rejected');
 

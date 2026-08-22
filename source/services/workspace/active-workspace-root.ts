@@ -14,9 +14,33 @@ import process from 'process';
  * explicitly injected root always wins over this fallback.
  */
 let activeRoot: string | undefined;
+let liveSessionRuntimeCount = 0;
+
+export class ConcurrentWorkspaceRootError extends Error {
+  readonly code = 'workspace_root_multi_runtime';
+
+  constructor() {
+    super('Cannot publish an active workspace root while multiple session runtimes are live.');
+    this.name = 'ConcurrentWorkspaceRootError';
+  }
+}
+
+/** Internal lifecycle admission used to fail closed before a second runtime retargets tools. */
+export function registerSessionRuntime(): () => void {
+  liveSessionRuntimeCount += 1;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    liveSessionRuntimeCount = Math.max(0, liveSessionRuntimeCount - 1);
+  };
+}
 
 /** Called only by ExecutionContext, which owns the lease. */
 export function publishActiveWorkspaceRoot(root: string | undefined): void {
+  if (root !== undefined && liveSessionRuntimeCount > 1) {
+    throw new ConcurrentWorkspaceRootError();
+  }
   activeRoot = root;
 }
 

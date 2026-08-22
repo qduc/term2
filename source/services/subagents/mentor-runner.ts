@@ -38,14 +38,14 @@ export class MentorRunner {
   #sessionContextService: ISessionContextService;
   #executionContext?: ExecutionContext;
   #mentorSession: SubagentSession;
-  #onEvent?: (event: ConversationEvent) => void;
+  #onEvent?: (event: ConversationEvent) => void | PromiseLike<void>;
 
   constructor(deps: {
     logger: ILoggingService;
     settings: ISettingsService;
     sessionContextService: ISessionContextService;
     executionContext?: ExecutionContext;
-    onEvent?: (event: ConversationEvent) => void;
+    onEvent?: (event: ConversationEvent) => void | PromiseLike<void>;
     session?: SubagentSession;
   }) {
     this.#logger = deps.logger;
@@ -102,7 +102,8 @@ export class MentorRunner {
         if (!signal?.aborted && !isAbortLike(error?.message, error)) throw error;
         const usage = normalizeAgentRunUsage(error?.usage) ?? extractUsage(error);
         if (slot && usage) childBudget!.recordUsage(usage);
-        if (usage) safeEmit(this.#logger, this.#onEvent, { type: 'usage_update', agentId, usage });
+        if (usage)
+          await safeEmit(this.#logger, this.#onEvent, { type: 'usage_update', agentId, usage }, { propagate: true });
         return {
           agentId,
           role: 'mentor',
@@ -326,7 +327,8 @@ export class MentorRunner {
     mentorSession.appendOutput({ output: selectAgentStreamItems(stream), lastResponseId: stream.lastResponseId });
 
     const usage = normalizeAgentRunUsage(stream.runUsage) ?? extractUsage(stream);
-    if (usage) safeEmit(this.#logger, this.#onEvent, { type: 'usage_update', agentId, usage });
+    if (usage)
+      await safeEmit(this.#logger, this.#onEvent, { type: 'usage_update', agentId, usage }, { propagate: true });
 
     return {
       agentId,

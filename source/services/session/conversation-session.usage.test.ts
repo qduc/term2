@@ -114,7 +114,11 @@ it('sendMessage() keeps run-cumulative terminal usage while emitting per-request
   const { terminalAdapter } = bundle;
 
   const events: ConversationEvent[] = [];
-  const result = await terminalAdapter.sendMessage('Hello', { onEvent: (ev) => events.push(ev) });
+  const result = await terminalAdapter.sendMessage('Hello', {
+    onEvent: (ev) => {
+      events.push(ev);
+    },
+  });
 
   // The terminal usage stays the authoritative run-cumulative total.
   expect((result as unknown as Record<string, unknown>).usage).toEqual({

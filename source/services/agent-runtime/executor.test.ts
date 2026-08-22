@@ -190,7 +190,9 @@ describe('createExecutor', () => {
       toolsUsed: [],
     });
 
-    const executor = createExecutor(runWithDef, logger(), undefined, (event) => events.push(event));
+    const executor = createExecutor(runWithDef, logger(), undefined, (event) => {
+      events.push(event);
+    });
 
     await executor(makeExecutorInput());
 

@@ -16,24 +16,28 @@ import type {
   SendMessageOptions,
   HandleApprovalDecisionOptions,
   ConversationAdapter,
+  AbortDiscardResult,
   ConversationEventSink,
+  PreparedMessageIds,
+  PreparedMessageResult,
   QueuedTurnStartObserver,
   SubmissionMutation,
 } from './conversation-adapter.js';
 import type { LargeUncachedInputDecision } from '../large-uncached-input-guard.js';
 import type { InputSurgeDecision } from '../input-surge-guard.js';
-import type { SessionRuntime } from '../session/session-composition.js';
+import type { SessionRuntime } from '../../core/index.js';
 import type { BackgroundTaskControlPort } from '../session/background-task-control.js';
 import type {
   BackgroundSubagentNotificationPort,
   BackgroundSubagentTaskPort,
 } from '../subagents/subagent-notification-store.js';
-import type { BackgroundSubagentApprovalChannel } from '../session/session-composition.js';
+import type { BackgroundSubagentApprovalChannel } from '../../core/index.js';
 import type { QueueStateKind, QueueStateObserver } from './conversation-adapter.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import { createConversationRuntime } from './conversation-runtime-factory.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
+import { ToolCallMarkerStore } from '../../utils/streaming/extract-command-messages.js';
 import type {
   PendingInteractionResolution,
   PendingInteractionSnapshot,
@@ -53,6 +57,11 @@ export class ConversationService {
   #adapter: ConversationAdapter;
   #clientHandle: SessionClientHandle;
   readonly #clientFactory: SessionClientFactory;
+  readonly #toolCallMarkers: ToolCallMarkerStore;
+  readonly #queueCapacity?: number;
+  readonly #preparedLeaseTtlMs?: number;
+  readonly #activeCancelTimeoutMs?: number;
+  readonly #discardOnFailure: boolean;
   #eventSink: ConversationEventSink | null = null;
   #pendingInteractionObserver: ((snapshot: PendingInteractionSnapshot | null) => void) | null = null;
   readonly #deps: {
@@ -69,6 +78,11 @@ export class ConversationService {
     sessionId = 'default',
     sessionStartedAt,
     toolOwnership,
+    toolCallMarkers,
+    queueCapacity,
+    preparedLeaseTtlMs,
+    activeCancelTimeoutMs,
+    discardOnFailure,
   }: {
     /** Compatibility seam: caller retains ownership of a prebuilt client. */
     agentClient?: ConversationAgentClient;
@@ -84,6 +98,16 @@ export class ConversationService {
     sessionStartedAt?: string;
     /** Required with a caller-owned client to preserve approval/nested identity. */
     toolOwnership?: ToolOwnershipRegistry;
+    /** Internal per-session marker state for command-message annotations. */
+    toolCallMarkers?: ToolCallMarkerStore;
+    /** Gateway-only finite queue capacity. */
+    queueCapacity?: number;
+    /** Gateway-only prepared lease TTL. */
+    preparedLeaseTtlMs?: number;
+    /** Test/runtime seam for bounding cancellation waits. */
+    activeCancelTimeoutMs?: number;
+    /** Gateway-only failure policy: discard retained work rather than pause it. */
+    discardOnFailure?: boolean;
   }) {
     if (!sessionClientFactory && !agentClient) {
       throw new Error('ConversationService requires an agentClient or sessionClientFactory');
@@ -92,7 +116,12 @@ export class ConversationService {
       throw new Error('ConversationService requires toolOwnership with an agentClient');
     }
     this.#clientFactory = sessionClientFactory ?? createCallerOwnedSessionClientFactory(agentClient!, toolOwnership!);
+    this.#queueCapacity = queueCapacity;
+    this.#preparedLeaseTtlMs = preparedLeaseTtlMs;
+    this.#activeCancelTimeoutMs = activeCancelTimeoutMs;
+    this.#discardOnFailure = discardOnFailure === true;
     this.#clientHandle = this.#clientFactory.create(sessionId ?? 'default');
+    this.#toolCallMarkers = toolCallMarkers ?? new ToolCallMarkerStore();
     this.#deps = deps;
     const { runtime, adapter } = createConversationRuntime({
       agentClient: this.#clientHandle.agentClient,
@@ -105,8 +134,13 @@ export class ConversationService {
       ...(this.#clientHandle.access ? { sessionAccess: this.#clientHandle.access } : {}),
       ...(this.#clientHandle.hookLifecycle ? { hookLifecycle: this.#clientHandle.hookLifecycle } : {}),
       ...(this.#clientHandle.hookEvents ? { hookEvents: this.#clientHandle.hookEvents } : {}),
+      toolCallMarkers: this.#toolCallMarkers,
       deps,
       queueForeground: true,
+      queueCapacity,
+      preparedLeaseTtlMs,
+      activeCancelTimeoutMs,
+      discardOnFailure: this.#discardOnFailure,
       sessionId: sessionId ?? 'default',
       sessionStartedAt,
     });
@@ -188,8 +222,13 @@ export class ConversationService {
       ...(this.#clientHandle.access ? { sessionAccess: this.#clientHandle.access } : {}),
       ...(this.#clientHandle.hookLifecycle ? { hookLifecycle: this.#clientHandle.hookLifecycle } : {}),
       ...(this.#clientHandle.hookEvents ? { hookEvents: this.#clientHandle.hookEvents } : {}),
+      toolCallMarkers: this.#toolCallMarkers,
       deps: this.#deps,
       queueForeground: true,
+      queueCapacity: this.#queueCapacity,
+      preparedLeaseTtlMs: this.#preparedLeaseTtlMs,
+      activeCancelTimeoutMs: this.#activeCancelTimeoutMs,
+      discardOnFailure: this.#discardOnFailure,
       sessionId: newId,
     });
     this.#runtime = runtime;
@@ -333,8 +372,38 @@ export class ConversationService {
     this.#clientHandle.agentClient.cancelBackgroundShellJobs?.();
   }
 
+  /** Reserve a gateway message slot without starting provider/tool work. */
+  prepareMessage(input: string | UserTurn, ids: PreparedMessageIds): Promise<PreparedMessageResult> {
+    return this.#adapter.prepareMessage(input, ids);
+  }
+
+  commitMessage(leaseId: string): Promise<void> {
+    return this.#adapter.commitMessage(leaseId);
+  }
+
+  cancelPreparedMessage(leaseId: string): Promise<void> {
+    return this.#adapter.cancelPreparedMessage(leaseId);
+  }
+
+  abortAndDiscard(): Promise<AbortDiscardResult> {
+    return this.#adapter.abortAndDiscard();
+  }
+
+  closeAdmission(): string[] {
+    return this.#adapter.closeAdmission();
+  }
+
+  reopenAdmission(): void {
+    this.#adapter.reopenAdmission();
+  }
+
+  consumeFailureDiscardedTurnIds(): string[] {
+    return this.#adapter.consumeFailureDiscardedTurnIds();
+  }
+
   /** Release the current runtime and, when factory-owned, its session client. */
   dispose(): void {
+    this.#adapter.closeAdmission();
     this.#runtime.dispose();
     this.#clientHandle.dispose();
   }
@@ -345,7 +414,7 @@ export class ConversationService {
 
   async compactContext(): Promise<string> {
     const startedAt = Date.now();
-    this.#eventSink?.({
+    await this.#eventSink?.({
       type: 'context_compaction_started',
       provider: this.#deps.settingsService?.get('agent.provider') ?? 'openai',
       sessionId: this.sessionId,
@@ -354,7 +423,7 @@ export class ConversationService {
     try {
       const outcome = await this.#runtime.compactContext();
       if (outcome.kind === 'busy') {
-        this.#eventSink?.({
+        await this.#eventSink?.({
           type: 'context_compaction_failed',
           provider: this.#deps.settingsService?.get('agent.provider') ?? 'openai',
           sessionId: this.sessionId,
@@ -370,7 +439,7 @@ export class ConversationService {
           outcome.reason === 'no_complete_cold_turn'
             ? 'Nothing to compact: at least one complete cold turn is required.'
             : `Context compaction was blocked: ${outcome.reason}.`;
-        this.#eventSink?.({
+        await this.#eventSink?.({
           type: 'context_compaction_failed',
           provider: this.#deps.settingsService?.get('agent.provider') ?? 'openai',
           sessionId: this.sessionId,
@@ -382,7 +451,7 @@ export class ConversationService {
       }
       if (outcome.kind !== 'compacted') return 'Nothing to compact.';
       if (outcome.usage.inputTokens > 0 || outcome.usage.outputTokens > 0) {
-        this.#eventSink?.({
+        await this.#eventSink?.({
           type: 'usage_update',
           usage: {
             prompt_tokens: outcome.usage.inputTokens,
@@ -391,8 +460,8 @@ export class ConversationService {
           },
         });
       }
-      for (const record of outcome.costRecords) this.#eventSink?.({ type: 'cost_update', record });
-      this.#eventSink?.({
+      for (const record of outcome.costRecords) await this.#eventSink?.({ type: 'cost_update', record });
+      await this.#eventSink?.({
         type: 'context_compaction_completed',
         provider: this.#deps.settingsService?.get('agent.provider') ?? 'openai',
         sessionId: this.sessionId,
@@ -405,7 +474,7 @@ export class ConversationService {
         outcome.checkpoint.contextSummary.estimatedTokensAfter ?? '?'
       } estimated tokens).`;
     } catch (error) {
-      this.#eventSink?.({
+      await this.#eventSink?.({
         type: 'context_compaction_failed',
         provider: this.#deps.settingsService?.get('agent.provider') ?? 'openai',
         sessionId: this.sessionId,

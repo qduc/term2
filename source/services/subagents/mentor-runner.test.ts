@@ -67,7 +67,9 @@ it('returns final text and usage from a settled stream (F4 regression)', async (
       'agent.mentorProvider': providerId,
     }),
     sessionContextService: createSessionContextService(),
-    onEvent: (event) => received.push(event),
+    onEvent: (event) => {
+      received.push(event);
+    },
   });
 
   const result = await runner.run('mentor-run', 'Review this change.');

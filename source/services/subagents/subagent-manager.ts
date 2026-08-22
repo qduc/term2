@@ -34,7 +34,7 @@ import type { ForegroundSubagentCandidate } from './nested-runner.js';
 export class SubagentManager {
   #logger: ILoggingService;
   #settings: ISettingsService;
-  #onEvent?: (event: ConversationEvent) => void;
+  #onEvent?: (event: ConversationEvent) => void | PromiseLike<void>;
   #runtime: SubagentRuntime;
   #mentorActive = false;
 
@@ -43,7 +43,7 @@ export class SubagentManager {
     settings: ISettingsService;
     executionContext?: ExecutionContext;
     sessionContextService: ISessionContextService;
-    onEvent?: (event: ConversationEvent) => void;
+    onEvent?: (event: ConversationEvent) => void | PromiseLike<void>;
     agentClient?: ISubagentClient;
     createClient?: ISubagentClientFactory['createClient'];
     skillsService?: SkillsService;
@@ -120,13 +120,18 @@ export class SubagentManager {
     const agentId = randomUUID();
 
     this.#logger.debug('SubagentManager.run', { agentId, role: request.role, taskLength: request.task.length });
-    safeEmit(this.#logger, this.#onEvent, {
-      type: 'subagent_started',
-      agentId,
-      role: request.role,
-      task: request.task,
-      parentTool: request.parentTool,
-    });
+    await safeEmit(
+      this.#logger,
+      this.#onEvent,
+      {
+        type: 'subagent_started',
+        agentId,
+        role: request.role,
+        task: request.task,
+        parentTool: request.parentTool,
+      },
+      { propagate: true },
+    );
 
     try {
       if (request.role === 'mentor') {
@@ -145,7 +150,7 @@ export class SubagentManager {
               request.executionBudget,
             )
           : await this.#runtime.executionRunner.run(agentId, request, this.#resolveRoleDefinition(request.role));
-      safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result });
+      await safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result }, { propagate: true });
       return result;
     } catch (error: any) {
       this.#logger.error('Subagent run failed', {
@@ -168,7 +173,7 @@ export class SubagentManager {
         error: error?.message || String(error),
         ...(usage ? { usage } : {}),
       };
-      safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result });
+      await safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result }, { propagate: true });
       return result;
     } finally {
       if (request.role === 'mentor') this.#mentorActive = false;

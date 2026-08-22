@@ -1,10 +1,5 @@
 import { it, expect, beforeEach, afterEach } from 'vitest';
-import {
-  clearApprovalRejectionMarkers,
-  clearLlmAutoApprovalMarkers,
-  extractCommandMessages,
-  markToolCallAsLlmAutoApproved,
-} from './extract-command-messages.js';
+import { ToolCallMarkerStore, extractCommandMessages } from './extract-command-messages.js';
 import { clearToolFormatters, registerToolFormatters } from '../../tools/command-message-formatters.js';
 import { formatApplyPatchCommandMessage } from '../../tools/file/apply-patch.js';
 import { formatAskMentorCommandMessage } from '../../tools/agent/ask-mentor.js';
@@ -16,6 +11,8 @@ import { formatGrepCommandMessage } from '../../tools/file/grep.js';
 import { formatReadFileCommandMessage } from '../../tools/file/read-file.js';
 import { formatBackgroundShellJobCommandMessage, formatShellCommandMessage } from '../../tools/system/shell.js';
 
+let markerStore: ToolCallMarkerStore;
+
 const withStubbedNow = (value: number) => {
   const realNow = Date.now;
   Date.now = () => value;
@@ -25,8 +22,7 @@ const withStubbedNow = (value: number) => {
 };
 
 beforeEach(() => {
-  clearApprovalRejectionMarkers();
-  clearLlmAutoApprovalMarkers();
+  markerStore = new ToolCallMarkerStore();
   clearToolFormatters();
   registerToolFormatters([
     { name: 'apply_patch', formatCommandMessage: formatApplyPatchCommandMessage },
@@ -42,8 +38,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  clearApprovalRejectionMarkers();
-  clearLlmAutoApprovalMarkers();
   clearToolFormatters();
 });
 
@@ -83,8 +77,24 @@ it('extracts failure reason from shell command outcome', () => {
   }
 });
 
+it('keeps approval markers isolated between stores with the same call ID', () => {
+  const storeA = new ToolCallMarkerStore();
+  const storeB = new ToolCallMarkerStore();
+  const items = [
+    {
+      type: 'tool_call_output_item',
+      output: 'done',
+      rawItem: { type: 'function_call_result', name: 'shell', callId: 'same-call' },
+    },
+  ];
+
+  storeA.markToolCallAsLlmAutoApproved('same-call');
+  expect(extractCommandMessages(items, storeA)[0]?.autoApprovedByLlm).toBe(true);
+  expect(extractCommandMessages(items, storeB)[0]?.autoApprovedByLlm).toBeUndefined();
+});
+
 it('marks a shell command auto-approved by the LLM', () => {
-  markToolCallAsLlmAutoApproved('call-auto-approved');
+  markerStore.markToolCallAsLlmAutoApproved('call-auto-approved');
 
   const items = [
     {
@@ -104,7 +114,7 @@ it('marks a shell command auto-approved by the LLM', () => {
     },
   ];
 
-  const messages = extractCommandMessages(items);
+  const messages = extractCommandMessages(items, markerStore);
 
   expect(messages).toHaveLength(1);
   expect(messages[0]?.autoApprovedByLlm).toBe(true);

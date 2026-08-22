@@ -14,6 +14,7 @@ import type { ModelRequestCost } from '../../services/cost/model-cost.js';
 import { extractUsage } from '../../utils/ai/token-usage.js';
 import { getActiveWorkspaceRoot } from '../workspace/active-workspace-root.js';
 import { extractCommandMessages } from '../../utils/streaming/extract-command-messages.js';
+import type { ToolCallMarkerStore } from '../../utils/streaming/extract-command-messages.js';
 import { attachCachedArguments } from '../command-message-streaming.js';
 import { createInvalidToolCallDiagnostic } from '../logging/logging-contract.js';
 import { asRecord, getCallIdFromObject, getString, getToolInfoFromInterruption } from '../interruption-info.js';
@@ -56,6 +57,7 @@ export interface ResultBuilderDeps {
   sessionAccess?: SessionAccessState;
   /** Explicit nested/test-only legacy approval state. */
   nestedCompatibility?: NestedToolCompatibilityState;
+  toolCallMarkers?: ToolCallMarkerStore;
 }
 
 export interface ResultBuilderInput {
@@ -347,7 +349,7 @@ export async function buildConversationResult(
 
   const items = selectAgentStreamItems(result);
   const commandMessageItems = attachCachedArguments(items, toolCallArgumentsById);
-  const allCommandMessages = extractCommandMessages(commandMessageItems);
+  const allCommandMessages = extractCommandMessages(commandMessageItems, deps.toolCallMarkers);
   const derivedTurnItems = buildPersistedAssistantTurnItems(items);
 
   const commandMessages = emittedCommandIds

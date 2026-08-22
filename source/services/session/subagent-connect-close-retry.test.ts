@@ -40,10 +40,14 @@ it('retries a subagent whose websocket closes before any stream exists', async (
   });
 
   const types: string[] = [];
-  for await (const event of runtime.turns.start({ text: 'go', images: [] } as never)) {
-    types.push(event.type);
-  }
+  try {
+    for await (const event of runtime.turns.start({ text: 'go', images: [] } as never)) {
+      types.push(event.type);
+    }
 
-  expect(calls).toBe(2);
-  expect(types).toEqual(['retry', 'text_delta', 'final']);
+    expect(calls).toBe(2);
+    expect(types).toEqual(['retry', 'text_delta', 'final']);
+  } finally {
+    await runtime.shutdown();
+  }
 });

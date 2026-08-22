@@ -1,4 +1,8 @@
-import type { ConversationEvent, FinalResponseEvent } from '../conversation/conversation-events.js';
+import type {
+  ConversationEvent,
+  ConversationEventSink,
+  FinalResponseEvent,
+} from '../conversation/conversation-events.js';
 import type { ConversationTerminal } from '../../contracts/conversation.js';
 import type { CommandMessage } from '../../tools/types.js';
 import { type NormalizedUsage } from '../../utils/ai/token-usage.js';
@@ -28,7 +32,7 @@ export async function collectTerminalResult(
     onTextChunk?: (fullText: string, chunk: string) => void;
     onReasoningChunk?: (fullText: string, chunk: string) => void;
     onCommandMessage?: (message: CommandMessage) => void;
-    onEvent?: (event: ConversationEvent) => void;
+    onEvent?: ConversationEventSink;
     getRawInterruption?: () => unknown;
     onFinalEvent?: (event: FinalResponseEvent) => void;
   } = {},
@@ -77,7 +81,7 @@ export async function collectTerminalResult(
   };
 
   for await (const event of events) {
-    onEvent?.(event);
+    await onEvent?.(event);
 
     switch (event.type) {
       case 'text_delta': {

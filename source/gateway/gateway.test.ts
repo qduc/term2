@@ -19,6 +19,7 @@ import { GatewayLifecycle } from './lifecycle.js';
 import { MemoryReplayLedger, SqliteReplayLedger, type ReplayLedger } from './replay-ledger.js';
 import { GatewayPersistenceCoordinator } from './persistence/coordinator.js';
 import { createGatewayStorageLayout } from './persistence/storage.js';
+import { createGatewayEventJournal } from './persistence/event-journal.js';
 import { createSafeLogMetadata, GatewayLogError } from './safe-log.js';
 import { executeShellCommand, GatewayShellEnvironmentError } from '../utils/shell/execute-shell.js';
 import {
@@ -264,6 +265,29 @@ function makeVerifier(ledger: ReplayLedger = new MemoryReplayLedger(), clock = (
     }),
     ledger,
   };
+}
+
+async function connectEvents(
+  socketPath: string,
+  token: string,
+  pathName: string,
+): Promise<{ status: number; close: () => void }> {
+  return await new Promise((resolve, reject) => {
+    const request = httpRequest(
+      {
+        socketPath,
+        method: 'GET',
+        path: pathName,
+        headers: { 'x-term2-assertion': token },
+      },
+      (response) => {
+        response.on('error', () => undefined);
+        resolve({ status: response.statusCode ?? 0, close: () => response.destroy() });
+      },
+    );
+    request.once('error', reject);
+    request.end();
+  });
 }
 
 afterEach(() => {
@@ -716,7 +740,7 @@ describe('gateway startup and assertion verifier', () => {
     }
   });
 
-  it('resolves an ask_user interaction through the gateway route with revision and event ordering', async () => {
+  it('keeps an ask_user interaction resolvable across concurrent subscribers', async () => {
     const root = makeTemp();
     const manifestPath = path.join(root, 'manifest.json');
     writeFileSync(manifestPath, JSON.stringify(makeManifest(root)));
@@ -796,6 +820,7 @@ describe('gateway startup and assertion verifier', () => {
         workspaceId: 'workspace-a',
         ...(sessionId ? { sessionId } : {}),
       });
+    let secondaryEvents: { status: number; close: () => void } | undefined;
     try {
       await gateway.start();
       const socketPath = path.join(root, 'gateway.sock');
@@ -828,6 +853,20 @@ describe('gateway startup and assertion verifier', () => {
       }
       expect(pending).toMatchObject({ kind: 'ask_user', revision: 1 });
       const interactionId = pending!.interactionId as string;
+      const [secondaryRead, connectedEvents] = await Promise.all([
+        rpc(socketPath, token('session_read', sessionId), null, `/private/agent/v1/sessions/${sessionId}`),
+        connectEvents(
+          socketPath,
+          token('events_connect', sessionId),
+          `/private/agent/v1/sessions/${sessionId}/events?after=0`,
+        ),
+      ]);
+      secondaryEvents = connectedEvents;
+      expect(secondaryRead.status).toBe(200);
+      expect(secondaryRead.body).toMatchObject({
+        session: { interaction: { interaction: { interactionId, revision: 1 } } },
+      });
+      expect(secondaryEvents.status).toBe(200);
       const turnId = (
         await rpc(socketPath, token('session_read', sessionId), null, `/private/agent/v1/sessions/${sessionId}`)
       ).body as { session: { interaction: { turnId: string } } };
@@ -850,6 +889,17 @@ describe('gateway startup and assertion verifier', () => {
       expect(first.status).toBe(200);
       expect(first.body).toMatchObject({ accepted: false, interaction: { interactionId, revision: 2 } });
 
+      const afterFirstAnswer = await rpc(
+        socketPath,
+        token('session_read', sessionId),
+        null,
+        `/private/agent/v1/sessions/${sessionId}`,
+      );
+      expect(afterFirstAnswer.status).toBe(200);
+      expect(afterFirstAnswer.body).toMatchObject({
+        session: { interaction: { state: 'pending', interaction: { interactionId, revision: 2 } } },
+      });
+
       const lateRevision = await rpc(
         socketPath,
         token('interaction_resolve', sessionId),
@@ -862,7 +912,7 @@ describe('gateway startup and assertion verifier', () => {
       const terminal = await rpc(
         socketPath,
         token('interaction_resolve', sessionId),
-        { revision: 2, answer: 'option:0' },
+        { revision: 2, answer: 'custom', approvalAnswer: 'B' },
         `/private/agent/v1/sessions/${sessionId}/interactions/${interactionId}`,
       );
       expect(terminal.status).toBe(202);
@@ -872,6 +922,7 @@ describe('gateway startup and assertion verifier', () => {
         interactionId,
         accepted: true,
       });
+      expect((terminal.body as { turnId: string }).turnId).toBe(turnId.session.interaction.turnId);
       expect(continuationCalls).toBe(1);
 
       const duplicate = await rpc(
@@ -923,6 +974,16 @@ describe('gateway startup and assertion verifier', () => {
           .interaction?.interaction;
       }
       expect(secondPending).toMatchObject({ kind: 'tool_approval', revision: 1 });
+      const oldInteractionDuringLiveReplacement = await rpc(
+        socketPath,
+        token('interaction_resolve', sessionId),
+        { revision: 2, answer: 'option:0' },
+        `/private/agent/v1/sessions/${sessionId}/interactions/${interactionId}`,
+      );
+      expect(oldInteractionDuringLiveReplacement.status).toBe(409);
+      expect((oldInteractionDuringLiveReplacement.body as { error: { code: string } }).error.code).toBe(
+        'stale_interaction',
+      );
       const failed = await rpc(
         socketPath,
         token('interaction_resolve', sessionId),
@@ -939,6 +1000,8 @@ describe('gateway startup and assertion verifier', () => {
       );
       expect(gateway.interactionMetrics.interaction_continuation_failed).toBe(1);
     } finally {
+      // Close the reconnect subscriber before tearing down the gateway.
+      secondaryEvents?.close();
       await gateway.shutdown(100);
       persistence.closeIndex();
       await runtimeFactory.shutdown();
@@ -1212,6 +1275,18 @@ describe('gateway startup and assertion verifier', () => {
     expect(
       classifyInteractionResolution({ state: 'pending', interaction: {} as any, turnId: 'turn-a' }, true),
     ).toBeNull();
+    expect(
+      classifyInteractionResolution(
+        {
+          state: 'recovered',
+          interaction: { version: 1 } as any,
+          turnId: 'turn-a',
+          resolvable: false,
+          reason: 'daemon_restart',
+        },
+        true,
+      ),
+    ).toBeNull();
   });
 
   it('rejects a non-absolute socket before reading deployment state', () => {
@@ -1465,6 +1540,125 @@ describe('workspace admission', () => {
     expect(() => admission.admit(claimsFor('session_create', { workspaceId: 'workspace-a' }))).toThrowError(
       new WorkspaceAdmissionError('workspace_session_exists'),
     );
+  });
+});
+
+describe('v1 compacted cursor over the gateway events route', () => {
+  it('returns 410 cursor_compacted after a durable compactThrough on restart', async () => {
+    const root = makeTemp();
+    const manifestPath = path.join(root, 'manifest.json');
+    writeFileSync(manifestPath, JSON.stringify(makeManifest(root)));
+    const layout = createGatewayStorageLayout(path.join(root, 'data'));
+    const persistence = new GatewayPersistenceCoordinator(layout);
+    const runtimeFactory = new RuntimeFactory({
+      tmpDir: path.join(root, 'runtime'),
+      providerBroker: broker,
+      providerProbe: { available: true, secretFree: true },
+      sandboxAvailable: true,
+      createAgentClient: () =>
+        ({
+          chat: async () => '',
+          abort: () => {},
+          setModel: () => {},
+          addToolInterceptor: () => () => {},
+          startStream: async () => createMockStream([{ type: 'final', finalText: 'done' }]),
+          continueRunStream: async () => createMockStream([]),
+        } as ConversationAgentClient),
+    });
+    const createGateway = () =>
+      Term2Gateway.create({
+        enabled: true,
+        socketPath: path.join(root, 'gateway.sock'),
+        manifestPath,
+        manifestSha256: createHash('sha256').update(readFileSync(manifestPath)).digest('hex'),
+        replayDbPath: path.join(root, 'replay.sqlite'),
+        issuer: 'chatforge-bff',
+        audience: 'term2-gateway',
+        publicKeys: { active: publicKey },
+        providerBroker: broker,
+        providerProbe: { available: true, secretFree: true },
+        workerSandboxAvailable: true,
+        workspaceBoundaryProbe: boundaryProbe,
+        allowWrite: true,
+        auditWriter: async () => undefined,
+        tmpDir: path.join(root, 'tmp'),
+        runtimeFactory,
+        persistence,
+      });
+    const token = (purpose: GatewayAssertionClaims['purpose'], sessionId?: string) =>
+      createGatewayAssertion({
+        privateKey,
+        kid: 'active',
+        issuer: 'chatforge-bff',
+        audience: 'term2-gateway',
+        subject: 'user-a',
+        purpose,
+        workspaceId: 'workspace-a',
+        ...(sessionId ? { sessionId } : {}),
+      });
+    let sessionId = '';
+    const first = createGateway();
+    try {
+      await first.start();
+      const created = await rpc(
+        path.join(root, 'gateway.sock'),
+        token('session_create'),
+        { workspaceId: 'workspace-a' },
+        '/private/agent/v1/sessions',
+      );
+      expect(created.status).toBe(201);
+      sessionId = (created.body as { session: { id: string } }).session.id;
+    } finally {
+      await first.shutdown(100);
+    }
+    const directory = layout.existingSessionPath('user-a', 'workspace-a', sessionId);
+    expect(directory).toBeTruthy();
+    const journal = createGatewayEventJournal({ sessionId, directory: directory! });
+    expect(journal.highWater().lastPublishedSequence).toBeGreaterThanOrEqual(1);
+    journal.compactThrough(1);
+    journal.close();
+    const restarted = createGateway();
+    try {
+      await restarted.start();
+      const compacted = await new Promise<{ status: number; body: unknown }>((resolve, reject) => {
+        const request = httpRequest(
+          {
+            socketPath: path.join(root, 'gateway.sock'),
+            method: 'GET',
+            path: `/private/agent/v1/sessions/${sessionId}/events?after=0`,
+            headers: { 'x-term2-assertion': token('events_connect', sessionId) },
+          },
+          (response) => {
+            let text = '';
+            response.setEncoding('utf8');
+            response.on('data', (chunk) => {
+              text += chunk;
+            });
+            response.on('end', () => {
+              let body: unknown = text;
+              try {
+                body = text ? JSON.parse(text) : null;
+              } catch {
+                body = text;
+              }
+              resolve({ status: response.statusCode ?? 0, body });
+            });
+          },
+        );
+        request.on('error', reject);
+        request.end();
+      });
+      expect(compacted.status).toBe(410);
+      expect(compacted.body).toMatchObject({ error: { code: 'cursor_compacted' } });
+      const details = (compacted.body as { error?: { details?: Record<string, unknown> } }).error?.details;
+      expect(
+        details?.reloadRequired === true || (compacted.body as { reloadRequired?: boolean }).reloadRequired === true,
+      ).toBe(true);
+    } finally {
+      await restarted.shutdown(100);
+      persistence.closeIndex();
+      await runtimeFactory.shutdown();
+    }
   });
 });
 

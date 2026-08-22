@@ -2,9 +2,9 @@ import type { CommandMessage } from '../tools/types.js';
 import type { Item, ToolResult } from '../contracts/conversation-items.js';
 import type { ConversationEvent } from './conversation/conversation-events.js';
 import { normalizeRunItem } from './conversation/run-item-normalizer.js';
-import { extractCommandMessages } from '../utils/streaming/extract-command-messages.js';
+import { extractCommandMessages, type ToolCallMarkerStore } from '../utils/streaming/extract-command-messages.js';
 
-type ExtractCommandMessages = (items: readonly unknown[]) => CommandMessage[];
+type ExtractCommandMessages = (items: readonly unknown[], markerStore?: ToolCallMarkerStore) => CommandMessage[];
 type EnrichedToolResult = ToolResult & { arguments?: unknown };
 
 const normalizedItems = (item: unknown): Item[] => normalizeRunItem(item);
@@ -33,13 +33,15 @@ export const emitCommandMessagesFromItems = (
     toolCallArgumentsById,
     emittedCommandIds,
     extractCommandMessages: extractCommandMessagesFn = extractCommandMessages,
+    markerStore,
   }: {
     toolCallArgumentsById: Map<string, unknown>;
     emittedCommandIds: Set<string>;
     extractCommandMessages?: ExtractCommandMessages;
+    markerStore?: ToolCallMarkerStore;
   },
 ): ConversationEvent[] => {
-  const commandMessages = extractCommandMessagesFn(attachCachedArguments(items, toolCallArgumentsById));
+  const commandMessages = extractCommandMessagesFn(attachCachedArguments(items, toolCallArgumentsById), markerStore);
   const out: ConversationEvent[] = [];
 
   for (const cmdMsg of commandMessages) {

@@ -8,7 +8,7 @@ import { LoggingService } from '../logging/logging-service.js';
 import { createAgentStream, type AgentStream } from '../agent-stream.js';
 import { clearToolFormatters, registerToolFormatters } from '../../tools/command-message-formatters.js';
 import { formatShellCommandMessage } from '../../tools/system/shell.js';
-import { clearApprovalRejectionMarkers } from '../../utils/streaming/extract-command-messages.js';
+import { ToolCallMarkerStore } from '../../utils/streaming/extract-command-messages.js';
 import { toolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import { SessionAccessState } from '../session/session-access-state.js';
@@ -41,14 +41,12 @@ class ApprovalFlowCoordinator extends ProductionApprovalFlowCoordinator {
 beforeEach(() => {
   clearToolFormatters();
   registerToolFormatters([{ name: 'shell', formatCommandMessage: formatShellCommandMessage }]);
-  clearApprovalRejectionMarkers();
   toolApprovalPolicyRegistry.clear();
   resetSandboxDeniedReadStoresForTest();
 });
 
 afterEach(() => {
   clearToolFormatters();
-  clearApprovalRejectionMarkers();
   toolApprovalPolicyRegistry.clear();
   resetSandboxDeniedReadStoresForTest();
   resetDockerHostControlGrantsForTests();
@@ -106,7 +104,14 @@ const makeDeps = (
     toolOwnership: toolOwnership ?? new ToolOwnershipRegistry(),
     nestedCompatibility,
   });
-  return { approvalFlow, shellAutoApproval, logger, sessionId: 's1', nestedCompatibility };
+  return {
+    approvalFlow,
+    shellAutoApproval,
+    logger,
+    sessionId: 's1',
+    nestedCompatibility,
+    toolCallMarkers: new ToolCallMarkerStore(),
+  };
 };
 
 it('turns a parked main-run budget interaction into a resumable pending terminal', async () => {
@@ -1043,8 +1048,8 @@ it('response outcome preserves approval-rejected command messages for rendering'
   // message must still appear in commandMessages so the UI can render it.
   // Previously these were filtered out silently, leaving the user without feedback.
   // Simulate that approval-flow-coordinator marked call-1 as rejected (happens before buildConversationResult).
-  const { markToolCallAsApprovalRejection } = await import('../../utils/streaming/extract-command-messages.js');
-  markToolCallAsApprovalRejection('call-1');
+  const deps = makeDeps();
+  deps.toolCallMarkers!.markToolCallAsApprovalRejection('call-1');
 
   // A model turn carries command items in newItems (not history), so mirror that shape.
   const stream = makeStream({
@@ -1069,7 +1074,7 @@ it('response outcome preserves approval-rejected command messages for rendering'
       },
     ],
   });
-  const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, makeDeps());
+  const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
 
   expect(outcome.kind).toBe('response');
   if (outcome.kind === 'response') {

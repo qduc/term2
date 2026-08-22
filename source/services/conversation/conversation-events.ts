@@ -42,6 +42,13 @@ export type ConversationEvent =
   | RunBudgetEventNotice
   | SubagentRunBudgetEvent;
 
+/**
+ * Event consumers may be synchronous (CLI/UI) or await persistence at a
+ * runtime boundary (gateway). Producers that own event ordering must await
+ * the returned thenable before advancing the stream.
+ */
+export type ConversationEventSink = (event: ConversationEvent) => void | PromiseLike<void>;
+
 export interface RetryEvent {
   type: 'retry';
   /** Present when an async subagent owns this retry; root retries remain valid without it. */

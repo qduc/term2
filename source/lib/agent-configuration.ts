@@ -15,6 +15,7 @@ import type { ApplicationAgent } from '../services/agent-runtime/application-run
 import type { BackgroundShellRegistry } from '../services/shell/background-shell-registry.js';
 import type { BackgroundShellOutputBundle } from '../services/shell/background-shell-watches.js';
 import type { BackgroundShellExecutionResult } from '../tools/system/shell.js';
+import type { ShellChildRegistry } from '../utils/shell/shell-child-registry.js';
 
 /** Narrow capability interface consumed by chat/session clients. */
 export interface AgentSource {
@@ -41,6 +42,7 @@ export interface AgentConfigurationDeps {
   backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
   /** Root-session-owned output store + watch layer; nested clients omit it. */
   backgroundShellOutput?: BackgroundShellOutputBundle;
+  shellChildRegistry?: ShellChildRegistry;
   /** False for one-shot/non-interactive callers until their lifecycle is supported. */
   allowBackgroundShell?: boolean;
 }
@@ -70,6 +72,7 @@ export class AgentConfiguration implements AgentSource {
   #sessionAccess?: SessionAccessState;
   #backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
   #backgroundShellOutput?: BackgroundShellOutputBundle;
+  #shellChildRegistry?: ShellChildRegistry;
   #allowBackgroundShell: boolean;
   #unsubscribeSettings: (() => void) | null = null;
   #isDisposed = false;
@@ -97,6 +100,7 @@ export class AgentConfiguration implements AgentSource {
     this.#sessionAccess = deps.sessionAccess;
     this.#backgroundShellRegistry = deps.backgroundShellRegistry;
     this.#backgroundShellOutput = deps.backgroundShellOutput;
+    this.#shellChildRegistry = deps.shellChildRegistry;
     this.#allowBackgroundShell = deps.allowBackgroundShell ?? true;
 
     // Create editor
@@ -214,6 +218,7 @@ export class AgentConfiguration implements AgentSource {
       sessionAccess: this.#sessionAccess,
       backgroundShellRegistry: this.#backgroundShellRegistry,
       backgroundShellOutput: this.#backgroundShellOutput,
+      shellChildRegistry: this.#shellChildRegistry,
       allowBackgroundShell: this.#allowBackgroundShell,
     };
   }

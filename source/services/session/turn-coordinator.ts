@@ -165,13 +165,14 @@ export class TurnCoordinator {
     }
   }
 
-  abort(): void {
-    this.deps.turnWorkflow.abortLiveRun();
+  abort(): Promise<void> {
+    const completion = this.deps.turnWorkflow.abortLiveRun();
     this.deps.approvalFlow.abort();
     this.deps.statusMachine.abort();
     this.deps.providerContinuity.clear();
     this.deps.turnWorkflow.closeTurn?.();
     void this.#emitTurnEnd({ kind: 'failed' });
+    return completion;
   }
 
   /** Close a live turn before a lifecycle reset invalidates its lease. */

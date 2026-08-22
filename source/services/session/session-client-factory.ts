@@ -96,6 +96,7 @@ export function createOwnedSessionClientFactory(
     backgroundShellOutput?: BackgroundShellOutputBundle,
   ) => DisposableConversationAgentClient,
   hookLifecycle?: HookLifecyclePort,
+  defaults?: { allowBackgroundShell?: boolean },
 ): SessionClientFactory {
   return {
     create(sessionId, options) {
@@ -126,7 +127,7 @@ export function createOwnedSessionClientFactory(
         : undefined;
       const toolLifecycle =
         hookLifecycle && hookEvents ? createToolExecutionLifecyclePort(hookLifecycle, hookEvents) : undefined;
-      const allowBackgroundShell = options?.allowBackgroundShell !== false;
+      const allowBackgroundShell = options?.allowBackgroundShell ?? defaults?.allowBackgroundShell ?? true;
       const backgroundShellRegistry = allowBackgroundShell
         ? new BackgroundShellRegistry<BackgroundShellExecutionResult>()
         : undefined;

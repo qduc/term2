@@ -18,6 +18,7 @@ import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { ProviderOpaqueItem } from '../../contracts/conversation-items.js';
 import { GenerationGuard, type GenerationToken } from '../generation-guard.js';
 import { RepetitionDetector, RepetitiveModelOutputError } from './repetition-detector.js';
+import { ToolCallMarkerStore } from '../../utils/streaming/extract-command-messages.js';
 
 export type StreamHistorySource = 'startStream' | 'continueRunStream' | 'abortResolution';
 
@@ -188,6 +189,7 @@ export interface SessionStreamProcessorDeps {
   journal: AssistantTurnJournal;
   /** Cancels provider work when the output safety guard terminates a stream. */
   abortStream?: () => void;
+  toolCallMarkers?: ToolCallMarkerStore;
 }
 
 export interface StreamProcessOptions {
@@ -198,7 +200,11 @@ export interface StreamProcessOptions {
 }
 
 export class SessionStreamProcessor {
-  constructor(private readonly deps: SessionStreamProcessorDeps) {}
+  readonly #toolCallMarkers: ToolCallMarkerStore;
+
+  constructor(private readonly deps: SessionStreamProcessorDeps) {
+    this.#toolCallMarkers = deps.toolCallMarkers ?? new ToolCallMarkerStore();
+  }
 
   /**
    * Processes the AgentStream, records function calls/results,
@@ -241,6 +247,7 @@ export class SessionStreamProcessor {
         toolCallArgumentsById: workingToolArguments,
         emittedInvalidToolCallPackets: workingInvalidPackets,
         preserveExistingToolArgs: true,
+        markerStore: this.#toolCallMarkers,
         onFunctionCallItem: (item) => {
           this.deps.generationGuard.runIfCurrent(options.gen, () => {
             const reasoningText =

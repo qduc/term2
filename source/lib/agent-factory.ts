@@ -28,6 +28,7 @@ import type { BackgroundShellRegistry } from '../services/shell/background-shell
 import type { BackgroundShellOutputBundle } from '../services/shell/background-shell-watches.js';
 import type { BackgroundShellExecutionResult } from '../tools/system/shell.js';
 import { getCatalogModel } from '../providers/model-catalog/catalog.js';
+import type { ShellChildRegistry } from '../utils/shell/shell-child-registry.js';
 
 export interface AgentFactoryDeps {
   settings: ISettingsService;
@@ -56,6 +57,7 @@ export interface AgentFactoryDeps {
   backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
   /** Root-session-owned output store + watch layer for background jobs. */
   backgroundShellOutput?: BackgroundShellOutputBundle;
+  shellChildRegistry?: ShellChildRegistry;
   /** False for one-shot/non-interactive callers until their lifecycle is supported. */
   allowBackgroundShell?: boolean;
 }
@@ -381,6 +383,7 @@ export function buildAgent(
       sessionAccess: deps.sessionAccess,
       backgroundShellRegistry: deps.backgroundShellRegistry,
       backgroundShellOutput: deps.backgroundShellOutput,
+      shellChildRegistry: deps.shellChildRegistry,
       allowBackgroundShell: deps.allowBackgroundShell,
     },
     resolvedModel,

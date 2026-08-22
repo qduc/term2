@@ -59,7 +59,9 @@ const makeRunner = (events: any[]) => {
       buildToolDefinitions: () => [],
       buildAgentTools: () => [],
     } as any,
-    onEvent: (event) => received.push(event),
+    onEvent: (event) => {
+      received.push(event);
+    },
     toolOwnership: new ToolOwnershipRegistry(),
   });
   return { runner, received, clients };
@@ -153,7 +155,9 @@ describe('ExecutionSubagentRunner text-turn peek events', () => {
         buildToolDefinitions: () => [],
         buildAgentTools: () => [],
       } as any,
-      onEvent: (event) => received.push(event),
+      onEvent: (event) => {
+        received.push(event);
+      },
       toolOwnership: new ToolOwnershipRegistry(),
     });
 

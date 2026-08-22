@@ -1419,21 +1419,27 @@ it('characterization - approve-approve-response through handleApprovalDecision A
 
   // First sendMessage -> approval_required (tool 1)
   const r1 = await terminalAdapter.sendMessage('run commands', {
-    onEvent: (e) => events.push(e),
+    onEvent: (e) => {
+      events.push(e);
+    },
   });
   expect(r1.type).toBe('approval_required');
   expect((r1 as { type: 'approval_required'; approval: { callId: string } }).approval.callId).toBe('call-aa1');
 
   // First handleApprovalDecision -> approval_required (tool 2)
   const r2 = await terminalAdapter.handleApprovalDecision('y', undefined, {
-    onEvent: (e) => events.push(e),
+    onEvent: (e) => {
+      events.push(e);
+    },
   });
   expect(r2?.type).toBe('approval_required');
   expect((r2 as { type: 'approval_required'; approval: { callId: string } })?.approval.callId).toBe('call-aa2');
 
   // Second handleApprovalDecision -> response
   const r3 = await terminalAdapter.handleApprovalDecision('y', undefined, {
-    onEvent: (e) => events.push(e),
+    onEvent: (e) => {
+      events.push(e);
+    },
   });
   expect(r3?.type).toBe('response');
   if (r3?.type === 'response') {

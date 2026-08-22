@@ -1,11 +1,15 @@
 import type { ILoggingService, ISessionContextService, ISettingsService } from '../service-interfaces.js';
-import type { SessionRuntime } from '../session/session-composition.js';
+import type { SessionRuntime } from '../../core/index.js';
 import { ConversationAdapter } from './conversation-adapter.js';
 import { createSessionQueuePersistence } from './queue-persistence.js';
 import { isTestEnvironment } from '../settings/settings-env.js';
 
 export type CreateConversationAdapterOptions = {
   queueForeground?: boolean;
+  queueCapacity?: number;
+  preparedLeaseTtlMs?: number;
+  activeCancelTimeoutMs?: number;
+  discardOnFailure?: boolean;
   deps: {
     logger: ILoggingService;
     settingsService?: ISettingsService;
@@ -15,7 +19,14 @@ export type CreateConversationAdapterOptions = {
 
 export function createConversationAdapterForRuntime(
   runtime: SessionRuntime,
-  { deps, queueForeground }: CreateConversationAdapterOptions,
+  {
+    deps,
+    queueForeground,
+    queueCapacity,
+    preparedLeaseTtlMs,
+    activeCancelTimeoutMs,
+    discardOnFailure,
+  }: CreateConversationAdapterOptions,
 ): ConversationAdapter {
   const { logger, settingsService, sessionContextService } = deps;
   return new ConversationAdapter({
@@ -32,6 +43,10 @@ export function createConversationAdapterForRuntime(
     pendingInteraction: runtime.pendingInteraction,
     turnFlow: runtime.turns,
     queueForeground,
+    queueCapacity,
+    preparedLeaseTtlMs,
+    activeCancelTimeoutMs,
+    discardOnFailure,
     queuePersistence:
       queueForeground && !isTestEnvironment() ? createSessionQueuePersistence(runtime.sessionId) : undefined,
   });

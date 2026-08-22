@@ -146,7 +146,10 @@ export type TurnEvent<Terminal = unknown> =
 
 export type QueueCommandResult =
   | { readonly kind: 'accepted' }
-  | { readonly kind: 'rejected'; readonly reason: 'capacity' | 'invalid' | 'not_queued' | 'stale' | 'inapplicable' }
+  | {
+      readonly kind: 'rejected';
+      readonly reason: 'capacity' | 'invalid' | 'not_queued' | 'stale' | 'inapplicable' | 'cancellation_unproven';
+    }
   | { readonly kind: 'no_op' };
 
 export interface QueueTurnDriver<Snapshot> {
@@ -555,10 +558,11 @@ export class QueueController<Snapshot, Terminal = unknown> {
     this.#phase = 'cancelling';
     this.#pendingAction = undefined;
     await this.#persist();
+    let proven = true;
     try {
-      await this.#driver.cancel(active);
+      proven = (await this.#driver.cancel(active)) !== false;
     } finally {
-      if (this.#active?.executionId === active.executionId) {
+      if (this.#active?.executionId === active.executionId && proven) {
         this.#active = undefined;
         // Invariant: a paused queue must contain retained work. When nothing
         // was queued at stop time, return to idle so the next submission
@@ -576,9 +580,14 @@ export class QueueController<Snapshot, Terminal = unknown> {
         if (retainedQueueLength === 0) {
           await this.#dispatch();
         }
+      } else if (!proven) {
+        // Keep the active execution attached to the cancelling controller.
+        // A caller that cannot prove cancellation must not observe an idle
+        // queue capable of dispatching work alongside it.
+        await this.#persist();
       }
     }
-    return { kind: 'accepted' };
+    return proven ? { kind: 'accepted' } : { kind: 'rejected', reason: 'cancellation_unproven' };
   }
 
   async #dispatch(): Promise<void> {

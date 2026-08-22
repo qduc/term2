@@ -46,7 +46,9 @@ it('collectTerminalResult returns approval_required with raw interruption from c
       },
     ]),
     {
-      onEvent: (event) => seenEvents.push(event.type),
+      onEvent: (event) => {
+        seenEvents.push(event.type);
+      },
       onTextChunk: (full, chunk) => textChunks.push(`${full}:${chunk}`),
       getRawInterruption: () => ({ id: 'raw-interruption' }),
     },
@@ -289,7 +291,9 @@ it('collectTerminalResult accumulates streamed callbacks and returns final respo
       onTextChunk: (full, chunk) => seenText.push(`${full}:${chunk}`),
       onReasoningChunk: (full, chunk) => seenReasoning.push(`${full}:${chunk}`),
       onCommandMessage: (message) => seenCommands.push(message.id),
-      onEvent: (event) => seenEvents.push(event.type),
+      onEvent: (event) => {
+        seenEvents.push(event.type);
+      },
       onFinalEvent: () => {
         sawFinal = true;
       },

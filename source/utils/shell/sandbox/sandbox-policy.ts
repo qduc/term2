@@ -39,6 +39,8 @@ export interface CreateSandboxRuntimeConfigOptions {
   /** Test seam for exercising home-resident credential policy without touching the real home directory. */
   home?: string;
   cwd?: string;
+  /** Sandbox temp dir supplied to manager filesystem policy and child env. */
+  tmpDir?: string;
   env?: NodeJS.ProcessEnv;
   onProtectedFiltered?: (filtered: readonly string[]) => void;
 }
@@ -431,7 +433,7 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
   const home = options.home ?? os.homedir();
   const readPolicy = options.readPolicy ?? 'standard';
   const workspaceRoot = fs.realpathSync(options.cwd ?? getActiveWorkspaceRoot());
-  const tmpDir = SANDBOX_TEMP_DIR;
+  const tmpDir = options.tmpDir ?? SANDBOX_TEMP_DIR;
   const appCacheDir = path.join(home, '.cache', 'term2-nodejs');
   const rtkConfigDir = path.join(home, '.config', 'rtk');
   const rtkDataDir = path.join(home, '.local', 'share', 'rtk');

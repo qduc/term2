@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { SubagentManager } from '../services/subagents/subagent-manager.js';
-import type { ConversationEvent } from '../services/conversation/conversation-events.js';
+import type { ConversationEvent, ConversationEventSink } from '../services/conversation/conversation-events.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../services/service-interfaces.js';
 import type { ExecutionContext } from '../services/execution-context.js';
 import type {
@@ -45,8 +45,8 @@ export class SubagentBridge {
   #subagentManager: SubagentManager | null;
   #isDisposed = false;
   #sessionContextService: ISessionContextService;
-  #subagentEventSink: ((event: ConversationEvent) => void) | null = null;
-  #backgroundEventSink: ((event: ConversationEvent) => void) | null = null;
+  #subagentEventSink: ConversationEventSink | null = null;
+  #backgroundEventSink: ConversationEventSink | null = null;
   #backgroundRunIds = new Set<string>();
   #activeSubagentsCount = 0;
   #bufferedEvents: Array<{ event: ConversationEvent; scope: SubagentEventScope }> = [];
@@ -81,9 +81,9 @@ export class SubagentBridge {
     }
   }
 
-  setEventSink(sink: ((event: ConversationEvent) => void) | null): void {
+  async setEventSink(sink: ConversationEventSink | null): Promise<void> {
     this.#subagentEventSink = sink;
-    if (sink) this.#flushBufferedEvents('foreground', sink);
+    if (sink) await this.#flushBufferedEvents('foreground', sink);
   }
 
   /**
@@ -92,9 +92,9 @@ export class SubagentBridge {
    * activity that settles while the conversation is idle is still observed
    * instead of being buffered until the next turn attaches a sink.
    */
-  setBackgroundEventSink(sink: ((event: ConversationEvent) => void) | null): void {
+  async setBackgroundEventSink(sink: ConversationEventSink | null): Promise<void> {
     this.#backgroundEventSink = sink;
-    if (sink) this.#flushBufferedEvents('background', sink);
+    if (sink) await this.#flushBufferedEvents('background', sink);
   }
 
   /** Installs the session-owned adopted-subagent approval pause sink. */
@@ -133,11 +133,11 @@ export class SubagentBridge {
     return this.#subagentManager?.disposeAsync() ?? Promise.resolve();
   }
 
-  #flushBufferedEvents(scope: SubagentEventScope, sink: (event: ConversationEvent) => void): void {
+  async #flushBufferedEvents(scope: SubagentEventScope, sink: ConversationEventSink): Promise<void> {
     const pending: Array<{ event: ConversationEvent; scope: SubagentEventScope }> = [];
     for (const buffered of this.#bufferedEvents) {
       if (buffered.scope === scope) {
-        sink(buffered.event);
+        await sink(buffered.event);
       } else {
         pending.push(buffered);
       }
@@ -145,7 +145,7 @@ export class SubagentBridge {
     this.#bufferedEvents = pending;
   }
 
-  #emitEvent(event: ConversationEvent): void {
+  async #emitEvent(event: ConversationEvent): Promise<void> {
     if (this.#isDisposed) return;
 
     const agentId =
@@ -171,7 +171,7 @@ export class SubagentBridge {
         : 'foreground';
     const sink = scope === 'background' ? this.#backgroundEventSink : this.#subagentEventSink;
     if (sink) {
-      sink(event);
+      await sink(event);
     } else {
       this.#bufferedEvents.push({ event, scope });
     }

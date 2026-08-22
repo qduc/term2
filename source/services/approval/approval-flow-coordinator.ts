@@ -1,7 +1,7 @@
 import type { ILoggingService } from '../service-interfaces.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { ApprovalState, type AbortedApprovalContext, type PendingApprovalContext } from './approval-state.js';
-import { markToolCallAsApprovalRejection } from '../../utils/streaming/extract-command-messages.js';
+import { ToolCallMarkerStore } from '../../utils/streaming/extract-command-messages.js';
 import { getCallIdFromObject } from '../interruption-info.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { SessionToolTracker } from '../session/session-tool-tracker.js';
@@ -30,6 +30,7 @@ export interface ApprovalFlowCoordinatorDeps {
   nestedCompatibility?: NestedToolCompatibilityState;
   hookLifecycle?: HookLifecyclePort;
   hookEvents?: HookEventFactory;
+  toolCallMarkers?: ToolCallMarkerStore;
 }
 
 export interface AbortResolutionPlan {
@@ -51,10 +52,12 @@ export type ApprovalDecisionInput = {
 
 export class ApprovalFlowCoordinator {
   readonly #toolOwnership: ToolOwnershipRegistry;
+  readonly #toolCallMarkers: ToolCallMarkerStore;
   readonly #decisionExecutor: ApprovalDecisionExecutor;
 
   constructor(private readonly deps: ApprovalFlowCoordinatorDeps) {
     this.#toolOwnership = deps.toolOwnership;
+    this.#toolCallMarkers = deps.toolCallMarkers ?? new ToolCallMarkerStore();
     this.#decisionExecutor = new ApprovalDecisionExecutor({
       logger: deps.logger,
       sessionId: deps.sessionId,
@@ -63,6 +66,7 @@ export class ApprovalFlowCoordinator {
       nestedCompatibility: deps.nestedCompatibility,
       hookLifecycle: deps.hookLifecycle,
       hookEvents: deps.hookEvents,
+      toolCallMarkers: this.#toolCallMarkers,
     });
   }
 
@@ -133,7 +137,7 @@ export class ApprovalFlowCoordinator {
     const expectedCallId = getCallIdFromObject(abortedContext.interruption);
     const rejectionMessage = `Tool execution was not approved. User provided new input instead: ${userText}`;
 
-    markToolCallAsApprovalRejection(expectedCallId);
+    this.#toolCallMarkers.markToolCallAsApprovalRejection(expectedCallId);
 
     abortedContext.state.reject?.(abortedContext.interruption as any, { message: rejectionMessage });
     abortedContext.decisionsByCallId ??= new Map();

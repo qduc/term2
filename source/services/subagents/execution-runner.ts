@@ -28,7 +28,7 @@ import type { ModelRequestCost } from '../../services/cost/model-cost.js';
 import { buildInstructions, resolveSubagentSearchViaShell } from './role-loader.js';
 import type { ISubagentClientFactory } from './subagent-client-types.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
-import { createSessionRuntime } from '../session/session-composition.js';
+import { createSessionRuntime } from '../../core/index.js';
 import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
 import type { SkillsService } from '../skills/skills-service.js';
 import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
@@ -43,7 +43,7 @@ export class ExecutionSubagentRunner {
   #executionContext?: ExecutionContext;
   #createClient?: ISubagentClientFactory['createClient'];
   #toolFactory: SubagentToolFactory;
-  #onEvent?: (event: ConversationEvent) => void;
+  #onEvent?: (event: ConversationEvent) => void | PromiseLike<void>;
   #skillsService?: SkillsService;
   #toolOwnership: ToolOwnershipRegistry;
 
@@ -54,7 +54,7 @@ export class ExecutionSubagentRunner {
     executionContext?: ExecutionContext;
     createClient?: ISubagentClientFactory['createClient'];
     toolFactory: SubagentToolFactory;
-    onEvent?: (event: ConversationEvent) => void;
+    onEvent?: (event: ConversationEvent) => void | PromiseLike<void>;
     skillsService?: SkillsService;
     toolOwnership: ToolOwnershipRegistry;
   }) {
@@ -274,56 +274,86 @@ export class ExecutionSubagentRunner {
         switch (event.type) {
           case 'text_delta':
             currentText = `${currentText}${event.delta}`.slice(0, MAX_PEEK_TEXT_LENGTH);
-            safeEmit(this.#logger, onEvent, {
-              type: 'subagent_streaming_text',
-              agentId,
-              text: currentText,
-            });
+            await safeEmit(
+              this.#logger,
+              onEvent,
+              {
+                type: 'subagent_streaming_text',
+                agentId,
+                text: currentText,
+              },
+              { propagate: true },
+            );
             break;
           case 'tool_started':
             if (currentText.trim()) {
-              safeEmit(this.#logger, onEvent, {
-                type: 'subagent_text_turn',
-                agentId,
-                role: request.role,
-                text: currentText,
-              });
+              await safeEmit(
+                this.#logger,
+                onEvent,
+                {
+                  type: 'subagent_text_turn',
+                  agentId,
+                  role: request.role,
+                  text: currentText,
+                },
+                { propagate: true },
+              );
               currentText = '';
             }
             if (event.toolName) {
-              safeEmit(this.#logger, onEvent, {
-                type: 'subagent_tool_started',
-                agentId,
-                role: request.role,
-                toolCallId: event.toolCallId,
-                toolName: event.toolName,
-                arguments: event.arguments,
-              });
+              await safeEmit(
+                this.#logger,
+                onEvent,
+                {
+                  type: 'subagent_tool_started',
+                  agentId,
+                  role: request.role,
+                  toolCallId: event.toolCallId,
+                  toolName: event.toolName,
+                  arguments: event.arguments,
+                },
+                { propagate: true },
+              );
             }
             break;
           case 'command_message':
-            safeEmit(this.#logger, onEvent, {
-              type: 'subagent_command_message',
-              agentId,
-              role: request.role,
-              message: event.message,
-            });
+            await safeEmit(
+              this.#logger,
+              onEvent,
+              {
+                type: 'subagent_command_message',
+                agentId,
+                role: request.role,
+                message: event.message,
+              },
+              { propagate: true },
+            );
             break;
           case 'final':
             if (currentText.trim()) {
-              safeEmit(this.#logger, onEvent, {
-                type: 'subagent_text_turn',
-                agentId,
-                role: request.role,
-                text: currentText,
-              });
+              await safeEmit(
+                this.#logger,
+                onEvent,
+                {
+                  type: 'subagent_text_turn',
+                  agentId,
+                  role: request.role,
+                  text: currentText,
+                },
+                { propagate: true },
+              );
               currentText = '';
             }
             finalText = event.finalText;
             if (event.usage) {
               usage = event.usage;
               if (!emittedUsageUpdate) {
-                safeEmit(this.#logger, onEvent, { type: 'usage_update', agentId, usage: event.usage });
+                await safeEmit(
+                  this.#logger,
+                  onEvent,
+                  { type: 'usage_update', agentId, usage: event.usage },
+                  { propagate: true },
+                );
                 emittedUsageUpdate = true;
               }
             }
@@ -331,20 +361,30 @@ export class ExecutionSubagentRunner {
             break;
           case 'usage_update':
             if (event.usage) usage = event.usage;
-            safeEmit(this.#logger, onEvent, {
-              type: 'usage_update',
-              agentId,
-              usage: event.usage,
-            });
+            await safeEmit(
+              this.#logger,
+              onEvent,
+              {
+                type: 'usage_update',
+                agentId,
+                usage: event.usage,
+              },
+              { propagate: true },
+            );
             emittedUsageUpdate = true;
             break;
           case 'run_budget':
-            safeEmit(this.#logger, onEvent, {
-              type: 'subagent_run_budget',
-              agentId,
-              role: request.role,
-              event: event.evidence,
-            });
+            await safeEmit(
+              this.#logger,
+              onEvent,
+              {
+                type: 'subagent_run_budget',
+                agentId,
+                role: request.role,
+                event: event.evidence,
+              },
+              { propagate: true },
+            );
             break;
           case 'error':
             error = new Error(event.message);
@@ -353,15 +393,20 @@ export class ExecutionSubagentRunner {
             break;
           case 'retry':
             currentText = '';
-            safeEmit(this.#logger, onEvent, {
-              type: 'retry',
-              toolName: event.toolName,
-              attempt: event.attempt,
-              maxRetries: event.maxRetries,
-              errorMessage: event.errorMessage,
-              retryType: event.retryType,
-              agentId,
-            });
+            await safeEmit(
+              this.#logger,
+              onEvent,
+              {
+                type: 'retry',
+                toolName: event.toolName,
+                attempt: event.attempt,
+                maxRetries: event.maxRetries,
+                errorMessage: event.errorMessage,
+                retryType: event.retryType,
+                agentId,
+              },
+              { propagate: true },
+            );
             break;
         }
       }
@@ -376,7 +421,7 @@ export class ExecutionSubagentRunner {
         usage = normalizeAgentRunUsage(err?.state?.usage) ?? extractUsage(err);
       }
       if (usage && !emittedUsageUpdate) {
-        safeEmit(this.#logger, onEvent, { type: 'usage_update', agentId, usage });
+        await safeEmit(this.#logger, onEvent, { type: 'usage_update', agentId, usage }, { propagate: true });
       }
     } finally {
       try {

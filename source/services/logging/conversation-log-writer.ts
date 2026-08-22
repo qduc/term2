@@ -14,7 +14,7 @@ import {
 import { decodeLogEnvelope } from '../conversation/conversation-decoder.js';
 import { isPidAlive, saveLastConversation } from '../conversation/conversation-persistence.js';
 
-const FSYNC_EVENTS = new Set<LogEvent['type']>([
+export const CONVERSATION_FSYNC_EVENTS = new Set<LogEvent['type']>([
   'user_message',
   'assistant_turn',
   'undo',
@@ -413,12 +413,12 @@ class ConversationLogWriterImpl implements ConversationLogWriter {
 
     try {
       this.#fileSystem.writeSync(this.#fd, line);
-      if (FSYNC_EVENTS.has(sanitizedEvent.type)) {
+      if (CONVERSATION_FSYNC_EVENTS.has(sanitizedEvent.type)) {
         this.#fileSystem.fsyncSync(this.#fd);
         this.#saveLast(this.#sessionId, this.#projectPath, this.#sshHost);
       }
     } catch (err: unknown) {
-      if (FSYNC_EVENTS.has(sanitizedEvent.type)) {
+      if (CONVERSATION_FSYNC_EVENTS.has(sanitizedEvent.type)) {
         this.#recordFailure(err);
         throw err;
       }

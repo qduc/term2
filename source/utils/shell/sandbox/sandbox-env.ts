@@ -27,6 +27,7 @@ export function isSecretKey(key: string): boolean {
 export interface SandboxEnvironmentOptions {
   cwd?: string;
   readPolicy?: 'standard' | 'strict';
+  tmpDir?: string;
   dockerHostControl?: { socketPath: string; configDir: string };
 }
 
@@ -44,6 +45,8 @@ export function createSandboxEnvironment(
     }
     env[key] = value;
   }
+
+  if (options.tmpDir) env.TMPDIR = options.tmpDir;
 
   if (options.readPolicy === 'strict') {
     const cwd = options.cwd ?? getActiveWorkspaceRoot();

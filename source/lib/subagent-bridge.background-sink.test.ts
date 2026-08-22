@@ -7,12 +7,14 @@ import { ToolOwnershipRegistry } from '../services/approval/tool-ownership-regis
  * into the manager's `onEvent` callback, so mocking the manager module at that
  * boundary lets these tests emit events through the exact production path.
  */
-const managerInstances = vi.hoisted(() => [] as Array<{ onEvent?: (event: ConversationEvent) => void }>);
+const managerInstances = vi.hoisted(
+  () => [] as Array<{ onEvent?: (event: ConversationEvent) => void | PromiseLike<void> }>,
+);
 
 vi.mock('../services/subagents/subagent-manager.js', () => ({
   SubagentManager: class {
     onEvent?: (event: ConversationEvent) => void;
-    constructor(deps: { onEvent?: (event: ConversationEvent) => void }) {
+    constructor(deps: { onEvent?: (event: ConversationEvent) => void | PromiseLike<void> }) {
       this.onEvent = deps.onEvent;
       managerInstances.push(this);
     }
@@ -255,4 +257,52 @@ it('clears the background sink when set to null', () => {
   emit(asyncCompletedEvent('run-1'));
 
   expect(background.events).toHaveLength(0);
+});
+
+it('awaits a foreground sink before the manager event completes', async () => {
+  const { bridge, emit } = makeBridge();
+  let release!: () => void;
+  const journalReady = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const observed: string[] = [];
+
+  await bridge.setEventSink(async (event) => {
+    await journalReady;
+    observed.push(event.type);
+  });
+
+  const emission = emit({
+    type: 'usage_update',
+    usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+  });
+  await Promise.resolve();
+  expect(observed).toEqual([]);
+  release();
+  await emission;
+  expect(observed).toEqual(['usage_update']);
+});
+
+it('awaits a buffered foreground event while attaching its sink', async () => {
+  const { bridge, emit } = makeBridge();
+  const buffered = emit({
+    type: 'usage_update',
+    usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+  });
+  await buffered;
+
+  let release!: () => void;
+  const journalReady = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const observed: string[] = [];
+  const attaching = bridge.setEventSink(async (event) => {
+    await journalReady;
+    observed.push(event.type);
+  });
+  await Promise.resolve();
+  expect(observed).toEqual([]);
+  release();
+  await attaching;
+  expect(observed).toEqual(['usage_update']);
 });

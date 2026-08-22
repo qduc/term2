@@ -249,7 +249,9 @@ it('compactContext reports busy through its event sink while a turn is running',
     toolOwnership: new ToolOwnershipRegistry(),
     deps: { logger: mockLogger, sessionContextService },
   });
-  service.setEventSink((event) => events.push(event));
+  service.setEventSink((event) => {
+    events.push(event);
+  });
 
   const active = service.sendMessage('busy turn');
   await flushQueue();
@@ -271,7 +273,9 @@ it('compactContext reports blocked when no complete cold turn exists', async () 
     toolOwnership: new ToolOwnershipRegistry(),
     deps: { logger: mockLogger, sessionContextService },
   });
-  service.setEventSink((event) => events.push(event));
+  service.setEventSink((event) => {
+    events.push(event);
+  });
 
   await expect(service.compactContext()).resolves.toBe(
     'Nothing to compact: at least one complete cold turn is required.',
@@ -288,7 +292,9 @@ it('compactContext emits completion events for deterministic local compaction', 
     toolOwnership: new ToolOwnershipRegistry(),
     deps: { logger: mockLogger, sessionContextService },
   });
-  service.setEventSink((event) => events.push(event));
+  service.setEventSink((event) => {
+    events.push(event);
+  });
   service.importState({
     history: Array.from({ length: 4 }, (_, index) => [
       { role: 'user', type: 'message', content: `user-${index}` },
@@ -311,7 +317,9 @@ it('keeps the event sink attached when the session is reset', async () => {
     sessionClientFactory: factoryForClients(clients),
     deps: { logger: mockLogger, sessionContextService },
   });
-  service.setEventSink((event) => events.push(event));
+  service.setEventSink((event) => {
+    events.push(event);
+  });
 
   service.resetWithNewId('replacement');
   await service.sendMessage('post-reset');

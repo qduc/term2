@@ -9,46 +9,39 @@ import type { CommandMessage } from '../../tools/types.js';
 import type { Item, ToolResult } from '../../contracts/conversation-items.js';
 import { normalizeRunItem } from '../../services/conversation/run-item-normalizer.js';
 
-const approvalRejectionCallIds = new Set<string>();
-const llmAutoApprovalCallIds = new Set<string>();
+/** Per-session/turn markers used to annotate tool results without process-global state. */
+export class ToolCallMarkerStore {
+  #approvalRejectionCallIds = new Set<string>();
+  #llmAutoApprovalCallIds = new Set<string>();
 
-export const markToolCallAsLlmAutoApproved = (callId?: string | null): void => {
-  if (callId) {
-    llmAutoApprovalCallIds.add(callId);
+  markToolCallAsLlmAutoApproved(callId?: string | null): void {
+    if (callId) this.#llmAutoApprovalCallIds.add(callId);
   }
-};
 
-export const clearLlmAutoApprovalMarkers = (): void => {
-  llmAutoApprovalCallIds.clear();
-};
-
-export const markToolCallAsApprovalRejection = (callId?: string | null): void => {
-  if (!callId) {
-    return;
+  clearLlmAutoApprovalMarkers(): void {
+    this.#llmAutoApprovalCallIds.clear();
   }
-  approvalRejectionCallIds.add(callId);
-};
 
-export const clearApprovalRejectionMarkers = (): void => {
-  approvalRejectionCallIds.clear();
-};
-
-const isApprovalRejectionForItem = (item: ToolResultItem | null | undefined): boolean => {
-  const callId = getCallIdFromItem(item);
-  if (!callId) {
-    return false;
+  markToolCallAsApprovalRejection(callId?: string | null): void {
+    if (callId) this.#approvalRejectionCallIds.add(callId);
   }
-  return approvalRejectionCallIds.has(callId);
-};
 
-const consumeLlmAutoApprovalForItem = (item: ToolResultItem | null | undefined): boolean => {
-  const callId = getCallIdFromItem(item);
-  if (!callId || !llmAutoApprovalCallIds.has(callId)) {
-    return false;
+  clearApprovalRejectionMarkers(): void {
+    this.#approvalRejectionCallIds.clear();
   }
-  llmAutoApprovalCallIds.delete(callId);
-  return true;
-};
+
+  isApprovalRejectionForItem(item: ToolResultItem | null | undefined): boolean {
+    const callId = getCallIdFromItem(item);
+    return callId ? this.#approvalRejectionCallIds.has(callId) : false;
+  }
+
+  consumeLlmAutoApprovalForItem(item: ToolResultItem | null | undefined): boolean {
+    const callId = getCallIdFromItem(item);
+    if (!callId || !this.#llmAutoApprovalCallIds.has(callId)) return false;
+    this.#llmAutoApprovalCallIds.delete(callId);
+    return true;
+  }
+}
 
 const normalizeToolItem = (item: Item): { toolName: string; arguments: unknown; outputText: string } | null => {
   if (item.type !== 'tool_result') {
@@ -67,7 +60,10 @@ const getProviderArguments = (item: ToolResult): unknown => {
   return providerItem?.arguments ?? providerItem?.args ?? providerItem?.operation;
 };
 
-export const extractCommandMessages = (items: readonly unknown[] = []): CommandMessage[] => {
+export const extractCommandMessages = (
+  items: readonly unknown[] = [],
+  markerStore: ToolCallMarkerStore = new ToolCallMarkerStore(),
+): CommandMessage[] => {
   const messages: CommandMessage[] = [];
   const toolCallArgumentsById = new Map<string, unknown>();
   const normalizedItems = items.flatMap(normalizeRunItem);
@@ -84,8 +80,8 @@ export const extractCommandMessages = (items: readonly unknown[] = []): CommandM
 
     const resultItem = item as ToolResult & { arguments?: unknown };
 
-    const isApprovalRejection = isApprovalRejectionForItem(resultItem);
-    const autoApprovedByLlm = consumeLlmAutoApprovalForItem(resultItem);
+    const isApprovalRejection = markerStore.isApprovalRejectionForItem(resultItem);
+    const autoApprovedByLlm = markerStore.consumeLlmAutoApprovalForItem(resultItem);
 
     const formatter = getToolFormatter(normalizedItem.toolName);
     if (formatter) {

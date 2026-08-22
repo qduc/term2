@@ -60,6 +60,7 @@ import type { AgentRuntime } from './services/agent-runtime/agent-runtime.js';
 import type { WorkflowLimits } from './services/agent-runtime/workflow/workflow-types.js';
 import { getProjectTreeForPrompt } from './utils/project-tree.js';
 import { MemoryCapabilityBuilder } from './services/memory/memory-capabilities.js';
+import type { ShellChildRegistry } from './utils/shell/shell-child-registry.js';
 
 export { getProjectTreeForPrompt } from './utils/project-tree.js';
 
@@ -219,6 +220,7 @@ export const getAgentDefinition = (
     backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
     /** Root-session-only output store + watch layer for background jobs. */
     backgroundShellOutput?: BackgroundShellOutputBundle;
+    shellChildRegistry?: ShellChildRegistry;
     /** False for one-shot/non-interactive callers until their lifecycle is supported. */
     allowBackgroundShell?: boolean;
   },
@@ -242,6 +244,7 @@ export const getAgentDefinition = (
     sessionAccess,
     backgroundShellRegistry,
     backgroundShellOutput,
+    shellChildRegistry,
     allowBackgroundShell = true,
   } = deps;
   const defaultModel = settingsService.get('agent.model');
@@ -351,6 +354,7 @@ export const getAgentDefinition = (
         searchViaShell,
         backgroundShellRegistry: rootBackgroundShellRegistry,
         backgroundShellWatches: rootBackgroundShellOutput?.watches,
+        shellChildRegistry,
       }),
       createReadFileToolDefinition({
         executionContext,
@@ -410,6 +414,7 @@ export const getAgentDefinition = (
     sessionAccess,
     backgroundShellRegistry: rootBackgroundShellRegistry,
     backgroundShellWatches: rootBackgroundShellOutput?.watches,
+    shellChildRegistry,
   });
   const tools: AnyToolDefinition[] = [
     shellTool,

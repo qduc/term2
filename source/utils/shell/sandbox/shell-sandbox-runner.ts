@@ -53,7 +53,10 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
     return SandboxManager.annotateStderrWithSandboxFailures(command, stderr);
   }
 
-  async #initialize(cwd: string, config: SandboxRuntimeConfig = createSandboxRuntimeConfig({ cwd })): Promise<void> {
+  async #initialize(
+    cwd: string,
+    config: SandboxRuntimeConfig = createSandboxRuntimeConfig({ cwd, tmpDir: SANDBOX_TEMP_DIR }),
+  ): Promise<void> {
     const initializationKey = JSON.stringify({ cwd, config });
     if (AnthropicShellSandboxRunner.#initializedForKey === initializationKey) {
       return;
@@ -63,7 +66,6 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
       if (AnthropicShellSandboxRunner.#initializedForKey) {
         await SandboxManager.reset();
       }
-      process.env.CLAUDE_CODE_TMPDIR = SANDBOX_TEMP_DIR;
       const sandboxAskCallback = async ({ host, port }: { host: string; port?: number }): Promise<boolean> => {
         return requestSandboxNetworkApproval({ host, port });
       };

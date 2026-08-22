@@ -99,7 +99,7 @@ export function createExecutor(
   runWithDef: SubagentRunWithDefFn,
   logger: ILoggingService,
   mentorRun?: MentorRunFn,
-  onEvent?: (event: ConversationEvent) => void,
+  onEvent?: (event: ConversationEvent) => void | PromiseLike<void>,
 ): ExecutorFn {
   return async <T = string>(input: ExecutorInput): Promise<RunResult<T>> => {
     const { definition, instructions, input: runInput } = input;
@@ -125,12 +125,17 @@ export function createExecutor(
       signal: effectiveSignal,
     };
 
-    safeEmit(logger, onEvent, {
-      type: 'subagent_started',
-      agentId,
-      role: request.role,
-      task: request.task,
-    });
+    await safeEmit(
+      logger,
+      onEvent,
+      {
+        type: 'subagent_started',
+        agentId,
+        role: request.role,
+        task: request.task,
+      },
+      { propagate: true },
+    );
 
     logger.debug('AgentRuntime executor starting', {
       agentName: definition.name,
@@ -155,18 +160,23 @@ export function createExecutor(
         subagentResult = await runWithDef(agentId, request, legacyDef);
       }
     } catch (error) {
-      safeEmit(logger, onEvent, {
-        type: 'subagent_completed',
-        result: {
-          agentId,
-          role: request.role,
-          status: isAbortLike(error instanceof Error ? error.message : String(error), error) ? 'cancelled' : 'failed',
-          finalText: '',
-          filesChanged: [],
-          toolsUsed: [],
-          error: error instanceof Error ? error.message : String(error),
+      await safeEmit(
+        logger,
+        onEvent,
+        {
+          type: 'subagent_completed',
+          result: {
+            agentId,
+            role: request.role,
+            status: isAbortLike(error instanceof Error ? error.message : String(error), error) ? 'cancelled' : 'failed',
+            finalText: '',
+            filesChanged: [],
+            toolsUsed: [],
+            error: error instanceof Error ? error.message : String(error),
+          },
         },
-      });
+        { propagate: true },
+      );
       throw error;
     }
 
@@ -176,7 +186,7 @@ export function createExecutor(
       status: subagentResult.status,
     });
 
-    safeEmit(logger, onEvent, { type: 'subagent_completed', result: subagentResult });
+    await safeEmit(logger, onEvent, { type: 'subagent_completed', result: subagentResult }, { propagate: true });
 
     return mapSubagentResultToRunResult<T>(subagentResult);
   };

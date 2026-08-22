@@ -1,13 +1,13 @@
 import type { ILoggingService, ISessionContextService, ISettingsService } from '../service-interfaces.js';
-import type { ConversationEvent } from './conversation-events.js';
+import type { ApprovalRequiredEvent, ConversationEvent, ConversationEventSink } from './conversation-events.js';
 import type { CommandMessage } from '../../tools/types.js';
-import type { ConversationTerminal, PostExecuteApprovalToken } from '../../contracts/conversation.js';
+import type { ConversationTerminal, PendingApproval, PostExecuteApprovalToken } from '../../contracts/conversation.js';
 import { collectTerminalResult, TerminalResultCollectorExhaustionError } from '../session/terminal-result-collector.js';
 import { getCallIdFromObject } from '../interruption-info.js';
 import { normalizeUserTurn, type UserTurn } from '../../types/user-turn.js';
 import { userTurnToProviderItem } from './user-turn-item.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
-import type { SessionRuntime, SessionLogs, SessionApprovalQuery } from '../session/session-composition.js';
+import type { SessionRuntime, SessionLogs, SessionApprovalQuery } from '../../core/index.js';
 import type { SessionManager } from '../session/session-manager.js';
 import type { PendingInteractionState } from '../session/pending-interaction-state.js';
 import type { AskUserAnswerSink, SubagentEventSinkHost } from '../conversation-agent-client.js';
@@ -22,10 +22,12 @@ import {
 } from '../queue/queue-controller.js';
 
 export type SendMessageOptions = {
+  /** Internal admission callback; called when a queued submission is accepted or rejected. */
+  onAdmission?: (error?: unknown) => void;
   onTextChunk?: (fullText: string, chunk: string) => void;
   onReasoningChunk?: (fullText: string, chunk: string) => void;
   onCommandMessage?: (message: CommandMessage) => void;
-  onEvent?: (event: ConversationEvent) => void;
+  onEvent?: ConversationEventSink;
   hallucinationRetryCount?: number;
   bypassInputSurgeGuard?: boolean;
   replayFromHistory?: boolean;
@@ -40,7 +42,7 @@ export type HandleApprovalDecisionOptions = {
   onTextChunk?: (fullText: string, chunk: string) => void;
   onReasoningChunk?: (fullText: string, chunk: string) => void;
   onCommandMessage?: (message: CommandMessage) => void;
-  onEvent?: (event: ConversationEvent) => void;
+  onEvent?: ConversationEventSink;
   approvalAnswer?: string;
   /**
    * End the turn once this decision's tool result is recorded, without giving
@@ -52,7 +54,7 @@ export type HandleApprovalDecisionOptions = {
 
 export type TurnFlow = Pick<SessionRuntime['turns'], 'start' | 'continueAfterApproval'> & {
   continueAfterPostExecuteApproval?: SessionRuntime['turns']['continueAfterPostExecuteApproval'];
-  abort?: () => void;
+  abort?: () => void | Promise<void>;
   steer?: SessionRuntime['turns']['steer'];
   retractSteer?: SessionRuntime['turns']['retractSteer'];
   editSteer?: SessionRuntime['turns']['editSteer'];
@@ -119,7 +121,33 @@ export interface QueueStateSnapshot {
 
 export type QueueStateObserver = (snapshot: QueueStateSnapshot) => void;
 
-export type ConversationEventSink = (event: ConversationEvent) => void;
+export type { ConversationEventSink } from './conversation-events.js';
+
+export type PreparedMessageIds = { readonly turnId: string; readonly clientRequestId: string };
+export type PreparedMessageResult =
+  | { readonly kind: 'prepared'; readonly leaseId: string; readonly turnId: string }
+  | { readonly kind: 'rejected'; readonly reason: 'busy' | 'queue_full' | 'closed' };
+
+export type AbortDiscardResult = {
+  readonly discardedTurnIds: string[];
+  readonly proven: boolean;
+};
+
+export class AdmissionLeaseError extends Error {
+  readonly code: 'stale' | 'wrong_session' | 'already_settled' | 'closed';
+  constructor(code: AdmissionLeaseError['code']) {
+    super('message admission lease rejected');
+    this.name = 'AdmissionLeaseError';
+    this.code = code;
+  }
+}
+
+type PreparedMessage = {
+  readonly input: string | UserTurn;
+  readonly turnId: string;
+  readonly clientRequestId: string;
+  readonly expiresAt: number;
+};
 
 /**
  * Fired by the adapter when the queue has actually started executing a queued
@@ -149,7 +177,7 @@ export class ConversationAdapter {
   #userTurns: Pick<SessionManager, 'listUserTurns'>;
   #logs: SessionLogs;
   #approval: SessionApprovalQuery;
-  #pendingInteraction: Pick<PendingInteractionState, 'present' | 'clear'> | null;
+  #pendingInteraction: Pick<PendingInteractionState, 'present' | 'clear' | 'getSnapshot'> | null;
   #turnFlow: TurnFlow;
   readonly #messagesById = new Map<string, QueuedMessage>();
   /**
@@ -168,12 +196,21 @@ export class ConversationAdapter {
   #cancellingRequestId: string | null = null;
   #cancellationEpoch = 0;
   #cancellation: Promise<void> = Promise.resolve();
+  #cancellationProven = true;
+  #activeAbortCompletion: Promise<void> | null = null;
   #approvalExecutionId: ExecutionId | null = null;
   #approvalActionId: ActionId | null = null;
   #postExecuteApproval: PostExecuteApprovalToken | null = null;
   #queueStateObserver: QueueStateObserver | null = null;
   #queuedTurnStartObserver: QueuedTurnStartObserver | null = null;
   readonly #activeCancelTimeoutMs: number;
+  readonly #queueCapacity: number;
+  readonly #preparedLeaseTtlMs: number;
+  readonly #discardOnFailure: boolean;
+  readonly #failureDiscardedTurnIds: string[] = [];
+  readonly #preparedMessages = new Map<string, PreparedMessage>();
+  readonly #cancelledLeases = new Set<string>();
+  #admissionClosed = false;
 
   constructor(deps: {
     sessionId: string;
@@ -187,12 +224,15 @@ export class ConversationAdapter {
     logs: SessionLogs;
     approval: SessionApprovalQuery;
     /** Session-owned interaction projection; omitted by low-level legacy tests. */
-    pendingInteraction?: Pick<PendingInteractionState, 'present' | 'clear'>;
+    pendingInteraction?: Pick<PendingInteractionState, 'present' | 'clear' | 'getSnapshot'>;
     turnFlow: TurnFlow;
     queueForeground?: boolean;
     queueCapacity?: number;
     /** Test seam: bound how long cancel waits for a hung active turn. */
     activeCancelTimeoutMs?: number;
+    /** Gateway-only finite reservation policy; legacy callers retain Infinity. */
+    preparedLeaseTtlMs?: number;
+    discardOnFailure?: boolean;
     queuePersistence?: QueuePersistence<QueuedMessageSnapshot>;
   }) {
     this.#sessionId = deps.sessionId;
@@ -208,20 +248,23 @@ export class ConversationAdapter {
     this.#pendingInteraction = deps.pendingInteraction ?? null;
     this.#turnFlow = deps.turnFlow;
     this.#activeCancelTimeoutMs = deps.activeCancelTimeoutMs ?? ACTIVE_CANCEL_TIMEOUT_MS;
+    this.#queueCapacity = deps.queueCapacity ?? Infinity;
+    this.#preparedLeaseTtlMs = deps.preparedLeaseTtlMs ?? 10_000;
+    this.#discardOnFailure = deps.discardOnFailure === true;
     if (deps.queueForeground) {
       const driver: QueueTurnDriver<QueuedMessageSnapshot> = {
         start: (execution) => this.#startQueuedTurn(execution),
         cancel: async () => {
-          // Prefer natural abort settlement, but never block queue cancel forever
-          // if the underlying turn ignores abort.
-          await Promise.race([
-            this.#activeTurn.then(
-              () => undefined,
-              () => undefined,
+          // Prefer natural abort settlement, but report whether the bounded
+          // barrier actually proved that the active execution stopped.
+          const result = await Promise.race([
+            (this.#activeAbortCompletion ?? this.#activeTurn).then(
+              () => true,
+              () => true,
             ),
-            delay(this.#activeCancelTimeoutMs),
+            delay(this.#activeCancelTimeoutMs).then(() => false),
           ]);
-          return true;
+          return result;
         },
       };
       this.#queue = new QueueController({
@@ -462,6 +505,7 @@ export class ConversationAdapter {
   async sendMessage(
     input: string | UserTurn,
     {
+      onAdmission,
       onTextChunk,
       onReasoningChunk,
       onCommandMessage,
@@ -484,8 +528,8 @@ export class ConversationAdapter {
         hallucinationRetryCount,
         bypassInputSurgeGuard,
         replayFromHistory,
-      }).then((result) => {
-        this.#recordPendingInteraction(result);
+      }).then(async (result) => {
+        await this.#recordPendingInteraction(result);
         return result;
       });
     }
@@ -516,18 +560,120 @@ export class ConversationAdapter {
       const controllerText = displayText.trim() ? displayText : QUEUED_NON_TEXT_PLACEHOLDER;
       void queue
         .command({ kind: busyMode === 'steer' ? 'steer' : 'submit', id: requestId, text: controllerText })
-        .then((result) => {
+        .then(async (result) => {
           if (result.kind !== 'accepted') {
             const reason = result.kind === 'rejected' ? result.reason : result.kind;
-            this.#settleFailure(requestId, new Error(`Foreground queue rejected message: ${reason}`));
+            const error = new Error(`Foreground queue rejected message: ${reason}`);
+            onAdmission?.(error);
+            await this.#eventSink?.({ type: 'error', message: error.message, kind: 'admission_rejected' });
+            this.#settleFailure(requestId, error);
+          } else {
+            onAdmission?.();
           }
           this.#notifyQueueState();
         })
         .catch((error) => {
+          onAdmission?.(error);
           this.#settleFailure(requestId, error);
           this.#notifyQueueState();
         });
     });
+  }
+
+  async prepareMessage(input: string | UserTurn, ids: PreparedMessageIds): Promise<PreparedMessageResult> {
+    const now = Date.now();
+    for (const [leaseId, prepared] of this.#preparedMessages) {
+      if (prepared.expiresAt <= now) this.#preparedMessages.delete(leaseId);
+    }
+    if (this.#admissionClosed) return { kind: 'rejected', reason: 'closed' };
+    if (
+      !ids.turnId ||
+      !ids.clientRequestId ||
+      [...this.#preparedMessages.values()].some(
+        (prepared) => prepared.turnId === ids.turnId || prepared.clientRequestId === ids.clientRequestId,
+      )
+    ) {
+      return { kind: 'rejected', reason: 'busy' };
+    }
+    const state = this.#queue?.state();
+    if (!this.#queue && this.isQueueActive()) return { kind: 'rejected', reason: 'busy' };
+    if (state && state.queue.length + this.#preparedMessages.size >= this.#queueCapacity) {
+      return { kind: 'rejected', reason: 'queue_full' };
+    }
+    const leaseId = crypto.randomUUID();
+    this.#preparedMessages.set(leaseId, {
+      input: typeof input === 'string' ? input : structuredClone(input),
+      turnId: ids.turnId,
+      clientRequestId: ids.clientRequestId,
+      expiresAt: Date.now() + this.#preparedLeaseTtlMs,
+    });
+    return { kind: 'prepared', leaseId, turnId: ids.turnId };
+  }
+
+  async commitMessage(leaseId: string): Promise<void> {
+    if (this.#admissionClosed) throw new AdmissionLeaseError('closed');
+    const prepared = this.#preparedMessages.get(leaseId);
+    if (!prepared) throw new AdmissionLeaseError('stale');
+    if (prepared.expiresAt <= Date.now()) {
+      this.#preparedMessages.delete(leaseId);
+      throw new AdmissionLeaseError('stale');
+    }
+    this.#preparedMessages.delete(leaseId);
+    await new Promise<void>((resolve, reject) => {
+      const terminal = this.sendMessage(prepared.input, {
+        preferredMessageId: prepared.turnId,
+        onAdmission: (error) => (error ? reject(error) : resolve()),
+      });
+      // The admission callback reports queue rejection; this handler prevents
+      // the later terminal rejection from becoming an unhandled promise.
+      terminal.then(
+        () => undefined,
+        () => undefined,
+      );
+    });
+  }
+
+  async cancelPreparedMessage(leaseId: string): Promise<void> {
+    if (this.#admissionClosed) throw new AdmissionLeaseError('closed');
+    if (this.#cancelledLeases.has(leaseId)) return;
+    const prepared = this.#preparedMessages.get(leaseId);
+    if (!prepared) throw new AdmissionLeaseError('stale');
+    this.#preparedMessages.delete(leaseId);
+    if (prepared.expiresAt <= Date.now()) throw new AdmissionLeaseError('stale');
+    this.#cancelledLeases.add(leaseId);
+  }
+
+  async abortAndDiscard(): Promise<AbortDiscardResult> {
+    const discarded = [...this.#preparedMessages.values()].map((item) => item.turnId);
+    this.#preparedMessages.clear();
+    this.abort();
+    await this.#cancellation;
+    if (this.#queue) {
+      discarded.push(...this.#queue.state().queue.map((item) => item.id));
+      await this.discardQueue();
+    }
+    return { discardedTurnIds: [...new Set(discarded)], proven: this.#cancellationProven };
+  }
+
+  closeAdmission(): string[] {
+    this.#admissionClosed = true;
+    const discarded = [...this.#preparedMessages.values()].map((item) => item.turnId);
+    this.#preparedMessages.clear();
+    return discarded;
+  }
+
+  reopenAdmission(): void {
+    if (this.#cancellationProven) this.#admissionClosed = false;
+  }
+
+  preparedMessageCount(): number {
+    return this.#preparedMessages.size;
+  }
+
+  consumeFailureDiscardedTurnIds(): string[] {
+    const discarded = [...new Set(this.#failureDiscardedTurnIds)];
+    this.#failureDiscardedTurnIds.length = 0;
+    return discarded;
   }
 
   async resumeQueue(): Promise<void> {
@@ -563,17 +709,20 @@ export class ConversationAdapter {
     // requests stay pending — pause is not a terminal fate.
     const activeRequestId = this.#activeRequestId;
     this.#cancellingRequestId = activeRequestId;
-    this.#turnFlow.abort?.();
-    this.#cancellation = this.#queue.command({ kind: 'cancel' }).then(() => {
-      if (activeRequestId && this.#messagesById.has(activeRequestId)) {
+    this.#activeAbortCompletion = Promise.resolve(this.#turnFlow.abort?.());
+    this.#cancellationProven = true;
+    this.#cancellation = this.#queue.command({ kind: 'cancel' }).then((result) => {
+      this.#cancellationProven = result.kind !== 'rejected' || result.reason !== 'cancellation_unproven';
+      if (this.#cancellationProven && activeRequestId && this.#messagesById.has(activeRequestId)) {
         this.#settleFailure(activeRequestId, queueCancellationError('Active turn was cancelled'));
       }
-      if (this.#activeRequestId === activeRequestId) {
+      if (this.#cancellationProven && this.#activeRequestId === activeRequestId) {
         this.#activeRequestId = null;
       }
-      if (this.#cancellingRequestId === activeRequestId) {
+      if (this.#cancellationProven && this.#cancellingRequestId === activeRequestId) {
         this.#cancellingRequestId = null;
       }
+      if (this.#cancellationProven) this.#activeAbortCompletion = null;
       this.#notifyQueueState();
     });
   }
@@ -638,13 +787,13 @@ export class ConversationAdapter {
           request: {}, // existing runtime doesn't expose typed tool request details
         });
         this.#notifyQueueState();
-        this.#recordPendingInteraction(result);
+        await this.#recordPendingInteraction(result);
         this.#settleSuccess(execution.snapshot.requestId, result);
         return;
       }
       await this.#queue!.event({ kind: 'completed', executionId: execution.executionId, terminal: result });
       this.#notifyQueueState();
-      this.#recordPendingInteraction(result);
+      await this.#recordPendingInteraction(result);
       this.#settleSuccess(execution.snapshot.requestId, result);
     } catch (error) {
       const failure =
@@ -653,9 +802,34 @@ export class ConversationAdapter {
           ? queueCancellationError('Active turn was cancelled')
           : error;
       // Controller pauses with retained queue on failure when work remains.
-      await this.#queue!.event({ kind: 'failed', executionId: execution.executionId, failure });
-      this.#notifyQueueState();
-      this.#settleFailure(execution.snapshot.requestId, failure);
+      try {
+        await this.#queue!.event({ kind: 'failed', executionId: execution.executionId, failure });
+        if (this.#discardOnFailure) {
+          this.#failureDiscardedTurnIds.push(...this.#queue!.state().queue.map((item) => item.id));
+          await this.discardQueue();
+        }
+        this.#notifyQueueState();
+      } catch (queueError) {
+        this.#logger.error('Failed to settle queued turn failure state', {
+          error: queueError instanceof Error ? queueError.message : String(queueError),
+        });
+      }
+      try {
+        await this.#eventSink?.({
+          type: 'error',
+          message: failure instanceof Error ? failure.message : String(failure),
+          kind: 'turn_failed',
+        });
+      } catch (eventError) {
+        // The failure event is itself critical at the gateway boundary. It
+        // must not prevent the owning submission from settling or leave
+        // #activeTurn as an unhandled rejection.
+        this.#logger.error('Failed to publish queued turn failure event', {
+          error: eventError instanceof Error ? eventError.message : String(eventError),
+        });
+      } finally {
+        this.#settleFailure(execution.snapshot.requestId, failure);
+      }
     }
   }
 
@@ -709,14 +883,24 @@ export class ConversationAdapter {
     const turn = normalizeUserTurn(input);
     const cancellationEpoch = this.#cancellationEpoch;
     return this.#withTrafficContext(turn.text, async () => {
-      const wrappedOnEvent = (event: ConversationEvent) => {
+      const wrappedOnEvent = async (event: ConversationEvent): Promise<void> => {
+        if (event.type === 'approval_required') {
+          // Install the authoritative session snapshot before any gateway/UI
+          // sink sees the approval event. The runtime retains the private
+          // interruption in SessionApprovalQuery; this public event carries
+          // only its already-sanitized descriptor shape.
+          this.#pendingInteraction?.present({
+            ...(event.approval as PendingApproval),
+            rawInterruption: null,
+          });
+        }
+        await this.#eventSink?.(event);
         this.#logs.dispatchEventToLog(event);
-        this.#eventSink?.(event);
-        onEvent?.(event);
+        await onEvent?.(event);
       };
-      this.#subagentEventSinkHost?.setSubagentEventSink(wrappedOnEvent);
       let result: ConversationTerminal;
       try {
+        await this.#subagentEventSinkHost?.setSubagentEventSink(wrappedOnEvent);
         const startOptions: any = { retries: { hallucinationRetryCount } };
         if (bypassInputSurgeGuard !== undefined) {
           startOptions.bypassInputSurgeGuard = bypassInputSurgeGuard;
@@ -745,7 +929,7 @@ export class ConversationAdapter {
         );
       } finally {
         this.#subagentEventSinkHost?.cancelSubagentRuns?.();
-        this.#subagentEventSinkHost?.setSubagentEventSink(null);
+        await this.#subagentEventSinkHost?.setSubagentEventSink(null);
       }
 
       if (result.type === 'response') {
@@ -854,14 +1038,24 @@ export class ConversationAdapter {
       }
 
       const result = await this.#withTrafficContext(undefined, async () => {
-        const wrappedOnEvent = (event: ConversationEvent) => {
+        const wrappedOnEvent = async (event: ConversationEvent): Promise<void> => {
+          if (event.type === 'approval_required') {
+            // Install the authoritative session snapshot before any gateway/UI
+            // sink sees the approval event. The runtime retains the private
+            // interruption in SessionApprovalQuery; this public event carries
+            // only its already-sanitized descriptor shape.
+            this.#pendingInteraction?.present({
+              ...(event.approval as PendingApproval),
+              rawInterruption: null,
+            });
+          }
+          await this.#eventSink?.(event);
           this.#logs.dispatchEventToLog(event);
-          this.#eventSink?.(event);
-          onEvent?.(event);
+          await onEvent?.(event);
         };
-        this.#subagentEventSinkHost?.setSubagentEventSink(wrappedOnEvent);
         let result: ConversationTerminal | null;
         try {
+          await this.#subagentEventSinkHost?.setSubagentEventSink(wrappedOnEvent);
           result = await this.#collectTerminalResult(
             postExecuteApproval
               ? this.#turnFlow.continueAfterPostExecuteApproval!()
@@ -889,7 +1083,7 @@ export class ConversationAdapter {
           );
         } finally {
           this.#subagentEventSinkHost?.cancelSubagentRuns?.();
-          this.#subagentEventSinkHost?.setSubagentEventSink(null);
+          await this.#subagentEventSinkHost?.setSubagentEventSink(null);
         }
 
         if (result && result.type === 'response') {
@@ -925,7 +1119,7 @@ export class ConversationAdapter {
           this.#notifyQueueState();
         }
       }
-      if (result) this.#recordPendingInteraction(result);
+      if (result) await this.#recordPendingInteraction(result);
       return result;
     } catch (error) {
       if (this.#queue && this.#approvalExecutionId) {
@@ -939,9 +1133,18 @@ export class ConversationAdapter {
     }
   }
 
-  #recordPendingInteraction(result: ConversationTerminal): void {
+  async #recordPendingInteraction(result: ConversationTerminal): Promise<void> {
     if (result.type === 'approval_required') {
-      this.#pendingInteraction?.present(result.approval);
+      // The event bridge presents before publication. Keep a fallback for
+      // terminal/test paths that return an approval without emitting its event,
+      // but never replace an already-live snapshot (which would change its
+      // optimistic-concurrency ID).
+      if (!this.#pendingInteraction?.getSnapshot?.()) {
+        const safeApproval = { ...result.approval, rawInterruption: null };
+        this.#pendingInteraction?.present(safeApproval);
+        const approvalEvent: ApprovalRequiredEvent = { type: 'approval_required', approval: safeApproval };
+        await this.#eventSink?.(approvalEvent);
+      }
     } else {
       this.#pendingInteraction?.clear();
     }

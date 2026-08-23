@@ -66,6 +66,7 @@ export class GatewayServer {
   readonly #verifier: AssertionVerifier;
   readonly #handler: GatewayRpcHandler;
   readonly #pairingHandler?: GatewayPairingHandler;
+  readonly #pairingEnabled: boolean;
   readonly #lifecycle: GatewayLifecycle;
   #server?: Server;
 
@@ -92,6 +93,7 @@ export class GatewayServer {
     this.#verifier = options.verifier;
     this.#handler = options.handler;
     this.#pairingHandler = options.pairingHandler;
+    this.#pairingEnabled = options.pairingHandler !== undefined;
     this.#lifecycle = options.lifecycle ?? new GatewayLifecycle();
   }
 
@@ -157,12 +159,20 @@ export class GatewayServer {
     }
     const token = request.headers['x-term2-assertion'];
     if (typeof token !== 'string')
-      return send(response, 401, errorBody('authentication_required', 'gateway assertion required'));
+      return send(
+        response,
+        401,
+        errorBody(this.#pairingEnabled ? 'pairing_required' : 'authentication_required', 'gateway assertion required'),
+      );
     let claims: GatewayAssertionClaims;
     try {
       claims = this.#verifier.verify(token);
     } catch {
-      return send(response, 401, errorBody('authentication_required', 'gateway assertion rejected'));
+      return send(
+        response,
+        401,
+        errorBody(this.#pairingEnabled ? 'pairing_required' : 'authentication_required', 'gateway assertion rejected'),
+      );
     }
     const correlationHeader = request.headers['x-correlation-id'];
     if (

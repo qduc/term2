@@ -77,6 +77,7 @@ const broker: ProviderBrokerCapability = {
 const TRANSCRIPT_KEYS = new Set([
   'messages',
   'items',
+  'commands',
   'entries',
   'turns',
   'id',
@@ -655,7 +656,11 @@ describe('gateway startup and assertion verifier', () => {
           abort: () => {},
           setModel: () => {},
           addToolInterceptor: () => () => {},
-          startStream: async () => createMockStream([]),
+          startStream: async () => {
+            const stream = createMockStream([{ type: 'final', finalText: 'assistant reply' }]);
+            stream.finalOutput = 'assistant reply';
+            return stream;
+          },
           continueRunStream: async () => createMockStream([]),
         } as ConversationAgentClient),
     });
@@ -689,6 +694,7 @@ describe('gateway startup and assertion verifier', () => {
         workspaceId: 'workspace-a',
         ...(sessionId ? { sessionId } : {}),
       });
+    let gatewayStopped = false;
     try {
       await gateway.start();
       const created = await rpc(
@@ -716,8 +722,9 @@ describe('gateway startup and assertion verifier', () => {
         .split('\n')
         .filter(Boolean)
         .map((line) => (JSON.parse(line) as { type: string }).type);
-      expect(eventTypes.indexOf('user_message_accepted')).toBeGreaterThanOrEqual(0);
-      expect(eventTypes.indexOf('assistant_started')).toBeGreaterThan(eventTypes.indexOf('user_message_accepted'));
+      expect(eventTypes).toEqual(['session_created', 'user_message_accepted', 'assistant_started', 'turn_completed']);
+      const admissionAfterCompletion = persistence.index.admission('user-a', sessionId, 'client-1');
+      expect(admissionAfterCompletion?.state).toBe('terminal');
       const read = await rpc(
         path.join(root, 'gateway.sock'),
         token('session_read', sessionId),
@@ -725,16 +732,69 @@ describe('gateway startup and assertion verifier', () => {
         `/private/agent/v1/sessions/${sessionId}`,
       );
       expect(read.status).toBe(200);
-      const session = (read.body as { session: { transcript: { messages: Array<Record<string, unknown>> } } }).session;
+      const session = (
+        read.body as {
+          session: {
+            latestSequence: number;
+            projectionSequence: number;
+            transcript: { messages: Array<Record<string, unknown>> };
+          };
+        }
+      ).session;
+      expect(session.projectionSequence).toBe(session.latestSequence);
       assertFrozenTranscript(session.transcript);
       expect(session.transcript.messages).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ id: expect.any(String), role: 'user', text: 'hello from the user' }),
+          expect.objectContaining({ id: expect.any(String), role: 'bot', text: 'assistant reply' }),
         ]),
       );
+      expect(session.transcript.messages.every((message) => !String(message.id).startsWith('system-interrupted'))).toBe(
+        true,
+      );
       expect(session.transcript.messages.every((message) => !('sender' in message))).toBe(true);
-    } finally {
+
       await gateway.shutdown(100);
+      gatewayStopped = true;
+      const restarted = Term2Gateway.create({
+        enabled: true,
+        socketPath: path.join(root, 'gateway.sock'),
+        manifestPath,
+        manifestSha256: createHash('sha256').update(readFileSync(manifestPath)).digest('hex'),
+        replayDbPath: path.join(root, 'replay.sqlite'),
+        issuer: 'chatforge-bff',
+        audience: 'term2-gateway',
+        publicKeys: { active: publicKey },
+        providerBroker: broker,
+        providerProbe: { available: true, secretFree: true },
+        workerSandboxAvailable: true,
+        workspaceBoundaryProbe: boundaryProbe,
+        allowWrite: true,
+        auditWriter: async () => undefined,
+        tmpDir: path.join(root, 'tmp'),
+        persistence,
+      });
+      try {
+        await restarted.start();
+        const reopened = await rpc(
+          path.join(root, 'gateway.sock'),
+          token('session_read', sessionId),
+          null,
+          `/private/agent/v1/sessions/${sessionId}`,
+        );
+        expect(reopened.status).toBe(200);
+        const reopenedMessages = (
+          reopened.body as { session: { transcript: { messages: Array<Record<string, unknown>> } } }
+        ).session.transcript.messages;
+        expect(reopenedMessages).toEqual(
+          expect.arrayContaining([expect.objectContaining({ role: 'bot', text: 'assistant reply' })]),
+        );
+        expect(reopenedMessages.every((message) => !String(message.id).startsWith('system-interrupted'))).toBe(true);
+      } finally {
+        await restarted.shutdown(100);
+      }
+    } finally {
+      if (!gatewayStopped) await gateway.shutdown(100);
       persistence.closeIndex();
       await runtimeFactory.shutdown();
     }
@@ -952,6 +1012,34 @@ describe('gateway startup and assertion verifier', () => {
       expect(eventTypes.indexOf('approval_required')).toBeGreaterThanOrEqual(0);
       expect(eventTypes.indexOf('interaction_updated')).toBeGreaterThan(eventTypes.indexOf('approval_required'));
       expect(eventTypes.indexOf('interaction_resolved')).toBeGreaterThan(eventTypes.indexOf('interaction_updated'));
+
+      let completedProjection: {
+        session: { transcript: { messages: Array<Record<string, unknown>> } };
+      } | null = null;
+      for (let attempt = 0; attempt < 30 && !completedProjection; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const projectionRead = await rpc(
+          socketPath,
+          token('session_read', sessionId),
+          null,
+          `/private/agent/v1/sessions/${sessionId}`,
+        );
+        const candidate = projectionRead.body as {
+          session: { transcript: { messages: Array<Record<string, unknown>> } };
+        };
+        if (
+          candidate.session.transcript.messages.some(
+            (message) => message.role === 'bot' && typeof message.text === 'string' && message.text.length > 0,
+          )
+        ) {
+          completedProjection = candidate;
+        }
+      }
+      expect(completedProjection).not.toBeNull();
+      const commands = completedProjection!.session.transcript.messages.flatMap((message) =>
+        Array.isArray(message.commands) ? message.commands : [],
+      );
+      expect(commands).toContainEqual({ callId: 'ask-route-1', toolName: 'ask_user', status: 'completed' });
 
       failContinuation = true;
       const secondSubmitted = await rpc(
@@ -1250,6 +1338,16 @@ describe('gateway startup and assertion verifier', () => {
       );
       expect(repeated.status).toBe(200);
       expect(readRejected()).toHaveLength(1);
+      const abortedRead = await rpc(
+        socketPath,
+        token('session_read', sessionId),
+        null,
+        `/private/agent/v1/sessions/${sessionId}`,
+      );
+      const abortedMessages = (
+        abortedRead.body as { session: { transcript: { messages: Array<Record<string, unknown>> } } }
+      ).session.transcript.messages;
+      expect(abortedMessages.some((message) => String(message.id).startsWith('system-interrupted'))).toBe(true);
     } finally {
       parked?.release();
       await gateway.shutdown(100);

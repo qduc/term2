@@ -170,6 +170,8 @@ export interface FinalResponseEvent {
 export interface ErrorEvent {
   type: 'error';
   message: string;
+  /** Optional final text to preserve when a turn fails after producing an answer. */
+  finalText?: string;
   kind?: string;
   stack?: string;
   /**

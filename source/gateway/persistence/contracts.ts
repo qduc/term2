@@ -73,6 +73,12 @@ export type AgentEventType =
   | 'turn_failed'
   | 'turn_aborted';
 
+export const TERMINAL_AGENT_EVENT_TYPES: ReadonlySet<AgentEventType> = new Set([
+  'turn_completed',
+  'turn_failed',
+  'turn_aborted',
+]);
+
 export const FROZEN_AGENT_EVENT_TYPES = [
   'session_created',
   'user_message_accepted',

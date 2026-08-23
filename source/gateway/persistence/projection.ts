@@ -17,6 +17,13 @@ import type { PendingInteractionDto } from '../interaction-protocol.js';
 
 export type { PendingInteractionDto } from '../interaction-protocol.js';
 
+export type ProjectionCommandStatus = 'completed' | 'failed' | 'aborted' | 'unknown';
+export type ProjectionCommand = Readonly<{
+  callId: string;
+  toolName: string;
+  status: ProjectionCommandStatus;
+}>;
+
 export type InteractionProjection =
   | null
   | { readonly state: 'pending'; readonly interaction: PendingInteractionDto; readonly turnId: string }
@@ -32,7 +39,10 @@ export type SessionProjectionSource = {
   readonly session: GatewaySessionRecord;
   readonly latestSequence: number;
   readonly earliestReplayableSequence: number;
+  /** Cursor covered by the hydrated transcript; never below the replay floor. */
   readonly projectionSequence: number;
+  /** Journal-sourced terminal tool state, keyed by the owning turn ID. */
+  readonly journalCommands: ReadonlyMap<string, readonly ProjectionCommand[]>;
   readonly transcript: RestoredState | null;
   readonly interaction: InteractionProjection;
   readonly resolvedInteractionIds: ReadonlySet<string>;
@@ -124,6 +134,39 @@ function readTerm2Envelopes(directory: string, expectedSessionId?: string): Pers
   return all;
 }
 
+function commandsFromJournal(events: readonly AgentEventEnvelope[]): ReadonlyMap<string, readonly ProjectionCommand[]> {
+  const commandsByTurn = new Map<string, ProjectionCommand[]>();
+  const statusByTerminalEvent = new Map<string, ProjectionCommandStatus>([
+    ['turn_completed', 'completed'],
+    ['turn_failed', 'failed'],
+    ['turn_aborted', 'aborted'],
+  ]);
+  for (const event of events) {
+    if (event.type === 'tool_started') {
+      const turnId = typeof event.payload.turnId === 'string' ? event.payload.turnId : null;
+      const callId = typeof event.payload.callId === 'string' ? event.payload.callId : null;
+      const toolName = typeof event.payload.toolName === 'string' ? event.payload.toolName : null;
+      if (!turnId || !callId || !toolName) continue;
+      const commands = commandsByTurn.get(turnId) ?? [];
+      if (!commands.some((command) => command.callId === callId) && commands.length < 64) {
+        commands.push({ callId, toolName, status: 'unknown' });
+      }
+      commandsByTurn.set(turnId, commands);
+      continue;
+    }
+    const status = statusByTerminalEvent.get(event.type);
+    const turnId = typeof event.payload.turnId === 'string' ? event.payload.turnId : null;
+    if (!status || !turnId) continue;
+    const commands = commandsByTurn.get(turnId);
+    if (!commands) continue;
+    commandsByTurn.set(
+      turnId,
+      commands.map((command) => ({ ...command, status })),
+    );
+  }
+  return commandsByTurn;
+}
+
 function interactionFromJournal(journal: GatewayEventJournalImpl): InteractionProjection {
   let projection: InteractionProjection = null;
   const resolvedInteractionIds = new Set<string>();
@@ -213,9 +256,19 @@ export async function createSessionProjectionSource(options: {
 }): Promise<SessionProjectionSource> {
   const session = options.index.getForOwner(options.ownerUserId, options.sessionId);
   const highWater: PersistenceHighWater = options.journal.highWater();
+  const journalEvents = options.journal.events();
+  const journalCommands = commandsFromJournal(journalEvents);
+  // The transcript is hydrated from the durable log, so it covers every
+  // published journal event. Report that coverage rather than the journal's
+  // optional checkpoint, which may still be zero after restart/compaction.
+  const projectionSequence = Math.max(
+    highWater.lastPublishedSequence,
+    highWater.firstRetainedEventSequence,
+    highWater.projectionSequence,
+  );
   let interaction = interactionFromJournal(options.journal);
   const resolvedInteractionIds = new Set<string>();
-  for (const event of options.journal.events()) {
+  for (const event of journalEvents) {
     if (event.type === 'interaction_resolved' && typeof event.payload.interactionId === 'string') {
       resolvedInteractionIds.add(event.payload.interactionId);
     }
@@ -234,7 +287,8 @@ export async function createSessionProjectionSource(options: {
     session,
     latestSequence: highWater.lastPublishedSequence,
     earliestReplayableSequence: highWater.firstRetainedEventSequence,
-    projectionSequence: highWater.projectionSequence,
+    projectionSequence,
+    journalCommands,
     transcript: hydrateTranscript(directory, session.id),
     interaction,
     resolvedInteractionIds,

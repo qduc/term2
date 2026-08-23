@@ -13,8 +13,10 @@ import type {
   GatewaySessionComposition,
   ProviderBrokerCapability,
   SecretFreeWorkerSettings,
+  SessionSettingsSnapshot,
   SessionBinding,
 } from './contracts.js';
+import { createSessionSettingsSnapshot } from './launcher-seam.js';
 import { ServerSession, type ServerSessionOptions } from './server-session.js';
 import type { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
 import type { PostExecutePauseCapability } from '../services/session/post-execute-pause-capability.js';
@@ -73,7 +75,7 @@ export type GatewayAgentClientFactory = (input: {
   sessionContextService: ISessionContextService;
   executionContext: GatewaySessionComposition['executionContext'];
   skillsService: SkillsService;
-  providerBroker: ProviderBrokerCapability;
+  providerBroker?: ProviderBrokerCapability;
   toolOwnership: ToolOwnershipRegistry;
   postExecutePauseCapability: PostExecutePauseCapability;
   sessionAccess: SessionAccessState;
@@ -86,17 +88,27 @@ export type GatewayAgentClientFactory = (input: {
   gatewayMode: true;
   allowBackgroundShell: boolean;
   maxToolOutputBytes: number;
+  sessionSettingsSnapshot: SessionSettingsSnapshot;
 }) => ConversationAgentClient;
 
 export type RuntimeFactoryOptions = {
   policy?: Partial<RuntimeResourcePolicy>;
-  providerBroker: ProviderBrokerCapability;
-  providerProbe: WorkerBoundaryProbe;
+  /** Legacy fixture capability. Omit this for the real provider stack. */
+  providerBroker?: ProviderBrokerCapability;
+  providerProbe?: WorkerBoundaryProbe;
   tmpDir: string;
   sandboxAvailable: true;
   createAgentClient: GatewayAgentClientFactory;
   createLogger?: (sessionId: string, context: ISessionContextService) => ILoggingService;
-  createSettings?: (defaults: SecretFreeWorkerSettings, tmpDir: string) => ISettingsService;
+  createSettings?: (
+    defaults: SecretFreeWorkerSettings,
+    tmpDir: string,
+    snapshot: SessionSettingsSnapshot,
+  ) => ISettingsService;
+  /** The launcher's authority is read to create a snapshot, never shared with a session. */
+  settingsAuthority?: ISettingsService;
+  createSettingsSnapshot?: (binding: SessionBinding) => SessionSettingsSnapshot;
+  modelCatalogLogger?: ILoggingService;
   createSessionContext?: () => ISessionContextService;
   createSkills?: (logger: ILoggingService, canonicalRoot: string) => SkillsService;
   onResourceReleased?: (sessionId: string) => void;
@@ -152,6 +164,7 @@ function createDefaultSettings(
   defaults: SecretFreeWorkerSettings,
   tmpDir: string,
   maxParallelToolCalls = 1,
+  snapshot?: SessionSettingsSnapshot,
 ): ISettingsService {
   const settings = new SettingsService({
     settingsDir: path.join(tmpDir, 'settings'),
@@ -162,6 +175,9 @@ function createDefaultSettings(
   });
   settings.set('agent.provider', defaults.providerId, { persist: false });
   settings.set('agent.model', defaults.modelId, { persist: false });
+  if (snapshot) {
+    settings.set('agent.reasoningEffort', snapshot.reasoningEffort as never, { persist: false });
+  }
   settings.set('agent.maxParallelToolCalls', maxParallelToolCalls, { persist: false });
   return settings;
 }
@@ -191,6 +207,15 @@ export class RuntimeFactory {
   get liveSessionCount(): number {
     return this.#sessions.size;
   }
+  get settingsAuthority(): ISettingsService | undefined {
+    return this.#options.settingsAuthority;
+  }
+  get modelCatalogLogger(): ILoggingService | undefined {
+    return this.#options.modelCatalogLogger;
+  }
+  get usesRealProviderStack(): boolean {
+    return !this.#options.providerBroker;
+  }
 
   async create(
     binding: SessionBinding,
@@ -207,11 +232,26 @@ export class RuntimeFactory {
     this.#creating.add(binding.sessionId);
 
     let composition: ReturnType<typeof composeGatewaySession>;
+    const sessionSettingsSnapshot =
+      this.#options.createSettingsSnapshot?.(binding) ??
+      (this.#options.settingsAuthority
+        ? createSessionSettingsSnapshot({
+            settings: this.#options.settingsAuthority,
+            // A launcher must opt in to write access through its explicit
+            // snapshot callback; binding access alone is not authority.
+            effectiveToolPolicy: { allowWrite: false },
+          })
+        : undefined);
+    if (!this.#options.providerBroker && !sessionSettingsSnapshot) {
+      this.#creating.delete(binding.sessionId);
+      throw new RuntimeFactoryError('provider_unavailable');
+    }
     try {
       composition = composeGatewaySession({
         binding,
         providerBroker: this.#options.providerBroker,
         providerProbe: this.#options.providerProbe,
+        settingsSnapshot: sessionSettingsSnapshot,
         tmpDir: path.join(this.#options.tmpDir, binding.sessionId),
         sandboxAvailable: this.#options.sandboxAvailable,
         maxProviderRequestsPerTurn: this.#policy.maxProviderRequestsPerTurn,
@@ -229,12 +269,18 @@ export class RuntimeFactory {
         sessionContextService: context,
       });
     const settings =
-      this.#options.createSettings?.(composition.settings, path.join(this.#options.tmpDir, binding.sessionId)) ??
+      this.#options.createSettings?.(
+        composition.settings,
+        path.join(this.#options.tmpDir, binding.sessionId),
+        sessionSettingsSnapshot!,
+      ) ??
       createDefaultSettings(
         composition.settings,
         path.join(this.#options.tmpDir, binding.sessionId),
         this.#policy.maxParallelToolCalls,
+        sessionSettingsSnapshot,
       );
+    composition.sessionSettingsService = settings;
     const skills =
       this.#options.createSkills?.(logger, binding.canonicalRoot) ?? new SkillsService(logger, binding.canonicalRoot);
     const sessionClientFactory = createOwnedSessionClientFactory(
@@ -259,6 +305,7 @@ export class RuntimeFactory {
           executionContext: composition.executionContext,
           skillsService: skills,
           providerBroker: composition.providerBroker,
+          sessionSettingsSnapshot: sessionSettingsSnapshot!,
           toolOwnership,
           postExecutePauseCapability,
           sessionAccess: access,
@@ -312,8 +359,11 @@ export class RuntimeFactory {
     }
   }
 
-  async shutdown(): Promise<void> {
+  async shutdown(graceMs = this.#policy.shutdownGraceMs): Promise<void> {
     this.#closed = true;
-    await Promise.all([...this.#sessions.values()].map((session) => session.dispose('shutdown')));
+    await Promise.race([
+      Promise.all([...this.#sessions.values()].map((session) => session.dispose('shutdown'))).then(() => undefined),
+      new Promise<void>((resolve) => setTimeout(resolve, Math.max(1, graceMs))),
+    ]);
   }
 }

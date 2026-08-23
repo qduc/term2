@@ -11,6 +11,7 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
   static #initializedForKey: string | undefined;
   static #initializationFailure: SandboxAvailability | undefined;
   static #managerOperation: Promise<void> = Promise.resolve();
+  #heldLease = false;
 
   async availability(): Promise<SandboxAvailability> {
     if (!SandboxManager.isSupportedPlatform()) {
@@ -37,12 +38,30 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
       signal?: AbortSignal;
     },
   ): Promise<{ command: string; diagnostics?: string[] }> {
-    return this.#withManagerLock(async () => {
+    const operation = async () => {
       await this.#initialize(options.cwd, options.config);
       const wrapped = await SandboxManager.wrapWithSandbox(command, undefined, undefined, options.signal);
       const diagnostics = SandboxManager.getLinuxGlobPatternWarnings?.() ?? [];
       return { command: wrapped, diagnostics };
+    };
+    return this.#heldLease ? operation() : this.#withManagerLock(operation);
+  }
+
+  async acquire(): Promise<() => void> {
+    const previous = AnthropicShellSandboxRunner.#managerOperation;
+    let release!: () => void;
+    AnthropicShellSandboxRunner.#managerOperation = new Promise<void>((resolve) => {
+      release = resolve;
     });
+    await previous;
+    this.#heldLease = true;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.#heldLease = false;
+      release();
+    };
   }
 
   cleanupAfterCommand(): void {

@@ -8,10 +8,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { AssertionVerifier, createGatewayAssertion, GatewayAssertionError } from './assertion.js';
 import {
   classifyInteractionResolution,
+  assertGatewayStartup,
   GatewayStartupError,
   interactionDtoFromSnapshot,
   isInteractionResolveRequest,
   isPublicEventEnvelope,
+  sessionConfigProjection,
   Term2Gateway,
 } from './gateway.js';
 import { RuntimeFactory } from './runtime-factory.js';
@@ -296,6 +298,33 @@ afterEach(() => {
 });
 
 describe('gateway startup and assertion verifier', () => {
+  it('projects the effective fail-closed tool policy and hashes it into the config revision', () => {
+    const session = {
+      sessionId: 'session-a',
+      resources: {
+        settings: {
+          providerId: 'openai',
+          modelId: 'gpt-5',
+          reasoningEffort: 'default',
+          mode: 'standard',
+          toolPolicy: { allowWrite: false, autoApprove: true },
+        },
+      },
+    } as any;
+    const projection = sessionConfigProjection(session);
+    expect(projection.toolPolicy).toEqual({
+      allowWrite: false,
+      autoApprove: true,
+      allowUnsandboxed: false,
+      sshEnabled: false,
+    });
+    const changed = sessionConfigProjection({
+      ...session,
+      resources: { settings: { ...session.resources.settings, toolPolicy: { allowWrite: true } } },
+    } as any);
+    expect(changed.configRevision).not.toBe(projection.configRevision);
+  });
+
   it('refuses missing trust-boundary prerequisites and unsafe feature flags', () => {
     const root = makeTemp();
     const manifestPath = path.join(root, 'manifest.json');
@@ -325,6 +354,53 @@ describe('gateway startup and assertion verifier', () => {
     );
     expect(() => Term2Gateway.create({ ...base, manifestSha256: undefined })).toThrowError(new GatewayStartupError());
     expect(() => Term2Gateway.create({ ...base, auditWriter: undefined })).toThrowError(new GatewayStartupError());
+  });
+
+  it('requires exactly one transport and validates network TLS configuration', () => {
+    const root = makeTemp();
+    const manifestPath = path.join(root, 'manifest.json');
+    const manifest = makeManifest(root);
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+    const base = {
+      enabled: false,
+      socketPath: path.join(root, 'gateway.sock'),
+      manifestPath,
+      manifestSha256: createHash('sha256').update(readFileSync(manifestPath)).digest('hex'),
+      replayDbPath: path.join(root, 'replay.sqlite'),
+      issuer: 'chatforge-bff',
+      audience: 'term2-gateway',
+      publicKeys: { active: publicKey },
+      providerBroker: broker,
+      providerProbe: { available: true, secretFree: true },
+      workerSandboxAvailable: true,
+      workspaceBoundaryProbe: boundaryProbe,
+      auditWriter: async () => undefined,
+      tmpDir: path.join(root, 'tmp'),
+    };
+    const certPath = path.join(root, 'cert.pem');
+    const keyPath = path.join(root, 'key.pem');
+    const caPath = path.join(root, 'ca.pem');
+    writeFileSync(certPath, 'test-cert');
+    writeFileSync(keyPath, 'test-key');
+    writeFileSync(caPath, 'test-ca');
+    const network = {
+      ...base,
+      socketPath: undefined,
+      host: '127.0.0.1',
+      port: 443,
+      tls: { certPath, keyPath, caPath, requireClientCert: true },
+    };
+    expect(() => assertGatewayStartup({ ...base, socketPath: undefined } as any, manifest)).toThrowError(
+      new GatewayStartupError(),
+    );
+    expect(() => assertGatewayStartup({ ...network, socketPath: path.join(root, 'both.sock') }, manifest)).toThrowError(
+      new GatewayStartupError(),
+    );
+    expect(() => assertGatewayStartup({ ...network, port: 0 }, manifest)).toThrowError(new GatewayStartupError());
+    expect(() =>
+      assertGatewayStartup({ ...network, tls: { ...network.tls, certPath: path.join(root, 'missing') } }, manifest),
+    ).toThrowError(new GatewayStartupError());
+    expect(assertGatewayStartup(network, manifest)).toBe(manifest);
   });
 
   it('refuses a non-absolute socket and never exposes a TCP listener', async () => {

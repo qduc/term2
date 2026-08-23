@@ -137,6 +137,7 @@ function validateSshTargets(value: unknown): GatewayManifest['sshTargets'] {
 export type WorkspaceBoundaryEvidence = {
   mountedRoot: string;
   writable: boolean;
+  policy?: 'read_only_launcher';
 };
 
 export type WorkspaceBoundaryProbe = (
@@ -152,6 +153,8 @@ export type WorkspaceAdmissionOptions = {
 
 export class WorkspaceAdmission {
   readonly #sessions = new Map<string, SessionBinding>();
+  readonly #dynamicGrants = new Map<string, WorkspaceGrant>();
+  #dynamicRevision = 0;
   #manifest: GatewayManifest;
   readonly #allowSsh: boolean;
   readonly #allowWrite: boolean;
@@ -166,31 +169,66 @@ export class WorkspaceAdmission {
   }
 
   get manifestVersion(): number {
-    return this.#manifest.version;
+    return this.#manifest.version + this.#dynamicRevision;
   }
 
   replaceManifest(manifest: GatewayManifest): void {
     this.#manifest = validateGatewayManifest(manifest);
+    this.#dynamicGrants.clear();
+    this.#dynamicRevision = 0;
   }
 
   listAliases(ownerUserId: string): WorkspaceAlias[] {
-    return this.#manifest.grants
+    return [...this.#manifest.grants, ...this.#dynamicGrants.values()]
       .filter((grant) => grant.enabled && grant.kind === 'local' && grant.ownerUserId === ownerUserId)
       .map(({ workspaceId, access, label }) => ({ workspaceId, access, label }));
   }
 
-  admit(claims: GatewayAssertionClaims, requestedManifestVersion = this.#manifest.version): SessionBinding {
+  /** Add a server-validated local root without weakening manifest admission. */
+  registerDynamicLocalGrant(grant: WorkspaceGrant): number {
+    if (
+      grant.kind !== 'local' ||
+      !grant.localRoot ||
+      !path.isAbsolute(grant.localRoot) ||
+      !grant.ownerUserId ||
+      !isProvisionedLabel(grant.label) ||
+      !/^[A-Za-z0-9_-]{1,256}$/.test(grant.workspaceId) ||
+      (grant.access !== 'read' && grant.access !== 'read_write') ||
+      grant.enabled !== true ||
+      [...this.#manifest.grants, ...this.#dynamicGrants.values()].some(
+        (candidate) => candidate.workspaceId === grant.workspaceId,
+      )
+    ) {
+      throw new WorkspaceAdmissionError('manifest_invalid');
+    }
+    this.#dynamicGrants.set(grant.workspaceId, Object.freeze({ ...grant }));
+    this.#dynamicRevision += 1;
+    return this.manifestVersion;
+  }
+
+  removeDynamicLocalGrant(workspaceId: string): void {
+    if (this.#dynamicGrants.delete(workspaceId)) this.#dynamicRevision += 1;
+  }
+
+  admit(claims: GatewayAssertionClaims, requestedManifestVersion = this.manifestVersion): SessionBinding {
+    const binding = this.prepare(claims, requestedManifestVersion);
+    if ([...this.#sessions.values()].some((session) => session.workspaceId === binding.workspaceId)) {
+      throw new WorkspaceAdmissionError('workspace_session_exists');
+    }
+    this.#sessions.set(binding.sessionId, binding);
+    return binding;
+  }
+
+  /** Validate and construct a binding without reserving an active session. */
+  prepare(claims: GatewayAssertionClaims, requestedManifestVersion = this.manifestVersion): SessionBinding {
     if (claims.purpose !== 'session_create') throw new WorkspaceAdmissionError('workspace_not_found');
-    if (requestedManifestVersion !== this.#manifest.version)
+    if (requestedManifestVersion !== this.manifestVersion)
       throw new WorkspaceAdmissionError('manifest_version_mismatch');
     const workspaceId = claims.workspaceId;
     if (!workspaceId) throw new WorkspaceAdmissionError('workspace_not_found');
-    const grant = this.#manifest.grants.find((candidate) => candidate.workspaceId === workspaceId);
+    const grant = this.#grantFor(workspaceId);
     if (!grant) throw new WorkspaceAdmissionError('workspace_not_found');
     if (grant.ownerUserId !== claims.sub) throw new WorkspaceAdmissionError('workspace_owner_mismatch');
-    if ([...this.#sessions.values()].some((session) => session.workspaceId === workspaceId)) {
-      throw new WorkspaceAdmissionError('workspace_session_exists');
-    }
     if (!grant.enabled) throw new WorkspaceAdmissionError('workspace_disabled');
     if (grant.kind === 'ssh') {
       if (!this.#allowSsh) throw new WorkspaceAdmissionError('ssh_disabled');
@@ -211,11 +249,10 @@ export class WorkspaceAdmission {
       sessionId: randomUUID(),
       ownerUserId: claims.sub,
       workspaceId: grant.workspaceId,
-      grantVersion: this.#manifest.version,
+      grantVersion: this.manifestVersion,
       canonicalRoot,
       access: grant.access,
     };
-    this.#sessions.set(binding.sessionId, binding);
     return Object.freeze(binding);
   }
 
@@ -232,8 +269,9 @@ export class WorkspaceAdmission {
       if (current.grantVersion !== grantVersion) throw new WorkspaceAdmissionError('manifest_version_mismatch');
       return current;
     }
-    if (grantVersion !== this.#manifest.version) throw new WorkspaceAdmissionError('manifest_version_mismatch');
-    const grant = this.#manifest.grants.find((candidate) => candidate.workspaceId === workspaceId);
+    if (grantVersion > this.manifestVersion || grantVersion < this.#manifest.version)
+      throw new WorkspaceAdmissionError('manifest_version_mismatch');
+    const grant = this.#grantFor(workspaceId);
     if (!grant) throw new WorkspaceAdmissionError('workspace_not_found');
     if (grant.ownerUserId !== ownerUserId) throw new WorkspaceAdmissionError('workspace_owner_mismatch');
     if (!grant.enabled) throw new WorkspaceAdmissionError('workspace_disabled');
@@ -250,7 +288,7 @@ export class WorkspaceAdmission {
       sessionId,
       ownerUserId,
       workspaceId: grant.workspaceId,
-      grantVersion: this.#manifest.version,
+      grantVersion,
       canonicalRoot,
       access: grant.access,
     };
@@ -277,6 +315,13 @@ export class WorkspaceAdmission {
 
   remove(sessionId: string): void {
     this.#sessions.delete(sessionId);
+  }
+
+  #grantFor(workspaceId: string): WorkspaceGrant | undefined {
+    return (
+      this.#dynamicGrants.get(workspaceId) ??
+      this.#manifest.grants.find((candidate) => candidate.workspaceId === workspaceId)
+    );
   }
 
   static assertPath(binding: SessionBinding, requestedPath: string): string {

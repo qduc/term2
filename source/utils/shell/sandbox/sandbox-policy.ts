@@ -19,6 +19,8 @@ export type SandboxAvailability =
 
 export interface ShellSandboxRunner {
   availability(): Promise<SandboxAvailability>;
+  /** Hold the process-wide sandbox configuration through command execution. */
+  acquire?(): Promise<() => void>;
   wrap(
     command: string,
     options: {

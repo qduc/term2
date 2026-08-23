@@ -820,6 +820,48 @@ export class SettingsService {
   }
 
   /**
+   * Persist a batch as one file settlement.  Validation happens against a
+   * clone before the file lock is entered, and the in-memory/runtime-overlay
+   * state is changed only after the atomic save reports `saved`.
+   */
+  setPersistentDynamicTransaction(changes: readonly { key: string; value: unknown }[]): DurableWriteResult {
+    if (changes.length === 0) return { status: 'saved' };
+
+    let candidate = structuredClone(this.settings) as SettingsData;
+    for (const change of changes) {
+      if (this.isSensitive(change.key)) {
+        throw new Error(
+          `Cannot modify '${change.key}' - it is a sensitive setting that can only be configured via environment variables.`,
+        );
+      }
+      candidate = this.applyPersistedSetting(candidate, change.key, change.value);
+    }
+
+    const previousProviders = changes.some((change) => change.key === 'providers')
+      ? this.settings.providers
+      : undefined;
+    const durableResult = this.saveToFile((current) => {
+      let next = current;
+      for (const change of changes) next = this.applyPersistedSetting(next, change.key, change.value);
+      return next;
+    });
+    this.lastDurableWrite = durableResult;
+    if (durableResult.status !== 'saved') return durableResult;
+
+    // saveToFile reconciles before this operation's overlays are recorded;
+    // install the already-validated candidate so a prior overlay cannot make
+    // the successful batch look stale in the next projection.
+    this.settings = candidate;
+    for (const change of changes) {
+      this.recordRuntimeOverride(change.key, change.value, 'cli');
+      this.sources.set(change.key, 'cli');
+      this.notifyChange(change.key);
+    }
+    if (previousProviders) this.invalidateChangedProviderModelCaches(previousProviders, candidate.providers);
+    return durableResult;
+  }
+
+  /**
    * Reset a setting to its default value.
    * Sensitive settings cannot be reset as they should only come from env.
    */

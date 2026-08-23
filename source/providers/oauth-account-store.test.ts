@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -101,6 +101,33 @@ describe('OAuthAccountStore', () => {
     store.upsert({ access_token: 'a1', sub: 'user-a' });
 
     expect(fs.statSync(filePath).mode & 0o777).toBe(0o600);
+  });
+
+  it('cleans an operation-unique temporary file when the atomic rename fails', () => {
+    const { store, filePath } = makeStore();
+    const rename = vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => {
+      throw new Error('simulated rename failure');
+    });
+    try {
+      expect(() => store.upsert({ access_token: 'secret', sub: 'user-a' })).toThrow('simulated rename failure');
+    } finally {
+      rename.mockRestore();
+    }
+    expect(fs.readdirSync(path.dirname(filePath)).filter((name) => name.endsWith('.tmp'))).toEqual([]);
+  });
+
+  it('sweeps legacy and operation-unique temporary names at startup', () => {
+    const { filePath } = makeStore();
+    const directory = path.dirname(filePath);
+    fs.writeFileSync(`${filePath}.tmp`, JSON.stringify({ access_token: 'legacy-secret' }), { mode: 0o600 });
+    fs.writeFileSync(`${filePath}.123.00000000-0000-4000-8000-000000000000.tmp`, 'secret', { mode: 0o600 });
+    new OAuthAccountStore<Tokens>({
+      filePath,
+      identify: (tokens) => ({ id: tokens.sub ?? tokens.email ?? 'default', label: tokens.email ?? 'account' }),
+      migrateLegacy: (body: any) => (body?.access_token ? (body as Tokens) : null),
+    });
+    expect(fs.existsSync(`${filePath}.tmp`)).toBe(false);
+    expect(fs.readdirSync(directory).some((name) => name.includes('.123.00000000-'))).toBe(false);
   });
 
   it('recovers when the active pointer names an account that is gone', () => {

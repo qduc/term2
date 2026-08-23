@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 /**
  * A multi-account credential store, shared by every provider term2 logs in to
@@ -44,6 +45,8 @@ export type OAuthAccountStoreOptions<TTokens> = {
    * if the body holds no usable credential.
    */
   migrateLegacy: (body: unknown) => TTokens | null;
+  /** Injectable filesystem seam for failure/cleanup tests. */
+  filesystem?: typeof fs;
 };
 
 function emptyStore<TTokens>(): OAuthAccountStoreFile<TTokens> {
@@ -51,7 +54,12 @@ function emptyStore<TTokens>(): OAuthAccountStoreFile<TTokens> {
 }
 
 export class OAuthAccountStore<TTokens> {
-  constructor(private readonly options: OAuthAccountStoreOptions<TTokens>) {}
+  private readonly filesystem: typeof fs;
+
+  constructor(private readonly options: OAuthAccountStoreOptions<TTokens>) {
+    this.filesystem = options.filesystem ?? fs;
+    this.sweepTemporaryFiles();
+  }
 
   get filePath(): string {
     return this.options.filePath;
@@ -65,7 +73,7 @@ export class OAuthAccountStore<TTokens> {
   read(): OAuthAccountStoreFile<TTokens> {
     let parsed: any;
     try {
-      parsed = JSON.parse(fs.readFileSync(this.options.filePath, 'utf8'));
+      parsed = JSON.parse(this.filesystem.readFileSync(this.options.filePath, 'utf8'));
     } catch {
       return emptyStore<TTokens>();
     }
@@ -92,10 +100,53 @@ export class OAuthAccountStore<TTokens> {
   }
 
   private write(store: OAuthAccountStoreFile<TTokens>): void {
-    fs.mkdirSync(path.dirname(this.options.filePath), { recursive: true });
-    const tmpPath = `${this.options.filePath}.tmp`;
-    fs.writeFileSync(tmpPath, JSON.stringify(store, null, 2), { mode: 0o600, encoding: 'utf8' });
-    fs.renameSync(tmpPath, this.options.filePath);
+    this.filesystem.mkdirSync(path.dirname(this.options.filePath), { recursive: true });
+    const tmpPath = `${this.options.filePath}.${process.pid}.${randomUUID()}.tmp`;
+    let fd: number | undefined;
+    let renamed = false;
+    try {
+      fd = this.filesystem.openSync(tmpPath, 'w', 0o600);
+      this.filesystem.writeFileSync(fd, JSON.stringify(store, null, 2), { encoding: 'utf8' });
+      this.filesystem.fsyncSync(fd);
+      this.filesystem.closeSync(fd);
+      fd = undefined;
+      this.filesystem.renameSync(tmpPath, this.options.filePath);
+      renamed = true;
+    } finally {
+      if (fd !== undefined) {
+        try {
+          this.filesystem.closeSync(fd);
+        } catch {
+          // Preserve the original write failure.
+        }
+      }
+      if (!renamed) {
+        try {
+          this.filesystem.unlinkSync(tmpPath);
+        } catch {
+          // Best-effort cleanup; the next startup sweep retries it.
+        }
+      }
+    }
+  }
+
+  private sweepTemporaryFiles(): void {
+    const directory = path.dirname(this.options.filePath);
+    const base = path.basename(this.options.filePath).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const unique = new RegExp(`^${base}\\.[^.]+\\.[A-Fa-f0-9-]{36}\\.tmp$`);
+    try {
+      for (const name of this.filesystem.readdirSync(directory)) {
+        if (name === `${path.basename(this.options.filePath)}.tmp` || unique.test(name)) {
+          try {
+            this.filesystem.unlinkSync(path.join(directory, name));
+          } catch {
+            // A concurrent writer or permission failure is handled on its own path.
+          }
+        }
+      }
+    } catch {
+      // A missing store directory has no temporary credentials to recover.
+    }
   }
 
   list(): OAuthAccount<TTokens>[] {

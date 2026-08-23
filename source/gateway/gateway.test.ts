@@ -1,5 +1,5 @@
 import { createHash, generateKeyPairSync } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -34,7 +34,7 @@ import { validateGatewayManifest, WorkspaceAdmission, WorkspaceAdmissionError } 
 import type { ConversationAgentClient } from '../services/conversation-agent-client.js';
 import { createAgentStream } from '../services/agent-stream.js';
 import { createMockStream } from '../services/test-helpers/mock-stream.js';
-import type { GatewayAssertionClaims, ProviderBrokerCapability } from './contracts.js';
+import type { GatewayAssertionClaims, ProviderBrokerCapability, WorkspaceGrant } from './contracts.js';
 
 const tempRoots: string[] = [];
 const makeTemp = () => {
@@ -525,6 +525,7 @@ describe('gateway startup and assertion verifier', () => {
     expect(first.status).toBe(201);
     const duplicate = await rpc(socketPath, token(), null);
     expect(duplicate.status).toBe(409);
+    expect(duplicate.body).toMatchObject({ error: { code: 'session_busy' } });
     await gateway.shutdown(100);
   });
 
@@ -1714,6 +1715,56 @@ describe('workspace admission', () => {
     expect(() => admission.admit(claimsFor('session_create', { workspaceId: 'workspace-a' }))).toThrowError(
       new WorkspaceAdmissionError('workspace_session_exists'),
     );
+  });
+
+  it('restores a binding for a persisted dynamic grant after restart', () => {
+    const root = makeTemp();
+    const wsRoot = path.join(root, 'ws');
+    mkdirSync(wsRoot, { recursive: true });
+    const dynamicGrant: WorkspaceGrant = {
+      workspaceId: 'dyn-1',
+      ownerUserId: 'user-a',
+      label: 'local-owner',
+      kind: 'local',
+      localRoot: wsRoot,
+      access: 'read',
+      enabled: true,
+    };
+    const changes: WorkspaceGrant[][] = [];
+    const admission = new WorkspaceAdmission(makeManifest(root), {
+      allowWrite: false,
+      boundaryProbe,
+      onDynamicGrantChange: (grants) => changes.push([...grants]),
+    });
+    admission.registerDynamicLocalGrant(dynamicGrant);
+    expect(changes).toEqual([[dynamicGrant]]);
+    const created = admission.admit(claimsFor('session_create', { workspaceId: 'dyn-1' }));
+
+    // A restarted gateway reconstructs the admission from the persisted list
+    // and must be able to restore the session binding (the launch path relies
+    // on this for session reads after a daemon restart).
+    const restarted = new WorkspaceAdmission(makeManifest(root), {
+      allowWrite: false,
+      boundaryProbe,
+      initialDynamicGrants: changes[0],
+    });
+    const binding = restarted.restore(created.sessionId, 'user-a', 'dyn-1', 2);
+    expect(binding.workspaceId).toBe('dyn-1');
+    expect(restarted.manifestVersion).toBe(2);
+    // A restored session has no live runtime, so it must not hold the
+    // workspace: a fresh create in the same workspace is the recovery path
+    // after a daemon restart.
+    const resumed = restarted.admit(claimsFor('session_create', { workspaceId: 'dyn-1' }));
+    expect(resumed.sessionId).not.toBe(created.sessionId);
+    // Invalid persisted entries must fail closed rather than silently load.
+    expect(
+      () =>
+        new WorkspaceAdmission(makeManifest(root), {
+          allowWrite: false,
+          boundaryProbe,
+          initialDynamicGrants: [{ ...dynamicGrant, workspaceId: 'bad id' }],
+        }),
+    ).toThrowError(new WorkspaceAdmissionError('manifest_invalid'));
   });
 });
 

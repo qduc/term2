@@ -1373,6 +1373,14 @@ export class Term2Gateway {
       await persisted.persistence.journal.append(mapped, {
         durability: mapped.type === 'text_delta' || mapped.type === 'reasoning_delta' ? 'stream' : 'critical',
       });
+      // Keep the sessions-list sequence counter live: stream deltas stay
+      // non-blocking, but every critical event refreshes the index row so the
+      // sidebar never reports a stale "1 events" for a running session.
+      if (mapped.type !== 'text_delta' && mapped.type !== 'reasoning_delta') {
+        this.#config.persistence?.index.update(sessionId, {
+          lastPublishedSequence: persisted.persistence.journal.highWater().lastPublishedSequence,
+        });
+      }
       if (event.type === 'final' || event.type === 'error') {
         const admission = admissions.find((candidate) => candidate.turnId === context.turnId);
         if (admission && (admission.state === 'accepted' || admission.state === 'committed')) {
@@ -1414,11 +1422,12 @@ export class Term2Gateway {
       return publicError(422, 'validation_error', 'workspace candidate is unavailable');
     }
     if (error instanceof WorkspaceAdmissionError) {
-      return publicError(
-        error.code === 'workspace_session_exists' ? 409 : 403,
-        error.code === 'workspace_session_exists' ? 'protocol_conflict' : 'workspace_forbidden',
-        'workspace access denied',
-      );
+      // One active session per workspace is a deliberate constraint; surface it
+      // with a distinct code so clients can recover (e.g. select the existing
+      // session) instead of seeing a generic protocol_conflict.
+      if (error.code === 'workspace_session_exists')
+        return publicError(409, 'session_busy', 'a session is already active for this workspace');
+      return publicError(403, 'workspace_forbidden', 'workspace access denied');
     }
     if (error instanceof GatewayPersistenceError) {
       if (error.code === 'not_found' || error.code === 'owner_mismatch')

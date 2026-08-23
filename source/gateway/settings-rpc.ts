@@ -57,6 +57,8 @@ export type SettingsProjection = {
         source: string;
         scope: 'global' | 'session';
         confirmRequired: boolean;
+        /** Whether the browser may persist this key (PERSISTENT_SETTINGS_KEYS). */
+        persistable: boolean;
       }
     >;
     credentials: Record<string, SecretFreeCredential>;
@@ -128,6 +130,7 @@ export function buildSettingsProjection(
       source,
       scope: sessionScopedKey(key) ? 'session' : 'global',
       confirmRequired: key.startsWith('shell.') || key === 'agent.maxParallelToolCalls',
+      persistable: isPersistentSettingsKey(key),
     };
   }
 

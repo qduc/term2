@@ -149,23 +149,46 @@ export type WorkspaceAdmissionOptions = {
   allowSsh?: boolean;
   allowWrite?: boolean;
   boundaryProbe?: WorkspaceBoundaryProbe;
+  /** Dynamic (browser-selected) grants to restore after a restart. */
+  initialDynamicGrants?: readonly WorkspaceGrant[];
+  /** Durable sink invoked on every dynamic-grant mutation (register/remove). */
+  onDynamicGrantChange?: (grants: readonly WorkspaceGrant[]) => void;
 };
 
 export class WorkspaceAdmission {
+  /** Live (runtime-backed) session bindings; the one-per-workspace constraint applies here. */
   readonly #sessions = new Map<string, SessionBinding>();
+  /** Restored bindings from the persisted index (read-only history, no runtime). */
+  readonly #restored = new Map<string, SessionBinding>();
   readonly #dynamicGrants = new Map<string, WorkspaceGrant>();
   #dynamicRevision = 0;
   #manifest: GatewayManifest;
   readonly #allowSsh: boolean;
   readonly #allowWrite: boolean;
   readonly #boundaryProbe?: WorkspaceBoundaryProbe;
+  readonly #onDynamicGrantChange?: (grants: readonly WorkspaceGrant[]) => void;
 
   constructor(manifest: GatewayManifest, options: WorkspaceAdmissionOptions | boolean = {}) {
     const resolved = typeof options === 'boolean' ? { allowSsh: options } : options;
     this.#allowSsh = resolved.allowSsh === true;
     this.#allowWrite = resolved.allowWrite === true;
     this.#boundaryProbe = resolved.boundaryProbe;
+    this.#onDynamicGrantChange = resolved.onDynamicGrantChange;
     this.#manifest = validateGatewayManifest(manifest);
+    for (const grant of resolved.initialDynamicGrants ?? []) {
+      // Each dynamic grant represents one prior register(), which bumped the
+      // revision; restoring them reproduces the manifestVersion the sessions
+      // recorded as grantVersion.
+      if (
+        !validateDynamicGrant(grant) ||
+        this.#dynamicGrants.has(grant.workspaceId) ||
+        this.#manifest.grants.some((candidate) => candidate.workspaceId === grant.workspaceId)
+      ) {
+        throw new WorkspaceAdmissionError('manifest_invalid');
+      }
+      this.#dynamicGrants.set(grant.workspaceId, Object.freeze({ ...grant }));
+      this.#dynamicRevision += 1;
+    }
   }
 
   get manifestVersion(): number {
@@ -203,11 +226,19 @@ export class WorkspaceAdmission {
     }
     this.#dynamicGrants.set(grant.workspaceId, Object.freeze({ ...grant }));
     this.#dynamicRevision += 1;
+    this.#persistDynamicGrants();
     return this.manifestVersion;
   }
 
   removeDynamicLocalGrant(workspaceId: string): void {
-    if (this.#dynamicGrants.delete(workspaceId)) this.#dynamicRevision += 1;
+    if (this.#dynamicGrants.delete(workspaceId)) {
+      this.#dynamicRevision -= 1;
+      this.#persistDynamicGrants();
+    }
+  }
+
+  #persistDynamicGrants(): void {
+    this.#onDynamicGrantChange?.([...this.#dynamicGrants.values()]);
   }
 
   admit(claims: GatewayAssertionClaims, requestedManifestVersion = this.manifestVersion): SessionBinding {
@@ -262,7 +293,7 @@ export class WorkspaceAdmission {
    * the manifest and boundary probe remain the authority for the root.
    */
   restore(sessionId: string, ownerUserId: string, workspaceId: string, grantVersion: number): SessionBinding {
-    const current = this.#sessions.get(sessionId);
+    const current = this.#sessions.get(sessionId) ?? this.#restored.get(sessionId);
     if (current) {
       if (current.ownerUserId !== ownerUserId || current.workspaceId !== workspaceId)
         throw new WorkspaceAdmissionError('session_owner_mismatch');
@@ -292,12 +323,12 @@ export class WorkspaceAdmission {
       canonicalRoot,
       access: grant.access,
     };
-    this.#sessions.set(sessionId, binding);
+    this.#restored.set(sessionId, binding);
     return Object.freeze(binding);
   }
 
   getSession(sessionId: string, ownerUserId: string): SessionBinding {
-    const session = this.#sessions.get(sessionId);
+    const session = this.#sessions.get(sessionId) ?? this.#restored.get(sessionId);
     if (!session) throw new WorkspaceAdmissionError('session_not_found');
     if (session.ownerUserId !== ownerUserId) throw new WorkspaceAdmissionError('session_owner_mismatch');
     return session;
@@ -315,6 +346,7 @@ export class WorkspaceAdmission {
 
   remove(sessionId: string): void {
     this.#sessions.delete(sessionId);
+    this.#restored.delete(sessionId);
   }
 
   #grantFor(workspaceId: string): WorkspaceGrant | undefined {
@@ -340,6 +372,23 @@ export class WorkspaceAdmission {
     if (!isContained(binding.canonicalRoot, resolved)) throw new WorkspaceAdmissionError('workspace_path_escape');
     return resolved;
   }
+}
+
+export function validateDynamicGrant(value: unknown): value is WorkspaceGrant {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const grant = value as WorkspaceGrant;
+  return (
+    typeof grant.workspaceId === 'string' &&
+    /^[A-Za-z0-9_-]{1,256}$/.test(grant.workspaceId) &&
+    typeof grant.ownerUserId === 'string' &&
+    grant.ownerUserId.length > 0 &&
+    isProvisionedLabel(grant.label) &&
+    grant.kind === 'local' &&
+    typeof grant.localRoot === 'string' &&
+    path.isAbsolute(grant.localRoot) &&
+    (grant.access === 'read' || grant.access === 'read_write') &&
+    grant.enabled === true
+  );
 }
 
 function canonicalizeGrantRoot(grant: WorkspaceGrant): string {

@@ -180,7 +180,12 @@ export class GatewayServer {
       (typeof correlationHeader !== 'string' || !CORRELATION_ID_PATTERN.test(correlationHeader))
     )
       return send(response, 400, errorBody('validation_error', 'correlation ID is invalid'));
-    if (request.method !== 'GET' && request.method !== 'POST' && request.method !== 'PUT')
+    if (
+      request.method !== 'GET' &&
+      request.method !== 'POST' &&
+      request.method !== 'PUT' &&
+      request.method !== 'DELETE'
+    )
       return send(response, 405, errorBody('protocol_conflict', 'gateway method is not supported'));
     if (
       request.method !== 'GET' &&

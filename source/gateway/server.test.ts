@@ -196,7 +196,7 @@ function secureCall(
 }
 
 describe('GatewayServer private socket transport', () => {
-  it('verifies before routing, supports GET and POST, and passes the parsed URL', async () => {
+  it('verifies before routing, supports GET, POST, PUT, and DELETE, and passes the parsed URL', async () => {
     const root = makeRoot();
     const seen: Array<{ method: string; pathname: string; body: unknown; correlationId?: string }> = [];
     const server = new GatewayServer({
@@ -225,11 +225,26 @@ describe('GatewayServer private socket transport', () => {
       headers: { 'x-term2-assertion': 'token', 'content-type': 'application/json' },
       body: '{"text":"hi"}',
     });
+    // DELETE must pass the method gate so credential_delete / oauth_delete
+    // routes (which are matched on DELETE) can be reached.
+    const del = await call(path.join(root, 'gateway.sock'), {
+      method: 'DELETE',
+      path: '/private/agent/v1/credentials/openai',
+      headers: { 'x-term2-assertion': 'token' },
+    });
+    const unsupported = await call(path.join(root, 'gateway.sock'), {
+      method: 'PATCH',
+      path: '/private/agent/v1/settings',
+      headers: { 'x-term2-assertion': 'token' },
+    });
     expect(get.status).toBe(200);
     expect(post.status).toBe(200);
+    expect(del.status).toBe(200);
+    expect(unsupported.status).toBe(405);
     expect(seen).toEqual([
       { method: 'GET', pathname: '/private/agent/v1/sessions', body: null, correlationId: 'corr-123' },
       { method: 'POST', pathname: '/private/agent/v1/sessions/s1/messages', body: { text: 'hi' } },
+      { method: 'DELETE', pathname: '/private/agent/v1/credentials/openai', body: null },
     ]);
     await server.close();
   });

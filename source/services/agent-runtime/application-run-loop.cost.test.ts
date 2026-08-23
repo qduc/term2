@@ -90,6 +90,18 @@ describe('ApplicationRunLoop cost records', () => {
     expect(records.costRecords![0]!.usdMicros).toBe(parseUsdMicros('0.00002772'));
   });
 
+  it('records OpenRouter numeric response cost as exact provider cost', async () => {
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => completionModel({ usage: USAGE, costUsd: 0.000123 }),
+    });
+    const stream = loop.startStream(agent, 'hello', { providerId: 'openrouter' });
+    const records = (await stream.completed) as { costRecords?: ModelRequestCost[] };
+    expect(records.costRecords).toHaveLength(1);
+    expect(records.costRecords![0]!.source).toBe('provider');
+    expect(records.costRecords![0]!.provider).toBe('openrouter');
+    expect(records.costRecords![0]!.usdMicros).toBe(123);
+  });
+
   it('records a completed request without usage as an unpriced marker', async () => {
     const loop = new ApplicationRunLoop({ resolveModel: () => completionModel() });
     const stream = loop.startStream(agent, 'hello', { providerId: 'openai' });

@@ -71,6 +71,7 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
     let sawFinishReason = false;
     let finishReason: string | undefined;
     let usage: StreamedModelUsage | undefined;
+    let costUsd: number | string | undefined;
     for await (const chunk of response) {
       const choice = chunk.choices?.[0];
       const delta = choice?.delta;
@@ -131,6 +132,12 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
         // delta. Retain the latest frame for the application completion;
         // providers may omit it entirely.
         usage = normalizeChatUsage(chunk.usage) as typeof usage;
+        if (chunk.usage.cost !== undefined && costUsd === undefined) {
+          costUsd = chunk.usage.cost;
+        }
+      }
+      if ((chunk as any).cost !== undefined && costUsd === undefined) {
+        costUsd = (chunk as any).cost;
       }
     }
     if (!sawFinishReason) throw new Error('OpenAI-compatible streamed response ended without a finish reason');
@@ -173,7 +180,11 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
       responseId: `chatcmpl-${Date.now()}`,
       ...(finishReason !== undefined ? { finishReason } : {}),
       usage,
-      ...(this.costCapture?.cost !== undefined ? { costUsd: this.costCapture.cost } : {}),
+      ...(this.costCapture?.cost !== undefined
+        ? { costUsd: this.costCapture.cost }
+        : costUsd !== undefined
+        ? { costUsd }
+        : {}),
       output,
     };
   }

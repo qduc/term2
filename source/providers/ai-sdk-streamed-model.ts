@@ -50,6 +50,7 @@ export function createAiSdkStreamedModel(
         output.push({ type: 'tool_call', id: call.toolCallId, name: call.toolName, arguments: call.input ?? '{}' });
       }
       const usage = result.usage ?? {};
+      const costUsd = extractAiSdkCostUsd(result.providerMetadata, usage);
       return {
         responseId: result.response?.id ?? `response-${Date.now()}`,
         output,
@@ -59,6 +60,7 @@ export function createAiSdkStreamedModel(
           ...(usage.inputTokens?.cacheRead !== undefined ? { cachedInputTokens: usage.inputTokens.cacheRead } : {}),
           ...(usage.inputTokens?.cacheWrite !== undefined ? { cacheWriteTokens: usage.inputTokens.cacheWrite } : {}),
         },
+        ...(costUsd !== undefined ? { costUsd } : {}),
       };
     },
     async *stream(request) {
@@ -161,6 +163,7 @@ export function createAiSdkStreamedModel(
           const id = responseId;
           if (!id) throw new Error('AI SDK streamed response did not include a response id');
           appendUnendedReasoning(output, reasoning);
+          const costUsd = extractAiSdkCostUsd(part.providerMetadata, part.usage);
           yield {
             type: 'completion',
             responseId: id,
@@ -176,6 +179,7 @@ export function createAiSdkStreamedModel(
                 ? { cacheWriteTokens: part.usage.inputTokens.cacheWrite }
                 : {}),
             },
+            ...(costUsd !== undefined ? { costUsd } : {}),
             providerMetadata: { ...completionMetadata, model: `${model.provider}:${model.modelId}`, responseId: id },
           };
           return;
@@ -394,4 +398,60 @@ function* publishToolCall(output: StreamedModelTurnOutput[], id: string, call: {
   const event = { type: 'tool_call' as const, id, name: call.name, arguments: call.arguments };
   output.push(event);
   yield event;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
+function parseCostValue(value: unknown): number | string | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim().length > 0) return value;
+  return undefined;
+}
+
+/**
+ * Extract provider-reported cost (USD amount or credits) from AI SDK
+ * provider metadata or usage when present (e.g. OpenRouter usage accounting).
+ */
+export function extractAiSdkCostUsd(
+  providerMetadata?: Record<string, unknown>,
+  usage?: unknown,
+): number | string | undefined {
+  const usageRecord = asRecord(usage);
+  if (usageRecord) {
+    const rawRecord = asRecord(usageRecord.raw);
+    const rawCost = parseCostValue(rawRecord?.cost ?? usageRecord.cost);
+    if (rawCost !== undefined) return rawCost;
+  }
+
+  if (!providerMetadata || typeof providerMetadata !== 'object') return undefined;
+
+  const openrouter = asRecord(providerMetadata.openrouter);
+  if (openrouter) {
+    const openrouterUsage = asRecord(openrouter.usage);
+    const costDetails = asRecord(openrouterUsage?.costDetails) ?? asRecord(openrouterUsage?.cost_details);
+    const cost = parseCostValue(
+      openrouterUsage?.cost ??
+        openrouter.cost ??
+        costDetails?.upstreamInferenceCost ??
+        costDetails?.upstream_inference_cost,
+    );
+    if (cost !== undefined) return cost;
+  }
+
+  for (const [key, value] of Object.entries(providerMetadata)) {
+    if (key === 'model' || key === 'responseId') continue;
+    const record = asRecord(value);
+    if (record) {
+      const nestedUsage = asRecord(record.usage);
+      const costDetails = asRecord(nestedUsage?.costDetails) ?? asRecord(nestedUsage?.cost_details);
+      const nestedCost = parseCostValue(
+        nestedUsage?.cost ?? record.cost ?? costDetails?.upstreamInferenceCost ?? costDetails?.upstream_inference_cost,
+      );
+      if (nestedCost !== undefined) return nestedCost;
+    }
+  }
+
+  return undefined;
 }

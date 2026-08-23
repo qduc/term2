@@ -294,3 +294,66 @@ it('AiSdkOpenRouterProvider forwards explicit settings to unary getResponse and 
     }),
   ]);
 });
+
+it('AiSdkOpenRouterProvider surfaces OpenRouter cost metadata as costUsd on completion', async () => {
+  const provider = new AiSdkOpenRouterProvider({
+    defaultModel: 'openrouter/auto',
+    resolveConfig: () => ({ apiKey: 'sk-test' }),
+    createProvider: () => (modelId: string) =>
+      ({
+        specificationVersion: 'v3',
+        provider: 'openrouter.chat',
+        modelId,
+        supportedUrls: {},
+        async doGenerate() {
+          return {
+            response: { id: 'resp-gen' },
+            text: 'hi',
+            usage: { inputTokens: { total: 10 }, outputTokens: { total: 5 } },
+            providerMetadata: {
+              openrouter: {
+                usage: {
+                  promptTokens: 10,
+                  completionTokens: 5,
+                  totalTokens: 15,
+                  cost: 0.00012,
+                },
+              },
+            },
+          };
+        },
+        async doStream() {
+          return {
+            stream: (async function* () {
+              yield { type: 'response-metadata', id: 'resp-stream' };
+              yield { type: 'text-delta', delta: 'hi' };
+              yield {
+                type: 'finish',
+                finishReason: { unified: 'stop' },
+                usage: { inputTokens: { total: 10 }, outputTokens: { total: 5 } },
+                providerMetadata: {
+                  openrouter: {
+                    usage: {
+                      promptTokens: 10,
+                      completionTokens: 5,
+                      totalTokens: 15,
+                      cost: 0.00012,
+                    },
+                  },
+                },
+              };
+            })(),
+          };
+        },
+      } as any),
+  });
+
+  const model = provider.getStreamedModel('openai/gpt-4o-mini');
+  const unary = await model.getResponse!({ input: [], tools: [] });
+  expect(unary.costUsd).toBe(0.00012);
+
+  const streamEvents = await collect(model.stream!({ input: [], tools: [] }));
+  const completion = streamEvents.find((e: any) => e.type === 'completion') as any;
+  expect(completion).toBeDefined();
+  expect(completion.costUsd).toBe(0.00012);
+});

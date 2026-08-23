@@ -382,3 +382,72 @@ it('drops a provider_opaque item and still sends the rest of the history', async
   expect(capturedPrompt).toHaveLength(1);
   expect(capturedPrompt[0].role).toBe('user');
 });
+
+it('extracts provider-reported cost from finish metadata and attaches costUsd to completion', async () => {
+  const model = createAiSdkStreamedModel({
+    provider: 'openrouter',
+    modelId: 'anthropic/claude-3.5-sonnet',
+    specificationVersion: 'v3',
+    supportedUrls: {},
+    async doGenerate() {
+      return {} as unknown as Awaited<ReturnType<LanguageModelV3['doGenerate']>>;
+    },
+    async doStream() {
+      return {
+        stream: (async function* () {
+          yield { type: 'response-metadata', id: 'response-cost' };
+          yield { type: 'text-delta', delta: 'done' };
+          yield {
+            type: 'finish',
+            finishReason: { unified: 'stop' },
+            usage: { inputTokens: { total: 100 }, outputTokens: { total: 50 } },
+            providerMetadata: {
+              openrouter: {
+                usage: {
+                  promptTokens: 100,
+                  completionTokens: 50,
+                  totalTokens: 150,
+                  cost: 0.00045,
+                },
+              },
+            },
+          };
+        })(),
+      } as unknown as Awaited<ReturnType<LanguageModelV3['doStream']>>;
+    },
+  } as unknown as LanguageModelV3);
+
+  const events = await collect(model.stream({ input: [], tools: [] }));
+  const completion = events.find((e: any) => e.type === 'completion') as any;
+  expect(completion).toBeDefined();
+  expect(completion.costUsd).toBe(0.00045);
+});
+
+it('extracts provider-reported cost from unary getResponse providerMetadata', async () => {
+  const model = createAiSdkStreamedModel({
+    provider: 'openrouter',
+    modelId: 'openai/gpt-4o',
+    specificationVersion: 'v3',
+    supportedUrls: {},
+    async doGenerate() {
+      return {
+        response: { id: 'unary-cost' },
+        text: 'hello',
+        usage: { inputTokens: { total: 50 }, outputTokens: { total: 20 } },
+        providerMetadata: {
+          openrouter: {
+            usage: {
+              cost: 0.00025,
+            },
+          },
+        },
+      } as unknown as Awaited<ReturnType<LanguageModelV3['doGenerate']>>;
+    },
+    async doStream() {
+      throw new Error('not called');
+    },
+  } as unknown as LanguageModelV3);
+
+  const result = await model.getResponse!({ input: [], tools: [] });
+  expect(result.costUsd).toBe(0.00025);
+});

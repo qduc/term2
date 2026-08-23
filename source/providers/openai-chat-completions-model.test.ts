@@ -1062,3 +1062,21 @@ it('reports usage from the terminal chunk that carries no choice', async () => {
   const completion = events.find((event) => event.type === 'completion');
   expect(completion.usage).toMatchObject({ inputTokens: 1234, outputTokens: 56 });
 });
+
+it('reports costUsd from terminal chunk usage.cost', async () => {
+  async function* usageWithCostStream(): AsyncIterable<any> {
+    yield { choices: [{ delta: { content: 'done' } }] };
+    yield { choices: [{ delta: {}, finish_reason: 'stop' }] };
+    yield { choices: [], usage: { prompt_tokens: 1234, completion_tokens: 56, cost: 0.000789 } };
+  }
+
+  const client = { chat: { completions: { create: async () => usageWithCostStream() } } };
+  const model = new OpenAIChatCompletionsModel(client, 'fixture-chat');
+  const events: any[] = [];
+  for await (const event of model.stream({ input: [], tools: [] } as any)) {
+    events.push(event);
+  }
+
+  const completion = events.find((event) => event.type === 'completion');
+  expect(completion.costUsd).toBe(0.000789);
+});

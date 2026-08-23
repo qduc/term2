@@ -454,6 +454,137 @@ describe('P103C1 persistence corrections', () => {
     expect(() => hydrateTranscript(directory, 'session-a')).toThrowError(expect.objectContaining({ code: 'corrupt' }));
   });
 
+  it('reports projection coverage at the published cursor before and after compaction', async () => {
+    const layout = createGatewayStorageLayout(root());
+    const index = new GatewaySessionIndex(layout);
+    const now = new Date().toISOString();
+    index.create({
+      id: 'session-a',
+      ownerUserId: 'owner-a',
+      workspaceId: 'workspace-a',
+      grantVersion: '1',
+      bindingFingerprint: 'fingerprint-a',
+      status: 'idle',
+      createdAt: now,
+      updatedAt: now,
+    });
+    const directory = layout.sessionPath('owner-a', 'workspace-a', 'session-a');
+    const journal = createGatewayEventJournal({ sessionId: 'session-a', directory });
+    for (let index = 0; index < 8; index += 1) {
+      await journal.append(
+        { sessionId: 'session-a', type: 'text_delta', payload: { turnId: 'turn-a', delta: String(index) } },
+        { durability: 'critical' },
+      );
+    }
+    const normal = await createSessionProjectionSource({
+      index,
+      layout,
+      ownerUserId: 'owner-a',
+      sessionId: 'session-a',
+      journal,
+    });
+    expect(normal.projectionSequence).toBe(normal.latestSequence);
+    expect(normal.projectionSequence).toBe(8);
+    const normalReplay = normal.subscribeFrom(normal.projectionSequence, () => undefined);
+    expect(normalReplay.kind).toBe('subscribed');
+    if (normalReplay.kind === 'subscribed') expect(normalReplay.replay).toEqual([]);
+
+    journal.compactThrough(5);
+    const compacted = await createSessionProjectionSource({
+      index,
+      layout,
+      ownerUserId: 'owner-a',
+      sessionId: 'session-a',
+      journal,
+    });
+    expect(compacted.earliestReplayableSequence).toBe(6);
+    expect(compacted.projectionSequence).toBeGreaterThanOrEqual(compacted.earliestReplayableSequence);
+    const compactedReplay = compacted.subscribeFrom(compacted.projectionSequence, () => undefined);
+    expect(compactedReplay.kind).toBe('subscribed');
+    if (compactedReplay.kind === 'subscribed') {
+      expect(compactedReplay.replay.map((event) => event.id)).toEqual(
+        compactedReplay.replay.map((event, index) => compacted.projectionSequence + index + 1),
+      );
+    }
+    journal.close();
+    index.close();
+  });
+
+  it('sources bounded command statuses from journal tool starts and terminal turns', async () => {
+    const layout = createGatewayStorageLayout(root());
+    const index = new GatewaySessionIndex(layout);
+    const now = new Date().toISOString();
+    index.create({
+      id: 'session-a',
+      ownerUserId: 'owner-a',
+      workspaceId: 'workspace-a',
+      grantVersion: '1',
+      bindingFingerprint: 'fingerprint-a',
+      status: 'idle',
+      createdAt: now,
+      updatedAt: now,
+    });
+    const directory = layout.sessionPath('owner-a', 'workspace-a', 'session-a');
+    const journal = createGatewayEventJournal({ sessionId: 'session-a', directory });
+    await journal.append(
+      {
+        sessionId: 'session-a',
+        type: 'tool_started',
+        payload: { turnId: 'turn-completed', callId: 'call-completed', toolName: 'ask_user' },
+      },
+      { durability: 'critical' },
+    );
+    await journal.append(
+      {
+        sessionId: 'session-a',
+        type: 'turn_completed',
+        payload: { turnId: 'turn-completed', outcome: 'completed', text: 'done' },
+      },
+      { durability: 'critical' },
+    );
+    await journal.append(
+      {
+        sessionId: 'session-a',
+        type: 'tool_started',
+        payload: { turnId: 'turn-aborted', callId: 'call-aborted', toolName: 'shell' },
+      },
+      { durability: 'critical' },
+    );
+    const sourceBeforeTerminal = await createSessionProjectionSource({
+      index,
+      layout,
+      ownerUserId: 'owner-a',
+      sessionId: 'session-a',
+      journal,
+    });
+    expect(sourceBeforeTerminal.journalCommands.get('turn-aborted')).toEqual([
+      { callId: 'call-aborted', toolName: 'shell', status: 'unknown' },
+    ]);
+    await journal.append(
+      {
+        sessionId: 'session-a',
+        type: 'turn_aborted',
+        payload: { turnId: 'turn-aborted', outcome: 'aborted' },
+      },
+      { durability: 'critical' },
+    );
+    const source = await createSessionProjectionSource({
+      index,
+      layout,
+      ownerUserId: 'owner-a',
+      sessionId: 'session-a',
+      journal,
+    });
+    expect(source.journalCommands.get('turn-completed')).toEqual([
+      { callId: 'call-completed', toolName: 'ask_user', status: 'completed' },
+    ]);
+    expect(source.journalCommands.get('turn-aborted')).toEqual([
+      { callId: 'call-aborted', toolName: 'shell', status: 'aborted' },
+    ]);
+    journal.close();
+    index.close();
+  });
+
   it('projects a live pending interaction and uses the generation reload result', async () => {
     const layout = createGatewayStorageLayout(root());
     const index = new GatewaySessionIndex(layout);
@@ -577,6 +708,67 @@ describe('P103C1 persistence corrections', () => {
       repairAcceptedEvent: async () => undefined,
     });
     expect(repaired).toMatchObject({ state: 'accepted', phase: 'committed' });
+    index.close();
+  });
+
+  it('startup reconciliation settles an accepted admission with a terminal event without rejection', async () => {
+    const layout = createGatewayStorageLayout(root());
+    const index = new GatewaySessionIndex(layout);
+    const binding = {
+      sessionId: 'session-a',
+      ownerUserId: 'owner-a',
+      workspaceId: 'workspace-a',
+      grantVersion: 1,
+      canonicalRoot: '/workspace',
+      access: 'read' as const,
+    };
+    const now = new Date().toISOString();
+    index.create({
+      id: binding.sessionId,
+      ownerUserId: binding.ownerUserId,
+      workspaceId: binding.workspaceId,
+      grantVersion: '1',
+      bindingFingerprint: computeBindingFingerprint(binding),
+      status: 'running',
+      activeTurnId: 'turn-a',
+      createdAt: now,
+      updatedAt: now,
+    });
+    const admissions = new GatewayAdmissionPersistence(index);
+    admissions.prepare({
+      ownerUserId: 'owner-a',
+      sessionId: 'session-a',
+      clientRequestId: 'request-a',
+      body: { text: 'hello' },
+      turnId: 'turn-a',
+    });
+    index.updateAdmission('owner-a', 'session-a', 'request-a', {
+      state: 'accepted',
+      result: 'accepted',
+      phase: 'committed',
+    });
+    const persistence = createSessionPersistence({
+      layout,
+      ownerUserId: 'owner-a',
+      workspaceId: 'workspace-a',
+      sessionId: 'session-a',
+    });
+    await persistence.journal.append(
+      {
+        sessionId: 'session-a',
+        type: 'turn_completed',
+        payload: { turnId: 'turn-a', outcome: 'completed', text: 'done' },
+      },
+      { durability: 'critical' },
+    );
+    const coordinator = new GatewayPersistenceCoordinator(layout, index);
+    await coordinator.reconcileStartup(binding, persistence);
+    expect(index.admission('owner-a', 'session-a', 'request-a')).toMatchObject({
+      state: 'terminal',
+      result: 'accepted',
+    });
+    expect(persistence.journal.events()).toEqual([expect.objectContaining({ type: 'turn_completed' })]);
+    await persistence.close();
     index.close();
   });
 

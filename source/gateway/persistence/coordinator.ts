@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { GatewayPersistenceError, type GatewaySessionRecord } from './contracts.js';
+import { GatewayPersistenceError, TERMINAL_AGENT_EVENT_TYPES, type GatewaySessionRecord } from './contracts.js';
 import { createSessionPersistence, type SessionPersistenceHandle } from './session-persistence.js';
 import { GatewaySessionIndex } from './session-index.js';
 import type { GatewayStorageLayout } from './storage.js';
@@ -160,6 +160,21 @@ export class GatewayPersistenceCoordinator {
         (event) => event.type === 'assistant_started' && event.payload.turnId === admission.turnId,
       );
       if (alreadyRejected || started) continue;
+      const terminalEvent = events.find(
+        (event) => TERMINAL_AGENT_EVENT_TYPES.has(event.type) && event.payload.turnId === admission.turnId,
+      );
+      if (terminalEvent) {
+        this.#index.updateAdmission(binding.ownerUserId, binding.sessionId, admission.clientRequestId, {
+          state: 'terminal',
+          result:
+            terminalEvent.type === 'turn_completed'
+              ? 'accepted'
+              : terminalEvent.type === 'turn_failed'
+              ? 'failed'
+              : 'aborted',
+        });
+        continue;
+      }
       await persistence.journal.append(
         {
           sessionId: binding.sessionId,

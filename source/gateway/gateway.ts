@@ -26,10 +26,17 @@ import { SqliteReplayLedger } from './replay-ledger.js';
 import { GatewayServer } from './server.js';
 import type { RuntimeFactory } from './runtime-factory.js';
 import type { ConversationEvent } from '../services/conversation/conversation-events.js';
-import { FROZEN_AGENT_EVENT_TYPES, GatewayPersistenceError } from './persistence/contracts.js';
+import type { LogEvent } from '../services/logging/conversation-log-events.js';
+import {
+  FROZEN_AGENT_EVENT_TYPES,
+  GatewayPersistenceError,
+  TERMINAL_AGENT_EVENT_TYPES,
+  type AgentEventType,
+} from './persistence/contracts.js';
 import {
   createSessionProjectionSource,
   type PendingInteractionDto,
+  type ProjectionCommand,
   type SessionProjectionSource,
 } from './persistence/projection.js';
 import {
@@ -446,6 +453,7 @@ export class Term2Gateway {
         await this.#enqueueEventPersistence(claims.sessionId!, async () => {
           const admissions = this.#config.persistence?.index.listAdmissions(claims.sub, claims.sessionId!) ?? [];
           for (const discardedTurnId of outcome.discardedTurnIds) {
+            if (hasTerminalTurnEvent(persisted.persistence.journal.events(), discardedTurnId)) continue;
             const admission = admissions.find((candidate) => candidate.turnId === discardedTurnId);
             await persisted.persistence.journal.append(
               {
@@ -795,6 +803,7 @@ export class Term2Gateway {
       if (!persisted) return;
       const admissions = this.#config.persistence?.index.listAdmissions(persisted.record.ownerUserId, sessionId) ?? [];
       for (const discardedTurnId of new Set(context.discardedTurnIds)) {
+        if (hasTerminalTurnEvent(persisted.persistence.journal.events(), discardedTurnId)) continue;
         const admission = admissions.find((candidate) => candidate.turnId === discardedTurnId);
         await persisted.persistence.journal.append(
           {
@@ -829,6 +838,8 @@ export class Term2Gateway {
       if (event.type === 'approval_required' && binding?.revision && binding.revision > 1) return;
       const mapped = mapConversationEvent(event, context.turnId, sessionId, binding, snapshot ?? undefined);
       if (!mapped) return;
+      const transcriptFact = terminalTranscriptFact(event, context.turnId);
+      if (transcriptFact) await persisted.persistence.critical.appendTranscriptCritical(transcriptFact);
       if ((mapped.type === 'approval_required' || mapped.type === 'interaction_updated') && binding) {
         persisted.persistence.interactionCheckpoint.save({
           turnId: binding.turnId,
@@ -840,6 +851,21 @@ export class Term2Gateway {
       await persisted.persistence.journal.append(mapped, {
         durability: mapped.type === 'text_delta' || mapped.type === 'reasoning_delta' ? 'stream' : 'critical',
       });
+      if (event.type === 'final' || event.type === 'error') {
+        const admission = admissions.find((candidate) => candidate.turnId === context.turnId);
+        if (admission && (admission.state === 'accepted' || admission.state === 'committed')) {
+          try {
+            this.#admissions?.markTerminal(
+              persisted.record.ownerUserId,
+              sessionId,
+              admission.clientRequestId,
+              event.type === 'final' ? 'accepted' : 'failed',
+            );
+          } catch (error) {
+            if (!(error instanceof GatewayPersistenceError) || error.code !== 'not_found') throw error;
+          }
+        }
+      }
     });
   }
 
@@ -1256,13 +1282,102 @@ function sanitizePublicInteraction(value: Record<string, unknown>): PendingInter
   return validatePendingInteractionDto(value);
 }
 
+const PROJECTION_COMMAND_STATUSES = new Set(['completed', 'failed', 'aborted', 'unknown']);
+
+function projectTranscriptMessages(
+  transcript: SessionProjectionSource['transcript'],
+  journalCommands: ReadonlyMap<string, readonly ProjectionCommand[]>,
+): Record<string, unknown>[] {
+  if (!transcript) return [];
+  const commandsByTurn = new Map<string, ProjectionCommand[]>();
+  const addCommand = (turnId: string, command: ProjectionCommand): void => {
+    const commands = commandsByTurn.get(turnId) ?? [];
+    if (!commands.some((candidate) => candidate.callId === command.callId)) commands.push(command);
+    commandsByTurn.set(turnId, commands.slice(0, 64));
+  };
+
+  for (const command of transcript.toolLedger) {
+    if (!PROJECTION_COMMAND_STATUSES.has(command.status)) continue;
+    addCommand(command.turnId, {
+      callId: boundedText(command.callId, 256),
+      toolName: boundedText(command.toolName, 256),
+      status: boundedText(command.status, 32) as ProjectionCommand['status'],
+    });
+  }
+  for (const [turnId, commands] of journalCommands) {
+    for (const command of commands) {
+      const existing = commandsByTurn.get(turnId)?.find((candidate) => candidate.callId === command.callId);
+      if (existing) {
+        const current = commandsByTurn.get(turnId)!;
+        commandsByTurn.set(
+          turnId,
+          current.map((candidate) => (candidate.callId === command.callId ? command : candidate)),
+        );
+      } else {
+        addCommand(turnId, command);
+      }
+    }
+  }
+
+  const projected: Record<string, unknown>[] = [];
+  let currentTurnId: string | null = null;
+  const attachedTurns = new Set<string>();
+  for (const message of transcript.messages) {
+    const record = message as unknown as {
+      id?: unknown;
+      sender?: unknown;
+      role?: unknown;
+      text?: unknown;
+      callId?: unknown;
+      toolName?: unknown;
+      status?: unknown;
+    };
+    const sender = typeof record.sender === 'string' ? record.sender : record.role;
+    if (sender === 'user') {
+      currentTurnId = typeof record.id === 'string' ? record.id : null;
+    }
+    if (sender === 'command' || sender === 'reasoning') {
+      if (
+        sender === 'command' &&
+        currentTurnId &&
+        typeof record.callId === 'string' &&
+        typeof record.toolName === 'string' &&
+        typeof record.status === 'string' &&
+        !commandsByTurn.get(currentTurnId)?.some((command) => command.callId === record.callId)
+      ) {
+        addCommand(currentTurnId, {
+          callId: boundedText(record.callId, 256),
+          toolName: boundedText(record.toolName, 256),
+          status: boundedText(record.status, 32) as ProjectionCommand['status'],
+        });
+      }
+      continue;
+    }
+
+    const role = sender === 'user' ? 'user' : 'bot';
+    const projectedMessage: Record<string, unknown> = {
+      id: boundedText(record.id, 256),
+      role,
+      text: boundedText(record.text, 16_384),
+    };
+    const commands = role === 'bot' && currentTurnId ? commandsByTurn.get(currentTurnId) : undefined;
+    if (commands && commands.length > 0 && !attachedTurns.has(currentTurnId!)) {
+      projectedMessage.commands = commands;
+      attachedTurns.add(currentTurnId!);
+    }
+    projected.push(projectedMessage);
+  }
+  return projected.slice(-200);
+}
+
+/**
+ * Session transcript wire shape: messages have `id`, `role` (`user` or `bot`),
+ * and bounded `text`. A completed turn's first bot message may carry a bounded
+ * `commands` array of `{callId, toolName, status}` entries for its tool cards.
+ */
 function toSessionProjection(source: SessionProjectionSource): Record<string, unknown> {
   const transcript = source.transcript;
-  const messages = (transcript?.messages ?? []).slice(-200).map((message) => ({
-    id: boundedText(message.id, 256),
-    role: boundedText(message.sender ?? (message as unknown as { role?: unknown }).role, 32),
-    text: boundedText((message as unknown as { text?: unknown }).text, 16_384),
-  }));
+  const messages = projectTranscriptMessages(transcript, source.journalCommands);
   const interaction = source.interaction
     ? {
         ...source.interaction,
@@ -1281,6 +1396,36 @@ function toSessionProjection(source: SessionProjectionSource): Record<string, un
     transcript: { messages, ...(transcript?.updatedAt ? { updatedAt: transcript.updatedAt } : {}) },
     interaction,
   };
+}
+
+// Terminal runtime final/error events have two durable representations: the
+// public journal and the replay transcript. Aborts intentionally settle only
+// the journal so replay retains interruption semantics.
+function hasTerminalTurnEvent(
+  events: readonly { readonly type: string; readonly payload: Readonly<Record<string, unknown>> }[],
+  turnId: string,
+): boolean {
+  return events.some(
+    (event) => TERMINAL_AGENT_EVENT_TYPES.has(event.type as AgentEventType) && event.payload.turnId === turnId,
+  );
+}
+
+function terminalTranscriptFact(event: ConversationEvent, turnId: string): LogEvent | null {
+  if (event.type === 'final') {
+    const items = event.turnItems ? [...event.turnItems] : [];
+    if (!items.some((item) => item.type === 'assistant_text')) {
+      items.push({ type: 'assistant_text', text: boundedText(event.finalText, 16_384) });
+    }
+    return { type: 'assistant_turn', turnId, turn: { items } };
+  }
+  if (event.type === 'error') {
+    return {
+      type: 'assistant_turn',
+      turnId,
+      turn: { items: [{ type: 'assistant_text', text: boundedText(event.finalText ?? event.message, 16_384) }] },
+    };
+  }
+  return null;
 }
 
 function mapConversationEvent(

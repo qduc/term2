@@ -117,6 +117,47 @@ it('AssistantTurnJournal: preserves the same turn id across approval continuatio
   expect(turnIds).toEqual(['turn-2', 'turn-2', 'turn-2', 'turn-3']);
 });
 
+it('AssistantTurnJournal: pruneToUserTurnCount drops items from removed turns', () => {
+  const journal = new AssistantTurnJournal({ getCurrentTurnId: () => 'turn-1' });
+  journal.recordRunItem({ rawItem: { type: 'function_call', callId: 'call-1', name: 'shell', arguments: '{}' } });
+  journal.recordRunItem({
+    rawItem: { type: 'function_call_result', callId: 'call-1', name: 'shell', output: 'out' },
+  });
+
+  const items = journal.getEvents().map((event) => (event.item as { callId?: string }).callId);
+  expect(items).toEqual(['call-1', 'call-1']);
+
+  journal.pruneToUserTurnCount(0);
+  expect(journal.getEvents()).toEqual([]);
+});
+
+it('AssistantTurnJournal: pruneToUserTurnCount keeps surviving turns and non-turn ids', () => {
+  let turnId = 'turn-1';
+  const journal = new AssistantTurnJournal({ getCurrentTurnId: () => turnId });
+  journal.recordRunItem({ rawItem: { type: 'function_call', callId: 'keep-me', name: 'shell', arguments: '{}' } });
+  turnId = 'turn-2';
+  journal.recordRunItem({ rawItem: { type: 'function_call', callId: 'drop-me', name: 'shell', arguments: '{}' } });
+  turnId = 'custom-turn';
+  journal.recordRunItem({
+    rawItem: { type: 'function_call', callId: 'ambiguous-keep', name: 'shell', arguments: '{}' },
+  });
+
+  journal.pruneToUserTurnCount(1);
+
+  const callIds = journal.getEvents().map((event) => (event.item as { callId?: string }).callId);
+  expect(callIds).toEqual(['keep-me', 'ambiguous-keep']);
+});
+
+it('AssistantTurnJournal: clear empties buffered items and restarts sequence', () => {
+  const journal = new AssistantTurnJournal({ getCurrentTurnId: () => 'turn-1' });
+  journal.recordRunItem({ rawItem: { type: 'function_call', callId: 'call-1', name: 'shell', arguments: '{}' } });
+
+  journal.clear();
+
+  expect(journal.getEvents()).toEqual([]);
+  expect(journal.peekNextSeq()).toBe(1);
+});
+
 it('AssistantTurnJournal: dedupes duplicate raw items within the same turn', () => {
   const { events, sink } = makeSink();
   const journal = new AssistantTurnJournal({ getCurrentTurnId: () => 'turn-1', sink });

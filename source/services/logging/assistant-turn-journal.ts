@@ -76,6 +76,35 @@ export class AssistantTurnJournal {
   }
 
   /**
+   * Drop buffered item events belonging to user turns that no longer exist.
+   *
+   * Call after the conversation is rewound (undo). Recovery paths rebuild the
+   * tool ledger from this buffer; without this prune, tool pairs from undone
+   * turns would be re-injected into provider history on the next retry.
+   * Events with non-`turn-N` ids are kept conservatively, mirroring the live
+   * ledger's fallback rule.
+   */
+  pruneToUserTurnCount(userTurnCount: number): void {
+    this.#itemEvents = this.#itemEvents.filter((event) => {
+      const match = /^turn-(\d+)$/.exec(event.turnId);
+      if (!match) {
+        return true;
+      }
+      return Number.parseInt(match[1]!, 10) <= userTurnCount;
+    });
+  }
+
+  /**
+   * Drop all buffered item events. Call on full session reset; recovery state
+   * for cleared turns must not survive into the new conversation.
+   */
+  clear(): void {
+    this.#itemEvents = [];
+    this.#emittedItemKeys.clear();
+    this.#seq = 0;
+  }
+
+  /**
    * Returns all durable persisted items emitted so far, across all turns.
    */
   getItems(): PersistedAssistantTurnItem[] {

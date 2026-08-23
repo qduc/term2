@@ -11,6 +11,7 @@ import { SessionContinuityReset } from './session-continuity-reset.js';
 import { projectImportedState, ProjectionWarningCode } from '../conversation/conversation-state-projector.js';
 import { ImportedConversationStateSchema } from '../conversation/conversation-state-schema.js';
 import type { SessionAccessState } from './session-access-state.js';
+import type { AssistantTurnJournal } from '../logging/assistant-turn-journal.js';
 
 /**
  * Owns and manages session-level state transitions:
@@ -38,6 +39,7 @@ export class SessionLifecycle {
   #continuityReset: SessionContinuityReset;
   #sessionAccess: SessionAccessState | undefined;
   #terminateActiveTurn: (() => void) | undefined;
+  #journal: AssistantTurnJournal;
 
   constructor(deps: {
     inputPlanner: SessionInputPlanner;
@@ -49,6 +51,13 @@ export class SessionLifecycle {
     providerContinuity: ProviderContinuity;
     generationGuard: GenerationGuard;
     continuityReset: SessionContinuityReset;
+    /**
+     * Streams assistant items into the durable journal. Undo/reset must prune
+     * it alongside the store and ledger: failure recovery rebuilds the tool
+     * ledger from this buffer, so skipped pruning would resurrect tool pairs
+     * from undone turns into the next provider request.
+     */
+    journal: AssistantTurnJournal;
     /** Handle-owned root capability; absent only for compatibility callers. */
     sessionAccess?: SessionAccessState;
     /** Notify the coordinator before a generation reset invalidates a turn. */
@@ -65,6 +74,7 @@ export class SessionLifecycle {
     this.#continuityReset = deps.continuityReset;
     this.#sessionAccess = deps.sessionAccess;
     this.#terminateActiveTurn = deps.terminateActiveTurn;
+    this.#journal = deps.journal;
   }
 
   // ── Public lifecycle methods ─────────────────────────────────────
@@ -81,6 +91,7 @@ export class SessionLifecycle {
     this.#conversationStore.clear();
     this.#toolTracker.reset();
     this.#inputPlanner.reset();
+    this.#journal.clear();
     this.#appState.statusMachine.abort();
   }
 
@@ -104,6 +115,7 @@ export class SessionLifecycle {
     this.#terminateActiveTurn?.();
     this.#generationGuard.invalidate();
     this.#pruneToolLedgerToCurrentHistory();
+    this.#journal.pruneToUserTurnCount(this.#conversationStore.listUserTurns().length);
     this.#continuityReset.reset();
     this.#inputPlanner.markUndoOrRewind();
     this.#appState.statusMachine.abort();

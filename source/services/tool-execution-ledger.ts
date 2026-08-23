@@ -191,7 +191,11 @@ export class ToolExecutionLedger {
 
   import(entries: readonly SavedToolExecution[] | undefined): void {
     this.#entries = Array.isArray(entries) ? clone(entries) : [];
-    this.#turnCounter = this.#entries.length;
+    // The next turn id must clear every imported entry's turn number — after an
+    // undo prunes entries, entry *count* is unrelated to the logical turn
+    // numbering and reusing an old turn-N id would make journal events from
+    // different logical turns collide.
+    this.#turnCounter = this.#entries.reduce((max, entry) => Math.max(max, turnNumberOf(entry.turnId) ?? 0), 0);
     this.#currentTurnId = `turn-${this.#turnCounter}`;
   }
 

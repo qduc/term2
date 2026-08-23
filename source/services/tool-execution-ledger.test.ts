@@ -122,6 +122,22 @@ it('ToolExecutionLedger preserves wrapped provider objects while reconciling the
   expect(reconcileHistoryWithToolLedger(recovered.history, [saved]).addedCompletedPairs).toBe(0);
 });
 
+it('import derives the next turn id from the max imported turn number, not the entry count', () => {
+  const ledger = new ToolExecutionLedger();
+  // Three completed entries across turns 1 and 2 (multiple tools per turn):
+  // entry count (3) must not become the next turn number.
+  ledger.import([
+    { turnId: 'turn-1', callId: 'a', toolName: 'shell', status: 'completed', startedAt: '2026-01-01T00:00:00Z' },
+    { turnId: 'turn-1', callId: 'b', toolName: 'shell', status: 'completed', startedAt: '2026-01-01T00:00:00Z' },
+    { turnId: 'turn-2', callId: 'c', toolName: 'shell', status: 'completed', startedAt: '2026-01-01T00:00:00Z' },
+  ]);
+  expect(ledger.beginTurn()).toBe('turn-3');
+
+  // An empty import (full undo) restarts numbering at turn-1.
+  ledger.import([]);
+  expect(ledger.beginTurn()).toBe('turn-1');
+});
+
 it('ToolExecutionLedger marks unfinished calls as aborted', () => {
   const ledger = new ToolExecutionLedger();
 

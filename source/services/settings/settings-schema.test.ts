@@ -134,9 +134,9 @@ it('run-budget policy defaults are runtime-modifiable and reject invalid limits'
   expect(DEFAULT_SETTINGS.agent.runBudget).toEqual(AgentSettingsSchema.parse({}).runBudget);
 
   const configured = SettingsSchema.parse({
-    agent: { runBudget: { maxUsdMicros: 7_500_000, identicalToolCallThreshold: 4 } },
+    agent: { runBudget: { maxUsdMicros: 7_500_000, identicalToolCallThreshold: 4, escalation: 'disabled' } },
   }).agent?.runBudget;
-  expect(configured).toMatchObject({ maxUsdMicros: 7_500_000, identicalToolCallThreshold: 4 });
+  expect(configured).toMatchObject({ maxUsdMicros: 7_500_000, identicalToolCallThreshold: 4, escalation: 'disabled' });
 
   for (const key of [
     SETTING_KEYS.AGENT_RUN_BUDGET_MAX_USD_MICROS,

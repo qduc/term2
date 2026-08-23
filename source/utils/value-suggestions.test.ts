@@ -262,6 +262,11 @@ it('buildSettingValueSuggestions offers tuned run-budget policy values', () => {
     '150',
     '200',
   ]);
+  expect(buildSettingValueSuggestions('agent.runBudget.escalation').map((suggestion) => suggestion.value)).toEqual([
+    'warn',
+    'pause',
+    'disabled',
+  ]);
 
   for (const key of [
     'agent.runBudget.maxUnpricedTokens',

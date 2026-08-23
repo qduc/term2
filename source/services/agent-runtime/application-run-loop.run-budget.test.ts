@@ -219,3 +219,28 @@ it('contains a critical subagent budget with one final tool-free wrap-up call', 
   expect(requestedTools).toEqual([[]]);
   expect(stream.finalOutput).toBe('completed X; remains Y');
 });
+
+it('emits no budget events and never pauses when escalation is disabled', async () => {
+  const evidence: RunBudgetEvent[] = [];
+  const model: StreamedModelTurn = {
+    async *stream() {
+      yield {
+        type: 'completion' as const,
+        responseId: 'done',
+        output: [{ type: 'message' as const, content: [{ type: 'text' as const, text: 'done' }] }],
+      };
+    },
+  };
+  const loop = new ApplicationRunLoop({ resolveModel: () => model });
+  const stream = loop.startStream(agent, 'go', {
+    maxTurns: 2,
+    runBudget: { ...policy, turnBackstop: 0, escalation: 'disabled' },
+    onRunBudgetEvent: (event) => evidence.push(event),
+  });
+
+  await stream.completed;
+
+  expect(evidence).toEqual([]);
+  expect(stream.interruptions ?? []).toEqual([]);
+  expect(stream.finalOutput).toBe('done');
+});

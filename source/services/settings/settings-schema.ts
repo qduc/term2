@@ -114,9 +114,11 @@ export const AgentSettingsSchema = z.object({
       maxParentExtensions: z.number().int().nonnegative().finite().default(2),
       identicalToolCallThreshold: z.number().int().positive().finite().default(3),
       escalation: z
-        .enum(['warn', 'pause'])
+        .enum(['warn', 'pause', 'disabled'])
         .default('warn')
-        .describe('What a non-soft budget stage does: warn in the status bar, or pause the run for a decision'),
+        .describe(
+          'What a non-soft budget stage does: warn in the status bar, pause the run for a decision, or disabled',
+        ),
     })
     .default({
       maxUsdMicros: 5_000_000,
@@ -633,7 +635,7 @@ export interface SettingsWithSources {
       extensionPercent: SettingWithSource<number>;
       maxParentExtensions: SettingWithSource<number>;
       identicalToolCallThreshold: SettingWithSource<number>;
-      escalation: SettingWithSource<'warn' | 'pause'>;
+      escalation: SettingWithSource<'warn' | 'pause' | 'disabled'>;
     };
     backgroundCheckIn: {
       enabled: SettingWithSource<boolean>;

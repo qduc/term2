@@ -398,9 +398,17 @@ const StatusBar: FC<StatusBarProps> = ({
     return `Credits ${percent}% · reset ${reset}`;
   })();
 
+  function formatActiveTime(ms: number): string {
+    const totalSeconds = Math.round(ms / 1000);
+    if (totalSeconds < 60) return `${totalSeconds}s`;
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return seconds > 0 ? `${minutes}m${seconds}s` : `${minutes}m`;
+  }
+
   // In warn mode the run keeps going past its envelope, so this line is the
-  // only signal the human gets. It states the dimension and how far past the
-  // limit the run is, not an instruction — the decision stays with the human.
+  // only signal the human gets. It states the dimension, used vs limit, and
+  // percentage consumed, not an instruction — the decision stays with the human.
   const runBudgetNoticeText = (() => {
     if (!runBudgetNotice) return '';
     if (runBudgetNotice.type === 'tool_stall') {
@@ -408,15 +416,18 @@ const StatusBar: FC<StatusBarProps> = ({
     }
     const { dimension, used, limit } = runBudgetNotice.evidence;
     const percent = limit > 0 ? Math.round((used / limit) * 100) : 100;
-    const label =
-      dimension === 'usd'
-        ? 'cost'
-        : dimension === 'unpriced_tokens'
-        ? 'tokens'
-        : dimension === 'active_time'
-        ? 'run time'
-        : 'turns';
-    return `${GLYPH_WARNING} Run ${label} ${percent}% of budget`;
+    switch (dimension) {
+      case 'usd':
+        return `${GLYPH_WARNING} Run cost: ${formatUsdMicros(used)} / ${formatUsdMicros(limit)} (${percent}%)`;
+      case 'unpriced_tokens':
+        return `${GLYPH_WARNING} Run tokens: ${formatStatusBarTokens(used)} / ${formatStatusBarTokens(limit)} (${percent}%)`;
+      case 'active_time':
+        return `${GLYPH_WARNING} Run time: ${formatActiveTime(used)} / ${formatActiveTime(limit)} (${percent}%)`;
+      case 'turns':
+        return `${GLYPH_WARNING} Run turns: ${used} / ${limit} (${percent}%)`;
+      default:
+        return `${GLYPH_WARNING} Run budget: ${percent}%`;
+    }
   })();
 
   const staticCommitBlockerText = (() => {

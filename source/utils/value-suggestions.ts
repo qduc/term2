@@ -160,6 +160,7 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
   'agent.runBudget.escalation': [
     { value: 'warn', description: 'status-bar warning only (default)' },
     { value: 'pause', description: 'hold the run for a human decision' },
+    { value: 'disabled', description: 'disable budget warnings and pauses' },
   ],
   'agent.runBudget.identicalToolCallThreshold': [
     { value: '2' },

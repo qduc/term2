@@ -239,7 +239,7 @@ it.sequential('StatusBar warns about run-budget evidence instead of the run stop
   expect(lastFrame()).toContain('Run tokens 100% of budget');
 });
 
-it.sequential('StatusBar hides context usage when the model is not in the catalog', async () => {
+it.sequential('StatusBar renders known context used without window when the model is not in the catalog', async () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'model-that-does-not-exist',
     'agent.provider': 'openai',
@@ -251,7 +251,8 @@ it.sequential('StatusBar hides context usage when the model is not in the catalo
   );
 
   const output = lastFrame() ?? '';
-  expect(output.includes('k/')).toBe(false);
+  expect(output).toContain('Ctx 100k');
+  expect(output).not.toContain('Ctx 100k /');
 });
 
 it.sequential('StatusBar hides context usage when lastUsage has no prompt tokens', async () => {

@@ -81,10 +81,11 @@ const StatusBar: FC<StatusBarProps> = ({
 
   // Context gauge: last request's prompt tokens (the current conversation
   // context) over the vendored catalog's context window for the active model.
+  // When the context window is absent from the catalog, render the known used
+  // context instead of dropping the gauge entirely.
   const contextWindow = model ? getModelContextWindow(providerKey, model) : undefined;
   const contextTokens = lastUsage?.prompt_tokens;
-  const contextUsageText =
-    contextWindow != null && contextTokens != null ? formatContextUsage(contextTokens, contextWindow) : '';
+  const contextUsageText = contextTokens != null ? formatContextUsage(contextTokens, contextWindow) : '';
 
   const slate = '#64748b';
   const glow = '#fbbf24';

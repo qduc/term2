@@ -324,8 +324,12 @@ function formatCompactTokens(tokens: number): string {
 /**
  * Compact context gauge, e.g. "100k/1.0M": tokens used in the current context
  * (the last request's prompt tokens) over the model's context window.
+ * When the context window is unknown, returns only the used token gauge (e.g. "100k").
  */
-export function formatContextUsage(usedTokens: number, contextWindow: number): string {
+export function formatContextUsage(usedTokens: number, contextWindow?: number): string {
+  if (contextWindow == null) {
+    return formatCompactTokens(usedTokens);
+  }
   return `${formatCompactTokens(usedTokens)}/${formatCompactTokens(contextWindow)}`;
 }
 

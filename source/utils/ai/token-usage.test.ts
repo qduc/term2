@@ -243,6 +243,9 @@ it('formatContextUsage renders used/window in compact k/M units', () => {
   expect(formatContextUsage(1_500_000, 2_600_000)).toBe('1.5M/2.6M');
   expect(formatContextUsage(1_049_000, 1_000_000)).toBe('1.0M/1.0M');
   expect(formatContextUsage(999, 200_000)).toBe('1k/200k');
+  expect(formatContextUsage(100_000)).toBe('100k');
+  expect(formatContextUsage(1_500_000)).toBe('1.5M');
+  expect(formatContextUsage(0)).toBe('0k');
 });
 
 it('addTokenUsage accumulates usage counters', () => {

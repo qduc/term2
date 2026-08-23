@@ -617,7 +617,18 @@ export function createSearchReplaceToolDefinition(deps: {
               changed = true;
             }
 
-            if (changed) {
+            const batchFailed = group.some(({ index }) => output[index]?.success === false);
+            if (batchFailed) {
+              for (const { operation, index } of group) {
+                const detail = typeof output[index]?.error === 'string' ? ` ${output[index].error}` : '';
+                output[index] = {
+                  success: false,
+                  operation: 'search_replace',
+                  path: operation.path,
+                  error: `Batch aborted; no changes were written.${detail}`,
+                };
+              }
+            } else if (changed) {
               await writeFileFn(targetPath, nextContent);
             }
           });

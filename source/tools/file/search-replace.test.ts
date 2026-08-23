@@ -455,7 +455,7 @@ it.sequential('execute applies batched replacements to one file with a single re
   });
 });
 
-it.sequential('execute keeps successful batched replacements when another replacement fails', async () => {
+it.sequential('execute leaves the file unchanged when any batched replacement fails', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool(createMockSettingsService({ 'tools.enableEditHealing': false }));
     const filePath = 'batch-failure.txt';
@@ -482,12 +482,13 @@ it.sequential('execute keeps successful batched replacements when another replac
     });
 
     const parsed = parsePlainResult(result);
-    expect(parsed.output[0].success).toBe(true);
+    expect(parsed.output[0].success).toBe(false);
     expect(parsed.output[1].success).toBe(false);
-    expect(parsed.output[2].success).toBe(true);
+    expect(parsed.output[2].success).toBe(false);
+    expect(parsed.output.every((item: { error?: string }) => item.error?.includes('Batch aborted'))).toBe(true);
 
     const updated = await fs.readFile(absPath, 'utf8');
-    expect(updated).toBe('ALPHA\nbeta\nGAMMA\n');
+    expect(updated).toBe(originalContent);
   });
 });
 

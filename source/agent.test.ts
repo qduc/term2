@@ -707,6 +707,7 @@ it('getAgentDefinition for gpt-5 omits grep and glob regardless of searchViaShel
   expect(toolNames.includes('glob')).toBe(false);
   expect(toolNames.includes('read_code_outline')).toBe(true);
   expect(toolNames.includes('code_context_search')).toBe(true);
+  expect(toolNames.includes('read_file')).toBe(true);
   expect(toolNames.includes('apply_patch')).toBe(true);
 
   const codeContextTool = definition.tools.find((tool) => tool.name === 'code_context_search');

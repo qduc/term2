@@ -501,6 +501,7 @@ export const getAgentDefinition = (
     }
   } else {
     // Full mode: all tools based on model
+    tools.push(createReadFileToolDefinition({ executionContext, sessionAccess, settingsService }));
     if (isGpt5) {
       tools.push(createApplyPatchToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }));
     } else {
@@ -511,7 +512,6 @@ export const getAgentDefinition = (
         );
       }
       tools.push(
-        createReadFileToolDefinition({ executionContext, sessionAccess, settingsService }),
         createCreateFileToolDefinition({
           settingsService,
           loggingService,

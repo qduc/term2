@@ -35,6 +35,13 @@ export interface ChainedWireProtocol {
   getPrefix(input: unknown[]): unknown[];
 
   /**
+   * Derive a safe continuation delta when the provider's returned output does
+   * not byte-for-byte match the form restored into the transcript. Returning
+   * null keeps the generic prefix fallback.
+   */
+  getContinuationDelta?(input: unknown[]): unknown[] | null;
+
+  /**
    * Normalize output items before they are stored for later replay matching.
    * This typically strips server-assigned ids so that the replayed items in a
    * subsequent request match the stored canonical form.
@@ -152,9 +159,7 @@ export class ChainedWireState {
     const prefix = this.protocol.getPrefix(input);
     const delta = startsWith(input, baseline)
       ? input.slice(baseline.length)
-      : startsWith(input, prefix)
-      ? input.slice(prefix.length)
-      : null;
+      : this.protocol.getContinuationDelta?.(input) ?? (startsWith(input, prefix) ? input.slice(prefix.length) : null);
 
     if (delta === null) {
       return { requestData, usedDelta: false, token };

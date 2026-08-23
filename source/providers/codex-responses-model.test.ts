@@ -1272,6 +1272,76 @@ it('CodexResponsesWSModel sends only new input after a Responses-Lite prefix is 
   }
 });
 
+it('CodexResponsesWSModel does not replay a Luna tool transcript when server output differs from restored history', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const trafficBodies: any[] = [];
+  let responseCount = 0;
+
+  const mockProviderTraffic: IProviderTraffic = {
+    recordRequestStart(input) {
+      trafficBodies.push(input.sentBody);
+    },
+    async recordResponseReceived() {},
+    recordResponseClosed() {},
+    recordRequestFailed() {},
+  };
+
+  transport.fetchResponse = async function () {
+    responseCount += 1;
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: {
+          id: `resp_lite_tool_${responseCount}`,
+          output:
+            responseCount === 1
+              ? [
+                  { type: 'reasoning', id: 'reasoning-server', encrypted_content: 'server-form', summary: [] },
+                  { type: 'function_call', id: 'fc-server', call_id: 'call-1', name: 'shell', arguments: '{}' },
+                ]
+              : [],
+          usage: {},
+        },
+      },
+    ]);
+  };
+
+  const model = new CodexResponsesWSModel(
+    { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+    'gpt-5.6-luna',
+    { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+    undefined,
+    mockProviderTraffic,
+    {
+      getContext: () => ({ sessionId: 'session-lite-tool-delta', traceId: 'trace-lite-tool-delta' } as any),
+      runWithContext: <T>(_context: any, fn: () => T) => fn(),
+    } as any,
+    transport,
+  );
+
+  const userMessage = { role: 'user', type: 'message', content: [{ type: 'text', text: 'inspect it' }] };
+  await collect(model.stream({ input: [userMessage], tools: [] } as any));
+
+  await collect(
+    model.stream({
+      previousResponseId: 'resp_lite_tool_1',
+      input: [
+        userMessage,
+        { type: 'reasoning', encrypted_content: 'restored-form', summary: [] },
+        { type: 'tool_call', id: 'call-1', name: 'shell', arguments: '{}' },
+        { type: 'tool_result', id: 'call-1', output: 'done' },
+      ],
+      tools: [],
+    } as any),
+  );
+
+  expect(trafficBodies).toHaveLength(2);
+  expect(trafficBodies[1].previous_response_id).toBe('resp_lite_tool_1');
+  expect(trafficBodies[1].input).toEqual([
+    expect.objectContaining({ type: 'function_call_output', call_id: 'call-1', output: 'done' }),
+  ]);
+});
+
 it('CodexResponsesWSModel correlates server-managed state across sequential streamed requests for standard models', async () => {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const trafficBodies: any[] = [];

@@ -1,6 +1,7 @@
 /** Application-owned headerless V4A diff implementation. */
 export function applyDiff(input: string, diff: string, mode: 'default' | 'create' = 'default'): string {
   const lines = normalizeLines(diff);
+  rejectEmbeddedFileEnvelope(lines);
   if (mode === 'create') return parseCreate(lines);
   return applyChunks(input, parseUpdate(lines, input).chunks);
 }
@@ -9,6 +10,15 @@ const END_PATCH = '*** End Patch';
 const END_FILE = '*** End of File';
 const SECTION_MARKERS = [END_PATCH, '*** Update File:', '*** Delete File:', '*** Add File:', END_FILE];
 const TERMINATORS = [END_PATCH, '*** Update File:', '*** Delete File:', '*** Add File:'];
+
+function rejectEmbeddedFileEnvelope(lines: string[]): void {
+  const header = lines.find((line) =>
+    ['*** Update File:', '*** Delete File:', '*** Add File:'].some((prefix) => line.startsWith(prefix)),
+  );
+  if (!header) return;
+  const marker = header.slice(0, header.indexOf(':') + 1);
+  throw new Error(`Unsupported '${marker}' inside a single operation's diff. Use one entry in 'operations' per file.`);
+}
 
 type Parser = { lines: string[]; index: number; fuzz: number };
 type Chunk = { origIndex: number; delLines: string[]; insLines: string[] };

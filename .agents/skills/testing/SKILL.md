@@ -16,6 +16,7 @@ pnpm test                          # Run all tests
 pnpm test path/to/my-file.test.ts  # Run tests in a specific file
 pnpm test:related ./source/foo.ts  # Run statically related tests for source files
 pnpm test:changed                  # Run tests affected by the current Git diff
+pnpm typecheck                     # Type-check TypeScript without emitting files
 pnpm exec prettier --write <files> # Fix formatting in files you changed
 ```
 
@@ -36,6 +37,7 @@ paths directly to pnpm and begin every repository-relative source path with
 - **Project-wide inputs** — changes to `package.json`, `pnpm-lock.yaml`,
   `tsconfig*.json`, Vitest configuration, or `scripts/` require the full suite.
 - **No relevant focused test exists** — run the smallest applicable broader command, and say why.
+- **Any `.ts` or `.tsx` change** — run `pnpm typecheck`; Vitest transpiles TypeScript without proving it type-checks.
 - **Provider, bridge, run-loop, registry, or non-interactive changes** — these additionally require the provider black-box suite; use the `provider-testing` skill.
 
 Never claim a test, build, or check passed unless you actually ran it and it succeeded.

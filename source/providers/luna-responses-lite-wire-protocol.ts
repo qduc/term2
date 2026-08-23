@@ -15,6 +15,19 @@ const isAdditionalTools = (value: unknown): value is RecordValue =>
 const isDeveloperMessage = (value: unknown): value is RecordValue =>
   isRecord(value) && value.type === 'message' && value.role === 'developer';
 
+const isProviderOutput = (value: unknown): boolean => {
+  if (!isRecord(value)) return false;
+  if (value.type === 'message') return value.role === 'assistant';
+  return (
+    value.type === 'reasoning' ||
+    value.type === 'function_call' ||
+    value.type === 'local_shell_call' ||
+    value.type === 'tool_search_call' ||
+    value.type === 'custom_tool_call' ||
+    value.type === 'web_search_call'
+  );
+};
+
 /**
  * Item types whose server-assigned `id` field is stripped during output
  * normalization so that replayed items in a subsequent request match the
@@ -78,6 +91,13 @@ export class LunaResponsesLiteWireProtocol implements ChainedWireProtocol {
       prefix.push(input[1]);
     }
     return prefix;
+  }
+
+  getContinuationDelta(input: unknown[]): unknown[] | null {
+    for (let index = input.length - 1; index >= 0; index -= 1) {
+      if (isProviderOutput(input[index])) return input.slice(index + 1);
+    }
+    return null;
   }
 
   normalizeOutputItems(items: unknown[]): unknown[] {

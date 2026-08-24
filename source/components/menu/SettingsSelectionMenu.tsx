@@ -7,6 +7,7 @@ import {
   type SettingsCategory,
 } from '../../hooks/use-settings-completion.js';
 import { SETTING_KEYS } from '../../services/settings/settings-service.js';
+import { isSecretSetting } from '../../utils/value-suggestions.js';
 import { getRtkBinaryPath } from '../../services/rtk-service.js';
 import { MenuContainer } from '../common/MenuContainer.js';
 import { ScrollableTabBar } from '../common/ScrollableTabBar.js';
@@ -45,6 +46,10 @@ function formatValue(
   }
   if (typeof value === 'number') {
     return { text: String(value), color: 'yellow' };
+  }
+  // Secrets are shown masked or not at all — never as a truncated prefix.
+  if (isSecretSetting(key)) {
+    return { text: value ? '********' : '<empty>', color: 'gray' };
   }
   return { text: truncate(value, 40), color: 'cyan' };
 }

@@ -268,6 +268,17 @@ function autoSuggestFromSchema(key: string): SettingValueSuggestion[] {
   return [];
 }
 
+/**
+ * Secret settings hold credentials. Their current value must never be echoed
+ * into the input buffer or the suggestion list: doing so lets a following paste
+ * append to the existing secret instead of replacing it, producing a silently
+ * malformed credential (two concatenated API keys) that only surfaces later as
+ * an opaque provider 401.
+ */
+export function isSecretSetting(key: string): boolean {
+  return /(^|\.)apiKey$/.test(key);
+}
+
 // Type guard for isNumberSetting / isStringSetting (kept for backward compat).
 export function isStringSetting(key: string): boolean {
   return isSettingType(key, 'string');

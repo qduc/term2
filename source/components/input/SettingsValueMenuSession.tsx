@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Box, Text } from 'ink';
 import SettingsValueSelectionMenu from '../menu/SettingsValueSelectionMenu.js';
 import { parseSettingValue } from '../../utils/settings-command.js';
+import { isSecretSetting } from '../../utils/value-suggestions.js';
 import type { useSettingsValueCompletion } from '../../hooks/use-settings-value-completion.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
 import type { MenuComponentProps } from './menu-registry.js';
@@ -67,6 +68,10 @@ export function SettingsValueMenuSession({ frame, active, controller, interactio
           case 'command': {
             setApplyError(null);
             if (event.command === 'tab') {
+              // Tab is inert for secrets: completing one would write the stored
+              // credential into the buffer, so a following paste would append
+              // to it rather than replace it.
+              if (isSecretSetting(frame.settingKey)) return keep();
               const suggestion = settingsValue.getSelectedItem();
               if (!suggestion) return keep();
               const currentEditor = controller.getSnapshot().editor;

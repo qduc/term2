@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useInputContext } from '../context/InputContext.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
 import { useSelection } from './use-selection.js';
-import { buildSettingValueSuggestions, filterSettingValueSuggestionsByQuery } from '../utils/value-suggestions.js';
+import {
+  buildSettingValueSuggestions,
+  filterSettingValueSuggestionsByQuery,
+  isSecretSetting,
+} from '../utils/value-suggestions.js';
 import { resolveSettingAtPath, unwrapSchema } from '../services/settings/setting-schema-utils.js';
 
 const MAX_RESULTS = 10;
@@ -70,6 +74,8 @@ export const useSettingsValueCompletion = (
     // settingsVersion is used to allow refresh when values change.
     void settingsVersion;
     const suggestions = [...buildSettingValueSuggestions(resolvedSettingKey)];
+    // Never surface a stored credential as a suggestion.
+    if (isSecretSetting(resolvedSettingKey)) return suggestions;
     try {
       const currentValue = settingsService.getDynamic(resolvedSettingKey);
       if (currentValue !== undefined) {
@@ -100,7 +106,12 @@ export const useSettingsValueCompletion = (
       const editor = controller.getSnapshot().editor;
       controller.replaceText(editor.text, Math.max(editor.cursor, valueStartIndex));
 
-      // Get current value from settingsService and find it in suggestions
+      // Get current value from settingsService and find it in suggestions.
+      // Secrets are never listed, so there is nothing to preselect.
+      if (isSecretSetting(key)) {
+        setSelectedIndex(0);
+        return;
+      }
       try {
         const currentValue = settingsService.getDynamic(key);
         if (currentValue !== undefined) {

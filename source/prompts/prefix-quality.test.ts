@@ -5,6 +5,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { expect, it } from 'vitest';
 import { getAgentDefinition } from '../agent.js';
 import { createMockSettingsService } from '../services/settings/settings-service.mock.js';
+import { PLAN_MODE_ENTER_NOTICE, primePlanModeNoticeIfActive } from '../services/mode-notices.js';
 import { buildPromptSpec } from './prompt-constructor.js';
 
 const mockLogger = {
@@ -37,9 +38,21 @@ it('plan-mode stub is smaller than the full workflow and still names the live co
   expect(full).toContain(PLAN_WORKFLOW_MARKER);
   expect(full).toContain('Synthesize their findings yourself');
   expect(full).toContain('Acceptance criteria');
+  expect(full).toContain('You are currently in **Plan Mode**.');
+  expect(full).not.toContain('You are currently in **Standard Mode**');
+  expect(PLAN_MODE_ENTER_NOTICE).toContain(PLAN_WORKFLOW_MARKER);
+  expect(PLAN_MODE_ENTER_NOTICE).toContain('You are currently in **Plan Mode**.');
 });
 
-it('standard sessions omit the Plan Mode workflow body; plan-mode sessions keep it', async () => {
+it('primes the enter notice when a session starts already in Plan Mode', () => {
+  const queued: string[] = [];
+  primePlanModeNoticeIfActive(false, (text) => queued.push(text));
+  expect(queued).toEqual([]);
+  primePlanModeNoticeIfActive(true, (text) => queued.push(text));
+  expect(queued).toEqual([PLAN_MODE_ENTER_NOTICE]);
+});
+
+it('instruction prefix stays on the stub in both modes; the workflow rides on the enter notice', async () => {
   const cwd = await mkdtemp(path.join(os.tmpdir(), 'term2-prefix-quality-'));
   const executionContext = {
     isRemote: () => false,
@@ -65,25 +78,24 @@ it('standard sessions omit the Plan Mode workflow body; plan-mode sessions keep 
     });
 
     expect(standard.instructions).toContain(STUB_STANDARD_MARKER);
+    expect(plan.instructions).toContain(STUB_STANDARD_MARKER);
     expect(standard.instructions).not.toContain(PLAN_WORKFLOW_MARKER);
-    expect(plan.instructions).toContain(PLAN_WORKFLOW_MARKER);
-    expect(plan.instructions).toContain('Synthesize their findings yourself');
-    expect(plan.instructions.length).toBeGreaterThan(standard.instructions.length);
+    expect(plan.instructions).not.toContain(PLAN_WORKFLOW_MARKER);
+    expect(plan.instructions).toBe(standard.instructions);
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }
 });
 
-it('product-controlled standard prefix stays below the plan-mode prefix for the same model', () => {
+it('product-controlled prefix does not attach the Plan Mode workflow file', () => {
   const standard = buildPromptSpec({ model: 'gpt-4o', liteMode: false, planMode: false });
   const plan = buildPromptSpec({ model: 'gpt-4o', liteMode: false, planMode: true });
 
   expect(standard.fragmentFiles).toContain('plan-mode-stub.md');
   expect(standard.fragmentFiles).not.toContain('plan-mode-info.md');
-  expect(plan.fragmentFiles).toContain('plan-mode-info.md');
-  expect(plan.fragmentFiles).not.toContain('plan-mode-stub.md');
+  expect(plan.fragmentFiles).toEqual(standard.fragmentFiles);
 
-  const standardBytes = standard.fragmentFiles.reduce((sum, file) => sum + readPrompt(file).length, 0);
-  const planBytes = plan.fragmentFiles.reduce((sum, file) => sum + readPrompt(file).length, 0);
-  expect(standardBytes).toBeLessThan(planBytes);
+  const stubBytes = readPrompt('plan-mode-stub.md').length;
+  const fullBytes = readPrompt('plan-mode-info.md').length;
+  expect(stubBytes).toBeLessThan(fullBytes / 2);
 });

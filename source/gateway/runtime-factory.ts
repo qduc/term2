@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { realpathSync, statSync } from 'node:fs';
 import { ConversationService } from '../services/conversation/conversation-service.js';
+import { primePlanModeNoticeIfActive } from '../services/mode-notices.js';
 import type { ConversationAgentClient } from '../services/conversation-agent-client.js';
 import { createOwnedSessionClientFactory } from '../services/session/session-client-factory.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../services/service-interfaces.js';
@@ -277,7 +278,7 @@ export class RuntimeFactory {
     );
     let service: ConversationService | undefined;
     try {
-      service = new ConversationService({
+      const created = new ConversationService({
         sessionClientFactory,
         sessionId: binding.sessionId,
         deps: { logger, settingsService: settings, sessionContextService: context, skillsService: skills },
@@ -286,6 +287,8 @@ export class RuntimeFactory {
         activeCancelTimeoutMs: this.#options.activeCancelTimeoutMs,
         discardOnFailure: true,
       });
+      service = created;
+      primePlanModeNoticeIfActive(Boolean(settings.get('app.planMode')), (text) => created.queueModeNotice(text));
       const session = new ServerSession({
         binding,
         service,

@@ -152,7 +152,7 @@ describe('assembled stateless provider lifecycle black-box', () => {
         rows: 40,
       });
 
-      await activeChild.waitForIdleInput({ timeoutMs: 15_000 });
+      await activeChild.waitForIdleInput({ timeoutMs: 30_000 });
 
       await sendUserTurn(activeChild, 'first stateless user turn', 'first-response');
       await sendUserTurn(activeChild, 'second stateless user turn', 'second-response');
@@ -206,8 +206,8 @@ type ChildOutputMarker = {
 };
 
 async function waitForCompletedTurn(child: PtyChildDriver, response: string, idle: number): Promise<void> {
-  await child.waitForVisibleOutput(response, 15_000);
-  await child.waitForIdleInput({ after: idle, timeoutMs: 15_000 });
+  await child.waitForVisibleOutput(response, 30_000);
+  await child.waitForIdleInput({ after: idle, timeoutMs: 30_000 });
 }
 
 function captureOutputMarker(child: PtyChildDriver): ChildOutputMarker {

@@ -2,6 +2,7 @@ import { it, expect } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
+import { spawnSync } from 'node:child_process';
 import { createCodeContextSearchToolDefinition, createReadCodeOutlineToolDefinition } from './code-context.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 
@@ -23,6 +24,37 @@ async function withTempWorkspace(run: (dir: string) => Promise<void>) {
 
 const readCodeOutlineToolDefinition = createReadCodeOutlineToolDefinition();
 const codeContextSearchToolDefinition = createCodeContextSearchToolDefinition();
+
+// Related/symbol search shells out to real ripgrep. Machines without rg are
+// still covered by the forced-probe degradation tests below; these end-to-end
+// scenarios only claim to pass where the binary exists (CI installs it).
+const hostHasRipgrep = spawnSync('rg', ['--version'], { stdio: 'ignore' }).status === 0;
+const rgOnlySequential = hostHasRipgrep ? it.sequential : it.sequential.skip;
+
+it.sequential('degrades to rg_unavailable for related queries when ripgrep is missing', async () => {
+  await withTempWorkspace(async (dir) => {
+    await fs.mkdir(path.join(dir, 'src'), { recursive: true });
+    await fs.writeFile(path.join(dir, 'src', 'example.ts'), 'export const example = 1;\n');
+
+    const result = (await createCodeContextSearchToolDefinition({ hasRipgrep: async () => false }).execute({
+      query_type: 'related',
+      path: 'src/example.ts',
+    })) as string;
+
+    expect(result.startsWith('WARNING rg_unavailable')).toBe(true);
+  });
+});
+
+it.sequential('degrades to rg_unavailable for symbol queries when ripgrep is missing', async () => {
+  await withTempWorkspace(async () => {
+    const result = (await createCodeContextSearchToolDefinition({ hasRipgrep: async () => false }).execute({
+      query_type: 'symbol',
+      symbol: 'example',
+    })) as string;
+
+    expect(result.startsWith('WARNING rg_unavailable')).toBe(true);
+  });
+});
 
 it('description references glob when glob is available and shell when it is not', () => {
   expect(codeContextSearchToolDefinition.description).toContain('use glob');
@@ -145,7 +177,7 @@ it.sequential('execute: read_code_outline summarizes a TS file without bodies', 
   });
 });
 
-it.sequential('execute: code_context_search related warns for unsupported target language', async () => {
+rgOnlySequential('execute: code_context_search related warns for unsupported target language', async () => {
   await withTempWorkspace(async (dir) => {
     const filePath = 'notes/outline.txt';
     const absPath = path.join(dir, filePath);
@@ -178,7 +210,7 @@ it.sequential('execute: read_code_outline returns unknown language with empty se
   });
 });
 
-it.sequential('execute: code_context_search related finds tests, importers, and barrel exports', async () => {
+rgOnlySequential('execute: code_context_search related finds tests, importers, and barrel exports', async () => {
   await withTempWorkspace(async (dir) => {
     const files: Array<[string, string]> = [
       ['src/foo.ts', ['export const foo = 1;', 'export function buildFoo() {', '  return foo;', '}'].join('\n')],
@@ -210,7 +242,7 @@ it.sequential('execute: code_context_search related finds tests, importers, and 
   });
 });
 
-it.sequential('execute: code_context_search related honors max_results', async () => {
+rgOnlySequential('execute: code_context_search related honors max_results', async () => {
   await withTempWorkspace(async (dir) => {
     const files = [
       'src/foo.ts',
@@ -239,7 +271,7 @@ it.sequential('execute: code_context_search related honors max_results', async (
   });
 });
 
-it.sequential('execute: code_context_search related detects multi-line named imports', async () => {
+rgOnlySequential('execute: code_context_search related detects multi-line named imports', async () => {
   await withTempWorkspace(async (dir) => {
     const files: Array<[string, string]> = [
       ['src/foo.ts', 'export const foo = 1;\n'],
@@ -262,7 +294,7 @@ it.sequential('execute: code_context_search related detects multi-line named imp
   });
 });
 
-it.sequential('execute: code_context_search related does not flag same-named sibling modules', async () => {
+rgOnlySequential('execute: code_context_search related does not flag same-named sibling modules', async () => {
   await withTempWorkspace(async (dir) => {
     const files: Array<[string, string]> = [
       ['src/a/util.ts', 'export const util = 1;\n'],
@@ -339,7 +371,7 @@ const symbolCases = [
 ] as const;
 
 for (const symbolCase of symbolCases) {
-  it.sequential(`execute: code_context_search symbol finds ${symbolCase.label} declarations`, async () => {
+  rgOnlySequential(`execute: code_context_search symbol finds ${symbolCase.label} declarations`, async () => {
     await withTempWorkspace(async (dir) => {
       const absPath = path.join(dir, symbolCase.filePath);
       await fs.mkdir(path.dirname(absPath), { recursive: true });
@@ -395,7 +427,7 @@ it.sequential(
   },
 );
 
-it.sequential('execute: code_context_search rejects unsafe symbol names', async () => {
+rgOnlySequential('execute: code_context_search rejects unsafe symbol names', async () => {
   await withTempWorkspace(async () => {
     const result = (await codeContextSearchToolDefinition.execute({
       query_type: 'symbol',

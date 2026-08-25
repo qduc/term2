@@ -5,7 +5,12 @@ import path from 'node:path';
 import { spawnTerminal, type TerminalSession } from './test-helpers/terminal-e2e.js';
 import { HARNESS_IDLE_ENV, waitForHarnessIdleGeneration } from './lib/harness-input-idle.js';
 
-const E2E_TIMEOUT_MS = 45_000;
+// tsx cold-starts the whole app through an on-demand transform; shared CI
+// runners can take over a minute before the UI prints its first frame, so
+// startup gets its own generous budget while exit stays tight.
+const STARTUP_TIMEOUT_MS = 120_000;
+const EXIT_TIMEOUT_MS = 45_000;
+const TEST_TIMEOUT_MS = 300_000;
 
 let session: TerminalSession | null = null;
 let tempHome = '';
@@ -26,7 +31,7 @@ afterEach(() => {
   tempHome = '';
 });
 
-it.sequential('starts the terminal UI and exits on Ctrl+C', { timeout: E2E_TIMEOUT_MS }, async () => {
+it.sequential('starts the terminal UI and exits on Ctrl+C', { timeout: TEST_TIMEOUT_MS }, async () => {
   tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-e2e-home-'));
   tempConversationsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-e2e-conversations-'));
 
@@ -42,12 +47,12 @@ it.sequential('starts the terminal UI and exits on Ctrl+C', { timeout: E2E_TIMEO
     },
   });
 
-  await session.waitForOutput('Lite', E2E_TIMEOUT_MS);
-  await waitForHarnessIdleGeneration(idlePath, { timeoutMs: E2E_TIMEOUT_MS });
+  await session.waitForOutput('Lite', STARTUP_TIMEOUT_MS);
+  await waitForHarnessIdleGeneration(idlePath, { timeoutMs: STARTUP_TIMEOUT_MS });
 
   session.write('\x03');
 
-  const exit = await session.waitForExit(E2E_TIMEOUT_MS);
+  const exit = await session.waitForExit(EXIT_TIMEOUT_MS);
   expect(exit.exitCode).toBe(0);
   expect(session.getVisibleOutput()).toContain('Lite');
 });

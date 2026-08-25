@@ -2,7 +2,7 @@ import { it, expect } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import { execFile } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createGrepToolDefinition, formatGrepCommandMessage } from './grep.js';
 import { SessionAccessState } from '../../services/session/session-access-state.js';
@@ -33,6 +33,12 @@ it('description references glob when glob is available and shell when it is not'
 });
 
 const execFileAsync = promisify(execFile);
+
+// The rg lane understands \d-style classes; the POSIX grep fallback does not.
+// Tests that depend on rg's dialect skip where only the fallback can run so
+// both scenarios stay explicit instead of host-dependent by accident.
+const hostHasRipgrep = spawnSync('rg', ['--version'], { stdio: 'ignore' }).status === 0;
+const rgOnlySequential = hostHasRipgrep ? it.sequential : it.sequential.skip;
 
 function createWrappedGrepTool() {
   const definition = createGrepToolDefinition();
@@ -119,7 +125,7 @@ it.sequential('execute: ignore_case true enables case-insensitive search', async
   });
 });
 
-it.sequential('execute: regex mode supports parsed digit class patterns', async () => {
+rgOnlySequential('execute: regex mode supports parsed digit class patterns', async () => {
   await withTempDir(async (dir) => {
     await fs.writeFile(path.join(dir, 'notes.txt'), 'testabc\ntest123\ntest456\n');
 
@@ -175,7 +181,7 @@ it.sequential('execute: enables rg multiline mode for newline regex escapes', as
   expect(commands.at(-1)).toContain('--multiline');
 });
 
-it.sequential('invoke: grep uses strict JSON parsing before regex execution', async () => {
+rgOnlySequential('invoke: grep uses strict JSON parsing before regex execution', async () => {
   await withTempDir(async (dir) => {
     await fs.writeFile(path.join(dir, 'notes.txt'), 'testabc\ntest123\ntest456\n');
     const grep = createWrappedGrepTool();
@@ -202,6 +208,38 @@ it.sequential('execute: fixed_strings true uses fixed-string matching', async ()
 
     expect(result.includes('hello.world')).toBe(true);
     expect(result.includes('hello-world')).toBe(false);
+  });
+});
+
+it.sequential('fallback: without ripgrep, digit-class shorthands do not pretend to work', async () => {
+  await withTempDir(async (dir) => {
+    await fs.writeFile(path.join(dir, 'notes.txt'), 'testabc\ntest123\ntest456\n');
+
+    const result = (await createGrepToolDefinition({ hasRipgrep: async () => false }).execute({
+      pattern: 'test\\d+',
+      path: '.',
+    })) as string;
+
+    // GNU grep has no \d shorthand. The fallback must surface "no matches"
+    // rather than silently applying ripgrep semantics it does not have.
+    expect(result).toBe('No matches found.');
+  });
+});
+
+it.sequential('fallback: without ripgrep, POSIX bracket classes still match digits', async () => {
+  await withTempDir(async (dir) => {
+    await fs.writeFile(path.join(dir, 'notes.txt'), 'testabc\ntest123\ntest456\n');
+
+    const result = (await createGrepToolDefinition({ hasRipgrep: async () => false }).execute({
+      // Plain grep runs in BRE mode: bracket expressions work, but "+" is a
+      // literal character there, so this deliberately avoids quantifiers.
+      pattern: 'test[0-9]',
+      path: '.',
+    })) as string;
+
+    expect(result.includes('test123')).toBe(true);
+    expect(result.includes('test456')).toBe(true);
+    expect(result.includes('testabc')).toBe(false);
   });
 });
 

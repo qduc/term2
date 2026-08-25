@@ -6,6 +6,29 @@ import type { SubagentResult, SubagentRunHandle, SubagentRunStatus } from './ser
 import os from 'os';
 import { BackgroundShellRegistry } from './services/shell/background-shell-registry.js';
 
+// search-via-shell probes `rg` availability with spawnSync while assembling
+// the prompt. Tests below pin that probe instead of inheriting whichever
+// binaries the host happens to have, so both availability scenarios run
+// deterministically everywhere.
+const binaryProbeControl = vi.hoisted(() => ({
+  mode: 'passthrough' as 'passthrough' | 'present' | 'absent',
+}));
+
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>();
+  const spawnSyncOverride = ((command: any, ...rest: any[]) => {
+    if (binaryProbeControl.mode !== 'passthrough' && command === 'rg') {
+      return { status: binaryProbeControl.mode === 'present' ? 0 : 1 };
+    }
+    return (actual.spawnSync as any)(command, ...rest);
+  }) as typeof actual.spawnSync;
+  return { ...actual, spawnSync: spawnSyncOverride };
+});
+
+function setRipgrepAvailability(mode: 'present' | 'absent') {
+  binaryProbeControl.mode = mode;
+}
+
 const mockLogger = {
   debug: () => {},
   info: () => {},
@@ -778,19 +801,44 @@ it('getAgentDefinition does not default searchViaShell to true for non-gpt-5 mod
 });
 
 it('getAgentDefinition forces searchViaShell on for non-gpt-5 models when explicitly set to on', () => {
-  const settingsService = createMockSettingsService({
-    'app.searchViaShell': 'on',
-    'agent.model': 'gpt-4o',
-  });
+  setRipgrepAvailability('present');
+  try {
+    const settingsService = createMockSettingsService({
+      'app.searchViaShell': 'on',
+      'agent.model': 'gpt-4o',
+    });
 
-  const definition = getAgentDefinition({
-    settingsService,
-    loggingService: mockLogger,
-  });
+    const definition = getAgentDefinition({
+      settingsService,
+      loggingService: mockLogger,
+    });
 
-  expect(definition.instructions.includes('### Searching via the shell')).toBe(true);
-  expect(definition.instructions.includes('`glob`')).toBe(false);
-  expect(definition.instructions.includes('`grep`')).toBe(false);
+    expect(definition.instructions.includes('### Searching via the shell')).toBe(true);
+    expect(definition.instructions.includes('`glob`')).toBe(false);
+    expect(definition.instructions.includes('`grep`')).toBe(false);
+  } finally {
+    binaryProbeControl.mode = 'passthrough';
+  }
+});
+
+it('getAgentDefinition falls back to naming grep when ripgrep is missing', () => {
+  setRipgrepAvailability('absent');
+  try {
+    const settingsService = createMockSettingsService({
+      'app.searchViaShell': 'on',
+      'agent.model': 'gpt-4o',
+    });
+
+    const definition = getAgentDefinition({
+      settingsService,
+      loggingService: mockLogger,
+    });
+
+    expect(definition.instructions.includes('### Searching via the shell')).toBe(true);
+    expect(definition.instructions.includes('use `grep`')).toBe(true);
+  } finally {
+    binaryProbeControl.mode = 'passthrough';
+  }
 });
 
 // it('getAgentDefinition includes GPT version-specific prompt fragments', () => {
@@ -845,18 +893,23 @@ it('getAgentDefinition appends search-via-shell addendum when enabled', () => {
 });
 
 it('getAgentDefinition omits dedicated search tool references from prompt when searchViaShell is true', () => {
-  const settingsService = createMockSettingsService({
-    'app.searchViaShell': 'on',
-    'agent.model': 'gpt-4o',
-  });
+  setRipgrepAvailability('present');
+  try {
+    const settingsService = createMockSettingsService({
+      'app.searchViaShell': 'on',
+      'agent.model': 'gpt-4o',
+    });
 
-  const definition = getAgentDefinition({
-    settingsService,
-    loggingService: mockLogger,
-  });
+    const definition = getAgentDefinition({
+      settingsService,
+      loggingService: mockLogger,
+    });
 
-  expect(definition.instructions.includes('`glob`')).toBe(false);
-  expect(definition.instructions.includes('`grep`')).toBe(false);
+    expect(definition.instructions.includes('`glob`')).toBe(false);
+    expect(definition.instructions.includes('`grep`')).toBe(false);
+  } finally {
+    binaryProbeControl.mode = 'passthrough';
+  }
 });
 
 it('getAgentDefinition uses fallback search prompt for remote execution', () => {

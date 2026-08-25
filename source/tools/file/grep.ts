@@ -175,6 +175,8 @@ export const createGrepToolDefinition = (
     nestedCompatibility?: NestedToolCompatibilityState;
     /** YOLO (autoApproveMode 'always') read bypass. */
     settingsService?: ISettingsService;
+    /** Overrides the host ripgrep probe so tests can pin either search lane. */
+    hasRipgrep?: () => Promise<boolean>;
   } = {},
 ): ToolDefinition<typeof searchParametersSchema> => {
   const {
@@ -185,6 +187,7 @@ export const createGrepToolDefinition = (
     sessionAccess,
     nestedCompatibility,
     settingsService,
+    hasRipgrep,
   } = deps;
   return {
     name: 'grep',
@@ -239,7 +242,7 @@ export const createGrepToolDefinition = (
 
       const max_results = 50; // Lowered to reduce output size
 
-      const useRg = await checkRgAvailability(executionContext);
+      const useRg = hasRipgrep ? await hasRipgrep() : await checkRgAvailability(executionContext);
       let command = '';
 
       const limit = max_results;

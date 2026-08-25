@@ -44,6 +44,8 @@ if (mode === 'write') {
   // On Windows Node resolves os.homedir() from USERPROFILE. Reporting both
   // variables lets the host-independent harness test pin that contract.
   process.stdout.write(`HOME:${process.env.HOME}\r\nUSERPROFILE:${process.env.USERPROFILE}\r\n`);
+} else if (mode === 'environment') {
+  process.stdout.write(`CI:${process.env.CI ?? '<unset>'}\r\n`);
 } else {
   throw new Error(`Unknown harness child mode: ${mode ?? '<missing>'}`);
 }

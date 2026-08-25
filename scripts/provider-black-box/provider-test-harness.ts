@@ -388,6 +388,10 @@ function createWorkspaceEnvironment(
     Object.entries(process.env).filter(([key]) => !/(API_KEY|TOKEN|PASSWORD|SECRET)/i.test(key)),
   ) as NodeJS.ProcessEnv;
   const env: NodeJS.ProcessEnv = { ...inherited };
+  // The harness creates a real PTY and drives an interactive Ink application.
+  // Do not let the host runner's non-interactive marker change child input
+  // behavior; callers can still opt into CI semantics through an override.
+  delete env.CI;
   for (const [key, value] of Object.entries(overrides ?? {})) {
     if (value === undefined) delete env[key];
     else env[key] = value;

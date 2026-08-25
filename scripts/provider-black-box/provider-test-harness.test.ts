@@ -99,6 +99,21 @@ describe('provider black-box harness', () => {
     });
   });
 
+  it('does not inherit the host CI marker into an interactive PTY child', async () => {
+    const previous = process.env.CI;
+    process.env.CI = 'true';
+    try {
+      await withIsolatedWorkspace({}, async (workspace) => {
+        const child = await workspace.start({ command: process.execPath, args: [CHILD, 'environment'] });
+        await child.waitForVisibleOutput('CI:<unset>');
+        await expect(child.waitForExit()).resolves.toMatchObject({ exitCode: 0 });
+      });
+    } finally {
+      if (previous === undefined) delete process.env.CI;
+      else process.env.CI = previous;
+    }
+  });
+
   it('awaits termination after a bounded timeout', async () => {
     const workspace = await createIsolatedWorkspaceLease();
     try {

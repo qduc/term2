@@ -25,7 +25,11 @@ process.on('exit', () => {
   }
 });
 
-const DEFAULT_TIMEOUT_MS = 20_000;
+// Shared-runner reality: a PTY scenario's turn can legitimately take longer
+// than a developer laptop under vitest's parallel workers. --bail=1 bounds a
+// genuine hang to one scenario, so a generous ceiling costs little and stops
+// per-call-site timeout whack-a-mole.
+const DEFAULT_TIMEOUT_MS = 40_000;
 const DEFAULT_WRITE_TIMEOUT_MS = 5_000;
 const PTY_INPUT_SETTLE_MS = 50;
 const DEFAULT_TERMINATE_GRACE_MS = 500;

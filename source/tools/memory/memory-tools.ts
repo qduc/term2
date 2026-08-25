@@ -33,12 +33,25 @@ const makeFormat =
       createBaseMessage(item, index, 0, false, {
         command: `memory_${commandLabel}: ${String(args.id ?? args.query ?? '')}`,
         output: outputText,
-        success: !outputText.startsWith('Error:'),
+        success: isSuccessOutput(outputText),
         toolName,
         toolArgs: args,
       }),
     ];
   };
+
+function isSuccessOutput(outputText: string): boolean {
+  const trimmed = outputText.trim();
+  if (!trimmed) return true;
+  if (trimmed.startsWith('Error:') || trimmed.startsWith('Tool input did not match schema')) return false;
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed && typeof parsed === 'object' && 'error' in parsed) return false;
+  } catch {
+    // Not JSON — fall through to prefix checks above
+  }
+  return true;
+}
 const id = z
   .string()
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)

@@ -187,6 +187,7 @@ const CommandMessage: FC<Props> = ({
     const argsText =
       toolName === 'background_subagent_notification' ||
       toolName === 'background_shell_notification' ||
+      toolName === 'background_shell_output_notification' ||
       toolName === 'background_task_control_notification' ||
       !formattedArgs
         ? ''
@@ -294,6 +295,17 @@ const CommandMessage: FC<Props> = ({
           return renderAction(`Background shell completed: ${label}`);
         }
         return renderAction(`Background shell ${jobs.length || 'job'} notification`);
+      }
+      case 'background_shell_output_notification': {
+        const firings = Array.isArray(toolArgs?.firings) ? toolArgs.firings : [];
+        if (firings.length === 1) {
+          const [{ command, matchedLines }] = firings;
+          const label = command || 'job';
+          const lineCount = Array.isArray(matchedLines) ? matchedLines.length : undefined;
+          const suffix = lineCount ? ` (${lineCount} line${lineCount === 1 ? '' : 's'})` : '';
+          return renderAction(`Background shell output: ${label}${suffix}`);
+        }
+        return renderAction(`Background shell output (${firings.length || 'job'} jobs)`);
       }
       case 'background_task_control_notification': {
         const actions = Array.isArray(toolArgs?.actions) ? toolArgs.actions : [];

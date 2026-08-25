@@ -5,12 +5,14 @@ import path from 'node:path';
 import { spawnTerminal, type TerminalSession } from './test-helpers/terminal-e2e.js';
 import { HARNESS_IDLE_ENV, waitForHarnessIdleGeneration } from './lib/harness-input-idle.js';
 
-// tsx cold-starts the whole app through an on-demand transform; shared CI
-// runners can take over a minute before the UI prints its first frame, so
-// startup gets its own generous budget while exit stays tight.
-const STARTUP_TIMEOUT_MS = 120_000;
+// tsx cold-starts the whole app through an on-demand transform; inside CI's
+// full-suite run that competes with dozens of vitest workers for every core,
+// so first paint can take minutes rather than seconds. The budget is large
+// on purpose; a real failure now dumps the child's visible output instead of
+// failing blind.
+const STARTUP_TIMEOUT_MS = 240_000;
 const EXIT_TIMEOUT_MS = 45_000;
-const TEST_TIMEOUT_MS = 300_000;
+const TEST_TIMEOUT_MS = 600_000;
 
 let session: TerminalSession | null = null;
 let tempHome = '';

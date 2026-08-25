@@ -25,6 +25,14 @@ export type TerminalSession = {
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
+// Timeout errors are the only window into a headless CI terminal; include the
+// last chunk of what the child actually rendered so a blind wait failure can
+// be diagnosed from the log alone.
+function tailOf(text: string, max = 800): string {
+  const stripped = stripVTControlCharacters(text).trimEnd();
+  return stripped.length > max ? `…${stripped.slice(-max)}` : stripped;
+}
+
 const PYTHON_PTY_BRIDGE = ['import pty', 'import sys', 'sys.exit(pty.spawn(sys.argv[1:]))'].join('; ');
 
 export function spawnTerminal(command: string, args: string[], options: SpawnTerminalOptions = {}): TerminalSession {
@@ -82,13 +90,24 @@ export function spawnTerminal(command: string, args: string[], options: SpawnTer
 
         if (exitState) {
           clearInterval(timer);
-          reject(new Error(`Terminal exited before output appeared: ${needle}`));
+          reject(
+            new Error(
+              `Terminal exited before output appeared: ${needle}\n` +
+                `exit code=${exitState.exitCode} signal=${exitState.signal ?? 'none'}\n` +
+                `visible output (tail):\n${tailOf(getVisibleOutput())}`,
+            ),
+          );
           return;
         }
 
         if (Date.now() - startedAt > timeoutMs) {
           clearInterval(timer);
-          reject(new Error(`Timed out waiting for terminal output: ${needle}`));
+          reject(
+            new Error(
+              `Timed out waiting for terminal output: ${needle}\n` +
+                `visible output (tail):\n${tailOf(getVisibleOutput())}`,
+            ),
+          );
         }
       }, 25);
 

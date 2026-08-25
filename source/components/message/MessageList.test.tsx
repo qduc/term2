@@ -1,6 +1,7 @@
 // @ts-expect-error IS_REACT_ACT_ENVIRONMENT is not in globalThis types
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-import { it, expect } from 'vitest';
+import { it, expect, vi, onTestFinished } from 'vitest';
+import { act } from 'react';
 import React from 'react';
 import { renderInAct, rerenderInAct } from '../../test-helpers/ink-testing.js';
 import MessageList, {
@@ -1077,7 +1078,19 @@ it.sequential('MessageList collapses a closed run of tool calls into one summary
   expect(countOccurrences(output, '"a.ts"')).toBe(0);
 });
 
-it.sequential('MessageList groups a still-growing tool call run into one line whose counts tick up', async () => {
+// A running command is hidden for its first second (useCommandVisibility) so
+// fast tools never flash a line. Push past that to see the in-flight line.
+const revealRunningCommands = async () => {
+  await act(async () => {
+    vi.advanceTimersByTime(1100);
+  });
+};
+
+it.sequential('MessageList folds settled calls while the running one keeps its own line', async () => {
+  vi.useFakeTimers();
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
   const settingsService = createMockSettingsService({ 'ui.displayMode': 'concise' });
   const cmd = (n: number, status: string, toolName: string) => ({
     id: `cmd-${n}`,
@@ -1091,26 +1104,15 @@ it.sequential('MessageList groups a still-growing tool call run into one line wh
   const renderer = await renderInAct(
     <MessageList
       settingsService={settingsService}
-      messages={[cmd(1, 'completed', 'grep'), cmd(2, 'running', 'read_file')]}
+      messages={[cmd(1, 'completed', 'grep'), cmd(2, 'completed', 'read_file'), cmd(3, 'running', 'shell')]}
     />,
   );
 
-  // Grouped immediately, while cmd-2 is still in flight.
+  // Two settled calls folded; the running one still says what it is doing.
+  await revealRunningCommands();
   let output = stripAnsi(renderer.lastFrame() ?? '');
-  expect(output.includes('▶ Searched for 1 pattern, read 1 file')).toBe(true);
-
-  await rerenderInAct(
-    renderer,
-    <MessageList
-      settingsService={settingsService}
-      messages={[cmd(1, 'completed', 'grep'), cmd(2, 'completed', 'read_file'), cmd(3, 'running', 'read_file')]}
-    />,
-  );
-
-  // Same line, count ticked up — not a second line.
-  output = stripAnsi(renderer.lastFrame() ?? '');
-  expect(output.includes('▶ Searched for 1 pattern, read 2 files')).toBe(true);
-  expect(countOccurrences(output, 'Searched for')).toBe(1);
+  expect(output.includes('✔ Searched for 1 pattern, read 1 file')).toBe(true);
+  expect(output.includes('cmd3')).toBe(true);
 
   await rerenderInAct(
     renderer,
@@ -1119,23 +1121,31 @@ it.sequential('MessageList groups a still-growing tool call run into one line wh
       messages={[
         cmd(1, 'completed', 'grep'),
         cmd(2, 'completed', 'read_file'),
-        cmd(3, 'completed', 'read_file'),
-        { id: 'bot-reply', sender: 'bot', status: 'finalized', text: 'done' },
+        cmd(3, 'completed', 'shell'),
+        cmd(4, 'running', 'shell'),
       ]}
     />,
   );
 
+  // Same line, count ticked up — not a second summary. cmd3 folded in, cmd4 took over.
+  await revealRunningCommands();
   output = stripAnsi(renderer.lastFrame() ?? '');
-  expect(output.includes('✔ Searched for 1 pattern, read 2 files')).toBe(true);
+  expect(output.includes('✔ Searched for 1 pattern, read 1 file, ran 1 shell command')).toBe(true);
   expect(countOccurrences(output, 'Searched for')).toBe(1);
+  expect(output.includes('cmd3')).toBe(false);
+  expect(output.includes('cmd4')).toBe(true);
 });
 
 // Regression: an ungrouped run grows the dynamic region ~2 rows per tool call.
 // Once that region reaches the terminal height, Ink abandons incremental redraw
 // and clears the screen *and the scrollback* on every frame, so the whole
-// conversation vanishes the moment the assistant starts replying. Keeping the
-// run one grouped line tall is what prevents that, so assert the height.
-it.sequential('MessageList keeps a long in-flight tool call run one line tall', async () => {
+// conversation vanishes the moment the assistant starts replying. Only in-flight
+// calls stay unfolded, so assert a long run stays short.
+it.sequential('MessageList keeps a long tool call run bounded to the folded line plus what is running', async () => {
+  vi.useFakeTimers();
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
   const settingsService = createMockSettingsService({ 'ui.displayMode': 'concise' });
   const messages: any[] = [{ id: 'user', sender: 'user', status: 'finalized', text: 'go' }];
   for (let n = 1; n <= 12; n += 1) {
@@ -1145,13 +1155,41 @@ it.sequential('MessageList keeps a long in-flight tool call run one line tall', 
       status: n === 12 ? 'running' : 'completed',
       command: `cmd${n}`,
       toolName: 'read_file',
+      toolArgs: { path: `file${n}.ts` },
       output: '',
     });
   }
 
   const { lastFrame } = await renderInAct(<MessageList settingsService={settingsService} messages={messages} />);
-  const toolLines = renderedLines(lastFrame() ?? '').filter((line) => line.includes('file'));
+  await revealRunningCommands();
+  const toolLines = renderedLines(lastFrame() ?? '').filter((line) => line.includes('✔') || line.includes('▶'));
 
-  expect(toolLines).toHaveLength(1);
-  expect(toolLines[0]).toContain('▶ Read 12 files');
+  expect(toolLines).toHaveLength(2);
+  expect(toolLines[0]).toContain('✔ Read 11 files');
+  expect(toolLines[1]).toContain('file12.ts');
+});
+
+it.sequential('MessageList reports a partly-failed run without painting the whole line red', async () => {
+  const settingsService = createMockSettingsService({ 'ui.displayMode': 'concise' });
+  const { lastFrame } = await renderInAct(
+    <MessageList
+      settingsService={settingsService}
+      messages={[
+        { id: 'cmd-1', sender: 'command', status: 'completed', command: 'ls', output: '' },
+        { id: 'cmd-2', sender: 'command', status: 'failed', command: 'pnpm test', output: '' },
+        { id: 'bot', sender: 'bot', status: 'finalized', text: 'done' },
+      ]}
+    />,
+  );
+
+  const frame = lastFrame() ?? '';
+  const summaryLine = renderedLines(frame).find((line) => line.includes('shell commands')) ?? '';
+  const failureLine = renderedLines(frame).find((line) => line.includes('failed')) ?? '';
+
+  expect(summaryLine).toContain('✔ Ran 2 shell commands');
+  expect(failureLine).toContain('✖ 1 failed: pnpm test');
+  // The summary itself is not the failure: no ✖ marker on it, and it is not red.
+  expect(summaryLine.includes('✖')).toBe(false);
+  const rawSummary = frame.split('\n').find((line) => line.includes('Ran 2 shell commands')) ?? '';
+  expect(rawSummary.includes('\u001B[31m')).toBe(false);
 });

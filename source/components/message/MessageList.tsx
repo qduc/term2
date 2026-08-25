@@ -354,10 +354,10 @@ const MessageList = <T extends MessageLike = Message>({
       const committedSignature = committedMessageSignaturesRef.current.get(message.id);
       const isCompletedCommand =
         (message.sender === 'command' && message.status !== 'pending' && message.status !== 'running') ||
-        // A command-group reaching `history` is closed by construction (an
-        // open run is held in the active region), so once it has settled it is
-        // as safe to commit as a single completed command.
-        (message.sender === 'command-group' && message.status !== 'running');
+        // A command-group only ever holds settled calls, and one reaching
+        // `history` is closed by construction (an open run is held in the
+        // active region), so it is as safe to commit as a completed command.
+        message.sender === 'command-group';
 
       if (committedSignature === signature) {
         continue;

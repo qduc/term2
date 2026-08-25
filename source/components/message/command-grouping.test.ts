@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { groupCommandRuns, summarizeCommandGroup, countFailedMembers } from './command-grouping.js';
+import {
+  groupCommandRuns,
+  summarizeCommandGroup,
+  countFailedMembers,
+  describeGroupFailures,
+} from './command-grouping.js';
 
 describe('groupCommandRuns', () => {
   it('leaves a lone command message ungrouped so it keeps showing what it did', () => {
@@ -31,28 +36,62 @@ describe('groupCommandRuns', () => {
     expect(result[0]).toMatchObject({ sender: 'command-group' });
   });
 
-  it('groups a run containing a still-running member and marks the group running', () => {
+  it('leaves a running call on its own line below the group', () => {
+    const messages = [
+      { id: '1', sender: 'command', status: 'completed', toolName: 'grep' },
+      { id: '2', sender: 'command', status: 'completed', toolName: 'read_file' },
+      { id: '3', sender: 'command', status: 'running', toolName: 'shell' },
+    ];
+    const result = groupCommandRuns(messages);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({ sender: 'command-group' });
+    expect((result[0] as any).members.map((m: any) => m.id)).toEqual(['1', '2']);
+    expect(result[1]).toEqual(messages[2]);
+  });
+
+  it('leaves every call from the first in-flight one onward unfolded', () => {
+    // Parallel dispatch can settle out of order; folding past a running call
+    // would hide it, which is the whole point of keeping it visible.
+    const messages = [
+      { id: '1', sender: 'command', status: 'completed', toolName: 'grep' },
+      { id: '2', sender: 'command', status: 'completed', toolName: 'grep' },
+      { id: '3', sender: 'command', status: 'running', toolName: 'shell' },
+      { id: '4', sender: 'command', status: 'completed', toolName: 'read_file' },
+    ];
+    const result = groupCommandRuns(messages);
+    expect(result.map((m: any) => m.id)).toEqual(['command-group:1', '3', '4']);
+  });
+
+  it('folds nothing while fewer than two calls have settled', () => {
     const messages = [
       { id: '1', sender: 'command', status: 'completed', toolName: 'grep' },
       { id: '2', sender: 'command', status: 'running', toolName: 'read_file' },
     ];
-    const result = groupCommandRuns(messages);
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({ sender: 'command-group', status: 'running' });
+    expect(groupCommandRuns(messages)).toEqual(messages);
   });
 
-  it('prefers running over failed while a later member is still in flight', () => {
+  it('treats a pending call as in-flight too', () => {
     const messages = [
-      { id: '1', sender: 'command', status: 'failed', toolName: 'grep' },
-      { id: '2', sender: 'command', status: 'running', toolName: 'read_file' },
+      { id: '1', sender: 'command', status: 'completed', toolName: 'grep' },
+      { id: '2', sender: 'command', status: 'completed', toolName: 'grep' },
+      { id: '3', sender: 'command', status: 'pending', toolName: 'shell' },
     ];
-    expect(groupCommandRuns(messages)[0]).toMatchObject({ status: 'running' });
+    expect(groupCommandRuns(messages).map((m: any) => m.id)).toEqual(['command-group:1', '3']);
   });
 
-  it('marks the group failed when any member failed', () => {
+  it('marks a run partial when only some members failed', () => {
     const messages = [
       { id: '1', sender: 'command', status: 'completed', toolName: 'grep' },
       { id: '2', sender: 'command', status: 'failed', toolName: 'read_file' },
+    ];
+    const result = groupCommandRuns(messages);
+    expect(result[0]).toMatchObject({ sender: 'command-group', status: 'partial' });
+  });
+
+  it('marks a run failed only when every member failed', () => {
+    const messages = [
+      { id: '1', sender: 'command', status: 'failed', toolName: 'grep' },
+      { id: '2', sender: 'command', status: 'completed', toolName: 'read_file', success: false },
     ];
     const result = groupCommandRuns(messages);
     expect(result[0]).toMatchObject({ sender: 'command-group', status: 'failed' });
@@ -109,5 +148,42 @@ describe('countFailedMembers', () => {
       { id: '4', status: 'completed', success: false },
     ];
     expect(countFailedMembers(members)).toBe(3);
+  });
+});
+
+describe('describeGroupFailures', () => {
+  const shell = (id: string, command: string) => ({ id, status: 'failed', command });
+
+  it('is empty when nothing failed', () => {
+    expect(describeGroupFailures([{ id: '1', status: 'completed', command: 'ls' }])).toBe('');
+  });
+
+  it('names the failing shell commands', () => {
+    expect(describeGroupFailures([{ id: '1', status: 'completed', command: 'ls' }, shell('2', 'pnpm test')])).toBe(
+      '1 failed: pnpm test',
+    );
+  });
+
+  it('names non-shell failures by their formatted args', () => {
+    const members = [{ id: '1', status: 'failed', toolName: 'read_file', toolArgs: { path: 'a.ts' } }];
+    expect(describeGroupFailures(members)).toBe('1 failed: "a.ts"');
+  });
+
+  it('falls back to the tool name when a call has no args to show', () => {
+    expect(describeGroupFailures([{ id: '1', status: 'failed', toolName: 'web_search' }])).toBe('1 failed: web_search');
+  });
+
+  it('caps the named failures so the line cannot grow into a paragraph', () => {
+    const members = [shell('1', 'a'), shell('2', 'b'), shell('3', 'c'), shell('4', 'd'), shell('5', 'e')];
+    expect(describeGroupFailures(members)).toBe('5 failed: a, b, c, +2 more');
+  });
+
+  it('truncates a long command to one short line', () => {
+    const long = shell('1', `echo ${'x'.repeat(80)}\nsecond line`);
+    const described = describeGroupFailures([long]);
+    expect(described.startsWith('1 failed: echo xxx')).toBe(true);
+    expect(described.endsWith('…')).toBe(true);
+    expect(described.includes('second line')).toBe(false);
+    expect(described.length).toBeLessThan(60);
   });
 });

@@ -1,0 +1,52 @@
+name: Publish package
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# npm Trusted Publishing exchanges a short-lived OIDC token for publish
+# authentication. No npm token secret is needed.
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          # npm Trusted Publishing requires npm 11.5.1+; Node 24 ships a
+          # compatible npm CLI.
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.7.0
+          run_install: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build package
+        run: pnpm run build
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Publish package
+        # Tag checkouts are detached; pnpm's git checks would reject them.
+        # npm generates provenance automatically for GitHub OIDC publishing.
+        run: pnpm publish --access public --no-git-checks

@@ -64,19 +64,20 @@ it('buildPromptSpec composes file fragments in stable order', () => {
     searchViaShell: true,
   });
 
-  expect(spec.fragmentFiles).toEqual(['worktree-hygiene.md', 'mentor-addon.md', 'plan-mode-info.md']);
+  expect(spec.fragmentFiles).toEqual(['worktree-hygiene.md', 'mentor-addon.md', 'plan-mode-stub.md']);
 
   expect(spec.inlineSections).toContainEqual(expect.stringContaining('## Shell Sandbox'));
 });
 
-it('buildPromptSpec attaches the Plan Mode stub in standard mode and the full workflow only when Plan Mode is on', () => {
+it('buildPromptSpec attaches the Plan Mode stub in standard and plan mode so the instruction prefix stays cache-stable', () => {
   const standard = buildPromptSpec({ model: 'gpt-4o', liteMode: false, planMode: false });
   expect(standard.fragmentFiles.includes('plan-mode-stub.md')).toBe(true);
   expect(standard.fragmentFiles.includes('plan-mode-info.md')).toBe(false);
 
   const plan = buildPromptSpec({ model: 'gpt-4o', liteMode: false, planMode: true });
-  expect(plan.fragmentFiles.includes('plan-mode-info.md')).toBe(true);
-  expect(plan.fragmentFiles.includes('plan-mode-stub.md')).toBe(false);
+  expect(plan.fragmentFiles.includes('plan-mode-stub.md')).toBe(true);
+  expect(plan.fragmentFiles.includes('plan-mode-info.md')).toBe(false);
+  expect(plan.fragmentFiles).toEqual(standard.fragmentFiles);
 });
 
 it('buildPromptSpec excludes Plan Mode fragments in lite and orchestrator modes', () => {

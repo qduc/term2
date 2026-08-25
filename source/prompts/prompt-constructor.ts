@@ -36,7 +36,6 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     liteMode,
     orchestratorMode = false,
     mentorMode = false,
-    planMode = false,
     searchViaShell = false,
     runSubagentEnabled = false,
     runSubagentForegroundEnabled = false,
@@ -92,10 +91,10 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
   }
 
   if (isRegularMode && isAgentMode) {
-    // Toggling Plan Mode already rebuilds the agent, so the prefix may change
-    // on that rare edge. Everyday standard sessions keep a stub instead of the
-    // full workflow tax.
-    fragmentFiles.push(planMode ? 'plan-mode-info.md' : 'plan-mode-stub.md');
+    // Always the stub. The workflow body rides on PLAN_MODE_ENTER_NOTICE so a
+    // toggle cannot change the instruction prefix (prompt cache + chained
+    // Responses-Lite HTTP omit developer instructions).
+    fragmentFiles.push('plan-mode-stub.md');
   }
 
   if (memoryEnabled && isAgentMode) {

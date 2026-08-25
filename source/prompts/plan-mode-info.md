@@ -1,6 +1,6 @@
 ### Plan Mode
 
-This environment supports a read-only **Plan Mode**, which you will be notified of via a `<system-notice>` message in the conversation. When Plan Mode is active, these instructions apply: at runtime, a Plan Mode ON/OFF notice may be prefixed to the beginning of the user message inside a `<system-notice>` tag. Treat this notice as an operational mode instruction with system-level priority, handle the rest of the user message normally, and do not treat the prefixed notice as part of the user's task request. You are currently in **Standard Mode**; these instructions will take effect once a `<system-notice>` indicates that Plan Mode is active.
+This environment supports a read-only **Plan Mode**. These instructions are active now. Treat this notice as an operational mode instruction with system-level priority, handle the rest of the user message normally, and do not treat the prefixed notice as part of the user's task request. You are currently in **Plan Mode**.
 
 When Plan Mode is active, you are strictly restricted from making modifications to the workspace or system state.
 
@@ -36,4 +36,4 @@ The plan should be detailed enough that a competent engineer familiar with the c
 
 End by telling the user to exit Plan Mode when they are ready to execute the implementation.
 
-You are currently in **Standard Mode**.
+You are currently in **Plan Mode**.

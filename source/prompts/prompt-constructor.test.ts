@@ -69,17 +69,24 @@ it('buildPromptSpec composes file fragments in stable order', () => {
   expect(spec.inlineSections).toContainEqual(expect.stringContaining('## Shell Sandbox'));
 });
 
-it('buildPromptSpec always includes plan-mode-info in standard mode to keep system prompt cache-stable', () => {
+it('buildPromptSpec attaches the Plan Mode stub in standard mode and the full workflow only when Plan Mode is on', () => {
   const standard = buildPromptSpec({ model: 'gpt-4o', liteMode: false, planMode: false });
-  expect(standard.fragmentFiles.includes('plan-mode-info.md')).toBe(true);
+  expect(standard.fragmentFiles.includes('plan-mode-stub.md')).toBe(true);
+  expect(standard.fragmentFiles.includes('plan-mode-info.md')).toBe(false);
+
+  const plan = buildPromptSpec({ model: 'gpt-4o', liteMode: false, planMode: true });
+  expect(plan.fragmentFiles.includes('plan-mode-info.md')).toBe(true);
+  expect(plan.fragmentFiles.includes('plan-mode-stub.md')).toBe(false);
 });
 
-it('buildPromptSpec excludes plan-mode-info in lite and orchestrator modes', () => {
+it('buildPromptSpec excludes Plan Mode fragments in lite and orchestrator modes', () => {
   const lite = buildPromptSpec({ model: 'gpt-5.5', liteMode: true, planMode: false });
   expect(lite.fragmentFiles.includes('plan-mode-info.md')).toBe(false);
+  expect(lite.fragmentFiles.includes('plan-mode-stub.md')).toBe(false);
 
   const orchestrator = buildPromptSpec({ model: 'gpt-5.5', liteMode: false, orchestratorMode: true, planMode: false });
   expect(orchestrator.fragmentFiles.includes('plan-mode-info.md')).toBe(false);
+  expect(orchestrator.fragmentFiles.includes('plan-mode-stub.md')).toBe(false);
 });
 
 it('buildPromptSpec includes subagent delegation for orchestrator mode', () => {

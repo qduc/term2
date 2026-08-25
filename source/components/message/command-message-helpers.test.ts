@@ -315,6 +315,10 @@ const REGISTERED_TOOL_ARGS: Array<[string, Record<string, unknown>]> = [
   ['get_subagent_status', { runId: null }],
   ['send_message', { target: 'run-1', message: 'focus on the parser', reply_to: null }],
   ['cancel_run', { target: 'run-1' }],
+  ['get_shell_job', { job_id: 'job-1' }],
+  ['cancel_shell_job', { job_id: 'job-1' }],
+  ['monitor_shell_job', { job_id: 'job-1', pattern: 'error' }],
+  ['cancel_shell_monitor', { watch_id: 'watch-1' }],
   ['memory_list', {}],
   ['memory_get', { id: 'x' }],
   ['memory_search', { query: 'x' }],
@@ -334,8 +338,14 @@ it('formatToolArgs has a display case for every registered tool', () => {
   }
 });
 
-it('formatToolArgs still dumps key=value for genuinely unknown tools', () => {
-  expect(formatToolArgs('some_future_tool', { foo: 'bar', count: 2 })).toBe('foo=bar count=2');
+it('formatToolArgs formats background shell job tools cleanly', () => {
+  expect(formatToolArgs('get_shell_job', { job_id: 'shell-1' })).toBe('[shell-1]');
+  expect(formatToolArgs('cancel_shell_job', { job_id: 'shell-1' })).toBe('[shell-1]');
+  expect(formatToolArgs('monitor_shell_job', { job_id: 'shell-1' })).toBe('[shell-1]');
+  expect(formatToolArgs('monitor_shell_job', { job_id: 'shell-1', pattern: 'EXIT:\\d+' })).toBe(
+    '[shell-1] for "EXIT:\\d+"',
+  );
+  expect(formatToolArgs('cancel_shell_monitor', { watch_id: 'watch-5' })).toBe('[watch-5]');
 });
 
 it('formatToolArgs renders get_subagent_status runId, treating null and absent alike as all runs', () => {

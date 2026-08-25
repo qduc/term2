@@ -3,6 +3,7 @@ import { FileMemoryStore } from './memory-store.js';
 import { createMemoryToolDefinitions } from '../../tools/memory/memory-tools.js';
 import type { ToolDefinition } from '../../tools/types.js';
 import { createHash } from 'node:crypto';
+import { execSync } from 'node:child_process';
 import path from 'node:path';
 
 export type MemoryAccess = 'none' | 'read' | 'write';
@@ -138,10 +139,28 @@ export class MemoryCapabilityBuilder {
       searchDefaultLimit: settings.searchDefaultLimit,
       searchMaxLimit: settings.searchMaxLimit,
     };
-    const projectId = createHash('sha256').update(path.resolve(projectPath)).digest('hex');
+    const projectId = this.#resolveProjectId(projectPath);
     return {
       global: new FileMemoryStore({ root: settings.directory, ...options }),
       project: new FileMemoryStore({ root: path.join(settings.directory, 'projects', projectId), ...options }),
     };
+  }
+
+  #resolveProjectId(projectPath: string): string {
+    try {
+      const commonDir = execSync('git rev-parse --git-common-dir', {
+        cwd: projectPath,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
+      if (commonDir) {
+        const resolved = path.isAbsolute(commonDir) ? commonDir : path.resolve(projectPath, commonDir);
+        const projectRoot = path.dirname(resolved);
+        return createHash('sha256').update(path.resolve(projectRoot)).digest('hex');
+      }
+    } catch {
+      // Not a git repo or git not available — fall back to path-based id
+    }
+    return createHash('sha256').update(path.resolve(projectPath)).digest('hex');
   }
 }

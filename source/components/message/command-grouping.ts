@@ -2,14 +2,18 @@
 // messages into a single live summary line (e.g. "Searched for 1 pattern, read
 // 3 files, ran 2 shell commands").
 //
-// Grouping is eager: a run collapses as soon as it has two members, while more
-// tool calls may still be appended to it and while a member is still running.
-// The counts simply tick up in place. That keeps the run one line tall for its
-// whole lifetime, which matters beyond looks — an ungrouped run grows the
-// dynamic region by ~2 rows per tool call, and once that region reaches the
-// terminal height Ink stops redrawing incrementally and clears the screen *and
-// the scrollback* on every frame.
+// Grouping is eager: the finished calls in a run collapse as soon as there are
+// two of them, while more calls may still be appended. The counts simply tick
+// up in place. Calls still in flight keep their own detailed line below the
+// group, so a slow one is visible for as long as it runs.
+//
+// That bound matters beyond looks. An ungrouped run grows the dynamic region by
+// ~2 rows per tool call, and once that region reaches the terminal height Ink
+// stops redrawing incrementally and clears the screen *and the scrollback* on
+// every frame. Only the in-flight calls stay unfolded, and those are capped by
+// the parallel-dispatch limit.
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
+import { formatToolArgs } from './command-message-helpers.js';
 
 export type GroupableMessage = {
   id: string;
@@ -17,12 +21,14 @@ export type GroupableMessage = {
   status?: string;
   success?: boolean | null;
   toolName?: string;
+  command?: string;
+  toolArgs?: any;
 };
 
 export type CommandGroupMessage = {
   id: string;
   sender: 'command-group';
-  status: 'running' | 'completed' | 'failed';
+  status: 'completed' | 'partial' | 'failed';
   members: GroupableMessage[];
 };
 
@@ -31,17 +37,52 @@ const isRunningStatus = (status: string | undefined) => status === 'pending' || 
 const isFailedMember = (message: GroupableMessage) =>
   message.status === 'failed' || message.status === 'aborted' || message.success === false;
 
+export const countFailedMembers = (members: GroupableMessage[]): number => members.filter(isFailedMember).length;
+
+const MAX_FAILURE_LABEL_CHARS = 40;
+const MAX_NAMED_FAILURES = 3;
+
+/** Shortest thing that identifies one call: the shell command, else its formatted args, else the tool name. */
+const describeMember = (member: GroupableMessage): string => {
+  const isShell = !member.toolName || member.toolName === 'shell';
+  const raw = isShell
+    ? member.command ?? ''
+    : (member.toolArgs ? formatToolArgs(member.toolName, member.toolArgs, 'concise') : '') || member.toolName || '';
+  const firstLine = raw.split('\n')[0].trim();
+
+  return firstLine.length > MAX_FAILURE_LABEL_CHARS ? `${firstLine.slice(0, MAX_FAILURE_LABEL_CHARS - 1)}…` : firstLine;
+};
+
+/**
+ * "2 failed: pnpm test, git push" — the line that sits under a partly-failed
+ * group. Naming the failures is the whole point of the second line, so it is
+ * capped rather than allowed to wrap into a paragraph.
+ */
+export const describeGroupFailures = (members: GroupableMessage[]): string => {
+  const failed = members.filter(isFailedMember);
+  if (failed.length === 0) {
+    return '';
+  }
+
+  const labels = failed.slice(0, MAX_NAMED_FAILURES).map(describeMember).filter(Boolean);
+  const unnamed = failed.length - labels.length;
+  const named = labels.join(', ');
+  const suffix = unnamed > 0 ? `${named ? ', ' : ''}+${unnamed} more` : '';
+
+  return `${failed.length} failed${named || suffix ? `: ${named}${suffix}` : ''}`;
+};
+
 /**
  * The id keys on the *first* member only, so it stays stable as the run grows.
  * A growing run must keep one identity across renders, or every new tool call
  * would remount the summary line and could commit a stale copy to <Static>.
  */
 export const buildCommandGroupMessage = (members: GroupableMessage[]): CommandGroupMessage => {
-  const status = members.some((member) => isRunningStatus(member.status))
-    ? 'running'
-    : members.some(isFailedMember)
-    ? 'failed'
-    : 'completed';
+  const failed = countFailedMembers(members);
+  // `failed` means the whole run failed. A run where only some calls failed is
+  // `partial`: painting the whole line red would claim work failed that
+  // actually succeeded, which is most of what the run did.
+  const status = failed === 0 ? 'completed' : failed === members.length ? 'failed' : 'partial';
 
   return {
     id: `command-group:${members[0].id}`,
@@ -52,12 +93,13 @@ export const buildCommandGroupMessage = (members: GroupableMessage[]): CommandGr
 };
 
 /**
- * Folds every maximal run of 2+ consecutive `sender === 'command'` messages
- * into a single `CommandGroupMessage`, whether or not the run is finished.
- * Everything else passes through unchanged.
+ * Within each maximal run of consecutive `sender === 'command'` messages, folds
+ * the leading *settled* calls into one `CommandGroupMessage`. Anything from the
+ * first still-running call onward is left alone, so work in flight keeps
+ * showing what it is doing. Everything else passes through unchanged.
  *
- * A lone command is left alone so a single tool call still shows what it
- * actually did rather than a bare "1 file".
+ * A single settled call is also left alone, so one tool call still shows what
+ * it actually did rather than a bare "1 file".
  */
 export const groupCommandRuns = <T extends GroupableMessage>(messages: T[]): (T | CommandGroupMessage)[] => {
   const result: (T | CommandGroupMessage)[] = [];
@@ -77,9 +119,11 @@ export const groupCommandRuns = <T extends GroupableMessage>(messages: T[]): (T 
     }
 
     const run = messages.slice(i, j);
+    const inFlight = run.findIndex((member) => isRunningStatus(member.status));
+    const settled = inFlight === -1 ? run : run.slice(0, inFlight);
 
-    if (run.length >= 2) {
-      result.push(buildCommandGroupMessage(run));
+    if (settled.length >= 2) {
+      result.push(buildCommandGroupMessage(settled), ...run.slice(settled.length));
     } else {
       result.push(...run);
     }
@@ -138,5 +182,3 @@ export const summarizeCommandGroup = (members: { toolName?: string }[]): string 
     })
     .join(', ');
 };
-
-export const countFailedMembers = (members: GroupableMessage[]): number => members.filter(isFailedMember).length;

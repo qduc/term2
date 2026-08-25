@@ -1,3 +1,10 @@
+## [0.15.0] - 2026-08-25
+
+### Improvements
+- Switched npm publishing to GitHub Actions Trusted Publishing with short-lived OIDC authentication and automatic provenance.
+
+---
+
 ## [0.14.0] - 2026-08-12
 
 ### Features

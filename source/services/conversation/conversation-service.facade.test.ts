@@ -310,6 +310,34 @@ it('compactContext emits completion events for deterministic local compaction', 
   service.dispose();
 });
 
+it('re-primes Plan Mode notice after resetWithNewId when planMode is on', async () => {
+  const streamInputs: unknown[] = [];
+  const clients = [
+    partialClient(),
+    partialClient({
+      startStream: async (input: unknown) => {
+        streamInputs.push(input);
+        return completedStream('after reset');
+      },
+    }),
+  ];
+  const service = new ConversationService({
+    sessionClientFactory: factoryForClients(clients),
+    deps: {
+      logger: mockLogger,
+      sessionContextService,
+      settingsService: { get: (key: string) => (key === 'app.planMode' ? true : undefined) } as any,
+    },
+  });
+
+  service.resetWithNewId('replacement');
+  await service.sendMessage('post-reset plan');
+
+  expect(JSON.stringify(streamInputs)).toContain('post-reset plan');
+  expect(JSON.stringify(streamInputs)).toContain('Plan Mode Workflow');
+  service.dispose();
+});
+
 it('keeps the event sink attached when the session is reset', async () => {
   const clients = [partialClient(), partialClient({ startStream: async () => completedStream('after reset') })];
   const events: ConversationEvent[] = [];

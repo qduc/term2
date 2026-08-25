@@ -6,7 +6,13 @@ import { isSessionReadGranted } from '../../services/approval/session-read-acces
 import type { ISettingsService } from '../../services/service-interfaces.js';
 import type { SessionAccessState } from '../../services/session/session-access-state.js';
 import type { NestedToolCompatibilityState } from '../../services/session/nested-tool-compatibility-state.js';
-import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from '../format-helpers.js';
+import {
+  getOutputText,
+  normalizeToolArguments,
+  createBaseMessage,
+  getCallIdFromItem,
+  isSuccessOutput,
+} from '../format-helpers.js';
 import {
   boundToolResultText,
   looksLikeBinary,
@@ -67,7 +73,7 @@ export const formatReadFileCommandMessage: FormatCommandMessage = (item, index, 
   }
 
   const output = getOutputText(item) || 'No output';
-  const success = !output.startsWith('Error:');
+  const success = isSuccessOutput(output);
 
   return [
     createBaseMessage(item, index, 0, false, {

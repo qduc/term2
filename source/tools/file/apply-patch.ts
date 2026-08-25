@@ -8,6 +8,7 @@ import type { ILoggingService, ISettingsService } from '../../services/service-i
 import type { SessionAccessState } from '../../services/session/session-access-state.js';
 import {
   getOutputText,
+  isSuccessOutput,
   safeJsonParse,
   normalizeToolArguments,
   createBaseMessage,
@@ -145,8 +146,8 @@ export const formatApplyPatchCommandMessage: FormatCommandMessage = (item, index
       ? rawStatus !== 'failed' &&
         !output.startsWith('Invalid patch') &&
         !output.startsWith('Cannot update') &&
-        !output.startsWith('Error:')
-      : !output.startsWith('Error:');
+        isSuccessOutput(output)
+      : isSuccessOutput(output);
 
   return [
     createBaseMessage(item, index, 0, false, {

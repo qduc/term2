@@ -17,6 +17,7 @@ import type { ISettingsService } from '../../services/service-interfaces.js';
 import { resolveWorkspacePath } from '../utils.js';
 import {
   getOutputText,
+  isSuccessOutput,
   normalizeToolArguments,
   createBaseMessage,
   getCallIdFromItem,
@@ -361,9 +362,7 @@ export const formatGrepCommandMessage: FormatCommandMessage = (item, index, tool
 
   const command = parts.join(' ');
   const output = parsedOutput?.output ?? getOutputText(item) ?? 'No output';
-  // Success is determined by the grep tool - it returns "No matches found."
-  // for empty results and throws for actual errors
-  const success = true;
+  const success = isSuccessOutput(output);
 
   return [
     createBaseMessage(item, index, 0, false, {

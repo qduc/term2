@@ -5,7 +5,13 @@
 
 import { z } from 'zod';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
-import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from '../format-helpers.js';
+import {
+  getOutputText,
+  normalizeToolArguments,
+  createBaseMessage,
+  getCallIdFromItem,
+  isSuccessOutput,
+} from '../format-helpers.js';
 import { getConfiguredWebSearchProvider, type WebSearchResponse } from '../../providers/web-search/index.js';
 import type { ISettingsService, ILoggingService } from '../../services/service-interfaces.js';
 
@@ -66,7 +72,7 @@ export const formatWebSearchCommandMessage: FormatCommandMessage = (item, index,
   const query = args?.query ?? 'unknown query';
   const command = `web_search: "${query}"`;
   const output = getOutputText(item) || 'No results';
-  const success = !output.startsWith('Error:');
+  const success = isSuccessOutput(output);
 
   return [
     createBaseMessage(item, index, 0, false, {

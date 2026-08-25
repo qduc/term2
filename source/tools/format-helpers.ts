@@ -236,6 +236,25 @@ export const generateMessageId = (
 };
 
 /**
+ * Determines whether a tool output string represents a successful result.
+ * Shared across tool formatters so schema-validation failures and JSON error
+ * payloads (used by memory tools) are consistently treated as failures.
+ */
+export const isSuccessOutput = (output: string): boolean => {
+  const trimmed = output.trim();
+  if (!trimmed) return true;
+  if (trimmed.startsWith('Error:')) return false;
+  if (trimmed.startsWith('Tool input did not match schema')) return false;
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed && typeof parsed === 'object' && 'error' in parsed) return false;
+  } catch {
+    // Not JSON — fall through
+  }
+  return true;
+};
+
+/**
  * Creates a base command message with common fields filled in.
  */
 export const createBaseMessage = (

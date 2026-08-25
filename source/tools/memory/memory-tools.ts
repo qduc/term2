@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import type { FormatCommandMessage, SchemaToolDefinition, ToolDefinition } from '../types.js';
-import { createBaseMessage, getCallIdFromItem, getOutputText, normalizeToolArguments } from '../format-helpers.js';
+import {
+  createBaseMessage,
+  getCallIdFromItem,
+  getOutputText,
+  isSuccessOutput,
+  normalizeToolArguments,
+} from '../format-helpers.js';
 import {
   InvalidMemoryError,
   MemoryAlreadyExistsError,
@@ -40,18 +46,6 @@ const makeFormat =
     ];
   };
 
-function isSuccessOutput(outputText: string): boolean {
-  const trimmed = outputText.trim();
-  if (!trimmed) return true;
-  if (trimmed.startsWith('Error:') || trimmed.startsWith('Tool input did not match schema')) return false;
-  try {
-    const parsed = JSON.parse(trimmed);
-    if (parsed && typeof parsed === 'object' && 'error' in parsed) return false;
-  } catch {
-    // Not JSON — fall through to prefix checks above
-  }
-  return true;
-}
 const id = z
   .string()
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)

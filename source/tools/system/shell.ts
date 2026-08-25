@@ -598,6 +598,7 @@ export const formatShellCommandMessage: FormatCommandMessage = (item, index, too
   // Check if this is an error message (doesn't start with expected status formats)
   const firstLine = outputText.split('\n')[0]?.trim() || '';
   const isErrorMessage =
+    firstLine.startsWith('Tool input did not match schema') ||
     firstLine.includes('error') ||
     firstLine.includes('Error') ||
     firstLine.includes('failed') ||

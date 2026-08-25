@@ -4,7 +4,13 @@ import util from 'util';
 import path from 'path';
 import { resolveWorkspacePath, relaxedNumber } from '../utils.js';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
-import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from '../format-helpers.js';
+import {
+  getOutputText,
+  normalizeToolArguments,
+  createBaseMessage,
+  getCallIdFromItem,
+  isSuccessOutput,
+} from '../format-helpers.js';
 import { isSessionReadGranted } from '../../services/approval/session-read-access.js';
 import type { SessionAccessState } from '../../services/session/session-access-state.js';
 import type { NestedToolCompatibilityState } from '../../services/session/nested-tool-compatibility-state.js';
@@ -88,7 +94,7 @@ export const formatFindFilesCommandMessage: FormatCommandMessage = (item, index,
 
   const command = parts.join(' ');
   const output = getOutputText(item) || 'No output';
-  const success = !output.startsWith('Error:') && !output.startsWith('No files found');
+  const success = isSuccessOutput(output) && !output.startsWith('No files found');
 
   return [
     createBaseMessage(item, index, 0, false, {

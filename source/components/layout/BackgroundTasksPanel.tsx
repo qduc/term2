@@ -110,22 +110,28 @@ const formatObservation = (task: BackgroundTaskControlDetails): string => {
   }
 };
 
-const formatPhase = (task: BackgroundTaskControlDetails): string => {
+const formatPhase = (task: BackgroundTaskControlDetails, now: number): string => {
+  const elapsed = formatBackgroundTaskElapsed(now - task.startedAt);
   const activity = task.activity;
-  if (!activity) return 'Running';
-  if (activity.phase === 'waiting') return `Awaiting ${activity.reason ?? 'provider'} response`;
-  if (activity.phase === 'cancelling') return 'Cancelling';
+  if (!activity) return `Running · ${elapsed}`;
+  if (activity.phase === 'waiting') return `Awaiting ${activity.reason ?? 'provider'} response · ${elapsed}`;
+  if (activity.phase === 'cancelling') return `Cancelling · ${elapsed}`;
   if (activity.phase === 'settled') return formatTerminalStatus(task);
-  return 'Active';
+  return `Active · ${elapsed}`;
 };
 
-const formatCompactPhase = (task: BackgroundTaskControlDetails): string => {
+const formatCompactPhase = (task: BackgroundTaskControlDetails, now: number, isNarrow: boolean): string => {
   const activity = task.activity;
-  if (!activity) return 'Running';
-  if (activity.phase === 'waiting') return 'Waiting';
-  if (activity.phase === 'cancelling') return 'Cancelling';
-  if (activity.phase === 'settled') return formatTerminalStatus(task);
-  return 'Active';
+  if (activity?.phase === 'settled') return formatTerminalStatus(task);
+  const base = !activity
+    ? 'Running'
+    : activity.phase === 'waiting'
+    ? 'Waiting'
+    : activity.phase === 'cancelling'
+    ? 'Cancelling'
+    : 'Active';
+  if (isNarrow) return base;
+  return `${base} · ${formatBackgroundTaskElapsed(now - task.startedAt)}`;
 };
 
 const formatCompactTerminalStatus = (task: PanelTask): string => {
@@ -168,8 +174,8 @@ const formatFirstLine = ({
       : formatTerminalStatus(task)
     : controlTask
     ? isWide
-      ? formatPhase(controlTask)
-      : formatCompactPhase(controlTask)
+      ? formatPhase(controlTask, now)
+      : formatCompactPhase(controlTask, now, isNarrow)
     : isNarrow
     ? 'Running'
     : formatLiveStatus(task, now);
@@ -185,6 +191,16 @@ const formatFirstLine = ({
     ? BACKGROUND_TASK_PANEL_WIDE_LABEL_LIMIT
     : BACKGROUND_TASK_PANEL_MEDIUM_LABEL_LIMIT;
   return { badge, identity: truncate(formatTaskLabel(task), Math.min(physicalBudget, classBudget)), phase };
+};
+
+const SHELL_OUTPUT_PREVIEW_LIMIT = 80;
+
+/** Last non-empty output line, for a live preview of what a running shell is producing. */
+const formatShellOutputPreview = (task: BackgroundTaskControlDetails): string | undefined => {
+  if (task.kind !== 'shell' || !task.output) return undefined;
+  const lines = task.output.split('\n').filter((line) => line.trim());
+  const last = lines.at(-1);
+  return last ? truncate(last.trim(), SHELL_OUTPUT_PREVIEW_LIMIT) : undefined;
 };
 
 const formatLiveness = (task: BackgroundTaskControlDetails): string => {
@@ -271,6 +287,10 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now, columns: testColumns }) =
         const isNarrow = columns < BACKGROUND_TASK_PANEL_MEDIUM_COLUMNS;
         const isWide = columns >= BACKGROUND_TASK_PANEL_WIDE_COLUMNS;
         const firstLine = formatFirstLine({ task, placement, columns, now, isWide, isNarrow });
+        const isStalled = controlTask?.activity?.liveness.state === 'quiet';
+        const toolCallCount = subagentTask ? Object.values(subagentTask.toolCounts).reduce((sum, n) => sum + n, 0) : 0;
+        const modelLabel = subagentTask?.model?.id;
+        const shellOutputPreview = controlTask ? formatShellOutputPreview(controlTask) : undefined;
         return (
           <Box key={key} flexDirection="column">
             <Text>
@@ -281,9 +301,17 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now, columns: testColumns }) =
             {!isNarrow && controlTask && !isTerminal(task) && (
               <Text color="#94a3b8" wrap="truncate-end">
                 {' '}
-                {columns >= BACKGROUND_TASK_PANEL_WIDE_COLUMNS
-                  ? `${formatObservation(controlTask)} · ${formatLiveness(controlTask)}`
-                  : formatObservation(controlTask)}
+                {shellOutputPreview ? `"${shellOutputPreview}"` : formatObservation(controlTask)}
+                {isWide ? (
+                  <>
+                    {' · '}
+                    <Text color={isStalled ? '#f59e0b' : undefined}>{formatLiveness(controlTask)}</Text>
+                  </>
+                ) : (
+                  ''
+                )}
+                {isWide && toolCallCount > 0 ? ` · ${toolCallCount} tool${toolCallCount === 1 ? '' : 's'}` : ''}
+                {isWide && modelLabel ? ` · ${modelLabel}` : ''}
                 {showHighContext
                   ? ` · Ctx ${formatContextTokens(context!)} / ${formatContextTokens(
                       subagentTask!.model!.contextWindow!,

@@ -128,6 +128,72 @@ it.sequential('uses explicit wide, medium, and narrow information budgets withou
   }
 });
 
+it.sequential(
+  'shows tool-call count and model on wide rows, and colors a stalled task apart from a fresh one',
+  async () => {
+    const stalled = {
+      kind: 'subagent' as const,
+      id: 'stalled-worker',
+      role: 'explorer',
+      task: 'audit provider fixtures for stalled request boundaries',
+      taskPreview: 'audit provider fixtures for stalled request boundaries',
+      status: 'running' as const,
+      startedAt: 1_000,
+      elapsedMs: 10_000,
+      toolCounts: { grep: 3, read_file: 4 },
+      model: { provider: 'openai', id: 'gpt-4o', contextWindow: 128_000 },
+      activity: {
+        phase: 'waiting' as const,
+        reason: 'provider' as const,
+        lastObservation: { kind: 'request_dispatched' as const, at: 1_000 },
+        liveness: { state: 'quiet' as const, lastObservedAt: 1_000, ageMs: 10_000 },
+      },
+    };
+    const fresh = {
+      ...stalled,
+      id: 'fresh-worker',
+      toolCounts: { grep: 1 },
+      activity: {
+        ...stalled.activity,
+        liveness: { state: 'recent' as const, lastObservedAt: 10_500, ageMs: 500 },
+      },
+    };
+
+    const renderer = await renderInAct(<BackgroundTasksPanel tasks={[stalled, fresh]} now={11_000} columns={120} />);
+    const output = renderer.lastFrame() ?? '';
+    expect(output).toContain('7 tools');
+    expect(output).toContain('1 tool');
+    expect(output).not.toContain('1 tools');
+    expect(output).toContain('gpt-4o');
+
+    expect(output).toContain('no activity observed for 10s');
+    expect(output).toContain('0s ago');
+  },
+);
+
+it.sequential(
+  'shows the last output line of a running shell task in place of the generic observation text',
+  async () => {
+    const task = {
+      kind: 'shell' as const,
+      id: 'output-preview',
+      command: 'pnpm build',
+      status: 'running' as const,
+      startedAt: 1_000,
+      output: 'compiling module a\ncompiling module b\n\n',
+      activity: {
+        phase: 'active' as const,
+        lastObservation: { kind: 'shell_output_received' as const, at: 1_000 },
+        liveness: { state: 'recent' as const, lastObservedAt: 1_000, ageMs: 500 },
+      },
+    };
+    const renderer = await renderInAct(<BackgroundTasksPanel tasks={[task]} now={1_500} columns={120} />);
+    const output = renderer.lastFrame() ?? '';
+    expect(output).toContain('"compiling module b"');
+    expect(output).not.toContain('Shell output received');
+  },
+);
+
 it.each([
   {
     columns: 40,

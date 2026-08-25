@@ -21,7 +21,7 @@ const mockLogger = {
 const readPrompt = (file: string): string => fs.readFileSync(path.join(import.meta.dirname, file), 'utf8');
 
 const PLAN_WORKFLOW_MARKER = 'Plan Mode Workflow';
-const STUB_STANDARD_MARKER = 'You are currently in **Standard Mode**. Full Plan Mode workflow instructions';
+const STUB_MODE_NOTICE_MARKER = 'Follow the notice; do not infer mode from this system prompt';
 
 it('plan-mode stub is smaller than the full workflow and still names the live constraints', () => {
   const stub = readPrompt('plan-mode-stub.md');
@@ -31,7 +31,8 @@ it('plan-mode stub is smaller than the full workflow and still names the live co
   expect(stub).toContain('<system-notice>');
   expect(stub).toContain('do not create or modify files');
   expect(stub).toContain('write-capable subagents');
-  expect(stub).toContain(STUB_STANDARD_MARKER);
+  expect(stub).toContain(STUB_MODE_NOTICE_MARKER);
+  expect(stub).not.toContain('You are currently in **Standard Mode**');
   expect(stub).not.toContain(PLAN_WORKFLOW_MARKER);
   expect(stub).not.toContain('Acceptance criteria');
 
@@ -77,8 +78,8 @@ it('instruction prefix stays on the stub in both modes; the workflow rides on th
       executionContext,
     });
 
-    expect(standard.instructions).toContain(STUB_STANDARD_MARKER);
-    expect(plan.instructions).toContain(STUB_STANDARD_MARKER);
+    expect(standard.instructions).toContain(STUB_MODE_NOTICE_MARKER);
+    expect(plan.instructions).toContain(STUB_MODE_NOTICE_MARKER);
     expect(standard.instructions).not.toContain(PLAN_WORKFLOW_MARKER);
     expect(plan.instructions).not.toContain(PLAN_WORKFLOW_MARKER);
     expect(plan.instructions).toBe(standard.instructions);

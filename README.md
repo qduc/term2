@@ -371,6 +371,22 @@ npm test
 npm run build
 ```
 
+### Releasing
+
+The release script supports an explicit, non-interactive path for agents and
+automation:
+
+```bash
+# Bump minor, generate and accept the changelog, commit, tag, and push.
+pnpm release --minor --push --non-interactive
+```
+
+Use `--patch` or `--major` for the other semver increments. Use
+`--no-push --non-interactive` to prepare the commit and tag locally without
+publishing them. npm publishing is delegated to the GitHub Actions Trusted
+Publishing workflow after the tag is pushed; `--publish-local` is an explicit
+token-authenticated fallback.
+
 ## Troubleshooting
 
 | Issue | Fix |

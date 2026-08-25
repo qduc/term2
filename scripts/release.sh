@@ -14,20 +14,37 @@ NC='\033[0m'
 # ---------------------------------------------------------------------------
 
 TARGET_VERSION_HINT=""
+RELEASE_SELECTOR=""
+NON_INTERACTIVE=false
+PUSH_MODE="prompt"
+PUBLISH_MODE="ci"
 
 print_usage() {
-    echo "Usage: $0 [VERSION]"
+    echo "Usage: $0 [OPTIONS] [VERSION]"
     echo ""
     echo "Idempotent release script. Re-run the same command to continue after"
     echo "a failure; completed steps are skipped automatically."
     echo ""
     echo "Options:"
     echo "  VERSION           Continue or finish this version (optional hint)"
+    echo "  --patch           Select the next patch release"
+    echo "  --minor           Select the next minor release"
+    echo "  --major           Select the next major release"
+    echo "  --push            Push the release commit and tag without prompting"
+    echo "  --no-push         Prepare the release locally without pushing"
+    echo "  --non-interactive Do not prompt; requires --push or --no-push"
+    echo "  --publish-local   Publish locally with pnpm instead of delegating to CI"
     echo "  --help, -h        Show this help"
     echo ""
     echo "Examples:"
-    echo "  $0                # Start a new release, or continue an in-flight one"
-    echo "  $0 1.2.3          # Continue/finish release 1.2.3"
+    echo "  $0 --minor --push --non-interactive"
+    echo "                     # Bump, changelog, commit, tag, and push"
+    echo "  $0 1.2.3 --push --non-interactive"
+    echo "                     # Continue/finish release 1.2.3 and push it"
+    echo ""
+    echo "By default npm publishing is delegated to the GitHub Actions Trusted"
+    echo "Publishing workflow after the tag is pushed. Use --publish-local only"
+    echo "for an explicit token-authenticated local publish fallback."
 }
 
 while [[ $# -gt 0 ]]; do
@@ -39,6 +56,41 @@ while [[ $# -gt 0 ]]; do
                 TARGET_VERSION_HINT="$2"
                 shift
             fi
+            shift
+            ;;
+        --patch|--minor|--major)
+            if [[ -n "$RELEASE_SELECTOR" ]]; then
+                echo -e "${RED}Only one of --patch, --minor, or --major may be specified.${NC}"
+                print_usage
+                exit 1
+            fi
+            RELEASE_SELECTOR="${1#--}"
+            shift
+            ;;
+        --push)
+            if [[ "$PUSH_MODE" == "skip" ]]; then
+                echo -e "${RED}Specify only one of --push or --no-push.${NC}"
+                print_usage
+                exit 1
+            fi
+            PUSH_MODE="push"
+            shift
+            ;;
+        --no-push)
+            if [[ "$PUSH_MODE" == "push" ]]; then
+                echo -e "${RED}Specify only one of --push or --no-push.${NC}"
+                print_usage
+                exit 1
+            fi
+            PUSH_MODE="skip"
+            shift
+            ;;
+        --non-interactive|--yes)
+            NON_INTERACTIVE=true
+            shift
+            ;;
+        --publish-local)
+            PUBLISH_MODE="local"
             shift
             ;;
         --help|-h)
@@ -61,6 +113,18 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if [[ -n "$TARGET_VERSION_HINT" && -n "$RELEASE_SELECTOR" ]]; then
+    echo -e "${RED}Specify either VERSION or a release selector, not both.${NC}"
+    print_usage
+    exit 1
+fi
+
+if [[ "$NON_INTERACTIVE" == "true" && "$PUSH_MODE" == "prompt" ]]; then
+    echo -e "${RED}--non-interactive requires either --push or --no-push.${NC}"
+    print_usage
+    exit 1
+fi
 
 echo -e "${BLUE}=== Release Script ===${NC}"
 
@@ -169,9 +233,29 @@ retry() {
     done
 }
 
+push_release_refs() {
+    local version=$1
+    local remote
+    remote=$(git remote 2>/dev/null | head -1)
+    if [[ -z "$remote" ]]; then
+        echo -e "${RED}No git remote is configured; cannot push release refs.${NC}"
+        return 1
+    fi
+
+    # Push only the current branch and this release tag. The old `git push
+    # --tags` form could publish unrelated local tags along with the release.
+    retry 3 2 -- git push "$remote" HEAD
+    retry 3 2 -- git push "$remote" "v$version"
+}
+
 run_health_checks() {
-    echo -e "${BLUE}Running lint, tests, and build...${NC}"
-    pnpm lint
+    echo -e "${BLUE}Running typecheck, source lint, formatting, tests, and build...${NC}"
+    # Release validation covers the shipped source and release metadata. The
+    # repository-wide lint command also traverses auxiliary tools that are not
+    # part of the published package and can block an otherwise valid release.
+    pnpm typecheck
+    pnpm exec eslint source
+    pnpm exec prettier --check source package.json CHANGELOG.md
     pnpm run build
     pnpm test
 }
@@ -277,34 +361,42 @@ if [[ -z "$NEW_VERSION" ]]; then
     run_health_checks
     VALIDATED=true
 
-    echo "Select release type:"
-    options=("Patch" "Minor" "Major" "Custom")
-    select opt in "${options[@]}"; do
-        case $opt in
-            "Patch")
-                pnpm version patch --no-git-tag-version --no-commit-hooks >/dev/null
-                NEW_VERSION=$(get_package_version)
-                break
-                ;;
-            "Minor")
-                pnpm version minor --no-git-tag-version --no-commit-hooks >/dev/null
-                NEW_VERSION=$(get_package_version)
-                break
-                ;;
-            "Major")
-                pnpm version major --no-git-tag-version --no-commit-hooks >/dev/null
-                NEW_VERSION=$(get_package_version)
-                break
-                ;;
-            "Custom")
-                read -r -p "Enter version: " NEW_VERSION
-                pnpm version "$NEW_VERSION" --no-git-tag-version --no-commit-hooks >/dev/null
-                NEW_VERSION=$(get_package_version)
-                break
-                ;;
-            *) echo "Invalid option";;
-        esac
-    done
+    if [[ -n "$RELEASE_SELECTOR" ]]; then
+        pnpm version "$RELEASE_SELECTOR" --no-git-tag-version --no-commit-hooks >/dev/null
+        NEW_VERSION=$(get_package_version)
+    elif [[ "$NON_INTERACTIVE" == "true" ]]; then
+        echo -e "${RED}Non-interactive mode needs --patch, --minor, --major, or VERSION.${NC}"
+        exit 1
+    else
+        echo "Select release type:"
+        options=("Patch" "Minor" "Major" "Custom")
+        select opt in "${options[@]}"; do
+            case $opt in
+                "Patch")
+                    pnpm version patch --no-git-tag-version --no-commit-hooks >/dev/null
+                    NEW_VERSION=$(get_package_version)
+                    break
+                    ;;
+                "Minor")
+                    pnpm version minor --no-git-tag-version --no-commit-hooks >/dev/null
+                    NEW_VERSION=$(get_package_version)
+                    break
+                    ;;
+                "Major")
+                    pnpm version major --no-git-tag-version --no-commit-hooks >/dev/null
+                    NEW_VERSION=$(get_package_version)
+                    break
+                    ;;
+                "Custom")
+                    read -r -p "Enter version: " NEW_VERSION
+                    pnpm version "$NEW_VERSION" --no-git-tag-version --no-commit-hooks >/dev/null
+                    NEW_VERSION=$(get_package_version)
+                    break
+                    ;;
+                *) echo "Invalid option";;
+            esac
+        done
+    fi
 fi
 
 if [[ -z "$NEW_VERSION" ]]; then
@@ -403,7 +495,11 @@ else
         echo -e "${BLUE}Generated Changelog:${NC}"
         echo "$CHANGELOG_ENTRY"
         echo "--------------------------------"
-        read -r -p "Press Enter to accept and continue, or Ctrl+C to abort..."
+        if [[ "$NON_INTERACTIVE" == "true" ]]; then
+            echo -e "${YELLOW}Accepting generated changelog in non-interactive mode.${NC}"
+        else
+            read -r -p "Press Enter to accept and continue, or Ctrl+C to abort..."
+        fi
     fi
 
     if [ -f CHANGELOG.md ]; then
@@ -493,17 +589,32 @@ if is_tag_on_remote "$NEW_VERSION"; then
     echo -e "${YELLOW}Skipping push (v$NEW_VERSION already on remote)${NC}"
     PUSH_OK=true
 else
-    read -r -p "Do you want to push commits and tags to remote? (y/N) " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        WANT_PUSH=true
-        echo -e "${BLUE}Pushing to remote...${NC}"
-        if retry 3 2 -- bash -c 'git push && git push --tags'; then
+    case "$PUSH_MODE" in
+        push)
+            WANT_PUSH=true
+            ;;
+        skip)
+            echo -e "${YELLOW}Skipping push (--no-push).${NC}"
+            ;;
+        prompt)
+            read -r -p "Do you want to push commits and tags to remote? (y/N) " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                WANT_PUSH=true
+            else
+                echo -e "${YELLOW}Skipping push.${NC}"
+            fi
+            ;;
+    esac
+
+    if [[ "$WANT_PUSH" == "true" ]]; then
+        echo -e "${BLUE}Pushing release commit and v$NEW_VERSION tag...${NC}"
+        if push_release_refs "$NEW_VERSION"; then
             if is_tag_on_remote "$NEW_VERSION"; then
                 PUSH_OK=true
             else
-                # Push exited 0 but probe failed (eventual consistency / different remote)
-                echo -e "${YELLOW}Push command succeeded but remote tag v$NEW_VERSION not visible yet.${NC}"
+                # Push exited 0 but the remote tag is not visible yet.
+                echo -e "${YELLOW}Push succeeded but remote tag v$NEW_VERSION is not visible yet.${NC}"
                 PUSH_OK=true
             fi
         else
@@ -520,52 +631,57 @@ fi
 WANT_PUBLISH=false
 PUBLISH_OK=false
 
-if is_published_on_npm "$NEW_VERSION"; then
-    echo -e "${YELLOW}Skipping npm publish (v$NEW_VERSION already published)${NC}"
-    PUBLISH_OK=true
+PUBLISH_DELEGATED=false
+if [[ "$PUBLISH_MODE" == "ci" ]]; then
+    PUBLISH_DELEGATED=true
+    if [[ "$PUSH_OK" == "true" ]]; then
+        echo -e "${BLUE}npm publish delegated to GitHub Actions Trusted Publishing.${NC}"
+    else
+        echo -e "${YELLOW}npm publish is pending the release tag being pushed to GitHub.${NC}"
+    fi
 else
-    read -r -p "Do you want to publish to npm now? (y/N) " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        WANT_PUBLISH=true
+    WANT_PUBLISH=true
 
-        ensure_npm_auth() {
-            if pnpm whoami &>/dev/null; then
-                return 0
-            fi
-            echo -e "${YELLOW}Not logged in to npm. Please log in:${NC}"
-            pnpm login
-            pnpm whoami &>/dev/null
-        }
+    ensure_npm_auth() {
+        if pnpm whoami &>/dev/null; then
+            return 0
+        fi
+        if [[ "$NON_INTERACTIVE" == "true" ]]; then
+            echo -e "${RED}--publish-local requires an existing npm login in non-interactive mode.${NC}"
+            return 1
+        fi
+        echo -e "${YELLOW}Not logged in to npm. Please log in:${NC}"
+        pnpm login
+        pnpm whoami &>/dev/null
+    }
 
-        do_publish() {
-            ensure_npm_auth
-            pnpm publish
-        }
+    do_publish() {
+        ensure_npm_auth
+        pnpm publish --access public --no-git-checks
+    }
 
-        echo -e "${BLUE}Publishing to npm...${NC}"
-        if retry 3 2 -- do_publish; then
-            if is_published_on_npm "$NEW_VERSION"; then
-                PUBLISH_OK=true
-            else
-                echo -e "${YELLOW}Publish command succeeded but registry does not list v$NEW_VERSION yet; probing once more...${NC}"
-                sleep 2
-                if is_published_on_npm "$NEW_VERSION"; then
-                    PUBLISH_OK=true
-                else
-                    echo -e "${RED}Could not confirm v$NEW_VERSION on npm.${NC}"
-                    PUBLISH_OK=false
-                fi
-            fi
+    echo -e "${BLUE}Publishing to npm locally (--publish-local)...${NC}"
+    if retry 3 2 -- do_publish; then
+        if is_published_on_npm "$NEW_VERSION"; then
+            PUBLISH_OK=true
         else
-            # Lost response: publish may have succeeded
+            echo -e "${YELLOW}Publish command succeeded but registry does not list v$NEW_VERSION yet; probing once more...${NC}"
+            sleep 2
             if is_published_on_npm "$NEW_VERSION"; then
-                echo -e "${GREEN}Publish reported failure but v$NEW_VERSION is on npm — treating as success.${NC}"
                 PUBLISH_OK=true
             else
-                echo -e "${RED}npm publish failed after retries.${NC}"
+                echo -e "${RED}Could not confirm v$NEW_VERSION on npm.${NC}"
                 PUBLISH_OK=false
             fi
+        fi
+    else
+        # Lost response: publish may have succeeded
+        if is_published_on_npm "$NEW_VERSION"; then
+            echo -e "${GREEN}Publish reported failure but v$NEW_VERSION is on npm — treating as success.${NC}"
+            PUBLISH_OK=true
+        else
+            echo -e "${RED}npm publish failed after retries.${NC}"
+            PUBLISH_OK=false
         fi
     fi
 fi
@@ -585,10 +701,14 @@ elif [[ "$PUSH_OK" == "true" ]]; then
 else
     echo -e "  push:    skipped"
 fi
-if [[ "$WANT_PUBLISH" == "true" ]]; then
+if [[ "$PUBLISH_DELEGATED" == "true" ]]; then
+    if [[ "$PUSH_OK" == "true" ]]; then
+        echo -e "  npm:     delegated to GitHub Actions (OIDC)"
+    else
+        echo -e "  npm:     pending tag push"
+    fi
+elif [[ "$WANT_PUBLISH" == "true" ]]; then
     echo -e "  npm:     $([[ "$PUBLISH_OK" == "true" ]] && echo "yes" || echo "FAILED")"
-elif [[ "$PUBLISH_OK" == "true" ]]; then
-    echo -e "  npm:     already published"
 else
     echo -e "  npm:     skipped"
 fi
@@ -600,13 +720,13 @@ fi
 if [[ "$WANT_PUSH" == "true" && "$PUSH_OK" != "true" ]]; then
     EXIT_CODE=1
 fi
-if [[ "$WANT_PUBLISH" == "true" && "$PUBLISH_OK" != "true" ]]; then
+if [[ "$PUBLISH_MODE" == "local" && "$WANT_PUBLISH" == "true" && "$PUBLISH_OK" != "true" ]]; then
     EXIT_CODE=1
 fi
 
 if [[ "$EXIT_CODE" -eq 0 ]]; then
     echo -e "${GREEN}Release v$NEW_VERSION completed.${NC}"
-    if [[ "$PUSH_OK" != "true" || "$PUBLISH_OK" != "true" ]]; then
+    if [[ "$PUSH_OK" != "true" ]]; then
         echo -e "${YELLOW}To push and/or publish later: $0 $NEW_VERSION${NC}"
     fi
 else

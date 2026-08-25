@@ -36,6 +36,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     liteMode,
     orchestratorMode = false,
     mentorMode = false,
+    planMode = false,
     searchViaShell = false,
     runSubagentEnabled = false,
     runSubagentForegroundEnabled = false,
@@ -91,7 +92,10 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
   }
 
   if (isRegularMode && isAgentMode) {
-    fragmentFiles.push('plan-mode-info.md');
+    // Toggling Plan Mode already rebuilds the agent, so the prefix may change
+    // on that rare edge. Everyday standard sessions keep a stub instead of the
+    // full workflow tax.
+    fragmentFiles.push(planMode ? 'plan-mode-info.md' : 'plan-mode-stub.md');
   }
 
   if (memoryEnabled && isAgentMode) {

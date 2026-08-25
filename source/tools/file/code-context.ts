@@ -9,6 +9,7 @@ import {
   createBaseMessage,
   getCallIdFromItem,
   getOutputText,
+  isSuccessOutput,
   normalizeToolArguments,
   type ToolResultItem,
 } from '../format-helpers.js';
@@ -262,7 +263,7 @@ export const formatReadCodeOutlineCommandMessage: FormatCommandMessage = (item, 
     createBaseMessage(item, index, 0, false, {
       command: `read_code_outline "${filePath}"`,
       output,
-      success: !output.startsWith('Error:'),
+      success: isSuccessOutput(output),
       toolName: 'read_code_outline',
       toolArgs: args,
     }),
@@ -281,7 +282,7 @@ export const formatCodeContextSearchCommandMessage: FormatCommandMessage = (item
     createBaseMessage(item, index, 0, false, {
       command,
       output,
-      success: !output.startsWith('Error:'),
+      success: isSuccessOutput(output),
       toolName: 'code_context_search',
       toolArgs: args,
     }),

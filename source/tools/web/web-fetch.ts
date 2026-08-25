@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
-import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from '../format-helpers.js';
+import {
+  getOutputText,
+  normalizeToolArguments,
+  createBaseMessage,
+  getCallIdFromItem,
+  isSuccessOutput,
+} from '../format-helpers.js';
 import type { ISettingsService, ILoggingService } from '../../services/service-interfaces.js';
 import { boundToolResultText } from '../../utils/output/bound-tool-result.js';
 import { formatFullOutputSavedNote, saveOutputArtifact } from '../../utils/shell/shell-output.js';
@@ -50,7 +56,7 @@ export const formatWebFetchCommandMessage: FormatCommandMessage = (item, index, 
   const url = args?.url ?? 'unknown url';
   const command = `web_fetch: "${url}"`;
   const output = getOutputText(item) || 'No results';
-  const success = !output.startsWith('Error:');
+  const success = isSuccessOutput(output);
 
   return [
     createBaseMessage(item, index, 0, false, {

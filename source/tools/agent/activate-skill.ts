@@ -3,7 +3,13 @@ import fs from 'fs';
 import path from 'path';
 import type { ToolDefinition } from '../types.js';
 import type { SkillsService } from '../../services/skills/skills-service.js';
-import { getCallIdFromItem, getOutputText, normalizeToolArguments, createBaseMessage } from '../format-helpers.js';
+import {
+  getCallIdFromItem,
+  getOutputText,
+  normalizeToolArguments,
+  createBaseMessage,
+  isSuccessOutput,
+} from '../format-helpers.js';
 
 const ACTIVATE_SKILL_DESCRIPTION =
   'Load the full instructions for a specified skill to perform a specialized task. ' +
@@ -91,7 +97,7 @@ Relative paths in this skill are relative to the skill directory.${resourceXml}
         createBaseMessage(item, index, 0, false, {
           command: `activate_skill "${skillName}"`,
           output: getOutputText(item) || 'Activated successfully.',
-          success: !getOutputText(item)?.startsWith('Error:'),
+          success: isSuccessOutput(getOutputText(item) || ''),
           toolName: 'activate_skill',
           toolArgs: args,
         }),

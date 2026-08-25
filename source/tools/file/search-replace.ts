@@ -7,6 +7,7 @@ import type { ILoggingService, ISettingsService } from '../../services/service-i
 import type { SessionAccessState } from '../../services/session/session-access-state.js';
 import {
   getOutputText,
+  isSuccessOutput,
   safeJsonParse,
   normalizeToolArguments,
   createBaseMessage,
@@ -243,7 +244,7 @@ export const formatSearchReplaceCommandMessage: FormatCommandMessage = (item, in
   } else {
     output = rawOutput;
   }
-  const success = !output.startsWith('Error:');
+  const success = isSuccessOutput(output);
 
   return [
     createBaseMessage(item, index, 0, false, {

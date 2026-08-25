@@ -7,7 +7,13 @@ import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import { TOOL_NAME_CREATE_FILE } from '../tool-names.js';
 import type { ILoggingService, ISettingsService, ISSHService } from '../../services/service-interfaces.js';
 import type { SessionAccessState } from '../../services/session/session-access-state.js';
-import { getOutputText, safeJsonParse, normalizeToolArguments, createBaseMessage } from '../format-helpers.js';
+import {
+  getOutputText,
+  isSuccessOutput,
+  safeJsonParse,
+  normalizeToolArguments,
+  createBaseMessage,
+} from '../format-helpers.js';
 import { ExecutionContext } from '../../services/execution-context.js';
 
 const CREATE_FILE_DESCRIPTION =
@@ -48,7 +54,7 @@ export const formatCreateFileCommandMessage: FormatCommandMessage = (item, index
       : typeof parsedOutput?.error === 'string'
       ? parsedOutput.error
       : rawOutput;
-  const success = typeof parsedOutput?.success === 'boolean' ? parsedOutput.success : !output.startsWith('Error:');
+  const success = typeof parsedOutput?.success === 'boolean' ? parsedOutput.success : isSuccessOutput(output);
 
   return [
     createBaseMessage(item, index, 0, false, {

@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
-import { getOutputText, normalizeToolArguments, createBaseMessage, getCallIdFromItem } from '../format-helpers.js';
+import {
+  getOutputText,
+  isSuccessOutput,
+  normalizeToolArguments,
+  createBaseMessage,
+  getCallIdFromItem,
+} from '../format-helpers.js';
 import { isAbortLike } from '../../services/subagents/utils.js';
 
 const ASK_MENTOR_DESCRIPTION =
@@ -29,7 +35,7 @@ export const formatAskMentorCommandMessage: FormatCommandMessage = (item, index,
   const question = args?.question ?? 'Unknown question';
   const command = `ask_mentor: ${question}`;
   const output = getOutputText(item) || 'No response from mentor';
-  const success = !output.startsWith('Failed to ask mentor:');
+  const success = isSuccessOutput(output) && !output.startsWith('Failed to ask mentor:');
 
   return [
     createBaseMessage(item, index, 0, false, {

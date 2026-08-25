@@ -1,6 +1,29 @@
 ## [0.15.0] - 2026-08-25
 
+### Features
+- Added Grok OAuth login (`--grok-login`) with a term2-owned credential store, and a switcher for multiple Grok and Codex accounts. Account changes apply from the next session.
+- Ran Grok on the Responses API with its own opaque reasoning lane, prompt-cache affinity, and weekly credit usage in the status bar.
+- Added per-model usage and cost, including provider-reported cost on streamed turns.
+- Added staged run-budget limits with stall detection, warn-mode escalation, and a subscription exemption.
+- Added a confirmation prompt when switching modes mid-session.
+- Discovered OpenCode model transports and routed Opencode Muse through Responses.
+- Added inline background-shell monitoring, richer Tasks-panel liveness, and a unified live UI for foreground and background subagents.
+- Collapsed closed tool-call runs into one summary line in concise mode, and added safe `apply_patch` self-healing.
+- Made YOLO mode skip approvals globally except `ask_user`, including workspace-boundary prompts for read tools.
+
+### Bug Fixes
+- Fixed tool-call rendering so in-flight calls stay visible, long runs group instead of wiping scrollback, mixed results are not overstated, and empty failed output is not shown as an approval denial.
+- Stopped retrying expired provider credentials and stopped tab-completion from echoing stored API keys.
+- Recovered flaky or nested Responses WebSocket closes, settled broken `previous_response_id` chains without retry loops, and dropped foreign or cold provider-opaque items instead of refusing the turn or compaction.
+- Kept assistant text that arrives with tool calls, committed it before dispatch, shared project memory across worktrees, and treated schema and JSON tool errors as failures.
+- Primed Plan Mode notices on remaining entry paths and sent Plan Mode workflow only while Plan Mode is on.
+- Disabled unsupported Codex server-side context compaction, removed the unused Codex warmup request, and recovered corrupt Codex history without warmup partitioning.
+- Isolated background-task manager input, settled SSH commands on transport drop, honored the parallel tool-call setting, and redrew committed messages on terminal resize.
+
 ### Improvements
+- Polished `ask_user` layout, queue vs steer guidance, and paused-queue prompts.
+- Defaulted local context compaction to `auto` and propagated reasoning effort through compaction.
+- Updated the bundled model catalog, including Muse Spark token limits.
 - Switched npm publishing to GitHub Actions Trusted Publishing with short-lived OIDC authentication and automatic provenance.
 
 ---

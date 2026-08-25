@@ -49,7 +49,9 @@ it.sequential('starts the terminal UI and exits on Ctrl+C', { timeout: TEST_TIME
     },
   });
 
-  await session.waitForOutput('Lite', STARTUP_TIMEOUT_MS);
+  // The banner's mode pill renders "LITE" (Banner.tsx); do not wait on
+  // StatusBar text below the fold, which is not part of the first paint.
+  await session.waitForOutput('LITE', STARTUP_TIMEOUT_MS);
   await waitForHarnessIdleGeneration(idlePath, { timeoutMs: STARTUP_TIMEOUT_MS });
 
   session.write('\x03');

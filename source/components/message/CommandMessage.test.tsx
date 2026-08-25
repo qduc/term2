@@ -106,6 +106,111 @@ it('CommandMessage renders a settled background shell job as tool activity', asy
   unmount();
 });
 
+it('CommandMessage renders background shell output notification with line count', async () => {
+  const { lastFrame, unmount } = await renderInAct(
+    <CommandMessage
+      command="background_shell_output_notification"
+      toolName="background_shell_output_notification"
+      status="completed"
+      success={true}
+      toolArgs={{
+        firings: [
+          {
+            jobId: 'shell-1',
+            command: 'gh run watch 123',
+            watchId: 'watch-1',
+            seq: 1,
+            matchedLines: 'line 1\nline 2\nline 3',
+          },
+        ],
+      }}
+      output="line 1\nline 2\nline 3"
+    />,
+  );
+
+  const output = stripAnsi(lastFrame() ?? '');
+  expect(output).toContain('Background shell output: gh run watch 123 (3 lines)');
+  unmount();
+});
+
+it('CommandMessage renders replayed background shell output notification from flat toolArgs', async () => {
+  const { lastFrame, unmount } = await renderInAct(
+    <CommandMessage
+      command="background_shell_output_notification"
+      toolName="background_shell_output_notification"
+      status="completed"
+      success={true}
+      toolArgs={{
+        jobId: 'shell-1',
+        command: 'pnpm build',
+        watchId: 'watch-1',
+        seq: 1,
+        matchedLines: 'built successfully',
+      }}
+      output="built successfully"
+    />,
+  );
+
+  const output = stripAnsi(lastFrame() ?? '');
+  expect(output).toContain('Background shell output: pnpm build (1 line)');
+  expect(output).not.toContain('(job jobs)');
+  unmount();
+});
+
+it('CommandMessage renders background shell tools with clean verbs and args', async () => {
+  const { lastFrame: frame1, unmount: unmount1 } = await renderInAct(
+    <CommandMessage
+      command="monitor_shell_job"
+      toolName="monitor_shell_job"
+      status="completed"
+      success={true}
+      toolArgs={{ job_id: 'shell-1', pattern: 'error TS' }}
+      output="monitoring"
+    />,
+  );
+  expect(stripAnsi(frame1() ?? '')).toContain('Monitored shell output [shell-1] for "error TS"');
+  unmount1();
+
+  const { lastFrame: frame2, unmount: unmount2 } = await renderInAct(
+    <CommandMessage
+      command="cancel_shell_monitor"
+      toolName="cancel_shell_monitor"
+      status="completed"
+      success={true}
+      toolArgs={{ watch_id: 'watch-5' }}
+      output="cancelled"
+    />,
+  );
+  expect(stripAnsi(frame2() ?? '')).toContain('Cancelled shell monitor [watch-5]');
+  unmount2();
+
+  const { lastFrame: frame3, unmount: unmount3 } = await renderInAct(
+    <CommandMessage
+      command="get_shell_job"
+      toolName="get_shell_job"
+      status="completed"
+      success={true}
+      toolArgs={{ job_id: 'shell-1' }}
+      output="running"
+    />,
+  );
+  expect(stripAnsi(frame3() ?? '')).toContain('Checked shell job [shell-1]');
+  unmount3();
+
+  const { lastFrame: frame4, unmount: unmount4 } = await renderInAct(
+    <CommandMessage
+      command="cancel_shell_job"
+      toolName="cancel_shell_job"
+      status="completed"
+      success={true}
+      toolArgs={{ job_id: 'shell-1' }}
+      output="cancelled"
+    />,
+  );
+  expect(stripAnsi(frame4() ?? '')).toContain('Cancelled shell job [shell-1]');
+  unmount4();
+});
+
 it('CommandMessage renders a manual background stop as concise tool activity', async () => {
   const { lastFrame, unmount } = await renderInAct(
     <CommandMessage

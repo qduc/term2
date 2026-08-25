@@ -238,7 +238,7 @@ const isTerminal = (task: PanelTask): boolean =>
 const formatLiveStatus = (task: PanelTask, now: number): string => {
   const startedAt = 'startedAt' in task && typeof task.startedAt === 'number' ? task.startedAt : now;
   if (!isControlTask(task) || !task.activity) return `Running · ${formatBackgroundTaskElapsed(now - startedAt)}`;
-  return `${formatPhase(task)} · ${formatLiveness(task)}`;
+  return `${formatPhase(task, now)} · ${formatLiveness(task)}`;
 };
 
 /** How long a settled task stays on the panel after it finishes. */

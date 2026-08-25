@@ -643,6 +643,27 @@ export const formatToolArgs = (
         return `[${target}]`;
       }
 
+      case 'get_shell_job': {
+        const jobId = normalizedArgs.job_id || 'unknown';
+        return `[${jobId}]`;
+      }
+
+      case 'cancel_shell_job': {
+        const jobId = normalizedArgs.job_id || 'unknown';
+        return `[${jobId}]`;
+      }
+
+      case 'monitor_shell_job': {
+        const jobId = normalizedArgs.job_id || 'unknown';
+        const pattern = normalizedArgs.pattern ? ` for "${normalizedArgs.pattern}"` : '';
+        return `[${jobId}]${pattern}`;
+      }
+
+      case 'cancel_shell_monitor': {
+        const watchId = normalizedArgs.watch_id || 'unknown';
+        return `[${watchId}]`;
+      }
+
       case 'ask_orchestrator': {
         const question = normalizedArgs.question || 'Unknown question';
         const qPreview = question.length > 40 ? `${question.slice(0, 40)}...` : question;

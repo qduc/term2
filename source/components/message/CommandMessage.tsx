@@ -297,16 +297,41 @@ const CommandMessage: FC<Props> = ({
         return renderAction(`Background shell ${jobs.length || 'job'} notification`);
       }
       case 'background_shell_output_notification': {
-        const firings = Array.isArray(toolArgs?.firings) ? toolArgs.firings : [];
+        const firings = Array.isArray(toolArgs?.firings)
+          ? toolArgs.firings
+          : toolArgs && (toolArgs.jobId || toolArgs.watchId || toolArgs.command || toolArgs.matchedLines)
+          ? [toolArgs]
+          : [];
         if (firings.length === 1) {
-          const [{ command, matchedLines }] = firings;
+          const [{ command, matchedLines, coalescedCount }] = firings;
           const label = command || 'job';
-          const lineCount = Array.isArray(matchedLines) ? matchedLines.length : undefined;
-          const suffix = lineCount ? ` (${lineCount} line${lineCount === 1 ? '' : 's'})` : '';
+          const lineCount =
+            typeof coalescedCount === 'number'
+              ? coalescedCount
+              : typeof matchedLines === 'string'
+              ? matchedLines
+                ? matchedLines.split('\n').length
+                : 0
+              : Array.isArray(matchedLines)
+              ? matchedLines.length
+              : undefined;
+          const suffix =
+            lineCount !== undefined && lineCount > 0 ? ` (${lineCount} line${lineCount === 1 ? '' : 's'})` : '';
           return renderAction(`Background shell output: ${label}${suffix}`);
         }
-        return renderAction(`Background shell output (${firings.length || 'job'} jobs)`);
+        if (firings.length > 1) {
+          return renderAction(`Background shell output (${firings.length} jobs)`);
+        }
+        return renderAction('Background shell output');
       }
+      case 'get_shell_job':
+        return renderAction('Checked shell job');
+      case 'cancel_shell_job':
+        return renderAction('Cancelled shell job');
+      case 'monitor_shell_job':
+        return renderAction('Monitored shell output');
+      case 'cancel_shell_monitor':
+        return renderAction('Cancelled shell monitor');
       case 'background_task_control_notification': {
         const actions = Array.isArray(toolArgs?.actions) ? toolArgs.actions : [];
         if (actions.length === 1) {

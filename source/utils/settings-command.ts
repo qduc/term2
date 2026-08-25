@@ -412,9 +412,14 @@ export function createSettingsCommand({
         return true;
       }
 
+      const planWas = Boolean(settingsService.get(SETTING_KEYS.APP_PLAN_MODE));
       const durableResult = settingsService.setDynamic(key, parsedValue);
       if (applyRuntimeSetting) {
         applyRuntimeSetting(key, parsedValue);
+      }
+      const planIs = Boolean(settingsService.get(SETTING_KEYS.APP_PLAN_MODE));
+      if (applyRuntimeSetting && key !== SETTING_KEYS.APP_PLAN_MODE && planWas !== planIs) {
+        applyRuntimeSetting(SETTING_KEYS.APP_PLAN_MODE, planIs);
       }
       addSystemMessage(formatDurableSetMessage(durableResult, key, parsedValue));
       if (key === SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS) {

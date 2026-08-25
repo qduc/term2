@@ -146,6 +146,34 @@ it('viewing all settings with no args prompts for autocomplete', () => {
   expect(deps.messages.length).toBe(0); // No message sent
 });
 
+it('queues an implicit Plan Mode exit when /settings enables an exclusive mode', () => {
+  let planMode = true;
+  const applied: Array<{ key: string; value: unknown }> = [];
+  const command = createSettingsCommand({
+    settingsService: {
+      get: (key: string) => (key === 'app.planMode' ? planMode : false),
+      getDynamic: () => false,
+      isRuntimeModifiable: () => true,
+      setDynamic: (key: string) => {
+        if (key === 'app.liteMode') planMode = false;
+        return { status: 'saved' };
+      },
+    } as any,
+    addSystemMessage: () => {},
+    applyRuntimeSetting: (key, value) => {
+      applied.push({ key, value });
+    },
+    replaceInput: () => {},
+  });
+
+  command.action('app.liteMode true');
+
+  expect(applied).toEqual([
+    { key: 'app.liteMode', value: true },
+    { key: 'app.planMode', value: false },
+  ]);
+});
+
 it('viewing a single setting shows value and source', () => {
   const deps = createDeps({
     values: { 'agent.model': 'gpt-4o' },

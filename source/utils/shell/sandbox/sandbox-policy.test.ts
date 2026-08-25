@@ -110,7 +110,6 @@ it('createSandboxRuntimeConfig denies home and named system reads with workspace
       pnpmStoreDir,
       pnpmStoreDirLinux,
       pnpmStoreDirLegacy,
-      runtimeRoot,
       path.join(home, '.local', 'share', 'pnpm', 'store'),
       '/usr',
       '/bin',
@@ -126,6 +125,16 @@ it('createSandboxRuntimeConfig denies home and named system reads with workspace
   );
   expect(config.filesystem.allowRead).not.toContain(home);
   expect(config.filesystem.allowRead).not.toContain(path.join(home, '.npmrc'));
+  // The policy carves out the running Node install only when it lives under
+  // $HOME (nvm-style layouts). Hostedtoolcache-style installs under /opt stay
+  // denied, so the expectation must follow the same rule instead of assuming
+  // a developer-machine layout.
+  const execPathReal = fs.realpathSync(process.execPath);
+  if (execPathReal.startsWith(`${home}${path.sep}`)) {
+    expect(config.filesystem.allowRead).toContain(runtimeRoot);
+  } else {
+    expect(config.filesystem.allowRead).not.toContain(runtimeRoot);
+  }
   expect(config.filesystem.allowWrite).toEqual(expect.arrayContaining([workspaceRoot, SANDBOX_TEMP_DIR]));
 });
 

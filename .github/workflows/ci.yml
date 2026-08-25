@@ -39,6 +39,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The search tools probe rg/fd on PATH (the grep tool prefers ripgrep;
+      # code-context requires it). Install rg so CI runs the same primary lane
+      # developer machines use; the fallback lane is covered by forced-probe
+      # tests that run regardless of host binaries.
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
       # The script sets NODE_ENV=test itself via cross-env; do not rely on the
       # ambient value (see AGENTS.md on why production mode breaks Ink tests).
       - name: Run full test suite

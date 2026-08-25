@@ -1,4 +1,4 @@
-import { it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { it, expect, beforeAll, afterAll, onTestFinished, vi } from 'vitest';
 import { CodexResponsesModel, CodexResponsesTransport, CodexResponsesWSModel } from './codex-responses-model.js';
 import type { StreamedModelTurnRequest } from '../contracts/streamed-model-turn.js';
 import fs from 'node:fs';
@@ -957,6 +957,13 @@ it.sequential('Codex HTTP stream forwards application instructions to Luna as de
 });
 
 it.sequential('Codex registry boundary preserves the full streamed-turn request and response contract', async () => {
+  // The registry-built model resolves credentials from term2's own store via
+  // CodexTokenManager before delegating to the injected transport. Pin that
+  // boundary so the contract test verifies the registry route itself and
+  // never depends on a local Codex login.
+  const tokenSpy = vi.spyOn(CodexTokenManager.prototype, 'getOrRefreshAccessToken').mockResolvedValue('test-token');
+  onTestFinished(() => tokenSpy.mockRestore());
+
   const provider = getProvider('codex');
   expect(provider?.createStreamedModel).toBeTruthy();
   if (!provider?.createStreamedModel) return;

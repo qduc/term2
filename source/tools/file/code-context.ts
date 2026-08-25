@@ -168,9 +168,15 @@ export const createReadCodeOutlineToolDefinition = (
 };
 
 export const createCodeContextSearchToolDefinition = (
-  deps: { executionContext?: ExecutionContext; globAvailable?: boolean; settingsService?: ISettingsService } = {},
+  deps: {
+    executionContext?: ExecutionContext;
+    globAvailable?: boolean;
+    settingsService?: ISettingsService;
+    /** Overrides the host ripgrep probe so tests can pin either search lane. */
+    hasRipgrep?: () => Promise<boolean>;
+  } = {},
 ): ToolDefinition<typeof codeContextSearchParametersSchema> => {
-  const { executionContext, globAvailable = true, settingsService } = deps;
+  const { executionContext, globAvailable = true, settingsService, hasRipgrep } = deps;
   return {
     name: 'code_context_search',
     description: buildCodeContextSearchDescription(globAvailable),
@@ -201,7 +207,7 @@ export const createCodeContextSearchToolDefinition = (
       const maxResults = params.max_results ?? DEFAULT_MAX_RESULTS;
 
       try {
-        if (!(await isRipgrepAvailable())) {
+        if (!(await (hasRipgrep ? hasRipgrep() : isRipgrepAvailable()))) {
           return params.query_type === 'related'
             ? `WARNING rg_unavailable\n${formatRelatedResults(params.path ?? '', [])}`
             : `WARNING rg_unavailable\n${formatSymbolResults(params.symbol ?? '', [])}`;

@@ -64,3 +64,17 @@ it('queues the plan-mode exit notice when app.planMode becomes false', () => {
 
   expect(conversationService.queueModeNotice).toHaveBeenCalledWith(PLAN_MODE_EXIT_NOTICE);
 });
+
+it('queues the plan-mode exit notice when another exclusive mode implicitly turns Plan Mode off', () => {
+  let planMode = true;
+  const { service, conversationService } = makeService({
+    get: vi.fn((key: string) => (key === 'app.planMode' ? planMode : 'current-model')),
+    setDynamicTransaction: vi.fn(() => {
+      planMode = false;
+    }),
+  });
+
+  service.apply([{ key: 'app.liteMode', value: true, persistence: 'runtime' }]);
+
+  expect(conversationService.queueModeNotice).toHaveBeenCalledWith(PLAN_MODE_EXIT_NOTICE);
+});

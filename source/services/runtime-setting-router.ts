@@ -37,9 +37,15 @@ export class ConversationConfigurationService {
   apply(changes: readonly ConversationSettingChange[]): { restartOnly: readonly string[] } {
     const runtime = changes.filter((change) => change.persistence === 'runtime');
     if (runtime.length > 0) {
+      const planWas = Boolean(this.#deps.settingsService.get('app.planMode'));
       this.#deps.settingsService.setDynamicTransaction(runtime.map(({ key, value }) => ({ key, value })));
       for (const change of runtime) {
         this.applyRuntimeSetting(change.key, change.value);
+      }
+      const planIs = Boolean(this.#deps.settingsService.get('app.planMode'));
+      const planKeyExplicit = runtime.some((change) => change.key === 'app.planMode');
+      if (!planKeyExplicit && planWas !== planIs) {
+        this.#deps.conversationService.queueModeNotice(planModeNotice(planIs));
       }
     }
     for (const change of changes.filter((item) => item.persistence === 'restart')) {

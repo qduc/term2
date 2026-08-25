@@ -681,6 +681,58 @@ it('runNonInteractive exposes configured provider and model through its session 
   });
 });
 
+it('runNonInteractive prefixes Plan Mode workflow onto the first turn when planMode is already on', async () => {
+  const stdout = createStringWritable();
+  const stderr = createStringWritable();
+  const streamInputs: unknown[] = [];
+  const logger: any = createNoopLogger();
+  const settingsService: any = {
+    get(key: string) {
+      if (key === 'app.planMode') return true;
+      return undefined;
+    },
+    getDynamic() {
+      return undefined;
+    },
+  };
+
+  const exitCode = await runNonInteractive({
+    prompt: 'plan the auth refactor',
+    autoApprove: false,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+    logger,
+    settingsService,
+    sessionClientFactory: {
+      create() {
+        return {
+          agentClient: {
+            chat: async () => '',
+            abort() {},
+            setModel() {},
+            addToolInterceptor() {
+              return () => {};
+            },
+            startStream: async (input: unknown) => {
+              streamInputs.push(input);
+              return createMockStream([]);
+            },
+            continueRunStream: async () => createMockStream([]),
+          },
+          continuationProjectionMode: 'legacy',
+          toolOwnership: new ToolOwnershipRegistry(),
+          dispose() {},
+        };
+      },
+    },
+  });
+
+  expect(exitCode).toBe(0);
+  expect(JSON.stringify(streamInputs)).toContain('plan the auth refactor');
+  expect(JSON.stringify(streamInputs)).toContain('Plan Mode Workflow');
+  expect(JSON.stringify(streamInputs)).toContain('You are currently in **Plan Mode**');
+});
+
 it('runNonInteractive() disposes its factory-owned client after the runtime', async () => {
   const disposed: string[] = [];
   const createOptions: unknown[] = [];

@@ -446,6 +446,20 @@ it.sequential(
   },
 );
 
+it.sequential('splitStaticHistory keeps even a lone trailing command active under groupCommands', async () => {
+  // A lone completed command is the first member of a run that has not started
+  // growing yet. Committing it to static here would strand it as its own frozen
+  // line beside the group that absorbs it when the next tool call lands.
+  const messages = [
+    { id: 'older', sender: 'bot', text: 'older', status: 'finalized' },
+    { id: 'cmd-1', sender: 'command', status: 'completed', command: 'grep foo', output: '' },
+  ];
+
+  const { history, active } = splitStaticHistory(messages, { groupCommands: true });
+  expect(history.map((m) => m.id)).toEqual(['older']);
+  expect(active.map((m) => m.id)).toEqual(['cmd-1']);
+});
+
 it.sequential(
   'splitStaticHistory releases a trailing command run into history once it is closed by a later message',
   async () => {
@@ -1063,38 +1077,81 @@ it.sequential('MessageList collapses a closed run of tool calls into one summary
   expect(countOccurrences(output, '"a.ts"')).toBe(0);
 });
 
-it.sequential('MessageList keeps a still-running trailing tool call run ungrouped and updates it live', async () => {
+it.sequential('MessageList groups a still-growing tool call run into one line whose counts tick up', async () => {
   const settingsService = createMockSettingsService({ 'ui.displayMode': 'concise' });
+  const cmd = (n: number, status: string, toolName: string) => ({
+    id: `cmd-${n}`,
+    sender: 'command',
+    status,
+    command: `cmd${n}`,
+    toolName,
+    output: '',
+  });
+
   const renderer = await renderInAct(
     <MessageList
       settingsService={settingsService}
-      messages={[
-        { id: 'cmd-1', sender: 'command', status: 'completed', command: 'grep foo', toolName: 'grep', output: '' },
-        { id: 'cmd-2', sender: 'command', status: 'running', command: 'cat bar', toolName: undefined, output: '' },
-      ]}
+      messages={[cmd(1, 'completed', 'grep'), cmd(2, 'running', 'read_file')]}
     />,
   );
 
+  // Grouped immediately, while cmd-2 is still in flight.
   let output = stripAnsi(renderer.lastFrame() ?? '');
-  // Still-running trailing run stays ungrouped: cmd-1 renders its own individual
-  // line rather than being folded into a "Searched for 1 pattern, ..." summary.
-  expect(output.includes('Searched for 1 pattern')).toBe(false);
-  expect(output.includes('Searched')).toBe(true);
+  expect(output.includes('▶ Searched for 1 pattern, read 1 file')).toBe(true);
+
+  await rerenderInAct(
+    renderer,
+    <MessageList
+      settingsService={settingsService}
+      messages={[cmd(1, 'completed', 'grep'), cmd(2, 'completed', 'read_file'), cmd(3, 'running', 'read_file')]}
+    />,
+  );
+
+  // Same line, count ticked up — not a second line.
+  output = stripAnsi(renderer.lastFrame() ?? '');
+  expect(output.includes('▶ Searched for 1 pattern, read 2 files')).toBe(true);
+  expect(countOccurrences(output, 'Searched for')).toBe(1);
 
   await rerenderInAct(
     renderer,
     <MessageList
       settingsService={settingsService}
       messages={[
-        { id: 'cmd-1', sender: 'command', status: 'completed', command: 'grep foo', toolName: 'grep', output: '' },
-        { id: 'cmd-2', sender: 'command', status: 'completed', command: 'cat bar', toolName: undefined, output: '' },
+        cmd(1, 'completed', 'grep'),
+        cmd(2, 'completed', 'read_file'),
+        cmd(3, 'completed', 'read_file'),
         { id: 'bot-reply', sender: 'bot', status: 'finalized', text: 'done' },
       ]}
     />,
   );
 
   output = stripAnsi(renderer.lastFrame() ?? '');
-  expect(output.includes('Searched for 1 pattern, ran 1 shell command')).toBe(true);
-  // Once folded into the group summary, the individual raw command line is gone.
-  expect(countOccurrences(output, 'cat bar')).toBe(0);
+  expect(output.includes('✔ Searched for 1 pattern, read 2 files')).toBe(true);
+  expect(countOccurrences(output, 'Searched for')).toBe(1);
+});
+
+// Regression: an ungrouped run grows the dynamic region ~2 rows per tool call.
+// Once that region reaches the terminal height, Ink abandons incremental redraw
+// and clears the screen *and the scrollback* on every frame, so the whole
+// conversation vanishes the moment the assistant starts replying. Keeping the
+// run one grouped line tall is what prevents that, so assert the height.
+it.sequential('MessageList keeps a long in-flight tool call run one line tall', async () => {
+  const settingsService = createMockSettingsService({ 'ui.displayMode': 'concise' });
+  const messages: any[] = [{ id: 'user', sender: 'user', status: 'finalized', text: 'go' }];
+  for (let n = 1; n <= 12; n += 1) {
+    messages.push({
+      id: `cmd-${n}`,
+      sender: 'command',
+      status: n === 12 ? 'running' : 'completed',
+      command: `cmd${n}`,
+      toolName: 'read_file',
+      output: '',
+    });
+  }
+
+  const { lastFrame } = await renderInAct(<MessageList settingsService={settingsService} messages={messages} />);
+  const toolLines = renderedLines(lastFrame() ?? '').filter((line) => line.includes('file'));
+
+  expect(toolLines).toHaveLength(1);
+  expect(toolLines[0]).toContain('▶ Read 12 files');
 });

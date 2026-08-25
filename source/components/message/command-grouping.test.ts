@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { groupCommandRuns, summarizeCommandGroup, countFailedMembers } from './command-grouping.js';
 
 describe('groupCommandRuns', () => {
-  it('leaves a lone command message ungrouped', () => {
+  it('leaves a lone command message ungrouped so it keeps showing what it did', () => {
     const messages = [{ id: '1', sender: 'command', status: 'completed', toolName: 'grep' }];
-    const result = groupCommandRuns(messages, { treatTrailingAsClosed: true });
+    const result = groupCommandRuns(messages);
     expect(result).toEqual(messages);
   });
 
@@ -14,40 +14,39 @@ describe('groupCommandRuns', () => {
       { id: '2', sender: 'command', status: 'completed', toolName: 'read_file' },
       { id: '3', sender: 'bot', status: 'finalized' },
     ];
-    const result = groupCommandRuns(messages, { treatTrailingAsClosed: false });
+    const result = groupCommandRuns(messages);
     expect(result).toHaveLength(2);
     expect(result[0]).toMatchObject({ sender: 'command-group', status: 'completed' });
     expect((result[0] as any).members).toHaveLength(2);
     expect(result[1]).toEqual(messages[2]);
   });
 
-  it('leaves a trailing multi-command run ungrouped when treatTrailingAsClosed is false', () => {
+  it('groups a trailing run that may still grow', () => {
     const messages = [
       { id: '1', sender: 'command', status: 'completed', toolName: 'grep' },
       { id: '2', sender: 'command', status: 'completed', toolName: 'read_file' },
     ];
-    const result = groupCommandRuns(messages, { treatTrailingAsClosed: false });
-    expect(result).toEqual(messages);
-  });
-
-  it('groups a trailing multi-command run when treatTrailingAsClosed is true', () => {
-    const messages = [
-      { id: '1', sender: 'command', status: 'completed', toolName: 'grep' },
-      { id: '2', sender: 'command', status: 'completed', toolName: 'read_file' },
-    ];
-    const result = groupCommandRuns(messages, { treatTrailingAsClosed: true });
+    const result = groupCommandRuns(messages);
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({ sender: 'command-group' });
   });
 
-  it('never groups a run containing a still-running member, even mid-array', () => {
+  it('groups a run containing a still-running member and marks the group running', () => {
     const messages = [
       { id: '1', sender: 'command', status: 'completed', toolName: 'grep' },
       { id: '2', sender: 'command', status: 'running', toolName: 'read_file' },
-      { id: '3', sender: 'bot', status: 'finalized' },
     ];
-    const result = groupCommandRuns(messages, { treatTrailingAsClosed: true });
-    expect(result).toEqual(messages);
+    const result = groupCommandRuns(messages);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ sender: 'command-group', status: 'running' });
+  });
+
+  it('prefers running over failed while a later member is still in flight', () => {
+    const messages = [
+      { id: '1', sender: 'command', status: 'failed', toolName: 'grep' },
+      { id: '2', sender: 'command', status: 'running', toolName: 'read_file' },
+    ];
+    expect(groupCommandRuns(messages)[0]).toMatchObject({ status: 'running' });
   });
 
   it('marks the group failed when any member failed', () => {
@@ -55,17 +54,16 @@ describe('groupCommandRuns', () => {
       { id: '1', sender: 'command', status: 'completed', toolName: 'grep' },
       { id: '2', sender: 'command', status: 'failed', toolName: 'read_file' },
     ];
-    const result = groupCommandRuns(messages, { treatTrailingAsClosed: true });
+    const result = groupCommandRuns(messages);
     expect(result[0]).toMatchObject({ sender: 'command-group', status: 'failed' });
   });
 
-  it('produces a stable id from the first and last member ids', () => {
-    const messages = [
-      { id: 'a', sender: 'command', status: 'completed', toolName: 'grep' },
-      { id: 'b', sender: 'command', status: 'completed', toolName: 'read_file' },
-    ];
-    const result = groupCommandRuns(messages, { treatTrailingAsClosed: true });
-    expect(result[0].id).toBe('command-group:a:b');
+  it('keeps the same id as the run grows, so the summary line is one identity', () => {
+    const grow = (ids: string[]) =>
+      groupCommandRuns(ids.map((id) => ({ id, sender: 'command', status: 'completed', toolName: 'read_file' })));
+
+    expect(grow(['a', 'b'])[0].id).toBe('command-group:a');
+    expect(grow(['a', 'b', 'c'])[0].id).toBe('command-group:a');
   });
 
   it('groups multiple independent closed runs separately', () => {
@@ -76,7 +74,7 @@ describe('groupCommandRuns', () => {
       { id: '4', sender: 'command', status: 'completed', toolName: 'shell' },
       { id: '5', sender: 'command', status: 'completed', toolName: 'shell' },
     ];
-    const result = groupCommandRuns(messages, { treatTrailingAsClosed: true });
+    const result = groupCommandRuns(messages);
     expect(result).toHaveLength(3);
     expect(result[0]).toMatchObject({ sender: 'command-group' });
     expect(result[1]).toEqual(messages[2]);

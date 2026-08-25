@@ -1,15 +1,14 @@
-// Concise-mode presentation layer that folds a *closed* run of consecutive
-// tool-call messages into a single summary line (e.g. "Searched for 1
-// pattern, read 3 files, ran 2 shell commands").
+// Concise-mode presentation layer that folds a run of consecutive tool-call
+// messages into a single live summary line (e.g. "Searched for 1 pattern, read
+// 3 files, ran 2 shell commands").
 //
-// A run is "closed" when we know for certain no further tool call will be
-// appended immediately after it — either because a different kind of message
-// already followed it, or (for the tail of static history specifically) the
-// caller has already established that via `treatTrailingAsClosed`. A run
-// sitting at the very end of the live/dynamic region is always left
-// ungrouped: more tool calls could still land right after it, and a group
-// already committed to Ink's <Static> can never be edited once written, so
-// grouping must never guess ahead of what's actually known.
+// Grouping is eager: a run collapses as soon as it has two members, while more
+// tool calls may still be appended to it and while a member is still running.
+// The counts simply tick up in place. That keeps the run one line tall for its
+// whole lifetime, which matters beyond looks — an ungrouped run grows the
+// dynamic region by ~2 rows per tool call, and once that region reaches the
+// terminal height Ink stops redrawing incrementally and clears the screen *and
+// the scrollback* on every frame.
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
 
 export type GroupableMessage = {
@@ -23,42 +22,44 @@ export type GroupableMessage = {
 export type CommandGroupMessage = {
   id: string;
   sender: 'command-group';
-  status: 'completed' | 'failed';
+  status: 'running' | 'completed' | 'failed';
   members: GroupableMessage[];
 };
 
-const isTerminalStatus = (status: string | undefined) => status !== 'pending' && status !== 'running';
+const isRunningStatus = (status: string | undefined) => status === 'pending' || status === 'running';
 
 const isFailedMember = (message: GroupableMessage) =>
   message.status === 'failed' || message.status === 'aborted' || message.success === false;
 
+/**
+ * The id keys on the *first* member only, so it stays stable as the run grows.
+ * A growing run must keep one identity across renders, or every new tool call
+ * would remount the summary line and could commit a stale copy to <Static>.
+ */
 export const buildCommandGroupMessage = (members: GroupableMessage[]): CommandGroupMessage => {
-  const first = members[0];
-  const last = members[members.length - 1];
+  const status = members.some((member) => isRunningStatus(member.status))
+    ? 'running'
+    : members.some(isFailedMember)
+    ? 'failed'
+    : 'completed';
+
   return {
-    id: `command-group:${first.id}:${last.id}`,
+    id: `command-group:${members[0].id}`,
     sender: 'command-group',
-    status: members.some(isFailedMember) ? 'failed' : 'completed',
+    status,
     members,
   };
 };
 
 /**
- * Folds maximal runs of consecutive `sender === 'command'` messages (length
- * >= 2, all terminal) into a single `CommandGroupMessage`. Everything else
- * passes through unchanged.
+ * Folds every maximal run of 2+ consecutive `sender === 'command'` messages
+ * into a single `CommandGroupMessage`, whether or not the run is finished.
+ * Everything else passes through unchanged.
  *
- * `treatTrailingAsClosed` controls whether a run touching the end of the
- * given array counts as closed. Pass `true` only when the caller has
- * separately confirmed (outside this array) that nothing more will be
- * appended right after it — e.g. static history, where a later active
- * message already proved the run is over. Pass `false` for the live/dynamic
- * region, where a trailing run may still be growing.
+ * A lone command is left alone so a single tool call still shows what it
+ * actually did rather than a bare "1 file".
  */
-export const groupCommandRuns = <T extends GroupableMessage>(
-  messages: T[],
-  options: { treatTrailingAsClosed: boolean },
-): (T | CommandGroupMessage)[] => {
+export const groupCommandRuns = <T extends GroupableMessage>(messages: T[]): (T | CommandGroupMessage)[] => {
   const result: (T | CommandGroupMessage)[] = [];
   let i = 0;
 
@@ -76,11 +77,8 @@ export const groupCommandRuns = <T extends GroupableMessage>(
     }
 
     const run = messages.slice(i, j);
-    const isTrailingRun = j === messages.length;
-    const allTerminal = run.every((m) => isTerminalStatus(m.status));
-    const shouldGroup = run.length >= 2 && allTerminal && (!isTrailingRun || options.treatTrailingAsClosed);
 
-    if (shouldGroup) {
+    if (run.length >= 2) {
       result.push(buildCommandGroupMessage(run));
     } else {
       result.push(...run);

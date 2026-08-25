@@ -111,12 +111,17 @@ const canRenderStatically = (message: MessageLike) => {
   return true;
 };
 
-// A trailing run of 2+ consecutive, individually-terminal command messages that
-// reaches the very end of the array might still grow (another tool call could
-// land right after it). Concise-mode grouping needs that run to stay in the
-// dynamic/active region — never committed to <Static> — until something else
-// closes it, so it can be collapsed into one summary line atomically instead
-// of flickering from several frozen static lines into one.
+// A run of command messages that reaches the very end of the array might still
+// grow (another tool call could land right after it). Concise-mode grouping
+// keeps that whole run in the dynamic/active region — never committed to
+// <Static> — until something else closes it, so its summary line can keep
+// counting up in place. <Static> writes each item exactly once, so committing
+// any member early would strand it as a separate frozen line beside the group
+// that later absorbs it.
+//
+// This includes a run of one: a lone completed tool call must stay dynamic too,
+// or the next tool call would form a group whose first member is already frozen
+// in static history.
 const findOpenTrailingCommandRunStart = (messages: MessageLike[]): number => {
   const lastIndex = messages.length - 1;
   if (lastIndex < 0 || messages[lastIndex]?.sender !== 'command') {
@@ -128,7 +133,7 @@ const findOpenTrailingCommandRunStart = (messages: MessageLike[]): number => {
     runStart -= 1;
   }
 
-  return lastIndex - runStart + 1 >= 2 ? runStart : -1;
+  return runStart;
 };
 
 export const splitStaticHistory = <T extends MessageLike>(messages: T[], options: { groupCommands?: boolean } = {}) => {
@@ -298,13 +303,12 @@ const MessageList = <T extends MessageLike = Message>({
     }
 
     // Grouping is a pure display transform on top of the static/active split
-    // above, which already guarantees `split.history` only contains runs that
-    // are known-closed (nothing more will ever be appended right after them).
-    // `split.active` may end in a run that's still open, so its trailing run
-    // is left ungrouped until a later render closes it.
+    // above, which already guarantees every run in `split.history` is closed.
+    // A still-open run lives in `split.active`, where it is re-rendered each
+    // frame, so it can be grouped just as eagerly and simply count up.
     return {
-      history: groupCommandRuns(split.history, { treatTrailingAsClosed: true }),
-      active: groupCommandRuns(split.active, { treatTrailingAsClosed: false }),
+      history: groupCommandRuns(split.history),
+      active: groupCommandRuns(split.active),
     };
   }, [filteredMessages, displayMode]);
 
@@ -350,10 +354,10 @@ const MessageList = <T extends MessageLike = Message>({
       const committedSignature = committedMessageSignaturesRef.current.get(message.id);
       const isCompletedCommand =
         (message.sender === 'command' && message.status !== 'pending' && message.status !== 'running') ||
-        // A command-group only ever forms from a run that is already fully
-        // terminal and closed (see groupCommandRuns), so it is always safe
-        // to commit as soon as it appears, same as a single completed command.
-        message.sender === 'command-group';
+        // A command-group reaching `history` is closed by construction (an
+        // open run is held in the active region), so once it has settled it is
+        // as safe to commit as a single completed command.
+        (message.sender === 'command-group' && message.status !== 'running');
 
       if (committedSignature === signature) {
         continue;
@@ -481,7 +485,7 @@ const MessageList = <T extends MessageLike = Message>({
     return (
       <Box key={msg.id} marginTop={marginTop} width={maxWidth}>
         {'members' in msg ? (
-          <CommandGroupSummary members={msg.members} hasFailure={msg.status === 'failed'} />
+          <CommandGroupSummary members={msg.members} status={msg.status} />
         ) : msg.sender === 'command' ? (
           <CommandMessage
             command={msg.command ?? ''}

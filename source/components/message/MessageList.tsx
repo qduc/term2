@@ -1,9 +1,11 @@
 import React, { useMemo, useRef } from 'react';
 import { Box, Static, useStdout } from 'ink';
 import CommandMessage from './CommandMessage.js';
+import CommandGroupSummary from './CommandGroupSummary.js';
 import ChatMessage from './ChatMessage.js';
 import Banner from '../layout/Banner.js';
 import SubagentActivityMessage from './SubagentActivityMessage.js';
+import { groupCommandRuns, type CommandGroupMessage } from './command-grouping.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
 import type { Message } from '../../types/message.js';
 
@@ -70,10 +72,12 @@ type StaticBannerItem = {
 type StaticMessageItem = {
   kind: 'message';
   id: string;
-  message: MessageLike;
+  message: MessageLike | CommandGroupMessage;
 };
 
 type StaticItem = StaticBannerItem | StaticMessageItem;
+
+type RenderableMessage = MessageLike | CommandGroupMessage;
 
 export const MESSAGE_HORIZONTAL_PADDING = 2;
 export const EMPTY_RESTORED_STATIC_MESSAGE_IDS: readonly string[] = [];
@@ -107,9 +111,38 @@ const canRenderStatically = (message: MessageLike) => {
   return true;
 };
 
-export const splitStaticHistory = <T extends MessageLike>(messages: T[]) => {
-  const activeStart = messages.findIndex((message) => !canRenderStatically(message));
-  if (activeStart === -1) {
+// A trailing run of 2+ consecutive, individually-terminal command messages that
+// reaches the very end of the array might still grow (another tool call could
+// land right after it). Concise-mode grouping needs that run to stay in the
+// dynamic/active region — never committed to <Static> — until something else
+// closes it, so it can be collapsed into one summary line atomically instead
+// of flickering from several frozen static lines into one.
+const findOpenTrailingCommandRunStart = (messages: MessageLike[]): number => {
+  const lastIndex = messages.length - 1;
+  if (lastIndex < 0 || messages[lastIndex]?.sender !== 'command') {
+    return -1;
+  }
+
+  let runStart = lastIndex;
+  while (runStart > 0 && messages[runStart - 1]?.sender === 'command') {
+    runStart -= 1;
+  }
+
+  return lastIndex - runStart + 1 >= 2 ? runStart : -1;
+};
+
+export const splitStaticHistory = <T extends MessageLike>(messages: T[], options: { groupCommands?: boolean } = {}) => {
+  const canRenderStart = messages.findIndex((message) => !canRenderStatically(message));
+  let activeStart = canRenderStart === -1 ? messages.length : canRenderStart;
+
+  if (options.groupCommands) {
+    const openRunStart = findOpenTrailingCommandRunStart(messages);
+    if (openRunStart !== -1 && openRunStart < activeStart) {
+      activeStart = openRunStart;
+    }
+  }
+
+  if (activeStart >= messages.length) {
     return { history: messages, active: [] };
   }
 
@@ -188,12 +221,12 @@ export const detectStaticCommitBlocker = <T extends MessageLike>(
   };
 };
 
-const createStaticItems = (bannerItems: string[], history: MessageLike[]): StaticItem[] => [
+const createStaticItems = (bannerItems: string[], history: RenderableMessage[]): StaticItem[] => [
   ...bannerItems.map((id) => ({ kind: 'banner' as const, id })),
   ...history.map((message) => ({ kind: 'message' as const, id: message.id, message })),
 ];
 
-const createMessageSignature = (message: MessageLike) => {
+const createMessageSignature = (message: RenderableMessage) => {
   try {
     return JSON.stringify(message);
   } catch {
@@ -258,8 +291,22 @@ const MessageList = <T extends MessageLike = Message>({
   // This stabilizes the references passed to Static and the active Box,
   // preventing unnecessary re-renders and fixing flickering in long sessions.
   const { history, active } = useMemo(() => {
-    return splitStaticHistory(filteredMessages);
-  }, [filteredMessages]);
+    const groupCommands = displayMode === 'concise';
+    const split = splitStaticHistory(filteredMessages, { groupCommands });
+    if (!groupCommands) {
+      return split;
+    }
+
+    // Grouping is a pure display transform on top of the static/active split
+    // above, which already guarantees `split.history` only contains runs that
+    // are known-closed (nothing more will ever be appended right after them).
+    // `split.active` may end in a run that's still open, so its trailing run
+    // is left ungrouped until a later render closes it.
+    return {
+      history: groupCommandRuns(split.history, { treatTrailingAsClosed: true }),
+      active: groupCommandRuns(split.active, { treatTrailingAsClosed: false }),
+    };
+  }, [filteredMessages, displayMode]);
 
   const staticItemsRef = useRef<StaticItem[]>(createStaticItems(bannerItems, []));
   const seenBannerIdsRef = useRef<Set<string>>(new Set(bannerItems));
@@ -276,7 +323,7 @@ const MessageList = <T extends MessageLike = Message>({
     }
 
     const additions: StaticItem[] = [];
-    const deferred: MessageLike[] = [];
+    const deferred: RenderableMessage[] = [];
     const hasActiveMessages = active.length > 0;
     const previousActiveMessageIds = previousActiveMessageIdsRef.current;
     const hasExistingStaticHistory = staticItemsRef.current.some((item) => item.kind === 'message');
@@ -302,7 +349,11 @@ const MessageList = <T extends MessageLike = Message>({
       const signature = createMessageSignature(message);
       const committedSignature = committedMessageSignaturesRef.current.get(message.id);
       const isCompletedCommand =
-        message.sender === 'command' && message.status !== 'pending' && message.status !== 'running';
+        (message.sender === 'command' && message.status !== 'pending' && message.status !== 'running') ||
+        // A command-group only ever forms from a run that is already fully
+        // terminal and closed (see groupCommandRuns), so it is always safe
+        // to commit as soon as it appears, same as a single completed command.
+        message.sender === 'command-group';
 
       if (committedSignature === signature) {
         continue;
@@ -384,9 +435,9 @@ const MessageList = <T extends MessageLike = Message>({
   }, [deferredHistory, active]);
 
   const renderMessage = (
-    msg: MessageLike,
+    msg: MessageLike | CommandGroupMessage,
     idx: number,
-    collection: readonly (StaticItem | MessageLike)[],
+    collection: readonly (StaticItem | MessageLike | CommandGroupMessage)[],
     maxWidth?: number,
   ) => {
     // Helper to get previous message safely from either StaticItem[] or MessageLike[]
@@ -429,7 +480,9 @@ const MessageList = <T extends MessageLike = Message>({
 
     return (
       <Box key={msg.id} marginTop={marginTop} width={maxWidth}>
-        {msg.sender === 'command' ? (
+        {'members' in msg ? (
+          <CommandGroupSummary members={msg.members} hasFailure={msg.status === 'failed'} />
+        ) : msg.sender === 'command' ? (
           <CommandMessage
             command={msg.command ?? ''}
             output={msg.output}

@@ -427,6 +427,40 @@ it.sequential('splitStaticHistory keeps completed commands behind an earlier run
   expect(history.some((message) => message.id === 'completed-command')).toBe(false);
 });
 
+it.sequential(
+  'splitStaticHistory keeps a still-open trailing command run active only when groupCommands is set',
+  async () => {
+    const messages = [
+      { id: 'older', sender: 'bot', text: 'older', status: 'finalized' },
+      { id: 'cmd-1', sender: 'command', status: 'completed', command: 'grep foo', output: '' },
+      { id: 'cmd-2', sender: 'command', status: 'completed', command: 'cat bar', output: '' },
+    ];
+
+    const withoutGrouping = splitStaticHistory(messages);
+    expect(withoutGrouping.history.some((m) => m.id === 'cmd-2')).toBe(true);
+    expect(withoutGrouping.active).toHaveLength(0);
+
+    const withGrouping = splitStaticHistory(messages, { groupCommands: true });
+    expect(withGrouping.history.some((m) => m.id === 'cmd-1')).toBe(false);
+    expect(withGrouping.active.map((m) => m.id)).toEqual(['cmd-1', 'cmd-2']);
+  },
+);
+
+it.sequential(
+  'splitStaticHistory releases a trailing command run into history once it is closed by a later message',
+  async () => {
+    const messages = [
+      { id: 'cmd-1', sender: 'command', status: 'completed', command: 'grep foo', output: '' },
+      { id: 'cmd-2', sender: 'command', status: 'completed', command: 'cat bar', output: '' },
+      { id: 'bot-reply', sender: 'bot', text: 'done', status: 'finalized' },
+    ];
+
+    const { history, active } = splitStaticHistory(messages, { groupCommands: true });
+    expect(history.map((m) => m.id)).toEqual(['cmd-1', 'cmd-2', 'bot-reply']);
+    expect(active).toHaveLength(0);
+  },
+);
+
 it.sequential('splitStaticHistory moves completed subagent activity to static history', async () => {
   const messages = [
     { id: 'older', sender: 'bot', text: 'older', status: 'finalized' },
@@ -1001,3 +1035,66 @@ it.sequential(
     expect(renderer.frames.length).toBe(2);
   },
 );
+
+it.sequential('MessageList collapses a closed run of tool calls into one summary line in concise mode', async () => {
+  const settingsService = createMockSettingsService({ 'ui.displayMode': 'concise' });
+  const { lastFrame } = await renderInAct(
+    <MessageList
+      settingsService={settingsService}
+      messages={[
+        { id: 'cmd-1', sender: 'command', status: 'completed', command: 'grep foo', toolName: 'grep', output: '' },
+        {
+          id: 'cmd-2',
+          sender: 'command',
+          status: 'completed',
+          command: '',
+          toolName: 'read_file',
+          toolArgs: { path: 'a.ts' },
+          output: '',
+        },
+        { id: 'bot-reply', sender: 'bot', status: 'finalized', text: 'done' },
+      ]}
+    />,
+  );
+
+  const output = stripAnsi(lastFrame() ?? '');
+  expect(output.includes('Searched for 1 pattern, read 1 file')).toBe(true);
+  // The individual tool-call lines must not also render once folded into the summary.
+  expect(countOccurrences(output, '"a.ts"')).toBe(0);
+});
+
+it.sequential('MessageList keeps a still-running trailing tool call run ungrouped and updates it live', async () => {
+  const settingsService = createMockSettingsService({ 'ui.displayMode': 'concise' });
+  const renderer = await renderInAct(
+    <MessageList
+      settingsService={settingsService}
+      messages={[
+        { id: 'cmd-1', sender: 'command', status: 'completed', command: 'grep foo', toolName: 'grep', output: '' },
+        { id: 'cmd-2', sender: 'command', status: 'running', command: 'cat bar', toolName: undefined, output: '' },
+      ]}
+    />,
+  );
+
+  let output = stripAnsi(renderer.lastFrame() ?? '');
+  // Still-running trailing run stays ungrouped: cmd-1 renders its own individual
+  // line rather than being folded into a "Searched for 1 pattern, ..." summary.
+  expect(output.includes('Searched for 1 pattern')).toBe(false);
+  expect(output.includes('Searched')).toBe(true);
+
+  await rerenderInAct(
+    renderer,
+    <MessageList
+      settingsService={settingsService}
+      messages={[
+        { id: 'cmd-1', sender: 'command', status: 'completed', command: 'grep foo', toolName: 'grep', output: '' },
+        { id: 'cmd-2', sender: 'command', status: 'completed', command: 'cat bar', toolName: undefined, output: '' },
+        { id: 'bot-reply', sender: 'bot', status: 'finalized', text: 'done' },
+      ]}
+    />,
+  );
+
+  output = stripAnsi(renderer.lastFrame() ?? '');
+  expect(output.includes('Searched for 1 pattern, ran 1 shell command')).toBe(true);
+  // Once folded into the group summary, the individual raw command line is gone.
+  expect(countOccurrences(output, 'cat bar')).toBe(0);
+});

@@ -1,0 +1,71 @@
+name: CI
+
+# Run on every push to main: the full unit/e2e vitest suite (`pnpm test`),
+# plus the provider black-box suite (`test:provider-black-box`), which builds
+# dist/ and drives the shipped CLI through PTY-driven scenarios against
+# deterministic loopback fixtures.
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+# A newer push to main supersedes an in-flight run of an older commit;
+# cancel the stale run instead of queueing behind it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # npm -g rather than corepack: corepack is bundled only with Node < 25,
+      # and npm ships with every Node release the runner may provision.
+      - name: Install pnpm
+        run: npm install -g pnpm@11.7.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The script sets NODE_ENV=test itself via cross-env; do not rely on the
+      # ambient value (see AGENTS.md on why production mode breaks Ink tests).
+      - name: Run full test suite
+        run: pnpm test
+
+  provider-black-box:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # npm -g rather than corepack: corepack is bundled only with Node < 25,
+      # and npm ships with every Node release the runner may provision.
+      - name: Install pnpm
+        run: npm install -g pnpm@11.7.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Builds dist/ first, then launches it through a python3 pty.spawn
+      # bridge (provider-test-harness.ts). GitHub-hosted Ubuntu runners ship
+      # python3, so the PTY bridge needs no extra setup here.
+      - name: Run provider black-box suite
+        run: pnpm test:provider-black-box

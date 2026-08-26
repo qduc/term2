@@ -64,9 +64,27 @@ it('buildPromptSpec composes file fragments in stable order', () => {
     searchViaShell: true,
   });
 
-  expect(spec.fragmentFiles).toEqual(['worktree-hygiene.md', 'mentor-addon.md', 'plan-mode-stub.md']);
+  expect(spec.fragmentFiles).toEqual([
+    'approval-model.md',
+    'worktree-hygiene.md',
+    'mentor-addon.md',
+    'plan-mode-stub.md',
+  ]);
 
   expect(spec.inlineSections).toContainEqual(expect.stringContaining('## Shell Sandbox'));
+});
+
+it('buildPromptSpec ships the approval mechanism to every non-lite profile', () => {
+  for (const model of ['gpt-5.6-sol', 'gpt-5.5', 'gpt-5.4', 'gpt-4o', 'claude-opus-4', 'kimi-k2']) {
+    const spec = buildPromptSpec({ model, liteMode: false });
+    expect(spec.fragmentFiles).toContain('approval-model.md');
+  }
+
+  const orchestrator = buildPromptSpec({ model: 'gpt-5.6-sol', liteMode: false, orchestratorMode: true });
+  expect(orchestrator.fragmentFiles).toContain('approval-model.md');
+
+  const lite = buildPromptSpec({ model: 'gpt-5.6-sol', liteMode: true });
+  expect(lite.fragmentFiles).not.toContain('approval-model.md');
 });
 
 it('buildPromptSpec attaches the Plan Mode stub in standard and plan mode so the instruction prefix stays cache-stable', () => {

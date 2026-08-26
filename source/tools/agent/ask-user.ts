@@ -12,6 +12,8 @@ const ASK_USER_DESCRIPTION =
   'Ask the user clarifying questions when missing user decisions block correct progress. ' +
   'Use this when you need a decision, preference, or missing detail from the user before you can proceed correctly. ' +
   'Do NOT use this for information you can find yourself with tools. ' +
+  'Do NOT use this to request permission to run a tool or take an action: the approval layer already gates every ' +
+  'tool call and prompts the user when one needs confirmation, so attempt the action instead of asking about it. ' +
   'Returns the answers selected/entered by the user.';
 
 const reservedOptionLabels = new Set<string>(ASK_USER_RESERVED_OPTION_LABELS);

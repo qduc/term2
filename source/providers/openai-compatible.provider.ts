@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { RetryingModel } from './retrying-model.js';
 import type { ISettingsService, ILoggingService, ISessionContextService } from '../services/service-interfaces.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../services/session/session-context-service.js';
 import { type ProviderDefinition, type ProviderDeps, type ProviderFetch } from './registry.js';
@@ -363,7 +364,13 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
       if (!('getStreamedModel' in provider) || typeof provider.getStreamedModel !== 'function') {
         throw new Error(`Custom provider '${providerId}' has no application-owned streamed model`);
       }
-      return provider.getStreamedModel(model);
+      const streamed = provider.getStreamedModel(model);
+      const attempts = deps.retryAttempts ?? deps.settingsService.get('agent.retryAttempts') ?? 2;
+      return new RetryingModel(streamed, {
+        retryAttempts: attempts,
+        loggingService: deps.loggingService,
+        onRetry: deps.onRetry,
+      });
     },
     fetchModels: async (deps: ProviderDeps, fetchImpl: ProviderFetch = fetch) => {
       const resolved = findConfigFromSettings(deps.settingsService, providerId);

@@ -5,7 +5,7 @@ import {
   LongRetryDelayError,
   findReauthenticationRequiredError,
 } from '../../providers/common/provider-errors.js';
-import { getRetryAfterMs } from './upstream-retry-policy.js';
+import { classifyUpstreamRetryableError, getRetryAfterMs } from './upstream-retry-policy.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import { AmbiguousModelOutcomeError } from './retry-errors.js';
 
@@ -417,9 +417,20 @@ export const isTransientRetryableError = (error: unknown, logger?: Pick<ILogging
     return false;
   }
 
+  // 1. WebSocket abnormal close code classification (with logging)
+  const wsResult = handleWebSocketCloseClassification(error, logger);
+  if (wsResult !== undefined) {
+    return wsResult;
+  }
+
   // Incomplete stream terminals (finish_reason / finish event missing) are
   // recoverable mid-stream cuts — same policy as isRetryableTransportError.
   if (isIncompleteStreamTerminalError(error)) {
+    return true;
+  }
+
+  const upstream = classifyUpstreamRetryableError(error);
+  if (upstream.retryable) {
     return true;
   }
 
@@ -470,12 +481,6 @@ export const isTransientRetryableError = (error: unknown, logger?: Pick<ILogging
       }
       return false;
     }
-  }
-
-  // 1. WebSocket abnormal close code classification (with logging)
-  const wsResult = handleWebSocketCloseClassification(error, logger);
-  if (wsResult !== undefined) {
-    return wsResult;
   }
 
   // 2. Network protocol errors

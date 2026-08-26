@@ -20,9 +20,10 @@ it('openrouter exposes an application-owned model factory without requiring a ru
   expect(typeof provider?.createStreamedModel).toBe('function');
 });
 
-it('openrouter application model factory uses configured credentials', () => {
+it('openrouter application model factory uses configured credentials and wraps in RetryingModel', () => {
   const provider = getProvider('openrouter');
   const model = provider!.createStreamedModel!('openrouter/auto', deps);
   expect(model).toBeTruthy();
   expect(typeof (model as any).stream).toBe('function');
+  expect((model as any).wrappedModel).toBeTruthy();
 });

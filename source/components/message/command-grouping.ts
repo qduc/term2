@@ -2,16 +2,17 @@
 // messages into a single live summary line (e.g. "Searched for 1 pattern, read
 // 3 files, ran 2 shell commands").
 //
-// Grouping is eager: the finished calls in a run collapse as soon as there are
-// two of them, while more calls may still be appended. The counts simply tick
-// up in place. Calls still in flight keep their own detailed line below the
-// group, so a slow one is visible for as long as it runs.
+// In an open trailing run, the most recently completed tool call is retained
+// separate below the group summary line so its result stays visible while work
+// proceeds. Preceding finished calls collapse into the summary line whose counts
+// tick up in place. Once another kind of message arrives (or the run closes),
+// all settled calls fold into the group summary.
 //
 // That bound matters beyond looks. An ungrouped run grows the dynamic region by
 // ~2 rows per tool call, and once that region reaches the terminal height Ink
 // stops redrawing incrementally and clears the screen *and the scrollback* on
-// every frame. Only the in-flight calls stay unfolded, and those are capped by
-// the parallel-dispatch limit.
+// every frame. Only the last run call and in-flight calls stay unfolded, and
+// those are bounded.
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
 import { formatToolArgs } from './command-message-helpers.js';
 
@@ -92,16 +93,31 @@ export const buildCommandGroupMessage = (members: GroupableMessage[]): CommandGr
   };
 };
 
+export type GroupCommandRunsOptions = {
+  /** When true, all runs in the message list are treated as closed (e.g. in static history). */
+  isClosed?: boolean;
+};
+
 /**
  * Within each maximal run of consecutive `sender === 'command'` messages, folds
- * the leading *settled* calls into one `CommandGroupMessage`. Anything from the
- * first still-running call onward is left alone, so work in flight keeps
- * showing what it is doing. Everything else passes through unchanged.
+ * settled calls into a `CommandGroupMessage`.
+ *
+ * In an open trailing run (where no subsequent non-command message has arrived),
+ * the most recently completed tool call is retained separate below the group
+ * summary line so its result stays visible. Once another kind of message
+ * arrives, all settled calls in the run fold into the group.
+ *
+ * Anything from the first still-running call onward is left alone, so work in
+ * flight keeps showing what it is doing. Everything else passes through
+ * unchanged.
  *
  * A single settled call is also left alone, so one tool call still shows what
  * it actually did rather than a bare "1 file".
  */
-export const groupCommandRuns = <T extends GroupableMessage>(messages: T[]): (T | CommandGroupMessage)[] => {
+export const groupCommandRuns = <T extends GroupableMessage>(
+  messages: T[],
+  options?: GroupCommandRunsOptions,
+): (T | CommandGroupMessage)[] => {
   const result: (T | CommandGroupMessage)[] = [];
   let i = 0;
 
@@ -119,13 +135,25 @@ export const groupCommandRuns = <T extends GroupableMessage>(messages: T[]): (T 
     }
 
     const run = messages.slice(i, j);
+    const hasTrailingNonCommandMessage = options?.isClosed || j < messages.length;
     const inFlight = run.findIndex((member) => isRunningStatus(member.status));
     const settled = inFlight === -1 ? run : run.slice(0, inFlight);
+    const inFlightAndAfter = inFlight === -1 ? [] : run.slice(inFlight);
 
-    if (settled.length >= 2) {
-      result.push(buildCommandGroupMessage(settled), ...run.slice(settled.length));
+    if (hasTrailingNonCommandMessage) {
+      if (settled.length >= 2) {
+        result.push(buildCommandGroupMessage(settled), ...inFlightAndAfter);
+      } else {
+        result.push(...run);
+      }
     } else {
-      result.push(...run);
+      if (settled.length >= 2) {
+        const lastRunTool = settled[settled.length - 1];
+        const toGroup = settled.slice(0, -1);
+        result.push(buildCommandGroupMessage(toGroup), lastRunTool, ...inFlightAndAfter);
+      } else {
+        result.push(...run);
+      }
     }
 
     i = j;

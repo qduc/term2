@@ -1086,7 +1086,7 @@ const revealRunningCommands = async () => {
   });
 };
 
-it.sequential('MessageList folds settled calls while the running one keeps its own line', async () => {
+it.sequential('MessageList folds settled calls while retaining the last run tool and running call', async () => {
   vi.useFakeTimers();
   onTestFinished(() => {
     vi.useRealTimers();
@@ -1108,10 +1108,11 @@ it.sequential('MessageList folds settled calls while the running one keeps its o
     />,
   );
 
-  // Two settled calls folded; the running one still says what it is doing.
+  // Settled calls: cmd1 folded into group, cmd2 retained separate as last run tool; cmd3 running.
   await revealRunningCommands();
   let output = stripAnsi(renderer.lastFrame() ?? '');
-  expect(output.includes('✔ Searched for 1 pattern, read 1 file')).toBe(true);
+  expect(output.includes('✔ Searched for 1 pattern')).toBe(true);
+  expect(output.includes('Read')).toBe(true);
   expect(output.includes('cmd3')).toBe(true);
 
   await rerenderInAct(
@@ -1127,12 +1128,12 @@ it.sequential('MessageList folds settled calls while the running one keeps its o
     />,
   );
 
-  // Same line, count ticked up — not a second summary. cmd3 folded in, cmd4 took over.
+  // Same line, count ticked up: cmd1 and cmd2 folded into group, cmd3 retained as last run tool, cmd4 running.
   await revealRunningCommands();
   output = stripAnsi(renderer.lastFrame() ?? '');
-  expect(output.includes('✔ Searched for 1 pattern, read 1 file, ran 1 shell command')).toBe(true);
+  expect(output.includes('✔ Searched for 1 pattern, read 1 file')).toBe(true);
   expect(countOccurrences(output, 'Searched for')).toBe(1);
-  expect(output.includes('cmd3')).toBe(false);
+  expect(output.includes('cmd3')).toBe(true);
   expect(output.includes('cmd4')).toBe(true);
 });
 
@@ -1140,7 +1141,7 @@ it.sequential('MessageList folds settled calls while the running one keeps its o
 // Once that region reaches the terminal height, Ink abandons incremental redraw
 // and clears the screen *and the scrollback* on every frame, so the whole
 // conversation vanishes the moment the assistant starts replying. Only in-flight
-// calls stay unfolded, so assert a long run stays short.
+// calls and the last run tool stay unfolded, so assert a long run stays short.
 it.sequential('MessageList keeps a long tool call run bounded to the folded line plus what is running', async () => {
   vi.useFakeTimers();
   onTestFinished(() => {
@@ -1164,9 +1165,11 @@ it.sequential('MessageList keeps a long tool call run bounded to the folded line
   await revealRunningCommands();
   const toolLines = renderedLines(lastFrame() ?? '').filter((line) => line.includes('✔') || line.includes('▶'));
 
-  expect(toolLines).toHaveLength(2);
-  expect(toolLines[0]).toContain('✔ Read 11 files');
-  expect(toolLines[1]).toContain('file12.ts');
+  // 1 group line (files 1..10), 1 last run tool line (file11.ts), 1 running tool line (file12.ts)
+  expect(toolLines).toHaveLength(3);
+  expect(toolLines[0]).toContain('✔ Read 10 files');
+  expect(toolLines[1]).toContain('file11.ts');
+  expect(toolLines[2]).toContain('file12.ts');
 });
 
 it.sequential('MessageList reports a partly-failed run without painting the whole line red', async () => {

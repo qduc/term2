@@ -307,7 +307,7 @@ const MessageList = <T extends MessageLike = Message>({
     // A still-open run lives in `split.active`, where it is re-rendered each
     // frame, so it can be grouped just as eagerly and simply count up.
     return {
-      history: groupCommandRuns(split.history),
+      history: groupCommandRuns(split.history, { isClosed: true }),
       active: groupCommandRuns(split.active),
     };
   }, [filteredMessages, displayMode]);

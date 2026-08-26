@@ -26,15 +26,22 @@ const RATE_LIMIT_MESSAGE_PATTERNS = ['rate limit', 'too many requests', 'rate_li
 
 const getMessage = (error: unknown): string => {
   if (typeof error === 'string') return error;
-  if (error && typeof error === 'object' && 'message' in error) {
-    return String((error as { message?: unknown }).message ?? '');
+  if (error && typeof error === 'object') {
+    const msg = (error as { message?: unknown }).message;
+    if (typeof msg === 'string') return msg;
+    const nested = (error as { error?: { message?: unknown } }).error?.message;
+    if (typeof nested === 'string') return nested;
   }
   return '';
 };
 
 const parseStatus = (value: unknown): number | undefined => {
-  const status = typeof value === 'number' ? value : parseInt(String(value), 10);
-  return Number.isInteger(status) ? status : undefined;
+  if (typeof value === 'number' && Number.isInteger(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = parseInt(value, 10);
+    return Number.isInteger(parsed) && String(parsed) === value.trim() ? parsed : undefined;
+  }
+  return undefined;
 };
 
 const getHeadersSource = (source: unknown): HeaderSource | undefined => {
@@ -127,13 +134,42 @@ export function classifyUpstreamRetryableError(error: unknown): UpstreamRetryCla
     return { retryable: false };
   }
 
-  const status = parseStatus((error as { status?: unknown; statusCode?: unknown }).status ?? (error as any).statusCode);
+  const rawStatus =
+    (error as { status?: unknown; statusCode?: unknown; code?: unknown }).status ??
+    (error as any).statusCode ??
+    (error as any).code ??
+    (error as any).error?.status ??
+    (error as any).error?.statusCode ??
+    (error as any).error?.code;
+  const status = parseStatus(rawStatus);
   if (status !== undefined) {
     return {
       retryable: status === 429 || status >= 500,
       status,
-      retryAfterMs: getRetryAfterMs(error),
+      retryAfterMs: getRetryAfterMs(error) ?? getRetryAfterMs((error as any).error),
       reason: 'generic-status',
+    };
+  }
+
+  const rawCode = String((error as any).code ?? (error as any).error?.code ?? '').toLowerCase();
+  const rawType = String(
+    (error as any).metadata?.error_type ??
+      (error as any).error?.metadata?.error_type ??
+      (error as any).type ??
+      (error as any).error?.type ??
+      '',
+  ).toLowerCase();
+  if (
+    rawCode.includes('rate_limit') ||
+    rawCode.includes('too_many_requests') ||
+    rawType.includes('rate_limit') ||
+    rawType.includes('too_many_requests')
+  ) {
+    return {
+      retryable: true,
+      status: 429,
+      retryAfterMs: getRetryAfterMs(error) ?? getRetryAfterMs((error as any).error),
+      reason: 'rate-limit-code',
     };
   }
 
@@ -141,7 +177,7 @@ export function classifyUpstreamRetryableError(error: unknown): UpstreamRetryCla
   const retryable = RATE_LIMIT_MESSAGE_PATTERNS.some((pattern) => message.includes(pattern));
   return {
     retryable,
-    retryAfterMs: getRetryAfterMs(error),
+    retryAfterMs: getRetryAfterMs(error) ?? getRetryAfterMs((error as any).error),
     ...(retryable ? { reason: 'rate-limit-message' } : {}),
   };
 }

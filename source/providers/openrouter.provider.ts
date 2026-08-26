@@ -1,3 +1,4 @@
+import { RetryingModel } from './retrying-model.js';
 import { registerProvider } from './registry.js';
 import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { AiSdkOpenRouterProvider } from './ai-sdk-openrouter.provider.js';
@@ -113,7 +114,13 @@ registerProvider({
   createStreamedModel: (model, deps): StreamedModelTurn => {
     const provider = createOpenRouterModel(deps, model);
     if (!provider) throw new Error('OpenRouter API key is not configured');
-    return provider.getStreamedModel(model);
+    const streamedModel = provider.getStreamedModel(model);
+    const retryAttempts = deps.retryAttempts ?? deps.settingsService.get('agent.retryAttempts') ?? 2;
+    return new RetryingModel(streamedModel, {
+      retryAttempts,
+      loggingService: deps.loggingService,
+      onRetry: deps.onRetry,
+    });
   },
   fetchModels: fetchOpenRouterModels,
   sensitiveSettingKeys: [

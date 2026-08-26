@@ -451,3 +451,30 @@ it('classify stops recovering a flaky close once the transient budget is spent',
 
   expect(result.kind).toBe('unrecoverable');
 });
+
+it('classify returns transient for in-stream 429 rate limit error frame', () => {
+  const classifier = makeClassifier();
+  const error = {
+    code: 429,
+    message: 'Provider returned error',
+    metadata: { error_type: 'rate_limit_exceeded' },
+  };
+
+  const result = classifier.classify(baseContext({ error }));
+
+  expect(result.kind).toBe('transient');
+  if (result.kind !== 'transient') return;
+  expect(result.attempt).toBe(1);
+  expect(result.delayMs > 0 && result.delayMs <= 30000).toBe(true);
+});
+
+it('classify returns transient for OpenRouter / upstream 503 error', () => {
+  const classifier = makeClassifier();
+  const error = new OpenAICompatibleError('service unavailable', 503, {});
+
+  const result = classifier.classify(baseContext({ error }));
+
+  expect(result.kind).toBe('transient');
+  if (result.kind !== 'transient') return;
+  expect(result.attempt).toBe(1);
+});

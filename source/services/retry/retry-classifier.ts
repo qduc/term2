@@ -4,8 +4,10 @@ import {
   isPreviousResponseNotFoundError,
   isRecoverableIncompleteStreamClose,
   isRetryableTransportError,
+  isTransientRetryableError,
   isWebSocketConnectionLimitReachedError,
 } from './retry-error-classification.js';
+import { classifyUpstreamRetryableError } from './upstream-retry-policy.js';
 import type { ClassificationContext, ClassifiedFailure } from './retry-contracts.js';
 import { AmbiguousModelOutcomeError, ConversationStateNoProgressError } from './retry-errors.js';
 import { extractHistoryLength } from '../stream-snapshot.js';
@@ -73,16 +75,19 @@ export class DefaultRetryClassifier {
     // refuses every ambiguous error — replaying against the open chain is unsafe.
     // Chain recovery does not replay: it rebuilds from full history. Route the
     // recoverable closes there rather than ending the run on one flaky drop.
-    if (error instanceof AmbiguousModelOutcomeError && isRecoverableIncompleteStreamClose(error)) {
-      const nextAttempt = retryCounts.transientRetryCount + 1;
-      if (nextAttempt > maxTransientRetries) {
-        return { kind: 'unrecoverable' };
+    if (error instanceof AmbiguousModelOutcomeError) {
+      if (isRecoverableIncompleteStreamClose(error)) {
+        const nextAttempt = retryCounts.transientRetryCount + 1;
+        if (nextAttempt > maxTransientRetries) {
+          return { kind: 'unrecoverable' };
+        }
+        return {
+          kind: 'chain_recovery',
+          attempt: nextAttempt,
+          delayMs: computeTransientDelayMs(nextAttempt, this.random),
+        };
       }
-      return {
-        kind: 'chain_recovery',
-        attempt: nextAttempt,
-        delayMs: computeTransientDelayMs(nextAttempt, this.random),
-      };
+      return { kind: 'unrecoverable' };
     }
 
     if (isWebSocketConnectionLimitReachedError(error)) {
@@ -94,12 +99,14 @@ export class DefaultRetryClassifier {
       return { kind: 'transport_downgrade' };
     }
 
-    if (isRetryableTransportError(error).retryable) {
+    const upstream = classifyUpstreamRetryableError(error);
+    if (isRetryableTransportError(error).retryable || isTransientRetryableError(error) || upstream.retryable) {
       const nextAttempt = retryCounts.transientRetryCount + 1;
       if (nextAttempt > maxTransientRetries) {
         return { kind: 'unrecoverable' };
       }
-      return { kind: 'transient', attempt: nextAttempt, delayMs: computeTransientDelayMs(nextAttempt, this.random) };
+      const delayMs = upstream.retryAfterMs ?? computeTransientDelayMs(nextAttempt, this.random);
+      return { kind: 'transient', attempt: nextAttempt, delayMs };
     }
 
     return { kind: 'unrecoverable' };

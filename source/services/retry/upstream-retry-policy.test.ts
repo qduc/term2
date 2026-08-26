@@ -147,3 +147,35 @@ it('classifyUpstreamRetryableError parses retry-after from generic error headers
     reason: 'generic-status',
   });
 });
+
+it('classifyUpstreamRetryableError marks in-stream 429 error frames and metadata retryable', () => {
+  const inStreamFrame = {
+    code: 429,
+    message: 'Provider returned error',
+    metadata: { error_type: 'rate_limit_exceeded' },
+  };
+  expect(classifyUpstreamRetryableError(inStreamFrame)).toMatchObject({
+    retryable: true,
+    status: 429,
+  });
+
+  const nestedError = {
+    error: {
+      code: 429,
+      message: 'Provider returned error',
+      metadata: { error_type: 'rate_limit_exceeded' },
+    },
+  };
+  expect(classifyUpstreamRetryableError(nestedError)).toMatchObject({
+    retryable: true,
+    status: 429,
+  });
+
+  const errorWithMetadata = Object.assign(new Error('Provider returned error'), {
+    metadata: { error_type: 'rate_limit_exceeded' },
+  });
+  expect(classifyUpstreamRetryableError(errorWithMetadata)).toMatchObject({
+    retryable: true,
+    status: 429,
+  });
+});

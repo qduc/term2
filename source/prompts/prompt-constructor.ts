@@ -58,6 +58,13 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
   // receives the shared dirty-state and validation safeguards.
   const shouldIncludeWorktreeHygiene = !liteMode;
 
+  // Every non-lite prompt states how the approval layer works. Without it a
+  // model has no mechanism for "requires confirmation" other than stopping the
+  // turn to ask, which it then does even under auto-approval.
+  if (!liteMode) {
+    fragmentFiles.push('approval-model.md');
+  }
+
   if (shouldIncludeWorktreeHygiene) {
     fragmentFiles.push('worktree-hygiene.md');
   }

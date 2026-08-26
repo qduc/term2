@@ -6,6 +6,7 @@ const WEBSOCKET_CLOSED = 3;
 export type ResponsesWebSocketLike = {
   close(): void;
   socket?: { readyState?: number };
+  on?(event: 'error', listener: () => void): unknown;
 };
 
 export type ResponsesWebSocketRelease = {
@@ -16,7 +17,13 @@ type SessionSocket<T extends ResponsesWebSocketLike> = {
   socket: T;
   fingerprint: string;
   inFlight: number;
+  openedAt: number;
 };
+
+// The Codex WebSocket endpoint force-closes connections at ~60 minutes. A
+// retained idle socket must be retired before that lifetime expires, or the
+// next turn is handed a socket the server is about to kill mid-flight.
+const MAX_RETAINED_SOCKET_AGE_MS = 50 * 60 * 1000;
 
 /**
  * One Responses WebSocket per logical agent/session. A later acquire must not
@@ -38,6 +45,10 @@ export class ResponsesWebSocketSessions<T extends ResponsesWebSocketLike = Respo
         this.#closeSocket(slot.socket);
         continue;
       }
+      if (slot.inFlight === 0 && Date.now() - slot.openedAt >= MAX_RETAINED_SOCKET_AGE_MS) {
+        this.#closeSocket(slot.socket);
+        continue;
+      }
       if (slot.inFlight === 0 && slot.fingerprint !== fingerprint) {
         this.#closeSocket(slot.socket);
         continue;
@@ -55,7 +66,12 @@ export class ResponsesWebSocketSessions<T extends ResponsesWebSocketLike = Respo
     }
 
     const socket = this.createSocket(headers);
-    retained.push({ socket, fingerprint, inFlight: 1 });
+    // The SDK turns an unlistened socket error into a bare `Promise.reject`,
+    // which crashes the process when an idle retained socket is closed by
+    // the server (e.g. its 60-minute lifetime cap). Active streams attach
+    // their own listener and still receive the same emitted event.
+    socket.on?.('error', () => {});
+    retained.push({ socket, fingerprint, inFlight: 1, openedAt: Date.now() });
     this.#slots.set(key, retained);
     return socket;
   }
@@ -66,7 +82,8 @@ export class ResponsesWebSocketSessions<T extends ResponsesWebSocketLike = Respo
       if (index < 0) continue;
       const slot = list[index]!;
       slot.inFlight = Math.max(0, slot.inFlight - 1);
-      if (options.keepAlive && isLive(socket) && slot.inFlight === 0) {
+      const withinLifetime = Date.now() - slot.openedAt < MAX_RETAINED_SOCKET_AGE_MS;
+      if (options.keepAlive && withinLifetime && isLive(socket) && slot.inFlight === 0) {
         return;
       }
       this.#closeSocket(socket);

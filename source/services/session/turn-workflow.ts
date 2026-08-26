@@ -421,6 +421,7 @@ export class TurnWorkflow {
             return { kind: 'approval_required', terminal: this.#postExecuteApprovalTerminal(cycleResult.entries) };
           }
           const { outcome } = cycleResult;
+          attempt.advanceRetry({ ...attempt.retryCounts, transientRetryCount: 0 });
 
           if (outcome.kind === 'response') {
             return { kind: 'response', terminal: outcome.result };
@@ -872,6 +873,7 @@ export class TurnWorkflow {
 
           const { outcome, nextCumulativeMessages, nextCumulativeUsage, nextCumulativeTurnItems, mergedEmittedIds } =
             cycleResult;
+          state.setRetryCounts({ ...state.retryCounts, transientRetryCount: 0 });
 
           state.setCumulativeUsage(nextCumulativeUsage);
           state.setCumulativeCommandMessages(nextCumulativeMessages);

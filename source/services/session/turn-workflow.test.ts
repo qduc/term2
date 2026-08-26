@@ -56,6 +56,24 @@ const defaultRetryCounts: RetryCounts = {
   transportDowngradeCount: 0,
 };
 
+const prepareApprovalContinuation = (composition: any, token: number) => {
+  composition.approvalFlow.prepareContinuation = () =>
+    ({
+      pendingApprovalContext: {
+        state: {},
+        interruption: { type: 'tool_approval_item', callId: 'call-1', name: 'shell', arguments: '{}' },
+        toolCallArgumentsById: new Map([['call-1', '{}']]),
+        emittedCommandIds: new Set<string>(),
+        token,
+        inputMode: 'delta',
+        cumulativeUsage: {},
+        cumulativeCommandMessages: [],
+        cumulativeTurnItems: [],
+      },
+      toolStartedEvent: undefined,
+    } as any);
+};
+
 it('executes initial turn successfully', async () => {
   const stream = new MockStream([{ type: 'text_delta', text: 'hello response' }]);
   stream.finalOutput = 'hello response';
@@ -107,6 +125,114 @@ it('executes initial turn successfully', async () => {
   expect(receivedProviderHistorySnapshot).toBe(attempt.providerHistorySnapshot);
   expect(receivedLineage).toBe(composition.providerContinuity.lineage);
   expect(Object.isFrozen(receivedProviderHistorySnapshot)).toBe(true);
+});
+
+it('resets only the transient retry count after a successful initial stream cycle', async () => {
+  const stream = new MockStream([{ type: 'text_delta', text: 'hello response' }]);
+  stream.finalOutput = 'hello response';
+  const { workflow, composition } = setupWorkflow({
+    getProvider: () => 'openai',
+    startStream: async () => stream,
+  });
+  const attempt = new TurnAttempt({
+    turn: { text: 'hello' },
+    token: composition.generationGuard.capture(),
+    initialRetryCounts: {
+      transientRetryCount: 2,
+      serviceTierFallbackCount: 1,
+      modelRetryCount: 3,
+      transportDowngradeCount: 1,
+    },
+    initialJournalSnapshot: [],
+    maxTransientRetries: 3,
+  });
+
+  await collect(workflow.executeInitial(attempt));
+
+  expect(attempt.retryCounts).toEqual({
+    transientRetryCount: 0,
+    serviceTierFallbackCount: 1,
+    modelRetryCount: 3,
+    transportDowngradeCount: 1,
+  });
+});
+
+it('resets the transient retry count after a recovered continuation stream cycle succeeds', async () => {
+  let streamCount = 0;
+  const failedStream = new MockStream([]);
+  (failedStream as any)[Symbol.asyncIterator] = async function* () {
+    throw new Error('temporary provider failure');
+  };
+  const mockClient = {
+    getProvider: () => 'openai',
+    continueRunStream: async () => {
+      streamCount++;
+      if (streamCount === 1) return failedStream;
+      const stream = new MockStream([{ type: 'text_delta', text: 'continuation response' }]);
+      stream.finalOutput = 'continuation response';
+      return stream;
+    },
+  };
+  const { workflow, composition } = setupWorkflow(mockClient);
+  const token = composition.generationGuard.capture();
+  prepareApprovalContinuation(composition, token);
+  let recoveredState: any;
+  (workflow as any).deps.continuationRecoveryHandler.handle = async function* ({ state }: any) {
+    recoveredState = state;
+    state.setRetryCounts({
+      transientRetryCount: 2,
+      serviceTierFallbackCount: 1,
+      modelRetryCount: 3,
+      transportDowngradeCount: 1,
+    });
+    return { kind: 'resume' };
+  };
+
+  await collect(workflow.executeContinuation({ kind: 'approval_decision', answer: 'y', generation: token }));
+
+  expect(streamCount).toBe(2);
+  expect(recoveredState.retryCounts).toEqual({
+    transientRetryCount: 0,
+    serviceTierFallbackCount: 1,
+    modelRetryCount: 3,
+    transportDowngradeCount: 1,
+  });
+});
+
+it('keeps transient retry counts after a failed continuation stream cycle', async () => {
+  const failedStream = new MockStream([]);
+  (failedStream as any)[Symbol.asyncIterator] = async function* () {
+    throw new Error('temporary provider failure');
+  };
+  const { workflow, composition } = setupWorkflow({
+    getProvider: () => 'openai',
+    continueRunStream: async () => failedStream,
+  });
+  const token = composition.generationGuard.capture();
+  prepareApprovalContinuation(composition, token);
+  (workflow as any).deps.continuationRecoveryHandler.handle = async function* ({ state }: any) {
+    state.setRetryCounts({
+      transientRetryCount: 2,
+      serviceTierFallbackCount: 1,
+      modelRetryCount: 3,
+      transportDowngradeCount: 1,
+    });
+    return { kind: 'fresh_start', retryCounts: state.retryCounts };
+  };
+
+  const { outcome } = await collect(
+    workflow.executeContinuationAttempt({ kind: 'approval_decision', answer: 'y', generation: token }),
+  );
+
+  expect(outcome).toEqual({
+    kind: 'fresh_start_required',
+    retryCounts: {
+      transientRetryCount: 2,
+      serviceTierFallbackCount: 1,
+      modelRetryCount: 3,
+      transportDowngradeCount: 1,
+    },
+  });
 });
 
 it('requests the standard tier before starting a flagged initial attempt', async () => {

@@ -18,6 +18,42 @@ type RetryingModelOptions = {
   onRetry?: () => void;
 };
 
+/** Watches a signal and rejects with an AbortError when it fires. */
+function abortError(): Error {
+  return Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' });
+}
+
+/**
+ * Resolves when `sleep` settles, or rejects with an AbortError the moment
+ * `signal` fires. Lets a user interrupt a turn even while it sits in retry
+ * backoff, instead of waiting out the remainder of the delay.
+ */
+async function sleepOrAbort(
+  sleep: (delayMs: number) => Promise<void>,
+  delayMs: number,
+  signal: AbortSignal | undefined,
+): Promise<void> {
+  if (signal?.aborted) throw abortError();
+  if (!signal) {
+    await sleep(delayMs);
+    return;
+  }
+  await new Promise<void>((resolve, reject) => {
+    const onAbort = () => reject(abortError());
+    signal.addEventListener('abort', onAbort, { once: true });
+    sleep(delayMs).then(
+      () => {
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
 /** Decorates one application-owned streamed turn with pre-event retries. */
 export class RetryingModel implements StreamedModelTurn {
   readonly #sleep: (delayMs: number) => Promise<void>;
@@ -56,7 +92,7 @@ export class RetryingModel implements StreamedModelTurn {
           this.#logExhaustion(error, attempt);
           throw error;
         }
-        await this.#backoff(error, attempt + 1);
+        await this.#backoff(request.signal, error, attempt + 1);
       }
     }
   }
@@ -69,7 +105,7 @@ export class RetryingModel implements StreamedModelTurn {
     return attempt < this.options.retryAttempts && this.#isRetryable(error);
   }
 
-  async #backoff(error: unknown, attemptNumber: number): Promise<void> {
+  async #backoff(signal: AbortSignal | undefined, error: unknown, attemptNumber: number): Promise<void> {
     const delayMs = computeUpstreamRetryDelayMs({
       attemptIndex: attemptNumber - 1,
       random: this.#random,
@@ -83,7 +119,7 @@ export class RetryingModel implements StreamedModelTurn {
       error: error instanceof Error ? error.message : String(error),
     });
     this.options.onRetry?.();
-    await this.#sleep(delayMs);
+    await sleepOrAbort(this.#sleep, delayMs, signal);
   }
 
   #logExhaustion(error: unknown, attempt: number): void {

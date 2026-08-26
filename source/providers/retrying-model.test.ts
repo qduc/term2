@@ -120,6 +120,62 @@ it('stream uses the larger upstream backoff schedule for retries', async () => {
   expect(delays).toEqual([3000, 24000]);
 });
 
+it('stream aborts out of the backoff sleep when the turn signal is aborted', async () => {
+  let calls = 0;
+  const controller = new AbortController();
+  const underlying: StreamedModelTurn = {
+    async *stream() {
+      calls++;
+      throw retryableError();
+    },
+  };
+  // The injected sleep parks without resolving so we can control the abort timing.
+  let releaseSleep: (() => void) | undefined;
+  const model = new RetryingModel(underlying, {
+    retryAttempts: 2,
+    sleep: () =>
+      new Promise<void>((resolve) => {
+        releaseSleep = resolve;
+      }),
+  });
+  const req = { ...request, signal: controller.signal };
+
+  const pending = collect(model.stream(req));
+  await new Promise((r) => setTimeout(r, 0));
+  // The first attempt failed and the model is now parked in backoff.
+  expect(calls).toBe(1);
+
+  // The user interrupts the turn while the backoff is pending.
+  controller.abort();
+  await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+  // The wrapped model must not be re-invoked after an abort.
+  expect(calls).toBe(1);
+  releaseSleep?.();
+});
+
+it('stream does not sleep when the signal is already aborted before the backoff', async () => {
+  let calls = 0;
+  const controller = new AbortController();
+  controller.abort();
+  const underlying: StreamedModelTurn = {
+    async *stream() {
+      calls++;
+      throw retryableError();
+    },
+  };
+  const model = new RetryingModel(underlying, {
+    retryAttempts: 2,
+    sleep: () => {
+      throw new Error('sleep must not be awaited once the signal is already aborted');
+    },
+  });
+
+  await expect(collect(model.stream({ ...request, signal: controller.signal }))).rejects.toMatchObject({
+    name: 'AbortError',
+  });
+  expect(calls).toBe(1);
+});
+
 it('RetryingModel does not expose getResponse when the wrapped model has none', () => {
   const inner: StreamedModelTurn = {
     async *stream() {},

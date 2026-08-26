@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { ResponsesWebSocketSessions } from './responses-websocket-sessions.js';
 
 const CONNECTING = 0;
@@ -8,6 +8,7 @@ const CLOSED = 3;
 class FakeSocket {
   readonly socket: { readyState: number };
   closeCount = 0;
+  errorListeners: Array<() => void> = [];
 
   constructor(readyState = CONNECTING) {
     this.socket = { readyState };
@@ -16,6 +17,10 @@ class FakeSocket {
   close(): void {
     this.closeCount += 1;
     this.socket.readyState = CLOSED;
+  }
+
+  on(event: string, listener: () => void): void {
+    if (event === 'error') this.errorListeners.push(listener);
   }
 }
 
@@ -82,6 +87,50 @@ it('replaces an idle socket when connection headers other than turn metadata cha
   expect(created).toHaveLength(2);
   expect(second).not.toBe(first);
   expect(first.closeCount).toBe(1);
+});
+
+it('attaches an error listener to every created socket so an idle server-side close cannot crash the process', () => {
+  const { pool, created } = sessions();
+
+  pool.acquire({ 'session-id': 'agent-a' });
+
+  expect(created).toHaveLength(1);
+  expect(created[0]!.errorListeners.length).toBeGreaterThan(0);
+});
+
+it('does not retain an idle socket past the provider connection lifetime cap', () => {
+  vi.useFakeTimers();
+  try {
+    const { pool, created } = sessions();
+    const headers = { 'session-id': 'agent-a', authorization: 'token' };
+
+    const first = pool.acquire(headers) as unknown as FakeSocket;
+    first.socket.readyState = OPEN;
+    pool.release(first as never, { keepAlive: true });
+    vi.advanceTimersByTime(61 * 60 * 1000);
+
+    const second = pool.acquire(headers) as unknown as FakeSocket;
+
+    expect(created).toHaveLength(2);
+    expect(second).not.toBe(first);
+    expect(first.closeCount).toBe(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('still retains a young idle socket for the next turn', () => {
+  const { pool, created } = sessions();
+  const headers = { 'session-id': 'agent-a', authorization: 'token' };
+
+  const first = pool.acquire(headers) as unknown as FakeSocket;
+  first.socket.readyState = OPEN;
+  pool.release(first as never, { keepAlive: true });
+
+  const second = pool.acquire(headers) as unknown as FakeSocket;
+
+  expect(created).toHaveLength(1);
+  expect(second).toBe(first);
 });
 
 it('close() closes every agent socket', () => {

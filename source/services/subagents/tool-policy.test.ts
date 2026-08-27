@@ -380,6 +380,60 @@ describe('worker editor approval parity', () => {
 
     await expect(wrapped.needsApproval({ path: '../outside.txt' }, {})).resolves.toBe(false);
   });
+
+  it('executes an outside-boundary write in YOLO mode', async () => {
+    const execute = vi.fn(async () => 'executed');
+    const policy = new SubagentToolPolicy({
+      settings: createMockSettings({ 'shell.autoApproveMode': 'always' }),
+      logger: createMockLogger(),
+      sessionContextService: createSessionContextService(),
+    });
+    const wrapped = policy.wrapWriteTool(
+      {
+        name: 'apply_patch',
+        description: 'patch',
+        parameters: z.object({ path: z.string() }),
+        needsApproval: () => true,
+        execute,
+        formatCommandMessage: () => [],
+      },
+      process.cwd(),
+      [],
+      (params: { path: string }) => [params.path],
+      true,
+    );
+
+    await expect(wrapped.execute({ path: '../outside.txt' }, {})).resolves.toBe('executed');
+    expect(execute).toHaveBeenCalledOnce();
+  });
+
+  it('rejects an outside-boundary write outside YOLO mode', async () => {
+    const execute = vi.fn(async () => 'executed');
+    const policy = new SubagentToolPolicy({
+      settings: createMockSettings({ 'shell.autoApproveMode': 'off' }),
+      logger: createMockLogger(),
+      sessionContextService: createSessionContextService(),
+    });
+    const wrapped = policy.wrapWriteTool(
+      {
+        name: 'apply_patch',
+        description: 'patch',
+        parameters: z.object({ path: z.string() }),
+        needsApproval: () => true,
+        execute,
+        formatCommandMessage: () => [],
+      },
+      process.cwd(),
+      [],
+      (params: { path: string }) => [params.path],
+      true,
+    );
+
+    await expect(wrapped.execute({ path: '../outside.txt' }, {})).resolves.toContain(
+      'outside the allowed write boundary',
+    );
+    expect(execute).not.toHaveBeenCalled();
+  });
 });
 
 describe('worker shell auto-approval in always mode', () => {
@@ -429,13 +483,11 @@ describe('worker shell auto-approval in always mode', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it('still enforces the workspace write boundary in always mode', async () => {
+  it('executes an outside-workspace write target in always mode', async () => {
     const { wrapped, execute } = wrapShell('always', async () => true);
 
-    await expect(wrapped.execute({ command: 'echo hi > /etc/passwd' })).resolves.toContain(
-      'outside the allowed write boundary',
-    );
-    expect(execute).not.toHaveBeenCalled();
+    await expect(wrapped.execute({ command: 'echo hi > ../outside.txt' })).resolves.toBe('executed');
+    expect(execute).toHaveBeenCalledOnce();
   });
 });
 
@@ -476,6 +528,29 @@ describe('foreground nested worker shell auto-approval', () => {
         command: 'NODE_ENV=test pnpm test source/services/approval/tool-ownership-registry.test.ts',
       }),
     ).resolves.toBe(true);
+  });
+
+  it('executes an outside-workspace write target in always mode', async () => {
+    const execute = vi.fn(async () => 'executed');
+    const policy = new SubagentToolPolicy({
+      settings: createMockSettings({ 'shell.autoApproveMode': 'always' }),
+      logger: createMockLogger(),
+      sessionContextService: createSessionContextService(),
+    });
+    const shell = policy.wrapNestedShellTool(
+      {
+        name: 'shell',
+        description: 'test shell',
+        parameters: z.object({ command: z.string() }),
+        needsApproval: () => true,
+        execute,
+        formatCommandMessage: () => [],
+      },
+      process.cwd(),
+    );
+
+    await expect(shell.execute({ command: 'echo hi > ../outside.txt' })).resolves.toBe('executed');
+    expect(execute).toHaveBeenCalledOnce();
   });
 
   it('still rejects an explicit unsandboxed request in always mode', async () => {

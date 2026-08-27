@@ -1826,3 +1826,60 @@ it('paused queue must contain retained work: discarding a paused queue clears it
   expect(await controller.command({ kind: 'resume_queue' })).toEqual({ kind: 'no_op' });
   expect(starts).toEqual(['execution-1']);
 });
+
+it('holdDispatch queues submissions without starting them until releaseDispatch', async () => {
+  const starts: string[] = [];
+  const controller = new QueueController({
+    driver: {
+      start: ({ item }) => {
+        starts.push(item.text);
+      },
+      cancel: async () => undefined,
+    },
+    snapshotFactory: () => ({}),
+    ids: {
+      item: (() => {
+        let number = 0;
+        return () => `item-${++number}`;
+      })(),
+      execution: (() => {
+        let number = 0;
+        return () => `execution-${++number}`;
+      })(),
+    },
+  });
+
+  expect(controller.holdDispatch()).toBe(true);
+  expect(controller.isDispatchHeld()).toBe(true);
+  expect(controller.holdDispatch()).toBe(false);
+
+  await controller.command({ kind: 'submit', text: 'follow-up' });
+  expect(starts).toEqual([]);
+  expect(controller.state()).toMatchObject({ kind: 'idle', queue: [{ text: 'follow-up' }] });
+
+  controller.releaseDispatch();
+  await Promise.resolve();
+  expect(starts).toEqual(['follow-up']);
+  expect(controller.isDispatchHeld()).toBe(false);
+});
+
+it('releaseDispatch can pause queued work instead of starting it', async () => {
+  const starts: string[] = [];
+  const controller = new QueueController({
+    driver: {
+      start: ({ item }) => {
+        starts.push(item.text);
+      },
+      cancel: async () => undefined,
+    },
+    snapshotFactory: () => ({}),
+  });
+
+  expect(controller.holdDispatch()).toBe(true);
+  await controller.command({ kind: 'submit', text: 'keep' });
+  controller.releaseDispatch({ pauseIfQueued: true });
+
+  expect(starts).toEqual([]);
+  expect(controller.state()).toMatchObject({ kind: 'paused', reason: 'manual', queue: [{ text: 'keep' }] });
+  expect(controller.isDispatchHeld()).toBe(false);
+});

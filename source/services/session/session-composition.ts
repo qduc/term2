@@ -128,7 +128,7 @@ export type SessionRuntimeInternals = {
   generationGuard: GenerationGuard;
   providerContinuity: ProviderContinuity;
   breakChaining: () => void;
-  compactContext: () => Promise<LocalCompactionOutcome | { kind: 'busy' | 'stale' }>;
+  compactContext: (options?: { signal?: AbortSignal }) => Promise<LocalCompactionOutcome | { kind: 'busy' | 'stale' }>;
   recoveryPolicy: DefaultConversationRecoveryPolicy;
   recoveryExecutor: DefaultRecoveryExecutor;
   retryClassifier: DefaultRetryClassifier;
@@ -278,7 +278,7 @@ export type SessionRuntime = {
   state: SessionManager;
   /** Controller for runtime model/provider/retry settings. */
   settings: SessionRuntimeController;
-  compactContext: () => Promise<LocalCompactionOutcome | { kind: 'busy' | 'stale' }>;
+  compactContext: (options?: { signal?: AbortSignal }) => Promise<LocalCompactionOutcome | { kind: 'busy' | 'stale' }>;
   logs: SessionLogs;
   approval: SessionApprovalQuery;
   /** Pending approval protocol projected by presentation layers. */
@@ -775,7 +775,9 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     return shutdownPromise;
   };
 
-  const compactContext = async (): Promise<LocalCompactionOutcome | { kind: 'busy' | 'stale' }> => {
+  const compactContext = async (options?: {
+    signal?: AbortSignal;
+  }): Promise<LocalCompactionOutcome | { kind: 'busy' | 'stale' }> => {
     if (!appState.statusMachine.is('idle')) return { kind: 'busy' };
     const snapshot = conversationStore.getProviderHistorySnapshot();
     const provider =
@@ -787,29 +789,48 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     const catalog = getCatalogModel(provider, model);
     const compactThreshold = settingsService?.get('agent.contextCompaction.compactThreshold') ?? 0.8;
     const configuredMaxOutput = settingsService?.get('agent.maxOutputTokens');
+    const abortError = (): Error => {
+      const error = new Error('Context compaction cancelled.');
+      error.name = 'AbortError';
+      return error;
+    };
     const compactor = new LocalContextCompactor({
-      generate: async ({ renderedInput, maxOutputTokens }) => {
-        const options = {
+      generate: async ({ renderedInput, maxOutputTokens, signal }) => {
+        if (signal?.aborted) throw abortError();
+        const chatOptions = {
           provider,
           model,
           reasoningEffort,
           instructions: CONTEXT_COMPACTION_INSTRUCTIONS,
           maxTokens: maxOutputTokens,
         };
-        if (agentClient.chatDetailed) {
-          const result = await agentClient.chatDetailed(renderedInput, options);
-          return {
-            text: result.text,
-            usage: result.usage
-              ? {
-                  inputTokens: result.usage.prompt_tokens,
-                  outputTokens: result.usage.completion_tokens,
-                }
-              : undefined,
-            costRecords: result.costRecords,
-          };
-        }
-        return { text: await agentClient.chat(renderedInput, options) };
+        const aborted = new Promise<never>((_, reject) => {
+          signal?.addEventListener(
+            'abort',
+            () => {
+              getMethod<[], void>(agentClient, 'abort')?.call(agentClient);
+              reject(abortError());
+            },
+            { once: true },
+          );
+        });
+        const generate = async () => {
+          if (agentClient.chatDetailed) {
+            const result = await agentClient.chatDetailed(renderedInput, chatOptions);
+            return {
+              text: result.text,
+              usage: result.usage
+                ? {
+                    inputTokens: result.usage.prompt_tokens,
+                    outputTokens: result.usage.completion_tokens,
+                  }
+                : undefined,
+              costRecords: result.costRecords,
+            };
+          }
+          return { text: await agentClient.chat(renderedInput, chatOptions) };
+        };
+        return signal ? Promise.race([generate(), aborted]) : generate();
       },
     });
     const outcome = await compactor.compactAtBoundary({
@@ -825,6 +846,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
       compactThreshold,
       compactThresholdTokens: null,
       manual: true,
+      signal: options?.signal,
     });
     if (outcome.kind !== 'compacted') return outcome;
 

@@ -203,6 +203,7 @@ export class ConversationAdapter {
   #postExecuteApproval: PostExecuteApprovalToken | null = null;
   #queueStateObserver: QueueStateObserver | null = null;
   #queuedTurnStartObserver: QueuedTurnStartObserver | null = null;
+  #compactionAbort: AbortController | null = null;
   readonly #activeCancelTimeoutMs: number;
   readonly #queueCapacity: number;
   readonly #preparedLeaseTtlMs: number;
@@ -313,8 +314,33 @@ export class ConversationAdapter {
   /** Whether the foreground queue owns a new submission's UI lifecycle. */
   isQueueOwningSubmissions(): boolean {
     if (!this.#queue) return false;
+    if (this.#queue.isDispatchHeld()) return true;
     const state = this.#queue.state();
     return state.kind !== 'idle' || state.queue.length > 0;
+  }
+
+  /**
+   * Occupy the foreground queue the way an in-flight turn does, so new
+   * submits enqueue instead of starting. False when a turn already owns it.
+   */
+  holdForegroundQueue(): boolean {
+    if (!this.#queue) return true;
+    const held = this.#queue.holdDispatch();
+    if (held) this.#notifyQueueState();
+    return held;
+  }
+
+  releaseForegroundQueue(options: { pauseIfQueued?: boolean } = {}): void {
+    this.#queue?.releaseDispatch(options);
+    this.#notifyQueueState();
+  }
+
+  attachCompactionAbort(controller: AbortController): void {
+    this.#compactionAbort = controller;
+  }
+
+  detachCompactionAbort(controller: AbortController): void {
+    if (this.#compactionAbort === controller) this.#compactionAbort = null;
   }
 
   /**
@@ -696,6 +722,7 @@ export class ConversationAdapter {
   }
 
   abort(): void {
+    this.#compactionAbort?.abort();
     this.#cancellationEpoch++;
     this.#pendingInteraction?.clear();
     if (!this.#queue) {

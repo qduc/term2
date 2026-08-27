@@ -542,6 +542,16 @@ export class ConversationOrchestrator {
     }
   }
 
+  async compactContext(): Promise<string> {
+    this.#activeTurns += 1;
+    this.config.ui.onTurnStart();
+    try {
+      return await this.config.conversationService.compactContext();
+    } finally {
+      this.#endTurn();
+    }
+  }
+
   async sendUserMessage(
     input: string | UserTurn,
     options?: { bypassInputSurgeGuard?: boolean; busyMode?: 'steer' | 'follow_up' },

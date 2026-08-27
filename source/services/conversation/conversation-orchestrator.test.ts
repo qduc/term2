@@ -36,6 +36,7 @@ function mockConversationService(): ConversationService {
   return {
     sessionId: 'test-session',
     sendMessage: vi.fn(),
+    compactContext: vi.fn(async () => 'Context compacted locally.'),
     handleApprovalDecision: vi.fn(),
     abort: vi.fn(),
     interruptFromUser: vi.fn(),
@@ -543,6 +544,25 @@ describe('ConversationOrchestrator', () => {
       interactionId: interactionB.interactionId,
       approval: { callId: 'approval-b' },
     });
+  });
+
+  it('marks the session processing for the duration of compactContext', async () => {
+    const cfg = makeConfig();
+    let releaseCompact!: (value: string) => void;
+    vi.mocked(cfg.conversationService.compactContext).mockReturnValue(
+      new Promise<string>((resolve) => {
+        releaseCompact = resolve;
+      }),
+    );
+    const orchestrator = new ConversationOrchestrator(cfg);
+
+    const pending = orchestrator.compactContext();
+    expect(cfg.ui.onTurnStart).toHaveBeenCalledOnce();
+    expect(cfg.ui.onTurnEnd).not.toHaveBeenCalled();
+
+    releaseCompact('Context compacted locally.');
+    await expect(pending).resolves.toBe('Context compacted locally.');
+    expect(cfg.ui.onTurnEnd).toHaveBeenCalledOnce();
   });
 
   it('routes a queued message to onQueuedMessagePending instead of appending when a turn is in flight', async () => {

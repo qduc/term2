@@ -12,9 +12,13 @@ export type GenerationGuardCode =
   | 'request_deadline';
 
 /**
- * A provider-neutral, per-request generation budget. The stream-output budget
- * applies to text, reasoning, and the observable growth of streamed tool
- * arguments; individual limits keep one channel from consuming it all.
+ * A provider-neutral, per-request generation budget. Text and streamed tool
+ * arguments fail closed when they exceed their caps: they are the visible or
+ * executed payload. Reasoning is a scratch channel — verbose high-effort
+ * models produce far more of it than 100k characters without looping — so
+ * that cap truncates what we retain and does not abort the request. Reasoning
+ * does not consume the aggregate output budget, or one long thought would
+ * starve later text and tool calls.
  */
 export interface GenerationGuardOptions {
   readonly maxOutputCharacters?: number;
@@ -197,14 +201,24 @@ export class GenerationGuard {
     }
   }
 
-  observeReasoning(text: string): void {
-    this.#addReasoning(text.length);
-    if (this.#reasoningRepetition.append(text)) {
+  /**
+   * Count and retain reasoning up to the configured cap. Returns the prefix
+   * that still fits so callers can stop forwarding the rest; never throws for
+   * length. Repetition on the retained prefix remains fail-closed.
+   */
+  observeReasoning(text: string): string {
+    if (!text) return text;
+    const remaining = this.#options.maxReasoningCharacters - this.#reasoningCharacters;
+    if (remaining <= 0) return '';
+    const accepted = text.length > remaining ? text.slice(0, remaining) : text;
+    this.#addReasoning(accepted.length);
+    if (this.#reasoningRepetition.append(accepted)) {
       throw new GenerationGuardError(
         'repetitive_reasoning',
         'Model output was stopped because reasoning entered a repeating pattern.',
       );
     }
+    return accepted;
   }
 
   /**
@@ -273,7 +287,6 @@ export class GenerationGuard {
 
   #addReasoning(length: number): void {
     this.#assertReasoningLength(this.#reasoningCharacters + length);
-    this.#addOutputCharacters(length);
     this.#reasoningCharacters += length;
   }
 

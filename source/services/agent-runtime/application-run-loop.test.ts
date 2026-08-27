@@ -357,7 +357,41 @@ describe('ApplicationRunLoop generation guard', () => {
     await expect(stream.completed).resolves.toBeDefined();
   });
 
-  it('enforces text, reasoning, and aggregate output ceilings before forwarding excess output', async () => {
+  it('truncates streamed reasoning at its cap and still delivers later text instead of aborting the request', async () => {
+    const model: StreamedModelTurn = {
+      async *stream() {
+        yield { type: 'reasoning_delta' as const, text: '12345' };
+        yield { type: 'reasoning_delta' as const, text: '6' };
+        yield { type: 'text_delta' as const, text: 'done' };
+        yield {
+          type: 'completion' as const,
+          responseId: 'resp-verbose-reasoning',
+          output: [
+            { type: 'reasoning' as const, text: '123456' },
+            { type: 'message' as const, content: [{ type: 'text' as const, text: 'done' }] },
+          ],
+        };
+      },
+    };
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'prompt', {
+      generationGuard: { ...guard, maxReasoningCharacters: 5, maxOutputCharacters: 10, maxTextCharacters: 10 },
+    } as any);
+
+    await expect(collect(stream)).resolves.toEqual(
+      expect.arrayContaining([
+        { type: 'reasoning_delta', text: '12345' },
+        { type: 'text_delta', text: 'done' },
+        {
+          type: 'item',
+          item: { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'done' }] },
+        },
+      ]),
+    );
+    expect(stream.output).not.toContainEqual({ type: 'reasoning_delta', text: '6' });
+    await expect(stream.completed).resolves.toBeDefined();
+  });
+
+  it('enforces text and aggregate output ceilings before forwarding excess output', async () => {
     const textModel: StreamedModelTurn = {
       async *stream() {
         yield { type: 'text_delta' as const, text: '12345' };
@@ -370,29 +404,10 @@ describe('ApplicationRunLoop generation guard', () => {
     await expect(textStream.completed).rejects.toMatchObject({ code: 'text_characters', unsafeToReplay: true });
     expect(textStream.output).toEqual([{ type: 'text_delta', text: '12345' }]);
 
-    const reasoningModel: StreamedModelTurn = {
-      async *stream() {
-        yield { type: 'reasoning_delta' as const, text: '12345' };
-        yield { type: 'reasoning_delta' as const, text: '6' };
-      },
-    };
-    const reasoningStream = new ApplicationRunLoop({ resolveModel: () => reasoningModel }).startStream(
-      agent,
-      'prompt',
-      {
-        generationGuard: { ...guard, maxReasoningCharacters: 5 },
-      } as any,
-    );
-    await expect(reasoningStream.completed).rejects.toMatchObject({
-      code: 'reasoning_characters',
-      unsafeToReplay: true,
-    });
-    expect(reasoningStream.output).toEqual([{ type: 'reasoning_delta', text: '12345' }]);
-
     const aggregateModel: StreamedModelTurn = {
       async *stream() {
         yield { type: 'text_delta' as const, text: '12345' };
-        yield { type: 'reasoning_delta' as const, text: '678901' };
+        yield { type: 'tool_call_streaming_delta' as const, toolName: 'apply_patch', argumentCharCount: 6 };
       },
     };
     const aggregateStream = new ApplicationRunLoop({ resolveModel: () => aggregateModel }).startStream(
@@ -468,7 +483,8 @@ describe('ApplicationRunLoop generation guard', () => {
         generationGuard: { ...guard, maxReasoningCharacters: 5 },
       } as any,
     );
-    await expect(reasoningOnly.completed).rejects.toMatchObject({ code: 'reasoning_characters', unsafeToReplay: true });
+    await expect(reasoningOnly.completed).resolves.toBeDefined();
+    expect(reasoningOnly.history).toEqual([{ type: 'message', role: 'user', content: 'prompt' }]);
   });
 
   it('aborts the active provider request when its total deadline expires', async () => {
@@ -564,7 +580,7 @@ describe('ApplicationRunLoop generation guard', () => {
       const completion = expect(stream.completed).rejects.toMatchObject({
         code: 'request_deadline',
         message:
-          'Model request exceeded its total deadline (0s); streamed 20 output chars (text 7, reasoning 13, tool arguments 0).',
+          'Model request exceeded its total deadline (0s); streamed 7 output chars (text 7, reasoning 13, tool arguments 0).',
       });
       await vi.advanceTimersByTimeAsync(10);
       await completion;

@@ -17,6 +17,7 @@ import { createHandoffSlashCommand } from '../commands/handoff-command.js';
 import { createGuardedSettingsCommand } from '../commands/guarded-settings-command.js';
 import { createSkillsSlashCommand } from '../commands/skills-command.js';
 import { createCompactSlashCommand } from '../commands/compact-command.js';
+import { guardAgainstBusyTurn } from '../utils/busy-turn-guard.js';
 import type { SkillsService, SkillInfo } from '../services/skills/skills-service.js';
 import type { Message } from '../types/message.js';
 import type { CopySelection } from '../utils/copy-selections.js';
@@ -47,6 +48,8 @@ interface UseAppCommandsProps {
   skillsService: SkillsService;
   onSkillSelected: (skill: SkillInfo) => void;
   requestModeSwitchConfirm?: (pending: PendingModeSwitch) => void;
+  /** True while an agent turn is in flight; gates conversation-mutating commands. */
+  turnInFlight?: boolean;
 }
 
 // Re-export for backward compat
@@ -80,6 +83,7 @@ export const useAppCommands = ({
   skillsService,
   onSkillSelected,
   requestModeSwitchConfirm,
+  turnInFlight = false,
 }: UseAppCommandsProps) => {
   const { disableOtherModes, togglePlanMode, cycleAppModes } = useModeHelpers({
     settingsService,
@@ -99,36 +103,49 @@ export const useAppCommands = ({
       onRewind,
     };
 
+    // These actions abort the active turn, replace the conversation, or race
+    // it (rewind/retry, retry-tool, clear, quit, compact). Every dispatch
+    // path funnels through the command objects, so guarding here covers the
+    // typed submit, the intent host, and the slash menu at once.
+    const guardBusyTurn = (command: SlashCommand) =>
+      guardAgainstBusyTurn(command, { turnInFlight: () => turnInFlight, notify: addSystemMessage });
+
     return [
       createModelSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage, replaceInput }),
       createEffortSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage, replaceInput }),
-      createClearSlashCommand(clearConversation, addSystemMessage),
+      guardBusyTurn(createClearSlashCommand(clearConversation, addSystemMessage)),
       createCopySlashCommand({ messages, addSystemMessage, openCopyMenu }),
       createUsageSlashCommand(addSystemMessage, getSessionUsage, refreshProviderUsage),
-      createRewindSlashCommand({
-        name: 'rewind',
-        defaultDisposition: 'edit',
-        bareTarget: 'picker',
-        ...rewindDeps,
-      }),
+      guardBusyTurn(
+        createRewindSlashCommand({
+          name: 'rewind',
+          defaultDisposition: 'edit',
+          bareTarget: 'picker',
+          ...rewindDeps,
+        }),
+      ),
       // Aliases keep existing muscle memory working: bare /undo opened a picker
       // and bare /retry acted on the last turn immediately, so each keeps that.
-      createRewindSlashCommand({
-        name: 'undo',
-        aliasOf: 'rewind',
-        defaultDisposition: 'edit',
-        bareTarget: 'picker',
-        ...rewindDeps,
-      }),
-      createRewindSlashCommand({
-        name: 'retry',
-        aliasOf: 'rewind',
-        defaultDisposition: 'resend',
-        bareTarget: 'last',
-        ...rewindDeps,
-      }),
-      createRetryToolSlashCommand({ retryLastToolOutput, addSystemMessage }),
-      createCompactSlashCommand({ compactContext, addSystemMessage }),
+      guardBusyTurn(
+        createRewindSlashCommand({
+          name: 'undo',
+          aliasOf: 'rewind',
+          defaultDisposition: 'edit',
+          bareTarget: 'picker',
+          ...rewindDeps,
+        }),
+      ),
+      guardBusyTurn(
+        createRewindSlashCommand({
+          name: 'retry',
+          aliasOf: 'rewind',
+          defaultDisposition: 'resend',
+          bareTarget: 'last',
+          ...rewindDeps,
+        }),
+      ),
+      guardBusyTurn(createRetryToolSlashCommand({ retryLastToolOutput, addSystemMessage })),
+      guardBusyTurn(createCompactSlashCommand({ compactContext, addSystemMessage })),
       createModeToggleCommand(
         'app.liteMode',
         'lite',
@@ -197,7 +214,7 @@ export const useAppCommands = ({
         },
       },
       createSkillsSlashCommand({ skillsService, onSkillSelected, addSystemMessage, replaceInput }),
-      createQuitSlashCommand(exit),
+      guardBusyTurn(createQuitSlashCommand(exit)),
     ];
   }, [
     addSystemMessage,
@@ -225,6 +242,7 @@ export const useAppCommands = ({
     skillsService,
     onSkillSelected,
     requestModeSwitchConfirm,
+    turnInFlight,
   ]);
 
   return {

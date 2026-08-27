@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import { ConversationService } from './conversation-service.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { ConversationEvent } from './conversation-events.js';
@@ -282,6 +282,81 @@ it('compactContext reports blocked when no complete cold turn exists', async () 
   );
   expect(events.map((event) => event.type)).toEqual(['context_compaction_started', 'context_compaction_failed']);
   expect(events[1]).toMatchObject({ errorCategory: 'validation', strategy: 'local' });
+  service.dispose();
+});
+
+it('queues a user message submitted while local compaction is running', async () => {
+  let releaseSummary!: (value: string) => void;
+  const chat = vi.fn(
+    () =>
+      new Promise<string>((resolve) => {
+        releaseSummary = resolve;
+      }),
+  );
+  const startedTurns: string[] = [];
+  const service = new ConversationService({
+    agentClient: partialClient({
+      chat,
+      startStream: async (input: unknown) => {
+        startedTurns.push(typeof input === 'string' ? input : JSON.stringify(input));
+        return completedStream('after compact');
+      },
+    }),
+    toolOwnership: new ToolOwnershipRegistry(),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+  service.importState({
+    history: Array.from({ length: 4 }, (_, index) => [
+      { role: 'user', type: 'message', content: `user-${index}` },
+      { role: 'assistant', type: 'message', content: `assistant-${index}` },
+    ]).flat(),
+    previousResponseId: null,
+    toolLedger: [],
+  });
+
+  const compacting = service.compactContext();
+  await vi.waitFor(() => expect(chat).toHaveBeenCalled());
+  expect(service.isQueueOwningSubmissions()).toBe(true);
+
+  const followUp = service.sendMessage('after compact');
+  await flushQueue();
+  expect(startedTurns).toEqual([]);
+
+  releaseSummary('deterministic summary');
+  await expect(compacting).resolves.toMatch(/^Context compacted locally \(/);
+  await followUp;
+  expect(startedTurns.length).toBeGreaterThan(0);
+  service.dispose();
+});
+
+it('abort during compaction cancels it and releases the foreground queue', async () => {
+  const chat = vi.fn(
+    () =>
+      new Promise<string>(() => {
+        /* hang until abort */
+      }),
+  );
+  const service = new ConversationService({
+    agentClient: partialClient({ chat }),
+    toolOwnership: new ToolOwnershipRegistry(),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+  service.importState({
+    history: Array.from({ length: 4 }, (_, index) => [
+      { role: 'user', type: 'message', content: `user-${index}` },
+      { role: 'assistant', type: 'message', content: `assistant-${index}` },
+    ]).flat(),
+    previousResponseId: null,
+    toolLedger: [],
+  });
+
+  const compacting = service.compactContext();
+  await vi.waitFor(() => expect(chat).toHaveBeenCalled());
+  expect(service.isQueueOwningSubmissions()).toBe(true);
+
+  service.abort();
+  await expect(compacting).resolves.toBe('Context compaction cancelled.');
+  expect(service.isQueueOwningSubmissions()).toBe(false);
   service.dispose();
 });
 

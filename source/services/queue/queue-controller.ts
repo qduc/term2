@@ -305,6 +305,8 @@ export class QueueController<Snapshot, Terminal = unknown> {
   #pauseReason: QueuePauseReason | undefined;
   #recovery: QueueRecovery | undefined;
   #persistenceWrites = Promise.resolve();
+  /** Out-of-band occupancy (manual compaction) that must not start queued work. */
+  #dispatchHeld = false;
 
   constructor(options: QueueControllerOptions<Snapshot, Terminal>) {
     this.#driver = options.driver;
@@ -318,6 +320,36 @@ export class QueueController<Snapshot, Terminal = unknown> {
     this.#persistence = options.persistence;
     this.#preflightEvaluator = options.preflightEvaluator;
     this.#restore();
+  }
+
+  /**
+   * Prevent `#dispatch` while idle. Submissions still enqueue. Returns false
+   * when the queue is already occupied (running, paused, or already held).
+   */
+  holdDispatch(): boolean {
+    if (this.#dispatchHeld || this.#phase !== 'idle' || this.#active) return false;
+    this.#dispatchHeld = true;
+    return true;
+  }
+
+  isDispatchHeld(): boolean {
+    return this.#dispatchHeld;
+  }
+
+  /**
+   * Drop the hold. By default the next queued item starts. `pauseIfQueued`
+   * matches stop-during-a-turn: retained work stays paused instead of running.
+   */
+  releaseDispatch(options: { pauseIfQueued?: boolean } = {}): void {
+    if (!this.#dispatchHeld) return;
+    this.#dispatchHeld = false;
+    if (options.pauseIfQueued && this.#queue.length > 0 && this.#phase === 'idle' && !this.#active) {
+      this.#phase = 'paused';
+      this.#pauseReason = 'manual';
+      void this.#persist();
+      return;
+    }
+    void this.#dispatch();
   }
 
   state(): QueueState<Snapshot> {
@@ -591,7 +623,7 @@ export class QueueController<Snapshot, Terminal = unknown> {
   }
 
   async #dispatch(): Promise<void> {
-    if (this.#phase !== 'idle' || this.#active || this.#queue.length === 0) return;
+    if (this.#dispatchHeld || this.#phase !== 'idle' || this.#active || this.#queue.length === 0) return;
 
     const head = this.#queue[0]!;
 

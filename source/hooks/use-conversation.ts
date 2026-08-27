@@ -396,6 +396,8 @@ export const useConversation = ({
     (targetId: RewindTargetId, uiIndex: number) => { text: string; images?: UserTurn['images'] } | null
   >((targetId, uiIndex) => orchestrator.rewindToTarget(targetId, uiIndex), [orchestrator]);
 
+  const compactContext = useCallback(() => orchestrator.compactContext(), [orchestrator]);
+
   const retryLastToolOutput = useCallback<() => Promise<boolean>>(
     () => orchestrator.retryLastToolOutput(),
     [orchestrator],
@@ -518,6 +520,7 @@ export const useConversation = ({
     cancelAskUser,
     rewindToTarget,
     retryLastToolOutput,
+    compactContext,
     getUserMessages,
     setModel,
     setReasoningEffort,

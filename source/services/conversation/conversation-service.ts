@@ -44,6 +44,7 @@ import type {
   PendingInteractionSnapshot,
   ResolvePendingInteractionRequest,
 } from '../session/pending-interaction-state.js';
+import { isAbortLikeError } from '../../utils/error-helpers.js';
 
 export type { ConversationTerminal, ApprovalDescriptor, PendingApproval } from '../../contracts/conversation.js';
 export type { CommandMessage } from '../../tools/types.js';
@@ -418,6 +419,28 @@ export class ConversationService {
 
   async compactContext(): Promise<string> {
     const startedAt = Date.now();
+    const fail = async (errorCategory: 'validation' | 'request', message: string): Promise<string> => {
+      await this.#eventSink?.({
+        type: 'context_compaction_failed',
+        provider: this.#deps.settingsService?.get('agent.provider') ?? 'openai',
+        sessionId: this.sessionId,
+        errorCategory,
+        durationMs: Date.now() - startedAt,
+        strategy: 'local',
+      });
+      return message;
+    };
+    if (!this.#adapter.holdForegroundQueue()) {
+      await this.#eventSink?.({
+        type: 'context_compaction_started',
+        provider: this.#deps.settingsService?.get('agent.provider') ?? 'openai',
+        sessionId: this.sessionId,
+        strategy: 'local',
+      });
+      return fail('validation', 'Context compaction is available only while the conversation is idle.');
+    }
+    const abort = new AbortController();
+    this.#adapter.attachCompactionAbort(abort);
     await this.#eventSink?.({
       type: 'context_compaction_started',
       provider: this.#deps.settingsService?.get('agent.provider') ?? 'openai',
@@ -425,17 +448,9 @@ export class ConversationService {
       strategy: 'local',
     });
     try {
-      const outcome = await this.#runtime.compactContext();
+      const outcome = await this.#runtime.compactContext({ signal: abort.signal });
       if (outcome.kind === 'busy') {
-        await this.#eventSink?.({
-          type: 'context_compaction_failed',
-          provider: this.#deps.settingsService?.get('agent.provider') ?? 'openai',
-          sessionId: this.sessionId,
-          errorCategory: 'validation',
-          durationMs: Date.now() - startedAt,
-          strategy: 'local',
-        });
-        return 'Context compaction is available only while the conversation is idle.';
+        return fail('validation', 'Context compaction is available only while the conversation is idle.');
       }
       if (outcome.kind === 'stale') throw new Error('Conversation changed while context compaction was running');
       if (outcome.kind === 'blocked') {
@@ -443,15 +458,7 @@ export class ConversationService {
           outcome.reason === 'no_complete_cold_turn'
             ? 'Nothing to compact: at least one complete cold turn is required.'
             : `Context compaction was blocked: ${outcome.reason}.`;
-        await this.#eventSink?.({
-          type: 'context_compaction_failed',
-          provider: this.#deps.settingsService?.get('agent.provider') ?? 'openai',
-          sessionId: this.sessionId,
-          errorCategory: 'validation',
-          durationMs: Date.now() - startedAt,
-          strategy: 'local',
-        });
-        return message;
+        return fail('validation', message);
       }
       if (outcome.kind !== 'compacted') return 'Nothing to compact.';
       if (outcome.usage.inputTokens > 0 || outcome.usage.outputTokens > 0) {
@@ -478,15 +485,14 @@ export class ConversationService {
         outcome.checkpoint.contextSummary.estimatedTokensAfter ?? '?'
       } estimated tokens).`;
     } catch (error) {
-      await this.#eventSink?.({
-        type: 'context_compaction_failed',
-        provider: this.#deps.settingsService?.get('agent.provider') ?? 'openai',
-        sessionId: this.sessionId,
-        errorCategory: 'request',
-        durationMs: Date.now() - startedAt,
-        strategy: 'local',
-      });
+      if (abort.signal.aborted || isAbortLikeError(error)) {
+        return fail('request', 'Context compaction cancelled.');
+      }
+      await fail('request', 'Context compaction failed.');
       throw error;
+    } finally {
+      this.#adapter.detachCompactionAbort(abort);
+      this.#adapter.releaseForegroundQueue({ pauseIfQueued: abort.signal.aborted });
     }
   }
 

@@ -210,6 +210,7 @@ const App: FC<AppProps> = ({
     cancelAskUser,
     rewindToTarget,
     retryLastToolOutput,
+    compactContext,
     getUserMessages,
     setModel,
     setReasoningEffort,
@@ -596,7 +597,7 @@ const App: FC<AppProps> = ({
     rewindToTarget: (item) => rewindToTarget(item.targetId, item.uiIndex),
     restoreTurnToInput,
     retryLastToolOutput,
-    compactContext: () => conversationService.compactContext(),
+    compactContext,
     onRewind: redrawMessageList,
     openRewindMenu,
     openProvidersMenu: () => {

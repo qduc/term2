@@ -1019,9 +1019,11 @@ export class ApplicationRunLoop {
               continue;
             }
             if (event.type === 'reasoning_delta') {
-              generationGuard.observeReasoning(event.text);
-              pendingNativeReasoning = appendNativeReasoning(pendingNativeReasoning, event);
-              outputPush(stream, queue, { type: 'reasoning_delta', text: event.text });
+              const accepted = generationGuard.observeReasoning(event.text);
+              if (!accepted) continue;
+              const forwarded = accepted === event.text ? event : { ...event, text: accepted };
+              pendingNativeReasoning = appendNativeReasoning(pendingNativeReasoning, forwarded);
+              outputPush(stream, queue, { type: 'reasoning_delta', text: accepted });
               continue;
             }
             if (event.type === 'tool_call_streaming_delta') {

@@ -50,6 +50,11 @@ Open work, in order:
   verified and merged (`74323696`, merge `fa328291`).
 - **Completed:** tool ownership lifecycle repair is implemented and merged
   (`184db508`, merge `faa737c5`).
+- **Completed (this branch, unmerged):** `GenerationGuard` reasoning-length
+  false positive. Verbose high-effort reasoning of ~100k characters on one
+  request was aborting the turn as `reasoning_characters` /
+  `unsafeToReplay`. The 100k cap is retained as a truncate bound; it no
+  longer fails the request. See the repair record below.
 - **Next:** implement the remaining two approved repairs in separate worktrees
   and independently revertible commits. Re-run each recorded red proof first
   and follow the verification gates below.
@@ -430,6 +435,100 @@ pnpm test:provider-black-box
 UNVERIFIED: two attempts each failed a different 15-second PTY wait
 (interactive public-hook startup, then Runtime OpenAI stateless startup). The
 focused and full suites passed; neither timeout exercised tool ownership.
+```
+
+### GenerationGuard reasoning-length false positive
+
+Incident 2026-08-27: term2 + deepseek-v4-flash at high reasoning effort died
+with `Model output was stopped because reasoning exceeded its limit.` after
+~17 minutes. Both failing runs streamed ~100,100 characters of reasoning
+after the last completed tool call, then threw at
+`generation-guard.ts` `#assertReasoningLength`. Prior tools were reads only,
+so the git diff was empty. pi completed the same model, effort, and tasks
+with no equivalent guard. The cap is cumulative per request, not per-chunk.
+`GenerationGuardError` extends `AmbiguousModelOutcomeError`, so retry
+classifies the throw as unrecoverable — replaying would hit the same cap.
+
+The 100,000-character number is retained. The defect was the action: aborting
+the request treated productive verbose reasoning as proof the work was
+invalid. Reasoning no longer consumes the aggregate output budget, or a full
+thought would starve later text and tool calls.
+
+```text
+Harm prevented: a verbose high-effort reasoner aborting a productive turn
+  once thinking crosses 100k characters, discarding later text and tool calls.
+Scope and execution paths: ApplicationRunLoop model-stream consume, including
+  non-interactive stderr reasoning_delta.
+Guard class: containment budget (reasoning volume) with a retention bound.
+Enforcement owner: GenerationGuard.observeReasoning / observeCompletion.
+Recovery owner: none; overflow truncates in place and the request continues.
+Measured signal and observation boundary: cumulative reasoning characters on
+  one provider request, counted from reasoning_delta and completion reasoning.
+Direct evidence or proxy: direct character count of the reasoning channel.
+Legitimate work that can produce the same signal: high-effort coding models
+  that think at length before the first write (observed: 100,100 chars after
+  the last tool, then abort).
+Configuration sources and precedence: agent.maxStreamOutputChars via
+  modelSettings, then GenerationGuardOptions, then 100_000 default.
+Effective default and clamping: 100,000 characters retained; excess dropped;
+  integer-positive setting unchanged.
+Action and why the signal justifies it: stop forwarding reasoning past the
+  cap so assembled output stays bounded; do not abort, because volume of
+  thinking is not evidence of a loop. Text and tool-argument caps remain
+  fail-closed.
+Partial-work settlement: already-forwarded reasoning is kept; later text,
+  tool calls, and completion still settle; dropped reasoning is not spoolable
+  (display-only scratch, not user work product).
+Retry, fallback, and provider-continuity semantics: unchanged. Native
+  encrypted / reasoning_content metadata is still taken from provider
+  metadata, not from the truncated display prefix.
+Observability fields: existing GenerationGuardError codes for text, tools,
+  repetition, and deadline; reasoning length no longer throws.
+Persisted-setting migration, if any: none.
+Rollback boundary: one independently revertible commit.
+Ledger row: GenerationGuard reasoning-length false positive.
+```
+
+Red proof before production changes:
+
+```text
+NODE_ENV=test pnpm exec vitest run \
+  source/services/agent-runtime/generation-guard.test.ts \
+  source/services/agent-runtime/application-run-loop.test.ts \
+  -t "truncates streamed reasoning|accepts reasoning at the character cap"
+FAIL: GenerationGuardError { code: "reasoning_characters", unsafeToReplay: true }
+```
+
+Detection gap: existing tests encoded abort-on-reasoning-length as intended
+and never sent later text after the cap. The incident is a class of
+verbose-but-finite reasoning, not a loop.
+
+Focused verification (2026-08-27):
+
+```text
+NODE_ENV=test pnpm exec vitest run \
+  source/services/agent-runtime/generation-guard.test.ts \
+  source/services/agent-runtime/application-run-loop.test.ts
+PASS 2 files, 76 tests
+
+NODE_ENV=test pnpm exec tsc --noEmit
+PASS
+
+NODE_ENV=test pnpm test:related \
+  ./source/services/agent-runtime/generation-guard.ts \
+  ./source/services/agent-runtime/application-run-loop.ts \
+  ./source/hooks/settings-completion-config.ts
+PASS 127 files, 2066 tests; 2 expected fail; 1 skipped
+
+NODE_ENV=test pnpm exec vitest run --config vitest.provider-black-box.config.ts \
+  -t "stops runaway streamed output"
+PASS 4 tests (openai/codex × http/websocket)
+
+pnpm test:provider-black-box
+FLAKE: two full-suite attempts each failed a different 15s PTY wait
+(openai websocket incomplete-stream, then public-hooks interactive startup).
+CLI sat at idle with 0 captured requests. Same class as the ledger's earlier
+unverified PTY timeouts; not exercised by the reasoning-length change.
 ```
 
 ### Test contracts by class

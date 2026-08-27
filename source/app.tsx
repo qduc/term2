@@ -610,6 +610,7 @@ const App: FC<AppProps> = ({
     skillsService: skillsService ?? ({ getAvailableSkills: () => [] } as unknown as SkillsService),
     onSkillSelected: handleSkillSelected,
     requestModeSwitchConfirm: setPendingModeSwitch,
+    turnInFlight: isProcessing,
   });
 
   const handleRewindSelect = useCallback(

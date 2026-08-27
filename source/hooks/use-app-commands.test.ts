@@ -181,6 +181,7 @@ const TestHookWrapper = ({
   messages = [],
   onSystemMessage,
   requestModeSwitchConfirm,
+  turnInFlight,
 }: {
   settings: Map<string, any>;
   onHookResult: (res: any) => void;
@@ -188,6 +189,7 @@ const TestHookWrapper = ({
   messages?: Message[];
   onSystemMessage?: (text: string) => void;
   requestModeSwitchConfirm?: (pending: any) => void;
+  turnInFlight?: boolean;
 }) => {
   const settingsService = {
     get: (key: string) => settings.get(key) ?? false,
@@ -214,6 +216,7 @@ const TestHookWrapper = ({
     skillsService: { getAvailableSkills: () => [] } as any,
     onSkillSelected: () => {},
     requestModeSwitchConfirm,
+    turnInFlight,
   });
 
   onHookResult(hookResult);
@@ -256,6 +259,95 @@ it.sequential('useAppCommands gives /retry a resend default and /undo an edit de
   const find = (name: string) => hookResult.slashCommands.find((command: any) => command.name === name);
   expect(find('retry').description).toContain('resend');
   expect(find('undo').description).toContain('input box');
+});
+
+it.sequential('useAppCommands blocks conversation-mutating commands while a turn is in flight', async () => {
+  const settings = new Map<string, any>();
+  const systemMessages: string[] = [];
+  let hookResult: any;
+
+  await renderInAct(
+    React.createElement(TestHookWrapper, {
+      settings,
+      turnInFlight: true,
+      onSystemMessage: (text: string) => systemMessages.push(text),
+      onHookResult: (res) => {
+        hookResult = res;
+      },
+    }),
+  );
+
+  for (const name of ['rewind', 'undo', 'retry', 'clear', 'retry-tool', 'quit', 'compact']) {
+    const command = hookResult.slashCommands.find((command: any) => command.name === name);
+    expect(command, `command /${name} should be registered`).toBeTruthy();
+
+    let result: boolean | void = false;
+    await act(async () => {
+      result = command.action();
+    });
+
+    expect(result, `/${name} should report handled when blocked`).toBe(true);
+    expect(
+      systemMessages.some((message) => message.includes(`/${name}`) && message.includes('agent is working')),
+      `/${name} should tell the user it is blocked`,
+    ).toBe(true);
+  }
+});
+
+it.sequential('useAppCommands runs the blocked commands normally when the agent is idle', async () => {
+  const settings = new Map<string, any>();
+  const systemMessages: string[] = [];
+  let hookResult: any;
+
+  await renderInAct(
+    React.createElement(TestHookWrapper, {
+      settings,
+      onSystemMessage: (text: string) => systemMessages.push(text),
+      onHookResult: (res) => {
+        hookResult = res;
+      },
+    }),
+  );
+
+  const clear = hookResult.slashCommands.find((command: any) => command.name === 'clear');
+  await act(async () => {
+    clear.action();
+  });
+  expect(systemMessages).toEqual(['Welcome to term²! Type a message to start chatting.']);
+
+  const compact = hookResult.slashCommands.find((command: any) => command.name === 'compact');
+  expect(systemMessages.some((message) => message.includes('Compacting'))).toBe(false);
+  await act(async () => {
+    compact.action();
+    await flushMicrotasks();
+  });
+  expect(systemMessages.some((message) => message.includes('Compacting'))).toBe(true);
+  expect(systemMessages.some((message) => message.includes('agent is working'))).toBe(false);
+});
+
+it.sequential('useAppCommands leaves display-only commands runnable while a turn is in flight', async () => {
+  const settings = new Map<string, any>();
+  const systemMessages: string[] = [];
+  let hookResult: any;
+
+  await renderInAct(
+    React.createElement(TestHookWrapper, {
+      settings,
+      turnInFlight: true,
+      onSystemMessage: (text: string) => systemMessages.push(text),
+      onHookResult: (res) => {
+        hookResult = res;
+      },
+    }),
+  );
+
+  const usage = hookResult.slashCommands.find((command: any) => command.name === 'usage');
+  let result: boolean | void = false;
+  await act(async () => {
+    result = usage.action();
+  });
+  expect(result).toBe(true);
+  expect(systemMessages.some((message) => message.includes('agent is working'))).toBe(false);
 });
 
 it.sequential('useAppCommands togglePlanMode toggles plan mode', async () => {

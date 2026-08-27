@@ -390,6 +390,7 @@ export class SubagentToolPolicy {
         // In 'always' auto-approval mode that fallback is skipped entirely,
         // mirroring the root agent's unrestricted shell approval path.
         const autoApproveMode = this.#settings.get('shell.autoApproveMode');
+        const bypassWorkspaceWriteBoundary = shouldBypassToolApproval(definition.name, autoApproveMode);
         if (autoApproveMode !== 'always' && (await originalNeedsApproval(params, context))) {
           const status = classifyCommand(command, this.#logger);
           if (status === SafetyStatus.RED) {
@@ -406,7 +407,7 @@ export class SubagentToolPolicy {
         const extractedPaths = this.extractPathsFromCommand(command, cwd);
         if (extractedPaths.length > 0) {
           for (const filePath of extractedPaths) {
-            if (!this.isWithinWriteBoundary(filePath, cwd)) {
+            if (!bypassWorkspaceWriteBoundary && !this.isWithinWriteBoundary(filePath, cwd)) {
               return `Error: command blocked — target path "${filePath}" is outside the allowed write boundary. Command: ${command}`;
             }
           }
@@ -448,8 +449,12 @@ export class SubagentToolPolicy {
 
         const command = getShellCommand(params);
         const extractedPaths = command ? this.extractPathsFromCommand(command, cwd) : [];
+        const bypassWorkspaceWriteBoundary = shouldBypassToolApproval(
+          definition.name,
+          this.#settings.get('shell.autoApproveMode'),
+        );
         for (const filePath of extractedPaths) {
-          if (!this.isWithinWriteBoundary(filePath, cwd)) {
+          if (!bypassWorkspaceWriteBoundary && !this.isWithinWriteBoundary(filePath, cwd)) {
             return `Error: command blocked - target path "${filePath}" is outside the allowed write boundary. Command: ${command}`;
           }
         }
@@ -534,9 +539,13 @@ export class SubagentToolPolicy {
         : () => false,
       execute: async (params: z.infer<S>, context?: unknown, details?: unknown) => {
         const paths = extractPaths(params);
+        const bypassWorkspaceWriteBoundary = shouldBypassToolApproval(
+          definition.name,
+          this.#settings.get('shell.autoApproveMode'),
+        );
 
         for (const filePath of paths) {
-          if (!this.isWithinWriteBoundary(filePath, cwd)) {
+          if (!bypassWorkspaceWriteBoundary && !this.isWithinWriteBoundary(filePath, cwd)) {
             return `Error: Write rejected: path "${filePath}" is outside the allowed write boundary.`;
           }
         }

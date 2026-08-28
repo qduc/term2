@@ -4,3 +4,4 @@ allowBuilds:
   ssh2: true
 minimumReleaseAgeExclude:
   - ink-prompt
+  - '@qduc/web-fetch@0.1.4'

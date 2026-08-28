@@ -7,10 +7,22 @@ import {
 } from './command-grouping.js';
 
 describe('groupCommandRuns', () => {
-  it('leaves a lone command message ungrouped so it keeps showing what it did', () => {
+  it('leaves a lone command message ungrouped while the run may still grow', () => {
     const messages = [{ id: '1', sender: 'command', status: 'completed', toolName: 'grep' }];
     const result = groupCommandRuns(messages);
     expect(result).toEqual(messages);
+  });
+
+  it('folds a lone settled call once another kind of message closes the run', () => {
+    const messages = [
+      { id: '1', sender: 'command', status: 'completed', toolName: 'grep' },
+      { id: '2', sender: 'bot', status: 'finalized' },
+    ];
+    const result = groupCommandRuns(messages);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({ sender: 'command-group', status: 'completed' });
+    expect((result[0] as any).members).toHaveLength(1);
+    expect(result[1]).toEqual(messages[1]);
   });
 
   it('merges a closed run of terminal commands into one group', () => {
@@ -163,6 +175,14 @@ describe('groupCommandRuns', () => {
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({ sender: 'command-group' });
     expect((result[0] as any).members).toHaveLength(2);
+  });
+
+  it('folds a lone settled call when options.isClosed is explicitly set', () => {
+    const messages = [{ id: '1', sender: 'command', status: 'completed', toolName: 'grep' }];
+    const result = groupCommandRuns(messages, { isClosed: true });
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ sender: 'command-group' });
+    expect((result[0] as any).members).toHaveLength(1);
   });
 });
 

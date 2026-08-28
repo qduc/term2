@@ -84,7 +84,7 @@
     "@ai-sdk/provider": "^3.0.10",
     "@anthropic-ai/sandbox-runtime": "^0.0.56",
     "@openrouter/ai-sdk-provider": "^2.9.0",
-    "@qduc/web-fetch": "^0.1.0",
+    "@qduc/web-fetch": "^0.1.4",
     "ai": "^6.0.177",
     "env-paths": "^3.0.0",
     "fast-deep-equal": "^3.1.3",

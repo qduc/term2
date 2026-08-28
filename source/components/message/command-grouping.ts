@@ -111,8 +111,9 @@ export type GroupCommandRunsOptions = {
  * flight keeps showing what it is doing. Everything else passes through
  * unchanged.
  *
- * A single settled call is also left alone, so one tool call still shows what
- * it actually did rather than a bare "1 file".
+ * A single settled call in an open trailing run is left alone so its result
+ * stays visible while work may continue. Once another kind of message closes
+ * the run, even one call folds into the summary line.
  */
 export const groupCommandRuns = <T extends GroupableMessage>(
   messages: T[],
@@ -141,7 +142,7 @@ export const groupCommandRuns = <T extends GroupableMessage>(
     const inFlightAndAfter = inFlight === -1 ? [] : run.slice(inFlight);
 
     if (hasTrailingNonCommandMessage) {
-      if (settled.length >= 2) {
+      if (settled.length >= 1) {
         result.push(buildCommandGroupMessage(settled), ...inFlightAndAfter);
       } else {
         result.push(...run);

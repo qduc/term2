@@ -81,6 +81,7 @@ export type AssertionVerifierOptions = {
   issuer: string;
   audience: string;
   publicKeys: ReadonlyMap<string, AssertionKey> | Record<string, AssertionKey>;
+  allowEmptyKeys?: boolean;
   replayLedger: ReplayLedger;
   clock?: () => number;
   clockSkewSeconds?: number;
@@ -90,18 +91,23 @@ export type AssertionVerifierOptions = {
 export class AssertionVerifier {
   readonly #issuer: string;
   readonly #audience: string;
-  readonly #keys: ReadonlyMap<string, KeyObject>;
+  readonly #keys: Map<string, KeyObject>;
   readonly #ledger: ReplayLedger;
   readonly #clock: () => number;
   readonly #clockSkew: number;
 
   constructor(options: AssertionVerifierOptions) {
-    if (!options.issuer || !options.audience || (options.publicKeys instanceof Map && options.publicKeys.size === 0)) {
+    if (
+      !options.issuer ||
+      !options.audience ||
+      (options.publicKeys instanceof Map && options.publicKeys.size === 0 && !options.allowEmptyKeys)
+    ) {
       throw new Error('gateway assertion configuration is incomplete');
     }
     const entries =
       options.publicKeys instanceof Map ? [...options.publicKeys.entries()] : Object.entries(options.publicKeys);
-    if (entries.length === 0) throw new Error('gateway assertion configuration is incomplete');
+    if (entries.length === 0 && !options.allowEmptyKeys)
+      throw new Error('gateway assertion configuration is incomplete');
     this.#keys = new Map(entries.map(([kid, key]) => [kid, createPublicKey(key)]));
     this.#issuer = options.issuer;
     this.#audience = options.audience;
@@ -110,6 +116,12 @@ export class AssertionVerifier {
     this.#clockSkew = options.clockSkewSeconds ?? DEFAULT_CLOCK_SKEW_SECONDS;
     if (!Number.isFinite(this.#clockSkew) || this.#clockSkew < 0 || this.#clockSkew > 30)
       throw new Error('invalid gateway clock skew');
+  }
+
+  /** Adds a persisted paired public key without changing assertion semantics. */
+  addTrustedKey(kid: string, publicKey: AssertionKey): void {
+    if (!kid || this.#keys.has(kid)) throw new Error('trusted assertion key is invalid');
+    this.#keys.set(kid, createPublicKey(publicKey));
   }
 
   verify(token: string, expectedPurpose?: AssertionPurpose): GatewayAssertionClaims {
@@ -176,6 +188,16 @@ function isClaims(value: unknown): value is GatewayAssertionClaims {
     return false;
   if (
     candidate.purpose === 'workspace_list' ||
+    candidate.purpose === 'workspace_candidate_validate' ||
+    candidate.purpose === 'workspace_candidate_browse' ||
+    candidate.purpose === 'workspace_candidate_select' ||
+    candidate.purpose === 'settings_read' ||
+    candidate.purpose === 'settings_write' ||
+    candidate.purpose === 'credential_write' ||
+    candidate.purpose === 'credential_delete' ||
+    candidate.purpose === 'oauth_login' ||
+    candidate.purpose === 'oauth_select' ||
+    candidate.purpose === 'oauth_delete' ||
     candidate.purpose === 'session_list' ||
     candidate.purpose === 'model_list'
   ) {
@@ -183,6 +205,12 @@ function isClaims(value: unknown): value is GatewayAssertionClaims {
   }
   if (candidate.purpose === 'session_create')
     return typeof candidate.workspaceId === 'string' && candidate.sessionId === undefined;
+  if (candidate.purpose === 'session_update') {
+    return (
+      candidate.workspaceId === undefined &&
+      (candidate.sessionId === undefined || typeof candidate.sessionId === 'string')
+    );
+  }
   return (
     (candidate.workspaceId === undefined || typeof candidate.workspaceId === 'string') &&
     typeof candidate.sessionId === 'string'

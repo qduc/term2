@@ -2,6 +2,17 @@ import type { SessionRuntime } from '../core/index.js';
 
 export const ASSERTION_PURPOSES = [
   'workspace_list',
+  'workspace_candidate_validate',
+  'workspace_candidate_browse',
+  'workspace_candidate_select',
+  'settings_read',
+  'settings_write',
+  'credential_write',
+  'credential_delete',
+  'oauth_login',
+  'oauth_select',
+  'oauth_delete',
+  'session_update',
   'session_list',
   'model_list',
   'session_create',
@@ -82,11 +93,26 @@ export type SessionBinding = {
 export type SecretFreeWorkerSettings = {
   providerId: string;
   modelId: string;
-  brokerCapabilityId: string;
+  /** Present for the legacy fixture broker; absent for the real provider stack. */
+  brokerCapabilityId?: string;
   /** Canonical real path used by both the settings snapshot and execution context. */
   executionRoot: string;
   envPolicyVersion: 1;
+  reasoningEffort?: string;
+  mode?: string;
+  toolPolicy?: Readonly<Record<string, boolean>>;
+  defaultsRevision?: string | number;
 };
+
+/** Secret-free settings captured when a gateway session is admitted. */
+export type SessionSettingsSnapshot = Readonly<{
+  providerId: string;
+  modelId: string;
+  reasoningEffort: string;
+  mode: string;
+  effectiveToolPolicy: Readonly<Record<string, boolean>>;
+  defaultsRevision?: string | number;
+}>;
 
 export type NormalizedProviderRequest = {
   messages: readonly Record<string, unknown>[];
@@ -123,6 +149,17 @@ export type GatewaySafeLogMetadata = {
   operation:
     | 'startup'
     | 'workspace_list'
+    | 'workspace_candidate_validate'
+    | 'workspace_candidate_browse'
+    | 'workspace_candidate_select'
+    | 'settings_read'
+    | 'settings_write'
+    | 'credential_write'
+    | 'credential_delete'
+    | 'oauth_login'
+    | 'oauth_select'
+    | 'oauth_delete'
+    | 'session_update'
     | 'session_list'
     | 'model_list'
     | 'session_create'
@@ -141,7 +178,10 @@ export type GatewaySessionComposition = {
   binding: SessionBinding;
   executionContext: import('../services/execution-context.js').ExecutionContext;
   settings: SecretFreeWorkerSettings;
-  providerBroker: ProviderBrokerCapability;
+  /** Session-owned mutable settings service; never serialized across the worker boundary. */
+  sessionSettingsService?: import('../services/service-interfaces.js').ISettingsService;
+  providerBroker?: ProviderBrokerCapability;
+  sessionSettingsSnapshot?: SessionSettingsSnapshot;
   env: Readonly<Record<string, string>>;
   spawnOptions: {
     cwd: string;

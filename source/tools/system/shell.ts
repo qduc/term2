@@ -838,6 +838,7 @@ export function createShellToolDefinition(deps: {
       const correlationId = randomUUID();
       const startedAt = Date.now();
       let sandboxed = false;
+      let sandboxLeaseRelease: (() => void) | undefined;
       let dockerHostControl: DockerHostControl | undefined;
       let backgroundCleanupDeferred = false;
       let transferred = false;
@@ -964,6 +965,7 @@ export function createShellToolDefinition(deps: {
           }
         }
         if (!sshService && sandbox === 'default' && sandboxEnabled) {
+          if (shellSandboxRunner.acquire) sandboxLeaseRelease = await shellSandboxRunner.acquire();
           sandboxAvailability = await shellSandboxRunner.availability();
           if (dockerHostControlRequested && sandboxAvailability.type !== 'available') {
             return 'Error: Docker host control requires an available local sandbox.';
@@ -1198,6 +1200,8 @@ export function createShellToolDefinition(deps: {
           if (sandboxed) {
             await shellSandboxRunner.cleanupAfterCommand?.();
           }
+          sandboxLeaseRelease?.();
+          sandboxLeaseRelease = undefined;
           dockerHostControl?.cleanup();
           restoreForegroundCorrelation();
         };
@@ -1297,6 +1301,8 @@ export function createShellToolDefinition(deps: {
           if (sandboxed) {
             await shellSandboxRunner.cleanupAfterCommand?.();
           }
+          sandboxLeaseRelease?.();
+          sandboxLeaseRelease = undefined;
           dockerHostControl?.cleanup();
           restoreForegroundCorrelation();
         }

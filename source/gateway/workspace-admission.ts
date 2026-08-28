@@ -137,6 +137,7 @@ function validateSshTargets(value: unknown): GatewayManifest['sshTargets'] {
 export type WorkspaceBoundaryEvidence = {
   mountedRoot: string;
   writable: boolean;
+  policy?: 'read_only_launcher';
 };
 
 export type WorkspaceBoundaryProbe = (
@@ -148,49 +149,117 @@ export type WorkspaceAdmissionOptions = {
   allowSsh?: boolean;
   allowWrite?: boolean;
   boundaryProbe?: WorkspaceBoundaryProbe;
+  /** Dynamic (browser-selected) grants to restore after a restart. */
+  initialDynamicGrants?: readonly WorkspaceGrant[];
+  /** Durable sink invoked on every dynamic-grant mutation (register/remove). */
+  onDynamicGrantChange?: (grants: readonly WorkspaceGrant[]) => void;
 };
 
 export class WorkspaceAdmission {
+  /** Live (runtime-backed) session bindings; the one-per-workspace constraint applies here. */
   readonly #sessions = new Map<string, SessionBinding>();
+  /** Restored bindings from the persisted index (read-only history, no runtime). */
+  readonly #restored = new Map<string, SessionBinding>();
+  readonly #dynamicGrants = new Map<string, WorkspaceGrant>();
+  #dynamicRevision = 0;
   #manifest: GatewayManifest;
   readonly #allowSsh: boolean;
   readonly #allowWrite: boolean;
   readonly #boundaryProbe?: WorkspaceBoundaryProbe;
+  readonly #onDynamicGrantChange?: (grants: readonly WorkspaceGrant[]) => void;
 
   constructor(manifest: GatewayManifest, options: WorkspaceAdmissionOptions | boolean = {}) {
     const resolved = typeof options === 'boolean' ? { allowSsh: options } : options;
     this.#allowSsh = resolved.allowSsh === true;
     this.#allowWrite = resolved.allowWrite === true;
     this.#boundaryProbe = resolved.boundaryProbe;
+    this.#onDynamicGrantChange = resolved.onDynamicGrantChange;
     this.#manifest = validateGatewayManifest(manifest);
+    for (const grant of resolved.initialDynamicGrants ?? []) {
+      // Each dynamic grant represents one prior register(), which bumped the
+      // revision; restoring them reproduces the manifestVersion the sessions
+      // recorded as grantVersion.
+      if (
+        !validateDynamicGrant(grant) ||
+        this.#dynamicGrants.has(grant.workspaceId) ||
+        this.#manifest.grants.some((candidate) => candidate.workspaceId === grant.workspaceId)
+      ) {
+        throw new WorkspaceAdmissionError('manifest_invalid');
+      }
+      this.#dynamicGrants.set(grant.workspaceId, Object.freeze({ ...grant }));
+      this.#dynamicRevision += 1;
+    }
   }
 
   get manifestVersion(): number {
-    return this.#manifest.version;
+    return this.#manifest.version + this.#dynamicRevision;
   }
 
   replaceManifest(manifest: GatewayManifest): void {
     this.#manifest = validateGatewayManifest(manifest);
+    this.#dynamicGrants.clear();
+    this.#dynamicRevision = 0;
   }
 
   listAliases(ownerUserId: string): WorkspaceAlias[] {
-    return this.#manifest.grants
+    return [...this.#manifest.grants, ...this.#dynamicGrants.values()]
       .filter((grant) => grant.enabled && grant.kind === 'local' && grant.ownerUserId === ownerUserId)
       .map(({ workspaceId, access, label }) => ({ workspaceId, access, label }));
   }
 
-  admit(claims: GatewayAssertionClaims, requestedManifestVersion = this.#manifest.version): SessionBinding {
+  /** Add a server-validated local root without weakening manifest admission. */
+  registerDynamicLocalGrant(grant: WorkspaceGrant): number {
+    if (
+      grant.kind !== 'local' ||
+      !grant.localRoot ||
+      !path.isAbsolute(grant.localRoot) ||
+      !grant.ownerUserId ||
+      !isProvisionedLabel(grant.label) ||
+      !/^[A-Za-z0-9_-]{1,256}$/.test(grant.workspaceId) ||
+      (grant.access !== 'read' && grant.access !== 'read_write') ||
+      grant.enabled !== true ||
+      [...this.#manifest.grants, ...this.#dynamicGrants.values()].some(
+        (candidate) => candidate.workspaceId === grant.workspaceId,
+      )
+    ) {
+      throw new WorkspaceAdmissionError('manifest_invalid');
+    }
+    this.#dynamicGrants.set(grant.workspaceId, Object.freeze({ ...grant }));
+    this.#dynamicRevision += 1;
+    this.#persistDynamicGrants();
+    return this.manifestVersion;
+  }
+
+  removeDynamicLocalGrant(workspaceId: string): void {
+    if (this.#dynamicGrants.delete(workspaceId)) {
+      this.#dynamicRevision -= 1;
+      this.#persistDynamicGrants();
+    }
+  }
+
+  #persistDynamicGrants(): void {
+    this.#onDynamicGrantChange?.([...this.#dynamicGrants.values()]);
+  }
+
+  admit(claims: GatewayAssertionClaims, requestedManifestVersion = this.manifestVersion): SessionBinding {
+    const binding = this.prepare(claims, requestedManifestVersion);
+    if ([...this.#sessions.values()].some((session) => session.workspaceId === binding.workspaceId)) {
+      throw new WorkspaceAdmissionError('workspace_session_exists');
+    }
+    this.#sessions.set(binding.sessionId, binding);
+    return binding;
+  }
+
+  /** Validate and construct a binding without reserving an active session. */
+  prepare(claims: GatewayAssertionClaims, requestedManifestVersion = this.manifestVersion): SessionBinding {
     if (claims.purpose !== 'session_create') throw new WorkspaceAdmissionError('workspace_not_found');
-    if (requestedManifestVersion !== this.#manifest.version)
+    if (requestedManifestVersion !== this.manifestVersion)
       throw new WorkspaceAdmissionError('manifest_version_mismatch');
     const workspaceId = claims.workspaceId;
     if (!workspaceId) throw new WorkspaceAdmissionError('workspace_not_found');
-    const grant = this.#manifest.grants.find((candidate) => candidate.workspaceId === workspaceId);
+    const grant = this.#grantFor(workspaceId);
     if (!grant) throw new WorkspaceAdmissionError('workspace_not_found');
     if (grant.ownerUserId !== claims.sub) throw new WorkspaceAdmissionError('workspace_owner_mismatch');
-    if ([...this.#sessions.values()].some((session) => session.workspaceId === workspaceId)) {
-      throw new WorkspaceAdmissionError('workspace_session_exists');
-    }
     if (!grant.enabled) throw new WorkspaceAdmissionError('workspace_disabled');
     if (grant.kind === 'ssh') {
       if (!this.#allowSsh) throw new WorkspaceAdmissionError('ssh_disabled');
@@ -211,11 +280,10 @@ export class WorkspaceAdmission {
       sessionId: randomUUID(),
       ownerUserId: claims.sub,
       workspaceId: grant.workspaceId,
-      grantVersion: this.#manifest.version,
+      grantVersion: this.manifestVersion,
       canonicalRoot,
       access: grant.access,
     };
-    this.#sessions.set(binding.sessionId, binding);
     return Object.freeze(binding);
   }
 
@@ -225,15 +293,16 @@ export class WorkspaceAdmission {
    * the manifest and boundary probe remain the authority for the root.
    */
   restore(sessionId: string, ownerUserId: string, workspaceId: string, grantVersion: number): SessionBinding {
-    const current = this.#sessions.get(sessionId);
+    const current = this.#sessions.get(sessionId) ?? this.#restored.get(sessionId);
     if (current) {
       if (current.ownerUserId !== ownerUserId || current.workspaceId !== workspaceId)
         throw new WorkspaceAdmissionError('session_owner_mismatch');
       if (current.grantVersion !== grantVersion) throw new WorkspaceAdmissionError('manifest_version_mismatch');
       return current;
     }
-    if (grantVersion !== this.#manifest.version) throw new WorkspaceAdmissionError('manifest_version_mismatch');
-    const grant = this.#manifest.grants.find((candidate) => candidate.workspaceId === workspaceId);
+    if (grantVersion > this.manifestVersion || grantVersion < this.#manifest.version)
+      throw new WorkspaceAdmissionError('manifest_version_mismatch');
+    const grant = this.#grantFor(workspaceId);
     if (!grant) throw new WorkspaceAdmissionError('workspace_not_found');
     if (grant.ownerUserId !== ownerUserId) throw new WorkspaceAdmissionError('workspace_owner_mismatch');
     if (!grant.enabled) throw new WorkspaceAdmissionError('workspace_disabled');
@@ -250,16 +319,16 @@ export class WorkspaceAdmission {
       sessionId,
       ownerUserId,
       workspaceId: grant.workspaceId,
-      grantVersion: this.#manifest.version,
+      grantVersion,
       canonicalRoot,
       access: grant.access,
     };
-    this.#sessions.set(sessionId, binding);
+    this.#restored.set(sessionId, binding);
     return Object.freeze(binding);
   }
 
   getSession(sessionId: string, ownerUserId: string): SessionBinding {
-    const session = this.#sessions.get(sessionId);
+    const session = this.#sessions.get(sessionId) ?? this.#restored.get(sessionId);
     if (!session) throw new WorkspaceAdmissionError('session_not_found');
     if (session.ownerUserId !== ownerUserId) throw new WorkspaceAdmissionError('session_owner_mismatch');
     return session;
@@ -277,6 +346,14 @@ export class WorkspaceAdmission {
 
   remove(sessionId: string): void {
     this.#sessions.delete(sessionId);
+    this.#restored.delete(sessionId);
+  }
+
+  #grantFor(workspaceId: string): WorkspaceGrant | undefined {
+    return (
+      this.#dynamicGrants.get(workspaceId) ??
+      this.#manifest.grants.find((candidate) => candidate.workspaceId === workspaceId)
+    );
   }
 
   static assertPath(binding: SessionBinding, requestedPath: string): string {
@@ -295,6 +372,23 @@ export class WorkspaceAdmission {
     if (!isContained(binding.canonicalRoot, resolved)) throw new WorkspaceAdmissionError('workspace_path_escape');
     return resolved;
   }
+}
+
+export function validateDynamicGrant(value: unknown): value is WorkspaceGrant {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const grant = value as WorkspaceGrant;
+  return (
+    typeof grant.workspaceId === 'string' &&
+    /^[A-Za-z0-9_-]{1,256}$/.test(grant.workspaceId) &&
+    typeof grant.ownerUserId === 'string' &&
+    grant.ownerUserId.length > 0 &&
+    isProvisionedLabel(grant.label) &&
+    grant.kind === 'local' &&
+    typeof grant.localRoot === 'string' &&
+    path.isAbsolute(grant.localRoot) &&
+    (grant.access === 'read' || grant.access === 'read_write') &&
+    grant.enabled === true
+  );
 }
 
 function canonicalizeGrantRoot(grant: WorkspaceGrant): string {

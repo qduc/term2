@@ -4,6 +4,7 @@ import type {
   GatewaySessionComposition,
   ProviderBrokerCapability,
   SecretFreeWorkerSettings,
+  SessionSettingsSnapshot,
   SessionBinding,
 } from './contracts.js';
 
@@ -93,15 +94,25 @@ export function createSessionScopedProviderBroker(
 }
 
 export function createSecretFreeWorkerSettings(
-  capability: ProviderBrokerCapability,
+  capability: ProviderBrokerCapability | undefined,
   canonicalRoot: string,
+  snapshot?: SessionSettingsSnapshot,
 ): SecretFreeWorkerSettings {
+  if (!capability && !snapshot) throw new WorkerBoundaryError('provider_unavailable');
   return Object.freeze({
-    providerId: capability.providerId,
-    modelId: capability.modelId,
-    brokerCapabilityId: capability.capabilityId,
+    providerId: snapshot?.providerId ?? capability!.providerId,
+    modelId: snapshot?.modelId ?? capability!.modelId,
+    ...(capability ? { brokerCapabilityId: capability.capabilityId } : {}),
     executionRoot: canonicalRoot,
     envPolicyVersion: 1,
+    ...(snapshot
+      ? {
+          reasoningEffort: snapshot.reasoningEffort,
+          mode: snapshot.mode,
+          toolPolicy: snapshot.effectiveToolPolicy,
+          ...(snapshot.defaultsRevision === undefined ? {} : { defaultsRevision: snapshot.defaultsRevision }),
+        }
+      : {}),
   });
 }
 
@@ -151,8 +162,9 @@ export function assertExplicitSanitizedEnv(env: Readonly<Record<string, string>>
 
 export type GatewaySessionCompositionOptions = {
   binding: SessionBinding;
-  providerBroker: ProviderBrokerCapability;
-  providerProbe: WorkerBoundaryProbe;
+  providerBroker?: ProviderBrokerCapability;
+  providerProbe?: WorkerBoundaryProbe;
+  settingsSnapshot?: SessionSettingsSnapshot;
   tmpDir: string;
   env?: Readonly<Record<string, string>>;
   sandboxAvailable?: boolean;
@@ -161,18 +173,25 @@ export type GatewaySessionCompositionOptions = {
     executionContext: ExecutionContext;
     settings: SecretFreeWorkerSettings;
     env: Readonly<Record<string, string>>;
-    providerBroker: ProviderBrokerCapability;
+    providerBroker?: ProviderBrokerCapability;
   }) => GatewaySessionComposition['runtime'];
 };
 
 /** Composes the session-owned capabilities without changing process cwd or env. */
 export function composeGatewaySession(options: GatewaySessionCompositionOptions): GatewaySessionComposition {
   if (options.sandboxAvailable !== true) throw new WorkerBoundaryError('sandbox_unavailable');
-  const baseProviderBroker = assertProviderBrokerReady(options.providerBroker, options.providerProbe);
-  const providerBroker = createSessionScopedProviderBroker(baseProviderBroker, options.binding.sessionId, {
-    maxRequestsPerTurn: options.maxProviderRequestsPerTurn,
-  });
-  const settings = createSecretFreeWorkerSettings(providerBroker, options.binding.canonicalRoot);
+  const providerBroker = options.providerBroker
+    ? createSessionScopedProviderBroker(
+        assertProviderBrokerReady(options.providerBroker, options.providerProbe),
+        options.binding.sessionId,
+        { maxRequestsPerTurn: options.maxProviderRequestsPerTurn },
+      )
+    : undefined;
+  const settings = createSecretFreeWorkerSettings(
+    providerBroker,
+    options.binding.canonicalRoot,
+    options.settingsSnapshot,
+  );
   const env = options.env ?? createSanitizedWorkerEnv({ sessionId: options.binding.sessionId, tmpDir: options.tmpDir });
   assertExplicitSanitizedEnv(env);
   const executionContext = ExecutionContext.pin(options.binding.canonicalRoot);
@@ -184,6 +203,7 @@ export function composeGatewaySession(options: GatewaySessionCompositionOptions)
     executionContext,
     settings,
     providerBroker,
+    ...(options.settingsSnapshot ? { sessionSettingsSnapshot: options.settingsSnapshot } : {}),
     env,
     spawnOptions: { cwd: options.binding.canonicalRoot, env, gatewayMode: true },
     runtime,
@@ -191,7 +211,7 @@ export function composeGatewaySession(options: GatewaySessionCompositionOptions)
       if (disposed) return;
       disposed = true;
       runtime?.dispose();
-      (providerBroker as ProviderBrokerCapability & { revoke?: () => void }).revoke?.();
+      (providerBroker as (ProviderBrokerCapability & { revoke?: () => void }) | undefined)?.revoke?.();
     },
   };
 }

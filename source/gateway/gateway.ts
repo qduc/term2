@@ -52,10 +52,36 @@ import {
   GATEWAY_EVENT_STREAM_CONTENT_TYPE,
   GATEWAY_EVENT_STREAM_HEARTBEAT,
   type GatewayRpcResult,
+  type GatewayTlsOptions,
 } from './server.js';
 import { ServerSession } from './server-session.js';
 import type { GatewayPersistenceCoordinator, GatewayPersistedSession } from './persistence/coordinator.js';
 import { ServerSessionError } from './server-session.js';
+import { DynamicWorkspaceRegistry, DynamicWorkspaceRegistryError } from './dynamic-workspace-registry.js';
+import { accessSync, constants as fsConstants, realpathSync, statSync } from 'node:fs';
+import { ModelCatalogSession } from '../services/models/model-catalog-session.js';
+import { getAvailableProviderIds } from '../utils/ai/provider-credentials.js';
+import { getProviderIds } from '../providers/index.js';
+import { LoggingService } from '../services/logging/logging-service.js';
+import {
+  applySettingsChanges,
+  buildSettingsProjection,
+  deleteCredential,
+  setCredential,
+  SettingsRpcError,
+  type SettingsAuthority,
+} from './settings-rpc.js';
+import { GatewayPairing, PairingError } from './pairing.js';
+import { TrustedClientsStore } from './trusted-clients.js';
+import {
+  isOAuthAccountProvider,
+  listOAuthAccounts,
+  removeOAuthAccount,
+  setActiveOAuthAccount,
+  type OAuthAccountProviderId,
+} from '../providers/oauth-accounts.js';
+import { loginToCodex } from '../providers/codex-auth.js';
+import { loginToGrok } from '../providers/grok-auth.js';
 
 const MAX_BUFFERED_SSE_EVENTS = 256;
 const NONCRITICAL_RUNTIME_EVENT_TYPES = new Set<ConversationEvent['type']>(['text_delta', 'reasoning_delta']);
@@ -127,9 +153,23 @@ const PUBLIC_EVENT_PAYLOAD_KEYS = new Set([
   'runBudgetEvidence',
 ]);
 
+const LOCAL_OWNER_PURPOSES = new Set<GatewayAssertionClaims['purpose']>([
+  'settings_read',
+  'settings_write',
+  'credential_write',
+  'credential_delete',
+  'oauth_login',
+  'oauth_select',
+  'oauth_delete',
+]);
+
 export type GatewayLaunchConfig = {
   enabled: boolean;
-  socketPath: string;
+  socketPath?: string;
+  /** Defaults to loopback; public-interface binds are outside deployment policy. */
+  host?: string;
+  port?: number;
+  tls?: GatewayTlsOptions;
   manifestPath: string;
   manifestSha256?: string;
   replayDbPath: string;
@@ -150,6 +190,21 @@ export type GatewayLaunchConfig = {
   runtimeFactory?: RuntimeFactory;
   /** Optional plan-03 durable index/log/journal owner. */
   persistence?: GatewayPersistenceCoordinator;
+  /** Optional pre-wired registry; otherwise one is derived from local grants. */
+  workspaceRegistry?: DynamicWorkspaceRegistry;
+  /** Explicit local roots allowed to the browser-owned candidate registry. */
+  workspaceAllowedRoots?: readonly string[];
+  /** Test/launcher seam for the server-owned OAuth loopback flow. */
+  oauthLogin?: (provider: OAuthAccountProviderId) => Promise<void>;
+  /** Principal permitted to operate the process-wide settings/account stores. */
+  localOwnerUserId?: string;
+  pairing?: {
+    enabled: boolean;
+    otpTtlMs?: number;
+    maxAttempts?: number;
+    /** Remove this file and restart to revoke all peers and re-bootstrap pairing. */
+    trustFilePath: string;
+  };
 };
 
 export class GatewayStartupError extends Error {
@@ -160,22 +215,65 @@ export class GatewayStartupError extends Error {
 }
 
 export function assertGatewayStartup(config: GatewayLaunchConfig, manifest?: GatewayManifest): GatewayManifest {
-  if (!config.socketPath.startsWith('/') || !config.issuer || !config.audience || !config.replayDbPath)
-    throw new GatewayStartupError();
-  if (
-    !config.publicKeys ||
-    (config.publicKeys instanceof Map ? config.publicKeys.size === 0 : Object.keys(config.publicKeys).length === 0)
-  )
-    throw new GatewayStartupError();
+  const socketTransport = config.socketPath !== undefined;
+  const networkTransport = config.host !== undefined || config.port !== undefined || config.tls !== undefined;
+  if (socketTransport === networkTransport) throw new GatewayStartupError();
+  if (socketTransport) {
+    if (!config.socketPath!.startsWith('/')) throw new GatewayStartupError();
+  } else {
+    if (
+      (config.host !== undefined && !config.host.trim()) ||
+      !Number.isSafeInteger(config.port) ||
+      config.port! < 1 ||
+      config.port! > 65_535 ||
+      !config.tls ||
+      !config.tls.certPath ||
+      !config.tls.keyPath ||
+      (config.tls.caPath !== undefined && !config.tls.caPath) ||
+      typeof config.tls.requireClientCert !== 'boolean'
+    )
+      throw new GatewayStartupError();
+    for (const filePath of [
+      config.tls.certPath,
+      config.tls.keyPath,
+      ...(config.tls.caPath ? [config.tls.caPath] : []),
+    ]) {
+      try {
+        accessSync(filePath, fsConstants.R_OK);
+      } catch {
+        throw new GatewayStartupError();
+      }
+    }
+  }
+  if (!config.issuer || !config.audience || !config.replayDbPath) throw new GatewayStartupError();
+  if (config.pairing?.enabled) {
+    if (!config.pairing.trustFilePath.startsWith('/') || config.pairing.trustFilePath.includes('\u0000'))
+      throw new GatewayStartupError();
+    if (
+      (config.pairing.otpTtlMs !== undefined &&
+        (!Number.isSafeInteger(config.pairing.otpTtlMs) || config.pairing.otpTtlMs <= 0)) ||
+      (config.pairing.maxAttempts !== undefined &&
+        (!Number.isSafeInteger(config.pairing.maxAttempts) || config.pairing.maxAttempts <= 0))
+    )
+      throw new GatewayStartupError();
+  }
+  const configuredKeyCount =
+    config.publicKeys instanceof Map ? config.publicKeys.size : Object.keys(config.publicKeys ?? {}).length;
+  if (configuredKeyCount === 0 && !config.pairing?.enabled) throw new GatewayStartupError();
   if (!manifest) throw new GatewayStartupError();
   if (!config.manifestSha256 || !/^[a-f0-9]{64}$/i.test(config.manifestSha256)) throw new GatewayStartupError();
-  if (!config.providerBroker || !config.providerProbe?.available || !config.providerProbe.secretFree)
+  const realProviderStack = config.runtimeFactory?.usesRealProviderStack === true;
+  if (
+    !realProviderStack &&
+    (!config.providerBroker || !config.providerProbe?.available || !config.providerProbe.secretFree)
+  )
     throw new GatewayStartupError();
+  if (realProviderStack && !config.runtimeFactory?.settingsAuthority) throw new GatewayStartupError();
   if (config.workerSandboxAvailable !== true || typeof config.workspaceBoundaryProbe !== 'function')
     throw new GatewayStartupError();
   if (config.sshEnabled || config.autoApprove || config.allowUnsandboxed) throw new GatewayStartupError();
   if (typeof config.auditWriter !== 'function') throw new GatewayStartupError();
-  assertProviderBrokerReady(config.providerBroker, config.providerProbe);
+  if (!realProviderStack) assertProviderBrokerReady(config.providerBroker, config.providerProbe);
   if (!config.tmpDir?.startsWith('/')) throw new GatewayStartupError();
   return manifest;
 }
@@ -183,7 +281,6 @@ export function assertGatewayStartup(config: GatewayLaunchConfig, manifest?: Gat
 /** Gateway control plane. Runtime/session protocols remain private RPC consumers. */
 export class Term2Gateway {
   readonly #config: GatewayLaunchConfig;
-  readonly #manifest: GatewayManifest;
   readonly #replay: SqliteReplayLedger;
   readonly #admission: WorkspaceAdmission;
   readonly #verifier: AssertionVerifier;
@@ -196,28 +293,97 @@ export class Term2Gateway {
   readonly #interactionCounters = new Map<InteractionMetric, number>();
   readonly #eventPersistenceTails = new Map<string, Promise<void>>();
   #shutdownInProgress = false;
+  #shutdownPromise?: Promise<void>;
   readonly #server: GatewayServer;
+  readonly #modelCatalog?: ModelCatalogSession;
+  readonly #workspaceRegistry: DynamicWorkspaceRegistry;
+  readonly #pairing?: GatewayPairing;
+  #oauthMutation: Promise<void> = Promise.resolve();
+  #settingsMutation: Promise<void> = Promise.resolve();
 
   private constructor(config: GatewayLaunchConfig, manifest: GatewayManifest) {
     this.#config = config;
-    this.#manifest = manifest;
     this.#replay = new SqliteReplayLedger(config.replayDbPath);
-    this.#admission = new WorkspaceAdmission(manifest, {
-      allowWrite: config.allowWrite === true,
-      boundaryProbe: config.workspaceBoundaryProbe,
-    });
+    this.#admission =
+      config.workspaceRegistry?.admission ??
+      new WorkspaceAdmission(manifest, {
+        allowWrite: config.allowWrite === true,
+        boundaryProbe: config.workspaceBoundaryProbe,
+      });
+    this.#workspaceRegistry =
+      config.workspaceRegistry ??
+      new DynamicWorkspaceRegistry({
+        admission: this.#admission,
+        allowedRoots: config.workspaceAllowedRoots ?? deriveDynamicWorkspaceRoots(manifest),
+      });
+    const trustedStore = config.pairing?.enabled ? new TrustedClientsStore(config.pairing.trustFilePath) : undefined;
+    const assertionKeys = new Map<string, string | Buffer>();
+    for (const [kid, key] of config.publicKeys instanceof Map
+      ? config.publicKeys.entries()
+      : Object.entries(config.publicKeys))
+      assertionKeys.set(kid, key);
+    for (const trusted of trustedStore?.entries() ?? []) assertionKeys.set(trusted.kid, trusted.publicKeyPem);
     this.#verifier = new AssertionVerifier({
       issuer: config.issuer,
       audience: config.audience,
-      publicKeys: config.publicKeys,
+      publicKeys: assertionKeys,
+      allowEmptyKeys: config.pairing?.enabled === true,
       replayLedger: this.#replay,
     });
+    this.#pairing = trustedStore
+      ? new GatewayPairing({
+          enabled: config.pairing!.enabled,
+          otpTtlMs: config.pairing!.otpTtlMs,
+          maxAttempts: config.pairing!.maxAttempts,
+          trustStore: trustedStore,
+        })
+      : undefined;
     this.#audit = new GatewayAuditLog(config.auditWriter!);
     this.#admissions = config.persistence ? new GatewayAdmissionPersistence(config.persistence.index) : null;
+    const settingsAuthority = config.runtimeFactory?.settingsAuthority;
+    if (settingsAuthority) {
+      this.#modelCatalog = new ModelCatalogSession({
+        settingsService: settingsAuthority,
+        loggingService:
+          config.runtimeFactory?.modelCatalogLogger ??
+          new LoggingService({ disableLogging: true, suppressConsoleOutput: true }),
+      });
+    }
+    const transport = config.socketPath
+      ? { socketPath: config.socketPath }
+      : { host: config.host, port: config.port!, tls: config.tls! };
     this.#server = new GatewayServer({
-      socketPath: config.socketPath,
+      ...transport,
       verifier: this.#verifier,
       lifecycle: this.#lifecycle,
+      ...(this.#pairing
+        ? {
+            pairingHandler: async ({ body }) => {
+              if (!isPairingRegisterBody(body))
+                return publicError(401, 'pairing_invalid', 'pairing request is invalid');
+              try {
+                const result = await this.#pairing!.register(body.publicKeyPem, body.otp);
+                const publicKeyPem = trustedStore!.entries().find((entry) => entry.kid === result.kid)?.publicKeyPem;
+                if (!publicKeyPem) return publicError(503, 'pairing_unavailable', 'pairing is unavailable', true);
+                this.#verifier.addTrustedKey(result.kid, publicKeyPem);
+                return { status: 200, body: result };
+              } catch (error) {
+                if (error instanceof PairingError) {
+                  if (error.code === 'pairing_unavailable')
+                    return publicError(503, 'pairing_unavailable', 'pairing is unavailable', true);
+                  return publicError(
+                    401,
+                    error.code === 'pairing_required' || error.code === 'pairing_not_allowed'
+                      ? 'pairing_required'
+                      : 'pairing_invalid',
+                    'pairing rejected',
+                  );
+                }
+                throw error;
+              }
+            },
+          }
+        : {}),
       handler: (input) => this.#handleRpc(input),
     });
   }
@@ -238,6 +404,8 @@ export class Term2Gateway {
       return publicError(400, 'protocol_conflict', 'gateway path and assertion session do not match');
     if (!route.legacy && route.purpose !== claims.purpose)
       return publicError(400, 'protocol_conflict', 'gateway purpose does not match route');
+    if (LOCAL_OWNER_PURPOSES.has(claims.purpose) && claims.sub !== this.#config.localOwnerUserId)
+      return publicError(403, 'settings_forbidden', 'local owner authorization is required');
     try {
       if (claims.purpose === 'workspace_list') {
         await this.#audit.write(
@@ -284,7 +452,26 @@ export class Term2Gateway {
           throw error;
         }
       }
+      if (claims.purpose === 'model_list') return await this.#modelList(input.correlationId);
+      if (claims.purpose === 'workspace_candidate_validate')
+        return await this.#workspaceCandidateValidate(claims, input.body, input.correlationId);
+      if (claims.purpose === 'workspace_candidate_browse')
+        return await this.#workspaceCandidateBrowse(claims, input.body, input.correlationId);
+      if (claims.purpose === 'workspace_candidate_select')
+        return await this.#workspaceCandidateSelect(claims, input.body, input.correlationId);
+      if (claims.purpose === 'settings_read') return await this.#settingsRead(input.correlationId);
+      if (claims.purpose === 'settings_write') return await this.#settingsWrite(input.body, input.correlationId);
+      if (claims.purpose === 'credential_write')
+        return await this.#credentialWrite(route.interactionId!, input.body, input.correlationId);
+      if (claims.purpose === 'credential_delete')
+        return await this.#credentialDelete(route.interactionId!, input.correlationId);
+      if (claims.purpose === 'oauth_login') return await this.#oauthLogin(route.interactionId!, input.correlationId);
+      if (claims.purpose === 'oauth_select')
+        return await this.#oauthSelect(route.interactionId!, input.body, input.correlationId);
+      if (claims.purpose === 'oauth_delete') return await this.#oauthDelete(route.interactionId!, input.correlationId);
       if (!claims.sessionId) return publicError(400, 'protocol_conflict', 'session assertion is incomplete');
+      if (claims.purpose === 'session_update')
+        return await this.#sessionUpdate(claims, input.body, input.correlationId);
       if (claims.purpose === 'session_read') {
         const projection = await this.#projectionFor(claims.sub, claims.sessionId);
         return { status: 200, body: { session: toSessionProjection(projection) } };
@@ -298,6 +485,341 @@ export class Term2Gateway {
     } catch (error) {
       return this.#mapError(error);
     }
+  }
+
+  async #modelList(correlationId?: string): Promise<GatewayRpcResult> {
+    const catalog = this.#modelCatalog;
+    const settings = this.#config.runtimeFactory?.settingsAuthority;
+    if (!catalog || !settings) return publicError(503, 'model_catalog_unavailable', 'model catalog unavailable', true);
+    await this.#audit.write(
+      createSafeLogMetadata({
+        operation: 'model_list',
+        outcome: 'allowed',
+        reasonCode: 'accepted',
+        ...(correlationId ? { correlationId } : {}),
+      }),
+    );
+    const models: Array<{
+      provider: string;
+      id: string;
+      name?: string;
+      default_reasoning_level?: string;
+      contextWindow?: number;
+    }> = [];
+    for (const provider of getAvailableProviderIds(settings, getProviderIds())) {
+      try {
+        const result = await catalog.load(provider);
+        for (const model of result.models) {
+          models.push({
+            provider,
+            id: model.id,
+            ...(model.name === undefined ? {} : { name: model.name }),
+            ...(model.default_reasoning_level === undefined
+              ? {}
+              : { default_reasoning_level: model.default_reasoning_level }),
+            ...(model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow }),
+          });
+        }
+      } catch {
+        // Provider errors can include credential values or request headers.
+        // The redacted model surface simply omits that provider.
+      }
+    }
+    return { status: 200, body: { models } };
+  }
+
+  async #workspaceCandidateValidate(
+    claims: GatewayAssertionClaims,
+    body: unknown,
+    correlationId?: string,
+  ): Promise<GatewayRpcResult> {
+    if (!isWorkspaceCandidateValidateBody(body))
+      return publicError(400, 'validation_error', 'workspace request is invalid');
+    const result = this.#workspaceRegistry.validateCandidate(body.absolutePath, claims.sub);
+    await this.#audit.write(
+      createSafeLogMetadata({
+        operation: 'workspace_candidate_validate',
+        outcome: result.valid ? 'allowed' : 'denied',
+        reasonCode: result.valid ? 'accepted' : result.reasonCode,
+        ...(correlationId ? { correlationId } : {}),
+      }),
+    );
+    return { status: 200, body: result };
+  }
+
+  async #workspaceCandidateBrowse(
+    claims: GatewayAssertionClaims,
+    body: unknown,
+    correlationId?: string,
+  ): Promise<GatewayRpcResult> {
+    if (!isWorkspaceCandidateBrowseBody(body))
+      return publicError(400, 'validation_error', 'workspace request is invalid');
+    const result = this.#workspaceRegistry.browse(body.candidateId, body.child, claims.sub);
+    await this.#audit.write(
+      createSafeLogMetadata({
+        operation: 'workspace_candidate_browse',
+        outcome: 'allowed',
+        reasonCode: 'accepted',
+        ...(correlationId ? { correlationId } : {}),
+      }),
+    );
+    return { status: 200, body: result };
+  }
+
+  async #workspaceCandidateSelect(
+    claims: GatewayAssertionClaims,
+    body: unknown,
+    correlationId?: string,
+  ): Promise<GatewayRpcResult> {
+    if (!isWorkspaceCandidateSelectBody(body))
+      return publicError(400, 'validation_error', 'workspace request is invalid');
+    const result = this.#workspaceRegistry.select(body.candidateId, body.access, claims.sub);
+    await this.#audit.write(
+      createSafeLogMetadata({
+        operation: 'workspace_candidate_select',
+        outcome: 'allowed',
+        reasonCode: 'accepted',
+        workspaceId: result.workspaceId,
+        grantVersion: result.binding.grantVersion,
+        access: result.binding.access,
+        ...(correlationId ? { correlationId } : {}),
+      }),
+    );
+    return {
+      status: 200,
+      body: {
+        workspaceId: result.workspaceId,
+        displayName: result.displayName,
+        binding: {
+          sessionId: result.binding.sessionId,
+          ownerUserId: result.binding.ownerUserId,
+          workspaceId: result.binding.workspaceId,
+          grantVersion: result.binding.grantVersion,
+          canonicalRoot: result.binding.canonicalRoot,
+          access: result.binding.access,
+        },
+      },
+    };
+  }
+
+  #settingsAuthority(): SettingsAuthority | undefined {
+    const settings = this.#config.runtimeFactory?.settingsAuthority;
+    return settings ? (settings as SettingsAuthority) : undefined;
+  }
+
+  async #settingsRead(correlationId?: string): Promise<GatewayRpcResult> {
+    const settings = this.#settingsAuthority();
+    if (!settings) return publicError(503, 'settings_unavailable', 'settings unavailable', true);
+    const projection = buildSettingsProjection(settings, this.#config.allowWrite ? 'read_write' : 'read');
+    await this.#audit.write(
+      createSafeLogMetadata({
+        operation: 'settings_read',
+        outcome: 'allowed',
+        reasonCode: 'accepted',
+        ...(correlationId ? { correlationId } : {}),
+      }),
+    );
+    return { status: 200, body: projection };
+  }
+
+  async #settingsWrite(body: unknown, correlationId?: string): Promise<GatewayRpcResult> {
+    const settings = this.#settingsAuthority();
+    if (!settings) return publicError(503, 'settings_unavailable', 'settings unavailable', true);
+    if (!isSettingsWriteBody(body)) return publicError(400, 'validation_error', 'settings request is invalid');
+    return await this.#withSettingsMutation(async () => {
+      const projection = applySettingsChanges(settings, body.expectedRevision, body.changes);
+      await this.#audit.write(
+        createSafeLogMetadata({
+          operation: 'settings_write',
+          outcome: 'allowed',
+          reasonCode: 'accepted',
+          ...(correlationId ? { correlationId } : {}),
+        }),
+      );
+      return { status: 200, body: { committed: true, revision: projection.revision, projection } };
+    });
+  }
+
+  async #credentialWrite(credentialId: string, body: unknown, correlationId?: string): Promise<GatewayRpcResult> {
+    const settings = this.#settingsAuthority();
+    if (!settings) return publicError(503, 'settings_unavailable', 'settings unavailable', true);
+    if (!isCredentialWriteBody(body)) return publicError(400, 'validation_error', 'credential request is invalid');
+    return await this.#withSettingsMutation(async () => {
+      const result = setCredential(settings, credentialId, body.value);
+      await this.#audit.write(
+        createSafeLogMetadata({
+          operation: 'credential_write',
+          outcome: 'allowed',
+          reasonCode: 'accepted',
+          ...(correlationId ? { correlationId } : {}),
+        }),
+      );
+      return { status: 200, body: result };
+    });
+  }
+
+  async #credentialDelete(credentialId: string, correlationId?: string): Promise<GatewayRpcResult> {
+    const settings = this.#settingsAuthority();
+    if (!settings) return publicError(503, 'settings_unavailable', 'settings unavailable', true);
+    return await this.#withSettingsMutation(async () => {
+      const result = deleteCredential(settings, credentialId);
+      await this.#audit.write(
+        createSafeLogMetadata({
+          operation: 'credential_delete',
+          outcome: 'allowed',
+          reasonCode: 'accepted',
+          ...(correlationId ? { correlationId } : {}),
+        }),
+      );
+      return { status: 200, body: result };
+    });
+  }
+
+  async #withSettingsMutation<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = this.#settingsMutation;
+    let release!: () => void;
+    this.#settingsMutation = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+    }
+  }
+
+  async #oauthLogin(resource: string, correlationId?: string): Promise<GatewayRpcResult> {
+    const [provider] = resource.split('\u0000');
+    if (!isOAuthAccountProvider(provider)) return publicError(400, 'validation_error', 'OAuth provider is invalid');
+    return await this.#withOAuthMutation(
+      async () => {
+        try {
+          if (this.#config.oauthLogin) await this.#config.oauthLogin(provider);
+          else if (provider === 'codex') await loginToCodex();
+          else await loginToGrok();
+          return {
+            status: 200,
+            body: { status: 'completed', configured: listOAuthAccounts(provider).length > 0 },
+          };
+        } catch {
+          return { status: 200, body: { status: 'not_completed' } };
+        }
+      },
+      'oauth_login',
+      correlationId,
+    );
+  }
+
+  async #oauthSelect(resource: string, body: unknown, correlationId?: string): Promise<GatewayRpcResult> {
+    const [provider] = resource.split('\u0000');
+    if (!isOAuthAccountProvider(provider) || !isOAuthSelectBody(body))
+      return publicError(400, 'validation_error', 'OAuth request is invalid');
+    return await this.#withOAuthMutation(
+      async () => {
+        const ok = setActiveOAuthAccount(provider, body.accountId);
+        const account = listOAuthAccounts(provider).find((item) => item.id === body.accountId);
+        return {
+          status: 200,
+          body: { ok, isSelected: account?.isSelected === true, isInUse: account?.isInUse === true },
+        };
+      },
+      'oauth_select',
+      correlationId,
+    );
+  }
+
+  async #oauthDelete(resource: string, correlationId?: string): Promise<GatewayRpcResult> {
+    const [provider, accountId] = resource.split('\u0000');
+    if (!isOAuthAccountProvider(provider) || !accountId)
+      return publicError(400, 'validation_error', 'OAuth request is invalid');
+    return await this.#withOAuthMutation(
+      async () => {
+        const ok = removeOAuthAccount(provider, accountId);
+        return { status: 200, body: { ok } };
+      },
+      'oauth_delete',
+      correlationId,
+    );
+  }
+
+  async #withOAuthMutation(
+    operation: () => Promise<GatewayRpcResult>,
+    auditOperation: 'oauth_login' | 'oauth_select' | 'oauth_delete',
+    correlationId?: string,
+  ): Promise<GatewayRpcResult> {
+    const previous = this.#oauthMutation;
+    let release!: () => void;
+    this.#oauthMutation = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      const result = await operation();
+      await this.#audit.write(
+        createSafeLogMetadata({
+          operation: auditOperation,
+          outcome: 'allowed',
+          reasonCode: 'accepted',
+          ...(correlationId ? { correlationId } : {}),
+        }),
+      );
+      return result;
+    } finally {
+      release();
+    }
+  }
+
+  async #sessionUpdate(
+    claims: GatewayAssertionClaims,
+    body: unknown,
+    correlationId?: string,
+  ): Promise<GatewayRpcResult> {
+    if (!isSessionUpdateBody(body)) return publicError(400, 'validation_error', 'session config is invalid');
+    const session = this.#sessions.get(claims.sessionId!);
+    if (!(session instanceof ServerSession) || session.binding.ownerUserId !== claims.sub)
+      return publicError(404, 'not_found', 'session not found');
+    if (session.status === 'running' || session.status === 'awaiting_interaction')
+      return publicError(409, 'session_busy', 'session is busy');
+    const settings = session.resources.sessionSettingsService as SettingsAuthority | undefined;
+    if (!settings) return publicError(503, 'settings_unavailable', 'session settings unavailable', true);
+    if (body.model !== undefined) {
+      if (!this.#modelCatalog) return publicError(503, 'settings_unavailable', 'model catalog unavailable', true);
+      const provider = String(settings.getDynamic('agent.provider') ?? '');
+      const models = await this.#modelCatalog.load(provider);
+      if (!models.models.some((model) => model.id === body.model))
+        return publicError(422, 'validation_error', 'model is unavailable');
+      session.service.setModel(body.model);
+    }
+    if (body.reasoningEffort !== undefined) session.service.setReasoningEffort(body.reasoningEffort as any);
+    if (body.mode !== undefined) {
+      const modes = { mentorMode: false, liteMode: false, planMode: false, orchestratorMode: false };
+      const key =
+        body.mode === 'mentor'
+          ? 'mentorMode'
+          : body.mode === 'lite'
+          ? 'liteMode'
+          : body.mode === 'plan'
+          ? 'planMode'
+          : body.mode === 'orchestrator'
+          ? 'orchestratorMode'
+          : undefined;
+      if (key) modes[key] = true;
+      for (const [modeKey, value] of Object.entries(modes))
+        settings.setDynamic(`app.${modeKey}`, value, { persist: false });
+    }
+    const result = sessionConfigProjection(session);
+    await this.#audit.write(
+      createSafeLogMetadata({
+        operation: 'session_update',
+        outcome: 'allowed',
+        reasonCode: 'accepted',
+        sessionId: session.sessionId,
+        workspaceId: session.binding.workspaceId,
+        ...(correlationId ? { correlationId } : {}),
+      }),
+    );
+    return { status: 200, body: result };
   }
 
   #interactionBindingFor(
@@ -851,6 +1373,14 @@ export class Term2Gateway {
       await persisted.persistence.journal.append(mapped, {
         durability: mapped.type === 'text_delta' || mapped.type === 'reasoning_delta' ? 'stream' : 'critical',
       });
+      // Keep the sessions-list sequence counter live: stream deltas stay
+      // non-blocking, but every critical event refreshes the index row so the
+      // sidebar never reports a stale "1 events" for a running session.
+      if (mapped.type !== 'text_delta' && mapped.type !== 'reasoning_delta') {
+        this.#config.persistence?.index.update(sessionId, {
+          lastPublishedSequence: persisted.persistence.journal.highWater().lastPublishedSequence,
+        });
+      }
       if (event.type === 'final' || event.type === 'error') {
         const admission = admissions.find((candidate) => candidate.turnId === context.turnId);
         if (admission && (admission.state === 'accepted' || admission.state === 'committed')) {
@@ -870,12 +1400,34 @@ export class Term2Gateway {
   }
 
   #mapError(error: unknown): GatewayRpcResult {
+    if (error instanceof SettingsRpcError) {
+      if (error.code === 'settings_conflict')
+        return publicError(409, 'settings_conflict', 'settings changed; reload before retrying', false, {
+          currentRevision: error.details?.currentRevision,
+          ...(error.details?.projection ? { projection: error.details.projection } : {}),
+        });
+      if (error.code === 'settings_not_allowed')
+        return publicError(403, 'settings_forbidden', 'settings change is not allowed');
+      if (error.code === 'not_persisted')
+        return publicError(503, 'settings_unavailable', 'settings could not be saved', true);
+      return publicError(503, 'settings_unavailable', 'settings unavailable', true);
+    }
+    if (error instanceof DynamicWorkspaceRegistryError) {
+      if (error.code === 'candidate_not_found' || error.code === 'candidate_expired')
+        return publicError(404, 'not_found', 'workspace candidate not found');
+      if (error.code === 'workspace_owner_mismatch' || error.code === 'workspace_path_escape')
+        return publicError(403, 'workspace_forbidden', 'workspace access denied');
+      if (error.code === 'candidate_registry_full')
+        return publicError(429, 'candidate_registry_full', 'workspace candidate capacity is full', true);
+      return publicError(422, 'validation_error', 'workspace candidate is unavailable');
+    }
     if (error instanceof WorkspaceAdmissionError) {
-      return publicError(
-        error.code === 'workspace_session_exists' ? 409 : 403,
-        error.code === 'workspace_session_exists' ? 'protocol_conflict' : 'workspace_forbidden',
-        'workspace access denied',
-      );
+      // One active session per workspace is a deliberate constraint; surface it
+      // with a distinct code so clients can recover (e.g. select the existing
+      // session) instead of seeing a generic protocol_conflict.
+      if (error.code === 'workspace_session_exists')
+        return publicError(409, 'session_busy', 'a session is already active for this workspace');
+      return publicError(403, 'workspace_forbidden', 'workspace access denied');
     }
     if (error instanceof GatewayPersistenceError) {
       if (error.code === 'not_found' || error.code === 'owner_mismatch')
@@ -913,7 +1465,7 @@ export class Term2Gateway {
     return this.#lifecycle;
   }
   get manifestVersion(): number {
-    return this.#manifest.version;
+    return this.#admission.manifestVersion;
   }
   get interactionMetrics(): Readonly<Record<InteractionMetric, number>> {
     return Object.freeze(
@@ -1039,14 +1591,57 @@ export class Term2Gateway {
   }
 
   async shutdown(graceMs = 5_000): Promise<void> {
+    if (this.#shutdownPromise) return this.#shutdownPromise;
     this.#shutdownInProgress = true;
-    await this.#server.shutdown(graceMs);
-    await Promise.all([...this.#sessions.values()].map((session) => Promise.resolve(session.dispose())));
-    this.#sessions.clear();
-    this.#replay.close();
-    await this.#audit.write(
-      createSafeLogMetadata({ operation: 'shutdown', outcome: 'interrupted', reasonCode: 'shutdown' }),
-    );
+    const hardDeadlineMs = Math.max(1, graceMs);
+    this.#shutdownPromise = (async () => {
+      const deadline = Date.now() + hardDeadlineMs;
+      let forced = false;
+      const remaining = () => Math.max(1, deadline - Date.now());
+      const waitBounded = async (work: Promise<unknown>): Promise<boolean> => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const completed = await Promise.race([
+          work.then(
+            () => true,
+            () => true,
+          ),
+          new Promise<boolean>((resolve) => {
+            timer = setTimeout(() => resolve(false), remaining());
+          }),
+        ]);
+        if (timer) clearTimeout(timer);
+        return completed;
+      };
+      const markForced = () => {
+        if (forced) return;
+        forced = true;
+        for (const sessionId of this.#persisted.keys()) this.#config.persistence?.markForcedShutdown(sessionId);
+      };
+
+      if (!(await waitBounded(this.#server.shutdown(remaining())))) markForced();
+      if (
+        !(await waitBounded(
+          Promise.all([...this.#sessions.values()].map((session) => Promise.resolve(session.dispose()))),
+        ))
+      )
+        markForced();
+      if (this.#config.runtimeFactory && !(await waitBounded(this.#config.runtimeFactory.shutdown(remaining()))))
+        markForced();
+      this.#sessions.clear();
+      this.#replay.close();
+      // The audit record is bounded by the same deadline. A broken audit sink
+      // must not keep the local owner process alive indefinitely.
+      await waitBounded(
+        this.#audit.write(
+          createSafeLogMetadata({
+            operation: 'shutdown',
+            outcome: forced ? 'interrupted' : 'allowed',
+            reasonCode: forced ? 'forced_shutdown' : 'shutdown',
+          }),
+        ),
+      );
+    })();
+    return this.#shutdownPromise;
   }
 }
 
@@ -1072,10 +1667,33 @@ function matchPrivateRoute(method: string, pathname: string): PrivateRoute | nul
   // GET is canonical for workspace_list; POST is a tested compatibility alias for the pinned BFF wire.
   if ((method === 'GET' || method === 'POST') && pathname === '/private/agent/v1/workspaces')
     return { purpose: 'workspace_list' };
+  if (method === 'POST' && pathname === '/private/agent/v1/workspace/candidates/validate')
+    return { purpose: 'workspace_candidate_validate' };
+  if (method === 'POST' && pathname === '/private/agent/v1/workspace/candidates/browse')
+    return { purpose: 'workspace_candidate_browse' };
+  if (method === 'POST' && pathname === '/private/agent/v1/workspace/candidates/select')
+    return { purpose: 'workspace_candidate_select' };
+  if (method === 'GET' && pathname === '/private/agent/v1/models') return { purpose: 'model_list' };
+  if (method === 'GET' && pathname === '/private/agent/v1/settings') return { purpose: 'settings_read' };
+  if (method === 'PUT' && pathname === '/private/agent/v1/settings') return { purpose: 'settings_write' };
+  const credential = pathname.match(/^\/private\/agent\/v1\/credentials\/([A-Za-z0-9_-]{1,256})$/);
+  if (credential && method === 'POST') return { purpose: 'credential_write', interactionId: credential[1] };
+  if (credential && method === 'DELETE') return { purpose: 'credential_delete', interactionId: credential[1] };
+  const oauth = pathname.match(/^\/private\/agent\/v1\/oauth\/([A-Za-z0-9_-]{1,256})\/(login|select)$/);
+  if (oauth && method === 'POST')
+    return {
+      purpose: oauth[2] === 'login' ? 'oauth_login' : 'oauth_select',
+      interactionId: `${oauth[1]}\u0000${oauth[2]}`,
+    };
+  const oauthDelete = pathname.match(
+    /^\/private\/agent\/v1\/oauth\/([A-Za-z0-9_-]{1,256})\/accounts\/([A-Za-z0-9_-]{1,256})$/,
+  );
+  if (oauthDelete && method === 'DELETE')
+    return { purpose: 'oauth_delete', interactionId: `${oauthDelete[1]}\u0000${oauthDelete[2]}` };
   if (method === 'POST' && pathname === '/private/agent/v1/sessions') return { purpose: 'session_create' };
   if (method === 'GET' && pathname === '/private/agent/v1/sessions') return { purpose: 'session_list' };
   const match = pathname.match(
-    /^\/private\/agent\/v1\/sessions\/([A-Za-z0-9_-]{1,256})(?:\/(messages|abort|events|interactions\/([A-Za-z0-9_-]{1,256})))?$/,
+    /^\/private\/agent\/v1\/sessions\/([A-Za-z0-9_-]{1,256})(?:\/(messages|abort|events|config|interactions\/([A-Za-z0-9_-]{1,256})))?$/,
   );
   if (!match) return null;
   const sessionId = match[1]!;
@@ -1083,9 +1701,25 @@ function matchPrivateRoute(method: string, pathname: string): PrivateRoute | nul
   if (method === 'POST' && match[2] === 'messages') return { purpose: 'message_submit', sessionId };
   if (method === 'POST' && match[2] === 'abort') return { purpose: 'abort', sessionId };
   if (method === 'GET' && match[2] === 'events') return { purpose: 'events_connect', sessionId };
+  if (method === 'POST' && match[2] === 'config') return { purpose: 'session_update', sessionId };
   if (method === 'POST' && match[2]?.startsWith('interactions/'))
     return { purpose: 'interaction_resolve', sessionId, interactionId: match[3] };
   return null;
+}
+
+function deriveDynamicWorkspaceRoots(manifest: GatewayManifest): string[] {
+  const roots = new Set<string>();
+  for (const grant of manifest.grants) {
+    if (grant.kind !== 'local' || !grant.localRoot) continue;
+    try {
+      const canonical = realpathSync(grant.localRoot);
+      if (statSync(canonical).isDirectory()) roots.add(canonical);
+    } catch {
+      // A stale manifest root remains a v1 admission error; it must not make
+      // the otherwise-compatible gateway fail before the candidate route is used.
+    }
+  }
+  return [...roots];
 }
 
 export function classifyInteractionResolution(
@@ -1109,6 +1743,162 @@ function isSessionCreateBody(body: unknown, workspaceId: string | undefined, leg
   if (keys.some((key) => key !== 'workspaceId')) return false;
   const requested = (body as Record<string, unknown>).workspaceId;
   return typeof requested === 'string' && requested === workspaceId;
+}
+
+function isWorkspaceCandidateValidateBody(body: unknown): body is { absolutePath: string } {
+  return (
+    !!body &&
+    typeof body === 'object' &&
+    !Array.isArray(body) &&
+    Object.keys(body as Record<string, unknown>).length === 1 &&
+    typeof (body as Record<string, unknown>).absolutePath === 'string'
+  );
+}
+
+function isWorkspaceCandidateBrowseBody(body: unknown): body is { candidateId: string; child?: string } {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  const value = body as Record<string, unknown>;
+  return (
+    Object.keys(value).every((key) => key === 'candidateId' || key === 'child') &&
+    isOpaqueId(value.candidateId) &&
+    (value.child === undefined || isOpaqueId(value.child))
+  );
+}
+
+function isWorkspaceCandidateSelectBody(body: unknown): body is {
+  candidateId: string;
+  access: 'read' | 'read_write';
+} {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  const value = body as Record<string, unknown>;
+  return (
+    Object.keys(value).length === 2 &&
+    Object.keys(value).every((key) => key === 'candidateId' || key === 'access') &&
+    isOpaqueId(value.candidateId) &&
+    (value.access === 'read' || value.access === 'read_write')
+  );
+}
+
+function isSettingsWriteBody(
+  body: unknown,
+): body is { expectedRevision: string; changes: Array<{ key: string; value: unknown }> } {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  const value = body as Record<string, unknown>;
+  if (typeof value.expectedRevision !== 'string' || !Array.isArray(value.changes) || value.changes.length > 100)
+    return false;
+  return value.changes.every((change) => {
+    if (!change || typeof change !== 'object' || Array.isArray(change)) return false;
+    const item = change as Record<string, unknown>;
+    return (
+      Object.keys(item).length === 2 &&
+      typeof item.key === 'string' &&
+      Object.prototype.hasOwnProperty.call(item, 'value') &&
+      isSafeSettingsValue(item.value)
+    );
+  });
+}
+
+function isPairingRegisterBody(body: unknown): body is { publicKeyPem: string; otp: string } {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  const value = body as Record<string, unknown>;
+  return (
+    Object.keys(value).length === 2 &&
+    typeof value.publicKeyPem === 'string' &&
+    value.publicKeyPem.length > 0 &&
+    value.publicKeyPem.length <= 16_384 &&
+    typeof value.otp === 'string' &&
+    /^\d{6}$/.test(value.otp)
+  );
+}
+
+function isSafeSettingsValue(value: unknown): boolean {
+  return (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    (Array.isArray(value) && value.every((item) => typeof item === 'string'))
+  );
+}
+
+function isCredentialWriteBody(body: unknown): body is { value: string } {
+  return (
+    !!body &&
+    typeof body === 'object' &&
+    !Array.isArray(body) &&
+    Object.keys(body as Record<string, unknown>).length === 1 &&
+    typeof (body as Record<string, unknown>).value === 'string' &&
+    ((body as Record<string, unknown>).value as string).length > 0
+  );
+}
+
+function isOAuthSelectBody(body: unknown): body is { accountId: string } {
+  return (
+    !!body &&
+    typeof body === 'object' &&
+    !Array.isArray(body) &&
+    Object.keys(body as Record<string, unknown>).length === 1 &&
+    isOpaqueId((body as Record<string, unknown>).accountId)
+  );
+}
+
+function isSessionUpdateBody(body: unknown): body is { model?: string; reasoningEffort?: string; mode?: string } {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  const value = body as Record<string, unknown>;
+  if (Object.keys(value).some((key) => !['model', 'reasoningEffort', 'mode'].includes(key))) return false;
+  if (
+    value.model !== undefined &&
+    (typeof value.model !== 'string' || value.model.length === 0 || value.model.length > 512)
+  )
+    return false;
+  if (
+    value.reasoningEffort !== undefined &&
+    !['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(String(value.reasoningEffort))
+  )
+    return false;
+  return (
+    value.mode === undefined || ['standard', 'lite', 'plan', 'mentor', 'orchestrator'].includes(String(value.mode))
+  );
+}
+
+export function sessionConfigProjection(session: ServerSession): Record<string, unknown> {
+  const snapshot = session.resources.settings;
+  const service = session.resources.sessionSettingsService;
+  const get = (key: string, fallback: unknown) => service?.getDynamic(key) ?? fallback;
+  const snapshotPolicy = snapshot.toolPolicy ?? {};
+  const sessionPolicy = session.resources.settings.toolPolicy ?? {};
+  const toolPolicy = {
+    allowWrite: sessionPolicy.allowWrite ?? snapshotPolicy.allowWrite ?? false,
+    autoApprove: sessionPolicy.autoApprove ?? snapshotPolicy.autoApprove ?? false,
+    allowUnsandboxed: sessionPolicy.allowUnsandboxed ?? snapshotPolicy.allowUnsandboxed ?? false,
+    sshEnabled: sessionPolicy.sshEnabled ?? snapshotPolicy.sshEnabled ?? false,
+  };
+  const settings = {
+    providerId: get('agent.provider', snapshot.providerId),
+    modelId: get('agent.model', snapshot.modelId),
+    reasoningEffort: get('agent.reasoningEffort', snapshot.reasoningEffort ?? 'default'),
+    mode: get('app.orchestratorMode', false)
+      ? 'orchestrator'
+      : get('app.liteMode', false)
+      ? 'lite'
+      : get('app.planMode', false)
+      ? 'plan'
+      : get('app.mentorMode', false)
+      ? 'mentor'
+      : snapshot.mode ?? 'standard',
+    toolPolicy,
+    defaultsRevision: snapshot.defaultsRevision,
+  };
+  return {
+    sessionId: session.sessionId,
+    providerId: settings.providerId ?? 'unknown',
+    modelId: settings.modelId ?? 'unknown',
+    reasoningEffort: settings.reasoningEffort ?? 'default',
+    mode: settings.mode ?? 'standard',
+    toolPolicy,
+    configRevision: crypto.createHash('sha256').update(JSON.stringify(settings)).digest('hex'),
+    defaultsRevision: settings.defaultsRevision ?? 'unknown',
+  };
 }
 
 function isOpaqueId(value: unknown): value is string {

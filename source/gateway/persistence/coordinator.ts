@@ -204,6 +204,19 @@ export class GatewayPersistenceCoordinator {
     });
   }
 
+  /** Record a durable marker before a provider-owned close is abandoned. */
+  markForcedShutdown(sessionId: string): void {
+    const record = this.#index.get(sessionId);
+    if (!record || record.status === 'closed') return;
+    this.#index.update(sessionId, {
+      status: 'interrupted',
+      activeTurnId: null,
+      interruptedAt: new Date().toISOString(),
+      recoveryWarning: 'session forcibly interrupted during gateway shutdown',
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
   closeIndex(): void {
     this.#index.close();
   }

@@ -6,6 +6,7 @@ import envPaths from 'env-paths';
 import { DELTA_SIDECAR_SUFFIX, deltaSidecarPathFor, isTruncatedLogEvent } from '../logging/conversation-log-events.js';
 import { decodeLogEnvelope, type PersistedLogEnvelope } from './conversation-decoder.js';
 import { replayEvents, type RestoredState } from './conversation-replay.js';
+import { auditSessionLog, type SessionAudit } from './session-audit.js';
 
 import type { SavedAppMode } from './conversation-persistence-types.js';
 export type { SavedAppMode, SavedMessage } from './conversation-persistence-types.js';
@@ -581,6 +582,26 @@ export function forkConversation(sourceId: string, newId: string): boolean {
     }
   }
   return true;
+}
+
+/**
+ * Report how a saved session ended, without resuming it.
+ *
+ * Reads the same merged envelope stream `loadConversation` does, sidecar
+ * included, so the verdict describes exactly the log a resume would replay.
+ * Returns null when the conversation does not exist or cannot be read.
+ */
+export function auditConversation(id: string): SessionAudit | null {
+  ensureConversationsDir();
+  const filePath = getConversationPath(id);
+  try {
+    if (!fs.existsSync(filePath)) {
+      return null;
+    }
+    return auditSessionLog(readEnvelopes(filePath));
+  } catch {
+    return null;
+  }
 }
 
 const CONTENT_EVENT_TYPES = new Set(['user_message', 'assistant_turn', 'command_message', 'subagent_started', 'error']);

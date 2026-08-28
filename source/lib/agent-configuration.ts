@@ -261,6 +261,7 @@ export class AgentConfiguration implements AgentSource {
       'agent.maxOutputTokens',
       'agent.maxStreamOutputChars',
       'agent.maxModelRequestDurationMs',
+      'agent.maxModelStreamIdleMs',
       // Provider model factories snapshot credentials, endpoints, and other
       // transport settings. Rebuild and notify consumers when any of these
       // change so cached application models cannot outlive their settings.

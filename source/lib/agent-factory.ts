@@ -280,6 +280,7 @@ function buildModelSettings({
   const maxOutputTokens = deps.settings.get('agent.maxOutputTokens');
   const maxStreamOutputChars = deps.settings.get('agent.maxStreamOutputChars');
   const maxModelRequestDurationMs = deps.settings.get('agent.maxModelRequestDurationMs');
+  const maxModelStreamIdleMs = deps.settings.get('agent.maxModelStreamIdleMs');
   if (typeof maxOutputTokens === 'number') {
     const catalogLimit = getCatalogModel(deps.providerId, resolvedModel)?.maxTokens;
     modelSettings.maxTokens = catalogLimit === undefined ? maxOutputTokens : Math.min(maxOutputTokens, catalogLimit);
@@ -287,6 +288,9 @@ function buildModelSettings({
   if (typeof maxStreamOutputChars === 'number') modelSettings.maxStreamOutputChars = maxStreamOutputChars;
   if (typeof maxModelRequestDurationMs === 'number') {
     modelSettings.maxModelRequestDurationMs = maxModelRequestDurationMs;
+  }
+  if (typeof maxModelStreamIdleMs === 'number') {
+    modelSettings.maxModelStreamIdleMs = maxModelStreamIdleMs;
   }
   if (reasoningEffort && reasoningEffort !== 'default') {
     modelSettings.reasoning = {

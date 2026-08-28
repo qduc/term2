@@ -41,9 +41,9 @@ import { addTokenUsage, normalizeUsage } from '../../utils/ai/token-usage.js';
 import { computeModelCost, type ModelRequestCost, type ServiceTier } from '../../services/cost/model-cost.js';
 import { getCatalogPricingVersion, getModelPricing } from '../../services/cost/pricing.js';
 import {
-  GenerationDeadline,
   GenerationGuard,
   GenerationGuardError,
+  GenerationStreamDeadlines,
   type GenerationGuardOptions,
 } from './generation-guard.js';
 
@@ -59,8 +59,10 @@ export interface AgentModelSettings {
   maxTokens?: number;
   /** Hard per-request stream-output budget across text, reasoning, and tool arguments. */
   maxStreamOutputChars?: number;
-  /** Optional total wall-clock limit for each provider request; 0 disables it. */
+  /** Optional total wall-clock ceiling for each provider request; 0 disables it. Opt-in backstop. */
   maxModelRequestDurationMs?: number;
+  /** Provider-neutral inactivity window: abort if no streamed delta arrives within this many ms; 0 disables it. */
+  maxModelStreamIdleMs?: number;
   retry?: { maxRetries?: number };
   providerData?: Record<string, unknown>;
   codex?: { promptCacheKey?: string; include?: readonly string[] };
@@ -985,11 +987,12 @@ export class ApplicationRunLoop {
         maxToolArgumentCharacters: state.agent.modelSettings?.maxStreamOutputChars,
         maxCumulativeToolArgumentCharacters: state.agent.modelSettings?.maxStreamOutputChars,
         requestDeadlineMs: state.agent.modelSettings?.maxModelRequestDurationMs,
+        maxStreamIdleMs: state.agent.modelSettings?.maxModelStreamIdleMs,
         ...options.generationGuard,
       });
       const consume = async (): Promise<void> => {
-        const deadline = new GenerationDeadline(
-          generationGuard.requestDeadlineMs,
+        const deadline = new GenerationStreamDeadlines(
+          { totalMs: generationGuard.requestDeadlineMs, idleMs: generationGuard.maxStreamIdleMs },
           () => requestAbortController.abort(),
           () => generationGuard.progress,
         );
@@ -1003,6 +1006,9 @@ export class ApplicationRunLoop {
               iteratorFinished = true;
               return;
             }
+            // Any streamed event is transport activity: re-arm the inactivity
+            // window so long legitimate reasoning is never mistaken for a stall.
+            deadline.recordActivity();
             const event = next.value;
             if (event.type === 'completion') {
               generationGuard.observeCompletion(event.output);

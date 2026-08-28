@@ -81,15 +81,15 @@ export const AgentSettingsSchema = z.object({
   maxTurns: z.number().int().positive().default(100),
   maxOutputTokens: z.number().int().positive().default(32_000),
   maxStreamOutputChars: z.number().int().positive().default(100_000),
-  // A deadline of 0 was the previous default and was never usable: it reaches
-  // `setTimeout(…, 0)` and aborts the first request immediately. Repair it to
-  // the real default instead of rejecting, because a schema error here fails
-  // the whole settings file and every config written before this setting became
-  // positive-only would refuse to start.
-  maxModelRequestDurationMs: z.preprocess(
-    (value) => (value === 0 ? undefined : value),
-    z.number().int().positive().default(300_000),
-  ),
+  // Total wall-clock ceiling per provider request. 0 means "no ceiling": the
+  // provider-neutral stream-idle watchdog (maxModelStreamIdleMs) owns stall
+  // detection, so this is an opt-in backstop and defaults off. `Generation
+  // StreamDeadlines` treats a non-positive value as disabled.
+  maxModelRequestDurationMs: z.number().int().nonnegative().default(0),
+  // Provider-neutral inactivity window: abort a request that streams no output
+  // for this many ms. Re-arms on every streamed delta, so long legitimate
+  // reasoning survives while a silent stall is cut. 0 disables it.
+  maxModelStreamIdleMs: z.number().int().nonnegative().default(600_000),
   retryAttempts: z.number().int().nonnegative().default(2),
   transport: z.enum(['websocket', 'http']).default('websocket'),
   maxParallelToolCalls: z
@@ -605,6 +605,7 @@ export interface SettingsWithSources {
     maxOutputTokens: SettingWithSource<number>;
     maxStreamOutputChars: SettingWithSource<number>;
     maxModelRequestDurationMs: SettingWithSource<number>;
+    maxModelStreamIdleMs: SettingWithSource<number>;
     retryAttempts: SettingWithSource<number>;
     transport: SettingWithSource<'websocket' | 'http'>;
     maxParallelToolCalls: SettingWithSource<number>;
@@ -766,6 +767,7 @@ export const SETTING_KEYS = {
   AGENT_MAX_OUTPUT_TOKENS: 'agent.maxOutputTokens',
   AGENT_MAX_STREAM_OUTPUT_CHARS: 'agent.maxStreamOutputChars',
   AGENT_MAX_MODEL_REQUEST_DURATION_MS: 'agent.maxModelRequestDurationMs',
+  AGENT_MAX_MODEL_STREAM_IDLE_MS: 'agent.maxModelStreamIdleMs',
   AGENT_RETRY_ATTEMPTS: 'agent.retryAttempts',
   AGENT_TRANSPORT: 'agent.transport',
   AGENT_MAX_PARALLEL_TOOL_CALLS: 'agent.maxParallelToolCalls',
@@ -1040,6 +1042,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     maxOutputTokens: 32_000,
     maxStreamOutputChars: 100_000,
     maxModelRequestDurationMs: 0,
+    maxModelStreamIdleMs: 600_000,
     retryAttempts: 2,
     transport: 'websocket',
     maxParallelToolCalls: 3,

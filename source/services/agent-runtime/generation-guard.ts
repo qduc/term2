@@ -9,7 +9,8 @@ export type GenerationGuardCode =
   | 'output_characters'
   | 'repetitive_text'
   | 'repetitive_reasoning'
-  | 'request_deadline';
+  | 'request_deadline'
+  | 'stream_inactivity';
 
 /**
  * A provider-neutral, per-request generation budget. Text and streamed tool
@@ -26,8 +27,15 @@ export interface GenerationGuardOptions {
   readonly maxReasoningCharacters?: number;
   readonly maxToolArgumentCharacters?: number;
   readonly maxCumulativeToolArgumentCharacters?: number;
-  /** Optional hard wall-clock limit; 0 disables it. */
+  /** Optional total wall-clock ceiling; 0 disables it. Opt-in backstop only. */
   readonly requestDeadlineMs?: number;
+  /**
+   * Provider-neutral inactivity window: abort if no streamed delta arrives
+   * within this many ms. Re-arms on every streamed event, so long legitimate
+   * reasoning that keeps emitting survives while a silent stall is cut. 0
+   * disables it.
+   */
+  readonly maxStreamIdleMs?: number;
   readonly repetition?: Partial<GenerationRepetitionOptions>;
 }
 
@@ -53,10 +61,14 @@ export const DEFAULT_GENERATION_GUARD_OPTIONS: Readonly<Required<Omit<Generation
   maxReasoningCharacters: 100_000,
   maxToolArgumentCharacters: 100_000,
   maxCumulativeToolArgumentCharacters: 100_000,
-  // Slow reasoning requests can legitimately remain silent for many minutes.
-  // A total wall-clock deadline cannot distinguish that from a stalled
-  // provider, so keep it opt-in; transport watchdogs own inactivity failures.
+  // A total wall-clock deadline cannot distinguish slow-but-active reasoning
+  // from a stalled provider, so keep it opt-in (off by default). The stream
+  // -idle watchdog below owns inactivity for every provider: it re-arms on
+  // each streamed delta, so long legitimate thinking survives while true
+  // silence is cut. 600s matches the proven Codex inter-frame value and lets a
+  // provider that buffers its whole answer for minutes still deliver it.
   requestDeadlineMs: 0,
+  maxStreamIdleMs: 600_000,
   repetition: DEFAULT_GENERATION_REPETITION_OPTIONS,
 };
 
@@ -159,6 +171,10 @@ export class GenerationGuard {
 
   get requestDeadlineMs(): number {
     return this.#options.requestDeadlineMs;
+  }
+
+  get maxStreamIdleMs(): number {
+    return this.#options.maxStreamIdleMs;
   }
 
   get textCharacters(): number {
@@ -352,25 +368,34 @@ function describeDeadlineExpiry(timeoutMs: number, progress: GenerationProgress 
   );
 }
 
-/** Race iterator reads with an explicitly enabled deadline that aborts the active provider signal. */
-export class GenerationDeadline {
+/** The inactivity message mirrors the deadline message so both survive the subagent tool-output boundary. */
+function describeInactivityExpiry(idleMs: number, progress: GenerationProgress | undefined): string {
+  const base = `Model request stalled with no streamed output for its idle window (${Math.round(idleMs / 1000)}s)`;
+  if (!progress) return `${base}.`;
+  return (
+    `${base}; streamed ${progress.outputCharacters} output chars ` +
+    `(text ${progress.textCharacters}, reasoning ${progress.reasoningCharacters}, ` +
+    `tool arguments ${progress.toolArgumentCharacters}).`
+  );
+}
+
+/**
+ * Rejects every in-flight and future wait once any armed timer fails. The
+ * first failure wins and short-circuits later waits with the same error.
+ */
+class DeadlineGate {
   #error: GenerationGuardError | undefined;
-  #timer: ReturnType<typeof setTimeout> | undefined;
   readonly #waitingRejectors = new Set<(error: GenerationGuardError) => void>();
 
-  constructor(timeoutMs: number, abortActiveRequest: () => void, describeProgress?: () => GenerationProgress) {
-    if (timeoutMs <= 0) return;
-    this.#timer = setTimeout(() => {
-      this.#error = new GenerationGuardError(
-        'request_deadline',
-        describeDeadlineExpiry(timeoutMs, describeProgress?.()),
-      );
-      abortActiveRequest();
-      for (const reject of this.#waitingRejectors) reject(this.#error);
-      this.#waitingRejectors.clear();
-    }, timeoutMs);
-    // A safety deadline must not keep an otherwise finished CLI process alive.
-    this.#timer.unref?.();
+  get error(): GenerationGuardError | undefined {
+    return this.#error;
+  }
+
+  fail(error: GenerationGuardError): void {
+    if (this.#error) return;
+    this.#error = error;
+    for (const reject of this.#waitingRejectors) reject(error);
+    this.#waitingRejectors.clear();
   }
 
   wait<T>(operation: Promise<T>): Promise<T> {
@@ -391,9 +416,68 @@ export class GenerationDeadline {
       );
     });
   }
+}
+
+/**
+ * Races stream reads against two independent limits that both abort the active
+ * provider request: an optional total wall-clock ceiling (opt-in) and a
+ * provider-neutral inactivity window that re-arms on every streamed event.
+ */
+export class GenerationStreamDeadlines {
+  readonly #gate = new DeadlineGate();
+  readonly #idleMs: number;
+  readonly #abort: () => void;
+  readonly #describeProgress?: () => GenerationProgress;
+  #totalTimer: ReturnType<typeof setTimeout> | undefined;
+  #idleTimer: ReturnType<typeof setTimeout> | undefined;
+
+  constructor(
+    options: { readonly totalMs: number; readonly idleMs: number },
+    abortActiveRequest: () => void,
+    describeProgress?: () => GenerationProgress,
+  ) {
+    this.#idleMs = options.idleMs;
+    this.#abort = abortActiveRequest;
+    this.#describeProgress = describeProgress;
+    if (options.totalMs > 0) {
+      this.#totalTimer = setTimeout(
+        () => this.#fail('request_deadline', describeDeadlineExpiry(options.totalMs, this.#describeProgress?.())),
+        options.totalMs,
+      );
+      // A safety deadline must not keep an otherwise finished CLI process alive.
+      this.#totalTimer.unref?.();
+    }
+    this.#armIdle();
+  }
+
+  /** Reset the inactivity window; called for every streamed event. */
+  recordActivity(): void {
+    if (this.#gate.error || this.#idleMs <= 0) return;
+    if (this.#idleTimer !== undefined) clearTimeout(this.#idleTimer);
+    this.#armIdle();
+  }
+
+  wait<T>(operation: Promise<T>): Promise<T> {
+    return this.#gate.wait(operation);
+  }
 
   dispose(): void {
-    if (this.#timer !== undefined) clearTimeout(this.#timer);
+    if (this.#totalTimer !== undefined) clearTimeout(this.#totalTimer);
+    if (this.#idleTimer !== undefined) clearTimeout(this.#idleTimer);
+  }
+
+  #armIdle(): void {
+    if (this.#idleMs <= 0) return;
+    this.#idleTimer = setTimeout(
+      () => this.#fail('stream_inactivity', describeInactivityExpiry(this.#idleMs, this.#describeProgress?.())),
+      this.#idleMs,
+    );
+    this.#idleTimer.unref?.();
+  }
+
+  #fail(code: GenerationGuardCode, message: string): void {
+    this.#gate.fail(new GenerationGuardError(code, message));
+    this.#abort();
   }
 }
 
@@ -408,6 +492,7 @@ export function resolveGenerationGuardOptions(options?: GenerationGuardOptions):
       options?.maxCumulativeToolArgumentCharacters ??
       DEFAULT_GENERATION_GUARD_OPTIONS.maxCumulativeToolArgumentCharacters,
     requestDeadlineMs: options?.requestDeadlineMs ?? DEFAULT_GENERATION_GUARD_OPTIONS.requestDeadlineMs,
+    maxStreamIdleMs: options?.maxStreamIdleMs ?? DEFAULT_GENERATION_GUARD_OPTIONS.maxStreamIdleMs,
     repetition: { ...DEFAULT_GENERATION_REPETITION_OPTIONS, ...options?.repetition },
   };
 }

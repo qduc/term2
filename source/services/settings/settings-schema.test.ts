@@ -16,17 +16,25 @@ it('keeps the structured Contract 04 consumer inventory complete and duplicate-f
   const inventoryKeys = Object.values(CONTRACT_04_CONSUMER_INVENTORY).flat();
   const exportedKeys = Object.values(SETTING_KEYS);
 
-  expect(exportedKeys).toHaveLength(127);
-  expect(new Set(exportedKeys).size).toBe(127);
+  expect(exportedKeys).toHaveLength(128);
+  expect(new Set(exportedKeys).size).toBe(128);
   expect(inventoryKeys).toHaveLength(exportedKeys.length);
   expect(new Set(inventoryKeys).size).toBe(inventoryKeys.length);
   expect([...inventoryKeys].sort()).toEqual([...exportedKeys].sort());
 });
 
-it('defaults the model-request wall-clock deadline to 300_000 while allowing an explicit limit', () => {
-  expect(AgentSettingsSchema.parse({}).maxModelRequestDurationMs).toBe(300_000);
+it('defaults the total wall-clock deadline to 0 (off) while allowing an explicit opt-in limit', () => {
+  expect(AgentSettingsSchema.parse({}).maxModelRequestDurationMs).toBe(0);
+  expect(AgentSettingsSchema.parse({ maxModelRequestDurationMs: 0 }).maxModelRequestDurationMs).toBe(0);
   expect(AgentSettingsSchema.parse({ maxModelRequestDurationMs: 600_000 }).maxModelRequestDurationMs).toBe(600_000);
   expect(() => AgentSettingsSchema.parse({ maxModelRequestDurationMs: -1 })).toThrow();
+});
+
+it('defaults the provider-neutral stream-idle window to 600_000 and rejects a negative window', () => {
+  expect(AgentSettingsSchema.parse({}).maxModelStreamIdleMs).toBe(600_000);
+  expect(AgentSettingsSchema.parse({ maxModelStreamIdleMs: 0 }).maxModelStreamIdleMs).toBe(0);
+  expect(AgentSettingsSchema.parse({ maxModelStreamIdleMs: 120_000 }).maxModelStreamIdleMs).toBe(120_000);
+  expect(() => AgentSettingsSchema.parse({ maxModelStreamIdleMs: -1 })).toThrow();
 });
 
 it('Codex websocket receive timeouts default to transport-safe values and reject invalid values', () => {
@@ -475,11 +483,11 @@ it('startup normalization: persisted orchestratorMode=true with implicit lite (p
   expect(result.mentorMode).toBe(false);
 });
 
-it('repairs the unusable zero request deadline instead of rejecting the settings file', () => {
-  // Zero was the previous default, so real config files carry it. Rejecting
-  // would fail the whole file and refuse to start.
-  expect(AgentSettingsSchema.parse({ maxModelRequestDurationMs: 0 }).maxModelRequestDurationMs).toBe(300_000);
-  expect(AgentSettingsSchema.parse({}).maxModelRequestDurationMs).toBe(300_000);
+it('treats a zero total request deadline as "off" rather than coercing it to a default', () => {
+  // 0 now means "no total ceiling"; the provider-neutral stream-idle watchdog
+  // owns stall detection, so the total wall-clock is opt-in.
+  expect(AgentSettingsSchema.parse({ maxModelRequestDurationMs: 0 }).maxModelRequestDurationMs).toBe(0);
+  expect(AgentSettingsSchema.parse({}).maxModelRequestDurationMs).toBe(0);
   expect(AgentSettingsSchema.parse({ maxModelRequestDurationMs: 45_000 }).maxModelRequestDurationMs).toBe(45_000);
   expect(() => AgentSettingsSchema.parse({ maxModelRequestDurationMs: -1 })).toThrow();
 });

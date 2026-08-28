@@ -61,7 +61,9 @@ export const SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.AGENT_MAX_STREAM_OUTPUT_CHARS]:
     'Maximum streamed text or tool-argument characters per model request; reasoning above this is truncated, not aborted',
   [SETTING_KEYS.AGENT_MAX_MODEL_REQUEST_DURATION_MS]:
-    'Optional hard duration limit for one model request, in milliseconds (0 disables)',
+    'Optional total wall-clock ceiling for one model request, in milliseconds (0 disables; opt-in backstop)',
+  [SETTING_KEYS.AGENT_MAX_MODEL_STREAM_IDLE_MS]:
+    'Abort a request that streams no output for this many milliseconds; re-arms on each streamed delta so long reasoning survives (0 disables)',
   [SETTING_KEYS.AGENT_RETRY_ATTEMPTS]: 'Number of retry attempts for failed requests',
   [SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS]: 'Maximum number of tool calls allowed to run at the same time',
   [SETTING_KEYS.AGENT_RUN_BUDGET_MAX_USD_MICROS]:
@@ -237,6 +239,7 @@ export const CATEGORY_KEYS = {
     SETTING_KEYS.AGENT_MAX_OUTPUT_TOKENS,
     SETTING_KEYS.AGENT_MAX_STREAM_OUTPUT_CHARS,
     SETTING_KEYS.AGENT_MAX_MODEL_REQUEST_DURATION_MS,
+    SETTING_KEYS.AGENT_MAX_MODEL_STREAM_IDLE_MS,
     SETTING_KEYS.AGENT_RUN_BUDGET_MAX_USD_MICROS,
     SETTING_KEYS.AGENT_RUN_BUDGET_MAX_UNPRICED_TOKENS,
     SETTING_KEYS.AGENT_RUN_BUDGET_MAX_ACTIVE_TIME_MS,

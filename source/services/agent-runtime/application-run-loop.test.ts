@@ -588,6 +588,109 @@ describe('ApplicationRunLoop generation guard', () => {
       vi.useRealTimers();
     }
   });
+
+  it('aborts a stalled request with a stream_inactivity code once the idle window elapses with no output', async () => {
+    vi.useFakeTimers();
+    try {
+      let signal: AbortSignal | undefined;
+      let started!: () => void;
+      const startedPromise = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      const model: StreamedModelTurn = {
+        async *stream(request) {
+          signal = request.signal;
+          started();
+          await new Promise<void>((resolve) =>
+            request.signal?.addEventListener('abort', () => resolve(), { once: true }),
+          );
+          yield { type: 'completion' as const, responseId: 'too-late', output: [] };
+        },
+      };
+      const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'prompt', {
+        generationGuard: { ...guard, requestDeadlineMs: 0, maxStreamIdleMs: 100 },
+      } as any);
+      await startedPromise;
+      const completion = expect(stream.completed).rejects.toMatchObject({
+        code: 'stream_inactivity',
+        unsafeToReplay: true,
+      });
+      // One tick short of the window must not fire; the window itself must.
+      await vi.advanceTimersByTimeAsync(99);
+      expect(signal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await completion;
+      expect(signal?.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('resets the idle window on each streamed delta so a slow-but-active model survives past the window', async () => {
+    vi.useFakeTimers();
+    try {
+      let releaseFirst!: () => void;
+      let releaseSecond!: () => void;
+      const firstGate = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      const secondGate = new Promise<void>((resolve) => {
+        releaseSecond = resolve;
+      });
+      const model: StreamedModelTurn = {
+        async *stream() {
+          await firstGate; // released at t=60
+          yield { type: 'reasoning_delta' as const, text: 'thinking' }; // resets the 100ms window at t=60 -> deadline 160
+          await secondGate; // released at t=120 (< 160)
+          yield { type: 'completion' as const, responseId: 'slow-but-valid', output: [] };
+        },
+      };
+      const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'prompt', {
+        generationGuard: { ...guard, requestDeadlineMs: 0, maxStreamIdleMs: 100 },
+      } as any);
+      const completion = expect(stream.completed).resolves.toBeDefined();
+
+      await vi.advanceTimersByTimeAsync(60); // t=60, initial 100ms window not yet elapsed
+      releaseFirst(); // delta streams -> without a reset the window would fire at t=100
+      await vi.advanceTimersByTimeAsync(60); // t=120 < reset deadline 160, so a reset keeps it alive
+      releaseSecond();
+      await vi.advanceTimersByTimeAsync(0);
+      await completion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('imposes no idle deadline when the stream-idle window is disabled', async () => {
+    vi.useFakeTimers();
+    try {
+      let started!: () => void;
+      let release!: () => void;
+      const startedPromise = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      const releasePromise = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const model: StreamedModelTurn = {
+        async *stream() {
+          started();
+          await releasePromise;
+          yield { type: 'completion' as const, responseId: 'quiet-but-valid', output: [] };
+        },
+      };
+      const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'prompt', {
+        generationGuard: { ...guard, requestDeadlineMs: 0, maxStreamIdleMs: 0 },
+      } as any);
+      const completion = expect(stream.completed).resolves.toBeDefined();
+      await startedPromise;
+      await vi.advanceTimersByTimeAsync(3_600_000);
+      release();
+      await completion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('ApplicationRunLoop', () => {

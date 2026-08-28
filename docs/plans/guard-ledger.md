@@ -531,6 +531,102 @@ CLI sat at idle with 0 captured requests. Same class as the ledger's earlier
 unverified PTY timeouts; not exercised by the reasoning-length change.
 ```
 
+### GenerationStreamDeadlines total-deadline false positive (provider-neutral inactivity watchdog)
+
+Incidents: 2026-08-27 OpenRouter `z-ai/glm-5.3-flash` and 2026-08-21 Neuralwatt
+`kimi-k3-flex` both aborted with `request_deadline` at the 300s
+`agent.maxModelRequestDurationMs` default. Log review showed neither was a
+runaway: Kimi was actively streaming text+reasoning ~25s before the cut, and
+GLM buffered its whole answer and delivered it ~2 min *after* the deadline. The
+300s limit was a **total** wall-clock that cannot tell slow-but-active work from
+a stall. Codex already had a transport inactivity watchdog
+(`websocket-receive-watchdog.ts`, 90s first-frame / 600s inter-frame) that
+re-arms on any frame — but it covers only the Codex WebSocket transport. Every
+other provider fell back to the crude total deadline.
+
+Repair: the generation guard now owns a **provider-neutral** inactivity window
+(`GenerationStreamDeadlines`) that re-arms on every streamed event in
+`ApplicationRunLoop.consume`. The total wall-clock becomes an opt-in backstop,
+default off. A single 600s idle window (matching Codex's proven inter-frame)
+lets Kimi survive (streams → re-arms) and GLM survive (its single late frame
+arrives inside the window), while a genuinely silent request is still cut at
+600s.
+
+```text
+Harm prevented: a stalled/hung provider request burning unbounded time with no
+  output AND a slow-but-active model being aborted mid-work by a total deadline.
+Scope and execution paths: every model.stream request in
+  ApplicationRunLoop.consume (root, subagent, non-interactive, shell — one loop).
+Guard class: inactivity watchdog (primary) + opt-in containment budget (total
+  ceiling, default off).
+Enforcement owner: GenerationStreamDeadlines in generation-guard.ts, driven by
+  ApplicationRunLoop.consume via deadline.recordActivity() on each event.
+Recovery owner: retry classifier; GenerationGuardError extends
+  AmbiguousModelOutcomeError → unsafeToReplay, no blind re-dispatch.
+Measured signal and observation boundary: wall-clock gap since the last streamed
+  event, observed in the consume() loop; total elapsed for the opt-in ceiling.
+Direct evidence or proxy: proxy (silence). Justified for an inactivity watchdog
+  because absence of ANY streamed frame for the window is the transport-neutral
+  signature of a stall; active reasoning emits deltas that re-arm it.
+Legitimate work that can produce the same signal: long high-effort reasoning
+  (emits reasoning deltas → re-arms) and buffered providers that send the whole
+  answer in one late frame within the window.
+Configuration sources and precedence: options.generationGuard (per-request) >
+  modelSettings.maxModelStreamIdleMs / maxModelRequestDurationMs (settings) >
+  DEFAULT_GENERATION_GUARD_OPTIONS.
+Effective default and clamping: maxModelStreamIdleMs default 600_000;
+  maxModelRequestDurationMs default 0 = off. Both nonnegative; <=0 disables that
+  timer.
+Action and why the signal justifies it: abort the active request and throw
+  GenerationGuardError (code 'stream_inactivity' or 'request_deadline').
+Partial-work settlement: cost record marked failed/cancelled; streamed progress
+  counts carried in the error message (survives the subagent tool-output string).
+Retry, fallback, and provider-continuity semantics: AmbiguousModelOutcomeError,
+  not auto-replayed; continuity unchanged.
+Observability fields: error code, configured window, streamed progress counts.
+Persisted-setting migration, if any: settings-schema drops the 0→300_000
+  coercion so 0 now means "off"; default 300_000 → 0. The existing
+  migrateFormerRequestDeadlineDefault (persisted 300_000 → 0) becomes effective.
+  Configs holding an explicit positive value keep it as the total ceiling.
+Rollback boundary: revert generation-guard.ts + run-loop wiring + settings +
+  agent-factory/agent-configuration + completion-config, one branch.
+Ledger row: GenerationStreamDeadlines total-deadline false positive.
+```
+
+Red proof before production changes:
+
+```text
+NODE_ENV=test pnpm exec vitest run \
+  source/services/agent-runtime/application-run-loop.test.ts \
+  -t "stream_inactivity"
+FAIL: Test timed out — no idle guard aborted the stalled stream.
+
+NODE_ENV=test pnpm exec vitest run \
+  source/services/settings/settings-schema.test.ts -t "stream-idle"
+FAIL: expected undefined to be 600000 (maxModelStreamIdleMs did not exist).
+```
+
+Detection gap: the total deadline was only tested for the runaway (abort) case
+and for "no default deadline" — no test asserted that a slow-but-active or
+buffered provider survives, so a total wall-clock reading as a stall went
+uncaught. The new reset-on-delta test closes that class.
+
+Focused verification (2026-08-28):
+
+```text
+NODE_ENV=test pnpm exec vitest run \
+  source/services/agent-runtime/generation-guard.test.ts \
+  source/services/agent-runtime/application-run-loop.test.ts \
+  source/services/settings/settings-schema.test.ts
+PASS 3 files, 109 tests
+
+NODE_ENV=test pnpm typecheck
+PASS
+
+pnpm test:provider-black-box
+PASS 19 files, 171 tests; 1 skipped
+```
+
 ### Test contracts by class
 
 A repair for a candidate must satisfy its class contract.

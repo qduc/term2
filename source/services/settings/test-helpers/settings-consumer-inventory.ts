@@ -27,6 +27,7 @@ export const CONTRACT_04_CONSUMER_INVENTORY = {
     'agent.maxOutputTokens',
     'agent.maxStreamOutputChars',
     'agent.maxModelRequestDurationMs',
+    'agent.maxModelStreamIdleMs',
     'agent.retryAttempts',
     'agent.transport',
     'agent.maxParallelToolCalls',

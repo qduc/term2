@@ -521,4 +521,28 @@ describe('NestedSubagentRunner end to end', () => {
     });
     expect(warn).not.toHaveBeenCalled();
   });
+
+  it('contains an unrecoverable failure after tools executed into a failed result with partial findings', async () => {
+    const events: ConversationEvent[] = [];
+    const warn = vi.fn();
+    const { runner } = buildNestedRunner({
+      failAfterApproval: true,
+      onEvent: (event) => events.push(event),
+      logger: { ...createMockLogger(), warn },
+    });
+
+    const result = await runner.runAsTool({ role: 'worker', task: 'update notes' }, parentToolContext(), {
+      toolCall: { callId: 'parent-call-1' },
+    });
+
+    expect(result.status).toBe('failed');
+    expect(result.error).toContain('late nested provider failure');
+    expect(result.filesChanged).toEqual(['notes.md']);
+    expect(result.toolsUsed).toEqual([{ toolName: 'fake_tool', count: 1 }]);
+    expect(result.finalText).toContain('late nested provider failure');
+    expect(events.find((event) => event.type === 'subagent_completed')).toMatchObject({
+      result: { status: 'failed', agentId: 'parent-call-1' },
+    });
+    expect(warn).toHaveBeenCalled();
+  });
 });

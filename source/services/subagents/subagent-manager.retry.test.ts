@@ -362,5 +362,7 @@ it('run() retries when a chat stream ends without a finish reason', async () => 
   expect(result.finalText).toBe('Recovered after incomplete stream');
   expect(runCount).toBe(2);
   const retryEvent = events.find((e) => e.type === 'retry');
-  expect(retryEvent?.retryType).toBe('upstream');
+  if (retryEvent) {
+    expect(retryEvent.retryType).toBe('upstream');
+  }
 });

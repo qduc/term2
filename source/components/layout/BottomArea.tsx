@@ -35,6 +35,7 @@ import type { SessionCostSummary } from '../../services/cost/model-cost.js';
 import type { BackgroundTaskControlPort } from '../../services/session/background-task-control.js';
 import type { BackgroundTaskControlDetails } from '../../services/session/background-task-control.js';
 import type { CopySelection } from '../../utils/copy-selections.js';
+import type { PendingQueueMessage } from '../input/PendingQueueList.js';
 import { useInputState } from '../../context/InputContext.js';
 import FirstRunSetupPrompt, { type FirstRunSetupPhase } from '../input/FirstRunSetupPrompt.js';
 import { COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
@@ -96,7 +97,7 @@ export type BottomAreaProps = {
   queuePauseReason?: QueuePauseReason;
   onResumeQueue?: () => void;
   onDiscardQueue?: () => void;
-  pendingQueuedMessages?: ReadonlyArray<{ id: string; text: string; queuedAt: number }>;
+  pendingQueuedMessages?: ReadonlyArray<PendingQueueMessage>;
   onRetractQueuedMessage?: (id: string) => Promise<SubmissionMutation>;
   onEditQueuedMessage?: (id: string, turn: UserTurn) => Promise<SubmissionMutation>;
   backgroundSubagentTasks?: readonly BackgroundTask[];

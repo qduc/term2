@@ -59,7 +59,12 @@ type TestProps = {
   allowEmptySubmit?: boolean;
   promptLabel?: string;
   onSystemMessage?: (text: string) => void;
-  pendingQueuedMessages?: ReadonlyArray<{ id: string; text: string; queuedAt: number }>;
+  pendingQueuedMessages?: ReadonlyArray<{
+    id: string;
+    text: string;
+    delivery: 'steer' | 'follow_up';
+    queuedAt: number;
+  }>;
   onRetractQueuedMessage?: (id: string) => Promise<SubmissionMutation>;
   onEditQueuedMessage?: (id: string, turn: UserTurn) => Promise<SubmissionMutation>;
 };
@@ -226,8 +231,8 @@ it.sequential('up enters the queued selector at the bottom item and edit submits
     <TestInputBox
       {...defaultProps}
       pendingQueuedMessages={[
-        { id: 'q-1', text: 'first queued', queuedAt: 1 },
-        { id: 'q-2', text: 'second queued', queuedAt: 2 },
+        { id: 'q-1', text: 'first queued', delivery: 'follow_up', queuedAt: 1 },
+        { id: 'q-2', text: 'second queued', delivery: 'follow_up', queuedAt: 2 },
       ]}
       onEditQueuedMessage={async (id, turn) => {
         edits.push({ id, turn });
@@ -262,15 +267,15 @@ it.sequential('up past the top queued item reaches input history', async () => {
     <TestInputBox
       {...defaultProps}
       historyService={historyService}
-      pendingQueuedMessages={[{ id: 'q-1', text: 'waiting steer', queuedAt: 1 }]}
+      pendingQueuedMessages={[{ id: 'q-1', text: 'waiting steer', delivery: 'steer', queuedAt: 1 }]}
     />,
   );
 
   await writeInput(stdin, '\u001B[A');
-  expect(lastFrame()).toContain('> ⏳ Queued 1. waiting steer');
+  expect(lastFrame()).toContain('> ⏳ Steering 1. waiting steer');
   await writeInput(stdin, '\u001B[A');
   expect(lastFrame()).toMatch(/s\s*e\s*n\s*t\s*e\s*a\s*r\s*l\s*i\s*e\s*r/);
-  expect(lastFrame()).not.toContain('> ⏳ Queued');
+  expect(lastFrame()).not.toContain('> ⏳ Steering');
 });
 
 it.sequential('InputBox shows the shell prompt when in shell mode', async () => {
@@ -1507,6 +1512,19 @@ it.sequential('shows Queue vs Steer guidance when turnInFlight is active', async
   expect(output.includes('Alt+Enter Queue for next turn')).toBe(true);
 });
 
+it.sequential('shows Steering label for pending steer submissions', async () => {
+  const { lastFrame } = await renderAndFlush(
+    <TestInputBox
+      {...defaultProps}
+      turnInFlight={true}
+      pendingQueuedMessages={[{ id: 'q-1', text: 'change direction', delivery: 'steer', queuedAt: 1 }]}
+    />,
+  );
+  const output = lastFrame() ?? '';
+  expect(output.includes('⏳ Steering 1.')).toBe(true);
+  expect(output.includes('⏳ Queued 1.')).toBe(false);
+});
+
 it.sequential(
   'shows queue management hint when turnInFlight is active with pending items and empty value',
   async () => {
@@ -1514,7 +1532,7 @@ it.sequential(
       <TestInputBox
         {...defaultProps}
         turnInFlight={true}
-        pendingQueuedMessages={[{ id: 'q-1', text: 'first queued', queuedAt: 1 }]}
+        pendingQueuedMessages={[{ id: 'q-1', text: 'first queued', delivery: 'follow_up', queuedAt: 1 }]}
       />,
     );
     const output = lastFrame() ?? '';

@@ -113,6 +113,7 @@ function makeUIPort(): UIPort {
     onQueuedMessageStarted: vi.fn(),
     onQueuedMessageRemoved: vi.fn(),
     onQueuedMessageEdited: vi.fn(),
+    onQueuedMessageReclassified: vi.fn(),
   };
 }
 
@@ -586,7 +587,7 @@ describe('ConversationOrchestrator', () => {
     await Promise.resolve();
 
     expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledTimes(1);
-    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledWith(expect.any(String), 'follow-up');
+    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledWith(expect.any(String), 'follow-up', 'follow_up');
     expect(cfg.messages.appendMessages).not.toHaveBeenCalled();
 
     release();
@@ -651,7 +652,7 @@ describe('ConversationOrchestrator', () => {
 
     await orchestrator.sendUserMessage('while paused');
 
-    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledWith(expect.any(String), 'while paused');
+    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledWith(expect.any(String), 'while paused', 'follow_up');
     expect(cfg.messages.appendMessages).not.toHaveBeenCalled();
   });
 
@@ -719,6 +720,7 @@ describe('ConversationOrchestrator', () => {
       expect.objectContaining({ text: 'change direction' }),
       expect.objectContaining({ id: expect.any(String) }),
     );
+    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledWith(expect.any(String), 'change direction', 'steer');
     // No second turn is submitted: the message belongs to the turn in flight.
     expect(cfg.conversationService.sendMessage).not.toHaveBeenCalled();
     const appended = vi.mocked(cfg.messages.appendMessages).mock.calls[0]?.[0]?.[0] as any;
@@ -745,6 +747,8 @@ describe('ConversationOrchestrator', () => {
       expect.objectContaining({ busyMode: 'steer' }),
     );
     expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledTimes(1);
+    expect(cfg.ui.onQueuedMessagePending).toHaveBeenCalledWith(expect.any(String), 'too late to steer', 'steer');
+    expect(cfg.ui.onQueuedMessageReclassified).toHaveBeenCalledWith(expect.any(String), 'follow_up');
   });
 
   it('clears a delivered queue row even when the queue-start observer never fires', async () => {

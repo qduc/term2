@@ -292,11 +292,12 @@ export const useConversation = ({
         onAskUserAdvanceToNext: () => {},
         onAskUserGoBack: () => {},
         onQueueStateChange: (snapshot) => dispatch({ type: 'queue/updated', snapshot }),
-        onQueuedMessagePending: (id, text) =>
-          dispatch({ type: 'queue/message_pending', id, text, queuedAt: Date.now() }),
+        onQueuedMessagePending: (id, text, delivery) =>
+          dispatch({ type: 'queue/message_pending', id, text, delivery, queuedAt: Date.now() }),
         onQueuedMessageStarted: (id) => dispatch({ type: 'queue/message_started', id }),
         onQueuedMessageRemoved: (id) => dispatch({ type: 'queue/message_removed', id }),
         onQueuedMessageEdited: (id, text) => dispatch({ type: 'queue/message_edited', id, text }),
+        onQueuedMessageReclassified: (id, delivery) => dispatch({ type: 'queue/message_reclassified', id, delivery }),
       },
       approvedContext: approvedContextRef,
       usageAccumulator,

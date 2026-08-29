@@ -9,7 +9,14 @@ import {
   COLOR_WARNING,
 } from '../theme.js';
 
-export type PendingQueueMessage = { id: string; text: string; queuedAt: number };
+export type PendingQueueDelivery = 'steer' | 'follow_up';
+
+export type PendingQueueMessage = {
+  id: string;
+  text: string;
+  queuedAt: number;
+  delivery: PendingQueueDelivery;
+};
 
 type Props = {
   messages: ReadonlyArray<PendingQueueMessage>;
@@ -32,7 +39,7 @@ const PendingQueueList: FC<Props> = ({ messages, selectedIndex, editingId, notic
       return (
         <Box key={message.id} flexDirection="row">
           <Text color={selected ? COLOR_ACCENT : COLOR_TEXT_MUTED} bold={selected}>
-            {selected ? '> ' : '  '}⏳ Queued {index + 1}.{' '}
+            {selected ? '> ' : '  '}⏳ {message.delivery === 'steer' ? 'Steering' : 'Queued'} {index + 1}.{' '}
           </Text>
           <Text color={selected ? COLOR_TEXT : COLOR_TEXT_MUTED} bold={selected} dimColor={editing}>
             {preview}

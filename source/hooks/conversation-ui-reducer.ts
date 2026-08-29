@@ -94,7 +94,12 @@ export interface ConversationUIState {
   // Messages queued behind an in-flight turn. Shown above the input box until
   // the queue actually starts processing each one, at which point it is moved
   // to the message list with the correct timeline.
-  pendingQueuedMessages: ReadonlyArray<{ id: string; text: string; queuedAt: number }>;
+  pendingQueuedMessages: ReadonlyArray<{
+    id: string;
+    text: string;
+    queuedAt: number;
+    delivery: 'steer' | 'follow_up';
+  }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -154,13 +159,14 @@ export type ConversationUIAction =
   // --- Queue state ---
   | { type: 'queue/updated'; snapshot: QueueSnapshot }
   /** A user message is queued behind an in-flight turn; show it above the input box. */
-  | { type: 'queue/message_pending'; id: string; text: string; queuedAt: number }
+  | { type: 'queue/message_pending'; id: string; text: string; delivery: 'steer' | 'follow_up'; queuedAt: number }
   /** The queue has started executing the queued message; remove it from the pending list. */
   | { type: 'queue/message_started'; id: string }
   /** A queued message was removed or rejected before execution started. */
   | { type: 'queue/message_removed'; id: string }
   /** A pending submission (steer or queued) was edited in place; stage and position are unchanged. */
   | { type: 'queue/message_edited'; id: string; text: string }
+  | { type: 'queue/message_reclassified'; id: string; delivery: 'follow_up' }
 
   // --- Compound resets ---
   /** Reset transient approval/processing/indicator state (used by stop, rewind, etc.). */
@@ -533,8 +539,19 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
         ...state,
         pendingQueuedMessages: [
           ...state.pendingQueuedMessages,
-          { id: action.id, text: action.text, queuedAt: action.queuedAt },
+          { id: action.id, text: action.text, delivery: action.delivery, queuedAt: action.queuedAt },
         ],
+      };
+
+    case 'queue/message_reclassified':
+      if (!state.pendingQueuedMessages.some((m) => m.id === action.id)) {
+        return state;
+      }
+      return {
+        ...state,
+        pendingQueuedMessages: state.pendingQueuedMessages.map((m) =>
+          m.id === action.id ? { ...m, delivery: action.delivery } : m,
+        ),
       };
 
     case 'queue/message_started':

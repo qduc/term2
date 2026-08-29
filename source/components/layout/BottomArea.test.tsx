@@ -743,7 +743,9 @@ it.sequential('BottomArea shows select reasoning effort prompt when handoffState
 it.sequential('BottomArea renders the queued message above the input box', async () => {
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
-    pendingQueuedMessages: [{ id: 'q-1', text: 'Follow-up question about the previous answer', queuedAt: 1000 }],
+    pendingQueuedMessages: [
+      { id: 'q-1', text: 'Follow-up question about the previous answer', delivery: 'follow_up', queuedAt: 1000 },
+    ],
   });
   const output = lastFrame() ?? '';
   expect(output.includes('⏳ Queued 1.')).toBe(true);
@@ -757,7 +759,7 @@ it.sequential('BottomArea truncates queued previews longer than 80 characters', 
   const longText = 'a'.repeat(120);
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
-    pendingQueuedMessages: [{ id: 'q-1', text: longText, queuedAt: 1000 }],
+    pendingQueuedMessages: [{ id: 'q-1', text: longText, delivery: 'follow_up', queuedAt: 1000 }],
   });
   const output = lastFrame() ?? '';
   expect(output.includes('⏳ Queued 1.')).toBe(true);
@@ -772,8 +774,8 @@ it.sequential('BottomArea renders multiple queued messages in order', async () =
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     pendingQueuedMessages: [
-      { id: 'q-1', text: 'first queued', queuedAt: 1 },
-      { id: 'q-2', text: 'second queued', queuedAt: 2 },
+      { id: 'q-1', text: 'first queued', delivery: 'follow_up', queuedAt: 1 },
+      { id: 'q-2', text: 'second queued', delivery: 'follow_up', queuedAt: 2 },
     ],
   });
   const output = lastFrame() ?? '';

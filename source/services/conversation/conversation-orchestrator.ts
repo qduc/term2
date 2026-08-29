@@ -596,17 +596,17 @@ export class ConversationOrchestrator {
     });
 
     if (queueOwnsSubmission) {
-      // A turn is already in flight or the queue is paused with retained work.
-      // Show the message above the input box until the queue actually starts
-      // processing it; the message list will be updated when the queue pops
-      // this turn.
-      this.config.ui.onQueuedMessagePending?.(userMessage.id, userMessage.text);
+      const delivery: 'steer' | 'follow_up' = options?.busyMode === 'steer' ? 'steer' : 'follow_up';
 
       // A steer belongs to the turn already running: hand it to that turn so
       // the model reads it at its next request, rather than making the user
       // wait for the whole turn to end. The message joins the transcript at the
       // moment the turn takes it, which is when the model actually sees it.
-      if (options?.busyMode === 'steer' && this.config.conversationService.steerActiveTurn) {
+      if (delivery === 'steer' && this.config.conversationService.steerActiveTurn) {
+        // Show "Steering" while the active turn may still be waiting for its
+        // next request boundary. A follow-up (Alt+Enter) is the only case that
+        // should read as "Queued" here.
+        this.config.ui.onQueuedMessagePending?.(userMessage.id, userMessage.text, delivery);
         // Diagnostics for "my steer just queued". The three fields below
         // separate the ways delivery can fail, which otherwise look identical
         // in the UI because the queued label is drawn before this even runs:
@@ -654,6 +654,9 @@ export class ConversationOrchestrator {
           return;
         }
         this.#editedSteerTurns.delete(userMessage.id);
+        this.config.ui.onQueuedMessageReclassified?.(userMessage.id, 'follow_up');
+      } else {
+        this.config.ui.onQueuedMessagePending?.(userMessage.id, userMessage.text, delivery);
       }
     } else {
       // No turn is in flight — append directly. The queue observer will also

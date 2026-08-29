@@ -406,7 +406,7 @@ const InputBox: FC<Props> = ({
       {escHintVisible && <Text color={COLOR_TEXT_SUBTLE}>Press ESC again to clear input</Text>}
       {waitingForRejectionReason && <Text color={COLOR_TEXT_SUBTLE}>(or ESC to cancel)</Text>}
       {turnInFlight && queueSelectionIndex === null && !waitingForRejectionReason && !escHintVisible && (
-        <Box marginTop={0}>
+        <Box marginTop={1}>
           <Text color={COLOR_TEXT_SUBTLE}>
             {(pendingQueuedMessages?.length ?? 0) > 0 && value === '' ? (
               <>

@@ -438,13 +438,23 @@ it('parseMemoryOutput returns combined list shape for scope "all"', () => {
   });
 });
 
+it('parseMemoryOutput preserves bounded omission diagnostics', () => {
+  expect(
+    parseMemoryOutput(JSON.stringify({ scope: 'all', global: [], project: [], omitted: { global: 1, project: 2 } })),
+  ).toMatchObject({ type: 'list', omitted: 3 });
+  expect(parseMemoryOutput(JSON.stringify({ results: [], omitted: 4 }))).toEqual({
+    type: 'search',
+    results: [],
+    omitted: 4,
+  });
+});
+
 it('parseMemoryOutput returns search shape for {results: []} without a memory field', () => {
   const result = parseMemoryOutput(
     JSON.stringify({ query: 'rules', results: [{ memory: { id: 'a' }, matchedFields: ['title'] }] }),
   );
   expect(result).toEqual({
     type: 'search',
-    query: 'rules',
     results: [{ memory: { id: 'a' }, matchedFields: ['title'] }],
   });
 });
@@ -453,6 +463,31 @@ it('parseMemoryOutput returns get shape for {memory: {}}', () => {
   const memory = { id: 'a', title: 'A' };
   const result = parseMemoryOutput(JSON.stringify({ memory }));
   expect(result).toEqual({ type: 'get', memory });
+});
+
+it('parseMemoryOutput unwraps scoped retrieval memories and cursor-paged content', () => {
+  expect(
+    parseMemoryOutput(
+      JSON.stringify({
+        memories: [{ scope: 'project', memory: { id: 'a', title: 'A', summary: 'S', tags: [] } }],
+        omittedIdCount: 2,
+        unavailableIdCount: 1,
+      }),
+    ),
+  ).toEqual({
+    type: 'list',
+    memories: [{ id: 'a', title: 'A', summary: 'S', tags: [], scope: 'project' }],
+    omitted: 2,
+    unavailable: 1,
+  });
+  expect(
+    parseMemoryOutput(
+      JSON.stringify({ memory: { id: 'large', title: 'Large', summary: 'S', tags: [] }, content: { text: 'chunk' } }),
+    ),
+  ).toEqual({
+    type: 'get',
+    memory: { id: 'large', title: 'Large', summary: 'S', tags: [], content: 'chunk' },
+  });
 });
 
 it('parseMemoryOutput returns delete shape for {deleted: boolean}', () => {

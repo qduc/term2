@@ -1056,8 +1056,10 @@ export class SubagentToolFactory {
             // callback closes the active-tool gate that defers steering interrupts.
             options.onToolComplete?.(definition.name, result, context, details);
           }
-          const trimmedResult = trimToolOutput(result, undefined, maxOutputLength ?? undefined);
-          return injectRunBudgetWarning(trimmedResult, context);
+          const trimmedResult = definition.preserveSerializedOutput
+            ? String(result ?? '')
+            : trimToolOutput(result, undefined, maxOutputLength ?? undefined);
+          return definition.preserveSerializedOutput ? trimmedResult : injectRunBudgetWarning(trimmedResult, context);
         },
       };
       return wrapToolInvoke(

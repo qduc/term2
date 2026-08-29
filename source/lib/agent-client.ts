@@ -351,6 +351,8 @@ export class AgentClient {
       executionContext?: ExecutionContext;
       sessionContextService: ISessionContextService;
       skillsService?: SkillsService;
+      /** Supplied only by the interactive CLI root composition. */
+      sessionBrowser?: import('../services/conversation/session-browser.js').SessionBrowser;
       /** Supplied only by an owned root session client. */
       requestCapture?: ProviderRequestCapture;
     };
@@ -404,6 +406,7 @@ export class AgentClient {
         backgroundShellOutput: this.#backgroundShellOutput,
         shellChildRegistry: this.#shellChildRegistry,
         allowBackgroundShell,
+        sessionBrowser: deps.sessionBrowser,
         onConfigChanged: (_changedKey?: string) => {
           // Models capture provider/settings at creation time.
           this.#clearStreamedModelCache();

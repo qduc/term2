@@ -358,12 +358,20 @@ const CommandMessage: FC<Props> = ({
         return renderAction('Retrieved memory');
       case 'memory_search':
         return renderAction('Searched memories');
+      case 'memory_retrieve':
+        return renderAction('Retrieved relevant memories');
       case 'memory_create':
         return renderAction('Saved memory');
       case 'memory_update':
         return renderAction('Updated memory');
       case 'memory_delete':
         return renderAction('Deleted memory');
+      case 'session_list':
+        return renderAction('Listed prior sessions');
+      case 'session_search':
+        return renderAction('Searched prior sessions');
+      case 'session_read':
+        return renderAction('Read prior session');
       default:
         return renderAction(toolName || 'Ran tool');
     }
@@ -852,7 +860,12 @@ const CommandMessage: FC<Props> = ({
     }
 
     if (toolName && toolName.startsWith('memory_')) {
-      const result = MemoryRenderer({ output, toolName, renderStandardHeader });
+      const result = MemoryRenderer({
+        output,
+        toolName,
+        query: typeof toolArgs?.query === 'string' ? toolArgs.query : undefined,
+        renderStandardHeader,
+      });
       if (result) return result;
     }
   }

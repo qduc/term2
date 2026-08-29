@@ -13,16 +13,62 @@ import {
   MemoryNotFoundError,
   MemoryStorageError,
   type Memory,
+  type MemoryMetadata,
   type MemoryStore,
 } from '../../services/memory/memory-store.js';
+import {
+  contentSnippet,
+  queryTerms,
+  rankMemorySearchResults,
+  type ScopedMemorySearchResult,
+} from '../../services/memory/memory-search.js';
+import { boundedJsonFailure, fitSerializedEnvelope, fitsSerializedText } from '../../utils/output/bounded-json.js';
+import { resolveToolResultMaxBytes } from '../../utils/output/bound-tool-result.js';
 
 export type MemoryScope = 'global' | 'project';
 export type MemoryStores = Record<MemoryScope, MemoryStore>;
 
 const scope = z.enum(['global', 'project']).describe('Memory scope to write to.');
+const MIN_TOOL_OUTPUT_CHARS = 512;
+const MAX_TOOL_OUTPUT_CHARS = 12_000;
+const DEFAULT_INDEX_OUTPUT_CHARS = 12_000;
+const DEFAULT_DOCUMENT_OUTPUT_CHARS = 12_000;
+const DEFAULT_RESULT_LIMIT = 10;
+const MAX_RESULT_LIMIT = 50;
+const maxChars = z.number().int().min(MIN_TOOL_OUTPUT_CHARS).max(MAX_TOOL_OUTPUT_CHARS).optional();
+const resultLimit = z.number().int().min(1).max(MAX_RESULT_LIMIT).optional();
 
 function normalizeStores(stores: MemoryStore | MemoryStores): MemoryStores {
   return 'list' in stores ? { global: stores, project: stores } : stores;
+}
+
+class MemoryCursorError extends Error {}
+class StaleMemoryCursorError extends Error {}
+class OutputBudgetExceededError extends Error {}
+
+function metadata(memory: MemoryMetadata): MemoryMetadata {
+  return {
+    id: memory.id,
+    title: memory.title,
+    summary: memory.summary,
+    tags: memory.tags,
+    createdAt: memory.createdAt,
+    updatedAt: memory.updatedAt,
+  };
+}
+
+function output<T>(maxChars: number, build: (charsUsed: number) => T): T {
+  const fitted = fitSerializedEnvelope(build, { maxChars });
+  if (!fitted) throw new OutputBudgetExceededError();
+  return fitted.value;
+}
+
+function boundedError(code: string, message: string, maxChars: number) {
+  const result = { error: { code, message } };
+  const serialized = JSON.stringify(result);
+  return fitsSerializedText(serialized, { maxChars, maxBytes: resolveToolResultMaxBytes() })
+    ? serialized
+    : boundedJsonFailure({ maxChars, maxBytes: resolveToolResultMaxBytes() });
 }
 
 const makeFormat =
@@ -56,22 +102,25 @@ const fields = {
   content: z.string().optional(),
   tags: z.array(z.string()).optional(),
 };
-function safe(operation: () => Promise<unknown>) {
+function safe(operation: () => Promise<unknown>, maxChars: number) {
   return operation()
     .then((value) => JSON.stringify(value))
     .catch((error) =>
-      JSON.stringify({
-        error:
-          error instanceof MemoryNotFoundError
-            ? { code: 'not_found', message: 'Memory was not found.' }
-            : error instanceof MemoryAlreadyExistsError
-            ? { code: 'already_exists', message: 'A memory with this ID already exists.' }
-            : error instanceof InvalidMemoryError
-            ? { code: 'invalid_memory', message: error.message }
-            : error instanceof MemoryStorageError
-            ? { code: 'storage_error', message: 'Memory storage is unavailable or corrupted.' }
-            : { code: 'memory_error', message: 'Memory operation failed.' },
-      }),
+      error instanceof MemoryNotFoundError
+        ? boundedError('not_found', 'Memory was not found.', maxChars)
+        : error instanceof MemoryAlreadyExistsError
+        ? boundedError('already_exists', 'A memory with this ID already exists.', maxChars)
+        : error instanceof InvalidMemoryError
+        ? boundedError('invalid_memory', 'Memory input is invalid.', maxChars)
+        : error instanceof MemoryStorageError
+        ? boundedError('storage_error', 'Memory storage is unavailable or corrupted.', maxChars)
+        : error instanceof MemoryCursorError
+        ? boundedError('invalid_cursor', 'The memory cursor is invalid.', maxChars)
+        : error instanceof StaleMemoryCursorError
+        ? boundedError('stale_cursor', 'The memory cursor is stale.', maxChars)
+        : error instanceof OutputBudgetExceededError
+        ? boundedError('output_budget_exceeded', 'The requested result cannot fit in the output budget.', maxChars)
+        : boundedError('memory_error', 'Memory operation failed.', maxChars),
     );
 }
 function definition<S extends z.ZodObject<any>>(
@@ -85,33 +134,90 @@ function definition<S extends z.ZodObject<any>>(
     name,
     description,
     parameters,
+    preserveSerializedOutput: ['memory_list', 'memory_get', 'memory_search', 'memory_retrieve'].includes(name),
     needsApproval: () => needsApproval,
-    execute: (params: z.infer<S>) => safe(() => execute(params)),
+    execute: (params: z.infer<S>) =>
+      safe(() => execute(params), (params as { maxChars?: number }).maxChars ?? DEFAULT_DOCUMENT_OUTPUT_CHARS),
     formatCommandMessage: makeFormat(name),
   };
 }
 
 export function createMemoryToolDefinitions(input: MemoryStore | MemoryStores): ToolDefinition[] {
   const stores = normalizeStores(input);
+  const configuredLimits = stores.global.searchLimits?.() ?? {
+    defaultLimit: DEFAULT_RESULT_LIMIT,
+    maxLimit: MAX_RESULT_LIMIT,
+  };
+  const effectiveLimit = (requested: number | undefined) =>
+    Math.min(requested ?? configuredLimits.defaultLimit, configuredLimits.maxLimit, MAX_RESULT_LIMIT);
+  const rankedSearch = async (query: string, limit: number): Promise<ScopedMemorySearchResult[]> => {
+    const options = { limit: Math.min(configuredLimits.maxLimit, MAX_RESULT_LIMIT) };
+    const [global, project] = await Promise.all([
+      stores.global.search(query, options),
+      stores.project.search(query, options),
+    ]);
+    return rankMemorySearchResults([
+      ...global.map((result) => ({ ...result, scope: 'global' as const })),
+      ...project.map((result) => ({ ...result, scope: 'project' as const })),
+    ]).slice(0, limit);
+  };
   return [
     definition(
       'memory_list',
       'List persistent-memory summaries from both the global and project scopes.',
-      z.object({ limit: z.number().int().positive().optional() }).strict(),
-      async ({ limit }) => {
-        const options = { limit };
-        const [global, project] = await Promise.all([stores.global.list(options), stores.project.list(options)]);
-        return { scope: 'all', global, project };
+      z.object({ limit: resultLimit, maxChars }).strict(),
+      async ({ limit, maxChars: requestedMaxChars }) => {
+        const selectedLimit = effectiveLimit(limit);
+        const [globalCandidates, projectCandidates] = await Promise.all([
+          stores.global.list({ limit: selectedLimit }),
+          stores.project.list({ limit: selectedLimit }),
+        ]);
+        const result = {
+          scope: 'all' as const,
+          global: [] as MemoryMetadata[],
+          project: [] as MemoryMetadata[],
+          omitted: { global: 0, project: 0 },
+        };
+        const budget = requestedMaxChars ?? DEFAULT_INDEX_OUTPUT_CHARS;
+        // Admit each record against the largest possible final count so later
+        // omissions cannot invalidate an already admitted envelope.
+        const reservedOmitted = { global: globalCandidates.length, project: projectCandidates.length };
+        for (const [entryScope, candidate] of [
+          ...globalCandidates.map((memory) => ['global' as const, memory] as const),
+          ...projectCandidates.map((memory) => ['project' as const, memory] as const),
+        ]) {
+          const admitted = fitSerializedEnvelope(
+            (charsUsed) => ({
+              ...result,
+              [entryScope]: [...result[entryScope], metadata(candidate)],
+              omitted: reservedOmitted,
+              charsUsed,
+            }),
+            { maxChars: budget },
+          );
+          if (admitted) {
+            result[entryScope] = admitted.value[entryScope];
+            continue;
+          }
+          result.omitted[entryScope]++;
+        }
+        return output(budget, (charsUsed) => ({ ...result, charsUsed }));
       },
     ),
     definition(
       'memory_get',
       'Load one memory by ID, checking both the global and project scopes.',
-      z.object({ id }).strict(),
-      async ({ id }) => {
+      z.object({ id, cursor: z.string().optional(), maxChars }).strict(),
+      async ({ id, cursor, maxChars: requestedMaxChars }) => {
+        const budget = requestedMaxChars ?? DEFAULT_DOCUMENT_OUTPUT_CHARS;
         for (const scope of ['global', 'project'] as const) {
           const memory = await stores[scope].get(id);
-          if (memory) return { scope, memory };
+          if (!memory) continue;
+          const offset = cursor ? decodeMemoryCursor(cursor, id, scope, memory) : 0;
+          if (cursor) return memoryPage(scope, memory, offset, budget);
+          const complete = fitSerializedEnvelope((charsUsed) => ({ scope, memory, charsUsed }), { maxChars: budget });
+          if (complete) return complete.value;
+          return memoryPage(scope, memory, offset, budget);
         }
         throw new MemoryNotFoundError(id);
       },
@@ -119,50 +225,124 @@ export function createMemoryToolDefinitions(input: MemoryStore | MemoryStores): 
     definition(
       'memory_search',
       'Search both the global and project memory scopes using deterministic local text matching.',
-      z.object({ query: z.string(), limit: z.number().int().positive().optional() }).strict(),
-      async ({ query, ...options }) => {
-        const [global, project] = await Promise.all([
-          stores.global.search(query, options),
-          stores.project.search(query, options),
-        ]);
-        return {
-          results: [
-            ...global.map((result) => ({ scope: 'global' as const, ...result })),
-            ...project.map((result) => ({ scope: 'project' as const, ...result })),
-          ],
-        };
+      z.object({ query: z.string().refine((value) => /\S/.test(value)), limit: resultLimit, maxChars }).strict(),
+      async ({ query, limit, maxChars: requestedMaxChars }) => {
+        const budget = requestedMaxChars ?? DEFAULT_INDEX_OUTPUT_CHARS;
+        const candidates = await rankedSearch(query, effectiveLimit(limit));
+        const result = { results: [] as Array<Record<string, unknown>>, omitted: 0 };
+        const terms = queryTerms(query);
+        for (const candidate of candidates) {
+          const item = {
+            scope: candidate.scope,
+            memory: metadata(candidate.memory),
+            matchedFields: candidate.matchedFields,
+            available: candidate.available,
+            ...(candidate.matchedFields.includes('content') && candidate.content !== undefined
+              ? { contentSnippet: contentSnippet(candidate.content, terms) }
+              : {}),
+          };
+          const prospective = fitSerializedEnvelope(
+            // The eventual count is bounded by candidates.length; reserve its
+            // digit width before admitting a result.
+            (charsUsed) => ({ ...result, results: [...result.results, item], omitted: candidates.length, charsUsed }),
+            { maxChars: budget },
+          );
+          if (prospective) result.results = prospective.value.results;
+          else {
+            const omitted = fitSerializedEnvelope(
+              (charsUsed) => ({ ...result, omitted: result.omitted + 1, charsUsed }),
+              {
+                maxChars: budget,
+              },
+            );
+            if (!omitted) throw new OutputBudgetExceededError();
+            result.omitted++;
+          }
+        }
+        return output(budget, (charsUsed) => ({ ...result, charsUsed }));
       },
     ),
     definition(
       'memory_retrieve',
       'Search and load relevant memories across both the global and project scopes.',
-      z.object({ query: z.string(), limit: z.number().int().positive().optional() }).strict(),
-      async ({ query, ...options }) => {
-        const searchAcross = async (scope: MemoryScope) => {
-          const results = await stores[scope].search(query, options);
-          const memories: Array<{ scope: MemoryScope; memory: Memory }> = [];
-          const unavailableIds: Array<{ scope: MemoryScope; id: string }> = [];
-          for (const result of results) {
-            if (!result.available) {
-              unavailableIds.push({ scope, id: result.memory.id });
-              continue;
-            }
-            try {
-              const memory = await stores[scope].get(result.memory.id);
-              if (memory) memories.push({ scope, memory });
-              else unavailableIds.push({ scope, id: result.memory.id });
-            } catch (error) {
-              if (!(error instanceof MemoryStorageError) && !(error instanceof MemoryNotFoundError)) throw error;
-              unavailableIds.push({ scope, id: result.memory.id });
-            }
+      z.object({ query: z.string().refine((value) => /\S/.test(value)), limit: resultLimit, maxChars }).strict(),
+      async ({ query, limit, maxChars: requestedMaxChars }) => {
+        const budget = requestedMaxChars ?? DEFAULT_DOCUMENT_OUTPUT_CHARS;
+        const candidates = await rankedSearch(query, effectiveLimit(limit));
+        const loaded: Array<{ scope: MemoryScope; memory?: Memory; id: string; unavailable: boolean }> = [];
+        for (const candidate of candidates) {
+          if (!candidate.available) {
+            loaded.push({ scope: candidate.scope, id: candidate.memory.id, unavailable: true });
+            continue;
           }
-          return { memories, unavailableIds };
+          try {
+            const memory = await stores[candidate.scope].get(candidate.memory.id);
+            loaded.push({
+              scope: candidate.scope,
+              id: candidate.memory.id,
+              memory: memory ?? undefined,
+              unavailable: !memory,
+            });
+          } catch (error) {
+            if (!(error instanceof MemoryStorageError) && !(error instanceof MemoryNotFoundError)) throw error;
+            loaded.push({ scope: candidate.scope, id: candidate.memory.id, unavailable: true });
+          }
+        }
+        const result = {
+          memories: [] as Array<{ scope: MemoryScope; memory: Memory }>,
+          unavailableIds: [] as Array<{ scope: MemoryScope; id: string }>,
+          omittedIds: [] as Array<{ scope: MemoryScope; id: string }>,
+          omittedIdCount: 0,
+          unavailableIdCount: 0,
         };
-        const [global, project] = await Promise.all([searchAcross('global'), searchAcross('project')]);
-        return {
-          memories: [...global.memories, ...project.memories],
-          unavailableIds: [...global.unavailableIds, ...project.unavailableIds],
-        };
+        const unavailable = loaded.filter((entry) => entry.unavailable);
+        const available = loaded.filter(
+          (entry): entry is typeof entry & { memory: Memory } => !entry.unavailable && !!entry.memory,
+        );
+        // References and memories are admitted against both terminal count
+        // widths, so neither count can overflow a previously valid result.
+        const reservedCounts = () => ({
+          omittedIdCount: available.length,
+          unavailableIdCount: unavailable.length,
+        });
+        result.unavailableIdCount = unavailable.length;
+        for (const candidate of unavailable) {
+          const reference = { scope: candidate.scope, id: candidate.id };
+          const prospective = fitSerializedEnvelope(
+            (charsUsed) => ({
+              ...result,
+              ...reservedCounts(),
+              unavailableIds: [...result.unavailableIds, reference],
+              charsUsed,
+            }),
+            { maxChars: budget },
+          );
+          if (prospective) result.unavailableIds = prospective.value.unavailableIds;
+        }
+        for (const candidate of available) {
+          const memory = { scope: candidate.scope, memory: candidate.memory };
+          const prospective = fitSerializedEnvelope(
+            (charsUsed) => ({ ...result, ...reservedCounts(), memories: [...result.memories, memory], charsUsed }),
+            { maxChars: budget },
+          );
+          if (prospective) {
+            result.memories = prospective.value.memories;
+            continue;
+          }
+          result.omittedIdCount++;
+          const reference = { scope: candidate.scope, id: candidate.id };
+          const omission = fitSerializedEnvelope(
+            (charsUsed) => ({
+              ...result,
+              ...reservedCounts(),
+              omittedIds: [...result.omittedIds, reference],
+              charsUsed,
+            }),
+            { maxChars: budget },
+          );
+          if (omission) result.omittedIds = omission.value.omittedIds;
+        }
+        return output(budget, (charsUsed) => ({ ...result, charsUsed }));
       },
     ),
     definition(
@@ -206,4 +386,120 @@ export function createMemoryToolDefinitions(input: MemoryStore | MemoryStores): 
       true,
     ),
   ];
+}
+
+type MemoryCursor = { v: 1; scope: MemoryScope; id: string; updatedAt: string; nextOffset: number };
+
+function decodeMemoryCursor(cursor: string, id: string, scope: MemoryScope, memory: Memory): number {
+  if (!/^[A-Za-z0-9_-]+$/.test(cursor)) throw new MemoryCursorError();
+  let decoded: string;
+  let value: unknown;
+  try {
+    decoded = Buffer.from(cursor, 'base64url').toString('utf8');
+    if (Buffer.from(decoded, 'utf8').toString('base64url') !== cursor) throw new Error();
+    value = JSON.parse(decoded);
+  } catch {
+    throw new MemoryCursorError();
+  }
+  const parsed = value as Partial<MemoryCursor>;
+  if (
+    !parsed ||
+    parsed.v !== 1 ||
+    parsed.scope !== scope ||
+    parsed.id !== id ||
+    !isUtcTimestamp(parsed.updatedAt) ||
+    typeof parsed.nextOffset !== 'number' ||
+    !Number.isSafeInteger(parsed.nextOffset) ||
+    parsed.nextOffset < 0 ||
+    Object.keys(parsed).join(',') !== 'v,scope,id,updatedAt,nextOffset' ||
+    JSON.stringify(parsed) !== decoded
+  )
+    throw new MemoryCursorError();
+  const validated = parsed as MemoryCursor;
+  if (validated.updatedAt !== memory.updatedAt) throw new StaleMemoryCursorError();
+  if (
+    (memory.content.length === 0 && validated.nextOffset !== 0) ||
+    (memory.content.length > 0 && validated.nextOffset >= memory.content.length)
+  )
+    throw new MemoryCursorError();
+  if (
+    validated.nextOffset > 0 &&
+    validated.nextOffset < memory.content.length &&
+    isHighSurrogate(memory.content.charCodeAt(validated.nextOffset - 1)) &&
+    isLowSurrogate(memory.content.charCodeAt(validated.nextOffset))
+  )
+    throw new MemoryCursorError();
+  return validated.nextOffset;
+}
+
+function memoryPage(scope: MemoryScope, memory: Memory, offset: number, maxChars: number) {
+  const totalChars = memory.content.length;
+  const page = (end: number) => {
+    const text = safePageSlice(memory.content, offset, end);
+    if (!text && totalChars > offset) return null;
+    const nextOffset = offset + text.length;
+    const content = {
+      offset,
+      totalChars,
+      text,
+      ...(nextOffset < totalChars
+        ? { nextCursor: encodeMemoryCursor({ v: 1, scope, id: memory.id, updatedAt: memory.updatedAt, nextOffset }) }
+        : {}),
+    };
+    return fitSerializedEnvelope((charsUsed) => ({ scope, memory: metadata(memory), content, charsUsed }), {
+      maxChars,
+    });
+  };
+  if (totalChars === 0) {
+    const empty = page(0);
+    if (empty) return empty.value;
+    throw new OutputBudgetExceededError();
+  }
+  let lower = offset + 1;
+  let upper = totalChars;
+  let best: ReturnType<typeof page> = null;
+  while (lower <= upper) {
+    const middle = Math.floor((lower + upper) / 2);
+    const candidate = page(middle);
+    if (candidate) {
+      best = candidate;
+      lower = middle + 1;
+    } else {
+      upper = middle - 1;
+    }
+  }
+  if (!best || !best.value.content.text) throw new OutputBudgetExceededError();
+  return best.value;
+}
+
+function safePageSlice(content: string, start: number, end: number) {
+  let safeEnd = end;
+  if (
+    safeEnd > start &&
+    safeEnd < content.length &&
+    isHighSurrogate(content.charCodeAt(safeEnd - 1)) &&
+    isLowSurrogate(content.charCodeAt(safeEnd))
+  )
+    safeEnd--;
+  return content.slice(start, safeEnd);
+}
+
+function encodeMemoryCursor(cursor: MemoryCursor) {
+  return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
+}
+
+function isUtcTimestamp(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) &&
+    !Number.isNaN(Date.parse(value))
+  );
+}
+
+function isHighSurrogate(value: number) {
+  return value >= 0xd800 && value <= 0xdbff;
+}
+
+function isLowSurrogate(value: number) {
+  return value >= 0xdc00 && value <= 0xdfff;
 }

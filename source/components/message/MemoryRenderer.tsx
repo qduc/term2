@@ -6,12 +6,13 @@ import { COLOR_ACCENT, COLOR_DANGER, COLOR_MUTED, COLOR_TEXT, COLOR_TOOL_OUTPUT 
 type Props = {
   output: string;
   toolName: string;
+  query?: string;
   renderStandardHeader: () => React.ReactElement;
 };
 
 const truncate = (text: string, max: number): string => (text.length > max ? `${text.slice(0, max)}...` : text);
 
-const MemoryRenderer: FC<Props> = ({ output, toolName, renderStandardHeader }) => {
+const MemoryRenderer: FC<Props> = ({ output, toolName, query, renderStandardHeader }) => {
   const parsed = parseMemoryOutput(output) as any;
   if (!parsed) return null;
 
@@ -39,6 +40,8 @@ const MemoryRenderer: FC<Props> = ({ output, toolName, renderStandardHeader }) =
         <Box flexDirection="column" paddingLeft={2}>
           <Text color={COLOR_MUTED} dimColor>
             {total} memor{total === 1 ? 'y' : 'ies'} found
+            {parsed.omitted ? `; ${parsed.omitted} omitted` : ''}
+            {parsed.unavailable ? `; ${parsed.unavailable} unavailable` : ''}
           </Text>
           {groups.map(([label, memories]) => (
             <Box key={label} flexDirection="column">
@@ -63,6 +66,11 @@ const MemoryRenderer: FC<Props> = ({ output, toolName, renderStandardHeader }) =
                     {m.tags && m.tags.length > 0 ? (
                       <Text color={COLOR_MUTED} dimColor>
                         tags: {m.tags.join(', ')}
+                      </Text>
+                    ) : null}
+                    {m.scope ? (
+                      <Text color={COLOR_MUTED} dimColor>
+                        scope: {m.scope}
                       </Text>
                     ) : null}
                   </Box>
@@ -131,13 +139,15 @@ const MemoryRenderer: FC<Props> = ({ output, toolName, renderStandardHeader }) =
   }
 
   if (parsed.type === 'search') {
-    const { query, results } = parsed;
+    const { results } = parsed;
     return (
       <Box flexDirection="column">
         <Box marginBottom={1}>{renderStandardHeader()}</Box>
         <Box paddingLeft={2}>
           <Text color={COLOR_MUTED} dimColor>
-            {results.length} result{results.length === 1 ? '' : 's'} for "{query}"
+            {results.length} result{results.length === 1 ? '' : 's'}
+            {query ? ` for "${query}"` : ''}
+            {parsed.omitted ? `; ${parsed.omitted} omitted` : ''}
           </Text>
         </Box>
         <Box flexDirection="column" paddingLeft={2}>
@@ -150,6 +160,7 @@ const MemoryRenderer: FC<Props> = ({ output, toolName, renderStandardHeader }) =
                 [{r.scope || 'all'}] matched: {(r.matchedFields || []).join(', ') || 'n/a'}
               </Text>
               {r.memory?.summary ? <Text color={COLOR_TOOL_OUTPUT}>{truncate(r.memory.summary, 140)}</Text> : null}
+              {r.contentSnippet?.text ? <Text color={COLOR_TOOL_OUTPUT}>{r.contentSnippet.text}</Text> : null}
             </Box>
           ))}
         </Box>

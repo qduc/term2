@@ -61,6 +61,7 @@ import {
 } from './utils/home-directory-start-guard.js';
 import { createRootHookRuntime } from './services/hooks/hook-composition.js';
 import { pruneStaleTempArtifacts } from './utils/shell/temp-sweep.js';
+import { SessionBrowser } from './services/conversation/session-browser.js';
 
 const sessionUsageAccumulator = createUsageAccumulator();
 const subagentUsageAccumulator = createUsageAccumulator();
@@ -636,6 +637,12 @@ const history = new HistoryService({
   loggingService: logger,
   settingsService: settings,
 });
+// This is deliberately composed only for the interactive root session. The
+// browser reevaluates its project root per tool call and has no write port.
+const sessionBrowser = new SessionBrowser(() => ({
+  projectPath: executionContext.getCwd(),
+  ...(sshInfo?.host ? { sshHost: sshInfo.host } : {}),
+}));
 
 const skillsService = new SkillsService(logger, executionContext.getCwd());
 skillsService.discoverSkills();
@@ -693,6 +700,7 @@ const sessionClientFactory = createOwnedSessionClientFactory(
         sessionContextService,
         skillsService,
         requestCapture,
+        sessionBrowser: hasPositionalPrompt ? undefined : sessionBrowser,
       },
       toolOwnership,
       postExecutePauseCapability,

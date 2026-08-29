@@ -5,6 +5,7 @@ import { ExecutionContext } from './services/execution-context.js';
 import type { SubagentResult, SubagentRunHandle, SubagentRunStatus } from './services/subagents/types.js';
 import os from 'os';
 import { BackgroundShellRegistry } from './services/shell/background-shell-registry.js';
+import { SessionBrowser } from './services/conversation/session-browser.js';
 
 // search-via-shell probes `rg` availability with spawnSync while assembling
 // the prompt. Tests below pin that probe instead of inheriting whichever
@@ -129,6 +130,34 @@ it('adds memory tools and summary-only context when memory is enabled, and neith
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+it('registers prior-session browser tools only when the root composition explicitly supplies one', () => {
+  const absent = getAgentDefinition({ settingsService: createMockSettingsService(), loggingService: mockLogger });
+  const present = getAgentDefinition({
+    settingsService: createMockSettingsService(),
+    loggingService: mockLogger,
+    sessionBrowser: new SessionBrowser(() => ({ projectPath: '/project' })),
+  });
+  expect(absent.tools.map((tool) => tool.name)).not.toContain('session_list');
+  expect(present.tools.map((tool) => tool.name)).toEqual(
+    expect.arrayContaining(['session_list', 'session_search', 'session_read']),
+  );
+  expect(present.instructions).toContain('Prior-session transcripts');
+  expect(present.instructions).not.toContain('session transcript text');
+});
+
+it('includes prior-session safety guidance for an interactive orchestrator root', () => {
+  const definition = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'app.orchestratorMode': true }),
+    loggingService: mockLogger,
+    sessionBrowser: new SessionBrowser(() => ({ projectPath: '/project' })),
+    ...orchestratorSubagentDeps,
+  });
+
+  expect(definition.tools.map((tool) => tool.name)).toContain('session_read');
+  expect(definition.instructions).toContain('Prior-session transcripts');
+  expect(definition.instructions).toContain('stale or untrusted');
 });
 
 it('advertises librarian delegation when memory and subagent delegation are enabled', () => {

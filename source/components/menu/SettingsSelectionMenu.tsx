@@ -67,6 +67,7 @@ const SettingsSelectionMenu: FC<Props> = ({
   categories,
 }) => {
   const activeCategory = categories.find((category) => category.id === activeCategoryId);
+  const selectedItem = items[selectedIndex];
 
   return (
     <Box flexDirection="column">
@@ -100,9 +101,18 @@ const SettingsSelectionMenu: FC<Props> = ({
           </Box>
         }
         footer={
-          <Text color="gray" dimColor>
-            Use <Text bold>↑↓</Text> to navigate, <Text bold>Enter</Text> to edit, <Text bold>Esc</Text> to close
-          </Text>
+          <Box flexDirection="column">
+            {selectedItem?.description && (
+              <Box marginBottom={0}>
+                <Text color="#7dd3fc" dimColor italic>
+                  {selectedItem.description}
+                </Text>
+              </Box>
+            )}
+            <Text color="gray" dimColor>
+              Use <Text bold>↑↓</Text> to navigate, <Text bold>Enter</Text> to edit, <Text bold>Esc</Text> to close
+            </Text>
+          </Box>
         }
         footerOutsideBorder={false}
         renderItem={(item, actualIndex, isSelected) => {
@@ -126,22 +136,12 @@ const SettingsSelectionMenu: FC<Props> = ({
                 </Box>
               )}
 
-              <Box flexDirection="column">
-                <Box>
-                  <Text color={isSelected ? 'green' : 'gray'}>{isSelected ? '▶ ' : '  '}</Text>
-                  <Text color={isSelected ? 'green' : 'white'} bold={isSelected}>
-                    {paddedKey}
-                  </Text>
-                  {valueObj && <Text color={isSelected ? 'white' : 'gray'}>{valueObj.text}</Text>}
-                </Box>
-
-                {isSelected && item.description && (
-                  <Box marginLeft={2} marginTop={0}>
-                    <Text color="#7dd3fc" dimColor italic>
-                      └── {item.description}
-                    </Text>
-                  </Box>
-                )}
+              <Box>
+                <Text color={isSelected ? 'green' : 'gray'}>{isSelected ? '▶ ' : '  '}</Text>
+                <Text color={isSelected ? 'green' : 'white'} bold={isSelected}>
+                  {paddedKey}
+                </Text>
+                {valueObj && <Text color={isSelected ? 'white' : 'gray'}>{valueObj.text}</Text>}
               </Box>
             </Box>
           );

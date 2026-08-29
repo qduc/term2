@@ -30,6 +30,7 @@ const SettingsValueSelectionMenu: FC<Props> = ({
   // For free-form string settings (no predefined suggestions), show a neutral
   // message instead of a red error box — the empty state is expected.
   const showNeutralEmpty = items.length === 0 && isFreeFormStringSetting;
+  const selectedItem = items[selectedIndex];
 
   return (
     <MenuContainer
@@ -57,10 +58,19 @@ const SettingsValueSelectionMenu: FC<Props> = ({
         </Box>
       }
       footer={
-        <Text color="gray" dimColor>
-          <Text bold>Enter</Text> confirm · <Text bold>Esc</Text> cancel · <Text bold>↑↓</Text> navigate ·{' '}
-          <Text bold>Ctrl+D</Text> reset to default
-        </Text>
+        <Box flexDirection="column">
+          {selectedItem?.description && (
+            <Box marginBottom={0}>
+              <Text color="#7dd3fc" dimColor italic>
+                {selectedItem.description}
+              </Text>
+            </Box>
+          )}
+          <Text color="gray" dimColor>
+            <Text bold>Enter</Text> confirm · <Text bold>Esc</Text> cancel · <Text bold>↑↓</Text> navigate ·{' '}
+            <Text bold>Ctrl+D</Text> reset to default
+          </Text>
+        </Box>
       }
       footerOutsideBorder={false}
       renderItem={(item, _index, isSelected) => (
@@ -69,7 +79,6 @@ const SettingsValueSelectionMenu: FC<Props> = ({
           <Text color={isSelected ? 'green' : 'white'} bold={isSelected}>
             {item.value}
           </Text>
-          {item.description && <Text color="gray"> — {item.description}</Text>}
         </Box>
       )}
     />

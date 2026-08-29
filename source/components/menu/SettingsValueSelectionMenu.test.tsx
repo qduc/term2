@@ -20,24 +20,31 @@ it.sequential('SettingsValueSelectionMenu renders empty state', async () => {
   expect(lastFrame()?.includes('zzz')).toBe(true);
 });
 
-it.sequential('SettingsValueSelectionMenu shows suggestions list', async () => {
-  const { lastFrame } = await renderInAct(
-    <SettingsValueSelectionMenu settingKey="agent.reasoningEffort" items={suggestions} selectedIndex={0} query="" />,
-  );
-  const output = lastFrame() ?? '';
-  expect(output.includes('low')).toBe(true);
-  expect(output.includes('Lower reasoning cost')).toBe(true);
-  expect(output.includes('medium')).toBe(true);
-  expect(output.includes('high')).toBe(true);
-});
+it.sequential(
+  'SettingsValueSelectionMenu shows suggestions list and highlighted item description at the bottom footer',
+  async () => {
+    const { lastFrame } = await renderInAct(
+      <SettingsValueSelectionMenu settingKey="agent.reasoningEffort" items={suggestions} selectedIndex={0} query="" />,
+    );
+    const output = lastFrame() ?? '';
+    expect(output.includes('low')).toBe(true);
+    expect(output.includes('Lower reasoning cost')).toBe(true);
+    expect(output.includes('medium')).toBe(true);
+    expect(output.includes('high')).toBe(true);
+    expect(output.includes('Balanced')).toBe(false);
+    expect(output.includes('Highest reasoning')).toBe(false);
+  },
+);
 
-it.sequential('SettingsValueSelectionMenu marks the selected value', async () => {
+it.sequential('SettingsValueSelectionMenu marks the selected value and updates bottom description', async () => {
   const { lastFrame } = await renderInAct(
     <SettingsValueSelectionMenu settingKey="agent.reasoningEffort" items={suggestions} selectedIndex={2} query="" />,
   );
   const output = lastFrame() ?? '';
   expect(output.includes('▶')).toBe(true);
   expect(output.includes('high')).toBe(true);
+  expect(output.includes('Highest reasoning')).toBe(true);
+  expect(output.includes('Lower reasoning cost')).toBe(false);
 });
 
 it.sequential('SettingsValueSelectionMenu shows numeric hint when applicable (empty state)', async () => {
@@ -65,6 +72,7 @@ it.sequential('SettingsValueSelectionMenu renders footer', async () => {
     />,
   );
   const output = lastFrame() ?? '';
+  expect(output.includes('Zero')).toBe(true);
   expect(output.includes('confirm')).toBe(true);
   expect(output.includes('cancel')).toBe(true);
 });

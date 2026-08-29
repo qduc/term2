@@ -34,6 +34,7 @@ export type ConversationEvent =
   | BackgroundShellStartedEvent
   | BackgroundShellCompletedEvent
   | BackgroundShellOutputEvent
+  | BackgroundCheckInDueEvent
   | CodexRateLimitEvent
   | UserMessageConsumedForAbortEvent
   | ContextCompactionStartedEvent
@@ -339,6 +340,25 @@ export interface BackgroundShellOutputEvent {
   seqRange?: { first: number; last: number };
   /** Present when the job's retained buffer evicted bytes before this firing. */
   droppedBytes?: number;
+}
+
+/**
+ * A still-running background task (shell job or async subagent) has reached
+ * its next proactive check-in interval. Fired by the session's check-in
+ * scheduler, never by either registry — a task going quiet is not itself
+ * evidence of anything wrong, so this must read as a status update, not an
+ * alarm.
+ */
+export interface BackgroundCheckInDueEvent {
+  type: 'background_check_in_due';
+  target: { kind: 'subagent'; id: string } | { kind: 'shell'; id: string };
+  /** Per-task monotonic ordinal; keeps repeat check-ins distinct under the exactly-once dedupe. */
+  checkInIndex: number;
+  /** Elapsed wall time since the task started, at the moment this check-in fired. */
+  elapsedMs: number;
+  details:
+    | { kind: 'subagent'; id: string; name?: string; role: string; task: string }
+    | { kind: 'shell'; id: string; command: string };
 }
 
 /** Emitted when Codex reports ChatGPT plan usage limits. */

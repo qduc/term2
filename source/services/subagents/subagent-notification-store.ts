@@ -91,6 +91,20 @@ export interface BackgroundShellOutputNotification {
   recordedAt: number;
 }
 
+/** A still-running background task has reached its next proactive check-in interval. */
+export interface BackgroundCheckInNotification {
+  kind: 'check_in';
+  /** `check_in:${target.kind}:${target.id}:${checkInIndex}` — repeat check-ins are distinct ids. */
+  messageId: string;
+  target: { kind: 'subagent'; id: string } | { kind: 'shell'; id: string };
+  checkInIndex: number;
+  elapsedMs: number;
+  details:
+    | { kind: 'subagent'; id: string; name?: string; role: string; task: string }
+    | { kind: 'shell'; id: string; command: string };
+  recordedAt: number;
+}
+
 /** A user action on background work that the main agent must plan around. */
 export interface BackgroundUserControlNotification {
   kind: 'user_control';
@@ -109,7 +123,8 @@ export type BackgroundNotification =
   | BackgroundSubagentNotification
   | BackgroundShellCompletionNotification
   | BackgroundShellOutputNotification
-  | BackgroundUserControlNotification;
+  | BackgroundUserControlNotification
+  | BackgroundCheckInNotification;
 
 export type BackgroundSubagentTaskStatus = 'running' | 'completed' | 'failed' | 'cancelled';
 
@@ -499,6 +514,17 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
         ...(event.coalescedCount !== undefined ? { coalescedCount: event.coalescedCount } : {}),
         ...(event.seqRange !== undefined ? { seqRange: event.seqRange } : {}),
         ...(event.droppedBytes !== undefined ? { droppedBytes: event.droppedBytes } : {}),
+        recordedAt: this.#now(),
+      };
+    }
+    if (event.type === 'background_check_in_due') {
+      return {
+        kind: 'check_in',
+        messageId: `check_in:${event.target.kind}:${event.target.id}:${event.checkInIndex}`,
+        target: event.target,
+        checkInIndex: event.checkInIndex,
+        elapsedMs: event.elapsedMs,
+        details: event.details,
         recordedAt: this.#now(),
       };
     }

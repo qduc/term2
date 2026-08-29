@@ -74,6 +74,10 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
     (notification): notification is Extract<BackgroundNotification, { kind: 'user_control' }> =>
       notification.kind === 'user_control',
   );
+  const checkIns = notifications.filter(
+    (notification): notification is Extract<BackgroundNotification, { kind: 'check_in' }> =>
+      notification.kind === 'check_in',
+  );
   const sections: string[] = [];
 
   if (completions.length > 0) {
@@ -192,6 +196,28 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
     );
   }
 
+  if (checkIns.length > 0) {
+    const noun = checkIns.length === 1 ? 'task' : 'tasks';
+    const entries = checkIns.map((notification) => {
+      const { details } = notification;
+      const label =
+        details.kind === 'subagent'
+          ? `background subagent ${details.name ?? details.id} | role: ${details.role} | task: ${details.task}`
+          : `background shell | jobId: ${details.id} | command: ${details.command}`;
+      const elapsedSeconds = Math.round(notification.elapsedMs / 1000);
+      return `- ${label}\n  still running, elapsed ${elapsedSeconds}s, check-in #${notification.checkInIndex}`;
+    });
+    sections.push(
+      [
+        `Periodic check-in on ${checkIns.length} still-running background ${noun}. This is an automatic system notification, not a user message, and does not by itself mean anything is wrong.`,
+        '',
+        ...entries,
+        '',
+        'Decide freely: doing nothing and letting it keep running is a valid choice. Only report to the user or intervene (steer or stop the task) if the elapsed time or task nature makes that the right call.',
+      ].join('\n'),
+    );
+  }
+
   if (userControls.length > 0) {
     const stopControls = userControls.filter((notification) => notification.action === 'stop');
     const backgroundMoves = userControls.filter((notification) => notification.action === 'background');
@@ -275,6 +301,15 @@ function formatBackgroundSubagentNotificationDisplay(notifications: readonly Bac
           ...(notification.droppedBytes !== undefined ? [`  droppedBytes: ${notification.droppedBytes}`] : []),
           ...(notification.matchedLines ? [`  matchedLines: ${notification.matchedLines}`] : []),
         ].join('\n');
+      }
+      if (notification.kind === 'check_in') {
+        const { details } = notification;
+        const elapsedSeconds = Math.round(notification.elapsedMs / 1000);
+        const label =
+          details.kind === 'subagent'
+            ? `background subagent ${details.name ?? details.id} (${details.role})`
+            : `background shell ${details.command}`;
+        return `Check-in #${notification.checkInIndex}: ${label} still running, elapsed ${elapsedSeconds}s`;
       }
       if (notification.kind === 'user_control') {
         const details = notification.details;
@@ -1003,6 +1038,10 @@ export class ConversationOrchestrator {
       (notification): notification is Extract<BackgroundNotification, { kind: 'user_control' }> =>
         notification.kind === 'user_control',
     );
+    const checkIns = newlyDisplayed.filter(
+      (notification): notification is Extract<BackgroundNotification, { kind: 'check_in' }> =>
+        notification.kind === 'check_in',
+    );
     this.config.messages.appendMessages([
       ...(subagentNotifications.length > 0
         ? [
@@ -1078,6 +1117,26 @@ export class ConversationOrchestrator {
               toolName: 'background_task_control_notification',
               toolArgs: {
                 actions: userControls.map(({ action, target }) => ({ action, target })),
+              },
+            },
+          ]
+        : []),
+      ...(checkIns.length > 0
+        ? [
+            {
+              id: this.createMessageId(),
+              sender: 'command' as const,
+              status: 'completed' as const,
+              command: 'background_check_in_notification',
+              output: formatBackgroundSubagentNotificationDisplay(checkIns),
+              success: true,
+              toolName: 'background_check_in_notification',
+              toolArgs: {
+                checkIns: checkIns.map(({ target, checkInIndex, elapsedMs }) => ({
+                  target,
+                  checkInIndex,
+                  elapsedMs,
+                })),
               },
             },
           ]

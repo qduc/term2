@@ -18,7 +18,7 @@ https://github.com/user-attachments/assets/ac960d65-f7c8-453a-9440-91f6397ae842
 - 🤖 **Multi-Provider Support** - Works with OpenAI, OpenRouter, OpenAI-compatible APIs, and Vercel AI SDK providers
 - 🔒 **Safe Execution** - Every command requires your explicit approval with diff preview
 - 🛠️ **Advanced Tools** - Shell execution, file patching, search/replace (with `<...>` gap matching), grep, find files, file reading, file creation, web search, web fetching, code outline & context search, mentor consultation, and subagent invocation
-- 👥 **Subagent Delegation** - Spawn specialized, synchronous subagents (`explorer`, `worker`, `researcher`, `mentor`) to perform sub-tasks in parallel while conserving your main context
+- 👥 **Subagent Delegation** - Spawn specialized, synchronous subagents (`explorer`, `worker`, `mentor`, `librarian`) to perform sub-tasks in parallel while conserving your main context
 - ⏪ **Conversation Rewind** - Rewind to any past user turn with `/rewind`, choosing whether to edit the turn again or resend it as-is. The picker states what each rewind discards (turns, replies, edited files) before you commit to it
 - 💾 **Conversation Resumption & Persistence** - Saved conversations are persisted using robust event logging and can be resumed later using the `--resume` flag
 - 💬 **Slash Commands** - Quick actions like `/clear`, `/quit`, `/model`, `/mentor`, `/lite`, `/copy`, `/auto-approve`, `/plan`, `/rewind`, `/usage`, `/effort`, `/handoff`, and `/orchestrator` for easy control
@@ -331,7 +331,7 @@ You can reorder provider priority with the `PROVIDER_ORDER` setting in `settings
 
 ## Subagents
 
-Delegate tasks to specialized subagents to prevent context bloat. Available roles: **Explorer** (codebase scanning), **Worker** (modifications & tests), **Researcher** (web search & docs), **Mentor** (strategic guidance). Ancillary workloads use four configurable tiers: mentor uses `smart`, worker and researcher use `balanced`, explorer and librarian use `cheap`, and approval/edit-healing tasks use `chore`. Each tier can set a matching provider, such as `agent.smartProvider`; subagent tiers can also set reasoning effort with `agent.smartReasoningEffort`, `agent.balancedReasoningEffort`, or `agent.cheapReasoningEffort`. Unset values inherit the main agent settings.
+Delegate tasks to specialized subagents to prevent context bloat. Available roles: **Explorer** (codebase scanning and research), **Worker** (modifications & tests), **Mentor** (strategic guidance), **Librarian** (persistent-memory context and maintenance). Ancillary workloads use four configurable tiers: mentor uses `smart`, worker uses `balanced`, explorer and librarian use `cheap`, and approval/edit-healing tasks use `chore`. Each tier can set a matching provider, such as `agent.smartProvider`; subagent tiers can also set reasoning effort with `agent.smartReasoningEffort`, `agent.balancedReasoningEffort`, or `agent.cheapReasoningEffort`. Unset values inherit the main agent settings.
 
 Legacy per-role, mentor, auto-approval, and edit-healing model settings remain readable for compatibility but are hidden from the interactive settings menu. New configuration should use the tier settings.
 
@@ -418,7 +418,8 @@ MIT License - see [LICENSE](LICENSE) file for details
 
 Built with:
 
-- [OpenAI Agents SDK](https://github.com/openai/openai-agents-js)
+- [OpenAI Node SDK](https://github.com/openai/openai-node)
+- [Vercel AI SDK](https://github.com/vercel/ai)
 - [Ink](https://github.com/vadimdemedes/ink) - React for CLI
 - [TypeScript](https://www.typescriptlang.org/)
 - [ssh2](https://github.com/mscdex/ssh2) - SSH client for Node.js

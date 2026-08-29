@@ -71,10 +71,16 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
   `provider_opaque` items (`source/contracts/provider-input.ts:20-42`;
   `conversation-turn-items.ts:94-105`).
 - `inputSurgeKind: 'delta'` for chained input (`session-input-planner.ts:211-230`).
-- Adapter lane ownership: Responses splices only `provider === 'openai'`; Chat Completions
+- Adapter lane ownership: the acceptance rule lives once in
+  `providers/provider-opaque-compatibility.ts` and keys on the *lane* tag, not the provider id.
+  A Responses adapter splices only its own lane tag, which it takes as a parameter
+  (`OPENAI_RESPONSES_OPAQUE_TAG = 'openai'` by default, `GROK_RESPONSES_OPAQUE_TAG = 'grok'`
+  for Grok — a second vendor on the same wire shape whose ciphertext is not interchangeable);
+  the Responses lane never honours the legacy shared tag
+  (`provider-opaque-compatibility.ts:31-79`). Chat Completions
   splices `tag === providerId` or legacy `'openai-compatible'`, where the runtime-compatible
   tag is `opaqueProviderTag(config)` = `config.name || config.type || 'openai-compatible'`
-  (`openai-compatible.provider.ts:45-46`); AI SDK and Codex drop every tag at their public request boundary, with lower-level serializer guards for bypasses.
+  (`openai-compatible.provider.ts:51-52`); AI SDK and Codex drop every tag at their public request boundary, with lower-level serializer guards for bypasses.
 
 ## 5. Settlement semantics
 

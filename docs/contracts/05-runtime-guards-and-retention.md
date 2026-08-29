@@ -114,14 +114,14 @@ the ledger remains the authoritative per-guard inventory.
 ## 7. Public boundary under test
 
 - `validateCommandSafety` + specialized handlers — `command-safety*.test.ts`.
-- `createSandboxRuntimeConfig` + `isPathProtected` + `DeniedReadDetector` —
+- `createSandboxRuntimeConfig` + `isPathProtected` + `detectDeniedRead` —
   `sandbox-policy.test.ts`, `denied-read-detector.test.ts`.
 - `RunBudget` policy/stages/stall/extensions — `run-budget.test.ts`,
   `application-run-loop.run-budget.test.ts`.
 - `ExecuteShellOptions` timeout/overflow — `execute-shell*.test.ts`.
 - `BackgroundShellRegistry` / `BackgroundShellOutputStore` —
   `background-shell-registry.test.ts`, `background-shell-output-store.test.ts`.
-- `WebsocketReceiveWatchdog` — `websocket-receive-watchdog.test.ts`.
+- `createWebSocketReceiveWatchdog` — `websocket-receive-watchdog.test.ts`.
 - Steering mailbox — `subagent-run-control.test.ts`.
 - `ToolOwnershipRegistry` — `tool-ownership-registry.test.ts`.
 

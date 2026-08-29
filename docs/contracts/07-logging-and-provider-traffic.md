@@ -243,14 +243,15 @@ Tests execute against isolated disk fixtures created via `fs.mkdtempSync` and ty
 
 ### Defect Class 4: Double-Fault Error Masking in Fetch Middleware
 - **Level 1 — Bug:** When an upstream provider request fails (e.g. 504 Gateway Timeout or network abort), if diagnostic `recordRequestFailed` throws during error recording, the diagnostic error replaces and masks the original provider error.
-- **Level 2 — Root Cause:** `createLoggingMiddleware` (`source/providers/fetch/logging-middleware.ts:133-141`) executes `providerTraffic.recordRequestFailed` inside its `catch (error)` block; because `ProviderTraffic` throws on store errors, the original error is replaced.
-- **Structural Hardening (Phase 2 Repair):** Ensure `ProviderTraffic.recordRequestFailed` catches store errors and never throws, so `createLoggingMiddleware` reliably re-throws `error`.
+- **Level 2 — Root Cause:** `createLoggingMiddleware` (`source/providers/fetch/logging-middleware.ts:134-140`) executes `providerTraffic.recordRequestFailed` inside its `catch (error)` block; at the time of writing `ProviderTraffic` threw on store errors, so the original error was replaced.
+- **Structural Hardening (Phase 2 Repair): landed for the store write.** Every artifact-store call in `ProviderTraffic` now goes through `#runArtifactStoreOperation` (`provider-traffic.ts:1103-1121`), which swallows store errors behind a warning, so a store write can no longer mask the provider error. The residual exposure is narrower: the winston `loggingService.error`/`info` call that follows each store write is still unguarded.
 
 ### Codex Stream Consumer Direct Gaps (Unresolved Seam Defect)
 - In `source/providers/codex-responses-model.ts`:
-  - `logTrafficReceived` path (:1026): `this.providerTraffic.recordResponseReceived(...)` is invoked without `await` or `.catch()`. If the returned promise rejects on store write error, Node.js emits an unhandled promise rejection that terminates the process under `--unhandled-rejections=strict`.
-  - `logTrafficFailed` path (:1048): `this.providerTraffic.recordRequestFailed(...)` is invoked synchronously on WebSocket failure. If it throws on store write error, the diagnostic failure replaces and masks the real WebSocket provider error.
-  - `logTrafficClosed` path (:1069): `this.providerTraffic.recordResponseClosed(...)` is invoked synchronously in the stream loop `finally` block. If it throws on store write error, the synchronous exception displaces the primary stream return value or upstream abort error.
+  - `#logTrafficReceived` path (:1079): `this.providerTraffic.recordResponseReceived(...)` is invoked without `await` or `.catch()`. If the returned promise rejects, Node.js emits an unhandled promise rejection that terminates the process under `--unhandled-rejections=strict`.
+  - `#logTrafficFailed` path (:1101): `this.providerTraffic.recordRequestFailed(...)` is invoked synchronously on WebSocket failure. If it throws, the diagnostic failure replaces and masks the real WebSocket provider error.
+  - `#logTrafficClosed` path (:1121): `this.providerTraffic.recordResponseClosed(...)` is invoked synchronously in the stream loop `finally` block. If it throws, the synchronous exception displaces the primary stream return value or upstream abort error.
+  - Scope note: store-write errors alone no longer reach these call sites, because every artifact-store call is wrapped in `#runArtifactStoreOperation` (`provider-traffic.ts:1103-1121`). The unguarded winston logging call in each record method remains.
   - *Recommendation for Phase 2:* Ensure `IProviderTraffic` methods never throw or reject.
 
 ### Residual Hypotheses / Unresolved Decisions (Awaiting Owner Review)

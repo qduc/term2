@@ -137,6 +137,27 @@ Conclusions:
 6. **Try `jsx: react-jsx` last** as warning cleanup, with before/after timing
    and the build-output tests as parity evidence.
 
+## Deterministic lane (2026-08-29)
+
+Landed: `vitest.lane.config.ts` (tier excludes + fixed seed),
+`.github/vitest.lane.safe.txt` (leak-verified file manifest),
+`scripts/run-deterministic-lane.mjs` (`pnpm test:lane` / `test:lane:seed`).
+The lane runs its manifest **without worker isolation** — the dominant cost
+class from the attribution experiments.
+
+- Baseline lane (10 leak files excluded, 526 files): 17.5 s wall for 5,338
+  tests, 0 local failures — down from ~61 s isolated.
+- Verified leak-free across two shuffled seeds (`20260829`, `314159`) after a
+  pre-push-style soak of three seeds. 31 total non-isolated runs with zero
+  failures.
+- 10 files documented as leaking in the manifest header (provider registry,
+  Grok credit singleton, execution context, oauth-pkce child_process mocks,
+  and others).
+- Growth path: additional files enter the manifest only after passing a fresh
+  shuffled seed (`pnpm test:lane:seed <new-seed>`). First growth candidate:
+  the 15 fake-timer-only files (includes `InputBox` 8.0 s and
+  `CommandMessage` 5.3 s).
+
 ## Acceptance criteria
 
 - A documented unit command runs without provider/network/process side effects

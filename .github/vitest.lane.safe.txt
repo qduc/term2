@@ -1,0 +1,26 @@
+# Deterministic-lane safe manifest (docs/plans/slow-test-suite.md)
+#
+# These files were verified to pass with worker isolation DISABLED
+# (--isolate=false) across shuffled seeds. The lane runs them without
+# isolation because per-file worker overhead is the dominant suite cost
+# (attribution: 449-file tail = 38s wall for 22.6s of test work).
+#
+# Excluded from non-isolated execution (verified leaking):
+#   source/hooks/use-grok-credit-usage.test.tsx — process-wide credit
+#     service singleton (permanent 401 stop) poisons later files.
+#   source/hooks/use-shell-mode.test.tsx — mock contamination.
+#   source/lib/openai-agent-client.public-methods.test.ts — module singleton
+#     mutation (releaseDiscovery).
+#   source/lib/subagent-bridge.background-sink.test.ts — module singleton.
+#   source/providers/openai-responses-model.test.ts — OpenAI client state.
+#   source/providers/oauth-pkce.test.ts — child_process mock leakage.
+#   source/providers/provider-service.test.ts — provider registry state.
+#   source/providers/registry.test.ts — vi.mock poisoning ("Mock OpenAI").
+#   source/services/approval/approval-decision-executor.test.ts — approval
+#     state leakage.
+#   source/services/execution-context.test.ts — ConcurrentWorkspaceRootError
+#     from leaked session runtimes.
+#
+# Golden rule: a file may only be listed here if it passed a shuffled
+# --isolate=false run on at least two distinct seeds. Run
+# `pnpm test:lane:seed 4242` (or any fresh seed) after adding a file.

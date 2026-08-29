@@ -36,6 +36,12 @@ if (manifest.length === 0) {
 }
 
 const config = path.join(root, 'vitest.lane.config.ts');
+// Guard: a healthy seed takes ~25s on the 8-vCPU dev host. A non-isolated run
+// can hang indefinitely when a leaked keepalive (timer/handle/socket) holds the
+// worker pool open — observed 2026-08-29 as a 17-minute no-output hang. 180s
+// gives ~7x headroom over normal while making hangs fail fast instead of
+// blocking a CI/pre-push lane forever.
+const SEED_TIMEOUT_MS = 180_000;
 let worst = 0;
 
 for (const seed of seeds) {
@@ -55,9 +61,14 @@ for (const seed of seeds) {
       `--sequence.seed=${seed}`,
       ...manifest,
     ],
-    { stdio: 'inherit', cwd: root },
+    { stdio: 'inherit', cwd: root, timeout: SEED_TIMEOUT_MS, killSignal: 'SIGKILL' },
   );
   const code = result.status ?? 1;
+  if (result.signal === 'SIGKILL') {
+    console.error(
+      `deterministic lane: seed ${seed} exceeded ${SEED_TIMEOUT_MS / 1000}s — likely a leaked keepalive; treat as failure`,
+    );
+  }
   if (code > worst) worst = code;
 }
 

@@ -147,16 +147,24 @@ class from the attribution experiments.
 
 - Baseline lane (10 leak files excluded, 526 files): 17.5 s wall for 5,338
   tests, 0 local failures — down from ~61 s isolated.
-- Verified leak-free across two shuffled seeds (`20260829`, `314159`) after a
-  pre-push-style soak of three seeds. 31 total non-isolated runs with zero
-  failures.
-- 10 files documented as leaking in the manifest header (provider registry,
-  Grok credit singleton, execution context, oauth-pkce child_process mocks,
-  and others).
-- Growth path: additional files enter the manifest only after passing a fresh
-  shuffled seed (`pnpm test:lane:seed <new-seed>`). First growth candidate:
-  the 15 fake-timer-only files (includes `InputBox` 8.0 s and
-  `CommandMessage` 5.3 s).
+- Leak discovery is order- and timing-dependent: identical seeds produced
+  different failure sets across runs. The manifest is therefore trimmed to the
+  **union of every observed failure** across all seeds run, then re-verified
+  on fresh seeds until a full round comes back clean. 36 files are excluded
+  with per-file reasons in the manifest header (provider registry, Grok credit
+  singleton, session-runtime/workspace-root state, shell-sandbox state, and
+  others).
+- The runner carries a 180 s per-seed guard (~7× a healthy ~25 s run) because
+  a non-isolated run can hang when a leaked keepalive holds the worker pool
+  open (observed reproducibly on seed 888: no output for 15 min, 3 cores
+  spinning). The 22 keepalive-pattern suspects among the never-started files
+  pass cleanly on their own, so the hang needs a poisoner–victim pair spanning
+  the run order; bisecting it is left as follow-up. The shipped default seeds
+  (`20260829`, `314159`) are hang-free and failure-free.
+- Status: rounds 1–2 committed; round 3 flagged 3 more files (trimmed,
+  re-verification round pending). Growth path: additional files enter the
+  manifest only after passing a fresh shuffled seed (`pnpm test:lane:seed
+  <new-seed>`).
 
 ## Acceptance criteria
 

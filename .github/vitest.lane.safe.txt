@@ -44,6 +44,24 @@
 #   source/utils/shell/execute-shell.test.ts — cross-file leakage observed non-isolated (see leak-union 2026-08-29).
 #   source/utils/shell/sandbox/shell-sandbox-runner.test.ts — cross-file leakage observed non-isolated (see leak-union 2026-08-29).
 #
+#   source/utils/shell/command-safety.path.test.ts — cross-file leakage non-isolated (seed 11).
+#   source/tools/system/worktree.test.ts — cross-file leakage non-isolated (seed 11).
+#   source/components/layout/StatusBar.test.tsx
+#   source/services/session/session-runtime.characterization.test.ts — cross-file leakage non-isolated (seed 555).
+#   source/gateway/gateway.test.ts
+#   source/services/session/conversation-session.auto-approval.test.ts — cross-file leakage non-isolated (seed 2468).
+#   source/services/subagents/subagent-manager.roles.test.ts
+# Round-2 exclusions (seeds 111/222/333/444):
+#   source/components/input/ApplicationInputSurface.test.tsx
+#   source/gateway/settings-rpc.test.ts
+#   source/providers/codex.provider.test.ts
+#   source/services/conversation/conversation-service.test.ts
+#   source/services/workspace/workspace-lease-authority.test.ts
+#   source/utils/shell/sandbox/sandbox-policy.test.ts
+# Round-3 exclusions (seeds 666/777/888) — PENDING re-verification:
+#   source/gateway/settings-gateway-rpc.test.ts
+#   source/services/generation-guard.test.ts
+#   source/hooks/use-provider-selection.test.ts
 # Golden rule: a file may only be listed here if it passed a shuffled
 # --isolate=false run on at least two distinct seeds. Run
 # `pnpm test:lane:seed 4242` (or any fresh seed) after adding a file.
@@ -78,7 +96,6 @@ source/components/InputBox.menu-logic.test.ts
 source/components/MarkdownRenderer.test.tsx
 source/components/common/MenuContainer.test.tsx
 source/components/common/compute-visible-tabs.test.ts
-source/components/input/ApplicationInputSurface.test.tsx
 source/components/input/CopyMenuSession.test.tsx
 source/components/input/FirstRunSetupPrompt.test.tsx
 source/components/input/ModelMenuSession.test.tsx
@@ -94,7 +111,6 @@ source/components/layout/BackgroundTaskManager.test.tsx
 source/components/layout/BackgroundTasksPanel.test.tsx
 source/components/layout/BottomArea.test.tsx
 source/components/layout/DiffView.test.tsx
-source/components/layout/StatusBar.test.tsx
 source/components/layout/background-task-clock.test.ts
 source/components/layout/live-task-rows.test.ts
 source/components/menu/CopyMenu.test.tsx
@@ -133,7 +149,6 @@ source/env-setup.test.ts
 source/gateway/awaitable-runtime-events.test.ts
 source/gateway/dynamic-workspace-registry.test.ts
 source/gateway/dynamic-workspace-rpc.test.ts
-source/gateway/gateway.test.ts
 source/gateway/interaction-protocol.test.ts
 source/gateway/launcher-seam.test.ts
 source/gateway/pairing.test.ts
@@ -141,8 +156,6 @@ source/gateway/persistence-recovery-matrix.test.ts
 source/gateway/persistence.test.ts
 source/gateway/runtime-factory.test.ts
 source/gateway/server.test.ts
-source/gateway/settings-gateway-rpc.test.ts
-source/gateway/settings-rpc.test.ts
 source/gateway/workspace-boundary-probe.test.ts
 source/hooks/conversation-ui-reducer.ask-user-bugfix.test.ts
 source/hooks/conversation-ui-reducer.test.ts
@@ -167,7 +180,6 @@ source/hooks/use-input-history.test.tsx
 source/hooks/use-mentor-pool-selection.test.ts
 source/hooks/use-model-selection.test.tsx
 source/hooks/use-path-completion.test.tsx
-source/hooks/use-provider-selection.test.ts
 source/hooks/use-rewind-selection.test.ts
 source/hooks/use-runtime-settings.test.tsx
 source/hooks/use-selection.test.ts
@@ -219,7 +231,6 @@ source/providers/chained-wire-state.test.ts
 source/providers/codex-auth.test.ts
 source/providers/codex-responses-model.test.ts
 source/providers/codex-turn-converter.test.ts
-source/providers/codex.provider.test.ts
 source/providers/common/openai-compatible-message-contract.test.ts
 source/providers/common/openai-compatible-messages.test.ts
 source/providers/custom-provider-adapter.test.ts
@@ -314,7 +325,6 @@ source/services/conversation/conversation-persistence.test.ts
 source/services/conversation/conversation-replay.test.ts
 source/services/conversation/conversation-result-builder.test.ts
 source/services/conversation/conversation-service.facade.test.ts
-source/services/conversation/conversation-service.test.ts
 source/services/conversation/conversation-state-projector.test.ts
 source/services/conversation/conversation-state-schema.test.ts
 source/services/conversation/conversation-store.test.ts
@@ -324,7 +334,6 @@ source/services/conversation/queue-persistence.test.ts
 source/services/conversation/run-item-normalizer.test.ts
 source/services/cost/model-cost.test.ts
 source/services/cost/pricing.test.ts
-source/services/generation-guard.test.ts
 source/services/grok/grok-credit-usage-service.test.ts
 source/services/handoff/handoff-session.test.ts
 source/services/history-service.test.ts
@@ -375,7 +384,6 @@ source/services/session/continuation-plan-applier.test.ts
 source/services/session/continuation-recovery-handler.test.ts
 source/services/session/continuation-state.test.ts
 source/services/session/conversation-session-reasoning.test.ts
-source/services/session/conversation-session.auto-approval.test.ts
 source/services/session/conversation-session.characterization.test.ts
 source/services/session/conversation-session.input-surge.test.ts
 source/services/session/conversation-session.isolation.test.ts
@@ -403,7 +411,6 @@ source/services/session/session-input-planner.test.ts
 source/services/session/session-lifecycle.test.ts
 source/services/session/session-manager.test.ts
 source/services/session/session-runtime-controller.test.ts
-source/services/session/session-runtime.characterization.test.ts
 source/services/session/session-stream-processor.test.ts
 source/services/session/session-tool-tracker.test.ts
 source/services/session/subagent-connect-close-retry.test.ts
@@ -443,7 +450,6 @@ source/services/subagents/subagent-manager.agent-runtime.test.ts
 source/services/subagents/subagent-manager.lifecycle.test.ts
 source/services/subagents/subagent-manager.misc.test.ts
 source/services/subagents/subagent-manager.prompts.test.ts
-source/services/subagents/subagent-manager.roles.test.ts
 source/services/subagents/subagent-manager.tools.test.ts
 source/services/subagents/subagent-notification-store.test.ts
 source/services/subagents/subagent-run-control.test.ts
@@ -455,7 +461,6 @@ source/services/tool-call-arguments.test.ts
 source/services/tool-execution-ledger.test.ts
 source/services/workspace/active-workspace-root.test.ts
 source/services/workspace/parse-worktree-list.test.ts
-source/services/workspace/workspace-lease-authority.test.ts
 source/services/workspace/worktree-transition.test.ts
 source/slash-commands.test.ts
 source/test-helpers/ink-testing.test.tsx
@@ -478,7 +483,6 @@ source/tools/memory/memory-tools.test.ts
 source/tools/run-agent-workflow.test.ts
 source/tools/shell-and-grep-formatters.test.ts
 source/tools/system/shell.test.ts
-source/tools/system/worktree.test.ts
 source/tools/tool-names.test.ts
 source/tools/tool-parameter-schema.test.ts
 source/tools/utils.test.ts
@@ -524,7 +528,6 @@ source/utils/shell/command-logger.test.ts
 source/utils/shell/command-safety.evaluator-false-positives.test.ts
 source/utils/shell/command-safety.find.test.ts
 source/utils/shell/command-safety.git.test.ts
-source/utils/shell/command-safety.path.test.ts
 source/utils/shell/command-safety.red-yellow-policy.test.ts
 source/utils/shell/command-safety.specialized-handlers.test.ts
 source/utils/shell/command-safety.test.ts
@@ -540,7 +543,6 @@ source/utils/shell/sandbox/sandbox-failure-classifier.test.ts
 source/utils/shell/sandbox/sandbox-network-approval-coordinator.test.ts
 source/utils/shell/sandbox/sandbox-network-approval.test.ts
 source/utils/shell/sandbox/sandbox-network-store.test.ts
-source/utils/shell/sandbox/sandbox-policy.test.ts
 source/utils/shell/shell-child-registry.test.ts
 source/utils/shell/shell-output.test.ts
 source/utils/shell/temp-sweep.test.ts

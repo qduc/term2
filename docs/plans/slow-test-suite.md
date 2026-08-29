@@ -1,4 +1,4 @@
-Status: plan.
+Status: plan. Attribution experiments complete 2026-08-29 — see "Attribution experiment results".
 
 # Slow test suite
 
@@ -53,39 +53,99 @@ context mismatch therefore enters the patch-healing provider path instead of
 using a mocked healer. The test is measuring provider setup/timeout behavior
 in addition to patch error formatting.
 
-## Likely causes
+## Attribution experiment results (2026-08-29)
 
-1. The default command mixes unit, integration, and end-to-end tests.
-2. Many source tests deliberately exercise real subprocess, filesystem,
-   networking, gateway-restart, TLS, WebSocket, and timer behavior.
-3. Ink/React tests repeatedly mount and render application components.
-4. Hundreds of test files incur module transformation and worker/import-graph
-   startup overhead. `it.sequential` only serializes tests within one file; it
-   does not make the whole run sequential.
-5. The TypeScript configuration uses the classic JSX transform (`jsx: react`),
-   and React reports the outdated-transform warning during many render tests.
-   This may add transform noise and overhead, but it is not yet established as
-   the primary bottleneck.
+All runs `NODE_ENV=test`, JSON reporter, on the 8-vCPU PVE host. The first four
+ran in a quiet window (load ≤ 0.7); the worker-scaling runs were polluted by
+external host load (8.8–11.9, CPU 92% busy) and are not comparable to the
+quiet baseline.
 
-## Future work
+| Run | Scope | Wall | Result |
+| --- | --- | ---: | --- |
+| baseline | full suite, 8 workers | 84 s | 7,012 passed |
+| single-inputbox | `InputBox.test.tsx` alone | 5 s | 39 passed — its 8.0 s in-suite duration is mostly parallel contention, not own cost |
+| tail-only | 449 smallest files (22.6 s summed test time) | 38 s | 5,335 passed — the tail takes ~38 s of wall for ~5 s of ideal work |
+| head-free | full minus `*.integration.*`/`*.e2e.*` | 61 s | 6,957 passed — removing 10 files (23.8 s summed) saves 23 s of wall, near 1:1 |
+| head-free, `--isolate=false` | same lane, no worker isolation | 33 s | **67 failed** — cross-file module-cache leakage |
+| full, 6 workers | full suite | 89 s | contended, not comparable |
+| full, 4 workers | full suite | 102 s | contended, not comparable |
 
-- Define a fast unit-test command that excludes integration and end-to-end
-  tests without silently dropping important deterministic contract tests.
-- Define explicit integration/e2e commands and keep the broader gate available
-  before handoff or CI.
-- Isolate the `apply-patch` failure-format tests from patch-healing provider
-  execution by injecting a deterministic healing dependency where appropriate.
-- Profile the source suite by test file and category before changing worker or
-  JSX settings; do not optimize based only on the broad inventory counts.
-- Preserve the existing full-suite gate and compare wall time and coverage of
-  the new commands against this baseline.
+Conclusions:
+
+1. **Per-file fixed overhead dominates** (the "world 3" hypothesis). The
+   449-file tail, whose test work sums to 22.6 s, needs 38 s of wall. Module
+   transform + import graph + per-file worker isolation is a primary cost, not
+   the head alone.
+2. **The integration/e2e head also serializes the critical path**: the
+   head-free run's 23 s saving is close to those files' summed time, meaning
+   they run mostly unoverlapped as stragglers.
+3. **`isolate: false` halves the unit lane (61 s → 33 s) but is not adoptable
+   as-is.** With shared module caches, 67 tests fail from cross-file leakage:
+   `vi.mock` poisoning ("Mock OpenAI" leaking into `providers/registry.test.ts`
+   and `provider-service.test.ts`), the process-wide Grok credit singleton
+   poisoned for later files, `ConcurrentWorkspaceRootError` from leaked session
+   runtimes, and mock contamination across hooks and lib. Any adoption must be
+   scoped to a verified singleton-free, mock-safe subset.
+4. The single-file check confirms in-suite durations include contention; the
+   JSON profile's summed worker-time is an upper bound, and wall-time
+   attribution needs the run-level experiments above, not per-file sums alone.
+
+## Likely causes (revised after experiments)
+
+1. **Confirmed — per-file module/worker overhead across 549 files.** Largest
+   single lever; only capturable for a curated safe subset (see 3 above).
+2. **Confirmed — the integration/e2e head extends the critical path** with
+   real PTY/subprocess/provider work (and `apply-patch`'s provider-healing
+   leak). Head repairs pay back nearly 1:1 in wall time.
+3. **Confirmed — Ink/React render tests are 43% of summed worker-time**, and
+   their in-suite cost includes contention; repeated mounts are a real but
+   partially parallelism-inflated cost.
+4. **Unresolved — worker-count tuning.** The 8/6/4 scaling comparison was
+   invalidated by host load; re-run in a quiet window before tuning
+   `--maxWorkers`.
+5. The classic JSX transform warning remains unmeasured and cheap to test
+   last.
+
+## Future work (ordered by measured leverage)
+
+1. ~~**Isolate the `apply-patch` failure-format tests from patch-healing provider
+   execution**~~ — DONE 2026-08-29: `createTool()` in `apply-patch.test.ts` now
+   injects a deterministic `{ wasModified: false }` healer; the file's in-suite
+   test time dropped from ~3.8 s to ~54 ms; 21/21 pass, typecheck green. The
+   black-box suite run red before and after (pre-existing failure in
+   `provider-session-responses.blackbox.ts` two-turn chaining) — unrelated, not
+   introduced here.
+2. **Define the unit lane** (`exclude: *.integration.*, *.e2e.*,
+   scripts/provider-black-box`) as lane infrastructure — the scope for
+   isolation experiments and future CI staging. Expect ~61 s today, less after
+   head repairs. Do not market it as a developer fast gate: nobody re-runs a
+   60 s pre-push hook. Developer feedback stays `test:related`/`test:changed`.
+3. **Build the curated no-isolate subset on the test-audit graph.** The 33 s
+   no-isolate measurement is the prize, but only a generated manifest of
+   mock-safe, singleton-free tests can capture it. Selection must come from
+   `docs/test-audit/graph.yaml` Domain/Suite fields (generated, validated that
+   selected tests still exist), never hand-maintained, and must respect the
+   audit plan's guardrails. Keep the isolated full suite as the handoff/CI
+   authority; verify the subset with shuffled, seeded repeat runs before
+   adoption.
+4. **Repair the timing head** (`cli.integration` spawn-per-case, repeated Ink
+   mounts in `InputBox`/`CommandMessage`/`BottomArea`). Check the test-suite-audit
+   non-destructive milestone before rewriting test internals; consolidation or
+   rework of those files may need the approval that plan describes.
+5. **Re-run the worker-scaling comparison in a quiet window** before any
+   `--maxWorkers` or pool tuning.
+6. **Try `jsx: react-jsx` last** as warning cleanup, with before/after timing
+   and the build-output tests as parity evidence.
 
 ## Acceptance criteria
 
 - A documented unit command runs without provider/network/process side effects
-  and is materially faster than the current full command.
+  and is materially faster than the current full command (61 s vs 84 s measured
+  at the tier split alone; the curated no-isolate subset targets ~30 s).
 - Integration and end-to-end tests remain runnable through explicit commands.
 - The patch-healing error tests do not invoke a real provider.
 - The full suite still passes with `NODE_ENV=test` after the split.
+- Any no-isolate lane proves leak-free via shuffled, seeded repeat runs, and
+  the isolated full suite remains the authoritative handoff gate.
 
 

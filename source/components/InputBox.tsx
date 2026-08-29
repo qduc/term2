@@ -411,7 +411,7 @@ const InputBox: FC<Props> = ({
         queueSelectionIndex === null &&
         value === '' &&
         !activePromptLabel && (
-          <Box marginTop={0}>
+          <Box marginTop={1}>
             <Text color={COLOR_TEXT_SUBTLE}>
               <Text color={COLOR_TEXT_MUTED}>Ctrl+O</Text> model · <Text color={COLOR_TEXT_MUTED}>Ctrl+T</Text> effort
             </Text>

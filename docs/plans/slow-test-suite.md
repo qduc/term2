@@ -1,15 +1,18 @@
-Status: plan. Attribution experiments complete 2026-08-29 — see "Attribution experiment results".
+Status: plan. Lane verification complete 2026-08-29 — see "Deterministic lane".
 
 ## Resume here
 
-The deterministic no-isolate lane is landed (`pnpm test:lane`, 490-file
-manifest, 180 s hang guard) but its final manifest still needs one clean
-verification round: run `pnpm test:lane` and, if a fresh seed fails, union
-the failing files into the manifest's exclusion list as in rounds 1–3. After
-that, the remaining options in "Future work" apply, in order. Context for
-the current state (leak classes, the seed-888 hang, what was measured) is in
-the "Deterministic lane" section below and in project memory
-`slow-test-suite-profile-2026-08-29`.
+The deterministic no-isolate lane is landed and verified: `pnpm test:lane`
+(476-file manifest, 180 s hang guard) passed five consecutive rounds
+(20260829, 314159, plus fresh seeds 24680/135791/987654) with no failures
+and no hangs, ~14 s per seed. The verification round also surfaced three
+more order/timing-dependent leaks, now excluded (see "Deterministic lane").
+The remaining options in "Future work" apply, in order: re-run the
+worker-scaling comparison in a quiet window (item 5), then
+`jsx: react-jsx` (item 6). Head repairs (item 4) need the test-suite-audit
+approval check first. Context for the current state (leak classes, the
+seed-888 hang, what was measured) is in the "Deterministic lane" section
+below and in project memory `slow-test-suite-profile-2026-08-29`.
 
 # Slow test suite
 
@@ -161,19 +164,31 @@ class from the attribution experiments.
 - Leak discovery is order- and timing-dependent: identical seeds produced
   different failure sets across runs. The manifest is therefore trimmed to the
   **union of every observed failure** across all seeds run, then re-verified
-  on fresh seeds until a full round comes back clean. 36 files are excluded
-  with per-file reasons in the manifest header (provider registry, Grok credit
+  on fresh seeds until a full round comes back clean. The final manifest
+  excludes 49 files with per-file reasons in the manifest header (provider
+  registry, Grok credit
   singleton, session-runtime/workspace-root state, shell-sandbox state, and
   others).
-- The runner carries a 180 s per-seed guard (~7× a healthy ~25 s run) because
+- The runner carries a 180 s per-seed guard (~13× a healthy ~14 s run; ~7×
+  when the baseline was ~25 s) because
   a non-isolated run can hang when a leaked keepalive holds the worker pool
   open (observed reproducibly on seed 888: no output for 15 min, 3 cores
   spinning). The 22 keepalive-pattern suspects among the never-started files
   pass cleanly on their own, so the hang needs a poisoner–victim pair spanning
   the run order; bisecting it is left as follow-up. The shipped default seeds
   (`20260829`, `314159`) are hang-free and failure-free.
-- Status: rounds 1–2 committed; round 3 flagged 3 more files (trimmed,
-  re-verification round pending). Growth path: additional files enter the
+- Status: rounds 1–3 committed; round 4 (2026-08-29) verified rounds 1–3
+  clean and unioned three more order/timing-dependent leaks observed once
+  each, all passing on re-run with the same seed:
+  `source/services/workspace/active-workspace-root.test.ts`
+  (ConcurrentWorkspaceRootError, same class as `execution-context.test.ts`),
+  `source/tools/web/web-search.test.ts` (settings/env leak made the
+  unconfigured-provider guard pass), and
+  `source/components/input/SettingsMenuSession.test.tsx` (React update
+  depth exceeded). Final manifest: 476 test files per seed, 49 manifest
+  entries excluded; verified clean
+  on five consecutive rounds (20260829, 314159, 24680, 135791, 987654),
+  ~14 s per seed, no hangs. Growth path: additional files enter the
   manifest only after passing a fresh shuffled seed (`pnpm test:lane:seed
   <new-seed>`).
 

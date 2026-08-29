@@ -58,10 +58,22 @@
 #   source/services/conversation/conversation-service.test.ts
 #   source/services/workspace/workspace-lease-authority.test.ts
 #   source/utils/shell/sandbox/sandbox-policy.test.ts
-# Round-3 exclusions (seeds 666/777/888) — PENDING re-verification:
+# Round-3 exclusions (seeds 666/777/888) — re-verified clean 2026-08-29:
 #   source/gateway/settings-gateway-rpc.test.ts
 #   source/services/generation-guard.test.ts
 #   source/hooks/use-provider-selection.test.ts
+# Round-4 exclusion (verification round, seed run 20260829+314159):
+#   source/services/workspace/active-workspace-root.test.ts —
+#     ConcurrentWorkspaceRootError from leaked session runtimes (same class
+#     as execution-context.test.ts); failure is order/timing-dependent —
+#     the file passed both seeds re-run individually after failing in the
+#     combined lane run.
+#   source/tools/web/web-search.test.ts — settings/env state leakage makes
+#     the unconfigured-provider guard pass (observed seed 90210,
+#     order/timing-dependent — file passed on re-run with the same seed).
+#   source/components/input/SettingsMenuSession.test.tsx — exceeded React
+#     update depth non-isolated (observed seed 314159, order/timing-dependent
+#     — file passed on re-run with the same seed).
 # Golden rule: a file may only be listed here if it passed a shuffled
 # --isolate=false run on at least two distinct seeds. Run
 # `pnpm test:lane:seed 4242` (or any fresh seed) after adding a file.
@@ -100,7 +112,6 @@ source/components/input/CopyMenuSession.test.tsx
 source/components/input/FirstRunSetupPrompt.test.tsx
 source/components/input/ModelMenuSession.test.tsx
 source/components/input/RewindMenuSession.test.tsx
-source/components/input/SettingsMenuSession.test.tsx
 source/components/input/SettingsValueMenuSession.test.tsx
 source/components/input/SlashMenuSession.test.ts
 source/components/input/input-width.test.ts
@@ -459,7 +470,6 @@ source/services/subagents/utils.test.ts
 source/services/subagents/worker-worktree.test.ts
 source/services/tool-call-arguments.test.ts
 source/services/tool-execution-ledger.test.ts
-source/services/workspace/active-workspace-root.test.ts
 source/services/workspace/parse-worktree-list.test.ts
 source/services/workspace/worktree-transition.test.ts
 source/slash-commands.test.ts
@@ -487,7 +497,6 @@ source/tools/tool-names.test.ts
 source/tools/tool-parameter-schema.test.ts
 source/tools/utils.test.ts
 source/tools/web/web-fetch.test.ts
-source/tools/web/web-search.test.ts
 source/types/user-turn.test.ts
 source/utils/ai/model-provider-arg.test.ts
 source/utils/ai/model-settings.test.ts

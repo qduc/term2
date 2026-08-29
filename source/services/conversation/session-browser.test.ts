@@ -232,13 +232,15 @@ it('skips malformed browser projections and reports trustworthy unavailable coun
       event: { type: 'session_init', id: 'unsafe.name', createdAt: '2026-01-01T00:00:00.000Z', projectPath: '/other' },
     }),
   );
+  fs.mkdirSync(path.join(dir, 'unreadable.jsonl'));
   const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
-  expect(browser.list({})).toMatchObject({ sessions: [expect.objectContaining({ id: 'valid' })], unavailable: 2 });
+  expect(browser.list({})).toMatchObject({ sessions: [expect.objectContaining({ id: 'valid' })], unavailable: 3 });
   expect(browser.search({ query: 'hello' })).toMatchObject({
     results: [expect.objectContaining({ sessionId: 'valid' })],
-    unavailable: 2,
+    unavailable: 3,
   });
   expect(browser.read({ id: 'malformed' })).toMatchObject({ error: { code: 'session_unavailable' } });
+  expect(browser.read({ id: 'unreadable' })).toMatchObject({ error: { code: 'session_unavailable' } });
 });
 
 it('recovers all oversized text exactly once with advancing, bounded pages', () => {

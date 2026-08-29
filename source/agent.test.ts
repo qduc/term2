@@ -134,10 +134,16 @@ it('adds memory tools and summary-only context when memory is enabled, and neith
 
 it('registers prior-session browser tools only when the root composition explicitly supplies one', () => {
   const absent = getAgentDefinition({ settingsService: createMockSettingsService(), loggingService: mockLogger });
+  const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
+  const list = vi.spyOn(browser, 'list').mockReturnValue({
+    sessions: [{ firstUserMessage: 'HISTORICAL_TRANSCRIPT_SENTINEL' }],
+    omitted: 0,
+    unavailable: 0,
+  });
   const present = getAgentDefinition({
     settingsService: createMockSettingsService(),
     loggingService: mockLogger,
-    sessionBrowser: new SessionBrowser(() => ({ projectPath: '/project' })),
+    sessionBrowser: browser,
   });
   expect(absent.tools.map((tool) => tool.name)).not.toContain('session_list');
   expect(present.tools.map((tool) => tool.name)).toEqual(
@@ -145,6 +151,8 @@ it('registers prior-session browser tools only when the root composition explici
   );
   expect(present.instructions).toContain('Prior-session transcripts');
   expect(present.instructions).not.toContain('session transcript text');
+  expect(present.instructions).not.toContain('HISTORICAL_TRANSCRIPT_SENTINEL');
+  expect(list).not.toHaveBeenCalled();
 });
 
 it('includes prior-session safety guidance for an interactive orchestrator root', () => {

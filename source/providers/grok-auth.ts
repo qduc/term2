@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import envPaths from 'env-paths';
 import { runPkceLoopbackLogin } from './oauth-pkce.js';
-import type { PkceLoginConfig } from './oauth-pkce.js';
+import type { PkceLoginConfig, PkceLoginOptions } from './oauth-pkce.js';
 import { OAuthAccountStore } from './oauth-account-store.js';
 import type { AccountIdentity, OAuthAccount } from './oauth-account-store.js';
 import { getJwtClaims } from './jwt-claims.js';
@@ -343,18 +343,19 @@ export const GROK_PKCE_CONFIG: PkceLoginConfig = {
  * Runs the browser OAuth + PKCE flow and persists the resulting tokens into
  * term2's own store. Resolves only after the human finishes in the browser.
  */
-export async function loginToGrok(options?: {
-  fetchImpl?: typeof fetch;
-  authPath?: string;
-  openBrowser?: (url: string) => void;
-  onPrompt?: (url: string) => void;
-  signal?: AbortSignal;
-}): Promise<GrokTokens> {
+export async function loginToGrok(
+  options?: {
+    fetchImpl?: typeof fetch;
+    authPath?: string;
+  } & PkceLoginOptions,
+): Promise<GrokTokens> {
   const body = await runPkceLoopbackLogin(GROK_PKCE_CONFIG, {
     fetchImpl: options?.fetchImpl,
     openBrowser: options?.openBrowser,
     onPrompt: options?.onPrompt,
     signal: options?.signal,
+    pasteInput: options?.pasteInput,
+    onPasteRejected: options?.onPasteRejected,
   });
 
   const tokens = toTokens(body);

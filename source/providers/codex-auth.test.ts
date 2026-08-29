@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
+import { PassThrough } from 'node:stream';
 import {
   CODEX_REDIRECT_PORTS,
   CODEX_REDIRECT_URI,
@@ -98,6 +99,32 @@ describe('loginToCodex', () => {
 
     await expect(login).resolves.toMatchObject({ access_token: 'issued', refresh_token: 'r' });
     expect(fetchImpl.mock.calls[0][0]).toBe(CODEX_TOKEN_ENDPOINT);
+    expect(readStoredCodexTokens(file)).toMatchObject({ access_token: 'issued' });
+  });
+
+  it('completes login from a pasted loopback redirect URL', async () => {
+    const file = tmpFile('codex-auth.json');
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ access_token: 'issued', refresh_token: 'r' }));
+    const pasteInput = new PassThrough();
+    let authorizeUrl = '';
+    const login = loginToCodex({
+      authPath: file,
+      fetchImpl: fetchImpl as any,
+      openBrowser: () => {},
+      pasteInput,
+      onPrompt: (url) => {
+        authorizeUrl = url;
+      },
+    });
+
+    await vi.waitFor(() => expect(authorizeUrl).not.toBe(''));
+    const requested = new URL(authorizeUrl);
+    pasteInput.write(
+      `http://localhost:1455/auth/callback?code=pasted-code&state=${requested.searchParams.get('state')}\n`,
+    );
+
+    await expect(login).resolves.toMatchObject({ access_token: 'issued' });
+    expect(new URLSearchParams(fetchImpl.mock.calls[0][1].body).get('code')).toBe('pasted-code');
     expect(readStoredCodexTokens(file)).toMatchObject({ access_token: 'issued' });
   });
 

@@ -239,17 +239,28 @@ const cli = meow(
   },
 );
 
+function oauthLoginIo(providerLabel: string) {
+  return {
+    pasteInput: process.stdin.isTTY ? process.stdin : undefined,
+    onPasteRejected: (message: string) => {
+      console.error(message);
+    },
+    onPrompt: (url: string) => {
+      console.log(`Opening your browser to log in to ${providerLabel}.`);
+      console.log(`If it does not open, visit:\n${url}\n`);
+      console.log(
+        'If you are remote and the browser cannot reach this machine, copy the redirected localhost URL from the address bar, paste it here, and press Enter.',
+      );
+    },
+  };
+}
+
 // Login is a standalone errand: it must run before any session, settings, or
 // Ink setup so a fresh host can authenticate without a usable provider.
 if (cli.flags.grokLogin) {
   const { loginToGrok } = await import('./providers/grok-auth.js');
   try {
-    const tokens = await loginToGrok({
-      onPrompt: (url) => {
-        console.log('Opening your browser to log in to Grok.');
-        console.log(`If it does not open, visit:\n${url}\n`);
-      },
-    });
+    const tokens = await loginToGrok(oauthLoginIo('Grok'));
     console.log(`Logged in to Grok${tokens.email ? ` as ${tokens.email}` : ''}.`);
     process.exit(0);
   } catch (error: any) {
@@ -261,12 +272,7 @@ if (cli.flags.grokLogin) {
 if (cli.flags.codexLogin) {
   const { loginToCodex } = await import('./providers/codex-auth.js');
   try {
-    await loginToCodex({
-      onPrompt: (url) => {
-        console.log('Opening your browser to log in to Codex.');
-        console.log(`If it does not open, visit:\n${url}\n`);
-      },
-    });
+    await loginToCodex(oauthLoginIo('Codex'));
     console.log('Logged in to Codex.');
     process.exit(0);
   } catch (error: any) {

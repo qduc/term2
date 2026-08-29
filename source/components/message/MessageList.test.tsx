@@ -1196,3 +1196,32 @@ it.sequential('MessageList reports a partly-failed run without painting the whol
   const rawSummary = frame.split('\n').find((line) => line.includes('Ran 2 shell commands')) ?? '';
   expect(rawSummary.includes('\u001B[31m')).toBe(false);
 });
+
+it.sequential('MessageList folds finished subagent into concise group in concise mode', async () => {
+  const settingsService = createMockSettingsService({ 'ui.displayMode': 'concise' });
+  const { lastFrame } = await renderInAct(
+    <MessageList
+      settingsService={settingsService}
+      messages={[
+        { id: 'cmd-1', sender: 'command', status: 'completed', toolName: 'grep', toolArgs: { pattern: 'test' } },
+        {
+          id: 'sub-1',
+          sender: 'subagent',
+          status: 'completed',
+          agentId: 'sub-1',
+          role: 'explorer',
+          task: 'inspect files',
+          tools: [],
+          finalText: 'All good',
+        },
+        { id: 'bot-1', sender: 'bot', status: 'finalized', text: 'All done!' },
+      ]}
+    />,
+  );
+
+  const frame = lastFrame() ?? '';
+  const summaryLine = renderedLines(frame).find((line) => line.includes('delegated to')) ?? '';
+
+  expect(summaryLine).toContain('✓ Searched for 1 pattern, delegated to 1 subagent');
+  expect(summaryLine).not.toContain('$ run_subagent');
+});

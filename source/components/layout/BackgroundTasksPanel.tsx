@@ -9,6 +9,9 @@ import type {
   ForegroundTransferCandidate,
 } from '../../services/session/background-task-control.js';
 import { normalizeLiveTaskRows, type LiveTaskRow } from './live-task-rows.js';
+import { BACKGROUND_TASKS_PANEL_GRACE_MS } from './background-task-clock.js';
+
+export { BACKGROUND_TASKS_PANEL_GRACE_MS };
 import { terminalTextWidth, truncateTerminalText } from './terminal-text-budget.js';
 
 type Props = {
@@ -240,9 +243,6 @@ const formatLiveStatus = (task: PanelTask, now: number): string => {
   if (!isControlTask(task) || !task.activity) return `Running · ${formatBackgroundTaskElapsed(now - startedAt)}`;
   return `${formatPhase(task, now)} · ${formatLiveness(task)}`;
 };
-
-/** How long a settled task stays on the panel after it finishes. */
-export const BACKGROUND_TASKS_PANEL_GRACE_MS = 5_000;
 
 const BackgroundTasksPanel: FC<Props> = ({ tasks, now, columns: testColumns }) => {
   const { stdout } = useStdout();

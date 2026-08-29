@@ -18,6 +18,7 @@ import type { RewindTargetId } from '../services/conversation/conversation-store
 import { conversationUIReducer, createInitialUIState, getConversationUIFlags } from './conversation-ui-reducer.js';
 import type { BackgroundTask } from '../services/subagents/subagent-notification-store.js';
 import type { BackgroundTaskControlDetails } from '../services/session/background-task-control.js';
+import { needsBackgroundTaskClock } from '../components/layout/background-task-clock.js';
 import type {
   BackgroundSubagentApprovalSnapshot,
   BackgroundSubagentApprovalResolutionRequest,
@@ -215,27 +216,21 @@ export const useConversation = ({
     return () => conversationService.setBackgroundSubagentTaskObserver(null);
   }, [conversationService, refreshBackgroundSubagentTasks]);
 
+  const backgroundClockNeeded = needsBackgroundTaskClock({
+    snapshotTasks: backgroundSubagentTaskState.tasks,
+    detailsTasks: backgroundTaskDetailsState.tasks,
+    foregroundCount: foregroundTransferCandidates.length,
+    now: Math.max(backgroundSubagentTaskState.now, backgroundTaskDetailsState.now),
+  });
+
   useEffect(() => {
-    // Keep ticking while the details lane still has rows: the panel's per-row
-    // linger only expires on a tick, and terminal details outlive the store's
-    // own retention window.
-    if (
-      !isProcessing &&
-      backgroundSubagentTaskState.tasks.length === 0 &&
-      backgroundTaskDetailsState.tasks.length === 0 &&
-      foregroundTransferCandidates.length === 0
-    ) {
-      return;
-    }
+    // Tick only while live work or the panel linger still needs `now`.
+    // Retained terminal registry rows outlive that window on purpose (Ctrl+G);
+    // they must not keep a 1s Ink redraw after the agent is idle.
+    if (!backgroundClockNeeded) return;
     const interval = setInterval(refreshBackgroundSubagentTasks, 1_000);
     return () => clearInterval(interval);
-  }, [
-    isProcessing,
-    backgroundSubagentTaskState.tasks.length,
-    backgroundTaskDetailsState.tasks.length,
-    foregroundTransferCandidates.length,
-    refreshBackgroundSubagentTasks,
-  ]);
+  }, [backgroundClockNeeded, refreshBackgroundSubagentTasks]);
 
   useEffect(() => {
     if (typeof conversationService.backgroundSubagentApprovals?.subscribe !== 'function') return;

@@ -33,6 +33,7 @@ import { ProviderContinuity } from '../provider-continuity.js';
 import type { OpenAIRootFreshTurnSelectorParityObserver } from '../openai-root-selector-parity-observer.js';
 import type { OpenAIRootCheckpointLifecycleObserver } from '../openai-root-checkpoint-lifecycle-observer.js';
 import { TurnCoordinator, type TurnStartOptions } from './turn-coordinator.js';
+import { BackgroundCheckInScheduler } from './background-check-in-scheduler.js';
 import { SessionStreamProcessor } from './session-stream-processor.js';
 import { SessionManager } from './session-manager.js';
 import { SessionRuntimeController } from './session-runtime-controller.js';
@@ -508,6 +509,21 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   resolvedSubagentEventSinkHost?.setBackgroundSubagentApprovalPauseSink?.(backgroundSubagentApprovals.publish);
   resolvedBackgroundShellEventSinkHost?.setBackgroundShellEventSink?.(recordBackgroundEvent);
 
+  // Wakes the launching agent to check on a still-running background shell
+  // job or subagent while the session is otherwise idle. See
+  // docs/plans/background-work-control/agent-checkin.md. Settings are read
+  // fresh on every tick so a runtime change takes effect without restarting
+  // the timer.
+  const backgroundCheckInScheduler = new BackgroundCheckInScheduler({
+    getRunningTasks: () => notificationStore.getTaskSnapshot(),
+    emit: recordBackgroundEvent,
+    getSettings: () => ({
+      enabled: settingsService?.get('agent.backgroundCheckIn.enabled') ?? true,
+      intervalMs: settingsService?.get('agent.backgroundCheckIn.intervalMs') ?? 300_000,
+      maxCheckInsPerTask: settingsService?.get('agent.backgroundCheckIn.maxCheckInsPerTask') ?? 3,
+    }),
+  });
+
   const approvalFlow = new ApprovalFlowCoordinator({
     agentClient,
     approvalState,
@@ -763,6 +779,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   const dispose = (): void => {
     if (disposed) return;
     disposed = true;
+    backgroundCheckInScheduler.dispose();
     turnWorkflow.abortLiveRun();
     postExecutePending.close();
     generationGuard.invalidate();

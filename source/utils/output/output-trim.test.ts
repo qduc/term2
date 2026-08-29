@@ -49,6 +49,29 @@ it('trims few-line output with one very long line by character limit', () => {
   expect(result.includes('a'.repeat(5000))).toBe(false);
 });
 
+it('trims output with very few lines (e.g. 5 lines) exceeding character limit', () => {
+  const lines = [
+    'Already up to date',
+    'Done in 378ms',
+    `{"numTotalTests":7000,"results":[${'{"test":"fast"},'.repeat(5000)}{}]}`,
+    'Warning: something happened',
+  ];
+  const output = lines.join('\n');
+  const result = trimOutput(output, undefined, 5000);
+
+  expect(result.includes('characters trimmed')).toBe(true);
+  expect(result.length).toBeLessThan(output.length);
+  expect(result.length).toBeLessThan(6000);
+});
+
+it('handles very small maxCharacters without string repetition quirk', () => {
+  const output = 'abcdefghij';
+  const result = trimOutput(output, undefined, 2);
+
+  expect(result.includes('characters trimmed')).toBe(true);
+  expect(result.length).toBeLessThan(output.length + 100);
+});
+
 it('respects maxLines override parameter', () => {
   const lines = Array<string>();
   for (let i = 1; i <= 100; i++) {

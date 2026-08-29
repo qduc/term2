@@ -1341,41 +1341,42 @@ it.sequential('InputBox ignores focus sequences when in text mode', async () => 
 it.sequential('settings value completion shows current custom settings value in suggestions list', async () => {
   const originalColumns = process.stdout.columns;
   process.stdout.columns = 80;
+  try {
+    const settingsService = createMockSettingsService({
+      'agent.maxTurns': 35,
+    });
 
-  // Cleanup after test
-  process.stdout.columns = originalColumns;
+    const mockSettingsCommand: SlashCommand = {
+      name: '/settings',
+      description: 'Settings',
+      action: () => {},
+      completion: {
+        type: 'settings',
+        trigger: '/settings ',
+        resetTrigger: '/settings reset ',
+      },
+    };
 
-  const settingsService = createMockSettingsService({
-    'agent.maxTurns': 35,
-  });
+    const { lastFrame, stdin } = await renderAndFlush(
+      <InputProvider>
+        <InputBox
+          {...defaultProps}
+          settingsService={settingsService}
+          slashCommands={[...mockSlashCommands, mockSettingsCommand]}
+        />
+      </InputProvider>,
+    );
 
-  const mockSettingsCommand: SlashCommand = {
-    name: '/settings',
-    description: 'Settings',
-    action: () => {},
-    completion: {
-      type: 'settings',
-      trigger: '/settings ',
-      resetTrigger: '/settings reset ',
-    },
-  };
+    // Write trigger value to enter settings value completion mode
+    await writeInput(stdin, '/settings agent.maxTurns ');
+    const frame = await waitFor(lastFrame, (f) => f.includes('Current value'), { timeoutMs: 5000 });
+    const visibleFrame = toVisibleText(frame);
 
-  const { lastFrame, stdin } = await renderAndFlush(
-    <InputProvider>
-      <InputBox
-        {...defaultProps}
-        settingsService={settingsService}
-        slashCommands={[...mockSlashCommands, mockSettingsCommand]}
-      />
-    </InputProvider>,
-  );
-
-  // Write trigger value to enter settings value completion mode
-  await writeInput(stdin, '/settings agent.maxTurns ');
-  const frame = await waitFor(lastFrame, (f) => f.includes('Current value'), { timeoutMs: 5000 });
-  const visibleFrame = toVisibleText(frame);
-
-  expect(visibleFrame.includes('35 — Current value')).toBe(true);
+    expect(visibleFrame).toMatch(/▶\s+35/);
+    expect(visibleFrame).toContain('Current value');
+  } finally {
+    process.stdout.columns = originalColumns;
+  }
 });
 
 it.sequential('InputBox allows backspace and delete keys to modify input in provider wizard phases', async () => {

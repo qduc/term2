@@ -1,8 +1,6 @@
 // @ts-expect-error IS_REACT_ACT_ENVIRONMENT is not in globalThis types
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-// TEMPORARY verification probe for the "Stopped + processing.." bug report.
-// Reproduces: turn in flight -> stopProcessingWithNotice -> turn promise NOT yet
-// settled. Asserts the isProcessing flag and transcript at that instant.
+// Regression coverage for stopping a turn before its transport promise settles.
 import { it, expect } from 'vitest';
 import React, { act } from 'react';
 import { Text } from 'ink';
@@ -16,7 +14,7 @@ const loggingService = {
   error() {},
 } as any;
 
-it.sequential('PROBE: stop while turn promise unsettled — isProcessing flag and transcript', async () => {
+it.sequential('stopping an unsettled turn leaves the UI idle with a stopped notice', async () => {
   let resolveSend: (() => void) | undefined;
   const mockConversationService = {
     sessionId: 'session-id',
@@ -33,6 +31,7 @@ it.sequential('PROBE: stop while turn promise unsettled — isProcessing flag an
 
   let sendMsg: ((input: string) => Promise<void>) | undefined;
   let stopFn: (() => void) | undefined;
+  let latestTranscript: string | undefined;
 
   const Harness = () => {
     const { sendUserMessage, stopProcessing, isProcessing, messages } = useConversation({
@@ -43,34 +42,36 @@ it.sequential('PROBE: stop while turn promise unsettled — isProcessing flag an
     sendMsg = sendUserMessage;
     stopFn = stopProcessing;
     const transcript = messages.map((m) => ('text' in m ? m.text : m.sender)).join('|');
+    latestTranscript = `${isProcessing ? 'PROCESSING' : 'IDLE'}::${transcript}`;
     return <Text>{`${isProcessing ? 'PROCESSING' : 'IDLE'}::${transcript}`}</Text>;
   };
 
   const { lastFrame } = await renderInAct(<Harness />);
   expect(lastFrame!()).toBe('IDLE::');
 
+  let sendSettled = false;
   let pendingSend: Promise<void> | undefined;
   await act(async () => {
-    pendingSend = sendMsg!('hello');
+    pendingSend = sendMsg!('hello').then(() => {
+      sendSettled = true;
+    });
     await Promise.resolve();
   });
-  // Turn started, spinner should be up.
-  console.log('after send:', lastFrame!());
   expect(lastFrame!()).toBe('PROCESSING::hello');
 
-  // User presses double-Escape: stopProcessingWithNotice runs, but the turn
-  // promise is still parked (unresolved) — this is the report's exact window.
+  // Stop while the transport promise is still parked. The UI must settle
+  // immediately rather than waiting for the transport to finish.
   await act(async () => {
     stopFn?.();
   });
-  console.log('immediately after stop (turn promise unsettled):', lastFrame!());
+  expect(lastFrame!()).toBe('IDLE::hello|Stopped');
 
-  // Now unwind the aborted turn like the real transport would.
+  // Unwind the transport after the UI has already settled. This must not undo
+  // the stopped state or leave the promise hanging.
   await act(async () => {
     resolveSend?.();
     await pendingSend;
   });
-  console.log('after turn promise settles:', lastFrame!());
-
-  expect(lastFrame!()).toBe('IDLE::hello|Stopped');
+  expect(sendSettled).toBe(true);
+  expect(latestTranscript).toBe('IDLE::hello|Stopped');
 });

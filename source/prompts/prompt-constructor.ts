@@ -21,6 +21,7 @@ export type PromptConstructorOptions = {
   sandboxEnabled?: boolean;
   memoryEnabled?: boolean;
   memoryGuidance?: string;
+  sessionBrowserEnabled?: boolean;
   executionContext?: ExecutionContext;
 };
 
@@ -45,6 +46,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     sandboxEnabled = true,
     memoryEnabled = false,
     memoryGuidance = '',
+    sessionBrowserEnabled = false,
     executionContext,
   } = options;
 
@@ -106,6 +108,10 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
 
   if (memoryEnabled && isAgentMode) {
     fragmentFiles.push('memory.md');
+  }
+
+  if (sessionBrowserEnabled) {
+    fragmentFiles.push('session-browser.md');
   }
 
   if (memoryGuidance) {

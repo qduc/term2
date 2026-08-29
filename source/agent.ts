@@ -61,6 +61,8 @@ import type { WorkflowLimits } from './services/agent-runtime/workflow/workflow-
 import { getProjectTreeForPrompt } from './utils/project-tree.js';
 import { MemoryCapabilityBuilder } from './services/memory/memory-capabilities.js';
 import type { ShellChildRegistry } from './utils/shell/shell-child-registry.js';
+import { createSessionBrowserToolDefinitions } from './tools/session-browser/session-browser-tools.js';
+import type { SessionBrowser } from './services/conversation/session-browser.js';
 
 export { getProjectTreeForPrompt } from './utils/project-tree.js';
 
@@ -223,6 +225,8 @@ export const getAgentDefinition = (
     shellChildRegistry?: ShellChildRegistry;
     /** False for one-shot/non-interactive callers until their lifecycle is supported. */
     allowBackgroundShell?: boolean;
+    /** Explicit interactive-root-only capability; never inferred from memory access. */
+    sessionBrowser?: SessionBrowser;
   },
   model?: string,
 ): AgentDefinition => {
@@ -246,6 +250,7 @@ export const getAgentDefinition = (
     backgroundShellOutput,
     shellChildRegistry,
     allowBackgroundShell = true,
+    sessionBrowser,
   } = deps;
   const defaultModel = settingsService.get('agent.model');
   const resolvedModel = model?.trim() || defaultModel;
@@ -292,6 +297,7 @@ export const getAgentDefinition = (
     sandboxEnabled,
     memoryEnabled: memoryCapability.access !== 'none',
     memoryGuidance: memoryCapability.guidance,
+    sessionBrowserEnabled: Boolean(sessionBrowser),
     executionContext,
   });
   let prompt = resolvePrompt(path.join(BASE_PROMPT_PATH, promptSpec.basePromptFile));
@@ -388,6 +394,7 @@ export const getAgentDefinition = (
       );
     }
     tools.push(...memoryCapability.tools);
+    if (sessionBrowser) tools.push(...createSessionBrowserToolDefinitions(sessionBrowser));
     if (getAskUserAnswer) {
       const askUserTool = createAskUserToolDefinition(getAskUserAnswer);
       if (askUserTool.name !== TOOL_NAME_ASK_USER) {
@@ -452,6 +459,7 @@ export const getAgentDefinition = (
   }
 
   tools.push(...memoryCapability.tools);
+  if (sessionBrowser) tools.push(...createSessionBrowserToolDefinitions(sessionBrowser));
 
   if (skillsService && skillsService.getAvailableSkillsForModel().length > 0) {
     tools.push(createActivateSkillToolDefinition(skillsService));

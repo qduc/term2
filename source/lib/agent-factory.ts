@@ -29,6 +29,7 @@ import type { BackgroundShellOutputBundle } from '../services/shell/background-s
 import type { BackgroundShellExecutionResult } from '../tools/system/shell.js';
 import { getCatalogModel } from '../providers/model-catalog/catalog.js';
 import type { ShellChildRegistry } from '../utils/shell/shell-child-registry.js';
+import type { SessionBrowser } from '../services/conversation/session-browser.js';
 
 export interface AgentFactoryDeps {
   settings: ISettingsService;
@@ -60,6 +61,8 @@ export interface AgentFactoryDeps {
   shellChildRegistry?: ShellChildRegistry;
   /** False for one-shot/non-interactive callers until their lifecycle is supported. */
   allowBackgroundShell?: boolean;
+  /** Explicit interactive-root-only browser capability. */
+  sessionBrowser?: SessionBrowser;
 }
 
 export interface AgentBuildResult {
@@ -180,8 +183,10 @@ export function buildAgentTools({
                 executeAgain: executeOriginal,
               })
             : result;
-          const trimmedResult = trimToolOutput(finalResult, undefined, maxOutputLengthValue ?? undefined);
-          return injectRunBudgetWarning(trimmedResult, _context);
+          const trimmedResult = definition.preserveSerializedOutput
+            ? String(finalResult ?? '')
+            : trimToolOutput(finalResult, undefined, maxOutputLengthValue ?? undefined);
+          return definition.preserveSerializedOutput ? trimmedResult : injectRunBudgetWarning(trimmedResult, _context);
         },
       };
       // Validate arguments against the tool's own schema before execute, the
@@ -389,6 +394,7 @@ export function buildAgent(
       backgroundShellOutput: deps.backgroundShellOutput,
       shellChildRegistry: deps.shellChildRegistry,
       allowBackgroundShell: deps.allowBackgroundShell,
+      sessionBrowser: deps.sessionBrowser,
     },
     resolvedModel,
   );

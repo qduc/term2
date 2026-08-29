@@ -408,6 +408,8 @@ export class NestedSubagentRunner {
         let stream = loop.startStream(agent, task, {
           context: runContext,
           signal,
+          providerId,
+          supportsConversationChaining: provider.capabilities?.supportsConversationChaining === true,
           // The nested run's ledger was seeded with the parent's decisions by
           // runAsTool; use it so F5 holds and nested decisions land on it.
           approvals: toolContext?.approvals,

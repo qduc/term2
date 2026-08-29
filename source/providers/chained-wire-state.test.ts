@@ -132,24 +132,29 @@ it('returns full request when there is no stored state at all', () => {
   expect(prepared.requestData.input).toEqual(fullInput);
 });
 
-it('returns full request when no previous_response_id is provided', () => {
-  const protocol = makeProtocol();
+it('adopts the stored response id when the caller omits previous_response_id', () => {
+  const protocol = makeProtocol({
+    getPrefix: (input) => input.slice(0, 0),
+  });
   const state = new ChainedWireState(protocol);
   const key = 'session-1';
-  const fullInput = [{ role: 'user', content: 'hello' }];
+  const openingUser = { role: 'user', content: 'hello' };
+  const assistantResponse = { type: 'message', role: 'assistant', content: 'hi' };
+  const nextUser = { role: 'user', content: 'continue' };
 
-  // Establish stored state.
-  state.prepare(key, 'token-1', { model: 'gpt-5.6-luna', input: fullInput });
-  state.recordResponse(key, 'token-1', 'resp-1', []);
+  state.prepare(key, 'token-1', { model: 'gpt-5.6-luna', input: [openingUser] });
+  state.recordResponse(key, 'token-1', 'resp-1', [assistantResponse]);
 
-  // No previous_response_id → should not attempt delta.
+  // Nested Luna explorers never pass previous_response_id. The stored chain is
+  // still the continuation the server holds — attach it and send only the delta.
   const prepared = state.prepare(key, 'token-2', {
     model: 'gpt-5.6-luna',
-    input: fullInput,
+    input: [openingUser, assistantResponse, nextUser],
   });
 
-  expect(prepared.usedDelta).toBe(false);
-  expect(prepared.requestData.input).toEqual(fullInput);
+  expect(prepared.usedDelta).toBe(true);
+  expect(prepared.requestData.previous_response_id).toBe('resp-1');
+  expect(prepared.requestData.input).toEqual([nextUser]);
 });
 
 // ---------------------------------------------------------------------------

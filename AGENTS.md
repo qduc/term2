@@ -183,9 +183,10 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   unadopted work may appear on the compact strip only with an explicit
   foreground tag.
 
-- `docs/plans/background-work-control/liveness-ui.md` — **implemented and
-  verified with adversarial-review corrections** (2026-08-13; awaiting branch
-  re-review before merge). It separates lifecycle phase/reason, locally
+- `docs/plans/background-work-control/liveness-ui.md` — **implemented and merged**
+  (`13307919`, with the adversarial-review findings fixed in `93b9b536`). The shared
+  protocol lives at `source/services/background-task-activity.ts`;
+  `services/session/background-task-liveness.ts` is a deprecated re-export. It separates lifecycle phase/reason, locally
   observed facts, and recent/quiet liveness; captures truthful launch-time
   model/context metadata; and gives the panel and manager explicit, live
   physical-width information budgets plus bounded presentation labels without
@@ -203,8 +204,8 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   *lane* tag, not the provider id; converters drop foreign items rather than
   throwing, because throwing bricked every conversation that switched providers.
 
-- `docs/plans/tool-output-and-effect-safety.md` — **Milestones 1–2 implemented**
-  (branch `tool-output-effect-safety`). Read before touching `read_file` result
+- `docs/plans/tool-output-and-effect-safety.md` — **Milestones 1–2 implemented and
+  merged** (`a41186d6`, from branch `tool-output-effect-safety`). Read before touching `read_file` result
   size, `utils/shell/shell-output.ts` / `utils/output/bound-tool-result.ts`,
   `ToolExecutionStatus`, stream-failure settlement in
   `services/retry/recovery-executor.ts`, or tool dispatch marking: tool results

@@ -3,13 +3,13 @@ import {
   isPreviousResponseNotFoundError,
   isRecoverableIncompleteStreamClose,
   isWebSocketConnectionLimitReachedError,
-} from '../retry/retry-error-classification.js';
-import { classifyUpstreamRetryableError } from '../retry/upstream-retry-policy.js';
-import { AmbiguousModelOutcomeError, ConversationStateNoProgressError } from '../retry/retry-errors.js';
+} from './retry-error-classification.js';
+import { classifyUpstreamRetryableError } from './upstream-retry-policy.js';
+import { AmbiguousModelOutcomeError, ConversationStateNoProgressError } from './retry-errors.js';
 import { findReauthenticationRequiredError } from '../../providers/common/provider-errors.js';
 import { findWebSocketClosedEarly } from '../../providers/websocket-close-evidence.js';
 import { isCancellationError } from '../../lib/harness-invariant-error.js';
-import { GenerationGuardError } from './generation-guard.js';
+import { GenerationGuardError } from '../agent-runtime/generation-guard.js';
 
 const TRANSIENT_BASE_DELAY_MS = 500;
 const TRANSIENT_MAX_DELAY_MS = 30_000;
@@ -25,7 +25,7 @@ const RETRYABLE_WEBSOCKET_CLOSE_CODES = new Set([
 export type InLoopRetryDecision =
   | {
       readonly retryable: true;
-      readonly kind: 'transient' | 'chain_recovery';
+      readonly kind: 'chain_recovery';
       readonly delayMs: number;
     }
   | {
@@ -78,54 +78,39 @@ export function classifyInLoopModelRetry(
 
   const upstream = classifyUpstreamRetryableError(error);
   const upstreamDelay = upstream.retryAfterMs;
+  const recoverChain = (): InLoopRetryDecision => ({
+    retryable: true,
+    kind: 'chain_recovery',
+    delayMs: computeInLoopBackoffDelayMs(attempt + 1, random, upstreamDelay),
+  });
 
   const wsClosed = findWebSocketClosedEarly(error);
   if (wsClosed) {
     const code = wsClosed.closeCode !== undefined ? String(wsClosed.closeCode) : undefined;
     const isRetryable = code ? RETRYABLE_WEBSOCKET_CLOSE_CODES.has(code) : true;
     if (isRetryable) {
-      return {
-        retryable: true,
-        kind: 'chain_recovery',
-        delayMs: computeInLoopBackoffDelayMs(attempt + 1, random, upstreamDelay),
-      };
+      return recoverChain();
     }
     return { retryable: false, reason: 'websocket_close_non_retryable' };
   }
 
   if (isPreviousResponseNotFoundError(error) || isMissingServerToolOutputError(error)) {
-    return {
-      retryable: true,
-      kind: 'chain_recovery',
-      delayMs: computeInLoopBackoffDelayMs(attempt + 1, random, upstreamDelay),
-    };
+    return recoverChain();
   }
 
   if (error instanceof AmbiguousModelOutcomeError) {
     if (isRecoverableIncompleteStreamClose(error)) {
-      return {
-        retryable: true,
-        kind: 'chain_recovery',
-        delayMs: computeInLoopBackoffDelayMs(attempt + 1, random, upstreamDelay),
-      };
+      return recoverChain();
     }
     return { retryable: false, reason: 'ambiguous_outcome' };
   }
 
   if (isWebSocketConnectionLimitReachedError(error)) {
-    return {
-      retryable: true,
-      kind: 'chain_recovery',
-      delayMs: computeInLoopBackoffDelayMs(attempt + 1, random, upstreamDelay),
-    };
+    return recoverChain();
   }
 
   if (isRecoverableIncompleteStreamClose(error)) {
-    return {
-      retryable: true,
-      kind: 'chain_recovery',
-      delayMs: computeInLoopBackoffDelayMs(attempt + 1, random, upstreamDelay),
-    };
+    return recoverChain();
   }
 
   const errorString = String((error as { message?: unknown })?.message ?? error).toLowerCase();
@@ -138,11 +123,7 @@ export function classifyInLoopModelRetry(
     errorString.includes('etimedout');
 
   if (isConnectionDrop) {
-    return {
-      retryable: true,
-      kind: 'chain_recovery',
-      delayMs: computeInLoopBackoffDelayMs(attempt + 1, random, upstreamDelay),
-    };
+    return recoverChain();
   }
 
   return { retryable: false, reason: 'unrecoverable' };

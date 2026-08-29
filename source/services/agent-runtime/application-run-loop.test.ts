@@ -2630,6 +2630,7 @@ describe('ApplicationRunLoop in-loop request retry', () => {
     const loop = new ApplicationRunLoop({
       resolveModel: () => model,
       logDiagnostic: (msg, meta) => diagnostics.push({ msg, meta }),
+      waitBeforeModelRetry: async () => undefined,
     });
 
     const stream = loop.startStream(
@@ -2666,7 +2667,10 @@ describe('ApplicationRunLoop in-loop request retry', () => {
       },
     };
 
-    const loop = new ApplicationRunLoop({ resolveModel: () => model });
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => model,
+      waitBeforeModelRetry: async () => undefined,
+    });
     const stream = loop.startStream(
       {
         ...agent,
@@ -2697,7 +2701,10 @@ describe('ApplicationRunLoop in-loop request retry', () => {
       },
     };
 
-    const loop = new ApplicationRunLoop({ resolveModel: () => model });
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => model,
+      waitBeforeModelRetry: async () => undefined,
+    });
     const stream = loop.startStream(
       {
         ...agent,
@@ -2734,5 +2741,64 @@ describe('ApplicationRunLoop in-loop request retry', () => {
 
     await expect(stream.completed).rejects.toThrow();
     expect(attempts).toBe(1);
+  });
+
+  it('rolls back native reasoning committed by a failed model attempt', async () => {
+    let attempts = 0;
+    const model: StreamedModelTurn = {
+      async *stream() {
+        attempts++;
+        if (attempts === 1) {
+          yield {
+            type: 'reasoning_delta',
+            id: 'reasoning-failed-attempt',
+            text: 'provisional reasoning',
+            providerMetadata: { openai: { encrypted_content: 'provisional-ciphertext' } },
+          };
+          yield { type: 'tool_call', id: 'provisional-call', name: 'probe', arguments: '{}' };
+          throw new WebSocketClosedEarlyError({ code: 1006 });
+        }
+        yield {
+          type: 'completion',
+          responseId: 'response-after-retry',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'Recovered.' }] }],
+        };
+      },
+    };
+
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => model,
+      waitBeforeModelRetry: async () => undefined,
+    });
+    const stream = loop.startStream(
+      {
+        ...agent,
+        tools: [
+          {
+            name: 'probe',
+            parameters: { type: 'object' },
+            needsApproval: async () => false,
+            execute: async () => 'unused',
+          },
+        ] as any,
+        modelSettings: { retry: { maxRetries: 1 } },
+      },
+      'prompt',
+    );
+    const eventsPromise = collect(stream);
+
+    await stream.completed;
+    const events = await eventsPromise;
+
+    expect(stream.history).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'reasoning', id: 'reasoning-failed-attempt' })]),
+    );
+    expect(events).toContainEqual({
+      type: 'model_attempt_rollback',
+      textCharacters: 0,
+      reasoningCharacters: 'provisional reasoning'.length,
+      textDeltas: 0,
+      reasoningDeltas: 1,
+    });
   });
 });

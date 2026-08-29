@@ -218,11 +218,12 @@ const writeInput = async (stdin: { write: (input: string) => void }, input: stri
   });
 };
 
-it.sequential('InputBox shows the input prompt', async () => {
+it.sequential('InputBox shows the input prompt and idle shortcut hints', async () => {
   const { lastFrame } = await renderAndFlush(<TestInputBox {...defaultProps} />);
   const output = lastFrame();
   // Should show the prompt character
   expect(output!.includes('❯')).toBe(true);
+  expect(output!.includes('Ctrl+O model · Ctrl+T effort')).toBe(true);
 });
 
 it.sequential('up enters the queued selector at the bottom item and edit submits by id', async () => {

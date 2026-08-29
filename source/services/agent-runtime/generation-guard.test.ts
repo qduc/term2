@@ -39,6 +39,15 @@ it('does not reject a completion whose reasoning exceeds the cap', () => {
   expect(guard.reasoningCharacters).toBe(5);
 });
 
+it('allows periodic text beyond the former repetition threshold', () => {
+  const text = 'fixed-width periodic model data\n'.repeat(200);
+  const guard = new GenerationGuard();
+
+  expect(text.length).toBeGreaterThan(4_096);
+  expect(() => guard.observeText(text)).not.toThrow();
+  expect(guard.textCharacters).toBe(text.length);
+});
+
 it('still aborts when visible text exceeds its cap', () => {
   const guard = new GenerationGuard({ maxTextCharacters: 5 });
 
@@ -47,5 +56,17 @@ it('still aborts when visible text exceeds its cap', () => {
     guard.observeText('123456');
   } catch (error) {
     expect(error).toMatchObject({ code: 'text_characters', unsafeToReplay: true });
+  }
+});
+
+it('keeps the default 100,000-character aggregate output containment settlement', () => {
+  const guard = new GenerationGuard();
+
+  guard.observeText('x'.repeat(100_000));
+  expect(() => guard.observeToolArgumentProgress(1)).toThrow(GenerationGuardError);
+  try {
+    guard.observeToolArgumentProgress(1);
+  } catch (error) {
+    expect(error).toMatchObject({ code: 'output_characters', unsafeToReplay: true });
   }
 });

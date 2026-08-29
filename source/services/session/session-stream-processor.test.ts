@@ -453,11 +453,13 @@ it('SessionStreamProcessor.process() streams events and updates toolTracker', as
   expect(loggedEvents[0].output).toBe('file1.txt');
 });
 
-it('SessionStreamProcessor.process() aborts a stream that enters a repeating text pattern', async () => {
+it('SessionStreamProcessor.process() streams periodic text beyond both former repetition thresholds', async () => {
   const conversationStore = new ConversationStore();
   const toolTracker = new SessionToolTracker(conversationStore);
   const generationGuard = new GenerationGuard();
   let abortCount = 0;
+  const chunk = 'fixed-width periodic model data\n';
+  const text = chunk.repeat(200);
   const processor = new SessionStreamProcessor({
     logger,
     sessionId: 'test-session',
@@ -469,25 +471,25 @@ it('SessionStreamProcessor.process() aborts a stream that enters a repeating tex
     journal: makeJournal(),
     abortStream: () => abortCount++,
   });
-  const stream = makeStream([
-    {
-      type: 'text_delta',
-      text: 'abc '.repeat(60),
-    },
-  ]);
+  const stream = makeStream(Array.from({ length: 200 }, () => ({ type: 'text_delta' as const, text: chunk })));
 
+  const events: ConversationEvent[] = [];
   const consume = async () => {
-    for await (const _ of processor.process(stream, {
+    for await (const event of processor.process(stream, {
       gen: generationGuard.capture(),
       source: 'startStream',
       preserveExistingToolArgs: false,
     })) {
-      // Consume the stream.
+      events.push(event);
     }
   };
 
-  await expect(consume()).rejects.toMatchObject({ code: 'repetitive_model_output' });
-  expect(abortCount).toBe(1);
+  expect(text.length).toBeGreaterThan(4_096);
+  await expect(consume()).resolves.toBeUndefined();
+  expect(abortCount).toBe(0);
+  expect(events).toHaveLength(200);
+  expect(events.map((event) => (event.type === 'text_delta' ? event.delta : '')).join('')).toBe(text);
+  expect(events.at(-1)).toEqual({ type: 'text_delta', delta: chunk, fullText: text });
 });
 
 it('SessionStreamProcessor.process() preserves reasoning before recovered tool call history', async () => {

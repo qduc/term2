@@ -37,12 +37,3 @@ export class RepetitionDetector {
     return false;
   }
 }
-
-export class RepetitiveModelOutputError extends Error {
-  readonly code = 'repetitive_model_output';
-
-  constructor() {
-    super('Model output was stopped because it entered a repeating pattern.');
-    this.name = 'RepetitiveModelOutputError';
-  }
-}

@@ -1,5 +1,7 @@
 # Token-safe persistent-memory retrieval and local session browser
 
+> **Status: implemented and merged in `6d36e624`.**
+>
 > ## Resume here
 >
 > This document is the normative contract and implementation record for bounded

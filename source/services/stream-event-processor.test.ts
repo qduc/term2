@@ -973,3 +973,18 @@ it('surfaces application-owned local compaction lifecycle with its strategy', as
     },
   ]);
 });
+
+it('yields tool_dispatched ConversationEvent when tool_call_dispatched ApplicationRunEvent is processed', async () => {
+  const acc = createStreamAccumulator();
+  const stream = makeStream([{ type: 'tool_call_dispatched', callId: 'call-123', toolName: 'shell' }]);
+  const emitted: any[] = [];
+  for await (const event of processStreamEvents(stream, acc, baseOpts(), baseDeps())) emitted.push(event);
+
+  expect(emitted).toEqual([
+    {
+      type: 'tool_dispatched',
+      toolCallId: 'call-123',
+      toolName: 'shell',
+    },
+  ]);
+});

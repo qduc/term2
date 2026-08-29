@@ -37,6 +37,8 @@ export type ApplicationRunEvent =
   | { readonly type: 'cost_update'; readonly record: ModelRequestCost }
   /** Staged budget/stall evidence, kept out of provider history. */
   /** Named `evidence`, not `event`: an `event.event` payload reads as a retired SDK envelope. */
-  | { readonly type: 'run_budget'; readonly evidence: RunBudgetEvent };
+  | { readonly type: 'run_budget'; readonly evidence: RunBudgetEvent }
+  /** Emitted when a planned tool call is dispatched for execution. */
+  | { readonly type: 'tool_call_dispatched'; readonly callId: string; readonly toolName: string };
 
 export type ApplicationRunStream = AsyncIterable<ApplicationRunEvent>;

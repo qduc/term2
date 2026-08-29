@@ -1613,7 +1613,7 @@ it('CommandMessage renders running command with ◐ when isSubagent is true', as
   expect(lines[0]!.includes('◐')).toBe(true);
 });
 
-it('CommandMessage renders pending command with ◐ when isSubagent is true', async () => {
+it('CommandMessage renders pending command with ○ when isSubagent is true', async () => {
   const props = {
     command: 'shell ls -la',
     toolName: 'shell',
@@ -1627,10 +1627,29 @@ it('CommandMessage renders pending command with ◐ when isSubagent is true', as
 
   const lines = output.trim().split('\n');
   expect(lines.length, `Expected exactly 1 line, got: ${output}`).toBe(1);
-  // `status: 'pending'` alone does not set the `awaitingDecision` prop, so it
-  // still renders as 'running', not 'pending' — that distinction is driven by
-  // awaitingDecision, not by the raw status string.
-  expect(lines[0]!.includes('◐')).toBe(true);
+  expect(lines[0]!.includes('○')).toBe(true);
+});
+
+it('CommandMessage renders pending command with (queued) label and ○ glyph in standard mode', async () => {
+  vi.useFakeTimers();
+  try {
+    const props = {
+      command: 'read_file "src/main.ts"',
+      toolName: 'read_file',
+      status: 'pending' as const,
+    };
+
+    const { lastFrame, unmount } = await renderInAct(<CommandMessage {...props} />);
+    await advanceTimersInAct(1_000);
+    const output = stripAnsi(lastFrame() ?? '');
+
+    expect(output.includes('○')).toBe(true);
+    expect(output.includes('(queued)')).toBe(true);
+    expect(output.includes('0s')).toBe(false);
+    unmount();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it('CommandMessage renders failed status without success/failureReason as ✗ when isSubagent is true', async () => {

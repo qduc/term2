@@ -1387,6 +1387,13 @@ export class ApplicationRunLoop {
         maxParallelToolCalls,
         dispatchOrder: group.map((entry) => entry.event.id),
       });
+      for (const entry of group) {
+        outputPush(stream, queue, {
+          type: 'tool_call_dispatched',
+          callId: entry.event.id,
+          toolName: entry.event.name,
+        });
+      }
       if (group.length > 1) {
         const results = await Promise.allSettled(
           group.map((entry) => this.#invokePlannedTool(entry, toolContext, state)),

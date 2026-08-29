@@ -153,6 +153,14 @@ export async function* processStreamEvents(
       };
       continue;
     }
+    if (event.type === 'tool_call_dispatched') {
+      yield {
+        type: 'tool_dispatched',
+        toolCallId: event.callId,
+        toolName: event.toolName,
+      };
+      continue;
+    }
 
     const item = event.item;
     captureToolCallArguments(item, opts.toolCallArgumentsById);

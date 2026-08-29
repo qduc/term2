@@ -118,11 +118,14 @@ const CommandMessage: FC<Props> = ({
   awaitingDecision = false,
 }) => {
   const { isVisible, isRunning } = useCommandVisibility(status);
-  const isWaiting = isRunning && awaitingDecision;
+  const isWaiting = awaitingDecision;
+  const isQueued = status === 'pending' && !awaitingDecision;
   const isExecuting = isRunning && !awaitingDecision;
   const runningElapsedSeconds = useRunningElapsedSeconds(isExecuting);
   const runningElapsedLabel = isWaiting ? (
     <Text color={COLOR_TEXT_SUBTLE}> (waiting)</Text>
+  ) : isQueued ? (
+    <Text color={COLOR_TEXT_SUBTLE}> (queued)</Text>
   ) : isExecuting ? (
     <Text color={COLOR_WARNING}> ({runningElapsedSeconds}s)</Text>
   ) : null;
@@ -376,7 +379,13 @@ const CommandMessage: FC<Props> = ({
     // outcome from a normal failed run — so it is checked first and maps to the
     // same 'failed' glyph/color as success === false.
     const statusKind: ToolStatusKind =
-      isApprovalRejection || success === false ? 'failed' : isWaiting ? 'pending' : isRunning ? 'running' : 'completed';
+      isApprovalRejection || success === false
+        ? 'failed'
+        : isWaiting || isQueued
+        ? 'pending'
+        : isRunning
+        ? 'running'
+        : 'completed';
     const headerColor = TOOL_STATUS_COLOR[statusKind];
 
     return (
@@ -418,9 +427,9 @@ const CommandMessage: FC<Props> = ({
   const matchCount = useMemo(() => {
     if (displayMode !== 'concise') return 0;
     if (!isSearchLikeTool(toolName, command)) return 0;
-    if (isRunning || isApprovalRejection) return 0;
+    if (isRunning || isQueued || isApprovalRejection) return 0;
     return getMatchCount(toolName, command, output);
-  }, [displayMode, toolName, command, isRunning, isApprovalRejection, output]);
+  }, [displayMode, toolName, command, isRunning, isQueued, isApprovalRejection, output]);
 
   const matchCountElement =
     matchCount > 0 ? (
@@ -447,7 +456,7 @@ const CommandMessage: FC<Props> = ({
         Boolean(failureReason);
       const subagentStatusKind: ToolStatusKind = isFailed
         ? 'failed'
-        : isWaiting
+        : isWaiting || isQueued
         ? 'pending'
         : isRunning
         ? 'running'
@@ -458,7 +467,7 @@ const CommandMessage: FC<Props> = ({
           <Text wrap="truncate" color={COLOR_TEXT_SUBTLE}>
             <Text color={TOOL_STATUS_COLOR[subagentStatusKind]}>{TOOL_STATUS_GLYPH[subagentStatusKind]}</Text>{' '}
             {actionText}
-            {isRunning && runningElapsedLabel}
+            {runningElapsedLabel}
           </Text>
         </Box>
       );
@@ -479,12 +488,12 @@ const CommandMessage: FC<Props> = ({
       );
     }
 
-    if (isRunning) {
-      const runningStatusKind: ToolStatusKind = isWaiting ? 'pending' : 'running';
+    if (isRunning || isQueued || isWaiting) {
+      const inFlightStatusKind: ToolStatusKind = isWaiting || isQueued ? 'pending' : 'running';
       return (
         <Box>
-          <Text color={TOOL_STATUS_COLOR[runningStatusKind]}>
-            <Text bold>{TOOL_STATUS_GLYPH[runningStatusKind]}</Text> {displayAction}
+          <Text color={TOOL_STATUS_COLOR[inFlightStatusKind]}>
+            <Text bold>{TOOL_STATUS_GLYPH[inFlightStatusKind]}</Text> {displayAction}
             {runningElapsedLabel}
             {changeStatsElement}
           </Text>
@@ -569,7 +578,7 @@ const CommandMessage: FC<Props> = ({
       </Box>
     );
   }
-  const outputText = output?.trim() ? output : isRunning ? '(running...)' : '(no output)';
+  const outputText = output?.trim() ? output : isRunning ? '(running...)' : isQueued ? '(queued)' : '(no output)';
   const displayed =
     outputText && outputText !== '(no output)'
       ? (() => {
@@ -658,7 +667,7 @@ const CommandMessage: FC<Props> = ({
   }
 
   // Standard mode custom tool renderers
-  if (displayMode === 'standard' && success !== false && !failureReason && !isRunning) {
+  if (displayMode === 'standard' && success !== false && !failureReason && !isRunning && !isQueued && !isWaiting) {
     if (toolName === 'read_file' || toolName === 'view_file') {
       const result = ReadFileRenderer({ output, renderStandardHeader });
       if (result) return result;

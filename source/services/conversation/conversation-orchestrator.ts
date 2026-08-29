@@ -427,7 +427,7 @@ export class ConversationOrchestrator {
       this.config.conversationService.interruptFromUser();
       this.config.messages.setMessages((messages) =>
         messages.map((message) =>
-          message.sender === 'command' && message.status === 'running'
+          message.sender === 'command' && (message.status === 'running' || message.status === 'pending')
             ? { ...message, status: 'aborted' as const }
             : message,
         ),
@@ -933,12 +933,15 @@ export class ConversationOrchestrator {
 
     const stranded = this.config.messages
       .getMessages()
-      .filter((message): message is CommandMessage => isCommandMessage(message) && message.status === 'running');
+      .filter(
+        (message): message is CommandMessage =>
+          isCommandMessage(message) && (message.status === 'running' || message.status === 'pending'),
+      );
     if (stranded.length === 0) return;
 
     this.config.messages.setMessages((messages) =>
       messages.map((message) =>
-        message.sender === 'command' && message.status === 'running'
+        message.sender === 'command' && (message.status === 'running' || message.status === 'pending')
           ? { ...message, status: 'aborted' as const }
           : message,
       ),

@@ -12,6 +12,7 @@ export type ConversationEvent =
   | TextDeltaEvent
   | ReasoningDeltaEvent
   | ToolStartedEvent
+  | ToolDispatchedEvent
   | ToolCallStreamingDeltaEvent
   | CommandMessageEvent
   | ApprovalRequiredEvent
@@ -90,13 +91,23 @@ export interface ReasoningDeltaEvent {
 
 /**
  * Emitted when a tool is called but hasn't completed yet.
- * Allows UI to show immediate feedback that a tool is running.
+ * Allows UI to register that a tool was called.
  */
 export interface ToolStartedEvent {
   type: 'tool_started';
   toolCallId: string;
   toolName: string;
   arguments: unknown;
+}
+
+/**
+ * Emitted when a planned tool call is dispatched to execute.
+ * Allows UI to transition the tool to the running state and begin timing.
+ */
+export interface ToolDispatchedEvent {
+  type: 'tool_dispatched';
+  toolCallId: string;
+  toolName: string;
 }
 
 /**

@@ -220,6 +220,9 @@ export async function runNonInteractive(
     ) {
       return 'Error: Background shell execution is unavailable in non-interactive mode.';
     }
+    if (name === 'run_subagent_async') {
+      return 'Error: Asynchronous subagent execution is unavailable in non-interactive mode. Use synchronous run_subagent instead.';
+    }
     return null;
   });
 

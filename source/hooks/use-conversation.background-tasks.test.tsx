@@ -195,3 +195,52 @@ it.sequential('keeps ticking now while a background task is still live', async (
     vi.useRealTimers();
   }
 });
+
+it.sequential('triggers notifier.approvalNeeded when background subagent approvals are pending', async () => {
+  let subscriber: (() => void) | null = null;
+  let snapshot: any = { pendingCount: 0, pending: [] };
+  const conversationService = {
+    sessionId: 'approval-notify',
+    backgroundSubagentTasks: { getSnapshot: () => [] },
+    setBackgroundSubagentTaskObserver: () => {},
+    backgroundSubagentApprovals: {
+      getSnapshot: () => snapshot,
+      subscribe: (cb: () => void) => {
+        subscriber = cb;
+        return () => {
+          subscriber = null;
+        };
+      },
+    },
+    backgroundTaskControl: {
+      listDetails: () => [],
+      listForegroundTransferCandidates: () => [],
+    },
+  } as any;
+
+  const notifier = {
+    turnComplete: vi.fn(),
+    approvalNeeded: vi.fn(),
+  };
+
+  const Harness = () => {
+    useConversation({
+      conversationService,
+      loggingService,
+      historyService,
+      notifier,
+    });
+    return null;
+  };
+
+  const renderer = await renderInAct(<Harness />);
+  expect(notifier.approvalNeeded).not.toHaveBeenCalled();
+
+  // Background subagent pauses for approval
+  snapshot = { pendingCount: 1, pending: [{ id: 'p1' } as any] };
+  act(() => subscriber?.());
+
+  expect(notifier.approvalNeeded).toHaveBeenCalledTimes(1);
+
+  act(() => renderer.unmount());
+});

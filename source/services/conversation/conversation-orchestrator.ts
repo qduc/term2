@@ -1240,8 +1240,39 @@ export class ConversationOrchestrator {
         }
         this.config.costAccumulator?.addRecords(event.result.costRecords ?? []);
         this.emitCostSummary();
+        if (!this.hasActiveBackgroundWork()) {
+          this.config.notifier?.turnComplete();
+        }
+      }
+      if (eventType === 'background_shell_completed') {
+        if (!this.hasActiveBackgroundWork()) {
+          this.config.notifier?.turnComplete();
+        }
       }
     };
+  }
+
+  private hasActiveBackgroundWork(): boolean {
+    const details = this.config.conversationService?.backgroundTaskControl?.listDetails?.() ?? [];
+    for (const d of details) {
+      if (d.kind === 'subagent') {
+        if (
+          d.status === 'running' ||
+          d.status === 'awaiting_approval' ||
+          d.status === 'waiting_for_answer' ||
+          d.status === 'cancelling'
+        ) {
+          return true;
+        }
+      } else if (d.kind === 'shell') {
+        if (d.status === 'running' || d.status === 'cancelling') {
+          return true;
+        }
+      }
+    }
+    const approvals = this.config.conversationService?.backgroundSubagentApprovals?.getSnapshot?.();
+    if (approvals && approvals.pendingCount > 0) return true;
+    return false;
   }
 
   /** Push the accumulator's current summary to the UI after any cost add. */
@@ -1287,7 +1318,9 @@ export class ConversationOrchestrator {
       clearStreamingBotMessage(streamingState);
     }
     this.config.ui.onApprovalResolved();
-    this.config.notifier?.turnComplete();
+    if (!this.hasActiveBackgroundWork()) {
+      this.config.notifier?.turnComplete();
+    }
     if (result.usage) {
       this.config.usageAccumulator?.add(result.usage);
       this.config.ui.onUsageUpdate(latestStreamedUsage ?? result.usage);

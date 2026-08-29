@@ -235,10 +235,14 @@ export const useConversation = ({
 
   useEffect(() => {
     if (typeof conversationService.backgroundSubagentApprovals?.subscribe !== 'function') return;
-    return conversationService.backgroundSubagentApprovals.subscribe(() =>
-      setBackgroundSubagentApproval(readBackgroundApproval()),
-    );
-  }, [conversationService, readBackgroundApproval]);
+    return conversationService.backgroundSubagentApprovals.subscribe(() => {
+      const snapshot = readBackgroundApproval();
+      setBackgroundSubagentApproval(snapshot);
+      if (snapshot.pendingCount > 0) {
+        notifier?.approvalNeeded();
+      }
+    });
+  }, [conversationService, readBackgroundApproval, notifier]);
 
   const resolveBackgroundSubagentApproval = useCallback(
     (request: BackgroundSubagentApprovalResolutionRequest) =>

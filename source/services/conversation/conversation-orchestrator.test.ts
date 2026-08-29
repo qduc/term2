@@ -1166,4 +1166,84 @@ describe('ConversationOrchestrator', () => {
       expect(cfg.loggingService.warn).not.toHaveBeenCalled();
     });
   });
+
+  describe('terminal notifications with background tasks', () => {
+    it('suppresses turnComplete when background tasks are still running on turn settlement', async () => {
+      const cfg = makeConfig();
+      const notifier = {
+        turnComplete: vi.fn(),
+        approvalNeeded: vi.fn(),
+      };
+      cfg.notifier = notifier;
+
+      let backgroundDetails: any[] = [{ kind: 'subagent', status: 'running', runId: 'sub-1' }];
+      Object.defineProperty(cfg.conversationService, 'backgroundTaskControl', {
+        value: { listDetails: () => backgroundDetails },
+        configurable: true,
+      });
+
+      vi.mocked(cfg.conversationService.sendMessage).mockResolvedValue({
+        type: 'response',
+        finalText: 'spawned subagent',
+        commandMessages: [],
+      });
+
+      const orchestrator = new ConversationOrchestrator(cfg);
+      await orchestrator.sendUserMessage('start subagent');
+
+      // Foreground turn finished, but subagent is running -> no turnComplete notification
+      expect(notifier.turnComplete).not.toHaveBeenCalled();
+
+      // Now subagent completes
+      backgroundDetails = [];
+      const onEvent = (orchestrator as any).createOnEventHandler(vi.fn());
+      onEvent({
+        type: 'subagent_completed',
+        async: true,
+        result: { agentId: 'sub-1', role: 'explorer', status: 'completed' },
+      });
+
+      // Now turnComplete is fired!
+      expect(notifier.turnComplete).toHaveBeenCalledTimes(1);
+    });
+
+    it('fires turnComplete on background_shell_completed when all tasks settle', async () => {
+      const cfg = makeConfig();
+      const notifier = {
+        turnComplete: vi.fn(),
+        approvalNeeded: vi.fn(),
+      };
+      cfg.notifier = notifier;
+
+      let backgroundDetails: any[] = [{ kind: 'shell', status: 'running', id: 'shell-1' }];
+      Object.defineProperty(cfg.conversationService, 'backgroundTaskControl', {
+        value: { listDetails: () => backgroundDetails },
+        configurable: true,
+      });
+
+      vi.mocked(cfg.conversationService.sendMessage).mockResolvedValue({
+        type: 'response',
+        finalText: 'running shell in background',
+        commandMessages: [],
+      });
+
+      const orchestrator = new ConversationOrchestrator(cfg);
+      await orchestrator.sendUserMessage('run bg shell');
+
+      expect(notifier.turnComplete).not.toHaveBeenCalled();
+
+      // Shell job completes
+      backgroundDetails = [];
+      const onEvent = (orchestrator as any).createOnEventHandler(vi.fn());
+      onEvent({
+        type: 'background_shell_completed',
+        jobId: 'shell-1',
+        command: 'build',
+        status: 'completed',
+        output: 'done',
+      });
+
+      expect(notifier.turnComplete).toHaveBeenCalledTimes(1);
+    });
+  });
 });

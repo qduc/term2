@@ -101,8 +101,10 @@ export class ServerSession {
       if (event.type === 'final' || event.type === 'error') {
         if (this.#activeTurnId) this.#settledTurns.add(this.#activeTurnId);
         this.#activeTurnId = null;
-        if (this.#status !== 'interrupted' && this.#status !== 'closed') this.#status = 'idle';
         this.#clearDeadline();
+      }
+      if (this.#status !== 'interrupted' && this.#status !== 'closed') {
+        this.#status = this.#computePublicStatus();
       }
       try {
         await this.#eventSink?.(event, { turnId, discardedTurnIds });
@@ -118,8 +120,35 @@ export class ServerSession {
     return this.id;
   }
 
+  #computePublicStatus(): ServerSessionStatus {
+    if (this.#status === 'interrupted' || this.#status === 'closed') return this.#status;
+    if (this.#activeTurnId) {
+      if (this.#status === 'awaiting_interaction') return 'awaiting_interaction';
+      return 'running';
+    }
+    const approvals = this.service.backgroundSubagentApprovals?.getSnapshot?.();
+    if (approvals && approvals.pendingCount > 0) return 'awaiting_interaction';
+    const details = this.service.backgroundTaskControl?.listDetails?.() ?? [];
+    for (const d of details) {
+      if (d.kind === 'subagent') {
+        if (d.status === 'awaiting_approval' || d.status === 'waiting_for_answer') {
+          return 'awaiting_interaction';
+        }
+        if (d.status === 'running' || d.status === 'cancelling') {
+          return 'running';
+        }
+      } else if (d.kind === 'shell') {
+        if (d.status === 'running' || d.status === 'cancelling') {
+          return 'running';
+        }
+      }
+    }
+    return 'idle';
+  }
+
   get status(): ServerSessionStatus {
-    return this.#status;
+    if (this.#status === 'interrupted' || this.#status === 'closed') return this.#status;
+    return this.#computePublicStatus();
   }
 
   get activeTurnId(): string | null {
@@ -223,7 +252,7 @@ export class ServerSession {
       for (const discardedTurnId of result.discardedTurnIds) this.#settledTurns.add(discardedTurnId);
       this.#preparedTurns.clear();
       this.#activeTurnId = null;
-      this.#status = 'idle';
+      this.#status = this.#computePublicStatus();
       this.#clearDeadline();
       this.service.reopenAdmission();
       const outcome: AbortOutcome = { kind: 'aborted', turnId, discardedTurnIds: result.discardedTurnIds };

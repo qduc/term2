@@ -166,3 +166,44 @@ it('formatSessionAudit: renders the verdict and the unfinished work', () => {
   expect(text).toContain('interrupted_mid_tool');
   expect(text).toContain('unfinished tool: create_file (c2)');
 });
+
+it('auditSessionLog: undo clears trailing user message and in-flight calls', () => {
+  const audit = auditSessionLog([
+    env(userMessage('build it')),
+    env({ type: 'tool_started', toolCallId: 'c1', toolName: 'shell', arguments: {} }),
+    env({ type: 'approval_required', approval: { callId: 'c2', toolName: 'shell' } }),
+    env({ type: 'undo' } as any),
+  ]);
+
+  expect(audit.outcome).toBe('settled');
+  expect(audit.unfinishedToolCalls).toEqual([]);
+});
+
+it('auditSessionLog: subagent transfer/interruption and background shell completion retire open tasks', () => {
+  const audit = auditSessionLog([
+    env(userMessage('run workers')),
+    env({ type: 'subagent_started', agentId: 'sub-1', role: 'worker-1', task: 't1' }),
+    env({ type: 'subagent_started', agentId: 'sub-2', role: 'worker-2', task: 't2' }),
+    env({ type: 'subagent_transferred', agentId: 'sub-1', runId: 'r1', role: 'worker-1' }),
+    env({ type: 'subagent_interrupted', agentId: 'sub-2', role: 'worker-2', finalText: 'stopped' }),
+    env({ type: 'background_shell_started', jobId: 'shell-1', command: 'npm start' }),
+    env({
+      type: 'background_shell_completed',
+      jobId: 'shell-1',
+      command: 'npm start',
+      status: 'completed',
+      output: 'ok',
+    }),
+    env({ type: 'tool_started', toolCallId: 'c1', toolName: 'test', arguments: {} }),
+    env({ type: 'tool_result', callId: 'c1', toolName: 'test', status: 'failed', output: 'err' }),
+    env({ type: 'tool_started', toolCallId: 'c2', toolName: 'test', arguments: {} }),
+    env({ type: 'tool_result', callId: 'c2', toolName: 'test', status: 'aborted' }),
+    env(assistantTurn('finished')),
+  ]);
+
+  expect(audit.unfinishedSubagents).toEqual([]);
+  expect(audit.unfinishedBackgroundShells).toEqual([]);
+  expect(audit.toolCalls.failed).toBe(1);
+  expect(audit.toolCalls.aborted).toBe(1);
+  expect(audit.outcome).toBe('settled');
+});

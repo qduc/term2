@@ -33,7 +33,7 @@ Everything else is discoverable by reading the tree. Skills carry the depth:
 - **Optimize for fast feedback.** Run focused tests during development; run the relevant broader gate after a coherent change, and reserve the full suite for broad changes or final handoff. Never claim completion while a required gate remains unrun
 - **Provider changes run the black-box suite.** Provider, bridge, run-loop, registry, and non-interactive changes must run `pnpm test:provider-black-box` as part of development, not just at the end. See the `provider-testing` skill.
 - **A regression test is the floor, not the finish line.** After any non-trivial bug fix, ask what allowed the defect class and why nothing caught it earlier. See `## After a bug fix` in the `testing` skill.
-- **Run tests with `NODE_ENV=test`.** If the shell exports `NODE_ENV=production`, vitest loads React's production build, whose `react` entry does not export `act`; `renderInAct` then fails ~26 tests in `MessageList.test.tsx` with `TypeError: act is not a function`. Prepend `NODE_ENV=test` explicitly (e.g. `NODE_ENV=test pnpm test`) instead of relying on the ambient value.
+- **The `pnpm` test scripts pin `NODE_ENV=test` via `cross-env`; keep it that way.** Under `NODE_ENV=production` vitest loads React's production build, whose `react` entry does not export `act`; `renderInAct` then fails ~26 tests in `MessageList.test.tsx` with `TypeError: act is not a function`. The scripts make the ambient value irrelevant, so a bare `pnpm test` is safe — but set it yourself if you invoke `vitest` directly.
 
 # Work In Progress
 
@@ -64,7 +64,7 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   before touching any listed area.
 - `tools/president-decision-portal/` and `scripts/candidate-gates.ts` — merged
   on 2026-08-16 from worktrees with no plan doc and no recorded caller. Nothing
-  invokes either one. The portal binds a single hard-coded LAN address and
+  invokes either one outside `scripts/candidate-gates.test.ts`. The portal binds a single hard-coded LAN address and
   writes a token and an append-only ledger under `~/.agents/runtime/`; it is
   inert unless run deliberately. Establish provenance before extending either,
   and consider reverting them if they are not wanted.

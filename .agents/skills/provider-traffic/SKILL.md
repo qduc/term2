@@ -1,6 +1,6 @@
 ---
 name: provider-traffic
-description: Read provider traffic logs (the JSONL artifacts under provider-traffic/) efficiently with jq to debug LLM requests, errors, tool calls, and model responses. Use when the user is debugging a provider/model issue, an API error, wrong tool-call arguments, a streaming/transport problem, malformed SSE frames, or wants to inspect what was sent to / received from a provider. Use to find the right session and request fast without dumping huge files.
+description: Read provider traffic logs (the JSON artifacts under provider-traffic/) efficiently with jq to debug LLM requests, errors, tool calls, and model responses. Use when the user is debugging a provider/model issue, an API error, wrong tool-call arguments, a streaming/transport problem, malformed SSE frames, or wants to inspect what was sent to / received from a provider. Use to find the right session and request fast without dumping huge files.
 ---
 
 # Provider Traffic Log Reading

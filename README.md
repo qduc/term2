@@ -18,7 +18,7 @@ https://github.com/user-attachments/assets/ac960d65-f7c8-453a-9440-91f6397ae842
 - 🤖 **Multi-Provider Support** - Works with OpenAI, OpenRouter, OpenAI-compatible APIs, and Vercel AI SDK providers
 - 🔒 **Safe Execution** - Every command requires your explicit approval with diff preview
 - 🛠️ **Advanced Tools** - Shell execution, file patching, search/replace (with `<...>` gap matching), grep, find files, file reading, file creation, web search, web fetching, code outline & context search, mentor consultation, and subagent invocation
-- 👥 **Subagent Delegation** - Spawn specialized, synchronous subagents (`explorer`, `worker`, `mentor`, `librarian`) to perform sub-tasks in parallel while conserving your main context
+- 👥 **Subagent Delegation** - Spawn specialized subagents (foreground or background) (`explorer`, `worker`, `mentor`, `librarian`) to perform sub-tasks in parallel while conserving your main context
 - ⏪ **Conversation Rewind** - Rewind to any past user turn with `/rewind`, choosing whether to edit the turn again or resend it as-is. The picker states what each rewind discards (turns, replies, edited files) before you commit to it
 - 💾 **Conversation Resumption & Persistence** - Saved conversations are persisted using robust event logging and can be resumed later using the `--resume` flag
 - 💬 **Slash Commands** - Quick actions like `/clear`, `/quit`, `/model`, `/mentor`, `/lite`, `/copy`, `/auto-approve`, `/plan`, `/rewind`, `/usage`, `/effort`, `/handoff`, and `/orchestrator` for easy control
@@ -29,7 +29,7 @@ https://github.com/user-attachments/assets/ac960d65-f7c8-453a-9440-91f6397ae842
 - 🎨 **Markdown Rendering** - Formatted code blocks, tables, and text in the terminal
 - 🔄 **Retry Logic** - Automatic recovery from tool hallucinations and upstream errors
 - 🌐 **SSH Mode** - Execute commands and edit files on remote servers over SSH
-- 🔒 **Sandboxed Execution** - Shell commands run in a sandbox with configurable read policies (`credential-denylist`, `home-denylist`, `standard`, `strict`) to protect sensitive files
+- 🔒 **Sandboxed Execution** - Shell commands run in a sandbox with configurable read policies (`standard`, `strict`) to protect sensitive files
 - 🤖 **Non-Interactive Mode** - Run commands from the CLI without starting the full UI
 - ✏️ **Standard Mode** - Auto-approves file edits in your workspace for faster development (active by default)
 - 🛡️ **Smart Shell Auto-Approval** - A hybrid local-heuristic + LLM-based safety evaluator that auto-approves safe commands, eliminating prompt fatigue while strictly blocking risky ones (with detailed reasoning explanations)

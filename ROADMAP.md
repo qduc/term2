@@ -1,6 +1,6 @@
 # Roadmap: stabilize before expanding
 
-Status: **Feature expansion paused for a bounded stabilization tranche.**
+Status: **Stabilization tranche complete (Phases 0–3 closed 2026-08-16); feature expansion resumed.** The operating rules below remain the standard workflow.
 
 ## Goal
 

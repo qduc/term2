@@ -193,6 +193,7 @@ const CommandMessage: FC<Props> = ({
       toolName === 'background_shell_notification' ||
       toolName === 'background_shell_output_notification' ||
       toolName === 'background_task_control_notification' ||
+      toolName === 'background_check_in_notification' ||
       !formattedArgs
         ? ''
         : ` ${formattedArgs}`;
@@ -354,6 +355,19 @@ const CommandMessage: FC<Props> = ({
           }
         }
         return renderAction('Background task control updated');
+      }
+      case 'background_check_in_notification': {
+        const checkIns = Array.isArray(toolArgs?.checkIns) ? toolArgs.checkIns : [];
+        if (checkIns.length === 1) {
+          const [{ target, checkInIndex }] = checkIns;
+          const label =
+            target?.kind === 'subagent'
+              ? `background subagent ${target.id ?? 'run'}`
+              : `background shell ${target?.id ?? 'job'}`;
+          const prefix = typeof checkInIndex === 'number' ? `Check-in #${checkInIndex}` : 'Check-in';
+          return renderAction(`${prefix} on ${label}`);
+        }
+        return renderAction(`Background check-in (${checkIns.length || 'task'})`);
       }
       case 'memory_list':
         return renderAction('Listed memories');

@@ -133,6 +133,25 @@ it('CommandMessage renders background shell output notification with line count'
   unmount();
 });
 
+it('CommandMessage renders a background check-in notification', async () => {
+  const { lastFrame, unmount } = await renderInAct(
+    <CommandMessage
+      command="background_check_in_notification"
+      toolName="background_check_in_notification"
+      status="completed"
+      success={true}
+      toolArgs={{
+        checkIns: [{ target: { kind: 'shell', id: 'shell-1' }, checkInIndex: 2, elapsedMs: 600_000 }],
+      }}
+      output="Check-in #2: background shell pnpm test still running, elapsed 600s"
+    />,
+  );
+
+  const output = stripAnsi(lastFrame() ?? '');
+  expect(output).toContain('Check-in #2 on background shell shell-1');
+  unmount();
+});
+
 it('CommandMessage renders replayed background shell output notification from flat toolArgs', async () => {
   const { lastFrame, unmount } = await renderInAct(
     <CommandMessage

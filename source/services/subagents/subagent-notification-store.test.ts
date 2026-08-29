@@ -115,6 +115,18 @@ const shellOutput = (
 const budget = (event: Extract<ConversationEvent, { type: 'subagent_run_budget' }>['event']): ConversationEvent =>
   ({ type: 'subagent_run_budget', agentId: 'run-1', role: 'explorer', event } as ConversationEvent);
 
+const checkInDue = (
+  overrides: Partial<Extract<ConversationEvent, { type: 'background_check_in_due' }>> = {},
+): ConversationEvent =>
+  ({
+    type: 'background_check_in_due',
+    target: { kind: 'shell', id: 'shell-1' },
+    checkInIndex: 1,
+    elapsedMs: 300_000,
+    details: { kind: 'shell', id: 'shell-1', command: 'pnpm test' },
+    ...overrides,
+  } as ConversationEvent);
+
 const makeStore = (options: { now?: () => number; deliveredIdCap?: number } = {}) =>
   new SubagentNotificationStore({ now: () => 1_000, ...options });
 
@@ -330,6 +342,46 @@ it('does not project a watch firing into the task lifecycle', () => {
   store.recordLifecycle(shellStarted());
 
   expect(store.recordLifecycle(shellOutput())).toBe(false);
+  expect(store.getTaskSnapshot()).toEqual([
+    expect.objectContaining({ kind: 'shell', jobId: 'shell-1', status: 'running' }),
+  ]);
+});
+
+it('records a check-in notification carrying task identity and elapsed time', () => {
+  const store = makeStore({ now: () => 4_242 });
+
+  expect(store.enqueue(checkInDue())).toBe(true);
+  expect(store.drain()).toEqual([
+    {
+      kind: 'check_in',
+      messageId: 'check_in:shell:shell-1:1',
+      target: { kind: 'shell', id: 'shell-1' },
+      checkInIndex: 1,
+      elapsedMs: 300_000,
+      details: { kind: 'shell', id: 'shell-1', command: 'pnpm test' },
+      recordedAt: 4_242,
+    },
+  ]);
+});
+
+it('keeps repeat check-ins on the same task distinct and drops an exact replay once', () => {
+  const store = makeStore();
+
+  expect(store.enqueue(checkInDue())).toBe(true);
+  expect(store.enqueue(checkInDue({ checkInIndex: 2, elapsedMs: 600_000 }))).toBe(true);
+  expect(store.enqueue(checkInDue())).toBe(false);
+
+  expect(store.drain().map((notification) => notification.messageId)).toEqual([
+    'check_in:shell:shell-1:1',
+    'check_in:shell:shell-1:2',
+  ]);
+});
+
+it('does not project a check-in into the task lifecycle', () => {
+  const store = makeStore();
+  store.recordLifecycle(shellStarted());
+
+  expect(store.recordLifecycle(checkInDue())).toBe(false);
   expect(store.getTaskSnapshot()).toEqual([
     expect.objectContaining({ kind: 'shell', jobId: 'shell-1', status: 'running' }),
   ]);

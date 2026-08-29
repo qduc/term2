@@ -405,6 +405,18 @@ const InputBox: FC<Props> = ({
       </Box>
       {escHintVisible && <Text color={COLOR_TEXT_SUBTLE}>Press ESC again to clear input</Text>}
       {waitingForRejectionReason && <Text color={COLOR_TEXT_SUBTLE}>(or ESC to cancel)</Text>}
+      {!turnInFlight &&
+        !waitingForRejectionReason &&
+        !escHintVisible &&
+        queueSelectionIndex === null &&
+        value === '' &&
+        !activePromptLabel && (
+          <Box marginTop={0}>
+            <Text color={COLOR_TEXT_SUBTLE}>
+              <Text color={COLOR_TEXT_MUTED}>Ctrl+O</Text> model · <Text color={COLOR_TEXT_MUTED}>Ctrl+T</Text> effort
+            </Text>
+          </Box>
+        )}
       {turnInFlight && queueSelectionIndex === null && !waitingForRejectionReason && !escHintVisible && (
         <Box marginTop={1}>
           <Text color={COLOR_TEXT_SUBTLE}>

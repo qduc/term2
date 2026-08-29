@@ -18,7 +18,7 @@ export function createEffortSlashCommand({
 }: CreateEffortSlashCommandDeps): SlashCommand {
   return {
     name: 'effort',
-    description: 'Set reasoning effort (alias for /settings agent.reasoningEffort)',
+    description: 'Set reasoning effort (Ctrl+T, alias for /settings agent.reasoningEffort)',
     expectsArgs: true,
     completion: { type: 'setting-value', trigger: EFFORT_TRIGGER, settingKey: 'agent.reasoningEffort' },
     action: (args?: string) => {

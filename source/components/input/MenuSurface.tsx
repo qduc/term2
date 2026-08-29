@@ -71,6 +71,10 @@ export function MenuSurface({ stack, controller, interactions, services, enabled
         dispatch({ type: 'command', command: 'refresh' });
       } else if (key.ctrl && _input === 'd') {
         dispatch({ type: 'command', command: 'reset' });
+      } else if ((key.ctrl && (_input.toLowerCase() === 'o' || _input === '\x0f')) || _input === '\x0f') {
+        controller.replaceText('/model ');
+      } else if ((key.ctrl && (_input.toLowerCase() === 't' || _input === '\x14')) || _input === '\x14') {
+        controller.replaceText('/effort ');
       } else if (key.return) {
         dispatch({
           type: 'accept',

@@ -107,6 +107,52 @@ it.sequential('does not tick now for retained terminal background details after 
   }
 });
 
+it.sequential('ticks now while a turn is in flight even before task state is populated', async () => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+  vi.setSystemTime(1_000_000);
+  try {
+    const conversationService = {
+      sessionId: 'in-flight-clock',
+      abort: () => {},
+      interruptFromUser: () => {},
+      sendMessage: async () => new Promise(() => undefined),
+      backgroundSubagentTasks: { getSnapshot: () => [] },
+      setBackgroundSubagentTaskObserver: () => {},
+      backgroundTaskControl: {
+        listDetails: () => [],
+        listForegroundTransferCandidates: () => [],
+      },
+    } as any;
+
+    let sendMsg: ((input: string) => Promise<void>) | undefined;
+    const Harness = () => {
+      const { sendUserMessage, isProcessing, backgroundTaskDetailsNow } = useConversation({
+        conversationService,
+        loggingService,
+        historyService,
+      });
+      sendMsg = sendUserMessage;
+      return <Text>{`${isProcessing ? 'PROCESSING' : 'IDLE'}:${backgroundTaskDetailsNow}`}</Text>;
+    };
+
+    const renderer = await renderInAct(<Harness />);
+    expect(renderer.lastFrame() ?? '').toBe('IDLE:1000000');
+
+    await act(async () => {
+      void sendMsg!('hello');
+      await Promise.resolve();
+    });
+    expect(renderer.lastFrame() ?? '').toMatch(/^PROCESSING:/);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    expect(renderer.lastFrame() ?? '').toBe('PROCESSING:1002000');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it.sequential('keeps ticking now while a background task is still live', async () => {
   vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
   vi.setSystemTime(1_000_000);

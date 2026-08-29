@@ -44,6 +44,16 @@ it('ticks while a foreground transfer candidate is live', () => {
   expect(needsBackgroundTaskClock({ now: 5_000, foregroundCount: 1 })).toBe(true);
 });
 
+it('ticks while a turn is in flight so the task strip can discover live work', () => {
+  expect(
+    needsBackgroundTaskClock({
+      now: 1_000_000,
+      turnInFlight: true,
+      detailsTasks: [{ status: 'cancelled', completedAt: 10_000 }],
+    }),
+  ).toBe(true);
+});
+
 it('ticks through the panel linger window, then stops at the grace boundary', () => {
   const task = { status: 'completed' as const, completedAt: 10_000 };
   expect(needsBackgroundTaskClock({ now: 10_000 + GRACE - 1, detailsTasks: [task] })).toBe(true);

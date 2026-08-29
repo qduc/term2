@@ -220,6 +220,7 @@ export const useConversation = ({
     snapshotTasks: backgroundSubagentTaskState.tasks,
     detailsTasks: backgroundTaskDetailsState.tasks,
     foregroundCount: foregroundTransferCandidates.length,
+    turnInFlight: isProcessing,
     now: Math.max(backgroundSubagentTaskState.now, backgroundTaskDetailsState.now),
   });
 

@@ -32,23 +32,28 @@ export const backgroundTaskSettledAt = (task: BackgroundTaskClockRow): number | 
 /**
  * Whether the composer still needs a 1s clock for background-task presentation.
  *
- * Live work and rows still inside the panel linger need `now` to advance.
- * Retained terminal registry rows do not: they are inspectable history, not a
- * reason to repaint an idle terminal.
+ * Live work, an in-flight turn, and rows still inside the panel linger need
+ * `now` to advance. The compact task strip reads foreground candidates live
+ * during a turn, before React state has caught up; without a clock those rows
+ * freeze at 0s. Retained terminal registry rows after idle do not: they are
+ * inspectable history, not a reason to repaint a settled terminal.
  */
 export const needsBackgroundTaskClock = ({
   snapshotTasks = [],
   detailsTasks = [],
   foregroundCount = 0,
+  turnInFlight = false,
   now,
   graceMs = BACKGROUND_TASKS_PANEL_GRACE_MS,
 }: {
   snapshotTasks?: readonly BackgroundTaskClockRow[];
   detailsTasks?: readonly BackgroundTaskClockRow[];
   foregroundCount?: number;
+  turnInFlight?: boolean;
   now: number;
   graceMs?: number;
 }): boolean => {
+  if (turnInFlight) return true;
   if (foregroundCount > 0) return true;
 
   for (const task of [...snapshotTasks, ...detailsTasks]) {

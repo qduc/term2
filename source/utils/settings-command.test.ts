@@ -46,6 +46,11 @@ const baseSettings = {
       identicalToolCallThreshold: { value: 3, source: 'default' },
       escalation: { value: 'warn', source: 'default' },
     },
+    backgroundCheckIn: {
+      enabled: { value: true, source: 'default' },
+      intervalMs: { value: 300_000, source: 'default' },
+      maxCheckInsPerTask: { value: 3, source: 'default' },
+    },
   },
   shell: {
     timeout: { value: 120000, source: 'default' },
@@ -128,6 +133,9 @@ it('formatSettingsSummary renders values with sources', () => {
   expect(summary.includes('agent.runBudget.maxUsdMicros: 5000000 (default)')).toBe(true);
   expect(summary.includes('agent.runBudget.identicalToolCallThreshold: 3 (default)')).toBe(true);
   expect(summary.includes('agent.runBudget.escalation: warn (default)')).toBe(true);
+  expect(summary.includes('agent.backgroundCheckIn.enabled: true (default)')).toBe(true);
+  expect(summary.includes('agent.backgroundCheckIn.intervalMs: 300000 (default)')).toBe(true);
+  expect(summary.includes('agent.backgroundCheckIn.maxCheckInsPerTask: 3 (default)')).toBe(true);
   expect(summary.includes('memory.enabled: true (default)')).toBe(true);
 });
 

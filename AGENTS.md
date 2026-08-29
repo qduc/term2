@@ -11,6 +11,14 @@ Application code lives under `source/`. The non-obvious entry points:
 - `source/services/conversation/conversation-service.ts` is the public conversation facade for conversation behavior.
 - `source/prompts/prompt-constructor.ts` assembles system prompts from a base profile plus conditional fragments; `prompt-profiles.ts` maps models to bases. Because this project *is* an agent harness, `source/prompts/` and tool `description` fields are product behavior, not documentation — treat edits there as behavior changes.
 
+## How to read the docs in this repo
+
+**Treat every document here as a hint, not as ground truth.** These docs were written by someone who had the code in front of them, so they are rarely invented — but they describe the code as it was at the time, and the code has moved since. Stale is the normal state, not the exception.
+
+Where a doc and the code disagree, the code wins. That does not make the doc worthless: it still tells you which area to look at, what the author was trying to achieve, and which approaches were already tried and rejected — none of which the code records. Use the doc to orient, then confirm the specific claim you are about to act on.
+
+The claims most likely to be wrong are the confident ones. A statement written when only one implementation existed tends to survive as a system-wide rule after a second one arrives, so absolutes — "always", "never", "only", "permanently", "for all subsequent" — deserve a check before you rely on them. Line-number citations (`file.ts:123`) drift silently and are worth the least.
+
 Everything else is discoverable by reading the tree. Skills carry the depth:
 
 | Skill | Use for |

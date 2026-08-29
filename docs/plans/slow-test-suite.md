@@ -1,5 +1,16 @@
 Status: plan. Attribution experiments complete 2026-08-29 — see "Attribution experiment results".
 
+## Resume here
+
+The deterministic no-isolate lane is landed (`pnpm test:lane`, 490-file
+manifest, 180 s hang guard) but its final manifest still needs one clean
+verification round: run `pnpm test:lane` and, if a fresh seed fails, union
+the failing files into the manifest's exclusion list as in rounds 1–3. After
+that, the remaining options in "Future work" apply, in order. Context for
+the current state (leak classes, the seed-888 hang, what was measured) is in
+the "Deterministic lane" section below and in project memory
+`slow-test-suite-profile-2026-08-29`.
+
 # Slow test suite
 
 ## Problem

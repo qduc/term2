@@ -8,7 +8,7 @@ Background-task liveness presentation is now planned in [liveness-ui.md](livenes
 
 Foreground and background subagent live cards are unified in [unified-subagent-ui.md](unified-subagent-ui.md): a transferred transcript card settles as `backgrounded`, the compact strip shares one row with an explicit placement tag, and `listDetails()` stays background-only.
 
-Proactive check-ins on still-running background work are proposed in [agent-checkin.md](agent-checkin.md): while a task runs and the session is idle, the harness periodically opens a turn so the agent — not just the human — sees current status and can decide to keep waiting, report, or intervene. It reuses the existing settlement-notification pipeline; no new turn-start primitive.
+Proactive check-ins on still-running background work are implemented, see [agent-checkin.md](agent-checkin.md): while a task runs and the session is idle, `BackgroundCheckInScheduler` periodically opens a turn so the agent — not just the human — sees current status and can decide to keep waiting, report, or intervene. It reuses the existing settlement-notification pipeline; no new turn-start primitive.
 
 ## Destination
 

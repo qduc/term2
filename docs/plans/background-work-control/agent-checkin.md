@@ -1,9 +1,29 @@
 # Periodic background-task check-ins
 
-Status: **proposed.** No code written yet. Read `docs/plans/background-work-control/MAP.md`,
+Status: **implemented and merged** (three phases, each squash-mergeable via
+`git log --grep=background-checkin`). Read `docs/plans/background-work-control/MAP.md`,
 `docs/plans/background-work-control/liveness-ui.md`, and `docs/plans/mid-turn-injection.md` before
 touching any file this plan names — they define the vocabulary (Injection, Background Notification,
 liveness) and the invariants this plan must not break.
+
+## Resume here
+
+All three phases below landed exactly as designed: no new turn-start primitive, the scheduler at
+`source/services/session/background-check-in-scheduler.ts`, the `check_in` notification kind in
+`subagent-notification-store.ts`, and `agent.backgroundCheckIn` in the settings schema. Every focused
+suite, `pnpm typecheck`, and `pnpm test:provider-black-box` passed at merge time (Phase 3's commit).
+The **Open questions** section below is resolved, not aspirational — read it for what was decided and
+why, not as a TODO list.
+
+One correction to the setting-wiring skill surfaced while wiring Phase 2: its checklist does not
+mention `SETTINGS_SOURCE_KEYS` in `source/services/settings/settings-sources.ts` or the
+`CONTRACT_04_CONSUMER_INVENTORY` fixture in `settings-schema.test.ts`. Both are separate explicit
+per-field lists that a new setting must also join — `settings-sources.ts` builds the
+`SettingsWithSources` value returned by `getAll()` via a hardcoded key list, not reflection, so
+skipping it leaves the new setting silently `undefined` at every `.value`/`.source` read despite the
+type system claiming it is populated (the cast `as SettingsWithSources` hides the gap). The next
+setting added should update both, and the setting-wiring skill should probably gain these as a
+seventh and eighth touchpoint.
 
 ## Goal
 
@@ -79,40 +99,62 @@ alongside `lastCheckInAt`), not in the store — the store's job stays "was this
 delivered," not "how many check-ins has this task had." Cap and interval state for a task are
 discarded when the task leaves the snapshot (settled and past the store's retention window).
 
-## Open questions for implementation time
+## Open questions — resolved at implementation time
 
-- **Payload richness.** `BackgroundTask` (the snapshot type) does not carry the
-  `BackgroundTaskLiveness`/`lastObservation` shape from `background-task-activity.ts` — that's
-  computed separately, today only for the UI. Decide whether the check-in payload is worth extending
-  to include it (truer "current status," matches the language liveness-ui.md already established) or
-  whether task identity + status + elapsed time is enough for a first cut. Either way, reuse
-  liveness-ui.md's truthful-language rule: a check-in must never claim a task is "hung," only that it
-  has or hasn't produced observable activity recently.
-- **Batching.** If two tasks are due in the same tick, should that produce one hidden turn with two
-  `check_in` notifications, or one turn per task? The drain path already batches an array
-  (`#deliverBackgroundSubagentNotifications` drains everything pending at once) — default to one
-  turn, multiple notifications, unless a reason to split turns up surfaces during implementation.
-- **Settings shape and defaults.** Model `agent.backgroundCheckIn` on `agent.runBudget`'s nested
-  `z.object` (`settings-schema.ts:101`): `{ enabled: boolean (default true), intervalMs: number
-  (default 300_000), maxCheckInsPerTask: number (default TBD — 3 was floated in conversation, not
-  committed) }`. Needs dotted-path constants and a defaults-object entry alongside `runBudget`'s, and
-  must go through the `setting-wiring` skill's checklist so it actually appears in `/settings`.
-- **Formatter copy.** `formatBackgroundSubagentNotifications` / `formatBackgroundSubagentNotificationDisplay`
-  (`conversation-orchestrator.ts:52`, `:249`) need a `check_in` branch. Wording is a fresh decision,
-  not a copy of the completion wording — a check-in is not news of an outcome.
+- **Payload richness — resolved: task identity + status + elapsed time, no liveness fact.**
+  `BackgroundCheckInDueEvent`/`BackgroundCheckInNotification` carry `target`, `checkInIndex`,
+  `elapsedMs`, and `details` (command, or role/task/name) — not `BackgroundTaskLiveness`. This was the
+  simpler of the two options and was enough to satisfy the truthful-language rule: the formatter says
+  "still running, elapsed Ns" and explicitly "does not by itself mean anything is wrong," never
+  "hung." Wiring `background-task-activity.ts`'s liveness computation into the payload remains a
+  future enhancement if a check-in ever needs to distinguish a quiet task from a noisy one; nothing
+  here blocks that.
+- **Batching — resolved: unchanged, relies on existing multi-notification handling.** The scheduler's
+  `tick()` calls `emit()` (→ `recordBackgroundEvent`) once per due task, synchronously, in the same
+  tick. Because `#deliverBackgroundSubagentNotifications` is async and its first synchronous section
+  (checking `turnIsRunning`, then `pending.drain()`) runs to completion before the first `await`, two
+  tasks due in the same tick do not each open their own hidden turn: the first call's `#beginTurn`
+  increments `#activeTurns` before the second `emit()` fires its observer, so the second call sees
+  `turnIsRunning === true` and injects into the first call's now-in-flight turn instead of opening a
+  second one. This is pre-existing behavior of the shared pipeline (the same thing already happens
+  when a shell completion and a subagent completion arrive close together) — check-ins introduce no
+  new interleaving, so no new test was added for it beyond what already covers concurrent
+  notifications.
+- **Settings shape and defaults — resolved.** `agent.backgroundCheckIn = { enabled: true (default),
+  intervalMs: 300_000, maxCheckInsPerTask: 3 }`, modeled on `runBudget`'s nested `z.object`. All
+  mandatory and optional `setting-wiring` touchpoints are done, plus the two the skill's checklist
+  omits (see `## Resume here`).
+- **Formatter copy — resolved.** Both `formatBackgroundSubagentNotifications` and
+  `formatBackgroundSubagentNotificationDisplay` gained a `check_in` branch with its own wording
+  ("Periodic check-in on N still-running background tasks... Decide freely: doing nothing... is a
+  valid choice"), not a copy of the completion wording.
 
-## Implementation phases (proposed; each its own worktree per `AGENTS.md`)
+## Implementation phases (all merged)
 
 1. **Types and store plumbing** — `check_in` `BackgroundNotification` kind, `#notificationFor` case,
-   formatter sections. Pure types + `SubagentNotificationStore`/`conversation-orchestrator.ts`
-   changes, unit-testable without any timer.
+   formatter sections, `CommandMessage.tsx` transcript rendering. Pure types +
+   `SubagentNotificationStore`/`conversation-orchestrator.ts` changes, unit-tested without any timer
+   (store dedupe/lifecycle tests, orchestrator mid-turn-injection and idle-wake tests, a
+   `CommandMessage` render test).
 2. **Settings** — `agent.backgroundCheckIn` schema, dotted-path constants, defaults, `/settings` UI
-   wiring per the `setting-wiring` skill.
-3. **Scheduler** — the interval poller in `session-composition.ts`, reading
-   `notificationStore.getTaskSnapshot()`, tracking per-task `lastCheckInAt`/`checkInCount`, calling
-   `recordBackgroundEvent` when due and under cap, gated by `agent.backgroundCheckIn.enabled`.
-   Injected clock/timer in tests; no real timers.
-4. **End-to-end wiring and black-box coverage** — confirm a check-in actually opens a hidden turn when
-   idle and injects when a turn is active, that the cap stops further wakes, and that a settling task
-   removes it from scheduling. Run `pnpm test:provider-black-box` since this touches the run loop's
-   turn-opening path (per `AGENTS.md`'s provider-testing requirement).
+   wiring per the `setting-wiring` skill, plus `settings-sources.ts` and the Contract 04 inventory
+   (see `## Resume here`).
+3. **Scheduler** — `BackgroundCheckInScheduler` in
+   `source/services/session/background-check-in-scheduler.ts`: a fixed 30s poll tick (independent of
+   the configurable `intervalMs`, so a runtime setting change needs no timer restart), reading
+   `notificationStore.getTaskSnapshot()`, tracking per-task `lastCheckInAt`/`checkInCount` in memory,
+   calling `recordBackgroundEvent` when due and under cap, gated by `agent.backgroundCheckIn.enabled`.
+   Wired into `createSessionRuntimeInternals` right after the background event sinks are installed;
+   disposed as the first step of the session's existing `dispose()`. Unit-tested with an injected
+   clock/timer (due-time math, the cap, disposal, independent tasks, progress reset on leaving the
+   running snapshot) plus an integration test in
+   `session-composition.subagent-notifications.test.ts` using `vi.useFakeTimers()` to prove a real
+   background shell job receives check-ins end to end and that disposal stops the timer.
+   `pnpm test:provider-black-box` passed (171/172, one pre-existing unrelated skip) on this phase
+   since it touches session composition.
+
+No separate "Phase 4" was needed: the idle-hidden-turn and active-turn-injection paths were already
+proven by Phase 1's orchestrator tests using synthetic `background_check_in_due` events, and Phase 3's
+integration test proves the real scheduler drives the same observer seam those tests attach to — the
+composition of the two is the end-to-end path, so a third redundant test spanning both layers was not
+added.

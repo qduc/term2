@@ -185,6 +185,16 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   event routing: a transferred transcript card settles as `backgrounded`, and
   unadopted work may appear on the compact strip only with an explicit
   foreground tag.
+- `docs/plans/background-work-control/agent-checkin.md` — **implemented and
+  merged.** `BackgroundCheckInScheduler`
+  (`source/services/session/background-check-in-scheduler.ts`) periodically
+  wakes the launching agent (not just the passive liveness UI) about a
+  still-running background shell job or subagent, gated by
+  `agent.backgroundCheckIn.{enabled,intervalMs,maxCheckInsPerTask}`. It reuses
+  the existing settlement-notification pipeline (`recordBackgroundEvent` ->
+  `SubagentNotificationStore` -> the idle-hidden-turn / active-turn-injection
+  path) rather than a new turn-start primitive. Read it before changing that
+  pipeline, `background-check-in-scheduler.ts`, or `agent.backgroundCheckIn`.
 
 - `docs/plans/background-work-control/liveness-ui.md` — **implemented and merged**
   (`13307919`, with the adversarial-review findings fixed in `93b9b536`). The shared

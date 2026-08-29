@@ -23,7 +23,7 @@ export type TurnStartOptions = Pick<
   | 'signal'
   | 'resumeState'
   | 'resumePreviousResponseId'
-  | 'bypassInputSurgeGuard'
+  | 'inputSurgeApproval'
 > & { origin?: 'user' | 'queued' };
 
 export interface TurnCoordinatorDeps {

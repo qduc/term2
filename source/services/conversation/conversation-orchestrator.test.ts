@@ -8,6 +8,7 @@ import type { ApprovedToolContext } from '../approval/approval-presentation-poli
 import type { NormalizedUsage, UsageAccumulator } from '../../utils/ai/token-usage.js';
 import type { ConversationTerminal } from '../../contracts/conversation.js';
 import { PendingInteractionState } from '../session/pending-interaction-state.js';
+import { issueInputSurgeApproval } from '../input-surge-approval.js';
 import { ASK_USER_NO_ANSWER_RESULT } from '../../tools/agent/ask-user-constants.js';
 import { createSessionCostAccumulator } from '../cost/model-cost.js';
 
@@ -199,10 +200,30 @@ describe('ConversationOrchestrator', () => {
     expect(cfg.messages.appendMessages).toHaveBeenCalledTimes(1);
     expect(cfg.conversationService.sendMessage).toHaveBeenCalledWith(
       { text: 'hello' },
-      expect.objectContaining({ bypassInputSurgeGuard: undefined }),
+      expect.objectContaining({ busyMode: undefined }),
     );
     expect(cfg.ui.onTurnStart).toHaveBeenCalled();
     expect(cfg.ui.onTurnEnd).toHaveBeenCalled();
+  });
+
+  it('carries workflow-issued input-surge approval with the exact submitted content', async () => {
+    const cfg = makeConfig();
+    (cfg.conversationService as any).isQueueActive = undefined;
+    (cfg.conversationService as any).setQueuedTurnStartObserver = undefined;
+    const orchestrator = new ConversationOrchestrator(cfg);
+    const approval = issueInputSurgeApproval('approved content');
+    vi.mocked(cfg.conversationService.sendMessage).mockResolvedValue({
+      type: 'response',
+      finalText: 'ok',
+      commandMessages: [],
+    });
+
+    await orchestrator.sendUserMessage('approved content', { inputSurgeApproval: approval });
+
+    expect(cfg.conversationService.sendMessage).toHaveBeenCalledWith(
+      { text: 'approved content' },
+      expect.objectContaining({ inputSurgeApproval: approval }),
+    );
   });
 
   // `costRecords` is an optional field re-declared at every hop between the run

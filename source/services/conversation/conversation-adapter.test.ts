@@ -5,6 +5,7 @@ import { QueueController } from '../queue/queue-controller.js';
 import { AmbiguousModelOutcomeError } from '../retry/retry-errors.js';
 import type { SessionLogs, SessionApprovalQuery } from '../session/session-composition.js';
 import type { UserTurn } from '../../types/user-turn.js';
+import { issueInputSurgeApproval } from '../input-surge-approval.js';
 import type { SessionManager } from '../session/session-manager.js';
 import type { FinalTerminal } from '../../contracts/conversation.js';
 import type { ConversationEvent } from './conversation-events.js';
@@ -1310,6 +1311,56 @@ it('editSubmission on a queued item sends the edited text — the #messagesById 
   expect(started).toHaveLength(2);
   expect(started[0]).toBe('active');
   expect(started[1]).toMatchObject({ text: 'edited text' });
+});
+
+it('does not restore an approved input-surge capability after queued content is edited away and back', async () => {
+  let releaseActive!: () => void;
+  const activeReleased = new Promise<void>((resolve) => {
+    releaseActive = resolve;
+  });
+  const startOptions: any[] = [];
+  const adapter = new ConversationAdapter({
+    sessionId: 'session-1',
+    startedAt: new Date().toISOString(),
+    logger,
+    sessionContextService,
+    userTurns: { listUserTurns: () => [] } as Pick<SessionManager, 'listUserTurns'>,
+    logs: { dispatchEventToLog: noop, log: noop, setLogSink: noop } as unknown as SessionLogs,
+    approval: { getPending: () => null, getPendingInterruption: () => ({}) } as unknown as SessionApprovalQuery,
+    turnFlow: {
+      async *start(input: string | UserTurn, options: unknown) {
+        startOptions.push(options);
+        if (typeof input === 'string' && input === 'active') await activeReleased;
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+      async *continueAfterApproval() {
+        yield { type: 'final' as const, finalText: 'done' };
+      },
+    },
+    queueForeground: true,
+  });
+
+  const active = adapter.sendMessage('active', { preferredMessageId: 'active' });
+  await new Promise((resolve) => setImmediate(resolve));
+  const queued = adapter.sendMessage('approved original', {
+    preferredMessageId: 'queued-1',
+    inputSurgeApproval: issueInputSurgeApproval('approved original'),
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  await expect(adapter.editSubmission('queued-1', { text: 'replacement' })).resolves.toEqual({
+    kind: 'applied',
+    stage: 'queued',
+  });
+  await expect(adapter.editSubmission('queued-1', { text: 'approved original' })).resolves.toEqual({
+    kind: 'applied',
+    stage: 'queued',
+  });
+  releaseActive();
+  await active;
+  await queued;
+
+  expect(startOptions[1]).not.toHaveProperty('inputSurgeApproval');
 });
 
 it('editSubmission on a queued item rolls back #messagesById when the controller rejects the edit (hazard 2)', async () => {

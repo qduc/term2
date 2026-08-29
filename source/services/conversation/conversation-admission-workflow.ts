@@ -1,6 +1,7 @@
 import type { InputSurgeDecision } from '../input-surge-guard.js';
 import type { LargeUncachedInputDecision } from '../large-uncached-input-guard.js';
-import type { UserTurn } from '../../types/user-turn.js';
+import { issueInputSurgeApproval, type InputSurgeApproval } from '../input-surge-approval.js';
+import { injectSkillIntoTurn, type UserTurn } from '../../types/user-turn.js';
 
 export type ConversationBusyMode = 'steer' | 'follow_up';
 
@@ -8,7 +9,7 @@ export type AdmissionOptions = {
   busyMode?: ConversationBusyMode;
 };
 
-type SenderOptions = AdmissionOptions & { bypassInputSurgeGuard?: boolean };
+type SenderOptions = AdmissionOptions & { inputSurgeApproval?: InputSurgeApproval };
 
 export type AdmissionConfirmation =
   | {
@@ -95,7 +96,12 @@ export class ConversationAdmissionWorkflow {
     }
 
     if (pending.kind === 'surge') {
-      return this.#admit(pending.turn, { ...pending.options, bypassInputSurgeGuard: true });
+      return this.#admit(pending.turn, {
+        ...pending.options,
+        inputSurgeApproval: issueInputSurgeApproval(
+          pending.turn.skill ? injectSkillIntoTurn(pending.turn) : pending.turn,
+        ),
+      });
     }
 
     return this.#admit(pending.turn, pending.options);

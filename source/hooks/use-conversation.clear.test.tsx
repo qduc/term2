@@ -16,8 +16,8 @@ const loggingService = {
 type PublicConversationSend = ReturnType<typeof useConversation>['sendUserMessage'];
 
 const assertPublicSendCannotBypassAdmission = (send: PublicConversationSend) => {
-  // @ts-expect-error The surge bypass is workflow-owned and never public UI input.
-  send({ text: 'not allowed' }, { bypassInputSurgeGuard: true });
+  // @ts-expect-error The surge approval capability is workflow-owned and never public UI input.
+  send({ text: 'not allowed' }, { inputSurgeApproval: {} });
 };
 void assertPublicSendCannotBypassAdmission;
 

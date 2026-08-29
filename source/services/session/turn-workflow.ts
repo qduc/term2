@@ -11,6 +11,7 @@ import type { GenerationGuard } from '../generation-guard.js';
 import { TurnAttempt } from './turn-attempt.js';
 import { getMethod, getCallIdFromObject, getToolInfoFromInterruption } from '../interruption-info.js';
 import type { UserTurn } from '../../types/user-turn.js';
+import { issueInputSurgeApproval } from '../input-surge-approval.js';
 import type { InitialTurnRunOptions, TurnAttemptFactory } from './turn-attempt-factory.js';
 import type { InitialInputPreparer } from './initial-input-preparer.js';
 import type { InitialTurnRecoveryHandler } from './initial-turn-recovery-handler.js';
@@ -377,7 +378,7 @@ export class TurnWorkflow {
           // Preserve the follow-up prompt as a normal user turn so the next
           // turn can steer the conversation naturally after an ESC abort.
           const preparation = this.deps.inputPreparer.prepare(attempt, skipUser, {
-            bypassInputSurgeGuard: true,
+            inputSurgeApproval: issueInputSurgeApproval(attempt.submittedTurn),
             replayFromHistory: options.replayFromHistory,
           });
           if (preparation.kind === 'blocked') {

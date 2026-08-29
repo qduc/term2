@@ -342,7 +342,7 @@ it.sequential('MaxTurnsExceededError recovery keeps reconciled tool history allo
   expect(followUpResult.finalText).toBe('recovered-final');
 });
 
-it('InputSurgeGuard blocks by default but bypasses when bypassInputSurgeGuard is true', async () => {
+it('InputSurgeGuard blocks direct terminal-adapter submissions without workflow-issued approval', async () => {
   const { bundle } = createSessionHarness({
     startStreams: [createTerminalStream(5, 'attempt-1')],
     continuationStreams: [],
@@ -366,9 +366,7 @@ it('InputSurgeGuard blocks by default but bypasses when bypassInputSurgeGuard is
     /Request blocked to prevent runaway context growth/,
   );
 
-  // The second send with bypassInputSurgeGuard: true should succeed
-  const result = expectResponse(
-    await bundle.terminalAdapter.sendMessage('trigger surge', { bypassInputSurgeGuard: true }),
+  await expect(bundle.terminalAdapter.sendMessage('trigger surge', { inputSurgeApproval: {} as any })).rejects.toThrow(
+    /Request blocked to prevent runaway context growth/,
   );
-  expect(result.finalText).toBe('attempt-1-final');
 });

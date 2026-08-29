@@ -33,6 +33,7 @@ import type {
   BackgroundSubagentNotificationPort,
 } from '../subagents/subagent-notification-store.js';
 import type { RunBudgetEvent } from '../agent-runtime/run-budget.js';
+import type { InputSurgeApproval } from '../input-surge-approval.js';
 
 const REASONING_RESPONSE_THROTTLE_MS = 200;
 
@@ -554,7 +555,7 @@ export class ConversationOrchestrator {
 
   async sendUserMessage(
     input: string | UserTurn,
-    options?: { bypassInputSurgeGuard?: boolean; busyMode?: 'steer' | 'follow_up' },
+    options?: { inputSurgeApproval?: InputSurgeApproval; busyMode?: 'steer' | 'follow_up' },
   ): Promise<void> {
     const turn = normalizeUserTurn(input);
     if (!hasUserTurnContent(turn)) {
@@ -685,7 +686,7 @@ export class ConversationOrchestrator {
       const turnToSend = turn.skill ? injectSkillIntoTurn(turn) : turn;
       const result = await this.config.conversationService.sendMessage(turnToSend, {
         onEvent: this.createOnEventHandler(applyConversationEvent),
-        bypassInputSurgeGuard: options?.bypassInputSurgeGuard,
+        inputSurgeApproval: options?.inputSurgeApproval,
         busyMode: options?.busyMode,
         preferredMessageId: userMessage.id,
       });

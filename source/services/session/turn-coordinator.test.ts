@@ -126,7 +126,7 @@ it('start forwards turn start options to the workflow', async () => {
     signal: new AbortController().signal,
     resumeState: { state: 'resume' } as any,
     resumePreviousResponseId: 'resp-1',
-    bypassInputSurgeGuard: true,
+    inputSurgeApproval: {} as any,
   };
 
   for await (const _ of coordinator.start('hello', options)) {

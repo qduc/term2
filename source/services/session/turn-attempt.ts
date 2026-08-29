@@ -9,6 +9,7 @@ import type { ProviderHistorySnapshot } from '../conversation/conversation-store
 
 export class TurnAttempt {
   readonly #turn: UserTurn;
+  readonly #submittedTurn: UserTurn;
   readonly #token: GenerationToken;
   readonly #initialRetryCounts: RetryCounts;
   readonly #initialJournalSnapshot: AssistantJournalItemLogEvent[];
@@ -28,6 +29,8 @@ export class TurnAttempt {
 
   constructor(options: {
     turn: UserTurn;
+    /** The normalized user submission before session-owned mode-notice augmentation. */
+    submittedTurn?: UserTurn;
     token: GenerationToken;
     initialRetryCounts: RetryCounts;
     initialJournalSnapshot: AssistantJournalItemLogEvent[];
@@ -37,6 +40,7 @@ export class TurnAttempt {
     onAbort?: () => void;
   }) {
     this.#turn = options.turn;
+    this.#submittedTurn = options.submittedTurn ?? options.turn;
     this.#token = options.token;
     this.#initialRetryCounts = options.initialRetryCounts;
     this.#initialJournalSnapshot = options.initialJournalSnapshot;
@@ -63,6 +67,10 @@ export class TurnAttempt {
 
   get turn(): UserTurn {
     return this.#turn;
+  }
+
+  get submittedTurn(): UserTurn {
+    return this.#submittedTurn;
   }
 
   get token(): GenerationToken {

@@ -305,6 +305,102 @@ runtime or test behavior.
    and confirmation. Preserve the existing decline, stale-confirmation, repeated-
    confirmation, and caller-supplied-bypass protections.
 
+### InputSurgeGuard content-bound approval repair
+
+Disposition: **implemented in this uncommitted worktree repair; no commit ID.**
+`InputSurgeApproval` is an opaque, one-use capability whose module-private
+provenance record carries a canonical normalized `UserTurn` snapshot: text,
+every image field, and every skill field. The admission workflow issues it only
+when the matching surge confirmation is approved. The execution admission owner
+(`InitialInputPreparer`) consumes and validates it against the exact normalized
+submitted turn before allowing a blocked provider request. A caller-supplied
+lookalike has no module-private provenance and cannot bypass the guard. Queue replacement drops
+the stored capability before the edited message starts, so replacement content
+follows ordinary surge blocking rather than inheriting the prior confirmation.
+The aborted-approval internal path issues the same narrowly scoped,
+content-bound one-use capability for the attempt it is resolving; it no longer
+has a free boolean bypass.
+
+```text
+Harm prevented: an approval for one surge input authorizing edited, replacement,
+  or caller-injected input on a later execution boundary.
+Scope and execution paths: admission confirmation, foreground queue storage and
+  edit, adapter-to-session start options, initial provider-request preparation,
+  and aborted-approval internal resolution.
+Guard class: advisory confirmation plus content-bound admission authority.
+Enforcement owner: InitialInputPreparer at provider-request admission.
+Recovery owner: ConversationAdmissionWorkflow confirmation; unchanged decline
+  and stale/repeated-decision settlement.
+Measured signal and observation boundary: exact normalized UserTurn content at
+  the provider-request admission boundary, not a caller option or queue id.
+Direct evidence or proxy: direct normalized text, images, and skill content.
+Legitimate work that can produce the same signal: an unchanged queued turn after
+  explicit approval; its capability is admitted once.
+Action and why the signal justifies it: consume only a workflow-issued matching
+  capability; otherwise retain the existing surge block and normal re-admission
+  path.
+Partial-work settlement: unchanged; an invalid capability blocks before a
+  provider request and rolls back the just-added user turn as before.
+Retry, fallback, and provider-continuity semantics: unchanged.
+Observability fields: existing input_surge.blocked fields; no turn payload or
+  capability is logged.
+Persisted-setting migration, if any: none.
+Rollback boundary: this uncommitted repair only; no commit ID.
+Ledger row: InputSurgeGuard bypass scope.
+```
+
+Red proof before production changes:
+
+```text
+NODE_ENV=test pnpm test source/services/conversation/conversation-admission-workflow.test.ts \
+  source/services/conversation/conversation-adapter.test.ts \
+  source/services/session/initial-input-preparer.test.ts
+FAIL: approved surge send supplied bypassInputSurgeGuard: true instead of a
+      capability; the capability contract module did not yet exist.
+```
+
+Detection gap: prior workflow tests proved only that a boolean was stripped at
+the UI-facing admission call and that a confirmation id was one-shot. They did
+not follow approval authority through queued-message replacement to the
+execution admission boundary, nor mutate nested image or skill content after
+approval. The new contract tests cover issued-only authority, one-use admission,
+nested image and skill mutation, caller forgery, edit-away/edit-back invalidation,
+mode-notice separation, workflow-to-orchestrator capability transport, and the
+retained decline/stale/repeated-confirmation behavior.
+
+Focused verification (uncommitted repair):
+
+```text
+NODE_ENV=test pnpm test source/services/conversation/conversation-admission-workflow.test.ts \
+  source/services/conversation/conversation-adapter.test.ts \
+  source/services/session/conversation-session.input-surge.test.ts \
+  source/services/session/initial-input-preparer.test.ts \
+  source/services/session/turn-coordinator.test.ts \
+  source/services/conversation/conversation-orchestrator.test.ts \
+  source/hooks/use-conversation.clear.test.tsx
+PASS 7 files, 139 tests
+
+NODE_ENV=test pnpm typecheck
+PASS
+
+NODE_ENV=test pnpm test:related <changed production files>
+KNOWN BASELINE FAILURE: 73 files and 1,083 tests passed; the sole failure was
+source/hooks/stop-processing-probe.test.tsx:75, the pre-existing blank final
+frame recorded in MORNING.md.
+
+NODE_ENV=test pnpm test:changed
+KNOWN BASELINE FAILURE: same sole stop-processing probe failure; 73 files and
+1,083 tests passed, with 2 expected failures.
+
+NODE_ENV=test pnpm test:provider-black-box
+PASS 19 files, 171 tests; 1 skipped
+
+NODE_ENV=test pnpm test
+KNOWN BASELINE FAILURE: 543 files passed, 1 failed, 1 skipped; 6,956 tests
+passed, 1 failed, 3 expected failures, 2 skipped. The sole failure was the same
+stop-processing probe and does not exercise input-surge admission.
+```
+
 ### Subagent steering mailbox repair
 
 Disposition: **repaired in `74323696` and merged in `fa328291`.**

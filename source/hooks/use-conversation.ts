@@ -28,6 +28,7 @@ import {
   type AdmissionOptions,
 } from '../services/conversation/conversation-admission-workflow.js';
 import type { HistoryService } from '../services/history-service.js';
+import type { InputSurgeApproval } from '../services/input-surge-approval.js';
 
 import type { ConversationLogWriter } from '../services/logging/conversation-log-writer.js';
 
@@ -42,7 +43,7 @@ export type {
 } from '../types/message.js';
 
 const MAX_MESSAGE_COUNT = 300;
-type ConversationTransportOptions = AdmissionOptions & { bypassInputSurgeGuard?: boolean };
+type ConversationTransportOptions = AdmissionOptions & { inputSurgeApproval?: InputSurgeApproval };
 
 const getInitialLastUsage = (messages: Message[]): NormalizedUsage | null => {
   for (let i = messages.length - 1; i >= 0; i--) {

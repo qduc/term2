@@ -112,6 +112,16 @@ export async function* processStreamEvents(
       if (emitted) yield emitted;
       continue;
     }
+    if (event.type === 'model_attempt_rollback') {
+      acc.finalOutput = acc.finalOutput.slice(0, Math.max(0, acc.finalOutput.length - event.textCharacters));
+      acc.reasoningOutput = acc.reasoningOutput.slice(
+        0,
+        Math.max(0, acc.reasoningOutput.length - event.reasoningCharacters),
+      );
+      acc.textDeltaCount = Math.max(0, acc.textDeltaCount - event.textDeltas);
+      acc.reasoningDeltaCount = Math.max(0, acc.reasoningDeltaCount - event.reasoningDeltas);
+      continue;
+    }
     if (event.type === 'tool_call_streaming_delta') {
       yield { ...event } satisfies ToolCallStreamingDeltaEvent;
       continue;

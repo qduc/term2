@@ -317,7 +317,7 @@ it('run() retries a mid-stream transport drop instead of failing the subagent', 
   expect(retryEvent?.retryType).toBe('upstream');
 });
 
-it('run() retries when a chat stream ends without a finish reason', async () => {
+it('run() recovers an incomplete chat stream inside the application loop without an outer retry', async () => {
   // Same recovery path as a transport drop: subagents must not fail a worker
   // permanently when the provider closes SSE before a finish_reason frame.
   let runCount = 0;
@@ -362,7 +362,5 @@ it('run() retries when a chat stream ends without a finish reason', async () => 
   expect(result.finalText).toBe('Recovered after incomplete stream');
   expect(runCount).toBe(2);
   const retryEvent = events.find((e) => e.type === 'retry');
-  if (retryEvent) {
-    expect(retryEvent.retryType).toBe('upstream');
-  }
+  expect(retryEvent).toBeUndefined();
 });

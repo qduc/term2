@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { classifyInLoopModelRetry, computeInLoopBackoffDelayMs, sleepWithAbort } from './model-request-retry.js';
-import { AmbiguousModelOutcomeError, ConversationStateNoProgressError } from '../retry/retry-errors.js';
+import { classifyInLoopModelRetry, computeInLoopBackoffDelayMs, sleepWithAbort } from './in-loop-model-retry.js';
+import { AmbiguousModelOutcomeError, ConversationStateNoProgressError } from './retry-errors.js';
 import { WebSocketClosedEarlyError } from '../../providers/websocket-close-evidence.js';
-import { GenerationGuardError } from './generation-guard.js';
+import { GenerationGuardError } from '../agent-runtime/generation-guard.js';
 
-describe('model-request-retry', () => {
+describe('in-loop-model-retry', () => {
   it('classifies WebSocketClosedEarlyError as retryable chain_recovery', () => {
     const error = new WebSocketClosedEarlyError({ code: 1006, reason: '', unsentCount: 0 });
     const decision = classifyInLoopModelRetry(error, 0, 2, () => 0.5);
@@ -57,7 +57,7 @@ describe('model-request-retry', () => {
   });
 
   it('rejects retry for GenerationGuardError', () => {
-    const error = new GenerationGuardError('repeated text', 'repeated_text');
+    const error = new GenerationGuardError('repetitive_text', 'repeated text');
     const decision = classifyInLoopModelRetry(error, 0, 2);
 
     expect(decision.retryable).toBe(false);

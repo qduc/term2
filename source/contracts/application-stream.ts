@@ -11,6 +11,14 @@ import type { RunBudgetEvent } from '../services/agent-runtime/run-budget.js';
 export type ApplicationRunEvent =
   | { readonly type: 'text_delta'; readonly text: string }
   | { readonly type: 'reasoning_delta'; readonly text: string }
+  /** Retracts provisional deltas from a failed provider attempt before retrying the same logical request. */
+  | {
+      readonly type: 'model_attempt_rollback';
+      readonly textCharacters: number;
+      readonly reasoningCharacters: number;
+      readonly textDeltas: number;
+      readonly reasoningDeltas: number;
+    }
   | { readonly type: 'codex_rate_limits'; readonly rateLimits: CodexRateLimitInfo }
   | { readonly type: 'tool_call_streaming_delta'; readonly toolName?: string; readonly argumentCharCount: number }
   /** Server-side context compaction bracketed by real provider frames; see StreamedModelTurnEvent. */

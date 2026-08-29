@@ -47,7 +47,7 @@ import {
   GenerationStreamDeadlines,
   type GenerationGuardOptions,
 } from './generation-guard.js';
-import { classifyInLoopModelRetry, sleepWithAbort } from './model-request-retry.js';
+import { classifyInLoopModelRetry, sleepWithAbort } from '../retry/in-loop-model-retry.js';
 
 /**
  * Fields of `modelSettings` the run loop and provider adapters actually read.
@@ -197,6 +197,8 @@ export interface ApplicationRunLoopDeps {
    */
   readonly logDiagnostic?: (message: string, meta: Record<string, unknown>) => void;
   readonly contextCompactionSessionState?: ContextCompactionSessionState;
+  /** Injectable wait boundary so retry behavior can be tested without real timers. */
+  readonly waitBeforeModelRetry?: (delayMs: number, signal?: AbortSignal) => Promise<void>;
 }
 
 /**
@@ -950,6 +952,13 @@ export class ApplicationRunLoop {
         const requestId = activeRequestId;
         const outputLengthBefore = stream.output.length;
         const newItemsLengthBefore = stream.newItems.length;
+        const inputLengthBefore = state.input.length;
+        const historyLengthBefore = state.history.length;
+        const criticalWrapUpDispatchedBefore = state.criticalWrapUpDispatched;
+        let provisionalTextCharacters = 0;
+        let provisionalReasoningCharacters = 0;
+        let provisionalTextDeltas = 0;
+        let provisionalReasoningDeltas = 0;
 
         criticalWrapUp = state.criticalWrapUpPending === true && state.criticalWrapUpDispatched !== true;
         if (criticalWrapUp) state.criticalWrapUpDispatched = true;
@@ -1034,6 +1043,8 @@ export class ApplicationRunLoop {
               }
               if (event.type === 'text_delta') {
                 generationGuard.observeText(event.text);
+                provisionalTextCharacters += event.text.length;
+                provisionalTextDeltas++;
                 outputPush(stream, queue, { type: 'text_delta', text: event.text });
                 continue;
               }
@@ -1046,6 +1057,8 @@ export class ApplicationRunLoop {
                 if (!accepted) continue;
                 const forwarded = accepted === event.text ? event : { ...event, text: accepted };
                 pendingNativeReasoning = appendNativeReasoning(pendingNativeReasoning, forwarded);
+                provisionalReasoningCharacters += accepted.length;
+                provisionalReasoningDeltas++;
                 outputPush(stream, queue, { type: 'reasoning_delta', text: accepted });
                 continue;
               }
@@ -1084,9 +1097,21 @@ export class ApplicationRunLoop {
           const decision = classifyInLoopModelRetry(error, attempt, maxRetries);
           if (decision.retryable && !options.signal?.aborted) {
             attempt++;
+            state.input.splice(inputLengthBefore);
+            state.history.splice(historyLengthBefore);
+            state.criticalWrapUpDispatched = criticalWrapUpDispatchedBefore;
             stream.output.splice(outputLengthBefore);
             if (stream.newItems !== stream.output) {
               stream.newItems.splice(newItemsLengthBefore);
+            }
+            if (provisionalTextDeltas > 0 || provisionalReasoningDeltas > 0) {
+              queue.push({
+                type: 'model_attempt_rollback',
+                textCharacters: provisionalTextCharacters,
+                reasoningCharacters: provisionalReasoningCharacters,
+                textDeltas: provisionalTextDeltas,
+                reasoningDeltas: provisionalReasoningDeltas,
+              });
             }
             if (decision.kind === 'chain_recovery') {
               state.disableChainingForAttempt = true;
@@ -1100,7 +1125,7 @@ export class ApplicationRunLoop {
               delayMs: decision.delayMs,
               error: error instanceof Error ? error.message : String(error),
             });
-            await sleepWithAbort(decision.delayMs, options.signal);
+            await (this.#deps.waitBeforeModelRetry ?? sleepWithAbort)(decision.delayMs, options.signal);
             continue;
           }
 

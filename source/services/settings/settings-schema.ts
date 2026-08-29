@@ -135,6 +135,16 @@ export const AgentSettingsSchema = z.object({
       escalation: 'warn',
     })
     .describe('Per-run staged budget and stall-detection policy'),
+  backgroundCheckIn: z
+    .object({
+      enabled: z.boolean().default(true),
+      intervalMs: z.number().int().positive().finite().default(300_000),
+      maxCheckInsPerTask: z.number().int().positive().finite().default(3),
+    })
+    .default({ enabled: true, intervalMs: 300_000, maxCheckInsPerTask: 3 })
+    .describe(
+      'Proactive check-ins on a still-running background shell job or subagent while the session is otherwise idle',
+    ),
   // NOTE: We do NOT validate provider existence here because the provider
   // registry can be extended at runtime from settings.json (custom providers).
   // We validate/fallback after SettingsService loads and registers runtime providers.
@@ -625,6 +635,11 @@ export interface SettingsWithSources {
       identicalToolCallThreshold: SettingWithSource<number>;
       escalation: SettingWithSource<'warn' | 'pause'>;
     };
+    backgroundCheckIn: {
+      enabled: SettingWithSource<boolean>;
+      intervalMs: SettingWithSource<number>;
+      maxCheckInsPerTask: SettingWithSource<number>;
+    };
     provider: SettingWithSource<string>;
     openrouter: SettingWithSource<any>;
     openai: SettingWithSource<any>;
@@ -785,6 +800,9 @@ export const SETTING_KEYS = {
   AGENT_RUN_BUDGET_MAX_PARENT_EXTENSIONS: 'agent.runBudget.maxParentExtensions',
   AGENT_RUN_BUDGET_IDENTICAL_TOOL_CALL_THRESHOLD: 'agent.runBudget.identicalToolCallThreshold',
   AGENT_RUN_BUDGET_ESCALATION: 'agent.runBudget.escalation',
+  AGENT_BACKGROUND_CHECK_IN_ENABLED: 'agent.backgroundCheckIn.enabled',
+  AGENT_BACKGROUND_CHECK_IN_INTERVAL_MS: 'agent.backgroundCheckIn.intervalMs',
+  AGENT_BACKGROUND_CHECK_IN_MAX_PER_TASK: 'agent.backgroundCheckIn.maxCheckInsPerTask',
   AGENT_OPENROUTER_API_KEY: 'agent.openrouter.apiKey',
   AGENT_OPENAI_API_KEY: 'agent.openai.apiKey',
   AGENT_OPENROUTER_BASE_URL: 'agent.openrouter.baseUrl', // Sensitive - env only
@@ -917,6 +935,9 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_RUN_BUDGET_MAX_PARENT_EXTENSIONS,
   SETTING_KEYS.AGENT_RUN_BUDGET_IDENTICAL_TOOL_CALL_THRESHOLD,
   SETTING_KEYS.AGENT_RUN_BUDGET_ESCALATION,
+  SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_ENABLED,
+  SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_INTERVAL_MS,
+  SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_MAX_PER_TASK,
   SETTING_KEYS.AGENT_MENTOR_MODEL,
   SETTING_KEYS.AGENT_MENTOR_PROVIDER,
   SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT,
@@ -1061,6 +1082,11 @@ export const DEFAULT_SETTINGS: SettingsData = {
       maxParentExtensions: 2,
       identicalToolCallThreshold: 3,
       escalation: 'warn',
+    },
+    backgroundCheckIn: {
+      enabled: true,
+      intervalMs: 300_000,
+      maxCheckInsPerTask: 3,
     },
     provider: 'openai',
     openrouter: {

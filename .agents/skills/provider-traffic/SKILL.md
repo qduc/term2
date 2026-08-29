@@ -70,11 +70,17 @@ Each request file is `{ "sent": {...}, "received": {...} }`.
 | `malformedFrames[]` | `{raw,error}` — frames that failed to parse as JSON |
 | `unknownFrames[]` | `{signature,count,firstRaw,lastRaw}` — SSE frames the parser didn't recognize |
 | `payload?` | **normalized** representation of the assembled response (see below); absent when nothing was extracted |
+| `wireShape?` | `"responses"` \| `"chat_completions"` \| `"unknown"` — which shape `payload` is rendered in. Set only for SSE, where the frames reveal the shape |
 | `fallbackBody?` | raw body when extraction produced nothing parseable (text transport, etc.) |
 
 ### `received.summary.payload` — the normalized response
 
-The logger reassembles streaming chunks into one OpenAI-style object so JSON and SSE look identical:
+The logger reassembles streaming chunks into one object so JSON and SSE look
+identical. **It renders that object in two different shapes**, selected by
+`summary.wireShape`, so check the shape before writing a `jq` path or you will
+silently get `null`.
+
+`wireShape: "chat_completions"` — Chat Completions shape:
 
 ```jsonc
 {
@@ -92,7 +98,25 @@ The logger reassembles streaming chunks into one OpenAI-style object so JSON and
 }
 ```
 
-Tool-call `function.arguments` is the **fully reassembled** argument string (chunks concatenated) — read the assembled value here, not individual SSE lines.
+`wireShape: "responses"` — Responses shape (this is what the Codex, OpenAI
+Responses, and Grok lanes produce; there is no `choices` key at all):
+
+```jsonc
+{
+  "id": "resp_…",                  // optional, assembled from the stream
+  "status": "completed",           // optional; the Responses analogue of finish_reason
+  "usage": { … },                  // optional, from the last usage frame
+  "output": [
+    { "type": "reasoning", "summary": [ { "type": "summary_text", "text": "…" } ] },
+    { "type": "message", "role": "assistant",
+      "content": [ { "type": "output_text", "text": "assembled text" } ] },
+    { "type": "function_call", "call_id": "call_…", "name": "shell",
+      "arguments": "<full args string>" }
+  ]
+}
+```
+
+Tool-call arguments are the **fully reassembled** argument string (chunks concatenated) — read the assembled value here, not individual SSE lines.
 
 ### `DailySessionIndexEntry` (one per line in `<day>/index.jsonl`)
 
@@ -139,6 +163,13 @@ Tool-call `function.arguments` is the **fully reassembled** argument string (chu
 ## Common jq recipes
 
 Set `F` to one request file, `D` to the date dir, `S` to the session dir.
+
+The `payload` recipes below are written for `wireShape: "chat_completions"`.
+On the Responses lane substitute the `output[]` paths: text is
+`.received.summary.payload.output[] | select(.type=="message") | .content[].text`,
+reasoning is `select(.type=="reasoning")`, tool calls are
+`select(.type=="function_call")` with `.name` / `.arguments`, and the finish
+reason is `.received.summary.payload.status`.
 
 ```bash
 F=~/.local/state/term2-nodejs/logs/provider-traffic/2026-06-18/12-39-39_e3e68/12-40-12.528Z_c1089.json

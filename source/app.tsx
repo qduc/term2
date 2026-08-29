@@ -354,7 +354,16 @@ const App: FC<AppProps> = ({
   // authoritative check still runs at submit time in ConversationAdmissionWorkflow.
   // An emptied composer flushes immediately so a stale warning never outlives
   // the text it described.
-  const grokCreditUsage = useGrokCreditUsage(settingsService, isProcessing);
+  const hasActiveBackgroundTasks = (backgroundTaskDetails ?? []).some(
+    (task) =>
+      task.status === 'running' ||
+      task.status === 'cancelling' ||
+      task.status === 'awaiting_approval' ||
+      task.status === 'waiting_for_answer',
+  );
+  const isOverallBusy = isProcessing || hasActiveBackgroundTasks;
+
+  const grokCreditUsage = useGrokCreditUsage(settingsService, isOverallBusy);
 
   const previewInput = useDebouncedValue(input, LARGE_UNCACHED_PREVIEW_DEBOUNCE_MS, (value) => value === '');
   const [largeUncachedPreview, setLargeUncachedPreview] = useState<LargeUncachedInputDecision | null>(null);
@@ -798,8 +807,8 @@ const App: FC<AppProps> = ({
   });
 
   useEffect(() => {
-    setTerminalTitle(buildTerminalTitleLabel(terminalTitleBase, effectiveIsProcessing));
-  }, [effectiveIsProcessing, terminalTitleBase]);
+    setTerminalTitle(buildTerminalTitleLabel(terminalTitleBase, isOverallBusy));
+  }, [isOverallBusy, terminalTitleBase]);
 
   useEffect(() => {
     publishHarnessInputState({ owner: inputOwner.kind, processing: effectiveIsProcessing });

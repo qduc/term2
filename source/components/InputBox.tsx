@@ -423,12 +423,14 @@ const InputBox: FC<Props> = ({
             {(pendingQueuedMessages?.length ?? 0) > 0 && value === '' ? (
               <>
                 <Text color={COLOR_TEXT_MUTED}>↑</Text> select queued · <Text color={COLOR_ACCENT}>Enter</Text> Steer ·{' '}
-                <Text color={COLOR_ACCENT_ALT}>Alt+Enter</Text> Queue
+                <Text color={COLOR_ACCENT_ALT}>Alt+Enter</Text> Queue · <Text color={COLOR_TEXT_MUTED}>Ctrl+O</Text>{' '}
+                model · <Text color={COLOR_TEXT_MUTED}>Ctrl+T</Text> effort
               </>
             ) : (
               <>
                 <Text color={COLOR_ACCENT}>Enter</Text> Steer active turn ·{' '}
-                <Text color={COLOR_ACCENT_ALT}>Alt+Enter</Text> Queue for next turn
+                <Text color={COLOR_ACCENT_ALT}>Alt+Enter</Text> Queue for next turn ·{' '}
+                <Text color={COLOR_TEXT_MUTED}>Ctrl+O</Text> model · <Text color={COLOR_TEXT_MUTED}>Ctrl+T</Text> effort
               </>
             )}
           </Text>

@@ -489,6 +489,37 @@ export class NestedSubagentRunner {
             };
             return JSON.stringify(budgetResult);
           }
+
+          // If the subagent executed tools before encountering an unrecoverable failure
+          // (e.g. fatal transport drop after retries exhausted), contain the failure into
+          // a structured failed result with partial findings so the parent agent receives
+          // the collected evidence and does not lose all progress.
+          const toolCallCount = Object.keys(runContext.toolCounts).length;
+          if (toolCallCount > 0 && signal?.aborted !== true) {
+            const errorMessage = (error as Error)?.message || String(error);
+            this.#logger.warn('Subagent failed after tool executions; returning containment result', {
+              agentId: runContext.agentId,
+              role,
+              error: errorMessage,
+              toolCallCount,
+            });
+            const partialText = extractFinalText(stream);
+            const failureResult: NestedSubagentResult = {
+              agentId: runContext.agentId,
+              role,
+              status: 'failed',
+              error: errorMessage,
+              finalText: partialText
+                ? `${partialText}\n\n[Subagent stopped due to error: ${errorMessage}]`
+                : `[Subagent stopped due to error after ${toolCallCount} tool action(s): ${errorMessage}]`,
+              filesChanged: [...new Set(runContext.filesChanged)],
+              toolsUsed: aggregateContextToolUsage(runContext.toolCounts),
+              usage: extractUsage(stream),
+              costRecords: stream.runCostRecords as ModelRequestCost[] | undefined,
+            };
+            return JSON.stringify(failureResult);
+          }
+
           throw error;
         }
 

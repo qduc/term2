@@ -18,6 +18,7 @@ import type {
   ContextCompactionSessionState,
   StreamedModelTurnRequest,
   StreamedModelTool,
+  StreamedModelTurnOutput,
 } from '../../contracts/streamed-model-turn.js';
 import type {
   AnyToolDefinition,
@@ -46,6 +47,7 @@ import {
   GenerationStreamDeadlines,
   type GenerationGuardOptions,
 } from './generation-guard.js';
+import { classifyInLoopModelRetry, sleepWithAbort } from './model-request-retry.js';
 
 /**
  * Fields of `modelSettings` the run loop and provider adapters actually read.
@@ -927,158 +929,199 @@ export class ApplicationRunLoop {
       }
 
       const model = await this.#deps.resolveModel(state.agent.model);
-      let sawToolCall = false;
-      const streamedToolCalls: Array<Extract<StreamedModelTurnEvent, { type: 'tool_call' }>> = [];
+      const maxRetries = state.agent.modelSettings?.retry?.maxRetries ?? 0;
+      let attempt = 0;
+      let streamedToolCalls: Array<Extract<StreamedModelTurnEvent, { type: 'tool_call' }>> = [];
       let completion: Extract<StreamedModelTurnEvent, { type: 'completion' }> | undefined;
+      let sawToolCall = false;
+      let activeRequestId = '';
+      let activeRequest: StreamedModelTurnRequest | undefined;
       let pendingNativeReasoning: PendingNativeReasoning | undefined;
-      // Stable process-unique request id, allocated immediately before dispatch
-      // so a cost record can be settled exactly once (success or failure).
-      const requestId = this.#nextRequestId();
+      let criticalWrapUp = false;
 
-      const criticalWrapUp = state.criticalWrapUpPending === true && state.criticalWrapUpDispatched !== true;
-      if (criticalWrapUp) state.criticalWrapUpDispatched = true;
-      const disableChaining = state.disableChainingForAttempt === true;
-      if (disableChaining) {
-        state.disableChainingForAttempt = false;
-        state.responseId = undefined;
-        state.responseProviderId = undefined;
-      }
-      const request: StreamedModelTurnRequest = {
-        instructions: criticalWrapUp
-          ? `${state.agent.instructions}\n\nBudget containment is terminal. Do not call tools. In this one final response, summarize what you completed, the evidence you have, and what remains.`
-          : state.agent.instructions,
-        ...(state.supportsConversationChaining &&
-        !disableChaining &&
-        state.responseId &&
-        state.responseProviderId !== undefined &&
-        state.responseProviderId === state.currentProviderId
-          ? { previousResponseId: state.responseId }
-          : {}),
-        ...(disableChaining ? { disableChaining: true } : {}),
-        input: state.input,
-        tools: toModelTools(criticalWrapUp ? [] : state.agent.tools),
-        applicationTools: criticalWrapUp ? [] : state.agent.tools,
-        ...(state.agent.modelSettings?.temperature !== undefined
-          ? { temperature: state.agent.modelSettings.temperature as number }
-          : {}),
-        ...(state.agent.modelSettings?.reasoning ? { reasoning: state.agent.modelSettings.reasoning as any } : {}),
-        ...(state.agent.modelSettings?.maxTokens !== undefined
-          ? { maxTokens: state.agent.modelSettings.maxTokens }
-          : {}),
-        ...(state.agent.outputType !== undefined ? { outputType: state.agent.outputType } : {}),
-        ...(state.agent.modelSettings?.codex ? { codex: state.agent.modelSettings.codex } : {}),
-        ...(state.agent.modelSettings?.providerData
-          ? {
-              providerOptions: this.#contextCompactionSessionState.disabled
-                ? Object.fromEntries(
-                    Object.entries(state.agent.modelSettings.providerData).filter(
-                      ([key]) => key !== 'contextCompaction',
-                    ),
-                  )
-                : state.agent.modelSettings.providerData,
-            }
-          : {}),
-        ...(options.signal ? { signal: options.signal } : {}),
-      };
-      const generationGuard = new GenerationGuard({
-        maxOutputCharacters: state.agent.modelSettings?.maxStreamOutputChars,
-        maxTextCharacters: state.agent.modelSettings?.maxStreamOutputChars,
-        maxReasoningCharacters: state.agent.modelSettings?.maxStreamOutputChars,
-        maxToolArgumentCharacters: state.agent.modelSettings?.maxStreamOutputChars,
-        maxCumulativeToolArgumentCharacters: state.agent.modelSettings?.maxStreamOutputChars,
-        requestDeadlineMs: state.agent.modelSettings?.maxModelRequestDurationMs,
-        maxStreamIdleMs: state.agent.modelSettings?.maxModelStreamIdleMs,
-        ...options.generationGuard,
-      });
-      const consume = async (): Promise<void> => {
-        const deadline = new GenerationStreamDeadlines(
-          { totalMs: generationGuard.requestDeadlineMs, idleMs: generationGuard.maxStreamIdleMs },
-          () => requestAbortController.abort(),
-          () => generationGuard.progress,
-        );
-        let iterator: AsyncIterator<StreamedModelTurnEvent> | undefined;
-        let iteratorFinished = false;
-        try {
-          iterator = model.stream(request)[Symbol.asyncIterator]();
-          while (true) {
-            const next = await deadline.wait(iterator.next());
-            if (next.done) {
-              iteratorFinished = true;
-              return;
-            }
-            // Any streamed event is transport activity: re-arm the inactivity
-            // window so long legitimate reasoning is never mistaken for a stall.
-            deadline.recordActivity();
-            const event = next.value;
-            if (event.type === 'completion') {
-              generationGuard.observeCompletion(event.output);
-              completion = event;
-              continue;
-            }
-            if (event.type === 'text_delta') {
-              generationGuard.observeText(event.text);
-              outputPush(stream, queue, { type: 'text_delta', text: event.text });
-              continue;
-            }
-            if (event.type === 'codex_rate_limits') {
-              outputPush(stream, queue, { type: 'codex_rate_limits', rateLimits: event.rateLimits });
-              continue;
-            }
-            if (event.type === 'reasoning_delta') {
-              const accepted = generationGuard.observeReasoning(event.text);
-              if (!accepted) continue;
-              const forwarded = accepted === event.text ? event : { ...event, text: accepted };
-              pendingNativeReasoning = appendNativeReasoning(pendingNativeReasoning, forwarded);
-              outputPush(stream, queue, { type: 'reasoning_delta', text: accepted });
-              continue;
-            }
-            if (event.type === 'tool_call_streaming_delta') {
-              generationGuard.observeToolArgumentProgress(event.argumentCharCount);
-              outputPush(stream, queue, event);
-              continue;
-            }
-            if (event.type === 'context_compaction_started' || event.type === 'context_compaction_completed') {
-              outputPush(stream, queue, event);
-              continue;
-            }
-            if (event.type === 'tool_call') {
-              generationGuard.observeToolCall(event.arguments);
-              pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
-              sawToolCall = true;
-              streamedToolCalls.push(event);
-            }
-          }
-        } finally {
-          deadline.dispose();
-          if (iterator && !iteratorFinished) void iterator.return?.().catch(() => undefined);
+      while (true) {
+        streamedToolCalls = [];
+        completion = undefined;
+        sawToolCall = false;
+        pendingNativeReasoning = undefined;
+        // Stable process-unique request id, allocated immediately before dispatch
+        // so a cost record can be settled exactly once (success or failure).
+        activeRequestId = this.#nextRequestId();
+        const requestId = activeRequestId;
+        const outputLengthBefore = stream.output.length;
+        const newItemsLengthBefore = stream.newItems.length;
+
+        criticalWrapUp = state.criticalWrapUpPending === true && state.criticalWrapUpDispatched !== true;
+        if (criticalWrapUp) state.criticalWrapUpDispatched = true;
+        const disableChaining = state.disableChainingForAttempt === true;
+        if (disableChaining) {
+          state.disableChainingForAttempt = false;
+          state.responseId = undefined;
+          state.responseProviderId = undefined;
         }
-      };
-      const dispatch = async (): Promise<void> => {
-        state.requestPreparation?.prepare(request);
-        await consume();
-      };
-      try {
-        if (state.requestPreparation) await state.requestPreparation.run(dispatch);
-        else await dispatch();
-      } catch (error) {
-        if (error instanceof GenerationGuardError) requestAbortController.abort();
-        // Dispatch began, but no terminal completion was accepted. Record an
-        // unpriced marker so the summary stays honest (partial) rather than
-        // appearing exact. Observational only: the error still propagates.
-        const cancelled = error instanceof Error && error.name === 'AbortError';
-        const record = this.#appendCostRecord(state, {
-          requestId,
-          provider: state.currentProviderId,
-          model: state.agent.model,
-          tier: resolveServiceTier(request),
-          outcome: cancelled ? 'cancelled' : 'failed',
+        const request: StreamedModelTurnRequest = {
+          instructions: criticalWrapUp
+            ? `${state.agent.instructions}\n\nBudget containment is terminal. Do not call tools. In this one final response, summarize what you completed, the evidence you have, and what remains.`
+            : state.agent.instructions,
+          ...(state.supportsConversationChaining &&
+          !disableChaining &&
+          state.responseId &&
+          state.responseProviderId !== undefined &&
+          state.responseProviderId === state.currentProviderId
+            ? { previousResponseId: state.responseId }
+            : {}),
+          ...(disableChaining ? { disableChaining: true } : {}),
+          input: state.input,
+          tools: toModelTools(criticalWrapUp ? [] : state.agent.tools),
+          applicationTools: criticalWrapUp ? [] : state.agent.tools,
+          ...(state.agent.modelSettings?.temperature !== undefined
+            ? { temperature: state.agent.modelSettings.temperature as number }
+            : {}),
+          ...(state.agent.modelSettings?.reasoning ? { reasoning: state.agent.modelSettings.reasoning as any } : {}),
+          ...(state.agent.modelSettings?.maxTokens !== undefined
+            ? { maxTokens: state.agent.modelSettings.maxTokens }
+            : {}),
+          ...(state.agent.outputType !== undefined ? { outputType: state.agent.outputType } : {}),
+          ...(state.agent.modelSettings?.codex ? { codex: state.agent.modelSettings.codex } : {}),
+          ...(state.agent.modelSettings?.providerData
+            ? {
+                providerOptions: this.#contextCompactionSessionState.disabled
+                  ? Object.fromEntries(
+                      Object.entries(state.agent.modelSettings.providerData).filter(
+                        ([key]) => key !== 'contextCompaction',
+                      ),
+                    )
+                  : state.agent.modelSettings.providerData,
+              }
+            : {}),
+          ...(options.signal ? { signal: options.signal } : {}),
+        };
+        activeRequest = request;
+        const generationGuard = new GenerationGuard({
+          maxOutputCharacters: state.agent.modelSettings?.maxStreamOutputChars,
+          maxTextCharacters: state.agent.modelSettings?.maxStreamOutputChars,
+          maxReasoningCharacters: state.agent.modelSettings?.maxStreamOutputChars,
+          maxToolArgumentCharacters: state.agent.modelSettings?.maxStreamOutputChars,
+          maxCumulativeToolArgumentCharacters: state.agent.modelSettings?.maxStreamOutputChars,
+          requestDeadlineMs: state.agent.modelSettings?.maxModelRequestDurationMs,
+          maxStreamIdleMs: state.agent.modelSettings?.maxModelStreamIdleMs,
+          ...options.generationGuard,
         });
-        // Only the live queue sees cost records: `output`/`newItems` feed
-        // persistence and replay, and a cost event must never become a
-        // restored history item.
-        queue.push({ type: 'cost_update', record });
-        this.#evaluateRunBudget(state, stream, queue);
-        throw error;
+        const consume = async (): Promise<void> => {
+          const deadline = new GenerationStreamDeadlines(
+            { totalMs: generationGuard.requestDeadlineMs, idleMs: generationGuard.maxStreamIdleMs },
+            () => requestAbortController.abort(),
+            () => generationGuard.progress,
+          );
+          let iterator: AsyncIterator<StreamedModelTurnEvent> | undefined;
+          let iteratorFinished = false;
+          try {
+            iterator = model.stream(request)[Symbol.asyncIterator]();
+            while (true) {
+              const next = await deadline.wait(iterator.next());
+              if (next.done) {
+                iteratorFinished = true;
+                return;
+              }
+              // Any streamed event is transport activity: re-arm the inactivity
+              // window so long legitimate reasoning is never mistaken for a stall.
+              deadline.recordActivity();
+              const event = next.value;
+              if (event.type === 'completion') {
+                generationGuard.observeCompletion(event.output);
+                completion = event;
+                continue;
+              }
+              if (event.type === 'text_delta') {
+                generationGuard.observeText(event.text);
+                outputPush(stream, queue, { type: 'text_delta', text: event.text });
+                continue;
+              }
+              if (event.type === 'codex_rate_limits') {
+                outputPush(stream, queue, { type: 'codex_rate_limits', rateLimits: event.rateLimits });
+                continue;
+              }
+              if (event.type === 'reasoning_delta') {
+                const accepted = generationGuard.observeReasoning(event.text);
+                if (!accepted) continue;
+                const forwarded = accepted === event.text ? event : { ...event, text: accepted };
+                pendingNativeReasoning = appendNativeReasoning(pendingNativeReasoning, forwarded);
+                outputPush(stream, queue, { type: 'reasoning_delta', text: accepted });
+                continue;
+              }
+              if (event.type === 'tool_call_streaming_delta') {
+                generationGuard.observeToolArgumentProgress(event.argumentCharCount);
+                outputPush(stream, queue, event);
+                continue;
+              }
+              if (event.type === 'context_compaction_started' || event.type === 'context_compaction_completed') {
+                outputPush(stream, queue, event);
+                continue;
+              }
+              if (event.type === 'tool_call') {
+                generationGuard.observeToolCall(event.arguments);
+                pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
+                sawToolCall = true;
+                streamedToolCalls.push(event);
+              }
+            }
+          } finally {
+            deadline.dispose();
+            if (iterator && !iteratorFinished) void iterator.return?.().catch(() => undefined);
+          }
+        };
+        const dispatch = async (): Promise<void> => {
+          state.requestPreparation?.prepare(request);
+          await consume();
+        };
+        try {
+          if (state.requestPreparation) await state.requestPreparation.run(dispatch);
+          else await dispatch();
+          break;
+        } catch (error) {
+          if (error instanceof GenerationGuardError) requestAbortController.abort();
+
+          const decision = classifyInLoopModelRetry(error, attempt, maxRetries);
+          if (decision.retryable && !options.signal?.aborted) {
+            attempt++;
+            stream.output.splice(outputLengthBefore);
+            if (stream.newItems !== stream.output) {
+              stream.newItems.splice(newItemsLengthBefore);
+            }
+            if (decision.kind === 'chain_recovery') {
+              state.disableChainingForAttempt = true;
+              state.responseId = undefined;
+              state.responseProviderId = undefined;
+            }
+            this.#deps.logDiagnostic?.('Retrying model request in run loop', {
+              attempt,
+              maxRetries,
+              kind: decision.kind,
+              delayMs: decision.delayMs,
+              error: error instanceof Error ? error.message : String(error),
+            });
+            await sleepWithAbort(decision.delayMs, options.signal);
+            continue;
+          }
+
+          // Dispatch began, but no terminal completion was accepted. Record an
+          // unpriced marker so the summary stays honest (partial) rather than
+          // appearing exact. Observational only: the error still propagates.
+          const cancelled = error instanceof Error && error.name === 'AbortError';
+          const record = this.#appendCostRecord(state, {
+            requestId,
+            provider: state.currentProviderId,
+            model: state.agent.model,
+            tier: resolveServiceTier(request),
+            outcome: cancelled ? 'cancelled' : 'failed',
+          });
+          // Only the live queue sees cost records: `output`/`newItems` feed
+          // persistence and replay, and a cost event must never become a
+          // restored history item.
+          queue.push({ type: 'cost_update', record });
+          this.#evaluateRunBudget(state, stream, queue);
+          throw error;
+        }
       }
 
       if (!completion) {
@@ -1097,6 +1140,7 @@ export class ApplicationRunLoop {
         }
         continue;
       }
+      const finalCompletion = completion as Extract<StreamedModelTurnEvent, { type: 'completion' }>;
       // Commit the authoritative terminal state before handling terminal-only
       // tool calls. Approval may pause immediately after this point, and the
       // continuation must still carry the response that produced the calls.
@@ -1105,15 +1149,15 @@ export class ApplicationRunLoop {
       // chaining, while still exposing the completed provider response on the
       // current stream for diagnostics.
       if (state.supportsConversationChaining && state.currentProviderId !== undefined) {
-        state.responseId = completion.responseId;
+        state.responseId = finalCompletion.responseId;
         state.responseProviderId = state.currentProviderId;
       } else {
         state.responseId = undefined;
         state.responseProviderId = undefined;
       }
       let normalizedCompletionUsage: ReturnType<typeof normalizeModelUsage>;
-      if (completion.usage !== undefined) {
-        normalizedCompletionUsage = normalizeModelUsage(completion.usage);
+      if (finalCompletion.usage !== undefined) {
+        normalizedCompletionUsage = normalizeModelUsage(finalCompletion.usage);
         if (normalizedCompletionUsage) {
           const accumulated = addTokenUsage(normalizeModelUsage(state.usage), normalizedCompletionUsage);
           state.usage = {
@@ -1133,7 +1177,7 @@ export class ApplicationRunLoop {
         } else {
           // Providers may carry a future/opaque usage shape. Preserve the old
           // pass-through behavior when normalization cannot recognize it.
-          state.usage = completion.usage;
+          state.usage = finalCompletion.usage;
         }
       } else {
         normalizedCompletionUsage = undefined;
@@ -1146,13 +1190,13 @@ export class ApplicationRunLoop {
       // persistence and replay, and a cost event must never become a restored
       // history item.
       const record = this.#appendCostRecord(state, {
-        requestId,
+        requestId: activeRequestId,
         provider: state.currentProviderId,
         model: state.agent.model,
-        tier: resolveServiceTier(request),
+        tier: activeRequest ? resolveServiceTier(activeRequest) : 'standard',
         outcome: 'completed',
         usage: normalizedCompletionUsage,
-        providerUsd: completion.costUsd,
+        providerUsd: finalCompletion.costUsd,
       });
       queue.push({ type: 'cost_update', record });
       // Cost and usage arrive in the same completion metadata, so surface both
@@ -1160,17 +1204,17 @@ export class ApplicationRunLoop {
       // usage, never the run accumulator in `state.usage`.
       if (normalizedCompletionUsage) queue.push({ type: 'usage_update', usage: normalizedCompletionUsage });
       this.#evaluateRunBudget(state, stream, queue);
-      stream.lastResponseId = completion.responseId;
-      stream.rawResponses?.push(completion);
+      stream.lastResponseId = finalCompletion.responseId;
+      stream.rawResponses?.push(finalCompletion);
       // Some provider adapters report function calls only in the terminal
       // completion rather than as separate stream events. Their reasoning may
       // likewise be terminal-only, so associate it before replaying calls.
       const toolCalls = [...streamedToolCalls];
       if (!sawToolCall) {
-        for (const item of completion.output) {
+        for (const item of finalCompletion.output) {
           if (item.type === 'reasoning') pendingNativeReasoning = appendNativeReasoning(pendingNativeReasoning, item);
         }
-        for (const item of completion.output) {
+        for (const item of finalCompletion.output) {
           if (item.type !== 'tool_call') continue;
           pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
           sawToolCall = true;
@@ -1188,7 +1232,7 @@ export class ApplicationRunLoop {
       // applies compaction's replacement rule; keeping the item here also
       // makes it available to an in-flight tool continuation before that
       // terminal history commit occurs.
-      for (const item of completion.output) {
+      for (const item of finalCompletion.output) {
         if (item.type !== 'provider_opaque') continue;
         const historyItem: ProviderInputItem = {
           ...item.item,
@@ -1199,8 +1243,8 @@ export class ApplicationRunLoop {
         outputPush(stream, queue, { type: 'item', item });
       }
 
-      const assistantText = completion.output
-        .filter((item) => item.type === 'message')
+      const assistantText = finalCompletion.output
+        .filter((item): item is Extract<StreamedModelTurnOutput, { type: 'message' }> => item.type === 'message')
         .flatMap((item) => item.content)
         .map((part) => part.text)
         .join('');

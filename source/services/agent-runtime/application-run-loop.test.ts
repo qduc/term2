@@ -15,6 +15,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { StreamedModelTurn } from '../../contracts/streamed-model-turn.js';
 import type { ToolDefinition } from '../../tools/types.js';
 import { HarnessInvariantError } from '../../lib/harness-invariant-error.js';
+import { WebSocketClosedEarlyError } from '../../providers/websocket-close-evidence.js';
 
 const agent: ApplicationAgent = {
   name: 'test-agent',
@@ -2604,4 +2605,134 @@ it('retains terminal-only encrypted reasoning from a Responses lane it has never
       },
     ]),
   );
+});
+
+describe('ApplicationRunLoop in-loop request retry', () => {
+  it('retries transient WebSocketClosedEarlyError mid-stream and succeeds without duplicating stream deltas', async () => {
+    let attempts = 0;
+    const model: StreamedModelTurn = {
+      async *stream(_request) {
+        attempts++;
+        if (attempts === 1) {
+          yield { type: 'text_delta', text: 'Partial text before socket drops...' };
+          throw new WebSocketClosedEarlyError({ code: 1006, reason: '', unsentCount: 0 });
+        }
+        yield { type: 'text_delta', text: 'Clean response on retry.' };
+        yield {
+          type: 'completion',
+          responseId: 'resp-retry-ok',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'Clean response on retry.' }] }],
+        };
+      },
+    };
+
+    const diagnostics: any[] = [];
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => model,
+      logDiagnostic: (msg, meta) => diagnostics.push({ msg, meta }),
+    });
+
+    const stream = loop.startStream(
+      {
+        ...agent,
+        modelSettings: { retry: { maxRetries: 2 } },
+      },
+      'test prompt',
+    );
+
+    const result = await stream.completed;
+    expect(attempts).toBe(2);
+    expect((result as any).output.filter((e: any) => e.type === 'text_delta')).toEqual([
+      { type: 'text_delta', text: 'Clean response on retry.' },
+    ]);
+    expect(diagnostics.some((d) => d.msg === 'Retrying model request in run loop')).toBe(true);
+  });
+
+  it('disables chaining on retry after connection drop', async () => {
+    const requests: any[] = [];
+    let attempts = 0;
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        requests.push(request);
+        attempts++;
+        if (attempts === 1) {
+          throw new WebSocketClosedEarlyError({ code: 1006 });
+        }
+        yield {
+          type: 'completion',
+          responseId: 'resp-2',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'Done.' }] }],
+        };
+      },
+    };
+
+    const loop = new ApplicationRunLoop({ resolveModel: () => model });
+    const stream = loop.startStream(
+      {
+        ...agent,
+        modelSettings: { retry: { maxRetries: 2 } },
+      },
+      'continue prompt',
+      {
+        providerId: 'codex',
+        supportsConversationChaining: true,
+        previousResponseId: 'resp-prior',
+      },
+    );
+
+    await stream.completed;
+    expect(attempts).toBe(2);
+    expect(requests[0].previousResponseId).toBe('resp-prior');
+    expect(requests[1].previousResponseId).toBeUndefined();
+    expect(requests[1].disableChaining).toBe(true);
+  });
+
+  it('re-throws when maxRetries is exhausted', async () => {
+    let attempts = 0;
+    const model: StreamedModelTurn = {
+      // eslint-disable-next-line require-yield
+      async *stream(_request) {
+        attempts++;
+        throw new WebSocketClosedEarlyError({ code: 1006 });
+      },
+    };
+
+    const loop = new ApplicationRunLoop({ resolveModel: () => model });
+    const stream = loop.startStream(
+      {
+        ...agent,
+        modelSettings: { retry: { maxRetries: 1 } },
+      },
+      'prompt',
+    );
+
+    await expect(stream.completed).rejects.toThrow('closed before a terminal response event');
+    expect(attempts).toBe(2);
+  });
+
+  it('does not retry when signal is aborted', async () => {
+    const controller = new AbortController();
+    let attempts = 0;
+    const model: StreamedModelTurn = {
+      // eslint-disable-next-line require-yield
+      async *stream(_request) {
+        attempts++;
+        controller.abort();
+        throw new WebSocketClosedEarlyError({ code: 1006 });
+      },
+    };
+
+    const loop = new ApplicationRunLoop({ resolveModel: () => model });
+    const stream = loop.startStream(
+      {
+        ...agent,
+        modelSettings: { retry: { maxRetries: 2 } },
+      },
+      'prompt',
+      { signal: controller.signal },
+    );
+
+    await expect(stream.completed).rejects.toThrow();
+    expect(attempts).toBe(1);
+  });
 });

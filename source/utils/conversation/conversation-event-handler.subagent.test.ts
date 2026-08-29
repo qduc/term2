@@ -435,10 +435,16 @@ it('run_subagent background launch remains an ordinary command message', () => {
         sender: 'command',
         callId: 'background-call-1',
         toolName: 'run_subagent',
-        status: 'running',
+        status: 'pending',
       }),
     ],
   ]);
+
+  handler({
+    type: 'tool_dispatched',
+    toolCallId: 'background-call-1',
+    toolName: 'run_subagent',
+  } as ConversationEvent);
 
   handler({
     type: 'command_message',
@@ -453,7 +459,8 @@ it('run_subagent background launch remains an ordinary command message', () => {
     },
   } as ConversationEvent);
 
-  const messages = deps.calls.setMessagesCalls[0]!(deps.calls.appendedMessages[0]!);
+  const running = deps.calls.setMessagesCalls[0]!(deps.calls.appendedMessages[0]!);
+  const messages = deps.calls.setMessagesCalls[1]!(running);
   expect(messages).toEqual([
     expect.objectContaining({
       sender: 'command',

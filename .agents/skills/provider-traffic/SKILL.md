@@ -70,7 +70,7 @@ Each request file is `{ "sent": {...}, "received": {...} }`.
 | `malformedFrames[]` | `{raw,error}` — frames that failed to parse as JSON |
 | `unknownFrames[]` | `{signature,count,firstRaw,lastRaw}` — SSE frames the parser didn't recognize |
 | `payload?` | **normalized** representation of the assembled response (see below); absent when nothing was extracted |
-| `wireShape?` | `"responses"` \| `"chat_completions"` \| `"unknown"` — which shape `payload` is rendered in. Set only for SSE, where the frames reveal the shape |
+| `wireShape?` | `"responses"` \| `"chat_completions"` \| `"unknown"` — which shape `payload` is rendered in. Set on the SSE and non-streaming-JSON paths (`provider-traffic.ts:693`, `:411`). **Absent on `transport: "websocket"`** — the Codex lane — so do not filter on it |
 | `fallbackBody?` | raw body when extraction produced nothing parseable (text transport, etc.) |
 
 ### `received.summary.payload` — the normalized response
@@ -98,16 +98,19 @@ silently get `null`.
 }
 ```
 
-`wireShape: "responses"` — Responses shape (this is what the Codex, OpenAI
-Responses, and Grok lanes produce; there is no `choices` key at all):
+`wireShape: "responses"` — Responses shape, produced by SSE lanes speaking the
+Responses API (there is no `choices` key at all). Note this is *not* what the
+Codex WebSocket lane writes: `summarizeWebsocketResponse` emits a
+`{choices,id,usage}` payload and sets no `wireShape` at all, so Codex artifacts
+read with the Chat Completions recipes below:
 
 ```jsonc
 {
   "id": "resp_…",                  // optional, assembled from the stream
-  "status": "completed",           // optional; the Responses analogue of finish_reason
+  "status": "in_progress",         // optional; the last status seen in the stream, not a final state
   "usage": { … },                  // optional, from the last usage frame
   "output": [
-    { "type": "reasoning", "summary": [ { "type": "summary_text", "text": "…" } ] },
+    { "type": "reasoning", "encrypted_content": "<redacted>", "summary": [] },
     { "type": "message", "role": "assistant",
       "content": [ { "type": "output_text", "text": "assembled text" } ] },
     { "type": "function_call", "call_id": "call_…", "name": "shell",
@@ -169,7 +172,9 @@ On the Responses lane substitute the `output[]` paths: text is
 `.received.summary.payload.output[] | select(.type=="message") | .content[].text`,
 reasoning is `select(.type=="reasoning")`, tool calls are
 `select(.type=="function_call")` with `.name` / `.arguments`, and the finish
-reason is `.received.summary.payload.status`.
+reason is `.received.summary.payload.status` (in practice `in_progress`, since
+the artifact is written from the assembled stream). Reasoning items on this lane
+normally carry `encrypted_content: "<redacted>"` with an empty `summary`.
 
 ```bash
 F=~/.local/state/term2-nodejs/logs/provider-traffic/2026-06-18/12-39-39_e3e68/12-40-12.528Z_c1089.json

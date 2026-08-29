@@ -76,8 +76,9 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
   A Responses adapter splices only its own lane tag, which it takes as a parameter
   (`OPENAI_RESPONSES_OPAQUE_TAG = 'openai'` by default, `GROK_RESPONSES_OPAQUE_TAG = 'grok'`
   for Grok — a second vendor on the same wire shape whose ciphertext is not interchangeable);
-  the Responses lane never honours the legacy shared tag
-  (`provider-opaque-compatibility.ts:31-79`). Chat Completions
+  `acceptsProviderOpaqueTag` refuses the legacy shared tag only for the lane tagged
+  `openai` — a Grok-tagged lane still accepts `'openai-compatible'` items, which looks
+  unintended (`provider-opaque-compatibility.ts:32-80`, esp. `:79`). Chat Completions
   splices `tag === providerId` or legacy `'openai-compatible'`, where the runtime-compatible
   tag is `opaqueProviderTag(config)` = `config.name || config.type || 'openai-compatible'`
   (`openai-compatible.provider.ts:51-52`); AI SDK and Codex drop every tag at their public request boundary, with lower-level serializer guards for bypasses.
@@ -165,41 +166,41 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
 | ROADMAP minimum-matrix cell | Evidence (file:title) | Status |
 | --- | --- | --- |
 | Complete parallel tool-call batch | `openai-chat-completions-model.test.ts:394` "application tool continuation keeps one reasoning-bearing assistant message for parallel tool calls"; `openai-chained-input-compatibility.test.ts:42` "preserves trailing tool-result selection and selected parallel outputs exactly" | covered |
-| Partial parallel tool-call batch | `session-input-planner.test.ts:54` "uses self-contained full history for a partial parallel tool batch"; `chained-input-filter.test.ts:419` "forwards only the completed result from a partial parallel batch" | covered |
+| Partial parallel tool-call batch | `session-input-planner.test.ts:82` "uses self-contained full history for a partial parallel tool batch"; `chained-input-filter.test.ts:419` "forwards only the completed result from a partial parallel batch" | covered |
 | Pre-stream transport failure | `recovery-executor.test.ts:337` "retry_fresh without stream preserves user message and clears continuity"; classification covered by `retry-classifier`/`retry-error-classification` tests | covered |
 | Mid-stream transport failure | `recovery-executor.test.ts:109` "retry_fresh with stream reconciles history and restores ledger"; `:151`, `:199` | covered |
 | Failure before dispatch | `recovery-executor.test.ts:151` "marks never-dispatched in-flight calls as aborted and injects error results"; `tool-execution-ledger.test.ts:733` | covered |
 | Failure after dispatch | `recovery-executor.test.ts:199` "marks dispatched in-flight calls as unknown, not failed" | covered |
-| Approval pause and continuation | `turn-workflow.test.ts:646` "executeInitial resolves aborted approvals through continuation"; `:580` "returns each later post-execute pause from the same live stream" | covered |
+| Approval pause and continuation | `turn-workflow.test.ts:874` "executeInitial resolves aborted approvals through continuation"; `:580` "returns each later post-execute pause from the same live stream" | covered |
 | Compacted history | `session-stream-processor.test.ts:77` "finalize() replaces history with user turns and the last OpenAI compaction item"; `local-context-compactor.test.ts:11` "reduces cold turns sequentially and returns a marked checkpoint plus verbatim hot tail" | covered |
 | Replacement boundaries | `conversation-state-projector.test.ts:88` "does not reinsert tool pairs behind a compaction marker"; `:106` "preserves a pre-boundary tool fragment instead of reinserting its ledger pair" | covered |
 | Save/resume | `conversation-replay.test.ts:1195` "assistant_turn rebuilds structured assistant history for resume"; `recovery-executor.test.ts:31` "resume_stream returns run instruction with resume state" | covered |
 | Stateless replay | `tool-execution-ledger.test.ts:515` "dropUnpairedFunctionCalls removes function_calls without a matching output"; `:530` "removes function_call_outputs without a matching call" | covered |
 | Orphan call/result item | `tool-execution-ledger.test.ts:515`, `:530`; `chained-input-filter.test.ts:357` "rejects an expected tool output whose function_call is missing from the input" | covered |
 | Duplicate item | `tool-execution-ledger.test.ts:216` "recordFunctionCall preserves existing historyItems on a duplicate call"; `session-stream-processor.test.ts:1360` "dedupes equivalent wrapped, canonical, and provider result representations" | covered |
-| Missing item | `chained-input-filter.test.ts:265` "rejects an empty chained delta when tool outputs are required"; `retry-classifier.test.ts:157` "classify returns bounded chain recovery when a chained continuation is missing required tool output" | covered |
+| Missing item | `chained-input-filter.test.ts:265` "rejects an empty chained delta when tool outputs are required"; `retry-classifier.test.ts:169` "classify returns bounded chain recovery when a chained continuation is missing required tool output" | covered |
 | Out-of-order item | `conversation-state-projector.test.ts:53` "replaces a lone compact tool result with the ledger pair instead of duplicating it" | covered |
-| Chained request | `session-input-planner.test.ts:7` "carries the authoritative immutable history snapshot alongside the unchanged input plan"; `chained-input-filter.test.ts:178`, `:400` | covered |
-| Forced-full-history request | `session-input-planner.test.ts:27` "drops chaining and uses full history when the previous response still has unpaid tool debt" | covered |
-| Transport-downgrade request | `recovery-policy.test.ts:58` "transport_downgrade produces retry_fresh with full_history"; `retry-classifier.test.ts:145` "classify returns transport_downgrade when the Responses websocket reaches its connection lifetime" | covered |
+| Chained request | `session-input-planner.test.ts:8` "carries the authoritative immutable history snapshot alongside the unchanged input plan"; `chained-input-filter.test.ts:178`, `:400` | covered |
+| Forced-full-history request | `session-input-planner.test.ts:55` "drops chaining and uses full history when the previous response still has unpaid tool debt" | covered |
+| Transport-downgrade request | `recovery-policy.test.ts:62` "transport_downgrade produces retry_fresh with full_history"; `retry-classifier.test.ts:157` "classify returns transport_downgrade when the Responses websocket reaches its connection lifetime" | covered |
 
 **C2.6 adapter-isolation cells (supplementary to the C2.1–C2.5 minimum matrix above):**
 
 | C2.6 cell | Evidence (file:title) | Status |
 | --- | --- | --- |
-| OpenAI Responses own-tag splice | `openai-responses-model.test.ts:576` "splices an openai provider_opaque input item verbatim into the request" (unary) | covered |
-| OpenAI Responses foreign fail-closed handling | `openai-responses-model.test.ts:605` "drops a non-openai provider_opaque item and still replays the rest of the history"; `openai-responses-model.ts:85-90` filters it before projection | covered |
-| OpenAI Responses unary `failed`/`incomplete` rejected | `openai-responses-model.test.ts:712` "rejects unary %s responses before lifecycle terminal success" | covered |
-| OpenAI Responses stream without terminal | `openai-responses-model.test.ts:734` "fails when an HTTP stream ends without a terminal completion" | covered |
-| OpenAI Responses unknown output becomes opaque | `openai-responses-model.test.ts:537` "turns an unknown Responses output item into provider_opaque instead of throwing" | covered |
+| OpenAI Responses own-tag splice | `openai-responses-model.test.ts:611` "splices an openai provider_opaque input item verbatim into the request" (unary) | covered |
+| OpenAI Responses foreign fail-closed handling | `openai-responses-model.test.ts:640` "drops a non-openai provider_opaque item and still replays the rest of the history"; `openai-responses-model.ts:85-90` filters it before projection | covered |
+| OpenAI Responses unary `failed`/`incomplete` rejected | `openai-responses-model.test.ts:747` "rejects unary %s responses before lifecycle terminal success" | covered |
+| OpenAI Responses stream without terminal | `openai-responses-model.test.ts:764` "fails when an HTTP stream ends without a terminal completion" | covered |
+| OpenAI Responses unknown output becomes opaque | `openai-responses-model.test.ts:572` "turns an unknown Responses output item into provider_opaque instead of throwing" | covered |
 | Chat Completions exposes no unary | `openai-chat-completions-model.test.ts:13` "Chat model exposes only the application-owned streamed-turn contract" | covered |
 | Chat Completions foreign fail-closed handling | `openai-chat-completions-model.test.ts:680` "drops provider_opaque from another provider and still sends the rest of the request"; `openai-chat-completions-model.ts:286-320` drops non-owned tags | covered |
 | Chat Completions same-type different-id fail-closed handling | `openai-chat-completions-model.test.ts:718` "drops an opaque item from a different provider of the same openai-compatible type" | covered |
-| Chat Completions own-tag splice | `openai-chat-completions-model.test.ts:747` "splices a trailing opaque payload onto its own turn, not an earlier assistant message"; `:788` "replaces reconstructed reasoning_content with the payload spelling rather than sending both" | covered |
+| Chat Completions own-tag splice | `openai-chat-completions-model.test.ts:751` "splices a trailing opaque payload onto its own turn, not an earlier assistant message"; `:788` "replaces reconstructed reasoning_content with the payload spelling rather than sending both" | covered |
 | Runtime-compatible tag = config name | `openai-compatible.provider.test.ts:414` / `:455` emit `provider: 'provider-test'` | covered |
 | AI SDK fail-closed handling | `ai-sdk-streamed-model.test.ts:355` "drops a provider_opaque item and still sends the rest of the history"; `ai-sdk-streamed-model.ts:228-244` filters before both stream/unary call options, while `:289-294` rejects a bypass | covered |
 | Codex fail-closed handling | `codex-turn-converter.test.ts:126` / `:136` drop foreign and own-tag items; `:146` "still refuses a provider_opaque item handed straight to the per-item converter"; `codex-turn-converter.ts:13-17,46-55` filters then guards bypasses | covered |
-| RetryingModel unary absence (green characterization) | `retrying-model.test.ts:123` "RetryingModel does not expose getResponse when the wrapped model has none" | covered |
+| RetryingModel unary absence (green characterization) | `retrying-model.test.ts:179` "RetryingModel does not expose getResponse when the wrapped model has none" | covered |
 | Persistence/replay of opaque items | `conversation-replay.test.ts:2075` "a provider_opaque item round-trips byte-identical through persistence and replay"; `:2122` "two provider_opaque items across turns both survive independently"; `application-run-loop.test.ts:27` "carries a providerOpaque-marked item through untouched as provider_opaque" | covered |
 
 ## 9. Verification commands

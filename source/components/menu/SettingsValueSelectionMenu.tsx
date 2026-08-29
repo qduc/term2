@@ -61,7 +61,7 @@ const SettingsValueSelectionMenu: FC<Props> = ({
         <Box flexDirection="column">
           {selectedItem?.description && (
             <Box marginBottom={0}>
-              <Text color="#7dd3fc" dimColor italic>
+              <Text color="#38bdf8" italic>
                 {selectedItem.description}
               </Text>
             </Box>

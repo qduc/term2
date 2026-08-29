@@ -99,7 +99,7 @@ export function MenuContainer<T>({
           borderBottom={false}
           borderLeft={false}
           borderRight={false}
-          borderColor="gray"
+          borderColor="#334155"
         >
           {typeof footer === 'string' ? (
             <Text color="gray" dimColor>

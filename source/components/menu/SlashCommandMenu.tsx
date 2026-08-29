@@ -32,10 +32,10 @@ const SlashCommandMenu: FC<Props> = ({ commands, selectedIndex, filter, scrollOf
             </Text>
           </Box>
           <Box width={SEPARATOR_COLUMN_WIDTH} flexShrink={0}>
-            <Text color="#64748b"> -</Text>
+            <Text color={isSelected ? '#22d3ee' : '#64748b'}> -</Text>
           </Box>
           <Box flexGrow={1} flexShrink={1}>
-            <Text color="#64748b">{cmd.description}</Text>
+            <Text color={isSelected ? 'white' : '#64748b'}>{cmd.description}</Text>
           </Box>
         </Box>
       )}

@@ -105,9 +105,11 @@ export function MenuSurface({ stack, controller, interactions, services, enabled
   return (
     <Box flexDirection="column">
       {promptLabel && (
-        <Box>
-          <Text color="#22d3ee">{promptLabel}</Text>
-          <Text>{promptText}</Text>
+        <Box marginBottom={0}>
+          <Text color="#22d3ee" bold>
+            {promptLabel}
+          </Text>
+          <Text color="white">{promptText}</Text>
         </Box>
       )}
       <MenuStackHost

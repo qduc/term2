@@ -19,6 +19,8 @@ Where a doc and the code disagree, the code wins. That does not make the doc wor
 
 The claims most likely to be wrong are the confident ones. A statement written when only one implementation existed tends to survive as a system-wide rule after a second one arrives, so absolutes — "always", "never", "only", "permanently", "for all subsequent" — deserve a check before you rely on them. Line-number citations (`file.ts:123`) drift silently and are worth the least.
 
+**Last full-repo docs verification: `f1f9199d` (2026-08-29).** That sweep covered this file, `CONTEXT.md`, `README.md`, `ROADMAP.md`, the skills, the contract docs, and plan status headers. Anything added or edited since then has not been checked against the code, and three independent passes each found real errors in the one before — so treat even swept text as a hint.
+
 Everything else is discoverable by reading the tree. Skills carry the depth:
 
 | Skill | Use for |

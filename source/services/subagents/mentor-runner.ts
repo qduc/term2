@@ -309,6 +309,8 @@ export class MentorRunner {
     });
     const stream = loop.startStream(mentorAgent, input, {
       ...(signal ? { signal } : {}),
+      providerId: mentorProvider,
+      supportsConversationChaining: supportsChaining,
       maxTurns: definition.maxTurns,
       runBudget: readRunBudgetPolicy(this.#settings),
       wrapUpOnCriticalRunBudget: true,

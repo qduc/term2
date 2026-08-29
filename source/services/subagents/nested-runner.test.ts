@@ -55,6 +55,8 @@ function buildNestedRunner(
     failAfterApproval?: boolean;
     /** Simulate mutable settings becoming invalid after launch-time role resolution. */
     failRoleResolutionAfterFirst?: boolean;
+    /** Advertise conversation chaining on the nested provider. */
+    supportsConversationChaining?: boolean;
     onEvent?: (event: ConversationEvent) => void;
     onBackgroundApprovalPause?: (pause: BackgroundSubagentApprovalPause) => void;
     logger?: ReturnType<typeof createMockLogger>;
@@ -97,6 +99,7 @@ function buildNestedRunner(
       },
     }),
     fetchModels: async () => [{ id: 'nested-model' }],
+    ...(options.supportsConversationChaining ? { capabilities: { supportsConversationChaining: true } } : {}),
   });
 
   const fakeTool: ToolDefinition = {
@@ -444,6 +447,18 @@ describe('NestedSubagentRunner end to end', () => {
 
     expect(requests).toHaveLength(2);
     expect(requests.map((request) => request.maxTokens)).toEqual([321, 321]);
+  });
+
+  it('forwards the nested provider chain onto later requests of the same run', async () => {
+    const { runner, requests } = buildNestedRunner({ supportsConversationChaining: true });
+
+    await runner.runAsTool({ role: 'worker', task: 'update notes' }, parentToolContext(), {
+      toolCall: { callId: 'parent-call-1' },
+    });
+
+    expect(requests).toHaveLength(2);
+    expect(requests[0].previousResponseId).toBeUndefined();
+    expect(requests[1].previousResponseId).toBe('resp-1');
   });
 
   it('honors a parent-approved tool inside the nested run (F5 through the runner)', async () => {

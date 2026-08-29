@@ -54,7 +54,13 @@ export function openInBrowser(url: string): void {
   const command = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open';
   const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url];
   try {
-    spawn(command, args, { stdio: 'ignore', detached: true }).unref();
+    const child = spawn(command, args, { stdio: 'ignore', detached: true });
+    child.on('error', () => {
+      // Ignored: opening a browser in a headless/server/minimal environment or when
+      // the browser launcher is missing (e.g. xdg-open ENOENT) is non-fatal.
+      // The caller always prints the URL, so the user can complete login manually.
+    });
+    child.unref();
   } catch {
     // The caller always prints the URL, so a failed launcher is not fatal.
   }

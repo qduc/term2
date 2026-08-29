@@ -1,12 +1,55 @@
 import React, { ReactNode } from 'react';
 import { Box, Text } from 'ink';
+import {
+  COLOR_ACCENT,
+  COLOR_BORDER,
+  COLOR_BORDER_ACTIVE,
+  COLOR_DANGER,
+  COLOR_TEXT_SUBTLE,
+  GLYPH_SELECTED,
+  GLYPH_SEPARATOR,
+} from '../theme.js';
+
+/**
+ * The selection marker every menu row starts with. A gutter marker beats
+ * `inverse`, which paints the row with the *terminal's* background color and so
+ * looks harsh (and differs machine to machine). It also keeps every row's text
+ * on the same left edge, selected or not.
+ */
+export const SelectionMarker: React.FC<{ selected: boolean }> = ({ selected }) => (
+  <Text color={COLOR_ACCENT} bold>
+    {selected ? `${GLYPH_SELECTED} ` : '  '}
+  </Text>
+);
+
+/**
+ * The standard key-hint footer. Every menu shows its hints in the same order
+ * and the same format, so the reader learns the shape once. Menus used to each
+ * invent their own wording, separator, and arrow glyph.
+ */
+export const MenuFooter: React.FC<{ hints: ReadonlyArray<[key: string, action: string]> }> = ({ hints }) => (
+  <Text color={COLOR_TEXT_SUBTLE}>
+    {hints.map(([key, action], index) => (
+      <React.Fragment key={key}>
+        {index > 0 ? ` ${GLYPH_SEPARATOR} ` : ''}
+        {key} {action}
+      </React.Fragment>
+    ))}
+  </Text>
+);
 
 type Props<T> = {
   items: T[];
   selectedIndex: number;
   scrollOffset?: number;
   maxHeight?: number;
-  borderColor: string;
+  /**
+   * Defaults to the active-surface border. Pass a color only to signal state
+   * (an error, say) — never to identify which menu this is; the title does that.
+   */
+  borderColor?: string;
+  /** Shown dim on the first line inside the border. */
+  title?: string;
 
   // States
   loading?: boolean;
@@ -29,7 +72,8 @@ export function MenuContainer<T>({
   selectedIndex,
   scrollOffset = 0,
   maxHeight = 10,
-  borderColor,
+  borderColor = COLOR_BORDER_ACTIVE,
+  title,
   loading = false,
   loadingText = 'Loading...',
   error = null,
@@ -39,18 +83,22 @@ export function MenuContainer<T>({
   isInactive,
   renderItem,
 }: Props<T>) {
+  const titleElement = title ? <Text color={COLOR_TEXT_SUBTLE}>{title}</Text> : null;
+
   if (loading) {
     return (
       <Box borderStyle="round" borderColor={borderColor} paddingX={1} flexDirection="column">
-        <Text color={borderColor}>{loadingText}</Text>
+        {titleElement}
+        <Text color={COLOR_TEXT_SUBTLE}>{loadingText}</Text>
       </Box>
     );
   }
 
   if (error) {
     return (
-      <Box borderStyle="round" borderColor="red" paddingX={1} flexDirection="column">
-        <Text color="red">{error}</Text>
+      <Box borderStyle="round" borderColor={COLOR_DANGER} paddingX={1} flexDirection="column">
+        {titleElement}
+        <Text color={COLOR_DANGER}>{error}</Text>
       </Box>
     );
   }
@@ -58,7 +106,8 @@ export function MenuContainer<T>({
   if (items.length === 0) {
     return (
       <Box borderStyle="round" borderColor={borderColor} paddingX={1} flexDirection="column">
-        {typeof fallbackText === 'string' ? <Text color="gray">{fallbackText}</Text> : fallbackText}
+        {titleElement}
+        {typeof fallbackText === 'string' ? <Text color={COLOR_TEXT_SUBTLE}>{fallbackText}</Text> : fallbackText}
       </Box>
     );
   }
@@ -69,7 +118,8 @@ export function MenuContainer<T>({
 
   const content = (
     <Box borderStyle="round" borderColor={borderColor} paddingX={1} flexDirection="column">
-      {hasScrollUp && <Text color="#64748b">↑ {scrollOffset} more</Text>}
+      {titleElement}
+      {hasScrollUp && <Text color={COLOR_TEXT_SUBTLE}>↑ {scrollOffset} more</Text>}
       {visibleItems.map((item, visibleIndex) => {
         const actualIndex = scrollOffset + visibleIndex;
         const isSelected = actualIndex === selectedIndex;
@@ -77,12 +127,12 @@ export function MenuContainer<T>({
         const element = renderItem(item, actualIndex, isSelected, isItemInactive);
         if (isItemInactive) {
           if (React.isValidElement(element) && element.type === Text) {
-            return React.cloneElement(element as React.ReactElement<any>, { color: 'gray' });
+            return React.cloneElement(element as React.ReactElement<any>, { color: COLOR_TEXT_SUBTLE });
           }
           if (typeof element === 'string' || typeof element === 'number') {
             return (
               <Box key={actualIndex}>
-                <Text color="gray">{element}</Text>
+                <Text color={COLOR_TEXT_SUBTLE}>{element}</Text>
               </Box>
             );
           }
@@ -90,7 +140,7 @@ export function MenuContainer<T>({
         }
         return element;
       })}
-      {hasScrollDown && <Text color="#64748b">↓ {items.length - scrollOffset - maxHeight} more</Text>}
+      {hasScrollDown && <Text color={COLOR_TEXT_SUBTLE}>↓ {items.length - scrollOffset - maxHeight} more</Text>}
       {!footerOutsideBorder && footer && (
         <Box
           marginTop={1}
@@ -99,15 +149,9 @@ export function MenuContainer<T>({
           borderBottom={false}
           borderLeft={false}
           borderRight={false}
-          borderColor="#334155"
+          borderColor={COLOR_BORDER}
         >
-          {typeof footer === 'string' ? (
-            <Text color="gray" dimColor>
-              {footer}
-            </Text>
-          ) : (
-            footer
-          )}
+          {typeof footer === 'string' ? <Text color={COLOR_TEXT_SUBTLE}>{footer}</Text> : footer}
         </Box>
       )}
     </Box>
@@ -117,7 +161,7 @@ export function MenuContainer<T>({
     return (
       <Box flexDirection="column">
         {content}
-        {typeof footer === 'string' ? <Text color="#64748b">{footer}</Text> : footer}
+        {typeof footer === 'string' ? <Text color={COLOR_TEXT_SUBTLE}>{footer}</Text> : footer}
       </Box>
     );
   }

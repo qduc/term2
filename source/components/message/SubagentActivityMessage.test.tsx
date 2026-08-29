@@ -20,7 +20,7 @@ it.sequential('SubagentActivityMessage renders plain string tools', async () => 
   const output = toVisibleText(lastFrame() ?? '');
 
   expect(output.includes('run_subagent [explorer] find x')).toBe(true);
-  expect(output.includes('✔ read_file "source/app.tsx"')).toBe(true);
+  expect(output.includes('✓ read_file "source/app.tsx"')).toBe(true);
 });
 
 it.sequential(
@@ -92,12 +92,12 @@ it.sequential('SubagentActivityMessage renders write tool CommandMessage concise
   const output = toVisibleText(rawOutput);
 
   expect(output.includes('run_subagent [explorer] find x')).toBe(true);
-  expect(output.includes('✔')).toBe(true);
+  expect(output.includes('✓')).toBe(true);
   expect(output.includes('Created "src/test.txt"')).toBe(true);
 
   // Verify left-alignment: no leading spaces before the checkmark
   const lines = output.split('\n').map((l) => l.trimEnd());
-  expect(lines.some((line) => line.startsWith('✔ Created "src/test.txt"'))).toBe(true);
+  expect(lines.some((line) => line.startsWith('✓ Created "src/test.txt"'))).toBe(true);
 
   // Verify the hex color #64748b is applied if ANSI colors are generated
   if (rawOutput !== output) {
@@ -133,7 +133,7 @@ it.sequential('SubagentActivityMessage renders failed string tool with cross', a
   const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />);
   const output = toVisibleText(lastFrame() ?? '');
 
-  expect(output.includes('✖ read_file "source/app.tsx"')).toBe(true);
+  expect(output.includes('✗ read_file "source/app.tsx"')).toBe(true);
 });
 
 it.sequential('SubagentActivityMessage renders failed-with-reason string tool with cross', async () => {
@@ -149,7 +149,7 @@ it.sequential('SubagentActivityMessage renders failed-with-reason string tool wi
   const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />);
   const output = toVisibleText(lastFrame() ?? '');
 
-  expect(output.includes('✖ read_file "source/app.tsx"')).toBe(true);
+  expect(output.includes('✗ read_file "source/app.tsx"')).toBe(true);
 });
 
 it.sequential('SubagentActivityMessage renders cancelled string tool with cross', async () => {
@@ -165,7 +165,7 @@ it.sequential('SubagentActivityMessage renders cancelled string tool with cross'
   const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />);
   const output = toVisibleText(lastFrame() ?? '');
 
-  expect(output.includes('✖ read_file "source/app.tsx"')).toBe(true);
+  expect(output.includes('✗ read_file "source/app.tsx"')).toBe(true);
 });
 
 it.sequential('SubagentActivityMessage renders match-count string tool with checkmark', async () => {
@@ -181,7 +181,7 @@ it.sequential('SubagentActivityMessage renders match-count string tool with chec
   const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />);
   const output = toVisibleText(lastFrame() ?? '');
 
-  expect(output.includes('✔ grep "TODO"')).toBe(true);
+  expect(output.includes('✓ grep "TODO"')).toBe(true);
 });
 
 it.sequential('SubagentActivityMessage renders single-match string tool with checkmark', async () => {
@@ -197,7 +197,7 @@ it.sequential('SubagentActivityMessage renders single-match string tool with che
   const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />);
   const output = toVisibleText(lastFrame() ?? '');
 
-  expect(output.includes('✔ grep "TODO"')).toBe(true);
+  expect(output.includes('✓ grep "TODO"')).toBe(true);
 });
 
 it.sequential(
@@ -259,7 +259,7 @@ it.sequential('SubagentActivityMessage does not misparse embedded (Failed: in ar
   const { lastFrame } = await renderInAct(<SubagentActivityMessage {...props} />);
   const output = toVisibleText(lastFrame() ?? '');
 
-  expect(output.includes('\u2714')).toBe(true);
+  expect(output.includes('\u2713')).toBe(true);
   expect(output.includes('write_file "notes (Failed: old).txt"')).toBe(true);
 });
 
@@ -303,7 +303,7 @@ it.sequential('SubagentActivityMessage freezes a transferred card with its last 
 
   expect(output).toContain('run_subagent [explorer] find x');
   expect(output).toContain('— moved to background');
-  expect(output).toContain('✔ read_file "source/app.tsx"');
+  expect(output).toContain('✓ read_file "source/app.tsx"');
   expect(output).not.toContain('should not replace the peek');
 });
 
@@ -320,7 +320,7 @@ it.sequential('SubagentActivityMessage renders an interrupted foreground card as
   );
 
   expect(lastFrame()).toContain('— interrupted');
-  expect(lastFrame()).toContain('✔ apply_patch source/example.ts');
+  expect(lastFrame()).toContain('✓ apply_patch source/example.ts');
 });
 
 it.sequential('SubagentActivityMessage appends failure reason to status suffix when error is present', async () => {

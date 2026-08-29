@@ -1,9 +1,7 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import { parseReadFileOutput } from './command-message-helpers.js';
-import { COLOR_TOOL_OUTPUT } from '../theme.js';
-
-const COLOR_MUTED = 'gray';
+import { COLOR_TEXT_SUBTLE, COLOR_TOOL_OUTPUT } from '../theme.js';
 
 type Props = {
   output: string;
@@ -39,18 +37,18 @@ const ReadFileRenderer: FC<Props> = ({ output, renderStandardHeader }) => {
   return (
     <Box flexDirection="column">
       {renderStandardHeader()}
-      <Box flexDirection="column" borderStyle="single" borderColor={COLOR_MUTED} paddingX={1} marginTop={1}>
+      <Box flexDirection="column" borderStyle="single" borderColor={COLOR_TEXT_SUBTLE} paddingX={1} marginTop={1}>
         {displayLines.map((line, idx) => {
           if (line.lineNum === -1) {
             return (
               <Box key={idx} flexDirection="row">
                 <Box width={8} flexShrink={0}>
-                  <Text color={COLOR_MUTED} dimColor>
+                  <Text color={COLOR_TEXT_SUBTLE} dimColor>
                     {'      │ '}
                   </Text>
                 </Box>
                 <Box flexGrow={1}>
-                  <Text color={COLOR_MUTED} dimColor>
+                  <Text color={COLOR_TEXT_SUBTLE} dimColor>
                     {line.content}
                   </Text>
                 </Box>
@@ -61,7 +59,7 @@ const ReadFileRenderer: FC<Props> = ({ output, renderStandardHeader }) => {
           return (
             <Box key={idx} flexDirection="row">
               <Box width={8} flexShrink={0}>
-                <Text color={COLOR_MUTED} dimColor>
+                <Text color={COLOR_TEXT_SUBTLE} dimColor>
                   {lineNumStr} │{' '}
                 </Text>
               </Box>

@@ -4,6 +4,7 @@ import { useInputContext } from '../../context/InputContext.js';
 import type { MenuController, MenuFrame, MenuInteractionRegistry } from './menu-types.js';
 import { MenuStackHost } from './MenuStackHost.js';
 import type { MenuServices } from './menu-registry.js';
+import { COLOR_ACCENT, COLOR_TEXT } from '../theme.js';
 
 const isFocusReportingSequence = (input: string): boolean =>
   input === '\x1b[I' || input === '\x1b[O' || input === '[I' || input === '[O';
@@ -106,10 +107,10 @@ export function MenuSurface({ stack, controller, interactions, services, enabled
     <Box flexDirection="column">
       {promptLabel && (
         <Box marginBottom={0}>
-          <Text color="#22d3ee" bold>
+          <Text color={COLOR_ACCENT} bold>
             {promptLabel}
           </Text>
-          <Text color="white">{promptText}</Text>
+          <Text color={COLOR_TEXT}>{promptText}</Text>
         </Box>
       )}
       <MenuStackHost

@@ -426,7 +426,7 @@ it.sequential('BottomArea shows approval prompt while the queue awaits the activ
   });
 });
 
-it.sequential('BottomArea shows processing indicator when busy', async () => {
+it.sequential('BottomArea shows processing indicator when busy with vertical spacing above input', async () => {
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     isProcessing: true,
@@ -436,6 +436,8 @@ it.sequential('BottomArea shows processing indicator when busy', async () => {
   expect(output.includes('Allow this action?')).toBe(false);
   // With queue mode, input stays visible while processing so the user can queue messages
   expect(output.includes('❯')).toBe(true);
+  // Expect a blank line between processing indicator and input prompt for visual breathing room
+  expect(output).toMatch(/processing\.+\n\s*\n\s*❯/);
   act(() => {
     unmount();
   });

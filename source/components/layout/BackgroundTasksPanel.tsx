@@ -13,6 +13,7 @@ import { BACKGROUND_TASKS_PANEL_GRACE_MS } from './background-task-clock.js';
 
 export { BACKGROUND_TASKS_PANEL_GRACE_MS };
 import { terminalTextWidth, truncateTerminalText } from './terminal-text-budget.js';
+import { COLOR_ACCENT_ALT, COLOR_BORDER, COLOR_TEXT_MUTED, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
 
 type Props = {
   tasks: readonly LiveTaskRow[] | readonly (BackgroundTask | BackgroundTaskControlDetails)[];
@@ -271,7 +272,7 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now, columns: testColumns }) =
 
   return (
     <Box flexDirection="column" marginBottom={1}>
-      <Text color="#94a3b8">Tasks · {activeCount} active · Ctrl+G manage</Text>
+      <Text color={COLOR_TEXT_MUTED}>Tasks · {activeCount} active · Ctrl+G manage</Text>
       {visible.map(({ key, placement, task }) => {
         const controlTask = isControlTask(task) ? task : undefined;
         const subagentTask = controlTask?.kind === 'subagent' ? controlTask : undefined;
@@ -294,18 +295,18 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now, columns: testColumns }) =
         return (
           <Box key={key} flexDirection="column">
             <Text>
-              <Text color="#64748b">• </Text>
-              <Text color="#a5b4fc">{firstLine.badge}</Text> <Text>{firstLine.identity}</Text> ·{' '}
+              <Text color={COLOR_TEXT_SUBTLE}>• </Text>
+              <Text color={COLOR_ACCENT_ALT}>{firstLine.badge}</Text> <Text>{firstLine.identity}</Text> ·{' '}
               <Text>{firstLine.phase}</Text>
             </Text>
             {!isNarrow && controlTask && !isTerminal(task) && (
-              <Text color="#94a3b8" wrap="truncate-end">
+              <Text color={COLOR_TEXT_MUTED} wrap="truncate-end">
                 {' '}
                 {shellOutputPreview ? `"${shellOutputPreview}"` : formatObservation(controlTask)}
                 {isWide ? (
                   <>
                     {' · '}
-                    <Text color={isStalled ? '#f59e0b' : undefined}>{formatLiveness(controlTask)}</Text>
+                    <Text color={isStalled ? COLOR_WARNING : undefined}>{formatLiveness(controlTask)}</Text>
                   </>
                 ) : (
                   ''
@@ -325,9 +326,9 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now, columns: testColumns }) =
               'lastTool' in task &&
               task.lastTool && (
                 <Box flexDirection="row">
-                  <Text color="#475569">{'  └ '}</Text>
+                  <Text color={COLOR_BORDER}>{'  └ '}</Text>
                   <Box flexGrow={1} flexShrink={1} minWidth={0}>
-                    <Text color="#64748b" wrap="truncate-end">
+                    <Text color={COLOR_TEXT_SUBTLE} wrap="truncate-end">
                       {TOOL_STATE_MARKER[task.lastTool.state]} {formatToolLabel(task.lastTool)}
                     </Text>
                   </Box>

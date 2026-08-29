@@ -6,6 +6,7 @@ import {
   type SettingValueSuggestion,
 } from '../../utils/value-suggestions.js';
 import { MenuContainer } from '../common/MenuContainer.js';
+import { COLOR_ACCENT, COLOR_DANGER, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
 
 type Props = {
   settingKey: string;
@@ -36,24 +37,24 @@ const SettingsValueSelectionMenu: FC<Props> = ({
     <MenuContainer
       items={items}
       selectedIndex={selectedIndex}
-      borderColor={items.length === 0 && !showNeutralEmpty ? 'red' : 'cyan'}
+      borderColor={items.length === 0 && !showNeutralEmpty ? COLOR_DANGER : COLOR_ACCENT}
       fallbackText={
         <Box flexDirection="column">
           {showNeutralEmpty ? (
-            <Text color="gray">Type a value</Text>
+            <Text color={COLOR_TEXT_SUBTLE}>Type a value</Text>
           ) : (
-            <Text color="red" bold>
+            <Text color={COLOR_DANGER} bold>
               No matching values
             </Text>
           )}
-          <Text color="gray">
+          <Text color={COLOR_TEXT_SUBTLE}>
             {settingKey} ·{' '}
             {showNeutralEmpty ? 'No predefined values — type freely' : `No values match "${query || '*'}"`}
           </Text>
-          {isNumericSettings && <Text color="yellow">Note: This setting accepts numeric values.</Text>}
-          {showNeutralEmpty && <Text color="yellow">Note: This setting accepts any string value.</Text>}
+          {isNumericSettings && <Text color={COLOR_WARNING}>Note: This setting accepts numeric values.</Text>}
+          {showNeutralEmpty && <Text color={COLOR_WARNING}>Note: This setting accepts any string value.</Text>}
           <Box marginTop={1}>
-            <Text color="gray">Enter → apply typed value · Esc → cancel</Text>
+            <Text color={COLOR_TEXT_SUBTLE}>Enter → apply typed value · Esc → cancel</Text>
           </Box>
         </Box>
       }
@@ -61,12 +62,12 @@ const SettingsValueSelectionMenu: FC<Props> = ({
         <Box flexDirection="column">
           {selectedItem?.description && (
             <Box marginBottom={0}>
-              <Text color="#38bdf8" italic>
+              <Text color={COLOR_ACCENT} italic>
                 {selectedItem.description}
               </Text>
             </Box>
           )}
-          <Text color="gray" dimColor>
+          <Text color={COLOR_TEXT_SUBTLE} dimColor>
             <Text bold>Enter</Text> confirm · <Text bold>Esc</Text> cancel · <Text bold>↑↓</Text> navigate ·{' '}
             <Text bold>Ctrl+D</Text> reset to default
           </Text>
@@ -75,8 +76,8 @@ const SettingsValueSelectionMenu: FC<Props> = ({
       footerOutsideBorder={false}
       renderItem={(item, _index, isSelected) => (
         <Box key={item.value}>
-          <Text color={isSelected ? 'green' : 'gray'}>{isSelected ? '▶ ' : '  '}</Text>
-          <Text color={isSelected ? 'green' : 'white'} bold={isSelected}>
+          <Text color={isSelected ? COLOR_SUCCESS : COLOR_TEXT_SUBTLE}>{isSelected ? '▶ ' : '  '}</Text>
+          <Text color={isSelected ? COLOR_SUCCESS : COLOR_TEXT} bold={isSelected}>
             {item.value}
           </Text>
         </Box>

@@ -4,6 +4,7 @@ import { REWIND_MENU_VISIBLE_ITEMS } from '../../hooks/use-rewind-selection.js';
 import type { RewindItem } from '../../utils/conversation/rewind-items.js';
 import type { RewindDisposition } from '../../commands/rewind-command.js';
 import { MenuContainer } from '../common/MenuContainer.js';
+import { COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
 
 type Props = {
   items: RewindItem[];
@@ -79,8 +80,8 @@ const RewindMenu: FC<Props> = ({
       selectedIndex={selectedIndex}
       scrollOffset={scrollOffset}
       maxHeight={maxHeight}
-      borderColor="yellow"
-      fallbackText={<Text color="yellow">Nothing to rewind</Text>}
+      borderColor={COLOR_WARNING}
+      fallbackText={<Text color={COLOR_WARNING}>Nothing to rewind</Text>}
       footer={footer}
       footerOutsideBorder={true}
       renderItem={(item, index, isSelected) => {
@@ -88,13 +89,13 @@ const RewindMenu: FC<Props> = ({
         const isLast = index === items.length - 1;
         return (
           <Box key={item.targetId} flexDirection="column">
-            <Text inverse={isSelected} color={isSelected ? 'yellow' : undefined} bold={isSelected}>
+            <Text inverse={isSelected} color={isSelected ? COLOR_WARNING : undefined} bold={isSelected}>
               {`${isSelected ? '▸' : ' '} ${String(index + 1).padStart(2)}. ${truncate(
                 item.text,
                 TRUNCATE_LENGTH,
               )}${images}`}
             </Text>
-            <Text color={isSelected ? 'yellow' : '#64748b'} dimColor={!isSelected}>
+            <Text color={isSelected ? COLOR_WARNING : COLOR_TEXT_SUBTLE} dimColor={!isSelected}>
               {`      ↳ ${describeDiscards(item)}`}
             </Text>
             {/* Blank line between rows: two-line entries run together otherwise. */}

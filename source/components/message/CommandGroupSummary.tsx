@@ -1,9 +1,7 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import { describeGroupFailures, summarizeCommandGroup, type GroupableMessage } from './command-grouping.js';
-
-const COLOR_SUCCESS = '#A0A0A0';
-const COLOR_ERROR = 'red';
+import { COLOR_DANGER, COLOR_TEXT_MUTED, TOOL_STATUS_COLOR, TOOL_STATUS_GLYPH } from '../theme.js';
 
 type Props = {
   members: GroupableMessage[];
@@ -15,9 +13,17 @@ type Props = {
 // line underneath carries the bad news, and names the calls that failed so the
 // count is actionable. Only an entirely-failed run turns red.
 const MARKERS: Record<Props['status'], { marker: string; markerColor: string; textColor: string }> = {
-  completed: { marker: '✔', markerColor: 'green', textColor: COLOR_SUCCESS },
-  partial: { marker: '✔', markerColor: 'green', textColor: COLOR_SUCCESS },
-  failed: { marker: '✖', markerColor: COLOR_ERROR, textColor: COLOR_ERROR },
+  completed: {
+    marker: TOOL_STATUS_GLYPH.completed,
+    markerColor: TOOL_STATUS_COLOR.completed,
+    textColor: COLOR_TEXT_MUTED,
+  },
+  partial: {
+    marker: TOOL_STATUS_GLYPH.completed,
+    markerColor: TOOL_STATUS_COLOR.completed,
+    textColor: COLOR_TEXT_MUTED,
+  },
+  failed: { marker: TOOL_STATUS_GLYPH.failed, markerColor: TOOL_STATUS_COLOR.failed, textColor: COLOR_DANGER },
 };
 
 /** Concise-mode line(s) for a run of tool calls, e.g. "Searched for 1 pattern, read 3 files, ran 2 shell commands". */
@@ -36,8 +42,8 @@ const CommandGroupSummary: FC<Props> = ({ members, status }) => {
       </Text>
       {failures !== '' && status !== 'failed' && (
         <Box paddingLeft={2}>
-          <Text color={COLOR_ERROR} wrap="truncate">
-            ✖ {failures}
+          <Text color={COLOR_DANGER} wrap="truncate">
+            {TOOL_STATUS_GLYPH.failed} {failures}
           </Text>
         </Box>
       )}

@@ -1111,7 +1111,7 @@ it.sequential('MessageList folds settled calls while retaining the last run tool
   // Settled calls: cmd1 folded into group, cmd2 retained separate as last run tool; cmd3 running.
   await revealRunningCommands();
   let output = stripAnsi(renderer.lastFrame() ?? '');
-  expect(output.includes('✔ Searched for 1 pattern')).toBe(true);
+  expect(output.includes('✓ Searched for 1 pattern')).toBe(true);
   expect(output.includes('Read')).toBe(true);
   expect(output.includes('cmd3')).toBe(true);
 
@@ -1131,7 +1131,7 @@ it.sequential('MessageList folds settled calls while retaining the last run tool
   // Same line, count ticked up: cmd1 and cmd2 folded into group, cmd3 retained as last run tool, cmd4 running.
   await revealRunningCommands();
   output = stripAnsi(renderer.lastFrame() ?? '');
-  expect(output.includes('✔ Searched for 1 pattern, read 1 file')).toBe(true);
+  expect(output.includes('✓ Searched for 1 pattern, read 1 file')).toBe(true);
   expect(countOccurrences(output, 'Searched for')).toBe(1);
   expect(output.includes('cmd3')).toBe(true);
   expect(output.includes('cmd4')).toBe(true);
@@ -1163,11 +1163,11 @@ it.sequential('MessageList keeps a long tool call run bounded to the folded line
 
   const { lastFrame } = await renderInAct(<MessageList settingsService={settingsService} messages={messages} />);
   await revealRunningCommands();
-  const toolLines = renderedLines(lastFrame() ?? '').filter((line) => line.includes('✔') || line.includes('▶'));
+  const toolLines = renderedLines(lastFrame() ?? '').filter((line) => line.includes('✓') || line.includes('◐'));
 
   // 1 group line (files 1..10), 1 last run tool line (file11.ts), 1 running tool line (file12.ts)
   expect(toolLines).toHaveLength(3);
-  expect(toolLines[0]).toContain('✔ Read 10 files');
+  expect(toolLines[0]).toContain('✓ Read 10 files');
   expect(toolLines[1]).toContain('file11.ts');
   expect(toolLines[2]).toContain('file12.ts');
 });
@@ -1189,10 +1189,10 @@ it.sequential('MessageList reports a partly-failed run without painting the whol
   const summaryLine = renderedLines(frame).find((line) => line.includes('shell commands')) ?? '';
   const failureLine = renderedLines(frame).find((line) => line.includes('failed')) ?? '';
 
-  expect(summaryLine).toContain('✔ Ran 2 shell commands');
-  expect(failureLine).toContain('✖ 1 failed: pnpm test');
-  // The summary itself is not the failure: no ✖ marker on it, and it is not red.
-  expect(summaryLine.includes('✖')).toBe(false);
+  expect(summaryLine).toContain('✓ Ran 2 shell commands');
+  expect(failureLine).toContain('✗ 1 failed: pnpm test');
+  // The summary itself is not the failure: no ✗ marker on it, and it is not red.
+  expect(summaryLine.includes('✗')).toBe(false);
   const rawSummary = frame.split('\n').find((line) => line.includes('Ran 2 shell commands')) ?? '';
   expect(rawSummary.includes('\u001B[31m')).toBe(false);
 });

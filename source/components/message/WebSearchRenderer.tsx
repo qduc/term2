@@ -1,13 +1,7 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import { parseWebSearchOutput } from './command-message-helpers.js';
-import { COLOR_TOOL_OUTPUT } from '../theme.js';
-
-const COLOR_WARNING = 'yellow';
-const COLOR_INFO = 'cyan';
-const COLOR_CONTENT = 'white';
-const COLOR_LINK = 'blue';
-const COLOR_MUTED = 'gray';
+import { COLOR_ACCENT, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_TOOL_OUTPUT, COLOR_WARNING } from '../theme.js';
 
 type Props = {
   output: string;
@@ -32,19 +26,19 @@ const WebSearchRenderer: FC<Props> = ({ output, renderStandardHeader }) => {
       )}
       {results && results.length > 0 && (
         <Box flexDirection="column">
-          <Text color={COLOR_INFO} bold>
+          <Text color={COLOR_ACCENT} bold>
             Search Results:
           </Text>
           {results.map((res: any, idx: number) => (
             <Box key={idx} flexDirection="column" marginTop={1} paddingLeft={2}>
-              <Text bold color={COLOR_CONTENT}>
+              <Text bold color={COLOR_TEXT}>
                 {idx + 1}. {res.title}
               </Text>
-              <Text color={COLOR_LINK} underline>
+              <Text color={COLOR_ACCENT} underline>
                 {res.url}
               </Text>
               {res.published && (
-                <Text color={COLOR_MUTED} dimColor>
+                <Text color={COLOR_TEXT_SUBTLE} dimColor>
                   Published: {res.published}
                 </Text>
               )}

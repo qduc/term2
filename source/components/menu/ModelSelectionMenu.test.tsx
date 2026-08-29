@@ -74,7 +74,7 @@ it.sequential('ModelSelectionMenu footer includes refresh hint', async () => {
   );
 
   const output = lastFrame();
-  expect(output?.includes('Ctrl+R → refresh model list')).toBe(true);
+  expect(output?.includes('ctrl+r refresh model list')).toBe(true);
 });
 
 it.sequential('ModelSelectionMenu does not duplicate refresh hint', async () => {
@@ -83,7 +83,7 @@ it.sequential('ModelSelectionMenu does not duplicate refresh hint', async () => 
   );
 
   const output = lastFrame();
-  expect(output?.match(/Ctrl\+R → refresh model list/g)).toHaveLength(1);
+  expect(output?.match(/ctrl\+r refresh model list/g)).toHaveLength(1);
 });
 
 it.sequential('ModelSelectionMenu highlights selected item', async () => {

@@ -1,7 +1,8 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import type { SlashCommand } from '../../slash-commands.js';
-import { MenuContainer } from '../common/MenuContainer.js';
+import { MenuContainer, MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
+import { COLOR_ACCENT, COLOR_TEXT, COLOR_TEXT_SUBTLE } from '../theme.js';
 
 type Props = {
   commands: SlashCommand[];
@@ -21,21 +22,30 @@ const SlashCommandMenu: FC<Props> = ({ commands, selectedIndex, filter, scrollOf
       items={filteredCommands}
       selectedIndex={selectedIndex}
       scrollOffset={scrollOffset}
-      borderColor="#22d3ee"
+      title="Commands"
       fallbackText="No matching commands"
+      footer={
+        <MenuFooter
+          hints={[
+            ['↑↓', 'navigate'],
+            ['⏎', 'run'],
+            ['esc', 'cancel'],
+          ]}
+        />
+      }
       renderItem={(cmd, _index, isSelected) => (
         <Box key={cmd.name} width="100%">
+          <SelectionMarker selected={isSelected} />
           <Box width={COMMAND_COLUMN_WIDTH} flexShrink={0}>
-            <Text color={isSelected ? '#22d3ee' : undefined} bold={isSelected} inverse={isSelected}>
-              {' '}
+            <Text color={isSelected ? COLOR_ACCENT : undefined} bold={isSelected}>
               /{cmd.name}
             </Text>
           </Box>
           <Box width={SEPARATOR_COLUMN_WIDTH} flexShrink={0}>
-            <Text color={isSelected ? '#22d3ee' : '#64748b'}> -</Text>
+            <Text color={COLOR_TEXT_SUBTLE}> -</Text>
           </Box>
           <Box flexGrow={1} flexShrink={1}>
-            <Text color={isSelected ? 'white' : '#64748b'}>{cmd.description}</Text>
+            <Text color={isSelected ? COLOR_TEXT : COLOR_TEXT_SUBTLE}>{cmd.description}</Text>
           </Box>
         </Box>
       )}

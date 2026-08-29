@@ -15,6 +15,14 @@ import type { HistoryService } from '../services/history-service.js';
 import type { UserTurn } from '../types/user-turn.js';
 import type { SubmissionMutation } from '../services/conversation/conversation-adapter.js';
 import PendingQueueList, { type PendingQueueMessage } from './input/PendingQueueList.js';
+import {
+  COLOR_ACCENT,
+  COLOR_ACCENT_ALT,
+  COLOR_SUCCESS,
+  COLOR_TEXT_MUTED,
+  COLOR_TEXT_SUBTLE,
+  COLOR_WARNING,
+} from './theme.js';
 
 export { calculateInputWidth };
 
@@ -358,16 +366,16 @@ const InputBox: FC<Props> = ({
       )}
       {activePromptLabel && (
         <Box>
-          <Text color="#22d3ee">{activePromptLabel}</Text>
+          <Text color={COLOR_ACCENT}>{activePromptLabel}</Text>
         </Box>
       )}
       <Box>
         {!activePromptLabel && waitingForRejectionReason ? (
-          <Text color="yellow">Why? </Text>
+          <Text color={COLOR_WARNING}>Why? </Text>
         ) : isShellMode ? (
-          <Text color="green">$ </Text>
+          <Text color={COLOR_SUCCESS}>$ </Text>
         ) : (
-          <Text color="#22d3ee">❯ </Text>
+          <Text color={COLOR_ACCENT}>❯ </Text>
         )}
         <MultilineInput
           key={inputKey}
@@ -395,20 +403,20 @@ const InputBox: FC<Props> = ({
           }}
         />
       </Box>
-      {escHintVisible && <Text color="#64748b">Press ESC again to clear input</Text>}
-      {waitingForRejectionReason && <Text color="#64748b">(or ESC to cancel)</Text>}
+      {escHintVisible && <Text color={COLOR_TEXT_SUBTLE}>Press ESC again to clear input</Text>}
+      {waitingForRejectionReason && <Text color={COLOR_TEXT_SUBTLE}>(or ESC to cancel)</Text>}
       {turnInFlight && queueSelectionIndex === null && !waitingForRejectionReason && !escHintVisible && (
         <Box marginTop={0}>
-          <Text color="#64748b">
+          <Text color={COLOR_TEXT_SUBTLE}>
             {(pendingQueuedMessages?.length ?? 0) > 0 && value === '' ? (
               <>
-                <Text color="#94a3b8">↑</Text> select queued · <Text color="#22d3ee">Enter</Text> Steer ·{' '}
-                <Text color="#a78bfa">Alt+Enter</Text> Queue
+                <Text color={COLOR_TEXT_MUTED}>↑</Text> select queued · <Text color={COLOR_ACCENT}>Enter</Text> Steer ·{' '}
+                <Text color={COLOR_ACCENT_ALT}>Alt+Enter</Text> Queue
               </>
             ) : (
               <>
-                <Text color="#22d3ee">Enter</Text> Steer active turn · <Text color="#a78bfa">Alt+Enter</Text> Queue for
-                next turn
+                <Text color={COLOR_ACCENT}>Enter</Text> Steer active turn ·{' '}
+                <Text color={COLOR_ACCENT_ALT}>Alt+Enter</Text> Queue for next turn
               </>
             )}
           </Text>

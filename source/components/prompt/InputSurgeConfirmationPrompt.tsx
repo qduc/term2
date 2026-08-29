@@ -1,5 +1,6 @@
 import React, { FC, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
+import { COLOR_DANGER, COLOR_SUCCESS, COLOR_WARNING } from '../theme.js';
 
 export interface InputSurgeConfirmationPromptProps {
   reason: string;
@@ -41,11 +42,13 @@ const InputSurgeConfirmationPrompt: FC<InputSurgeConfirmationPromptProps> = ({ r
 
   return (
     <Box flexDirection="column">
-      <Text color="yellow">⚠️ Input Surge Warning: {reason}</Text>
-      <Text color="yellow">Send request anyway?</Text>
+      <Text color={COLOR_WARNING}>⚠️ Input Surge Warning: {reason}</Text>
+      <Text color={COLOR_WARNING}>Send request anyway?</Text>
       <Box flexDirection="column" marginLeft={1}>
-        <Text color={selectedIndex === 0 ? 'green' : undefined}>{selectedIndex === 0 ? '❯ ' : '  '}Send anyway</Text>
-        <Text color={selectedIndex === 1 ? 'red' : undefined}>{selectedIndex === 1 ? '❯ ' : '  '}Cancel</Text>
+        <Text color={selectedIndex === 0 ? COLOR_SUCCESS : undefined}>
+          {selectedIndex === 0 ? '❯ ' : '  '}Send anyway
+        </Text>
+        <Text color={selectedIndex === 1 ? COLOR_DANGER : undefined}>{selectedIndex === 1 ? '❯ ' : '  '}Cancel</Text>
       </Box>
     </Box>
   );

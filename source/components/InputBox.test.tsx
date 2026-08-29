@@ -1506,11 +1506,12 @@ it.sequential('backspace works after committing a setting value and returning to
   expect(frame.includes('Cursor:9')).toBe(true);
 });
 
-it.sequential('shows Queue vs Steer guidance when turnInFlight is active', async () => {
+it.sequential('shows Queue vs Steer guidance and model/effort shortcuts when turnInFlight is active', async () => {
   const { lastFrame } = await renderAndFlush(<TestInputBox {...defaultProps} turnInFlight={true} />);
   const output = lastFrame() ?? '';
   expect(output.includes('Enter Steer active turn')).toBe(true);
   expect(output.includes('Alt+Enter Queue for next turn')).toBe(true);
+  expect(output.includes('Ctrl+O model · Ctrl+T effort')).toBe(true);
 });
 
 it.sequential('shows Steering label for pending steer submissions', async () => {
@@ -1540,5 +1541,6 @@ it.sequential(
     expect(output.includes('select queued')).toBe(true);
     expect(output.includes('Enter Steer')).toBe(true);
     expect(output.includes('Alt+Enter Queue')).toBe(true);
+    expect(output.includes('Ctrl+O model · Ctrl+T effort')).toBe(true);
   },
 );

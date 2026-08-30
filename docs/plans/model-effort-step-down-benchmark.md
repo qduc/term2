@@ -67,8 +67,9 @@ luna-low $0.02.
    9.0 despite both passing the same hidden test — a judge-only finding, the
    deterministic evaluator alone would have called this a tie. **Do not ship
    the blanket version.** Any implementation needs a floor above `luna-low`
-   for security-sensitive paths — untested whether medium effort or luna#high
-   is enough; only low-effort-on-cheap-model was shown to fail here.
+   for security-sensitive paths — floor follow-up answered 2026-08-30:
+   `luna#medium` clears it (see "Security-floor round"); only
+   low-effort-on-cheap-model was shown to fail here.
 3. `sol` (the priciest model) was never the best performer across all 4
    tasks — tied-best once, mid-pack once, worst once (the hard task). Paying
    for it did not reliably buy quality in this sample.
@@ -162,6 +163,41 @@ the empty duplicate-named `.diff` files before pooling. Also run
 `run-evaluator.sh` on the Stage 3 dir if you haven't (pooling needs
 `evaluator.status` for every declared candidate).
 
+## Security-floor round (2026-08-30 — answers next-step 1)
+
+Re-ran `f-security-002-symlink-traversal` with `baseline-terra#high`,
+`luna#high`, and a new `luna#medium` arm (dir
+`bench-f-security-002-symlink-traversal-20260830-211221`; run statuses:
+terra TIMEOUT@600s, luna-high TIMEOUT@600s, luna-medium OK@247s), then
+pooled-judged 6 candidates in one 3-sample Opus pool with per-sample
+reshuffles — tonight's three plus the morning run's completed terra,
+morning luna-high, and morning luna-low as the known-weak anchor. The judge
+sees each candidate's mechanical evaluator status by design (as in the
+original benchmark). Artifacts:
+`~/.agents/runtime/pooled-security-floor-20260830/`.
+
+| candidate | run | deterministic | judge mean (3 samples) |
+|---|---|---|---|
+| luna#high | tonight | PASS | **10.0** (10/10/10) |
+| luna#medium | tonight | PASS · 247s | **9.0** (9/9/9) |
+| terra#high (completed) | morning | PASS | 8.67 (9/9/8) |
+| luna#high | morning | PASS | 8.33 (8/9/8) |
+| luna#low (anchor) | morning | PASS | 6.0 (6/6/6) |
+| terra#high | tonight | FAIL (async redesign broke the sync contract) | 2.0 (2/2/2) |
+
+**Verdict: `luna#medium` is a sufficient floor on this security task** —
+9.0 vs the completed terra baseline's 8.67, with the known-weak anchor at
+6.0 confirming the judge still discriminates within this pool (anchor moved
+5.67→6.0 across pools; judge scales are only comparable within one pool,
+which is why everything was re-pooled rather than compared against morning
+numbers). `luna#high` scored highest, so effort level — not model tier —
+tracks quality here, consistent with the runaway-effort finding below.
+Also recorded: tonight's terra#high derailed into an async redesign of
+`resolveWorkspacePath` that failed the hidden test's sync contract — the
+expensive tier is not a reliability floor either.
+
+Judge session usage: 31% → 44% (~13 points for 3 samples over 6 candidates).
+
 ## Cost/usage spent so far
 
 - Benchmark agent runs (term2 CLI, real provider spend): ~$13 total across
@@ -175,11 +211,11 @@ the empty duplicate-named `.diff` files before pooling. Also run
 
 ## Next steps to actually ship this
 
-1. Decide the security-path floor: is `luna#high` (medium-cost, effort
+1. ~~Decide the security-path floor: is `luna#high` (medium-cost, effort
    stays high) enough to close the 5.67→9.0 gap, or does it need to stay on
-   `terra`/`sol` entirely for security-tagged work? Not tested — would need
-   one more benchmark round on the security task with that specific
-   candidate.
+   `terra`/`sol` entirely for security-tagged work?~~ — **Answered
+   2026-08-30**: `luna#medium` scores 9.0 vs completed-terra 8.67 (luna#low
+   anchor 6.0). See "Security-floor round" above.
 2. Design how "security-sensitive path" is detected at runtime to gate the
    floor (tool/file path heuristic? task classification? explicit tag?) —
    no design work done yet.

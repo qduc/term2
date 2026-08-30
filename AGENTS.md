@@ -62,7 +62,10 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   trap (do not run 3+ heavy `term2` benchmark candidates as parallel
   background tasks), and a `run-judge.sh` aggregator parsing bug (fixed
   2026-08-30; the recovered task-3 scores also corrected the doc's results
-  table).
+  table). The security-floor question is answered (2026-08-30):
+  `luna#medium` suffices on the security task (9.0 vs completed-terra 8.67,
+  judge 3-sample pooled); the remaining work is the step-down mechanism
+  itself plus the security-path detection design.
 - Test suite audit — foundation merged, milestone still non-destructive:
   build the evidence graph, not cleanup. Do not remove, rewrite, retier, or
   consolidate tests, and do not dispatch explorers, without the approval

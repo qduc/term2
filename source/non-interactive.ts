@@ -27,6 +27,7 @@ export interface NonInteractiveConfig {
   autoApprove: boolean;
   quiet?: boolean;
   showReasoning?: boolean;
+  json?: boolean;
   stdout?: NodeJS.WritableStream;
   stderr?: NodeJS.WritableStream;
   settingsService?: ISettingsService;
@@ -157,6 +158,11 @@ export async function runWithSession(session: ConversationSessionLike, config: N
   let streamedTextLength = 0;
 
   const onEvent = (event: ConversationEvent) => {
+    if (config.json) {
+      stdout.write(JSON.stringify(event) + '\n');
+      return;
+    }
+
     if (event.type === 'text_delta') {
       streamedTextLength += event.delta.length;
       stdout.write(event.delta);
@@ -209,28 +215,53 @@ export async function runWithSession(session: ConversationSessionLike, config: N
       });
       const rejectionReason = decision.answer === 'n' ? decision.rejectionReason : undefined;
       if (decision.answer === 'n' && decision.reportRejection) {
-        stderr.write(`Approval Rejected: ${rejectionReason}\n`);
+        if (config.json) {
+          stdout.write(JSON.stringify({ type: 'approval_rejected', reason: rejectionReason }) + '\n');
+        } else {
+          stderr.write(`Approval Rejected: ${rejectionReason}\n`);
+        }
       }
       result = supportsPersistentEventSink
         ? await session.handleApprovalDecision(decision.answer, rejectionReason)
         : await session.handleApprovalDecision(decision.answer, rejectionReason, { onEvent } as any);
 
       if (result === null) {
-        stderr.write('error No pending approval context (unexpected in non-interactive mode).\n');
+        if (config.json) {
+          stdout.write(
+            JSON.stringify({
+              type: 'error',
+              error: 'No pending approval context (unexpected in non-interactive mode).',
+            }) + '\n',
+          );
+        } else {
+          stderr.write('error No pending approval context (unexpected in non-interactive mode).\n');
+        }
         return 1;
       }
     }
 
     if (result?.type === 'response') {
-      stdout.write('\n');
+      if (config.json) {
+        stdout.write(JSON.stringify({ type: 'completed', finalText: result.finalText }) + '\n');
+      } else {
+        stdout.write('\n');
+      }
       return 0;
     }
 
-    stderr.write('error Unexpected conversation result.\n');
+    if (config.json) {
+      stdout.write(JSON.stringify({ type: 'error', error: 'Unexpected conversation result.' }) + '\n');
+    } else {
+      stderr.write('error Unexpected conversation result.\n');
+    }
     return 1;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    stderr.write(`error ${message}\n`);
+    if (config.json) {
+      stdout.write(JSON.stringify({ type: 'error', error: message }) + '\n');
+    } else {
+      stderr.write(`error ${message}\n`);
+    }
     return 1;
   } finally {
     if (typeof session.setEventSink === 'function') {

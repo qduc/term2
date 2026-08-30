@@ -95,7 +95,7 @@ export class MemoryCapabilityBuilder {
     };
 
     const stores = this.#createStores(settings, options.projectPath ?? process.cwd());
-    const tools = createMemoryToolDefinitions(stores);
+    const tools = createMemoryToolDefinitions(stores, { settingsService: this.#settings });
     let context = '';
     if (subject.kind === 'main' && access === 'write') {
       try {

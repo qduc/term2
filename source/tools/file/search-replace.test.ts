@@ -9,6 +9,7 @@ import {
   type SearchReplaceToolParams,
 } from './search-replace.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
+import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
 import type { ILoggingService } from '../../services/service-interfaces.js';
 
 type PlainResultItem = {
@@ -1742,4 +1743,23 @@ it('formatSearchReplaceCommandMessage handles missing replacements gracefully', 
 
   const messages = formatSearchReplaceCommandMessage(item, 0, new Map());
   expect((messages[0].toolArgs as any).replacements).toEqual([]);
+});
+
+it.sequential('needsApproval allows editing files in SANDBOX_TEMP_DIR without approval', async () => {
+  await withTempDir(async () => {
+    const tool = createTool(createMockSettingsService({ 'shell.autoApproveMode': 'auto' }));
+    const tempFilePath = path.join(SANDBOX_TEMP_DIR, 'scratch-replace.txt');
+    await fs.writeFile(tempFilePath, 'original content', 'utf8');
+
+    try {
+      const result = await tool.needsApproval({
+        path: tempFilePath,
+        replacements: [{ search_content: 'original', replace_content: 'updated' }],
+      });
+
+      expect(result).toBe(false);
+    } finally {
+      await fs.rm(tempFilePath, { force: true });
+    }
+  });
 });

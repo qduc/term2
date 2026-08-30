@@ -3,6 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { createCreateFileToolDefinition, type CreateFileToolParams } from './create-file.js';
+import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
 import { ExecutionContext } from '../../services/execution-context.js';
 import type { ISSHService, ILoggingService } from '../../services/service-interfaces.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
@@ -550,4 +551,18 @@ it.sequential('execute writes outside workspace when the call has been approved'
     await fs.rm(workspaceDir, { recursive: true, force: true });
     await fs.rm(path.join(path.dirname(workspaceDir), 'outside-approved.txt'), { force: true });
   }
+});
+
+it.sequential('needsApproval allows creating files in SANDBOX_TEMP_DIR without approval', async () => {
+  await withTempDir(async () => {
+    const tool = createTool(createMockSettingsService({ 'shell.autoApproveMode': 'auto' }));
+    const tempFilePath = path.join(SANDBOX_TEMP_DIR, 'scratch-test.txt');
+
+    const result = await tool.needsApproval({
+      path: tempFilePath,
+      content: 'temp scratch content',
+    });
+
+    expect(result).toBe(false);
+  });
 });

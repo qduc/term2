@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { readFile, writeFile } from 'fs/promises';
 import path from 'path';
-import { isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../utils.js';
+import { isProtectedHookPath, isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../utils.js';
+import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
 import type { SessionAccessState } from '../../services/session/session-access-state.js';
@@ -314,9 +315,16 @@ export function createSearchReplaceToolDefinition(deps: {
             return true;
           }
 
-          const insideCwd = targetPath.startsWith(cwd + path.sep);
+          const insideCwd =
+            targetPath.startsWith(cwd + path.sep) ||
+            targetPath === SANDBOX_TEMP_DIR ||
+            targetPath.startsWith(SANDBOX_TEMP_DIR + path.sep);
           const physicallyInsideWorkspace =
-            !isRemote && insideCwd && (await isWorkspacePathPhysicallyInside(targetPath, cwd));
+            !isRemote &&
+            insideCwd &&
+            !isProtectedHookPath(targetPath, cwd) &&
+            ((await isWorkspacePathPhysicallyInside(targetPath, cwd)) ||
+              (await isWorkspacePathPhysicallyInside(targetPath, SANDBOX_TEMP_DIR)));
           if (!physicallyInsideWorkspace) {
             if (!sessionAccess?.allowsEdit(targetPath, cwd)) return true;
           }

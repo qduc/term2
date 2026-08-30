@@ -2,7 +2,8 @@ import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { access, mkdir, writeFile } from 'fs/promises';
 import path from 'path';
-import { isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../utils.js';
+import { isProtectedHookPath, isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../utils.js';
+import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import { TOOL_NAME_CREATE_FILE } from '../tool-names.js';
 import type { ILoggingService, ISettingsService, ISSHService } from '../../services/service-interfaces.js';
@@ -119,13 +120,20 @@ export function createCreateFileToolDefinition(deps: {
         const { path: filePath } = params;
         const cwd = executionContext?.getCwd() || process.cwd();
         const targetPath = resolveWorkspacePath(filePath, cwd);
-        const insideCwd = targetPath.startsWith(cwd + path.sep);
+        const insideCwd =
+          targetPath.startsWith(cwd + path.sep) ||
+          targetPath === SANDBOX_TEMP_DIR ||
+          targetPath.startsWith(SANDBOX_TEMP_DIR + path.sep);
         // The shared physical check is local-only; remote symlink state is not
         // visible through the local filesystem, so remote writes fail closed to
         // explicit approval instead of being auto-approved lexically.
-        const isRemote = executionContext?.isRemote() && !!executionContext?.getSSHService();
+        const isRemote = executionContext?.isRemote() && !executionContext?.getSSHService();
         const physicallyInsideWorkspace =
-          !isRemote && insideCwd && (await isWorkspacePathPhysicallyInside(targetPath, cwd));
+          !isRemote &&
+          insideCwd &&
+          !isProtectedHookPath(targetPath, cwd) &&
+          ((await isWorkspacePathPhysicallyInside(targetPath, cwd)) ||
+            (await isWorkspacePathPhysicallyInside(targetPath, SANDBOX_TEMP_DIR)));
 
         // Auto-approve only when both lexical and physical containment hold.
         // This prevents an in-workspace symlink from redirecting the write.

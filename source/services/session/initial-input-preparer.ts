@@ -5,6 +5,7 @@ import type { GenerationGuard } from '../generation-guard.js';
 import type { SessionInputPlanner } from './session-input-planner.js';
 import type { SessionLifecycle } from './session-lifecycle.js';
 import type { TurnAttempt } from './turn-attempt.js';
+import { consumeInputSurgeApproval, type InputSurgeApproval } from '../input-surge-approval.js';
 
 type InputSurgeErrorEvent = Extract<ConversationEvent, { type: 'error' }>;
 
@@ -25,7 +26,7 @@ export class InitialInputPreparer {
   prepare(
     attempt: TurnAttempt,
     skipUserMessage: boolean,
-    options?: { bypassInputSurgeGuard?: boolean; replayFromHistory?: boolean },
+    options?: { inputSurgeApproval?: InputSurgeApproval; replayFromHistory?: boolean },
   ): InitialInputPreparationResult {
     if (!skipUserMessage && !attempt.addedUserMessage && !options?.replayFromHistory) {
       this.deps.conversationStore.addUserTurn(attempt.turn);
@@ -40,7 +41,9 @@ export class InitialInputPreparer {
     attempt.attachInput(plan);
 
     const surgeDecision = this.deps.inputPlanner.inspectForSurge(attempt.streamInput, attempt.inputMode!);
-    if (surgeDecision.action === 'block' && !options?.bypassInputSurgeGuard) {
+    const approvedSurge =
+      options?.inputSurgeApproval && consumeInputSurgeApproval(options.inputSurgeApproval, attempt.submittedTurn);
+    if (surgeDecision.action === 'block' && !approvedSurge) {
       let droppedUserMessage: { text: string; imageCount: number } | undefined;
       if (attempt.addedUserMessage && this.deps.generationGuard.isCurrent(attempt.token)) {
         this.deps.conversationStore.removeLastUserMessage();

@@ -6,6 +6,7 @@ import type { RetryCounts } from '../retry/retry-contracts.js';
 import type { ConversationStore } from '../conversation/conversation-store.js';
 import type { UserTurn } from '../../types/user-turn.js';
 import { normalizeUserTurn } from '../../types/user-turn.js';
+import type { InputSurgeApproval } from '../input-surge-approval.js';
 import type { SessionLifecycle } from './session-lifecycle.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
 import type { AssistantTurnJournal } from '../logging/assistant-turn-journal.js';
@@ -24,7 +25,7 @@ export type InitialTurnRunOptions = {
   delayMs?: number;
   useStandardServiceTier?: boolean;
   disableChainingForAttempt?: boolean;
-  bypassInputSurgeGuard?: boolean;
+  inputSurgeApproval?: InputSurgeApproval;
 };
 
 export type TurnAttemptFactoryDeps = {
@@ -65,6 +66,7 @@ export class TurnAttemptFactory {
       kind: 'created',
       attempt: new TurnAttempt({
         turn,
+        submittedTurn: normalized,
         token,
         initialRetryCounts: this.#normalizeRetryCounts(options.retries),
         initialJournalSnapshot: this.deps.journal.getEvents(),

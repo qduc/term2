@@ -3,7 +3,8 @@ import {
   ConversationAdmissionWorkflow,
   type ConversationAdmissionWorkflowDependencies,
 } from './conversation-admission-workflow.js';
-import type { UserTurn } from '../../types/user-turn.js';
+import { injectSkillIntoTurn, type UserTurn } from '../../types/user-turn.js';
+import { consumeInputSurgeApproval } from '../input-surge-approval.js';
 import type { InputSurgeDecision } from '../input-surge-guard.js';
 import type { LargeUncachedInputDecision } from '../large-uncached-input-guard.js';
 
@@ -91,17 +92,17 @@ describe('ConversationAdmissionWorkflow', () => {
     expect(history.addMessage.mock.invocationCallOrder[0]).toBeLessThan(send.mock.invocationCallOrder[0]);
   });
 
-  it('rejects a caller-supplied bypass and only creates one after surge approval', async () => {
+  it('strips caller-supplied surge authority and only creates a capability after surge approval', async () => {
     const { workflow, send } = createWorkflow();
 
-    const result = workflow.submit(turn, { bypassInputSurgeGuard: true } as any);
+    const result = workflow.submit(turn, { inputSurgeApproval: {} } as any);
     if (result.kind !== 'submitted') throw new Error('Expected submission');
     await result.completion;
 
     expect(send).toHaveBeenCalledWith(turn, {});
   });
 
-  it('sends an approved surge with a bypass and preserved busy mode', async () => {
+  it('sends an approved surge with a content-bound capability and preserved busy mode', async () => {
     const { workflow, conversation, logger, send } = createWorkflow();
     (conversation.previewInputSurge as any).mockReturnValue(blockedSurge);
 
@@ -113,7 +114,10 @@ describe('ConversationAdmissionWorkflow', () => {
     const approved = workflow.resolve(first.confirmation.id, 'approve');
     if (approved.kind !== 'submitted') throw new Error('Expected submission');
     await approved.completion;
-    expect(send).toHaveBeenCalledWith(turn, { busyMode: 'steer', bypassInputSurgeGuard: true });
+    expect(send).toHaveBeenCalledWith(turn, {
+      busyMode: 'steer',
+      inputSurgeApproval: expect.any(Object),
+    });
     expect(conversation.previewLargeUncachedInput).not.toHaveBeenCalled();
     expect(logger.debug).toHaveBeenCalledWith(
       'Input surge warning shown',
@@ -125,6 +129,24 @@ describe('ConversationAdmissionWorkflow', () => {
         previousStats: blockedSurge.previousStats,
       }),
     );
+  });
+
+  it('binds a skill turn approval to the skill-expanded submitted content', async () => {
+    const { workflow, conversation, send } = createWorkflow();
+    const skillTurn: UserTurn = {
+      text: 'Review this',
+      skill: { name: 'review', description: 'Review', body: 'Inspect the diff' },
+    };
+    (conversation.previewInputSurge as any).mockReturnValue(blockedSurge);
+
+    const pending = workflow.submit(skillTurn);
+    if (pending.kind !== 'confirmation_required') throw new Error('Expected confirmation');
+    const approved = workflow.resolve(pending.confirmation.id, 'approve');
+    if (approved.kind !== 'submitted') throw new Error('Expected submission');
+    await approved.completion;
+
+    const [, options] = (send.mock.calls as unknown as Array<[UserTurn, { inputSurgeApproval: unknown }]>)[0]!;
+    expect(consumeInputSurgeApproval(options.inputSurgeApproval, injectSkillIntoTurn(skillTurn))).toBe(true);
   });
 
   it('does not create a surge bypass for a large uncached approval', async () => {

@@ -5,6 +5,7 @@ import type { ConversationTerminal, PendingApproval, PostExecuteApprovalToken } 
 import { collectTerminalResult, TerminalResultCollectorExhaustionError } from '../session/terminal-result-collector.js';
 import { getCallIdFromObject } from '../interruption-info.js';
 import { normalizeUserTurn, type UserTurn } from '../../types/user-turn.js';
+import type { InputSurgeApproval } from '../input-surge-approval.js';
 import { userTurnToProviderItem } from './user-turn-item.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { SessionRuntime, SessionLogs, SessionApprovalQuery } from '../../core/index.js';
@@ -29,7 +30,7 @@ export type SendMessageOptions = {
   onCommandMessage?: (message: CommandMessage) => void;
   onEvent?: ConversationEventSink;
   hallucinationRetryCount?: number;
-  bypassInputSurgeGuard?: boolean;
+  inputSurgeApproval?: InputSurgeApproval;
   replayFromHistory?: boolean;
   preferredMessageId?: string;
   /** The turn is model input only and must not be projected as a user message in the UI. */
@@ -510,7 +511,8 @@ export class ConversationAdapter {
       if (inQueue) {
         const message = this.#messagesById.get(id);
         if (!message) return { kind: 'unknown_id' };
-        this.#messagesById.set(id, { ...message, input: structuredClone(turn) });
+        const { inputSurgeApproval: _invalidatedApproval, ...options } = message.options;
+        this.#messagesById.set(id, { ...message, input: structuredClone(turn), options });
         const displayText = normalizeUserTurn(turn).text;
         const controllerText = displayText.trim() ? displayText : QUEUED_NON_TEXT_PLACEHOLDER;
         const result = await this.#queue.command({ kind: 'edit_queued', itemId: id as ItemId, text: controllerText });
@@ -537,7 +539,7 @@ export class ConversationAdapter {
       onCommandMessage,
       onEvent,
       hallucinationRetryCount = 0,
-      bypassInputSurgeGuard,
+      inputSurgeApproval,
       replayFromHistory,
       preferredMessageId,
       suppressUserMessageDisplay,
@@ -552,7 +554,7 @@ export class ConversationAdapter {
         onCommandMessage,
         onEvent,
         hallucinationRetryCount,
-        bypassInputSurgeGuard,
+        inputSurgeApproval,
         replayFromHistory,
       }).then(async (result) => {
         await this.#recordPendingInteraction(result);
@@ -573,7 +575,7 @@ export class ConversationAdapter {
           onCommandMessage,
           onEvent,
           hallucinationRetryCount,
-          bypassInputSurgeGuard,
+          inputSurgeApproval,
           replayFromHistory,
           suppressUserMessageDisplay,
           busyMode,
@@ -902,7 +904,7 @@ export class ConversationAdapter {
       onCommandMessage,
       onEvent,
       hallucinationRetryCount = 0,
-      bypassInputSurgeGuard,
+      inputSurgeApproval,
       replayFromHistory,
     }: SendMessageOptions = {},
     requestId?: string | null,
@@ -929,8 +931,8 @@ export class ConversationAdapter {
       try {
         await this.#subagentEventSinkHost?.setSubagentEventSink(wrappedOnEvent);
         const startOptions: any = { retries: { hallucinationRetryCount } };
-        if (bypassInputSurgeGuard !== undefined) {
-          startOptions.bypassInputSurgeGuard = bypassInputSurgeGuard;
+        if (inputSurgeApproval !== undefined) {
+          startOptions.inputSurgeApproval = inputSurgeApproval;
         }
         if (replayFromHistory) {
           startOptions.replayFromHistory = true;

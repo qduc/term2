@@ -578,12 +578,18 @@ describe('Codex WebSocket corrupt-history recovery', () => {
         );
       });
       expect(paired, 'expected a self-contained request containing the completed tool pair').toBeTruthy();
+      expect(
+        created.filter((request) => {
+          const input = inputItems(asRecord(request)?.input);
+          return input.some((item) => item.type === 'function_call' && callIdOf(item) === ORPHAN_RESUME_CALL_ID);
+        }),
+        'the completed tool call must be replayed once as part of recovery, not redispatched',
+      ).toHaveLength(1);
       expect(asRecord(paired)?.previous_response_id ?? null).not.toBe(STALE_WARMUP_RESPONSE_ID);
       const generating = created.filter((request) => asRecord(request)?.generate !== false);
       const followUp = generating.at(-1);
       expect(asRecord(followUp)?.previous_response_id).toBeTruthy();
       expect(asRecord(followUp)?.previous_response_id).not.toBe(STALE_WARMUP_RESPONSE_ID);
-      expect(child.getVisibleOutput().split('pwd').length - 1).toBe(1);
       expect(child.getVisibleOutput().split('Conversation state was rejected by the provider').length - 1).toBeLessThan(
         2,
       );

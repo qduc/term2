@@ -127,7 +127,7 @@ term2 features five distinct operating modes tailored to different stages of dev
 | **Mentor** | `/mentor` | Collaborative problem-solving. Pairs the primary model with a higher-tier strategic model (`smartModel`) for architectural review. | Full codebase context, all tools and `ask_mentor`. |
 | **Orchestrator** | `/orchestrator` | High-level task coordination. Encourages prompt-guided delegation across specialized subagents while retaining end-to-end turn ownership. | Full codebase context, direct tools and subagent delegation. |
 
-> **Mode Switching:** In Standard or Plan mode, press `Shift+Tab` to instantly toggle between **Standard** and **Plan** modes (in Lite mode, `Shift+Tab` toggles shell execution mode). Use slash commands (`/plan`, `/lite`, `/mentor`, `/orchestrator`) to switch modes explicitly.
+> **Mode Switching:** Press `Shift+Tab` to cycle the application's operating modes. To run one direct shell command in any operating mode, prefix the input with `!`; the command and output are added to the conversation, then the input returns to normal mode. Use slash commands (`/plan`, `/lite`, `/mentor`, `/orchestrator`) to switch modes explicitly.
 
 ---
 
@@ -308,7 +308,8 @@ TODO_LIST=$(term2 "List all TODO markers in source/")
 | `Ctrl + O` | Input Box | Open interactive model selection menu. |
 | `Ctrl + T` | Input Box | Open reasoning effort selection menu. |
 | `Ctrl + G` | Global | Open Background Task Manager (inspect/pause/stop tasks). |
-| `Shift + Tab` | Global | Cycle Operating Modes (Standard ↔ Plan, or shell toggle in Lite). |
+| `Shift + Tab` | Global | Cycle Operating Modes. |
+| `!` prefix | Input Box | Execute the following command directly in the shell; the red `!` prompt remains active until the command completes. |
 | `Alt + Enter` / `Esc + Enter` | Input Box | Queue input while a turn is executing. |
 | `Ctrl + R` | Model Menu | Refresh provider model catalog from API. |
 | `Ctrl + D` | Settings Menu | Reset highlighted setting to its default value. |

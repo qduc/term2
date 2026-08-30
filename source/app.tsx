@@ -145,7 +145,6 @@ const App: FC<AppProps> = ({
   const [messageListEpoch, setMessageListEpoch] = useState(0);
   const [startupBannerIds, setStartupBannerIds] = useState(['startup-banner-0']);
   const [activeRestoredStaticMessageIds, setActiveRestoredStaticMessageIds] = useState(restoredStaticMessageIds);
-  const liteMode = useSetting(settingsService, 'app.liteMode') ?? false;
   const displayMode = useSetting(settingsService, 'ui.displayMode') ?? 'standard';
   const sessionUsage = useMemo(() => usageAccumulator ?? createUsageAccumulator(), [usageAccumulator]);
   const subagentUsage = useMemo(() => subagentUsageAccumulator ?? createUsageAccumulator(), [subagentUsageAccumulator]);
@@ -322,18 +321,16 @@ const App: FC<AppProps> = ({
       new ShellInteractionSession({
         settingsService,
         conversationSink: conversationService,
-        liteMode,
         sshInfo,
         sshService,
       }),
     [conversationService, settingsService, sshInfo, sshService],
   );
 
-  const { isShellMode, toggleShellMode, handleShellSubmit } = useShellMode({
+  const { isShellMode, enterShellMode, exitShellMode, handleShellSubmit } = useShellMode({
     session: shellInteractionSession,
     addShellMessage,
     replaceInput,
-    liteMode,
   });
 
   const clearConversationAndRefreshBanner = useCallback(async () => {
@@ -965,8 +962,6 @@ const App: FC<AppProps> = ({
     handoffState: handoff.handoffState,
     cancelHandoff: handoff.cancelHandoff,
     pendingLargeUncachedTurn,
-    liteMode,
-    toggleShellMode,
     cycleAppModes,
     replaceInput,
     onSkillActivationCancelled: () => addSystemMessage('Skill activation cancelled.'),
@@ -990,16 +985,16 @@ const App: FC<AppProps> = ({
       setWaitingForRejectionReason(false);
       return;
     }
-    if (await submitConversationTurn(turn)) {
-      return;
-    }
-
     const value = turn.text;
     const hasImages = Boolean(turn.images?.length);
     if (!hasUserTurnContent(turn) && handoff.handoffState?.stage !== 'entering_message') return;
 
-    if (liteMode && isShellMode && !hasImages) {
+    if (isShellMode && !hasImages) {
       await handleShellSubmit(value);
+      return;
+    }
+
+    if (await submitConversationTurn(turn)) {
       return;
     }
 
@@ -1135,7 +1130,6 @@ const App: FC<AppProps> = ({
             messages={messages}
             bannerItems={startupBannerIds}
             settingsService={settingsService}
-            isShellMode={isShellMode}
             restoredStaticMessageIds={activeRestoredStaticMessageIds}
             turnPaused={effectiveWaitingForApproval}
           />
@@ -1154,6 +1148,8 @@ const App: FC<AppProps> = ({
             thinkingStartedAt={thinkingStartedAt}
             toolCallStreamingInfo={toolCallStreamingInfo}
             isShellMode={isShellMode}
+            onShellModeEnter={enterShellMode}
+            onShellModeExit={exitShellMode}
             lastUsage={lastUsage}
             costSummary={costSummary}
             queuePaused={queuePaused}

@@ -22,7 +22,6 @@ vi.mock('../../utils/shell/shell-session.js', async (importOriginal) => ({
 
 const createSession = (
   options: {
-    liteMode?: boolean;
     sshInfo?: { host: string; user: string; remoteDir: string };
     sshService?: object;
   } = {},
@@ -32,7 +31,6 @@ const createSession = (
   const session = new ShellInteractionSession({
     settingsService: settingsService as any,
     conversationSink: { addShellContext },
-    liteMode: options.liteMode ?? true,
     sshInfo: options.sshInfo,
     sshService: options.sshService as any,
   });
@@ -45,13 +43,13 @@ beforeEach(() => {
 });
 
 describe('ShellInteractionSession', () => {
-  it('only enters shell mode while lite mode is eligible', () => {
-    const { session } = createSession({ liteMode: false });
+  it('enters shell mode regardless of the application mode', () => {
+    const { session } = createSession();
 
-    session.toggleShellMode();
+    session.enterShellMode();
 
-    expect(session.getSnapshot()).toEqual({ isShellMode: false });
-    expect(session.submit('pwd')).toBeNull();
+    expect(session.getSnapshot()).toEqual({ isShellMode: true });
+    expect(session.submit('pwd')).not.toBeNull();
   });
 
   it('executes accepted commands, forwards SSH execution, and retains their history', async () => {
@@ -60,7 +58,7 @@ describe('ShellInteractionSession', () => {
       sshInfo: { host: 'example.test', user: 'agent', remoteDir: '/remote/project' },
       sshService,
     });
-    session.toggleShellMode();
+    session.enterShellMode();
 
     const submission = session.submit('  pwd  ');
     expect(submission).toMatchObject({ command: 'pwd' });
@@ -78,7 +76,7 @@ describe('ShellInteractionSession', () => {
 
   it('does not admit or execute whitespace-only input', () => {
     const { session } = createSession();
-    session.toggleShellMode();
+    session.enterShellMode();
 
     expect(session.submit('   ')).toBeNull();
 
@@ -87,10 +85,10 @@ describe('ShellInteractionSession', () => {
 
   it('flushes a completed shell history only once when shell mode closes', async () => {
     const { session, addShellContext } = createSession();
-    session.toggleShellMode();
+    session.enterShellMode();
     await session.submit('echo one')!.completion;
 
-    session.toggleShellMode();
+    session.exitShellMode();
     session.flushShellHistory();
 
     expect(addShellContext).toHaveBeenCalledOnce();
@@ -101,10 +99,10 @@ describe('ShellInteractionSession', () => {
     const completion = deferred<{ text: string; exitCode: number | null; timedOut: boolean }>();
     mocks.executeFormattedShellCommand.mockReturnValueOnce(completion.promise);
     const { session, addShellContext } = createSession();
-    session.toggleShellMode();
+    session.enterShellMode();
     const submission = session.submit('echo delayed')!;
 
-    session.toggleShellMode();
+    session.exitShellMode();
 
     expect(addShellContext).not.toHaveBeenCalled();
     completion.resolve({ text: 'delayed output', exitCode: 0, timedOut: false });
@@ -120,11 +118,11 @@ describe('ShellInteractionSession', () => {
       .mockReturnValueOnce(firstCompletion.promise)
       .mockReturnValueOnce(secondCompletion.promise);
     const { session, addShellContext } = createSession();
-    session.toggleShellMode();
+    session.enterShellMode();
     const first = session.submit('echo first')!;
     const second = session.submit('echo second')!;
 
-    session.toggleShellMode();
+    session.exitShellMode();
     secondCompletion.resolve({ text: 'second output', exitCode: 0, timedOut: false });
     await second.completion;
     expect(addShellContext).not.toHaveBeenCalled();
@@ -143,11 +141,11 @@ describe('ShellInteractionSession', () => {
       .mockReturnValueOnce(successfulCompletion.promise)
       .mockReturnValueOnce(failedCompletion.promise);
     const { session, addShellContext } = createSession();
-    session.toggleShellMode();
+    session.enterShellMode();
     const successful = session.submit('echo kept')!;
     const failed = session.submit('echo failed')!;
 
-    session.toggleShellMode();
+    session.exitShellMode();
     failedCompletion.reject(new Error('execution failed'));
     await expect(failed.completion).rejects.toThrow('execution failed');
     expect(addShellContext).not.toHaveBeenCalled();
@@ -158,12 +156,12 @@ describe('ShellInteractionSession', () => {
     expect(addShellContext).toHaveBeenCalledWith(expect.stringContaining('$ echo kept'));
   });
 
-  it('exits and flushes when lite mode is disabled', async () => {
+  it('exits and flushes when shell mode is left', async () => {
     const { session, addShellContext } = createSession();
-    session.toggleShellMode();
+    session.enterShellMode();
     await session.submit('echo two')!.completion;
 
-    session.setLiteMode(false);
+    session.exitShellMode();
 
     expect(session.getSnapshot()).toEqual({ isShellMode: false });
     expect(addShellContext).toHaveBeenCalledWith(expect.stringContaining('$ echo two'));

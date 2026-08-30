@@ -29,6 +29,8 @@ export type ApplicationInputSurfaceProps = {
   waitingForRejectionReason?: boolean;
   turnInFlight?: boolean;
   isShellMode?: boolean;
+  onShellModeEnter?: () => void;
+  onShellModeExit?: () => void;
   settingsService: SettingsService;
   loggingService: LoggingService;
   historyService: HistoryService;

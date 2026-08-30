@@ -4,7 +4,7 @@ import React from 'react';
 import { act } from 'react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { Text } from 'ink';
-import { renderInAct, rerenderInAct } from '../test-helpers/ink-testing.js';
+import { renderInAct } from '../test-helpers/ink-testing.js';
 import { ShellInteractionSession } from '../services/shell/shell-interaction-session.js';
 import { useShellMode } from './use-shell-mode.js';
 
@@ -29,21 +29,15 @@ const Harness = (props: Parameters<typeof useShellMode>[0]) => {
   return <Text>shell</Text>;
 };
 
-const createSession = (liteMode = true) =>
+const createSession = () =>
   new ShellInteractionSession({
     settingsService: { get: vi.fn(() => undefined) } as any,
     conversationSink: { addShellContext: mocks.addShellContext },
-    liteMode,
   });
 
-const renderHarness = async (liteMode = true, session = createSession(liteMode)) => {
+const renderHarness = async (session = createSession()) => {
   return renderInAct(
-    <Harness
-      session={session}
-      addShellMessage={mocks.addShellMessage}
-      replaceInput={mocks.replaceInput}
-      liteMode={liteMode}
-    />,
+    <Harness session={session} addShellMessage={mocks.addShellMessage} replaceInput={mocks.replaceInput} />,
   );
 };
 
@@ -55,12 +49,12 @@ beforeEach(() => {
   mocks.addShellContext.mockReset();
 });
 
-it('clears the composer and projects accepted shell command results', async () => {
+it('clears the composer, projects results, and returns to normal mode after a command', async () => {
   const session = createSession();
-  await renderHarness(true, session);
+  await renderHarness(session);
 
   await act(async () => {
-    shellApi!.toggleShellMode();
+    shellApi!.enterShellMode();
   });
 
   await act(async () => {
@@ -70,14 +64,15 @@ it('clears the composer and projects accepted shell command results', async () =
   expect(mocks.replaceInput).toHaveBeenCalledWith('');
   expect(mocks.executeFormattedShellCommand).toHaveBeenCalledWith(expect.objectContaining({ command: 'ls' }));
   expect(mocks.addShellMessage).toHaveBeenCalledWith('ls', 'command output', 0, false);
+  expect(session.getSnapshot()).toEqual({ isShellMode: false });
 });
 
 it('flushes shell history when shell mode closes', async () => {
   const session = createSession();
-  await renderHarness(true, session);
+  await renderHarness(session);
 
   await act(async () => {
-    shellApi!.toggleShellMode();
+    shellApi!.enterShellMode();
   });
 
   await act(async () => {
@@ -85,33 +80,27 @@ it('flushes shell history when shell mode closes', async () => {
   });
 
   await act(async () => {
-    shellApi!.toggleShellMode();
+    shellApi!.exitShellMode();
   });
 
   expect(mocks.addShellContext).toHaveBeenCalledWith(expect.stringContaining('echo one|command output|0|false'));
 });
 
-it('auto-exits shell mode in non-lite mode and flushes pending history', async () => {
+it('flushes pending history when shell mode is explicitly left', async () => {
   const session = createSession();
-  const view = await renderHarness(true, session);
+  await renderHarness(session);
 
   await act(async () => {
-    shellApi!.toggleShellMode();
+    shellApi!.enterShellMode();
   });
 
   await act(async () => {
     await shellApi!.handleShellSubmit('echo two');
   });
 
-  await rerenderInAct(
-    view,
-    <Harness
-      session={session}
-      addShellMessage={mocks.addShellMessage}
-      replaceInput={mocks.replaceInput}
-      liteMode={false}
-    />,
-  );
+  await act(async () => {
+    shellApi!.exitShellMode();
+  });
 
   expect(mocks.addShellContext).toHaveBeenCalledWith(expect.stringContaining('echo two|command output|0|false'));
 });

@@ -39,7 +39,8 @@ const mocks = vi.hoisted(() => ({
   goToPreviousQuestion: vi.fn(),
   goToNextQuestion: vi.fn(),
   applyRuntimeSetting: vi.fn(),
-  toggleShellMode: vi.fn(),
+  enterShellMode: vi.fn(),
+  exitShellMode: vi.fn(),
   handleShellSubmit: vi.fn(),
   cycleAppModes: vi.fn(),
   clearConversation: vi.fn(),
@@ -217,7 +218,8 @@ vi.mock('./hooks/use-runtime-settings.js', () => ({
 vi.mock('./hooks/use-shell-mode.js', () => ({
   useShellMode: () => ({
     isShellMode: false,
-    toggleShellMode: mocks.toggleShellMode,
+    enterShellMode: mocks.enterShellMode,
+    exitShellMode: mocks.exitShellMode,
     handleShellSubmit: mocks.handleShellSubmit,
   }),
 }));
@@ -336,7 +338,8 @@ beforeEach(() => {
   mocks.goToPreviousQuestion.mockReset();
   mocks.goToNextQuestion.mockReset();
   mocks.applyRuntimeSetting.mockReset();
-  mocks.toggleShellMode.mockReset();
+  mocks.enterShellMode.mockReset();
+  mocks.exitShellMode.mockReset();
   mocks.handleShellSubmit.mockReset();
   mocks.cycleAppModes.mockReset();
   mocks.clearConversation.mockReset();

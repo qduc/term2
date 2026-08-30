@@ -21,7 +21,6 @@ const mocks = vi.hoisted(() => ({
   setWaitingForRejectionReason: vi.fn(),
   stopProcessing: vi.fn(),
   cancelHandoff: vi.fn(),
-  toggleShellMode: vi.fn(),
   cycleAppModes: vi.fn(),
   replaceInput: vi.fn(),
   onApprove: vi.fn(),
@@ -75,8 +74,6 @@ const createProps = (
   handoffState: null,
   cancelHandoff: mocks.cancelHandoff,
   pendingLargeUncachedTurn: null,
-  liteMode: false,
-  toggleShellMode: mocks.toggleShellMode,
   cycleAppModes: mocks.cycleAppModes,
   replaceInput: mocks.replaceInput,
   approvalShortcutsEnabled: true,
@@ -99,7 +96,6 @@ beforeEach(() => {
   mocks.setWaitingForRejectionReason.mockReset();
   mocks.stopProcessing.mockReset();
   mocks.cancelHandoff.mockReset();
-  mocks.toggleShellMode.mockReset();
   mocks.cycleAppModes.mockReset();
   mocks.replaceInput.mockReset();
   mocks.onApprove.mockReset();
@@ -215,17 +211,6 @@ it.sequential('switches app modes with Shift+Tab unless a large uncached turn is
   await fireInput('\u001b[Z', { shift: true, tab: true });
 
   expect(mocks.cycleAppModes.mock.calls.length).toBe(before + 1);
-  expect(mocks.toggleShellMode).not.toHaveBeenCalled();
-});
-
-it.sequential('toggles shell mode with Shift+Tab in lite mode', async () => {
-  await renderHarness({ liteMode: true });
-  const before = mocks.toggleShellMode.mock.calls.length;
-
-  await fireInput('\u001b[Z', { shift: true, tab: true });
-
-  expect(mocks.toggleShellMode.mock.calls.length).toBe(before + 1);
-  expect(mocks.cycleAppModes).not.toHaveBeenCalled();
 });
 
 it.sequential('ignores Shift+Tab while a large uncached turn is pending', async () => {
@@ -233,7 +218,6 @@ it.sequential('ignores Shift+Tab while a large uncached turn is pending', async 
 
   await fireInput('\u001b[Z', { shift: true, tab: true });
 
-  expect(mocks.toggleShellMode).not.toHaveBeenCalled();
   expect(mocks.cycleAppModes).not.toHaveBeenCalled();
 });
 
@@ -284,7 +268,6 @@ it.sequential('does NOT fire app shortcuts (Shift+Tab) while a prompt owns input
 
   await fireInput('\u001b[Z', { shift: true, tab: true });
 
-  expect(mocks.toggleShellMode).not.toHaveBeenCalled();
   expect(mocks.cycleAppModes).not.toHaveBeenCalled();
 });
 
@@ -298,7 +281,6 @@ it.sequential('does NOT fire Escape or Shift+Tab shortcuts while the background 
   await fireInput('\u001b[Z', { shift: true, tab: true });
 
   expect(mocks.stopProcessing).not.toHaveBeenCalled();
-  expect(mocks.toggleShellMode).not.toHaveBeenCalled();
   expect(mocks.cycleAppModes).not.toHaveBeenCalled();
 });
 

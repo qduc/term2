@@ -18,7 +18,7 @@ import PendingQueueList, { type PendingQueueMessage } from './input/PendingQueue
 import {
   COLOR_ACCENT,
   COLOR_ACCENT_ALT,
-  COLOR_SUCCESS,
+  COLOR_DANGER,
   COLOR_TEXT_MUTED,
   COLOR_TEXT_SUBTLE,
   COLOR_WARNING,
@@ -36,6 +36,8 @@ type Props = {
   waitingForRejectionReason?: boolean;
   turnInFlight?: boolean;
   isShellMode?: boolean;
+  onShellModeEnter?: () => void;
+  onShellModeExit?: () => void;
   settingsService: SettingsService;
   loggingService: LoggingService;
   historyService: HistoryService;
@@ -76,6 +78,8 @@ const InputBox: FC<Props> = ({
   waitingForRejectionReason = false,
   turnInFlight = false,
   isShellMode = false,
+  onShellModeEnter,
+  onShellModeExit,
   historyService,
   promptLabel,
   allowEmptySubmit = false,
@@ -183,8 +187,12 @@ const InputBox: FC<Props> = ({
       setCursorOverride(controller.getSnapshot().editor.cursor);
       return true;
     }
+    if (isShellMode && inputValueRef.current === '') {
+      onShellModeExit?.();
+      return true;
+    }
     return cancelQueueInteraction();
-  }, [cancelQueueInteraction, controller, setCursorOverride]);
+  }, [cancelQueueInteraction, controller, isShellMode, onShellModeExit, setCursorOverride]);
 
   const { escHintVisible } = useEscapeKey({
     value,
@@ -312,6 +320,9 @@ const InputBox: FC<Props> = ({
     if (!stdin) return;
     const onData = (chunk: Buffer | string) => {
       const data = String(chunk);
+      if (isShellMode && inputValueRef.current === '' && (data === '\x7f' || data === '\b')) {
+        onShellModeExit?.();
+      }
       const isRecentEscape = Date.now() - stdinBufferTimestampRef.current < 100;
       if (data === '\x1b\r' || (stdinBufferRef.current === '\x1b' && data === '\r' && isRecentEscape)) {
         consumedAltEnterRef.current = true;
@@ -331,7 +342,7 @@ const InputBox: FC<Props> = ({
     return () => {
       stdin.off('data', onData);
     };
-  }, [handleWrapperSubmit, images, stdin]);
+  }, [handleWrapperSubmit, images, isShellMode, onShellModeExit, stdin]);
 
   useEffect(() => {
     if (cursorOverride !== null && cursorOverride === cursorOffset) {
@@ -346,12 +357,18 @@ const InputBox: FC<Props> = ({
   const handleMultilineChange = useCallback(
     (newValue: string) => {
       const filtered = newValue.replace(/\x1b\[I|\x1b\[O/g, '');
+      if (!isShellMode && inputValueRef.current === '' && filtered.startsWith('!')) {
+        onChange(filtered.slice(1));
+        remountInput();
+        onShellModeEnter?.();
+        return;
+      }
       // ink-prompt can echo the controlled value when it mounts. Treat that
       // as synchronization, not an edit, so it cannot move a middle cursor
       // to the end during the menu-to-editor handoff.
       if (filtered !== inputValueRef.current) onChange(filtered);
     },
-    [onChange],
+    [isShellMode, onChange, onShellModeEnter, remountInput],
   );
 
   return (
@@ -373,7 +390,7 @@ const InputBox: FC<Props> = ({
         {!activePromptLabel && waitingForRejectionReason ? (
           <Text color={COLOR_WARNING}>Why? </Text>
         ) : isShellMode ? (
-          <Text color={COLOR_SUCCESS}>$ </Text>
+          <Text color={COLOR_DANGER}>! </Text>
         ) : (
           <Text color={COLOR_ACCENT}>❯ </Text>
         )}
@@ -399,6 +416,7 @@ const InputBox: FC<Props> = ({
               altEnterSuppressUntilRef.current = 0;
               return true;
             }
+            if (isShellMode && value === '' && (key.backspace || input === '\x7f' || input === '\b')) return true;
             return isFocusReportingSequence(input) || (key.meta && key.return);
           }}
         />

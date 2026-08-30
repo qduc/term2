@@ -17,7 +17,6 @@ import {
 
 interface BannerProps {
   settingsService: SettingsService;
-  isShellMode?: boolean;
 }
 
 const MAX_MODEL_LABEL = 34;
@@ -32,7 +31,7 @@ const Badge: FC<{ mode: ModeBadge }> = ({ mode }) => (
   </Text>
 );
 
-const Banner: FC<BannerProps> = ({ settingsService, isShellMode = false }) => {
+const Banner: FC<BannerProps> = ({ settingsService }) => {
   const mentorMode = useSetting(settingsService, 'app.mentorMode') ?? false;
   const liteMode = useSetting(settingsService, 'app.liteMode') ?? false;
   const planMode = useSetting(settingsService, 'app.planMode') ?? false;
@@ -48,15 +47,7 @@ const Banner: FC<BannerProps> = ({ settingsService, isShellMode = false }) => {
   const providerDef = getProvider(providerKey);
   const providerLabel = providerDef?.label || providerKey;
 
-  const baseMode: ModeBadge = orchestratorMode
-    ? 'ORCHESTRATOR'
-    : planMode
-    ? 'PLAN'
-    : liteMode
-    ? isShellMode
-      ? 'SHELL'
-      : 'LITE'
-    : 'STANDARD';
+  const baseMode: ModeBadge = orchestratorMode ? 'ORCHESTRATOR' : planMode ? 'PLAN' : liteMode ? 'LITE' : 'STANDARD';
 
   // Two borderless lines, not a bordered block. The banner is the first thing
   // on screen every session; a full box around it competes with the conversation

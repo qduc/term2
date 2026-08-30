@@ -13,7 +13,6 @@ type Props<T extends MessageLike = Message> = {
   messages: T[];
   bannerItems?: string[];
   settingsService?: SettingsService;
-  isShellMode?: boolean;
   restoredStaticMessageIds?: readonly string[];
   /** The turn is held at an approval or check-in prompt, so no tool is executing. */
   turnPaused?: boolean;
@@ -278,7 +277,6 @@ const MessageList = <T extends MessageLike = Message>({
   messages,
   bannerItems = [],
   settingsService,
-  isShellMode = false,
   restoredStaticMessageIds = EMPTY_RESTORED_STATIC_MESSAGE_IDS,
   turnPaused = false,
 }: Props<T>) => {
@@ -515,11 +513,7 @@ const MessageList = <T extends MessageLike = Message>({
 
   const renderStaticItem = (item: StaticItem, idx: number) => {
     if (item.kind === 'banner') {
-      return (
-        <Box key={item.id}>
-          {settingsService && <Banner settingsService={settingsService} isShellMode={isShellMode} />}
-        </Box>
-      );
+      return <Box key={item.id}>{settingsService && <Banner settingsService={settingsService} />}</Box>;
     }
 
     // The trailing blank line is rendered outside <Static> (see below). It must

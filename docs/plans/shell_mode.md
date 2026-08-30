@@ -1,65 +1,49 @@
-Plan: Shell Mode Toggle for Lite Mode
+Plan: Direct Shell Input Mode
 
 Summary
 
-Add a "Shell mode" toggle to Lite mode. Pressing Shift+Tab switches between "Ask" mode (AI chat) and
-"Shell" mode (direct shell commands). Shell commands and outputs accumulate and are silently injected into
-AI context when switching back to Ask mode.
+Add a transient direct-shell input mode available from every operating mode. A leading `!` switches the
+composer into shell mode, where the prefix is removed and the next submitted command runs directly. Shell
+commands and outputs are shown in the conversation and recorded as context for the agent.
 
 Key Behaviors
 
-- Shift+Tab in Lite mode: Toggle Ask ↔ Shell mode
-- Shift+Tab outside Lite mode: Toggle Standard mode (existing behavior)
+- A leading `!`: Enter shell mode and remove the prefix from the composer
 - Shell mode: Input executed directly as shell commands via child_process.exec()
-- Context injection: When returning to Ask mode, shell history auto-injected into conversation context (no
-  confirmation)
-- Visual: Prompt changes from > (Ask) to $ (Shell); Banner/StatusBar show mode
+- After a command completes: Show the command and output, record shell context, and return to normal input
+- Empty shell input: Escape or Backspace returns to normal input
+- Context injection: Shell history is auto-injected into conversation context (no confirmation)
+- Visual: Prompt changes from `❯` (normal) to a red `!` (Shell)
 
-Files to Modify
+Relevant Files
 
-1. source/utils/execute-shell.ts (NEW)
-
-Extract shell execution logic into reusable utility:
-export interface ShellExecutionResult {
-stdout: string;
-stderr: string;
-exitCode: number | null;
-timedOut: boolean;
-}
-export async function executeShellCommand(command: string, options?: {...}): Promise<ShellExecutionResult>
+The existing shell execution and conversation-message utilities are reused; the
+input, shell-session, and application wiring provide the transient mode.
 
 2. source/app.tsx
 
-- Add state: isShellMode (boolean), shellHistory (array of {command, output, exitCode})
-- Modify Shift+Tab handler (lines 354-359):
-- If liteMode: toggle isShellMode
-- Else: toggle Standard mode (existing)
-- Modify handleSubmit (line 361+):
-- If isShellMode && liteMode: execute command directly, add to shellHistory, display result
-- On mode switch to Ask: inject history into conversation store, clear history
-- Pass isShellMode prop down to InputBox, Banner, StatusBar
+- Use transient shell state and enter/exit callbacks from the shell interaction session
+- Route shell submissions directly in every operating mode
+- Exit shell mode and flush context after each completed command
+- Pass shell state and callbacks only to the input surface
 
 3. source/components/InputBox.tsx
 
-- Accept new prop isShellMode?: boolean
-- Change prompt character based on mode:
-  isShellMode ? <Text color="green">$ </Text> : <Text color="blue">{'\u276F'} </Text>
+- Accept `isShellMode` plus shell enter/exit callbacks
+- Recognize a leading `!`, remove it from the composer, and enter shell mode
+- Use a red `!` prompt while in shell mode; Escape or Backspace exits on empty input
 
 4. source/components/Banner.tsx
 
-- Accept new prop isShellMode?: boolean
-- Show mode pill:
-- liteMode && isShellMode: "SHELL" pill (yellow #ca8a04)
-- liteMode && !isShellMode: "LITE" pill (green, existing)
+- Keep shell mode out of the operating-mode pill
 
 5. source/components/StatusBar.tsx
 
-- Accept new prop isShellMode?: boolean
-- Show "Shell" or "Ask" indicator when in lite mode
+- Keep shell mode out of the operating-mode status
 
 6. source/components/BottomArea.tsx
 
-- Pass isShellMode prop through to InputBox and StatusBar
+- Pass shell state and callbacks through to InputBox
 
 7. source/hooks/use-conversation.ts
 
@@ -77,9 +61,9 @@ Shell Command Execution
 User types command → handleSubmit → executeShellCommand()
 → Add to shellHistory → addShellMessage() → Display in MessageList
 
-Mode Switch (Shell → Ask)
+Shell Completion
 
-Shift+Tab → isShellMode = false → Format shellHistory as text
+Command completion → isShellMode = false → Format shellHistory as text
 → conversationStore.addShellContext() → Clear shellHistory
 
 Context Format
@@ -94,20 +78,15 @@ $ git status
 On branch main
 Exit: 0
 
-Implementation Order
+Validation
 
-1. Create execute-shell.ts - Extract execution logic from tools/shell.ts
-2. Update app.tsx - Add state, modify handlers, mode toggle logic
-3. Update InputBox.tsx - Prompt character change
-4. Update Banner.tsx & StatusBar.tsx - Mode indicators
-5. Update BottomArea.tsx - Pass props
-6. Update use-conversation.ts - Shell message handling
-7. Update conversation-store.ts - Context injection method
-8. Write tests - Unit tests for execute-shell, integration tests for mode toggle
+Cover prefix recognition, prompt rendering, empty-input exit, direct execution
+across operating modes, context recording, and return to normal mode after
+completion with colocated tests.
 
 Visual Summary
 
 | Mode         | Prompt    | Banner         | StatusBar |
 | ------------ | --------- | -------------- | --------- |
-| Ask (Lite)   | > (blue)  | LITE (green)   | Ask       |
-| Shell (Lite) | $ (green) | SHELL (yellow) | Shell     |
+| Normal input | ❯ (blue)  | Current mode   | Current mode |
+| Shell input  | ! (red)   | Current mode   | Current mode |

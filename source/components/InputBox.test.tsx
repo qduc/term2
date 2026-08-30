@@ -1,8 +1,8 @@
 // @ts-expect-error IS_REACT_ACT_ENVIRONMENT is not in globalThis types
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import { it, expect, vi } from 'vitest';
-import React, { useEffect, useRef, act } from 'react';
-import { Box, Text } from 'ink';
+import React, { useEffect, useRef, useState, act } from 'react';
+import { Box, Text, useStdin } from 'ink';
 import ApplicationInputSurface from './input/ApplicationInputSurface.js';
 import { getProviderWizardPromptLabel } from './input/ProviderMenuSession.js';
 import ModelSelectionMenu from './menu/ModelSelectionMenu.js';
@@ -51,6 +51,8 @@ type TestProps = {
   onSubmit: (v: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) => void;
   slashCommands: SlashCommand[];
   isShellMode?: boolean;
+  onShellModeEnter?: () => void;
+  onShellModeExit?: () => void;
   settingsService: SettingsService;
   loggingService: LoggingService;
   historyService: HistoryService;
@@ -141,6 +143,11 @@ const CursorState = () => {
       <Text>Cursor:{cursorOffset}</Text>
     </Box>
   );
+};
+
+const InputStateDisplay = () => {
+  const { input } = useInputContext();
+  return <Text>Input:{input}</Text>;
 };
 
 const getCursorFromFrame = (frame: string | undefined): number | null => {
@@ -283,7 +290,69 @@ it.sequential('InputBox shows the shell prompt when in shell mode', async () => 
   const { lastFrame } = await renderAndFlush(<TestInputBox {...defaultProps} isShellMode />);
   const output = lastFrame();
   expect(output).toBeTruthy();
-  expect(output!.includes('$')).toBe(true);
+  expect(output!.includes('!')).toBe(true);
+  expect(output!.includes('❯')).toBe(false);
+});
+
+it.sequential('InputBox recognizes a leading bang, removes it, and enters shell mode', async () => {
+  const onShellModeEnter = vi.fn();
+  const ShellPrefixHarness = () => {
+    const [shellMode, setShellMode] = useState(false);
+    return (
+      <InputProvider>
+        <InputStateDisplay />
+        <InputBox
+          {...defaultProps}
+          isShellMode={shellMode}
+          onShellModeEnter={() => {
+            onShellModeEnter();
+            setShellMode(true);
+          }}
+        />
+      </InputProvider>
+    );
+  };
+  const { lastFrame, stdin } = await renderAndFlush(<ShellPrefixHarness />);
+
+  await writeInput(stdin, '!');
+
+  expect(onShellModeEnter).toHaveBeenCalledOnce();
+  await writeInput(stdin, 'echo');
+
+  expect(lastFrame()).toContain('Input:echo');
+  expect(lastFrame()).not.toContain('❯');
+});
+
+it.sequential('InputBox leaves shell mode on Escape with an empty command', async () => {
+  const onShellModeExit = vi.fn();
+  let inputEmitter: { emit: (event: string, input: string) => void } | null = null;
+  const EscapeHarness = () => {
+    const { internal_eventEmitter } = useStdin() as unknown as {
+      internal_eventEmitter: { emit: (event: string, input: string) => void };
+    };
+    useEffect(() => {
+      inputEmitter = internal_eventEmitter;
+    }, [internal_eventEmitter]);
+    return <TestInputBox {...defaultProps} isShellMode onShellModeExit={onShellModeExit} />;
+  };
+  await renderAndFlush(<EscapeHarness />);
+
+  await act(async () => {
+    inputEmitter!.emit('input', '\u001B');
+  });
+
+  expect(onShellModeExit).toHaveBeenCalledOnce();
+});
+
+it.sequential('InputBox leaves shell mode on Backspace with an empty command', async () => {
+  const onShellModeExit = vi.fn();
+  const { stdin } = await renderAndFlush(
+    <TestInputBox {...defaultProps} isShellMode onShellModeExit={onShellModeExit} />,
+  );
+
+  await writeInput(stdin, '\u007F');
+
+  expect(onShellModeExit).toHaveBeenCalledOnce();
 });
 
 it.sequential('getProviderWizardPromptLabel maps provider wizard phases to prompt labels', () => {

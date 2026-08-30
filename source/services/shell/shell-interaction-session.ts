@@ -23,7 +23,6 @@ export interface ShellContextSink {
 interface ShellInteractionSessionOptions {
   settingsService: Pick<SettingsService, 'get'>;
   conversationSink: ShellContextSink;
-  liteMode: boolean;
   sshInfo?: SSHInfo;
   sshService?: ISSHService;
 }
@@ -36,8 +35,8 @@ export interface ShellSubmission {
 /**
  * Owns the direct-shell lifecycle independently of any terminal renderer.
  * The interactive surface translates accepted commands into composer and
- * message updates, while this session preserves shell-mode eligibility and
- * the exact context that must be supplied to a later agent turn.
+ * message updates, while this session preserves the exact context that must
+ * be supplied to a later agent turn.
  */
 export class ShellInteractionSession {
   readonly #settingsService: Pick<SettingsService, 'get'>;
@@ -45,7 +44,6 @@ export class ShellInteractionSession {
   readonly #sshInfo?: SSHInfo;
   readonly #sshService?: ISSHService;
   readonly #listeners = new Set<() => void>();
-  #liteMode: boolean;
   #history: ShellHistoryEntry[] = [];
   #pendingExecutions = 0;
   #flushRequested = false;
@@ -54,7 +52,6 @@ export class ShellInteractionSession {
   constructor(options: ShellInteractionSessionOptions) {
     this.#settingsService = options.settingsService;
     this.#conversationSink = options.conversationSink;
-    this.#liteMode = options.liteMode;
     this.#sshInfo = options.sshInfo;
     this.#sshService = options.sshService;
   }
@@ -66,28 +63,17 @@ export class ShellInteractionSession {
     return () => this.#listeners.delete(listener);
   };
 
-  setLiteMode(liteMode: boolean): void {
-    this.#liteMode = liteMode;
-    if (!liteMode && this.#snapshot.isShellMode) {
-      this.#setShellMode(false);
-      this.flushShellHistory();
-    }
+  enterShellMode(): void {
+    this.#setShellMode(true);
   }
 
-  toggleShellMode(): void {
-    if (!this.#liteMode) {
-      return;
-    }
-
-    const nextIsShellMode = !this.#snapshot.isShellMode;
-    this.#setShellMode(nextIsShellMode);
-    if (!nextIsShellMode) {
-      this.flushShellHistory();
-    }
+  exitShellMode(): void {
+    this.#setShellMode(false);
+    this.flushShellHistory();
   }
 
   submit(value: string): ShellSubmission | null {
-    if (!this.#liteMode || !this.#snapshot.isShellMode) {
+    if (!this.#snapshot.isShellMode) {
       return null;
     }
 

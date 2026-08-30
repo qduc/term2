@@ -52,6 +52,8 @@ export type BottomAreaProps = {
   thinkingStartedAt?: number | null;
   toolCallStreamingInfo?: { toolName?: string; argumentCharCount: number } | null;
   isShellMode?: boolean;
+  onShellModeEnter?: () => void;
+  onShellModeExit?: () => void;
   lastUsage?: NormalizedUsage | null;
   lastCodexRateLimit?: CodexRateLimitInfo | null;
   runBudgetNotice?: RunBudgetEvent | null;
@@ -131,6 +133,8 @@ const BottomArea: FC<BottomAreaProps> = ({
   thinkingStartedAt = null,
   toolCallStreamingInfo = null,
   isShellMode = false,
+  onShellModeEnter,
+  onShellModeExit,
   onSubmit,
   onRejectionReasonInputReady,
   slashCommands,
@@ -408,6 +412,8 @@ const BottomArea: FC<BottomAreaProps> = ({
           slashCommands={slashCommands}
           waitingForRejectionReason={waitingForRejectionReason}
           isShellMode={isShellMode}
+          onShellModeEnter={onShellModeEnter}
+          onShellModeExit={onShellModeExit}
           settingsService={settingsService}
           loggingService={loggingService}
           historyService={historyService}
@@ -439,7 +445,6 @@ const BottomArea: FC<BottomAreaProps> = ({
 
       <StatusBar
         settingsService={settingsService}
-        isShellMode={isShellMode}
         sshInfo={sshInfo}
         lastUsage={lastUsage}
         lastCodexRateLimit={lastCodexRateLimit}

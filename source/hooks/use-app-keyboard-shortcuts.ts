@@ -50,8 +50,6 @@ export type UseAppKeyboardShortcutsOptions = {
   handoffState: HandoffState;
   cancelHandoff: () => void;
   pendingLargeUncachedTurn: UserTurn | null;
-  liteMode: boolean;
-  toggleShellMode: () => void;
   cycleAppModes: () => void;
   replaceInput: (value: string) => void;
   onSkillActivationCancelled: () => void;
@@ -83,8 +81,6 @@ export const useAppKeyboardShortcuts = ({
   handoffState,
   cancelHandoff,
   pendingLargeUncachedTurn,
-  liteMode,
-  toggleShellMode,
   cycleAppModes,
   replaceInput,
   onSkillActivationCancelled,
@@ -128,8 +124,6 @@ export const useAppKeyboardShortcuts = ({
     handoffState,
     cancelHandoff,
     pendingLargeUncachedTurn,
-    liteMode,
-    toggleShellMode,
     cycleAppModes,
     replaceInput,
     onSkillActivationCancelled,
@@ -156,8 +150,6 @@ export const useAppKeyboardShortcuts = ({
     handoffState,
     cancelHandoff,
     pendingLargeUncachedTurn,
-    liteMode,
-    toggleShellMode,
     cycleAppModes,
     replaceInput,
     onSkillActivationCancelled,
@@ -325,11 +317,6 @@ export const useAppKeyboardShortcuts = ({
       if (!isShiftTab) return;
 
       if (current.pendingLargeUncachedTurn) {
-        return;
-      }
-
-      if (current.liteMode) {
-        current.toggleShellMode();
         return;
       }
 

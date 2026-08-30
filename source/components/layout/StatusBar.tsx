@@ -223,7 +223,6 @@ const AUTO_APPROVE_LABELS: Record<'off' | 'advisory' | 'auto' | 'always', string
 
 interface StatusBarProps {
   settingsService: SettingsService;
-  isShellMode?: boolean;
   sshInfo?: SSHInfo;
   lastUsage?: NormalizedUsage | null;
   lastCodexRateLimit?: CodexRateLimitInfo | null;
@@ -242,7 +241,6 @@ interface StatusBarProps {
 
 const StatusBar: FC<StatusBarProps> = ({
   settingsService,
-  isShellMode = false,
   sshInfo,
   lastUsage,
   lastCodexRateLimit,
@@ -420,7 +418,9 @@ const StatusBar: FC<StatusBarProps> = ({
       case 'usd':
         return `${GLYPH_WARNING} Run cost: ${formatUsdMicros(used)} / ${formatUsdMicros(limit)} (${percent}%)`;
       case 'unpriced_tokens':
-        return `${GLYPH_WARNING} Run tokens: ${formatStatusBarTokens(used)} / ${formatStatusBarTokens(limit)} (${percent}%)`;
+        return `${GLYPH_WARNING} Run tokens: ${formatStatusBarTokens(used)} / ${formatStatusBarTokens(
+          limit,
+        )} (${percent}%)`;
       case 'active_time':
         return `${GLYPH_WARNING} Run time: ${formatActiveTime(used)} / ${formatActiveTime(limit)} (${percent}%)`;
       case 'turns':
@@ -442,7 +442,7 @@ const StatusBar: FC<StatusBarProps> = ({
   })();
 
   const modeLabels = [
-    ...(liteMode ? [`Lite · ${isShellMode ? 'Shell' : 'Ask'}`] : []),
+    ...(liteMode ? ['Lite'] : []),
     ...(mentorMode ? ['Mentor'] : []),
     ...(planMode ? ['Plan'] : []),
     ...(orchestratorMode ? ['Orchestrator'] : []),

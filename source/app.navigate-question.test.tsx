@@ -15,7 +15,8 @@ const mocks = vi.hoisted(() => ({
   setTriggerIndex: vi.fn(),
   setImages: vi.fn(),
   setInputAndCursor: vi.fn(),
-  toggleShellMode: vi.fn(),
+  enterShellMode: vi.fn(),
+  exitShellMode: vi.fn(),
   handleShellSubmit: vi.fn(),
   cycleAppModes: vi.fn(),
   applyRuntimeSetting: vi.fn(),
@@ -128,9 +129,9 @@ vi.mock('./hooks/use-runtime-settings.js', () => ({
 vi.mock('./hooks/use-shell-mode.js', () => ({
   useShellMode: () => ({
     isShellMode: false,
-    toggleShellMode: mocks.toggleShellMode,
+    enterShellMode: mocks.enterShellMode,
+    exitShellMode: mocks.exitShellMode,
     handleShellSubmit: mocks.handleShellSubmit,
-    flushShellHistory: vi.fn(),
   }),
 }));
 

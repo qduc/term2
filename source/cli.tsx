@@ -918,9 +918,9 @@ const { waitUntilExit } = render(
         initialMessages={initialMessages}
         restoredStaticMessageIds={restoredStaticMessageIds}
         logWriter={logWriter}
-        onRotateWriter={(newId) => {
+        onRotateWriter={(newId, createdAt) => {
           logWriter.append({ type: 'session_cleared' });
-          logWriter.rotate(newId, buildInitMeta(newId, new Date().toISOString()));
+          logWriter.rotate(newId, buildInitMeta(newId, createdAt ?? new Date().toISOString()));
           effectiveHasConversationContent = false;
         }}
         generateId={generateId}

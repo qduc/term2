@@ -24,7 +24,10 @@ function getActiveMode(appMode?: SavedAppMode): string {
   return 'standard';
 }
 
-export function formatResumeList(entries: ConversationListEntry[]): string {
+export function formatResumeList(
+  entries: ConversationListEntry[],
+  options: { resumeCommand?: (id: string) => string } = {},
+): string {
   if (entries.length === 0) {
     return 'No saved conversations found.';
   }
@@ -76,7 +79,9 @@ export function formatResumeList(entries: ConversationListEntry[]): string {
       lines.push(`   Prompt:  ${chalk.italic(`"${truncated.replace(/\n/g, ' ')}"`)}`);
     }
 
-    const resumeCmd = getResumeCommand(entry.id, entry.sshHost, entry.sshHost ? entry.projectPath : undefined);
+    const resumeCmd =
+      options.resumeCommand?.(entry.id) ??
+      getResumeCommand(entry.id, entry.sshHost, entry.sshHost ? entry.projectPath : undefined);
     lines.push(`   Resume:  ${chalk.bold(resumeCmd)}`);
     lines.push('');
   });

@@ -34,6 +34,7 @@ import type {
 } from '../subagents/subagent-notification-store.js';
 import type { RunBudgetEvent } from '../agent-runtime/run-budget.js';
 import type { InputSurgeApproval } from '../input-surge-approval.js';
+import type { RestoredState } from './conversation-replay.js';
 
 const REASONING_RESPONSE_THROTTLE_MS = 200;
 
@@ -443,6 +444,49 @@ export class ConversationOrchestrator {
     this.config.usageAccumulator?.reset();
     this.config.subagentUsageAccumulator?.reset();
     this.config.costAccumulator?.reset();
+    this.#directlyAppendedMessageIds.clear();
+    this.#displayedBackgroundNotificationMessageIds.clear();
+    this.#retractedSteerIds.clear();
+    this.#editedSteerTurns.clear();
+    this.#reportedStrandedCallIds.clear();
+  }
+
+  /**
+   * Replace the live UI projection with a persisted conversation after the
+   * caller has moved the service to the restored session id.
+   */
+  restoreConversation(
+    restored: Pick<RestoredState, 'messages' | 'history' | 'previousResponseId' | 'toolLedger' | 'updatedAt'> & {
+      usage?: RestoredState['usage'];
+      subagentUsage?: RestoredState['subagentUsage'];
+      costRecords?: RestoredState['costRecords'];
+    },
+  ): void {
+    this.config.conversationService.importState({
+      history: restored.history,
+      previousResponseId: restored.previousResponseId,
+      toolLedger: restored.toolLedger,
+      updatedAt: restored.updatedAt,
+    });
+    this.config.messages.setMessages(() => [...restored.messages]);
+    this.config.approvedContext.current = null;
+    this.config.conversationService.clearPendingInteraction?.();
+    this.config.ui.onResetAll();
+    this.config.usageAccumulator?.reset();
+    this.config.subagentUsageAccumulator?.reset();
+    this.config.costAccumulator?.reset();
+    if (restored.usage) {
+      this.config.usageAccumulator?.add(restored.usage, { alreadyBillable: true });
+      this.config.ui.onUsageUpdate(restored.usage);
+    }
+    if (restored.subagentUsage) {
+      this.config.subagentUsageAccumulator?.add(restored.subagentUsage, { alreadyBillable: true });
+    }
+    if (restored.costRecords?.length) {
+      const costAccumulator = this.config.costAccumulator;
+      costAccumulator?.addRecords(restored.costRecords);
+      if (costAccumulator) this.config.ui.onCostUpdate?.(costAccumulator.getSummary());
+    }
     this.#directlyAppendedMessageIds.clear();
     this.#displayedBackgroundNotificationMessageIds.clear();
     this.#retractedSteerIds.clear();

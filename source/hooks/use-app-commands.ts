@@ -22,6 +22,8 @@ import type { SkillsService, SkillInfo } from '../services/skills/skills-service
 import type { Message } from '../types/message.js';
 import type { CopySelection } from '../utils/copy-selections.js';
 import type { RewindItem } from '../utils/conversation/rewind-items.js';
+import { createResumeSlashCommand } from '../commands/resume-command.js';
+import type { ConversationListEntry } from '../services/conversation/conversation-persistence.js';
 
 interface UseAppCommandsProps {
   settingsService: SettingsService;
@@ -50,6 +52,8 @@ interface UseAppCommandsProps {
   requestModeSwitchConfirm?: (pending: PendingModeSwitch) => void;
   /** True while an agent turn is in flight; gates conversation-mutating commands. */
   turnInFlight?: boolean;
+  listConversations: () => ConversationListEntry[];
+  resumeConversation: (target?: string) => void | Promise<void>;
 }
 
 // Re-export for backward compat
@@ -84,6 +88,8 @@ export const useAppCommands = ({
   onSkillSelected,
   requestModeSwitchConfirm,
   turnInFlight = false,
+  listConversations,
+  resumeConversation,
 }: UseAppCommandsProps) => {
   const { disableOtherModes, togglePlanMode, cycleAppModes } = useModeHelpers({
     settingsService,
@@ -116,6 +122,7 @@ export const useAppCommands = ({
       guardBusyTurn(createClearSlashCommand(clearConversation, addSystemMessage)),
       createCopySlashCommand({ messages, addSystemMessage, openCopyMenu }),
       createUsageSlashCommand(addSystemMessage, getSessionUsage, refreshProviderUsage),
+      guardBusyTurn(createResumeSlashCommand({ listConversations, resumeConversation, addSystemMessage })),
       guardBusyTurn(
         createRewindSlashCommand({
           name: 'rewind',
@@ -241,6 +248,8 @@ export const useAppCommands = ({
     onSkillSelected,
     requestModeSwitchConfirm,
     turnInFlight,
+    listConversations,
+    resumeConversation,
   ]);
 
   return {

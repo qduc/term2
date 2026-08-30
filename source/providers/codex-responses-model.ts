@@ -1425,11 +1425,26 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     this.#lastSentChainFingerprint = undefined;
   }
 
+  #getEffectivePreviousResponseId(request: any): string | undefined {
+    if (typeof request?.previousResponseId === 'string' && request.previousResponseId.length > 0) {
+      return request.previousResponseId;
+    }
+    if (request?.disableChaining === true) {
+      return undefined;
+    }
+    if (RESPONSES_LITE_MODELS.has(this.modelId)) {
+      const key = this.#getCodexServerHistoryKey();
+      return key ? this.chainedWireState.getStoredResponseId(key) : undefined;
+    }
+    return undefined;
+  }
+
   #fingerprintPreparedRequest(request: any, recoveryClass = 'chain_recovery'): string {
+    const previousResponseId = this.#getEffectivePreviousResponseId(request);
     return fingerprintChainRequest({
       provider: 'codex',
       model: this.modelId,
-      previousResponseId: typeof request?.previousResponseId === 'string' ? request.previousResponseId : null,
+      previousResponseId: previousResponseId ?? null,
       input: Array.isArray(request?.input) ? request.input : [],
       recoveryClass,
     });
@@ -1542,7 +1557,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       let attemptedWithServerHistory = false;
       try {
         const preparedRequest = this.#prepareCodexServerHistoryRequests(request);
-        attemptedWithServerHistory = Boolean(preparedRequest.request?.previousResponseId);
+        attemptedWithServerHistory = Boolean(this.#getEffectivePreviousResponseId(preparedRequest.request));
         const effectiveRequest = preparedRequest.request;
         this.#assertChainRequestMakesProgress(effectiveRequest);
 
@@ -1589,7 +1604,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     let attemptedWithServerHistory = false;
     try {
       const preparedRequest = this.#prepareCodexServerHistoryRequests(request);
-      attemptedWithServerHistory = Boolean(preparedRequest.request?.previousResponseId);
+      attemptedWithServerHistory = Boolean(this.#getEffectivePreviousResponseId(preparedRequest.request));
       const effectiveRequest = preparedRequest.request;
       this.#assertChainRequestMakesProgress(effectiveRequest);
 

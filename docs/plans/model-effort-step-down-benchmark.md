@@ -50,7 +50,7 @@ terra/luna — see "Directory layout" below):
 |---|---|---|---|---|
 | `c11-d8-approval-grant-kind` | PASS · 10.0 | PASS · 10.0 | PASS · 10.0 | PASS · 10.0 |
 | `f-security-002-symlink-traversal` | PASS · 7.33 | PASS · **9.0** | PASS · 8.33 | PASS · **5.67** |
-| `f-correctness-002-null-session-context` | not run | PASS · 9.0 | PASS · 8.17 | PASS · 8.67 |
+| `f-correctness-002-null-session-context` | not run | PASS · 9.5 | PASS · 8.17 | PASS · 8.17 |
 | `r-retry-abort-backoff` (hard — real async-cancellation bug) | FAIL · 6.0 | FAIL · 8.0 | FAIL · 6.33 | FAIL · 7.67 |
 
 Cost per run (this is where the case is strongest): 7×–140× cheaper for
@@ -59,9 +59,10 @@ luna-low $0.02.
 
 **Conclusions actually supported by this evidence:**
 
-1. On 3 of 4 tasks, `luna-low` is at/near quality parity with `terra`
-   (10.0=10.0, 8.67 vs 9.0, 7.67 vs 8.0) at a fraction of the cost. The
-   headline hypothesis holds there.
+1. On 3 of 4 tasks, `luna-low` tracks `terra` closely (10.0=10.0, 8.17 vs 9.5,
+   7.67 vs 8.0) at a fraction of the cost. The headline hypothesis holds
+   there, with the largest residual gap on task 3 — driven by test-quality
+   sub-scores (terra 1.5, luna 0–0.5 in every sample).
 2. **Real exception: the security task.** `luna-low` scored 5.67 vs `terra`'s
    9.0 despite both passing the same hidden test — a judge-only finding, the
    deterministic evaluator alone would have called this a tie. **Do not ship
@@ -101,24 +102,37 @@ luna-low $0.02.
   was caught — check `run-candidates.sh --benchmark-dir <dir>` (dry run, no
   `--go`) prints the intended command before spending anything.
 
-## Known tooling issue: `run-judge.sh` dimension-score parser
+## Known tooling issue: `run-judge.sh` dimension-score parser — FIXED 2026-08-30
 
-On task 3 (`f-correctness-002-null-session-context`, plain `run-judge.sh`,
-not pooled), the judge produced valid, well-reasoned JSON verdicts in all 3
-samples but `run-judge.sh`'s aggregator rejected all of them as "invalid
-dimension score" — likely a rubric-key mismatch (this judge used
-`correctness/scope/compatibility/tests`, the parser apparently expects a
-fixed set). The API calls succeeded (real spend, real usage against the
-session limit) — only the aggregation failed. Scores were reconciled by hand
-from the raw `control/judge-{1,2,3}.txt` files + `control/mapping.json`
-(mapping is a single fixed shuffle for the whole run under plain
-`run-judge.sh`, unlike `pooled-judge.sh` which reshuffles per sample — worth
-knowing before reading a mapping.json literally per-sample).
+Root cause was not a rubric-key mismatch. The plain `run-judge.sh` prompt
+(living in `anonymize-diffs.sh`) asked the judge to report the total score
+alongside the four dimensions — its own example JSON included `"total": 0` —
+while `aggregate-judge.py` rejected any score entry with an extra key
+(`set(sc) != set(LIMITS)`), discarding all 3 samples of this task after the
+API spend was real. `pooled-judge.sh` never hit this because its prompt
+explicitly forbids totals.
 
-`pooled-judge.sh` did not hit this on tasks 1, 2, or 4 — consider always
-using `pooled-judge.sh` (even for a single source dir) instead of
-`run-judge.sh` directly, or fix the parser, before relying on the automated
-aggregation again.
+Fixed 2026-08-30, both sides: the aggregator now tolerates a judge-supplied
+`total` (it recomputes the total anyway) while still rejecting unknown keys,
+and the skip message names the offending keys instead of a bare "invalid
+dimension score"; the plain prompt no longer asks for `total`. Covered by
+updated/added tests in `test_pooled_judge.py`.
+
+Re-running the fixed aggregator on this task's raw `judge-{1,2,3}.txt`
+recovered all 3 samples mechanically: `baseline-terra` 9.5, `luna-high` 8.17,
+`luna-low` 8.17 (per-sample totals 9.5/9.5/9.5, 8.0/8.0/8.5, 8.0/8.0/8.5).
+That mechanical decode replaces the earlier hand-reconciled numbers (which
+read 9.0/8.17/8.67 — they did not come from a correct mapping join).
+
+Correction to the note below the original hand reconciliation: the mapping
+under plain `run-judge.sh` is **not** a single fixed shuffle for the whole
+run — `run-judge.sh` re-runs `anonymize-diffs.sh` per sample, so
+`mapping-1/2/3.json` differ, exactly like `pooled-judge.sh`. The recovered
+totals above join each sample through its own mapping and are authoritative.
+
+`pooled-judge.sh` did not hit this on tasks 1, 2, or 4 — prefer
+`pooled-judge.sh` (even for a single source dir) over `run-judge.sh` until
+the plain path gets the same test coverage.
 
 ## Directory layout (all under `/home/qduc/.agents/runtime/`)
 
@@ -180,8 +194,9 @@ the empty duplicate-named `.diff` files before pooling. Also run
    product change of this size — current spend (~$13 + 30 points of weekly
    Claude session usage) suggests another full round is affordable if
    wanted.
-5. Fix or route around the `run-judge.sh` parser issue before relying on
-   unattended judge aggregation again.
+5. ~~Fix or route around the `run-judge.sh` parser issue before relying on
+   unattended judge aggregation again.~~ — **Done 2026-08-30** (see "Known
+   tooling issue" above).
 
 ## Related, separate findings surfaced along the way (not part of this proposal, worth a future look)
 

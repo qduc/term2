@@ -60,7 +60,9 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   before touching this: it records the exact benchmark directories, a
   provider-id gotcha (`codex` not `openai-codex`), a host-memory-exhaustion
   trap (do not run 3+ heavy `term2` benchmark candidates as parallel
-  background tasks), and a `run-judge.sh` aggregator parsing bug.
+  background tasks), and a `run-judge.sh` aggregator parsing bug (fixed
+  2026-08-30; the recovered task-3 scores also corrected the doc's results
+  table).
 - Test suite audit — foundation merged, milestone still non-destructive:
   build the evidence graph, not cleanup. Do not remove, rewrite, retier, or
   consolidate tests, and do not dispatch explorers, without the approval

@@ -129,7 +129,7 @@ it('uses a persistent event sink when the session supports one', async () => {
   expect(setEventSinkCalls[setEventSinkCalls.length - 1]).toBeNull();
 });
 
-it('streams reasoning_delta events to stderr only', async () => {
+it('suppresses reasoning_delta events by default but streams them when showReasoning=true', async () => {
   const stdout = createStringWritable();
   const stderr = createStringWritable();
 
@@ -155,7 +155,21 @@ it('streams reasoning_delta events to stderr only', async () => {
 
   expect(exitCode).toBe(0);
   expect(stdout.getOutput()).toBe('OK\n');
-  expect(stderr.getOutput()).toBe('Thinking hard');
+  expect(stderr.getOutput()).toBe('');
+
+  const stdout2 = createStringWritable();
+  const stderr2 = createStringWritable();
+  const exitCode2 = await runWithSession(session, {
+    prompt: 'hi',
+    autoApprove: false,
+    showReasoning: true,
+    stdout: stdout2.stream,
+    stderr: stderr2.stream,
+  });
+
+  expect(exitCode2).toBe(0);
+  expect(stdout2.getOutput()).toBe('OK\n');
+  expect(stderr2.getOutput()).toBe('Thinking hard');
 });
 
 it('returns exit code 1 on error event', async () => {
@@ -223,7 +237,7 @@ it('with autoApprove=true: approves on approval_required', async () => {
   expect(exitCode).toBe(0);
   expect(calls).toEqual([{ answer: 'y', rejectionReason: undefined }]);
   expect(exportStateCalls).toBe(0);
-  expect(stderr.getOutput().toLowerCase().includes('auto-approve')).toBe(true);
+  expect(stderr.getOutput()).toBe('');
 });
 
 it('with autoApprove=false: rejects on approval_required with explanation', async () => {
@@ -323,12 +337,43 @@ it('writes parent and subagent tool summaries to stderr only', async () => {
   expect(stdout.getOutput()).toBe('OK\n');
 
   const err = stderr.getOutput();
-  expect(err.includes('tool_started')).toBe(true);
-  expect(err.includes('subagent_tool_started worker')).toBe(true);
-  expect(err.includes('bash')).toBe(true);
-  expect(err.includes('command_message')).toBe(true);
-  expect(err.includes('ls')).toBe(true);
+  expect(err).toContain('[tool] bash: ls');
+  expect(err).toContain('[subagent: worker] bash: pwd');
+  expect(err.includes('command_message')).toBe(false);
   expect(err.includes('OK')).toBe(false);
+});
+
+it('suppresses tool summaries on stderr when quiet=true', async () => {
+  const stdout = createStringWritable();
+  const stderr = createStringWritable();
+
+  const session: any = {
+    async sendMessage(_prompt: string, { onEvent }: any) {
+      onEvent?.({
+        type: 'tool_started',
+        toolCallId: 'call-1',
+        toolName: 'bash',
+        arguments: { command: 'ls' },
+      });
+      onEvent?.({ type: 'text_delta', delta: 'OK' });
+      return { type: 'response', finalText: 'OK', commandMessages: [] };
+    },
+    async handleApprovalDecision() {
+      return null;
+    },
+  };
+
+  const exitCode = await runWithSession(session, {
+    prompt: 'hi',
+    autoApprove: false,
+    quiet: true,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+  });
+
+  expect(exitCode).toBe(0);
+  expect(stdout.getOutput()).toBe('OK\n');
+  expect(stderr.getOutput()).toBe('');
 });
 
 it('handles multiple consecutive approval rounds', async () => {
@@ -973,7 +1018,8 @@ it('runNonInteractive auto-approves only the finite parent run-budget extensions
     expect(toolExecutions).toBe(3);
     expect(requests).toHaveLength(3);
     expect(stdout.getOutput()).toBe('Done.\n');
-    expect(stderr.getOutput()).toContain('--auto-approve enabled');
+    expect(stderr.getOutput()).toContain('[tool] read_file');
+    expect(stderr.getOutput()).not.toContain('--auto-approve enabled');
   } finally {
     unregisterProvider(provider);
   }

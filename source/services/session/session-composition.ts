@@ -561,6 +561,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     generationGuard,
     continuityReset,
     sessionAccess,
+    journal,
     terminateActiveTurn: () => terminateActiveTurn?.(),
   });
 

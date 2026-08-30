@@ -23,6 +23,7 @@ const makeLifecycleHarness = ({ sessionAccess }: { sessionAccess?: SessionAccess
     shellAutoApproval: { clearCache: 0 },
     turnAccumulator: { resetPersistedTurnState: 0 },
     inputPlanner: { reset: 0, markUndoOrRewind: 0, markResumedSession: 0 },
+    journal: { clear: 0, pruneToUserTurnCount: [] as number[] },
     agentClient: { clearConversations: 0 },
     statusMachine: { abort: 0 },
     logger: { warn: 0 },
@@ -119,6 +120,15 @@ const makeLifecycleHarness = ({ sessionAccess }: { sessionAccess?: SessionAccess
       },
       addImportedItem: () => {
         calls.conversationStore.addImportedItem++;
+      },
+      listUserTurns: () => [] as { index: number; text: string; imageCount: number }[],
+    },
+    journal: {
+      clear: () => {
+        calls.journal.clear++;
+      },
+      pruneToUserTurnCount: (count: number) => {
+        calls.journal.pruneToUserTurnCount.push(count);
       },
     },
     agentClient: {
@@ -234,9 +244,32 @@ it('afterUndo routes approval cleanup through approvalFlow coordinator', () => {
   expect(calls.approvalState.clearPending).toBe(0);
   expect(calls.approvalState.consumeAborted).toBe(0);
   expect(calls.toolTracker.pruneToCurrentHistory).toBe(1);
+  expect(calls.journal.pruneToUserTurnCount).toEqual([0]);
   expect(calls.inputPlanner.markUndoOrRewind).toBe(1);
   expect(calls.statusMachine.abort).toBe(1);
   expect(calls.agentClient.clearConversations).toBe(1);
+});
+
+it('resetSession clears buffered journal items so recovery cannot resurrect cleared turns', () => {
+  const { calls, deps } = makeLifecycleHarness();
+  const lifecycle = new SessionLifecycle(deps as any);
+
+  lifecycle.resetSession();
+
+  expect(calls.journal.clear).toBe(1);
+});
+
+it('afterUndo prunes the journal with the store’s surviving user-turn count', () => {
+  const { calls, deps } = makeLifecycleHarness();
+  deps.conversationStore.listUserTurns = () => [
+    { index: 0, text: 'first', imageCount: 0 },
+    { index: 4, text: 'second', imageCount: 0 },
+  ];
+  const lifecycle = new SessionLifecycle(deps as any);
+
+  lifecycle.afterUndo();
+
+  expect(calls.journal.pruneToUserTurnCount).toEqual([2]);
 });
 
 it('afterToolRetry rewinds state without touching the conversation logger undo event', () => {

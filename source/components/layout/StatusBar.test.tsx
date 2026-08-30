@@ -239,7 +239,27 @@ it.sequential('StatusBar warns about run-budget evidence instead of the run stop
     />,
   );
 
-  expect(lastFrame()).toContain('Run tokens 100% of budget');
+  expect(lastFrame()).toContain('Run tokens: 500.0k / 500.0k (100%)');
+});
+
+it.sequential('StatusBar formats USD run-budget evidence clearly', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-5.6-sol',
+    'agent.provider': 'openai',
+    'shell.autoApproveMode': 'off',
+  });
+  const { lastFrame } = await renderInAct(
+    <StatusBar
+      settingsService={settingsService}
+      runBudgetNotice={{
+        type: 'budget_stage',
+        stage: 'warning',
+        evidence: { dimension: 'usd', used: 4_050_000, limit: 5_000_000, headroom: 950_000 },
+      }}
+    />,
+  );
+
+  expect(lastFrame()).toContain('Run cost: $4.05 / $5.00 (81%)');
 });
 
 it.sequential('StatusBar renders known context used without window when the model is not in the catalog', async () => {

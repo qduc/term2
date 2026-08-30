@@ -24,7 +24,7 @@ export interface RunBudgetPolicy {
    * budget that cannot price the request is a rough proxy, and stopping real
    * work on a proxy is a worse failure than overrunning it.
    */
-  readonly escalation: 'warn' | 'pause';
+  readonly escalation: 'warn' | 'pause' | 'disabled';
 }
 
 interface RunBudgetSettingsReader {
@@ -164,6 +164,7 @@ export class RunBudget {
   }
 
   evaluate(input: { now?: number; turns: number; costRecords: readonly ModelRequestCost[] }): RunBudgetEvent[] {
+    if (this.#policy.escalation === 'disabled') return [];
     const now = input.now ?? Date.now();
     const activeTimeMs = this.#currentActiveTime(now);
     this.#turns = input.turns;
@@ -266,6 +267,7 @@ export class RunBudget {
   }
 
   observeToolCall(observation: ToolStallObservation): RunBudgetEvent | undefined {
+    if (this.#policy.escalation === 'disabled') return undefined;
     if (observation.effect === 'mutating') {
       this.#stallCounts.clear();
       this.#latchedStalls.clear();

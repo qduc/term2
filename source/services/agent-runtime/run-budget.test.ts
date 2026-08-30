@@ -198,6 +198,21 @@ describe('RunBudget', () => {
       turnBackstop: 0,
     });
   });
+
+  it('emits no budget or stall events when escalation is disabled', () => {
+    const budget = new RunBudget({ ...policy, escalation: 'disabled' }, 0);
+    const events = budget.evaluate({
+      now: 5_000,
+      turns: 99,
+      costRecords: [cost({ requestId: 'a', usdMicros: 500 })],
+    });
+    expect(events).toEqual([]);
+
+    const stall = budget.observeToolCall({ name: 'read_file', argumentsText: '{"path":"a"}' });
+    expect(stall).toBeUndefined();
+    expect(budget.observeToolCall({ name: 'read_file', argumentsText: '{"path":"a"}' })).toBeUndefined();
+    expect(budget.observeToolCall({ name: 'read_file', argumentsText: '{"path":"a"}' })).toBeUndefined();
+  });
 });
 
 describe('clampRunBudgetPolicy', () => {

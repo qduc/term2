@@ -262,8 +262,8 @@ type RunState = {
   runBudget?: RunBudget;
   onRunBudgetEvent?: (event: RunBudgetEvent) => void;
   wrapUpOnCriticalRunBudget?: boolean;
-  /** Copied from the run-budget policy: 'warn' never pauses the run. */
-  runBudgetEscalation?: 'warn' | 'pause';
+  /** Copied from the run-budget policy: 'warn' never pauses the run, 'disabled' emits no events. */
+  runBudgetEscalation?: 'warn' | 'pause' | 'disabled';
   criticalWrapUpPending?: boolean;
   criticalWrapUpDispatched?: boolean;
   /** Main-agent evidence that must be resolved before another request or tool dispatch. */
@@ -1626,6 +1626,9 @@ export class ApplicationRunLoop {
     stream?: AgentStream,
     queue?: EventQueue,
   ): void {
+    if (state.runBudgetEscalation === 'disabled') {
+      return;
+    }
     if (event.type === 'budget_stage' && event.stage === 'critical' && state.wrapUpOnCriticalRunBudget) {
       state.criticalWrapUpPending = true;
     }

@@ -1,0 +1,47 @@
+[
+  {
+    "id": "grok-credit-source",
+    "title": "Source of Grok weekly credit usage",
+    "summary": "Prior provider investigation locating Grok's account credit reading; retrieve before changing Grok usage integration.",
+    "tags": ["grok", "credits", "provider", "billing"],
+    "createdAt": "2026-08-18T10:00:00.000Z",
+    "updatedAt": "2026-08-21T10:00:00.000Z",
+    "content": "Live traffic and the Grok CLI established that inference Responses streams carry no quota frame and the proxy returns no useful rate-limit headers. Fetch the meter separately with GET {GROK_BASE_URL}/billing?format=credits and a bearer token; do not strip /v1 from the configured base URL and do not add an x-grok-client-identifier header. The recorded body nests values under config: config.creditUsagePercent, config.currentPeriod.end (with config.billingPeriodEnd as fallback), and config.productUsage. Some numeric values use a protobuf-style {val: number} wrapper. currentPeriod.periodType must be USAGE_PERIOD_TYPE_WEEKLY. Convert the end timestamp into the public periodEndMs number and preserve productUsage. Omitting ?format=credits returns monthly billing totals and is the wrong contract."
+  },
+  {
+    "id": "grok-credit-semantics",
+    "title": "Grok credit meter presentation semantics",
+    "summary": "Approved UI meaning and empty-state behavior for the Grok weekly credit status slot.",
+    "tags": ["grok", "credits", "status-bar", "ui"],
+    "createdAt": "2026-08-19T10:00:00.000Z",
+    "updatedAt": "2026-08-21T11:00:00.000Z",
+    "content": "creditUsagePercent is the integer percentage of a weekly period consumed, not remaining requests. Render it in a dedicated Grok credit slot as `Credits N%`; append the period end date as MM/DD when available. Missing or failed readings render nothing, never zero. Keep this shape separate from lastCodexRateLimit because the values have no shared semantics beyond occupying status-bar space."
+  },
+  {
+    "id": "grok-credit-refresh-policy",
+    "title": "Grok credit refresh ownership and cadence",
+    "summary": "Approved lifecycle, cooldown, and authentication-failure policy for credit refreshes.",
+    "tags": ["grok", "credits", "service", "lifecycle"],
+    "createdAt": "2026-08-20T10:00:00.000Z",
+    "updatedAt": "2026-08-21T12:00:00.000Z",
+    "content": "A process-wide Grok credit usage service owns fetching and a shared 5-minute cooldown. Refresh on the busy-to-idle edge of a turn, never from an idle timer. The value changes too slowly to justify background polling, and process-wide ownership prevents subagent fan-out from multiplying calls. Keep the last good reading across transient failures. A 401 or 403 permanently disables refresh for the process; a 429 should honor retry-after without shortening the local cooldown floor. The explicit /usage command may force a refresh past the cooldown."
+  },
+  {
+    "id": "codex-rate-limit-status",
+    "title": "Codex rate-limit status behavior",
+    "summary": "Codex-only status-bar quota frames and reset-window formatting; nearby but not portable to Grok.",
+    "tags": ["codex", "quota", "status-bar"],
+    "createdAt": "2026-08-01T10:00:00.000Z",
+    "updatedAt": "2026-08-10T10:00:00.000Z",
+    "content": "Codex inference emits codex.rate_limits frames. StatusBar formats those as used/reset windows via lastCodexRateLimit. This is provider-specific. Do not infer that another Responses provider emits the same frames or that a weekly consumed percentage has Codex's semantics."
+  },
+  {
+    "id": "grok-credit-polling-prototype",
+    "title": "Superseded Grok billing polling prototype",
+    "summary": "Old prototype notes for a timer-based monthly billing display; superseded and retained only as a warning.",
+    "tags": ["grok", "credits", "superseded"],
+    "createdAt": "2026-08-05T10:00:00.000Z",
+    "updatedAt": "2026-08-05T10:00:00.000Z",
+    "content": "SUPERSEDED by grok-credit-source, grok-credit-semantics, and grok-credit-refresh-policy. The prototype polled /billing without format=credits every 30 seconds and displayed monthly totals. Do not implement this design."
+  }
+]

@@ -5,6 +5,7 @@ import { ExecutionContext } from './services/execution-context.js';
 import type { SubagentResult, SubagentRunHandle, SubagentRunStatus } from './services/subagents/types.js';
 import os from 'os';
 import { BackgroundShellRegistry } from './services/shell/background-shell-registry.js';
+import { SessionBrowser } from './services/conversation/session-browser.js';
 
 // search-via-shell probes `rg` availability with spawnSync while assembling
 // the prompt. Tests below pin that probe instead of inheriting whichever
@@ -129,6 +130,42 @@ it('adds memory tools and summary-only context when memory is enabled, and neith
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+it('registers prior-session browser tools only when the root composition explicitly supplies one', () => {
+  const absent = getAgentDefinition({ settingsService: createMockSettingsService(), loggingService: mockLogger });
+  const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
+  const list = vi.spyOn(browser, 'list').mockReturnValue({
+    sessions: [{ firstUserMessage: 'HISTORICAL_TRANSCRIPT_SENTINEL' }],
+    omitted: 0,
+    unavailable: 0,
+  });
+  const present = getAgentDefinition({
+    settingsService: createMockSettingsService(),
+    loggingService: mockLogger,
+    sessionBrowser: browser,
+  });
+  expect(absent.tools.map((tool) => tool.name)).not.toContain('session_list');
+  expect(present.tools.map((tool) => tool.name)).toEqual(
+    expect.arrayContaining(['session_list', 'session_search', 'session_read']),
+  );
+  expect(present.instructions).toContain('Prior-session transcripts');
+  expect(present.instructions).not.toContain('session transcript text');
+  expect(present.instructions).not.toContain('HISTORICAL_TRANSCRIPT_SENTINEL');
+  expect(list).not.toHaveBeenCalled();
+});
+
+it('includes prior-session safety guidance for an interactive orchestrator root', () => {
+  const definition = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'app.orchestratorMode': true }),
+    loggingService: mockLogger,
+    sessionBrowser: new SessionBrowser(() => ({ projectPath: '/project' })),
+    ...orchestratorSubagentDeps,
+  });
+
+  expect(definition.tools.map((tool) => tool.name)).toContain('session_read');
+  expect(definition.instructions).toContain('Prior-session transcripts');
+  expect(definition.instructions).toContain('stale or untrusted');
 });
 
 it('advertises librarian delegation when memory and subagent delegation are enabled', () => {
@@ -304,7 +341,7 @@ it('getAgentDefinition omits ask_user when getAskUserAnswer is absent', () => {
   expect(toolNames.includes('ask_user')).toBe(false);
 });
 
-it('getAgentDefinition exposes only background execution through the unified delegation tool in orchestrator mode', () => {
+it('getAgentDefinition exposes the cache-stable delegation surface in orchestrator mode', () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',
     'app.orchestratorMode': true,
@@ -335,7 +372,7 @@ it('getAgentDefinition exposes only background execution through the unified del
       'safeParse' in schema &&
       typeof schema.safeParse === 'function' &&
       schema.safeParse({ execution: 'foreground', role: 'explorer', task: 'inspect' }).success,
-  ).toBe(false);
+  ).toBe(true);
   expect(definition.instructions.includes('### Delegating to subagents')).toBe(true);
 });
 
@@ -520,7 +557,7 @@ it('getAgentDefinition omits delegation guidance in lite mode', () => {
   expect(definition.instructions.includes('### Delegating to subagents')).toBe(false);
 });
 
-it('getAgentDefinition in orchestrator mode retains full memory authority', () => {
+it('getAgentDefinition keeps the orchestrator tool surface cache-stable with standard mode', () => {
   const settingsService = createMockSettingsService({
     'app.orchestratorMode': true,
     'agent.model': 'gpt-5',
@@ -532,26 +569,14 @@ it('getAgentDefinition in orchestrator mode retains full memory authority', () =
     ...orchestratorSubagentDeps,
   });
 
-  expect(definition.tools.map((tool) => tool.name)).toEqual([
-    'run_subagent',
-    'get_subagent_result',
-    'get_subagent_status',
-    'send_message',
-    'cancel_run',
-    'shell',
-    'read_file',
-    'grep',
-    'read_code_outline',
-    'code_context_search',
-    'apply_patch',
-    'memory_list',
-    'memory_get',
-    'memory_search',
-    'memory_retrieve',
-    'memory_create',
-    'memory_update',
-    'memory_delete',
-  ]);
+  const standard = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'agent.model': 'gpt-5' }),
+    loggingService: mockLogger,
+    ...orchestratorSubagentDeps,
+  });
+
+  expect(definition.tools.map((tool) => tool.name)).toEqual(standard.tools.map((tool) => tool.name));
+  expect(definition.instructions).toBe(standard.instructions);
   expect(definition.instructions).toContain('Validate any memory proposals from subagents');
   expect(definition.tools.map((tool) => tool.name).filter((name) => name.startsWith('memory_'))).toEqual([
     'memory_list',
@@ -564,7 +589,7 @@ it('getAgentDefinition in orchestrator mode retains full memory authority', () =
   ]);
 });
 
-it('getAgentDefinition in orchestrator mode retains delegation without direct-work encouragement', () => {
+it('getAgentDefinition keeps orchestrator behavior in the mode notice, not the prefix', () => {
   const settingsService = createMockSettingsService({
     'app.orchestratorMode': true,
     'agent.model': 'gpt-5',
@@ -576,11 +601,8 @@ it('getAgentDefinition in orchestrator mode retains delegation without direct-wo
     ...orchestratorSubagentDeps,
   });
 
-  expect(definition.instructions.includes('Orchestrator mode')).toBe(true);
-  expect(definition.instructions).toContain('You own the user-requested outcome end to end');
-  expect(definition.instructions).not.toContain('Directly inspect, edit, run commands, and test small or clear work');
-  expect(definition.instructions).not.toContain('Continue through obvious necessary next steps');
-  expect(definition.instructions).not.toContain('Delegate workspace inspection');
+  expect(definition.instructions.includes('Orchestrator mode')).toBe(false);
+  expect(definition.instructions).not.toContain('You own the user-requested outcome end to end');
   expect(definition.tools.map((tool) => tool.name)).toEqual(
     expect.arrayContaining(['read_code_outline', 'code_context_search', 'apply_patch']),
   );
@@ -616,7 +638,7 @@ it('getAgentDefinition in orchestrator mode retains full memory authority for no
   );
 });
 
-it('getAgentDefinition orchestrator mode registers grep and code_context_search but not glob', () => {
+it('getAgentDefinition keeps search tools stable in orchestrator mode', () => {
   const settingsService = createMockSettingsService({
     'app.orchestratorMode': true,
     'agent.model': 'gpt-4o',
@@ -631,14 +653,14 @@ it('getAgentDefinition orchestrator mode registers grep and code_context_search 
   const toolNames = definition.tools.map((tool) => tool.name);
   expect(toolNames.includes('grep')).toBe(true);
   expect(toolNames.includes('code_context_search')).toBe(true);
-  expect(toolNames.includes('glob')).toBe(false);
+  expect(toolNames.includes('glob')).toBe(true);
 
   const grepTool = definition.tools.find((tool) => tool.name === 'grep');
   const codeContextTool = definition.tools.find((tool) => tool.name === 'code_context_search');
-  expect(grepTool?.description).toContain('use shell');
-  expect(grepTool?.description).not.toContain('use glob');
-  expect(codeContextTool?.description).toContain('use shell');
-  expect(codeContextTool?.description).not.toContain('use glob');
+  expect(grepTool?.description).toContain('use glob');
+  expect(grepTool?.description).not.toContain('use shell');
+  expect(codeContextTool?.description).toContain('use glob');
+  expect(codeContextTool?.description).not.toContain('use shell');
 });
 
 it('getAgentDefinition throws if orchestratorMode is true and async delegation is missing', () => {
@@ -1133,10 +1155,6 @@ it('getAgentDefinition includes worktree hygiene fragment in standard, mentor, p
     'Before editing code, run the smallest relevant available test, lint, typecheck, or validation command as a baseline.',
   );
   expect(orchestrator.instructions).toContain('After your changes, rerun the same command and compare results');
-  expect(orchestrator.instructions).toContain(
-    'Choose investigation, planning, delegation, implementation, review, and validation adaptively.',
-  );
-  expect(orchestrator.instructions).toContain('Delegation transfers execution, never outcome ownership.');
 });
 
 it('getAgentDefinition omits worktree hygiene fragment in lite mode', () => {

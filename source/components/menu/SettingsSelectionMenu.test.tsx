@@ -87,3 +87,34 @@ it.sequential('SettingsSelectionMenu marks the selected item', async () => {
   expect(output.includes('▶')).toBe(true);
   expect(output.includes('shell.timeout')).toBe(true);
 });
+
+it.sequential('SettingsSelectionMenu displays highlighted item description at the bottom footer', async () => {
+  const { lastFrame } = await renderInAct(
+    <SettingsSelectionMenu
+      items={items}
+      selectedIndex={0}
+      query=""
+      activeCategoryId={defaultTabs.activeCategoryId}
+      categories={defaultTabs.categories}
+    />,
+  );
+  const output = lastFrame() ?? '';
+  expect(output.includes('The AI model to use')).toBe(true);
+  expect(output.includes('└──')).toBe(false);
+});
+
+it.sequential('SettingsSelectionMenu updates bottom description when selectedIndex changes', async () => {
+  const { lastFrame } = await renderInAct(
+    <SettingsSelectionMenu
+      items={items}
+      selectedIndex={1}
+      query=""
+      activeCategoryId={defaultTabs.activeCategoryId}
+      categories={defaultTabs.categories}
+    />,
+  );
+  const output = lastFrame() ?? '';
+  expect(output.includes('Shell command timeout in milliseconds')).toBe(true);
+  expect(output.includes('The AI model to use')).toBe(false);
+  expect(output.includes('└──')).toBe(false);
+});

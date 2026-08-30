@@ -74,6 +74,18 @@ const shellOutput = (
     ...overrides,
   } as ConversationEvent);
 
+const checkInDue = (
+  overrides: Partial<Extract<ConversationEvent, { type: 'background_check_in_due' }>> = {},
+): ConversationEvent =>
+  ({
+    type: 'background_check_in_due',
+    target: { kind: 'shell', id: 'shell-1' },
+    checkInIndex: 1,
+    elapsedMs: 300_000,
+    details: { kind: 'shell', id: 'shell-1', command: 'pnpm test' },
+    ...overrides,
+  } as ConversationEvent);
+
 /** Yield to the event loop so orchestrator-initiated turns can run to completion. */
 async function settle(times = 4): Promise<void> {
   for (let i = 0; i < times; i++) {
@@ -305,6 +317,24 @@ describe('ConversationOrchestrator background subagent notifications mid-turn', 
     );
   });
 
+  it('hands a check-in to the running turn without implying anything is wrong', async () => {
+    const h = makeHarness({ queueActive: true });
+
+    h.emit(checkInDue());
+    await settle();
+
+    expect(h.service.injectIntoActiveTurn).toHaveBeenCalledTimes(1);
+    const text = h.injectedTexts()[0];
+    expect(text).toContain('Periodic check-in');
+    expect(text).toContain('pnpm test');
+    expect(text).toContain('does not by itself mean anything is wrong');
+    expect(text).toContain('Decide freely');
+    expect(h.service.sendMessage).not.toHaveBeenCalled();
+    expect(h.config.messages.getMessages()).toContainEqual(
+      expect.objectContaining({ sender: 'command', toolName: 'background_check_in_notification' }),
+    );
+  });
+
   it('tells the active turn that the same shell moved to background without requesting a stop', async () => {
     const h = makeHarness({ queueActive: true });
 
@@ -439,6 +469,20 @@ describe('ConversationOrchestrator background subagent notifications', () => {
     expect(text).toContain('jobId: shell-1');
     expect(text).toContain('matchedLines:');
     expect(text).toContain('Listening on http://localhost:3000');
+    expect(h.config.messages.getMessages().some((message) => message.sender === 'user')).toBe(false);
+    expect(h.store.pendingCount).toBe(0);
+  });
+
+  it('wakes an idle session with a hidden turn for a proactive check-in', async () => {
+    const h = makeHarness();
+
+    h.emit(checkInDue());
+    await settle();
+
+    expect(h.service.sendMessage).toHaveBeenCalledTimes(1);
+    const text = h.sentTexts()[0];
+    expect(text).toContain('Periodic check-in');
+    expect(text).toContain('still running, elapsed 300s, check-in #1');
     expect(h.config.messages.getMessages().some((message) => message.sender === 'user')).toBe(false);
     expect(h.store.pendingCount).toBe(0);
   });

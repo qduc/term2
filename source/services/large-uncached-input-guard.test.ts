@@ -122,7 +122,7 @@ it('warns after idle time exceeds five minutes', () => {
   expect(decision.reasons.includes('idle_timeout')).toBe(true);
 });
 
-it('does not warn for Standard to Plan mode changes alone', () => {
+it('does not warn for transitions among non-lite modes alone', () => {
   const guard = new LargeUncachedInputGuard();
   guard.recordSuccessfulInput({
     input: largeInput(),
@@ -133,16 +133,18 @@ it('does not warn for Standard to Plan mode changes alone', () => {
     mode: 'standard',
   });
 
-  const decision = guard.inspect({
-    input: largeInput(),
-    now: 2_000,
-    provider: 'openai',
-    model: 'gpt-5',
-    reasoningEffort: 'medium',
-    mode: 'plan',
-  });
+  for (const mode of ['plan', 'mentor', 'orchestrator', 'standard']) {
+    const decision = guard.inspect({
+      input: largeInput(),
+      now: 2_000,
+      provider: 'openai',
+      model: 'gpt-5',
+      reasoningEffort: 'medium',
+      mode,
+    });
 
-  expect(decision.action).toBe('allow');
+    expect(decision.action).toBe('allow');
+  }
 });
 
 it('warns for resumed large old sessions', () => {

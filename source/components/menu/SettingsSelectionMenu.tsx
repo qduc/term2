@@ -11,6 +11,7 @@ import { isSecretSetting } from '../../utils/value-suggestions.js';
 import { getRtkBinaryPath } from '../../services/rtk-service.js';
 import { MenuContainer } from '../common/MenuContainer.js';
 import { ScrollableTabBar } from '../common/ScrollableTabBar.js';
+import { COLOR_ACCENT, COLOR_DANGER, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
 
 type Props = {
   items: SettingCompletionItem[];
@@ -41,17 +42,17 @@ function formatValue(
     }
     return {
       text,
-      color: value ? 'green' : 'red',
+      color: value ? COLOR_SUCCESS : COLOR_DANGER,
     };
   }
   if (typeof value === 'number') {
-    return { text: String(value), color: 'yellow' };
+    return { text: String(value), color: COLOR_WARNING };
   }
   // Secrets are shown masked or not at all — never as a truncated prefix.
   if (isSecretSetting(key)) {
-    return { text: value ? '********' : '<empty>', color: 'gray' };
+    return { text: value ? '********' : '<empty>', color: COLOR_TEXT_SUBTLE };
   }
-  return { text: truncate(value, 40), color: 'cyan' };
+  return { text: truncate(value, 40), color: COLOR_ACCENT };
 }
 
 const VISIBLE_COUNT = 10;
@@ -67,6 +68,7 @@ const SettingsSelectionMenu: FC<Props> = ({
   categories,
 }) => {
   const activeCategory = categories.find((category) => category.id === activeCategoryId);
+  const selectedItem = items[selectedIndex];
 
   return (
     <Box flexDirection="column">
@@ -75,7 +77,7 @@ const SettingsSelectionMenu: FC<Props> = ({
         activeItemId={activeCategoryId}
         getItemWidth={(category) => category.label.length + 2}
         renderTab={(category, isActive) => (
-          <Text inverse={isActive} color={isActive ? 'cyan' : '#64748b'} bold={isActive}>
+          <Text inverse={isActive} color={isActive ? COLOR_ACCENT : COLOR_TEXT_SUBTLE} bold={isActive}>
             {' '}
             {category.label}{' '}
           </Text>
@@ -87,22 +89,31 @@ const SettingsSelectionMenu: FC<Props> = ({
         selectedIndex={selectedIndex}
         scrollOffset={scrollOffset}
         maxHeight={VISIBLE_COUNT}
-        borderColor={items.length === 0 ? 'red' : 'cyan'}
+        borderColor={items.length === 0 ? COLOR_DANGER : COLOR_ACCENT}
         fallbackText={
           <Box flexDirection="column">
-            <Text bold color="red">
+            <Text bold color={COLOR_DANGER}>
               No settings found
             </Text>
-            <Text color="gray">
+            <Text color={COLOR_TEXT_SUBTLE}>
               No settings match "{query}"{' '}
               {isSearchingAll ? 'in any section' : `in ${activeCategory?.label ?? 'this section'}`}
             </Text>
           </Box>
         }
         footer={
-          <Text color="gray" dimColor>
-            Use <Text bold>↑↓</Text> to navigate, <Text bold>Enter</Text> to edit, <Text bold>Esc</Text> to close
-          </Text>
+          <Box flexDirection="column">
+            {selectedItem?.description && (
+              <Box marginBottom={0}>
+                <Text color={COLOR_ACCENT} italic>
+                  {selectedItem.description}
+                </Text>
+              </Box>
+            )}
+            <Text color={COLOR_TEXT_SUBTLE} dimColor>
+              Use <Text bold>↑↓</Text> to navigate, <Text bold>Enter</Text> to edit, <Text bold>Esc</Text> to close
+            </Text>
+          </Box>
         }
         footerOutsideBorder={false}
         renderItem={(item, actualIndex, isSelected) => {
@@ -120,28 +131,18 @@ const SettingsSelectionMenu: FC<Props> = ({
             <Box key={item.key} flexDirection="column">
               {showHeader && (
                 <Box marginTop={actualIndex === scrollOffset ? 0 : 1} marginBottom={0}>
-                  <Text color="#22d3ee" bold underline>
+                  <Text color={COLOR_ACCENT} bold underline>
                     {category.label}
                   </Text>
                 </Box>
               )}
 
-              <Box flexDirection="column">
-                <Box>
-                  <Text color={isSelected ? 'green' : 'gray'}>{isSelected ? '▶ ' : '  '}</Text>
-                  <Text color={isSelected ? 'green' : 'white'} bold={isSelected}>
-                    {paddedKey}
-                  </Text>
-                  {valueObj && <Text color={isSelected ? 'white' : 'gray'}>{valueObj.text}</Text>}
-                </Box>
-
-                {isSelected && item.description && (
-                  <Box marginLeft={2} marginTop={0}>
-                    <Text color="#7dd3fc" dimColor italic>
-                      └── {item.description}
-                    </Text>
-                  </Box>
-                )}
+              <Box>
+                <Text color={isSelected ? COLOR_SUCCESS : COLOR_TEXT_SUBTLE}>{isSelected ? '▶ ' : '  '}</Text>
+                <Text color={isSelected ? COLOR_SUCCESS : COLOR_TEXT} bold={isSelected}>
+                  {paddedKey}
+                </Text>
+                {valueObj && <Text color={isSelected ? COLOR_TEXT : COLOR_TEXT_SUBTLE}>{valueObj.text}</Text>}
               </Box>
             </Box>
           );

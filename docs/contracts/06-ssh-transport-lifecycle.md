@@ -39,8 +39,8 @@ once-per-client lifecycle are implemented through the public boundary. See
 - **File Tool (read_file):** `source/tools/file/read-file.ts:148` (calls `readFile(absolutePath)`).
 - **File Tool (search_replace):** `source/tools/file/search-replace.ts:398, 403` (calls `readFile` and `writeFile`).
 - **File Tool (apply_patch):** `source/tools/file/apply-patch.ts:282, 362, 367, 372` (calls `readFile`, `writeFile`, and `mkdir`).
-- **File Tool (glob):** `source/tools/file/glob.ts:52, 175-216` (`checkFdAvailability` calling `executeCommand('fd --version')`; `findFiles` delegating via `executeShellCommand` with single-quote escaping).
-- **File Tool (grep):** `source/tools/file/grep.ts:63, 129, 236-290` (`checkRgAvailability` calling `executeCommand('rg --version')`; `runGrep` delegating via `executeShellCommand` with `shellQuoteArg`).
+- **File Tool (glob):** `source/tools/file/glob.ts:51-60, 191-233` (`checkFdAvailability` calling `executeCommand('fd --version')`; the `glob` tool's `execute` delegating via `executeShellCommand` with single-quote escaping).
+- **File Tool (grep):** `source/tools/file/grep.ts:123-131, 246-305` (`checkRgAvailability` calling `executeCommand('rg --version')`; the `grep` tool's `execute` delegating via `executeShellCommand` with `shellQuoteArg`).
 
 ## 4. Identities and state crossing the boundary
 

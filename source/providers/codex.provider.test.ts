@@ -86,15 +86,19 @@ function createFakeJwt(expiresInSeconds: number): string {
 
 // Temporary directory inside the system temp directory for safe testing
 const TEST_DIR = path.join(os.tmpdir(), `term2-temp-codex-test-${Math.random().toString(36).slice(2)}`);
+const ORIGINAL_TERM2_CONFIG_DIR = process.env.TERM2_CONFIG_DIR;
 
 beforeAll(() => {
   if (fs.existsSync(TEST_DIR)) {
     fs.rmSync(TEST_DIR, { recursive: true, force: true });
   }
   fs.mkdirSync(TEST_DIR, { recursive: true });
+  process.env.TERM2_CONFIG_DIR = TEST_DIR;
 });
 
 afterAll(() => {
+  if (ORIGINAL_TERM2_CONFIG_DIR) process.env.TERM2_CONFIG_DIR = ORIGINAL_TERM2_CONFIG_DIR;
+  else delete process.env.TERM2_CONFIG_DIR;
   if (fs.existsSync(TEST_DIR)) {
     fs.rmSync(TEST_DIR, { recursive: true, force: true });
   }
@@ -361,7 +365,7 @@ it('Codex provider is registered in the registry', () => {
   });
 });
 
-it('Codex fetchModels parses custom models endpoint', async () => {
+it.sequential('Codex fetchModels parses custom models endpoint', async () => {
   const provider = getProvider('codex');
   expect(provider).toBeTruthy();
 

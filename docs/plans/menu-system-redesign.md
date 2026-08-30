@@ -1,6 +1,6 @@
 # Menu system redesign
 
-Status: Phase 5 is complete in the `menu-redesign-phase5` worktree. All of Phase 4 is merged — graphs 1–2 at
+Status: Phase 5 is merged (`7bda6909`, merge `9434a67e`, 2026-08-08); `PopupManager.tsx` is deleted and `MenuStackHost.tsx` replaces it. All of Phase 4 is merged — graphs 1–2 at
 `efa50cfa`, graph 3 at `3b4f67dd`, graph 4 at `32eabded` (implementation
 commits `ed3a8a31`, `b9ac1938`, `c05117a2` + `683be8f1`).
 

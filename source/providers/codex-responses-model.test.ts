@@ -1254,8 +1254,8 @@ it('CodexResponsesWSModel sends only new input after a Responses-Lite prefix is 
       } as any),
     );
 
-    // One request per turn: each turn carries the full history formatted with
-    // Responses-Lite developer tools and instructions prefix, without previous_response_id.
+    // Turn 1 is a full Responses-Lite request. Turn 2 chains onto that response
+    // and sends only the new user message.
     expect(trafficBodies).toHaveLength(2);
     expect(trafficBodies[0].input[0]).toMatchObject({ type: 'additional_tools', role: 'developer', tools: [tool] });
     expect(trafficBodies[0].previous_response_id).toBeUndefined();
@@ -1270,6 +1270,74 @@ it('CodexResponsesWSModel sends only new input after a Responses-Lite prefix is 
     expect(captures.map((capture) => capture.transport)).toEqual(['websocket', 'websocket']);
   } finally {
   }
+});
+
+it('CodexResponsesWSModel chains Luna turns when the caller omits previousResponseId', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const trafficBodies: any[] = [];
+  let responseCount = 0;
+
+  const mockProviderTraffic: IProviderTraffic = {
+    recordRequestStart(input) {
+      trafficBodies.push(input.sentBody);
+    },
+    async recordResponseReceived() {},
+    recordResponseClosed() {},
+    recordRequestFailed() {},
+  };
+
+  transport.fetchResponse = async function () {
+    responseCount += 1;
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: { id: `resp_lite_${responseCount}`, output: [], usage: {} },
+      },
+    ]);
+  };
+
+  const model = new CodexResponsesWSModel(
+    { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+    'gpt-5.6-luna',
+    { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+    undefined,
+    mockProviderTraffic,
+    {
+      getContext: () => ({ sessionId: 'session-lite-omitted-prev', traceId: 'trace-lite-omitted-prev' } as any),
+      runWithContext: <T>(_context: any, fn: () => T) => fn(),
+    } as any,
+    transport,
+  );
+
+  const tool = { type: 'function', name: 'read_file', parameters: { type: 'object' } };
+  const firstUserMessage = { role: 'user', type: 'message', content: [{ type: 'text', text: 'hello' }] };
+  const secondUserMessage = {
+    role: 'user',
+    type: 'message',
+    content: [{ type: 'text', text: 'how are you?' }],
+  };
+
+  await collect(
+    model.stream({
+      input: [firstUserMessage],
+      instructions: 'Follow the repository instructions.',
+      tools: [tool],
+    } as any),
+  );
+  await collect(
+    model.stream({
+      input: [firstUserMessage, secondUserMessage],
+      instructions: 'Follow the repository instructions.',
+      tools: [tool],
+    } as any),
+  );
+
+  expect(trafficBodies).toHaveLength(2);
+  expect(trafficBodies[0].previous_response_id).toBeUndefined();
+  expect(trafficBodies[1].previous_response_id).toBe('resp_lite_1');
+  expect(trafficBodies[1].input).toEqual([
+    expect.objectContaining({ role: 'user', content: [{ type: 'input_text', text: 'how are you?' }] }),
+  ]);
 });
 
 it('CodexResponsesWSModel does not replay a Luna tool transcript when server output differs from restored history', async () => {

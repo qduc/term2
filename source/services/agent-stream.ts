@@ -51,6 +51,7 @@ function projectProviderItems(items: readonly unknown[]): unknown[] {
     if (
       event.type === 'text_delta' ||
       event.type === 'reasoning_delta' ||
+      event.type === 'model_attempt_rollback' ||
       event.type === 'codex_rate_limits' ||
       event.type === 'tool_call_streaming_delta' ||
       event.type === 'context_compaction_started' ||

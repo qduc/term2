@@ -24,6 +24,7 @@ it('uses Codex auth-file presence without reading or validating token contents',
   const homedirSpy = vi.spyOn(os, 'homedir').mockReturnValue(home);
   vi.stubEnv('CHATGPT_LOCAL_HOME', '');
   vi.stubEnv('CODEX_HOME', codexHome);
+  vi.stubEnv('TERM2_CONFIG_DIR', path.join(home, 'term2'));
 
   try {
     expect(resolveProviderCredentials({ getDynamic: () => undefined } as any, 'codex')).toMatchObject({

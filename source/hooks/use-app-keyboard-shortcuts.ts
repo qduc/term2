@@ -309,6 +309,18 @@ export const useAppKeyboardShortcuts = ({
         return;
       }
 
+      const isCtrlO = (key.ctrl && (input.toLowerCase() === 'o' || input === '\x0f')) || input === '\x0f';
+      if (isCtrlO) {
+        current.replaceInput('/model ');
+        return;
+      }
+
+      const isCtrlT = (key.ctrl && (input.toLowerCase() === 't' || input === '\x14')) || input === '\x14';
+      if (isCtrlT) {
+        current.replaceInput('/effort ');
+        return;
+      }
+
       const isShiftTab = (key.shift && key.tab) || input === '\u001b[Z';
       if (!isShiftTab) return;
 

@@ -1,7 +1,8 @@
 // @ts-expect-error IS_REACT_ACT_ENVIRONMENT is not in globalThis types
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 import { it, expect } from 'vitest';
-import React from 'react';
+import React, { act } from 'react';
+import { renderToString } from 'ink';
 import StatusBar from './StatusBar.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import { renderInAct } from '../../test-helpers/ink-testing.js';
@@ -36,7 +37,7 @@ it.sequential('StatusBar renders reasoning effort on the first row with the mode
   expect(output.split('\n').some((line) => line.includes('gpt-4o') && line.includes('· low'))).toBe(true);
 });
 
-it.sequential('StatusBar renders the compact two-row configuration and usage layout', async () => {
+it.sequential('StatusBar puts all configuration on the first row and quota on the alert row', async () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-5.6-luna',
     'agent.provider': 'codex',
@@ -59,13 +60,15 @@ it.sequential('StatusBar renders the compact two-row configuration and usage lay
   );
 
   const lines = (lastFrame() ?? '').split('\n');
-  expect(lines.some((line) => line.includes('Standard │ Codex/gpt-5.6-luna · high'))).toBe(true);
-  // 2x2 grid: configuration + usage share the top row, safety + rate limit the bottom row.
-  expect(lines.some((line) => line.includes('Standard │ Codex/gpt-5.6-luna · high') && line.includes('↓ 13'))).toBe(
-    true,
-  );
-  expect(lines.some((line) => line.includes('Auto') && line.includes('7D 78% · reset '))).toBe(true);
-  expect(lines.some((line) => line.includes('↓ 13 │ Ctx 12k / 272k'))).toBe(true);
+  // Row 1 is configuration + this turn's numbers. Safety belongs beside the
+  // model it governs, so it sits here too rather than on a row of its own.
+  expect(lines.some((line) => line.includes('Standard │ Codex/gpt-5.6-luna · high │ Auto'))).toBe(true);
+  expect(
+    lines.some((line) => line.includes('Standard │ Codex/gpt-5.6-luna · high │ Auto') && line.includes('↓13')),
+  ).toBe(true);
+  // Row 2 carries alerts and quota only, so it is absent in the steady state.
+  expect(lines.some((line) => line.includes('7D 78% · reset ') && !line.includes('Standard'))).toBe(true);
+  expect(lines.some((line) => line.includes('↓13 · Ctx 12k/272k'))).toBe(true);
   expect(lines.some((line) => line.includes('Cache 0'))).toBe(false);
   expect(lines.some((line) => line.includes('(0 cached)'))).toBe(false);
 });
@@ -86,7 +89,7 @@ it.sequential('StatusBar renders cache usage', async () => {
 
   const output = lastFrame() ?? '';
 
-  expect(output.includes('↑ 1.2k / (75.0% cached) / ↓ 350')).toBe(true);
+  expect(output.includes('↑1.2k ↓350 · 75% cached')).toBe(true);
   expect(output.includes('│ Cache')).toBe(false);
 });
 
@@ -101,7 +104,7 @@ it.sequential('StatusBar renders cache usage as a percentage of prompt tokens', 
     <StatusBar settingsService={settingsService} lastUsage={{ prompt_tokens: 79_697, cache_read_tokens: 79_360 }} />,
   );
 
-  expect(lastFrame()).toContain('(99.6% cached)');
+  expect(lastFrame()).toContain('100% cached');
 });
 
 it.sequential('StatusBar renders context usage as used/window', async () => {
@@ -116,7 +119,7 @@ it.sequential('StatusBar renders context usage as used/window', async () => {
   );
 
   const output = lastFrame() ?? '';
-  expect(output.includes('Ctx 100k / 1.0M')).toBe(true);
+  expect(output.includes('Ctx 100k/1.0M')).toBe(true);
 });
 
 it.sequential('StatusBar renders context usage for an OpenAI model with a k-scale window', async () => {
@@ -131,7 +134,7 @@ it.sequential('StatusBar renders context usage for an OpenAI model with a k-scal
   );
 
   const output = lastFrame() ?? '';
-  expect(output.includes('Ctx 100k / 272k')).toBe(true);
+  expect(output.includes('Ctx 100k/272k')).toBe(true);
 });
 
 it.sequential('StatusBar renders an exact session cost', async () => {
@@ -214,7 +217,7 @@ it.sequential('StatusBar places session cost beside token and context usage', as
     />,
   );
 
-  expect(lastFrame()).toContain('↓ 350 │ Ctx 1k / 272k │ Cost $0.42');
+  expect(lastFrame()).toContain('↓350 · Ctx 1k/272k · Cost $0.42');
 });
 
 it.sequential('StatusBar warns about run-budget evidence instead of the run stopping', async () => {
@@ -282,7 +285,7 @@ it.sequential('StatusBar resolves the context window by model id for providers n
   );
 
   const output = lastFrame() ?? '';
-  expect(output.includes('Ctx 100k / 1.0M')).toBe(true);
+  expect(output.includes('Ctx 100k/1.0M')).toBe(true);
 });
 
 it.sequential('StatusBar renders Plan mode badge', async () => {
@@ -480,7 +483,7 @@ it.sequential('StatusBar renders large uncached prompt warning and confirmation 
     />,
   );
   const outputWarning = lastFrameWarning() ?? '';
-  expect(outputWarning.includes('(⚠️ 62.0k uncached) / ↓ 856')).toBe(true);
+  expect(outputWarning.includes('↑63.6k ↓856 · ▲ 62.0k uncached')).toBe(true);
   expect(outputWarning.includes('Cache Miss Risk')).toBe(false);
   expect(outputWarning.includes('Confirm Cache Miss')).toBe(false);
 
@@ -494,7 +497,7 @@ it.sequential('StatusBar renders large uncached prompt warning and confirmation 
     />,
   );
   const outputConfirm = lastFrameConfirm() ?? '';
-  expect(outputConfirm.includes('(⚠️ 62.0k uncached) / ↓ 856')).toBe(true);
+  expect(outputConfirm.includes('↑63.6k ↓856 · ▲ 62.0k uncached')).toBe(true);
   expect(outputConfirm.includes('Confirm Cache Miss')).toBe(false);
 });
 
@@ -698,4 +701,140 @@ it.sequential('StatusBar omits the credit slot when there is no Grok usage', asy
   const { lastFrame } = await renderInAct(<StatusBar settingsService={settingsService} grokCreditUsage={null} />);
 
   expect(lastFrame() ?? '').not.toContain('Credits');
+});
+
+// Regression test for a bug where, at ~85 columns, Ink's row-level flexWrap
+// reflowed text character-by-character inside each segment because the right
+// (metrics) group held its full width and the left (config) group absorbed
+// all the overflow: "Standard" split into "Stan"/"ard", "medium" into
+// "me"/"dium", "YOLO" into "YOL"/"O". The fix computes an explicit column
+// budget and drops whole segments instead, so no segment should ever be cut
+// mid-word — only whole-segment drops or an explicit "…" truncation.
+// renderInAct always lays out against ink-testing-library's fixed 100-column
+// mock stdout, so it cannot prove anything about narrow-width wrapping — the
+// `columns` prop only steers this component's own drop/truncate decisions,
+// not Yoga's actual box width. renderToString's `{ columns }` option, by
+// contrast, drives the real layout width (see BackgroundTasksPanel.test.tsx
+// for the same pattern), so only it can catch a real reflow.
+it.sequential('StatusBar never breaks a word across lines at a narrow width', () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-5.6-luna',
+    'agent.provider': 'codex',
+    'agent.reasoningEffort': 'medium',
+    'shell.autoApproveMode': 'always',
+    'sandbox.enabled': false,
+  });
+
+  const columns = 44;
+  let output = '';
+  act(() => {
+    output = renderToString(
+      <StatusBar
+        settingsService={settingsService}
+        columns={columns}
+        queueLength={2}
+        lastUsage={{ prompt_tokens: 29_400, completion_tokens: 269, cache_read_tokens: 24_355 }}
+        costSummary={{ knownUsdMicros: 8_205, pricedRequests: 1, unpricedRequests: 0, state: 'estimated' }}
+        lastCodexRateLimit={{
+          allowed: true,
+          limit_reached: false,
+          secondary: {
+            used_percent: 8,
+            window_minutes: 10080,
+            reset_after_seconds: 259200,
+            reset_at: Math.floor(Date.now() / 1000) + 5 * 24 * 60 * 60,
+          },
+        }}
+      />,
+      { columns },
+    );
+  });
+
+  const lines = output.split('\n');
+  for (const line of lines) {
+    expect(line.length).toBeLessThanOrEqual(columns);
+  }
+
+  // Each word must appear whole or not at all — never as the fragment the
+  // old character-wrapping bug produced.
+  if (output.includes('Stan') || output.includes('ard')) expect(output).toContain('Standard');
+  if (output.includes('YOL')) expect(output).toContain('YOLO');
+  if (output.includes(' me') || output.includes('dium')) expect(output).toContain('medium');
+});
+
+it.sequential('StatusBar drops cost and cache before dropping the mode label or provider/model', () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-5.6-luna',
+    'agent.provider': 'codex',
+    'agent.reasoningEffort': 'medium',
+    'agent.smartModel': 'claude-sonnet-4-6',
+    'app.mentorMode': true,
+    'shell.autoApproveMode': 'always',
+    'sandbox.enabled': false,
+  });
+
+  const columns = 38;
+  let output = '';
+  act(() => {
+    output = renderToString(
+      <StatusBar
+        settingsService={settingsService}
+        columns={columns}
+        sshInfo={{ user: 'root', host: 'build-host', remoteDir: '/srv/app' }}
+        queueLength={2}
+        lastUsage={{ prompt_tokens: 29_400, completion_tokens: 269, cache_read_tokens: 24_355 }}
+        costSummary={{ knownUsdMicros: 8_205, pricedRequests: 1, unpricedRequests: 0, state: 'estimated' }}
+      />,
+      { columns },
+    );
+  });
+
+  for (const line of output.split('\n')) {
+    expect(line.length).toBeLessThanOrEqual(columns);
+  }
+
+  // mentorMode makes the mode label itself read 'Mentor' rather than
+  // 'Standard' — that substitution is unrelated to dropping, so what this
+  // asserts is that the (always-shown) mode label and provider/model survive
+  // while the droppable mentor-model, cost, and cache segments do not.
+  expect(output).toContain('Mentor');
+  expect(output).toContain('Codex/gpt-5.6-luna');
+  expect(output).not.toContain('Cost');
+  expect(output).not.toContain('Est $');
+  expect(output).not.toContain('cached');
+  // Tokens are the last metric to go, so they and context still fit even
+  // though cost and cache — dropped first and second — do not.
+  expect(output).toContain('↑29.4k');
+  expect(output).toContain('Ctx 29k/272k');
+});
+
+it.sequential('StatusBar renders config and metrics on a single line at a wide width', () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-5.6-luna',
+    'agent.provider': 'codex',
+    'agent.reasoningEffort': 'medium',
+    'shell.autoApproveMode': 'always',
+    'sandbox.enabled': false,
+  });
+
+  const columns = 200;
+  let output = '';
+  act(() => {
+    output = renderToString(
+      <StatusBar
+        settingsService={settingsService}
+        columns={columns}
+        queueLength={2}
+        lastUsage={{ prompt_tokens: 29_400, completion_tokens: 269, cache_read_tokens: 24_355 }}
+        costSummary={{ knownUsdMicros: 8_205, pricedRequests: 1, unpricedRequests: 0, state: 'estimated' }}
+      />,
+      { columns },
+    );
+  });
+
+  const configAndMetricsLine = output.split('\n').find((line) => line.includes('Standard') && line.includes('Est $'));
+  expect(configAndMetricsLine).toBeDefined();
+  expect(configAndMetricsLine).toContain('Codex/gpt-5.6-luna');
+  expect(configAndMetricsLine).toContain('cached');
+  expect(configAndMetricsLine).toContain('Ctx');
 });

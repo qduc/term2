@@ -422,7 +422,7 @@ export class SubagentAsyncRegistry {
       task: run.task,
       taskPreview: truncatePreview(run.task),
       startedAt: run.startedAt,
-      elapsedMs: this.#now() - run.startedAt,
+      elapsedMs: (run.settled ? run.lastActivityAt : this.#now()) - run.startedAt,
       ...(run.lastToolName !== undefined ? { lastToolName: run.lastToolName } : {}),
       ...(run.lastToolAt !== undefined ? { lastToolAt: run.lastToolAt } : {}),
       lastActivityAt: run.lastActivityAt,

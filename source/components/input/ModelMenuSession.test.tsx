@@ -98,6 +98,7 @@ it.each([
     if (provider === 'codex') {
       vi.stubEnv('CHATGPT_LOCAL_HOME', '');
       vi.stubEnv('CODEX_HOME', '/tmp/term2-test-no-codex-auth');
+      vi.stubEnv('TERM2_CONFIG_DIR', '/tmp/term2-test-no-term2-auth');
       vi.spyOn(os, 'homedir').mockReturnValue('/tmp/term2-test-no-codex-home');
     }
 

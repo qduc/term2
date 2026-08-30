@@ -61,6 +61,8 @@
     "provider:fixture:scan": "cross-env NODE_ENV=test vitest run --reporter=minimal scripts/provider-black-box/fixture-security.test.ts",
     "test:docker-host-control-integration": "cross-env NODE_ENV=test RUN_DOCKER_HOST_CONTROL_INTEGRATION=1 vitest run --reporter=minimal source/tools/system/docker-host-control.integration.test.ts",
     "fake:codex": "tsx scripts/fake-codex-server.ts",
+    "test:lane": "node scripts/run-deterministic-lane.mjs",
+    "test:lane:seed": "node scripts/run-deterministic-lane.mjs",
     "test:verbose": "cross-env NODE_ENV=test vitest run",
     "test:related": "cross-env NODE_ENV=test vitest related --run --reporter=minimal --passWithNoTests=false",
     "test:vitest:watch": "cross-env NODE_ENV=test vitest",

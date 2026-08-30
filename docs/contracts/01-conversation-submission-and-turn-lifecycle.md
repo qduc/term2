@@ -118,20 +118,20 @@ Status: **owner-reviewed 2026-08-14; focused command all-green 2026-08-15 after 
 
 | ROADMAP minimum-matrix cell | Evidence (file:title) | Status |
 | --- | --- | --- |
-| Immediate execution | `queue-controller.test.ts:13` "admits FIFO work with an immutable dispatch snapshot and starts only one execution"; `conversation-orchestrator.test.ts:593` "appends directly when queue is wired up but no turn is in flight" | covered |
-| Deferred queue execution | `conversation-orchestrator.test.ts:636` "does not begin an owned turn for deferred queue work until the queue starts it"; `queue-controller.test.ts:60` "holds completion admission while submissions enqueue, then dispatches the next item exactly once" | covered |
-| Remove before start | `conversation-adapter.test.ts:1262` "retractSubmission removes a queued item by id and settles its sendMessage promise"; `conversation-orchestrator.test.ts:671` "does not end a turn when deferred queue work is removed before it starts" | covered |
-| Edit before start | `conversation-adapter.test.ts:1145` "editSubmission on a queued item sends the edited text"; `:1193` "rolls back #messagesById when the controller rejects the edit" | covered |
-| Cancel with zero retained items | `queue-controller.test.ts:250` "manual cancel with no retained queue returns to idle"; `:1015` (cancel from awaiting action, zero retained) | covered |
+| Immediate execution | `queue-controller.test.ts:13` "admits FIFO work with an immutable dispatch snapshot and starts only one execution"; `conversation-orchestrator.test.ts:615` "appends directly when queue is wired up but no turn is in flight" | covered |
+| Deferred queue execution | `conversation-orchestrator.test.ts:658` "does not begin an owned turn for deferred queue work until the queue starts it"; `queue-controller.test.ts:60` "holds completion admission while submissions enqueue, then dispatches the next item exactly once" | covered |
+| Remove before start | `conversation-adapter.test.ts:1384` "retractSubmission removes a queued item by id and settles its sendMessage promise"; `conversation-orchestrator.test.ts:693` "does not end a turn when deferred queue work is removed before it starts" | covered |
+| Edit before start | `conversation-adapter.test.ts:1267` "editSubmission on a queued item sends the edited text"; `:1193` "rolls back #messagesById when the controller rejects the edit" | covered |
+| Cancel with zero retained items | `queue-controller.test.ts:291` "manual cancel with no retained queue returns to idle"; `:1015` (cancel from awaiting action, zero retained) | covered |
 | Cancel with one retained item | `queue-controller.test.ts:215` "awaits cancellation cleanup, ignores late terminal events, and retains queued items paused manually" | covered |
 | Cancel with multiple retained items | `queue-controller.test.ts:250` "manual cancel retains multiple queued items and resumes them FIFO" | covered |
 | Repeated approval continuations | `turn-coordinator.test.ts:237` "awaiting_approval -> continuing -> awaiting_approval"; `conversation-session.characterization.test.ts:1117` "multiple sequential interruptions preserve approval and tool-start ordering" | covered |
-| Stale approval identity | `conversation-orchestrator.test.ts:523` "ignores a late approval A decision after continuation presents approval B"; adapter epoch/stale tests `conversation-adapter.test.ts:124`, `:168`, `:212` | covered |
+| Stale approval identity | `conversation-orchestrator.test.ts:526` "ignores a late approval A decision after continuation presents approval B"; adapter epoch/stale tests `conversation-adapter.test.ts:124`, `:168`, `:212` | covered |
 | Retry before stream start | `conversation-session.characterization.test.ts:1326` "fresh start execution recovers from transient error with successful re-drive"; `recovery-policy.test.ts:39` "transient failure without stream produces retry_fresh with full_history" | covered |
 | Recovery after partial stream output | `conversation-session.stream.test.ts:103` "run() retries streamed recoverable errors without committing failed stream history"; `:279` "emits tool_recovery before error when a streamed turn fails after tool activity" | covered |
 | UI projection — start callbacks delayed | `conversation-orchestrator.test.ts:636` (unresolved `sendMessage`, manual observer dispatch; no `onTurnStart` before callback) | covered |
-| UI projection — start callbacks skipped | `conversation-orchestrator.test.ts:728` "clears a delivered queue row even when the queue-start observer never fires" (regression for commit `80a48390`) | covered |
-| UI projection — start callbacks replayed | `conversation-orchestrator.test.ts:813` "does not double-append when the observer fires for an already-directly-appended message" | covered |
+| UI projection — start callbacks skipped | `conversation-orchestrator.test.ts:750` "clears a delivered queue row even when the queue-start observer never fires" (regression for commit `80a48390`) | covered |
+| UI projection — start callbacks replayed | `conversation-orchestrator.test.ts:835` "does not double-append when the observer fires for an already-directly-appended message" | covered |
 | Post-execute pause followed by an auto-approvable shell interruption | `turn-workflow.outcome-contract.test.ts:190` "settles a post-execute resume whose completed stream auto-approves a shell interruption" | covered (initial-path parity) |
 | Modeled outcomes project hook-contract-valid `turn.end` events and retain correlation across approval continuation | `turn-outcome-boundary.test.ts:125` "emits a hook-contract-valid turn.end for every modeled outcome"; `:157` "keeps one hook turn id across an approval pause and its continuation" | covered |
 

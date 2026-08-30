@@ -769,6 +769,24 @@ describe('peek / getRunStatus', () => {
     registry.dispose();
   });
 
+  it('freezes elapsedMs on a settled run so retained status is not a live clock', async () => {
+    let now = 1_000;
+    const registry = new SubagentAsyncRegistry({
+      logger: createMockLogger(),
+      now: () => now,
+      setInterval: () => 1 as any,
+      clearInterval: () => {},
+      run: async ({ request }) => result(request.role),
+    });
+    const handle = registry.startRun({ role: 'worker', task: 'edit' });
+    now = 1_500;
+    await registry.getResult(handle.runId);
+    expect((registry.getRunStatus(handle.runId) as { elapsedMs: number }).elapsedMs).toBe(500);
+    now = 10_000;
+    expect((registry.getRunStatus(handle.runId) as { elapsedMs: number }).elapsedMs).toBe(500);
+    registry.dispose();
+  });
+
   it('keeps a long-running tool active when its running command message arrives', async () => {
     let now = 1_000;
     const registry = new SubagentAsyncRegistry({

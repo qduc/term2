@@ -1,6 +1,7 @@
 import React, { FC, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
+import { COLOR_DANGER, COLOR_SUCCESS, COLOR_WARNING } from '../theme.js';
 
 interface LargeUncachedConfirmationPromptProps {
   usage: NormalizedUsage | null | undefined;
@@ -45,15 +46,15 @@ const LargeUncachedConfirmationPrompt: FC<LargeUncachedConfirmationPromptProps> 
 
   return (
     <Box flexDirection="column">
-      <Text color="yellow">
+      <Text color={COLOR_WARNING}>
         Send {promptTokens.toLocaleString()} tokens anyway?
         {cacheReadTokens != null
           ? ` (\u26A0\uFE0F ${cacheReadTokens.toLocaleString()} uncached)`
           : ' (may miss prompt cache)'}
       </Text>
       <Box flexDirection="column" marginLeft={1}>
-        <Text color={selectedIndex === 0 ? 'green' : undefined}>{selectedIndex === 0 ? '❯ ' : '  '}Send</Text>
-        <Text color={selectedIndex === 1 ? 'red' : undefined}>{selectedIndex === 1 ? '❯ ' : '  '}Cancel</Text>
+        <Text color={selectedIndex === 0 ? COLOR_SUCCESS : undefined}>{selectedIndex === 0 ? '❯ ' : '  '}Send</Text>
+        <Text color={selectedIndex === 1 ? COLOR_DANGER : undefined}>{selectedIndex === 1 ? '❯ ' : '  '}Cancel</Text>
       </Box>
     </Box>
   );

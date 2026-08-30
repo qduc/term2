@@ -33,6 +33,7 @@ import { ProviderContinuity } from '../provider-continuity.js';
 import type { OpenAIRootFreshTurnSelectorParityObserver } from '../openai-root-selector-parity-observer.js';
 import type { OpenAIRootCheckpointLifecycleObserver } from '../openai-root-checkpoint-lifecycle-observer.js';
 import { TurnCoordinator, type TurnStartOptions } from './turn-coordinator.js';
+import { BackgroundCheckInScheduler } from './background-check-in-scheduler.js';
 import { SessionStreamProcessor } from './session-stream-processor.js';
 import { SessionManager } from './session-manager.js';
 import { SessionRuntimeController } from './session-runtime-controller.js';
@@ -333,6 +334,8 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
 
   // Background (async) subagent runs settle whenever they settle, including
   // while the conversation is idle and no per-turn sink is attached.
+  let disposed = false;
+  let syncPublicStatus: () => void = () => {};
   const notificationStore = new SubagentNotificationStore();
   let notificationObserver: (() => void) | null = null;
   let taskObserver: (() => void) | null = null;
@@ -357,6 +360,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     client: agentClient,
     notifications: notificationStore,
     onNotification: () => {
+      syncPublicStatus();
       try {
         notificationObserver?.();
       } catch (error) {
@@ -369,6 +373,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
       }
     },
     onTaskChange: () => {
+      syncPublicStatus();
       try {
         taskObserver?.();
       } catch (error) {
@@ -487,6 +492,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
         });
       }
     }
+    syncPublicStatus();
     if (!notificationStore.enqueue(event)) return;
     try {
       notificationObserver?.();
@@ -502,6 +508,21 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   resolvedSubagentEventSinkHost?.setBackgroundSubagentEventSink?.(recordBackgroundEvent);
   resolvedSubagentEventSinkHost?.setBackgroundSubagentApprovalPauseSink?.(backgroundSubagentApprovals.publish);
   resolvedBackgroundShellEventSinkHost?.setBackgroundShellEventSink?.(recordBackgroundEvent);
+
+  // Wakes the launching agent to check on a still-running background shell
+  // job or subagent while the session is otherwise idle. See
+  // docs/plans/background-work-control/agent-checkin.md. Settings are read
+  // fresh on every tick so a runtime change takes effect without restarting
+  // the timer.
+  const backgroundCheckInScheduler = new BackgroundCheckInScheduler({
+    getRunningTasks: () => notificationStore.getTaskSnapshot(),
+    emit: recordBackgroundEvent,
+    getSettings: () => ({
+      enabled: settingsService?.get('agent.backgroundCheckIn.enabled') ?? true,
+      intervalMs: settingsService?.get('agent.backgroundCheckIn.intervalMs') ?? 300_000,
+      maxCheckInsPerTask: settingsService?.get('agent.backgroundCheckIn.maxCheckInsPerTask') ?? 3,
+    }),
+  });
 
   const approvalFlow = new ApprovalFlowCoordinator({
     agentClient,
@@ -544,18 +565,43 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   });
 
   let publicStatus: import('../hooks/hook-contracts.js').Term2Status = 'idle';
-  appState.statusMachine.setObserver(({ current }) => {
-    if (!hookLifecycle || !hookEvents) return;
-    const pending = approvalFlow.getPending();
-    const pendingTool = pending ? getToolInfoFromInterruption(pending.interruption).toolName : undefined;
-    const next: import('../hooks/hook-contracts.js').Term2Status =
-      current === 'idle'
-        ? 'idle'
-        : current === 'awaiting_approval'
-        ? pendingTool === 'ask_user'
-          ? 'waiting_for_user'
-          : 'waiting_for_approval'
-        : 'working';
+  const computePublicStatus = (): import('../hooks/hook-contracts.js').Term2Status => {
+    const current = appState.statusMachine.current;
+    if (current === 'awaiting_approval') {
+      const pending = approvalFlow.getPending();
+      const pendingTool = pending ? getToolInfoFromInterruption(pending.interruption).toolName : undefined;
+      return pendingTool === 'ask_user' ? 'waiting_for_user' : 'waiting_for_approval';
+    }
+    if (current !== 'idle') {
+      return 'working';
+    }
+    if (backgroundSubagentApprovals.getSnapshot().pendingCount > 0) {
+      return 'waiting_for_approval';
+    }
+    const backgroundDetails = backgroundTaskControl.listDetails();
+    for (const detail of backgroundDetails) {
+      if (detail.kind === 'subagent') {
+        if (detail.status === 'awaiting_approval') {
+          return 'waiting_for_approval';
+        }
+        if (detail.status === 'waiting_for_answer') {
+          return 'waiting_for_user';
+        }
+        if (detail.status === 'running' || detail.status === 'cancelling') {
+          return 'working';
+        }
+      } else if (detail.kind === 'shell') {
+        if (detail.status === 'running' || detail.status === 'cancelling') {
+          return 'working';
+        }
+      }
+    }
+    return 'idle';
+  };
+
+  syncPublicStatus = (): void => {
+    if (disposed || !hookLifecycle || !hookEvents) return;
+    const next = computePublicStatus();
     if (next === publicStatus) return;
     const previous = publicStatus;
     publicStatus = next;
@@ -573,6 +619,13 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
             : 'turn_started',
       }),
     );
+  };
+
+  appState.statusMachine.setObserver(() => {
+    syncPublicStatus();
+  });
+  backgroundSubagentApprovals.subscribe(() => {
+    syncPublicStatus();
   });
 
   const streamProcessor = new SessionStreamProcessor({
@@ -721,12 +774,12 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     state,
   });
 
-  let disposed = false;
   let backgroundShellSettlement: Promise<void> | undefined;
   let backgroundSubagentSettlement: Promise<void> | undefined;
   const dispose = (): void => {
     if (disposed) return;
     disposed = true;
+    backgroundCheckInScheduler.dispose();
     turnWorkflow.abortLiveRun();
     postExecutePending.close();
     generationGuard.invalidate();

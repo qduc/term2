@@ -187,6 +187,57 @@ describe('groupCommandRuns', () => {
 });
 
 describe('summarizeCommandGroup', () => {
+  it('folds a lone completed subagent once another message arrives', () => {
+    const messages = [
+      { id: '1', sender: 'subagent', status: 'completed', role: 'explorer', task: 'find file' },
+      { id: '2', sender: 'bot', status: 'finalized' },
+    ];
+    const result = groupCommandRuns(messages);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({ sender: 'command-group', status: 'completed' });
+    expect((result[0] as any).members).toHaveLength(1);
+    expect(result[1]).toEqual(messages[1]);
+  });
+
+  it('merges commands and completed subagents into one concise group', () => {
+    const messages = [
+      { id: '1', sender: 'command', status: 'completed', toolName: 'grep' },
+      { id: '2', sender: 'subagent', status: 'completed', role: 'explorer', task: 'find file' },
+      { id: '3', sender: 'bot', status: 'finalized' },
+    ];
+    const result = groupCommandRuns(messages);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({ sender: 'command-group', status: 'completed' });
+    expect((result[0] as any).members).toHaveLength(2);
+    expect(summarizeCommandGroup((result[0] as any).members)).toBe('Searched for 1 pattern, delegated to 1 subagent');
+  });
+
+  it('summarizes multiple subagent delegates with plural noun', () => {
+    const members = [
+      { sender: 'subagent' as const, status: 'completed' },
+      { sender: 'subagent' as const, status: 'completed' },
+    ];
+    expect(summarizeCommandGroup(members)).toBe('Delegated to 2 subagents');
+  });
+
+  it('summarizes async subagents with distinct category', () => {
+    const members = [{ sender: 'subagent' as const, status: 'completed', async: true }];
+    expect(summarizeCommandGroup(members)).toBe('Delegated async to 1 subagent');
+  });
+
+  it('builds the reference phrase from mixed tool calls including subagents', () => {
+    const members = [
+      { toolName: 'grep' },
+      { toolName: 'read_file' },
+      { toolName: 'read_file' },
+      { sender: 'subagent' as const, status: 'completed' },
+      { toolName: undefined },
+    ];
+    expect(summarizeCommandGroup(members)).toBe(
+      'Searched for 1 pattern, read 2 files, delegated to 1 subagent, ran 1 shell command',
+    );
+  });
+
   it('builds the reference phrase from mixed tool calls', () => {
     const members = [
       { toolName: 'grep' },

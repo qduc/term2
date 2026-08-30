@@ -59,10 +59,19 @@ const mockLoggingService: ILoggingService = {
   clearCorrelationId: () => {},
 };
 
+// With real settings defaults (tools.enableEditHealing: true), a context
+// mismatch would enter the real patch-healing provider path, so tests default
+// to a deterministic no-op healer. The healing integration tests below inject
+// their own mock explicitly and are unaffected.
+const noopPatchHealing = async (): Promise<{ wasModified: false }> => ({
+  wasModified: false,
+});
+
 function createTool(settingsService = createMockSettingsService()) {
   return createApplyPatchToolDefinition({
     loggingService: mockLoggingService,
     settingsService,
+    patchHealing: noopPatchHealing,
   });
 }
 

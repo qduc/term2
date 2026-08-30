@@ -12,6 +12,17 @@ import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_ASK_USER, TOOL_NAME_SEARCH_REPLACE } f
 import { ASK_USER_CUSTOM_ANSWER_LABEL, ASK_USER_SUBMIT_LABEL } from '../../tools/agent/ask-user-constants.js';
 import DiffView from '../layout/DiffView.js';
 import { requestsDockerHostControl } from '../../utils/shell/sandbox/docker-host-control.js';
+import {
+  COLOR_ACCENT,
+  COLOR_BORDER,
+  COLOR_DANGER,
+  COLOR_SUCCESS,
+  COLOR_TEXT,
+  COLOR_TEXT_MUTED,
+  COLOR_TEXT_SUBTLE,
+  COLOR_WARNING,
+} from '../theme.js';
+import { MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
 
 type Props = {
   approval: ApprovalDescriptor;
@@ -122,13 +133,13 @@ type CreateFileArgs = {
 };
 
 const operationLabels: Record<string, { label: string; color: string }> = {
-  create_file: { label: 'CREATE', color: 'green' },
-  update_file: { label: 'UPDATE', color: 'yellow' },
-  delete_file: { label: 'DELETE', color: 'red' },
+  create_file: { label: 'CREATE', color: COLOR_SUCCESS },
+  update_file: { label: 'UPDATE', color: COLOR_WARNING },
+  delete_file: { label: 'DELETE', color: COLOR_DANGER },
 };
 
 const ApplyPatchPrompt: FC<{ args: ApplyPatchArgs }> = ({ args }) => {
-  const op = operationLabels[args.type] || { label: args.type, color: 'white' };
+  const op = operationLabels[args.type] || { label: args.type, color: COLOR_TEXT };
 
   return (
     <Box flexDirection="column">
@@ -148,23 +159,23 @@ const ShellPrompt: FC<{ args: ShellArgs }> = ({ args }) => {
   return (
     <Box flexDirection="column" marginLeft={2} marginTop={1}>
       <Box>
-        <Text bold color="cyan">
+        <Text bold color={COLOR_ACCENT}>
           {cmd}
         </Text>
       </Box>
       {args.cwd && (
         <Box>
-          <Text color="#64748b">Cwd: {args.cwd}</Text>
+          <Text color={COLOR_TEXT_SUBTLE}>Cwd: {args.cwd}</Text>
         </Box>
       )}
       {args.timeout_ms && (
         <Box>
-          <Text color="#64748b">Timeout: {args.timeout_ms}ms</Text>
+          <Text color={COLOR_TEXT_SUBTLE}>Timeout: {args.timeout_ms}ms</Text>
         </Box>
       )}
       {args.max_output_length && (
         <Box>
-          <Text color="#64748b">Max output: {args.max_output_length} chars</Text>
+          <Text color={COLOR_TEXT_SUBTLE}>Max output: {args.max_output_length} chars</Text>
         </Box>
       )}
     </Box>
@@ -175,7 +186,7 @@ const SearchReplacePrompt: FC<{ args: SearchReplaceArgs }> = ({ args }) => {
   return (
     <Box flexDirection="column">
       <Box>
-        <Text color="yellow" bold>
+        <Text color={COLOR_WARNING} bold>
           [SEARCH & REPLACE]
         </Text>
         <Text> {args.path}</Text>
@@ -184,7 +195,7 @@ const SearchReplacePrompt: FC<{ args: SearchReplaceArgs }> = ({ args }) => {
         const diff = generateDiff(rep.search_content, rep.replace_content);
         return (
           <Box key={idx} flexDirection="column" marginTop={idx > 0 ? 1 : 0}>
-            {args.replacements.length > 1 && <Text color="gray">Replacement #{idx + 1}:</Text>}
+            {args.replacements.length > 1 && <Text color={COLOR_TEXT_SUBTLE}>Replacement #{idx + 1}:</Text>}
             <DiffView diff={diff} />
           </Box>
         );
@@ -203,7 +214,7 @@ const CreateFilePrompt: FC<{ args: CreateFileArgs }> = ({ args }) => {
   return (
     <Box flexDirection="column">
       <Box>
-        <Text color="green" bold>
+        <Text color={COLOR_SUCCESS} bold>
           [CREATE]
         </Text>
         <Text> {args.path}</Text>
@@ -215,8 +226,9 @@ const CreateFilePrompt: FC<{ args: CreateFileArgs }> = ({ args }) => {
 
 const LLMAdvisory: FC<{ advisory: NonNullable<ApprovalDescriptor['llmAdvisory']> }> = ({ advisory }) => {
   const isSystem = advisory.source === 'system';
-  const borderColor = isSystem ? 'red' : advisory.approved ? 'green' : 'yellow';
-  const headerColor = isSystem ? 'red' : advisory.approved ? 'green' : 'yellow';
+  const advisoryColor = isSystem ? COLOR_DANGER : advisory.approved ? COLOR_SUCCESS : COLOR_WARNING;
+  const borderColor = advisoryColor;
+  const headerColor = advisoryColor;
   const label = isSystem ? 'System Safety Check: BLOCKED ' : `AI Advisor: ${advisory.approved ? 'SAFE ' : 'CAUTION '}`;
 
   return (
@@ -225,14 +237,133 @@ const LLMAdvisory: FC<{ advisory: NonNullable<ApprovalDescriptor['llmAdvisory']>
         <Text color={headerColor} bold>
           {label}
         </Text>
-        <Text color="#94a3b8"> ({isSystem ? 'automated heuristic' : advisory.model}) </Text>
+        <Text color={COLOR_TEXT_MUTED}> ({isSystem ? 'automated heuristic' : advisory.model}) </Text>
       </Box>
-      <Text italic color="#cbd5e1">
+      <Text italic color={COLOR_TEXT_MUTED}>
         {isSystem ? advisory.reasoning : `"${advisory.reasoning}"`}
       </Text>
     </Box>
   );
 };
+
+/**
+ * The shared two-pane approval shape: an option list on the left, and a
+ * description of the highlighted option on the right. Previously only the
+ * ask_user branch explained its options; every other approval was a bare
+ * list, so a reviewer had to already know what "Allow this folder for this
+ * session" does. Reusing one layout means every approval gets that
+ * explanation for free.
+ */
+const TwoPaneApprovalLayout: FC<{
+  leftWidth: number;
+  left: React.ReactNode;
+  rightTitle: React.ReactNode;
+  rightDescription: React.ReactNode;
+}> = ({ leftWidth, left, rightTitle, rightDescription }) => (
+  <Box flexDirection="row" width="100%" marginTop={1}>
+    <Box flexDirection="column" width={leftWidth} flexShrink={0} flexGrow={0}>
+      {left}
+    </Box>
+    <Box
+      flexDirection="column"
+      flexGrow={1}
+      flexShrink={1}
+      paddingLeft={2}
+      borderStyle="single"
+      borderTop={false}
+      borderBottom={false}
+      borderRight={false}
+      borderLeft={true}
+      borderColor={COLOR_BORDER}
+    >
+      <Text bold color={COLOR_WARNING}>
+        {rightTitle}
+      </Text>
+      <Box marginTop={1}>
+        {rightDescription ? (
+          <Text color={COLOR_TEXT}>{rightDescription}</Text>
+        ) : (
+          <Text color={COLOR_TEXT_SUBTLE} italic>
+            No description available.
+          </Text>
+        )}
+      </Box>
+    </Box>
+  </Box>
+);
+
+/**
+ * Descriptions for the standard (non-ask_user) approval menus. Several
+ * contexts reuse the same label ("Allow once", "Reject") for different scope,
+ * so the description depends on which approval is showing, not just the
+ * label text.
+ */
+function describeStandardApprovalOption(
+  item: string,
+  ctx: {
+    isDockerHostControlApproval: boolean;
+    isSandboxNetworkApproval: boolean;
+    isOutsideWorkspaceEdit: boolean;
+    isFolderReadApproval: boolean;
+    folderReadGrantPath: string | null;
+  },
+): string {
+  if (ctx.isDockerHostControlApproval) {
+    switch (item) {
+      case 'Allow this command':
+        return 'Run this Docker host control command once.';
+      case 'Deny':
+        return 'Block this command.';
+      case 'Allow for this session':
+        return 'Allow Docker host control commands for the rest of this session without asking again.';
+      case 'Always allow for this project':
+        return 'Always allow Docker host control commands in this project, persisted across sessions.';
+    }
+  }
+  if (ctx.isSandboxNetworkApproval) {
+    switch (item) {
+      case 'Allow once':
+        return 'Allow network access to this host for this command only.';
+      case 'Deny':
+        return 'Block network access to this host.';
+      case 'Allow host for this session':
+        return 'Allow this host for the rest of this session.';
+      case 'Always allow host for this project':
+        return 'Always allow this host in this project, persisted across sessions.';
+    }
+  }
+  if (ctx.isOutsideWorkspaceEdit) {
+    switch (item) {
+      case 'Allow once':
+        return 'Allow this edit this one time.';
+      case 'Allow this file for this session':
+        return 'Allow edits to this exact file for the rest of this session.';
+      case 'Allow this folder for this session':
+        return 'Allow edits anywhere under this folder for the rest of this session.';
+      case 'Reject':
+        return 'Deny this edit.';
+    }
+  }
+  if (ctx.isFolderReadApproval) {
+    switch (item) {
+      case 'Allow once':
+        return 'Allow this read this one time.';
+      case 'Allow this folder for this session':
+        return ctx.folderReadGrantPath
+          ? `Allow read_file, grep, and glob to read ${ctx.folderReadGrantPath} for the rest of this session.`
+          : 'Allow read_file, grep, and glob to read this folder for the rest of this session.';
+      case 'Reject':
+        return 'Deny this read.';
+    }
+  }
+  switch (item) {
+    case 'Approve':
+      return 'Allow this tool call.';
+    case 'Reject':
+      return 'Deny this tool call.';
+  }
+  return '';
+}
 
 const ApprovalPrompt: FC<Props> = ({
   approval,
@@ -555,7 +686,7 @@ const ApprovalPrompt: FC<Props> = ({
   if (approval.checkIn) {
     return (
       <Box flexDirection="column">
-        <Text color="yellow" bold>
+        <Text color={COLOR_WARNING} bold>
           {approval.argumentsText}
         </Text>
         <Box flexDirection="column" marginTop={1}>
@@ -565,8 +696,14 @@ const ApprovalPrompt: FC<Props> = ({
               : 'Continue with one finite extension, or stop?'}
           </Text>
           <Box flexDirection="column" marginLeft={1}>
-            <Text color={selectedIndex === 0 ? 'green' : undefined}>{selectedIndex === 0 ? '❯ ' : '  '}Continue</Text>
-            <Text color={selectedIndex === 1 ? 'red' : undefined}>{selectedIndex === 1 ? '❯ ' : '  '}Stop</Text>
+            <Box>
+              <SelectionMarker selected={selectedIndex === 0} />
+              <Text color={selectedIndex === 0 ? COLOR_SUCCESS : undefined}>Continue</Text>
+            </Box>
+            <Box>
+              <SelectionMarker selected={selectedIndex === 1} />
+              <Text color={selectedIndex === 1 ? COLOR_DANGER : undefined}>Stop</Text>
+            </Box>
           </Box>
         </Box>
       </Box>
@@ -576,7 +713,7 @@ const ApprovalPrompt: FC<Props> = ({
   // Try to parse and render arguments nicely based on tool type
   let content: React.ReactNode = (
     <Box marginTop={1}>
-      <Text bold color="cyan">
+      <Text bold color={COLOR_ACCENT}>
         {approval.argumentsText}
       </Text>
     </Box>
@@ -661,112 +798,77 @@ const ApprovalPrompt: FC<Props> = ({
       36, // minimum width
     );
 
+    const askUserFooterHints: [string, string][] = [
+      [
+        isMultiSelect ? `1-${askUserOptions.length}` : `1-${askUserMenuItems.length}`,
+        isMultiSelect ? 'toggle' : 'select',
+      ],
+      ...(hasMultipleQuestions ? ([['p/n', 'prev/next question']] as [string, string][]) : []),
+      ...(isMultiSelect ? ([['space', 'toggle']] as [string, string][]) : []),
+      ['⏎', isMultiSelect ? 'submit' : 'confirm'],
+      ['esc', 'cancel'],
+    ];
+
     content = (
       <Box flexDirection="column">
         {totalQuestions > 1 && (
           <Box marginLeft={1}>
-            <Text color="yellow" dimColor>
-              ┌─ Question {currentQuestionIndex + 1} of {totalQuestions} ─
+            <Text color={COLOR_TEXT_SUBTLE}>
+              Question {currentQuestionIndex + 1} of {totalQuestions}
             </Text>
           </Box>
         )}
-        <Box borderStyle="round" borderColor="yellow" paddingX={1} paddingY={0}>
-          <Text color="yellow" bold>
+        <Box borderStyle="round" borderColor={COLOR_WARNING} paddingX={1} paddingY={0}>
+          <Text color={COLOR_WARNING} bold>
             {questionText}
           </Text>
         </Box>
         {waitingForAskUserAnswer && (
           <Box marginTop={1} marginLeft={1}>
-            <Text color="cyan">❯ Type your custom answer in the prompt below...</Text>
+            <Text color={COLOR_ACCENT}>❯ Type your custom answer in the prompt below...</Text>
           </Box>
         )}
-        <Box flexDirection="row" width="100%" marginTop={1}>
-          {/* Menu Items */}
-          <Box flexDirection="column" width={leftColWidth} flexShrink={0} flexGrow={0}>
-            {askUserMenuItems.map((item, idx) => {
-              const isOption = idx < askUserOptions.length;
-              const isRecommended = idx === 0 && isOption;
-              const isSelected = selectedIndex === idx;
+        <TwoPaneApprovalLayout
+          leftWidth={leftColWidth}
+          left={askUserMenuItems.map((item, idx) => {
+            const isOption = idx < askUserOptions.length;
+            const isRecommended = idx === 0 && isOption;
+            const isSelected = selectedIndex === idx;
 
-              let checkbox = '';
-              if (isMultiSelect && isOption) {
-                checkbox = selectedIndices.has(idx) ? '[x] ' : '[ ] ';
-              }
+            let checkbox = '';
+            if (isMultiSelect && isOption) {
+              checkbox = selectedIndices.has(idx) ? '[x] ' : '[ ] ';
+            }
 
-              const color = isSelected ? (item === ASK_USER_CUSTOM_ANSWER_LABEL ? 'cyan' : 'green') : undefined;
+            const color = isSelected
+              ? item === ASK_USER_CUSTOM_ANSWER_LABEL
+                ? COLOR_ACCENT
+                : COLOR_SUCCESS
+              : undefined;
 
-              return (
-                <Box key={item} flexDirection="row" width="100%">
-                  <Box width={3} flexShrink={0}>
-                    <Text color={color}>{isSelected ? '❯' : ' '}</Text>
-                    <Text color="gray" dimColor>
-                      {isRecommended ? '★' : ' '}{' '}
-                    </Text>
-                  </Box>
-                  <Box flexDirection="row" flexShrink={1} flexWrap="wrap">
-                    <Text color={color} bold={isSelected}>
-                      {idx + 1}. {checkbox}
-                      {item}
-                    </Text>
-                  </Box>
+            return (
+              <Box key={item} flexDirection="row" width="100%">
+                <SelectionMarker selected={isSelected} />
+                <Box width={2} flexShrink={0}>
+                  <Text color={COLOR_TEXT_SUBTLE} dimColor>
+                    {isRecommended ? '★' : ' '}
+                  </Text>
                 </Box>
-              );
-            })}
-          </Box>
-
-          {/* Details for the highlighted menu item */}
-          <Box
-            flexDirection="column"
-            flexGrow={1}
-            flexShrink={1}
-            paddingLeft={2}
-            borderStyle="single"
-            borderTop={false}
-            borderBottom={false}
-            borderRight={false}
-            borderLeft={true}
-            borderColor="#334155"
-          >
-            <Text bold color="yellow">
-              {rightPaneTitle}
-            </Text>
-            <Box marginTop={1}>
-              {highlightedDescription ? (
-                <Text color="white">{highlightedDescription}</Text>
-              ) : (
-                <Text color="#64748b" italic>
-                  No description available.
-                </Text>
-              )}
-            </Box>
-          </Box>
+                <Box flexDirection="row" flexShrink={1} flexWrap="wrap">
+                  <Text color={color} bold={isSelected}>
+                    {idx + 1}. {checkbox}
+                    {item}
+                  </Text>
+                </Box>
+              </Box>
+            );
+          })}
+          rightTitle={rightPaneTitle}
+          rightDescription={highlightedDescription}
+        />
+        <Box marginTop={1} marginLeft={1}>
+          <MenuFooter hints={askUserFooterHints} />
         </Box>
-        {/* Consolidated footer hints */}
-        {(() => {
-          const footerItems: string[] = [];
-          if (isMultiSelect) {
-            footerItems.push(`1-${askUserOptions.length} toggle`);
-          } else {
-            footerItems.push(`1-${askUserMenuItems.length} select`);
-          }
-          if (hasMultipleQuestions) {
-            footerItems.push('◄ p prev', 'n next ►');
-          }
-          if (isMultiSelect) {
-            footerItems.push('space toggle', 'enter submit');
-          } else {
-            footerItems.push('enter confirm');
-          }
-          footerItems.push('esc cancel');
-
-          return (
-            <Box marginTop={1} marginLeft={1}>
-              <Text color="#64748b" dimColor>
-                {footerItems.join('   ')}
-              </Text>
-            </Box>
-          );
-        })()}
       </Box>
     );
   }
@@ -777,45 +879,127 @@ const ApprovalPrompt: FC<Props> = ({
     const displaySuggestedParent = deniedRead.suggestedParent.replace(os.homedir(), '~');
     return (
       <Box flexDirection="column">
-        <Text color="red" bold>
+        <Text color={COLOR_DANGER} bold>
           Sandbox blocked read access:
         </Text>
-        <Text color="red"> {displayPath}</Text>
-        {content}
-        <Box flexDirection="column" marginTop={1} marginLeft={1}>
-          {deniedReadMenuItems.map((item, idx) => {
-            const color = idx === 0 ? 'red' : item === 'Run unsandboxed once' ? 'yellow' : 'green';
-            return (
-              <Text key={item} color={selectedIndex === idx ? color : undefined}>
-                {selectedIndex === idx ? '❯ ' : '  '}
-                {item}
+        <Text color={COLOR_DANGER}> {displayPath}</Text>
+        {/* Red left border, not just red text: this approval can grant access outside
+            the workspace, so its shape should read as risky before the words are read. */}
+        <Box
+          flexDirection="column"
+          borderStyle="single"
+          borderTop={false}
+          borderBottom={false}
+          borderRight={false}
+          borderLeft={true}
+          borderColor={COLOR_DANGER}
+          paddingLeft={1}
+          marginTop={1}
+        >
+          {content}
+          <Box flexDirection="column" marginTop={1}>
+            {deniedReadMenuItems.map((item, idx) => {
+              const color = idx === 0 ? COLOR_DANGER : item === 'Run unsandboxed once' ? COLOR_WARNING : COLOR_SUCCESS;
+              return (
+                <Box key={item}>
+                  <SelectionMarker selected={selectedIndex === idx} />
+                  <Text color={selectedIndex === idx ? color : undefined}>{item}</Text>
+                </Box>
+              );
+            })}
+          </Box>
+          {!deniedRead.sensitive && (
+            <Box marginTop={1}>
+              <Text color={COLOR_TEXT_SUBTLE}>
+                "Allow and remember" persists this path for this project: {displaySuggestedParent}
               </Text>
-            );
-          })}
+            </Box>
+          )}
+          {deniedRead.sensitive && (
+            <Box marginTop={1}>
+              <Text color={COLOR_TEXT_SUBTLE}>
+                This is a sensitive path — "allow once" is available but remember is suppressed.
+              </Text>
+            </Box>
+          )}
         </Box>
-        {!deniedRead.sensitive && (
-          <Box marginTop={1}>
-            <Text color="#64748b">
-              "Allow and remember" persists this path for this project: {displaySuggestedParent}
-            </Text>
-          </Box>
-        )}
-        {deniedRead.sensitive && (
-          <Box marginTop={1}>
-            <Text color="#64748b">
-              This is a sensitive path — "allow once" is available but remember is suppressed.
-            </Text>
-          </Box>
-        )}
       </Box>
     );
   }
 
+  // Left column width scales with the longest option label so the description
+  // pane's border lands in the same place regardless of which approval this is.
+  const plainApprovalLeftWidth = Math.max(...askUserMenuItems.map((item) => item.length + 4), 20);
+
+  const plainApprovalSection = !isAskUser && !isDeniedReadShell && (
+    <Box flexDirection="column" marginTop={1}>
+      <Text>
+        {isDockerHostControlApproval
+          ? 'Allow Docker host access?'
+          : isOutsideWorkspaceEdit
+          ? 'Allow permission to edit this file outside the workspace?'
+          : isFolderReadApproval
+          ? 'Allow this read outside the workspace?'
+          : 'Allow this action?'}
+      </Text>
+      <TwoPaneApprovalLayout
+        leftWidth={plainApprovalLeftWidth}
+        left={askUserMenuItems.map((item, index) => {
+          const isSelected = selectedIndex === index;
+          const isDangerLabel = item === 'Reject' || item === 'Deny';
+          return (
+            <Box key={item}>
+              <SelectionMarker selected={isSelected} />
+              <Text color={isSelected ? (isDangerLabel ? COLOR_DANGER : COLOR_SUCCESS) : undefined}>{item}</Text>
+            </Box>
+          );
+        })}
+        rightTitle={askUserMenuItems[selectedIndex] ?? 'Option'}
+        rightDescription={describeStandardApprovalOption(askUserMenuItems[selectedIndex] ?? '', {
+          isDockerHostControlApproval,
+          isSandboxNetworkApproval,
+          isOutsideWorkspaceEdit,
+          isFolderReadApproval,
+          folderReadGrantPath,
+        })}
+      />
+      {isFolderReadApproval && folderReadGrantPath && (
+        <Box marginTop={1}>
+          <Text color={COLOR_TEXT_SUBTLE}>
+            "Allow this folder" lets read_file, grep and glob read {folderReadGrantPath} for the rest of this session.
+          </Text>
+        </Box>
+      )}
+      {isOutsideWorkspaceEdit && approval.outsideWorkspaceEdit && (
+        <Box marginTop={1}>
+          <Text color={COLOR_TEXT_SUBTLE}>
+            File scope permits only {approval.outsideWorkspaceEdit.path}; folder scope permits edits beneath{' '}
+            {approval.outsideWorkspaceEdit.folder} for this session.
+          </Text>
+        </Box>
+      )}
+    </Box>
+  );
+
+  const bodyContent = (
+    <>
+      {content}
+      {isDockerHostControlApproval && (
+        <Text color={COLOR_DANGER}>
+          This command can control your Docker daemon. It can bypass filesystem and network sandbox restrictions, mount
+          host files, run privileged or persistent workloads, and is effectively equivalent to host access.
+        </Text>
+      )}
+      {approval.llmAdvisory && <LLMAdvisory advisory={approval.llmAdvisory} />}
+      {plainApprovalSection}
+    </>
+  );
+
   return (
     <Box flexDirection="column">
-      <Text color="yellow">
+      <Text color={COLOR_WARNING}>
         {isDockerHostControlApproval ? (
-          <Text bold color="red">
+          <Text bold color={COLOR_DANGER}>
             Docker Host Control
           </Text>
         ) : (
@@ -832,53 +1016,25 @@ const ApprovalPrompt: FC<Props> = ({
           </>
         )}
       </Text>
-      {content}
-      {isDockerHostControlApproval && (
-        <Text color="red">
-          This command can control your Docker daemon. It can bypass filesystem and network sandbox restrictions, mount
-          host files, run privileged or persistent workloads, and is effectively equivalent to host access.
-        </Text>
-      )}
-      {approval.llmAdvisory && <LLMAdvisory advisory={approval.llmAdvisory} />}
-      {!isAskUser && !isDeniedReadShell && (
-        <Box flexDirection="column" marginTop={1}>
-          <Text>
-            {isDockerHostControlApproval
-              ? 'Allow Docker host access?'
-              : isOutsideWorkspaceEdit
-              ? 'Allow permission to edit this file outside the workspace?'
-              : isFolderReadApproval
-              ? 'Allow this read outside the workspace?'
-              : 'Allow this action?'}
-          </Text>
-          <Box flexDirection="column" marginLeft={1}>
-            {askUserMenuItems.map((item, index) => (
-              <Text
-                key={item}
-                color={selectedIndex === index ? (item === 'Reject' || item === 'Deny' ? 'red' : 'green') : undefined}
-              >
-                {selectedIndex === index ? '❯ ' : '  '}
-                {item}
-              </Text>
-            ))}
-          </Box>
-          {isFolderReadApproval && folderReadGrantPath && (
-            <Box marginTop={1}>
-              <Text color="#64748b">
-                "Allow this folder" lets read_file, grep and glob read {folderReadGrantPath} for the rest of this
-                session.
-              </Text>
-            </Box>
-          )}
-          {isOutsideWorkspaceEdit && approval.outsideWorkspaceEdit && (
-            <Box marginTop={1}>
-              <Text color="#64748b">
-                File scope permits only {approval.outsideWorkspaceEdit.path}; folder scope permits edits beneath{' '}
-                {approval.outsideWorkspaceEdit.folder} for this session.
-              </Text>
-            </Box>
-          )}
+      {isDockerHostControlApproval ? (
+        // Red left border, not just red text: Docker host control is the single
+        // riskiest approval this app shows, and should be recognizable by shape
+        // even before the words are read.
+        <Box
+          flexDirection="column"
+          borderStyle="single"
+          borderTop={false}
+          borderBottom={false}
+          borderRight={false}
+          borderLeft={true}
+          borderColor={COLOR_DANGER}
+          paddingLeft={1}
+          marginTop={1}
+        >
+          {bodyContent}
         </Box>
+      ) : (
+        bodyContent
       )}
     </Box>
   );

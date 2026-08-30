@@ -68,6 +68,7 @@ export function createConversationEventHandler(
   } = deps;
 
   const activeRunningToolCallIds = new Set<string>();
+  const seenToolCallIds = new Set<string>();
   const pendingSubagentToolCalls = new Map<string, { role?: string; task?: string; [key: string]: unknown }>();
   const foregroundSubagentToolCallIds = new Set<string>();
   const seenSubagentAgentIds = new Set<string>();
@@ -292,14 +293,14 @@ export function createConversationEventHandler(
         resetBotTextTracking();
         botResponseUpdater.cancel();
 
-        // Emit a "pending" command message when tool starts running
+        // Emit a "pending" command message when tool is called
         // tool_started.arguments may be either an object or a JSON string
         const command = formatToolCommand(toolName, args as Record<string, unknown>);
 
         const pendingMessage: CommandMessage = {
           id: toolCallId ?? createMessageId(),
           sender: 'command',
-          status: 'running',
+          status: 'pending',
           command,
           output: '',
           callId: toolCallId,
@@ -307,15 +308,33 @@ export function createConversationEventHandler(
           toolArgs: args,
         };
 
-        if (toolCallId && activeRunningToolCallIds.has(toolCallId)) {
+        if (toolCallId && seenToolCallIds.has(toolCallId)) {
           return;
         }
 
         if (toolCallId) {
-          activeRunningToolCallIds.add(toolCallId);
+          seenToolCallIds.add(toolCallId);
         }
 
         appendMessages([pendingMessage]);
+        return;
+      }
+
+      case 'tool_dispatched': {
+        const { toolCallId } = event;
+        if (!toolCallId) return;
+        activeRunningToolCallIds.add(toolCallId);
+        setMessages((prev) => {
+          const index = prev.findIndex(
+            (msg) => msg.sender === 'command' && msg.callId === toolCallId && msg.status === 'pending',
+          );
+          if (index === -1) return prev;
+          const current = prev[index];
+          if (current.sender !== 'command') return prev;
+          const next = [...prev];
+          next[index] = { ...current, status: 'running' };
+          return trimMessages(next);
+        });
         return;
       }
 
@@ -371,13 +390,19 @@ export function createConversationEventHandler(
         resetBotTextTracking();
         botResponseUpdater.cancel();
 
-        // Replace pending message with completed one, or add new if not found
+        // Replace pending/running message with completed one, or add new if not found
         setMessages((prev) => {
           const pendingIndex = annotated.callId
             ? prev.findIndex(
-                (msg) => msg.sender === 'command' && msg.callId === annotated.callId && msg.status === 'running',
+                (msg) =>
+                  msg.sender === 'command' &&
+                  msg.callId === annotated.callId &&
+                  (msg.status === 'running' || msg.status === 'pending'),
               )
-            : prev.findIndex((msg) => msg.sender === 'command' && !msg.callId && msg.status === 'running');
+            : prev.findIndex(
+                (msg) =>
+                  msg.sender === 'command' && !msg.callId && (msg.status === 'running' || msg.status === 'pending'),
+              );
 
           if (pendingIndex !== -1) {
             const next = [...prev];

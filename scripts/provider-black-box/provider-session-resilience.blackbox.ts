@@ -576,7 +576,7 @@ describe('Codex WebSocket corrupt-history recovery', () => {
     const followUp = generating.at(-1);
     expect(asRecord(followUp)?.previous_response_id).toBeTruthy();
     expect(asRecord(followUp)?.previous_response_id).not.toBe(STALE_WARMUP_RESPONSE_ID);
-    expect(child.getVisibleOutput().split('$ pwd').length - 1).toBe(1);
+    expect(child.getVisibleOutput().split('pwd').length - 1).toBe(1);
     expect(child.getVisibleOutput().split('Conversation state was rejected by the provider').length - 1).toBeLessThan(
       2,
     );

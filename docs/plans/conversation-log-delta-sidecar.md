@@ -1,6 +1,8 @@
 # Conversation log: move streaming deltas to a droppable sidecar
 
-**Status: plan.** Awaiting review, then implementation.
+**Status: implemented.** The sidecar split is live: `conversation-persistence.ts:182-231`
+writes, merges, and reaps delta sidecars, and `gateway/persistence/projection.ts:113-115`
+treats a corrupt sidecar as losing only the unsettled turn. Retained for the rationale.
 **Owner:** qduc (implementation unassigned).
 **Branch:** `delta-sidecar-log`, worktree `.worktrees/delta-sidecar-log`.
 

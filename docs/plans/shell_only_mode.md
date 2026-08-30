@@ -1,6 +1,8 @@
 # Search-Via-Shell Mode (Experiment) — Draft Spec
 
-Status: draft. Not implemented.
+Status: **implemented** as the `app.searchViaShell` setting (`off` | `on` | `auto`,
+resolved in `source/agent.ts:259-261` and threaded into the prompt via
+`prompt-constructor.ts`). Retained for the experiment's rationale.
 
 ## Idea
 

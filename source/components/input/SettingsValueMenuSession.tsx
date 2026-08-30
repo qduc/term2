@@ -8,6 +8,7 @@ import type { SettingsService } from '../../services/settings/settings-service.j
 import type { MenuComponentProps } from './menu-registry.js';
 import type { MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
 import { applyMenuEditorEvent } from './menu-editor.js';
+import { COLOR_DANGER } from '../theme.js';
 
 type SettingsValueState = ReturnType<typeof useSettingsValueCompletion>;
 
@@ -134,7 +135,7 @@ export function SettingsValueMenuSession({ frame, active, controller, interactio
         isNumericSettings={settingsValue.isNumericSettings}
         isFreeFormString={settingsValue.isFreeFormString}
       />
-      {applyError && <Text color="red">{applyError}</Text>}
+      {applyError && <Text color={COLOR_DANGER}>{applyError}</Text>}
     </Box>
   );
 }

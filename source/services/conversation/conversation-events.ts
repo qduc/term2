@@ -377,6 +377,7 @@ export interface BackgroundCheckInDueEvent {
         command: string;
         status?: string;
         lastObservation?: BackgroundTaskObservation;
+        outputTail?: string;
       };
 }
 

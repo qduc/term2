@@ -521,6 +521,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     emit: recordBackgroundEvent,
     getSubagentStatus: (runId) => agentClient.getBackgroundSubagentStatus?.(runId),
     getShellJob: (jobId) => agentClient.getBackgroundShellJob?.(jobId),
+    getShellOutputTail: (jobId, maxBytes) => agentClient.getBackgroundShellOutputTail?.(jobId, maxBytes),
     getSettings: () => ({
       enabled: settingsService?.get('agent.backgroundCheckIn.enabled') ?? true,
       intervalMs: settingsService?.get('agent.backgroundCheckIn.intervalMs') ?? 300_000,

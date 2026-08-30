@@ -365,6 +365,30 @@ describe('ConversationOrchestrator background subagent notifications mid-turn', 
     expect(text).toContain('last tool: edit_file(src/auth.ts)');
   });
 
+  it('formats shell outputTail in the check-in prompt', async () => {
+    const h = makeHarness({ queueActive: true });
+
+    h.emit(
+      checkInDue({
+        target: { kind: 'shell', id: 'shell-1' },
+        details: {
+          kind: 'shell',
+          id: 'shell-1',
+          command: 'pnpm test:e2e',
+          status: 'running',
+          outputTail: '12/15 passed\nrunning test-4.ts',
+        },
+      }),
+    );
+    await settle();
+
+    expect(h.service.injectIntoActiveTurn).toHaveBeenCalledTimes(1);
+    const text = h.injectedTexts()[0];
+    expect(text).toContain('background shell | jobId: shell-1 | command: pnpm test:e2e');
+    expect(text).toContain('status: running');
+    expect(text).toContain('recent output:\n    12/15 passed\n    running test-4.ts');
+  });
+
   it('tells the active turn that the same shell moved to background without requesting a stop', async () => {
     const h = makeHarness({ queueActive: true });
 

@@ -30,6 +30,7 @@ function makeScheduler(options: {
   settings?: Partial<{ enabled: boolean; intervalMs: number; maxCheckInsPerTask: number }>;
   getSubagentStatus?: (runId: string) => any;
   getShellJob?: (jobId: string) => any;
+  getShellOutputTail?: (jobId: string, maxBytes?: number) => any;
   now: () => number;
 }) {
   const emit = vi.fn();
@@ -39,6 +40,7 @@ function makeScheduler(options: {
     emit,
     getSubagentStatus: options.getSubagentStatus,
     getShellJob: options.getShellJob,
+    getShellOutputTail: options.getShellOutputTail,
     getSettings: () => ({
       enabled: true,
       intervalMs: 300_000,
@@ -263,6 +265,32 @@ describe('BackgroundCheckInScheduler', () => {
         command: 'pnpm test',
         status: 'running',
         lastObservation: { kind: 'shell_output_received', at: 295_000 },
+      },
+    });
+  });
+
+  it('populates outputTail when getShellOutputTail is provided', () => {
+    let time = 0;
+    const { scheduler, emit } = makeScheduler({
+      tasks: () => [shellTask({ jobId: 'shell-1' })],
+      now: () => time,
+      getShellOutputTail: (jobId) => (jobId === 'shell-1' ? '12/15 passed\nrunning test-4.ts' : undefined),
+    });
+
+    time = 300_000;
+    scheduler.tick();
+
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect(emit).toHaveBeenCalledWith({
+      type: 'background_check_in_due',
+      target: { kind: 'shell', id: 'shell-1' },
+      checkInIndex: 1,
+      elapsedMs: 300_000,
+      details: {
+        kind: 'shell',
+        id: 'shell-1',
+        command: 'pnpm test',
+        outputTail: '12/15 passed\nrunning test-4.ts',
       },
     });
   });

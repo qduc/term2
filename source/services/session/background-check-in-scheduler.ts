@@ -19,6 +19,7 @@ export interface BackgroundCheckInSchedulerDeps {
   getSettings: () => BackgroundCheckInSettings;
   getSubagentStatus?: (runId: string) => SubagentRunStatus | undefined;
   getShellJob?: (jobId: string) => BackgroundShellJob<unknown> | undefined;
+  getShellOutputTail?: (jobId: string, maxBytes?: number) => string | undefined;
   now?: () => number;
   setInterval?: (callback: () => void, delay: number) => ReturnType<typeof setInterval>;
   clearInterval?: (timer: ReturnType<typeof setInterval>) => void;
@@ -50,16 +51,20 @@ function taskDetails(
   deps: {
     getSubagentStatus?: (runId: string) => SubagentRunStatus | undefined;
     getShellJob?: (jobId: string) => BackgroundShellJob<unknown> | undefined;
+    getShellOutputTail?: (jobId: string, maxBytes?: number) => string | undefined;
   },
 ): BackgroundCheckInDueEvent['details'] {
   if (task.kind === 'shell') {
     const job = deps.getShellJob?.(task.jobId);
+    const rawTail = deps.getShellOutputTail?.(task.jobId, 400)?.trim();
+    const outputTail = rawTail && rawTail.length > 0 ? rawTail : undefined;
     return {
       kind: 'shell',
       id: task.jobId,
       command: task.command,
       ...(job?.status ? { status: job.status } : {}),
       ...(job?.lastObservation ? { lastObservation: job.lastObservation } : {}),
+      ...(outputTail ? { outputTail } : {}),
     };
   }
 
@@ -110,6 +115,7 @@ export class BackgroundCheckInScheduler {
   #getSettings: () => BackgroundCheckInSettings;
   #getSubagentStatus?: (runId: string) => SubagentRunStatus | undefined;
   #getShellJob?: (jobId: string) => BackgroundShellJob<unknown> | undefined;
+  #getShellOutputTail?: (jobId: string, maxBytes?: number) => string | undefined;
   #now: () => number;
   #clearInterval: (timer: ReturnType<typeof setInterval>) => void;
   #timer: ReturnType<typeof setInterval> | undefined;
@@ -121,6 +127,7 @@ export class BackgroundCheckInScheduler {
     this.#getSettings = deps.getSettings;
     this.#getSubagentStatus = deps.getSubagentStatus;
     this.#getShellJob = deps.getShellJob;
+    this.#getShellOutputTail = deps.getShellOutputTail;
     this.#now = deps.now ?? (() => Date.now());
     const setIntervalFn = deps.setInterval ?? setInterval;
     this.#clearInterval = deps.clearInterval ?? clearInterval;
@@ -156,6 +163,7 @@ export class BackgroundCheckInScheduler {
         details: taskDetails(task, {
           getSubagentStatus: this.#getSubagentStatus,
           getShellJob: this.#getShellJob,
+          getShellOutputTail: this.#getShellOutputTail,
         }),
       });
     }

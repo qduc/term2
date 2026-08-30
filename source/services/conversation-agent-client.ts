@@ -139,6 +139,7 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   disposeBackgroundSubagents?(): Promise<void>;
   getBackgroundShellJob?(jobId: string): BackgroundShellJob<unknown> | undefined;
   listBackgroundShellJobs?(): BackgroundShellJob<unknown>[];
+  getBackgroundShellOutputTail?(jobId: string, maxBytes?: number): string | undefined;
   requestBackgroundShellStop?(jobId: string): boolean;
   /** The currently running root shell call that can be detached from its turn. */
   getForegroundShellTransferCandidate?(): ForegroundShellLeaseDetails | undefined;

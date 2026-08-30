@@ -341,6 +341,17 @@ it.sequential('getBuildFactoryDeps returns correct shape', () => {
   expect(typeof factoryDeps.checkToolInterceptors, 'has checkToolInterceptors').toBe('function');
 });
 
+it.sequential('getBuildFactoryDeps leaves getAskUserAnswer undefined when allowAskUser is false', () => {
+  ensureProviderRegistered();
+
+  const { deps } = createDeps();
+  const config = new AgentConfiguration({}, { ...deps, allowAskUser: false });
+
+  const factoryDeps = config.getBuildFactoryDeps();
+  expect(factoryDeps.getAskUserAnswer).toBeUndefined();
+  expect(factoryDeps.allowAskUser).toBe(false);
+});
+
 it.sequential('subscribeToSettings installs onChange handler', () => {
   ensureProviderRegistered();
 

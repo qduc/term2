@@ -225,6 +225,8 @@ export const getAgentDefinition = (
     shellChildRegistry?: ShellChildRegistry;
     /** False for one-shot/non-interactive callers until their lifecycle is supported. */
     allowBackgroundShell?: boolean;
+    /** False for non-interactive / headless sessions where user prompts cannot be answered. */
+    allowAskUser?: boolean;
     /** Explicit interactive-root-only capability; never inferred from memory access. */
     sessionBrowser?: SessionBrowser;
   },
@@ -250,6 +252,7 @@ export const getAgentDefinition = (
     backgroundShellOutput,
     shellChildRegistry,
     allowBackgroundShell = true,
+    allowAskUser = true,
     sessionBrowser,
   } = deps;
   const defaultModel = settingsService.get('agent.model');
@@ -400,7 +403,7 @@ export const getAgentDefinition = (
     tools.push(createActivateSkillToolDefinition(skillsService));
   }
 
-  if (getAskUserAnswer) {
+  if (getAskUserAnswer && allowAskUser) {
     const askUserTool = createAskUserToolDefinition(getAskUserAnswer);
     if (askUserTool.name !== TOOL_NAME_ASK_USER) {
       throw new Error(`Unexpected ask_user tool name: ${askUserTool.name}`);

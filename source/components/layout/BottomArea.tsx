@@ -122,6 +122,8 @@ export type BottomAreaProps = {
   onUnavailableModelSelected?: (provider: string) => void;
   onSkillSelected?: (skill: SkillInfo) => void;
   onCopySelection?: (selection: CopySelection) => void;
+  listConversations?: () => import('../../services/conversation/conversation-persistence.js').ConversationListEntry[];
+  resumeConversation?: (target?: string) => void | Promise<void>;
 };
 
 const BottomArea: FC<BottomAreaProps> = ({
@@ -203,6 +205,8 @@ const BottomArea: FC<BottomAreaProps> = ({
   onUnavailableModelSelected,
   onSkillSelected,
   onCopySelection,
+  listConversations,
+  resumeConversation,
 }) => {
   const { controller } = useInputState();
   const [dotCount, setDotCount] = useState(1);
@@ -431,6 +435,8 @@ const BottomArea: FC<BottomAreaProps> = ({
           onUnavailableModelSelected={onUnavailableModelSelected}
           onSkillSelected={onSkillSelected}
           onCopySelection={onCopySelection}
+          listConversations={listConversations}
+          resumeConversation={resumeConversation}
           promptLabel={
             waitingForAskUserAnswer
               ? 'Answer: '

@@ -284,7 +284,7 @@ TODO_LIST=$(term2 "List all TODO markers in source/")
 | `/lite` | — | Toggle lightweight terminal mode. |
 | `/mentor` | — | Toggle collaborative Mentor Mode. |
 | `/orchestrator` | — | Toggle prompt-guided Orchestrator Mode. |
-| `/auto-approve` | `[off\|advisory\|auto\|always]` | Cycle or set shell command auto-approval level. |
+| `/auto-approve` | `[off\|advisory\|auto\|always]` | Set shell command auto-approval level. |
 | `/sandbox` | — | Toggle shell sandbox isolation on or off. |
 | `/compact` | — | Manually trigger context compaction. |
 | `/providers` | — | Open interactive provider manager (list, add, edit, remove, switch accounts). |
@@ -295,7 +295,7 @@ TODO_LIST=$(term2 "List all TODO markers in source/")
 | `/retry-tool` | — | Re-execute the last failed or timed-out tool call. |
 | `/copy` | `[N]` | Copy the latest assistant response (or $N$-th prior response) to clipboard. |
 | `/usage` | — | Display exact token counts, cost breakdown, and provider rate-limit metrics. |
-| `/resume` | `[ls\|conversation-id]` | Resume the latest or a specific saved conversation; use `/resume ls` to list recent conversations. |
+| `/resume` | `[conversation-id]` | Resume a saved conversation (browse with `/resume` or specify an ID). |
 | `/handoff` | — | Export current conversation context for handoff to another session or model. |
 | `/settings` | `[key] [value]` | View or modify runtime configuration settings. |
 | `/clear` | — | Clear current conversation history and start a fresh turn. |

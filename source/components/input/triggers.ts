@@ -10,6 +10,7 @@ export const SETTINGS_RESET_TRIGGER = '/settings reset ';
 export const AUTO_APPROVE_TRIGGER = '/auto-approve ';
 export const EFFORT_TRIGGER = '/effort ';
 export const SKILLS_TRIGGER = '/skills ';
+export const RESUME_TRIGGER = '/resume ';
 
 const whitespaceRegex = /\s/;
 
@@ -272,6 +273,32 @@ export function createDefaultTriggerRegistry(
           identity: 'skills-root',
           frame: {
             kind: 'skills',
+            binding: {
+              trigger: { range: { start: 0, end: active.startIndex }, text: editor.text.slice(0, active.startIndex) },
+              queryStart: active.startIndex,
+              queryEnd: 'cursor',
+              replacement: { start: active.startIndex, end: 'cursor' },
+            },
+          },
+        };
+      }
+      return null;
+    },
+    successors: [],
+  });
+
+  // Priority 20: Resume
+  registerRule({
+    id: 'resume',
+    priority: 20,
+    parse: (editor) => {
+      const active = determineActiveMenu(editor.text, editor.cursor, slashCommands);
+      if (active.type === 'resume') {
+        return {
+          ruleId: 'resume',
+          identity: 'resume-root',
+          frame: {
+            kind: 'resume',
             binding: {
               trigger: { range: { start: 0, end: active.startIndex }, text: editor.text.slice(0, active.startIndex) },
               queryStart: active.startIndex,

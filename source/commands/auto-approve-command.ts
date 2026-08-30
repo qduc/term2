@@ -6,43 +6,40 @@ interface CreateAutoApproveSlashCommandDeps {
   settingsService: SettingsService;
   applyRuntimeSetting: (key: string, value: any) => void;
   addSystemMessage: (text: string) => void;
+  replaceInput: (input: string) => void;
 }
 
 export function createAutoApproveSlashCommand({
   settingsService,
   applyRuntimeSetting,
   addSystemMessage,
+  replaceInput,
 }: CreateAutoApproveSlashCommandDeps): SlashCommand {
   return {
     name: 'auto-approve',
-    description: 'Set or cycle tool auto-approval mode (off, advisory, auto, always)',
+    description: 'Set tool auto-approval mode (off, advisory, auto, always)',
     expectsArgs: true,
     completion: { type: 'setting-value', trigger: AUTO_APPROVE_TRIGGER, settingKey: 'shell.autoApproveMode' },
     action: (args?: string) => {
-      const validModes = ['off', 'advisory', 'auto', 'always'] as const;
-      let newValue: 'off' | 'advisory' | 'auto' | 'always';
-
-      if (args && args.trim()) {
-        const requested = args.trim().toLowerCase();
-        if (validModes.includes(requested as any)) {
-          newValue = requested as any;
-        } else {
-          addSystemMessage(`Error: Invalid mode '${args}'. Use: off, advisory, auto, or always.`);
-          return false;
-        }
-      } else {
-        const currentValue = settingsService.get('shell.autoApproveMode');
-        if (currentValue === 'off') {
-          newValue = 'advisory';
-        } else if (currentValue === 'advisory') {
-          newValue = 'auto';
-        } else if (currentValue === 'auto') {
-          newValue = 'always';
-        } else {
-          newValue = 'off';
-        }
+      if (!args) {
+        replaceInput(AUTO_APPROVE_TRIGGER);
+        return false;
       }
 
+      const parts = args.trim().split(/\s+/).filter(Boolean);
+      if (parts.length === 0) {
+        replaceInput(AUTO_APPROVE_TRIGGER);
+        return false;
+      }
+
+      const validModes = ['off', 'advisory', 'auto', 'always'] as const;
+      const requested = parts.join(' ').toLowerCase();
+      if (!validModes.includes(requested as any)) {
+        addSystemMessage(`Error: Invalid mode '${args}'. Use: off, advisory, auto, or always.`);
+        return false;
+      }
+
+      const newValue = requested as 'off' | 'advisory' | 'auto' | 'always';
       settingsService.set('shell.autoApproveMode', newValue);
       applyRuntimeSetting('shell.autoApproveMode', newValue);
 

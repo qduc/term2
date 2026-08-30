@@ -71,6 +71,22 @@ const skillsCommand: SlashCommand = {
   completion: { type: 'skills', trigger: '/skills ' },
 };
 
+const autoApproveCommand: SlashCommand = {
+  name: 'auto-approve',
+  description: 'Auto approve',
+  expectsArgs: true,
+  action: () => false,
+  completion: { type: 'setting-value', trigger: '/auto-approve ', settingKey: 'shell.autoApproveMode' },
+};
+
+const resumeCommand: SlashCommand = {
+  name: 'resume',
+  description: 'Resume',
+  expectsArgs: true,
+  action: () => false,
+  completion: { type: 'resume', trigger: '/resume ' },
+};
+
 const copySelections: CopySelection[] = [
   { label: 'Full response', text: 'answer\n```\ncode\n```' },
   { label: 'Code block #1', text: 'code' },
@@ -91,6 +107,8 @@ const renderSurface = async (
     onSkillSelected?: (skill: SkillInfo) => void;
     onSystemMessage?: (text: string) => void;
     onCopySelection?: (selection: CopySelection) => void;
+    listConversations?: () => import('../../services/conversation/conversation-persistence.js').ConversationListEntry[];
+    resumeConversation?: (target?: string) => void | Promise<void>;
   },
 ) => {
   const result = await renderInAct(
@@ -106,6 +124,8 @@ const renderSurface = async (
         onSkillSelected={options?.onSkillSelected}
         onSystemMessage={options?.onSystemMessage}
         onCopySelection={options?.onCopySelection}
+        listConversations={options?.listConversations}
+        resumeConversation={options?.resumeConversation}
       />
       {children}
     </InputProvider>,
@@ -372,4 +392,50 @@ it.sequential('accepting a skill activates it immediately and clears the command
   );
   expect(controller.getSnapshot().editor).toMatchObject({ text: '', cursor: 0 });
   expect(lastFrame()).not.toContain('/skills');
+});
+
+it.sequential('accepting a /auto-approve prefix opens the auto-approve value successor menu', async () => {
+  const controller = new MenuControllerImpl();
+  const { stdin } = await renderSurface(controller, [...slashCommands, autoApproveCommand]);
+
+  await writeInput(stdin, '/auto-app');
+  await writeInput(stdin, '\r');
+  await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'settings_value');
+
+  expect(controller.getSnapshot().editor.text).toBe('/auto-approve ');
+  expect(controller.getSnapshot().stack.at(-1)).toMatchObject({
+    kind: 'settings_value',
+    settingKey: 'shell.autoApproveMode',
+  });
+});
+
+it.sequential('accepting a /resume prefix opens the resume successor menu', async () => {
+  const controller = new MenuControllerImpl();
+  const { stdin } = await renderSurface(controller, [...slashCommands, resumeCommand]);
+
+  await writeInput(stdin, '/res');
+  await writeInput(stdin, '\r');
+  await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'resume');
+
+  expect(controller.getSnapshot().editor.text).toBe('/resume ');
+});
+
+it.sequential('accepting a conversation from /resume resumes it and clears the buffer', async () => {
+  const resumeConversation = vi.fn(async () => {});
+  const controller = new MenuControllerImpl();
+  const { lastFrame, stdin } = await renderSurface(controller, [...slashCommands, resumeCommand], undefined, {
+    listConversations: () => [
+      { id: 'session-abc-123', updatedAt: '2026-08-30T12:00:00.000Z', firstUserMessage: 'Test task' },
+    ],
+    resumeConversation,
+  });
+
+  await writeInput(stdin, '/resume ');
+  await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'resume');
+  await writeInput(stdin, '\r');
+  await waitFor(() => controller.getSnapshot().stack.length === 0);
+
+  expect(resumeConversation).toHaveBeenCalledWith('session-abc-123');
+  expect(controller.getSnapshot().editor).toMatchObject({ text: '', cursor: 0 });
+  expect(lastFrame()).not.toContain('/resume');
 });

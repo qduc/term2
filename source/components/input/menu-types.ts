@@ -92,6 +92,7 @@ export type MenuFrame =
       back: BackPolicy;
     }
   | { id: FrameId; kind: 'skills'; binding: TextBinding }
+  | { id: FrameId; kind: 'resume'; binding: TextBinding }
   | { id: FrameId; kind: 'copy'; items: CopySelection[] }
   | { id: FrameId; kind: 'rewind'; items: RewindItem[]; initialDisposition: RewindDisposition }
   | { id: FrameId; kind: 'providers'; returnPoint: ReturnPoint };

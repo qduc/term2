@@ -78,17 +78,21 @@ it.sequential('createUsageSlashCommand shows current session usage', () => {
   expect(messages).toEqual(['Token usage: 20,000 input (1,000,000 cached), 20,000 output']);
 });
 
-it.sequential('createResumeSlashCommand lists saved conversations in the app', () => {
-  const messages: string[] = [];
+it.sequential('createResumeSlashCommand opens interactive resume menu on empty args or ls', () => {
+  const inputs: string[] = [];
   const command = createResumeSlashCommand({
     listConversations: () => [{ id: 'saved-1', updatedAt: '2026-08-30T00:00:00.000Z' }],
     resumeConversation: vi.fn(),
-    addSystemMessage: (text) => messages.push(text),
+    addSystemMessage: vi.fn(),
+    replaceInput: (text) => inputs.push(text),
   });
 
-  expect(command.action('ls')).toBe(true);
-  expect(messages[0]).toContain('saved-1');
-  expect(messages[0]).toContain('Resume:  /resume saved-1');
+  expect(command.action()).toBe(false);
+  expect(inputs).toEqual(['/resume ']);
+
+  inputs.length = 0;
+  expect(command.action('ls')).toBe(false);
+  expect(inputs).toEqual(['/resume ']);
 });
 
 it.sequential('createResumeSlashCommand resumes the requested target and rejects extra arguments', async () => {
@@ -98,6 +102,7 @@ it.sequential('createResumeSlashCommand resumes the requested target and rejects
     listConversations: () => [],
     resumeConversation,
     addSystemMessage: (text) => messages.push(text),
+    replaceInput: () => {},
   });
 
   expect(command.action('saved-1')).toBe(true);

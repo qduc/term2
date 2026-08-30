@@ -2,7 +2,7 @@ import { it, expect } from 'vitest';
 import { findPathTrigger } from './input/triggers.js';
 import { determineActiveMenu, type ActiveMenu } from './input/determine-active-menu.js';
 import type { SlashCommand } from '../slash-commands.js';
-import { SKILLS_TRIGGER } from './input/triggers.js';
+import { SKILLS_TRIGGER, RESUME_TRIGGER } from './input/triggers.js';
 import { MODEL_SETTING_CONFIGS } from '../utils/ai/model-settings.js';
 
 const commandMetadata: SlashCommand[] = [
@@ -32,6 +32,13 @@ const commandMetadata: SlashCommand[] = [
     description: 'Activate a skill',
     expectsArgs: true,
     completion: { type: 'skills', trigger: SKILLS_TRIGGER },
+    action: () => {},
+  },
+  {
+    name: 'resume',
+    description: 'Resume conversation',
+    expectsArgs: true,
+    completion: { type: 'resume', trigger: RESUME_TRIGGER },
     action: () => {},
   },
 ];
@@ -203,4 +210,14 @@ it('determineActiveMenu - skills trigger (priority 2, beats slash)', () => {
 it('determineActiveMenu - skills does not activate when no space after /skills', () => {
   // Without trailing space, it's a slash command (since no space yet)
   expect(determine('/skills')).toEqual({ type: 'slash' });
+});
+
+it('determineActiveMenu - resume trigger (priority 2, beats slash)', () => {
+  expect(determine(RESUME_TRIGGER)).toEqual({ type: 'resume', startIndex: RESUME_TRIGGER.length });
+  expect(determine('/resume session-123', 19)).toEqual({ type: 'resume', startIndex: RESUME_TRIGGER.length });
+  expect(determine('/resume ', 3)).toEqual({ type: 'none' });
+});
+
+it('determineActiveMenu - resume does not activate when no space after /resume', () => {
+  expect(determine('/resume')).toEqual({ type: 'slash' });
 });

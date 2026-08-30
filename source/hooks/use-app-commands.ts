@@ -122,7 +122,9 @@ export const useAppCommands = ({
       guardBusyTurn(createClearSlashCommand(clearConversation, addSystemMessage)),
       createCopySlashCommand({ messages, addSystemMessage, openCopyMenu }),
       createUsageSlashCommand(addSystemMessage, getSessionUsage, refreshProviderUsage),
-      guardBusyTurn(createResumeSlashCommand({ listConversations, resumeConversation, addSystemMessage })),
+      guardBusyTurn(
+        createResumeSlashCommand({ listConversations, resumeConversation, addSystemMessage, replaceInput }),
+      ),
       guardBusyTurn(
         createRewindSlashCommand({
           name: 'rewind',
@@ -191,7 +193,7 @@ export const useAppCommands = ({
           disableOtherModes,
         },
       ),
-      createAutoApproveSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage }),
+      createAutoApproveSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage, replaceInput }),
       {
         name: 'plan',
         description: 'Toggle plan mode (read-only research/planning mode)',

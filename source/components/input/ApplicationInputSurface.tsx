@@ -8,6 +8,7 @@ import { useSettingsCompletion } from '../../hooks/use-settings-completion.js';
 import { useSettingsValueCompletion } from '../../hooks/use-settings-value-completion.js';
 import { useModelSelection } from '../../hooks/use-model-selection.js';
 import { useSkillSelection } from '../../hooks/use-skill-selection.js';
+import { useResumeSelection } from '../../hooks/use-resume-selection.js';
 import { createDefaultTriggerRegistry } from './triggers.js';
 import { MenuSurface } from './MenuSurface.js';
 import type { MenuServices } from './menu-registry.js';
@@ -16,6 +17,7 @@ import type { SettingsService } from '../../services/settings/settings-service.j
 import type { LoggingService } from '../../services/logging/logging-service.js';
 import type { HistoryService } from '../../services/history-service.js';
 import type { SkillInfo, SkillsService } from '../../services/skills/skills-service.js';
+import type { ConversationListEntry } from '../../services/conversation/conversation-persistence.js';
 import type { UserTurn } from '../../types/user-turn.js';
 import type { SubmissionMutation } from '../../services/conversation/conversation-adapter.js';
 import type { CopySelection } from '../../utils/copy-selections.js';
@@ -46,6 +48,8 @@ export type ApplicationInputSurfaceProps = {
   onUnavailableModelSelected?: (provider: string) => void;
   onSkillSelected?: (skill: SkillInfo) => void;
   onCopySelection?: (selection: CopySelection) => void;
+  listConversations?: () => ConversationListEntry[];
+  resumeConversation?: (target?: string) => void | Promise<void>;
 };
 
 export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props) => {
@@ -59,6 +63,9 @@ export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props)
   const skills = useSkillSelection({
     skillsService: props.skillsService ?? ({ getAvailableSkills: () => [] } as unknown as SkillsService),
   });
+  const resume = useResumeSelection({
+    listConversations: props.listConversations ?? (() => []),
+  });
 
   useEffect(() => {
     controller.setTriggerRegistry(
@@ -66,6 +73,7 @@ export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props)
         'slash',
         'path',
         'skills',
+        'resume',
         'settings',
         'settings-value-child',
         'settings-mentor-pool-child',
@@ -106,6 +114,7 @@ export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props)
     slash,
     path,
     skills,
+    resume,
     settings,
     settingsValue,
     models,
@@ -114,6 +123,7 @@ export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props)
     onSkillSelected: props.onSkillSelected,
     onCopySelection: props.onCopySelection,
     onSystemMessage: props.onSystemMessage,
+    onResumeConversation: props.resumeConversation,
   };
 
   if (stack.length > 0) {

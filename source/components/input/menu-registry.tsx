@@ -10,6 +10,7 @@ import { SettingsValueMenuSession } from './SettingsValueMenuSession.js';
 import { ModelMenuSession } from './ModelMenuSession.js';
 import { CopyMenuSession } from './CopyMenuSession.js';
 import { MentorPoolMenuSession } from './MentorPoolMenuSession.js';
+import { ResumeMenuSession } from './ResumeMenuSession.js';
 
 export type MenuServices = Record<string, unknown>;
 
@@ -28,6 +29,7 @@ export type MenuRegistry = {
 const defaultRegistry: MenuRegistry = {
   path: PathMenuSession as React.ComponentType<any>,
   skills: SkillsMenuSession as React.ComponentType<any>,
+  resume: ResumeMenuSession as React.ComponentType<any>,
   copy: CopyMenuSession,
   rewind: RewindMenuSession,
   providers: ProviderMenuSession,

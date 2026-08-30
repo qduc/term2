@@ -144,12 +144,14 @@ validates the existing audit production code but does not include the
 experiment-only `scripts/` runner. The runner was executed successfully through
 `tsx`; no production behavior was changed.
 
-`git status --short` at completion:
+### Experiment bookkeeping
 
-```text
-?? EXPERIMENT-P1.md
-?? scripts/experiments/
-```
+The experiment artifacts are tracked, not uncommitted or untracked:
+`EXPERIMENT-P1.md` and `scripts/experiments/session-audit-p1.ts` were added in
+commit `eff6f2bc` (`test(conversation): add session audit experiment runner,
+findings, and edge case tests`). The production audit service is separately
+tracked in `b9e061e2` (`feat(conversation): report how a saved session ended,
+without resuming it`).
 
 ## Unresolved risks and next evidence needed
 
@@ -173,4 +175,3 @@ experiment-only `scripts/` runner. The runner was executed successfully through
 6. This sample is one local data directory and one recency window. It says
    nothing about older formats, permission failures, corrupted logs, or a
    broader user population.
-

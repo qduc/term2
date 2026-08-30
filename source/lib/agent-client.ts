@@ -61,8 +61,12 @@ import {
 } from '../services/agent-runtime/context-compaction/local-context-compactor.js';
 import { CONTEXT_COMPACTION_INSTRUCTIONS } from '../prompts/context-compaction.js';
 import { getCatalogModel } from '../providers/model-catalog/catalog.js';
-import { isCodexResponsesLiteModel } from '../providers/codex-responses-model.js';
 import { supportsContextCompactionModel } from '../providers/openai-responses-model.js';
+import {
+  estimateContext,
+  resolveCompactionThreshold,
+  shouldDeferAutomaticCompaction,
+} from '../services/agent-runtime/context-compaction/index.js';
 import { projectConversationMessage } from '../services/conversation/conversation-message-projection.js';
 import { isLocalContextSummary } from '../contracts/provider-input.js';
 
@@ -102,6 +106,7 @@ export class AgentClient {
   #logger: ILoggingService;
   #settings: ISettingsService;
   #sessionContextService: ISessionContextService;
+  #requestCapture?: ProviderRequestCapture;
   #subagentBridge: SubagentBridge | null = null;
   #askUserAnswerStore: AskUserAnswerStore;
   #isDisposed = false;
@@ -124,10 +129,98 @@ export class AgentClient {
     this.#streamedModelCache.clear();
   }
 
+  #resolveStreamedModel(selectedModel: string): StreamedModelTurn | Promise<StreamedModelTurn> {
+    const providerId = this.#agentConfig.getProvider();
+    const provider = getProvider(providerId);
+    if (!provider?.createStreamedModel) {
+      throw new Error(`Provider '${providerId}' does not expose an application streamed model.`);
+    }
+    const cacheKey = `${providerId}\u0000${selectedModel}`;
+    let model = this.#streamedModelCache.get(cacheKey);
+    if (!model) {
+      model = provider.createStreamedModel(selectedModel, {
+        settingsService: this.#settings,
+        loggingService: this.#logger,
+        sessionContextService: this.#sessionContextService,
+        onRetry: () => this.#retryCallback?.(),
+        retryAttempts: this.#retryAttempts,
+        requestCapture: this.#requestCapture,
+        contextCompactionSessionState: this.#contextCompactionSessionState,
+      });
+      this.#streamedModelCache.set(cacheKey, model);
+      if (model instanceof Promise) {
+        void model.catch(() => {
+          if (this.#streamedModelCache.get(cacheKey) === model) this.#streamedModelCache.delete(cacheKey);
+        });
+      }
+    }
+    return model;
+  }
+
+  async #compactCodexHistory(input: {
+    history: readonly ProviderInputItem[];
+    model: string;
+    automaticCompactionsThisRun: number;
+    signal?: AbortSignal;
+    onStarted: (provider: string) => void;
+    manual: boolean;
+  }): Promise<
+    | { kind: 'unchanged' }
+    | { kind: 'failed'; provider: string }
+    | { kind: 'compacted'; history: ProviderInputItem[]; modelInput: ProviderInputItem[] }
+  > {
+    const catalog = getCatalogModel('codex', input.model);
+    const threshold = resolveCompactionThreshold({
+      contextWindow: catalog?.contextWindow,
+      compactThreshold: this.#settings.get('agent.contextCompaction.compactThreshold') ?? 0.8,
+      compactThresholdTokens: this.#settings.get('agent.contextCompaction.compactThresholdTokens') ?? null,
+    });
+    const estimate = estimateContext({
+      history: input.history,
+      contextWindow: catalog?.contextWindow,
+      maxOutputTokens: catalog?.maxTokens,
+    });
+    if (!input.manual) {
+      if (!threshold.available || estimate.renderedInputTokens < threshold.effectiveThreshold) {
+        return { kind: 'unchanged' };
+      }
+      const deferred = shouldDeferAutomaticCompaction({
+        automaticCompactionsThisRun: input.automaticCompactionsThisRun,
+        renderedInputTokens: estimate.renderedInputTokens,
+        hasCompleteNewUserTurn: true,
+      });
+      if (deferred) return { kind: 'unchanged' };
+    }
+    const streamed = await this.#resolveStreamedModel(input.model);
+    if (!streamed.compactHistory) {
+      this.#logger.warn('Codex compact endpoint is unavailable; continuing with uncompacted history', {
+        model: input.model,
+      });
+      return { kind: 'unchanged' };
+    }
+    input.onStarted('codex');
+    try {
+      const compacted = await streamed.compactHistory({
+        input: normalizeApplicationInput(input.history),
+        signal: input.signal,
+      });
+      const history = compacted.history as ProviderInputItem[];
+      if (history.length === 0) {
+        throw new Error('Codex compact endpoint returned an empty history');
+      }
+      return { kind: 'compacted', history, modelInput: history };
+    } catch (error) {
+      this.#logger.warn('Codex compact endpoint failed; continuing with uncompacted history', {
+        model: input.model,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { kind: 'failed', provider: 'codex' };
+    }
+  }
+
   #boundaryCompaction() {
     const enabled = this.#settings.get('agent.contextCompaction.enabled');
-    const configuredMode = this.#settings.get('agent.contextCompaction.mode') ?? 'native';
-    if (!enabled || configuredMode === 'native') return undefined;
+    if (!enabled) return undefined;
     return {
       compact: async ({
         history,
@@ -144,15 +237,21 @@ export class AgentClient {
         const provider = this.#agentConfig.getProvider();
         const model = this.#agentConfig.getModel();
         const reasoningEffort = this.#settings.get('agent.reasoningEffort');
-        // Native compaction is admitted by the provider capability plus the
-        // model allowlist. Codex Responses-Lite still rejects the field, so
-        // auto mode keeps using local compaction for that model only.
-        const nativeAvailable =
+        const openaiInlineNative =
           getProvider(provider)?.capabilities?.supportsContextCompaction === true &&
           supportsContextCompactionModel(model) &&
-          !(provider === 'codex' && isCodexResponsesLiteModel(model)) &&
           !this.#contextCompactionSessionState.disabled;
-        if (mode === 'auto' && nativeAvailable) return { kind: 'unchanged' as const };
+        if (provider === 'codex' && mode !== 'local') {
+          return this.#compactCodexHistory({
+            history,
+            model,
+            automaticCompactionsThisRun,
+            signal,
+            onStarted,
+            manual: false,
+          });
+        }
+        if (mode === 'native' || (mode === 'auto' && openaiInlineNative)) return { kind: 'unchanged' as const };
 
         const catalog = getCatalogModel(provider, model);
         const configuredMaxOutput = this.#settings.get('agent.maxOutputTokens');
@@ -426,41 +525,14 @@ export class AgentClient {
     );
     this.#maxTurns = maxTurns ?? (agentOverride ? 1 : 20);
     this.#retryAttempts = retryAttempts ?? 2;
+    this.#requestCapture = deps.requestCapture;
     this.#applicationRunLoop = new ApplicationRunLoop({
       toolLifecycle: this.#toolLifecycle,
       getOnToolDispatch: () => this.#onToolDispatch,
       contextCompactionSessionState: this.#contextCompactionSessionState,
       resolveMaxParallelToolCalls: () => deps.settings.get('agent.maxParallelToolCalls'),
       logDiagnostic: (message, meta) => deps.logger.info(message, meta),
-      resolveModel: (selectedModel) => {
-        const providerId = this.#agentConfig.getProvider();
-        const provider = getProvider(providerId);
-        if (!provider?.createStreamedModel) {
-          throw new Error(`Provider '${providerId}' does not expose an application streamed model.`);
-        }
-        const cacheKey = `${providerId}\u0000${selectedModel}`;
-        let model = this.#streamedModelCache.get(cacheKey);
-        if (!model) {
-          model = provider.createStreamedModel(selectedModel, {
-            settingsService: deps.settings,
-            loggingService: deps.logger,
-            sessionContextService: deps.sessionContextService,
-            onRetry: () => this.#retryCallback?.(),
-            retryAttempts: this.#retryAttempts,
-            requestCapture: deps.requestCapture,
-            contextCompactionSessionState: this.#contextCompactionSessionState,
-          });
-          this.#streamedModelCache.set(cacheKey, model);
-          if (model instanceof Promise) {
-            void model.catch(() => {
-              // A factory may be lazy. Evict only its own failed promise: a
-              // configuration refresh can have already installed a replacement.
-              if (this.#streamedModelCache.get(cacheKey) === model) this.#streamedModelCache.delete(cacheKey);
-            });
-          }
-        }
-        return model;
-      },
+      resolveModel: (selectedModel) => this.#resolveStreamedModel(selectedModel),
     });
     this.#chatService = new AgentChatService({
       agentConfig: this.#agentConfig,
@@ -981,6 +1053,24 @@ export class AgentClient {
     });
     this.#observeCompletion(stream, state, provider, this.#agentConfig.getModel());
     return stream;
+  }
+
+  async compactCodexSessionHistory(
+    history: readonly ProviderInputItem[],
+    signal?: AbortSignal,
+  ): Promise<
+    { kind: 'unchanged' } | { kind: 'failed'; provider: string } | { kind: 'compacted'; history: ProviderInputItem[] }
+  > {
+    const outcome = await this.#compactCodexHistory({
+      history,
+      model: this.#agentConfig.getModel(),
+      automaticCompactionsThisRun: 0,
+      signal,
+      onStarted: () => undefined,
+      manual: true,
+    });
+    if (outcome.kind === 'compacted') return { kind: 'compacted', history: outcome.history };
+    return outcome;
   }
 
   async chat(

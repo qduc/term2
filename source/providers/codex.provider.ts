@@ -452,11 +452,9 @@ async function fetchCodexModels(
 
 const CODEX_CAPABILITIES = {
   supportsConversationChaining: true,
-  // Standard Codex Responses (sol/terra/gpt-5.3-codex) accept server-side
-  // context_management. Responses-Lite (gpt-5.6-luna) still rejects it with
-  // 400 unsupported_value; that model is gated off at the transport and at
-  // auto-mode native admission, and falls back to local compaction.
-  supportsContextCompaction: true,
+  // `context_management` on create is api.openai.com only. Codex
+  // (chatgpt.com/backend-api/codex) compacts via POST /responses/compact.
+  supportsContextCompaction: false,
   supportsPromptCacheKey: true,
   usesStrictToolSchema: true,
 } as const;

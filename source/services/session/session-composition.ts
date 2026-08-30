@@ -7,6 +7,7 @@ import {
   LocalContextCompactor,
   type LocalCompactionOutcome,
 } from '../agent-runtime/context-compaction/local-context-compactor.js';
+import { estimateContext } from '../agent-runtime/context-compaction/index.js';
 import type { SteerOutcome } from '../agent-runtime/application-run-loop.js';
 import { ConversationStore } from '../conversation/conversation-store.js';
 import { ApprovalState, type PendingApprovalContext } from '../approval/approval-state.js';
@@ -849,6 +850,60 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
       error.name = 'AbortError';
       return error;
     };
+    const compactCodex = getMethod<
+      [readonly ProviderInputItem[], AbortSignal?],
+      Promise<
+        | { kind: 'unchanged' }
+        | { kind: 'failed'; provider: string }
+        | { kind: 'compacted'; history: ProviderInputItem[] }
+      >
+    >(agentClient, 'compactCodexSessionHistory');
+    if (provider === 'codex' && compactCodex) {
+      const before = estimateContext({
+        history: snapshot.history,
+        contextWindow: catalog?.contextWindow,
+        maxOutputTokens: catalog?.maxTokens,
+      });
+      const remote = await compactCodex.call(agentClient, snapshot.history, options?.signal);
+      if (remote.kind !== 'compacted') {
+        return remote.kind === 'failed'
+          ? {
+              kind: 'blocked',
+              reason: 'result_still_too_large',
+              estimate: before,
+            }
+          : { kind: 'not_needed', estimate: before };
+      }
+      if (!conversationStore.replaceHistoryAtRevision(snapshot.revision, remote.history)) {
+        return { kind: 'stale' };
+      }
+      providerContinuity.clear();
+      const after = estimateContext({
+        history: remote.history,
+        contextWindow: catalog?.contextWindow,
+        maxOutputTokens: catalog?.maxTokens,
+      });
+      return {
+        kind: 'compacted',
+        checkpoint: {
+          type: 'message',
+          role: 'system',
+          content: '',
+          contextSummary: {
+            version: 1,
+            strategy: 'local',
+            estimatedTokensBefore: before.renderedInputTokens,
+            estimatedTokensAfter: after.renderedInputTokens,
+          },
+        },
+        hotTail: [],
+        estimate: after,
+        rearmAtTokens: after.renderedInputTokens,
+        usage: { inputTokens: 0, outputTokens: 0 },
+        costRecords: [],
+        droppedOpaqueItems: 0,
+      };
+    }
     const compactor = new LocalContextCompactor({
       generate: async ({ renderedInput, maxOutputTokens, signal }) => {
         if (signal?.aborted) throw abortError();

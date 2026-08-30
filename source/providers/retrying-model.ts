@@ -101,6 +101,15 @@ export class RetryingModel implements StreamedModelTurn {
     await (this.model as { close?: () => Promise<void> }).close?.();
   }
 
+  compactHistory(
+    request: Parameters<NonNullable<StreamedModelTurn['compactHistory']>>[0],
+  ): ReturnType<NonNullable<StreamedModelTurn['compactHistory']>> {
+    if (!this.model.compactHistory) {
+      return Promise.reject(new Error('Underlying model does not support compactHistory'));
+    }
+    return this.model.compactHistory(request);
+  }
+
   #canRetry(error: unknown, attempt: number): boolean {
     return attempt < this.options.retryAttempts && this.#isRetryable(error);
   }

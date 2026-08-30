@@ -338,8 +338,8 @@ function buildModelSettings({
 
   const contextCompactionEnabled = deps.settings.get('agent.contextCompaction.enabled');
   const contextCompactionMode = deps.settings.get('agent.contextCompaction.mode') ?? 'native';
-  // Provider-owned: Codex standard Responses accepts context_management;
-  // Responses-Lite still rejects it and is gated in the Codex transport.
+  // Inline `context_management` is api.openai.com only. Codex uses POST
+  // /responses/compact at the request boundary instead.
   const providerCapabilities = getProviderCapabilities(deps.providerId);
   if (
     contextCompactionEnabled &&

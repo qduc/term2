@@ -809,6 +809,10 @@ export class AgentClient {
     return this.#backgroundShellRegistry?.list() ?? [];
   }
 
+  getBackgroundShellOutputTail(jobId: string, maxBytes?: number): string | undefined {
+    return this.#backgroundShellOutput?.store.readTail(jobId, maxBytes)?.text;
+  }
+
   requestBackgroundShellStop(jobId: string): boolean {
     return this.#backgroundShellRegistry?.cancel(jobId) ?? false;
   }

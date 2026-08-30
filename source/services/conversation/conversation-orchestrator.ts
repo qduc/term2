@@ -245,6 +245,13 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
       const lines = [header];
       const statusDesc = details.status ? `status: ${details.status} | ` : '';
       lines.push(`  ${statusDesc}still running, elapsed ${elapsedSeconds}s, check-in #${notification.checkInIndex}`);
+
+      if (details.outputTail) {
+        lines.push('  recent output:');
+        const tailLines = details.outputTail.split('\n').map((line) => `    ${line}`);
+        lines.push(...tailLines);
+      }
+
       return lines.join('\n');
     });
     sections.push(

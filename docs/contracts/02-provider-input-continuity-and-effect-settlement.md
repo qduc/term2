@@ -19,6 +19,7 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
 | C2.6a | A foreign `provider_opaque` item never serializes into another provider's request. | Resume/compaction blob sent to the wrong vendor; provider 400 or silent history corruption. |
 | C2.6b | Same-provider opaque is allowed **only** on adapters that own an opaque lane: OpenAI Responses (`provider === 'openai'`) and Chat Completions / runtime-compatible (`tag === providerId` **or** legacy `'openai-compatible'`). Codex and AI SDK do not own an opaque lane: their public adapters drop every `provider_opaque` item before serialization, while their lower-level serializers reject a bypassed item. | “Allow own tag” on Codex/AI SDK would be a lie: they have no opaque round-trip. The four adapter/converter proofs below establish fail-closed non-serialization; Codex output conversion also rejects unknown item types (`codex-responses-model.ts:326-349`) and never emits `provider_opaque`. |
 | C2.6c | Production turns use `stream()`. Missing `getResponse` is not a defect. If `getResponse` exists, it must apply the **same** splice/non-serialization rules and must not treat `failed`/`incomplete` as success. | Unary success on a failed Responses body would look like a completed turn to any future caller. |
+| C2.7 | A retry that omits `previous_response_id` must send self-contained full history. A caller-supplied chained delta is never retried without its anchor by the run loop or the Codex adapter. | Follow-up turns look amnesiac: the model sees only the newest sentence ("This.") and asks for context it already had. |
 
 ## 2. Owners
 
@@ -37,7 +38,8 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
   `retry_fresh`, `terminate`); ledger settlement on stream failure
   (`settleOpenCallsOnStreamFailure`, `markOpenCallsAborted`);
   `retry-classifier`/`recovery-policy` (chain_recovery, transport_downgrade ->
-  `retry_fresh` full-history).
+  `retry_fresh` full-history). C2.7 is enforced by `classifyInLoopModelRetry`
+  (`chained_delta_not_self_contained`) and `CodexResponsesWSModel.#shouldFallbackWithoutServerHistory`.
 
 ## 3. Execution paths that share the contract
 
@@ -182,6 +184,7 @@ Status: **owner-reviewed 2026-08-14; focused command green.** Owners:
 | Out-of-order item | `conversation-state-projector.test.ts:53` "replaces a lone compact tool result with the ledger pair instead of duplicating it" | covered |
 | Chained request | `session-input-planner.test.ts:8` "carries the authoritative immutable history snapshot alongside the unchanged input plan"; `chained-input-filter.test.ts:178`, `:400` | covered |
 | Forced-full-history request | `session-input-planner.test.ts:55` "drops chaining and uses full history when the previous response still has unpaid tool debt" | covered |
+| Chained delta not retried statelessly | `application-run-loop.test.ts` "does not retry a chained delta without an anchor after Invalid previous_response_id"; `in-loop-model-retry.test.ts` "refuses in-loop chain recovery when the failed request was a chained delta"; `codex-responses-model.test.ts` "does not retry a caller-supplied chained delta after invalid previous_response_id"; `conversation-session.lifecycle.test.ts` "rebuilds full history instead of retrying a chained delta after Invalid previous_response_id" | covered |
 | Transport-downgrade request | `recovery-policy.test.ts:62` "transport_downgrade produces retry_fresh with full_history"; `retry-classifier.test.ts:157` "classify returns transport_downgrade when the Responses websocket reaches its connection lifetime" | covered |
 
 **C2.6 adapter-isolation cells (supplementary to the C2.1–C2.5 minimum matrix above):**

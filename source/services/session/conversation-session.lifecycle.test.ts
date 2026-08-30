@@ -813,6 +813,63 @@ it('undoLastUserTurn() preserves earlier tool ledger entries that still belong t
   expect(retryCallIds.includes(secondToolCallId)).toBe(false);
 });
 
+it('rebuilds full history instead of retrying a chained delta after Invalid previous_response_id', async () => {
+  const firstStream = new MockStream([{ type: 'text_delta', text: 'First reply' }]);
+  firstStream.finalOutput = 'First reply';
+  firstStream.lastResponseId = 'resp-1';
+
+  const recoveredStream = new MockStream([{ type: 'text_delta', text: 'Recovered reply' }]);
+  recoveredStream.finalOutput = 'Recovered reply';
+  recoveredStream.lastResponseId = 'resp-2';
+
+  const calls: { input: unknown; opts?: any }[] = [];
+  const mockClient = createMockAgentClient({
+    getProvider() {
+      return 'codex';
+    },
+    supportsConversationChaining() {
+      return true;
+    },
+    async startStream(input: unknown, opts?: any) {
+      calls.push({ input, opts });
+      if (calls.length === 1) return firstStream;
+      if (calls.length === 2) {
+        const failed = new MockStream([]);
+        (failed as any)[Symbol.asyncIterator] = async function* () {
+          throw Object.assign(new Error('Invalid `previous_response_id`.'), { status: 400 });
+        };
+        return failed;
+      }
+      return recoveredStream;
+    },
+  });
+
+  const bundle = createConversationSession({
+    sessionId: 's1',
+    agentClient: mockClient,
+    deps: {
+      logger: mockLogger,
+      sessionContextService,
+      settingsService: createMockSettingsService([['agent.retryAttempts', 2]]),
+    },
+  });
+  const { turnCoordinator } = bundle;
+
+  for await (const _ of turnCoordinator.start('First message')) {
+  }
+  for await (const _ of turnCoordinator.start('no, you got it in reverse')) {
+  }
+
+  expect(calls.length).toBe(3);
+  expect(calls[1].opts?.previousResponseId).toBe('resp-1');
+  expect(calls[1].input).toBe('no, you got it in reverse');
+  expect(calls[2].opts?.previousResponseId).toBeFalsy();
+  expect(calls[2].opts?.disableChainingForAttempt).toBe(true);
+  expect(Array.isArray(calls[2].input)).toBe(true);
+  expect(JSON.stringify(calls[2].input)).toContain('First message');
+  expect(JSON.stringify(calls[2].input)).toContain('no, you got it in reverse');
+});
+
 it('aborting a streaming turn clears provider continuity and forces full history replay on the next turn', async () => {
   const stream1 = new MockStream([{ type: 'text_delta', text: 'First reply' }]);
   stream1.finalOutput = 'First reply';

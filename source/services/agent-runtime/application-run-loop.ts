@@ -1094,7 +1094,9 @@ export class ApplicationRunLoop {
         } catch (error) {
           if (error instanceof GenerationGuardError) requestAbortController.abort();
 
-          const decision = classifyInLoopModelRetry(error, attempt, maxRetries);
+          const decision = classifyInLoopModelRetry(error, attempt, maxRetries, Math.random, {
+            previousResponseId: activeRequest?.previousResponseId,
+          });
           if (decision.retryable && !options.signal?.aborted) {
             attempt++;
             state.input.splice(inputLengthBefore);

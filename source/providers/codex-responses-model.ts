@@ -1552,6 +1552,21 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     return rest;
   }
 
+  #callerSuppliedPreviousResponseId(request: any): boolean {
+    return typeof request?.previousResponseId === 'string' && request.previousResponseId.length > 0;
+  }
+
+  /**
+   * Provider-injected chaining may be dropped and the same complete logical
+   * request retried. A caller-supplied `previousResponseId` means the input is
+   * a chained delta and is not a conversation without that anchor.
+   */
+  #shouldFallbackWithoutServerHistory(request: any): boolean {
+    if (this.#callerSuppliedPreviousResponseId(request)) return false;
+    if (hasToolResultInput(request)) return false;
+    return true;
+  }
+
   protected override async fetchUnaryResponse(request: StreamedModelTurnRequest): Promise<any> {
     const run = async () => {
       let attemptedWithServerHistory = false;
@@ -1579,7 +1594,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         this.#recordRejectedChainRequest(error);
         if (isPreviousResponseUnavailableError(error) && attemptedWithServerHistory) {
           this.#forgetCodexResponseId();
-          if (isPreviousResponseUnavailableError(error) && hasToolResultInput(request)) {
+          if (!this.#shouldFallbackWithoutServerHistory(request)) {
             throw error;
           }
           const fallbackRequest = this.#withoutCodexServerHistory(request);
@@ -1636,7 +1651,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       this.#recordRejectedChainRequest(error);
       if (isPreviousResponseUnavailableError(error) && attemptedWithServerHistory && !receivedRawFrame) {
         this.#forgetCodexResponseId();
-        if (isPreviousResponseUnavailableError(error) && hasToolResultInput(request)) {
+        if (!this.#shouldFallbackWithoutServerHistory(request)) {
           throw error;
         }
         const fallbackRequest = this.#withoutCodexServerHistory(request);

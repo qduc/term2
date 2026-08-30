@@ -3379,6 +3379,56 @@ it('CodexResponsesWSModel invalidates Luna wire state on invalid previous_respon
   }
 });
 
+it('CodexResponsesWSModel does not retry a caller-supplied chained delta after invalid previous_response_id', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const seenRequests: any[] = [];
+  const invalidPrevResponseIdError = Object.assign(
+    new Error(
+      'Error: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"Invalid `previous_response_id`."}}',
+    ),
+    { status: 400 },
+  );
+  transport.fetchResponse = async function (request: any) {
+    seenRequests.push(request);
+    throw invalidPrevResponseIdError;
+  };
+
+  const mockClient = {
+    baseURL: 'https://api.openai.com',
+    apiKey: 'test-key',
+    _options: {},
+  };
+  const tokenManager = {
+    getOrRefreshAccessToken: async () => 'token',
+    getAccountId: () => 'acc_123',
+  };
+  const model = new CodexResponsesWSModel(
+    mockClient as any,
+    'gpt-5.3-codex',
+    tokenManager as any,
+    undefined,
+    undefined,
+    {
+      getContext: () => ({ sessionId: 'session-lossy-delta', traceId: 'trace-lossy-delta' } as any),
+      runWithContext: <T>(_context: any, fn: () => T) => fn(),
+    },
+    transport,
+  );
+
+  await expect(
+    collect(
+      model.stream({
+        previousResponseId: 'resp-stale',
+        input: [{ type: 'message', role: 'user', content: [{ type: 'text', text: 'This' }] }],
+        tools: [],
+      } as any),
+    ),
+  ).rejects.toThrow(/previous_response_id/i);
+
+  expect(seenRequests).toHaveLength(1);
+  expect(seenRequests[0].previousResponseId).toBe('resp-stale');
+});
+
 it('CodexResponsesWSModel allows unchained chain_recovery fallback after Luna invalid previous_response_id', async () => {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const seenRequests: any[] = [];

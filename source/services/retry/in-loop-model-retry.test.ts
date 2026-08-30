@@ -16,6 +16,40 @@ describe('in-loop-model-retry', () => {
     }
   });
 
+  it('refuses in-loop chain recovery when the failed request was a chained delta', () => {
+    const error = new Error('Invalid `previous_response_id`.');
+    const decision = classifyInLoopModelRetry(error, 0, 2, () => 0.5, {
+      previousResponseId: 'resp-prior',
+    });
+
+    expect(decision.retryable).toBe(false);
+    if (!decision.retryable) {
+      expect(decision.reason).toBe('chained_delta_not_self_contained');
+    }
+  });
+
+  it('refuses in-loop retry of a chained delta after a connection drop', () => {
+    const error = new WebSocketClosedEarlyError({ code: 1006, reason: '', unsentCount: 0 });
+    const decision = classifyInLoopModelRetry(error, 0, 2, () => 0.5, {
+      previousResponseId: 'resp-prior',
+    });
+
+    expect(decision.retryable).toBe(false);
+    if (!decision.retryable) {
+      expect(decision.reason).toBe('chained_delta_not_self_contained');
+    }
+  });
+
+  it('still recovers Invalid previous_response_id in-loop when the request was already unchained', () => {
+    const error = new Error('Invalid `previous_response_id`.');
+    const decision = classifyInLoopModelRetry(error, 0, 2, () => 0.5);
+
+    expect(decision.retryable).toBe(true);
+    if (decision.retryable) {
+      expect(decision.kind).toBe('chain_recovery');
+    }
+  });
+
   it('classifies AmbiguousModelOutcomeError wrapping a close error as chain_recovery', () => {
     const cause = new WebSocketClosedEarlyError({ code: 1006, reason: '' });
     const error = new AmbiguousModelOutcomeError('Stream ended early', { cause });

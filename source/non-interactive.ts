@@ -25,6 +25,8 @@ import { primeActiveModeNoticeIfActive } from './services/mode-notices.js';
 export interface NonInteractiveConfig {
   prompt: string;
   autoApprove: boolean;
+  quiet?: boolean;
+  showReasoning?: boolean;
   stdout?: NodeJS.WritableStream;
   stderr?: NodeJS.WritableStream;
   settingsService?: ISettingsService;
@@ -70,23 +72,72 @@ const safePreview = (value: unknown, maxLen = 500): string => {
   }
 };
 
-const formatEventForStderr = (event: ConversationEvent): string | null => {
+const formatToolSummary = (toolName: string, args: unknown): string => {
+  if (!args || typeof args !== 'object') {
+    return `[tool] ${toolName}`;
+  }
+  const obj = args as Record<string, unknown>;
+  if (toolName === 'shell' || toolName === 'bash') {
+    if (typeof obj.command === 'string') {
+      return `[tool] ${toolName}: ${safePreview(obj.command, 80)}`;
+    }
+  }
+  if (
+    toolName === 'read_file' ||
+    toolName === 'create_file' ||
+    toolName === 'write_to_file' ||
+    toolName === 'replace_file_content' ||
+    toolName === 'search_replace' ||
+    toolName === 'apply_patch'
+  ) {
+    const file = obj.TargetFile || obj.targetFile || obj.path || obj.filePath || obj.file;
+    if (typeof file === 'string') {
+      return `[tool] ${toolName}: ${file}`;
+    }
+  }
+  if (toolName === 'grep_search' || toolName === 'search_web') {
+    const q = obj.Query || obj.query;
+    if (typeof q === 'string') {
+      return `[tool] ${toolName}: ${safePreview(q, 60)}`;
+    }
+  }
+  if (toolName === 'find_by_name' || toolName === 'list_dir') {
+    const dirOrPattern = obj.Pattern || obj.DirectoryPath || obj.path || obj.SearchPath;
+    if (typeof dirOrPattern === 'string') {
+      return `[tool] ${toolName}: ${dirOrPattern}`;
+    }
+  }
+  const firstStr = Object.values(obj).find((v) => typeof v === 'string') as string | undefined;
+  if (firstStr) {
+    return `[tool] ${toolName}: ${safePreview(firstStr, 60)}`;
+  }
+  return `[tool] ${toolName}`;
+};
+
+const formatEventForStderr = (event: ConversationEvent, quiet = false): string | null => {
+  if (event.type === 'error') {
+    return `error ${event.message}\n`;
+  }
+  if (quiet) {
+    return null;
+  }
   switch (event.type) {
     case 'tool_started':
-      return `tool_started ${event.toolName} ${safePreview(event.arguments)}\n`;
+      return `${formatToolSummary(event.toolName, event.arguments)}\n`;
     case 'subagent_tool_started':
-      return `subagent_tool_started ${event.role} ${event.toolName} ${safePreview(event.arguments)}\n`;
+      return `[subagent: ${event.role}] ${formatToolSummary(event.toolName, event.arguments).replace(
+        /^\[tool\]\s*/,
+        '',
+      )}\n`;
     case 'command_message':
-      return `command_message ${event.message.status} ${event.message.command}\n`;
+      return null;
     case 'approval_required':
-      return `approval_required ${event.approval.toolName}\n`;
+      return `[approval required] ${event.approval.toolName}\n`;
     case 'retry':
       if (event.retryType === 'flex_service_tier') {
-        return `retry service_tier: ${event.errorMessage}\n`;
+        return `[retry] service_tier: ${event.errorMessage}\n`;
       }
-      return `retry ${event.toolName} ${event.attempt}/${event.maxRetries}: ${event.errorMessage}\n`;
-    case 'error':
-      return `error ${event.message}\n`;
+      return `[retry] ${event.toolName} (${event.attempt}/${event.maxRetries}): ${event.errorMessage}\n`;
     default:
       return null;
   }
@@ -113,7 +164,9 @@ export async function runWithSession(session: ConversationSessionLike, config: N
     }
 
     if (event.type === 'reasoning_delta') {
-      stderr.write(event.delta);
+      if (config.showReasoning) {
+        stderr.write(event.delta);
+      }
       return;
     }
 
@@ -128,15 +181,11 @@ export async function runWithSession(session: ConversationSessionLike, config: N
       return;
     }
 
-    const line = formatEventForStderr(event);
+    const line = formatEventForStderr(event, config.quiet);
     if (line) {
       stderr.write(line);
     }
   };
-
-  if (config.autoApprove) {
-    stderr.write('Warning: --auto-approve enabled. Tools may run without prompting.\n');
-  }
 
   try {
     type SendResult = Awaited<ReturnType<ConversationSessionLike['sendMessage']>>;

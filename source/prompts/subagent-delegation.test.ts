@@ -79,9 +79,9 @@ it('retains worker autonomy without mandatory pre-delegation ceremony', () => {
   expect(result).not.toContain('Before any `run_subagent` call, plan silently');
 });
 
-it('includes librarian delegation trigger when persistent memory is enabled', () => {
+it('uses the direct synthesis operation instead of advertising librarian delegation', () => {
   const result = getSubagentDelegationAddendum({ memoryEnabled: true });
-  expect(result.includes('librarian')).toBe(true);
+  expect(result.includes('librarian')).toBe(false);
 });
 
 it('does not advertise the librarian when persistent memory is disabled', () => {

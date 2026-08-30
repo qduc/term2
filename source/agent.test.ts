@@ -118,6 +118,7 @@ it('adds memory tools and summary-only context when memory is enabled, and neith
       'memory_get',
       'memory_search',
       'memory_retrieve',
+      'memory_synthesize',
       'memory_create',
       'memory_update',
       'memory_delete',
@@ -169,7 +170,7 @@ it('includes prior-session safety guidance for an interactive orchestrator root'
   expect(definition.instructions).toContain('stale or untrusted');
 });
 
-it('advertises librarian delegation when memory and subagent delegation are enabled', () => {
+it('advertises memory synthesis instead of librarian delegation', () => {
   const enabled = getAgentDefinition({
     settingsService: createMockSettingsService({ 'app.orchestratorMode': true }),
     loggingService: mockLogger,
@@ -181,7 +182,8 @@ it('advertises librarian delegation when memory and subagent delegation are enab
     ...orchestratorSubagentDeps,
   });
 
-  expect(enabled.instructions).toContain('`librarian`');
+  expect(enabled.instructions).not.toContain('`librarian`');
+  expect(enabled.instructions).toContain('Use memory_synthesize when the task depends on several memories');
   expect(disabled.instructions).not.toContain('`librarian`');
 });
 
@@ -600,6 +602,7 @@ it('getAgentDefinition keeps the orchestrator tool surface cache-stable with sta
     'memory_get',
     'memory_search',
     'memory_retrieve',
+    'memory_synthesize',
     'memory_create',
     'memory_update',
     'memory_delete',

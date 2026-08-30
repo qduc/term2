@@ -68,7 +68,7 @@ it('run_subagent_async schema accepts supported roles', () => {
     expect(tool.parameters.safeParse({ role, task: 'do work' }).success).toBe(true);
   }
   expect(tool.parameters.safeParse({ role: 'worker', task: 'do work' }).success).toBe(true);
-  expect(tool.parameters.safeParse({ role: 'librarian', task: 'do work' }).success).toBe(true);
+  expect(tool.parameters.safeParse({ role: 'librarian', task: 'do work' }).success).toBe(false);
   expect(tool.parameters.safeParse({ role: 'unknown', task: 'do work' }).success).toBe(false);
 });
 

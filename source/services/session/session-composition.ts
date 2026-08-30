@@ -423,6 +423,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     logger,
     settingsService,
     sessionContextService,
+    sessionAccess,
   });
 
   const appState = { statusMachine: new TurnStatusMachine() };

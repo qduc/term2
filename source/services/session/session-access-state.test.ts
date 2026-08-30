@@ -35,3 +35,20 @@ it('clears transient read and Docker state without removing the settings-backed 
   expect(access.requiresDockerApproval('indirect-command')).toBe(false);
   expect(access.hasDockerProject(process.cwd())).toBe(true);
 });
+
+it('tracks, checks, removes, and clears session-created files', () => {
+  const settings = createMockSettingsService({ 'sandbox.dockerHostControlProjects': [] });
+  const access = new SessionAccessState(settings);
+
+  access.recordCreatedFile('temp-scratch.txt', '/test/workspace');
+  expect(access.isCreatedInSession('temp-scratch.txt', '/test/workspace')).toBe(true);
+  expect(access.isCreatedInSession('/test/workspace/temp-scratch.txt')).toBe(true);
+  expect(access.isCreatedInSession('other.txt', '/test/workspace')).toBe(false);
+
+  access.removeCreatedFile('temp-scratch.txt', '/test/workspace');
+  expect(access.isCreatedInSession('temp-scratch.txt', '/test/workspace')).toBe(false);
+
+  access.recordCreatedFile('another.txt', '/test/workspace');
+  access.clearTransient();
+  expect(access.isCreatedInSession('another.txt', '/test/workspace')).toBe(false);
+});

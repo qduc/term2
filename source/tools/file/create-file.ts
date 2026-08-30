@@ -229,6 +229,8 @@ export function createCreateFileToolDefinition(deps: {
           await writeFile(targetPath, content, { encoding: 'utf8', flag: 'wx' });
         }
 
+        sessionAccess?.recordCreatedFile(targetPath, cwd);
+
         if (enableFileLogging) {
           loggingService.debug('File created', { path: filePath });
         }

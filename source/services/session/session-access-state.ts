@@ -11,11 +11,25 @@ export class SessionAccessState {
   readonly #readFolders = new Set<string>();
   readonly #editFiles = new Set<string>();
   readonly #editFolders = new Set<string>();
+  readonly #createdFiles = new Set<string>();
   readonly #dockerOnce = new Set<string>();
   readonly #dockerRoots = new Set<string>();
   readonly #dockerDenials = new Set<string>();
 
   constructor(private readonly settings: ISettingsService) {}
+
+  recordCreatedFile(file: string, baseDir: string = getActiveWorkspaceRoot()): void {
+    this.#createdFiles.add(path.resolve(baseDir, file));
+  }
+
+  isCreatedInSession(targetPath: string, baseDir: string = getActiveWorkspaceRoot()): boolean {
+    const target = path.resolve(baseDir, targetPath);
+    return this.#createdFiles.has(target);
+  }
+
+  removeCreatedFile(file: string, baseDir: string = getActiveWorkspaceRoot()): void {
+    this.#createdFiles.delete(path.resolve(baseDir, file));
+  }
 
   allowReadFolder(folder: string): void {
     this.#readFolders.add(folder);
@@ -80,6 +94,7 @@ export class SessionAccessState {
     this.#readFolders.clear();
     this.#editFiles.clear();
     this.#editFolders.clear();
+    this.#createdFiles.clear();
     this.#dockerOnce.clear();
     this.#dockerRoots.clear();
     this.#dockerDenials.clear();

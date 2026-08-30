@@ -14,6 +14,7 @@ import {
   SHELL_AUTO_APPROVAL_PROMPT_VERSION,
 } from '../../prompts/shell-auto-approval.js';
 import type { ShellAutoApprovalAgentClient } from '../conversation-agent-client.js';
+import type { SessionAccessState } from '../session/session-access-state.js';
 import { resolveAncillaryModelTier } from '../agent-runtime/model-resolver.js';
 import { projectConversationMessage } from '../conversation/conversation-message-projection.js';
 
@@ -407,6 +408,7 @@ export async function evaluateShellAutoApprovalAdvisories({
   agentClient,
   logger,
   sessionContextService,
+  sessionAccess,
   throwOnError = false,
   retryOptions,
 }: {
@@ -418,6 +420,7 @@ export async function evaluateShellAutoApprovalAdvisories({
   agentClient: ShellAutoApprovalAgentClient;
   logger: ILoggingService;
   sessionContextService: ISessionContextService;
+  sessionAccess?: SessionAccessState;
   throwOnError?: boolean;
   retryOptions?: {
     sleep?: (ms: number) => Promise<void>;
@@ -444,7 +447,9 @@ export async function evaluateShellAutoApprovalAdvisories({
   let needsElevatedReasoning = false;
   for (const { id, command, unsandboxed } of commands) {
     try {
-      const { status: safetyStatus, reasons } = classifyCommandDetailed(command, logger);
+      const { status: safetyStatus, reasons } = classifyCommandDetailed(command, logger, {
+        isSessionCreatedFile: (targetPath) => sessionAccess?.isCreatedInSession(targetPath) ?? false,
+      });
       if (safetyStatus === SafetyStatus.RED) {
         const detail = reasons.length > 0 ? reasons.join('; ') : 'matched a dangerous pattern';
         redSafetyDetails.set(id, detail);

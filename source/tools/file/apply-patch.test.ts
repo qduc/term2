@@ -5,6 +5,7 @@ import * as os from 'os';
 import { createApplyPatchToolDefinition } from './apply-patch.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
+import { SessionAccessState } from '../../services/session/session-access-state.js';
 import type { ILoggingService } from '../../services/service-interfaces.js';
 
 type PlainResultItem = {
@@ -569,5 +570,29 @@ it.sequential('needsApproval allows applying patch in SANDBOX_TEMP_DIR without a
     } finally {
       await fs.rm(tempFilePath, { force: true });
     }
+  });
+});
+
+it.sequential('execute create_file records created file in sessionAccess', async () => {
+  await withTempDir(async (dir) => {
+    const sessionAccess = new SessionAccessState(
+      createMockSettingsService({ 'sandbox.dockerHostControlProjects': [] }),
+    );
+    const tool = createApplyPatchToolDefinition({
+      loggingService: mockLoggingService,
+      settingsService: createMockSettingsService(),
+      sessionAccess,
+    });
+
+    const targetFile = 'patch-created.txt';
+    const result = await tool.execute({
+      type: 'create_file',
+      path: targetFile,
+      diff: '@@ -0,0 +1 @@\n+created with patch',
+    });
+
+    expect(result).toContain('Created patch-created.txt');
+    expect(sessionAccess.isCreatedInSession(targetFile, dir)).toBe(true);
+    expect(sessionAccess.isCreatedInSession(path.join(dir, targetFile))).toBe(true);
   });
 });

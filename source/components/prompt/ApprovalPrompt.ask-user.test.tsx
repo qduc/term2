@@ -9,7 +9,7 @@ import {
   ASK_USER_DECLINE_LABEL,
   ASK_USER_DECLINE_RESULT,
 } from '../../tools/agent/ask-user-constants.js';
-import { renderInAct } from '../../test-helpers/ink-testing.js';
+import { renderInAct, toVisibleText } from '../../test-helpers/ink-testing.js';
 
 const writeInput = async (stdin: { write: (input: string) => void }, input: string) => {
   await act(async () => {
@@ -104,6 +104,38 @@ it.sequential('ApprovalPrompt shows unsandboxed shell approvals in the header', 
   const output = lastFrame() ?? '';
   expect(output.includes('Agent wants to run in unsandboxed mode:')).toBe(true);
   expect(output.includes('curl https://example.com')).toBe(true);
+});
+
+it.sequential('ApprovalPrompt renders mixed system safety findings as separate severity lines', async () => {
+  const approval: ApprovalDescriptor = {
+    agentName: 'Agent',
+    toolName: 'shell',
+    argumentsText: JSON.stringify({ command: 'pkill -f chrome; echo ok; kill 7372' }),
+    rawInterruption: { type: 'shell' },
+    llmAdvisory: {
+      reasoning:
+        'Blocked by safety heuristics (RED): YELLOW: unknown or unlisted command: pkill; GREEN: argument ok; RED: blocked command: kill. Manual approval is strictly required.\n\nModel advisory: This command attempts to stop a process.',
+      approved: false,
+      model: 'test-auto-model',
+      source: 'system',
+    },
+  };
+
+  const { lastFrame } = await renderInAct(
+    <ApprovalPrompt approval={approval} onApprove={() => {}} onReject={() => {}} />,
+  );
+
+  const lines = toVisibleText(lastFrame() ?? '').split('\n');
+  const findingLines = [
+    ['YELLOW:', 'unknown or unlisted command: pkill'],
+    ['GREEN:', 'argument ok'],
+    ['RED:', 'blocked command: kill'],
+  ].map(([level, detail]) => lines.findIndex((line) => line.includes(level) && line.includes(detail)));
+
+  expect(findingLines.every((line) => line >= 0)).toBe(true);
+  expect(new Set(findingLines).size).toBe(3);
+  expect(lines.some((line) => line.includes('Manual approval is strictly required.'))).toBe(true);
+  expect(lines.some((line) => line.includes('Model advisory:'))).toBe(true);
 });
 
 it.sequential('ApprovalPrompt renders the Docker host-control menu without ordinary approval choices', async () => {

@@ -1,0 +1,8 @@
+We are about to implement a Grok weekly credit meter in this history-free
+workspace. Prior investigations and decisions are split across persistent
+memories, including at least one plausible but superseded design.
+
+Use your own memory tools to produce a decision-ready implementation brief
+covering the endpoint and wire shape, presentation contract, lifecycle/cadence,
+failure behavior, and any conflicting or superseded memory. Do not delegate,
+inspect the filesystem, or implement code. Return only the brief.

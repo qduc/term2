@@ -1,0 +1,19 @@
+Feature request:
+
+"My account's weekly credit meter never appears in the terminal. This provider
+does not include that number in normal inference replies, but its own command
+line client can show it. Add a small status-bar meter that shows the percentage
+used and, when available, the period reset date. It must not invent a zero when
+no reading is available."
+
+Find the relevant integration points and implement it. Add tests covering the
+feature.
+
+This project has several prior investigation results and design decisions in
+persistent memory. Recover the relevant context before changing code. Use the
+normal memory/delegation policy; no particular tool or role is mandatory. Treat
+the checked-out code as current ground truth when memory and code disagree.
+
+This is an isolated, history-free benchmark archive rather than a Git checkout.
+Edit it directly; do not create a worktree or commit.
+

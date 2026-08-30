@@ -4,6 +4,15 @@ Status: **shipped.** Implemented as `sendMessage` / `cancelRun` on
 `SubagentAsyncRegistry` (`source/services/subagents/subagent-async-registry.ts`).
 Retained for rationale, not as pending work.
 
+## Known deferred bug
+
+**User steering is misrouted to the root agent.** A steering message entered by the
+user while a subagent is the intended target is currently delivered to the root
+agent instead of that subagent. The later fix must preserve ordinary root-agent
+steering while routing explicitly subagent-directed user steering to the addressed
+live subagent. Reproduce and characterize the input-to-target selection path before
+changing delivery; no fix is included in this note.
+
 Parent: `docs/plans/subagent-oversight-goal.md` (feature 3). Research basis:
 `docs/plans/subagent-oversight-steer-research.md`. This plan supersedes the research
 document's unverified execution assumptions where they conflict with the decisions

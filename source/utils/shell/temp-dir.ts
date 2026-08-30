@@ -22,7 +22,12 @@ import { createHash } from 'node:crypto';
 const appDir = 'term2-nodejs';
 
 function resolveTempDir(): string {
-  const base = tmpdir();
+  let base = tmpdir();
+  try {
+    base = realpathSync(base);
+  } catch {
+    base = resolvePath(base);
+  }
 
   // Avoid double-pathing: if the system tmpdir already ends with our app
   // directory suffix, use it as-is.
@@ -39,10 +44,12 @@ function resolveTempDir(): string {
   return join(base, basename(homedir()), appDir);
 }
 
-const tempPath = resolveTempDir();
-mkdirSync(tempPath, { recursive: true });
+export function ensureSandboxTempDir(): string {
+  ensurePrivateDir(SANDBOX_TEMP_DIR);
+  return SANDBOX_TEMP_DIR;
+}
 
-export const SANDBOX_TEMP_DIR = realpathSync(tempPath);
+export const SANDBOX_TEMP_DIR = resolveTempDir();
 
 export interface SandboxXdgLayout {
   root: string;

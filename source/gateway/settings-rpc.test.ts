@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { applySettingsChanges, buildSettingsProjection, deleteCredential, setCredential } from './settings-rpc.js';
 
 function authority(values: Record<string, unknown>) {
@@ -24,6 +24,17 @@ function authority(values: Record<string, unknown>) {
 }
 
 describe('settings RPC policy boundary', () => {
+  beforeEach(() => {
+    // Isolate from host environment keys: resolveProviderCredentials reads
+    // process.env directly, so a live OPENAI_API_KEY would make the openai
+    // credential environment-sourced (non-writable) and break the set tests.
+    vi.stubEnv('OPENAI_API_KEY', '');
+    vi.stubEnv('OPENROUTER_API_KEY', '');
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('projects explicit safe keys and strips credential values and metadata', () => {
     const settings = authority({
       'agent.provider': 'openai',

@@ -60,6 +60,11 @@ describe('gateway settings/credential OAuth RPC', () => {
     const root = mkdtempSync(path.join(tmpdir(), 'term2-settings-rpc-'));
     roots.push(root);
     vi.stubEnv('TERM2_CONFIG_DIR', path.join(root, 'term2-config'));
+    // Isolate from host environment keys: resolveProviderCredentials reads
+    // process.env directly, so a live OPENAI_API_KEY would make the openai
+    // credential environment-sourced (non-writable) and fail the credential write.
+    vi.stubEnv('OPENAI_API_KEY', '');
+    vi.stubEnv('OPENROUTER_API_KEY', '');
     const values: Record<string, unknown> = {
       'agent.provider': 'openai',
       'agent.model': 'gpt-5',

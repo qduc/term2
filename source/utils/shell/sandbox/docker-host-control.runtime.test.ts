@@ -86,7 +86,17 @@ it.sequential('sandbox runtime denies a credential-resident socket until the exa
 
     expect(denied.exitCode).not.toBe(0);
 
-    const grantedConfig = createSandboxRuntimeConfig({ cwd: root, home, dockerSocketPath: socketPath, env: {} });
+    const baseGrantedConfig = createSandboxRuntimeConfig({ cwd: root, home, dockerSocketPath: socketPath, env: {} });
+    // The runtime's path-based allowUnixSockets is macOS-only: on Linux its
+    // seccomp filter blocks socket(AF_UNIX) creation entirely unless
+    // allowAllUnixSockets is set (see @anthropic-ai/sandbox-runtime
+    // linux-sandbox-utils). The exact-socket claim still holds on Linux because
+    // the filesystem layer tmpfs's the denied ~/.docker tree and binds in only
+    // the granted socket path.
+    const grantedConfig =
+      process.platform === 'linux'
+        ? { ...baseGrantedConfig, network: { ...baseGrantedConfig.network, allowAllUnixSockets: true } }
+        : baseGrantedConfig;
     const grantedWrapped = await runner.wrap(command, { cwd: root, config: grantedConfig });
     const granted = await executeShellCommand(grantedWrapped.command, { cwd: root, timeout: 10_000 });
     await runner.cleanupAfterCommand();

@@ -1,5 +1,5 @@
 import React, { act } from 'react';
-import { expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 import { InputProvider, useInputState } from '../../context/InputContext.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import { renderInAct } from '../../test-helpers/ink-testing.js';
@@ -47,6 +47,15 @@ const buildController = (intentHost?: IntentHost) => {
   );
   return controller;
 };
+
+beforeEach(() => {
+  // Isolate from host environment keys: resolveProviderCredentials reads
+  // process.env directly, so a live OPENAI_API_KEY makes the openai provider
+  // credential-present and sends the mentor pool model menu down the async
+  // catalog-load path instead of the deterministic not-configured short-circuit.
+  vi.stubEnv('OPENAI_API_KEY', '');
+  vi.stubEnv('OPENROUTER_API_KEY', '');
+});
 
 const waitForSettingsSession = async (predicate: () => boolean, description: string): Promise<void> => {
   const deadline = Date.now() + 1_000;

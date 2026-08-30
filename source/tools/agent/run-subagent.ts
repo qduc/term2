@@ -13,23 +13,31 @@ import type { NestedSubagentResult, SubagentResult, SubagentRunHandle } from '..
 import { SUBAGENT_RUN_NAME_PATTERN, SubagentRegistryError } from '../../services/subagents/subagent-async-registry.js';
 import { isAbortLike, formatSubagentResult } from '../../services/subagents/utils.js';
 
-const RUN_SUBAGENT_DESCRIPTION =
-  'Delegate a bounded task to a specialized subagent. Set execution to "foreground" when you need the structured result in this turn, ' +
-  'or "background" when the work can continue after you return control; background returns a running handle and later completion notification. ' +
-  'The subagent runs in its own context and returns only a summary, preserving your context. ' +
-  '(When to reach for this vs. doing it yourself is covered by the delegation guidance in your system instructions.)\n\n' +
-  'Independent foreground explorer and librarian calls in the same model response may run in parallel; keep worker calls and dependent tasks serial.\n\n' +
-  '## Task Requirements\n' +
-  'Give the task one clear objective, one ownership boundary, and one concrete done condition. Include the task-specific scope, non-discoverable parent findings or decisions, constraints, deliverable or acceptance criteria, and validation when applicable. ' +
-  'Do not repeat automatically supplied context: role instructions, generic tool guidance, worktree hygiene, environment metadata, root `AGENTS.md`, or skills catalog. ' +
-  'The subagent does not see your conversation or reasoning. ' +
-  "For explorer, request concrete evidence to collect for a bounded question and choose breadth or depth, never both: map one defined surface shallowly or trace one narrow seam thoroughly. Do not ask explorer to diagnose, recommend a fix, choose an approach, or own the user's complete investigation, review, diagnosis, or planning deliverable. " +
-  'For worker, assign one cohesive implementation unit. For mentor, ask one decision or challenge question. For librarian, assign one retrieval objective or memory-maintenance topic boundary.\n\n' +
-  'For isolated worker edits, create a git worktree under the workspace root first ' +
-  '(`git worktree add .worktrees/<slug> -b <slug>`), then pass `worktree` as that directory basename or branch name. ' +
-  '`worktree` is worker-only; it pins the child into that existing tree without re-rooting this session.\n\n' +
-  'Foreground returns a summary with status (completed, failed, cancelled, or interrupted), any final text, a list of tools used, and files changed. ' +
-  'A background status of "running" means launch succeeded: do not duplicate the task or immediately call get_subagent_result; end the turn and wait for the completion notification.';
+function getRunSubagentDescription(backgroundEnabled: boolean): string {
+  return (
+    'Delegate a bounded task to a specialized subagent. ' +
+    (backgroundEnabled
+      ? 'This session requires background execution: the tool returns a running handle immediately and a later completion notification. '
+      : 'This session uses foreground execution and returns the structured result in this turn. ') +
+    'The subagent runs in its own context and returns only a summary, preserving your context. ' +
+    '(When to reach for this vs. doing it yourself is covered by the delegation guidance in your system instructions.)\n\n' +
+    (backgroundEnabled
+      ? 'Background launches return immediately; do not duplicate them or call get_subagent_result until the completion notification arrives.\n\n'
+      : 'Independent foreground explorer and librarian calls in the same model response may run in parallel; keep worker calls and dependent tasks serial.\n\n') +
+    '## Task Requirements\n' +
+    'Give the task one clear objective, one ownership boundary, and one concrete done condition. Include the task-specific scope, non-discoverable parent findings or decisions, constraints, deliverable or acceptance criteria, and validation when applicable. ' +
+    'Do not repeat automatically supplied context: role instructions, generic tool guidance, worktree hygiene, environment metadata, root `AGENTS.md`, or skills catalog. ' +
+    'The subagent does not see your conversation or reasoning. ' +
+    "For explorer, request concrete evidence to collect for a bounded question and choose breadth or depth, never both: map one defined surface shallowly or trace one narrow seam thoroughly. Do not ask explorer to diagnose, recommend a fix, choose an approach, or own the user's complete investigation, review, diagnosis, or planning deliverable. " +
+    'For worker, assign one cohesive implementation unit. For mentor, ask one decision or challenge question. For librarian, assign one retrieval objective or memory-maintenance topic boundary.\n\n' +
+    'For isolated worker edits, create a git worktree under the workspace root first ' +
+    '(`git worktree add .worktrees/<slug> -b <slug>`), then pass `worktree` as that directory basename or branch name. ' +
+    '`worktree` is worker-only; it pins the child into that existing tree without re-rooting this session.\n\n' +
+    (backgroundEnabled
+      ? 'A background status of "running" means launch succeeded: end the turn and wait for the completion notification.'
+      : 'Foreground returns a summary with status (completed, failed, cancelled, or interrupted), any final text, a list of tools used, and files changed.')
+  );
+}
 
 const FOREGROUND_ROLES = ['explorer', 'worker', 'librarian'] as const;
 const BACKGROUND_ROLES = ['explorer', 'worker', 'mentor', 'librarian'] as const;
@@ -109,18 +117,7 @@ export type RunSubagentToolCallbacks = {
 };
 
 function createRunSubagentSchema({ runSubagent, runSubagentAsync }: RunSubagentToolCallbacks) {
-  if (runSubagent && !runSubagentAsync) {
-    return z
-      .object({
-        execution: z.literal('foreground').describe('Only foreground execution is available in this session.'),
-        role: z.enum(FOREGROUND_ROLES).describe('The subagent role to use.'),
-        task: z.string().describe(SUBAGENT_TASK_DESCRIPTION),
-        ...worktreeField,
-      })
-      .strict();
-  }
-
-  if (!runSubagent && runSubagentAsync) {
+  if (runSubagentAsync) {
     return z
       .object({
         execution: z.literal('background').describe('Only background execution is available in this session.'),
@@ -128,6 +125,17 @@ function createRunSubagentSchema({ runSubagent, runSubagentAsync }: RunSubagentT
         task: z.string().describe(SUBAGENT_TASK_DESCRIPTION),
         ...worktreeField,
         ...backgroundFields,
+      })
+      .strict();
+  }
+
+  if (runSubagent && !runSubagentAsync) {
+    return z
+      .object({
+        execution: z.literal('foreground').describe('Only foreground execution is available in this session.'),
+        role: z.enum(FOREGROUND_ROLES).describe('The subagent role to use.'),
+        task: z.string().describe(SUBAGENT_TASK_DESCRIPTION),
+        ...worktreeField,
       })
       .strict();
   }
@@ -362,7 +370,7 @@ export function createRunSubagentToolDefinition(
 
   return {
     name: 'run_subagent',
-    description: RUN_SUBAGENT_DESCRIPTION,
+    description: getRunSubagentDescription(Boolean(resolvedCallbacks.runSubagentAsync)),
     parameters,
     parallelSafe: (params: unknown) => {
       const candidate = params as Partial<RunSubagentParams>;
@@ -371,6 +379,15 @@ export function createRunSubagentToolDefinition(
     needsApproval: () => false,
     execute: async (rawParams: unknown, context, details) => {
       const params = rawParams as RunSubagentParams;
+      if (resolvedCallbacks.runSubagentAsync && params.execution === 'foreground') {
+        return JSON.stringify({
+          status: 'failed',
+          error: {
+            code: 'foreground_unavailable',
+            message: 'Foreground execution is unavailable in this session; use execution: "background".',
+          },
+        });
+      }
       if (params.execution === 'foreground' || (legacyForegroundOnly && params.execution === undefined)) {
         if (params.name != null || params.continue_run_id != null) {
           return failedForegroundResult(

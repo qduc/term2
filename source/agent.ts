@@ -278,6 +278,10 @@ export const getAgentDefinition = (
     Boolean(getSubagentStatus) &&
     Boolean(sendSubagentMessage) &&
     Boolean(cancelSubagentRun);
+  // A complete async capability owns the model-facing delegation contract. The
+  // nested runner remains wired for foreground-only compatibility sessions and
+  // for legacy lifecycle controls, but is not selectable alongside async work.
+  const runSubagentForegroundEnabled = Boolean(runSubagent) && !asyncSubagentEnabled;
   if (orchestratorMode && !asyncSubagentEnabled) {
     throw new Error(
       'orchestratorMode requires runSubagentAsync, getSubagentResult, getSubagentStatus, sendSubagentMessage, and cancelSubagentRun: cannot build orchestrator agent without asynchronous delegation.',
@@ -295,7 +299,7 @@ export const getAgentDefinition = (
     searchViaShell,
     codeContextEnabled,
     runSubagentEnabled: Boolean(runSubagent) || asyncSubagentEnabled,
-    runSubagentForegroundEnabled: Boolean(runSubagent),
+    runSubagentForegroundEnabled,
     runSubagentAsyncEnabled: asyncSubagentEnabled,
     asyncSubagentControlsEnabled: asyncSubagentEnabled,
     backgroundShellEnabled: allowBackgroundShell && Boolean(backgroundShellRegistry),

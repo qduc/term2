@@ -1,8 +1,9 @@
 import { getSubagentsRolesSection } from '../tools/agent/run-subagent.js';
 
 /**
- * Single source of truth for model-facing foreground and background delegation.
- * The tool name stays stable; `execution` selects an already-owned lifecycle.
+ * Single source of truth for model-facing subagent delegation.
+ * The tool name stays stable; `execution` identifies the lifecycle available in
+ * this session.
  */
 export function getSubagentDelegationAddendum({
   orchestratorMode = false,
@@ -17,20 +18,15 @@ export function getSubagentDelegationAddendum({
   backgroundEnabled?: boolean;
   controlsEnabled?: boolean;
 } = {}): string {
-  const executions = [
-    foregroundEnabled
-      ? '- `execution: "foreground"`: runs through the nested subagent path and returns its structured result in this turn. Use it when you need the answer before proceeding.'
-      : '',
-    backgroundEnabled
-      ? '- `execution: "background"`: starts a conversation-scoped run and returns `{ runId, status: "running" }` immediately. Use it when work can continue after you return control.'
-      : '',
-  ]
-    .filter(Boolean)
-    .join('\n');
+  const executions = backgroundEnabled
+    ? '- `execution: "background"`: the only execution mode in this session. It starts a conversation-scoped run and returns `{ runId, status: "running" }` immediately.'
+    : foregroundEnabled
+    ? '- `execution: "foreground"`: the only execution mode in this session. It runs through the nested subagent path and returns its structured result in this turn.'
+    : '';
 
   const header = `### Delegating to subagents
 
-You have one \`run_subagent\` tool. A subagent runs in its own context and returns only a summary, keeping your own context focused on high-level reasoning. Its required \`execution\` field selects the lifecycle available in this session:
+You have one \`run_subagent\` tool. A subagent runs in its own context and returns only a summary, keeping your own context focused on high-level reasoning. Its required \`execution\` field identifies the only lifecycle available in this session:
 
 ${executions}`;
 

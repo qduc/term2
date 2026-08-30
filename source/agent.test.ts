@@ -372,7 +372,7 @@ it('getAgentDefinition exposes the cache-stable delegation surface in orchestrat
       'safeParse' in schema &&
       typeof schema.safeParse === 'function' &&
       schema.safeParse({ execution: 'foreground', role: 'explorer', task: 'inspect' }).success,
-  ).toBe(true);
+  ).toBe(false);
   expect(definition.instructions.includes('### Delegating to subagents')).toBe(true);
 });
 
@@ -405,7 +405,7 @@ it('getAgentDefinition registers parent async controls in orchestrator and ordin
   }
 });
 
-it('advertises one dual-mode delegation tool when standard mode has both execution strategies', () => {
+it('advertises one background-only delegation tool when standard mode has async execution', () => {
   const definition = getAgentDefinition({
     settingsService: createMockSettingsService({ 'app.liteMode': false }),
     loggingService: mockLogger,
@@ -417,14 +417,18 @@ it('advertises one dual-mode delegation tool when standard mode has both executi
   expect(delegationTools).toHaveLength(1);
   expect(definition.tools.map((tool) => tool.name)).not.toContain('run_subagent_async');
   const schema = delegationTools[0]?.parameters;
-  for (const execution of ['foreground', 'background']) {
-    expect(
-      schema &&
-        'safeParse' in schema &&
-        typeof schema.safeParse === 'function' &&
-        schema.safeParse({ execution, role: 'explorer', task: 'inspect' }).success,
-    ).toBe(true);
-  }
+  expect(
+    schema &&
+      'safeParse' in schema &&
+      typeof schema.safeParse === 'function' &&
+      schema.safeParse({ execution: 'background', role: 'explorer', task: 'inspect' }).success,
+  ).toBe(true);
+  expect(
+    schema &&
+      'safeParse' in schema &&
+      typeof schema.safeParse === 'function' &&
+      schema.safeParse({ execution: 'foreground', role: 'explorer', task: 'inspect' }).success,
+  ).toBe(false);
 });
 
 it('getAgentDefinition registers root background shell controls only with its session registry', () => {

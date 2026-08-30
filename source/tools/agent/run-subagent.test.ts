@@ -56,7 +56,7 @@ it('marks foreground explorer and librarian parallel-safe regardless of a worktr
   expect(parallelSafe({ execution: 'background', role: 'explorer', task: 'inspect' })).toBe(false);
 });
 
-it('requires an explicit execution mode and dispatches foreground work to the nested runner', async () => {
+it('requires an explicit execution mode and dispatches background work when both callbacks exist', async () => {
   const foreground = vi.fn(async () => makeResult({ finalText: 'Foreground result.' }));
   const background = vi.fn(async () => ({
     runId: 'run-background',
@@ -67,13 +67,31 @@ it('requires an explicit execution mode and dispatches foreground work to the ne
   const tool = createRunSubagentToolDefinition({ runSubagent: foreground, runSubagentAsync: background });
 
   expect(tool.parameters.safeParse({ role: 'explorer', task: 'inspect' }).success).toBe(false);
-  expect(tool.parameters.safeParse({ execution: 'foreground', role: 'explorer', task: 'inspect' }).success).toBe(true);
+  expect(tool.parameters.safeParse({ execution: 'foreground', role: 'explorer', task: 'inspect' }).success).toBe(false);
+  expect(tool.parameters.safeParse({ execution: 'background', role: 'explorer', task: 'inspect' }).success).toBe(true);
+
+  await expect(tool.execute({ execution: 'background', role: 'explorer', task: 'inspect' })).resolves.toContain(
+    'run-background',
+  );
+  expect(background).toHaveBeenCalledWith(
+    { role: 'explorer', task: 'inspect', name: undefined, continue_run_id: undefined },
+    undefined,
+    undefined,
+  );
+  expect(foreground).not.toHaveBeenCalled();
+});
+
+it('rejects foreground calls at runtime when background execution is available', async () => {
+  const foreground = vi.fn(async () => makeResult());
+  const tool = createRunSubagentToolDefinition({
+    runSubagent: foreground,
+    runSubagentAsync: async () => ({ runId: 'run-background', role: 'explorer', task: 'inspect', status: 'running' }),
+  });
 
   await expect(tool.execute({ execution: 'foreground', role: 'explorer', task: 'inspect' })).resolves.toContain(
-    'Foreground result.',
+    'foreground_unavailable',
   );
-  expect(foreground).toHaveBeenCalledWith({ role: 'explorer', task: 'inspect' }, undefined, undefined);
-  expect(background).not.toHaveBeenCalled();
+  expect(foreground).not.toHaveBeenCalled();
 });
 
 it('dispatches background work to the registry callback and returns its running handle', async () => {
@@ -131,20 +149,14 @@ it('does not allow foreground calls to smuggle background-only inputs', async ()
 
   await expect(
     tool.execute({ execution: 'foreground', role: 'explorer', task: 'inspect', name: 'not-allowed' }),
-  ).resolves.toContain('Background-only inputs');
+  ).resolves.toContain('foreground_unavailable');
   expect(foreground).not.toHaveBeenCalled();
 });
 
-it('treats strict-provider null background fields as absent for foreground execution', async () => {
+it('treats strict-provider null background fields as absent for foreground-only execution', async () => {
   const foreground = vi.fn(async () => makeResult({ finalText: 'Foreground result.' }));
   const tool = createRunSubagentToolDefinition({
     runSubagent: foreground,
-    runSubagentAsync: async () => ({
-      runId: 'unused',
-      role: 'explorer',
-      task: 'inspect',
-      status: 'running',
-    }),
   });
 
   await expect(

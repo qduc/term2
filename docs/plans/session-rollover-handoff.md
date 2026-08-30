@@ -1,8 +1,66 @@
 # Session rollover — agent-triggered handoff as the compaction alternative
 
 Status: **proposed, nothing implemented.** Concept validated by a live
-experiment 2026-08-30 (see "Evidence" below). This doc maps the concept onto
-the existing code and records the design decisions that remain.
+experiment 2026-08-30 (see "Evidence" below), and by the overnight A/B
+benchmark 2026-08-31 (see "Overnight benchmark results" below): the rollover
+arm matched the human fix's blind-judge quality at ~2.2x lower cost. This doc
+maps the concept onto the existing code and records the design decisions that
+remain.
+
+## Overnight benchmark results (2026-08-31, run by the rollover session)
+
+Task `r-ws-session-lifetime` (rewound origin dbb0c47f, hidden evaluator =
+that commit's own 8 tests, typecheck gate on). Same harness (term2
+interactive in herdr), same model (`z-ai/glm-5.3-flash` via openrouter,
+effort high — both arms resolved their effort the same way), same workspace
+shape. One variable: arm 1 (full-session-ix) got the raw 12-line task;
+arm 2 (rollover-session-ix) got a ~2.3KB rollover brief whose diagnosis
+section externalized what the source session had already learned.
+
+| metric | arm 1 full-session | arm 2 rollover |
+| --- | --- | --- |
+| deterministic evaluator | **FAIL** 7/8 | **PASS** 8/8 |
+| blind judge (pooled, 3 samples, opus) | 4.33 ±0.58 | **9.67 ±0.58** |
+| wall time | 4594 s (76.6 min) | 2331 s (38.9 min) |
+| model calls | 128 | 84 |
+| tokens (in-new / cached / out) | 168k / 11.0M / 157k | 95k / 4.4M / 75k |
+| metered cost (provider-reported) | $0.2143 | $0.0964 |
+| context at finish | 134k | 82k |
+
+A human calibration candidate (the real dbb0c47f diff) scored 9.67 ±0.58 —
+identical to arm 2, sample for sample. Arm 1's gap is concrete: its lifetime
+fix lives outside the pool, so the hidden acquire-time retirement test fails
+(evaluator FAIL), and it expanded scope into `retry-classifier` (6 files
+touched vs arm 2's 3).
+
+Caveats, stated honestly:
+
+- **Single task, single sample of task shape.** This is one data point where
+  the task's diagnosis could be cleanly externalized in prose. Tasks whose
+  remaining work is mostly exploration (diagnosis NOT transferable in a
+  brief) would shrink the rollover's advantage; the direction of the result
+  should generalize, the magnitude should not be quoted.
+- **The brief is doing real work.** Arm 2's quality is partly the departing
+  session's diagnosis, paid for in the source session (excluded from both
+  arms' meters). Rollover cost should be read as "continuation cost", not
+  whole-task cost.
+- Both arms ran concurrently on one machine, and cost was attributed by
+  sessionId from the provider-traffic log (time-window attribution would
+  have mixed three overlapping term2 sessions; `collect-cost.py`'s window
+  mode was not used).
+- Both arms used YOLO auto-approval; arm 1 hit its 60-minute run budget at
+  102% and was harvested at its natural settle.
+- Retrieval-tuning capture (for SessionBrowser): arm 2 issued exactly ONE
+  session call — `session_search "session lifetime worktree commits"`
+  (limit 3, maxChars 1200); zero session_list, zero session_read. The brief
+  was ~fully self-sufficient. Arm 1, with no affordance, made zero calls
+  (by design). Feeds the brief-self-sufficiency threshold and default page
+  budgets noted in `session-retrieval-tuning-data` memory.
+
+Verdict: **rollover holds up on this task** — quality parity with the human
+fix, roughly half the wall time, ~2.2x lower metered cost, and a session
+that ends at 82k context instead of growing past 130k. Proceed to the M1/M2
+slice (milestone reminder + `session_rollover` tool) unpushed for review.
 
 ## The idea (user's proposal, 2026-08-30)
 

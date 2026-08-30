@@ -335,6 +335,36 @@ describe('ConversationOrchestrator background subagent notifications mid-turn', 
     );
   });
 
+  it('formats rich subagent progress details in the check-in prompt', async () => {
+    const h = makeHarness({ queueActive: true });
+
+    h.emit(
+      checkInDue({
+        target: { kind: 'subagent', id: 'agent-1' },
+        details: {
+          kind: 'subagent',
+          id: 'agent-1',
+          name: 'researcher',
+          role: 'worker',
+          task: 'implement feature',
+          activityState: 'active',
+          toolCounts: { view_file: 3, edit_file: 2 },
+          lastToolName: 'edit_file(src/auth.ts)',
+          latestNarrative: 'Working on auth implementation.',
+        },
+      }),
+    );
+    await settle();
+
+    expect(h.service.injectIntoActiveTurn).toHaveBeenCalledTimes(1);
+    const text = h.injectedTexts()[0];
+    expect(text).toContain('background subagent researcher (agent-1)');
+    expect(text).toContain('status: active');
+    expect(text).toContain('latest narrative: "Working on auth implementation."');
+    expect(text).toContain('tools used: view_file (3), edit_file (2)');
+    expect(text).toContain('last tool: edit_file(src/auth.ts)');
+  });
+
   it('tells the active turn that the same shell moved to background without requesting a stop', async () => {
     const h = makeHarness({ queueActive: true });
 

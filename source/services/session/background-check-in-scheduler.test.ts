@@ -28,6 +28,8 @@ const subagentTask = (overrides: Partial<BackgroundSubagentTask> = {}): Backgrou
 function makeScheduler(options: {
   tasks: () => readonly BackgroundTask[];
   settings?: Partial<{ enabled: boolean; intervalMs: number; maxCheckInsPerTask: number }>;
+  getSubagentStatus?: (runId: string) => any;
+  getShellJob?: (jobId: string) => any;
   now: () => number;
 }) {
   const emit = vi.fn();
@@ -35,6 +37,8 @@ function makeScheduler(options: {
   const scheduler = new BackgroundCheckInScheduler({
     getRunningTasks: options.tasks,
     emit,
+    getSubagentStatus: options.getSubagentStatus,
+    getShellJob: options.getShellJob,
     getSettings: () => ({
       enabled: true,
       intervalMs: 300_000,
@@ -177,6 +181,90 @@ describe('BackgroundCheckInScheduler', () => {
     scheduler.tick();
 
     expect(emit).not.toHaveBeenCalled();
+  });
+
+  it('fires for subagents with rich progress details when getSubagentStatus is provided', () => {
+    let time = 0;
+    const subagent = subagentTask({ runId: 'sub-1', role: 'worker', task: 'refactor tests' });
+    const { scheduler, emit } = makeScheduler({
+      tasks: () => [subagent],
+      now: () => time,
+      getSubagentStatus: (runId) =>
+        runId === 'sub-1'
+          ? {
+              runId: 'sub-1',
+              role: 'worker',
+              status: 'running',
+              task: 'refactor tests',
+              taskPreview: 'refactor tests',
+              startedAt: 0,
+              elapsedMs: 300_000,
+              activityState: 'active',
+              toolCounts: { grep_search: 3, edit_file: 1 },
+              lastToolName: 'edit_file',
+              lastObservation: { kind: 'tool_started', at: 290_000, toolName: 'edit_file' },
+              currentText: 'Modifying test suites to verify new behavior.',
+            }
+          : undefined,
+    });
+
+    time = 300_000;
+    scheduler.tick();
+
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect(emit).toHaveBeenCalledWith({
+      type: 'background_check_in_due',
+      target: { kind: 'subagent', id: 'sub-1' },
+      checkInIndex: 1,
+      elapsedMs: 300_000,
+      details: {
+        kind: 'subagent',
+        id: 'sub-1',
+        role: 'worker',
+        task: 'refactor tests',
+        activityState: 'active',
+        toolCounts: { grep_search: 3, edit_file: 1 },
+        lastToolName: 'edit_file',
+        lastObservation: { kind: 'tool_started', at: 290_000, toolName: 'edit_file' },
+        latestNarrative: 'Modifying test suites to verify new behavior.',
+      },
+    });
+  });
+
+  it('populates rich shell job observation and status when getShellJob is provided', () => {
+    let time = 0;
+    const { scheduler, emit } = makeScheduler({
+      tasks: () => [shellTask({ jobId: 'shell-1' })],
+      now: () => time,
+      getShellJob: (jobId) =>
+        jobId === 'shell-1'
+          ? {
+              id: 'shell-1',
+              command: 'pnpm test',
+              status: 'running',
+              startedAt: 0,
+              lastObservation: { kind: 'shell_output_received', at: 295_000 },
+            }
+          : undefined,
+    });
+
+    time = 300_000;
+    scheduler.tick();
+
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect(emit).toHaveBeenCalledWith({
+      type: 'background_check_in_due',
+      target: { kind: 'shell', id: 'shell-1' },
+      checkInIndex: 1,
+      elapsedMs: 300_000,
+      details: {
+        kind: 'shell',
+        id: 'shell-1',
+        command: 'pnpm test',
+        status: 'running',
+        lastObservation: { kind: 'shell_output_received', at: 295_000 },
+      },
+    });
   });
 
   it('disposes its internal timer exactly once', () => {

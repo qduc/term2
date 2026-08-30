@@ -6,6 +6,7 @@ import type { SubagentResult } from '../subagents/types.js';
 import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
 import type { CodexRateLimitInfo } from '../../contracts/streamed-model-turn.js';
 import type { RunBudgetEvent } from '../agent-runtime/run-budget.js';
+import type { BackgroundTaskObservation } from '../background-task-activity.js';
 export type { CodexRateLimitInfo, CodexRateLimitWindow } from '../../contracts/streamed-model-turn.js';
 
 export type ConversationEvent =
@@ -357,8 +358,26 @@ export interface BackgroundCheckInDueEvent {
   /** Elapsed wall time since the task started, at the moment this check-in fired. */
   elapsedMs: number;
   details:
-    | { kind: 'subagent'; id: string; name?: string; role: string; task: string }
-    | { kind: 'shell'; id: string; command: string };
+    | {
+        kind: 'subagent';
+        id: string;
+        name?: string;
+        role: string;
+        task: string;
+        activityState?: 'active' | 'waiting' | 'cancelling';
+        waitingReason?: 'provider' | 'approval' | 'answer';
+        toolCounts?: Record<string, number>;
+        lastToolName?: string;
+        lastObservation?: BackgroundTaskObservation;
+        latestNarrative?: string;
+      }
+    | {
+        kind: 'shell';
+        id: string;
+        command: string;
+        status?: string;
+        lastObservation?: BackgroundTaskObservation;
+      };
 }
 
 /** Emitted when Codex reports ChatGPT plan usage limits. */

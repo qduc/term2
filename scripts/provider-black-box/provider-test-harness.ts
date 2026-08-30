@@ -28,8 +28,10 @@ process.on('exit', () => {
 // Shared-runner reality: a PTY scenario's turn can legitimately take longer
 // than a developer laptop under vitest's parallel workers. --bail=1 bounds a
 // genuine hang to one scenario, so a generous ceiling costs little and stops
-// per-call-site timeout whack-a-mole.
-const DEFAULT_TIMEOUT_MS = 40_000;
+// per-call-site timeout whack-a-mole. Scenario files import this constant for
+// their own fixture waits so the suite has one shared ceiling, not per-file
+// duplicates that flake independently.
+export const DEFAULT_TIMEOUT_MS = 40_000;
 const DEFAULT_WRITE_TIMEOUT_MS = 5_000;
 const PTY_INPUT_SETTLE_MS = 50;
 const DEFAULT_TERMINATE_GRACE_MS = 500;
@@ -668,7 +670,35 @@ function createPtyChild(options: {
       if (!idlePath) {
         throw new Error(`${HARNESS_IDLE_ENV} is required to wait for composer idle.`);
       }
-      return waitForHarnessIdleGeneration(idlePath, { after, timeoutMs });
+      // Inherit the harness's shared PTY ceiling instead of the idle lib's
+      // tighter 15s default: readiness under shared-runner contention is the
+      // recorded flake class in docs/plans/guard-ledger.md, and --bail=1
+      // bounds a genuine hang to one scenario.
+      const effectiveTimeoutMs = timeoutMs ?? DEFAULT_TIMEOUT_MS;
+      const idleWait = waitForHarnessIdleGeneration(idlePath, { after, timeoutMs: effectiveTimeoutMs }).then(
+        (generation) => ({ kind: 'idle' as const, generation }),
+      );
+      // Race the child's exit against the idle channel so a dead child
+      // diagnoses itself instead of burning the full ceiling. waitForExit's
+      // timeout rejection is expected here; the idle lib's own timeout error
+      // remains authoritative for the genuinely-still-running case.
+      const exitWait = waitForExit(effectiveTimeoutMs).then(
+        (exit) => ({ kind: 'exited' as const, exit }),
+        () => ({ kind: 'running' as const }),
+      );
+      const outcome = await Promise.race([idleWait, exitWait]);
+      if (outcome.kind === 'idle') return outcome.generation;
+      if (outcome.kind === 'exited') {
+        const tail = tailOfVisibleOutput(visibleOutput);
+        throw new Error(
+          `PTY child exited before publishing composer idle (code=${outcome.exit.exitCode}, signal=${outcome.exit.signal}).\nchild visible output (tail):\n${tail}`,
+        );
+      }
+      throw new Error(
+        `Timed out waiting for harness idle generation > ${after} at ${idlePath} after ${effectiveTimeoutMs}ms; got ${readHarnessIdleGeneration(
+          idlePath,
+        )}.`,
+      );
     },
     waitForExit,
     terminate,
@@ -821,6 +851,11 @@ async function terminateProcess(child: ChildProcess): Promise<ChildExit> {
     signalChild(child, 'SIGKILL', true);
     return await waitForProcessExit(child, DEFAULT_TERMINATE_TIMEOUT_MS);
   }
+}
+
+/** Bounded tail of a child's visible output for self-diagnosing wait failures. */
+function tailOfVisibleOutput(visible: string, max = 2_000): string {
+  return visible.length > max ? visible.slice(-max) : visible;
 }
 
 function signalChild(child: ChildProcess, signal: NodeJS.Signals, processGroup: boolean): void {

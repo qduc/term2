@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocketServer, type WebSocket } from 'ws';
 import {
   createIsolatedWorkspaceLease,
+  DEFAULT_TIMEOUT_MS,
   writePtyTextAndSubmit,
   type IsolatedWorkspaceLease,
   type PtyChildDriver,
@@ -568,7 +569,7 @@ async function startResponsesFixtureServer(options: {
     },
     requests,
     served,
-    waitForRequests: async (predicate, timeoutMs = 15_000) => {
+    waitForRequests: async (predicate, timeoutMs = DEFAULT_TIMEOUT_MS) => {
       const startedAt = Date.now();
       while (!predicate(requests)) {
         if (Date.now() - startedAt >= timeoutMs) {

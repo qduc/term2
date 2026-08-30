@@ -82,3 +82,8 @@ it('waitForHarnessIdleGeneration times out when the generation never advances', 
   const path = await idlePath();
   await expect(waitForHarnessIdleGeneration(path, { after: 0, timeoutMs: 30 })).rejects.toThrow(/idle generation > 0/i);
 });
+
+it('waitForHarnessIdleGeneration names the effective ceiling in its timeout error', async () => {
+  const path = await idlePath();
+  await expect(waitForHarnessIdleGeneration(path, { after: 0, timeoutMs: 30 })).rejects.toThrow(/after 30ms/i);
+});

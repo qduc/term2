@@ -1,7 +1,7 @@
 import { access, copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   createIsolatedWorkspaceLease,
   removeIsolatedWorkspaceRoot,
@@ -76,6 +76,41 @@ describe('provider black-box harness', () => {
       await expect(pending).resolves.toBe(1);
       expect(child.readIdleGeneration()).toBe(1);
       await child.terminate();
+    });
+  });
+
+  it('gives waitForIdleInput the shared PTY ceiling when no timeout is passed', async () => {
+    await withIsolatedWorkspace({}, async (workspace) => {
+      const child = await workspace.start({ command: process.execPath, args: [CHILD, 'hang'] });
+      await child.waitForVisibleOutput('hanging');
+
+      // Red-proofs the shared-runner flake: a bare readiness wait must inherit
+      // the harness's generous default, not the idle lib's 15s. The child hangs
+      // forever, so the only way this resolves is the timeout itself.
+      vi.useFakeTimers();
+      try {
+        const pending = child.waitForIdleInput();
+        const assertion = expect(pending).rejects.toThrow(/after 40000ms/i);
+        await vi.advanceTimersByTimeAsync(39_999);
+        await vi.advanceTimersByTimeAsync(1);
+        await assertion;
+      } finally {
+        vi.useRealTimers();
+        await child.terminate();
+      }
+    });
+  });
+
+  it('fails waitForIdleInput fast when the child exits without publishing idle', async () => {
+    await withIsolatedWorkspace({}, async (workspace) => {
+      const child = await workspace.start({ command: process.execPath, args: [CHILD, 'echo'] });
+      await child.waitForVisibleOutput('ready');
+      // 'echo' exits on first stdin without ever publishing idle; the wait must
+      // diagnose the dead child instead of burning the full ceiling.
+      const pending = child.waitForIdleInput({ timeoutMs: 20_000 });
+      await writePtyTextAndWaitForVisibleEcho(child, 'stateful prompt\n');
+      await expect(child.waitForExit(2_000)).resolves.toMatchObject({ exitCode: 0 });
+      await expect(pending).rejects.toThrow(/exited before publishing composer idle/i);
     });
   });
 

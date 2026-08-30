@@ -105,11 +105,11 @@ describe('public hooks through the packaged CLI', () => {
         cols: 120,
         rows: 40,
       });
-      await child.waitForIdleInput({ timeoutMs: 15_000 });
+      await child.waitForIdleInput();
       await writePtyTextAndSubmit(child, 'fixture prompt');
-      await child.waitForVisibleOutput('hello', 15_000);
+      await child.waitForVisibleOutput('hello');
       await writePtyTextAndSubmit(child, '/quit');
-      await child.waitForExit(15_000);
+      await child.waitForExit();
 
       await expect(readFile(join(workspace.root, 'hook-events.log'), 'utf8')).resolves.toContain(
         'user:working:status.change',

@@ -1,3 +1,28 @@
+## [0.16.0] - 2026-08-30
+
+### Features
+- Added in-app and command-line session resumption, including recent-session listing and saved-session outcome details.
+- Added bounded persistent-memory retrieval and a local browser for finding prior sessions from the current project.
+- Added periodic check-ins for long-running background shells and subagents, with configurable scheduling and limits.
+- Added browser-owned gateway control for local server mode, workspaces, settings, credentials, and OTP pairing, with durable interaction recovery.
+- Added prefix-triggered shell input mode, model and reasoning-effort shortcuts (`Ctrl+O` and `Ctrl+T`), and clearer in-flight composer hints.
+- Added OpenCode Go usage-limit reporting and an option to disable run-budget escalation.
+
+### Bug Fixes
+- Improved recovery from provider stalls, in-stream rate limits, interrupted retries, verbose reasoning, invalid response IDs, and expired Codex WebSocket sessions.
+- Fixed continuation and history handling for Luna explorer turns, interrupted conversations, and undo-removed turns.
+- Fixed background-task status synchronization across the terminal, title, gateway, hooks, and non-interactive mode.
+- Fixed queued-tool timing, pending-steer labeling, output trimming, message grouping, and several menu and authentication edge cases.
+- Prevented conversation-mutating slash commands during active turns and made YOLO workspace-boundary behavior consistent for subagents.
+
+### Improvements
+- Unified runtime modes around prompt guidance while preserving provider prompt-cache behavior.
+- Made concise display mode the default for new users and improved run-budget status formatting.
+- Improved the task strip and background-subagent presentation, including completed-run grouping and live elapsed times.
+- Accepted pasted OAuth loopback redirects and handled headless environments without a browser opener.
+
+---
+
 ## [0.15.0] - 2026-08-25
 
 ### Features

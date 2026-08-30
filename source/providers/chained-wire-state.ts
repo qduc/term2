@@ -227,6 +227,13 @@ export class ChainedWireState {
   }
 
   /**
+   * Return the active stored response ID for a key, if any.
+   */
+  getStoredResponseId(key: ChainedWireStateKey): string | undefined {
+    return this.stored.get(key)?.responseId;
+  }
+
+  /**
    * Remove all state across every key. Safe to call on an empty instance.
    */
   clear(): void {

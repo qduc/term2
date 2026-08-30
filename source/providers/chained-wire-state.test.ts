@@ -816,3 +816,19 @@ it('preserves other requestData fields when computing delta', () => {
   expect(prepared.requestData.instructions).toBe('do something');
   expect(prepared.requestData.tools).toEqual([{ type: 'function', name: 'shell' }]);
 });
+
+it('getStoredResponseId returns the active stored response ID or undefined', () => {
+  const protocol = makeProtocol();
+  const state = new ChainedWireState(protocol);
+  const key = 'session-stored-id';
+
+  expect(state.getStoredResponseId(key)).toBeUndefined();
+
+  state.prepare(key, 'token-1', { input: [{ role: 'user', content: 'hello' }] });
+  state.recordResponse(key, 'token-1', 'resp-xyz', [{ type: 'assistant', content: 'reply' }]);
+
+  expect(state.getStoredResponseId(key)).toBe('resp-xyz');
+
+  state.invalidate(key);
+  expect(state.getStoredResponseId(key)).toBeUndefined();
+});

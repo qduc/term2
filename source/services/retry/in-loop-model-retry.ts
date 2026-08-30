@@ -33,6 +33,11 @@ export type InLoopRetryDecision =
       readonly reason: string;
     };
 
+/** The failed model request, used to refuse a chained-delta retry without an anchor. */
+export type InLoopRetryRequestContext = {
+  readonly previousResponseId?: string | null;
+};
+
 export function computeInLoopBackoffDelayMs(
   attempt: number,
   random: () => number = Math.random,
@@ -46,11 +51,16 @@ export function computeInLoopBackoffDelayMs(
   return Math.round(baseDelay * jitter);
 }
 
+function requestUsedCallerChain(request?: InLoopRetryRequestContext): boolean {
+  return typeof request?.previousResponseId === 'string' && request.previousResponseId.length > 0;
+}
+
 export function classifyInLoopModelRetry(
   error: unknown,
   attempt: number,
   maxRetries: number,
   random: () => number = Math.random,
+  request?: InLoopRetryRequestContext,
 ): InLoopRetryDecision {
   if (attempt >= maxRetries) {
     return { retryable: false, reason: 'max_retries_exceeded' };
@@ -78,11 +88,18 @@ export function classifyInLoopModelRetry(
 
   const upstream = classifyUpstreamRetryableError(error);
   const upstreamDelay = upstream.retryAfterMs;
-  const recoverChain = (): InLoopRetryDecision => ({
-    retryable: true,
-    kind: 'chain_recovery',
-    delayMs: computeInLoopBackoffDelayMs(attempt + 1, random, upstreamDelay),
-  });
+  const recoverChain = (): InLoopRetryDecision => {
+    // The run loop only has this request's input. A chained delta without its
+    // anchor is not a conversation; session recovery must rebuild full history.
+    if (requestUsedCallerChain(request)) {
+      return { retryable: false, reason: 'chained_delta_not_self_contained' };
+    }
+    return {
+      retryable: true,
+      kind: 'chain_recovery',
+      delayMs: computeInLoopBackoffDelayMs(attempt + 1, random, upstreamDelay),
+    };
+  };
 
   const wsClosed = findWebSocketClosedEarly(error);
   if (wsClosed) {

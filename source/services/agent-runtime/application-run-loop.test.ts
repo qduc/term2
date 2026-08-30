@@ -2645,7 +2645,7 @@ describe('ApplicationRunLoop in-loop request retry', () => {
     expect(diagnostics.some((d) => d.msg === 'Retrying model request in run loop')).toBe(true);
   });
 
-  it('disables chaining on retry after connection drop', async () => {
+  it('disables chaining on retry after connection drop of an unchained request', async () => {
     const requests: any[] = [];
     let attempts = 0;
     const model: StreamedModelTurn = {
@@ -2672,7 +2672,81 @@ describe('ApplicationRunLoop in-loop request retry', () => {
         ...agent,
         modelSettings: { retry: { maxRetries: 2 } },
       },
-      'continue prompt',
+      [
+        { role: 'user', type: 'message', content: 'earlier prompt' },
+        { role: 'assistant', type: 'message', content: [{ type: 'text', text: 'earlier reply' }] },
+        { role: 'user', type: 'message', content: 'continue prompt' },
+      ],
+      {
+        providerId: 'codex',
+        supportsConversationChaining: true,
+      },
+    );
+
+    await stream.completed;
+    expect(attempts).toBe(2);
+    expect(requests[0].previousResponseId).toBeUndefined();
+    expect(requests[1].previousResponseId).toBeUndefined();
+    expect(requests[1].disableChaining).toBe(true);
+    expect(requests[1].input).toEqual(requests[0].input);
+  });
+
+  it('does not retry a chained delta without an anchor after Invalid previous_response_id', async () => {
+    const requests: any[] = [];
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        requests.push(request);
+        throw Object.assign(new Error('Invalid `previous_response_id`.'), { status: 400 });
+      },
+    };
+
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => model,
+      waitBeforeModelRetry: async () => undefined,
+    });
+    const stream = loop.startStream(
+      {
+        ...agent,
+        modelSettings: { retry: { maxRetries: 2 } },
+      },
+      'This',
+      {
+        providerId: 'codex',
+        supportsConversationChaining: true,
+        previousResponseId: 'resp-stale',
+      },
+    );
+
+    await expect(stream.completed).rejects.toThrow('previous_response_id');
+    expect(requests).toHaveLength(1);
+    expect(requests[0].previousResponseId).toBe('resp-stale');
+    expect(requests[0].input).toEqual([
+      expect.objectContaining({
+        role: 'user',
+        content: [expect.objectContaining({ text: 'This' })],
+      }),
+    ]);
+  });
+
+  it('does not retry a chained delta without an anchor after a connection drop', async () => {
+    const requests: any[] = [];
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        requests.push(request);
+        throw new WebSocketClosedEarlyError({ code: 1006 });
+      },
+    };
+
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => model,
+      waitBeforeModelRetry: async () => undefined,
+    });
+    const stream = loop.startStream(
+      {
+        ...agent,
+        modelSettings: { retry: { maxRetries: 2 } },
+      },
+      'no, you got it in reverse',
       {
         providerId: 'codex',
         supportsConversationChaining: true,
@@ -2680,11 +2754,9 @@ describe('ApplicationRunLoop in-loop request retry', () => {
       },
     );
 
-    await stream.completed;
-    expect(attempts).toBe(2);
+    await expect(stream.completed).rejects.toThrow('closed before a terminal response event');
+    expect(requests).toHaveLength(1);
     expect(requests[0].previousResponseId).toBe('resp-prior');
-    expect(requests[1].previousResponseId).toBeUndefined();
-    expect(requests[1].disableChaining).toBe(true);
   });
 
   it('re-throws when maxRetries is exhausted', async () => {

@@ -107,7 +107,8 @@ export interface StreamedModelTurnRequest {
   /**
    * Skip previous_response_id and transport history compression for this
    * request. Recovery uses this to send one self-contained full-history
-   * inference request.
+   * inference request. A chained delta must never be retried with this flag
+   * and the same input: without the anchor it is not a conversation.
    */
   readonly disableChaining?: boolean;
 }

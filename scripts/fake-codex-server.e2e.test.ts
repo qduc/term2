@@ -361,18 +361,27 @@ it('does not replay an accepted but unacknowledged turn through the production r
   expect(server.receivedRequests).toHaveLength(1);
 });
 
-it('replays full history only after the server explicitly rejects the previous response id', async () => {
+it('propagates a caller-supplied stale previous_response_id so the session can rebuild full history', async () => {
   server = await startFakeCodexServer({ scenario: 'previous-response-not-found' });
   globalThis.WebSocket = NodeWebSocket as unknown as typeof WebSocket;
   const model = createModel(server.baseUrl);
   const chainedRequest = { ...request(), previousResponseId: 'resp_stale' };
 
-  for await (const _event of model.stream(chainedRequest)) {
-    // The explicit rejection is recovered by sending full history.
+  const consumeChained = async () => {
+    for await (const _event of model.stream(chainedRequest)) {
+      // A caller-supplied delta is not a conversation without its anchor.
+    }
+  };
+
+  await expect(consumeChained()).rejects.toThrow();
+  expect(server.receivedRequests).toHaveLength(1);
+  expect(server.receivedRequests[0]?.previous_response_id).toBe('resp_stale');
+
+  for await (const _event of model.stream(request())) {
+    // Session recovery resends the complete logical request without chaining.
   }
 
   expect(server.receivedRequests).toHaveLength(2);
-  expect(server.receivedRequests[0]?.previous_response_id).toBe('resp_stale');
   expect(server.receivedRequests[1]?.previous_response_id).toBeUndefined();
 });
 

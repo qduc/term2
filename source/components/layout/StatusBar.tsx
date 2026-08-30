@@ -5,6 +5,7 @@ import { useTerminalColumns } from '../../hooks/use-terminal-columns.js';
 import { hasDockerHostControlProject } from '../../utils/shell/sandbox/docker-host-control-grants.js';
 import { getProvider } from '../../providers/index.js';
 import type { GrokCreditUsage } from '../../providers/grok-credit-usage.js';
+import type { OpenCodeGoUsage } from '../../providers/opencode-go-usage.js';
 import { getModelContextWindow } from '../../providers/model-catalog/catalog.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
 import type { SSHInfo } from '../../services/shell/shell-interaction-session.js';
@@ -227,6 +228,7 @@ interface StatusBarProps {
   lastUsage?: NormalizedUsage | null;
   lastCodexRateLimit?: CodexRateLimitInfo | null;
   grokCreditUsage?: GrokCreditUsage | null;
+  openCodeGoUsage?: OpenCodeGoUsage | null;
   largeUncachedWarning?: { estimatedTokens: number } | null;
   hasPendingConfirmation?: boolean;
   pendingLargeUncachedTokens?: number;
@@ -245,6 +247,7 @@ const StatusBar: FC<StatusBarProps> = ({
   lastUsage,
   lastCodexRateLimit,
   grokCreditUsage,
+  openCodeGoUsage,
   largeUncachedWarning,
   hasPendingConfirmation = false,
   pendingLargeUncachedTokens,
@@ -329,6 +332,24 @@ const StatusBar: FC<StatusBarProps> = ({
       return `${GLYPH_WARNING} Confirm Cache Miss: ~${Math.round(tokens / 1000)}k`;
     }
     return `${GLYPH_WARNING} Cache Miss Risk: ~${Math.round(largeUncachedWarning.estimatedTokens / 1000)}k`;
+  })();
+
+  const openCodeGoUsageText = (() => {
+    if (!openCodeGoUsage) return '';
+    const formatReset = (seconds: number): string => {
+      if (seconds < 60) return `${Math.round(seconds)}s`;
+      const minutes = Math.floor(seconds / 60);
+      if (minutes < 60) return `${minutes}m`;
+      const hours = Math.floor(minutes / 60);
+      return hours < 24 ? `${hours}h` : `${Math.floor(hours / 24)}d`;
+    };
+    const formatLimit = (label: string, limit: { usagePercent: number; resetInSec: number }) =>
+      `${label} ${Math.round(limit.usagePercent)}% · reset ${formatReset(limit.resetInSec)}`;
+    return [
+      formatLimit('Roll', openCodeGoUsage.rollingUsage),
+      formatLimit('Week', openCodeGoUsage.weeklyUsage),
+      formatLimit('Month', openCodeGoUsage.monthlyUsage),
+    ].join(' / ');
   })();
 
   const codexRateLimitText = (() => {
@@ -466,7 +487,7 @@ const StatusBar: FC<StatusBarProps> = ({
   // means the bar is a single line whenever nothing is wrong — which is most
   // of the time — and grows only to say something.
   const hasAlerts = Boolean(warningText || dockerHostAccess || runBudgetNoticeText || staticCommitBlockerText);
-  const quotaText = codexRateLimitText || grokCreditUsageText;
+  const quotaText = codexRateLimitText || grokCreditUsageText || openCodeGoUsageText;
 
   // Segments as data: each group is fit to the *full* row budget on its own
   // (drop order below), and only afterward do the two fitted groups get

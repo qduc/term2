@@ -723,6 +723,22 @@ it.sequential('StatusBar omits the credit slot when there is no Grok usage', asy
   expect(lastFrame() ?? '').not.toContain('Credits');
 });
 
+it.sequential('StatusBar renders all OpenCode Go usage limits with countdown resets', async () => {
+  const settingsService = createMockSettingsService({ 'agent.provider': 'opencode go' });
+  const { lastFrame } = await renderInAct(
+    <StatusBar
+      settingsService={settingsService}
+      openCodeGoUsage={{
+        useBalance: false,
+        rollingUsage: { usagePercent: 42, resetInSec: 1234 },
+        weeklyUsage: { usagePercent: 27, resetInSec: 345600 },
+        monthlyUsage: { usagePercent: 18, resetInSec: 1414800 },
+      }}
+    />,
+  );
+  expect(lastFrame()).toContain('Roll 42% · reset 20m / Week 27% · reset 4d / Month 18% · reset 16d');
+});
+
 // Regression test for a bug where, at ~85 columns, Ink's row-level flexWrap
 // reflowed text character-by-character inside each segment because the right
 // (metrics) group held its full width and the left (config) group absorbed

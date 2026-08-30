@@ -20,6 +20,7 @@ import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { RunBudgetEvent } from '../../services/agent-runtime/run-budget.js';
 import type { CodexRateLimitInfo } from '../../services/conversation/conversation-events.js';
 import type { GrokCreditUsage } from '../../providers/grok-credit-usage.js';
+import type { OpenCodeGoUsage } from '../../providers/opencode-go-usage.js';
 import type { PendingApproval } from '../../contracts/conversation.js';
 import type { UserTurn } from '../../types/user-turn.js';
 import type { SkillInfo, SkillsService } from '../../services/skills/skills-service.js';
@@ -58,6 +59,7 @@ export type BottomAreaProps = {
   lastCodexRateLimit?: CodexRateLimitInfo | null;
   runBudgetNotice?: RunBudgetEvent | null;
   grokCreditUsage?: GrokCreditUsage | null;
+  openCodeGoUsage?: OpenCodeGoUsage | null;
   onSubmit: (value: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) => Promise<void>;
   onRejectionReasonInputReady?: () => void;
   slashCommands: SlashCommand[];
@@ -151,6 +153,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   lastCodexRateLimit,
   runBudgetNotice,
   grokCreditUsage,
+  openCodeGoUsage,
   onSettingChange,
   onSystemMessage,
   handoffState,
@@ -450,6 +453,7 @@ const BottomArea: FC<BottomAreaProps> = ({
         lastCodexRateLimit={lastCodexRateLimit}
         runBudgetNotice={runBudgetNotice}
         grokCreditUsage={grokCreditUsage}
+        openCodeGoUsage={openCodeGoUsage}
         largeUncachedWarning={largeUncachedWarning}
         hasPendingConfirmation={
           (pendingLargeUncachedTurn !== null && pendingLargeUncachedTokens > 0) || pendingSurgeTurn !== null

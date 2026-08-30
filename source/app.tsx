@@ -17,6 +17,7 @@ import type { HistoryService } from './services/history-service.js';
 import type { LoggingService } from './services/logging/logging-service.js';
 import { ISSHService } from './services/service-interfaces.js';
 import { useGrokCreditUsage } from './hooks/use-grok-credit-usage.js';
+import { useOpenCodeGoUsage } from './hooks/use-opencode-go-usage.js';
 import { useSetting } from './hooks/use-setting.js';
 import { useDebouncedValue } from './hooks/use-debounced-value.js';
 import type { LargeUncachedInputDecision } from './services/large-uncached-input-guard.js';
@@ -373,6 +374,7 @@ const App: FC<AppProps> = ({
   const isOverallBusy = isProcessing || hasActiveBackgroundTasks;
 
   const grokCreditUsage = useGrokCreditUsage(settingsService, isOverallBusy);
+  const openCodeGoUsage = useOpenCodeGoUsage(settingsService, isOverallBusy);
 
   const previewInput = useDebouncedValue(input, LARGE_UNCACHED_PREVIEW_DEBOUNCE_MS, (value) => value === '');
   const [largeUncachedPreview, setLargeUncachedPreview] = useState<LargeUncachedInputDecision | null>(null);
@@ -718,7 +720,10 @@ const App: FC<AppProps> = ({
     replaceInput,
     clearConversation: clearConversationAndRefreshBanner,
     getSessionUsage,
-    refreshProviderUsage: grokCreditUsage.refresh,
+    refreshProviderUsage: () => {
+      grokCreditUsage.refresh();
+      openCodeGoUsage.refresh();
+    },
     exit: exitWithUsage,
     messages,
     setModel,
@@ -1189,6 +1194,7 @@ const App: FC<AppProps> = ({
             lastCodexRateLimit={lastCodexRateLimit}
             runBudgetNotice={runBudgetNotice}
             grokCreditUsage={grokCreditUsage.usage}
+            openCodeGoUsage={openCodeGoUsage.usage}
             staticCommitBlocker={staticCommitBlocker}
             firstRunSetup={firstRunSetup}
             onProviderSelected={firstRunSetup.active ? firstRunSetup.onProviderSelected : undefined}

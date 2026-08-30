@@ -7,8 +7,6 @@ export type GenerationGuardCode =
   | 'tool_argument_characters'
   | 'cumulative_tool_argument_characters'
   | 'output_characters'
-  | 'repetitive_text'
-  | 'repetitive_reasoning'
   | 'request_deadline'
   | 'stream_inactivity';
 
@@ -36,26 +34,9 @@ export interface GenerationGuardOptions {
    * disables it.
    */
   readonly maxStreamIdleMs?: number;
-  readonly repetition?: Partial<GenerationRepetitionOptions>;
 }
 
-export interface GenerationRepetitionOptions {
-  readonly minRepeatedCharacters: number;
-  readonly minRepetitions: number;
-  readonly maxPatternCharacters: number;
-  readonly retainedWindowCharacters: number;
-}
-
-export const DEFAULT_GENERATION_REPETITION_OPTIONS: Readonly<GenerationRepetitionOptions> = {
-  minRepeatedCharacters: 4_096,
-  minRepetitions: 3,
-  maxPatternCharacters: 4_096,
-  retainedWindowCharacters: 32_768,
-};
-
-export const DEFAULT_GENERATION_GUARD_OPTIONS: Readonly<Required<Omit<GenerationGuardOptions, 'repetition'>>> & {
-  readonly repetition: Readonly<GenerationRepetitionOptions>;
-} = {
+export const DEFAULT_GENERATION_GUARD_OPTIONS: Readonly<Required<GenerationGuardOptions>> = {
   maxOutputCharacters: 100_000,
   maxTextCharacters: 100_000,
   maxReasoningCharacters: 100_000,
@@ -69,12 +50,9 @@ export const DEFAULT_GENERATION_GUARD_OPTIONS: Readonly<Required<Omit<Generation
   // provider that buffers its whole answer for minutes still deliver it.
   requestDeadlineMs: 0,
   maxStreamIdleMs: 600_000,
-  repetition: DEFAULT_GENERATION_REPETITION_OPTIONS,
 };
 
-type ResolvedGenerationGuardOptions = Required<Omit<GenerationGuardOptions, 'repetition'>> & {
-  repetition: GenerationRepetitionOptions;
-};
+type ResolvedGenerationGuardOptions = Required<GenerationGuardOptions>;
 
 /** A guard trip means the provider may have accepted work with an uncertain outcome. */
 export class GenerationGuardError extends AmbiguousModelOutcomeError {
@@ -87,63 +65,6 @@ export class GenerationGuardError extends AmbiguousModelOutcomeError {
   }
 }
 
-/** Bounded exact-periodic-suffix detector, intentionally preserving whitespace. */
-class RepetitionDetector {
-  #text = '';
-  #observedCharacters = 0;
-  #nextCheckAt: number;
-
-  constructor(private readonly options: GenerationRepetitionOptions) {
-    this.#nextCheckAt = options.minRepeatedCharacters;
-  }
-
-  append(delta: string): boolean {
-    this.#observedCharacters += delta.length;
-    this.#text = (this.#text + delta).slice(-this.options.retainedWindowCharacters);
-    if (this.#text.trim().length === 0) return false;
-    if (this.#observedCharacters < this.#nextCheckAt) return false;
-
-    // Rechecking every token would turn a long, ordinary response into a
-    // repeated O(window) scan. A bounded lag is harmless—the output ceiling
-    // remains exact—and keeps detector work near-linear in output size.
-    this.#nextCheckAt =
-      this.#observedCharacters + Math.max(1, Math.min(256, Math.floor(this.options.minRepeatedCharacters / 4)));
-    return hasRepeatedSuffix(this.#text, this.options);
-  }
-}
-
-/**
- * Z-values make equality of a suffix's repeated blocks an O(1) query per
- * candidate period after one O(window) scan of the reversed bounded buffer.
- */
-function hasRepeatedSuffix(text: string, options: GenerationRepetitionOptions): boolean {
-  const reversed = text.split('').reverse().join('');
-  const z = zValues(reversed);
-  const maxPatternLength = Math.min(options.maxPatternCharacters, Math.floor(text.length / options.minRepetitions));
-  for (let patternLength = 1; patternLength <= maxPatternLength; patternLength++) {
-    const repetitions = Math.max(options.minRepetitions, Math.ceil(options.minRepeatedCharacters / patternLength));
-    const repeatedLength = patternLength * repetitions;
-    if (repeatedLength > text.length || z[patternLength]! < repeatedLength - patternLength) continue;
-    if (text.slice(-patternLength).trim().length > 0) return true;
-  }
-  return false;
-}
-
-function zValues(value: string): Uint32Array {
-  const z = new Uint32Array(value.length);
-  let left = 0;
-  let right = 0;
-  for (let index = 1; index < value.length; index++) {
-    if (index <= right) z[index] = Math.min(right - index + 1, z[index - left]!);
-    while (index + z[index]! < value.length && value[z[index]!] === value[index + z[index]!]) z[index]! += 1;
-    if (index + z[index]! > right) {
-      left = index;
-      right = index + z[index]! - 1;
-    }
-  }
-  return z;
-}
-
 export interface GenerationProgress {
   readonly outputCharacters: number;
   readonly textCharacters: number;
@@ -151,11 +72,9 @@ export interface GenerationProgress {
   readonly toolArgumentCharacters: number;
 }
 
-/** Owns counting and repetition state for exactly one provider request. */
+/** Owns containment accounting for exactly one provider request. */
 export class GenerationGuard {
   readonly #options: ResolvedGenerationGuardOptions;
-  readonly #textRepetition: RepetitionDetector;
-  readonly #reasoningRepetition: RepetitionDetector;
   #textCharacters = 0;
   #reasoningCharacters = 0;
   #observableToolArgumentCharacters = 0;
@@ -165,8 +84,6 @@ export class GenerationGuard {
 
   constructor(options?: GenerationGuardOptions) {
     this.#options = resolveGenerationGuardOptions(options);
-    this.#textRepetition = new RepetitionDetector(this.#options.repetition);
-    this.#reasoningRepetition = new RepetitionDetector(this.#options.repetition);
   }
 
   get requestDeadlineMs(): number {
@@ -209,18 +126,12 @@ export class GenerationGuard {
 
   observeText(text: string): void {
     this.#addText(text.length);
-    if (this.#textRepetition.append(text)) {
-      throw new GenerationGuardError(
-        'repetitive_text',
-        'Model output was stopped because text entered a repeating pattern.',
-      );
-    }
   }
 
   /**
    * Count and retain reasoning up to the configured cap. Returns the prefix
    * that still fits so callers can stop forwarding the rest; never throws for
-   * length. Repetition on the retained prefix remains fail-closed.
+   * length.
    */
   observeReasoning(text: string): string {
     if (!text) return text;
@@ -228,12 +139,6 @@ export class GenerationGuard {
     if (remaining <= 0) return '';
     const accepted = text.length > remaining ? text.slice(0, remaining) : text;
     this.#addReasoning(accepted.length);
-    if (this.#reasoningRepetition.append(accepted)) {
-      throw new GenerationGuardError(
-        'repetitive_reasoning',
-        'Model output was stopped because reasoning entered a repeating pattern.',
-      );
-    }
     return accepted;
   }
 
@@ -264,7 +169,7 @@ export class GenerationGuard {
   /**
    * Validate terminal-only provider output before it reaches history. Terminal
    * text/reasoning often repeat streamed content, so add only the unobserved
-   * suffix length; repetition is evaluated only when this is the sole copy.
+   * suffix length.
    */
   observeCompletion(output: readonly StreamedModelTurnOutput[]): void {
     const text = output
@@ -493,6 +398,5 @@ export function resolveGenerationGuardOptions(options?: GenerationGuardOptions):
       DEFAULT_GENERATION_GUARD_OPTIONS.maxCumulativeToolArgumentCharacters,
     requestDeadlineMs: options?.requestDeadlineMs ?? DEFAULT_GENERATION_GUARD_OPTIONS.requestDeadlineMs,
     maxStreamIdleMs: options?.maxStreamIdleMs ?? DEFAULT_GENERATION_GUARD_OPTIONS.maxStreamIdleMs,
-    repetition: { ...DEFAULT_GENERATION_REPETITION_OPTIONS, ...options?.repetition },
   };
 }

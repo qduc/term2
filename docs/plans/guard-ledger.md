@@ -55,9 +55,10 @@ Open work, in order:
   request was aborting the turn as `reasoning_characters` /
   `unsafeToReplay`. The 100k cap is retained as a truncate bound; it no
   longer fails the request. See the repair record below.
-- **Next:** implement the remaining two approved repairs in separate worktrees
-  and independently revertible commits. Re-run each recorded red proof first
-  and follow the verification gates below.
+- **Completed (this branch, pending merge; `d16bd5e3`):** destructive repetition
+  inference is removed from both execution owners while the typed
+  100,000-character aggregate visible-output cap remains. The InputSurgeGuard
+  capability repair remains a separate worktree and rollback boundary.
 
 ## Guard classes
 
@@ -400,6 +401,70 @@ KNOWN BASELINE FAILURE: 543 files passed, 1 failed, 1 skipped; 6,956 tests
 passed, 1 failed, 3 expected failures, 2 skipped. The sole failure was the same
 stop-processing probe and does not exercise input-surge admission.
 ```
+
+### Duplicate repetition detector repair
+
+ Disposition: **implemented and verified in `d16bd5e3`; merged into `main`.**
+`GenerationGuard` no longer treats repeated text or reasoning as a terminal
+failure, and `SessionStreamProcessor` no longer owns a second foreground
+repetition abort. `RepetitionDetector` remains only as a bounded boolean
+diagnostic primitive with no production enforcement caller. The direct aggregate
+visible-output budget remains the enforcement owner: output beyond 100,000
+characters still aborts the active request as typed `output_characters` and is
+unsafe to replay, while already-forwarded output remains available.
+
+```text
+Harm prevented: legitimate periodic text or reasoning terminating a productive
+  turn and being falsely classified unsafe to replay.
+Scope and execution paths: shared ApplicationRunLoop model-stream consumption
+  and the foreground SessionStreamProcessor path.
+Guard class: repetition is an inconclusive runaway proxy; aggregate output is a
+  containment budget.
+Enforcement owner: GenerationGuard aggregate visible-output accounting.
+Recovery owner: ApplicationRunLoop abort and ambiguous-outcome settlement for
+  the retained output-character cap; repetition has no recovery path because it
+  no longer fabricates failure.
+Measured signal and observation boundary: cumulative visible text and streamed
+  tool-argument characters on one provider request.
+Direct evidence or proxy: direct character count for containment; periodicity is
+  a proxy and no longer authorizes termination.
+Legitimate work that can produce the removed signal: fixed-width tables, logs,
+  generated data, and periodic reasoning split across provider chunks.
+Configuration sources and precedence: existing GenerationGuard options and
+  model settings; no value or precedence changed.
+Effective default and clamping: aggregate visible output remains 100,000
+  characters by default; existing positive-integer resolution is unchanged.
+Action and why the signal justifies it: repetition has no terminal action;
+  exceeding the explicit aggregate budget aborts and reports output_characters.
+Partial-work settlement: already-forwarded output is retained; cap overflow
+  aborts before forwarding the triggering chunk.
+Retry, fallback, and provider-continuity semantics: cap overflow remains an
+  AmbiguousModelOutcomeError and unsafe to replay; repetition no longer enters
+  retry classification.
+Observability fields: retained typed output_characters code and counts; removed
+  repetitive_text, repetitive_reasoning, repetitive_model_output terminal codes.
+Persisted-setting migration, if any: none.
+Rollback boundary: independently revertible `d16bd5e3`.
+Ledger row: duplicate repetition detectors.
+```
+
+Red proof before production edits:
+
+```text
+NODE_ENV=test pnpm test source/services/agent-runtime/generation-guard.test.ts \
+  source/services/agent-runtime/application-run-loop.test.ts \
+  source/services/session/session-stream-processor.test.ts
+FAIL 5 tests: legitimate periodic output terminated as repetitive_text or
+repetitive_model_output; the aggregate-cap test was preempted by repetition.
+```
+
+Detection gap: both owners' tests encoded repetition-only termination as desired
+behavior. They did not challenge the proxy with legitimate periodic output at
+the public execution boundaries or assert that the explicit aggregate budget,
+rather than repetition, remained the terminal containment owner.
+
+Verification is recorded in `EXPERIMENT-P2.md`; implementation commit:
+`d16bd5e3`.
 
 ### Subagent steering mailbox repair
 

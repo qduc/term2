@@ -246,84 +246,65 @@ describe('ApplicationRunLoop generation guard', () => {
     maxToolArgumentCharacters: 100,
     maxCumulativeToolArgumentCharacters: 100,
     requestDeadlineMs: 1_000,
-    repetition: {
-      minRepeatedCharacters: 12,
-      minRepetitions: 3,
-      maxPatternCharacters: 16,
-      retainedWindowCharacters: 64,
-    },
   };
 
-  it('aborts unsafe repeated text across provider chunk boundaries before forwarding the triggering chunk', async () => {
+  it('streams legitimate periodic text beyond both former repetition thresholds', async () => {
     let signal: AbortSignal | undefined;
+    const chunk = 'fixed-width periodic model data\n';
+    const text = chunk.repeat(200);
     const model: StreamedModelTurn = {
       async *stream(request) {
         signal = request.signal;
-        yield { type: 'text_delta' as const, text: 'loop' };
-        yield { type: 'text_delta' as const, text: 'loop' };
-        yield { type: 'text_delta' as const, text: 'loop' };
-        yield { type: 'completion' as const, responseId: 'unreachable', output: [] };
+        for (let index = 0; index < 200; index++) {
+          yield { type: 'text_delta' as const, text: chunk };
+        }
+        yield {
+          type: 'completion' as const,
+          responseId: 'resp-periodic-output',
+          output: [{ type: 'message' as const, content: [{ type: 'text' as const, text }] }],
+        };
       },
     };
 
-    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'prompt', {
-      generationGuard: guard,
-    } as any);
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'prompt');
 
-    await expect(stream.completed).rejects.toMatchObject({ code: 'repetitive_text', unsafeToReplay: true });
-    expect(signal?.aborted).toBe(true);
-    expect(stream.output).toEqual([
-      { type: 'text_delta', text: 'loop' },
-      { type: 'text_delta', text: 'loop' },
-    ]);
+    expect(text.length).toBeGreaterThan(4_096);
+    await expect(stream.completed).resolves.toBeDefined();
+    expect(signal?.aborted).toBe(false);
+    const textEvents = stream.output as Array<{ type: string; text?: string }>;
+    expect(textEvents.filter((event) => event.type === 'text_delta')).toHaveLength(200);
+    expect(textEvents.map((event) => event.text ?? '').join('')).toBe(text);
   });
 
-  it('aborts unsafe repeated reasoning across provider chunk boundaries', async () => {
+  it('streams legitimate periodic reasoning beyond the former shared repetition threshold', async () => {
+    let signal: AbortSignal | undefined;
+    const chunk = 'fixed-width periodic reasoning\n';
+    const reasoning = chunk.repeat(200);
     const model: StreamedModelTurn = {
-      async *stream() {
-        yield { type: 'reasoning_delta' as const, text: 'think' };
-        yield { type: 'reasoning_delta' as const, text: 'think' };
-        yield { type: 'reasoning_delta' as const, text: 'think' };
-        yield { type: 'completion' as const, responseId: 'unreachable', output: [] };
+      async *stream(request) {
+        signal = request.signal;
+        for (let index = 0; index < 200; index++) {
+          yield { type: 'reasoning_delta' as const, text: chunk };
+        }
+        yield {
+          type: 'completion' as const,
+          responseId: 'resp-periodic-reasoning',
+          output: [{ type: 'message' as const, content: [{ type: 'text' as const, text: 'done' }] }],
+        };
       },
     };
-    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'prompt', {
-      generationGuard: { ...guard, repetition: { ...guard.repetition, minRepeatedCharacters: 15 } },
-    } as any);
 
-    await expect(stream.completed).rejects.toMatchObject({ code: 'repetitive_reasoning', unsafeToReplay: true });
-    expect(stream.output).toEqual([
-      { type: 'reasoning_delta', text: 'think' },
-      { type: 'reasoning_delta', text: 'think' },
-    ]);
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'prompt');
+
+    expect(reasoning.length).toBeGreaterThan(4_096);
+    await expect(stream.completed).resolves.toBeDefined();
+    expect(signal?.aborted).toBe(false);
+    const reasoningEvents = stream.output as Array<{ type: string; text?: string }>;
+    expect(reasoningEvents.filter((event) => event.type === 'reasoning_delta')).toHaveLength(200);
+    expect(reasoningEvents.map((event) => event.text ?? '').join('')).toBe(reasoning);
   });
 
-  it('continues checking for repetition after the retained detector window fills', async () => {
-    const model: StreamedModelTurn = {
-      async *stream() {
-        yield { type: 'text_delta' as const, text: 'abcdefghijkl' };
-        yield { type: 'text_delta' as const, text: 'zz' };
-        yield { type: 'text_delta' as const, text: 'zz' };
-        yield { type: 'text_delta' as const, text: 'zz' };
-        yield { type: 'completion' as const, responseId: 'unreachable', output: [] };
-      },
-    };
-    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'prompt', {
-      generationGuard: {
-        ...guard,
-        repetition: {
-          minRepeatedCharacters: 6,
-          minRepetitions: 3,
-          maxPatternCharacters: 4,
-          retainedWindowCharacters: 12,
-        },
-      },
-    } as any);
-
-    await expect(stream.completed).rejects.toMatchObject({ code: 'repetitive_text', unsafeToReplay: true });
-  });
-
-  it('allows ordinary repeated prose below the configured repetition threshold', async () => {
+  it('allows ordinary repeated prose', async () => {
     const text = 'Please inspect the current diff. Please inspect the current diff.';
     const model: StreamedModelTurn = {
       async *stream() {
@@ -337,10 +318,7 @@ describe('ApplicationRunLoop generation guard', () => {
       },
     };
     const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'prompt', {
-      generationGuard: {
-        ...guard,
-        repetition: { ...guard.repetition, minRepeatedCharacters: text.length + 1 },
-      },
+      generationGuard: guard,
     });
 
     await expect(collect(stream)).resolves.toEqual([
@@ -356,6 +334,24 @@ describe('ApplicationRunLoop generation guard', () => {
       },
     ]);
     await expect(stream.completed).resolves.toBeDefined();
+  });
+
+  it('settles output beyond the default 100,000-character aggregate cap as unsafe to replay', async () => {
+    let signal: AbortSignal | undefined;
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        signal = request.signal;
+        yield { type: 'text_delta' as const, text: 'x'.repeat(100_000) };
+        yield { type: 'tool_call_streaming_delta' as const, toolName: 'shell', argumentCharCount: 1 };
+      },
+    };
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'prompt');
+
+    await expect(stream.completed).rejects.toMatchObject({ code: 'output_characters', unsafeToReplay: true });
+    expect(signal?.aborted).toBe(true);
+    expect(stream.output).toHaveLength(1);
+    expect(stream.output[0]).toMatchObject({ type: 'text_delta', text: expect.any(String) });
+    expect((stream.output[0] as { text: string }).text).toHaveLength(100_000);
   });
 
   it('truncates streamed reasoning at its cap and still delivers later text instead of aborting the request', async () => {

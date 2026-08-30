@@ -17,7 +17,6 @@ import { projectPersistedAssistantItemToProviderHistory } from '../conversation/
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { ProviderOpaqueItem } from '../../contracts/conversation-items.js';
 import { GenerationGuard, type GenerationToken } from '../generation-guard.js';
-import { RepetitionDetector, RepetitiveModelOutputError } from './repetition-detector.js';
 import { ToolCallMarkerStore } from '../../utils/streaming/extract-command-messages.js';
 
 export type StreamHistorySource = 'startStream' | 'continueRunStream' | 'abortResolution';
@@ -242,7 +241,6 @@ export class SessionStreamProcessor {
     };
     let pendingLedgerReasoningText = '';
     let consumedLedgerReasoningLength = 0;
-    const repetitionDetector = new RepetitionDetector();
 
     const generator = processStreamEvents(
       stream,
@@ -320,18 +318,6 @@ export class SessionStreamProcessor {
         this.deps.generationGuard.runIfCurrent(options.gen, commitWorkingCaches);
         if (next.value.type === 'reasoning_delta') {
           pendingLedgerReasoningText = acc.reasoningOutput.slice(consumedLedgerReasoningLength);
-        }
-        if (next.value.type === 'text_delta' && repetitionDetector.append(next.value.delta)) {
-          this.deps.logger.warn('Repeating model output detected; aborting stream', {
-            eventType: 'conversation.repetitive_output_detected',
-            category: 'provider',
-            phase: 'stream',
-            sessionId: this.deps.sessionId,
-            traceId: this.deps.logger.getCorrelationId(),
-            outputLength: acc.finalOutput.length,
-          });
-          this.deps.abortStream?.();
-          throw new RepetitiveModelOutputError();
         }
         const filtered = this.deps.toolTracker.dedupeToolStarted(next.value);
         if (filtered) {

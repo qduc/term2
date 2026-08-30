@@ -56,8 +56,8 @@ describe('in-loop-model-retry', () => {
     }
   });
 
-  it('rejects retry for GenerationGuardError', () => {
-    const error = new GenerationGuardError('repetitive_text', 'repeated text');
+  it('rejects retry for the retained output-containment GenerationGuardError', () => {
+    const error = new GenerationGuardError('output_characters', 'output limit exceeded');
     const decision = classifyInLoopModelRetry(error, 0, 2);
 
     expect(decision.retryable).toBe(false);

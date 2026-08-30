@@ -531,56 +531,64 @@ describe('application-owned context compaction black-box lifecycle', () => {
 });
 
 describe('Codex WebSocket corrupt-history recovery', () => {
-  it('codex-websocket.orphan-chain-recovery sends a paired full-history request after a stale chain 400', async () => {
-    const route = WS_ROUTES.find((entry) => entry.route.provider === 'codex')!.route;
-    const server = await startResilienceWebSocketServer({
-      family: 'codex-responses',
-      scenario: 'orphan-chain-recovery',
-    });
-    activeWsServers.push(server);
-    const workspace = await createWorkspace(route, server);
-    activeWorkspaces.push(workspace);
-    await enableTransientRetries(workspace.paths.logDir);
-    const conversationId = '3281ca05-cc92-4a25-b686-5c4e969fc17c';
-    await writeCorruptCodexResume(workspace.paths.conversationsDir, conversationId, process.cwd());
+  const baseRoute = WS_ROUTES.find((entry) => entry.route.provider === 'codex')!.route;
+  const testCases = [
+    { model: baseRoute.model, label: 'standard model' },
+    { model: 'gpt-5.6-luna', label: 'Responses Lite (gpt-5.6-luna)' },
+  ] as const;
 
-    const child = await startInteractive(workspace, route, ['--resume', conversationId]);
-    await child.waitForVisibleOutput(`Resumed conversation: ${conversationId}`);
-    const idle = await child.waitForIdleInput();
-    await submitPrompt(child, 'continue from the last result');
-    await child.waitForState(
-      (snapshot) =>
-        snapshot.visibleOutput.includes('recovered-after-orphan') ||
-        snapshot.visibleOutput.includes('follow-up-chained'),
-    );
-    const recoveredIdle = await child.waitForIdleInput({ after: idle });
-    await submitPrompt(child, 'and then confirm continuity');
-    await child.waitForIdleInput({ after: recoveredIdle });
-    await child.terminate();
+  for (const { model, label } of testCases) {
+    it(`codex-websocket.orphan-chain-recovery (${label}) sends a paired full-history request after a stale chain 400`, async () => {
+      const route = { ...baseRoute, model };
+      const server = await startResilienceWebSocketServer({
+        family: 'codex-responses',
+        scenario: 'orphan-chain-recovery',
+      });
+      activeWsServers.push(server);
+      const workspace = await createWorkspace(route, server);
+      activeWorkspaces.push(workspace);
+      await enableTransientRetries(workspace.paths.logDir);
+      const conversationId = '3281ca05-cc92-4a25-b686-5c4e969fc17c';
+      await writeCorruptCodexResume(workspace.paths.conversationsDir, conversationId, process.cwd(), model);
 
-    const created = server.requests.filter(isResponseCreate);
-    expect(
-      created.filter((request) => firstOrphanToolOutputCallId(request)),
-      'resumed history must not send an orphan tool output',
-    ).toEqual([]);
-    const paired = created.find((request) => {
-      const input = inputItems(asRecord(request)?.input);
-      return (
-        input.some((item) => item.type === 'function_call' && callIdOf(item) === ORPHAN_RESUME_CALL_ID) &&
-        input.some((item) => item.type === 'function_call_output' && callIdOf(item) === ORPHAN_RESUME_CALL_ID)
+      const child = await startInteractive(workspace, route, ['--resume', conversationId]);
+      await child.waitForVisibleOutput(`Resumed conversation: ${conversationId}`);
+      const idle = await child.waitForIdleInput();
+      await submitPrompt(child, 'continue from the last result');
+      await child.waitForState(
+        (snapshot) =>
+          snapshot.visibleOutput.includes('recovered-after-orphan') ||
+          snapshot.visibleOutput.includes('follow-up-chained'),
+      );
+      const recoveredIdle = await child.waitForIdleInput({ after: idle });
+      await submitPrompt(child, 'and then confirm continuity');
+      await child.waitForIdleInput({ after: recoveredIdle });
+      await child.terminate();
+
+      const created = server.requests.filter(isResponseCreate);
+      expect(
+        created.filter((request) => firstOrphanToolOutputCallId(request)),
+        'resumed history must not send an orphan tool output',
+      ).toEqual([]);
+      const paired = created.find((request) => {
+        const input = inputItems(asRecord(request)?.input);
+        return (
+          input.some((item) => item.type === 'function_call' && callIdOf(item) === ORPHAN_RESUME_CALL_ID) &&
+          input.some((item) => item.type === 'function_call_output' && callIdOf(item) === ORPHAN_RESUME_CALL_ID)
+        );
+      });
+      expect(paired, 'expected a self-contained request containing the completed tool pair').toBeTruthy();
+      expect(asRecord(paired)?.previous_response_id ?? null).not.toBe(STALE_WARMUP_RESPONSE_ID);
+      const generating = created.filter((request) => asRecord(request)?.generate !== false);
+      const followUp = generating.at(-1);
+      expect(asRecord(followUp)?.previous_response_id).toBeTruthy();
+      expect(asRecord(followUp)?.previous_response_id).not.toBe(STALE_WARMUP_RESPONSE_ID);
+      expect(child.getVisibleOutput().split('pwd').length - 1).toBe(1);
+      expect(child.getVisibleOutput().split('Conversation state was rejected by the provider').length - 1).toBeLessThan(
+        2,
       );
     });
-    expect(paired, 'expected a self-contained request containing the completed tool pair').toBeTruthy();
-    expect(asRecord(paired)?.previous_response_id ?? null).not.toBe(STALE_WARMUP_RESPONSE_ID);
-    const generating = created.filter((request) => asRecord(request)?.generate !== false);
-    const followUp = generating.at(-1);
-    expect(asRecord(followUp)?.previous_response_id).toBeTruthy();
-    expect(asRecord(followUp)?.previous_response_id).not.toBe(STALE_WARMUP_RESPONSE_ID);
-    expect(child.getVisibleOutput().split('pwd').length - 1).toBe(1);
-    expect(child.getVisibleOutput().split('Conversation state was rejected by the provider').length - 1).toBeLessThan(
-      2,
-    );
-  });
+  }
 });
 
 async function runOneShot(
@@ -684,7 +692,12 @@ async function enableTransientRetries(settingsDir: string): Promise<void> {
   await writeFile(settingsPath, JSON.stringify(settings), 'utf8');
 }
 
-async function writeCorruptCodexResume(conversationsDir: string, id: string, projectPath: string): Promise<void> {
+async function writeCorruptCodexResume(
+  conversationsDir: string,
+  id: string,
+  projectPath: string,
+  model = 'fixture-codex-ws',
+): Promise<void> {
   await mkdir(conversationsDir, { recursive: true });
   const ts = '2026-08-12T17:00:18.000Z';
   const envelopes = [
@@ -697,7 +710,7 @@ async function writeCorruptCodexResume(conversationsDir: string, id: string, pro
         id,
         createdAt: ts,
         projectPath,
-        model: 'fixture-codex-ws',
+        model,
         provider: 'codex',
       },
     },
@@ -737,7 +750,7 @@ async function writeCorruptCodexResume(conversationsDir: string, id: string, pro
         },
         state: {
           previousResponseId: STALE_WARMUP_RESPONSE_ID,
-          model: 'fixture-codex-ws',
+          model,
           provider: 'codex',
         },
       },
@@ -1261,7 +1274,11 @@ function responseFramesForWs(
   const responseId = `resp_ws_${scenario}_${requestNumber}`;
   if (scenario === 'orphan-chain-recovery') {
     const orphanCallId = firstOrphanToolOutputCallId(message);
-    if (orphanCallId) {
+    const body = asRecord(message);
+    const hasStalePrevId =
+      body?.previous_response_id === STALE_WARMUP_RESPONSE_ID ||
+      (typeof body?.previous_response_id === 'string' && body.previous_response_id.includes('stale'));
+    if (orphanCallId || hasStalePrevId) {
       return [
         { type: 'response.created', response: { id: responseId, status: 'in_progress' } },
         {
@@ -1271,7 +1288,9 @@ function responseFramesForWs(
             status: 'failed',
             error: {
               type: 'invalid_request_error',
-              message: `No tool call found for function call output with call_id ${orphanCallId}.`,
+              message: orphanCallId
+                ? `No tool call found for function call output with call_id ${orphanCallId}.`
+                : 'Invalid `previous_response_id`.',
             },
           },
         },

@@ -2897,12 +2897,13 @@ it('CodexResponsesWSModel invalidates Luna wire state on previous_response_not_f
   const prevNotFoundError = Object.assign(new Error('Previous response not found for id resp_stale'), {
     code: 'previous_response_not_found',
   });
-  transport.fetchResponse = async function (request: any) {
-    seenRequests.push(request);
+  transport.fetchResponse = async function (request: any, _stream: boolean, requestData?: any) {
+    const payload = requestData ?? request;
+    seenRequests.push(payload);
 
     const isChainedContinuation =
-      request.previousResponseId === 'resp_luna_ok' &&
-      request.input?.some((item: any) => item?.content?.[0]?.text === 'continue');
+      (payload.previousResponseId === 'resp_luna_ok' || payload.previous_response_id === 'resp_luna_ok') &&
+      payload.input?.some((item: any) => item?.content?.[0]?.text === 'continue');
     if (isChainedContinuation && !rejectedChainedContinuation) {
       rejectedChainedContinuation = true;
       throw prevNotFoundError;
@@ -2952,11 +2953,10 @@ it('CodexResponsesWSModel invalidates Luna wire state on previous_response_not_f
       } as any),
     );
 
-    // Second request: chains off the first, but fails with prev-not-found.
+    // Second request: chains off the first (wire state supplies previous response id), but fails with prev-not-found.
     // The error triggers invalidation, then the fallback sends full input.
     await collect(
       model.stream({
-        previousResponseId: 'resp_luna_ok',
         input: [userMsg, userMsg2],
         instructions: 'Do it.',
         tools: [],
@@ -2968,14 +2968,18 @@ it('CodexResponsesWSModel invalidates Luna wire state on previous_response_not_f
     expect(rejectedChainedContinuation).toBe(true);
     const failedRequestIndex = seenRequests.findIndex(
       (candidate) =>
-        candidate.previousResponseId === 'resp_luna_ok' &&
+        (candidate.previousResponseId === 'resp_luna_ok' || candidate.previous_response_id === 'resp_luna_ok') &&
         candidate.input?.some((item: any) => item?.content?.[0]?.text === 'continue'),
     );
     const fallbackRequests = seenRequests.slice(failedRequestIndex + 1);
     expect(fallbackRequests).not.toHaveLength(0);
     expect(fallbackRequests[0].previousResponseId).toBeUndefined();
+    expect(fallbackRequests[0].previous_response_id).toBeUndefined();
     expect(fallbackRequests.flatMap((candidate) => candidate.input)).toEqual(
-      expect.arrayContaining([userMsg, userMsg2]),
+      expect.arrayContaining([
+        expect.objectContaining({ content: [{ type: 'input_text', text: 'hello' }] }),
+        expect.objectContaining({ content: [{ type: 'input_text', text: 'continue' }] }),
+      ]),
     );
   } finally {
   }
@@ -2991,12 +2995,13 @@ it('CodexResponsesWSModel invalidates Luna wire state on invalid previous_respon
     ),
     { status: 400 },
   );
-  transport.fetchResponse = async function (request: any) {
-    seenRequests.push(request);
+  transport.fetchResponse = async function (request: any, _stream: boolean, requestData?: any) {
+    const payload = requestData ?? request;
+    seenRequests.push(payload);
 
     const isChainedContinuation =
-      request.previousResponseId === 'resp_luna_ok' &&
-      request.input?.some((item: any) => item?.content?.[0]?.text === 'continue');
+      (payload.previousResponseId === 'resp_luna_ok' || payload.previous_response_id === 'resp_luna_ok') &&
+      payload.input?.some((item: any) => item?.content?.[0]?.text === 'continue');
     if (isChainedContinuation && !rejectedChainedContinuation) {
       rejectedChainedContinuation = true;
       throw invalidPrevResponseIdError;
@@ -3046,11 +3051,10 @@ it('CodexResponsesWSModel invalidates Luna wire state on invalid previous_respon
       } as any),
     );
 
-    // Second request: chains off the first, but fails with invalid previous_response_id.
+    // Second request: chains off the first (wire state supplies previous response id), but fails with invalid previous_response_id.
     // The error triggers invalidation, then the fallback sends full input.
     await collect(
       model.stream({
-        previousResponseId: 'resp_luna_ok',
         input: [userMsg, userMsg2],
         instructions: 'Do it.',
         tools: [],
@@ -3060,15 +3064,317 @@ it('CodexResponsesWSModel invalidates Luna wire state on invalid previous_respon
     expect(rejectedChainedContinuation).toBe(true);
     const failedRequestIndex = seenRequests.findIndex(
       (candidate) =>
-        candidate.previousResponseId === 'resp_luna_ok' &&
+        (candidate.previousResponseId === 'resp_luna_ok' || candidate.previous_response_id === 'resp_luna_ok') &&
         candidate.input?.some((item: any) => item?.content?.[0]?.text === 'continue'),
     );
     const fallbackRequests = seenRequests.slice(failedRequestIndex + 1);
     expect(fallbackRequests).not.toHaveLength(0);
     expect(fallbackRequests[0].previousResponseId).toBeUndefined();
+    expect(fallbackRequests[0].previous_response_id).toBeUndefined();
     expect(fallbackRequests.flatMap((candidate) => candidate.input)).toEqual(
-      expect.arrayContaining([userMsg, userMsg2]),
+      expect.arrayContaining([
+        expect.objectContaining({ content: [{ type: 'input_text', text: 'hello' }] }),
+        expect.objectContaining({ content: [{ type: 'input_text', text: 'continue' }] }),
+      ]),
     );
+  } finally {
+  }
+});
+
+it('CodexResponsesWSModel invalidates standard model wire state on invalid previous_response_id error payload in streaming path', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const seenRequests: any[] = [];
+  let rejectedChainedContinuation = false;
+  const invalidPrevResponseIdError = Object.assign(
+    new Error(
+      'Error: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"Invalid `previous_response_id`."}}',
+    ),
+    { status: 400 },
+  );
+  transport.fetchResponse = async function (request: any, _stream: boolean, requestData?: any) {
+    const payload = requestData ?? request;
+    seenRequests.push(payload);
+
+    const isChainedContinuation =
+      (payload.previousResponseId === 'resp_std_stream_1' || payload.previous_response_id === 'resp_std_stream_1') &&
+      payload.input?.some((item: any) => item?.content?.[0]?.text === 'continue');
+    if (isChainedContinuation && !rejectedChainedContinuation) {
+      rejectedChainedContinuation = true;
+      throw invalidPrevResponseIdError;
+    }
+
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: {
+          id: rejectedChainedContinuation ? 'resp_std_stream_fallback' : 'resp_std_stream_1',
+          output: [],
+          usage: {},
+        },
+      } as any,
+    ]);
+  };
+
+  const mockClient = {
+    baseURL: 'https://api.openai.com',
+    apiKey: 'test-key',
+    _options: {},
+  };
+  const tokenManager = {
+    getOrRefreshAccessToken: async () => 'token',
+    getAccountId: () => 'acc_123',
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      mockClient as any,
+      'gpt-5-codex',
+      tokenManager as any,
+      undefined,
+      undefined,
+      {
+        getContext: () =>
+          ({ sessionId: 'session-std-stream-invalid-err', traceId: 'trace-std-stream-invalid-err' } as any),
+        runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      },
+      transport,
+    );
+
+    const userMsg = { type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] };
+    const userMsg2 = { type: 'message', role: 'user', content: [{ type: 'text', text: 'continue' }] };
+
+    // 1. Initial request succeeds, establishing stored server history
+    await collect(
+      model.stream({
+        input: [userMsg],
+        instructions: 'Do it.',
+        tools: [],
+      } as any),
+    );
+
+    // 2. Chained request fails with invalid previous_response_id, then falls back to full input
+    const results = await collect(
+      model.stream({
+        input: [userMsg, userMsg2],
+        instructions: 'Do it.',
+        tools: [],
+      } as any),
+    );
+
+    expect(rejectedChainedContinuation).toBe(true);
+    const failedRequestIndex = seenRequests.findIndex(
+      (candidate) =>
+        (candidate.previousResponseId === 'resp_std_stream_1' ||
+          candidate.previous_response_id === 'resp_std_stream_1') &&
+        candidate.input?.some((item: any) => item?.content?.[0]?.text === 'continue'),
+    );
+    const fallbackRequests = seenRequests.slice(failedRequestIndex + 1);
+    expect(fallbackRequests).not.toHaveLength(0);
+    expect(fallbackRequests[0].previousResponseId).toBeUndefined();
+    expect(fallbackRequests[0].previous_response_id).toBeUndefined();
+    expect(fallbackRequests.flatMap((candidate) => candidate.input)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ content: [{ type: 'input_text', text: 'hello' }] }),
+        expect.objectContaining({ content: [{ type: 'input_text', text: 'continue' }] }),
+      ]),
+    );
+    expect(results.some((event: any) => event.type === 'completion')).toBe(true);
+  } finally {
+  }
+});
+
+it('CodexResponsesWSModel invalidates standard model wire state on invalid previous_response_id error payload in unary path', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const seenRequests: any[] = [];
+  let rejectedChainedContinuation = false;
+  const invalidPrevResponseIdError = Object.assign(
+    new Error(
+      'Error: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"Invalid `previous_response_id`."}}',
+    ),
+    { status: 400 },
+  );
+  transport.fetchResponse = async function (request: any, _stream: boolean, requestData?: any) {
+    const payload = requestData ?? request;
+    seenRequests.push(payload);
+
+    const isChainedContinuation =
+      (payload.previousResponseId === 'resp_std_unary_1' || payload.previous_response_id === 'resp_std_unary_1') &&
+      payload.input?.some((item: any) => item?.content?.[0]?.text === 'continue');
+    if (isChainedContinuation && !rejectedChainedContinuation) {
+      rejectedChainedContinuation = true;
+      throw invalidPrevResponseIdError;
+    }
+
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: {
+          id: rejectedChainedContinuation ? 'resp_std_unary_fallback' : 'resp_std_unary_1',
+          output: [],
+          usage: {},
+        },
+      } as any,
+    ]);
+  };
+
+  const mockClient = {
+    baseURL: 'https://api.openai.com',
+    apiKey: 'test-key',
+    _options: {},
+  };
+  const tokenManager = {
+    getOrRefreshAccessToken: async () => 'token',
+    getAccountId: () => 'acc_123',
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      mockClient as any,
+      'gpt-5-codex',
+      tokenManager as any,
+      undefined,
+      undefined,
+      {
+        getContext: () =>
+          ({ sessionId: 'session-std-unary-invalid-err', traceId: 'trace-std-unary-invalid-err' } as any),
+        runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      },
+      transport,
+    );
+
+    const userMsg = { type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] };
+    const userMsg2 = { type: 'message', role: 'user', content: [{ type: 'text', text: 'continue' }] };
+
+    // 1. Initial unary request succeeds, establishing stored server history
+    await (model as any).fetchUnaryResponse({
+      input: [userMsg],
+      instructions: 'Do it.',
+      tools: [],
+    } as any);
+
+    // 2. Chained unary request fails with invalid previous_response_id, then falls back to full input
+    const response = await (model as any).fetchUnaryResponse({
+      input: [userMsg, userMsg2],
+      instructions: 'Do it.',
+      tools: [],
+    } as any);
+
+    expect(rejectedChainedContinuation).toBe(true);
+    const failedRequestIndex = seenRequests.findIndex(
+      (candidate) =>
+        (candidate.previousResponseId === 'resp_std_unary_1' ||
+          candidate.previous_response_id === 'resp_std_unary_1') &&
+        candidate.input?.some((item: any) => item?.content?.[0]?.text === 'continue'),
+    );
+    const fallbackRequests = seenRequests.slice(failedRequestIndex + 1);
+    expect(fallbackRequests).not.toHaveLength(0);
+    expect(fallbackRequests[0].previousResponseId).toBeUndefined();
+    expect(fallbackRequests[0].previous_response_id).toBeUndefined();
+    expect(fallbackRequests.flatMap((candidate) => candidate.input)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ content: [{ type: 'input_text', text: 'hello' }] }),
+        expect.objectContaining({ content: [{ type: 'input_text', text: 'continue' }] }),
+      ]),
+    );
+    expect(response.id).toBe('resp_std_unary_fallback');
+  } finally {
+  }
+});
+
+it('CodexResponsesWSModel invalidates Luna wire state on invalid previous_response_id error payload in unary path', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const seenRequests: any[] = [];
+  let rejectedChainedContinuation = false;
+  const invalidPrevResponseIdError = Object.assign(
+    new Error(
+      'Error: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"Invalid `previous_response_id`."}}',
+    ),
+    { status: 400 },
+  );
+  transport.fetchResponse = async function (request: any, _stream: boolean, requestData?: any) {
+    const payload = requestData ?? request;
+    seenRequests.push(payload);
+
+    const isChainedContinuation =
+      (payload.previousResponseId === 'resp_luna_unary_1' || payload.previous_response_id === 'resp_luna_unary_1') &&
+      payload.input?.some((item: any) => item?.content?.[0]?.text === 'continue');
+    if (isChainedContinuation && !rejectedChainedContinuation) {
+      rejectedChainedContinuation = true;
+      throw invalidPrevResponseIdError;
+    }
+
+    return makeStream([
+      {
+        type: 'response.completed',
+        response: {
+          id: rejectedChainedContinuation ? 'resp_luna_unary_fallback' : 'resp_luna_unary_1',
+          output: [],
+          usage: {},
+        },
+      } as any,
+    ]);
+  };
+
+  const mockClient = {
+    baseURL: 'https://api.openai.com',
+    apiKey: 'test-key',
+    _options: {},
+  };
+  const tokenManager = {
+    getOrRefreshAccessToken: async () => 'token',
+    getAccountId: () => 'acc_123',
+  };
+
+  try {
+    const model = new CodexResponsesWSModel(
+      mockClient as any,
+      'gpt-5.6-luna',
+      tokenManager as any,
+      undefined,
+      undefined,
+      {
+        getContext: () =>
+          ({ sessionId: 'session-luna-unary-invalid-err', traceId: 'trace-luna-unary-invalid-err' } as any),
+        runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      },
+      transport,
+    );
+
+    const userMsg = { type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] };
+    const userMsg2 = { type: 'message', role: 'user', content: [{ type: 'text', text: 'continue' }] };
+
+    // 1. Initial unary request succeeds, establishing stored wire state
+    await (model as any).fetchUnaryResponse({
+      input: [userMsg],
+      instructions: 'Do it.',
+      tools: [],
+    } as any);
+
+    // 2. Chained unary request fails with invalid previous_response_id, then falls back to full input
+    const response = await (model as any).fetchUnaryResponse({
+      input: [userMsg, userMsg2],
+      instructions: 'Do it.',
+      tools: [],
+    } as any);
+
+    expect(rejectedChainedContinuation).toBe(true);
+    const failedRequestIndex = seenRequests.findIndex(
+      (candidate) =>
+        (candidate.previousResponseId === 'resp_luna_unary_1' ||
+          candidate.previous_response_id === 'resp_luna_unary_1') &&
+        candidate.input?.some((item: any) => item?.content?.[0]?.text === 'continue'),
+    );
+    const fallbackRequests = seenRequests.slice(failedRequestIndex + 1);
+    expect(fallbackRequests).not.toHaveLength(0);
+    expect(fallbackRequests[0].previousResponseId).toBeUndefined();
+    expect(fallbackRequests[0].previous_response_id).toBeUndefined();
+    expect(fallbackRequests.flatMap((candidate) => candidate.input)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ content: [{ type: 'input_text', text: 'hello' }] }),
+        expect.objectContaining({ content: [{ type: 'input_text', text: 'continue' }] }),
+      ]),
+    );
+    expect(response.id).toBe('resp_luna_unary_fallback');
   } finally {
   }
 });

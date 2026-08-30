@@ -114,14 +114,14 @@ the ledger remains the authoritative per-guard inventory.
 ## 7. Public boundary under test
 
 - `validateCommandSafety` + specialized handlers — `command-safety*.test.ts`.
-- `createSandboxRuntimeConfig` + `isPathProtected` + `DeniedReadDetector` —
+- `createSandboxRuntimeConfig` + `isPathProtected` + `detectDeniedRead` —
   `sandbox-policy.test.ts`, `denied-read-detector.test.ts`.
 - `RunBudget` policy/stages/stall/extensions — `run-budget.test.ts`,
   `application-run-loop.run-budget.test.ts`.
 - `ExecuteShellOptions` timeout/overflow — `execute-shell*.test.ts`.
 - `BackgroundShellRegistry` / `BackgroundShellOutputStore` —
   `background-shell-registry.test.ts`, `background-shell-output-store.test.ts`.
-- `WebsocketReceiveWatchdog` — `websocket-receive-watchdog.test.ts`.
+- `createWebSocketReceiveWatchdog` — `websocket-receive-watchdog.test.ts`.
 - Steering mailbox — `subagent-run-control.test.ts`.
 - `ToolOwnershipRegistry` — `tool-ownership-registry.test.ts`.
 
@@ -141,7 +141,7 @@ the ledger remains the authoritative per-guard inventory.
 | Shared root path | run-budget root envelope unchanged (`run-budget.test.ts:164-167` "returns the child envelope unchanged at the root") | covered |
 | Child path | run-budget clamp to tighter envelope (`run-budget.test.ts:169-181`); critical subagent wrap-up (`application-run-loop.run-budget.test.ts:161-186`); `subagent-async-registry.test.ts:592-615` "releases shared-session admission after %s terminal settlement" releases capacity after both failure and cancellation | covered |
 | Workflow path | `run-agent-workflow.test.ts:37` "enforces the maxRuns guard at the run_agent_workflow tool boundary" rejects the second run while retaining the first result | covered |
-| Non-interactive path | `non-interactive.test.ts:812` "runNonInteractive auto-approves only the finite parent run-budget extensions" stops after the configured parent extensions; `application-run-loop.run-budget.test.ts:103-136` covers the underlying unattended continuation | covered |
+| Non-interactive path | `non-interactive.test.ts:844` "runNonInteractive auto-approves only the finite parent run-budget extensions" stops after the configured parent extensions; `application-run-loop.run-budget.test.ts:103-136` covers the underlying unattended continuation | covered |
 | Shell path | timeout/abort (`execute-shell.test.ts:40`, `:112`); network-approval timer pause (`execute-shell.network-approval-timeout.test.ts:24-142`); command-safety suite | covered |
 
 ## 9. Verification commands

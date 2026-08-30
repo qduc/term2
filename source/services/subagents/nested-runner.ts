@@ -24,6 +24,7 @@ import { SubagentToolFactory, getSubagentRunContext, type SubagentRunContext } f
 import { loadRoleDefinition, resolveSubagentSearchViaShell, buildInstructions } from './role-loader.js';
 import {
   extractFinalText,
+  extractPartialToolEvidence,
   aggregateContextToolUsage,
   safeEmit,
   createCompositeAbortSignal,
@@ -408,6 +409,8 @@ export class NestedSubagentRunner {
         let stream = loop.startStream(agent, task, {
           context: runContext,
           signal,
+          providerId,
+          supportsConversationChaining: provider.capabilities?.supportsConversationChaining === true,
           // The nested run's ledger was seeded with the parent's decisions by
           // runAsTool; use it so F5 holds and nested decisions land on it.
           approvals: toolContext?.approvals,
@@ -489,6 +492,39 @@ export class NestedSubagentRunner {
             };
             return JSON.stringify(budgetResult);
           }
+
+          // If the subagent executed tools before encountering an unrecoverable failure
+          // (e.g. fatal transport drop after retries exhausted), contain the failure into
+          // a structured failed result with partial findings so the parent agent receives
+          // the collected evidence and does not lose all progress.
+          const toolCallCount = Object.values(runContext.toolCounts).reduce((total, count) => total + count, 0);
+          if (toolCallCount > 0 && signal?.aborted !== true) {
+            const errorMessage = (error as Error)?.message || String(error);
+            this.#logger.warn('Subagent failed after tool executions; returning containment result', {
+              agentId: runContext.agentId,
+              role,
+              error: errorMessage,
+              toolCallCount,
+            });
+            const partialText = extractFinalText(stream);
+            const partialToolEvidence = await extractPartialToolEvidence(stream);
+            const preservedProgress = [partialText, partialToolEvidence].filter(Boolean).join('\n\n');
+            const failureResult: NestedSubagentResult = {
+              agentId: runContext.agentId,
+              role,
+              status: 'failed',
+              error: errorMessage,
+              finalText: preservedProgress
+                ? `${preservedProgress}\n\n[Subagent stopped due to error: ${errorMessage}]`
+                : `[Subagent stopped due to error after ${toolCallCount} tool action(s): ${errorMessage}]`,
+              filesChanged: [...new Set(runContext.filesChanged)],
+              toolsUsed: aggregateContextToolUsage(runContext.toolCounts),
+              usage: extractUsage(stream),
+              costRecords: stream.runCostRecords as ModelRequestCost[] | undefined,
+            };
+            return JSON.stringify(failureResult);
+          }
+
           throw error;
         }
 

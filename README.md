@@ -1,424 +1,414 @@
 # term2
 
-[![npm version](https://img.shields.io/npm/v/@qduc/term2.svg)](https://www.npmjs.com/package/@qduc/term2)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![npm version](https://img.shields.io/npm/v/@qduc/term2.svg?style=flat-square)](https://www.npmjs.com/package/@qduc/term2)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg?style=flat-square)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg?style=flat-square)](https://www.typescriptlang.org/)
 
-A powerful terminal-based AI assistant that helps you get things done on your computer through natural conversation.
+term2 is an open-source terminal AI assistant and autonomous agent runtime built for high-velocity software engineering and system administration.
 
-**Why term2?** Unlike proprietary alternatives, term2 is **open-source (MIT)**, works with **any AI provider** (OpenAI, OpenRouter, local self-hosted, etc.), requires **no subscription**, and uniquely supports **remote server management via SSH** — all while giving you full control over what commands execute on your system.
+Combining a fast React (Ink) terminal interface with an application-owned run loop, term2 provides fine-grained execution safety, native multi-agent delegation, provider-neutral context compaction, and seamless multi-provider support—giving developers complete agency over their workflow without vendor lock-in or subscription gates.
 
-## Demo
+---
 
-https://github.com/user-attachments/assets/ac960d65-f7c8-453a-9440-91f6397ae842
+## Core Capabilities
 
-## Features
+- **Open Source and Local First**: MIT licensed. No mandatory subscriptions, telemetry lock-in, or proprietary walled gardens.
+- **Universal Provider Support**: Native integration with OpenAI (WebSocket Responses and Chat Completions), ChatGPT/Codex OAuth (browser PKCE), Grok Responses API (with encrypted reasoning and OAuth), OpenRouter, Anthropic, Google Gemini, and custom local endpoints (Ollama, llama.cpp, vLLM).
+- **Fine-Grained Sandboxing and Safety**: Sandboxed shell execution with configurable read/write boundaries (`standard`, `strict`) and interactive unified diff previews.
+- **Smart Shell Auto-Approval**: A hybrid heuristic and LLM safety evaluator that auto-approves safe read-only and workspace commands, eliminating prompt fatigue while strictly gating risky operations.
+- **Multi-Agent Orchestration**: Spawn specialized foreground or background subagents (`explorer`, `worker`, `mentor`, `librarian`) across tiered model profiles (`smart`, `balanced`, `cheap`, `chore`).
+- **Provider-Neutral Context Compaction**: Intelligently compacts long conversation histories (via `/compact` or automatic thresholds) while preserving cold-prefix architectural facts and hot-tail tool ledger integrity.
+- **Time-Travel Rewind and Forking**: Non-destructive conversation rewinding with discard previews (`/rewind`, `/undo`, `/retry`), session resumption (`--resume`), and session branching (`--fork`).
+- **Native Remote Development**: Execute commands and manage codebases on remote servers seamlessly over SSH with SSH agent authentication.
+- **Five Focused Operating Modes**: Standard, Plan, Lite, Mentor, and Orchestrator modes adapted to every phase of engineering.
 
-- 🎭 **Five Operating Modes** - Standard (full-power, auto-approves patches), Lite (fast & safe), Mentor (expert model advice), Plan (read-only research/planning), and Orchestrator (delegates task execution to subagents)
-- 🌍 **Open Source** - MIT licensed, hackable, auditable, community-driven
-- 🤖 **Multi-Provider Support** - Works with OpenAI, OpenRouter, OpenAI-compatible APIs, and Vercel AI SDK providers
-- 🔒 **Safe Execution** - Every command requires your explicit approval with diff preview
-- 🛠️ **Advanced Tools** - Shell execution, file patching, search/replace (with `<...>` gap matching), grep, find files, file reading, file creation, web search, web fetching, code outline & context search, mentor consultation, and subagent invocation
-- 👥 **Subagent Delegation** - Spawn specialized, synchronous subagents (`explorer`, `worker`, `researcher`, `mentor`) to perform sub-tasks in parallel while conserving your main context
-- ⏪ **Conversation Rewind** - Rewind to any past user turn with `/rewind`, choosing whether to edit the turn again or resend it as-is. The picker states what each rewind discards (turns, replies, edited files) before you commit to it
-- 💾 **Conversation Resumption & Persistence** - Saved conversations are persisted using robust event logging and can be resumed later using the `--resume` flag
-- 💬 **Slash Commands** - Quick actions like `/clear`, `/quit`, `/model`, `/mentor`, `/lite`, `/copy`, `/auto-approve`, `/plan`, `/rewind`, `/usage`, `/effort`, `/handoff`, and `/orchestrator` for easy control
-- 📝 **Smart Context** - The assistant understands your environment and provides relevant help
-- 🎯 **Streaming Responses** - See the AI's thoughts and reasoning in real-time
-- 🧠 **Reasoning Effort Control** - Configurable reasoning levels (minimal to high) for O1/O3 models
-- ⚡ **Command History** - Navigate previous inputs with arrow keys
-- 🎨 **Markdown Rendering** - Formatted code blocks, tables, and text in the terminal
-- 🔄 **Retry Logic** - Automatic recovery from tool hallucinations and upstream errors
-- 🌐 **SSH Mode** - Execute commands and edit files on remote servers over SSH
-- 🔒 **Sandboxed Execution** - Shell commands run in a sandbox with configurable read policies (`credential-denylist`, `home-denylist`, `standard`, `strict`) to protect sensitive files
-- 🤖 **Non-Interactive Mode** - Run commands from the CLI without starting the full UI
-- ✏️ **Standard Mode** - Auto-approves file edits in your workspace for faster development (active by default)
-- 🛡️ **Smart Shell Auto-Approval** - A hybrid local-heuristic + LLM-based safety evaluator that auto-approves safe commands, eliminating prompt fatigue while strictly blocking risky ones (with detailed reasoning explanations)
-- 🖼️ **Image Pasting** - Paste images from your clipboard directly into the terminal for vision-model analysis
-- 📈 **Real-time Token Usage** - Live token consumption displayed during streaming
+---
 
+## Comparison: Why term2?
 
-## Why term2 vs Alternatives?
+| Feature | term2 | Claude Code | Warp |
+| :--- | :---: | :---: | :---: |
+| **License** | **MIT Open Source** | Proprietary | Proprietary / Closed Core |
+| **Cost** | **Direct API / Pay-per-use** | Subscription / API | Freemium / Paid Tiers |
+| **Model Ecosystem** | **Any** (OpenAI, Codex, Grok, OpenRouter, Anthropic, Google, Local) | Anthropic only | Selected Cloud Models |
+| **OAuth Browser Login** | **Grok and Codex PKCE** | No | No |
+| **Local LLMs (Ollama/llama.cpp)** | **Native** | No | Partial (BYOLLM) |
+| **Subagent Swarms** | **Configurable 4-Tier Roles** | Limited | No |
+| **Remote SSH Workspaces** | **Native SSH Agent** | Remote Control | SSH Client |
+| **Dual-Model Mentor Mode** | **Built-in** | No | No |
+| **Context Compaction** | **Local and Provider-Native** | Automatic (Closed) | No |
 
-|  | **term2** | **Claude Code** | **Warp** |
-| --- | --- | --- | --- |
-| **Open Source** | ✅ MIT | ❌ Proprietary | ✅ Open Source |
-| **Cost** | Pay-per-use API | $20 - $200/mo (or API) | Freemium / Paid tiers |
-| **AI Providers** | Any (OpenAI, OpenRouter, local) | Anthropic only | Selected models / BYOLLM |
-| **SSH / Remote** | ✅ Native | ✅ Yes (Remote Control/SSH) | ✅ Yes |
-| **Mentor Mode** | ✅ Built-in | ❌ No | ❌ No |
-| **Self-Hostable** | ✅ Yes | ❌ No (Requires Anthropic) | ❌ Cloud elements (Oz) |
+---
 
 ## Installation
 
-**Requirements:**
+### Prerequisites
+- Node.js version 20.0.0 or higher
+- An API key or OAuth account for your preferred AI provider
 
-- Node.js 20 or higher
-- An API key from OpenAI, OpenRouter, or any OpenAI-compatible provider
-
-Install globally via npm:
-
+### Install via Package Manager
 ```bash
+# Install globally via npm
 npm install --global @qduc/term2
+
+# Or using pnpm
+pnpm add --global @qduc/term2
 ```
 
-Set your API key as an environment variable (see [Configuration](#configuration) section for details):
+### Quick Setup
 
+#### 1. OAuth Browser Login (Grok or Codex)
+term2 supports browser-based PKCE OAuth logins for OpenAI Codex/ChatGPT and xAI Grok:
 ```bash
-export OPENAI_API_KEY="your-api-key-here"
+# Log in to xAI Grok
+term2 --grok-login
+
+# Log in to OpenAI Codex / ChatGPT
+term2 --codex-login
 ```
 
-## Usage
+> **Multi-Account Management**: Manage multiple OAuth accounts and switch between active profiles at runtime via the `/providers` menu.
 
-Start the assistant:
-
+#### 2. Environment Variables (API Keys)
+Alternatively, export the API key for your chosen provider:
 ```bash
-term2              # Start in standard mode (full capabilities, auto-approves patches)
-term2 --lite       # Start in lite mode (fast, read-only)
-```
-
-Then simply chat with the AI! Type your question or request, press Enter, and the assistant will help you.
-
-**New to term2?**
-
-- Working on a codebase/project? Use standard mode: `term2`
-- Just need general terminal help? Use lite mode: `term2 --lite`
-- Tackling a complex problem? Enable mentor mode with `/mentor` command
-
-See the "Operating Modes" section below for full details.
-
-### Basic Examples
-
-```
-"What files are in my current directory?"
-"Show me my git status"
-"Create a backup of my documents folder"
-"What's using port 3000?"
-```
-
-### Advanced Examples
-
-```
-"Find all TODO comments in my JavaScript files"
-"Help me debug why my server won't start on port 8080"
-"Create a new React component called UserProfile"
-"Show me the disk usage of my home directory"
-"What processes are consuming the most memory?"
-"Search for the word 'config' in all .json files"
-```
-
-### Command Line Options
-
-```bash
-# Model selection
-term2                          # Start with default model (gpt-5.1)
-term2 -m gpt-5.2               # Use a specific model
-term2 --model gpt-5-mini      # Use GPT-5 mini for faster/cheaper responses
-term2 -r high                  # Set reasoning effort to high (for GPT-5 models)
-term2 --reasoning medium       # Set reasoning effort to medium
-
-# Operating modes (see "Operating Modes" section below for details)
-term2 --lite                   # Start in lite mode for general terminal work (no codebase)
-
-# Resuming past conversations
-term2 --resume                 # Resume the last conversation session
-term2 -R <conversation-uuid>   # Resume a specific conversation by ID
-
-# SSH Mode - execute on remote servers
-term2 --ssh user@host --remote-dir /path/to/project
-term2 --ssh deploy@server.com --remote-dir /var/www/app --ssh-port 2222
-
-# Combine SSH with lite mode for lightweight remote assistance
-term2 --ssh user@host --remote-dir /path --lite
-
-# Non-interactive mode
-term2 "how to use grep"
-term2 --auto-approve "list files in current directory"
-```
-
-### Slash Commands
-
-While in the chat, you can use these commands:
-
-- `/clear` - Clear the conversation history
-- `/quit` - Exit the application
-- `/model [model-name]` - Switch to a different model
-- `/mentor` - Toggle mentor mode
-- `/lite` - Toggle lite mode (requires `/clear` first if a session is active)
-- `/plan` - Toggle plan mode (read-only research/planning mode)
-- `/orchestrator` - Toggle orchestrator mode (delegates all tool-backed work to subagents; requires `/clear` first if a session is active)
-- `/skills` - Browse and manage available skills
-- `/rewind [last | <turn>] [edit | resend]` - Rewind the conversation to a user turn, discarding that turn and everything after it. With no arguments it opens a picker showing what each rewind would discard; `Tab` switches between putting the turn back in the input box (`edit`, the default) and resending it unchanged (`resend`)
-- `/undo` - Alias for `/rewind edit`
-- `/retry` - Alias for `/rewind resend`, acting on the last turn immediately
-- `/retry-tool` - Retry the last tool call (was `/retry tool`)
-- `/usage` - Show token usage breakdown for the current session (includes subagent usage)
-- `/effort [level]` - Set reasoning effort for O1/O3 models (e.g. none, minimal, low, medium, high)
-- `/copy` - Copy the latest assistant response to the clipboard
-- `/handoff` - Hand off the last assistant response to another model or session
-- `/auto-approve [off|advisory|auto|always]` - Set or cycle shell auto-approval mode
-- `/settings [key] [value]` - Modify runtime settings (e.g., `/settings agent.temperature 0.7`)
-
-
-## Operating Modes
-
-| Mode        | Toggle / Start with | Best for                             | Tools Available      | Context       |
-| ----------- | ------------------- | ------------------------------------ | -------------------- | ------------- |
-| **Standard**| `term2`             | Codebase work & development          | Auto-approves patches| Full codebase |
-| **Plan**    | `/plan`             | Researching and designing plans      | Read-only tools      | Full codebase |
-| **Lite**    | `term2 --lite`      | General terminal tasks (no codebase) | Read-only tools      | None          |
-| **Mentor**  | `/mentor`           | Complex codebase problems            | All + mentor tool    | Full codebase |
-| **Orchestrator**| `/orchestrator` | Delegating complex multi-step work   | Subagents + read-only| Full codebase |
-
-**Standard Mode** is the default. It auto-approves `apply_patch` operations within the workspace for high-velocity coding, while still requiring confirmation for destructive operations.
-
-**Plan Mode** enforces read-only boundaries — no file writes or mutating shell commands. Use `/plan` or `Shift+Tab` to toggle.
-
-**Lite Mode** is a fast, lightweight assistant for general terminal work (system admin, file management, SSH sessions). No codebase context or file editing tools. Use `term2 --lite` or `/lite` to toggle.
-
-**Mentor Mode** pairs your primary AI with the `agent.smartModel` tier for strategic guidance on complex problems. Toggle it with `/mentor`.
-
-**Orchestrator Mode** delegates all tool-backed work to subagents, preserving the main context window for high-level orchestration. Toggle with `/orchestrator`.
-
-**Switching modes:** Use `/lite`, `/mentor`, `/plan`, `/orchestrator`, or `Shift+Tab` (cycles Standard ↔ Plan). Modes handle mutual exclusions automatically.
-
-
-## SSH Mode
-
-Execute commands and modify files on remote servers over SSH. Requires an SSH agent with keys loaded.
-
-```bash
-term2 --ssh user@hostname --remote-dir /path/to/project
-term2 --ssh user@hostname --remote-dir /path/to/project --ssh-port 2222  # custom port
-term2 --ssh user@hostname --lite  # lightweight remote assistance (--remote-dir optional)
-```
-
-**Limitations:** SSH agent auth only (no passwords), text files only, no binary file support.
-
-## Non-Interactive Mode
-
-Pass a prompt as a positional argument for one-off tasks. Tool execution is rejected by default; use `--auto-approve` to allow it.
-
-```bash
-term2 "list files in current directory"
-term2 --auto-approve "delete /tmp/test-file"
-
-# Output: AI response → stdout, events → stderr
-ANSWER=$(term2 "is there any TODO in source/cli.tsx?")
-```
-
-With `--auto-approve`, defaults to Standard Mode; without it, defaults to Lite Mode.
-
-## Shell Auto-Approval
-
-term2 uses a hybrid local-heuristic + LLM safety evaluation to minimize prompt fatigue while blocking risky commands. Destructive operations (e.g., `rm -rf`, `git push --force`) are always blocked from auto-approval.
-
-Toggle modes with `/auto-approve`:
-
-| Mode | Behavior |
-| --- | --- |
-| `off` (default) | Every command requires manual confirmation |
-| `advisory` | Manual confirmation, but LLM reasoning is displayed alongside |
-| `auto` | Safe commands execute automatically; risky ones still prompt |
-| `always` | **YOLO**: every command runs without prompting (DANGEROUS) |
-
-In `always` mode, subagent shell commands are auto-approved too; subagents stay confined to the workspace write boundary and remain banned from unsandboxed execution.
-
-`always` and the sandbox are mutually exclusive: setting the mode disables the sandbox, and re-enabling the sandbox demotes the mode back to `auto`.
-
-```json
-{
-  "shell": { "autoApproveMode": "auto" },
-  "agent": { "choreModel": "gpt-5.4-mini" }
-}
-```
-
-> [!TIP] The chore tier also handles edit self-healing. Use a fast, lightweight model to keep these narrow background tasks responsive.
-
-## Configuration
-
-term2 stores its configuration in:
-
-- **macOS**: `~/Library/Logs/term2-nodejs/settings.json`
-- **Linux**: `~/.local/state/term2-nodejs/settings.json`
-
-### Environment Variables (API Keys Only)
-
-API keys should be set as environment variables for security (never commit them to git):
-
-```bash
-# OpenAI (default provider)
+# OpenAI
 export OPENAI_API_KEY="sk-..."
 
-# OpenRouter (for Claude, Gemini, and other models)
+# OpenRouter (Claude, Gemini, DeepSeek, etc.)
 export OPENROUTER_API_KEY="sk-or-v1-..."
 
-# Web Search (Tavily — default)
-export TAVILY_API_KEY="tvly-..."
+# Anthropic
+export ANTHROPIC_API_KEY="sk-ant-..."
 
-# Web Search (Exa)
+# Google Gemini
+export GOOGLE_GENERATIVE_AI_API_KEY="..."
+
+# Web Search (Tavily or Exa)
+export TAVILY_API_KEY="tvly-..."
 export EXA_API_KEY="..."
 ```
 
-To make them permanent, add these exports to your shell configuration file (`~/.bashrc`, `~/.zshrc`, or `~/.profile`).
+---
 
-### Configuring Other Settings
+## Quick Start
 
-Settings (model, provider, temperature, etc.) can be configured via:
+Launch term2 in your project directory:
 
-1. **App menu** - Use `/settings` command during a session (e.g., `/settings agent.model gpt-5.2`)
-2. **Settings file** - Manually edit the JSON file:
-   - **macOS**: `~/Library/Logs/term2-nodejs/settings.json`
-   - **Linux**: `~/.local/state/term2-nodejs/settings.json`
-3. **CLI flags** - Override for a single session (e.g., `-m gpt-5.2`)
+```bash
+# Start standard interactive session
+term2
 
-### Provider Configuration Examples
+# Start in lightweight mode (fast system/terminal operations, no codebase ingestion)
+term2 --lite
 
-```json
-// OpenAI (default)
-{ "agent": { "provider": "openai", "model": "gpt-5.5" } }
+# Start with a specific model and provider
+term2 -m claude-sonnet-4.6 -p openrouter
 
-// OpenRouter
-{ "agent": { "provider": "openrouter", "model": "anthropic/claude-sonnet-4.6" } }
+# Resume the last conversation session
+term2 --resume
+
+# Run a non-interactive prompt from the command line
+term2 "Explain the architecture of source/agent.ts"
 ```
 
-For local LLMs, add a provider entry to the `providers` list:
+---
 
-```json
-{
-  "providers": [
-    { "name": "llama.cpp", "type": "llama.cpp", "baseUrl": "http://127.0.0.1:8080/v1" }
-  ],
-  "agent": { "provider": "llama.cpp", "model": "qwen3.6-35b-a3b" }
-}
+## Operating Modes
+
+term2 features five distinct operating modes tailored to different stages of development:
+
+| Mode | Trigger / CLI | Purpose and Behavior | Tools and Context |
+| :--- | :--- | :--- | :--- |
+| **Standard** | `term2` *(default)* | High-velocity codebase development. Automatically approves workspace file patches while gating destructive commands. | Full codebase context, all tools, patch auto-approval. |
+| **Plan** | `/plan` or `Shift+Tab` | Architecture design, research, and code exploration. Enforces read-only safety guarantees (no file writes or mutating commands). | Full codebase context, read-only tools. |
+| **Lite** | `term2 --lite` or `/lite` | General terminal tasks, DevOps, and SSH administration without codebase ingestion overhead. | Session context only, read-only system tools. |
+| **Mentor** | `/mentor` | Collaborative problem-solving. Pairs the primary model with a higher-tier strategic model (`smartModel`) for architectural review. | Full codebase context, all tools and `ask_mentor`. |
+| **Orchestrator** | `/orchestrator` | High-level task coordination. Encourages prompt-guided delegation across specialized subagents while retaining end-to-end turn ownership. | Full codebase context, direct tools and subagent delegation. |
+
+> **Mode Switching:** In Standard or Plan mode, press `Shift+Tab` to instantly toggle between **Standard** and **Plan** modes (in Lite mode, `Shift+Tab` toggles shell execution mode). Use slash commands (`/plan`, `/lite`, `/mentor`, `/orchestrator`) to switch modes explicitly.
+
+---
+
+## Subagents Architecture
+
+term2 includes a modular subagent execution system designed to isolate heavy computational, research, or modification workloads from the main conversation transcript. Each subagent operates under a defined role profile with explicit permissions, execution budgets, and capability tiers.
+
+### Explorer Subagent
+- **Purpose**: Rapid codebase reconnaissance, symbol search, file discovery, and dependency mapping.
+- **Permissions**: Read-only (`canRead: true`, `canWrite: false`, `canSearchWeb: true`, `canRunShell: true`).
+- **Safety Boundary**: Restricted to non-destructive read operations and safe read-only shell commands (`rg`, `fd`, `git status`).
+- **Model Tier**: Defaults to `agent.cheapModel` (e.g. `gpt-5.4-mini`) to minimize latency and token consumption during wide search operations.
+
+### Worker Subagent
+- **Purpose**: Autonomous implementation of discrete tasks, file modifications, refactoring slices, and running automated test suites.
+- **Permissions**: Full read/write (`canRead: true`, `canWrite: true`, `canSearchWeb: false`, `canRunShell: true`).
+- **Safety Boundary**: Sandboxed to the workspace root directory. Supports pinning execution to a dedicated Git worktree (`worktree` parameter) to isolate dirty state from the parent checkout.
+- **Model Tier**: Defaults to `agent.balancedModel` (e.g. `gpt-5.3-codex` or `claude-sonnet-4.6`).
+
+### Mentor Subagent
+- **Purpose**: High-level strategic consultation, algorithmic design analysis, and independent second-opinion code review.
+- **Permissions**: Advisory only (`canRead: false`, `canWrite: false`, `canSearchWeb: false`, `canRunShell: false`).
+- **Safety Boundary**: Completely detached from the workspace filesystem and tool execution. Receives architectural queries via the `ask_mentor` tool and returns structured recommendations without polluting turn history.
+- **Model Tier**: Defaults to `agent.smartModel` (e.g. `gpt-5.5`).
+
+### Librarian Subagent
+- **Purpose**: Long-term persistent memory management, documentation discovery, and indexing domain knowledge across sessions.
+- **Permissions**: Memory management (`canRead: false`, `canWrite: false`, `canSearchWeb: false`, `canRunShell: false`). Interacts with memory exclusively via specialized `memory_*` tools and `activate_skill`.
+- **Safety Boundary**: Operates strictly within persistent memory storage without general filesystem, shell, or web access.
+- **Model Tier**: Defaults to `agent.cheapModel`.
+
+### Subagent Capability Tiers
+Subagent roles are mapped to four configurable model tiers in `settings.json`:
+- `agent.smartModel` / `agent.smartProvider` / `agent.smartReasoningEffort`: For deep reasoning and strategic advisory (used by Mentor).
+- `agent.balancedModel` / `agent.balancedProvider` / `agent.balancedReasoningEffort`: For implementation, editing, and execution (used by Worker).
+- `agent.cheapModel` / `agent.cheapProvider` / `agent.cheapReasoningEffort`: For high-throughput search and discovery (used by Explorer and Librarian).
+- `agent.choreModel` / `agent.choreProvider`: For narrow utility tasks such as AST patch self-healing and auto-approval evaluation.
+
+### Background Subagent Management and Lifecycle
+- **Concurrent Execution**: Subagents can run synchronously in the foreground or asynchronously in the background.
+- **Task Manager (`Ctrl+G`)**: Press `Ctrl+G` to open the Background Task Manager to inspect live running subagents, view stream output, pause runs, or terminate hung jobs.
+- **Resource Budgets**: Each subagent run is bounded by an execution turn budget (`maxTurns`) to prevent infinite recursive loops.
+
+### Subagent Check-In and Steering
+- **Periodic Check-In**: The `BackgroundCheckInScheduler` periodically wakes the launching agent with status summaries of background work without interrupting active user turns.
+- **Mid-Turn Steering**: Deliver real-time steering messages to running subagent tasks at clean request boundaries.
+- **Orchestrator Inquiries**: Subagents can query the parent orchestrator for clarifying decisions using the `ask_orchestrator` tool when encountering ambiguity.
+
+---
+
+## Safety, Sandboxing, and Auto-Approval
+
+### Sandboxed Execution
+Shell commands execute inside an isolated execution boundary:
+- `standard` policy: Restricts file writes to the workspace and temporary directories while blocking reads of sensitive credential paths (`~/.ssh`, `~/.aws`, `~/.docker`, `~/.netrc`, `~/.kube`, etc.).
+- `strict` policy: Locks down file reading to the workspace and safe toolchains, blocking access to the user home directory and system roots (`/etc`, `/var`, `/root`).
+- Toggle sandbox enforcement anytime using `/sandbox`, or configure policies via `sandbox.readPolicy` in `/settings`.
+
+### Smart Shell Auto-Approval Modes (`/auto-approve`)
+- `off` (Default): Every shell command prompts for interactive user confirmation with a unified diff preview.
+- `advisory`: Commands require confirmation, but include real-time LLM-generated safety and consequence explanations.
+- `auto`: Safe, read-only, and idempotent workspace operations execute automatically; potentially destructive commands (e.g. `rm -rf`, `git reset --hard`, `git push --force`) are strictly blocked for user confirmation.
+- `always`: Unattended execution mode. Disables sandbox boundaries (intended for automated CI environments; use with caution).
+
+---
+
+## Context Management and Compaction
+
+### Local and Server-Side Compaction
+- **Provider-Neutral Compactor**: When conversation tokens exceed configured ratios or thresholds, term2 performs request-boundary context compaction.
+- **Cold-Prefix Preservation**: Architectural decisions, environment constraints, and critical requirements are summarized and retained verbatim.
+- **Hot-Tail Invariants**: Recent conversation turns and active tool ledger call/result pairs remain completely intact, preventing broken references.
+- **Manual Trigger**: Run `/compact` at any point to compress transcript history immediately.
+- **OpenAI Native Compaction**: Leverages server-side context management when supported by the provider endpoint.
+
+---
+
+## Conversation Resumption, Rewind, and Queuing
+
+### Time-Travel Rewind (`/rewind`, `/undo`, `/retry`)
+- **Inspection Picker**: Running `/rewind` opens an interactive menu detailing exactly which turns, replies, and modified files will be affected before committing.
+- **Disposition Modes**:
+  - `edit` (Default / `/undo`): Discards subsequent turns and places the selected user prompt back into the input editor for revision.
+  - `resend` (`/retry`): Discards subsequent turns and immediately resends the selected prompt to the model.
+- **Tool Retry (`/retry-tool`)**: Retries only the most recent failed or timed-out tool call without losing conversation context.
+
+### Session Persistence and Resumption
+- **Persistence Engine**: Sessions are auto-saved using append-only event streams.
+- **Resuming Sessions**:
+  ```bash
+  term2 --resume               # Resume the most recent session
+  term2 --resume <session-id>  # Resume a specific session by UUID
+  term2 --resume ls            # List recent saved sessions with metadata
+  ```
+- **Session Branching (`--fork`)**:
+  ```bash
+  term2 --resume <session-id> --fork
+  ```
+
+### Mid-Turn Injection and Prompt Queuing
+- **Input Queuing**: Press `Alt+Enter` or `Esc+Enter` to queue additional user instructions while a turn is actively generating.
+- **Queue Editing**: Edit or delete pending queued prompts before they are admitted at the next request boundary.
+
+---
+
+## Remote Development over SSH
+
+term2 connects directly to remote hosts over SSH, executing commands and modifying remote files within a remote working directory:
+
+```bash
+# Connect to remote server with working directory
+term2 --ssh user@hostname --remote-dir /path/to/project
+
+# Custom SSH port
+term2 --ssh user@hostname --remote-dir /path/to/project --ssh-port 2222
+
+# Lightweight remote administration without codebase indexing
+term2 --ssh user@hostname --lite
 ```
 
-Supported provider types: `openai` (default), `openai-compatible`, `anthropic`, `google`, `opencode`, `llama.cpp`. Custom providers with `openai-compatible` type work with any OpenAI-compatible endpoint. Set the appropriate API key environment variable for each provider (e.g. `ANTHROPIC_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`).
+**Requirements and Behavior**:
+- Requires an SSH agent running locally (`ssh-agent`) with loaded keys (`ssh-add`), or configured identity keys in `~/.ssh/config`.
+- `--remote-dir` is required for full codebase sessions. In `--lite` mode, omitting `--remote-dir` defaults to the remote user's home directory.
+- Background command execution is restricted to local workspaces.
 
-### General Settings
+---
+
+## Non-Interactive and Scripting Mode
+
+Execute one-off queries and automation tasks directly from shell scripts:
+
+```bash
+# Standard non-interactive query (output prints to stdout)
+term2 "Summarize recent commits in this repository"
+
+# Automated task execution with tool approvals enabled
+term2 --auto-approve "Fix syntax errors in source/cli.tsx and run typecheck"
+
+# Capture output in shell pipeline
+TODO_LIST=$(term2 "List all TODO markers in source/")
+```
+
+---
+
+## Reference Guide
+
+### Slash Commands
+
+| Command | Arguments | Description |
+| :--- | :--- | :--- |
+| `/model` | `[model-name]` | Open model selection menu or switch model directly (`Ctrl+O`). |
+| `/effort` | `[effort-level]` | Configure reasoning effort (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`) (`Ctrl+T`). |
+| `/plan` | — | Toggle read-only Plan Mode (`Shift+Tab`). |
+| `/lite` | — | Toggle lightweight terminal mode. |
+| `/mentor` | — | Toggle collaborative Mentor Mode. |
+| `/orchestrator` | — | Toggle prompt-guided Orchestrator Mode. |
+| `/auto-approve` | `[off\|advisory\|auto\|always]` | Cycle or set shell command auto-approval level. |
+| `/sandbox` | — | Toggle shell sandbox isolation on or off. |
+| `/compact` | — | Manually trigger context compaction. |
+| `/providers` | — | Open interactive provider manager (list, add, edit, remove, switch accounts). |
+| `/skills` | `[skill-name]` | Activate a skill for the next request. |
+| `/rewind` | `[last\|<turn>] [edit\|resend]` | Rewind conversation history with interactive discard inspection. |
+| `/undo` | — | Alias for `/rewind edit` (places target turn back in input box). |
+| `/retry` | — | Alias for `/rewind resend` (immediately resends the last user turn). |
+| `/retry-tool` | — | Re-execute the last failed or timed-out tool call. |
+| `/copy` | `[N]` | Copy the latest assistant response (or $N$-th prior response) to clipboard. |
+| `/usage` | — | Display exact token counts, cost breakdown, and provider rate-limit metrics. |
+| `/handoff` | — | Export current conversation context for handoff to another session or model. |
+| `/settings` | `[key] [value]` | View or modify runtime configuration settings. |
+| `/clear` | — | Clear current conversation history and start a fresh turn. |
+| `/quit` | — | Exit term2 session. |
+
+### Keyboard Shortcuts
+
+| Shortcut | Context | Action |
+| :--- | :--- | :--- |
+| `Ctrl + O` | Input Box | Open interactive model selection menu. |
+| `Ctrl + T` | Input Box | Open reasoning effort selection menu. |
+| `Ctrl + G` | Global | Open Background Task Manager (inspect/pause/stop tasks). |
+| `Shift + Tab` | Global | Cycle Operating Modes (Standard ↔ Plan, or shell toggle in Lite). |
+| `Alt + Enter` / `Esc + Enter` | Input Box | Queue input while a turn is executing. |
+| `Ctrl + R` | Model Menu | Refresh provider model catalog from API. |
+| `Ctrl + D` | Settings Menu | Reset highlighted setting to its default value. |
+| `Escape` | Input Box | Clear input buffer (when typing). |
+| `Double Escape` | Active Turn | Safely interrupt in-flight generation or tool execution. |
+| `y` / `n` | Approval Prompt | Single-key approve or reject for tool execution. |
+| `Ctrl + C` | Global | Force immediate graceful exit. |
+
+---
+
+## Configuration
+
+Settings are persisted across sessions in `settings.json`:
+- **macOS**: `~/Library/Logs/term2-nodejs/settings.json`
+- **Linux**: `~/.local/state/term2-nodejs/settings.json` *(or `$XDG_STATE_HOME/term2-nodejs/settings.json`)*
+- **Windows**: `%LOCALAPPDATA%\term2-nodejs\Log\settings.json`
+
+### Configuration Example
 
 ```json
 {
   "agent": {
-    "model": "gpt-5.4",
     "provider": "openai",
-    "reasoningEffort": "default",
-    "temperature": 1,
+    "model": "gpt-5.4",
+    "reasoningEffort": "medium",
     "smartModel": "gpt-5.5",
-    "balancedModel": "gpt-5.3-codex",
+    "smartProvider": "openai",
+    "balancedModel": "claude-sonnet-4.6",
+    "balancedProvider": "openrouter",
     "cheapModel": "gpt-5.4-mini",
-    "choreModel": "gpt-5.4-mini"
+    "choreModel": "gpt-5.4-mini",
+    "temperature": 0.7,
+    "maxTurns": 100
   },
   "shell": {
+    "autoApproveMode": "auto",
     "timeout": 120000,
-    "autoApproveMode": "off",
-    "maxParallelToolCalls": 5
+    "maxParallelToolCalls": 3
   },
-  "webSearch": { "provider": "tavily" },
-  "app": { "searchViaShell": "auto" }
+  "sandbox": {
+    "readPolicy": "standard"
+  },
+  "webSearch": {
+    "provider": "tavily"
+  },
+  "providers": [
+    {
+      "name": "Local Ollama",
+      "type": "openai-compatible",
+      "baseUrl": "http://127.0.0.1:11434/v1"
+    },
+    {
+      "name": "Local llama.cpp",
+      "type": "llama.cpp",
+      "baseUrl": "http://127.0.0.1:8080/v1"
+    }
+  ]
 }
 ```
 
-See the full schema in `settings.json` for all available options (shell output limits, app mode toggles, concise display mode, etc.).
+---
 
+## Development and Testing
 
-## Supported Models
-
-- **OpenAI** (default): `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.3-codex`, `gpt-5.2`, `gpt-5.1`
-- **OpenRouter**: Claude, Gemini, DeepSeek, and hundreds more — use `-m model-name`
-- **Local/Self-hosted**: Any OpenAI-compatible API (Ollama, LM Studio, vLLM, Groq, etc.)
-
-You can reorder provider priority with the `PROVIDER_ORDER` setting in `settings.json`.
-
-## Subagents
-
-Delegate tasks to specialized subagents to prevent context bloat. Available roles: **Explorer** (codebase scanning), **Worker** (modifications & tests), **Researcher** (web search & docs), **Mentor** (strategic guidance). Ancillary workloads use four configurable tiers: mentor uses `smart`, worker and researcher use `balanced`, explorer and librarian use `cheap`, and approval/edit-healing tasks use `chore`. Each tier can set a matching provider, such as `agent.smartProvider`; subagent tiers can also set reasoning effort with `agent.smartReasoningEffort`, `agent.balancedReasoningEffort`, or `agent.cheapReasoningEffort`. Unset values inherit the main agent settings.
-
-Legacy per-role, mentor, auto-approval, and edit-healing model settings remain readable for compatibility but are hidden from the interactive settings menu. New configuration should use the tier settings.
-
-Subagents can also use the `ask_user` tool to ask you structured multi-choice questions during execution. Low-risk (YELLOW) shell commands issued by subagents are auto-approved to reduce interruptions.
-
-## Conversation Resumption & Persistence
-
-Conversations are auto-saved on exit. Resume with:
+To set up the development environment from source:
 
 ```bash
-term2 --resume               # resume last session
-term2 --resume <session-uuid> # resume specific session
-term2 --resume ls             # list saved sessions with metadata
-```
-
-
-
-## Development
-
-Want to contribute or run from source?
-
-```bash
-# Clone the repository
+# 1. Clone repository
 git clone https://github.com/qduc/term2.git
 cd term2
 
-# Install dependencies
-npm install
+# 2. Install dependencies (requires pnpm >= 11)
+pnpm install
 
-# Run in development mode
-npm run dev
+# 3. Start TypeScript compiler in watch mode
+pnpm dev
 
-# Run tests
-npm test
+# 4. Run test suites
+pnpm test                    # Run Vitest unit tests
+pnpm test:lane               # Run deterministic fast-lane tests
+pnpm test:provider-black-box # Run provider black-box wire tests
+pnpm typecheck               # Run strict type checking
+pnpm lint                    # Run ESLint and Prettier checks
 
-# Build
-npm run build
+# 5. Build for distribution
+pnpm build
 ```
 
-### Releasing
-
-The release script supports an explicit, non-interactive path for agents and
-automation:
-
-```bash
-# Bump minor, generate and accept the changelog, commit, tag, and push.
-pnpm release --minor --push --non-interactive
-```
-
-Use `--patch` or `--major` for the other semver increments. Use
-`--no-push --non-interactive` to prepare the commit and tag locally without
-publishing them. npm publishing is delegated to the GitHub Actions Trusted
-Publishing workflow after the tag is pushed; `--publish-local` is an explicit
-token-authenticated fallback.
-
-## Troubleshooting
-
-| Issue | Fix |
-| --- | --- |
-| `OPENAI_API_KEY not set` | `export OPENAI_API_KEY="sk-..."` |
-| `command not found: term2` | Restart terminal or `source ~/.zshrc` |
-| Permission denied during install | `sudo npm install --global @qduc/term2` or [fix npm perms](https://docs.npmjs.com/resolving-eacces-permissions-errors-when-installing-packages-globally) |
-| SSH connection failed | Start agent (`eval "$(ssh-agent -s)"`), add key (`ssh-add`), verify with `ssh-add -l` |
-| `remote-dir is required` | Add `--remote-dir /path` or use `--lite` (auto-detects) |
-
-## Tips
-
-- Choose the right mode: **lite** for terminal work, **standard** for codebase work, **mentor** for complex problems
-- Paste images directly into the terminal for vision-model analysis
-- Press `Ctrl+C` to exit, arrow keys to navigate history
-- Use `/auto-approve auto` to reduce prompt fatigue during long sessions
-- System notifications alert you when the agent needs approval or finishes a task
-- Sandbox protects sensitive files — configure `sandbox.readPolicy` in settings for stricter access control
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request or open an Issue on [GitHub](https://github.com/qduc/term2).
+---
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details
+This project is licensed under the [MIT License](LICENSE).
+
+---
 
 ## Acknowledgments
 
-Built with:
-
-- [OpenAI Agents SDK](https://github.com/openai/openai-agents-js)
-- [Ink](https://github.com/vadimdemedes/ink) - React for CLI
-- [TypeScript](https://www.typescriptlang.org/)
-- [ssh2](https://github.com/mscdex/ssh2) - SSH client for Node.js
+term2 is built on open-source libraries:
+- [Ink](https://github.com/vadimdemedes/ink) — React for interactive command-line apps
+- [Vercel AI SDK](https://github.com/vercel/ai) — Multi-provider AI streaming primitives
+- [OpenAI Node SDK](https://github.com/openai/openai-node) — OpenAI API transport
+- [ssh2](https://github.com/mscdex/ssh2) — SSH2 client for remote server execution
+- [Zod](https://github.com/colinhacks/zod) — TypeScript-first schema validation

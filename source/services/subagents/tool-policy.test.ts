@@ -327,6 +327,34 @@ describe('SubagentToolFactory agent tool wrapping', () => {
     expect(onToolStart).toHaveBeenCalledOnce();
     expect(onToolComplete).toHaveBeenCalledOnce();
   });
+
+  it('preserves self-bounded serialized memory output unchanged', async () => {
+    const settings = createMemorySettings();
+    settings.get = ((key: string) =>
+      key === 'shell.maxOutputChars' ? 10 : createMemorySettings().get(key as never)) as any;
+    const policy = new SubagentToolPolicy({
+      settings,
+      logger: createMockLogger(),
+      sessionContextService: createSessionContextService(),
+    });
+    const serialized = JSON.stringify({ text: 'first\nsecond', charsUsed: 42 });
+    const tool = new SubagentToolFactory({ settings, logger: createMockLogger(), toolPolicy: policy }).buildAgentTools(
+      [
+        {
+          name: 'memory_get',
+          description: 'bounded',
+          parameters: z.object({}),
+          preserveSerializedOutput: true,
+          needsApproval: () => false,
+          execute: async () => serialized,
+          formatCommandMessage: () => [],
+        },
+      ],
+      { providerId: 'test' },
+    )[0] as any;
+
+    expect(await tool.execute('{}', { turnLimitWarning: 'do not append' }, {})).toBe(serialized);
+  });
 });
 
 describe('worker shell sandbox approval parity', () => {

@@ -74,6 +74,10 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
     (notification): notification is Extract<BackgroundNotification, { kind: 'user_control' }> =>
       notification.kind === 'user_control',
   );
+  const checkIns = notifications.filter(
+    (notification): notification is Extract<BackgroundNotification, { kind: 'check_in' }> =>
+      notification.kind === 'check_in',
+  );
   const sections: string[] = [];
 
   if (completions.length > 0) {
@@ -192,6 +196,28 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
     );
   }
 
+  if (checkIns.length > 0) {
+    const noun = checkIns.length === 1 ? 'task' : 'tasks';
+    const entries = checkIns.map((notification) => {
+      const { details } = notification;
+      const label =
+        details.kind === 'subagent'
+          ? `background subagent ${details.name ?? details.id} | role: ${details.role} | task: ${details.task}`
+          : `background shell | jobId: ${details.id} | command: ${details.command}`;
+      const elapsedSeconds = Math.round(notification.elapsedMs / 1000);
+      return `- ${label}\n  still running, elapsed ${elapsedSeconds}s, check-in #${notification.checkInIndex}`;
+    });
+    sections.push(
+      [
+        `Periodic check-in on ${checkIns.length} still-running background ${noun}. This is an automatic system notification, not a user message, and does not by itself mean anything is wrong.`,
+        '',
+        ...entries,
+        '',
+        'Decide freely: doing nothing and letting it keep running is a valid choice. Only report to the user or intervene (steer or stop the task) if the elapsed time or task nature makes that the right call.',
+      ].join('\n'),
+    );
+  }
+
   if (userControls.length > 0) {
     const stopControls = userControls.filter((notification) => notification.action === 'stop');
     const backgroundMoves = userControls.filter((notification) => notification.action === 'background');
@@ -275,6 +301,15 @@ function formatBackgroundSubagentNotificationDisplay(notifications: readonly Bac
           ...(notification.droppedBytes !== undefined ? [`  droppedBytes: ${notification.droppedBytes}`] : []),
           ...(notification.matchedLines ? [`  matchedLines: ${notification.matchedLines}`] : []),
         ].join('\n');
+      }
+      if (notification.kind === 'check_in') {
+        const { details } = notification;
+        const elapsedSeconds = Math.round(notification.elapsedMs / 1000);
+        const label =
+          details.kind === 'subagent'
+            ? `background subagent ${details.name ?? details.id} (${details.role})`
+            : `background shell ${details.command}`;
+        return `Check-in #${notification.checkInIndex}: ${label} still running, elapsed ${elapsedSeconds}s`;
       }
       if (notification.kind === 'user_control') {
         const details = notification.details;
@@ -427,7 +462,7 @@ export class ConversationOrchestrator {
       this.config.conversationService.interruptFromUser();
       this.config.messages.setMessages((messages) =>
         messages.map((message) =>
-          message.sender === 'command' && message.status === 'running'
+          message.sender === 'command' && (message.status === 'running' || message.status === 'pending')
             ? { ...message, status: 'aborted' as const }
             : message,
         ),
@@ -596,17 +631,17 @@ export class ConversationOrchestrator {
     });
 
     if (queueOwnsSubmission) {
-      // A turn is already in flight or the queue is paused with retained work.
-      // Show the message above the input box until the queue actually starts
-      // processing it; the message list will be updated when the queue pops
-      // this turn.
-      this.config.ui.onQueuedMessagePending?.(userMessage.id, userMessage.text);
+      const delivery: 'steer' | 'follow_up' = options?.busyMode === 'steer' ? 'steer' : 'follow_up';
 
       // A steer belongs to the turn already running: hand it to that turn so
       // the model reads it at its next request, rather than making the user
       // wait for the whole turn to end. The message joins the transcript at the
       // moment the turn takes it, which is when the model actually sees it.
-      if (options?.busyMode === 'steer' && this.config.conversationService.steerActiveTurn) {
+      if (delivery === 'steer' && this.config.conversationService.steerActiveTurn) {
+        // Show "Steering" while the active turn may still be waiting for its
+        // next request boundary. A follow-up (Alt+Enter) is the only case that
+        // should read as "Queued" here.
+        this.config.ui.onQueuedMessagePending?.(userMessage.id, userMessage.text, delivery);
         // Diagnostics for "my steer just queued". The three fields below
         // separate the ways delivery can fail, which otherwise look identical
         // in the UI because the queued label is drawn before this even runs:
@@ -654,6 +689,9 @@ export class ConversationOrchestrator {
           return;
         }
         this.#editedSteerTurns.delete(userMessage.id);
+        this.config.ui.onQueuedMessageReclassified?.(userMessage.id, 'follow_up');
+      } else {
+        this.config.ui.onQueuedMessagePending?.(userMessage.id, userMessage.text, delivery);
       }
     } else {
       // No turn is in flight — append directly. The queue observer will also
@@ -933,12 +971,15 @@ export class ConversationOrchestrator {
 
     const stranded = this.config.messages
       .getMessages()
-      .filter((message): message is CommandMessage => isCommandMessage(message) && message.status === 'running');
+      .filter(
+        (message): message is CommandMessage =>
+          isCommandMessage(message) && (message.status === 'running' || message.status === 'pending'),
+      );
     if (stranded.length === 0) return;
 
     this.config.messages.setMessages((messages) =>
       messages.map((message) =>
-        message.sender === 'command' && message.status === 'running'
+        message.sender === 'command' && (message.status === 'running' || message.status === 'pending')
           ? { ...message, status: 'aborted' as const }
           : message,
       ),
@@ -996,6 +1037,10 @@ export class ConversationOrchestrator {
     const userControls = newlyDisplayed.filter(
       (notification): notification is Extract<BackgroundNotification, { kind: 'user_control' }> =>
         notification.kind === 'user_control',
+    );
+    const checkIns = newlyDisplayed.filter(
+      (notification): notification is Extract<BackgroundNotification, { kind: 'check_in' }> =>
+        notification.kind === 'check_in',
     );
     this.config.messages.appendMessages([
       ...(subagentNotifications.length > 0
@@ -1072,6 +1117,26 @@ export class ConversationOrchestrator {
               toolName: 'background_task_control_notification',
               toolArgs: {
                 actions: userControls.map(({ action, target }) => ({ action, target })),
+              },
+            },
+          ]
+        : []),
+      ...(checkIns.length > 0
+        ? [
+            {
+              id: this.createMessageId(),
+              sender: 'command' as const,
+              status: 'completed' as const,
+              command: 'background_check_in_notification',
+              output: formatBackgroundSubagentNotificationDisplay(checkIns),
+              success: true,
+              toolName: 'background_check_in_notification',
+              toolArgs: {
+                checkIns: checkIns.map(({ target, checkInIndex, elapsedMs }) => ({
+                  target,
+                  checkInIndex,
+                  elapsedMs,
+                })),
               },
             },
           ]
@@ -1234,8 +1299,39 @@ export class ConversationOrchestrator {
         }
         this.config.costAccumulator?.addRecords(event.result.costRecords ?? []);
         this.emitCostSummary();
+        if (!this.hasActiveBackgroundWork()) {
+          this.config.notifier?.turnComplete();
+        }
+      }
+      if (eventType === 'background_shell_completed') {
+        if (!this.hasActiveBackgroundWork()) {
+          this.config.notifier?.turnComplete();
+        }
       }
     };
+  }
+
+  private hasActiveBackgroundWork(): boolean {
+    const details = this.config.conversationService?.backgroundTaskControl?.listDetails?.() ?? [];
+    for (const d of details) {
+      if (d.kind === 'subagent') {
+        if (
+          d.status === 'running' ||
+          d.status === 'awaiting_approval' ||
+          d.status === 'waiting_for_answer' ||
+          d.status === 'cancelling'
+        ) {
+          return true;
+        }
+      } else if (d.kind === 'shell') {
+        if (d.status === 'running' || d.status === 'cancelling') {
+          return true;
+        }
+      }
+    }
+    const approvals = this.config.conversationService?.backgroundSubagentApprovals?.getSnapshot?.();
+    if (approvals && approvals.pendingCount > 0) return true;
+    return false;
   }
 
   /** Push the accumulator's current summary to the UI after any cost add. */
@@ -1281,7 +1377,9 @@ export class ConversationOrchestrator {
       clearStreamingBotMessage(streamingState);
     }
     this.config.ui.onApprovalResolved();
-    this.config.notifier?.turnComplete();
+    if (!this.hasActiveBackgroundWork()) {
+      this.config.notifier?.turnComplete();
+    }
     if (result.usage) {
       this.config.usageAccumulator?.add(result.usage);
       this.config.ui.onUsageUpdate(latestStreamedUsage ?? result.usage);

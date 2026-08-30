@@ -1,6 +1,7 @@
 import React, { FC } from 'react';
 import { Box, Text, useInput } from 'ink';
 import type { QueuePauseReason } from '../../services/queue/queue-controller.js';
+import { COLOR_DANGER, COLOR_DANGER_SOFT, COLOR_SUCCESS, COLOR_WARNING } from '../theme.js';
 
 export interface QueuePausedPromptProps {
   queueLength: number;
@@ -29,14 +30,14 @@ const QueuePausedPrompt: FC<QueuePausedPromptProps> = ({ queueLength, pauseReaso
 
   return (
     <Box flexDirection="column" marginY={1}>
-      <Text color="#fbbf24">
+      <Text color={COLOR_WARNING}>
         ⏸ Queue paused: {queueLength} item(s) pending.
         {pauseReason === 'failure' ? ' Last turn failed.' : ''}{' '}
-        <Text color="#22c55e" bold>
-          [<Text color="#4ade80">R</Text>]esume
+        <Text color={COLOR_SUCCESS} bold>
+          [<Text color={COLOR_SUCCESS}>R</Text>]esume
         </Text>{' '}
-        <Text color="#ef4444" bold>
-          [<Text color="#f87171">D</Text>]iscard
+        <Text color={COLOR_DANGER} bold>
+          [<Text color={COLOR_DANGER_SOFT}>D</Text>]iscard
         </Text>
       </Text>
     </Box>

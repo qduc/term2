@@ -15,7 +15,19 @@ import {
   parseSubagentOutput,
   stripRgErrorLines,
 } from './command-message-helpers.js';
-import { COLOR_TOOL_OUTPUT, COLOR_MUTED as THEME_COLOR_MUTED } from '../theme.js';
+import {
+  COLOR_ACCENT,
+  COLOR_ACCENT_ALT,
+  COLOR_DANGER,
+  COLOR_TEXT,
+  COLOR_TEXT_MUTED,
+  COLOR_TEXT_SUBTLE,
+  COLOR_TOOL_OUTPUT,
+  COLOR_WARNING,
+  TOOL_STATUS_COLOR,
+  TOOL_STATUS_GLYPH,
+  type ToolStatusKind,
+} from '../theme.js';
 import DiffView from '../layout/DiffView.js';
 import { useCommandVisibility } from './useCommandVisibility.js';
 import ReadFileRenderer from './ReadFileRenderer.js';
@@ -24,17 +36,6 @@ import WebSearchRenderer from './WebSearchRenderer.js';
 import WebFetchRenderer from './WebFetchRenderer.js';
 import CodeContextSearchRenderer from './CodeContextSearchRenderer.js';
 import MemoryRenderer from './MemoryRenderer.js';
-
-// --- Command Message Theme Colors ---
-// Customize these values to change the color scheme per theme.
-const COLOR_ERROR = 'red';
-const COLOR_SUCCESS = '#A0A0A0';
-const COLOR_WARNING = 'yellow';
-const COLOR_INFO = 'cyan';
-const COLOR_MUTED = 'gray';
-const COLOR_CONTENT = 'white';
-const COLOR_LINK = 'blue';
-const COLOR_SPECIAL = 'magenta';
 
 const useRunningElapsedSeconds = (isRunning: boolean): number => {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -117,11 +118,14 @@ const CommandMessage: FC<Props> = ({
   awaitingDecision = false,
 }) => {
   const { isVisible, isRunning } = useCommandVisibility(status);
-  const isWaiting = isRunning && awaitingDecision;
+  const isWaiting = awaitingDecision;
+  const isQueued = status === 'pending' && !awaitingDecision;
   const isExecuting = isRunning && !awaitingDecision;
   const runningElapsedSeconds = useRunningElapsedSeconds(isExecuting);
   const runningElapsedLabel = isWaiting ? (
-    <Text color={COLOR_MUTED}> (waiting)</Text>
+    <Text color={COLOR_TEXT_SUBTLE}> (waiting)</Text>
+  ) : isQueued ? (
+    <Text color={COLOR_TEXT_SUBTLE}> (queued)</Text>
   ) : isExecuting ? (
     <Text color={COLOR_WARNING}> ({runningElapsedSeconds}s)</Text>
   ) : null;
@@ -178,8 +182,8 @@ const CommandMessage: FC<Props> = ({
     if (isShell) {
       return (
         <>
-          <Text color={COLOR_MUTED}>$</Text> <Text bold>{command}</Text>
-          {runtime && <Text color={COLOR_MUTED}> ({runtime})</Text>}
+          <Text bold>{command}</Text>
+          {runtime && <Text color={COLOR_TEXT_SUBTLE}> ({runtime})</Text>}
         </>
       );
     }
@@ -189,6 +193,7 @@ const CommandMessage: FC<Props> = ({
       toolName === 'background_shell_notification' ||
       toolName === 'background_shell_output_notification' ||
       toolName === 'background_task_control_notification' ||
+      toolName === 'background_check_in_notification' ||
       !formattedArgs
         ? ''
         : ` ${formattedArgs}`;
@@ -351,50 +356,64 @@ const CommandMessage: FC<Props> = ({
         }
         return renderAction('Background task control updated');
       }
+      case 'background_check_in_notification': {
+        const checkIns = Array.isArray(toolArgs?.checkIns) ? toolArgs.checkIns : [];
+        if (checkIns.length === 1) {
+          const [{ target, checkInIndex }] = checkIns;
+          const label =
+            target?.kind === 'subagent'
+              ? `background subagent ${target.id ?? 'run'}`
+              : `background shell ${target?.id ?? 'job'}`;
+          const prefix = typeof checkInIndex === 'number' ? `Check-in #${checkInIndex}` : 'Check-in';
+          return renderAction(`${prefix} on ${label}`);
+        }
+        return renderAction(`Background check-in (${checkIns.length || 'task'})`);
+      }
       case 'memory_list':
         return renderAction('Listed memories');
       case 'memory_get':
         return renderAction('Retrieved memory');
       case 'memory_search':
         return renderAction('Searched memories');
+      case 'memory_retrieve':
+        return renderAction('Retrieved relevant memories');
       case 'memory_create':
         return renderAction('Saved memory');
       case 'memory_update':
         return renderAction('Updated memory');
       case 'memory_delete':
         return renderAction('Deleted memory');
+      case 'session_list':
+        return renderAction('Listed prior sessions');
+      case 'session_search':
+        return renderAction('Searched prior sessions');
+      case 'session_read':
+        return renderAction('Read prior session');
       default:
-        return (
-          <>
-            <Text dimColor>[{toolName}]</Text>
-            <Text>{argsText}</Text>
-          </>
-        );
+        return renderAction(toolName || 'Ran tool');
     }
     // Depend on the whole `toolArgs`, not `toolArgs?.runs`: the React Compiler infers the
     // former and refuses to preserve the memo when the declared deps are narrower.
   }, [toolName, command, runtime, formattedArgs, toolArgs, isBackgroundSubagentLaunch]);
 
   const renderStandardHeader = () => {
-    const headerColor =
-      success === false ? COLOR_ERROR : isWaiting ? COLOR_MUTED : isRunning ? COLOR_WARNING : COLOR_INFO;
-    const isShell = !toolName || toolName === 'shell';
-
-    if (isShell) {
-      return (
-        <Box>
-          <Text color={headerColor}>
-            {displayAction}
-            {runningElapsedLabel}
-          </Text>
-        </Box>
-      );
-    }
+    // isApprovalRejection carries no `success` value of its own — it is a distinct
+    // outcome from a normal failed run — so it is checked first and maps to the
+    // same 'failed' glyph/color as success === false.
+    const statusKind: ToolStatusKind =
+      isApprovalRejection || success === false
+        ? 'failed'
+        : isWaiting || isQueued
+        ? 'pending'
+        : isRunning
+        ? 'running'
+        : 'completed';
+    const headerColor = TOOL_STATUS_COLOR[statusKind];
 
     return (
       <Box>
         <Text color={headerColor}>
-          <Text color={COLOR_MUTED}>$</Text> {displayAction}
+          {TOOL_STATUS_GLYPH[statusKind]} {displayAction}
           {runningElapsedLabel}
         </Text>
       </Box>
@@ -422,27 +441,28 @@ const CommandMessage: FC<Props> = ({
   const changeStatsElement = changeStats ? (
     <>
       {' '}
-      (<Text color="green">+{changeStats.added}</Text> <Text color={COLOR_ERROR}>-{changeStats.removed}</Text>)
+      (<Text color={COLOR_TEXT_MUTED}>+{changeStats.added}</Text>{' '}
+      <Text color={COLOR_DANGER}>-{changeStats.removed}</Text>)
     </>
   ) : null;
 
   const matchCount = useMemo(() => {
     if (displayMode !== 'concise') return 0;
     if (!isSearchLikeTool(toolName, command)) return 0;
-    if (isRunning || isApprovalRejection) return 0;
+    if (isRunning || isQueued || isApprovalRejection) return 0;
     return getMatchCount(toolName, command, output);
-  }, [displayMode, toolName, command, isRunning, isApprovalRejection, output]);
+  }, [displayMode, toolName, command, isRunning, isQueued, isApprovalRejection, output]);
 
   const matchCountElement =
     matchCount > 0 ? (
       <Box paddingLeft={2}>
-        <Text color={COLOR_MUTED}>
+        <Text color={COLOR_TEXT_SUBTLE}>
           ({matchCount} match{matchCount !== 1 ? 'es' : ''})
         </Text>
       </Box>
     ) : null;
 
-  const autoApprovalLabel = autoApprovedByLlm ? <Text color={COLOR_MUTED}>(Auto approved by LLM)</Text> : null;
+  const autoApprovalLabel = autoApprovedByLlm ? <Text color={COLOR_TEXT_SUBTLE}>(Auto approved by LLM)</Text> : null;
 
   if (!isVisible && !isSubagent) {
     return null;
@@ -456,13 +476,20 @@ const CommandMessage: FC<Props> = ({
         isApprovalRejection ||
         success === false ||
         Boolean(failureReason);
-      const statusChar = isFailed ? '✖' : isWaiting ? '⏸' : isRunning ? '▶' : '✔';
+      const subagentStatusKind: ToolStatusKind = isFailed
+        ? 'failed'
+        : isWaiting || isQueued
+        ? 'pending'
+        : isRunning
+        ? 'running'
+        : 'completed';
       const actionText = isFailed ? command : displayAction;
       return (
         <Box>
-          <Text wrap="truncate" color={THEME_COLOR_MUTED}>
-            {statusChar} {actionText}
-            {isRunning && runningElapsedLabel}
+          <Text wrap="truncate" color={COLOR_TEXT_SUBTLE}>
+            <Text color={TOOL_STATUS_COLOR[subagentStatusKind]}>{TOOL_STATUS_GLYPH[subagentStatusKind]}</Text>{' '}
+            {actionText}
+            {runningElapsedLabel}
           </Text>
         </Box>
       );
@@ -471,23 +498,24 @@ const CommandMessage: FC<Props> = ({
     if (isApprovalRejection) {
       return (
         <Box flexDirection="column">
-          <Text color={textColor || COLOR_SUCCESS}>
-            <Text color={COLOR_ERROR} bold>
-              ✖
+          <Text color={textColor || COLOR_TEXT_MUTED}>
+            <Text color={TOOL_STATUS_COLOR.rejected} bold>
+              {TOOL_STATUS_GLYPH.rejected}
             </Text>{' '}
             {displayAction}
             {changeStatsElement}
           </Text>
-          <Text color={textColor || COLOR_SUCCESS}> → DENIED: {denialReason}</Text>
+          <Text color={textColor || COLOR_TEXT_MUTED}> → DENIED: {denialReason}</Text>
         </Box>
       );
     }
 
-    if (isRunning) {
+    if (isRunning || isQueued || isWaiting) {
+      const inFlightStatusKind: ToolStatusKind = isWaiting || isQueued ? 'pending' : 'running';
       return (
         <Box>
-          <Text color={isWaiting ? COLOR_MUTED : COLOR_WARNING}>
-            <Text bold>{isWaiting ? '⏸' : '▶'}</Text> {displayAction}
+          <Text color={TOOL_STATUS_COLOR[inFlightStatusKind]}>
+            <Text bold>{TOOL_STATUS_GLYPH[inFlightStatusKind]}</Text> {displayAction}
             {runningElapsedLabel}
             {changeStatsElement}
           </Text>
@@ -514,15 +542,15 @@ const CommandMessage: FC<Props> = ({
       })();
       return (
         <Box flexDirection="column">
-          <Text color={textColor || COLOR_SUCCESS}>
-            <Text color={COLOR_ERROR} bold>
-              ✖
+          <Text color={textColor || COLOR_TEXT_MUTED}>
+            <Text color={TOOL_STATUS_COLOR.failed} bold>
+              {TOOL_STATUS_GLYPH.failed}
             </Text>{' '}
             {displayAction}
             {changeStatsElement}
           </Text>
           {matchCountElement}
-          {matchCount === 0 && <Text color={textColor || COLOR_SUCCESS}>{truncatedError}</Text>}
+          {matchCount === 0 && <Text color={textColor || COLOR_TEXT_MUTED}>{truncatedError}</Text>}
         </Box>
       );
     }
@@ -532,13 +560,13 @@ const CommandMessage: FC<Props> = ({
       const responseText = getConciseAskUserResponse(output);
       return (
         <Box flexDirection="column">
-          <Text color={textColor || COLOR_SUCCESS}>
-            <Text color={'green'} bold>
-              ✔
+          <Text color={textColor || COLOR_TEXT_MUTED}>
+            <Text color={TOOL_STATUS_COLOR.completed} bold>
+              {TOOL_STATUS_GLYPH.completed}
             </Text>{' '}
             {displayAction}
           </Text>
-          <Text color={textColor || COLOR_SUCCESS}> Response: {responseText}</Text>
+          <Text color={textColor || COLOR_TEXT_MUTED}> Response: {responseText}</Text>
         </Box>
       );
     }
@@ -547,22 +575,22 @@ const CommandMessage: FC<Props> = ({
       const firstParagraph = getFirstParagraph(output, 200);
       return (
         <Box flexDirection="column">
-          <Text color={textColor || COLOR_SUCCESS}>
-            <Text color={'green'} bold>
-              ✔
+          <Text color={textColor || COLOR_TEXT_MUTED}>
+            <Text color={TOOL_STATUS_COLOR.completed} bold>
+              {TOOL_STATUS_GLYPH.completed}
             </Text>{' '}
             {displayAction}
           </Text>
-          <Text color={textColor || COLOR_SUCCESS}> Response: {firstParagraph}</Text>
+          <Text color={textColor || COLOR_TEXT_MUTED}> Response: {firstParagraph}</Text>
         </Box>
       );
     }
 
     return (
       <Box flexDirection="column">
-        <Text color={textColor || COLOR_SUCCESS}>
-          <Text color={'green'} bold>
-            ✔
+        <Text color={textColor || COLOR_TEXT_MUTED}>
+          <Text color={TOOL_STATUS_COLOR.completed} bold>
+            {TOOL_STATUS_GLYPH.completed}
           </Text>{' '}
           {displayAction}
           {changeStatsElement}
@@ -572,7 +600,7 @@ const CommandMessage: FC<Props> = ({
       </Box>
     );
   }
-  const outputText = output?.trim() ? output : isRunning ? '(running...)' : '(no output)';
+  const outputText = output?.trim() ? output : isRunning ? '(running...)' : isQueued ? '(queued)' : '(no output)';
   const displayed =
     outputText && outputText !== '(no output)'
       ? (() => {
@@ -593,7 +621,7 @@ const CommandMessage: FC<Props> = ({
     if (hadApproval) {
       return (
         <Box flexDirection="column">
-          <Text color={success === false ? COLOR_ERROR : COLOR_TOOL_OUTPUT}>{displayed}</Text>
+          <Text color={success === false ? COLOR_DANGER : COLOR_TOOL_OUTPUT}>{displayed}</Text>
         </Box>
       );
     }
@@ -602,8 +630,8 @@ const CommandMessage: FC<Props> = ({
       <Box flexDirection="column">
         {renderStandardHeader()}
         {toolArgs.diff && success !== false && <DiffView diff={toolArgs.diff} />}
-        {failureReason && <Text color={COLOR_ERROR}>Error: {failureReason}</Text>}
-        <Text color={success === false ? COLOR_ERROR : COLOR_TOOL_OUTPUT}>{displayed}</Text>
+        {failureReason && <Text color={COLOR_DANGER}>Error: {failureReason}</Text>}
+        <Text color={success === false ? COLOR_DANGER : COLOR_TOOL_OUTPUT}>{displayed}</Text>
       </Box>
     );
   }
@@ -614,7 +642,7 @@ const CommandMessage: FC<Props> = ({
     if (hadApproval) {
       return (
         <Box flexDirection="column">
-          <Text color={success === false ? COLOR_ERROR : COLOR_TOOL_OUTPUT}>{displayed}</Text>
+          <Text color={success === false ? COLOR_DANGER : COLOR_TOOL_OUTPUT}>{displayed}</Text>
         </Box>
       );
     }
@@ -624,8 +652,8 @@ const CommandMessage: FC<Props> = ({
       <Box flexDirection="column">
         {renderStandardHeader()}
         <DiffView diff={diff} />
-        {failureReason && <Text color={COLOR_ERROR}>Error: {failureReason}</Text>}
-        <Text color={success === false ? COLOR_ERROR : COLOR_TOOL_OUTPUT}>{displayed}</Text>
+        {failureReason && <Text color={COLOR_DANGER}>Error: {failureReason}</Text>}
+        <Text color={success === false ? COLOR_DANGER : COLOR_TOOL_OUTPUT}>{displayed}</Text>
       </Box>
     );
   }
@@ -636,8 +664,8 @@ const CommandMessage: FC<Props> = ({
       <Box flexDirection="column">
         {renderStandardHeader()}
         {success !== false && <DiffView diff={createFileDiffLines} />}
-        {failureReason && <Text color={COLOR_ERROR}>Error: {failureReason}</Text>}
-        <Text color={success === false ? COLOR_ERROR : COLOR_TOOL_OUTPUT}>{displayed}</Text>
+        {failureReason && <Text color={COLOR_DANGER}>Error: {failureReason}</Text>}
+        <Text color={success === false ? COLOR_DANGER : COLOR_TOOL_OUTPUT}>{displayed}</Text>
       </Box>
     );
   }
@@ -654,14 +682,14 @@ const CommandMessage: FC<Props> = ({
       <Box flexDirection="column">
         {renderStandardHeader()}
         <Box paddingLeft={2} marginTop={0.5}>
-          <Text color={COLOR_ERROR}>{launchError}</Text>
+          <Text color={COLOR_DANGER}>{launchError}</Text>
         </Box>
       </Box>
     );
   }
 
   // Standard mode custom tool renderers
-  if (displayMode === 'standard' && success !== false && !failureReason && !isRunning) {
+  if (displayMode === 'standard' && success !== false && !failureReason && !isRunning && !isQueued && !isWaiting) {
     if (toolName === 'read_file' || toolName === 'view_file') {
       const result = ReadFileRenderer({ output, renderStandardHeader });
       if (result) return result;
@@ -700,26 +728,27 @@ const CommandMessage: FC<Props> = ({
       const parsed = parseSubagentOutput(output, toolArgs) as any;
       if (parsed) {
         const { role: _role, status, toolsUsed, filesChanged, mainText } = parsed;
-        const _statusColor = status === 'completed' ? COLOR_SUCCESS : status === 'failed' ? COLOR_ERROR : COLOR_WARNING;
+        const _statusColor =
+          status === 'completed' ? COLOR_TEXT_MUTED : status === 'failed' ? COLOR_DANGER : COLOR_WARNING;
         return (
           <Box flexDirection="column">
             {renderStandardHeader()}
             {(toolsUsed || filesChanged) && (
               <Box flexDirection="column" paddingLeft={2} marginY={0.5}>
                 {toolsUsed && (
-                  <Text color={COLOR_MUTED}>
-                    Tools: <Text color={COLOR_CONTENT}>{toolsUsed}</Text>
+                  <Text color={COLOR_TEXT_SUBTLE}>
+                    Tools: <Text color={COLOR_TEXT}>{toolsUsed}</Text>
                   </Text>
                 )}
                 {filesChanged && (
-                  <Text color={COLOR_MUTED}>
-                    Changed: <Text color={COLOR_CONTENT}>{filesChanged}</Text>
+                  <Text color={COLOR_TEXT_SUBTLE}>
+                    Changed: <Text color={COLOR_TEXT}>{filesChanged}</Text>
                   </Text>
                 )}
               </Box>
             )}
             {mainText && (
-              <Box flexDirection="column" borderStyle="single" borderColor={COLOR_INFO} paddingX={1} marginTop={1}>
+              <Box flexDirection="column" borderStyle="single" borderColor={COLOR_ACCENT} paddingX={1} marginTop={1}>
                 <Text color={COLOR_TOOL_OUTPUT}>{mainText}</Text>
               </Box>
             )}
@@ -741,8 +770,8 @@ const CommandMessage: FC<Props> = ({
         <Box flexDirection="column">
           {renderStandardHeader()}
           <Box paddingLeft={2} marginTop={0.5}>
-            <Text color={COLOR_MUTED}>RunId: </Text>
-            <Text color={COLOR_SUCCESS}>{runId || output}</Text>
+            <Text color={COLOR_TEXT_SUBTLE}>RunId: </Text>
+            <Text color={COLOR_TEXT_MUTED}>{runId || output}</Text>
           </Box>
         </Box>
       );
@@ -762,8 +791,8 @@ const CommandMessage: FC<Props> = ({
       return (
         <Box flexDirection="column">
           {renderStandardHeader()}
-          <Box flexDirection="column" borderStyle="round" borderColor={COLOR_SPECIAL} paddingX={1} marginTop={1}>
-            <Text color={COLOR_SPECIAL} bold>
+          <Box flexDirection="column" borderStyle="round" borderColor={COLOR_ACCENT_ALT} paddingX={1} marginTop={1}>
+            <Text color={COLOR_ACCENT_ALT} bold>
               Mentor Response
             </Text>
             <Text color={COLOR_TOOL_OUTPUT}>{output}</Text>
@@ -779,17 +808,17 @@ const CommandMessage: FC<Props> = ({
           {renderStandardHeader()}
           {options && Array.isArray(options) && options.length > 0 && (
             <Box paddingLeft={2} marginY={0.5}>
-              <Text color={COLOR_MUTED}>Options: </Text>
+              <Text color={COLOR_TEXT_SUBTLE}>Options: </Text>
               {options.map((opt: string, idx: number) => (
-                <Text key={idx} color={idx === 0 ? COLOR_SUCCESS : COLOR_CONTENT}>
+                <Text key={idx} color={idx === 0 ? COLOR_TEXT_MUTED : COLOR_TEXT}>
                   {idx > 0 ? ', ' : ''}[{opt}]{idx === 0 ? ' (Recommended)' : ''}
                 </Text>
               ))}
             </Box>
           )}
           <Box paddingLeft={2} marginTop={0.5}>
-            <Text color={COLOR_MUTED}>Response: </Text>
-            <Text color={COLOR_SUCCESS} bold>
+            <Text color={COLOR_TEXT_SUBTLE}>Response: </Text>
+            <Text color={COLOR_TEXT_MUTED} bold>
               {output || 'No response yet'}
             </Text>
           </Box>
@@ -819,7 +848,7 @@ const CommandMessage: FC<Props> = ({
             )}
             {exports && exports.length > 0 && (
               <Box flexDirection="column" marginBottom={1} paddingLeft={2}>
-                <Text color={COLOR_SUCCESS} bold>
+                <Text color={COLOR_TEXT_MUTED} bold>
                   Exports:
                 </Text>
                 {exports.map((exp: string, idx: number) => (
@@ -832,7 +861,7 @@ const CommandMessage: FC<Props> = ({
             )}
             {decls && decls.length > 0 && (
               <Box flexDirection="column" paddingLeft={2}>
-                <Text color={COLOR_LINK} bold>
+                <Text color={COLOR_ACCENT} bold>
                   Declarations:
                 </Text>
                 {decls.map((decl: string, idx: number) => (
@@ -854,7 +883,12 @@ const CommandMessage: FC<Props> = ({
     }
 
     if (toolName && toolName.startsWith('memory_')) {
-      const result = MemoryRenderer({ output, toolName, renderStandardHeader });
+      const result = MemoryRenderer({
+        output,
+        toolName,
+        query: typeof toolArgs?.query === 'string' ? toolArgs.query : undefined,
+        renderStandardHeader,
+      });
       if (result) return result;
     }
   }
@@ -865,7 +899,7 @@ const CommandMessage: FC<Props> = ({
     return (
       <Box flexDirection="column">
         {renderStandardHeader()}
-        <Text color={COLOR_ERROR}>→ DENIED: {denialReason}</Text>
+        <Text color={COLOR_DANGER}>→ DENIED: {denialReason}</Text>
       </Box>
     );
   }
@@ -873,8 +907,8 @@ const CommandMessage: FC<Props> = ({
   return (
     <Box flexDirection="column">
       {renderStandardHeader()}
-      {failureReason && <Text color={COLOR_ERROR}>Error: {failureReason}</Text>}
-      <Text color={success === false ? COLOR_ERROR : COLOR_TOOL_OUTPUT}>{displayed}</Text>
+      {failureReason && <Text color={COLOR_DANGER}>Error: {failureReason}</Text>}
+      <Text color={success === false ? COLOR_DANGER : COLOR_TOOL_OUTPUT}>{displayed}</Text>
       {autoApprovalLabel}
     </Box>
   );

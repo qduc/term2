@@ -1,5 +1,6 @@
 import React, { FC, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
+import { COLOR_DANGER, COLOR_SUCCESS, COLOR_WARNING } from '../theme.js';
 
 export interface ModeSwitchConfirmationPromptProps {
   modeLabel: string;
@@ -52,14 +53,14 @@ const ModeSwitchConfirmationPrompt: FC<ModeSwitchConfirmationPromptProps> = ({
 
   return (
     <Box flexDirection="column">
-      <Text color="yellow">
+      <Text color={COLOR_WARNING}>
         ⚠️ {targetValue ? `Switching to ${modeLabel} mode` : `Disabling ${modeLabel} mode`} requires clearing the
         current session.
       </Text>
       <Text>Clear session and {actionText}?</Text>
       <Box flexDirection="column" marginLeft={1}>
-        <Text color={selectedIndex === 0 ? 'green' : undefined}>{selectedIndex === 0 ? '❯ ' : '  '}Yes</Text>
-        <Text color={selectedIndex === 1 ? 'red' : undefined}>{selectedIndex === 1 ? '❯ ' : '  '}No</Text>
+        <Text color={selectedIndex === 0 ? COLOR_SUCCESS : undefined}>{selectedIndex === 0 ? '❯ ' : '  '}Yes</Text>
+        <Text color={selectedIndex === 1 ? COLOR_DANGER : undefined}>{selectedIndex === 1 ? '❯ ' : '  '}No</Text>
       </Box>
     </Box>
   );

@@ -1289,6 +1289,11 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     }
 
     if (RESPONSES_LITE_MODELS.has(this.modelId)) {
+      // Luna chaining is owned by ChainedWireState in buildResponsesCreateRequest.
+      // That machine adopts the stored response id when the caller omits
+      // previousResponseId (nested explorers do). Injecting a terra-style
+      // remembered id here would duplicate that owner. disableChaining still
+      // clears the wire state via #forgetCodexResponseId above.
       const input = Array.isArray(request.input) ? dropUnpairedCodexToolItems(request.input) : request.input;
       return { request: input === request.input ? request : { ...request, input } };
     }

@@ -99,10 +99,38 @@ it('tool_started: creates pending command message with shell command', () => {
   expect(deps.calls.appendedMessages.length).toBe(1);
   const cmdMsg = deps.calls.appendedMessages[0][0];
   expect(cmdMsg.sender).toBe('command');
-  expect(cmdMsg.status).toBe('running');
+  expect(cmdMsg.status).toBe('pending');
   expect(cmdMsg.command).toBe('echo hello');
   expect(cmdMsg.toolName).toBe('shell');
   expect(cmdMsg.callId).toBe('call-1');
+});
+
+it('tool_dispatched: transitions pending command message to running', () => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'tool_started',
+    toolCallId: 'call-1',
+    toolName: 'shell',
+    arguments: { command: 'echo hello' },
+  } as ConversationEvent);
+
+  const initialMsg = deps.calls.appendedMessages[0][0];
+  expect(initialMsg.status).toBe('pending');
+
+  handler({
+    type: 'tool_dispatched',
+    toolCallId: 'call-1',
+    toolName: 'shell',
+  } as ConversationEvent);
+
+  expect(deps.calls.setMessagesCalls.length).toBe(1);
+  const updater = deps.calls.setMessagesCalls[0]!;
+  const updated = updater([initialMsg]);
+  expect(updated.length).toBe(1);
+  expect(updated[0].status).toBe('running');
 });
 
 it('tool_started: parses JSON string arguments', () => {
@@ -169,7 +197,7 @@ it('tool_started: appends a pending message for run_subagent_async (no SubagentA
   const cmdMsg = deps.calls.appendedMessages[0][0];
   expect(cmdMsg.toolName).toBe('run_subagent_async');
   expect(cmdMsg.callId).toBe('call-async-1');
-  expect(cmdMsg.status).toBe('running');
+  expect(cmdMsg.status).toBe('pending');
 });
 
 it('command_message: finalizes the run_subagent_async pending message instead of dropping it', () => {
@@ -220,7 +248,7 @@ it('tool_started: does not append duplicate running message for the same callId'
 
   expect(deps.calls.appendedMessages.length).toBe(1);
   expect(deps.calls.appendedMessages[0][0].callId).toBe('call-dup-1');
-  expect(deps.calls.appendedMessages[0][0].status).toBe('running');
+  expect(deps.calls.appendedMessages[0][0].status).toBe('pending');
 });
 
 it('command_message: annotates and updates existing pending message', () => {
@@ -586,7 +614,7 @@ it('command_message: leaves stale running message when no callId is present on e
   } as any);
 
   const runningMsg = deps.calls.appendedMessages[0][0];
-  expect(runningMsg.status).toBe('running');
+  expect(runningMsg.status).toBe('pending');
   expect(runningMsg.callId).toBe(undefined);
 
   // command_message also has no callId, so pendingIndex is immediately -1

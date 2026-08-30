@@ -1,7 +1,7 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import MarkdownRenderer from '../MarkdownRenderer.js';
-import { COLOR_REASONING } from '../theme.js';
+import { COLOR_ACCENT, COLOR_REASONING } from '../theme.js';
 import type { Message } from '../../types/message.js';
 
 type Props = {
@@ -13,7 +13,7 @@ const ChatMessage: FC<Props> = ({ msg, maxWidth }) => {
   return (
     <Box flexDirection="column">
       {msg.sender === 'user' ? (
-        <Text color="#22d3ee">❯ {msg.text}</Text>
+        <Text color={COLOR_ACCENT}>❯ {msg.text}</Text>
       ) : msg.sender === 'system' ? (
         <Text color={COLOR_REASONING}>{msg.text}</Text>
       ) : msg.sender === 'reasoning' ? (

@@ -11,6 +11,14 @@ import type { RunBudgetEvent } from '../services/agent-runtime/run-budget.js';
 export type ApplicationRunEvent =
   | { readonly type: 'text_delta'; readonly text: string }
   | { readonly type: 'reasoning_delta'; readonly text: string }
+  /** Retracts provisional deltas from a failed provider attempt before retrying the same logical request. */
+  | {
+      readonly type: 'model_attempt_rollback';
+      readonly textCharacters: number;
+      readonly reasoningCharacters: number;
+      readonly textDeltas: number;
+      readonly reasoningDeltas: number;
+    }
   | { readonly type: 'codex_rate_limits'; readonly rateLimits: CodexRateLimitInfo }
   | { readonly type: 'tool_call_streaming_delta'; readonly toolName?: string; readonly argumentCharCount: number }
   /** Server-side context compaction bracketed by real provider frames; see StreamedModelTurnEvent. */
@@ -37,6 +45,8 @@ export type ApplicationRunEvent =
   | { readonly type: 'cost_update'; readonly record: ModelRequestCost }
   /** Staged budget/stall evidence, kept out of provider history. */
   /** Named `evidence`, not `event`: an `event.event` payload reads as a retired SDK envelope. */
-  | { readonly type: 'run_budget'; readonly evidence: RunBudgetEvent };
+  | { readonly type: 'run_budget'; readonly evidence: RunBudgetEvent }
+  /** Emitted when a planned tool call is dispatched for execution. */
+  | { readonly type: 'tool_call_dispatched'; readonly callId: string; readonly toolName: string };
 
 export type ApplicationRunStream = AsyncIterable<ApplicationRunEvent>;

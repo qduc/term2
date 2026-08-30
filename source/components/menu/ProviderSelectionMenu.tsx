@@ -6,6 +6,7 @@ import type {
   ProviderSelectionMenuItem,
 } from '../../hooks/use-provider-selection.js';
 import { MenuContainer } from '../common/MenuContainer.js';
+import { COLOR_ACCENT, COLOR_DANGER, COLOR_SUCCESS, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
 
 type Props = {
   phase: ProviderSelectionPhase;
@@ -81,9 +82,9 @@ const ProviderSelectionMenu: FC<Props> = ({
   };
 
   const getBorderColor = () => {
-    if (errorMessage) return 'red';
-    if (phase === 'confirm_delete' || phase === 'confirm_discard') return 'red';
-    return 'cyan';
+    if (errorMessage) return COLOR_DANGER;
+    if (phase === 'confirm_delete' || phase === 'confirm_discard') return COLOR_DANGER;
+    return COLOR_ACCENT;
   };
 
   // Render a help card for text prompt wizard steps
@@ -104,20 +105,20 @@ const ProviderSelectionMenu: FC<Props> = ({
 
     return (
       <Box borderStyle="round" borderColor={getBorderColor()} paddingX={1} flexDirection="column">
-        <Text color="cyan" bold underline>
+        <Text color={COLOR_ACCENT} bold underline>
           {getHeader()}
         </Text>
         <Box marginTop={1} flexDirection="column">
-          <Text color="gray">{description}</Text>
+          <Text color={COLOR_TEXT_SUBTLE}>{description}</Text>
           {currentValue && (
             <Box marginTop={1}>
-              <Text color="yellow">Current draft value: </Text>
-              <Text color="white">{currentValue}</Text>
+              <Text color={COLOR_WARNING}>Current draft value: </Text>
+              <Text color={COLOR_TEXT}>{currentValue}</Text>
             </Box>
           )}
           {errorMessage && (
             <Box marginTop={1}>
-              <Text color="red">⚠ {errorMessage}</Text>
+              <Text color={COLOR_DANGER}>⚠ {errorMessage}</Text>
             </Box>
           )}
         </Box>
@@ -128,9 +129,9 @@ const ProviderSelectionMenu: FC<Props> = ({
           borderBottom={false}
           borderLeft={false}
           borderRight={false}
-          borderColor="gray"
+          borderColor={COLOR_TEXT_SUBTLE}
         >
-          <Text color="gray" dimColor>
+          <Text color={COLOR_TEXT_SUBTLE} dimColor>
             {getFooter()}
           </Text>
         </Box>
@@ -163,27 +164,27 @@ const ProviderSelectionMenu: FC<Props> = ({
   return (
     <Box flexDirection="column">
       <Box marginBottom={0}>
-        <Text color="cyan" bold underline>
+        <Text color={COLOR_ACCENT} bold underline>
           {getHeader()}
         </Text>
       </Box>
       {phase === 'confirm_delete' && (
         <Box marginTop={1} marginBottom={0}>
-          <Text color="red" bold>
+          <Text color={COLOR_DANGER} bold>
             ⚠ WARNING: Are you sure you want to delete this provider? This action cannot be undone.
           </Text>
         </Box>
       )}
       {phase === 'confirm_discard' && (
         <Box marginTop={1} marginBottom={0}>
-          <Text color="yellow" bold>
+          <Text color={COLOR_WARNING} bold>
             ⚠ You have unsaved changes. Discard them?
           </Text>
         </Box>
       )}
       {errorMessage && phase !== 'edit_fields' && (
         <Box marginTop={1} marginBottom={0}>
-          <Text color="red">⚠ {errorMessage}</Text>
+          <Text color={COLOR_DANGER}>⚠ {errorMessage}</Text>
         </Box>
       )}
       <MenuContainer
@@ -197,7 +198,7 @@ const ProviderSelectionMenu: FC<Props> = ({
           let label = item.label;
           let prefix = '  ';
           let suffix = '';
-          let color = isSelected ? 'green' : 'white';
+          let color = isSelected ? COLOR_SUCCESS : COLOR_TEXT;
           let bold = isSelected;
 
           if (item.kind === 'provider') {
@@ -205,7 +206,13 @@ const ProviderSelectionMenu: FC<Props> = ({
             // Custom providers remain bright so they look interactive.
             // Note: openai and openrouter remain active/bright because we can change their api key.
             const unavailable = item.hasCredentials === false;
-            color = isInactive ? 'gray' : unavailable ? 'yellow' : isSelected ? 'green' : 'white';
+            color = isInactive
+              ? COLOR_TEXT_SUBTLE
+              : unavailable
+              ? COLOR_WARNING
+              : isSelected
+              ? COLOR_SUCCESS
+              : COLOR_TEXT;
             if (item.id === 'codex') {
               suffix = unavailable
                 ? 'Not logged in on this host · Run `term2 --codex-login`'
@@ -217,10 +224,17 @@ const ProviderSelectionMenu: FC<Props> = ({
             }
           } else if (item.kind === 'add-provider') {
             prefix = '+ ';
-            color = isSelected ? 'green' : 'yellow';
+            color = isSelected ? COLOR_SUCCESS : COLOR_WARNING;
           } else if (item.kind === 'action') {
             prefix = item.tone === 'destructive' ? '× ' : '  ';
-            color = item.tone === 'destructive' ? (isSelected ? 'red' : 'red') : isSelected ? 'green' : 'white';
+            color =
+              item.tone === 'destructive'
+                ? isSelected
+                  ? COLOR_DANGER
+                  : COLOR_DANGER
+                : isSelected
+                ? COLOR_SUCCESS
+                : COLOR_TEXT;
             bold = isSelected || item.tone === 'destructive';
           } else if (item.kind === 'field' || item.kind === 'type') {
             prefix = '  ';
@@ -231,7 +245,13 @@ const ProviderSelectionMenu: FC<Props> = ({
             // "in use" is what this session is authenticating as right now;
             // "next session" is a selection that has not taken effect yet.
             prefix = item.isInUse ? '● ' : item.isSelected ? '○ ' : '  ';
-            color = item.isInUse ? 'green' : item.isSelected ? 'cyan' : isSelected ? 'green' : 'white';
+            color = item.isInUse
+              ? COLOR_SUCCESS
+              : item.isSelected
+              ? COLOR_ACCENT
+              : isSelected
+              ? COLOR_SUCCESS
+              : COLOR_TEXT;
             bold = item.isInUse;
             suffix = item.isInUse
               ? item.isSelected
@@ -242,7 +262,7 @@ const ProviderSelectionMenu: FC<Props> = ({
               : '';
           } else if (item.kind === 'note') {
             prefix = '  ';
-            color = 'gray';
+            color = COLOR_TEXT_SUBTLE;
           } else if (item.kind === 'reorder-item') {
             prefix = '  ';
             suffix = index === 0 ? '↑' : isSelected ? '↓' : '';
@@ -255,7 +275,7 @@ const ProviderSelectionMenu: FC<Props> = ({
 
           const isDestructive = item.kind === 'action' && item.tone === 'destructive';
           if (isDestructive) {
-            color = isSelected ? 'red' : 'red';
+            color = isSelected ? COLOR_DANGER : COLOR_DANGER;
           }
 
           if (phase === 'edit_fields' && item.kind === 'field') {
@@ -263,18 +283,18 @@ const ProviderSelectionMenu: FC<Props> = ({
             return (
               <Box key={`${index}-${item.kind}-${item.label}`} flexDirection="column">
                 <Box flexDirection="row">
-                  <Text color={isSelected ? 'green' : 'gray'}>{isSelected ? '▶ ' : '  '}</Text>
+                  <Text color={isSelected ? COLOR_SUCCESS : COLOR_TEXT_SUBTLE}>{isSelected ? '▶ ' : '  '}</Text>
                   <Box width={labelColumnWidth} flexDirection="row" flexShrink={0}>
                     <Text color={color} bold={bold}>
                       {prefix}
                       {label}
                     </Text>
                   </Box>
-                  {suffix ? <Text color="gray">{suffix}</Text> : null}
+                  {suffix ? <Text color={COLOR_TEXT_SUBTLE}>{suffix}</Text> : null}
                 </Box>
                 {error ? (
                   <Box marginLeft={4}>
-                    <Text color="red">⚠ {error}</Text>
+                    <Text color={COLOR_DANGER}>⚠ {error}</Text>
                   </Box>
                 ) : null}
               </Box>
@@ -283,14 +303,14 @@ const ProviderSelectionMenu: FC<Props> = ({
 
           return (
             <Box key={`${index}-${item.kind}-${item.label}`} flexDirection="row">
-              <Text color={isSelected ? 'green' : 'gray'}>{isSelected ? '▶ ' : '  '}</Text>
+              <Text color={isSelected ? COLOR_SUCCESS : COLOR_TEXT_SUBTLE}>{isSelected ? '▶ ' : '  '}</Text>
               <Box width={labelColumnWidth} flexDirection="row" flexShrink={0}>
                 <Text color={color} bold={bold}>
                   {prefix}
                   {label}
                 </Text>
               </Box>
-              {suffix ? <Text color="gray">{suffix}</Text> : null}
+              {suffix ? <Text color={COLOR_TEXT_SUBTLE}>{suffix}</Text> : null}
             </Box>
           );
         }}

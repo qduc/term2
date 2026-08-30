@@ -1,6 +1,11 @@
 # Session Cost in the Status Bar
 
-Status: **planned; no implementation started**.
+Status: **implemented.** `source/services/cost/` (`model-cost.ts`, `pricing.ts`,
+`pricing-overlay.ts`, `subscription-providers.ts`) owns the accounting, and `StatusBar`
+renders a `SessionCostSummary` slot with `exact`/`partial`/`unavailable` states
+(`source/components/layout/StatusBar.tsx:119-122`). The **Resume here** notes below
+describe the pre-implementation state and are retained for their design constraints,
+not as a description of current behavior.
 
 Scope: provider completion accounting, the application run loop, foreground and
 subagent session accounting, conversation persistence/replay, `/usage`, and the Ink

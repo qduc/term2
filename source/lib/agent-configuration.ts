@@ -16,6 +16,7 @@ import type { BackgroundShellRegistry } from '../services/shell/background-shell
 import type { BackgroundShellOutputBundle } from '../services/shell/background-shell-watches.js';
 import type { BackgroundShellExecutionResult } from '../tools/system/shell.js';
 import type { ShellChildRegistry } from '../utils/shell/shell-child-registry.js';
+import type { SessionBrowser } from '../services/conversation/session-browser.js';
 
 /** Narrow capability interface consumed by chat/session clients. */
 export interface AgentSource {
@@ -45,6 +46,8 @@ export interface AgentConfigurationDeps {
   shellChildRegistry?: ShellChildRegistry;
   /** False for one-shot/non-interactive callers until their lifecycle is supported. */
   allowBackgroundShell?: boolean;
+  /** Explicit interactive-root-only browser capability. */
+  sessionBrowser?: SessionBrowser;
 }
 
 export class AgentConfiguration implements AgentSource {
@@ -74,6 +77,7 @@ export class AgentConfiguration implements AgentSource {
   #backgroundShellOutput?: BackgroundShellOutputBundle;
   #shellChildRegistry?: ShellChildRegistry;
   #allowBackgroundShell: boolean;
+  #sessionBrowser?: SessionBrowser;
   #unsubscribeSettings: (() => void) | null = null;
   #isDisposed = false;
 
@@ -102,6 +106,7 @@ export class AgentConfiguration implements AgentSource {
     this.#backgroundShellOutput = deps.backgroundShellOutput;
     this.#shellChildRegistry = deps.shellChildRegistry;
     this.#allowBackgroundShell = deps.allowBackgroundShell ?? true;
+    this.#sessionBrowser = deps.sessionBrowser;
 
     // Create editor
     this.#editor = createEditorImpl({
@@ -220,6 +225,7 @@ export class AgentConfiguration implements AgentSource {
       backgroundShellOutput: this.#backgroundShellOutput,
       shellChildRegistry: this.#shellChildRegistry,
       allowBackgroundShell: this.#allowBackgroundShell,
+      sessionBrowser: this.#sessionBrowser,
     };
   }
 

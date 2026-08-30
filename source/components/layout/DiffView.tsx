@@ -1,6 +1,6 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
-import { COLOR_TOOL_OUTPUT } from '../theme.js';
+import { COLOR_ACCENT, COLOR_DANGER, COLOR_SUCCESS, COLOR_TOOL_OUTPUT } from '../theme.js';
 
 interface DiffViewProps {
   diff: string;
@@ -56,11 +56,11 @@ export const DiffView: FC<DiffViewProps> = ({ diff }) => {
   const renderLine = (line: string, key: any) => {
     let color: string | undefined;
     if (line.startsWith('+')) {
-      color = 'green';
+      color = COLOR_SUCCESS;
     } else if (line.startsWith('-')) {
-      color = 'red';
+      color = COLOR_DANGER;
     } else if (line.startsWith('@@')) {
-      color = 'cyan';
+      color = COLOR_ACCENT;
     }
 
     return (
@@ -91,7 +91,7 @@ export const DiffView: FC<DiffViewProps> = ({ diff }) => {
   if (collapsedLines.length === 0) {
     return (
       <Box flexDirection="column" marginLeft={2}>
-        <Text color="red">[Failed to render diff preview]</Text>
+        <Text color={COLOR_DANGER}>[Failed to render diff preview]</Text>
       </Box>
     );
   }

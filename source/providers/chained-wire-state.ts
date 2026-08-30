@@ -116,8 +116,9 @@ export class ChainedWireState {
    *
    * Stores the request as pending so a future `recordResponse` call can
    * correlate it. If a stored response chain exists for the same key and the
-   * fingerprints and `previous_response_id` match, the request input is
-   * trimmed to a delta.
+   * fingerprints match, the request input is trimmed to a delta. A matching
+   * `previous_response_id` is used when the caller supplies one; otherwise the
+   * stored id is adopted so callers that do not track response IDs still chain.
    */
   prepare(
     key: ChainedWireStateKey,
@@ -140,14 +141,16 @@ export class ChainedWireState {
       sequence: existingPending?.sequence ?? this.nextSequence++,
     });
 
-    const previousResponseId = this.protocol.getPreviousResponseId(requestData);
+    const requestedPreviousResponseId = this.protocol.getPreviousResponseId(requestData);
     const stored = this.stored.get(key);
 
-    // No stored chain, missing previous_response_id, or stale response id →
-    // full request.
-    if (!stored || !previousResponseId || stored.responseId !== previousResponseId) {
+    // No stored chain, or the caller named a stale response id → full request.
+    // Omitting previous_response_id is not a break: nested Luna explorers never
+    // track the id, so the stored chain is the continuation the server holds.
+    if (!stored || (requestedPreviousResponseId && stored.responseId !== requestedPreviousResponseId)) {
       return { requestData, usedDelta: false, token };
     }
+    const previousResponseId = requestedPreviousResponseId ?? stored.responseId;
 
     // Fingerprint changed → incompatible chain, full request.
     if (stored.fingerprint !== fingerprint) {
@@ -166,7 +169,7 @@ export class ChainedWireState {
     }
 
     return {
-      requestData: { ...requestData, input: delta },
+      requestData: { ...requestData, previous_response_id: previousResponseId, input: delta },
       usedDelta: true,
       token,
     };

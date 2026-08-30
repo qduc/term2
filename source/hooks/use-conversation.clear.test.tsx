@@ -290,7 +290,7 @@ it.sequential('useConversation cancels running shell messages when processing is
     });
   });
 
-  expect(lastFrame!()).toBe('running');
+  expect(lastFrame!()).toBe('pending');
 
   await act(async () => {
     stopFn?.();

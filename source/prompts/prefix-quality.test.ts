@@ -77,12 +77,22 @@ it('instruction prefix stays on the stub in both modes; the workflow rides on th
       loggingService: mockLogger,
       executionContext,
     });
+    const mentor = getAgentDefinition({
+      settingsService: createMockSettingsService({
+        'agent.model': 'gpt-4o',
+        'app.mentorMode': true,
+      }),
+      loggingService: mockLogger,
+      executionContext,
+    });
 
     expect(standard.instructions).toContain(STUB_MODE_NOTICE_MARKER);
     expect(plan.instructions).toContain(STUB_MODE_NOTICE_MARKER);
     expect(standard.instructions).not.toContain(PLAN_WORKFLOW_MARKER);
     expect(plan.instructions).not.toContain(PLAN_WORKFLOW_MARKER);
     expect(plan.instructions).toBe(standard.instructions);
+    expect(mentor.instructions).toBe(standard.instructions);
+    expect(mentor.tools.map((tool) => tool.name)).toEqual(standard.tools.map((tool) => tool.name));
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }

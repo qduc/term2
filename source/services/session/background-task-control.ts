@@ -366,5 +366,10 @@ function isDefined<T>(value: T | null): value is T {
 }
 
 function isTerminal(details: BackgroundTaskControlDetails): boolean {
-  return details.status !== 'running' && details.status !== 'waiting_for_answer' && details.status !== 'cancelling';
+  return (
+    details.status !== 'running' &&
+    details.status !== 'awaiting_approval' &&
+    details.status !== 'waiting_for_answer' &&
+    details.status !== 'cancelling'
+  );
 }

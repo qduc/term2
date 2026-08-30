@@ -3,7 +3,7 @@ import path from 'node:path';
 
 /**
  * Canonical mode-change notices injected into the next user message when the
- * user toggles plan mode at runtime. Prefixing the next real turn avoids a
+ * user toggles a runtime mode. Prefixing the next real turn avoids a
  * synthetic standalone history item while still making the mode change visible
  * to the model and persistent in the conversation transcript.
  *
@@ -12,6 +12,12 @@ import path from 'node:path';
  */
 const PLAN_MODE_WORKFLOW = fs
   .readFileSync(path.join(import.meta.dirname, '../prompts/plan-mode-info.md'), 'utf8')
+  .trim();
+const MENTOR_MODE_WORKFLOW = fs
+  .readFileSync(path.join(import.meta.dirname, '../prompts/mentor-addon.md'), 'utf8')
+  .trim();
+const ORCHESTRATOR_MODE_WORKFLOW = fs
+  .readFileSync(path.join(import.meta.dirname, '../prompts/orchestrator.md'), 'utf8')
   .trim();
 
 export const PLAN_MODE_ENTER_NOTICE =
@@ -31,9 +37,48 @@ export const PLAN_MODE_EXIT_NOTICE =
   'the plan.\n' +
   '</system-notice>';
 
+export const MENTOR_MODE_ENTER_NOTICE =
+  '<system-notice>\n' +
+  'Mentor Mode is ON. Work collaboratively with the configured mentor model and follow the mentor workflow below.\n\n' +
+  MENTOR_MODE_WORKFLOW +
+  '\n</system-notice>';
+
+export const MENTOR_MODE_EXIT_NOTICE =
+  '<system-notice>\n' +
+  'Mentor Mode is now OFF. Return to the normal workflow and do not treat the mentor-specific workflow as active.\n' +
+  '</system-notice>';
+
+export const ORCHESTRATOR_MODE_ENTER_NOTICE =
+  '<system-notice>\n' +
+  'Orchestrator Mode is ON. Follow the orchestrator workflow below while retaining end-to-end ownership of the user outcome.\n\n' +
+  ORCHESTRATOR_MODE_WORKFLOW +
+  '\n</system-notice>';
+
+export const ORCHESTRATOR_MODE_EXIT_NOTICE =
+  '<system-notice>\n' +
+  'Orchestrator Mode is now OFF. Return to the normal workflow; you may work directly when appropriate instead of following orchestrator-only delegation policy.\n' +
+  '</system-notice>';
+
 export const planModeNotice = (entering: boolean): string =>
   entering ? PLAN_MODE_ENTER_NOTICE : PLAN_MODE_EXIT_NOTICE;
 
+export type RuntimeMode = 'standard' | 'plan' | 'mentor' | 'orchestrator';
+
+export const runtimeModeNotice = (mode: Exclude<RuntimeMode, 'standard'>, entering: boolean): string => {
+  if (mode === 'plan') return planModeNotice(entering);
+  if (mode === 'mentor') return entering ? MENTOR_MODE_ENTER_NOTICE : MENTOR_MODE_EXIT_NOTICE;
+  return entering ? ORCHESTRATOR_MODE_ENTER_NOTICE : ORCHESTRATOR_MODE_EXIT_NOTICE;
+};
+
+export function primeActiveModeNoticeIfActive(
+  modes: { planMode?: boolean; mentorMode?: boolean; orchestratorMode?: boolean },
+  queue: (text: string) => void,
+): void {
+  if (modes.orchestratorMode) queue(ORCHESTRATOR_MODE_ENTER_NOTICE);
+  else if (modes.planMode) queue(PLAN_MODE_ENTER_NOTICE);
+  else if (modes.mentorMode) queue(MENTOR_MODE_ENTER_NOTICE);
+}
+
 export function primePlanModeNoticeIfActive(planMode: boolean, queue: (text: string) => void): void {
-  if (planMode) queue(planModeNotice(true));
+  primeActiveModeNoticeIfActive({ planMode }, queue);
 }

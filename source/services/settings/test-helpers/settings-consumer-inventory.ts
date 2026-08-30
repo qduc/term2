@@ -51,6 +51,11 @@ export const CONTRACT_04_CONSUMER_INVENTORY = {
     'agent.runBudget.identicalToolCallThreshold',
     'agent.runBudget.escalation',
   ],
+  'Background task check-in — next scheduler tick': [
+    'agent.backgroundCheckIn.enabled',
+    'agent.backgroundCheckIn.intervalMs',
+    'agent.backgroundCheckIn.maxCheckInsPerTask',
+  ],
   'Provider credentials/configuration — security-sensitive, next client/request': [
     'agent.openrouter.apiKey',
     'agent.openai.apiKey',

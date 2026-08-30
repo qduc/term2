@@ -62,6 +62,31 @@ it('emits text_delta events with accumulated fullText', async () => {
   expect(acc.textDeltaCount).toBe(2);
 });
 
+it('removes provisional text and reasoning when a model attempt rolls back', async () => {
+  const stream = makeStream([
+    { type: 'text_delta', text: 'provisional' },
+    { type: 'reasoning_delta', text: 'uncertain' },
+    {
+      type: 'model_attempt_rollback',
+      textCharacters: 'provisional'.length,
+      reasoningCharacters: 'uncertain'.length,
+      textDeltas: 1,
+      reasoningDeltas: 1,
+    },
+    { type: 'text_delta', text: 'recovered' },
+    { type: 'reasoning_delta', text: 'verified' },
+  ]);
+  const acc = createStreamAccumulator();
+  const events: any[] = [];
+
+  for await (const event of processStreamEvents(stream, acc, baseOpts(), baseDeps())) events.push(event);
+
+  expect(acc.finalOutput).toBe('recovered');
+  expect(acc.reasoningOutput).toBe('verified');
+  expect(events.filter((event) => event.type === 'text_delta').at(-1)?.fullText).toBe('recovered');
+  expect(events.filter((event) => event.type === 'reasoning_delta').at(-1)?.fullText).toBe('verified');
+});
+
 it('preserves newline between code fence language and first code line across text deltas', async () => {
   const stream = makeStream([
     { type: 'text_delta', text: '```typescript' },
@@ -970,6 +995,21 @@ it('surfaces application-owned local compaction lifecycle with its strategy', as
       sessionId: 'test-session',
       durationMs: 42,
       strategy: 'local',
+    },
+  ]);
+});
+
+it('yields tool_dispatched ConversationEvent when tool_call_dispatched ApplicationRunEvent is processed', async () => {
+  const acc = createStreamAccumulator();
+  const stream = makeStream([{ type: 'tool_call_dispatched', callId: 'call-123', toolName: 'shell' }]);
+  const emitted: any[] = [];
+  for await (const event of processStreamEvents(stream, acc, baseOpts(), baseDeps())) emitted.push(event);
+
+  expect(emitted).toEqual([
+    {
+      type: 'tool_dispatched',
+      toolCallId: 'call-123',
+      toolName: 'shell',
     },
   ]);
 });

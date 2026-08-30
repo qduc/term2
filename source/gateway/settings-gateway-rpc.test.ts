@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createGatewayAssertion } from './assertion.js';
 import { Term2Gateway } from './gateway.js';
 import { validateGatewayManifest } from './workspace-admission.js';
@@ -52,12 +52,14 @@ const request = async (
 
 describe('gateway settings/credential OAuth RPC', () => {
   afterEach(() => {
+    vi.unstubAllEnvs();
     for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
   });
 
   it('serves secret-free settings, write-only credentials, conflicts, and OAuth status', async () => {
     const root = mkdtempSync(path.join(tmpdir(), 'term2-settings-rpc-'));
     roots.push(root);
+    vi.stubEnv('TERM2_CONFIG_DIR', path.join(root, 'term2-config'));
     const values: Record<string, unknown> = {
       'agent.provider': 'openai',
       'agent.model': 'gpt-5',

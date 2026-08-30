@@ -50,7 +50,7 @@ Open work, in order:
   verified and merged (`74323696`, merge `fa328291`).
 - **Completed:** tool ownership lifecycle repair is implemented and merged
   (`184db508`, merge `faa737c5`).
-- **Completed (this branch, unmerged):** `GenerationGuard` reasoning-length
+- **Completed and merged (`8d0e7f7a`):** `GenerationGuard` reasoning-length
   false positive. Verbose high-effort reasoning of ~100k characters on one
   request was aborting the turn as `reasoning_characters` /
   `unsafeToReplay`. The 100k cap is retained as a truncate bound; it no

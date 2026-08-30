@@ -1,5 +1,6 @@
 import React, { FC, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
+import { COLOR_DANGER, COLOR_SUCCESS } from '../theme.js';
 
 interface StandardModeConfirmationPromptProps {
   onConfirm: () => void;
@@ -44,8 +45,8 @@ const StandardModeConfirmationPrompt: FC<StandardModeConfirmationPromptProps> = 
     <Box flexDirection="column">
       <Text>📋 Switch to standard mode?</Text>
       <Box flexDirection="column" marginLeft={1}>
-        <Text color={selectedIndex === 0 ? 'green' : undefined}>{selectedIndex === 0 ? '❯ ' : '  '}Yes</Text>
-        <Text color={selectedIndex === 1 ? 'red' : undefined}>{selectedIndex === 1 ? '❯ ' : '  '}No</Text>
+        <Text color={selectedIndex === 0 ? COLOR_SUCCESS : undefined}>{selectedIndex === 0 ? '❯ ' : '  '}Yes</Text>
+        <Text color={selectedIndex === 1 ? COLOR_DANGER : undefined}>{selectedIndex === 1 ? '❯ ' : '  '}No</Text>
       </Box>
     </Box>
   );

@@ -19,6 +19,7 @@ import type { SkillInfo, SkillsService } from '../../services/skills/skills-serv
 import type { UserTurn } from '../../types/user-turn.js';
 import type { SubmissionMutation } from '../../services/conversation/conversation-adapter.js';
 import type { CopySelection } from '../../utils/copy-selections.js';
+import type { PendingQueueMessage } from './PendingQueueList.js';
 
 export type ApplicationInputSurfaceProps = {
   enabled?: boolean;
@@ -36,7 +37,7 @@ export type ApplicationInputSurfaceProps = {
   promptLabel?: string;
   allowEmptySubmit?: boolean;
   skillsService?: SkillsService;
-  pendingQueuedMessages?: ReadonlyArray<{ id: string; text: string; queuedAt: number }>;
+  pendingQueuedMessages?: ReadonlyArray<PendingQueueMessage>;
   onRetractQueuedMessage?: (id: string) => Promise<SubmissionMutation>;
   onEditQueuedMessage?: (id: string, turn: UserTurn) => Promise<SubmissionMutation>;
   onProviderSelected?: (provider: string) => void;

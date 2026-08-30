@@ -1,6 +1,8 @@
 # Background-task observation and liveness UI
 
-Status: completed with adversarial-review corrections (2026-08-13); awaiting branch re-review before merge.
+Status: **merged** (`13307919`, with the review findings fixed in `93b9b536`). The shared
+protocol now lives at `source/services/background-task-activity.ts`;
+`services/session/background-task-liveness.ts` is a deprecated re-export.
 
 Research: [waiting-for-provider-ui-research.md](waiting-for-provider-ui-research.md).
 

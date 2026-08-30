@@ -93,6 +93,35 @@ export function extractFinalText(result: any): string {
   return '';
 }
 
+/** Preserve completed tool evidence when a nested run cannot produce its own final synthesis. */
+export async function extractPartialToolEvidence(result: any): Promise<string> {
+  if (!Array.isArray(result?.history)) return '';
+
+  const toolNames = new Map<string, string>();
+  const sections: string[] = [];
+  for (const entry of result.history) {
+    const item = entry?.rawItem ?? entry;
+    if (!item || typeof item !== 'object') continue;
+    if (item.type === 'function_call' && typeof item.callId === 'string' && typeof item.name === 'string') {
+      toolNames.set(item.callId, item.name);
+      continue;
+    }
+    if (item.type !== 'function_call_result' || typeof item.output !== 'string') continue;
+    const name =
+      typeof item.name === 'string'
+        ? item.name
+        : typeof item.callId === 'string'
+        ? toolNames.get(item.callId) ?? 'unknown tool'
+        : 'unknown tool';
+    sections.push(`### ${name}\n${item.output}`);
+  }
+  if (sections.length === 0) return '';
+
+  const fullText = `Recovered completed tool outputs:\n\n${sections.join('\n\n')}`;
+  const { boundToolResultText } = await import('../../utils/output/bound-tool-result.js');
+  return (await boundToolResultText({ fullText })).text;
+}
+
 export function aggregateToolUsage(toolCounts: Map<string, number>): Array<{ toolName: string; count: number }> {
   return Array.from(toolCounts.entries()).map(([toolName, count]) => ({ toolName, count }));
 }

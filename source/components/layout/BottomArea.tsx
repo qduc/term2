@@ -35,8 +35,10 @@ import type { SessionCostSummary } from '../../services/cost/model-cost.js';
 import type { BackgroundTaskControlPort } from '../../services/session/background-task-control.js';
 import type { BackgroundTaskControlDetails } from '../../services/session/background-task-control.js';
 import type { CopySelection } from '../../utils/copy-selections.js';
+import type { PendingQueueMessage } from '../input/PendingQueueList.js';
 import { useInputState } from '../../context/InputContext.js';
 import FirstRunSetupPrompt, { type FirstRunSetupPhase } from '../input/FirstRunSetupPrompt.js';
+import { COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
 
 export type BottomAreaProps = {
   pendingApproval: PendingApproval | null;
@@ -95,7 +97,7 @@ export type BottomAreaProps = {
   queuePauseReason?: QueuePauseReason;
   onResumeQueue?: () => void;
   onDiscardQueue?: () => void;
-  pendingQueuedMessages?: ReadonlyArray<{ id: string; text: string; queuedAt: number }>;
+  pendingQueuedMessages?: ReadonlyArray<PendingQueueMessage>;
   onRetractQueuedMessage?: (id: string) => Promise<SubmissionMutation>;
   onEditQueuedMessage?: (id: string, turn: UserTurn) => Promise<SubmissionMutation>;
   backgroundSubagentTasks?: readonly BackgroundTask[];
@@ -287,6 +289,16 @@ const BottomArea: FC<BottomAreaProps> = ({
     showSurgePrompt,
   ]);
 
+  const hasLiveTasks =
+    (listForegroundTaskTransferCandidates?.()?.length ?? (foregroundTransferCandidate ? 1 : 0)) > 0 ||
+    (backgroundTaskDetails?.length ?? backgroundSubagentTasks?.length ?? 0) > 0;
+  const hasTopContent =
+    (showApprovalPrompt && pendingApproval != null) ||
+    isProcessing ||
+    interruptConfirmVisible ||
+    hasLiveTasks ||
+    showQueuePausedPrompt;
+
   return (
     <Box flexDirection="column" width="100%">
       <Box flexDirection="column" marginTop={1}>
@@ -326,11 +338,11 @@ const BottomArea: FC<BottomAreaProps> = ({
             onDecline={onLargeUncachedDecline || (() => {})}
           />
         ) : (
-          <Box flexDirection="column">
+          <Box flexDirection="column" marginBottom={hasTopContent ? 1 : 0}>
             {showApprovalPrompt && pendingApproval && (
               <Box flexDirection="column">
                 {backgroundApprovalPendingCount > 1 && (
-                  <Text color="#f59e0b">Background approval · {backgroundApprovalPendingCount - 1} queued</Text>
+                  <Text color={COLOR_WARNING}>Background approval · {backgroundApprovalPendingCount - 1} queued</Text>
                 )}
                 <ApprovalPrompt
                   approval={pendingApproval}
@@ -345,18 +357,18 @@ const BottomArea: FC<BottomAreaProps> = ({
               </Box>
             )}
             {isProcessing && toolCallStreamingInfo && (
-              <Text color="#64748b">
+              <Text color={COLOR_TEXT_SUBTLE}>
                 Calling {toolCallStreamingInfo.toolName ? <Text bold>{toolCallStreamingInfo.toolName}</Text> : 'tool'} (
                 {toolCallStreamingInfo.argumentCharCount} chars){'.'.repeat(dotCount)}
               </Text>
             )}
             {isProcessing && !toolCallStreamingInfo && thinkingStartedAt != null && (
-              <Text color="#64748b">Thinking... {thinkingElapsedSeconds}s</Text>
+              <Text color={COLOR_TEXT_SUBTLE}>Thinking... {thinkingElapsedSeconds}s</Text>
             )}
             {isProcessing && !toolCallStreamingInfo && thinkingStartedAt == null && (
-              <Text color="#64748b">processing{'.'.repeat(dotCount)}</Text>
+              <Text color={COLOR_TEXT_SUBTLE}>processing{'.'.repeat(dotCount)}</Text>
             )}
-            {interruptConfirmVisible && <Text color="#f59e0b">Press ESC again to interrupt</Text>}
+            {interruptConfirmVisible && <Text color={COLOR_WARNING}>Press ESC again to interrupt</Text>}
             <BackgroundTasksPanel
               tasks={mergeLiveTaskRows({
                 foreground:

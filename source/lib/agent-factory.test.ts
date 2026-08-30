@@ -183,6 +183,18 @@ it.sequential('tools without a post-execute policy return their ordinary result'
   expect(pending.snapshot().entries).toEqual([]);
 });
 
+it.sequential('preserves self-bounded serialized tool output unchanged', async () => {
+  const serialized = JSON.stringify({ text: 'first\nsecond', charsUsed: 42 });
+  const definition = createToolDefinition({
+    preserveSerializedOutput: true,
+    execute: async () => serialized,
+  });
+  const { deps } = createDeps({ settingsValues: { 'shell.maxOutputChars': 10 } });
+  const tool = buildTestTool(definition, deps);
+
+  expect(await tool.invoke({}, JSON.stringify({ value: 'ignored' }))).toBe(serialized);
+});
+
 it.sequential('buildAgent passes the root background shell registry into the complete tool set', () => {
   const registry = new BackgroundShellRegistry<any>();
   const { deps } = createDeps({ backgroundShellRegistry: registry });

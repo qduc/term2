@@ -50,7 +50,9 @@ it.sequential('ApprovalPrompt renders ask_user question and options', async () =
   expect(output.includes('Optimizes for speed')).toBe(false);
   expect(output.includes(ASK_USER_CUSTOM_ANSWER_LABEL)).toBe(true);
   expect(output.includes('1-3 select')).toBe(true);
-  expect(output.includes('enter confirm')).toBe(true);
+  // The footer now uses the shared MenuFooter component, whose hint glyph is
+  // "⏎" (matching every other menu in the app), not the word "enter".
+  expect(output.includes('⏎ confirm')).toBe(true);
   expect(output.includes('esc cancel')).toBe(true);
   expect(output.includes('Use the safe default')).toBe(true);
   expect(output.includes('HELP & DETAILS')).toBe(false);
@@ -122,7 +124,10 @@ it.sequential('ApprovalPrompt renders the Docker host-control menu without ordin
   expect(output).toContain('Always allow for this project');
   expect(output).not.toContain('Run unsandboxed once');
   expect(output).not.toContain('Approve');
-  expect(output.replace(/\s+/g, ' ')).toContain(
+  // Docker's danger border draws a "│" on every wrapped line of its body, so
+  // normalize that border glyph away too, not just whitespace, before checking
+  // the sentence reads as one contiguous line.
+  expect(output.replace(/[│\s]+/g, ' ')).toContain(
     'This command can control your Docker daemon. It can bypass filesystem and network sandbox restrictions, mount host files, run privileged or persistent workloads, and is effectively equivalent to host access.',
   );
 });
@@ -593,9 +598,8 @@ it.sequential('ApprovalPrompt renders question index prefix for multiple questio
   const output = lastFrame() ?? '';
   expect(output.includes('Question 2 of 2')).toBe(true);
   expect(output.includes('Second question')).toBe(true);
-  // Navigation hints should be in the footer
-  expect(output.includes('◄ p prev')).toBe(true);
-  expect(output.includes('n next ►')).toBe(true);
+  // Navigation hints should be in the footer, in the shared MenuFooter shape.
+  expect(output.includes('p/n prev/next question')).toBe(true);
 });
 
 it.sequential('ApprovalPrompt calls onNavigateQuestion when p or left arrow is pressed', async () => {

@@ -4,6 +4,7 @@ import { useInputContext } from '../../context/InputContext.js';
 import type { MenuController, MenuFrame, MenuInteractionRegistry } from './menu-types.js';
 import { MenuStackHost } from './MenuStackHost.js';
 import type { MenuServices } from './menu-registry.js';
+import { COLOR_ACCENT, COLOR_TEXT } from '../theme.js';
 
 const isFocusReportingSequence = (input: string): boolean =>
   input === '\x1b[I' || input === '\x1b[O' || input === '[I' || input === '[O';
@@ -70,6 +71,10 @@ export function MenuSurface({ stack, controller, interactions, services, enabled
         dispatch({ type: 'command', command: 'refresh' });
       } else if (key.ctrl && _input === 'd') {
         dispatch({ type: 'command', command: 'reset' });
+      } else if ((key.ctrl && (_input.toLowerCase() === 'o' || _input === '\x0f')) || _input === '\x0f') {
+        controller.replaceText('/model ');
+      } else if ((key.ctrl && (_input.toLowerCase() === 't' || _input === '\x14')) || _input === '\x14') {
+        controller.replaceText('/effort ');
       } else if (key.return) {
         dispatch({
           type: 'accept',
@@ -105,9 +110,11 @@ export function MenuSurface({ stack, controller, interactions, services, enabled
   return (
     <Box flexDirection="column">
       {promptLabel && (
-        <Box>
-          <Text color="#22d3ee">{promptLabel}</Text>
-          <Text>{promptText}</Text>
+        <Box marginBottom={0}>
+          <Text color={COLOR_ACCENT} bold>
+            {promptLabel}
+          </Text>
+          <Text color={COLOR_TEXT}>{promptText}</Text>
         </Box>
       )}
       <MenuStackHost

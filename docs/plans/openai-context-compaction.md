@@ -1,9 +1,10 @@
 # OpenAI Context Compaction
 
-Status: **Steps 1 and 2 done and merged to `main`** (Step 1 as `dc949022`, Step 2 as `96a9874c`
-from branch `compaction-persistence`, commit `0ade9a68`), both on 2026-08-06.
-Opaque provider items now survive persistence and replay; resume at
-[Step 3](#step-3-enable-server-side-compaction). The blocking decision (server-side automatic
+Status: **All steps are done and merged to `main`** (Step 1 as `dc949022`, Step 2 as `96a9874c`
+from branch `compaction-persistence`, commit `0ade9a68`, both on 2026-08-06; Step 3 landed later —
+`context_management` is wired through `openai-responses-model.ts` and `codex-responses-model.ts`
+under a `registry.ts` capability gate). Opaque provider items survive persistence and replay.
+Nothing here is left to resume. The blocking decision (server-side automatic
 compaction via `context_management`, not the manual `/v1/responses/compact` endpoint) remains as
 resolved on 2026-08-05 — see [Experiment results](#experiment-results-2026-08-05).
 
@@ -28,7 +29,16 @@ full session of reading.
 
 **Step 2 (persistence and replay) is DONE** — merged to `main` as `96a9874c`. Gates re-run
 independently by the coordinator before merge: typecheck clean, `pnpm test:provider-black-box`
-152/152, `pnpm test` 5233 passed. Start at [Step 3](#step-3-enable-server-side-compaction).
+152/152, `pnpm test` 5233 passed.
+
+**Step 3 (server-side compaction) is also DONE.** Do not start there.
+
+**Two Step-1 statements below were later reversed and are kept only as history.** The lane tag is
+no longer hard-coded `openai`: it is a parameter, and Grok has its own lane
+(`GROK_RESPONSES_OPAQUE_TAG`). And converters no longer *throw* on a foreign opaque item — the
+acceptance rule lives once in `providers/provider-opaque-compatibility.ts` and foreign items are
+dropped, because throwing bricked every conversation that switched providers. See the
+`provider-neutral-context-compaction.md` corrections and `AGENTS.md`.
 
 What Step 1 shipped, so a resumer does not re-derive it:
 

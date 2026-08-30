@@ -10,6 +10,7 @@ import type { SubagentToolFactory } from './tool-policy.js';
 import type { SubagentDefinition } from './types.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { ToolDefinition } from '../../tools/types.js';
+import { WebSocketClosedEarlyError } from '../../providers/websocket-close-evidence.js';
 import {
   createMockLogger,
   createMockSettings,
@@ -53,8 +54,12 @@ function buildNestedRunner(
     turnBackstop?: number;
     /** Fail the exact continuation after an approved child tool. */
     failAfterApproval?: boolean;
+    /** Drop the first terminal budget wrap-up request. */
+    failFirstWrapUp?: boolean;
     /** Simulate mutable settings becoming invalid after launch-time role resolution. */
     failRoleResolutionAfterFirst?: boolean;
+    /** Advertise conversation chaining on the nested provider. */
+    supportsConversationChaining?: boolean;
     onEvent?: (event: ConversationEvent) => void;
     onBackgroundApprovalPause?: (pause: BackgroundSubagentApprovalPause) => void;
     logger?: ReturnType<typeof createMockLogger>;
@@ -62,6 +67,7 @@ function buildNestedRunner(
 ) {
   let first = true;
   let call = 0;
+  let wrapUpAttempts = 0;
   const requests: any[] = [];
   const providerId = registerTestProvider({
     label: 'Nested scripted provider',
@@ -69,6 +75,10 @@ function buildNestedRunner(
       async *stream(request: any) {
         requests.push(request);
         if (request.tools.length === 0) {
+          wrapUpAttempts++;
+          if (options.failFirstWrapUp && wrapUpAttempts === 1) {
+            throw new WebSocketClosedEarlyError({ code: 1006 });
+          }
           yield {
             type: 'completion',
             responseId: 'wrap-up',
@@ -97,6 +107,7 @@ function buildNestedRunner(
       },
     }),
     fetchModels: async () => [{ id: 'nested-model' }],
+    ...(options.supportsConversationChaining ? { capabilities: { supportsConversationChaining: true } } : {}),
   });
 
   const fakeTool: ToolDefinition = {
@@ -446,6 +457,18 @@ describe('NestedSubagentRunner end to end', () => {
     expect(requests.map((request) => request.maxTokens)).toEqual([321, 321]);
   });
 
+  it('forwards the nested provider chain onto later requests of the same run', async () => {
+    const { runner, requests } = buildNestedRunner({ supportsConversationChaining: true });
+
+    await runner.runAsTool({ role: 'worker', task: 'update notes' }, parentToolContext(), {
+      toolCall: { callId: 'parent-call-1' },
+    });
+
+    expect(requests).toHaveLength(2);
+    expect(requests[0].previousResponseId).toBeUndefined();
+    expect(requests[1].previousResponseId).toBe('resp-1');
+  });
+
   it('honors a parent-approved tool inside the nested run (F5 through the runner)', async () => {
     const { runner } = buildNestedRunner();
     const parent = parentToolContext();
@@ -520,5 +543,54 @@ describe('NestedSubagentRunner end to end', () => {
       result: { status: 'completed', agentId: 'parent-call-1' },
     });
     expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('contains an unrecoverable failure after tools executed into a failed result with partial findings', async () => {
+    const events: ConversationEvent[] = [];
+    const warn = vi.fn();
+    const { runner } = buildNestedRunner({
+      failAfterApproval: true,
+      onEvent: (event) => events.push(event),
+      logger: { ...createMockLogger(), warn },
+    });
+
+    const result = await runner.runAsTool({ role: 'worker', task: 'update notes' }, parentToolContext(), {
+      toolCall: { callId: 'parent-call-1' },
+    });
+
+    expect(result.status).toBe('failed');
+    expect(result.error).toContain('late nested provider failure');
+    expect(result.filesChanged).toEqual(['notes.md']);
+    expect(result.toolsUsed).toEqual([{ toolName: 'fake_tool', count: 1 }]);
+    expect(result.finalText).toContain('Updated notes.md');
+    expect(result.finalText).toContain('late nested provider failure');
+    expect(events.find((event) => event.type === 'subagent_completed')).toMatchObject({
+      result: { status: 'failed', agentId: 'parent-call-1' },
+    });
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it('retries a dropped critical wrap-up as the same tool-free request', async () => {
+    vi.useFakeTimers();
+    try {
+      const { runner, requests } = buildNestedRunner({
+        alwaysCallsTool: true,
+        maxTurns: 3,
+        turnBackstop: 3,
+        failFirstWrapUp: true,
+      });
+
+      const resultPromise = runner.runAsTool({ role: 'worker', task: 'update notes' }, parentToolContext(), {
+        toolCall: { callId: 'parent-call-1' },
+      });
+      await vi.runAllTimersAsync();
+      const result = await resultPromise;
+      const wrapUpRequestIndex = requests.findIndex((request) => request.tools.length === 0);
+
+      expect(result.status).toBe('completed');
+      expect(requests[wrapUpRequestIndex + 1]?.tools).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

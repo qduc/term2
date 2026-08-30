@@ -19,9 +19,9 @@ export const DEFAULT_TRIM_CONFIG: OutputTrimConfig = {
 let trimConfig: OutputTrimConfig = { ...DEFAULT_TRIM_CONFIG };
 
 function trimByCharacters(output: string, maxCharacters: number, note?: string): string {
-  const keepChars = Math.floor(maxCharacters * 0.4);
+  const keepChars = Math.max(0, Math.floor(maxCharacters * 0.4));
   const head = output.slice(0, keepChars);
-  const tail = output.slice(-keepChars);
+  const tail = keepChars > 0 ? output.slice(-keepChars) : '';
   const trimmedChars = output.length - keepChars * 2;
   const noteSuffix = note ? `; ${note}` : '';
   return `${head}\n... [${trimmedChars} characters trimmed${noteSuffix}] ...\n${tail}`;
@@ -65,11 +65,6 @@ export function trimOutput(output: string, maxLines?: number, maxCharacters?: nu
     return output;
   }
 
-  // Special case: single very long line that exceeds character limit
-  if (lines.length === 1 && exceedsCharacters) {
-    return trimByCharacters(output, effectiveMaxCharacters);
-  }
-
   // Calculate how many lines to keep at beginning and end
   // Keep 40% at the beginning, 40% at the end, trim 20% from the middle
   const keepLines = Math.floor(effectiveMaxLines * 0.4);
@@ -87,7 +82,11 @@ export function trimOutput(output: string, maxLines?: number, maxCharacters?: nu
   effectiveKeepLines = Math.max(effectiveKeepLines, 10);
 
   if (lines.length <= effectiveKeepLines * 2) {
-    // Not enough lines to meaningfully trim
+    // Not enough lines to meaningfully trim by lines alone.
+    // If character limit is exceeded, character trimming is still mandatory.
+    if (exceedsCharacters) {
+      return trimByCharacters(output, effectiveMaxCharacters);
+    }
     return output;
   }
 

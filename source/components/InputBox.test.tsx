@@ -59,7 +59,12 @@ type TestProps = {
   allowEmptySubmit?: boolean;
   promptLabel?: string;
   onSystemMessage?: (text: string) => void;
-  pendingQueuedMessages?: ReadonlyArray<{ id: string; text: string; queuedAt: number }>;
+  pendingQueuedMessages?: ReadonlyArray<{
+    id: string;
+    text: string;
+    delivery: 'steer' | 'follow_up';
+    queuedAt: number;
+  }>;
   onRetractQueuedMessage?: (id: string) => Promise<SubmissionMutation>;
   onEditQueuedMessage?: (id: string, turn: UserTurn) => Promise<SubmissionMutation>;
 };
@@ -213,11 +218,12 @@ const writeInput = async (stdin: { write: (input: string) => void }, input: stri
   });
 };
 
-it.sequential('InputBox shows the input prompt', async () => {
+it.sequential('InputBox shows the input prompt and idle shortcut hints', async () => {
   const { lastFrame } = await renderAndFlush(<TestInputBox {...defaultProps} />);
   const output = lastFrame();
   // Should show the prompt character
   expect(output!.includes('❯')).toBe(true);
+  expect(output!.includes('Ctrl+O model · Ctrl+T effort')).toBe(true);
 });
 
 it.sequential('up enters the queued selector at the bottom item and edit submits by id', async () => {
@@ -226,8 +232,8 @@ it.sequential('up enters the queued selector at the bottom item and edit submits
     <TestInputBox
       {...defaultProps}
       pendingQueuedMessages={[
-        { id: 'q-1', text: 'first queued', queuedAt: 1 },
-        { id: 'q-2', text: 'second queued', queuedAt: 2 },
+        { id: 'q-1', text: 'first queued', delivery: 'follow_up', queuedAt: 1 },
+        { id: 'q-2', text: 'second queued', delivery: 'follow_up', queuedAt: 2 },
       ]}
       onEditQueuedMessage={async (id, turn) => {
         edits.push({ id, turn });
@@ -262,15 +268,15 @@ it.sequential('up past the top queued item reaches input history', async () => {
     <TestInputBox
       {...defaultProps}
       historyService={historyService}
-      pendingQueuedMessages={[{ id: 'q-1', text: 'waiting steer', queuedAt: 1 }]}
+      pendingQueuedMessages={[{ id: 'q-1', text: 'waiting steer', delivery: 'steer', queuedAt: 1 }]}
     />,
   );
 
   await writeInput(stdin, '\u001B[A');
-  expect(lastFrame()).toContain('> ⏳ Queued 1. waiting steer');
+  expect(lastFrame()).toContain('> ⏳ Steering 1. waiting steer');
   await writeInput(stdin, '\u001B[A');
   expect(lastFrame()).toMatch(/s\s*e\s*n\s*t\s*e\s*a\s*r\s*l\s*i\s*e\s*r/);
-  expect(lastFrame()).not.toContain('> ⏳ Queued');
+  expect(lastFrame()).not.toContain('> ⏳ Steering');
 });
 
 it.sequential('InputBox shows the shell prompt when in shell mode', async () => {
@@ -1341,41 +1347,42 @@ it.sequential('InputBox ignores focus sequences when in text mode', async () => 
 it.sequential('settings value completion shows current custom settings value in suggestions list', async () => {
   const originalColumns = process.stdout.columns;
   process.stdout.columns = 80;
+  try {
+    const settingsService = createMockSettingsService({
+      'agent.maxTurns': 35,
+    });
 
-  // Cleanup after test
-  process.stdout.columns = originalColumns;
+    const mockSettingsCommand: SlashCommand = {
+      name: '/settings',
+      description: 'Settings',
+      action: () => {},
+      completion: {
+        type: 'settings',
+        trigger: '/settings ',
+        resetTrigger: '/settings reset ',
+      },
+    };
 
-  const settingsService = createMockSettingsService({
-    'agent.maxTurns': 35,
-  });
+    const { lastFrame, stdin } = await renderAndFlush(
+      <InputProvider>
+        <InputBox
+          {...defaultProps}
+          settingsService={settingsService}
+          slashCommands={[...mockSlashCommands, mockSettingsCommand]}
+        />
+      </InputProvider>,
+    );
 
-  const mockSettingsCommand: SlashCommand = {
-    name: '/settings',
-    description: 'Settings',
-    action: () => {},
-    completion: {
-      type: 'settings',
-      trigger: '/settings ',
-      resetTrigger: '/settings reset ',
-    },
-  };
+    // Write trigger value to enter settings value completion mode
+    await writeInput(stdin, '/settings agent.maxTurns ');
+    const frame = await waitFor(lastFrame, (f) => f.includes('Current value'), { timeoutMs: 5000 });
+    const visibleFrame = toVisibleText(frame);
 
-  const { lastFrame, stdin } = await renderAndFlush(
-    <InputProvider>
-      <InputBox
-        {...defaultProps}
-        settingsService={settingsService}
-        slashCommands={[...mockSlashCommands, mockSettingsCommand]}
-      />
-    </InputProvider>,
-  );
-
-  // Write trigger value to enter settings value completion mode
-  await writeInput(stdin, '/settings agent.maxTurns ');
-  const frame = await waitFor(lastFrame, (f) => f.includes('Current value'), { timeoutMs: 5000 });
-  const visibleFrame = toVisibleText(frame);
-
-  expect(visibleFrame.includes('35 — Current value')).toBe(true);
+    expect(visibleFrame).toMatch(/▶\s+35/);
+    expect(visibleFrame).toContain('Current value');
+  } finally {
+    process.stdout.columns = originalColumns;
+  }
 });
 
 it.sequential('InputBox allows backspace and delete keys to modify input in provider wizard phases', async () => {
@@ -1499,11 +1506,25 @@ it.sequential('backspace works after committing a setting value and returning to
   expect(frame.includes('Cursor:9')).toBe(true);
 });
 
-it.sequential('shows Queue vs Steer guidance when turnInFlight is active', async () => {
+it.sequential('shows Queue vs Steer guidance and model/effort shortcuts when turnInFlight is active', async () => {
   const { lastFrame } = await renderAndFlush(<TestInputBox {...defaultProps} turnInFlight={true} />);
   const output = lastFrame() ?? '';
   expect(output.includes('Enter Steer active turn')).toBe(true);
   expect(output.includes('Alt+Enter Queue for next turn')).toBe(true);
+  expect(output.includes('Ctrl+O model · Ctrl+T effort')).toBe(true);
+});
+
+it.sequential('shows Steering label for pending steer submissions', async () => {
+  const { lastFrame } = await renderAndFlush(
+    <TestInputBox
+      {...defaultProps}
+      turnInFlight={true}
+      pendingQueuedMessages={[{ id: 'q-1', text: 'change direction', delivery: 'steer', queuedAt: 1 }]}
+    />,
+  );
+  const output = lastFrame() ?? '';
+  expect(output.includes('⏳ Steering 1.')).toBe(true);
+  expect(output.includes('⏳ Queued 1.')).toBe(false);
 });
 
 it.sequential(
@@ -1513,12 +1534,13 @@ it.sequential(
       <TestInputBox
         {...defaultProps}
         turnInFlight={true}
-        pendingQueuedMessages={[{ id: 'q-1', text: 'first queued', queuedAt: 1 }]}
+        pendingQueuedMessages={[{ id: 'q-1', text: 'first queued', delivery: 'follow_up', queuedAt: 1 }]}
       />,
     );
     const output = lastFrame() ?? '';
     expect(output.includes('select queued')).toBe(true);
     expect(output.includes('Enter Steer')).toBe(true);
     expect(output.includes('Alt+Enter Queue')).toBe(true);
+    expect(output.includes('Ctrl+O model · Ctrl+T effort')).toBe(true);
   },
 );

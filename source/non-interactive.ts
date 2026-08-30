@@ -20,7 +20,7 @@ import { NonInteractiveApprovalPolicy } from './services/approval/non-interactiv
 import type { HookLifecyclePort } from './services/hooks/hook-service.js';
 import type { HookEventFactory } from './services/hooks/hook-event-factory.js';
 import { pruneStaleTempArtifacts } from './utils/shell/temp-sweep.js';
-import { primePlanModeNoticeIfActive } from './services/mode-notices.js';
+import { primeActiveModeNoticeIfActive } from './services/mode-notices.js';
 
 export interface NonInteractiveConfig {
   prompt: string;
@@ -220,6 +220,9 @@ export async function runNonInteractive(
     ) {
       return 'Error: Background shell execution is unavailable in non-interactive mode.';
     }
+    if (name === 'run_subagent_async') {
+      return 'Error: Asynchronous subagent execution is unavailable in non-interactive mode. Use synchronous run_subagent instead.';
+    }
     return null;
   });
 
@@ -239,8 +242,13 @@ export async function runNonInteractive(
       hookEvents: config.hookEvents ?? clientHandle.hookEvents,
     });
     runtime = createdRuntime.runtime;
-    primePlanModeNoticeIfActive(Boolean(config.settingsService?.get('app.planMode')), (text) =>
-      createdRuntime.runtime.state.queueModeNotice(text),
+    primeActiveModeNoticeIfActive(
+      {
+        planMode: Boolean(config.settingsService?.get('app.planMode')),
+        mentorMode: Boolean(config.settingsService?.get('app.mentorMode')),
+        orchestratorMode: Boolean(config.settingsService?.get('app.orchestratorMode')),
+      },
+      (text) => createdRuntime.runtime.state.queueModeNotice(text),
     );
     if (config.hookLifecycle && clientHandle.hookEvents) {
       await config.hookLifecycle.emit(

@@ -72,7 +72,7 @@ changes, `/settings` command for user entry).
   (`subagents/role-loader.ts:103-140`).
 - **Per-invocation:** mentor consultation values override role/definition
   (`mentor-runner.ts:244-250`, `:283-290`); shell tool `timeout_ms` and
-  `max_output_length` override settings (`tools/system/shell.ts:843-858`);
+  `max_output_length` override settings (`source/tools/system/shell.ts:843-858`);
   `config.providerOverride`/`config.temperature` override settings
   (`lib/agent-configuration.ts:109-125`); model resolver: model argument >
   `agent.model` > `'gpt-4o'` fallback (`model-resolver.ts:43-44`).
@@ -112,7 +112,7 @@ changes, `/settings` command for user entry).
 - Startup logs count CLI/env/config override leaves without values
   (`settings-service.ts:243-249`).
 - Shell execution logs the resolved `timeout` and `maxOutputLength`
-  (`tools/system/shell.ts:860-868`).
+  (`source/tools/system/shell.ts:860-868`).
 - Diagnosis: a setting that appears in the summary with an unexpected source is
   resolved through a precedence layer other than the one intended (C4.2).
 

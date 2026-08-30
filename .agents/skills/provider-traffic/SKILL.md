@@ -1,6 +1,6 @@
 ---
 name: provider-traffic
-description: Read provider traffic logs (the JSONL artifacts under provider-traffic/) efficiently with jq to debug LLM requests, errors, tool calls, and model responses. Use when the user is debugging a provider/model issue, an API error, wrong tool-call arguments, a streaming/transport problem, malformed SSE frames, or wants to inspect what was sent to / received from a provider. Use to find the right session and request fast without dumping huge files.
+description: Read provider traffic logs (the JSON artifacts under provider-traffic/) efficiently with jq to debug LLM requests, errors, tool calls, and model responses. Use when the user is debugging a provider/model issue, an API error, wrong tool-call arguments, a streaming/transport problem, malformed SSE frames, or wants to inspect what was sent to / received from a provider. Use to find the right session and request fast without dumping huge files.
 ---
 
 # Provider Traffic Log Reading
@@ -70,11 +70,17 @@ Each request file is `{ "sent": {...}, "received": {...} }`.
 | `malformedFrames[]` | `{raw,error}` — frames that failed to parse as JSON |
 | `unknownFrames[]` | `{signature,count,firstRaw,lastRaw}` — SSE frames the parser didn't recognize |
 | `payload?` | **normalized** representation of the assembled response (see below); absent when nothing was extracted |
+| `wireShape?` | `"responses"` \| `"chat_completions"` \| `"unknown"` — which shape `payload` is rendered in. Set on the SSE and non-streaming-JSON paths (`provider-traffic.ts:693`, `:411`). **Absent on `transport: "websocket"`** — the Codex lane — so do not filter on it |
 | `fallbackBody?` | raw body when extraction produced nothing parseable (text transport, etc.) |
 
 ### `received.summary.payload` — the normalized response
 
-The logger reassembles streaming chunks into one OpenAI-style object so JSON and SSE look identical:
+The logger reassembles streaming chunks into one object so JSON and SSE look
+identical. **It renders that object in two different shapes**, selected by
+`summary.wireShape`, so check the shape before writing a `jq` path or you will
+silently get `null`.
+
+`wireShape: "chat_completions"` — Chat Completions shape:
 
 ```jsonc
 {
@@ -92,7 +98,28 @@ The logger reassembles streaming chunks into one OpenAI-style object so JSON and
 }
 ```
 
-Tool-call `function.arguments` is the **fully reassembled** argument string (chunks concatenated) — read the assembled value here, not individual SSE lines.
+`wireShape: "responses"` — Responses shape, produced by SSE lanes speaking the
+Responses API (there is no `choices` key at all). Note this is *not* what the
+Codex WebSocket lane writes: `summarizeWebsocketResponse` emits a
+`{choices,id,usage}` payload and sets no `wireShape` at all, so Codex artifacts
+read with the Chat Completions recipes below:
+
+```jsonc
+{
+  "id": "resp_…",                  // optional, assembled from the stream
+  "status": "in_progress",         // optional; the last status seen in the stream, not a final state
+  "usage": { … },                  // optional, from the last usage frame
+  "output": [
+    { "type": "reasoning", "encrypted_content": "<redacted>", "summary": [] },
+    { "type": "message", "role": "assistant",
+      "content": [ { "type": "output_text", "text": "assembled text" } ] },
+    { "type": "function_call", "call_id": "call_…", "name": "shell",
+      "arguments": "<full args string>" }
+  ]
+}
+```
+
+Tool-call arguments are the **fully reassembled** argument string (chunks concatenated) — read the assembled value here, not individual SSE lines.
 
 ### `DailySessionIndexEntry` (one per line in `<day>/index.jsonl`)
 
@@ -139,6 +166,15 @@ Tool-call `function.arguments` is the **fully reassembled** argument string (chu
 ## Common jq recipes
 
 Set `F` to one request file, `D` to the date dir, `S` to the session dir.
+
+The `payload` recipes below are written for `wireShape: "chat_completions"`.
+On the Responses lane substitute the `output[]` paths: text is
+`.received.summary.payload.output[] | select(.type=="message") | .content[].text`,
+reasoning is `select(.type=="reasoning")`, tool calls are
+`select(.type=="function_call")` with `.name` / `.arguments`, and the finish
+reason is `.received.summary.payload.status` (in practice `in_progress`, since
+the artifact is written from the assembled stream). Reasoning items on this lane
+normally carry `encrypted_content: "<redacted>"` with an empty `summary`.
 
 ```bash
 F=~/.local/state/term2-nodejs/logs/provider-traffic/2026-06-18/12-39-39_e3e68/12-40-12.528Z_c1089.json

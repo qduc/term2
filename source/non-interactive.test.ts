@@ -837,6 +837,9 @@ it('runNonInteractive() blocks background shell execution for caller-owned clien
   expect(await toolInterceptors[0]?.('shell', { command: 'safe', background: true })).toBe(
     'Error: Background shell execution is unavailable in non-interactive mode.',
   );
+  expect(await toolInterceptors[0]?.('run_subagent_async', { role: 'explorer', task: 'search' })).toBe(
+    'Error: Asynchronous subagent execution is unavailable in non-interactive mode. Use synchronous run_subagent instead.',
+  );
   expect(await toolInterceptors[0]?.('shell', { command: 'safe' })).toBeNull();
   expect(removedInterceptors).toBe(1);
 });

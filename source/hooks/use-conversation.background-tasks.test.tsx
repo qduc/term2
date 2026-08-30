@@ -1,11 +1,20 @@
 // @ts-expect-error IS_REACT_ACT_ENVIRONMENT is not in globalThis types
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import React, { act } from 'react';
 import { Text } from 'ink';
 import { renderInAct } from '../test-helpers/ink-testing.js';
 import type { BackgroundTask } from '../services/subagents/subagent-notification-store.js';
 import { useConversation } from './use-conversation.js';
+
+const loggingService = {
+  debug() {},
+  info() {},
+  warn() {},
+  error() {},
+} as any;
+
+const historyService = { addMessage() {} };
 
 it.sequential('useConversation observes background task snapshots for the composer UI', async () => {
   let observer: (() => void) | null = null;
@@ -19,18 +28,11 @@ it.sequential('useConversation observes background task snapshots for the compos
       observer = next;
     },
   } as any;
-  const loggingService = {
-    debug() {},
-    info() {},
-    warn() {},
-    error() {},
-  } as any;
-
   const Harness = () => {
     const { backgroundSubagentTasks } = useConversation({
       conversationService,
       loggingService,
-      historyService: { addMessage() {} },
+      historyService,
     });
     return (
       <Text>
@@ -59,4 +61,186 @@ it.sequential('useConversation observes background task snapshots for the compos
 
   act(() => renderer.unmount());
   expect(observer).toBeNull();
+});
+
+it.sequential('does not tick now for retained terminal background details after linger', async () => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+  vi.setSystemTime(1_000_000);
+  try {
+    const conversationService = {
+      sessionId: 'retained-details',
+      backgroundSubagentTasks: { getSnapshot: () => [] },
+      setBackgroundSubagentTaskObserver: () => {},
+      backgroundTaskControl: {
+        listDetails: () => [
+          {
+            kind: 'shell',
+            id: 'job-1',
+            command: 'inbox-watch',
+            status: 'cancelled',
+            startedAt: 1_000,
+            completedAt: 10_000,
+          },
+        ],
+        listForegroundTransferCandidates: () => [],
+      },
+    } as any;
+
+    const Harness = () => {
+      const { backgroundTaskDetails, backgroundTaskDetailsNow } = useConversation({
+        conversationService,
+        loggingService,
+        historyService,
+      });
+      return <Text>{`${backgroundTaskDetails.length}:${backgroundTaskDetailsNow}`}</Text>;
+    };
+
+    const renderer = await renderInAct(<Harness />);
+    expect(renderer.lastFrame() ?? '').toBe('1:1000000');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000);
+    });
+    expect(renderer.lastFrame() ?? '').toBe('1:1000000');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it.sequential('ticks now while a turn is in flight even before task state is populated', async () => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+  vi.setSystemTime(1_000_000);
+  try {
+    const conversationService = {
+      sessionId: 'in-flight-clock',
+      abort: () => {},
+      interruptFromUser: () => {},
+      sendMessage: async () => new Promise(() => undefined),
+      backgroundSubagentTasks: { getSnapshot: () => [] },
+      setBackgroundSubagentTaskObserver: () => {},
+      backgroundTaskControl: {
+        listDetails: () => [],
+        listForegroundTransferCandidates: () => [],
+      },
+    } as any;
+
+    let sendMsg: ((input: string) => Promise<void>) | undefined;
+    const Harness = () => {
+      const { sendUserMessage, isProcessing, backgroundTaskDetailsNow } = useConversation({
+        conversationService,
+        loggingService,
+        historyService,
+      });
+      sendMsg = sendUserMessage;
+      return <Text>{`${isProcessing ? 'PROCESSING' : 'IDLE'}:${backgroundTaskDetailsNow}`}</Text>;
+    };
+
+    const renderer = await renderInAct(<Harness />);
+    expect(renderer.lastFrame() ?? '').toBe('IDLE:1000000');
+
+    await act(async () => {
+      void sendMsg!('hello');
+      await Promise.resolve();
+    });
+    expect(renderer.lastFrame() ?? '').toMatch(/^PROCESSING:/);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    expect(renderer.lastFrame() ?? '').toBe('PROCESSING:1002000');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it.sequential('keeps ticking now while a background task is still live', async () => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+  vi.setSystemTime(1_000_000);
+  try {
+    const conversationService = {
+      sessionId: 'live-details',
+      backgroundSubagentTasks: { getSnapshot: () => [] },
+      setBackgroundSubagentTaskObserver: () => {},
+      backgroundTaskControl: {
+        listDetails: () => [
+          {
+            kind: 'shell',
+            id: 'job-1',
+            command: 'pnpm test',
+            status: 'running',
+            startedAt: 1_000,
+          },
+        ],
+        listForegroundTransferCandidates: () => [],
+      },
+    } as any;
+
+    const Harness = () => {
+      const { backgroundTaskDetailsNow } = useConversation({
+        conversationService,
+        loggingService,
+        historyService,
+      });
+      return <Text>{String(backgroundTaskDetailsNow)}</Text>;
+    };
+
+    const renderer = await renderInAct(<Harness />);
+    expect(renderer.lastFrame() ?? '').toBe('1000000');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    expect(renderer.lastFrame() ?? '').toBe('1002000');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it.sequential('triggers notifier.approvalNeeded when background subagent approvals are pending', async () => {
+  let subscriber: (() => void) | null = null;
+  let snapshot: any = { pendingCount: 0, pending: [] };
+  const conversationService = {
+    sessionId: 'approval-notify',
+    backgroundSubagentTasks: { getSnapshot: () => [] },
+    setBackgroundSubagentTaskObserver: () => {},
+    backgroundSubagentApprovals: {
+      getSnapshot: () => snapshot,
+      subscribe: (cb: () => void) => {
+        subscriber = cb;
+        return () => {
+          subscriber = null;
+        };
+      },
+    },
+    backgroundTaskControl: {
+      listDetails: () => [],
+      listForegroundTransferCandidates: () => [],
+    },
+  } as any;
+
+  const notifier = {
+    turnComplete: vi.fn(),
+    approvalNeeded: vi.fn(),
+  };
+
+  const Harness = () => {
+    useConversation({
+      conversationService,
+      loggingService,
+      historyService,
+      notifier,
+    });
+    return null;
+  };
+
+  const renderer = await renderInAct(<Harness />);
+  expect(notifier.approvalNeeded).not.toHaveBeenCalled();
+
+  // Background subagent pauses for approval
+  snapshot = { pendingCount: 1, pending: [{ id: 'p1' } as any] };
+  act(() => subscriber?.());
+
+  expect(notifier.approvalNeeded).toHaveBeenCalledTimes(1);
+
+  act(() => renderer.unmount());
 });

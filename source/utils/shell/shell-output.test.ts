@@ -42,6 +42,41 @@ it('formatShellExecutionOutput saves the full output when truncation occurs', as
   }
 });
 
+it('formatShellExecutionOutput truncates few-line large JSON output and spools artifact', async () => {
+  const stdout = [
+    'Already up to date',
+    'Done in 378ms',
+    `{"numTotalTests":7000,"results":[${'{"test":"fast"},'.repeat(3000)}{}]}`,
+    'Warning: something happened',
+  ].join('\n');
+
+  const result = await formatShellExecutionOutput({
+    command: 'pnpm exec vitest run --reporter=json',
+    cwd: '/workspace',
+    stdout,
+    stderr: '',
+    exitCode: 0,
+    timedOut: false,
+    maxOutputLength: 5000,
+    durationMs: 500,
+  });
+
+  expect(result.truncated).toBe(true);
+  expect(result.artifactPath).toBeTruthy();
+  expect(result.text.includes('Full output saved to')).toBe(true);
+  expect(result.text.length).toBeLessThan(6000);
+
+  const artifactPath = result.artifactPath as string;
+  try {
+    const artifactContents = fs.readFileSync(artifactPath, 'utf8');
+    expect(artifactContents.includes('numTotalTests')).toBe(true);
+  } finally {
+    if (fs.existsSync(artifactPath)) {
+      fs.unlinkSync(artifactPath);
+    }
+  }
+});
+
 it('formatShellExecutionOutput leaves short output unchanged', async () => {
   const result = await formatShellExecutionOutput({
     command: 'printf hello',

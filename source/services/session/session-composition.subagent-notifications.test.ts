@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import { createSessionRuntime as createProductionSessionRuntime } from './session-composition.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
@@ -477,6 +477,87 @@ it('disposal cancels and shutdown settles root background shell jobs', async () 
   releaseSettlement();
   await shutdown;
   expect(sinks.shell).toBeNull();
+});
+
+it('proactively checks in on a still-running background shell job on a timer', () => {
+  vi.useFakeTimers();
+  try {
+    const sinks: Sinks = { turn: null, background: null, shell: null, approval: null };
+    const settings = new Map<string, unknown>([
+      ['agent.backgroundCheckIn.enabled', true],
+      ['agent.backgroundCheckIn.intervalMs', 60_000],
+      ['agent.backgroundCheckIn.maxCheckInsPerTask', 2],
+    ]);
+    const runtime = createSessionRuntime({
+      sessionId: 'bg-checkin',
+      agentClient: makeClient(sinks),
+      deps: {
+        logger: makeLogger(),
+        sessionContextService,
+        settingsService: { get: (key: string) => settings.get(key) } as any,
+      },
+    });
+    let notifications = 0;
+    runtime.backgroundSubagentNotifications.setObserver(() => notifications++);
+
+    sinks.shell?.({ type: 'background_shell_started', jobId: 'shell-1', command: 'pnpm test' });
+
+    vi.advanceTimersByTime(60_000);
+
+    expect(notifications).toBe(1);
+    expect(runtime.backgroundSubagentNotifications.drain()).toEqual([
+      expect.objectContaining({
+        kind: 'check_in',
+        target: { kind: 'shell', id: 'shell-1' },
+        checkInIndex: 1,
+        details: { kind: 'shell', id: 'shell-1', command: 'pnpm test' },
+      }),
+    ]);
+
+    // A second interval fires the second and, per the cap, final check-in.
+    vi.advanceTimersByTime(60_000);
+    expect(notifications).toBe(2);
+    // A third interval is silently capped.
+    vi.advanceTimersByTime(60_000);
+    expect(notifications).toBe(2);
+
+    runtime.dispose();
+    // Disposal stops the timer: no further check-in fires even across the cap boundary.
+    vi.advanceTimersByTime(600_000);
+    expect(notifications).toBe(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('does not check in when agent.backgroundCheckIn.enabled is false', () => {
+  vi.useFakeTimers();
+  try {
+    const sinks: Sinks = { turn: null, background: null, shell: null, approval: null };
+    const settings = new Map<string, unknown>([
+      ['agent.backgroundCheckIn.enabled', false],
+      ['agent.backgroundCheckIn.intervalMs', 60_000],
+    ]);
+    const runtime = createSessionRuntime({
+      sessionId: 'bg-checkin-disabled',
+      agentClient: makeClient(sinks),
+      deps: {
+        logger: makeLogger(),
+        sessionContextService,
+        settingsService: { get: (key: string) => settings.get(key) } as any,
+      },
+    });
+    let notifications = 0;
+    runtime.backgroundSubagentNotifications.setObserver(() => notifications++);
+
+    sinks.shell?.({ type: 'background_shell_started', jobId: 'shell-1', command: 'pnpm test' });
+    vi.advanceTimersByTime(600_000);
+
+    expect(notifications).toBe(0);
+    runtime.dispose();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it('shutdown retains the subagent sinks until adopted leases settle', async () => {

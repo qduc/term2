@@ -452,7 +452,7 @@ Create a narrow `SessionBrowser` service next to conversation persistence. Its
 constructor receives a context supplier, not arbitrary model-supplied paths:
 
 ```ts
-type SessionBrowserContext = { projectPath: string; sshHost?: string };
+type SessionBrowserContext = { projectPath: string; sshHost?: string; currentSessionId?: string };
 type SessionBrowser = {
   list(input: SessionListInput): SessionListResult;
   search(input: SessionSearchInput): SessionSearchResult;
@@ -544,6 +544,7 @@ object string.
     provider?: string;
     messageCount: number;
   }>;
+  total: number;
   omitted: number;
   unavailable: number;
   charsUsed: number;
@@ -560,7 +561,9 @@ prefix/ellipsis algorithm as a snippet (prefix rather than match-centered).
 `messageCount` is the count of projected browser records, not the older
 `listConversations()` display counter. This makes it agree with `session_read`.
 The list builder admits complete session records in order and sets `omitted` to
-the count that fit the requested limit but not the output envelope.
+the count that fit the requested limit but not the output envelope. `total` is
+the number of browsable candidate sessions in scope, including entries beyond
+`limit`, so `omitted` unambiguously counts only budget-dropped entries.
 
 `unavailable` counts safe-name, in-scope `*.jsonl` candidates that cannot produce a
 structurally valid `session_init`, cannot be read, or cannot be replayed. A
@@ -592,6 +595,7 @@ the deliberate distinction from memory retrieval, whose index has stable IDs.
     snippet: { text: string; truncated: boolean };
     updatedAt: string;
   }>;
+  total: number;
   omitted: number;
   unavailable: number;
   skippedMessageCount: number;
@@ -607,7 +611,12 @@ the start of text is +20, and any other text containment is +2. Scores add
 across terms. A record is eligible if total score is positive.
 
 Order matches by score descending, session `updatedAt` descending, session ID
-ascending, then `messageIndex` ascending. `kind` does not break ties because a
+ascending, then `messageIndex` ascending. When the browser context supplies
+`currentSessionId` (the interactive root's own live session), all matches from
+that session sort after every other session, unchanged within the group: the
+search indexes tool outputs, so the live transcript echoes the query while the
+agent is searching and would otherwise crowd out older sessions by recency.
+`total` is the count of ranked matching records before `limit` is applied. `kind` does not break ties because a
 single message index has exactly one projected kind. Duplicate text in two
 messages is intentionally two results. The snippet is the §4.3
 match-centered content-snippet algorithm with `CONTENT_SNIPPET_CHARS`, using
@@ -656,6 +665,7 @@ command's input surface.
     complete: boolean;
   }>;
   nextCursor?: string;
+  total: number;
   omitted: number;
   skippedMessageCount: number;
   charsUsed: number;
@@ -680,8 +690,9 @@ next cursor keeps the same index and advances `nextTextOffset` by
 `text.length`. Empty text is emitted complete and advances the index. `limit`
 caps records begun in one page; after a complete record, the browser may begin
 the next record in source order. It never skips an earlier record for a later
-one. `omitted` counts considered records not begun because the page bound was
-reached, not records after the page.
+one. `omitted` counts records of the session not begun in the page; a partially
+emitted chunk counts as begun, so `total - omitted` records were started in the
+page. `total` is the projected record count for the whole session.
 
 A success page must contain a complete empty message or a nonempty text chunk;
 the next cursor must therefore advance `(index, text offset)` lexicographically.

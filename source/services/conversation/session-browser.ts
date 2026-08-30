@@ -21,7 +21,7 @@ const DEFAULT_READ_LIMIT = 20;
 const SNIPPET_CHARS = 240;
 const SAFE_SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
-export type SessionBrowserContext = { projectPath: string; sshHost?: string };
+export type SessionBrowserContext = { projectPath: string; sshHost?: string; currentSessionId?: string };
 type Kind = 'user' | 'assistant' | 'reasoning' | 'system' | 'tool' | 'subagent';
 type ProjectedMessage = { index: number; kind: Kind; text: string };
 type BrowserError = {
@@ -51,7 +51,12 @@ export class SessionBrowser {
       else candidates.push({ conversation, projection });
     }
     const selected = candidates.slice(0, clamp(input.limit, DEFAULT_LIMIT));
-    const result = { sessions: [] as Array<Record<string, unknown>>, omitted: 0, unavailable };
+    const result = {
+      sessions: [] as Array<Record<string, unknown>>,
+      total: candidates.length,
+      omitted: 0,
+      unavailable,
+    };
     for (const { conversation, projection } of selected) {
       const firstUser = projection.records.find((record) => record.kind === 'user' && record.text);
       const item = {
@@ -77,6 +82,7 @@ export class SessionBrowser {
     let unavailable = browsed.unavailable;
     const conversations = browsed.conversations;
     let skippedMessageCount = 0;
+    const currentSessionId = this.getContext().currentSessionId;
     const matches: Array<{
       sessionId: string;
       kind: Kind;
@@ -106,15 +112,29 @@ export class SessionBrowser {
           });
       }
     }
-    matches.sort(
-      (a, b) =>
+    matches.sort((a, b) => {
+      // Demote the live session so its self-referential matches (the query text
+      // appears in its own transcript while the agent is searching) cannot
+      // crowd out older sessions by the updatedAt tie-break. Ordering only:
+      // scoring and result contents are unchanged.
+      const aCurrent = a.sessionId === currentSessionId ? 1 : 0;
+      const bCurrent = b.sessionId === currentSessionId ? 1 : 0;
+      if (aCurrent !== bCurrent) return aCurrent - bCurrent;
+      return (
         b.score - a.score ||
         b.updatedAt.localeCompare(a.updatedAt) ||
         a.sessionId.localeCompare(b.sessionId) ||
-        a.messageIndex - b.messageIndex,
-    );
+        a.messageIndex - b.messageIndex
+      );
+    });
     const selected = matches.slice(0, clamp(input.limit, DEFAULT_LIMIT));
-    const result = { results: [] as Array<Record<string, unknown>>, omitted: 0, unavailable, skippedMessageCount };
+    const result = {
+      results: [] as Array<Record<string, unknown>>,
+      total: matches.length,
+      omitted: 0,
+      unavailable,
+      skippedMessageCount,
+    };
     for (const match of selected) {
       const { score: _, ...item } = match;
       const candidate = fitted({ ...result, results: [...result.results, item], omitted: selected.length }, budget);
@@ -157,7 +177,7 @@ export class SessionBrowser {
     const items: Array<Record<string, unknown>> = [];
     let index = cursor.nextIndex;
     let offset = cursor.nextTextOffset;
-    let omitted = 0;
+    const total = projection.records.length;
     const limit = clamp(input.limit, DEFAULT_READ_LIMIT);
     while (index < projection.records.length && items.length < limit) {
       const record = projection.records[index]!;
@@ -173,7 +193,8 @@ export class SessionBrowser {
           session,
           items: [...items, completeItem],
           ...(nextCursor ? { nextCursor } : {}),
-          omitted: projection.records.length,
+          total,
+          omitted: total,
           skippedMessageCount: projection.skipped,
         },
         budget,
@@ -187,10 +208,7 @@ export class SessionBrowser {
       // Preserve source order: once fitting records already occupy this page,
       // leave the next record for its own page rather than making an earlier
       // page invalid by trying to append a partial later record.
-      if (items.length > 0) {
-        omitted = 1;
-        break;
-      }
+      if (items.length > 0) break;
       if (record.text.length === offset) return outputBudgetError(budget);
       const chunk = largestChunk(record, offset, (text) => {
         const next = encodeCursor(input.id, currentUpdatedAt, currentRevision, index, offset + text.length);
@@ -199,7 +217,8 @@ export class SessionBrowser {
             session,
             items: [...items, pageItem(record, text, offset, false)],
             nextCursor: next,
-            omitted: projection.records.length,
+            total,
+            omitted: total,
             skippedMessageCount: projection.skipped,
           },
           budget,
@@ -211,12 +230,21 @@ export class SessionBrowser {
       break;
     }
     const nextCursor =
-      index < projection.records.length
-        ? encodeCursor(input.id, currentUpdatedAt, currentRevision, index, offset)
-        : undefined;
+      index < total ? encodeCursor(input.id, currentUpdatedAt, currentRevision, index, offset) : undefined;
+    // Records begun in this page are total - omitted. A mid-record chunk (the
+    // cursor offset is nonzero) began its own record, so it is not counted as
+    // omitted; every later record is.
+    const omitted = total - index - (offset > 0 ? 1 : 0);
     return (
       fitted(
-        { session, items, ...(nextCursor ? { nextCursor } : {}), omitted, skippedMessageCount: projection.skipped },
+        {
+          session,
+          items,
+          ...(nextCursor ? { nextCursor } : {}),
+          total,
+          omitted,
+          skippedMessageCount: projection.skipped,
+        },
         budget,
       ) ?? outputBudgetError(budget)
     );

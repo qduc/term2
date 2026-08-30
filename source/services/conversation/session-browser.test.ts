@@ -270,6 +270,84 @@ it('recovers all oversized text exactly once with advancing, bounded pages', () 
   expect(chunks.join('')).toBe(text);
 });
 
+it('reports list totals and counts only budget-dropped entries in omitted', () => {
+  writeSession('session-a', '/project');
+  writeSession('session-b', '/project');
+  writeSession('session-c', '/project');
+  const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
+
+  const listed: any = browser.list({ limit: 2 });
+  expect(listed.total).toBe(3);
+  expect(listed.sessions).toHaveLength(2);
+  expect(listed.omitted).toBe(0);
+
+  // With limit covering every candidate, anything not emitted was dropped for
+  // budget, so omitted must account for exactly the difference.
+  const crowded: any = browser.list({ limit: 4, maxChars: 512 });
+  expect(crowded.total).toBe(3);
+  expect(crowded.sessions.length).toBeLessThan(3);
+  expect(crowded.omitted).toBe(3 - crowded.sessions.length);
+});
+
+it('demotes current-session search matches below all other sessions', () => {
+  writeSession('older', '/project', undefined, 'needle older');
+  writeSession('live', '/project', undefined, 'needle live');
+
+  const demoting = new SessionBrowser(() => ({ projectPath: '/project', currentSessionId: 'live' }));
+  const results: any = demoting.search({ query: 'needle' });
+  expect(results.results[0]!.sessionId).toBe('older');
+  expect(results.results.map((result: any) => result.sessionId)).toContain('live');
+
+  const neutral: any = new SessionBrowser(() => ({ projectPath: '/project' })).search({ query: 'needle' });
+  expect(neutral.results[0]!.sessionId).toBe('live');
+});
+
+it('reports search totals before the limit is applied', () => {
+  writeSession('session-a', '/project', undefined, 'needle');
+  writeSession('session-b', '/project', undefined, 'needle');
+  const result: any = new SessionBrowser(() => ({ projectPath: '/project' })).search({ query: 'needle', limit: 1 });
+  expect(result.total).toBe(2);
+  expect(result.results).toHaveLength(1);
+  expect(result.omitted).toBe(0);
+});
+
+it('reports read totals and per-page remaining record counts', () => {
+  const id = 'paged-total';
+  const writer = createConversationLogWriter({ sessionId: id, dir, logger });
+  writer.init({ id, createdAt: '2026-01-01T00:00:00.000Z', projectPath: '/project' });
+  for (let i = 0; i < 4; i++)
+    writer.append({ type: 'user_message', message: { id: `u${i}`, sender: 'user', text: `record ${i}` } });
+  void writer.close();
+  // Closing with an unanswered user message appends an interruption marker,
+  // so the projection is 4 user records plus 1 system record.
+  const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
+
+  const first: any = browser.read({ id, limit: 2 });
+  expect(first.total).toBe(5);
+  expect(first.items).toHaveLength(2);
+  expect(first.omitted).toBe(3);
+  expect(first.nextCursor).toBeTruthy();
+
+  const second: any = browser.read({ id, limit: 2, cursor: first.nextCursor });
+  expect(second.items).toHaveLength(2);
+  expect(second.omitted).toBe(1);
+  expect(second.nextCursor).toBeTruthy();
+
+  const third: any = browser.read({ id, limit: 2, cursor: second.nextCursor });
+  expect(third.items).toHaveLength(1);
+  expect(third.omitted).toBe(0);
+  expect(third.nextCursor).toBeUndefined();
+});
+
+it('counts a chunked record as begun when the budget forces a partial page', () => {
+  writeSession('chunky', '/project', undefined, 'x'.repeat(900));
+  const page: any = new SessionBrowser(() => ({ projectPath: '/project' })).read({ id: 'chunky', maxChars: 512 });
+  expect(page.total).toBe(2);
+  expect(page.items).toHaveLength(1);
+  expect(page.items[0]!.complete).toBe(false);
+  expect(page.omitted).toBe(1);
+});
+
 it('returns a coherent bounded failure when the runtime byte cap is tiny', () => {
   const original = getTrimConfig();
   try {

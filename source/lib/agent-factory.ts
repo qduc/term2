@@ -338,9 +338,8 @@ function buildModelSettings({
 
   const contextCompactionEnabled = deps.settings.get('agent.contextCompaction.enabled');
   const contextCompactionMode = deps.settings.get('agent.contextCompaction.mode') ?? 'native';
-  // This capability is provider-owned: Codex's Responses-Lite shim accepts the
-  // endpoint shape but rejects this parameter, so its registry capability is
-  // deliberately false.
+  // Provider-owned: Codex standard Responses accepts context_management;
+  // Responses-Lite still rejects it and is gated in the Codex transport.
   const providerCapabilities = getProviderCapabilities(deps.providerId);
   if (
     contextCompactionEnabled &&

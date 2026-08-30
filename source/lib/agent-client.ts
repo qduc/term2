@@ -61,6 +61,7 @@ import {
 } from '../services/agent-runtime/context-compaction/local-context-compactor.js';
 import { CONTEXT_COMPACTION_INSTRUCTIONS } from '../prompts/context-compaction.js';
 import { getCatalogModel } from '../providers/model-catalog/catalog.js';
+import { isCodexResponsesLiteModel } from '../providers/codex-responses-model.js';
 import { supportsContextCompactionModel } from '../providers/openai-responses-model.js';
 import { projectConversationMessage } from '../services/conversation/conversation-message-projection.js';
 import { isLocalContextSummary } from '../contracts/provider-input.js';
@@ -143,11 +144,13 @@ export class AgentClient {
         const provider = this.#agentConfig.getProvider();
         const model = this.#agentConfig.getModel();
         const reasoningEffort = this.#settings.get('agent.reasoningEffort');
-        // Native compaction is admitted only by the provider capability. Codex
-        // remains false because its Responses-Lite endpoint rejects this field.
+        // Native compaction is admitted by the provider capability plus the
+        // model allowlist. Codex Responses-Lite still rejects the field, so
+        // auto mode keeps using local compaction for that model only.
         const nativeAvailable =
           getProvider(provider)?.capabilities?.supportsContextCompaction === true &&
           supportsContextCompactionModel(model) &&
+          !(provider === 'codex' && isCodexResponsesLiteModel(model)) &&
           !this.#contextCompactionSessionState.disabled;
         if (mode === 'auto' && nativeAvailable) return { kind: 'unchanged' as const };
 

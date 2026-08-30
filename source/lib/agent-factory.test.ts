@@ -634,7 +634,21 @@ it.sequential('buildAgent passes an optional raw context compaction threshold wi
   });
 });
 
-it.sequential('buildAgent keeps native context compaction out of the Codex adapter', () => {
+it.sequential('buildAgent passes native context compaction to the Codex adapter', () => {
+  registerProvider(
+    {
+      id: 'codex',
+      label: 'Codex',
+      createStreamedModel: () => null as any,
+      fetchModels: async () => [],
+      capabilities: {
+        supportsConversationChaining: true,
+        supportsContextCompaction: true,
+      },
+    },
+    { allowOverride: true },
+  );
+
   const { deps } = createDeps({
     providerId: 'codex',
     settingsValues: {
@@ -645,7 +659,10 @@ it.sequential('buildAgent keeps native context compaction out of the Codex adapt
 
   const result = buildAgent({ model: 'gpt-5.3-codex-spark' }, deps);
 
-  expect(result.agent.modelSettings?.providerData?.contextCompaction).toBeUndefined();
+  expect(result.agent.modelSettings?.providerData?.contextCompaction).toEqual({
+    enabled: true,
+    threshold: 0.5,
+  });
 });
 
 it.sequential('buildAgent keeps context compaction out of providers without the capability', () => {

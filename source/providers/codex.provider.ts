@@ -452,9 +452,11 @@ async function fetchCodexModels(
 
 const CODEX_CAPABILITIES = {
   supportsConversationChaining: true,
-  // Codex's Responses-Lite shim accepts the Responses shape but rejects
-  // server-side context_management with a 400 unsupported_value response.
-  supportsContextCompaction: false,
+  // Standard Codex Responses (sol/terra/gpt-5.3-codex) accept server-side
+  // context_management. Responses-Lite (gpt-5.6-luna) still rejects it with
+  // 400 unsupported_value; that model is gated off at the transport and at
+  // auto-mode native admission, and falls back to local compaction.
+  supportsContextCompaction: true,
   supportsPromptCacheKey: true,
   usesStrictToolSchema: true,
 } as const;

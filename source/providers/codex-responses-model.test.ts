@@ -465,6 +465,22 @@ it.each([
   },
 );
 
+it('CodexResponsesTransport does not send context_management for Responses-Lite models', () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5.6-luna', false, {
+    supportsContextCompaction: true,
+  });
+  const built = transport.buildResponsesCreateRequest(
+    {
+      input: [],
+      tools: [],
+      providerOptions: { contextCompaction: { enabled: true, threshold: 0.5 } },
+    },
+    true,
+  );
+
+  expect(built.requestData).not.toHaveProperty('context_management');
+});
+
 it('CodexResponsesTransport does not send context_management without provider capability', () => {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5.3-codex-spark', false);
   const built = transport.buildResponsesCreateRequest(
@@ -548,6 +564,38 @@ it('CodexResponsesTransport marks opaque context_management 500s as session-disa
 
   expect(sessionState.disabled).toBe(true);
   expect((error as any).contextCompactionFailure).toBe('request');
+});
+
+it('keeps a native Codex compaction item as provider_opaque instead of throwing', async () => {
+  const transport = new CodexResponsesTransport();
+  transport.fetchResponse = async () =>
+    makeStream([
+      {
+        type: 'response.completed',
+        response: {
+          id: 'resp_compact',
+          output: [
+            { type: 'compaction', id: 'cmp_1', encrypted_content: 'cipher' },
+            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'ok' }] },
+          ],
+        },
+      },
+    ]);
+  const model = new CodexResponsesModel({} as any, 'gpt-5.6-sol', undefined, undefined, transport);
+  const events = await collect(model.stream({ input: [], tools: [] }));
+  const completion = events.find((event) => event.type === 'completion');
+  expect(completion).toMatchObject({
+    type: 'completion',
+    responseId: 'resp_compact',
+    output: [
+      {
+        type: 'provider_opaque',
+        provider: 'openai',
+        item: { type: 'compaction', id: 'cmp_1', encrypted_content: 'cipher' },
+      },
+      { type: 'message', content: [{ type: 'text', text: 'ok' }] },
+    ],
+  });
 });
 
 it('CodexResponsesTransport formats reasoning input items with required summary array for Responses API', () => {

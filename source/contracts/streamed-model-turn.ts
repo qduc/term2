@@ -81,6 +81,15 @@ export interface StreamedModelTurn {
   stream(request: StreamedModelTurnRequest): AsyncIterable<StreamedModelTurnEvent>;
   /** Optional unary fast path for providers whose native API is non-streaming. */
   getResponse?(request: StreamedModelTurnRequest): Promise<StreamedModelUnaryResult>;
+  /**
+   * Codex ChatGPT backend compact endpoint. OpenAI api.openai.com uses
+   * `context_management` on create instead and does not implement this.
+   */
+  compactHistory?(request: {
+    readonly input: readonly StreamedModelTurnInput[];
+    readonly instructions?: string;
+    readonly signal?: AbortSignal;
+  }): Promise<{ readonly history: readonly unknown[] }>;
 }
 
 export interface StreamedModelTurnRequest {

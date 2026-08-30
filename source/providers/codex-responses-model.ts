@@ -5,6 +5,7 @@ import type {
   ContextCompactionSessionState,
   StreamedModelTurn,
   StreamedModelTurnEvent,
+  StreamedModelTurnInput,
   StreamedModelTurnRequest,
 } from '../contracts/streamed-model-turn.js';
 import { toCodexResponsesInput } from './codex-turn-converter.js';
@@ -38,7 +39,9 @@ import {
   findWebSocketClosedEarly,
   readWebSocketCloseFrame,
 } from './websocket-close-evidence.js';
-import { markContextCompactionFailure, resolveContextManagement } from './openai-responses-model.js';
+import { markContextCompactionFailure } from './openai-responses-model.js';
+import { compactOutputToProviderHistory } from './codex-compact.js';
+import { OPENAI_RESPONSES_OPAQUE_TAG } from './provider-opaque-compatibility.js';
 import { ResponsesWebSocketSessions } from './responses-websocket-sessions.js';
 
 const DUMMY_PROVIDER_TRAFFIC: IProviderTraffic = {
@@ -89,6 +92,25 @@ export class CodexResponsesTransport {
     this.#sessions.close();
   }
 
+  async compactHistory(request: {
+    input: unknown[];
+    instructions?: string;
+    signal?: AbortSignal;
+  }): Promise<{ history: ReturnType<typeof compactOutputToProviderHistory> }> {
+    if (typeof this.client?.responses?.compact !== 'function') {
+      throw new Error('Codex compact endpoint is unavailable on this client');
+    }
+    const compacted = await this.client.responses.compact(
+      {
+        model: this.model,
+        input: request.input,
+        ...(request.instructions !== undefined ? { instructions: request.instructions } : {}),
+      },
+      request.signal ? { signal: request.signal } : undefined,
+    );
+    return { history: compactOutputToProviderHistory(compacted.output ?? []) };
+  }
+
   buildResponsesCreateRequest(request: StreamedModelTurnRequest, stream: boolean): any {
     const providerOptions = request.providerOptions ?? {};
     // contextCompaction is an app-level option; context_management is capability-gated
@@ -102,12 +124,8 @@ export class CodexResponsesTransport {
     const { context_management: _reservedContextManagement, ...safeExtraBody } = ((extraBody as
       | Record<string, unknown>
       | undefined) ?? {}) as Record<string, unknown>;
-    const contextManagement = resolveContextManagement(
-      providerOptions,
-      this.model,
-      this.options.supportsContextCompaction === true,
-      this.options.contextCompactionSessionState,
-    );
+    // Codex ChatGPT backend rejects context_management on create. Compaction
+    // is POST /responses/compact via compactHistory(), not this field.
     return {
       requestData: {
         model: this.model,
@@ -127,7 +145,6 @@ export class CodexResponsesTransport {
         ...(request.previousResponseId ? { previous_response_id: request.previousResponseId } : {}),
         ...(request.codex?.promptCacheKey ? { prompt_cache_key: request.codex.promptCacheKey } : {}),
         ...(request.codex?.include ? { include: request.codex.include } : {}),
-        ...(contextManagement ? { context_management: contextManagement } : {}),
       },
     };
   }
@@ -224,6 +241,18 @@ export class OpenAIResponsesModel implements StreamedModelTurn {
     this.transport.close?.();
   }
 
+  async compactHistory(request: {
+    input: readonly StreamedModelTurnInput[];
+    instructions?: string;
+    signal?: AbortSignal;
+  }): Promise<{ history: ReturnType<typeof compactOutputToProviderHistory> }> {
+    return this.transport.compactHistory({
+      input: toCodexResponsesInput(request.input),
+      instructions: request.instructions,
+      signal: request.signal,
+    });
+  }
+
   protected buildResponsesCreateRequest(request: StreamedModelTurnRequest, stream: boolean): any {
     const built = this.transport.buildResponsesCreateRequest(request, stream);
     if (this.transport instanceof CodexResponsesTransport && built?.requestData) {
@@ -318,6 +347,8 @@ async function* convertCodexRawStream(source: AsyncIterable<any>): AsyncIterable
           text,
         };
       }
+    } else if (event?.type === 'response.output_item.added' && event.output_item?.type === 'compaction') {
+      yield { type: 'context_compaction_started', provider: OPENAI_RESPONSES_OPAQUE_TAG };
     } else if (event?.type === 'response.output_item.added' && event.output_item?.type === 'function_call') {
       const index = typeof event.output_index === 'number' ? event.output_index : event.output_item.id ?? 0;
       if (typeof event.output_item.name === 'string') toolNamesByIndex.set(index, event.output_item.name);
@@ -412,6 +443,13 @@ function toCodexOutputItem(item: any): any {
       providerMetadata: { codex: codexReasoningMetadata(item) },
     };
   }
+  if (item.type === 'compaction') {
+    return {
+      type: 'provider_opaque',
+      provider: OPENAI_RESPONSES_OPAQUE_TAG,
+      item,
+    };
+  }
   throw new Error(`Unsupported Codex response output item type: ${String(item.type)}.`);
 }
 
@@ -471,6 +509,10 @@ const SUSPICIOUS_RECONSTRUCTED_OUTPUT_ITEM_COUNT = 20;
 const WS_RESPONSE_MODEL_CLASS = 'OpenAIResponsesWSModel';
 const WS_RESPONSE_WRAPPER_CLASS = 'CodexResponsesWSModel';
 const RESPONSES_LITE_MODELS = new Set(['gpt-5.6-luna']);
+
+export function isCodexResponsesLiteModel(model: string): boolean {
+  return RESPONSES_LITE_MODELS.has(model);
+}
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;

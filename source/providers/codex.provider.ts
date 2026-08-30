@@ -452,8 +452,8 @@ async function fetchCodexModels(
 
 const CODEX_CAPABILITIES = {
   supportsConversationChaining: true,
-  // Codex's Responses-Lite shim accepts the Responses shape but rejects
-  // server-side context_management with a 400 unsupported_value response.
+  // `context_management` on create is api.openai.com only. Codex
+  // (chatgpt.com/backend-api/codex) compacts via POST /responses/compact.
   supportsContextCompaction: false,
   supportsPromptCacheKey: true,
   usesStrictToolSchema: true,

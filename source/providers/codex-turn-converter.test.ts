@@ -119,13 +119,25 @@ describe('Codex streamed-turn conversion', () => {
 });
 
 describe('provider_opaque handling', () => {
-  // The Codex lane produces no opaque items of its own, so every opaque item it
-  // sees is another lane's — the ordinary residue of a provider switch. It is
-  // dropped rather than thrown on, because throwing killed every later turn too:
-  // nothing removes the item from history.
+  it('replays an OpenAI-lane compaction item so Codex native compaction can round-trip', () => {
+    expect(
+      toCodexResponsesInput([
+        {
+          type: 'provider_opaque',
+          provider: 'openai',
+          item: { type: 'compaction', id: 'cmp_1', encrypted_content: 'cipher' },
+        },
+        { type: 'message', role: 'user', content: [{ type: 'text', text: 'continue' }] },
+      ]),
+    ).toEqual([
+      { type: 'compaction', id: 'cmp_1', encrypted_content: 'cipher' },
+      { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'continue' }] },
+    ]);
+  });
+
   it('drops a foreign provider_opaque item and still serializes the rest', () => {
     const input = toCodexResponsesInput([
-      { type: 'provider_opaque', provider: 'openai', item: { type: 'compaction', encrypted_content: 'foreign-blob' } },
+      { type: 'provider_opaque', provider: 'grok', item: { type: 'compaction', encrypted_content: 'foreign-blob' } },
       { type: 'message', role: 'user', content: [{ type: 'text', text: 'still here' }] },
     ]);
 
@@ -133,7 +145,7 @@ describe('provider_opaque handling', () => {
     expect(input).toHaveLength(1);
   });
 
-  it('drops even a Codex-tagged provider_opaque item, which this lane never produces', () => {
+  it('drops a Codex-tagged provider_opaque item, which this lane tags as openai', () => {
     expect(
       toCodexResponsesInput([
         { type: 'provider_opaque', provider: 'codex', item: { type: 'compaction', encrypted_content: 'blob' } },

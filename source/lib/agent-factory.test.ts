@@ -634,7 +634,21 @@ it.sequential('buildAgent passes an optional raw context compaction threshold wi
   });
 });
 
-it.sequential('buildAgent keeps native context compaction out of the Codex adapter', () => {
+it.sequential('buildAgent keeps context_management out of the Codex adapter', () => {
+  registerProvider(
+    {
+      id: 'codex',
+      label: 'Codex',
+      createStreamedModel: () => null as any,
+      fetchModels: async () => [],
+      capabilities: {
+        supportsConversationChaining: true,
+        supportsContextCompaction: false,
+      },
+    },
+    { allowOverride: true },
+  );
+
   const { deps } = createDeps({
     providerId: 'codex',
     settingsValues: {

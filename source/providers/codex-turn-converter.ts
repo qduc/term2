@@ -4,6 +4,7 @@ import type {
   StreamedModelToolResultPart,
   StreamedModelTurnInput,
 } from '../contracts/streamed-model-turn.js';
+import { OPENAI_RESPONSES_OPAQUE_TAG, isForeignProviderOpaque } from './provider-opaque-compatibility.js';
 
 /**
  * The Codex Responses adapter's application-to-wire conversion. Keep this
@@ -11,10 +12,13 @@ import type {
  * or rejected before it can become malformed Responses input.
  */
 export function toCodexResponsesInput(input: readonly StreamedModelTurnInput[]): unknown[] {
-  // The Codex lane never produces opaque items, so any it sees came from
-  // another provider and is inert baggage left by a switch, not a fault. Drop
-  // it and keep replaying the rest. See `provider-opaque-compatibility.ts`.
-  return input.filter((item) => item.type !== 'provider_opaque').map(toCodexResponsesItem);
+  // Codex native compaction produces OpenAI-lane opaque items. Replay those
+  // verbatim. A foreign lane's blob is the ordinary residue of a provider
+  // switch: drop it and keep replaying the rest. See
+  // `provider-opaque-compatibility.ts`.
+  return input
+    .filter((item) => !isForeignProviderOpaque(item, OPENAI_RESPONSES_OPAQUE_TAG))
+    .map((item) => (item.type === 'provider_opaque' ? item.item : toCodexResponsesItem(item)));
 }
 
 export function toCodexResponsesItem(item: StreamedModelTurnInput): unknown {

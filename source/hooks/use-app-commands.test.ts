@@ -194,6 +194,11 @@ const TestHookWrapper = ({
   const settingsService = {
     get: (key: string) => settings.get(key) ?? false,
     set: (key: string, value: any) => settings.set(key, value),
+    setDynamic: (key: string, value: any) => {
+      settings.set(key, value);
+      return { key, value };
+    },
+    isRuntimeModifiable: () => true,
   } as any;
 
   const hookResult = useAppCommands({
@@ -444,16 +449,14 @@ it.sequential('useAppCommands /orchestrator enables exclusive orchestrator mode'
   expect(settings.get('app.planMode')).toBe(false);
 });
 
-it.sequential('useAppCommands blocks /orchestrator when the session has non-system history', async () => {
+it.sequential('useAppCommands allows /orchestrator when the session has non-system history', async () => {
   const settings = new Map<string, any>();
-  const systemMessages: string[] = [];
   let hookResult: any;
 
   await renderInAct(
     React.createElement(TestHookWrapper, {
       settings,
       messages: [{ id: 'msg-1', sender: 'user', text: 'inspect this' }],
-      onSystemMessage: (text: string) => systemMessages.push(text),
       onHookResult: (res) => {
         hookResult = res;
       },
@@ -464,11 +467,31 @@ it.sequential('useAppCommands blocks /orchestrator when the session has non-syst
     hookResult.slashCommands.find((command: any) => command.name === 'orchestrator').action();
   });
 
-  expect(settings.get('app.orchestratorMode')).toBeFalsy();
-  expect(systemMessages.some((message) => message.includes('/clear'))).toBe(true);
+  expect(settings.get('app.orchestratorMode')).toBe(true);
 });
 
-it.sequential('useAppCommands requests confirmation for /orchestrator when history exists', async () => {
+it.sequential('useAppCommands allows /mentor when the session has non-system history', async () => {
+  const settings = new Map<string, any>();
+  let hookResult: any;
+
+  await renderInAct(
+    React.createElement(TestHookWrapper, {
+      settings,
+      messages: [{ id: 'msg-1', sender: 'user', text: 'inspect this' }],
+      onHookResult: (res) => {
+        hookResult = res;
+      },
+    }),
+  );
+
+  await act(async () => {
+    hookResult.slashCommands.find((command: any) => command.name === 'mentor').action();
+  });
+
+  expect(settings.get('app.mentorMode')).toBe(true);
+});
+
+it.sequential('useAppCommands does not request confirmation for /orchestrator when history exists', async () => {
   const settings = new Map<string, any>();
   let requestedPending: any = null;
   let hookResult: any;
@@ -490,12 +513,8 @@ it.sequential('useAppCommands requests confirmation for /orchestrator when histo
     hookResult.slashCommands.find((command: any) => command.name === 'orchestrator').action();
   });
 
-  expect(requestedPending).toEqual({
-    modeKey: 'app.orchestratorMode',
-    modeLabel: 'Orchestrator',
-    targetValue: true,
-    enabledDetail: ' - tool-backed work must use subagents',
-  });
+  expect(requestedPending).toBeNull();
+  expect(settings.get('app.orchestratorMode')).toBe(true);
 });
 
 it.sequential('useAppCommands requests confirmation for /lite when history exists', async () => {
@@ -529,17 +548,15 @@ it.sequential('useAppCommands requests confirmation for /lite when history exist
 });
 
 it.sequential(
-  'useAppCommands blocks orchestrator settings changes when the session has non-system history',
+  'useAppCommands allows orchestrator settings changes when the session has non-system history',
   async () => {
     const settings = new Map<string, any>();
-    const systemMessages: string[] = [];
     let hookResult: any;
 
     await renderInAct(
       React.createElement(TestHookWrapper, {
         settings,
         messages: [{ id: 'msg-1', sender: 'user', text: 'inspect this' }],
-        onSystemMessage: (text: string) => systemMessages.push(text),
         onHookResult: (res) => {
           hookResult = res;
         },
@@ -550,13 +567,12 @@ it.sequential(
       hookResult.slashCommands.find((command: any) => command.name === 'settings').action('app.orchestratorMode true');
     });
 
-    expect(settings.get('app.orchestratorMode')).toBeFalsy();
-    expect(systemMessages.some((message) => message.includes('/clear'))).toBe(true);
+    expect(settings.get('app.orchestratorMode')).toBe(true);
   },
 );
 
 it.sequential(
-  'useAppCommands requests confirmation for orchestrator settings changes when history exists',
+  'useAppCommands does not request confirmation for orchestrator settings changes when history exists',
   async () => {
     const settings = new Map<string, any>();
     let requestedPending: any = null;
@@ -579,12 +595,8 @@ it.sequential(
       hookResult.slashCommands.find((command: any) => command.name === 'settings').action('app.orchestratorMode true');
     });
 
-    expect(requestedPending).toEqual({
-      modeKey: 'app.orchestratorMode',
-      modeLabel: 'Orchestrator',
-      targetValue: true,
-      enabledDetail: ' - tool-backed work must use subagents',
-    });
+    expect(requestedPending).toBeNull();
+    expect(settings.get('app.orchestratorMode')).toBe(true);
   },
 );
 

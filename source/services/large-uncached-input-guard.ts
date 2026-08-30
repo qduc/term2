@@ -99,9 +99,9 @@ const warningKeyFor = (
   return hash.digest('hex').slice(0, 24);
 };
 
-const isStandardPlanTransition = (fromMode?: string | null, toMode?: string | null): boolean => {
-  const pair = new Set([fromMode ?? 'standard', toMode ?? 'standard']);
-  return pair.size <= 2 && pair.has('standard') && pair.has('plan');
+const isNonLiteModeTransition = (fromMode?: string | null, toMode?: string | null): boolean => {
+  const nonLiteModes = new Set(['standard', 'plan', 'mentor', 'orchestrator']);
+  return nonLiteModes.has(fromMode ?? 'standard') && nonLiteModes.has(toMode ?? 'standard');
 };
 
 const allowDecision = (estimatedTokens = 0, estimatedBytes = 0): LargeUncachedInputDecision => ({
@@ -226,7 +226,7 @@ export class LargeUncachedInputGuard {
         this.#lastSuccessful.mode &&
         context.mode &&
         this.#lastSuccessful.mode !== context.mode &&
-        !isStandardPlanTransition(this.#lastSuccessful.mode, context.mode)
+        !isNonLiteModeTransition(this.#lastSuccessful.mode, context.mode)
       ) {
         reasons.push('mode_changed');
       }

@@ -1,5 +1,12 @@
 import { expect, it, vi } from 'vitest';
-import { PLAN_MODE_ENTER_NOTICE, PLAN_MODE_EXIT_NOTICE } from './mode-notices.js';
+import {
+  MENTOR_MODE_ENTER_NOTICE,
+  MENTOR_MODE_EXIT_NOTICE,
+  ORCHESTRATOR_MODE_ENTER_NOTICE,
+  ORCHESTRATOR_MODE_EXIT_NOTICE,
+  PLAN_MODE_ENTER_NOTICE,
+  PLAN_MODE_EXIT_NOTICE,
+} from './mode-notices.js';
 import { ConversationConfigurationService } from './runtime-setting-router.js';
 
 const makeService = (overrides: Record<string, unknown> = {}) => {
@@ -63,6 +70,19 @@ it('queues the plan-mode exit notice when app.planMode becomes false', () => {
   service.apply([{ key: 'app.planMode', value: false, persistence: 'runtime' }]);
 
   expect(conversationService.queueModeNotice).toHaveBeenCalledWith(PLAN_MODE_EXIT_NOTICE);
+});
+
+it.each([
+  ['app.mentorMode', true, MENTOR_MODE_ENTER_NOTICE],
+  ['app.mentorMode', false, MENTOR_MODE_EXIT_NOTICE],
+  ['app.orchestratorMode', true, ORCHESTRATOR_MODE_ENTER_NOTICE],
+  ['app.orchestratorMode', false, ORCHESTRATOR_MODE_EXIT_NOTICE],
+])('queues the %s notice when its runtime value becomes %s', (key, value, notice) => {
+  const { service, conversationService } = makeService();
+
+  service.apply([{ key, value, persistence: 'runtime' }]);
+
+  expect(conversationService.queueModeNotice).toHaveBeenCalledWith(notice);
 });
 
 it('queues the plan-mode exit notice when another exclusive mode implicitly turns Plan Mode off', () => {

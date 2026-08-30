@@ -45,7 +45,6 @@ import { killLiveShellChildren } from './utils/shell/execute-shell.js';
 import { createConversationLogWriter, LockConflictError } from './services/logging/conversation-log-writer.js';
 import { AGENT_AFFECTING_SETTINGS } from './services/logging/conversation-log-events.js';
 import { installPlanModeInterceptor } from './services/plan-mode-interceptor.js';
-import { primePlanModeNoticeIfActive } from './services/mode-notices.js';
 import { normalizeAppModes } from './services/settings/settings-schema.js';
 import { createOwnedSessionClientFactory } from './services/session/session-client-factory.js';
 import os from 'os';
@@ -810,7 +809,6 @@ const conversationService = new ConversationService({
     skillsService,
   },
 });
-primePlanModeNoticeIfActive(Boolean(settings.get('app.planMode')), (text) => conversationService.queueModeNotice(text));
 
 if (conversationService.hookEvents) {
   await hookService.emit(

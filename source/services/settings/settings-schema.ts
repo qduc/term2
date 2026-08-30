@@ -368,7 +368,7 @@ export const AppSettingsSchema = z.object({
   // mentorMode: uses simplified mentor prompt and enables ask_mentor tool (if mentorModel configured)
   // liteMode: minimal context for general terminal assistance (no codebase tools/prompts)
   // planMode: when enabled, forces read-only operation (Plan mode)
-  // orchestratorMode: parent only delegates tool-backed work through run_subagent
+  // orchestratorMode: prompt-guided delegation workflow; standard non-lite tools remain available for cache stability
   // Standard mode is the default (all flags false): full capabilities with auto-approve for apply_patch
   mentorMode: z.boolean().optional().default(false),
   liteMode: z.boolean().optional().default(false),

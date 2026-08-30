@@ -2,7 +2,7 @@ export type PromptProfile = {
   id: string;
   basePromptFile: string;
   fragmentFiles?: string[];
-  matches: (options: { normalizedModel: string; liteMode: boolean; orchestratorMode?: boolean }) => boolean;
+  matches: (options: { normalizedModel: string; liteMode: boolean }) => boolean;
 };
 
 export const PROMPT_PROFILES: PromptProfile[] = [
@@ -10,11 +10,6 @@ export const PROMPT_PROFILES: PromptProfile[] = [
     id: 'lite',
     basePromptFile: 'lite.md',
     matches: ({ liteMode }) => liteMode,
-  },
-  {
-    id: 'orchestrator',
-    basePromptFile: 'orchestrator.md',
-    matches: ({ orchestratorMode }) => Boolean(orchestratorMode),
   },
   {
     id: 'anthropic',
@@ -69,15 +64,7 @@ export const PROMPT_PROFILES: PromptProfile[] = [
   },
 ];
 
-export function selectPromptProfile({
-  model,
-  liteMode,
-  orchestratorMode,
-}: {
-  model: string;
-  liteMode: boolean;
-  orchestratorMode?: boolean;
-}): PromptProfile {
+export function selectPromptProfile({ model, liteMode }: { model: string; liteMode: boolean }): PromptProfile {
   const normalizedModel = model.trim().toLowerCase();
-  return PROMPT_PROFILES.find((profile) => profile.matches({ normalizedModel, liteMode, orchestratorMode }))!;
+  return PROMPT_PROFILES.find((profile) => profile.matches({ normalizedModel, liteMode }))!;
 }

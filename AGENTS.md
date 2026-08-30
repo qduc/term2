@@ -38,6 +38,8 @@ Everything else is discoverable by reading the tree. Skills carry the depth:
 - **`pnpm test:lane` runs a fixed no-isolate manifest, not the whole suite.** It executes only the files in `.github/vitest.lane.safe.txt` with worker isolation disabled (~28 s), so a new test file is invisible to it until admitted: a file joins the manifest only after passing shuffled seeded runs (`pnpm test:lane:seed <seed>`), and any file that has ever failed non-isolated stays excluded. The isolated full suite remains the handoff/CI authority. Leak classes and rules: `docs/plans/slow-test-suite.md`.
 - **The `pnpm` test scripts pin `NODE_ENV=test` via `cross-env`; keep it that way.** Under `NODE_ENV=production` vitest loads React's production build, whose `react` entry does not export `act`; `renderInAct` then fails ~26 tests in `MessageList.test.tsx` with `TypeError: act is not a function`. The scripts make the ambient value irrelevant, so a bare `pnpm test` is safe — but set it yourself if you invoke `vitest` directly.
 
+- **Orchestrator Mode is prompt-guided, not tool-enforced.** It intentionally uses the same non-lite prompt prefix and tool-building path as standard mode so toggling a runtime mode does not invalidate provider prompt-cache or chained Responses-Lite assumptions. The active workflow arrives in the next user-turn `<system-notice>`: the parent retains end-to-end outcome ownership and should delegate when useful, but direct tools remain available and the harness does not reject `execution: 'foreground'` in orchestrator mode. See `source/agent.ts` and `source/services/mode-notices.ts`.
+
 # Work In Progress
 
 Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Resume here** section: read it before touching the areas it covers, because it records decisions already taken and premises already disproven. Re-deriving them wastes a session and tends to reintroduce the framing the plan corrected.
@@ -46,6 +48,19 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 
 ## Active or deferred
 
+- Model/effort step-down for tool-continuation turns — **paused
+  mid-validation, nothing implemented yet.** Production-log analysis found
+  90%+ of expensive-tier (`sol`/`terra`) requests are pure tool-continuation
+  steps, not fresh reasoning turns. Real benchmark validation (4 tasks,
+  deterministic evaluator + Opus blind quality judge, not log inference)
+  confirmed cheap-tier (`luna`) parity on 3 of 4 tasks at 7x-140x lower cost,
+  but found a real quality gap on a security-sensitive task — the blanket
+  version must not ship without a floor above `luna#low` for
+  security-sensitive paths. Read `docs/plans/model-effort-step-down-benchmark.md`
+  before touching this: it records the exact benchmark directories, a
+  provider-id gotcha (`codex` not `openai-codex`), a host-memory-exhaustion
+  trap (do not run 3+ heavy `term2` benchmark candidates as parallel
+  background tasks), and a `run-judge.sh` aggregator parsing bug.
 - Test suite audit — foundation merged, milestone still non-destructive:
   build the evidence graph, not cleanup. Do not remove, rewrite, retier, or
   consolidate tests, and do not dispatch explorers, without the approval

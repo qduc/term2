@@ -8,6 +8,7 @@ import { getBackgroundShellAddendum } from './background-shell.js';
 export type PromptConstructorOptions = {
   model: string;
   liteMode: boolean;
+  /** Runtime-only mode flags; mode-specific workflows are sent as notices. */
   orchestratorMode?: boolean;
   mentorMode?: boolean;
   planMode?: boolean;
@@ -35,8 +36,6 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
   const {
     model,
     liteMode,
-    orchestratorMode = false,
-    mentorMode = false,
     searchViaShell = false,
     runSubagentEnabled = false,
     runSubagentForegroundEnabled = false,
@@ -50,12 +49,14 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     executionContext,
   } = options;
 
-  const profile = selectPromptProfile({ model, liteMode, orchestratorMode });
+  // Runtime modes are intentionally absent from profile selection. Their full
+  // workflows ride on the next user turn so rebuilding the agent does not
+  // invalidate the provider's instruction prefix.
+  const profile = selectPromptProfile({ model, liteMode });
   const fragmentFiles = [...(profile.fragmentFiles ?? [])];
   const inlineSections: string[] = [];
 
   const isRegularMode = !liteMode;
-  const isAgentMode = !orchestratorMode;
   // Orchestrators can directly modify the worktree, so every non-lite prompt
   // receives the shared dirty-state and validation safeguards.
   const shouldIncludeWorktreeHygiene = !liteMode;
@@ -79,11 +80,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     inlineSections.push(getBackgroundShellAddendum());
   }
 
-  if (mentorMode && isRegularMode) {
-    fragmentFiles.push('mentor-addon.md');
-  }
-
-  if (isAgentMode && searchViaShell) {
+  if (isRegularMode && searchViaShell) {
     inlineSections.push(getSearchViaShellAddendum({ executionContext }));
   }
 
@@ -91,7 +88,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     inlineSections.push(
       getSubagentDelegationAddendum({
         memoryEnabled,
-        orchestratorMode,
+        orchestratorMode: false,
         foregroundEnabled: runSubagentForegroundEnabled,
         backgroundEnabled: runSubagentAsyncEnabled,
         controlsEnabled: asyncSubagentControlsEnabled,
@@ -99,14 +96,16 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     );
   }
 
-  if (isRegularMode && isAgentMode) {
-    // Always the stub. The workflow body rides on PLAN_MODE_ENTER_NOTICE so a
-    // toggle cannot change the instruction prefix (prompt cache + chained
-    // Responses-Lite HTTP omit developer instructions).
+  if (isRegularMode) {
+    // Keep all mode stubs in every non-lite prompt. The full workflows ride on
+    // mode notices so a toggle cannot change the instruction prefix (prompt
+    // cache + chained Responses-Lite HTTP omit developer instructions).
     fragmentFiles.push('plan-mode-stub.md');
+    fragmentFiles.push('mentor-mode-stub.md');
+    fragmentFiles.push('orchestrator-mode-stub.md');
   }
 
-  if (memoryEnabled && isAgentMode) {
+  if (memoryEnabled && isRegularMode) {
     fragmentFiles.push('memory.md');
   }
 

@@ -224,12 +224,59 @@ const CreateFilePrompt: FC<{ args: CreateFileArgs }> = ({ args }) => {
   );
 };
 
+type SafetyFindingLevel = 'RED' | 'YELLOW' | 'GREEN';
+
+const SAFETY_FINDING_COLORS: Record<SafetyFindingLevel, string> = {
+  RED: COLOR_DANGER,
+  YELLOW: COLOR_WARNING,
+  GREEN: COLOR_SUCCESS,
+};
+
+type ParsedSystemSafetyReasoning = {
+  findings: { level: SafetyFindingLevel; detail: string }[];
+  modelAdvisory?: string;
+};
+
+/**
+ * The safety evaluator deliberately keeps its advisory as plain text for
+ * transport compatibility. Recover the structured severity markers only at
+ * this presentation boundary so mixed findings remain scannable in a narrow
+ * terminal.
+ */
+function parseSystemSafetyReasoning(reasoning: string): ParsedSystemSafetyReasoning | null {
+  const modelAdvisoryMarker = '\n\nModel advisory:';
+  const modelAdvisoryIndex = reasoning.indexOf(modelAdvisoryMarker);
+  const safetyText = modelAdvisoryIndex >= 0 ? reasoning.slice(0, modelAdvisoryIndex) : reasoning;
+  const modelAdvisory =
+    modelAdvisoryIndex >= 0 ? reasoning.slice(modelAdvisoryIndex + modelAdvisoryMarker.length).trim() : undefined;
+  const match = safetyText.match(
+    /^Blocked by safety heuristics \(RED\): (.*)\. Manual approval is strictly required\.$/s,
+  );
+  if (!match) return null;
+
+  const findings: ParsedSystemSafetyReasoning['findings'] = [];
+  const findingPattern = /(?:^|;\s*)((?:RED|YELLOW|GREEN)):\s*(.*?)(?=;\s*(?:RED|YELLOW|GREEN):|$)/g;
+  for (const finding of match[1].matchAll(findingPattern)) {
+    findings.push({ level: finding[1] as SafetyFindingLevel, detail: finding[2] });
+  }
+
+  // A RED result can have no reason text if the classifier only returns its
+  // status. Still make the blocking status visible instead of rendering an
+  // empty findings section.
+  if (findings.length === 0) {
+    findings.push({ level: 'RED', detail: match[1] });
+  }
+
+  return { findings, ...(modelAdvisory ? { modelAdvisory } : {}) };
+}
+
 const LLMAdvisory: FC<{ advisory: NonNullable<ApprovalDescriptor['llmAdvisory']> }> = ({ advisory }) => {
   const isSystem = advisory.source === 'system';
   const advisoryColor = isSystem ? COLOR_DANGER : advisory.approved ? COLOR_SUCCESS : COLOR_WARNING;
   const borderColor = advisoryColor;
   const headerColor = advisoryColor;
   const label = isSystem ? 'System Safety Check: BLOCKED ' : `AI Advisor: ${advisory.approved ? 'SAFE ' : 'CAUTION '}`;
+  const parsedSystemReasoning = isSystem ? parseSystemSafetyReasoning(advisory.reasoning) : null;
 
   return (
     <Box flexDirection="column" marginTop={1} paddingX={1} paddingY={0} borderStyle="round" borderColor={borderColor}>
@@ -239,9 +286,40 @@ const LLMAdvisory: FC<{ advisory: NonNullable<ApprovalDescriptor['llmAdvisory']>
         </Text>
         <Text color={COLOR_TEXT_MUTED}> ({isSystem ? 'automated heuristic' : advisory.model}) </Text>
       </Box>
-      <Text italic color={COLOR_TEXT_MUTED}>
-        {isSystem ? advisory.reasoning : `"${advisory.reasoning}"`}
-      </Text>
+      {parsedSystemReasoning ? (
+        <Box flexDirection="column" marginTop={1}>
+          <Text bold color={COLOR_TEXT_MUTED}>
+            Heuristic findings:
+          </Text>
+          <Box flexDirection="column" marginLeft={1}>
+            {parsedSystemReasoning.findings.map(({ level, detail }, index) => (
+              <Box key={`${level}-${detail}-${index}`}>
+                <Text color={SAFETY_FINDING_COLORS[level]} bold>
+                  {`${level}:`.padEnd(8)}
+                </Text>
+                <Text color={COLOR_TEXT_MUTED}>{detail}</Text>
+              </Box>
+            ))}
+          </Box>
+          <Box marginTop={1}>
+            <Text color={COLOR_TEXT_MUTED}>Manual approval is strictly required.</Text>
+          </Box>
+          {parsedSystemReasoning.modelAdvisory && (
+            <Box flexDirection="column" marginTop={1}>
+              <Text bold color={COLOR_TEXT_MUTED}>
+                Model advisory:
+              </Text>
+              <Text italic color={COLOR_TEXT_MUTED}>
+                {parsedSystemReasoning.modelAdvisory}
+              </Text>
+            </Box>
+          )}
+        </Box>
+      ) : (
+        <Text italic color={COLOR_TEXT_MUTED}>
+          {isSystem ? advisory.reasoning : `"${advisory.reasoning}"`}
+        </Text>
+      )}
     </Box>
   );
 };

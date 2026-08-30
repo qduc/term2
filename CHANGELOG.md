@@ -1,3 +1,24 @@
+## [0.17.0] - 2026-08-30
+
+### Features
+- Added structured NDJSON output streaming (`--json`) and `--quiet`/`--reasoning` flags for clean non-interactive execution.
+- Converted `/auto-approve` and `/resume` commands into interactive value selection menus.
+- Added automatic approval for memory mutations and safe temp/scratch directory file operations (including session-created scratch file deletions in `rm`).
+- Enhanced memory and session search with broad retrieval routing through synthesis, unambiguous pagination/omitted counts, and active-session demotion in search results.
+
+### Bug Fixes
+- Fixed Codex context compaction by invoking native `/responses/compact` instead of unsupported `context_management` payloads.
+- Fixed stale `previous_response_id` reuse on mid-session model changes by resetting chaining to prevent server 400 errors.
+- Fixed lossy chain recovery to rebuild full history rather than sending truncated deltas when an anchor is invalid.
+- Disabled the interactive `ask_user` tool in non-interactive mode.
+- Fixed temporary directory creation to be lazy, eliminating import-time filesystem side effects on core entry points.
+
+### Improvements
+- Improved readability of safety findings in command execution prompts.
+- Updated `CommandGroupSummary` failure handling color cues and diagnostics.
+
+---
+
 ## [0.16.0] - 2026-08-30
 
 ### Features

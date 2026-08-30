@@ -57,7 +57,7 @@ export type SessionClientHandle = {
 
 /** Creates the closure-bound client for one conversation session. */
 export type SessionClientFactory = {
-  create(sessionId: string, options?: { allowBackgroundShell?: boolean }): SessionClientHandle;
+  create(sessionId: string, options?: { allowBackgroundShell?: boolean; allowAskUser?: boolean }): SessionClientHandle;
 };
 
 type DisposableConversationAgentClient = ConversationAgentClient & { dispose?: () => void };
@@ -94,9 +94,10 @@ export function createOwnedSessionClientFactory(
     backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>,
     allowBackgroundShell?: boolean,
     backgroundShellOutput?: BackgroundShellOutputBundle,
+    allowAskUser?: boolean,
   ) => DisposableConversationAgentClient,
   hookLifecycle?: HookLifecyclePort,
-  defaults?: { allowBackgroundShell?: boolean },
+  defaults?: { allowBackgroundShell?: boolean; allowAskUser?: boolean },
 ): SessionClientFactory {
   return {
     create(sessionId, options) {
@@ -128,6 +129,7 @@ export function createOwnedSessionClientFactory(
       const toolLifecycle =
         hookLifecycle && hookEvents ? createToolExecutionLifecyclePort(hookLifecycle, hookEvents) : undefined;
       const allowBackgroundShell = options?.allowBackgroundShell ?? defaults?.allowBackgroundShell ?? true;
+      const allowAskUser = options?.allowAskUser ?? defaults?.allowAskUser ?? true;
       const backgroundShellRegistry = allowBackgroundShell
         ? new BackgroundShellRegistry<BackgroundShellExecutionResult>()
         : undefined;
@@ -164,6 +166,7 @@ export function createOwnedSessionClientFactory(
         backgroundShellRegistry,
         allowBackgroundShell,
         backgroundShellOutput,
+        allowAskUser,
       );
 
       let disposed = false;

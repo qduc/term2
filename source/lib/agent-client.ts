@@ -335,6 +335,7 @@ export class AgentClient {
     backgroundShellRegistry,
     backgroundShellOutput,
     allowBackgroundShell = true, // Retained for session-factory compatibility; direct execution no longer
+    allowAskUser = true,
     wrapUpOnCriticalRunBudget = false,
     // projects chained input through the legacy mode.
     continuationProjectionMode: _continuationProjectionMode = 'legacy',
@@ -373,6 +374,8 @@ export class AgentClient {
     backgroundShellOutput?: BackgroundShellOutputBundle;
     /** False for one-shot/non-interactive callers until their lifecycle is supported. */
     allowBackgroundShell?: boolean;
+    /** False for non-interactive / headless sessions where user prompts cannot be answered. */
+    allowAskUser?: boolean;
     /** Transient subagents terminate through one tool-free summary call at critical. */
     wrapUpOnCriticalRunBudget?: boolean;
     continuationProjectionMode?: ContinuationProjectionMode;
@@ -406,6 +409,7 @@ export class AgentClient {
         backgroundShellOutput: this.#backgroundShellOutput,
         shellChildRegistry: this.#shellChildRegistry,
         allowBackgroundShell,
+        allowAskUser,
         sessionBrowser: deps.sessionBrowser,
         onConfigChanged: (_changedKey?: string) => {
           // Models capture provider/settings at creation time.

@@ -785,16 +785,19 @@ it('runNonInteractive() disposes its factory-owned client after the runtime', as
 
   expect(stderr.getOutput()).toBe('');
   expect(exitCode).toBe(0);
-  expect(createOptions).toEqual([{ allowBackgroundShell: false }]);
+  expect(createOptions).toEqual([{ allowBackgroundShell: false, allowAskUser: false }]);
   expect(await toolInterceptors[0]?.('shell', { command: 'safe', background: true })).toBe(
     'Error: Background shell execution is unavailable in non-interactive mode.',
+  );
+  expect(await toolInterceptors[0]?.('ask_user', { questions: [{ question: 'why?' }] })).toBe(
+    'Error: ask_user is unavailable in non-interactive mode.',
   );
   expect(await toolInterceptors[0]?.('shell', { command: 'safe' })).toBeNull();
   expect(removedInterceptors).toBe(1);
   expect(disposed).toEqual(['client']);
 });
 
-it('runNonInteractive() blocks background shell execution for caller-owned clients only', async () => {
+it('runNonInteractive() blocks background shell and ask_user execution for caller-owned clients only', async () => {
   const toolInterceptors: Array<(name: string, params: unknown) => Promise<string | null>> = [];
   let removedInterceptors = 0;
   const stdout = createStringWritable();
@@ -839,6 +842,9 @@ it('runNonInteractive() blocks background shell execution for caller-owned clien
   );
   expect(await toolInterceptors[0]?.('run_subagent_async', { role: 'explorer', task: 'search' })).toBe(
     'Error: Asynchronous subagent execution is unavailable in non-interactive mode. Use synchronous run_subagent instead.',
+  );
+  expect(await toolInterceptors[0]?.('ask_user', { questions: [{ question: 'why?' }] })).toBe(
+    'Error: ask_user is unavailable in non-interactive mode.',
   );
   expect(await toolInterceptors[0]?.('shell', { command: 'safe' })).toBeNull();
   expect(removedInterceptors).toBe(1);

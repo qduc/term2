@@ -209,7 +209,7 @@ export async function runNonInteractive(
   const clientFactory =
     config.sessionClientFactory ?? createCallerOwnedSessionClientFactory(config.agentClient!, config.toolOwnership!);
   const sessionId = createNonInteractiveSessionId();
-  const clientHandle = clientFactory.create(sessionId, { allowBackgroundShell: false });
+  const clientHandle = clientFactory.create(sessionId, { allowBackgroundShell: false, allowAskUser: false });
   const removeBackgroundShellInterceptor = clientHandle.agentClient.addToolInterceptor(async (name, params) => {
     if (
       name === 'shell' &&
@@ -222,6 +222,9 @@ export async function runNonInteractive(
     }
     if (name === 'run_subagent_async') {
       return 'Error: Asynchronous subagent execution is unavailable in non-interactive mode. Use synchronous run_subagent instead.';
+    }
+    if (name === 'ask_user') {
+      return 'Error: ask_user is unavailable in non-interactive mode.';
     }
     return null;
   });

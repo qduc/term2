@@ -114,6 +114,35 @@ it('withholds the background shell capability when the session disables it', () 
   handle.dispose();
 });
 
+it('forwards allowAskUser option to client creation callback', () => {
+  let receivedAllowAskUser: boolean | undefined;
+  const factory = createOwnedSessionClientFactory(
+    createMockSettingsService(),
+    (
+      _sessionId,
+      _ownership,
+      _capability,
+      _access,
+      _mode,
+      _continuity,
+      _capture,
+      _lifecycle,
+      _backgroundShellRegistry,
+      _allowBackgroundShell,
+      _backgroundShellOutput,
+      allowAskUser,
+    ) => {
+      receivedAllowAskUser = allowAskUser;
+      return client();
+    },
+  );
+
+  const handle = factory.create('non-interactive', { allowAskUser: false });
+
+  expect(receivedAllowAskUser).toBe(false);
+  handle.dispose();
+});
+
 it('never disposes a caller-owned compatibility client', () => {
   const callerOwned = client();
   const toolOwnership = new ToolOwnershipRegistry();

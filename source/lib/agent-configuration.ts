@@ -46,6 +46,8 @@ export interface AgentConfigurationDeps {
   shellChildRegistry?: ShellChildRegistry;
   /** False for one-shot/non-interactive callers until their lifecycle is supported. */
   allowBackgroundShell?: boolean;
+  /** False for non-interactive / headless sessions where user prompts cannot be answered. */
+  allowAskUser?: boolean;
   /** Explicit interactive-root-only browser capability. */
   sessionBrowser?: SessionBrowser;
 }
@@ -77,6 +79,7 @@ export class AgentConfiguration implements AgentSource {
   #backgroundShellOutput?: BackgroundShellOutputBundle;
   #shellChildRegistry?: ShellChildRegistry;
   #allowBackgroundShell: boolean;
+  #allowAskUser: boolean;
   #sessionBrowser?: SessionBrowser;
   #unsubscribeSettings: (() => void) | null = null;
   #isDisposed = false;
@@ -106,6 +109,7 @@ export class AgentConfiguration implements AgentSource {
     this.#backgroundShellOutput = deps.backgroundShellOutput;
     this.#shellChildRegistry = deps.shellChildRegistry;
     this.#allowBackgroundShell = deps.allowBackgroundShell ?? true;
+    this.#allowAskUser = deps.allowAskUser ?? true;
     this.#sessionBrowser = deps.sessionBrowser;
 
     // Create editor
@@ -205,10 +209,12 @@ export class AgentConfiguration implements AgentSource {
       getSubagentStatus: (...args) => this.#getSubagentBridge()!.getSubagentStatus(...args),
       sendSubagentMessage: (...args) => this.#getSubagentBridge()!.sendSubagentMessage(...args),
       cancelSubagentRun: (...args) => this.#getSubagentBridge()!.cancelSubagentRun(...args),
-      getAskUserAnswer: (callId?: string) => {
-        if (!callId) return undefined;
-        return this.#askUserAnswerStore.consume(callId);
-      },
+      getAskUserAnswer: this.#allowAskUser
+        ? (callId?: string) => {
+            if (!callId) return undefined;
+            return this.#askUserAnswerStore.consume(callId);
+          }
+        : undefined,
       checkToolInterceptors: (name, params, toolCallId) =>
         this.#toolInterceptorRegistry.check(name, params, toolCallId),
       skillsService: this.#skillsService,
@@ -225,6 +231,7 @@ export class AgentConfiguration implements AgentSource {
       backgroundShellOutput: this.#backgroundShellOutput,
       shellChildRegistry: this.#shellChildRegistry,
       allowBackgroundShell: this.#allowBackgroundShell,
+      allowAskUser: this.#allowAskUser,
       sessionBrowser: this.#sessionBrowser,
     };
   }

@@ -341,6 +341,18 @@ it('getAgentDefinition omits ask_user when getAskUserAnswer is absent', () => {
   expect(toolNames.includes('ask_user')).toBe(false);
 });
 
+it('getAgentDefinition omits ask_user when allowAskUser is false even if getAskUserAnswer is provided', () => {
+  const definition = getAgentDefinition({
+    settingsService: createMockSettingsService({ 'agent.model': 'gpt-4o' }),
+    loggingService: mockLogger,
+    getAskUserAnswer: () => 'test answer',
+    allowAskUser: false,
+  });
+
+  const toolNames = definition.tools.map((tool) => tool.name);
+  expect(toolNames.includes('ask_user')).toBe(false);
+});
+
 it('getAgentDefinition exposes the cache-stable delegation surface in orchestrator mode', () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',

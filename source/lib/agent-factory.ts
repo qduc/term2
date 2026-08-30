@@ -45,7 +45,7 @@ export interface AgentFactoryDeps {
   getSubagentStatus?: (params: { runId?: string }, context?: unknown, details?: unknown) => any;
   sendSubagentMessage: (params: { target: string; message: string; reply_to?: string }) => any;
   cancelSubagentRun: (params: { target: string }) => any;
-  getAskUserAnswer: (callId?: string) => string | undefined;
+  getAskUserAnswer?: (callId?: string) => string | undefined;
   checkToolInterceptors: (name: string, params: unknown, toolCallId?: string) => Promise<string | null>;
   skillsService?: SkillsService;
   /** Optional lazy bridge to the production one-shot agent runtime. */
@@ -61,6 +61,8 @@ export interface AgentFactoryDeps {
   shellChildRegistry?: ShellChildRegistry;
   /** False for one-shot/non-interactive callers until their lifecycle is supported. */
   allowBackgroundShell?: boolean;
+  /** False for non-interactive / headless sessions where user prompts cannot be answered. */
+  allowAskUser?: boolean;
   /** Explicit interactive-root-only browser capability. */
   sessionBrowser?: SessionBrowser;
 }
@@ -394,6 +396,7 @@ export function buildAgent(
       backgroundShellOutput: deps.backgroundShellOutput,
       shellChildRegistry: deps.shellChildRegistry,
       allowBackgroundShell: deps.allowBackgroundShell,
+      allowAskUser: deps.allowAskUser,
       sessionBrowser: deps.sessionBrowser,
     },
     resolvedModel,

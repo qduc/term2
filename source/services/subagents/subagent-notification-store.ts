@@ -1,4 +1,5 @@
 import type {
+  BackgroundCheckInDueEvent,
   ConversationEvent,
   SubagentCommandMessageEvent,
   SubagentToolStartedEvent,
@@ -99,9 +100,7 @@ export interface BackgroundCheckInNotification {
   target: { kind: 'subagent'; id: string } | { kind: 'shell'; id: string };
   checkInIndex: number;
   elapsedMs: number;
-  details:
-    | { kind: 'subagent'; id: string; name?: string; role: string; task: string }
-    | { kind: 'shell'; id: string; command: string };
+  details: BackgroundCheckInDueEvent['details'];
   recordedAt: number;
 }
 

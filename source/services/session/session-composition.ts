@@ -519,6 +519,8 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   const backgroundCheckInScheduler = new BackgroundCheckInScheduler({
     getRunningTasks: () => notificationStore.getTaskSnapshot(),
     emit: recordBackgroundEvent,
+    getSubagentStatus: (runId) => agentClient.getBackgroundSubagentStatus?.(runId),
+    getShellJob: (jobId) => agentClient.getBackgroundShellJob?.(jobId),
     getSettings: () => ({
       enabled: settingsService?.get('agent.backgroundCheckIn.enabled') ?? true,
       intervalMs: settingsService?.get('agent.backgroundCheckIn.intervalMs') ?? 300_000,

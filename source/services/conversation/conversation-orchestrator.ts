@@ -202,12 +202,50 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
     const noun = checkIns.length === 1 ? 'task' : 'tasks';
     const entries = checkIns.map((notification) => {
       const { details } = notification;
-      const label =
-        details.kind === 'subagent'
-          ? `background subagent ${details.name ?? details.id} | role: ${details.role} | task: ${details.task}`
-          : `background shell | jobId: ${details.id} | command: ${details.command}`;
       const elapsedSeconds = Math.round(notification.elapsedMs / 1000);
-      return `- ${label}\n  still running, elapsed ${elapsedSeconds}s, check-in #${notification.checkInIndex}`;
+      if (details.kind === 'subagent') {
+        const nameLabel = details.name ? `${details.name} (${details.id})` : details.id;
+        const header = `- background subagent ${nameLabel} | role: ${details.role} | task: ${details.task}`;
+        const lines = [header];
+
+        const activityParts: string[] = [];
+        if (details.activityState) {
+          if (details.activityState === 'waiting' && details.waitingReason) {
+            activityParts.push(`waiting (${details.waitingReason})`);
+          } else {
+            activityParts.push(details.activityState);
+          }
+        }
+        const activityDesc = activityParts.length > 0 ? `status: ${activityParts.join(', ')} | ` : '';
+        lines.push(
+          `  ${activityDesc}still running, elapsed ${elapsedSeconds}s, check-in #${notification.checkInIndex}`,
+        );
+
+        if (details.latestNarrative) {
+          lines.push(`  latest narrative: "${details.latestNarrative}"`);
+        }
+
+        if (details.toolCounts && Object.keys(details.toolCounts).length > 0) {
+          const countsStr = Object.entries(details.toolCounts)
+            .map(([tool, count]) => `${tool} (${count})`)
+            .join(', ');
+          lines.push(`  tools used: ${countsStr}`);
+        }
+
+        if (details.lastToolName) {
+          lines.push(`  last tool: ${details.lastToolName}`);
+        } else if (details.lastObservation?.kind === 'tool_started') {
+          lines.push(`  last tool: ${details.lastObservation.toolName} [running]`);
+        }
+
+        return lines.join('\n');
+      }
+
+      const header = `- background shell | jobId: ${details.id} | command: ${details.command}`;
+      const lines = [header];
+      const statusDesc = details.status ? `status: ${details.status} | ` : '';
+      lines.push(`  ${statusDesc}still running, elapsed ${elapsedSeconds}s, check-in #${notification.checkInIndex}`);
+      return lines.join('\n');
     });
     sections.push(
       [

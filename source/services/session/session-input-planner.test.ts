@@ -108,6 +108,99 @@ it('uses self-contained full history for a partial parallel tool batch', () => {
   expect(continuity.previousResponseId).toBe(null);
 });
 
+// A held previous_response_id was minted by whatever model produced it. If the
+// user switches models mid-conversation, every other chaining check still
+// passes locally, but the provider 400s ("Invalid previous_response_id")
+// because the anchor does not belong to the model about to be called. This
+// reproduces the retry.conversation_state pattern seen in production logs
+// after a model switch to gpt-5.6-sol.
+it('drops chaining and uses full history after the configured model changes since the last response', () => {
+  const continuity = new ProviderContinuity();
+  continuity.update('resp-from-luna');
+  let currentModel = 'gpt-5.6-luna';
+  const planner = new SessionInputPlanner({
+    agentClient: { getProvider: () => 'openai', supportsConversationChaining: () => true } as any,
+    toolTracker: { getReconciledHistory: () => [{ role: 'user', type: 'message', content: 'first' }] } as any,
+    providerContinuity: continuity,
+    settingsService: { get: (key: string) => (key === 'agent.model' ? currentModel : undefined) } as any,
+  });
+
+  // Turn 1 dispatches to luna and chains normally.
+  const first = planner.build({ text: 'first' }, { includeTurn: false, pendingModeNotice: null });
+  expect(first.inputSurgeKind).toBe('delta');
+  planner.recordDispatchModel();
+
+  // The user switches models before turn 2. The stored anchor still belongs
+  // to luna, so it must not be reused for sol.
+  currentModel = 'gpt-5.6-sol';
+  const second = planner.build({ text: 'second' }, { includeTurn: true, pendingModeNotice: null });
+
+  expect(second.inputSurgeKind).toBe('full_history');
+  expect(Array.isArray(second.streamInput)).toBe(true);
+  // previousResponseId itself is untouched -- the switch just isn't trusted
+  // for this turn's request, not treated as a hard chain break.
+  expect(continuity.previousResponseId).toBe('resp-from-luna');
+});
+
+it('keeps chaining when the configured model is unchanged since the last dispatch', () => {
+  const continuity = new ProviderContinuity();
+  continuity.update('resp-from-sol');
+  const planner = new SessionInputPlanner({
+    agentClient: { getProvider: () => 'openai', supportsConversationChaining: () => true } as any,
+    toolTracker: { getReconciledHistory: () => [{ role: 'user', type: 'message', content: 'first' }] } as any,
+    providerContinuity: continuity,
+    settingsService: { get: (key: string) => (key === 'agent.model' ? 'gpt-5.6-sol' : undefined) } as any,
+  });
+
+  planner.build({ text: 'first' }, { includeTurn: false, pendingModeNotice: null });
+  planner.recordDispatchModel();
+
+  const second = planner.build({ text: 'second' }, { includeTurn: true, pendingModeNotice: null });
+
+  expect(second.inputSurgeKind).toBe('delta');
+});
+
+it('does not treat the first turn as a model switch when no dispatch has been recorded yet', () => {
+  const continuity = new ProviderContinuity();
+  continuity.update('resp-from-somewhere-else');
+  const planner = new SessionInputPlanner({
+    agentClient: { getProvider: () => 'openai', supportsConversationChaining: () => true } as any,
+    toolTracker: { getReconciledHistory: () => [{ role: 'user', type: 'message', content: 'first' }] } as any,
+    providerContinuity: continuity,
+    settingsService: { get: (key: string) => (key === 'agent.model' ? 'gpt-5.6-sol' : undefined) } as any,
+  });
+
+  const plan = planner.build({ text: 'first' }, { includeTurn: true, pendingModeNotice: null });
+
+  expect(plan.inputSurgeKind).toBe('delta');
+});
+
+// previewInputSurge must stay side-effect free: it calls build() internally
+// without dispatching, so it must never advance the model-switch tracker.
+it('previewInputSurge does not record a dispatch model', () => {
+  const continuity = new ProviderContinuity();
+  continuity.update('resp-from-luna');
+  let currentModel = 'gpt-5.6-luna';
+  const planner = new SessionInputPlanner({
+    agentClient: { getProvider: () => 'openai', supportsConversationChaining: () => true } as any,
+    toolTracker: { getReconciledHistory: () => [{ role: 'user', type: 'message', content: 'first' }] } as any,
+    providerContinuity: continuity,
+    settingsService: { get: (key: string) => (key === 'agent.model' ? currentModel : undefined) } as any,
+  });
+
+  planner.build({ text: 'first' }, { includeTurn: false, pendingModeNotice: null });
+  planner.recordDispatchModel();
+
+  currentModel = 'gpt-5.6-sol';
+  planner.previewInputSurge('preview only');
+
+  // The preview ran under sol, but never called recordDispatchModel, so the
+  // tracker still reflects the real last dispatch (luna) -- and thus still
+  // detects the switch on the next real build.
+  const real = planner.build({ text: 'second' }, { includeTurn: true, pendingModeNotice: null });
+  expect(real.inputSurgeKind).toBe('full_history');
+});
+
 it('combineHistoryAndDraftBytes matches JSON.stringify of history-plus-draft', () => {
   const history = [
     { role: 'user', type: 'message', content: 'prior' },

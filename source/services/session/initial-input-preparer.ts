@@ -39,6 +39,7 @@ export class InitialInputPreparer {
       replayFromHistory: options?.replayFromHistory,
     });
     attempt.attachInput(plan);
+    this.deps.inputPlanner.recordDispatchModel();
 
     const surgeDecision = this.deps.inputPlanner.inspectForSurge(attempt.streamInput, attempt.inputMode!);
     const approvedSurge =

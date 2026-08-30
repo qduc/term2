@@ -36,6 +36,7 @@ it('adds the user turn once and attaches the planned input', () => {
         effectiveTurn: attempt.turn,
       }),
       inspectForSurge: () => ({ action: 'allow' }),
+      recordDispatchModel: () => {},
     } as any,
     logger: { warn: () => {}, getCorrelationId: () => undefined } as any,
     sessionId: 'session-1',
@@ -47,6 +48,33 @@ it('adds the user turn once and attaches the planned input', () => {
   expect(added.length).toBe(1);
   expect(attempt.streamInput).toEqual(['history']);
   expect(attempt.inputMode).toBe('full_history');
+});
+
+it('records the dispatch model after attaching the built input', () => {
+  let recorded = 0;
+  const attempt = createAttempt();
+  const preparer = new InitialInputPreparer({
+    conversationStore: { addUserTurn: () => {} } as any,
+    generationGuard: { isCurrent: () => true } as any,
+    inputPlanner: {
+      build: () => ({
+        streamInput: ['history'],
+        inputSurgeKind: 'full_history',
+        effectiveTurn: attempt.turn,
+      }),
+      inspectForSurge: () => ({ action: 'allow' }),
+      recordDispatchModel: () => {
+        recorded++;
+      },
+    } as any,
+    logger: { warn: () => {}, getCorrelationId: () => undefined } as any,
+    sessionId: 'session-1',
+    state: { pendingModeNotice: null } as any,
+  });
+
+  preparer.prepare(attempt, false);
+
+  expect(recorded).toBe(1);
 });
 
 it('rolls back an inserted user turn when the surge guard blocks', () => {
@@ -72,6 +100,7 @@ it('rolls back an inserted user turn when the surge guard blocks', () => {
         stats: {},
         previousStats: {},
       }),
+      recordDispatchModel: () => {},
     } as any,
     logger: { warn: () => {}, getCorrelationId: () => 'trace-1' } as any,
     sessionId: 'session-1',
@@ -109,6 +138,7 @@ it('does not roll back a user turn after the generation becomes stale', () => {
         stats: {},
         previousStats: {},
       }),
+      recordDispatchModel: () => {},
     } as any,
     logger: { warn: () => {}, getCorrelationId: () => undefined } as any,
     sessionId: 'session-1',
@@ -130,6 +160,7 @@ it('only admits a blocked request with an issued approval for its exact nested i
     inputPlanner: {
       build: () => ({ streamInput: 'input', inputSurgeKind: 'delta', effectiveTurn: attempt.turn }),
       inspectForSurge: () => ({ action: 'block', reason: 'Too large', stats: {}, previousStats: {} }),
+      recordDispatchModel: () => {},
     } as any,
     logger: { warn: () => {}, getCorrelationId: () => undefined } as any,
     sessionId: 'session-1',
@@ -160,6 +191,7 @@ it('rejects a caller-forged input-surge approval at the execution admission boun
     inputPlanner: {
       build: () => ({ streamInput: 'input', inputSurgeKind: 'delta', effectiveTurn: attempt.turn }),
       inspectForSurge: () => ({ action: 'block', reason: 'Too large', stats: {}, previousStats: {} }),
+      recordDispatchModel: () => {},
     } as any,
     logger: { warn: () => {}, getCorrelationId: () => undefined } as any,
     sessionId: 'session-1',
@@ -190,6 +222,7 @@ it('binds approval to submitted content before session-owned mode-notice augment
     inputPlanner: {
       build: () => ({ streamInput: 'input', inputSurgeKind: 'delta', effectiveTurn: attempt.turn }),
       inspectForSurge: () => ({ action: 'block', reason: 'Too large', stats: {}, previousStats: {} }),
+      recordDispatchModel: () => {},
     } as any,
     logger: { warn: () => {}, getCorrelationId: () => undefined } as any,
     sessionId: 'session-1',

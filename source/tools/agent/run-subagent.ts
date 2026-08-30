@@ -23,13 +23,13 @@ function getRunSubagentDescription(backgroundEnabled: boolean): string {
     '(When to reach for this vs. doing it yourself is covered by the delegation guidance in your system instructions.)\n\n' +
     (backgroundEnabled
       ? 'Background launches return immediately; do not duplicate them or call get_subagent_result until the completion notification arrives.\n\n'
-      : 'Independent foreground explorer and librarian calls in the same model response may run in parallel; keep worker calls and dependent tasks serial.\n\n') +
+      : 'Independent foreground explorer calls in the same model response may run in parallel; keep worker calls and dependent tasks serial.\n\n') +
     '## Task Requirements\n' +
     'Give the task one clear objective, one ownership boundary, and one concrete done condition. Include the task-specific scope, non-discoverable parent findings or decisions, constraints, deliverable or acceptance criteria, and validation when applicable. ' +
     'Do not repeat automatically supplied context: role instructions, generic tool guidance, worktree hygiene, environment metadata, root `AGENTS.md`, or skills catalog. ' +
     'The subagent does not see your conversation or reasoning. ' +
     "For explorer, request concrete evidence to collect for a bounded question and choose breadth or depth, never both: map one defined surface shallowly or trace one narrow seam thoroughly. Do not ask explorer to diagnose, recommend a fix, choose an approach, or own the user's complete investigation, review, diagnosis, or planning deliverable. " +
-    'For worker, assign one cohesive implementation unit. For mentor, ask one decision or challenge question. For librarian, assign one retrieval objective or memory-maintenance topic boundary.\n\n' +
+    'For worker, assign one cohesive implementation unit. For mentor, ask one decision or challenge question.\n\n' +
     'For isolated worker edits, create a git worktree under the workspace root first ' +
     '(`git worktree add .worktrees/<slug> -b <slug>`), then pass `worktree` as that directory basename or branch name. ' +
     '`worktree` is worker-only; it pins the child into that existing tree without re-rooting this session.\n\n' +
@@ -39,9 +39,9 @@ function getRunSubagentDescription(backgroundEnabled: boolean): string {
   );
 }
 
-const FOREGROUND_ROLES = ['explorer', 'worker', 'librarian'] as const;
-const BACKGROUND_ROLES = ['explorer', 'worker', 'mentor', 'librarian'] as const;
-const ALL_ROLES = ['explorer', 'worker', 'mentor', 'librarian'] as const;
+const FOREGROUND_ROLES = ['explorer', 'worker'] as const;
+const BACKGROUND_ROLES = ['explorer', 'worker', 'mentor'] as const;
+const ALL_ROLES = ['explorer', 'worker', 'mentor'] as const;
 const SUBAGENT_TASK_DESCRIPTION =
   'Complete description of one bounded delegated unit with one objective, ownership boundary, and done condition. For explorer, specify concrete evidence to collect and choose breadth or depth, never both; do not delegate diagnosis, recommendations, or the parent task itself.';
 
@@ -374,7 +374,7 @@ export function createRunSubagentToolDefinition(
     parameters,
     parallelSafe: (params: unknown) => {
       const candidate = params as Partial<RunSubagentParams>;
-      return candidate.execution === 'foreground' && (candidate.role === 'explorer' || candidate.role === 'librarian');
+      return candidate.execution === 'foreground' && candidate.role === 'explorer';
     },
     needsApproval: () => false,
     execute: async (rawParams: unknown, context, details) => {

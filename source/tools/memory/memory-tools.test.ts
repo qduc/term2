@@ -108,6 +108,47 @@ it('exposes memory operations with structured responses', async () => {
   ).toBe(true);
 });
 
+it('synthesizes a de-duplicated evidence packet across several retrieval angles', async () => {
+  const first = { ...memory, id: 'first', title: 'First' };
+  const second = { ...memory, id: 'second', title: 'Second' };
+  const global: MemoryStore = {
+    ...store,
+    search: async (query) =>
+      query === 'endpoint'
+        ? [
+            { memory: first, matchedFields: ['title'], available: true, score: 15 },
+            { memory: second, matchedFields: ['content'], available: true, score: 2, content: second.content },
+          ]
+        : [{ memory: first, matchedFields: ['content'], available: true, score: 2, content: first.content }],
+    get: async (id) => (id === first.id ? first : second),
+  };
+  const tools = createMemoryToolDefinitions(
+    { global, project: { ...store, search: async () => [] } },
+    { includeSynthesize: true },
+  );
+
+  const synthesize = readTool(tools, 'memory_synthesize');
+  const result = JSON.parse(
+    (await synthesize.execute({
+      objective: 'recover the credit contract',
+      queries: ['endpoint', 'lifecycle'],
+    })) as string,
+  );
+
+  expect(result).toMatchObject({
+    objective: 'recover the credit contract',
+    memories: [
+      { scope: 'global', memory: first, matchedQueries: ['endpoint', 'lifecycle'] },
+      { scope: 'global', memory: second, matchedQueries: ['endpoint'] },
+    ],
+    omittedIds: [],
+    unavailableIds: [],
+  });
+  expect(result.charsUsed).toBe(JSON.stringify(result).length);
+  expect(synthesize.parameters.safeParse({ objective: 'x', queries: ['one'] }).success).toBe(false);
+  expect(synthesize.parameters.safeParse({ objective: 'x', queries: ['one', 'two'] }).success).toBe(true);
+});
+
 it('requires scope only on write tools', async () => {
   const tools = createMemoryToolDefinitions(store);
   const [list, get, search, retrieve, create, update, remove] = tools;

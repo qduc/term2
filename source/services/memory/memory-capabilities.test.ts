@@ -30,16 +30,17 @@ const writeTools = [
   'memory_update',
   'memory_delete',
 ];
+const mainWriteTools = [...writeTools.slice(0, 4), 'memory_synthesize', ...writeTools.slice(4)];
 const readTools = ['memory_list', 'memory_get', 'memory_search', 'memory_retrieve'];
 const mutatingTools = new Set(['memory_create', 'memory_update', 'memory_delete']);
 
 describe('MemoryCapabilityBuilder', () => {
   it.each([
-    ['default', { kind: 'main' as const }, 'write', writeTools],
-    ['plan', { kind: 'main' as const }, 'write', writeTools],
-    ['lite', { kind: 'main' as const }, 'write', writeTools],
-    ['main-agent-mentor', { kind: 'main' as const }, 'write', writeTools],
-    ['orchestrator', { kind: 'main' as const }, 'write', writeTools],
+    ['default', { kind: 'main' as const }, 'write', mainWriteTools],
+    ['plan', { kind: 'main' as const }, 'write', mainWriteTools],
+    ['lite', { kind: 'main' as const }, 'write', mainWriteTools],
+    ['main-agent-mentor', { kind: 'main' as const }, 'write', mainWriteTools],
+    ['orchestrator', { kind: 'main' as const }, 'write', mainWriteTools],
     ['explorer', { kind: 'subagent' as const, role: 'explorer' }, 'read', readTools],
     ['worker', { kind: 'subagent' as const, role: 'worker' }, 'read', readTools],
     ['mentor', { kind: 'subagent' as const, role: 'mentor' }, 'none', []],
@@ -147,7 +148,7 @@ describe('MemoryCapabilityBuilder', () => {
       kind: 'main',
     });
 
-    expect(capability.tools.map((tool) => tool.name)).toEqual(writeTools);
+    expect(capability.tools.map((tool) => tool.name)).toEqual(mainWriteTools);
     expect(capability.context).toContain('Inject this for the main agent.');
   });
 
@@ -206,5 +207,15 @@ describe('MemoryCapabilityBuilder', () => {
     expect(capability.tools.map((tool) => tool.name)).toEqual(writeTools);
     expect(capability.context).toBe('');
     expect(capability.guidance).toContain('memory librarian');
+  });
+
+  it('gives the root a broad synthesis operation without exposing it recursively to the librarian', () => {
+    const settings = createMockSettingsService();
+    const main = new MemoryCapabilityBuilder(settings).build({ kind: 'main' });
+    const librarian = new MemoryCapabilityBuilder(settings).build({ kind: 'subagent', role: 'librarian' });
+
+    expect(main.tools.map((tool) => tool.name)).toContain('memory_synthesize');
+    expect(librarian.tools.map((tool) => tool.name)).not.toContain('memory_synthesize');
+    expect(main.guidance).toContain('Use memory_synthesize when the task depends on several memories');
   });
 });

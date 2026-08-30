@@ -187,6 +187,59 @@ If that routing candidate still produces zero natural invocations, removal or
 replacement with a deterministic `memory_synthesize` operation would be better
 supported than another prompt-only iteration.
 
+## Follow-up experiment — deterministic synthesis routing
+
+The next experiment tested the concrete replacement suggested above: expose a
+root-only `memory_synthesize` operation that accepts 2–5 search angles,
+de-duplicates the loaded memories, and returns one bounded evidence packet.
+The candidate also removed `librarian` from the root's advertised subagent
+schemas. The incumbent retained the existing root memory tools and Librarian
+role. Both arms used the same five-memory corpus and `openrouter/openai/gpt-5.4-mini`.
+
+### Isolated real-model retrieval run
+
+Five runs per arm used the production session/runtime path and the same
+Grok-credit decision brief. The retrieval oracle required all load-bearing
+endpoint, wire-shape, UI, lifecycle, failure, and superseded-design facts.
+
+| Metric | Incumbent | Synthesis candidate |
+| --- | ---: | ---: |
+| Retrieval-oracle score | 10/10 in 5/5 | 10/10 in 5/5 |
+| Runs invoking `memory_synthesize` | 0/5 | 4/5 |
+| Runs using direct `memory_retrieve` | 5/5 | 3/5 |
+| Mean model requests | 2.6 | 2.8 |
+| Mean wall time | 7.0 s | 6.4 s |
+| Mean total wire tokens | 31,315 | 31,966 |
+
+The candidate therefore changed the observed routing behavior rather than only
+changing prose: broad retrieval was usually expressed as one synthesis call,
+while quality remained tied. The small token difference is not material at this
+sample size.
+
+### End-to-end coding control
+
+One paired run used `codex/gpt-5.6-luna` on the real `r-grok-credit-meter`
+history-free task, with the same prompt and memory fixture. The incumbent took
+292 seconds and the synthesis candidate 449 seconds. Both passed typecheck and
+both failed the same hidden evaluator assertion: the meter showed `Credits 29%`
+but omitted the required `· reset 08/24` text. The candidate did invoke
+`memory_synthesize`; it did not improve the coding oracle, but it also did not
+regress it. The run is evidence for routing, not evidence of a coding-quality
+gain. A parallel OpenRouter smoke run failed before editing in both arms when
+the model repeatedly supplied an invalid patch-tool shape; it is excluded from
+the comparison.
+
+### Follow-up decision
+
+Decision: **promote the deterministic synthesis affordance as the routing
+candidate; do not claim that it improves implementation quality.** It met the
+primary invocation criterion (4/5 versus 0/5), tied the retrieval oracle, and
+preserved the paired coding result. This is a replacement of the rarely invoked
+Librarian entry point, not an improvement to the Librarian role prompt itself.
+Keep the old role implementation available for direct/internal callers until a
+separate cleanup decision removes it completely. The candidate implementation
+and its real-run harness are preserved on the `librarian-routing` branch.
+
 ## Reproduction assets
 
 - `task-prompt.txt` — natural coding prompt
@@ -196,6 +249,8 @@ supported than another prompt-only iteration.
 - `retrieval-rubric.md` — deterministic 10-point retrieval oracle
 - `scripts/experiments/run-librarian-benchmark.mjs` — direct production-runner
   harness used for the isolated role arms
+- `scripts/experiments/run-librarian-routing-benchmark.mjs` — production
+  session/runtime harness used for the routing comparison
 
 Ephemeral raw workspaces and provider traces were written under
 `/tmp/librarian-bench-r-grok-credit-meter` and

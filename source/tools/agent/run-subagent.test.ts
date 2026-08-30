@@ -32,10 +32,9 @@ it('describes explorer tasks as evidence collection rather than delegated reason
   expect(tool.description).toContain('breadth or depth, never both');
   expect(tool.description).toContain('one cohesive implementation unit');
   expect(tool.description).toContain('one decision or challenge question');
-  expect(tool.description).toContain('one retrieval objective or memory-maintenance topic boundary');
   expect(tool.description).toContain('Do not ask explorer to diagnose, recommend a fix, choose an approach');
   expect(tool.description).toContain(
-    'Independent foreground explorer and librarian calls in the same model response may run in parallel',
+    'Independent foreground explorer calls in the same model response may run in parallel',
   );
   expect(tool.description).not.toContain('when they do not use a worktree');
   expect(roles).toContain('evidence collection');
@@ -43,7 +42,7 @@ it('describes explorer tasks as evidence collection rather than delegated reason
   expect(roles).not.toContain('answering codebase questions');
 });
 
-it('marks foreground explorer and librarian parallel-safe regardless of a worktree placeholder', () => {
+it('marks foreground explorer parallel-safe regardless of a worktree placeholder', () => {
   const tool = createRunSubagentToolDefinition(async () => makeResult());
   expect(typeof tool.parallelSafe).toBe('function');
   const parallelSafe = tool.parallelSafe as (params: unknown) => boolean;
@@ -51,7 +50,7 @@ it('marks foreground explorer and librarian parallel-safe regardless of a worktr
   expect(parallelSafe({ execution: 'foreground', role: 'explorer', task: 'inspect' })).toBe(true);
   expect(parallelSafe({ execution: 'foreground', role: 'explorer', task: 'inspect', worktree: null })).toBe(true);
   expect(parallelSafe({ execution: 'foreground', role: 'explorer', task: 'inspect', worktree: '' })).toBe(true);
-  expect(parallelSafe({ execution: 'foreground', role: 'librarian', task: 'lookup', worktree: null })).toBe(true);
+  expect(parallelSafe({ execution: 'foreground', role: 'librarian', task: 'lookup', worktree: null })).toBe(false);
   expect(parallelSafe({ execution: 'foreground', role: 'worker', task: 'edit' })).toBe(false);
   expect(parallelSafe({ execution: 'background', role: 'explorer', task: 'inspect' })).toBe(false);
 });
@@ -227,9 +226,12 @@ it('schema requires role and task', () => {
 it('schema accepts delegatable roles but hides mentor behind ask_mentor', () => {
   const tool = createRunSubagentToolDefinition(async () => makeResult());
 
-  for (const role of ['explorer', 'worker', 'librarian']) {
+  for (const role of ['explorer', 'worker']) {
     expect(tool.parameters.safeParse({ execution: 'foreground', role, task: 'do work' }).success).toBe(true);
   }
+  expect(tool.parameters.safeParse({ execution: 'foreground', role: 'librarian', task: 'do work' }).success).toBe(
+    false,
+  );
   expect(tool.parameters.safeParse({ execution: 'foreground', role: 'mentor', task: 'do work' }).success).toBe(false);
   expect(tool.parameters.safeParse({ execution: 'foreground', role: 'custom', task: 'do work' }).success).toBe(false);
 });

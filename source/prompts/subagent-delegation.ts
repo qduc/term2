@@ -7,7 +7,6 @@ import { getSubagentsRolesSection } from '../tools/agent/run-subagent.js';
  */
 export function getSubagentDelegationAddendum({
   orchestratorMode = false,
-  memoryEnabled = true,
   foregroundEnabled = true,
   backgroundEnabled = false,
   controlsEnabled = false,
@@ -36,9 +35,7 @@ ${
   backgroundEnabled
     ? '- About to commit to a non-trivial plan or tricky debugging direction and want it pressure-tested → `mentor`.\n'
     : ''
-}${
-    memoryEnabled ? '- Need relevant persistent-memory context or memory maintenance → `librarian`.\n' : ''
-  }- Have a cohesive, separable implementation or review unit with a checkable done condition → \`worker\`.
+}- Have a cohesive, separable implementation or review unit with a checkable done condition → \`worker\`.
 
 Explorer is an evidence collector, not a reasoning delegate. Ask it to locate and organize concrete facts, files, symbols, logs, tests, or sources for a bounded question. Do not pass the user's entire investigation, diagnosis, review, or planning task to explorer. You retain responsibility for hypotheses, causal analysis, judgments, and recommendations.${
     orchestratorMode
@@ -54,8 +51,8 @@ Otherwise, just do it yourself — especially when the task needs mid-flight cou
     ? `**Background execution rules:**
 - A returned handle with \`status: "running"\` means delegation succeeded. Do not duplicate or independently perform the delegated unit.
 - Do NOT call \`get_subagent_result\` immediately after a background launch. Active runs are refused rather than awaited. End the current turn and wait for the completion notification, which inlines the full result so you can continue directly.
-- Fresh background runs support explorer, worker, mentor, and librarian. They persist across ordinary parent-turn completion in process memory until the 30-minute sliding TTL expires or the 50-session cap evicts them.
-- Use \`get_subagent_result\` only with the exact \`runId\` from a completed run when you need to re-fetch a result already received. Mentor and librarian fresh calls reuse their default session; explorer fresh calls start a new session. Worker runs are always fresh and cannot be continued. Only completed non-worker runs support \`continue_run_id\`; do not invent runIds or continue active, failed, cancelled, missing, or evicted runs.${
+- Fresh background runs support explorer, worker, and mentor. They persist across ordinary parent-turn completion in process memory until the 30-minute sliding TTL expires or the 50-session cap evicts them.
+- Use \`get_subagent_result\` only with the exact \`runId\` from a completed run when you need to re-fetch a result already received. Mentor fresh calls reuse their default session; explorer fresh calls start a new session. Worker runs are always fresh and cannot be continued. Only completed non-worker runs support \`continue_run_id\`; do not invent runIds or continue active, failed, cancelled, missing, or evicted runs.${
         controlsEnabled
           ? `
 - Address \`send_message\` and \`cancel_run\` by the active name or runId; runId remains canonical. \`send_message\` non-blockingly steers an active execution run or answers a waiting \`ask_orchestrator\` question with \`reply_to\`; \`cancel_run\` non-blockingly requests cancellation.
@@ -73,7 +70,7 @@ Do not repeat automatically supplied context: role instructions, generic tool gu
   return `${header}\n\n${triggers}${
     backgroundRules ? `\n\n${backgroundRules}` : ''
   }\n\n${planningStep}\n\n${getSubagentsRolesSection({
-    includeLibrarian: memoryEnabled,
+    includeLibrarian: false,
     includeMentor: backgroundEnabled,
   })}`;
 }

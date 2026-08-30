@@ -135,7 +135,13 @@ function definition<S extends z.ZodObject<any>>(
     name,
     description,
     parameters,
-    preserveSerializedOutput: ['memory_list', 'memory_get', 'memory_search', 'memory_retrieve'].includes(name),
+    preserveSerializedOutput: [
+      'memory_list',
+      'memory_get',
+      'memory_search',
+      'memory_retrieve',
+      'memory_synthesize',
+    ].includes(name),
     needsApproval: typeof needsApproval === 'function' ? needsApproval : () => needsApproval,
     execute: (params: z.infer<S>) =>
       safe(() => execute(params), (params as { maxChars?: number }).maxChars ?? DEFAULT_DOCUMENT_OUTPUT_CHARS),
@@ -145,7 +151,7 @@ function definition<S extends z.ZodObject<any>>(
 
 export function createMemoryToolDefinitions(
   input: MemoryStore | MemoryStores,
-  options?: { settingsService?: ISettingsService },
+  options?: { settingsService?: ISettingsService; includeSynthesize?: boolean },
 ): ToolDefinition[] {
   const stores = normalizeStores(input);
   const configuredLimits = stores.global.searchLimits?.() ?? {
@@ -349,6 +355,144 @@ export function createMemoryToolDefinitions(
         return output(budget, (charsUsed) => ({ ...result, charsUsed }));
       },
     ),
+    ...(options?.includeSynthesize
+      ? [
+          definition(
+            'memory_synthesize',
+            'Retrieve one de-duplicated evidence packet for a broad memory objective. Use when the task depends on several memories, terminology may vary, or prior decisions may conflict or be stale. Supply 2-5 distinct search angles; the result traces every memory to the queries that found it. For one focused lookup, use memory_retrieve instead.',
+            z
+              .object({
+                objective: z.string().refine((value) => /\S/.test(value)),
+                queries: z
+                  .array(z.string().refine((value) => /\S/.test(value)))
+                  .min(2)
+                  .max(5),
+                limit: resultLimit,
+                maxChars,
+              })
+              .strict(),
+            async ({ objective, queries, limit, maxChars: requestedMaxChars }) => {
+              const budget = requestedMaxChars ?? DEFAULT_DOCUMENT_OUTPUT_CHARS;
+              const uniqueQueries = [...new Set(queries.map((query) => query.trim()))];
+              const searches = await Promise.all(
+                uniqueQueries.map(async (query) => ({
+                  query,
+                  candidates: await rankedSearch(query, effectiveLimit(limit)),
+                })),
+              );
+              const aggregated = new Map<
+                string,
+                {
+                  scope: MemoryScope;
+                  id: string;
+                  available: boolean;
+                  matchedQueries: string[];
+                }
+              >();
+              for (const { query, candidates } of searches) {
+                for (const candidate of candidates) {
+                  const key = `${candidate.scope}\0${candidate.memory.id}`;
+                  const existing = aggregated.get(key);
+                  if (existing) {
+                    existing.available ||= candidate.available;
+                    existing.matchedQueries.push(query);
+                    continue;
+                  }
+                  aggregated.set(key, {
+                    scope: candidate.scope,
+                    id: candidate.memory.id,
+                    available: candidate.available,
+                    matchedQueries: [query],
+                  });
+                }
+              }
+
+              const loaded: Array<{
+                scope: MemoryScope;
+                id: string;
+                memory?: Memory;
+                unavailable: boolean;
+                matchedQueries: string[];
+              }> = [];
+              for (const candidate of aggregated.values()) {
+                if (!candidate.available) {
+                  loaded.push({ ...candidate, unavailable: true });
+                  continue;
+                }
+                try {
+                  const memory = await stores[candidate.scope].get(candidate.id);
+                  loaded.push({
+                    ...candidate,
+                    memory: memory ?? undefined,
+                    unavailable: !memory,
+                  });
+                } catch (error) {
+                  if (!(error instanceof MemoryStorageError) && !(error instanceof MemoryNotFoundError)) throw error;
+                  loaded.push({ ...candidate, unavailable: true });
+                }
+              }
+
+              const result = {
+                objective,
+                queries: uniqueQueries,
+                memories: [] as Array<{ scope: MemoryScope; memory: Memory; matchedQueries: string[] }>,
+                unavailableIds: [] as Array<{ scope: MemoryScope; id: string; matchedQueries: string[] }>,
+                omittedIds: [] as Array<{ scope: MemoryScope; id: string; matchedQueries: string[] }>,
+                omittedIdCount: 0,
+                unavailableIdCount: 0,
+              };
+              const unavailable = loaded.filter((entry) => entry.unavailable);
+              const available = loaded.filter(
+                (entry): entry is typeof entry & { memory: Memory } => !entry.unavailable && !!entry.memory,
+              );
+              result.unavailableIdCount = unavailable.length;
+              for (const candidate of unavailable) {
+                const reference = {
+                  scope: candidate.scope,
+                  id: candidate.id,
+                  matchedQueries: candidate.matchedQueries,
+                };
+                const prospective = fitSerializedEnvelope(
+                  (charsUsed) => ({
+                    ...result,
+                    unavailableIds: [...result.unavailableIds, reference],
+                    charsUsed,
+                  }),
+                  { maxChars: budget },
+                );
+                if (prospective) result.unavailableIds = prospective.value.unavailableIds;
+              }
+              for (const candidate of available) {
+                const item = {
+                  scope: candidate.scope,
+                  memory: candidate.memory,
+                  matchedQueries: candidate.matchedQueries,
+                };
+                const prospective = fitSerializedEnvelope(
+                  (charsUsed) => ({ ...result, memories: [...result.memories, item], charsUsed }),
+                  { maxChars: budget },
+                );
+                if (prospective) {
+                  result.memories = prospective.value.memories;
+                  continue;
+                }
+                result.omittedIdCount++;
+                const reference = {
+                  scope: candidate.scope,
+                  id: candidate.id,
+                  matchedQueries: candidate.matchedQueries,
+                };
+                const omission = fitSerializedEnvelope(
+                  (charsUsed) => ({ ...result, omittedIds: [...result.omittedIds, reference], charsUsed }),
+                  { maxChars: budget },
+                );
+                if (omission) result.omittedIds = omission.value.omittedIds;
+              }
+              return output(budget, (charsUsed) => ({ ...result, charsUsed }));
+            },
+          ),
+        ]
+      : []),
     definition(
       'memory_create',
       'Save durable information to the selected global or project memory scope.',

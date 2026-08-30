@@ -19,19 +19,19 @@ export function createSessionBrowserToolDefinitions(browser: SessionBrowser): To
   return [
     definition(
       'session_list',
-      'List prior locally persisted sessions for the current project.',
+      'List prior locally persisted sessions for the current project. `total` is the number of browsable sessions in scope; `omitted` counts list entries dropped only because the output budget could not fit them (entries beyond `limit` are excluded by `total`).',
       z.object({ limit, maxChars }).strict(),
       (params) => browser.list(params),
     ),
     definition(
       'session_search',
-      'Search prior locally persisted session transcripts for the current project.',
+      'Search prior locally persisted session transcripts for the current project. `total` is the number of ranked matches before `limit` is applied; `omitted` counts matches dropped only because the output budget could not fit them. Matches from the currently active session sort last, because searching indexes tool outputs and the query echoes in the live transcript.',
       z.object({ query: z.string().refine((value) => /\S/.test(value)), limit, maxChars }).strict(),
       (params) => browser.search(params),
     ),
     definition(
       'session_read',
-      'Read a prior local session transcript progressively by cursor.',
+      'Read a prior local session transcript progressively by cursor. `total` is the projected record count for the whole session; `omitted` counts records not begun in this page (a partially emitted chunk still counts as begun), so `total - omitted` records were started here.',
       z.object({ id, cursor: z.string().optional(), limit, maxChars }).strict(),
       (params) => browser.read(params),
     ),

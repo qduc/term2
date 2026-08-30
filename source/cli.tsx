@@ -656,9 +656,13 @@ const history = new HistoryService({
 });
 // This is deliberately composed only for the interactive root session. The
 // browser reevaluates its project root per tool call and has no write port.
+// currentSessionId is read lazily for the same reason: it is assigned after
+// composition, and session_search uses it to demote the live session's
+// self-referential matches below all other sessions.
 const sessionBrowser = new SessionBrowser(() => ({
   projectPath: executionContext.getCwd(),
   ...(sshInfo?.host ? { sshHost: sshInfo.host } : {}),
+  ...(effectiveSessionId ? { currentSessionId: effectiveSessionId } : {}),
 }));
 
 const skillsService = new SkillsService(logger, executionContext.getCwd());

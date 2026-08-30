@@ -193,8 +193,10 @@ it.sequential(
 it.sequential(
   'MessageList moves a completed command before active reasoning directly into static history',
   async () => {
+    const settingsService = createMockSettingsService({ 'ui.displayMode': 'standard' });
     const renderer = await renderInAct(
       <MessageList
+        settingsService={settingsService}
         messages={[{ id: 'running-command', sender: 'command', status: 'running', command: 'npm test', output: '' }]}
       />,
     );
@@ -202,6 +204,7 @@ it.sequential(
     await rerenderInAct(
       renderer,
       <MessageList
+        settingsService={settingsService}
         messages={[
           { id: 'running-command', sender: 'command', status: 'completed', command: 'npm test', output: 'passed' },
           { id: 'active-reasoning', sender: 'reasoning', text: 'thinking' },
@@ -373,9 +376,11 @@ it.sequential('shouldCommitMessageToStatic commits completed commands immediatel
   ).toBe(true);
 });
 
-it.sequential('MessageList commits a first-seen completed command directly to Static', async () => {
+it.sequential('MessageList commits a first-seen completed command directly to Static in standard mode', async () => {
+  const settingsService = createMockSettingsService({ 'ui.displayMode': 'standard' });
   const renderer = await renderInAct(
     <MessageList
+      settingsService={settingsService}
       messages={[{ id: 'done-command', sender: 'command', status: 'completed', command: 'pwd', output: '/repo' }]}
     />,
   );
@@ -769,6 +774,7 @@ it.sequential('MessageList non-continuation across static-dynamic boundary has c
 });
 
 it.sequential('MessageList does not strand blank lines mid-history when reasoning streams in chunks', async () => {
+  const settingsService = createMockSettingsService({ 'ui.displayMode': 'standard' });
   // Reproduces the chunked-reasoning trigger: a finalized chunk is briefly the
   // last item with no dynamic tail (a safe boundary landed at the end of the
   // buffer, so no live tail was pushed), then reasoning resumes and more
@@ -776,6 +782,7 @@ it.sequential('MessageList does not strand blank lines mid-history when reasonin
   // write-once static buffer between the two chunks.
   const renderer = await renderInAct(
     <MessageList
+      settingsService={settingsService}
       messages={[
         { id: 'chunk-a', sender: 'reasoning', status: 'finalized', text: 'alpha reasoning chunk' },
         { id: 'tail', sender: 'reasoning', status: 'streaming', text: 'live tail' },
@@ -787,6 +794,7 @@ it.sequential('MessageList does not strand blank lines mid-history when reasonin
   await rerenderInAct(
     renderer,
     <MessageList
+      settingsService={settingsService}
       messages={[
         { id: 'chunk-a', sender: 'reasoning', status: 'finalized', text: 'alpha reasoning chunk' },
         { id: 'tail', sender: 'reasoning', status: 'finalized', text: 'bravo reasoning chunk' },
@@ -798,6 +806,7 @@ it.sequential('MessageList does not strand blank lines mid-history when reasonin
   await rerenderInAct(
     renderer,
     <MessageList
+      settingsService={settingsService}
       messages={[
         { id: 'chunk-a', sender: 'reasoning', status: 'finalized', text: 'alpha reasoning chunk' },
         { id: 'tail', sender: 'reasoning', status: 'finalized', text: 'bravo reasoning chunk' },
@@ -831,8 +840,23 @@ it.sequential('MessageList outputs a blank line after the final message in Stati
   expect(lines[lines.length - 1].trim()).toBe('');
 });
 
-it.sequential('MessageList hides reasoning messages when displayMode is concise', async () => {
-  const mockSettingsService = createMockSettingsService({ 'ui.displayMode': 'concise' });
+it.sequential('MessageList hides reasoning messages by default (concise mode)', async () => {
+  const messages = [
+    { id: '1', sender: 'user', text: 'Hello' },
+    { id: '2', sender: 'reasoning', text: 'I am thinking about hello' },
+    { id: '3', sender: 'bot', text: 'Hello back!' },
+  ];
+
+  const { lastFrame } = await renderInAct(<MessageList messages={messages} />);
+  const output = lastFrame() ?? '';
+
+  expect(output.includes('Hello')).toBe(true);
+  expect(output.includes('Hello back!')).toBe(true);
+  expect(output.includes('thinking')).toBe(false);
+});
+
+it.sequential('MessageList renders reasoning messages when displayMode is standard', async () => {
+  const mockSettingsService = createMockSettingsService({ 'ui.displayMode': 'standard' });
 
   const messages = [
     { id: '1', sender: 'user', text: 'Hello' },
@@ -845,7 +869,7 @@ it.sequential('MessageList hides reasoning messages when displayMode is concise'
 
   expect(output.includes('Hello')).toBe(true);
   expect(output.includes('Hello back!')).toBe(true);
-  expect(output.includes('thinking')).toBe(false);
+  expect(output.includes('thinking')).toBe(true);
 });
 
 it.sequential(

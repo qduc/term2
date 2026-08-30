@@ -349,7 +349,7 @@ export const UISettingsSchema = z.object({
     .describe('Max paste length before text is replaced by a placeholder'),
   displayMode: z
     .enum(['standard', 'concise'])
-    .default('standard')
+    .default('concise')
     .describe('Display mode for rendering conversation output'),
 });
 
@@ -1160,7 +1160,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   ui: {
     historySize: 1000,
     pasteThreshold: 3000,
-    displayMode: 'standard',
+    displayMode: 'concise',
   },
   logging: {
     logLevel: 'info',

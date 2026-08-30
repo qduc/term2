@@ -283,7 +283,7 @@ const MessageList = <T extends MessageLike = Message>({
   const { stdout } = useStdout();
   const terminalColumns = stdout.columns || 80;
   const contentWidth = Math.max(1, terminalColumns - MESSAGE_HORIZONTAL_PADDING * 2);
-  const displayMode = settingsService?.get('ui.displayMode') ?? 'standard';
+  const displayMode = settingsService?.get('ui.displayMode') ?? 'concise';
   const restoredStaticMessageIdSet = useMemo(() => new Set(restoredStaticMessageIds), [restoredStaticMessageIds]);
 
   const filteredMessages = useMemo(() => {

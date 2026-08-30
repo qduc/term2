@@ -145,7 +145,7 @@ const App: FC<AppProps> = ({
   const [messageListEpoch, setMessageListEpoch] = useState(0);
   const [startupBannerIds, setStartupBannerIds] = useState(['startup-banner-0']);
   const [activeRestoredStaticMessageIds, setActiveRestoredStaticMessageIds] = useState(restoredStaticMessageIds);
-  const displayMode = useSetting(settingsService, 'ui.displayMode') ?? 'standard';
+  const displayMode = useSetting(settingsService, 'ui.displayMode') ?? 'concise';
   const sessionUsage = useMemo(() => usageAccumulator ?? createUsageAccumulator(), [usageAccumulator]);
   const subagentUsage = useMemo(() => subagentUsageAccumulator ?? createUsageAccumulator(), [subagentUsageAccumulator]);
   const sessionCost = useMemo(() => costAccumulator ?? createSessionCostAccumulator(), [costAccumulator]);

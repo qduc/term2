@@ -7,6 +7,7 @@ import {
   KNOWN_CUSTOM_PROVIDER_TYPES,
   isKnownCustomProviderType,
   SettingsSchema,
+  UISettingsSchema,
   RUNTIME_MODIFIABLE_SETTINGS,
   SETTING_KEYS,
   normalizeAppModes,
@@ -233,6 +234,12 @@ it('agent transport defaults to websocket and is runtime modifiable', () => {
   expect(AgentSettingsSchema.parse({}).transport).toBe('websocket');
 
   expect(() => AgentSettingsSchema.parse({ transport: 'fallback' })).toThrow();
+});
+
+it('ui displayMode defaults to concise and is runtime modifiable', () => {
+  expect(UISettingsSchema.parse({}).displayMode).toBe('concise');
+  expect(DEFAULT_SETTINGS.ui.displayMode).toBe('concise');
+  expect(RUNTIME_MODIFIABLE_SETTINGS.has(SETTING_KEYS.UI_DISPLAY_MODE)).toBe(true);
 });
 
 it('workflow limits have bounded defaults and accept workspace configuration', () => {

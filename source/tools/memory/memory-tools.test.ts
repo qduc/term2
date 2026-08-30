@@ -166,6 +166,34 @@ it('requires approval for destructive memory mutations', async () => {
   expect(await remove.needsApproval({ scope: 'global', id: memory.id })).toBe(true);
 });
 
+it('auto-approves memory mutations when shell.autoApproveMode is auto or always', async () => {
+  const autoSettings = { get: (key: string) => (key === 'shell.autoApproveMode' ? 'auto' : undefined) } as any;
+  const autoTools = createMemoryToolDefinitions(store, { settingsService: autoSettings });
+  const autoUpdate = autoTools.find((tool) => tool.name === 'memory_update')!;
+  const autoRemove = autoTools.find((tool) => tool.name === 'memory_delete')!;
+
+  expect(await autoUpdate.needsApproval({ scope: 'global', id: memory.id, summary: 'Updated' })).toBe(false);
+  expect(await autoRemove.needsApproval({ scope: 'global', id: memory.id })).toBe(false);
+
+  const alwaysSettings = { get: (key: string) => (key === 'shell.autoApproveMode' ? 'always' : undefined) } as any;
+  const alwaysTools = createMemoryToolDefinitions(store, { settingsService: alwaysSettings });
+  expect(
+    await alwaysTools.find((t) => t.name === 'memory_update')!.needsApproval({ scope: 'global', id: memory.id }),
+  ).toBe(false);
+  expect(
+    await alwaysTools.find((t) => t.name === 'memory_delete')!.needsApproval({ scope: 'global', id: memory.id }),
+  ).toBe(false);
+
+  const advisorySettings = { get: (key: string) => (key === 'shell.autoApproveMode' ? 'advisory' : undefined) } as any;
+  const advisoryTools = createMemoryToolDefinitions(store, { settingsService: advisorySettings });
+  expect(
+    await advisoryTools.find((t) => t.name === 'memory_update')!.needsApproval({ scope: 'global', id: memory.id }),
+  ).toBe(true);
+  expect(
+    await advisoryTools.find((t) => t.name === 'memory_delete')!.needsApproval({ scope: 'global', id: memory.id }),
+  ).toBe(true);
+});
+
 it('requires memory updates to include a changed field', () => {
   const update = createMemoryToolDefinitions(store).find((tool) => tool.name === 'memory_update')!;
 

@@ -219,7 +219,7 @@ export class AgentConfiguration implements AgentSource {
         this.#toolInterceptorRegistry.check(name, params, toolCallId),
       skillsService: this.#skillsService,
       getAgentRuntime: () => ({
-        agent: (config) => {
+        agent: (config: any) => {
           const runtime = this.#getSubagentBridge()?.getAgentRuntime();
           if (!runtime) throw new Error('Agent runtime is unavailable');
           return runtime.agent(config);

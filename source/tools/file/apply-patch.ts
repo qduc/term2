@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import { applyDiff } from '../../utils/apply-diff.js';
-import { isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../utils.js';
+import { isProtectedHookPath, isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../utils.js';
+import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
 import type { ToolDefinition, FormatCommandMessage } from '../types.js';
 import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
 import type { SessionAccessState } from '../../services/session/session-access-state.js';
@@ -256,9 +257,16 @@ export function createApplyPatchToolDefinition(deps: {
             return true;
           }
 
-          const insideCwd = targetPath.startsWith(workspaceRoot + path.sep);
+          const insideCwd =
+            targetPath.startsWith(workspaceRoot + path.sep) ||
+            targetPath === SANDBOX_TEMP_DIR ||
+            targetPath.startsWith(SANDBOX_TEMP_DIR + path.sep);
           const physicallyInsideWorkspace =
-            !isRemote && insideCwd && (await isWorkspacePathPhysicallyInside(targetPath, workspaceRoot));
+            !isRemote &&
+            insideCwd &&
+            !isProtectedHookPath(targetPath, workspaceRoot) &&
+            ((await isWorkspacePathPhysicallyInside(targetPath, workspaceRoot)) ||
+              (await isWorkspacePathPhysicallyInside(targetPath, SANDBOX_TEMP_DIR)));
           if (!physicallyInsideWorkspace) {
             if (!sessionAccess?.allowsEdit(targetPath, workspaceRoot)) {
               loggingService.security('apply_patch needsApproval: physical boundary requires approval', {

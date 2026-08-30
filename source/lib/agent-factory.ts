@@ -20,9 +20,15 @@ import { getModelDefaultReasoningLevel, getProviderDefaultReasoningLevel } from 
 import { toolApprovalPolicyRegistry } from '../services/approval/tool-approval-policy-registry.js';
 import { shouldBypassToolApproval } from '../services/approval/shell-auto-approval-resolver.js';
 import type { AgentRuntime } from '../services/agent-runtime/agent-runtime.js';
-import { isZodToolParameterSchema } from '../tools/types.js';
-import { isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../tools/utils.js';
-import type { AnyToolDefinition, JsonSchemaObject, PostExecutePauseCapability, ToolRegistry } from '../tools/types.js';
+import { isProtectedHookPath, isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../tools/utils.js';
+import { SANDBOX_TEMP_DIR } from '../utils/shell/temp-dir.js';
+import {
+  isZodToolParameterSchema,
+  type AnyToolDefinition,
+  type JsonSchemaObject,
+  type PostExecutePauseCapability,
+  type ToolRegistry,
+} from '../tools/types.js';
 import type { SessionAccessState } from '../services/session/session-access-state.js';
 import type { BackgroundShellRegistry } from '../services/shell/background-shell-registry.js';
 import type { BackgroundShellOutputBundle } from '../services/shell/background-shell-watches.js';
@@ -234,8 +240,11 @@ export function buildAgentTools({
         }
 
         const prefix = workspaceRoot.endsWith(path.sep) ? workspaceRoot : `${workspaceRoot}${path.sep}`;
-        const insideWorkspace = resolved !== workspaceRoot && resolved.startsWith(prefix);
-        if (!insideWorkspace) {
+        const insideWorkspace =
+          (resolved !== workspaceRoot && resolved.startsWith(prefix)) ||
+          resolved === SANDBOX_TEMP_DIR ||
+          resolved.startsWith(SANDBOX_TEMP_DIR + path.sep);
+        if (!insideWorkspace || isProtectedHookPath(resolved, workspaceRoot)) {
           if (deps.sessionAccess?.allowsEdit(resolved, workspaceRoot)) return false;
           return true;
         }
@@ -247,10 +256,10 @@ export function buildAgentTools({
         if (deps.executionContext?.isRemote() && deps.executionContext.getSSHService()) {
           return true;
         }
-        return (
-          !(await isWorkspacePathPhysicallyInside(resolved, workspaceRoot)) &&
-          !deps.sessionAccess?.allowsEdit(resolved, workspaceRoot)
-        );
+        const physicallyInside =
+          (await isWorkspacePathPhysicallyInside(resolved, workspaceRoot)) ||
+          (await isWorkspacePathPhysicallyInside(resolved, SANDBOX_TEMP_DIR));
+        return !physicallyInside && !deps.sessionAccess?.allowsEdit(resolved, workspaceRoot);
       };
     }
     deps.logger.debug('Using native applyPatchTool from SDK', {

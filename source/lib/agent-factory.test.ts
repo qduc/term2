@@ -6,6 +6,8 @@ import type {
 } from '../contracts/streamed-model-turn.js';
 import { it, expect } from 'vitest';
 import { z } from 'zod';
+import path from 'path';
+import { SANDBOX_TEMP_DIR } from '../utils/shell/temp-dir.js';
 import { buildAgent, buildAgentTools } from './agent-factory.js';
 import { clearModelCache, fetchModels } from '../services/model-service.js';
 import { registerProvider, type ProviderDefinition } from '../providers/registry.js';
@@ -444,6 +446,14 @@ it.sequential('native apply_patch needsApproval requires approval for paths outs
     diff: '@@ -0,0 +1 @@\n+x',
   });
   expect(outsideResult).toBe(true);
+
+  // Path in SANDBOX_TEMP_DIR => auto-approved without approval prompt
+  const tempResult = await applyPatch.needsApproval(undefined, {
+    type: 'create_file',
+    path: path.join(SANDBOX_TEMP_DIR, 'native-patch-temp.txt'),
+    diff: '@@ -0,0 +1 @@\n+x',
+  });
+  expect(tempResult).toBe(false);
 });
 
 it.sequential('YOLO bypasses native apply_patch approval for paths outside the workspace', async () => {

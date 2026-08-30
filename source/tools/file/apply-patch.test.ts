@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { createApplyPatchToolDefinition } from './apply-patch.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
+import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
 import type { ILoggingService } from '../../services/service-interfaces.js';
 
 type PlainResultItem = {
@@ -544,5 +545,29 @@ it.sequential('execute: falls back to error when tools.enableEditHealing is fals
 
     expect(mockPatchHealing).not.toHaveBeenCalled();
     expect(result).toContain('Error: Invalid patch:');
+  });
+});
+
+it.sequential('needsApproval allows applying patch in SANDBOX_TEMP_DIR without approval', async () => {
+  await withTempDir(async () => {
+    const tool = createApplyPatchToolDefinition({
+      loggingService: mockLoggingService,
+      settingsService: createMockSettingsService({ 'shell.autoApproveMode': 'auto' }),
+    });
+
+    const tempFilePath = path.join(SANDBOX_TEMP_DIR, 'scratch-patch.txt');
+    await fs.writeFile(tempFilePath, 'original text\n', 'utf8');
+
+    try {
+      const result = await tool.needsApproval({
+        type: 'update_file',
+        path: tempFilePath,
+        diff: '--- a/scratch-patch.txt\n+++ b/scratch-patch.txt\n@@ -1 +1 @@\n-original text\n+patched text\n',
+      });
+
+      expect(result).toBe(false);
+    } finally {
+      await fs.rm(tempFilePath, { force: true });
+    }
   });
 });

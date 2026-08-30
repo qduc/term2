@@ -24,6 +24,7 @@ import {
 } from '../../services/memory/memory-search.js';
 import { boundedJsonFailure, fitSerializedEnvelope, fitsSerializedText } from '../../utils/output/bounded-json.js';
 import { resolveToolResultMaxBytes } from '../../utils/output/bound-tool-result.js';
+import type { ISettingsService } from '../../services/service-interfaces.js';
 
 export type MemoryScope = 'global' | 'project';
 export type MemoryStores = Record<MemoryScope, MemoryStore>;
@@ -128,21 +129,24 @@ function definition<S extends z.ZodObject<any>>(
   description: string,
   parameters: S,
   execute: (params: z.infer<S>) => Promise<unknown>,
-  needsApproval = false,
+  needsApproval: boolean | (() => boolean) = false,
 ): SchemaToolDefinition<S> {
   return {
     name,
     description,
     parameters,
     preserveSerializedOutput: ['memory_list', 'memory_get', 'memory_search', 'memory_retrieve'].includes(name),
-    needsApproval: () => needsApproval,
+    needsApproval: typeof needsApproval === 'function' ? needsApproval : () => needsApproval,
     execute: (params: z.infer<S>) =>
       safe(() => execute(params), (params as { maxChars?: number }).maxChars ?? DEFAULT_DOCUMENT_OUTPUT_CHARS),
     formatCommandMessage: makeFormat(name),
   };
 }
 
-export function createMemoryToolDefinitions(input: MemoryStore | MemoryStores): ToolDefinition[] {
+export function createMemoryToolDefinitions(
+  input: MemoryStore | MemoryStores,
+  options?: { settingsService?: ISettingsService },
+): ToolDefinition[] {
   const stores = normalizeStores(input);
   const configuredLimits = stores.global.searchLimits?.() ?? {
     defaultLimit: DEFAULT_RESULT_LIMIT,
@@ -373,7 +377,10 @@ export function createMemoryToolDefinitions(input: MemoryStore | MemoryStores): 
         const memory = await stores[scope].update(id, input);
         return { scope, memory };
       },
-      true,
+      () => {
+        const mode = options?.settingsService?.get('shell.autoApproveMode');
+        return mode !== 'auto' && mode !== 'always';
+      },
     ),
     definition(
       'memory_delete',
@@ -383,7 +390,10 @@ export function createMemoryToolDefinitions(input: MemoryStore | MemoryStores): 
         const deleted = await stores[scope].remove(id);
         return { scope, deleted };
       },
-      true,
+      () => {
+        const mode = options?.settingsService?.get('shell.autoApproveMode');
+        return mode !== 'auto' && mode !== 'always';
+      },
     ),
   ];
 }

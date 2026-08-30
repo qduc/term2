@@ -53,7 +53,9 @@ export async function waitForHarnessIdleGeneration(
     await delay(20);
   }
   throw new Error(
-    `Timed out waiting for harness idle generation > ${after} at ${path}; got ${readHarnessIdleGeneration(path)}.`,
+    `Timed out waiting for harness idle generation > ${after} at ${path} after ${timeoutMs}ms; got ${readHarnessIdleGeneration(
+      path,
+    )}.`,
   );
 }
 

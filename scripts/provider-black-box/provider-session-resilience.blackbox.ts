@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket, WebSocketServer } from 'ws';
 import {
   createIsolatedWorkspaceLease,
+  DEFAULT_TIMEOUT_MS,
   writePtyTextAndSubmit,
   type IsolatedWorkspaceLease,
   type IsolatedWorkspacePaths,
@@ -170,7 +171,6 @@ const COMPACTION_ROUTE: ProviderRoute = {
   alternateProvider: 'fixture-other-provider',
 };
 
-const DEFAULT_TIMEOUT_MS = 7_500;
 const PROMPT = 'fixture resilience prompt';
 const ANSWER = 'fixture resilience answer';
 const REASONING = 'fixture response-side reasoning';

@@ -960,6 +960,108 @@ NODE_ENV=test pnpm test
 PASS 496 files passed, 1 skipped; 6418 tests passed, 6 expected failures, 2 skipped
 ```
 
+### PTY readiness-wait false timeout in the provider black-box harness
+
+Disposition: **repaired locally on 2026-08-30; pending commit and merge.**
+
+Incidents: 2026-08-27 SB-05 gate (one transient interactive public-hooks PTY
+timeout, file passed 3/3 on rerun) and 2026-08-27 reasoning-length verification
+(two full-suite attempts each failed a *different* 15s PTY wait while the child
+sat healthy). Same class recurred on 2026-08-30: the full suite failed a
+different 15s wait per attempt while the named scenario passed in isolation.
+
+Root cause: the shared-runner policy from commit `886e1531` (one generous
+ceiling, `--bail=1` bounds genuine hangs) was implemented in the harness's
+`waitForState`/`waitForExit` but not everywhere waits are taken. The PTY
+driver's `waitForIdleInput` forwarded `timeoutMs: undefined` into
+`waitForHarnessIdleGeneration`, whose lib default is 15s — silently under the
+harness's shared 40s ceiling. `public-hooks.blackbox.ts` pinned 15s literals on
+all three interactive waits, and two sibling owners carried their own
+duplicates: the responses fixture server's `waitForRequests` default 15s and
+the resilience file's local `DEFAULT_TIMEOUT_MS = 7_500`. A control run with
+the repair stashed reproduced the same `chaining` failure on the parent commit,
+proving the gate failures were pre-existing contention, not the repair.
+
+```text
+Harm prevented: a healthy CLI startup under shared-runner contention failing a
+  readiness wait that expires before the child can render.
+Scope and execution paths: provider black-box PTY driver readiness waits (all
+  blackbox scenarios) and scenario-file fixture waits; named incident is the
+  public-hooks interactive startup.
+Guard class: containment budget on a test readiness proxy; this is a
+  false-positive repair (ceiling raised to the shared policy), not a
+  protection weakening.
+Enforcement owner: createPtyChild's waitForIdleInput (single point where the
+  driver's shared timeout policy meets the idle channel) plus the exported
+  DEFAULT_TIMEOUT_MS the scenario files now import for their fixture waits.
+Recovery owner: the scenario (vitest failure with self-diagnosing error).
+Measured signal and observation boundary: harness idle-generation file;
+  child exit as terminal evidence.
+Direct evidence or proxy: proxy (file generation). Justified: the file is the
+  published composer-idle signal; first-run/menu ownership never publishes.
+Legitimate work that can produce the same signal: slow PTY spawn, node boot,
+  jiti hook load, Ink render under CPU contention (recorded in 886e1531).
+Configuration sources and precedence: explicit timeoutMs argument > shared
+  DEFAULT_TIMEOUT_MS (40s). CI bounds contention at the config level
+  (maxWorkers 2) rather than by extending deadlines.
+Effective default and clamping: none beyond the precedence above.
+Action and why the signal justifies it: reject with an error naming the
+  effective ceiling and the child's visible-output tail; fail fast when the
+  child exits without publishing idle (a dead child can never satisfy the
+  wait, so racing exit against idle shortens genuine-failure diagnosis).
+Partial-work settlement: n/a (test-side guard); the child is settled by the
+  existing afterEach/lease cleanup.
+Retry, fallback, and provider-continuity semantics: n/a.
+Observability fields: effective ceiling, elapsed wait, idle generation read,
+  exit code/signal, visible-output tail — all in the thrown error.
+Persisted-setting migration, if any: none.
+Rollback boundary: provider-test-harness.ts + harness-input-idle.ts + the
+  three scenario call-site files, one branch.
+Ledger row: this section.
+```
+
+Red proof before the production change:
+
+```text
+NODE_ENV=test pnpm exec vitest run \
+  source/lib/harness-input-idle.test.ts \
+  scripts/provider-black-box/provider-test-harness.test.ts
+FAIL 3 new tests: the lib timeout error named no effective ceiling; a bare
+waitForIdleInput() rejected before the fake clock reached 40s (inherited 15s);
+an exited child burned the full ceiling instead of failing fast.
+PASS the 22 pre-existing tests (no behavior change claimed).
+```
+
+Detection gap: the shared-ceiling policy was recorded in a comment on one
+constant and in a commit message, but nothing tied the idle lib's independent
+15s default to it, and scenario files kept pinning per-call literals. The new
+tests pin the driver default, the error content, and the exit-fast path.
+
+Verification (2026-08-30):
+
+```text
+NODE_ENV=test pnpm exec vitest run \
+  source/lib/harness-input-idle.test.ts \
+  scripts/provider-black-box/provider-test-harness.test.ts
+PASS 2 files, 25 tests (22 baseline + 3 new)
+
+pnpm typecheck
+PASS
+
+pnpm exec prettier --check <changed-files>
+PASS
+
+CI=1 pnpm test:provider-black-box
+PASS 19 files, 174 tests; 1 skipped (78s). Unconstrained local runs (8
+workers on a shared 8-core container) still starve CLI children — the config
+comment and the control run both identify that as contention, not a wait
+failure — so the gate is validated under CI's worker bound.
+
+NODE_ENV=test pnpm test
+PASS 558 files; 1 skipped. 7135 tests; 3 expected fail, 2 skipped. Emitted the
+existing TimeoutNaNWarning; no test failed.
+```
+
 ## Reference: catalogued guards
 
 Recorded so the next reader does not re-derive them. **No row here owes a test.**

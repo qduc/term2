@@ -23,6 +23,7 @@ export interface CommandHandlerHelpers {
     suspicious: boolean;
     reason?: string;
   };
+  isSessionCreatedFile?: (path: string) => boolean;
 }
 
 /**

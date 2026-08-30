@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { createCreateFileToolDefinition, type CreateFileToolParams } from './create-file.js';
 import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
+import { SessionAccessState } from '../../services/session/session-access-state.js';
 import { ExecutionContext } from '../../services/execution-context.js';
 import type { ISSHService, ILoggingService } from '../../services/service-interfaces.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
@@ -564,5 +565,29 @@ it.sequential('needsApproval allows creating files in SANDBOX_TEMP_DIR without a
     });
 
     expect(result).toBe(false);
+  });
+});
+
+it.sequential('execute records created file in sessionAccess', async () => {
+  await withTempDir(async (dir) => {
+    const sessionAccess = new SessionAccessState(
+      createMockSettingsService({ 'sandbox.dockerHostControlProjects': [] }),
+    );
+    const tool = createCreateFileToolDefinition({
+      loggingService: mockLoggingService,
+      settingsService: createMockSettingsService(),
+      sessionAccess,
+    });
+
+    const targetFile = 'newly-created.txt';
+    const result = await tool.execute({
+      path: targetFile,
+      content: 'hello world',
+      overwrite: false,
+    });
+
+    expect(result).toBe('Created newly-created.txt');
+    expect(sessionAccess.isCreatedInSession(targetFile, dir)).toBe(true);
+    expect(sessionAccess.isCreatedInSession(path.join(dir, targetFile))).toBe(true);
   });
 });

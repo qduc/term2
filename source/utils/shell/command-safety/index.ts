@@ -38,8 +38,12 @@ export interface ClassifyCommandResult {
 /**
  * Classify command into a SafetyStatus (GREEN/YELLOW/RED)
  */
-export function classifyCommand(commandString: string, loggingService?: ILoggingService): SafetyStatus {
-  return classifyCommandDetailed(commandString, loggingService).status;
+export function classifyCommand(
+  commandString: string,
+  loggingService?: ILoggingService,
+  options?: { isSessionCreatedFile?: (path: string) => boolean },
+): SafetyStatus {
+  return classifyCommandDetailed(commandString, loggingService, options).status;
 }
 
 /**
@@ -49,6 +53,7 @@ export function classifyCommand(commandString: string, loggingService?: ILogging
 export function classifyCommandDetailed(
   commandString: string,
   loggingService?: ILoggingService,
+  options?: { isSessionCreatedFile?: (path: string) => boolean },
 ): ClassifyCommandResult {
   const reasons: string[] = [];
   const truncatedCommand = commandString.substring(0, 200);
@@ -124,16 +129,6 @@ export function classifyCommandDetailed(
 
   function traverseCommand(node: Command): void {
     const name = extractWordText(node.name);
-    if (typeof name === 'string') {
-      if (BLOCKED_COMMANDS.has(name)) {
-        upgradeStatus(SafetyStatus.RED, `blocked command: ${name}`);
-        return;
-      }
-      if (!ALLOWED_COMMANDS.has(name)) {
-        upgradeStatus(SafetyStatus.YELLOW, `unknown or unlisted command: ${name}`);
-      }
-    }
-
     const cmdName = typeof name === 'string' ? name : undefined;
 
     // Check if there's a specialized handler for this command
@@ -145,6 +140,7 @@ export function classifyCommandDetailed(
           analyzePathRisk: analyzePathRiskWithLogger,
           hasFindDangerousExecution,
           hasFindSuspiciousFlags,
+          isSessionCreatedFile: options?.isSessionCreatedFile,
         };
         const result = handler.handle(node, helpers);
         upgradeStatus(result.status, result.reasons.join('; '));
@@ -165,6 +161,16 @@ export function classifyCommandDetailed(
           }
         }
         return;
+      }
+    }
+
+    if (typeof name === 'string') {
+      if (BLOCKED_COMMANDS.has(name)) {
+        upgradeStatus(SafetyStatus.RED, `blocked command: ${name}`);
+        return;
+      }
+      if (!ALLOWED_COMMANDS.has(name)) {
+        upgradeStatus(SafetyStatus.YELLOW, `unknown or unlisted command: ${name}`);
       }
     }
 

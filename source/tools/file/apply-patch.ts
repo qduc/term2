@@ -419,6 +419,7 @@ export function createApplyPatchToolDefinition(deps: {
                 };
               }
               await writeFileFn(targetPath, content);
+              sessionAccess?.recordCreatedFile(targetPath, cwd);
 
               if (enableFileLogging) {
                 try {

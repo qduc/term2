@@ -34,12 +34,15 @@ const parseUnsandboxedFlag = (rawArguments: unknown): boolean => {
   return (rawArguments as Record<string, unknown>).sandbox === 'unsandboxed';
 };
 
+import type { SessionAccessState } from '../session/session-access-state.js';
+
 export interface ShellAutoApprovalResolverDeps {
   conversationStore: ConversationStore;
   agentClient: ShellAutoApprovalAgentClient;
   logger: ILoggingService;
   settingsService?: ISettingsService;
   sessionContextService: ISessionContextService;
+  sessionAccess?: SessionAccessState;
 }
 
 export class ShellAutoApprovalResolver {
@@ -133,6 +136,7 @@ export class ShellAutoApprovalResolver {
         agentClient: this.deps.agentClient,
         logger: this.deps.logger,
         sessionContextService: this.deps.sessionContextService,
+        sessionAccess: this.deps.sessionAccess,
       });
       for (const [id, advisory] of results) {
         this.advisoriesByCallId.set(id, advisory);
@@ -158,6 +162,7 @@ export class ShellAutoApprovalResolver {
       agentClient: this.deps.agentClient,
       logger: this.deps.logger,
       sessionContextService: this.deps.sessionContextService,
+      sessionAccess: this.deps.sessionAccess,
     });
     return single.get('__single__');
   }

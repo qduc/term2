@@ -75,6 +75,8 @@ export class SessionInputPlanner {
   #inputSurgeGuard = new InputSurgeGuard();
   #largeUncachedInputGuard = new LargeUncachedInputGuard();
   #outgoingSizeCache: OutgoingSizeCache | null = null;
+  /** Model the most recently dispatched turn was sent to, for detecting a switch. */
+  #lastDispatchModel: string | null = null;
 
   constructor(deps: {
     settingsService?: ISettingsService;
@@ -136,6 +138,19 @@ export class SessionInputPlanner {
     this.#inputSurgeGuard.reset();
     this.#largeUncachedInputGuard.reset();
     this.#outgoingSizeCache = null;
+    this.#lastDispatchModel = null;
+  }
+
+  /**
+   * Records the model the just-built plan was actually dispatched to. The next
+   * `build()` call compares this against the then-current model to catch a
+   * mid-conversation model switch before it reuses a stale `previous_response_id`.
+   *
+   * Deliberately not folded into `build()` itself: `build()` must stay pure
+   * because `previewInputSurge()` calls it without dispatching anything.
+   */
+  recordDispatchModel(): void {
+    this.#lastDispatchModel = this.#getModelForGuard();
   }
 
   /**
@@ -203,10 +218,20 @@ export class SessionInputPlanner {
     if (hasUnsettledChainDebt && this.#providerContinuity.previousResponseId) {
       this.#providerContinuity.clear();
     }
+    // A held previous_response_id was minted by whatever model produced it.
+    // If the user switched models since that turn, the anchor still passes
+    // every other chaining check locally but the provider 400s
+    // ("Invalid previous_response_id") because the ID does not belong to the
+    // model we are about to call. Drop the chain and send full history
+    // instead of risking that round trip.
+    const currentModel = this.#getModelForGuard();
+    const hasModelMismatch =
+      this.#lastDispatchModel !== null && currentModel !== null && this.#lastDispatchModel !== currentModel;
     const useChaining =
       supportsChaining &&
       !hasMalformedArgs &&
       !hasUnsettledChainDebt &&
+      !hasModelMismatch &&
       this.#providerContinuity.isChainingAvailable(outgoingHistory.length);
     const latestInput = outgoingHistory[outgoingHistory.length - 1] ?? effectiveTurn.text;
     const chainedInput = effectiveTurn.images?.length ? latestInput : effectiveTurn.text;

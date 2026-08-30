@@ -135,6 +135,11 @@ const isStructurallyValidKnownEvent = (event: UnknownObject): boolean => {
       return hasNumber(event, 'version');
     case 'session_cleared':
       return true;
+    case 'session_rollover':
+      return (
+        hasString(event, 'brief') &&
+        (event['reason'] === undefined || isOneOf(event['reason'], ['context_pressure', 'task_boundary']))
+      );
     default:
       return true;
   }

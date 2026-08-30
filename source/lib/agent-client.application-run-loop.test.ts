@@ -64,6 +64,34 @@ afterEach(() => {
 });
 
 describe('AgentClient application-run-loop execution', () => {
+  it('injects a crossed context milestone reminder through the public stream history', async () => {
+    const provider = `milestone-reminder-${Date.now()}`;
+    providers.add(provider);
+    registerProvider({
+      id: provider,
+      label: 'Milestone reminder test provider',
+      createStreamedModel: () => ({
+        async *stream() {
+          yield { type: 'completion' as const, responseId: 'response-1', output: [] };
+        },
+      }),
+      fetchModels: async () => [],
+    });
+    const instance = client(
+      provider,
+      { agentOverride: { name: 'override', model: 'test-model', instructions: 'test', tools: [] } },
+      { 'agent.sessionRollover.enabled': true, 'agent.sessionRollover.milestones': [1] },
+    );
+
+    const stream = await instance.startStream('first turn');
+    await stream.completed;
+
+    expect(stream.history).toEqual(
+      expect.arrayContaining([expect.objectContaining({ content: expect.stringContaining('session_rollover') })]),
+    );
+    instance.dispose();
+  });
+
   it('retains the direct streamed model across completed user turns', async () => {
     const provider = `retained-direct-model-${Date.now()}`;
     providers.add(provider);

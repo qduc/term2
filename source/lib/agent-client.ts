@@ -69,6 +69,8 @@ import {
 } from '../services/agent-runtime/context-compaction/index.js';
 import { projectConversationMessage } from '../services/conversation/conversation-message-projection.js';
 import { isLocalContextSummary } from '../contracts/provider-input.js';
+import { ContextMilestoneReminder } from '../services/agent-runtime/context-compaction/context-milestone-reminder.js';
+import type { SessionRolloverRequest } from '../contracts/session-rollover.js';
 
 type ChainedRunOptions = AgentClientRunOptions;
 
@@ -119,6 +121,8 @@ export class AgentClient {
   // Application streamed models own session-scoped transport state (notably
   // ResponsesWS), so recreate them only when the provider configuration changes.
   #streamedModelCache = new Map<string, StreamedModelTurn | Promise<StreamedModelTurn>>();
+  #contextMilestoneReminder = new ContextMilestoneReminder();
+  #sessionRolloverRequest: SessionRolloverRequest | null = null;
 
   #clearStreamedModelCache(): void {
     for (const cached of this.#streamedModelCache.values()) {
@@ -237,6 +241,7 @@ export class AgentClient {
         const provider = this.#agentConfig.getProvider();
         const model = this.#agentConfig.getModel();
         const reasoningEffort = this.#settings.get('agent.reasoningEffort');
+        const catalog = getCatalogModel(provider, model);
         const openaiInlineNative =
           getProvider(provider)?.capabilities?.supportsContextCompaction === true &&
           supportsContextCompactionModel(model) &&
@@ -253,7 +258,6 @@ export class AgentClient {
         }
         if (mode === 'native' || (mode === 'auto' && openaiInlineNative)) return { kind: 'unchanged' as const };
 
-        const catalog = getCatalogModel(provider, model);
         const configuredMaxOutput = this.#settings.get('agent.maxOutputTokens');
         let started = false;
         const compactor = new LocalContextCompactor({
@@ -352,6 +356,34 @@ export class AgentClient {
     };
   }
 
+  #observeContextMilestones(history: readonly ProviderInputItem[], onReminder: (text: string) => void): void {
+    const provider = this.#agentConfig.getProvider();
+    const model = this.#agentConfig.getModel();
+    const catalog = getCatalogModel(provider, model);
+    const threshold = resolveCompactionThreshold({
+      contextWindow: catalog?.contextWindow,
+      compactThreshold: this.#settings.get('agent.contextCompaction.compactThreshold') ?? 0.8,
+      compactThresholdTokens: this.#settings.get('agent.contextCompaction.compactThresholdTokens') ?? null,
+    });
+    const estimate = estimateContext({
+      history,
+      contextWindow: catalog?.contextWindow,
+      maxOutputTokens: catalog?.maxTokens,
+    });
+    const config = {
+      enabled: this.#settings.get('agent.sessionRollover.enabled') ?? true,
+      milestones: this.#settings.get('agent.sessionRollover.milestones') ?? [],
+      autoBrief: this.#settings.get('agent.sessionRollover.autoBrief') ?? true,
+    };
+    for (const reminder of this.#contextMilestoneReminder.observe(
+      estimate,
+      config,
+      threshold.available ? threshold.effectiveThreshold : undefined,
+    )) {
+      onReminder(reminder);
+    }
+  }
+
   /**
    * Forward real-time subagent activity events to the active conversation
    * turn. The session sets this for the duration of a send and clears it
@@ -375,6 +407,16 @@ export class AgentClient {
   /** Session-owned queue/control delivery for pauses from adopted child runs. */
   setBackgroundSubagentApprovalPauseSink(sink: BackgroundSubagentApprovalPauseSink | null): void {
     this.#subagentBridge?.setBackgroundApprovalPauseSink(sink);
+  }
+
+  requestSessionRollover(request: SessionRolloverRequest): void {
+    this.#sessionRolloverRequest ??= request;
+  }
+
+  consumeSessionRolloverRequest(): SessionRolloverRequest | null {
+    const request = this.#sessionRolloverRequest;
+    this.#sessionRolloverRequest = null;
+    return request;
   }
 
   /** Exact nested-tool state shared with the subagent runtime's tool factory. */
@@ -521,6 +563,9 @@ export class AgentClient {
           this.#subagentBridge?.clearCache();
           this.#resetMentorState();
         },
+        requestSessionRollover: deps.sessionBrowser
+          ? (request: SessionRolloverRequest) => this.requestSessionRollover(request)
+          : undefined,
       },
     );
     this.#maxTurns = maxTurns ?? (agentOverride ? 1 : 20);
@@ -1016,6 +1061,7 @@ export class AgentClient {
           runBudget,
           ...(this.#wrapUpOnCriticalRunBudget ? { wrapUpOnCriticalRunBudget: true } : {}),
           ...(options.onRunBudgetEvent ? { onRunBudgetEvent: options.onRunBudgetEvent } : {}),
+          onRequestBoundary: (history, onReminder) => this.#observeContextMilestones(history, onReminder),
         });
       };
       const stream = run();
@@ -1053,6 +1099,7 @@ export class AgentClient {
       runBudget,
       ...(this.#wrapUpOnCriticalRunBudget ? { wrapUpOnCriticalRunBudget: true } : {}),
       ...(options.onRunBudgetEvent ? { onRunBudgetEvent: options.onRunBudgetEvent } : {}),
+      onRequestBoundary: (history, onReminder) => this.#observeContextMilestones(history, onReminder),
       ...(options.stopAfterApprovalResolution ? { stopAfterApprovalResolution: true } : {}),
     });
     this.#observeCompletion(stream, state, provider, this.#agentConfig.getModel());

@@ -147,6 +147,14 @@ export const AgentSettingsSchema = z.object({
     .describe(
       'Proactive check-ins on a still-running background shell job or subagent while the session is otherwise idle',
     ),
+  sessionRollover: z
+    .object({
+      enabled: z.boolean().default(true),
+      milestones: z.array(z.number().int().positive()).default([200_000, 300_000, 400_000]),
+      autoBrief: z.boolean().default(true),
+    })
+    .default({ enabled: true, milestones: [200_000, 300_000, 400_000], autoBrief: true })
+    .describe('Agent advice for handing off a growing session at context milestones'),
   // NOTE: We do NOT validate provider existence here because the provider
   // registry can be extended at runtime from settings.json (custom providers).
   // We validate/fallback after SettingsService loads and registers runtime providers.
@@ -642,6 +650,11 @@ export interface SettingsWithSources {
       intervalMs: SettingWithSource<number>;
       maxCheckInsPerTask: SettingWithSource<number>;
     };
+    sessionRollover: {
+      enabled: SettingWithSource<boolean>;
+      milestones: SettingWithSource<number[]>;
+      autoBrief: SettingWithSource<boolean>;
+    };
     provider: SettingWithSource<string>;
     openrouter: SettingWithSource<any>;
     openai: SettingWithSource<any>;
@@ -805,6 +818,9 @@ export const SETTING_KEYS = {
   AGENT_BACKGROUND_CHECK_IN_ENABLED: 'agent.backgroundCheckIn.enabled',
   AGENT_BACKGROUND_CHECK_IN_INTERVAL_MS: 'agent.backgroundCheckIn.intervalMs',
   AGENT_BACKGROUND_CHECK_IN_MAX_PER_TASK: 'agent.backgroundCheckIn.maxCheckInsPerTask',
+  AGENT_SESSION_ROLLOVER_ENABLED: 'agent.sessionRollover.enabled',
+  AGENT_SESSION_ROLLOVER_MILESTONES: 'agent.sessionRollover.milestones',
+  AGENT_SESSION_ROLLOVER_AUTO_BRIEF: 'agent.sessionRollover.autoBrief',
   AGENT_OPENROUTER_API_KEY: 'agent.openrouter.apiKey',
   AGENT_OPENAI_API_KEY: 'agent.openai.apiKey',
   AGENT_OPENROUTER_BASE_URL: 'agent.openrouter.baseUrl', // Sensitive - env only
@@ -940,6 +956,9 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_ENABLED,
   SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_INTERVAL_MS,
   SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_MAX_PER_TASK,
+  SETTING_KEYS.AGENT_SESSION_ROLLOVER_ENABLED,
+  SETTING_KEYS.AGENT_SESSION_ROLLOVER_MILESTONES,
+  SETTING_KEYS.AGENT_SESSION_ROLLOVER_AUTO_BRIEF,
   SETTING_KEYS.AGENT_MENTOR_MODEL,
   SETTING_KEYS.AGENT_MENTOR_PROVIDER,
   SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT,
@@ -1089,6 +1108,11 @@ export const DEFAULT_SETTINGS: SettingsData = {
       enabled: true,
       intervalMs: 300_000,
       maxCheckInsPerTask: 3,
+    },
+    sessionRollover: {
+      enabled: true,
+      milestones: [200_000, 300_000, 400_000],
+      autoBrief: true,
     },
     provider: 'openai',
     openrouter: {

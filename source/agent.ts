@@ -63,6 +63,8 @@ import { MemoryCapabilityBuilder } from './services/memory/memory-capabilities.j
 import type { ShellChildRegistry } from './utils/shell/shell-child-registry.js';
 import { createSessionBrowserToolDefinitions } from './tools/session-browser/session-browser-tools.js';
 import type { SessionBrowser } from './services/conversation/session-browser.js';
+import type { SessionRolloverRequest } from './contracts/session-rollover.js';
+import { createSessionRolloverToolDefinition } from './tools/session-rollover/session-rollover-tool.js';
 
 export { getProjectTreeForPrompt } from './utils/project-tree.js';
 
@@ -229,6 +231,7 @@ export const getAgentDefinition = (
     allowAskUser?: boolean;
     /** Explicit interactive-root-only capability; never inferred from memory access. */
     sessionBrowser?: SessionBrowser;
+    requestSessionRollover?: (request: SessionRolloverRequest) => void;
   },
   model?: string,
 ): AgentDefinition => {
@@ -254,6 +257,7 @@ export const getAgentDefinition = (
     allowBackgroundShell = true,
     allowAskUser = true,
     sessionBrowser,
+    requestSessionRollover,
   } = deps;
   const defaultModel = settingsService.get('agent.model');
   const resolvedModel = model?.trim() || defaultModel;
@@ -398,6 +402,7 @@ export const getAgentDefinition = (
 
   tools.push(...memoryCapability.tools);
   if (sessionBrowser) tools.push(...createSessionBrowserToolDefinitions(sessionBrowser));
+  if (requestSessionRollover) tools.push(createSessionRolloverToolDefinition(requestSessionRollover));
 
   if (skillsService && skillsService.getAvailableSkillsForModel().length > 0) {
     tools.push(createActivateSkillToolDefinition(skillsService));

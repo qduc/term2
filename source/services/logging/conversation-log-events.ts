@@ -302,6 +302,12 @@ export interface SessionClearedEvent {
   type: 'session_cleared';
 }
 
+export interface SessionRolloverEvent {
+  type: 'session_rollover';
+  reason?: 'context_pressure' | 'task_boundary';
+  brief: string;
+}
+
 export type LogEvent =
   | SessionInitEvent
   | SettingsChangedEvent
@@ -327,7 +333,8 @@ export type LogEvent =
   | AssistantJournalDeltaLogEvent
   | AssistantJournalItemLogEvent
   | UndoEvent
-  | SessionClearedEvent;
+  | SessionClearedEvent
+  | SessionRolloverEvent;
 
 export interface TruncatedLogEvent {
   type: string;

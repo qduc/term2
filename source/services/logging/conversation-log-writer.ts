@@ -100,7 +100,12 @@ function deltaPath(dir: string, sessionId: string): string {
  * appends background-shell and subagent lifecycle events after the final turn,
  * so the sidecar would almost never be collected at close.
  */
-const TURN_SETTLING_EVENTS = new Set<LogEvent['type']>(['assistant_turn', 'undo', 'session_cleared']);
+const TURN_SETTLING_EVENTS = new Set<LogEvent['type']>([
+  'assistant_turn',
+  'undo',
+  'session_cleared',
+  'session_rollover',
+]);
 
 function lockPath(dir: string, sessionId: string): string {
   return path.join(dir, `${sessionId}.lock`);

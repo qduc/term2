@@ -17,6 +17,7 @@ import type { BackgroundShellOutputBundle } from '../services/shell/background-s
 import type { BackgroundShellExecutionResult } from '../tools/system/shell.js';
 import type { ShellChildRegistry } from '../utils/shell/shell-child-registry.js';
 import type { SessionBrowser } from '../services/conversation/session-browser.js';
+import type { SessionRolloverRequest } from '../contracts/session-rollover.js';
 
 /** Narrow capability interface consumed by chat/session clients. */
 export interface AgentSource {
@@ -50,6 +51,7 @@ export interface AgentConfigurationDeps {
   allowAskUser?: boolean;
   /** Explicit interactive-root-only browser capability. */
   sessionBrowser?: SessionBrowser;
+  requestSessionRollover?: (request: SessionRolloverRequest) => void;
 }
 
 export class AgentConfiguration implements AgentSource {
@@ -81,6 +83,7 @@ export class AgentConfiguration implements AgentSource {
   #allowBackgroundShell: boolean;
   #allowAskUser: boolean;
   #sessionBrowser?: SessionBrowser;
+  #requestSessionRollover?: (request: SessionRolloverRequest) => void;
   #unsubscribeSettings: (() => void) | null = null;
   #isDisposed = false;
 
@@ -111,6 +114,7 @@ export class AgentConfiguration implements AgentSource {
     this.#allowBackgroundShell = deps.allowBackgroundShell ?? true;
     this.#allowAskUser = deps.allowAskUser ?? true;
     this.#sessionBrowser = deps.sessionBrowser;
+    this.#requestSessionRollover = deps.requestSessionRollover;
 
     // Create editor
     this.#editor = createEditorImpl({
@@ -233,6 +237,7 @@ export class AgentConfiguration implements AgentSource {
       allowBackgroundShell: this.#allowBackgroundShell,
       allowAskUser: this.#allowAskUser,
       sessionBrowser: this.#sessionBrowser,
+      ...(this.#requestSessionRollover ? { requestSessionRollover: this.#requestSessionRollover } : {}),
     };
   }
 

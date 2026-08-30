@@ -146,6 +146,8 @@ export interface ApplicationRunLoopOptions {
   readonly requestPreparation?: ApplicationRequestPreparation;
   /** Application-owned local compaction evaluated at each request boundary. */
   readonly boundaryCompaction?: ApplicationBoundaryCompaction;
+  /** Synchronous request-boundary observation, before any optional compaction await. */
+  readonly onRequestBoundary?: (history: readonly ProviderInputItem[], onReminder: (text: string) => void) => void;
   /** Per-request output and deadline guard; model settings provide the normal runtime defaults. */
   readonly generationGuard?: GenerationGuardOptions;
   /**
@@ -785,6 +787,14 @@ export class ApplicationRunLoop {
     return stream;
   }
 
+  /** Route boundary advice through the same admission lane as mode notices. */
+  #queuePendingSystemNotice(text: string): void {
+    this.#pendingSteers.push({
+      items: [{ type: 'message', role: 'user', content: `[Mode Notice] ${text}` }],
+      resolve: () => undefined,
+    });
+  }
+
   async #execute(
     state: RunState,
     stream: AgentStream & { finalOutput?: string },
@@ -870,6 +880,7 @@ export class ApplicationRunLoop {
         this.#admitPendingSteers(state, stream, queue);
         this.#evaluateRunBudget(state, stream, queue);
         if (state.pendingRunBudgetInteraction) return this.#pauseForRunBudgetInteraction(state, stream, queue);
+        options.onRequestBoundary?.(state.history, (text) => this.#queuePendingSystemNotice(text));
 
         if (options.boundaryCompaction) {
           const compactionStartedAt = Date.now();
@@ -913,6 +924,8 @@ export class ApplicationRunLoop {
           this.#evaluateRunBudget(state, stream, queue);
           if (state.pendingRunBudgetInteraction) return this.#pauseForRunBudgetInteraction(state, stream, queue);
         }
+
+        this.#admitPendingSteers(state, stream, queue);
 
         state.turnCount += 1;
         this.#evaluateRunBudget(state, stream, queue);

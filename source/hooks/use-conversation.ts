@@ -31,6 +31,7 @@ import {
 import type { HistoryService } from '../services/history-service.js';
 import type { InputSurgeApproval } from '../services/input-surge-approval.js';
 import type { RestoredState } from '../services/conversation/conversation-replay.js';
+import type { SessionRolloverRequest } from '../contracts/session-rollover.js';
 
 import type { ConversationLogWriter } from '../services/logging/conversation-log-writer.js';
 
@@ -80,6 +81,7 @@ export const useConversation = ({
   initialMessages = [],
   sessionId,
   onClear,
+  onSessionRollover,
   settingsService,
   historyService,
   replaceInput,
@@ -95,6 +97,7 @@ export const useConversation = ({
   initialMessages?: Message[];
   sessionId?: string;
   onClear?: () => void | Promise<void>;
+  onSessionRollover?: (request: SessionRolloverRequest) => void | Promise<void>;
   settingsService?: SettingsService;
   historyService: Pick<HistoryService, 'addMessage'>;
   replaceInput?: (text: string) => void;
@@ -281,7 +284,11 @@ export const useConversation = ({
       },
       ui: {
         onTurnStart: () => dispatch({ type: 'turn/started' }),
-        onTurnEnd: () => dispatch({ type: 'turn/completed' }),
+        onTurnEnd: () => {
+          dispatch({ type: 'turn/completed' });
+          const request = conversationService.consumeSessionRolloverRequest?.();
+          if (request) void onSessionRollover?.(request);
+        },
         onApprovalRequested: (approval) => dispatch({ type: 'approval/requested', approval }),
         onApprovalResolved: () => dispatch({ type: 'approval/resolved' }),
         onUsageUpdate: (usage) => dispatch({ type: 'usage/updated', usage }),

@@ -15,6 +15,7 @@ import type { NestedToolCompatibilityState } from './session/nested-tool-compati
 import type { NormalizedUsage } from '../utils/ai/token-usage.js';
 import type { ModelRequestCost } from './cost/model-cost.js';
 import type { RunBudgetEvent } from './agent-runtime/run-budget.js';
+import type { SessionRolloverRequest } from '../contracts/session-rollover.js';
 
 export type AgentClientRunOptions = {
   previousResponseId?: string | null;
@@ -109,6 +110,8 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
    * the tracker so mid-tool stream recovery can settle as `unknown`.
    */
   setOnToolDispatch?(handler: ((callId: string) => void) | undefined): void;
+  requestSessionRollover?(request: SessionRolloverRequest): void;
+  consumeSessionRolloverRequest?(): SessionRolloverRequest | null;
   /** Conversation-scoped lifecycle sink for root background shell jobs. */
   setBackgroundShellEventSink?(sink: ((event: ConversationEvent) => void) | null): void;
 

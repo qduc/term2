@@ -45,6 +45,11 @@ const SETTINGS_SOURCE_KEYS = {
       intervalMs: 'agent.backgroundCheckIn.intervalMs',
       maxCheckInsPerTask: 'agent.backgroundCheckIn.maxCheckInsPerTask',
     },
+    sessionRollover: {
+      enabled: 'agent.sessionRollover.enabled',
+      milestones: 'agent.sessionRollover.milestones',
+      autoBrief: 'agent.sessionRollover.autoBrief',
+    },
     provider: 'agent.provider',
     openrouter: 'agent.openrouter',
     codex: {

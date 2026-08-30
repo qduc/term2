@@ -45,6 +45,7 @@ import type {
   ResolvePendingInteractionRequest,
 } from '../session/pending-interaction-state.js';
 import { isAbortLikeError } from '../../utils/error-helpers.js';
+import type { SessionRolloverRequest } from '../../contracts/session-rollover.js';
 
 export type { ConversationTerminal, ApprovalDescriptor, PendingApproval } from '../../contracts/conversation.js';
 export type { CommandMessage } from '../../tools/types.js';
@@ -369,6 +370,14 @@ export class ConversationService {
 
   queueModeNotice(text: string): void {
     this.#runtime.state.queueModeNotice(text);
+  }
+
+  consumeSessionRolloverRequest(): SessionRolloverRequest | null {
+    return this.#clientHandle.agentClient.consumeSessionRolloverRequest?.() ?? null;
+  }
+
+  logSessionRollover(request: SessionRolloverRequest): void {
+    this.#runtime.logs.log({ type: 'session_rollover', ...request });
   }
 
   /**

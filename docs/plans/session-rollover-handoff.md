@@ -1,11 +1,12 @@
 # Session rollover — agent-triggered handoff as the compaction alternative
 
-Status: **proposed, nothing implemented.** Concept validated by a live
-experiment 2026-08-30 (see "Evidence" below), and by the overnight A/B
+Concept validated by a live experiment 2026-08-30 (see "Evidence" below), and by the overnight A/B
 benchmark 2026-08-31 (see "Overnight benchmark results" below): the rollover
 arm matched the human fix's blind-judge quality at ~2.2x lower cost. This doc
 maps the concept onto the existing code and records the design decisions that
-remain.
+remain. The M1/M2 slice (milestone reminder + `session_rollover` tool) is
+implemented on branch `session-rollover`, left unpushed pending user review;
+nothing here is merged to main.
 
 ## Overnight benchmark results (2026-08-31, run by the rollover session)
 
@@ -213,10 +214,15 @@ leaks it until dispose — implementation detail for the slice.
 
 ## Decisions still open
 
-1. **Rotation ownership**: lift rotation from `app.tsx` into
-   `SessionRuntime` + UI-subscribes (recommended above), or a narrower
-   bridge where the tool sets a "rollover requested" state that the UI
-   consumes after turn settlement (less inversion, but splits the policy).
+1. **Rotation ownership** — chosen for M2: the narrower bridge. The tool
+   records one rollover request in the session client; the app consumes it
+   after turn settlement, logs the marker, reuses the existing
+   `handleClearConversation` sequence, and sends the brief as the new
+   session's first user turn. Rotation is deliberately not lifted into
+   `SessionRuntime` in this slice because `app.tsx` already owns the
+   writer/session-id/UI reset sequence; the broader inversion (still open
+   for later) would move that sequence behind `SessionRuntime` + UI
+   subscribers.
    Decision shapes the slice's size.
 2. **Where the brief lives**: (a) as the new session's first turn only
    (searchable via `firstUserMessage`), (b) also written to a file under the

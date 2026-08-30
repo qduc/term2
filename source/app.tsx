@@ -153,6 +153,9 @@ const App: FC<AppProps> = ({
   const [sessionId, setSessionId] = useState(initialSessionId);
   const [backgroundTaskManagerOpen, setBackgroundTaskManagerOpen] = useState(false);
   const handleClearConversationRef = useRef<(() => Promise<void>) | null>(null);
+  const sessionRolloverHandlerRef = useRef<
+    ((request: import('./contracts/session-rollover.js').SessionRolloverRequest) => void | Promise<void>) | null
+  >(null);
   const pendingSkillRef = useRef<SkillInfo | null>(null);
   const sandboxApprovalCoordinatorRef = useRef<SandboxNetworkApprovalCoordinator | null>(null);
   const [sandboxPromptRequest, setSandboxPromptRequest] = useState<SandboxNetworkAccessRequest | null>(null);
@@ -254,12 +257,19 @@ const App: FC<AppProps> = ({
         await handleClearConversationRef.current();
       }
     }, []),
+    onSessionRollover: (request) => sessionRolloverHandlerRef.current?.(request),
     settingsService,
     historyService,
     onRestoreInput: setInput,
     logWriter,
     notifier,
   });
+
+  sessionRolloverHandlerRef.current = async (request) => {
+    conversationService.logSessionRollover(request);
+    await clearConversation();
+    await sendUserMessage(request.brief);
+  };
 
   // Keep older test/integration harnesses compatible while the session facade
   // rolls out the adopted-subagent approval channel.

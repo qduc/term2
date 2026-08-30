@@ -182,8 +182,6 @@ export const useAppCommands = ({
           applyRuntimeSetting,
           addSystemMessage,
           disableOtherModes,
-          messages,
-          requestModeSwitchConfirm,
         },
       ),
       createAutoApproveSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage }),

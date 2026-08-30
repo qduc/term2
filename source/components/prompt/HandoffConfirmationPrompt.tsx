@@ -1,5 +1,6 @@
 import React, { FC, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
+import { COLOR_DANGER, COLOR_SUCCESS } from '../theme.js';
 
 interface HandoffConfirmationPromptProps {
   onConfirm: () => void;
@@ -40,8 +41,8 @@ const HandoffConfirmationPrompt: FC<HandoffConfirmationPromptProps> = ({ onConfi
     <Box flexDirection="column">
       <Text>📋 Change model?</Text>
       <Box flexDirection="column" marginLeft={1}>
-        <Text color={selectedIndex === 0 ? 'green' : undefined}>{selectedIndex === 0 ? '❯ ' : '  '}Yes</Text>
-        <Text color={selectedIndex === 1 ? 'red' : undefined}>{selectedIndex === 1 ? '❯ ' : '  '}No</Text>
+        <Text color={selectedIndex === 0 ? COLOR_SUCCESS : undefined}>{selectedIndex === 0 ? '❯ ' : '  '}Yes</Text>
+        <Text color={selectedIndex === 1 ? COLOR_DANGER : undefined}>{selectedIndex === 1 ? '❯ ' : '  '}No</Text>
       </Box>
     </Box>
   );

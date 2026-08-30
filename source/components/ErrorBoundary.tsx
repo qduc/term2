@@ -1,6 +1,7 @@
 import React, { Component, ReactNode } from 'react';
 import { Box, Text } from 'ink';
 import type { LoggingService } from '../services/logging/logging-service.js';
+import { COLOR_DANGER, COLOR_TEXT_SUBTLE, COLOR_WARNING } from './theme.js';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -63,7 +64,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       return (
         <Box flexDirection="column" padding={1}>
           <Box marginBottom={1}>
-            <Text color="red" bold>
+            <Text color={COLOR_DANGER} bold>
               ⚠ Application Error
             </Text>
           </Box>
@@ -74,10 +75,10 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
           {error && (
             <Box marginBottom={1} flexDirection="column">
-              <Text color="yellow">Error: {error.message}</Text>
+              <Text color={COLOR_WARNING}>Error: {error.message}</Text>
               {error.stack && (
                 <Box marginTop={1}>
-                  <Text color="#64748b">{error.stack.split('\n').slice(0, 5).join('\n')}</Text>
+                  <Text color={COLOR_TEXT_SUBTLE}>{error.stack.split('\n').slice(0, 5).join('\n')}</Text>
                 </Box>
               )}
             </Box>
@@ -96,7 +97,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
           {errorInfo?.componentStack && (
             <Box marginTop={1}>
-              <Text color="#64748b">Component: {errorInfo.componentStack.split('\n')[1]?.trim()}</Text>
+              <Text color={COLOR_TEXT_SUBTLE}>Component: {errorInfo.componentStack.split('\n')[1]?.trim()}</Text>
             </Box>
           )}
         </Box>

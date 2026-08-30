@@ -2,6 +2,7 @@ import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import type { PathCompletionItem } from '../../hooks/use-path-completion.js';
 import { MenuContainer } from '../common/MenuContainer.js';
+import { COLOR_ACCENT, COLOR_WARNING } from '../theme.js';
 
 type Props = {
   items: PathCompletionItem[];
@@ -26,13 +27,13 @@ const PathSelectionMenu: FC<Props> = ({
 }) => {
   return (
     <Box flexDirection="column">
-      {warning && <Text color="yellow">{warning}</Text>}
+      {warning && <Text color={COLOR_WARNING}>{warning}</Text>}
       <MenuContainer
         items={items}
         selectedIndex={selectedIndex}
         scrollOffset={scrollOffset}
         maxHeight={maxHeight}
-        borderColor="cyan"
+        borderColor={COLOR_ACCENT}
         loading={loading}
         loadingText="Loading project paths…"
         error={error ? `Unable to load paths: ${error}` : null}
@@ -43,7 +44,7 @@ const PathSelectionMenu: FC<Props> = ({
           const icon = item.type === 'directory' ? '📁' : '📄';
           return (
             <Box key={item.path}>
-              <Text color={isSelected ? 'cyan' : undefined} inverse={isSelected}>
+              <Text color={isSelected ? COLOR_ACCENT : undefined} inverse={isSelected}>
                 {icon} {item.path}
               </Text>
             </Box>

@@ -12,6 +12,7 @@ import type {
 import { sanitizeBackgroundTaskToolLabel } from '../../services/background-task-activity.js';
 import { formatBackgroundTaskElapsed } from './BackgroundTasksPanel.js';
 import { terminalTextWidth, truncateTerminalText } from './terminal-text-budget.js';
+import { COLOR_ACCENT_ALT, COLOR_DANGER_SOFT, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_WARNING } from '../theme.js';
 
 export type BackgroundTaskManagerProps = {
   enabled?: boolean;
@@ -127,7 +128,7 @@ const formatToolCounts = (counts: Record<string, number>): string => {
 
 const BackgroundTaskDetailsView: FC<{ details: BackgroundTaskControlDetails }> = ({ details }) => (
   <Box flexDirection="column" marginTop={1} paddingLeft={2}>
-    <Text color="#c4b5fd">ID: {details.id}</Text>
+    <Text color={COLOR_ACCENT_ALT}>ID: {details.id}</Text>
     <Text>State: {statusText(details)}</Text>
     {details.activity && (
       <Text>
@@ -140,7 +141,7 @@ const BackgroundTaskDetailsView: FC<{ details: BackgroundTaskControlDetails }> =
       <>
         <Text wrap="wrap">Command: {details.command}</Text>
         {details.output && <Text wrap="wrap">Output: {details.output}</Text>}
-        {details.error && <Text color="#f87171">Error: {details.error}</Text>}
+        {details.error && <Text color={COLOR_DANGER_SOFT}>Error: {details.error}</Text>}
       </>
     ) : (
       <>
@@ -321,14 +322,14 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
   const selected = selectedRow?.kind === 'background' ? selectedRow.task : undefined;
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="#6366f1" paddingX={1} marginBottom={1}>
-      <Text bold color="#a5b4fc">
+    <Box flexDirection="column" borderStyle="round" borderColor={COLOR_ACCENT_ALT} paddingX={1} marginBottom={1}>
+      <Text bold color={COLOR_ACCENT_ALT}>
         Manage background tasks
       </Text>
       {foreground.map((candidate, index) => (
         <Text
           key={`${candidate.kind}:${candidate.kind === 'shell' ? candidate.callId : candidate.runId}`}
-          color={index === selectedIndex ? '#f8fafc' : '#64748b'}
+          color={index === selectedIndex ? COLOR_TEXT : COLOR_TEXT_SUBTLE}
         >
           {index === selectedIndex ? '❯' : ' '} [{candidate.kind === 'shell' ? 'Shell' : candidate.role} · foreground]{' '}
           {candidate.kind === 'shell' ? candidate.command : candidate.task} · running
@@ -337,7 +338,7 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
       {tasks.map((task, index) => {
         const displayIndex = index + foreground.length;
         return (
-          <Text key={`${task.kind}:${task.id}`} color={displayIndex === selectedIndex ? '#f8fafc' : '#64748b'}>
+          <Text key={`${task.kind}:${task.id}`} color={displayIndex === selectedIndex ? COLOR_TEXT : COLOR_TEXT_SUBTLE}>
             {displayIndex === selectedIndex ? '❯' : ' '} [{task.kind === 'shell' ? 'Shell' : task.role}]{' '}
             {taskLabel(task)} · {statusText(task)}
           </Text>
@@ -345,7 +346,7 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
       })}
       {detailsVisible && selectedForeground && (
         <Box flexDirection="column" marginTop={1} paddingLeft={2}>
-          <Text color="#c4b5fd">
+          <Text color={COLOR_ACCENT_ALT}>
             {selectedForeground.kind === 'shell' ? 'Call ID' : 'Run ID'}:{' '}
             {selectedForeground.kind === 'shell' ? selectedForeground.callId : selectedForeground.runId}
           </Text>
@@ -358,20 +359,24 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
       )}
       {detailsVisible && selected && <BackgroundTaskDetailsView details={selected} />}
       {stopArmedKey === selectedRow?.key && (
-        <Text color="#f59e0b">Press Enter to force stop this task, or Esc to close.</Text>
+        <Text color={COLOR_WARNING}>Press Enter to force stop this task, or Esc to close.</Text>
       )}
       {backgroundArmedKey === selectedRow?.key && (
-        <Text color="#f59e0b">
+        <Text color={COLOR_WARNING}>
           Press Enter to put this {selectedForeground?.kind === 'subagent' ? 'subagent' : 'shell'} in the background, or
           Esc to close.
         </Text>
       )}
       {feedback && (
-        <Text color={feedback === 'Stop requested' || feedback === 'Moved to background' ? '#f59e0b' : '#f87171'}>
+        <Text
+          color={
+            feedback === 'Stop requested' || feedback === 'Moved to background' ? COLOR_WARNING : COLOR_DANGER_SOFT
+          }
+        >
           {feedback}
         </Text>
       )}
-      <Text color="#64748b">
+      <Text color={COLOR_TEXT_SUBTLE}>
         ↑↓ select · Enter details
         {selectedForeground ? ' · [b] Put in background' : ''}
         {selected && isActive(selected) ? ' · [x] Force stop' : ''} · Esc close

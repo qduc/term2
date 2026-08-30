@@ -320,4 +320,65 @@ describe('RuntimeFactory and ServerSession', () => {
       reason: 'closed',
     });
   });
+
+  it('keeps status as running or awaiting_interaction when background tasks are active', async () => {
+    let backgroundStatuses: any[] = [];
+    const client = {
+      ...partialClient(),
+      listBackgroundSubagentStatuses: () => backgroundStatuses,
+    };
+    const factory = makeFactory(root(), undefined, {
+      createAgentClient: () => client as any,
+    });
+    const session = await factory.create(binding(root(), 'background-status'));
+
+    expect(session.status).toBe('idle');
+
+    // Subagent is running in background
+    backgroundStatuses = [
+      {
+        runId: 'sub-gw-1',
+        role: 'worker',
+        status: 'running',
+        task: 'build',
+        taskPreview: 'build',
+        startedAt: 1000,
+        elapsedMs: 10,
+        toolCounts: {},
+      },
+    ];
+    expect(session.status).toBe('running');
+
+    // Subagent is waiting for answer
+    backgroundStatuses = [
+      {
+        runId: 'sub-gw-1',
+        role: 'worker',
+        status: 'waiting_for_answer',
+        task: 'build',
+        taskPreview: 'build',
+        startedAt: 1000,
+        elapsedMs: 20,
+        toolCounts: {},
+      },
+    ];
+    expect(session.status).toBe('awaiting_interaction');
+
+    // Subagent completes
+    backgroundStatuses = [
+      {
+        runId: 'sub-gw-1',
+        role: 'worker',
+        status: 'completed',
+        task: 'build',
+        taskPreview: 'build',
+        startedAt: 1000,
+        elapsedMs: 30,
+        toolCounts: {},
+      },
+    ];
+    expect(session.status).toBe('idle');
+
+    await session.dispose();
+  });
 });

@@ -18,6 +18,7 @@ import type { RewindTargetId } from '../services/conversation/conversation-store
 import { conversationUIReducer, createInitialUIState, getConversationUIFlags } from './conversation-ui-reducer.js';
 import type { BackgroundTask } from '../services/subagents/subagent-notification-store.js';
 import type { BackgroundTaskControlDetails } from '../services/session/background-task-control.js';
+import { needsBackgroundTaskClock } from '../components/layout/background-task-clock.js';
 import type {
   BackgroundSubagentApprovalSnapshot,
   BackgroundSubagentApprovalResolutionRequest,
@@ -215,34 +216,33 @@ export const useConversation = ({
     return () => conversationService.setBackgroundSubagentTaskObserver(null);
   }, [conversationService, refreshBackgroundSubagentTasks]);
 
+  const backgroundClockNeeded = needsBackgroundTaskClock({
+    snapshotTasks: backgroundSubagentTaskState.tasks,
+    detailsTasks: backgroundTaskDetailsState.tasks,
+    foregroundCount: foregroundTransferCandidates.length,
+    turnInFlight: isProcessing,
+    now: Math.max(backgroundSubagentTaskState.now, backgroundTaskDetailsState.now),
+  });
+
   useEffect(() => {
-    // Keep ticking while the details lane still has rows: the panel's per-row
-    // linger only expires on a tick, and terminal details outlive the store's
-    // own retention window.
-    if (
-      !isProcessing &&
-      backgroundSubagentTaskState.tasks.length === 0 &&
-      backgroundTaskDetailsState.tasks.length === 0 &&
-      foregroundTransferCandidates.length === 0
-    ) {
-      return;
-    }
+    // Tick only while live work or the panel linger still needs `now`.
+    // Retained terminal registry rows outlive that window on purpose (Ctrl+G);
+    // they must not keep a 1s Ink redraw after the agent is idle.
+    if (!backgroundClockNeeded) return;
     const interval = setInterval(refreshBackgroundSubagentTasks, 1_000);
     return () => clearInterval(interval);
-  }, [
-    isProcessing,
-    backgroundSubagentTaskState.tasks.length,
-    backgroundTaskDetailsState.tasks.length,
-    foregroundTransferCandidates.length,
-    refreshBackgroundSubagentTasks,
-  ]);
+  }, [backgroundClockNeeded, refreshBackgroundSubagentTasks]);
 
   useEffect(() => {
     if (typeof conversationService.backgroundSubagentApprovals?.subscribe !== 'function') return;
-    return conversationService.backgroundSubagentApprovals.subscribe(() =>
-      setBackgroundSubagentApproval(readBackgroundApproval()),
-    );
-  }, [conversationService, readBackgroundApproval]);
+    return conversationService.backgroundSubagentApprovals.subscribe(() => {
+      const snapshot = readBackgroundApproval();
+      setBackgroundSubagentApproval(snapshot);
+      if (snapshot.pendingCount > 0) {
+        notifier?.approvalNeeded();
+      }
+    });
+  }, [conversationService, readBackgroundApproval, notifier]);
 
   const resolveBackgroundSubagentApproval = useCallback(
     (request: BackgroundSubagentApprovalResolutionRequest) =>
@@ -296,11 +296,12 @@ export const useConversation = ({
         onAskUserAdvanceToNext: () => {},
         onAskUserGoBack: () => {},
         onQueueStateChange: (snapshot) => dispatch({ type: 'queue/updated', snapshot }),
-        onQueuedMessagePending: (id, text) =>
-          dispatch({ type: 'queue/message_pending', id, text, queuedAt: Date.now() }),
+        onQueuedMessagePending: (id, text, delivery) =>
+          dispatch({ type: 'queue/message_pending', id, text, delivery, queuedAt: Date.now() }),
         onQueuedMessageStarted: (id) => dispatch({ type: 'queue/message_started', id }),
         onQueuedMessageRemoved: (id) => dispatch({ type: 'queue/message_removed', id }),
         onQueuedMessageEdited: (id, text) => dispatch({ type: 'queue/message_edited', id, text }),
+        onQueuedMessageReclassified: (id, delivery) => dispatch({ type: 'queue/message_reclassified', id, delivery }),
       },
       approvedContext: approvedContextRef,
       usageAccumulator,

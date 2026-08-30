@@ -5,11 +5,12 @@ import { useState, useEffect } from 'react';
  * for fast-completing operations. Completed/failed messages are shown immediately.
  */
 export function useCommandVisibility(status: string | undefined): { isVisible: boolean; isRunning: boolean } {
-  const isRunning = status === 'pending' || status === 'running';
-  const [isVisible, setIsVisible] = useState(!isRunning);
+  const isRunning = status === 'running';
+  const isInFlight = status === 'pending' || status === 'running';
+  const [isVisible, setIsVisible] = useState(!isInFlight);
 
   useEffect(() => {
-    if (!isRunning) {
+    if (!isInFlight) {
       if (!isVisible) {
         // eslint-disable-next-line react-hooks/set-state-in-effect -- show-after-delay is an inherent side effect
         setIsVisible(true);
@@ -23,7 +24,7 @@ export function useCommandVisibility(status: string | undefined): { isVisible: b
 
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- isVisible drives show-after-delay which is inherently side-effect; adding isVisible would cause a re-render loop
-  }, [isRunning]);
+  }, [isInFlight]);
 
   return { isVisible, isRunning };
 }

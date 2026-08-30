@@ -25,6 +25,9 @@ export type LoadConversationForProjectResult =
   | { status: 'project_mismatch'; conversation: RestoredState }
   | { status: 'unreadable'; error: unknown };
 
+/** Read-only browser enumeration; malformed logs are counted without exposing paths or errors. */
+export type BrowseConversationsForProjectResult = { conversations: RestoredState[]; unavailable: number };
+
 export function getConversationsDir(): string {
   return conversationsDirOverride ?? process.env['TERM2_CONVERSATIONS_DIR'] ?? CONVERSATIONS_DIR;
 }
@@ -298,6 +301,15 @@ export function loadConversationForProject(
   expectedSshHost?: string,
 ): LoadConversationForProjectResult {
   ensureConversationsDir();
+  return loadConversationForProjectReadOnly(id, expectedProjectPath, expectedSshHost);
+}
+
+/** Browser-only load that must not trigger directory creation or legacy migration. */
+export function loadConversationForProjectReadOnly(
+  id: string,
+  expectedProjectPath: string,
+  expectedSshHost?: string,
+): LoadConversationForProjectResult {
   const filePath = getConversationPath(id);
   if (!fs.existsSync(filePath)) {
     return { status: 'not_found' };
@@ -318,6 +330,46 @@ export function loadConversationForProject(
     // can print an actionable diagnostic instead of crashing with an fs stack.
     return { status: 'unreadable', error };
   }
+}
+
+const SAFE_SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+
+/**
+ * Enumerates canonical local logs through the same decoder/replay/context path
+ * as resume. Unlike the UI list, this reports malformed candidates generically.
+ */
+export function browseConversationsForProject(
+  expectedProjectPath: string,
+  expectedSshHost?: string,
+): BrowseConversationsForProjectResult {
+  const dir = getConversationsDir();
+  let files: string[];
+  try {
+    if (!fs.existsSync(dir)) return { conversations: [], unavailable: 0 };
+    files = fs.readdirSync(dir).filter((file) => file.endsWith('.jsonl'));
+  } catch {
+    return { conversations: [], unavailable: 0 };
+  }
+  const conversations: RestoredState[] = [];
+  let unavailable = 0;
+  for (const file of files) {
+    const id = file.slice(0, -'.jsonl'.length);
+    if (!SAFE_SESSION_ID.test(id)) {
+      // An unsafe filename cannot be context-checked without deriving a path
+      // from an untrusted identifier, so it is neither exposed nor counted.
+      continue;
+    }
+    const loaded = loadConversationForProjectReadOnly(id, expectedProjectPath, expectedSshHost);
+    if (loaded.status === 'loaded' && loaded.conversation.id === id && loaded.conversation.createdAt) {
+      conversations.push(loaded.conversation);
+    } else if (
+      loaded.status === 'unreadable' ||
+      (loaded.status === 'loaded' && (loaded.conversation.id !== id || !loaded.conversation.createdAt))
+    ) {
+      unavailable++;
+    }
+  }
+  return { conversations, unavailable };
 }
 
 export function loadLastConversation(expectedProjectPath?: string, expectedSshHost?: string): RestoredState | null {

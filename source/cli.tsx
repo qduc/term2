@@ -45,7 +45,6 @@ import { killLiveShellChildren } from './utils/shell/execute-shell.js';
 import { createConversationLogWriter, LockConflictError } from './services/logging/conversation-log-writer.js';
 import { AGENT_AFFECTING_SETTINGS } from './services/logging/conversation-log-events.js';
 import { installPlanModeInterceptor } from './services/plan-mode-interceptor.js';
-import { primePlanModeNoticeIfActive } from './services/mode-notices.js';
 import { normalizeAppModes } from './services/settings/settings-schema.js';
 import { createOwnedSessionClientFactory } from './services/session/session-client-factory.js';
 import os from 'os';
@@ -61,6 +60,7 @@ import {
 } from './utils/home-directory-start-guard.js';
 import { createRootHookRuntime } from './services/hooks/hook-composition.js';
 import { pruneStaleTempArtifacts } from './utils/shell/temp-sweep.js';
+import { SessionBrowser } from './services/conversation/session-browser.js';
 
 const sessionUsageAccumulator = createUsageAccumulator();
 const subagentUsageAccumulator = createUsageAccumulator();
@@ -239,17 +239,28 @@ const cli = meow(
   },
 );
 
+function oauthLoginIo(providerLabel: string) {
+  return {
+    pasteInput: process.stdin.isTTY ? process.stdin : undefined,
+    onPasteRejected: (message: string) => {
+      console.error(message);
+    },
+    onPrompt: (url: string) => {
+      console.log(`Opening your browser to log in to ${providerLabel}.`);
+      console.log(`If it does not open, visit:\n${url}\n`);
+      console.log(
+        'If you are remote and the browser cannot reach this machine, copy the redirected localhost URL from the address bar, paste it here, and press Enter.',
+      );
+    },
+  };
+}
+
 // Login is a standalone errand: it must run before any session, settings, or
 // Ink setup so a fresh host can authenticate without a usable provider.
 if (cli.flags.grokLogin) {
   const { loginToGrok } = await import('./providers/grok-auth.js');
   try {
-    const tokens = await loginToGrok({
-      onPrompt: (url) => {
-        console.log('Opening your browser to log in to Grok.');
-        console.log(`If it does not open, visit:\n${url}\n`);
-      },
-    });
+    const tokens = await loginToGrok(oauthLoginIo('Grok'));
     console.log(`Logged in to Grok${tokens.email ? ` as ${tokens.email}` : ''}.`);
     process.exit(0);
   } catch (error: any) {
@@ -261,12 +272,7 @@ if (cli.flags.grokLogin) {
 if (cli.flags.codexLogin) {
   const { loginToCodex } = await import('./providers/codex-auth.js');
   try {
-    await loginToCodex({
-      onPrompt: (url) => {
-        console.log('Opening your browser to log in to Codex.');
-        console.log(`If it does not open, visit:\n${url}\n`);
-      },
-    });
+    await loginToCodex(oauthLoginIo('Codex'));
     console.log('Logged in to Codex.');
     process.exit(0);
   } catch (error: any) {
@@ -630,6 +636,12 @@ const history = new HistoryService({
   loggingService: logger,
   settingsService: settings,
 });
+// This is deliberately composed only for the interactive root session. The
+// browser reevaluates its project root per tool call and has no write port.
+const sessionBrowser = new SessionBrowser(() => ({
+  projectPath: executionContext.getCwd(),
+  ...(sshInfo?.host ? { sshHost: sshInfo.host } : {}),
+}));
 
 const skillsService = new SkillsService(logger, executionContext.getCwd());
 skillsService.discoverSkills();
@@ -687,6 +699,7 @@ const sessionClientFactory = createOwnedSessionClientFactory(
         sessionContextService,
         skillsService,
         requestCapture,
+        sessionBrowser: hasPositionalPrompt ? undefined : sessionBrowser,
       },
       toolOwnership,
       postExecutePauseCapability,
@@ -796,7 +809,6 @@ const conversationService = new ConversationService({
     skillsService,
   },
 });
-primePlanModeNoticeIfActive(Boolean(settings.get('app.planMode')), (text) => conversationService.queueModeNotice(text));
 
 if (conversationService.hookEvents) {
   await hookService.emit(

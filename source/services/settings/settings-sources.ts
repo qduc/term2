@@ -40,6 +40,11 @@ const SETTINGS_SOURCE_KEYS = {
       identicalToolCallThreshold: 'agent.runBudget.identicalToolCallThreshold',
       escalation: 'agent.runBudget.escalation',
     },
+    backgroundCheckIn: {
+      enabled: 'agent.backgroundCheckIn.enabled',
+      intervalMs: 'agent.backgroundCheckIn.intervalMs',
+      maxCheckInsPerTask: 'agent.backgroundCheckIn.maxCheckInsPerTask',
+    },
     provider: 'agent.provider',
     openrouter: 'agent.openrouter',
     codex: {

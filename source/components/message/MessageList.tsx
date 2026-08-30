@@ -111,10 +111,13 @@ const canRenderStatically = (message: MessageLike) => {
   return true;
 };
 
-// A run of command messages that reaches the very end of the array might still
-// grow (another tool call could land right after it). Concise-mode grouping
-// keeps that whole run in the dynamic/active region — never committed to
-// <Static> — until something else closes it, so its summary line can keep
+const isGroupableToolMessage = (message: MessageLike | undefined): boolean =>
+  message?.sender === 'command' || message?.sender === 'subagent';
+
+// A run of command or subagent messages that reaches the very end of the array
+// might still grow (another tool call could land right after it). Concise-mode
+// grouping keeps that whole run in the dynamic/active region — never committed
+// to <Static> — until something else closes it, so its summary line can keep
 // counting up in place. <Static> writes each item exactly once, so committing
 // any member early would strand it as a separate frozen line beside the group
 // that later absorbs it.
@@ -124,12 +127,12 @@ const canRenderStatically = (message: MessageLike) => {
 // in static history.
 const findOpenTrailingCommandRunStart = (messages: MessageLike[]): number => {
   const lastIndex = messages.length - 1;
-  if (lastIndex < 0 || messages[lastIndex]?.sender !== 'command') {
+  if (lastIndex < 0 || !isGroupableToolMessage(messages[lastIndex])) {
     return -1;
   }
 
   let runStart = lastIndex;
-  while (runStart > 0 && messages[runStart - 1]?.sender === 'command') {
+  while (runStart > 0 && isGroupableToolMessage(messages[runStart - 1])) {
     runStart -= 1;
   }
 
@@ -157,7 +160,7 @@ export const splitStaticHistory = <T extends MessageLike>(messages: T[], options
     previousMessage?.status === 'finalized' &&
     (previousMessage.sender === 'bot' || previousMessage.sender === 'reasoning');
   const activeStartWithToolLeadIn =
-    firstActiveMessage?.sender === 'command' &&
+    isGroupableToolMessage(firstActiveMessage) &&
     (firstActiveMessage.status === 'pending' || firstActiveMessage.status === 'running') &&
     previousMessageIsToolLeadIn
       ? activeStart - 1

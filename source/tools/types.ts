@@ -102,6 +102,8 @@ export interface SchemaToolDefinition<TSchema extends ZodTypeAny> {
   parallelSafe?: boolean | ((params: z.infer<TSchema>, context?: unknown) => Promise<boolean> | boolean);
   /** Declares a successful call as an observable mutation for stall detection. */
   effect?: 'mutating';
+  /** Result is already serialized and bounded; generic string trimming would corrupt its contract. */
+  preserveSerializedOutput?: boolean;
   /** Optional provider-facing schema when a strict transport cannot express the runtime contract. */
   strictParameters?: ZodTypeAny;
   argumentParsing?: 'repair' | 'strict';
@@ -154,6 +156,8 @@ export interface AnyToolDefinition {
   parallelSafe?: boolean | ((params: never, context?: unknown) => Promise<boolean> | boolean);
   /** Declares a successful call as an observable mutation for stall detection. */
   effect?: 'mutating';
+  /** Result is already serialized and bounded; generic string trimming would corrupt its contract. */
+  preserveSerializedOutput?: boolean;
   strictParameters?: ZodTypeAny;
   argumentParsing?: 'repair' | 'strict';
   approvalPresentation?: ApprovalPresentationCapability;

@@ -443,7 +443,15 @@ async function waitForRequests(
     await server.waitForRequests(predicate);
   } catch (error) {
     throw new Error(
-      `${error instanceof Error ? error.message : String(error)}\nchild output:\n${child.getVisibleOutput()}`,
+      [
+        error instanceof Error ? error.message : String(error),
+        `child pid: ${child.pid}`,
+        `idle generation: ${child.readIdleGeneration()}`,
+        `captured requests: ${server.requests.length}`,
+        `served responses: ${server.served.length}`,
+        `websocket connections: ${server.websocketConnectionCount}`,
+        `child output:\n${child.getVisibleOutput()}`,
+      ].join('\n'),
     );
   }
 }

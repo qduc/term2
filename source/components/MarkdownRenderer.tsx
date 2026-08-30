@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Box, Text, Newline, useStdout } from 'ink';
 import { marked } from 'marked';
+import { COLOR_ACCENT, COLOR_CODE_BACKGROUND, COLOR_SUCCESS, COLOR_TEXT_SUBTLE, COLOR_WARNING } from './theme.js';
 
 type MarkdownRenderOptions = {
   defaultColor?: string;
@@ -342,7 +343,7 @@ const TableRenderer = ({ token, style = 'ascii', options = {}, maxWidth }: Table
     return Array.from({ length: lineCount }, (_, lineIndex) => (
       <Box key={`${rowKey}-${lineIndex}`} flexDirection="row">
         {vertical.left ? (
-          <Text color="#64748b" dimColor={options.dimColor}>
+          <Text color={COLOR_TEXT_SUBTLE} dimColor={options.dimColor}>
             {vertical.left}
           </Text>
         ) : null}
@@ -358,7 +359,7 @@ const TableRenderer = ({ token, style = 'ascii', options = {}, maxWidth }: Table
             <React.Fragment key={index}>
               {cell}
               {index < numCols - 1 && (
-                <Text color="#64748b" dimColor={options.dimColor}>
+                <Text color={COLOR_TEXT_SUBTLE} dimColor={options.dimColor}>
                   {vertical.middle}
                 </Text>
               )}
@@ -366,7 +367,7 @@ const TableRenderer = ({ token, style = 'ascii', options = {}, maxWidth }: Table
           );
         })}
         {vertical.right ? (
-          <Text color="#64748b" dimColor={options.dimColor}>
+          <Text color={COLOR_TEXT_SUBTLE} dimColor={options.dimColor}>
             {vertical.right}
           </Text>
         ) : null}
@@ -378,7 +379,7 @@ const TableRenderer = ({ token, style = 'ascii', options = {}, maxWidth }: Table
   const renderSeparator = () => {
     return (
       <Box marginX={TABLE_MARGIN_X}>
-        <Text color="#64748b" dimColor={options.dimColor}>
+        <Text color={COLOR_TEXT_SUBTLE} dimColor={options.dimColor}>
           {borders.middle}
         </Text>
       </Box>
@@ -389,7 +390,7 @@ const TableRenderer = ({ token, style = 'ascii', options = {}, maxWidth }: Table
     <Box flexDirection="column">
       {/* Top border */}
       <Box marginX={TABLE_MARGIN_X}>
-        <Text color="#64748b" dimColor={options.dimColor}>
+        <Text color={COLOR_TEXT_SUBTLE} dimColor={options.dimColor}>
           {borders.top}
         </Text>
       </Box>
@@ -414,7 +415,7 @@ const TableRenderer = ({ token, style = 'ascii', options = {}, maxWidth }: Table
 
       {/* Bottom border */}
       <Box marginX={TABLE_MARGIN_X}>
-        <Text color="#64748b" dimColor={options.dimColor}>
+        <Text color={COLOR_TEXT_SUBTLE} dimColor={options.dimColor}>
           {borders.bottom}
         </Text>
       </Box>
@@ -462,21 +463,21 @@ const InlineContent = ({ tokens, options = {} }: { tokens: any[]; options?: Mark
 
           case 'codespan':
             return (
-              <Text key={key} color="yellow" backgroundColor="#333" dimColor={options.dimColor}>
+              <Text key={key} color={COLOR_WARNING} backgroundColor={COLOR_CODE_BACKGROUND} dimColor={options.dimColor}>
                 {`\u00A0${token.text}\u00A0`}
               </Text>
             );
 
           case 'link':
             return (
-              <Text key={key} color="#3b82f6" underline dimColor={options.dimColor}>
+              <Text key={key} color={COLOR_ACCENT} underline dimColor={options.dimColor}>
                 {token.text}
               </Text>
             );
 
           case 'image':
             return (
-              <Text key={key} color="#64748b" dimColor={options.dimColor}>
+              <Text key={key} color={COLOR_TEXT_SUBTLE} dimColor={options.dimColor}>
                 {' '}
                 [Image: {token.text}]{' '}
               </Text>
@@ -513,7 +514,7 @@ const BlockRenderer = ({
       const hasTrailingBlankLine = token.raw && token.raw.endsWith('\n\n');
       return (
         <Box flexDirection="column">
-          <Text bold underline={isMain} color={isMain ? 'green' : 'cyan'} dimColor={options.dimColor}>
+          <Text bold underline={isMain} color={isMain ? COLOR_SUCCESS : COLOR_ACCENT} dimColor={options.dimColor}>
             {'#'.repeat(token.depth) + ' '}
             <InlineContent tokens={token.tokens} options={options} />
           </Text>
@@ -544,7 +545,7 @@ const BlockRenderer = ({
       return (
         <Box flexDirection="row">
           <Box marginRight={1}>
-            <Text color="green" dimColor={options.dimColor}>
+            <Text color={COLOR_SUCCESS} dimColor={options.dimColor}>
               •
             </Text>
           </Box>
@@ -568,8 +569,8 @@ const BlockRenderer = ({
     case 'code':
       if (!token.text || !token.text.trim()) return null;
       return (
-        <Box borderStyle="round" borderColor="#64748b" paddingX={1} flexDirection="column" width={maxWidth}>
-          <Text color="yellow" dimColor={options.dimColor}>
+        <Box borderStyle="round" borderColor={COLOR_TEXT_SUBTLE} paddingX={1} flexDirection="column" width={maxWidth}>
+          <Text color={COLOR_WARNING} dimColor={options.dimColor}>
             {token.text}
           </Text>
         </Box>
@@ -584,7 +585,7 @@ const BlockRenderer = ({
           borderRight={false}
           borderTop={false}
           borderBottom={false}
-          borderColor="magenta"
+          borderColor={COLOR_ACCENT}
           flexDirection="column"
         >
           {/* Blockquotes often contain nested paragraphs which render as Boxes */}
@@ -601,7 +602,7 @@ const BlockRenderer = ({
     case 'hr':
       return (
         <Box>
-          <Text color="#64748b" dimColor={options.dimColor}>
+          <Text color={COLOR_TEXT_SUBTLE} dimColor={options.dimColor}>
             ────────────────────────────────────────
           </Text>
         </Box>

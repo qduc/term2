@@ -24,6 +24,13 @@ export type GroupableMessage = {
   toolName?: string;
   command?: string;
   toolArgs?: any;
+  role?: string;
+  task?: string;
+  parentTool?: string;
+  async?: boolean;
+  tools?: any[];
+  finalText?: string;
+  error?: string;
 };
 
 export type CommandGroupMessage = {
@@ -33,18 +40,31 @@ export type CommandGroupMessage = {
   members: GroupableMessage[];
 };
 
+export const isGroupableMessage = (message: GroupableMessage | undefined): boolean =>
+  message?.sender === 'command' || message?.sender === 'subagent';
+
 const isRunningStatus = (status: string | undefined) => status === 'pending' || status === 'running';
 
 const isFailedMember = (message: GroupableMessage) =>
-  message.status === 'failed' || message.status === 'aborted' || message.success === false;
+  message.status === 'failed' ||
+  message.status === 'aborted' ||
+  message.status === 'cancelled' ||
+  message.status === 'interrupted' ||
+  message.success === false;
 
 export const countFailedMembers = (members: GroupableMessage[]): number => members.filter(isFailedMember).length;
 
 const MAX_FAILURE_LABEL_CHARS = 40;
 const MAX_NAMED_FAILURES = 3;
 
-/** Shortest thing that identifies one call: the shell command, else its formatted args, else the tool name. */
+/** Shortest thing that identifies one call: the subagent title, shell command, else its formatted args, else the tool name. */
 const describeMember = (member: GroupableMessage): string => {
+  if (member.sender === 'subagent') {
+    const toolName = member.toolName ?? member.parentTool ?? (member.async ? 'run_subagent_async' : 'run_subagent');
+    const roleLabel = member.role ? ` [${member.role}]` : '';
+    const raw = `${toolName}${roleLabel}`;
+    return raw.length > MAX_FAILURE_LABEL_CHARS ? `${raw.slice(0, MAX_FAILURE_LABEL_CHARS - 1)}…` : raw;
+  }
   const isShell = !member.toolName || member.toolName === 'shell';
   const raw = isShell
     ? member.command ?? ''
@@ -124,14 +144,14 @@ export const groupCommandRuns = <T extends GroupableMessage>(
 
   while (i < messages.length) {
     const message = messages[i];
-    if (message.sender !== 'command') {
+    if (!isGroupableMessage(message)) {
       result.push(message);
       i += 1;
       continue;
     }
 
     let j = i + 1;
-    while (j < messages.length && messages[j].sender === 'command') {
+    while (j < messages.length && isGroupableMessage(messages[j])) {
       j += 1;
     }
 
@@ -189,12 +209,21 @@ const DEFAULT_TOOL_GROUP_CATEGORY: ToolGroupCategory = { verb: 'Ran', singular: 
 const lowerFirst = (text: string) => (text.length > 0 ? text.charAt(0).toLowerCase() + text.slice(1) : text);
 
 /** Builds "Searched for 1 pattern, read 3 files, ran 2 shell commands" from a closed group's members. */
-export const summarizeCommandGroup = (members: { toolName?: string }[]): string => {
+export const summarizeCommandGroup = (
+  members: { toolName?: string; sender?: string; parentTool?: string; async?: boolean }[],
+): string => {
   const order: string[] = [];
   const counts = new Map<string, number>();
 
   for (const member of members) {
-    const key = member.toolName || 'shell';
+    let key = member.toolName;
+    if (!key) {
+      if (member.sender === 'subagent') {
+        key = member.parentTool ?? (member.async ? 'run_subagent_async' : 'run_subagent');
+      } else {
+        key = 'shell';
+      }
+    }
     if (!counts.has(key)) {
       order.push(key);
     }

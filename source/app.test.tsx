@@ -75,8 +75,18 @@ const mocks = vi.hoisted(() => ({
     waitingForRejectionReason: false,
     waitingForAskUserAnswer: false,
     isProcessing: false,
+    backgroundTaskDetails: [] as any[],
   },
+  setTerminalTitle: vi.fn(),
 }));
+
+vi.mock('./utils/output/terminal-title.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./utils/output/terminal-title.js')>();
+  return {
+    ...actual,
+    setTerminalTitle: mocks.setTerminalTitle,
+  };
+});
 
 // Ink's public test renderer uses a legacy, non-strict root. Build the same
 // Ink host root in concurrent strict mode so React actually replays effects.
@@ -149,6 +159,7 @@ vi.mock('./hooks/use-conversation.js', () => ({
     setWaitingForRejectionReason: mocks.setWaitingForRejectionReason,
     setWaitingForAskUserAnswer: mocks.setWaitingForAskUserAnswer,
     isProcessing: mocks.conversationState.isProcessing,
+    backgroundTaskDetails: mocks.conversationState.backgroundTaskDetails ?? [],
     thinkingStartedAt: null,
     toolCallStreamingInfo: null,
     sendUserMessage: mocks.sendUserMessage,
@@ -976,6 +987,19 @@ describe('App orchestration', () => {
       expect(mocks.clearConversation).not.toHaveBeenCalled();
       expect(services.settingsService.set).not.toHaveBeenCalled();
       expect(mocks.bottomAreaProps.pendingModeSwitch).toBeNull();
+    });
+
+    it.sequential('sets terminal title with [...] prefix when background tasks are running', async () => {
+      const services = createServices();
+      mocks.setTerminalTitle.mockClear();
+      mocks.conversationState.isProcessing = false;
+      mocks.conversationState.backgroundTaskDetails = [{ kind: 'subagent', status: 'running', runId: 'sub-1' }];
+
+      await renderInAct(
+        <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+      );
+
+      expect(mocks.setTerminalTitle).toHaveBeenCalledWith('[...] term2');
     });
   });
 });

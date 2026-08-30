@@ -1,6 +1,6 @@
 # Tool output bounding and effect safety
 
-Status: **implemented** (Milestones 1 and 2). Branch `tool-output-effect-safety`.
+Status: **implemented and merged** (Milestones 1 and 2; `a41186d6`, from branch `tool-output-effect-safety`).
 
 ## Resume here
 

@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
+import { queryTerms, scoreMemorySearch } from './memory-search.js';
 
 export type MemoryId = string;
 export interface MemoryMetadata {
@@ -32,11 +33,16 @@ export interface MemorySearchResult {
   memory: MemoryMetadata;
   matchedFields: Array<'id' | 'title' | 'summary' | 'tags' | 'content'>;
   available: boolean;
+  /** Internal score used to rank the union of the two memory scopes. */
+  score: number;
+  /** Source content retained only for a content-match snippet at the tool boundary. */
+  content?: string;
 }
 export interface MemoryStore {
   list(options?: { limit?: number }): Promise<MemoryMetadata[]>;
   get(id: MemoryId): Promise<Memory | null>;
   search(query: string, options?: { limit?: number }): Promise<MemorySearchResult[]>;
+  searchLimits?(): { defaultLimit: number; maxLimit: number };
   create(input: CreateMemoryInput): Promise<Memory>;
   update(id: MemoryId, input: UpdateMemoryInput): Promise<Memory>;
   remove(id: MemoryId): Promise<boolean>;
@@ -119,12 +125,10 @@ export class FileMemoryStore implements MemoryStore {
     }
   }
   async search(query: string, options: { limit?: number } = {}): Promise<MemorySearchResult[]> {
-    const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    const terms = queryTerms(query);
     if (!terms.length) throw new InvalidMemoryError('Search query must not be empty.');
     const memories = [...(await this.load()).memories].sort(byRecent);
     const scored = await mapConcurrent(memories, SEARCH_READ_CONCURRENCY, async (memory) => {
-      let score = 0;
-      const fields = new Set<MemorySearchResult['matchedFields'][number]>();
       let content = '';
       let available = true;
       try {
@@ -132,41 +136,23 @@ export class FileMemoryStore implements MemoryStore {
       } catch {
         available = false;
       }
-      for (const term of terms) {
-        if (memory.id === term) {
-          score += 100;
-          fields.add('id');
-        } else if (memory.id.includes(term)) {
-          score += 20;
-          fields.add('id');
-        }
-        if (memory.title.toLowerCase().includes(term)) {
-          score += 15;
-          fields.add('title');
-        }
-        if (memory.tags.some((tag) => tag === term)) {
-          score += 12;
-          fields.add('tags');
-        } else if (memory.tags.some((tag) => tag.includes(term))) {
-          score += 12;
-          fields.add('tags');
-        }
-        if (memory.summary.toLowerCase().includes(term)) {
-          score += 8;
-          fields.add('summary');
-        }
-        if (content.toLowerCase().includes(term)) {
-          score += 2;
-          fields.add('content');
-        }
-      }
-      return { memory, matchedFields: [...fields], score, available };
+      const { score, matchedFields } = scoreMemorySearch(memory, content, terms);
+      return { memory, matchedFields, score, available, content: available ? content : undefined };
     });
     return scored
       .filter((result) => result.score > 0)
       .sort((a, b) => b.score - a.score || byRecent(a.memory, b.memory))
       .slice(0, limit(options.limit, this.searchMaxLimit, this.searchDefaultLimit))
-      .map(({ memory, matchedFields, available }) => ({ memory, matchedFields, available }));
+      .map(({ memory, matchedFields, available, score, content }) => ({
+        memory,
+        matchedFields,
+        available,
+        score,
+        content,
+      }));
+  }
+  searchLimits() {
+    return { defaultLimit: this.searchDefaultLimit, maxLimit: this.searchMaxLimit };
   }
   async create(input: CreateMemoryInput): Promise<Memory> {
     return this.mutate(async () => {

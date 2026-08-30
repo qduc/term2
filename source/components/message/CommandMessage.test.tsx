@@ -133,6 +133,25 @@ it('CommandMessage renders background shell output notification with line count'
   unmount();
 });
 
+it('CommandMessage renders a background check-in notification', async () => {
+  const { lastFrame, unmount } = await renderInAct(
+    <CommandMessage
+      command="background_check_in_notification"
+      toolName="background_check_in_notification"
+      status="completed"
+      success={true}
+      toolArgs={{
+        checkIns: [{ target: { kind: 'shell', id: 'shell-1' }, checkInIndex: 2, elapsedMs: 600_000 }],
+      }}
+      output="Check-in #2: background shell pnpm test still running, elapsed 600s"
+    />,
+  );
+
+  const output = stripAnsi(lastFrame() ?? '');
+  expect(output).toContain('Check-in #2 on background shell shell-1');
+  unmount();
+});
+
 it('CommandMessage renders replayed background shell output notification from flat toolArgs', async () => {
   const { lastFrame, unmount } = await renderInAct(
     <CommandMessage
@@ -857,8 +876,8 @@ it('CommandMessage renders successfully completed shell command on a single line
   const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = toVisibleText(lastFrame() ?? '');
 
-  expect(output.includes('✔')).toBe(true);
-  expect(output.includes('$ npm test')).toBe(true);
+  expect(output.includes('✓')).toBe(true);
+  expect(output.includes('npm test')).toBe(true);
   expect(output.includes('All tests passed')).toBe(false);
 });
 
@@ -877,8 +896,8 @@ it('CommandMessage renders running shell command on a single line in concise mod
     await advanceTimersInAct(1100);
     const output = toVisibleText(lastFrame() ?? '');
 
-    expect(output.includes('▶')).toBe(true);
-    expect(output.includes('$ npm run dev')).toBe(true);
+    expect(output.includes('◐')).toBe(true);
+    expect(output.includes('npm run dev')).toBe(true);
   } finally {
     vi.useRealTimers();
   }
@@ -901,8 +920,8 @@ it('CommandMessage renders failed command on two lines in concise mode', async (
   // Expect two lines
   const lines = output.trim().split('\n');
   expect(lines.length >= 2).toBe(true);
-  expect(lines[0]!.includes('✖')).toBe(true);
-  expect(lines[0]!.includes('$ npm test')).toBe(true);
+  expect(lines[0]!.includes('✗')).toBe(true);
+  expect(lines[0]!.includes('npm test')).toBe(true);
   expect(output.includes('Test suite failed')).toBe(true);
 });
 
@@ -923,7 +942,7 @@ it('CommandMessage renders failed shell command with empty output as "failed" in
   const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = toVisibleText(lastFrame() ?? '');
 
-  expect(output.includes('✖')).toBe(true);
+  expect(output.includes('✗')).toBe(true);
   expect(output.includes('grep -rn')).toBe(true);
   expect(output.includes('(20ms)')).toBe(true);
   expect(output.includes('failed')).toBe(true);
@@ -945,8 +964,8 @@ it('CommandMessage renders failed command with empty output and no failureReason
   const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = toVisibleText(lastFrame() ?? '');
 
-  expect(output.includes('✖')).toBe(true);
-  expect(output.includes('$ npm test')).toBe(true);
+  expect(output.includes('✗')).toBe(true);
+  expect(output.includes('npm test')).toBe(true);
   expect(output.includes('failed')).toBe(true);
   expect(output.includes('not approved')).toBe(false);
 });
@@ -964,7 +983,7 @@ it('CommandMessage renders non-shell tool concisely on a single line', async () 
   const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = lastFrame() ?? '';
 
-  expect(output.includes('✔')).toBe(true);
+  expect(output.includes('✓')).toBe(true);
   expect(output.includes('Created')).toBe(true);
   expect(output.includes('src/new-file.ts')).toBe(true);
   expect(output.includes('console.log')).toBe(false);
@@ -1430,7 +1449,7 @@ it('CommandMessage renders ask_user concise single question when running', async
     await advanceTimersInAct(1100);
     const output = stripAnsi(lastFrame() ?? '');
 
-    expect(output.includes('▶')).toBe(true);
+    expect(output.includes('◐')).toBe(true);
     expect(output.includes('Asked user "What is your favorite color?"')).toBe(true);
   } finally {
     vi.useRealTimers();
@@ -1454,7 +1473,7 @@ it('CommandMessage renders ask_user concise multiple questions when running', as
     await advanceTimersInAct(1100);
     const output = stripAnsi(lastFrame() ?? '');
 
-    expect(output.includes('▶')).toBe(true);
+    expect(output.includes('◐')).toBe(true);
     expect(output.includes('Asked user ["Color?, Name?"]')).toBe(true);
   } finally {
     vi.useRealTimers();
@@ -1479,7 +1498,7 @@ it('CommandMessage renders ask_user answer in second line in concise mode when c
 
   const lines = output.trim().split('\n');
   expect(lines.length >= 2).toBe(true);
-  expect(lines[0]!.includes('✔')).toBe(true);
+  expect(lines[0]!.includes('✓')).toBe(true);
   expect(lines[0]!.includes('Asked user "What is your favorite color?"')).toBe(true);
   expect(lines[1]!.includes('Response: Red')).toBe(true);
 });
@@ -1502,7 +1521,7 @@ it('CommandMessage renders ask_user declined answer in second line in concise mo
 
   const lines = output.trim().split('\n');
   expect(lines.length >= 2).toBe(true);
-  expect(lines[0]!.includes('✔')).toBe(true);
+  expect(lines[0]!.includes('✓')).toBe(true);
   expect(lines[0]!.includes('Asked user "What is your favorite color?"')).toBe(true);
   expect(lines[1]!.includes('Response: User declined to answer.')).toBe(true);
 });
@@ -1525,7 +1544,7 @@ it('CommandMessage renders ask_mentor first paragraph in second line in concise 
 
   const lines = output.trim().split('\n');
   expect(lines.length >= 2).toBe(true);
-  expect(lines[0]!.includes('✔')).toBe(true);
+  expect(lines[0]!.includes('✓')).toBe(true);
   expect(lines[0]!.includes('Asked mentor "How does this work?"')).toBe(true);
   expect(lines[1]!.includes('Response: This is the first paragraph.')).toBe(true);
   expect(lines[1]!.includes('This is the second paragraph.')).toBe(false);
@@ -1549,7 +1568,7 @@ it('CommandMessage renders ask_mentor entire output if only one paragraph in con
 
   const lines = output.trim().split('\n');
   expect(lines.length >= 2).toBe(true);
-  expect(lines[0]!.includes('✔')).toBe(true);
+  expect(lines[0]!.includes('✓')).toBe(true);
   expect(lines[1]!.includes('Response: Line 1')).toBe(true);
   expect(lines[2]!.includes('Line 2')).toBe(true);
 });
@@ -1570,7 +1589,7 @@ it('CommandMessage renders in a single, muted line when isSubagent is true', asy
 
   const lines = output.trim().split('\n');
   expect(lines.length, `Expected exactly 1 line, got: ${output}`).toBe(1);
-  expect(lines[0]!.includes('✔')).toBe(true);
+  expect(lines[0]!.includes('✓')).toBe(true);
   expect(lines[0]!.includes('Created "src/test.txt"')).toBe(true);
 });
 
@@ -1591,12 +1610,12 @@ it('CommandMessage renders failed command in a single, muted line when isSubagen
 
   const lines = output.trim().split('\n');
   expect(lines.length, `Expected exactly 1 line, got: ${output}`).toBe(1);
-  expect(lines[0]!.includes('✖')).toBe(true);
+  expect(lines[0]!.includes('✗')).toBe(true);
   // Raw command text for failures instead of friendly verb
   expect(lines[0]!.includes('create_file "src/test.txt"')).toBe(true);
 });
 
-it('CommandMessage renders running command with ▶ when isSubagent is true', async () => {
+it('CommandMessage renders running command with ◐ when isSubagent is true', async () => {
   const props = {
     command: 'shell ls -la',
     toolName: 'shell',
@@ -1610,10 +1629,10 @@ it('CommandMessage renders running command with ▶ when isSubagent is true', as
 
   const lines = output.trim().split('\n');
   expect(lines.length, `Expected exactly 1 line, got: ${output}`).toBe(1);
-  expect(lines[0]!.includes('▶')).toBe(true);
+  expect(lines[0]!.includes('◐')).toBe(true);
 });
 
-it('CommandMessage renders pending command with ▶ when isSubagent is true', async () => {
+it('CommandMessage renders pending command with ○ when isSubagent is true', async () => {
   const props = {
     command: 'shell ls -la',
     toolName: 'shell',
@@ -1627,10 +1646,32 @@ it('CommandMessage renders pending command with ▶ when isSubagent is true', as
 
   const lines = output.trim().split('\n');
   expect(lines.length, `Expected exactly 1 line, got: ${output}`).toBe(1);
-  expect(lines[0]!.includes('▶')).toBe(true);
+  expect(lines[0]!.includes('○')).toBe(true);
 });
 
-it('CommandMessage renders failed status without success/failureReason as ✖ when isSubagent is true', async () => {
+it('CommandMessage renders pending command with (queued) label and ○ glyph in standard mode', async () => {
+  vi.useFakeTimers();
+  try {
+    const props = {
+      command: 'read_file "src/main.ts"',
+      toolName: 'read_file',
+      status: 'pending' as const,
+    };
+
+    const { lastFrame, unmount } = await renderInAct(<CommandMessage {...props} />);
+    await advanceTimersInAct(1_000);
+    const output = stripAnsi(lastFrame() ?? '');
+
+    expect(output.includes('○')).toBe(true);
+    expect(output.includes('(queued)')).toBe(true);
+    expect(output.includes('0s')).toBe(false);
+    unmount();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('CommandMessage renders failed status without success/failureReason as ✗ when isSubagent is true', async () => {
   const props = {
     command: 'create_file "src/test.txt"',
     toolName: 'create_file',
@@ -1645,10 +1686,10 @@ it('CommandMessage renders failed status without success/failureReason as ✖ wh
 
   const lines = output.trim().split('\n');
   expect(lines.length, `Expected exactly 1 line, got: ${output}`).toBe(1);
-  expect(lines[0]!.includes('✖')).toBe(true);
+  expect(lines[0]!.includes('✗')).toBe(true);
 });
 
-it('CommandMessage renders aborted status as ✖ when isSubagent is true', async () => {
+it('CommandMessage renders aborted status as ✗ when isSubagent is true', async () => {
   const props = {
     command: 'shell npm test',
     toolName: 'shell',
@@ -1662,10 +1703,10 @@ it('CommandMessage renders aborted status as ✖ when isSubagent is true', async
 
   const lines = output.trim().split('\n');
   expect(lines.length, `Expected exactly 1 line, got: ${output}`).toBe(1);
-  expect(lines[0]!.includes('✖')).toBe(true);
+  expect(lines[0]!.includes('✗')).toBe(true);
 });
 
-it('CommandMessage renders approval rejection with ✖ when isSubagent is true', async () => {
+it('CommandMessage renders approval rejection with ✗ when isSubagent is true', async () => {
   const props = {
     command: 'shell rm -rf /',
     toolName: 'shell',
@@ -1680,7 +1721,7 @@ it('CommandMessage renders approval rejection with ✖ when isSubagent is true',
 
   const lines = output.trim().split('\n');
   expect(lines.length, `Expected exactly 1 line, got: ${output}`).toBe(1);
-  expect(lines[0]!.includes('✖')).toBe(true);
+  expect(lines[0]!.includes('✗')).toBe(true);
 });
 
 it('CommandMessage extracts runtime from shell tool output and displays it in standard mode', async () => {
@@ -1717,7 +1758,7 @@ it('CommandMessage extracts runtime from shell tool output and displays it in co
   const { lastFrame } = await renderInAct(<CommandMessage {...props} />);
   const output = stripAnsi(lastFrame() ?? '');
 
-  expect(output.includes('✔')).toBe(true);
+  expect(output.includes('✓')).toBe(true);
   expect(output.includes('echo "World"')).toBe(true);
   expect(output.includes('(12ms)')).toBe(true);
   expect(output.includes('Hello')).toBe(false);

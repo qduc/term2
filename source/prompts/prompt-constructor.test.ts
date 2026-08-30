@@ -4,7 +4,7 @@ import { buildPromptSpec } from './prompt-constructor.js';
 it('buildPromptSpec preserves mode precedence for base prompts', () => {
   expect(buildPromptSpec({ model: 'gpt-5.5', liteMode: true, orchestratorMode: true }).basePromptFile).toBe('lite.md');
   expect(buildPromptSpec({ model: 'gpt-5.5', liteMode: false, orchestratorMode: true }).basePromptFile).toBe(
-    'orchestrator.md',
+    'gpt-5.5.md',
   );
   expect(buildPromptSpec({ model: 'claude-3-sonnet', liteMode: false }).basePromptFile).toBe('anthropic.md');
   expect(buildPromptSpec({ model: 'gpt-5.3-codex', liteMode: false }).basePromptFile).toBe('codex.md');
@@ -27,7 +27,7 @@ it('buildPromptSpec keeps gpt-5.6 codex variants on the codex base prompt', () =
 it('buildPromptSpec still applies mode precedence over the gpt-5.6 profile', () => {
   expect(buildPromptSpec({ model: 'gpt-5.6', liteMode: true }).basePromptFile).toBe('lite.md');
   expect(buildPromptSpec({ model: 'gpt-5.6', liteMode: false, orchestratorMode: true }).basePromptFile).toBe(
-    'orchestrator.md',
+    'gpt-5.6.md',
   );
 });
 
@@ -67,8 +67,9 @@ it('buildPromptSpec composes file fragments in stable order', () => {
   expect(spec.fragmentFiles).toEqual([
     'approval-model.md',
     'worktree-hygiene.md',
-    'mentor-addon.md',
     'plan-mode-stub.md',
+    'mentor-mode-stub.md',
+    'orchestrator-mode-stub.md',
   ]);
 
   expect(spec.inlineSections).toContainEqual(expect.stringContaining('## Shell Sandbox'));
@@ -98,14 +99,29 @@ it('buildPromptSpec attaches the Plan Mode stub in standard and plan mode so the
   expect(plan.fragmentFiles).toEqual(standard.fragmentFiles);
 });
 
-it('buildPromptSpec excludes Plan Mode fragments in lite and orchestrator modes', () => {
+it('buildPromptSpec keeps all non-lite mode stubs stable while lite stays minimal', () => {
   const lite = buildPromptSpec({ model: 'gpt-5.5', liteMode: true, planMode: false });
   expect(lite.fragmentFiles.includes('plan-mode-info.md')).toBe(false);
   expect(lite.fragmentFiles.includes('plan-mode-stub.md')).toBe(false);
+  expect(lite.fragmentFiles.includes('mentor-mode-stub.md')).toBe(false);
+  expect(lite.fragmentFiles.includes('orchestrator-mode-stub.md')).toBe(false);
 
   const orchestrator = buildPromptSpec({ model: 'gpt-5.5', liteMode: false, orchestratorMode: true, planMode: false });
   expect(orchestrator.fragmentFiles.includes('plan-mode-info.md')).toBe(false);
-  expect(orchestrator.fragmentFiles.includes('plan-mode-stub.md')).toBe(false);
+  expect(orchestrator.fragmentFiles.includes('plan-mode-stub.md')).toBe(true);
+  expect(orchestrator.fragmentFiles.includes('mentor-mode-stub.md')).toBe(true);
+  expect(orchestrator.fragmentFiles.includes('orchestrator-mode-stub.md')).toBe(true);
+});
+
+it('buildPromptSpec keeps the non-lite instruction prefix identical across modes', () => {
+  const standard = buildPromptSpec({ model: 'gpt-4o', liteMode: false });
+  const plan = buildPromptSpec({ model: 'gpt-4o', liteMode: false, planMode: true });
+  const mentor = buildPromptSpec({ model: 'gpt-4o', liteMode: false, mentorMode: true });
+  const orchestrator = buildPromptSpec({ model: 'gpt-4o', liteMode: false, orchestratorMode: true });
+
+  expect(plan).toEqual(standard);
+  expect(mentor).toEqual(standard);
+  expect(orchestrator).toEqual(standard);
 });
 
 it('buildPromptSpec includes subagent delegation for orchestrator mode', () => {

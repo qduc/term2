@@ -11,6 +11,16 @@ Application code lives under `source/`. The non-obvious entry points:
 - `source/services/conversation/conversation-service.ts` is the public conversation facade for conversation behavior.
 - `source/prompts/prompt-constructor.ts` assembles system prompts from a base profile plus conditional fragments; `prompt-profiles.ts` maps models to bases. Because this project *is* an agent harness, `source/prompts/` and tool `description` fields are product behavior, not documentation — treat edits there as behavior changes.
 
+## How to read the docs in this repo
+
+**Treat every document here as a hint, not as ground truth.** These docs were written by someone who had the code in front of them, so they are rarely invented — but they describe the code as it was at the time, and the code has moved since. Stale is the normal state, not the exception.
+
+Where a doc and the code disagree, the code wins. That does not make the doc worthless: it still tells you which area to look at, what the author was trying to achieve, and which approaches were already tried and rejected — none of which the code records. Use the doc to orient, then confirm the specific claim you are about to act on.
+
+The claims most likely to be wrong are the confident ones. A statement written when only one implementation existed tends to survive as a system-wide rule after a second one arrives, so absolutes — "always", "never", "only", "permanently", "for all subsequent" — deserve a check before you rely on them. Line-number citations (`file.ts:123`) drift silently and are worth the least.
+
+**Last full-repo docs verification: `f1f9199d` (2026-08-29).** That sweep covered this file, `CONTEXT.md`, `README.md`, `ROADMAP.md`, the skills, the contract docs, and plan status headers. Anything added or edited since then has not been checked against the code, and three independent passes each found real errors in the one before — so treat even swept text as a hint.
+
 Everything else is discoverable by reading the tree. Skills carry the depth:
 
 | Skill | Use for |
@@ -25,7 +35,10 @@ Everything else is discoverable by reading the tree. Skills carry the depth:
 - **Optimize for fast feedback.** Run focused tests during development; run the relevant broader gate after a coherent change, and reserve the full suite for broad changes or final handoff. Never claim completion while a required gate remains unrun
 - **Provider changes run the black-box suite.** Provider, bridge, run-loop, registry, and non-interactive changes must run `pnpm test:provider-black-box` as part of development, not just at the end. See the `provider-testing` skill.
 - **A regression test is the floor, not the finish line.** After any non-trivial bug fix, ask what allowed the defect class and why nothing caught it earlier. See `## After a bug fix` in the `testing` skill.
-- **Run tests with `NODE_ENV=test`.** If the shell exports `NODE_ENV=production`, vitest loads React's production build, whose `react` entry does not export `act`; `renderInAct` then fails ~26 tests in `MessageList.test.tsx` with `TypeError: act is not a function`. Prepend `NODE_ENV=test` explicitly (e.g. `NODE_ENV=test pnpm test`) instead of relying on the ambient value.
+- **`pnpm test:lane` runs a fixed no-isolate manifest, not the whole suite.** It executes only the files in `.github/vitest.lane.safe.txt` with worker isolation disabled (~28 s), so a new test file is invisible to it until admitted: a file joins the manifest only after passing shuffled seeded runs (`pnpm test:lane:seed <seed>`), and any file that has ever failed non-isolated stays excluded. The isolated full suite remains the handoff/CI authority. Leak classes and rules: `docs/plans/slow-test-suite.md`.
+- **The `pnpm` test scripts pin `NODE_ENV=test` via `cross-env`; keep it that way.** Under `NODE_ENV=production` vitest loads React's production build, whose `react` entry does not export `act`; `renderInAct` then fails ~26 tests in `MessageList.test.tsx` with `TypeError: act is not a function`. The scripts make the ambient value irrelevant, so a bare `pnpm test` is safe — but set it yourself if you invoke `vitest` directly.
+
+- **Orchestrator Mode is prompt-guided, not tool-enforced.** It intentionally uses the same non-lite prompt prefix and tool-building path as standard mode so toggling a runtime mode does not invalidate provider prompt-cache or chained Responses-Lite assumptions. The active workflow arrives in the next user-turn `<system-notice>`: the parent retains end-to-end outcome ownership and should delegate when useful, but direct tools remain available and the harness does not reject `execution: 'foreground'` in orchestrator mode. See `source/agent.ts` and `source/services/mode-notices.ts`.
 
 # Work In Progress
 
@@ -35,6 +48,19 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 
 ## Active or deferred
 
+- Model/effort step-down for tool-continuation turns — **paused
+  mid-validation, nothing implemented yet.** Production-log analysis found
+  90%+ of expensive-tier (`sol`/`terra`) requests are pure tool-continuation
+  steps, not fresh reasoning turns. Real benchmark validation (4 tasks,
+  deterministic evaluator + Opus blind quality judge, not log inference)
+  confirmed cheap-tier (`luna`) parity on 3 of 4 tasks at 7x-140x lower cost,
+  but found a real quality gap on a security-sensitive task — the blanket
+  version must not ship without a floor above `luna#low` for
+  security-sensitive paths. Read `docs/plans/model-effort-step-down-benchmark.md`
+  before touching this: it records the exact benchmark directories, a
+  provider-id gotcha (`codex` not `openai-codex`), a host-memory-exhaustion
+  trap (do not run 3+ heavy `term2` benchmark candidates as parallel
+  background tasks), and a `run-judge.sh` aggregator parsing bug.
 - Test suite audit — foundation merged, milestone still non-destructive:
   build the evidence graph, not cleanup. Do not remove, rewrite, retier, or
   consolidate tests, and do not dispatch explorers, without the approval
@@ -56,7 +82,7 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   before touching any listed area.
 - `tools/president-decision-portal/` and `scripts/candidate-gates.ts` — merged
   on 2026-08-16 from worktrees with no plan doc and no recorded caller. Nothing
-  invokes either one. The portal binds a single hard-coded LAN address and
+  invokes either one outside `scripts/candidate-gates.test.ts`. The portal binds a single hard-coded LAN address and
   writes a token and an append-only ledger under `~/.agents/runtime/`; it is
   inert unless run deliberately. Establish provenance before extending either,
   and consider reverting them if they are not wanted.
@@ -174,10 +200,21 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   event routing: a transferred transcript card settles as `backgrounded`, and
   unadopted work may appear on the compact strip only with an explicit
   foreground tag.
+- `docs/plans/background-work-control/agent-checkin.md` — **implemented and
+  merged.** `BackgroundCheckInScheduler`
+  (`source/services/session/background-check-in-scheduler.ts`) periodically
+  wakes the launching agent (not just the passive liveness UI) about a
+  still-running background shell job or subagent, gated by
+  `agent.backgroundCheckIn.{enabled,intervalMs,maxCheckInsPerTask}`. It reuses
+  the existing settlement-notification pipeline (`recordBackgroundEvent` ->
+  `SubagentNotificationStore` -> the idle-hidden-turn / active-turn-injection
+  path) rather than a new turn-start primitive. Read it before changing that
+  pipeline, `background-check-in-scheduler.ts`, or `agent.backgroundCheckIn`.
 
-- `docs/plans/background-work-control/liveness-ui.md` — **implemented and
-  verified with adversarial-review corrections** (2026-08-13; awaiting branch
-  re-review before merge). It separates lifecycle phase/reason, locally
+- `docs/plans/background-work-control/liveness-ui.md` — **implemented and merged**
+  (`13307919`, with the adversarial-review findings fixed in `93b9b536`). The shared
+  protocol lives at `source/services/background-task-activity.ts`;
+  `services/session/background-task-liveness.ts` is a deprecated re-export. It separates lifecycle phase/reason, locally
   observed facts, and recent/quiet liveness; captures truthful launch-time
   model/context metadata; and gives the panel and manager explicit, live
   physical-width information budgets plus bounded presentation labels without
@@ -195,8 +232,8 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   *lane* tag, not the provider id; converters drop foreign items rather than
   throwing, because throwing bricked every conversation that switched providers.
 
-- `docs/plans/tool-output-and-effect-safety.md` — **Milestones 1–2 implemented**
-  (branch `tool-output-effect-safety`). Read before touching `read_file` result
+- `docs/plans/tool-output-and-effect-safety.md` — **Milestones 1–2 implemented and
+  merged** (`a41186d6`, from branch `tool-output-effect-safety`). Read before touching `read_file` result
   size, `utils/shell/shell-output.ts` / `utils/output/bound-tool-result.ts`,
   `ToolExecutionStatus`, stream-failure settlement in
   `services/retry/recovery-executor.ts`, or tool dispatch marking: tool results
@@ -223,7 +260,7 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 
 - `docs/plans/chain-settlement.md` — unpaid tool debt after a mid-stream failure must not leave a live `previousResponseId`. Read before changing `ProviderContinuity`, stream finalize debt sync, terminate recovery, `SessionInputPlanner` chaining, or “No tool output found for function call” classification: a text-only continue against an open chain is a server 400.
 
-- **WebSocket Responses session persistence & chain settlement:** WebSocket connections in `CodexResponsesTransport` and `OpenAIResponsesWSModelWithPromptCacheKey` are kept per logical agent (`providerHistoryKey`, else conversation `sessionId`) and stay open across that agent's completed turns so the backend retains in-memory `previous_response_id` state without requiring duplicate `generate: false` warmup requests. Opening one agent's socket must not close another's connecting socket. Sockets close only on `close()`, stream failure, or cancellation. When a 400 `Invalid previous_response_id` triggers `chain_recovery`, `breakChaining()` permanently switches the session to full history for all subsequent turns.
+- **WebSocket Responses session persistence & chain settlement:** WebSocket connections in `CodexResponsesTransport` and `OpenAIResponsesWSModelWithPromptCacheKey` are kept per logical agent (`providerHistoryKey`, else conversation `sessionId`) and stay open across that agent's completed turns so the backend retains in-memory `previous_response_id` state without requiring duplicate `generate: false` warmup requests. Opening one agent's socket must not close another's connecting socket. Sockets close only on `close()`, stream failure, or cancellation. When a 400 `Invalid previous_response_id` triggers `chain_recovery`, `breakChaining()` permanently sets `#chainingBroken` on that session's `ProviderContinuity` (`source/services/provider-continuity.ts:249`), so `SessionInputPlanner` builds full history for every later turn (`session-input-planner.ts:206-210`). That is true of the *application* layer only. The Codex provider layer holds its own anchor in `#lastLogicalRequestByKey` (`source/providers/codex-responses-model.ts:1012`), read at `:1270-1274`, and that is what actually writes `previous_response_id` onto the wire. `disableChaining` is one-shot — the run loop clears it after a single attempt (`application-run-loop.ts:940-942`) — and `#forgetCodexResponseId()` clears the anchor, but `#rememberCodexResponseId()` re-arms it (and resets `#serverHistoryReuseDisabled`) on the next response. So on the Codex lane a chain recovery yields one genuinely full-history request, after which the model re-anchors and trims the app's full history back to a delta. (`codexPreviousResponseIds` at `:1005` looks like the anchor but is written and cleared and never read.)
 
 # Parallel Work Isolation
 

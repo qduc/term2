@@ -117,6 +117,7 @@ describe('MemoryCapabilityBuilder', () => {
     const capability = new MemoryCapabilityBuilder(createMockSettingsService()).build({ kind: 'main' });
 
     expect(capability.guidance).toContain('memory_retrieve');
+    expect(capability.guidance).toContain('cursor when a large memory is paged');
     expect(capability.guidance).toContain('Before finishing a task');
     expect(capability.guidance).toContain('explicit durable');
     expect(capability.guidance).toContain('ordinary conversation');

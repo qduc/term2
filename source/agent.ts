@@ -61,6 +61,8 @@ import type { WorkflowLimits } from './services/agent-runtime/workflow/workflow-
 import { getProjectTreeForPrompt } from './utils/project-tree.js';
 import { MemoryCapabilityBuilder } from './services/memory/memory-capabilities.js';
 import type { ShellChildRegistry } from './utils/shell/shell-child-registry.js';
+import { createSessionBrowserToolDefinitions } from './tools/session-browser/session-browser-tools.js';
+import type { SessionBrowser } from './services/conversation/session-browser.js';
 
 export { getProjectTreeForPrompt } from './utils/project-tree.js';
 
@@ -223,6 +225,8 @@ export const getAgentDefinition = (
     shellChildRegistry?: ShellChildRegistry;
     /** False for one-shot/non-interactive callers until their lifecycle is supported. */
     allowBackgroundShell?: boolean;
+    /** Explicit interactive-root-only capability; never inferred from memory access. */
+    sessionBrowser?: SessionBrowser;
   },
   model?: string,
 ): AgentDefinition => {
@@ -246,6 +250,7 @@ export const getAgentDefinition = (
     backgroundShellOutput,
     shellChildRegistry,
     allowBackgroundShell = true,
+    sessionBrowser,
   } = deps;
   const defaultModel = settingsService.get('agent.model');
   const resolvedModel = model?.trim() || defaultModel;
@@ -273,6 +278,11 @@ export const getAgentDefinition = (
     Boolean(getSubagentStatus) &&
     Boolean(sendSubagentMessage) &&
     Boolean(cancelSubagentRun);
+  if (orchestratorMode && !asyncSubagentEnabled) {
+    throw new Error(
+      'orchestratorMode requires runSubagentAsync, getSubagentResult, getSubagentStatus, sendSubagentMessage, and cancelSubagentRun: cannot build orchestrator agent without asynchronous delegation.',
+    );
+  }
   const memoryCapability = new MemoryCapabilityBuilder(settingsService, {
     onWarning: (message) => loggingService.warn(message),
   }).build({ kind: 'main' }, { projectPath: executionContext?.getCwd() ?? process.cwd() });
@@ -292,6 +302,7 @@ export const getAgentDefinition = (
     sandboxEnabled,
     memoryEnabled: memoryCapability.access !== 'none',
     memoryGuidance: memoryCapability.guidance,
+    sessionBrowserEnabled: Boolean(sessionBrowser),
     executionContext,
   });
   let prompt = resolvePrompt(path.join(BASE_PROMPT_PATH, promptSpec.basePromptFile));
@@ -313,11 +324,11 @@ export const getAgentDefinition = (
   }
 
   const cwd = executionContext?.getCwd() || process.cwd();
-  const isLiteEnv = liteMode && !orchestratorMode && !planMode;
+  const isLiteEnv = liteMode && !planMode;
   // The glob/find-files tool is only registered in certain configurations; keep
   // the search-tool descriptions consistent so the model does not call a tool
   // that is not on its allowlist.
-  const globAvailable = orchestratorMode ? false : !searchViaShell && (liteMode || !isGpt5);
+  const globAvailable = !searchViaShell && (liteMode || !isGpt5);
   const envInfo = getEnvInfo(settingsService, executionContext, isLiteEnv);
   const skipAgentsMd = isLiteEnv || (executionContext?.isRemote() ?? false);
   const agentsInstructions = skipAgentsMd ? '' : getAgentsInstructions(cwd);
@@ -332,79 +343,6 @@ export const getAgentDefinition = (
 
   const rootBackgroundShellRegistry = allowBackgroundShell ? backgroundShellRegistry : undefined;
   const rootBackgroundShellOutput = allowBackgroundShell ? backgroundShellOutput : undefined;
-  if (orchestratorMode) {
-    if (!runSubagentAsync || !getSubagentResult || !getSubagentStatus || !sendSubagentMessage || !cancelSubagentRun) {
-      throw new Error(
-        'orchestratorMode requires runSubagentAsync, getSubagentResult, getSubagentStatus, sendSubagentMessage, and cancelSubagentRun: cannot build orchestrator agent without asynchronous delegation.',
-      );
-    }
-    const tools: AnyToolDefinition[] = [
-      createRunSubagentToolDefinition({ runSubagentAsync }),
-      createGetSubagentResultToolDefinition(getSubagentResult, getSubagentStatus),
-      createGetSubagentStatusToolDefinition(getSubagentStatus),
-      createSendMessageToolDefinition(sendSubagentMessage),
-      createCancelRunToolDefinition(cancelSubagentRun),
-    ];
-    tools.push(
-      createShellToolDefinition({
-        settingsService,
-        loggingService,
-        executionContext,
-        orchestratorMode: true,
-        searchViaShell,
-        backgroundShellRegistry: rootBackgroundShellRegistry,
-        backgroundShellWatches: rootBackgroundShellOutput?.watches,
-        shellChildRegistry,
-      }),
-      createReadFileToolDefinition({
-        executionContext,
-        allowOutsideWorkspace: true,
-        orchestratorMode: true,
-        settingsService,
-      }),
-      createGrepToolDefinition({ executionContext, orchestratorMode: true, globAvailable: false, settingsService }),
-    );
-    if (rootBackgroundShellRegistry) {
-      const backgroundTools = createBackgroundShellJobToolDefinitions(
-        rootBackgroundShellRegistry,
-        rootBackgroundShellOutput,
-      );
-      tools.push(backgroundTools.get, backgroundTools.cancel);
-      if (backgroundTools.monitor) tools.push(backgroundTools.monitor);
-      if (backgroundTools.cancelMonitor) tools.push(backgroundTools.cancelMonitor);
-    }
-    if (codeContextEnabled) {
-      tools.push(
-        createReadCodeOutlineToolDefinition({ executionContext, settingsService }),
-        createCodeContextSearchToolDefinition({ executionContext, globAvailable: false, settingsService }),
-      );
-    }
-    if (isGpt5) {
-      tools.push(createApplyPatchToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }));
-    } else {
-      tools.push(
-        createCreateFileToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }),
-        createSearchReplaceToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }),
-      );
-    }
-    tools.push(...memoryCapability.tools);
-    if (getAskUserAnswer) {
-      const askUserTool = createAskUserToolDefinition(getAskUserAnswer);
-      if (askUserTool.name !== TOOL_NAME_ASK_USER) {
-        throw new Error(`Unexpected ask_user tool name: ${askUserTool.name}`);
-      }
-      tools.push(askUserTool);
-    }
-    registerToolFormatters(tools);
-
-    return {
-      name: 'Agent',
-      instructions: `${prompt}\n\nEnvironment: ${envInfo}${agentsInstructions}${skillsInstructions}`,
-      tools,
-      model: resolvedModel,
-    };
-  }
-
   const shellTool = createShellToolDefinition({
     settingsService,
     loggingService,
@@ -452,6 +390,7 @@ export const getAgentDefinition = (
   }
 
   tools.push(...memoryCapability.tools);
+  if (sessionBrowser) tools.push(...createSessionBrowserToolDefinitions(sessionBrowser));
 
   if (skillsService && skillsService.getAvailableSkillsForModel().length > 0) {
     tools.push(createActivateSkillToolDefinition(skillsService));

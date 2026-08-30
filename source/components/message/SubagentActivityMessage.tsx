@@ -2,7 +2,14 @@ import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import CommandMessage from './CommandMessage.js';
 import { getFirstParagraph } from './command-message-helpers.js';
-import { COLOR_MUTED } from '../theme.js';
+import {
+  COLOR_DANGER,
+  COLOR_MUTED,
+  COLOR_SUCCESS,
+  COLOR_TEXT_SUBTLE,
+  COLOR_WARNING,
+  TOOL_STATUS_GLYPH,
+} from '../theme.js';
 import type { CommandMessage as CommandMessageType } from '../../types/message.js';
 
 type SubagentToolEntry = string | CommandMessageType;
@@ -47,27 +54,31 @@ const buildTitle = (
 };
 
 const formatSubagentStringTool = (tool: string, activityStatus?: string): string => {
-  let statusChar = '✔';
+  let statusChar: string = TOOL_STATUS_GLYPH.completed;
   let cleaned = tool;
 
   if (tool.endsWith(' (Success)')) {
-    statusChar = '✔';
+    statusChar = TOOL_STATUS_GLYPH.completed;
     cleaned = tool.slice(0, -' (Success)'.length);
   } else if (tool.endsWith(' (Failed)')) {
-    statusChar = '✖';
+    statusChar = TOOL_STATUS_GLYPH.failed;
     cleaned = tool.slice(0, -' (Failed)'.length);
   } else if (/\s+\(Failed:.*\)$/.test(tool)) {
-    statusChar = '✖';
+    statusChar = TOOL_STATUS_GLYPH.failed;
     cleaned = tool.replace(/\s+\(Failed:.*\)$/, '');
   } else if (tool.endsWith(' (Cancelled)')) {
-    statusChar = '✖';
+    statusChar = TOOL_STATUS_GLYPH.failed;
     cleaned = tool.slice(0, -' (Cancelled)'.length);
   } else if (/\s+\(\d+\s+matches?\)$/.test(tool)) {
-    statusChar = '✔';
+    statusChar = TOOL_STATUS_GLYPH.completed;
     cleaned = tool.replace(/\s+\(\d+\s+matches?\)$/, '');
   } else {
     statusChar =
-      activityStatus === 'running' ? '▶' : activityStatus === 'failed' || activityStatus === 'cancelled' ? '✖' : '✔';
+      activityStatus === 'running'
+        ? TOOL_STATUS_GLYPH.running
+        : activityStatus === 'failed' || activityStatus === 'cancelled'
+        ? TOOL_STATUS_GLYPH.failed
+        : TOOL_STATUS_GLYPH.completed;
   }
 
   return `${statusChar} ${cleaned}`;
@@ -102,12 +113,12 @@ const SubagentActivityMessage: FC<Props> = ({ msg }) => {
       : '';
   const color =
     msg.status === 'completed'
-      ? 'green'
+      ? COLOR_SUCCESS
       : msg.status === 'failed'
-      ? 'red'
+      ? COLOR_DANGER
       : msg.status === 'cancelled' || msg.status === 'interrupted' || msg.status === 'backgrounded'
-      ? 'gray'
-      : 'yellow';
+      ? COLOR_TEXT_SUBTLE
+      : COLOR_WARNING;
 
   return (
     <Box flexDirection="column">
@@ -133,7 +144,7 @@ const SubagentActivityMessage: FC<Props> = ({ msg }) => {
                   isApprovalRejection={tool.isApprovalRejection}
                   hadApproval={tool.hadApproval}
                   displayMode="concise"
-                  textColor="#64748b"
+                  textColor={COLOR_TEXT_SUBTLE}
                   isSubagent={true}
                 />
               </Box>

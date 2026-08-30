@@ -347,3 +347,48 @@ it.sequential('approves exactly once at the stable approval boundary', async () 
   expect(mocks.onApprove).toHaveBeenCalledTimes(1);
   expect(mocks.onReject).not.toHaveBeenCalled();
 });
+
+it.sequential('opens model menu on Ctrl+O when input owner is input', async () => {
+  await renderHarness({ inputOwner: { kind: 'input' } });
+
+  await fireInput('o', { ctrl: true });
+
+  expect(mocks.replaceInput).toHaveBeenCalledTimes(1);
+  expect(mocks.replaceInput).toHaveBeenCalledWith('/model ');
+});
+
+it.sequential('opens model menu on raw byte \x0f (Ctrl+O) when input owner is input', async () => {
+  await renderHarness({ inputOwner: { kind: 'input' } });
+
+  await fireInput('\x0f', {});
+
+  expect(mocks.replaceInput).toHaveBeenCalledTimes(1);
+  expect(mocks.replaceInput).toHaveBeenCalledWith('/model ');
+});
+
+it.sequential('opens effort menu on Ctrl+T when input owner is input', async () => {
+  await renderHarness({ inputOwner: { kind: 'input' } });
+
+  await fireInput('t', { ctrl: true });
+
+  expect(mocks.replaceInput).toHaveBeenCalledTimes(1);
+  expect(mocks.replaceInput).toHaveBeenCalledWith('/effort ');
+});
+
+it.sequential('opens effort menu on raw byte \x14 (Ctrl+T) when input owner is input', async () => {
+  await renderHarness({ inputOwner: { kind: 'input' } });
+
+  await fireInput('\x14', {});
+
+  expect(mocks.replaceInput).toHaveBeenCalledTimes(1);
+  expect(mocks.replaceInput).toHaveBeenCalledWith('/effort ');
+});
+
+it.sequential('does not trigger Ctrl+O or Ctrl+T when input owner is not input', async () => {
+  await renderHarness({ inputOwner: { kind: 'approval' } });
+
+  await fireInput('o', { ctrl: true });
+  await fireInput('t', { ctrl: true });
+
+  expect(mocks.replaceInput).not.toHaveBeenCalled();
+});

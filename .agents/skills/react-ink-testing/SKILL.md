@@ -13,6 +13,16 @@ description: >
 
 # React Ink Unit Testing
 
+> **In this repo, use Vitest and `renderInAct`.** This guide is a general Ink
+> testing reference and its setup sections assume Jest; term2 has no Jest at all.
+> `ink` (v7), `vitest`, and `ink-testing-library` are already installed, tests run
+> via `pnpm test`, and every `jest.*` call below maps to `vi.*`. Skip the "Ink v4"
+> and Jest-configuration material entirely.
+>
+> Render through `renderInAct` from `source/test-helpers/ink-testing.tsx`, not
+> bare `render` — 59 test files use it against a handful that do not. See the
+> `testing` skill for commands and the `NODE_ENV=test` / `act` trap.
+
 React Ink uses its own renderer (not the DOM), so standard React Testing Library
 **does not work**. Always use `ink-testing-library` instead.
 

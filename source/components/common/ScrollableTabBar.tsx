@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Text, useStdout } from 'ink';
 import { computeVisibleTabs } from './compute-visible-tabs.js';
+import { COLOR_TEXT_SUBTLE } from '../theme.js';
 
 export interface ScrollableTabBarProps<T extends { id: string }> {
   /** Array of tab items (must have an `id` property) */
@@ -44,16 +45,16 @@ export function ScrollableTabBar<T extends { id: string }>({
   return (
     <Box justifyContent="space-between">
       <Box>
-        {hasLeftScroll && <Text color="#64748b">◀ </Text>}
+        {hasLeftScroll && <Text color={COLOR_TEXT_SUBTLE}>◀ </Text>}
         {visibleItems.map((item, index) => (
           <Box key={item.id}>
             {renderTab(item, item.id === activeItemId)}
-            {index < visibleItems.length - 1 && <Text color="#64748b">{' │ '}</Text>}
+            {index < visibleItems.length - 1 && <Text color={COLOR_TEXT_SUBTLE}>{' │ '}</Text>}
           </Box>
         ))}
-        {hasRightScroll && <Text color="#64748b"> ▶</Text>}
+        {hasRightScroll && <Text color={COLOR_TEXT_SUBTLE}> ▶</Text>}
       </Box>
-      {hint && <Text color="#64748b">{hint}</Text>}
+      {hint && <Text color={COLOR_TEXT_SUBTLE}>{hint}</Text>}
     </Box>
   );
 }

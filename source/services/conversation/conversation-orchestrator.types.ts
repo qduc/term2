@@ -54,7 +54,7 @@ export interface UIPort {
    * NOT yet appended it to the message list. The UI should display it above
    * the input box until the queue actually starts processing the turn.
    */
-  onQueuedMessagePending?(id: string, text: string): void;
+  onQueuedMessagePending?(id: string, text: string, delivery: 'steer' | 'follow_up'): void;
   /**
    * The queue has started executing a previously-pending message. The
    * orchestrator has now appended it to the message list. The UI should
@@ -68,6 +68,8 @@ export interface UIPort {
    * position are unchanged — only the displayed text moves.
    */
   onQueuedMessageEdited?(id: string, text: string): void;
+  /** A steer could not join the active turn and will run as a queued follow-up instead. */
+  onQueuedMessageReclassified?(id: string, delivery: 'follow_up'): void;
 }
 
 export interface ConversationOrchestratorConfig {

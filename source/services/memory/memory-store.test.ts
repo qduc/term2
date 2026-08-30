@@ -79,6 +79,7 @@ it('searches deterministically with fixed field scoring and tie breaking', async
   const results = await memory.search('rules');
   expect(results.map((result) => result.memory.id)).toEqual(['rules-guide', 'project-rules']);
   expect(results[1].matchedFields).toEqual(expect.arrayContaining(['id', 'title', 'content']));
+  expect(results[1]).toMatchObject({ score: 37, content: '# Rules\nUse TypeScript.' });
 });
 
 it('recovers a missing index from the last durable backup', async () => {

@@ -1,6 +1,11 @@
 # LLM Auto-Approval for Unsandboxed Shell Requests (sandbox-enabled only)
 
-**Status:** Design complete, not yet implemented.
+**Status:** Implemented. `requiresHumanShellApproval` takes an
+`opts.llmMayEvaluateUnsandboxed` flag that lifts the forced-human gate for unsandboxed
+shell calls (`source/services/approval/shell-sandbox-approval.ts:44-52`), and
+`ShellAutoApprovalResolver` derives it from settings and carries an `unsandboxed` flag
+per command (`source/services/approval/shell-auto-approval-resolver.ts:64-125`).
+Retained for the design rationale.
 **Last updated:** 2026-07-31
 
 ---

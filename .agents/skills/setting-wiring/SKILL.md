@@ -21,7 +21,7 @@ undifferentiated in the UI. This skill is the complete checklist.
 
 ### 1. `SETTING_KEYS`
 
-**File:** `source/services/settings/settings-schema.ts` (~line 480)
+**File:** `source/services/settings/settings-schema.ts` (~line 747)
 
 Add `MY_SETTING: 'section.mySetting'` to the constant object. Every downstream
 consumer imports from this set. Forgetting this entry makes the setting
@@ -36,7 +36,7 @@ export const SETTING_KEYS = {
 
 ### 2. `DEFAULT_SETTINGS`
 
-**File:** `source/services/settings/settings-schema.ts` (~line 651)
+**File:** `source/services/settings/settings-schema.ts` (~line 1021)
 
 Add the default value under the appropriate section object. Missing this causes
 the setting to be `undefined` until explicitly set.
@@ -49,7 +49,7 @@ the setting to be `undefined` until explicitly set.
 
 ### 3. `SettingsWithSources` interface
 
-**File:** `source/services/settings/settings-schema.ts` (~line 386)
+**File:** `source/services/settings/settings-schema.ts` (~line 586)
 
 Add `mySetting: SettingWithSource<T>` to the matching section. Missing this
 causes TypeScript build errors in `formatSettingsSummary` and related tests.
@@ -62,7 +62,7 @@ causes TypeScript build errors in `formatSettingsSummary` and related tests.
 
 ### 4. `SETTING_DESCRIPTIONS`
 
-**File:** `source/hooks/settings-completion-config.ts` (~line 22)
+**File:** `source/hooks/settings-completion-config.ts` (~line 24)
 
 Add a description entry. Without this, the setting shows with an empty
 description in the UI footer and has no description-based search matching.
@@ -73,10 +73,10 @@ description in the UI footer and has no description-based search matching.
 
 ### 5. `CATEGORY_KEYS`
 
-**File:** `source/hooks/settings-completion-config.ts` (~line 106)
+**File:** `source/hooks/settings-completion-config.ts` (~line 210)
 
 Add `SETTING_KEYS.MY_SETTING` to the appropriate category Set (`models`,
-`safety`, `tools`, `ui`). Uncategorized settings fall into `misc`, which is a
+`safety`, `tools`, `ui`, `memory`, `hooks`). Uncategorized settings fall into `misc`, which is a
 hidden category that only appears during search-all mode — the setting will
 not show in normal tabbed browsing.
 
@@ -89,7 +89,7 @@ not show in normal tabbed browsing.
 
 ### 6. `RUNTIME_MODIFIABLE_SETTINGS`
 
-**File:** `source/services/settings/settings-schema.ts` (~line 559)
+**File:** `source/services/settings/settings-schema.ts` (~line 879)
 
 Add `SETTING_KEYS.MY_SETTING` to this Set if the setting should be changeable
 without restart. Omit it if the setting is startup-only. The UI will still
@@ -105,24 +105,24 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
 ## Optional touchpoints
 
 - **`SETTINGS_CATEGORIES` / `CATEGORY_ORDER`** — `settings-completion-config.ts`
-  (~line 14, ~line 156). Only if adding a brand-new category tab. Do not modify
+  (~line 14, ~line 310). Only if adding a brand-new category tab. Do not modify
   for an existing category. `misc` is always last and not in `CATEGORY_ORDER`.
 
-- **`HIDDEN_SETTINGS`** — `settings-completion-config.ts` (~line 73). Add if the
+- **`HIDDEN_SETTINGS`** — `settings-completion-config.ts` (~line 161). Add if the
   setting should be excluded from the UI entirely (e.g., provider-internal keys,
   CLI-only flags). This is for UX, not security.
 
-- **`COMMON_SETTINGS`** — `settings-completion-config.ts` (~line 100). Add if
+- **`COMMON_SETTINGS`** — `settings-completion-config.ts` (~line 204). Add if
   the setting should be pinned at the top of every category list regardless of
   active tab.
 
 - **`applyRuntimeSettingChange`** — `source/services/runtime-setting-router.ts`
-  (~line 19). Add an `if (key === 'section.mySetting') { … }` branch only if
+  (~line 69). Add an `if (key === 'section.mySetting') { … }` branch only if
   changing the setting has a live side effect (e.g., reconfiguring a service,
   updating a trim threshold). Many settings don't need this — they take effect
   on the next LLM request or next session.
 
-- **`formatSettingsSummary`** — `source/utils/settings-command.ts` (~line 23).
+- **`formatSettingsSummary`** — `source/utils/settings-command.ts` (~line 62).
   Add an entry to the `entries` array only if the setting should appear in the
   plain-text `/settings` slash-command summary. The interactive menu
   (touchpoints 4–6) is the primary surface.

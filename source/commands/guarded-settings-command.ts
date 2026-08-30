@@ -34,28 +34,21 @@ export function createGuardedSettingsCommand({
       const isReset = settingParts[0] === 'reset';
       const settingKey = isReset ? settingParts[1] : settingParts[0];
       const hasHistory = messages.some((msg) => msg.sender !== 'system');
-      if ((settingKey === 'app.orchestratorMode' || settingKey === 'app.liteMode') && hasHistory) {
+      if (settingKey === 'app.liteMode' && hasHistory) {
         if (requestModeSwitchConfirm) {
           const rawVal = isReset ? false : parseSettingValue(settingParts.slice(1).join(' '));
           const targetValue = typeof rawVal === 'boolean' ? rawVal : true;
-          const label = settingKey === 'app.orchestratorMode' ? 'Orchestrator' : 'Lite';
-          const enabledDetail =
-            settingKey === 'app.orchestratorMode'
-              ? ' - tool-backed work must use subagents'
-              : ' - using minimal prompt, no codebase context';
           requestModeSwitchConfirm({
             modeKey: settingKey as ExclusiveModeKey,
-            modeLabel: label,
+            modeLabel: 'Lite',
             targetValue,
-            enabledDetail,
+            enabledDetail: ' - using minimal prompt, no codebase context',
           });
           return true;
         }
 
         addSystemMessage(
-          `Cannot switch modes mid-session (tool/context mismatch). Use \`/clear\` first, then change ${
-            settingKey === 'app.orchestratorMode' ? 'orchestrator mode' : 'lite mode'
-          }.`,
+          'Cannot switch modes mid-session (tool/context mismatch). Use `/clear` first, then change lite mode.',
         );
         return true;
       }

@@ -451,24 +451,43 @@ export const parseMemoryOutput = (output: string | undefined) => {
       scope: 'all' as const,
       global: memoriesOf(parsed.global),
       project: memoriesOf(parsed.project),
+      ...(parsed.omitted && typeof parsed.omitted === 'object'
+        ? { omitted: Number(parsed.omitted.global ?? 0) + Number(parsed.omitted.project ?? 0) }
+        : {}),
     };
   }
   if (Array.isArray(parsed.memories)) {
     return {
       type: 'list' as const,
-      memories: parsed.memories.map((m: any) => ({
-        id: String(m?.id ?? ''),
-        title: m?.title,
-        summary: m?.summary,
-        tags: Array.isArray(m?.tags) ? m.tags : undefined,
-      })),
+      memories: parsed.memories.map((entry: any) => {
+        const memory = entry?.memory ?? entry;
+        return {
+          id: String(memory?.id ?? ''),
+          title: memory?.title,
+          summary: memory?.summary,
+          tags: Array.isArray(memory?.tags) ? memory.tags : undefined,
+          ...(entry?.scope ? { scope: entry.scope } : {}),
+        };
+      }),
+      ...(typeof parsed.omittedIdCount === 'number' ? { omitted: parsed.omittedIdCount } : {}),
+      ...(typeof parsed.unavailableIdCount === 'number' ? { unavailable: parsed.unavailableIdCount } : {}),
     };
   }
   if (Array.isArray(parsed.results)) {
-    return { type: 'search' as const, query: String(parsed.query ?? ''), results: parsed.results };
+    return {
+      type: 'search' as const,
+      results: parsed.results,
+      ...(typeof parsed.omitted === 'number' ? { omitted: parsed.omitted } : {}),
+    };
   }
   if (parsed.memory && typeof parsed.memory === 'object') {
-    return { type: 'get' as const, memory: parsed.memory };
+    return {
+      type: 'get' as const,
+      memory:
+        parsed.content && typeof parsed.content === 'object' && typeof parsed.content.text === 'string'
+          ? { ...parsed.memory, content: parsed.content.text }
+          : parsed.memory,
+    };
   }
   if (parsed.deleted !== undefined) {
     return { type: 'delete' as const, deleted: Boolean(parsed.deleted) };

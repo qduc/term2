@@ -1,6 +1,6 @@
 # Roadmap: stabilize before expanding
 
-Status: **Feature expansion paused for a bounded stabilization tranche.**
+Status: **Stabilization tranche complete (Phases 0–3 closed 2026-08-16); feature expansion resumed.** The operating rules below remain the standard workflow.
 
 ## Goal
 
@@ -99,7 +99,7 @@ a dated, reproducible baseline.
   - `NODE_ENV=test pnpm test:provider-black-box` (19 files / 166 tests passing);
   - formatting and lint checks used by the release path (`pnpm lint` clean).
 - Classified environment-only behaviors (Node `TimeoutNaNWarning`, expected `openai-websocket.reasoning` fixture skip, non-interactive e2e harness skips).
-- Recast `docs/plans/escaped-defects-30d/` as an unnormalized empirical evidence inventory with methodological disclaimers.
+- Recast `docs/plans/escaped-defects-30d/` as an unnormalized empirical evidence inventory with methodological disclaimers. (That directory was never committed and is not present in this repository; only `docs/plans/validation-baseline-2026-08-14.md` still cites it.)
 
 ### Exit criteria met
 

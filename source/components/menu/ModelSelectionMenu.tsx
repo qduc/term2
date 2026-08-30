@@ -9,8 +9,9 @@ import {
 } from '../../utils/ai/provider-credentials.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
 import { useSetting } from '../../hooks/use-setting.js';
-import { MenuContainer } from '../common/MenuContainer.js';
+import { MenuContainer, MenuFooter, SelectionMarker } from '../common/MenuContainer.js';
 import { ScrollableTabBar } from '../common/ScrollableTabBar.js';
+import { COLOR_ACCENT, COLOR_DANGER, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_WARNING, GLYPH_WARNING } from '../theme.js';
 
 type Props = {
   items: ModelInfo[];
@@ -92,7 +93,7 @@ const ModelSelectionMenu: FC<Props> = ({
         return (
           <Text
             inverse={isActive}
-            color={isActive ? 'magenta' : isDisabled ? 'red' : '#64748b'}
+            color={isActive ? COLOR_ACCENT : isDisabled ? COLOR_DANGER : COLOR_TEXT_SUBTLE}
             bold={isActive}
             strikethrough={isDisabled}
           >
@@ -106,7 +107,6 @@ const ModelSelectionMenu: FC<Props> = ({
           </Text>
         );
       }}
-      hint={canSwitchProvider ? 'Tab/←→ → switch provider' : undefined}
     />
   );
 
@@ -114,8 +114,8 @@ const ModelSelectionMenu: FC<Props> = ({
     <Box flexDirection="column">
       {tabBar}
       {activeTab && !activeTab.hasCredentials && (
-        <Text color="yellow">
-          ⚠ {activeTab.label} unavailable:{' '}
+        <Text color={COLOR_WARNING}>
+          {GLYPH_WARNING} {activeTab.label} unavailable:{' '}
           {activeTab.unavailableReason === 'missing-codex-login'
             ? 'Not logged in on this host. Run `term2 --codex-login` to log in to Codex.'
             : activeTab.unavailableReason === 'missing-grok-login'
@@ -125,7 +125,9 @@ const ModelSelectionMenu: FC<Props> = ({
       )}
       {!canSwitchProvider && (
         <Box marginTop={0}>
-          <Text color="yellow">⚠ {providerSwitchDisabledMessage}</Text>
+          <Text color={COLOR_WARNING}>
+            {GLYPH_WARNING} {providerSwitchDisabledMessage}
+          </Text>
         </Box>
       )}
       <MenuContainer
@@ -133,33 +135,47 @@ const ModelSelectionMenu: FC<Props> = ({
         selectedIndex={selectedIndex}
         scrollOffset={scrollOffset}
         maxHeight={maxHeight}
-        borderColor="magenta"
+        title="Select model"
         loading={loading}
         loadingText={loading ? `Loading models${provider ? ` from ${provider}` : ''}…` : 'Loading...'}
         error={error ? `Unable to load models: ${error}` : null}
-        fallbackText={<Text color="#64748b">No models match "{query || '*'}"</Text>}
+        fallbackText={<Text color={COLOR_TEXT_SUBTLE}>No models match "{query || '*'}"</Text>}
         footer={
-          <Text color="#64748b">Enter → set model · Esc → cancel · ↑↓ → scroll · Ctrl+R → refresh model list</Text>
+          <MenuFooter
+            hints={[
+              ['↑↓', 'navigate'],
+              ['⏎', 'select'],
+              ['tab', 'provider'],
+              ['ctrl+r', 'refresh model list'],
+              ['esc', 'cancel'],
+            ]}
+          />
         }
         footerOutsideBorder={true}
         renderItem={(item: ModelInfo, _actualIndex: number, isSelected: boolean) => (
           <Box key={item.id}>
-            <Text inverse={isSelected} color={isSelected ? 'magenta' : undefined} bold={isSelected}>
+            <SelectionMarker selected={isSelected} />
+            <Text color={isSelected ? COLOR_ACCENT : undefined} bold={isSelected}>
               {item.id}
             </Text>
             {item.unavailableReason === 'missing-codex-login' ? (
-              <Text color="yellow"> — unavailable: Not logged in on this host. Run `term2 --codex-login`.</Text>
+              <Text color={COLOR_WARNING}> — unavailable: Not logged in on this host. Run `term2 --codex-login`.</Text>
             ) : item.unavailableReason === 'missing-grok-login' ? (
-              <Text color="yellow"> — unavailable: Not logged in on this host. Run `term2 --grok-login`.</Text>
+              <Text color={COLOR_WARNING}> — unavailable: Not logged in on this host. Run `term2 --grok-login`.</Text>
             ) : item.unavailableReason === 'missing-credentials' ? (
-              <Text color="yellow"> — unavailable: API key not configured on this host</Text>
+              <Text color={COLOR_WARNING}> — unavailable: API key not configured on this host</Text>
             ) : null}
-            {item.name && <Text color={isSelected ? 'white' : '#64748b'}> — {item.name}</Text>}
+            {item.name && <Text color={isSelected ? COLOR_TEXT : COLOR_TEXT_SUBTLE}> — {item.name}</Text>}
           </Box>
         )}
       />
       {(error || (items.length === 0 && !loading)) && (
-        <Text color="#64748b">Tab/←→ → switch provider · Esc → cancel</Text>
+        <MenuFooter
+          hints={[
+            ['tab', 'switch provider'],
+            ['esc', 'cancel'],
+          ]}
+        />
       )}
     </Box>
   );

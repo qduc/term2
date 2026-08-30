@@ -74,7 +74,7 @@ it.sequential('ModelSelectionMenu footer includes refresh hint', async () => {
   );
 
   const output = lastFrame();
-  expect(output?.includes('Ctrl+R → refresh model list')).toBe(true);
+  expect(output?.includes('ctrl+r refresh model list')).toBe(true);
 });
 
 it.sequential('ModelSelectionMenu does not duplicate refresh hint', async () => {
@@ -83,7 +83,7 @@ it.sequential('ModelSelectionMenu does not duplicate refresh hint', async () => 
   );
 
   const output = lastFrame();
-  expect(output?.match(/Ctrl\+R → refresh model list/g)).toHaveLength(1);
+  expect(output?.match(/ctrl\+r refresh model list/g)).toHaveLength(1);
 });
 
 it.sequential('ModelSelectionMenu highlights selected item', async () => {
@@ -115,6 +115,7 @@ it.sequential('ModelSelectionMenu shows provider in header if specified', async 
 it.sequential('ModelSelectionMenu gives Codex login guidance for an unavailable Codex model', async () => {
   vi.stubEnv('CHATGPT_LOCAL_HOME', '');
   vi.stubEnv('CODEX_HOME', '/tmp/term2-test-no-codex-auth');
+  vi.stubEnv('TERM2_CONFIG_DIR', '/tmp/term2-test-no-term2-auth');
   vi.spyOn(os, 'homedir').mockReturnValue('/tmp/term2-test-no-codex-home');
 
   const { lastFrame } = await renderInAct(

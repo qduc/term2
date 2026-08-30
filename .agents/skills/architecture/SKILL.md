@@ -44,7 +44,7 @@ For the full path from user input through provider streaming, tool approval, and
 
 These are not derivable from reading the code:
 
-- `subagent-manager.ts` is a **compatibility facade**. It emits top-level lifecycle events and delegates through the composition root in `runtime.ts`. Do not add execution, prompt, cache, or tool-policy logic back to it. Strategy-specific execution belongs in `mentor-runner.ts` (persistent mentor history, provider continuity), `execution-runner.ts` (one-shot explorer/worker/researcher), or `nested-runner.ts` (cached `Agent.asTool()` instances, approval interruption/resume).
+- `subagent-manager.ts` is a **compatibility facade**. It emits top-level lifecycle events and delegates through the composition root in `runtime.ts`. Do not add execution, prompt, cache, or tool-policy logic back to it. Strategy-specific execution belongs in `mentor-runner.ts` (persistent mentor history, provider continuity), `execution-runner.ts` (one-shot explorer/worker/librarian), or `nested-runner.ts` (cached `Agent.asTool()` instances, approval interruption/resume).
 - Role frontmatter, prompt selection, environment context, and tool guidance belong in `role-loader.ts`. Capability construction and write/shell safety policy belong in `tool-policy.ts`. Wiring and the nested role-tool cache stay in `runtime.ts`.
 - New providers must be registered through the provider registry.
 - New tools must be registered in `agent.ts`.

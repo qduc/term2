@@ -3,11 +3,34 @@ import { Box, Text } from 'ink';
 import { useSetting } from '../../hooks/use-setting.js';
 import { getProvider } from '../../providers/index.js';
 import type { SettingsService } from '../../services/settings/settings-service.js';
+import {
+  COLOR_ACCENT,
+  COLOR_ACCENT_ALT,
+  COLOR_TEXT_MUTED,
+  COLOR_TEXT_SUBTLE,
+  COLOR_WARNING,
+  GLYPH_SEPARATOR,
+  MODE_BADGE_BACKGROUND,
+  MODE_BADGE_FOREGROUND,
+  type ModeBadge,
+} from '../theme.js';
 
 interface BannerProps {
   settingsService: SettingsService;
   isShellMode?: boolean;
 }
+
+const MAX_MODEL_LABEL = 34;
+
+const truncateModel = (name: string): string =>
+  name.length > MAX_MODEL_LABEL ? `${name.slice(0, MAX_MODEL_LABEL - 1)}…` : name;
+
+const Badge: FC<{ mode: ModeBadge }> = ({ mode }) => (
+  <Text backgroundColor={MODE_BADGE_BACKGROUND[mode]} color={MODE_BADGE_FOREGROUND} bold>
+    {' '}
+    {mode}{' '}
+  </Text>
+);
 
 const Banner: FC<BannerProps> = ({ settingsService, isShellMode = false }) => {
   const mentorMode = useSetting(settingsService, 'app.mentorMode') ?? false;
@@ -25,21 +48,7 @@ const Banner: FC<BannerProps> = ({ settingsService, isShellMode = false }) => {
   const providerDef = getProvider(providerKey);
   const providerLabel = providerDef?.label || providerKey;
 
-  const accent = '#0ed7b5';
-  const glow = '#fbbf24';
-  const slate = '#64748b';
-  const purple = '#a78bfa'; // Soft purple for mentor
-  const cyan = '#22d3ee'; // Soft cyan for provider
-  const lightSlate = '#94a3b8';
-
-  const Pill: FC<{ bg: string; label: string }> = ({ bg, label }) => (
-    <Text backgroundColor={bg} color="white" bold>
-      {' '}
-      {label}{' '}
-    </Text>
-  );
-
-  const baseMode = orchestratorMode
+  const baseMode: ModeBadge = orchestratorMode
     ? 'ORCHESTRATOR'
     : planMode
     ? 'PLAN'
@@ -49,94 +58,43 @@ const Banner: FC<BannerProps> = ({ settingsService, isShellMode = false }) => {
       : 'LITE'
     : 'STANDARD';
 
-  const pills = [
-    {
-      show: true,
-      label: baseMode,
-      bg:
-        baseMode === 'ORCHESTRATOR'
-          ? '#be123c'
-          : baseMode === 'PLAN'
-          ? '#0369a1'
-          : baseMode === 'SHELL'
-          ? '#ca8a04'
-          : baseMode === 'LITE'
-          ? '#059669'
-          : '#0f766e',
-    },
-    { show: mentorMode, label: 'MENTOR', bg: '#7c3aed' },
-  ];
-
+  // Two borderless lines, not a bordered block. The banner is the first thing
+  // on screen every session; a full box around it competes with the conversation
+  // below for attention and costs four lines to say four short facts.
   return (
-    <Box
-      flexDirection="column"
-      width="100%"
-      borderStyle="round"
-      borderColor={accent}
-      paddingX={2}
-      paddingY={1}
-      marginBottom={1}
-    >
-      {/* Header */}
-      <Box justifyContent="space-between" alignItems="center">
-        <Box alignItems="center">
-          <Text color={glow} bold>
-            {'▌'}
-          </Text>
-          <Text color={accent} bold>
-            {' '}
-            term²
-          </Text>
-        </Box>
-
-        {/* Mode pills */}
-        <Box gap={1}>
-          {pills
-            .filter((p) => p.show)
-            .map((p) => (
-              <Pill key={p.label} bg={p.bg} label={p.label} />
-            ))}
-        </Box>
+    <Box flexDirection="column" width="100%" marginBottom={1}>
+      <Box>
+        <Text color={COLOR_WARNING} bold>
+          ▌
+        </Text>
+        <Text color={COLOR_ACCENT} bold>
+          {' '}
+          term²{' '}
+        </Text>
+        <Badge mode={baseMode} />
+        {mentorMode && (
+          <>
+            <Text> </Text>
+            <Badge mode="MENTOR" />
+          </>
+        )}
       </Box>
 
-      {/* Status line */}
-      <Box justifyContent="space-between" marginTop={1} flexWrap="wrap">
-        <Box flexDirection="column" marginRight={3}>
-          <Text color={slate}>
-            Provider:{' '}
-            <Text color={cyan} bold>
-              {providerLabel}
-            </Text>
-          </Text>
-          <Box flexDirection="column">
-            <Text color={slate}>
-              Model:{' '}
-              <Text color={glow} bold>
-                {model ? (model.length > 34 ? `${model.slice(0, 31)}…` : model) : '—'}
-              </Text>
-              {reasoningEffort !== 'none' && (
-                <Text color={slate}>
-                  {' '}
-                  <Text color={lightSlate}>({reasoningEffort})</Text>
-                </Text>
-              )}
-            </Text>
-            {mentorMode && mentorModel && (
-              <Text color={slate}>
-                Mentor:{' '}
-                <Text color={purple} bold>
-                  {mentorModel.length > 34 ? `${mentorModel.slice(0, 31)}…` : mentorModel}
-                </Text>
-                {mentorReasoningEffort !== 'none' && (
-                  <Text color={slate}>
-                    {' '}
-                    <Text color={lightSlate}>({mentorReasoningEffort})</Text>
-                  </Text>
-                )}
-              </Text>
-            )}
-          </Box>
-        </Box>
+      <Box>
+        <Text color={COLOR_TEXT_SUBTLE}>{'  '}</Text>
+        <Text color={COLOR_TEXT_MUTED}>{providerLabel}</Text>
+        <Text color={COLOR_TEXT_SUBTLE}>/</Text>
+        <Text color={COLOR_ACCENT}>{model ? truncateModel(model) : '—'}</Text>
+        {reasoningEffort !== 'none' && <Text color={COLOR_TEXT_SUBTLE}> ({reasoningEffort})</Text>}
+
+        {mentorMode && mentorModel && (
+          <>
+            <Text color={COLOR_TEXT_SUBTLE}> {GLYPH_SEPARATOR} </Text>
+            <Text color={COLOR_TEXT_SUBTLE}>mentor </Text>
+            <Text color={COLOR_ACCENT_ALT}>{truncateModel(mentorModel)}</Text>
+            {mentorReasoningEffort !== 'none' && <Text color={COLOR_TEXT_SUBTLE}> ({mentorReasoningEffort})</Text>}
+          </>
+        )}
       </Box>
     </Box>
   );

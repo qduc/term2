@@ -1,7 +1,7 @@
 import type { SettingsService } from './settings/settings-service.js';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import { setTrimConfig } from '../utils/output/output-trim.js';
-import { planModeNotice } from './mode-notices.js';
+import { planModeNotice, runtimeModeNotice } from './mode-notices.js';
 
 export interface RuntimeSettingRouterConversationService {
   switchProvider(provider: string): void;
@@ -115,7 +115,15 @@ export function applyRuntimeSettingChange(key: string, value: unknown, deps: Run
     return;
   }
 
-  if (key === 'app.mentorMode' || key === 'app.liteMode' || key === 'app.orchestratorMode') {
+  if (key === 'app.mentorMode' || key === 'app.orchestratorMode') {
+    deps.setModel(deps.settingsService.get('agent.model'));
+    deps.conversationService.queueModeNotice(
+      runtimeModeNotice(key === 'app.mentorMode' ? 'mentor' : 'orchestrator', Boolean(value)),
+    );
+    return;
+  }
+
+  if (key === 'app.liteMode') {
     deps.setModel(deps.settingsService.get('agent.model'));
     return;
   }

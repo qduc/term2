@@ -8,6 +8,7 @@ import type { MenuComponentProps } from './menu-registry.js';
 import type { MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
 import { applyMenuEditorEvent } from './menu-editor.js';
 import { resolveProviderCredentials } from '../../utils/ai/provider-credentials.js';
+import { COLOR_DANGER } from '../theme.js';
 
 type ModelsState = ReturnType<typeof useModelSelection>;
 
@@ -171,7 +172,7 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
         canSwitchProvider={models.canSwitchProvider}
         credentialRevision={models.credentialRevision}
       />
-      {applyError && <Text color="red">{applyError}</Text>}
+      {applyError && <Text color={COLOR_DANGER}>{applyError}</Text>}
     </Box>
   );
 }

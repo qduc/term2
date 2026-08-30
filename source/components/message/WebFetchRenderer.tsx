@@ -1,12 +1,7 @@
 import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import { parseWebFetchOutput } from './command-message-helpers.js';
-import { COLOR_TOOL_OUTPUT } from '../theme.js';
-
-const COLOR_CONTENT = 'white';
-const COLOR_LINK = 'blue';
-const COLOR_MUTED = 'gray';
-const COLOR_WARNING = 'yellow';
+import { COLOR_ACCENT, COLOR_TEXT, COLOR_TEXT_SUBTLE, COLOR_TOOL_OUTPUT, COLOR_WARNING } from '../theme.js';
 
 type Props = {
   output: string;
@@ -33,26 +28,33 @@ const WebFetchRenderer: FC<Props> = ({ output, renderStandardHeader }) => {
       {renderStandardHeader()}
       {title && (
         <Box paddingLeft={2}>
-          <Text color={COLOR_CONTENT} bold>
+          <Text color={COLOR_TEXT} bold>
             {title}
           </Text>
         </Box>
       )}
       <Box paddingLeft={2}>
-        <Text color={COLOR_LINK} underline>
+        <Text color={COLOR_ACCENT} underline>
           {url}
         </Text>
       </Box>
       {toc && (
-        <Box flexDirection="column" borderStyle="classic" borderColor={COLOR_MUTED} paddingX={1} marginY={1} width={50}>
+        <Box
+          flexDirection="column"
+          borderStyle="classic"
+          borderColor={COLOR_TEXT_SUBTLE}
+          paddingX={1}
+          marginY={1}
+          width={50}
+        >
           <Text color={COLOR_WARNING} bold>
             Table of Contents
           </Text>
-          <Text color={COLOR_MUTED}>{toc}</Text>
+          <Text color={COLOR_TEXT_SUBTLE}>{toc}</Text>
         </Box>
       )}
       {content && (
-        <Box flexDirection="column" borderStyle="single" borderColor={COLOR_MUTED} paddingX={1} marginTop={1}>
+        <Box flexDirection="column" borderStyle="single" borderColor={COLOR_TEXT_SUBTLE} paddingX={1} marginTop={1}>
           <Text color={COLOR_TOOL_OUTPUT}>{displayContent}</Text>
         </Box>
       )}
@@ -60,7 +62,7 @@ const WebFetchRenderer: FC<Props> = ({ output, renderStandardHeader }) => {
         <Box marginTop={1}>
           <Text color={COLOR_WARNING}>
             Full content saved to:{' '}
-            <Text bold color={COLOR_CONTENT}>
+            <Text bold color={COLOR_TEXT}>
               {tempFile}
             </Text>
           </Text>

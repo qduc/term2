@@ -129,6 +129,7 @@ describe('ApplicationRunLoop parallel-safe tool dispatch', () => {
   it('treats a serial call as a barrier for later eligible calls', async () => {
     const first = deferred<string>();
     const executions: string[] = [];
+    const dispatchedEvents: string[] = [];
     const model = modelForCalls([
       { id: 'call-first', name: 'first' },
       { id: 'call-serial', name: 'serial' },
@@ -166,11 +167,22 @@ describe('ApplicationRunLoop parallel-safe tool dispatch', () => {
       'inspect',
     );
 
+    const collectDispatches = (async () => {
+      for await (const event of stream) {
+        if (event.type === 'tool_call_dispatched') {
+          dispatchedEvents.push(event.callId);
+        }
+      }
+    })();
+
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(executions).toEqual(['first']);
+    expect(dispatchedEvents).toEqual(['call-first']);
     first.resolve('first result');
     await stream.completed;
+    await collectDispatches;
     expect(executions).toEqual(['first', 'serial', 'last']);
+    expect(dispatchedEvents).toEqual(['call-first', 'call-serial', 'call-last']);
   });
 
   it('does not let an eligible call leap across an approval barrier', async () => {

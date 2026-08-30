@@ -307,7 +307,7 @@ runtime or test behavior.
 
 ### InputSurgeGuard content-bound approval repair
 
-Disposition: **implemented in this uncommitted worktree repair; no commit ID.**
+Disposition: **implemented in `c3c8ef25`.**
 `InputSurgeApproval` is an opaque, one-use capability whose module-private
 provenance record carries a canonical normalized `UserTurn` snapshot: text,
 every image field, and every skill field. The admission workflow issues it only
@@ -345,7 +345,7 @@ Retry, fallback, and provider-continuity semantics: unchanged.
 Observability fields: existing input_surge.blocked fields; no turn payload or
   capability is logged.
 Persisted-setting migration, if any: none.
-Rollback boundary: this uncommitted repair only; no commit ID.
+Rollback boundary: `c3c8ef25`.
 Ledger row: InputSurgeGuard bypass scope.
 ```
 
@@ -368,7 +368,7 @@ nested image and skill mutation, caller forgery, edit-away/edit-back invalidatio
 mode-notice separation, workflow-to-orchestrator capability transport, and the
 retained decline/stale/repeated-confirmation behavior.
 
-Focused verification (uncommitted repair):
+Focused verification (`c3c8ef25`):
 
 ```text
 NODE_ENV=test pnpm test source/services/conversation/conversation-admission-workflow.test.ts \

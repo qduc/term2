@@ -1,6 +1,7 @@
 # Experiment P2 — generation repetition disposition
 
-Status: complete, uncommitted isolated TDD experiment.
+Status: complete; implementation committed in `d16bd5e3` (pending merge to
+`main`).
 
 ## Guard contract
 

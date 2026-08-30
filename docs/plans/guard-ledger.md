@@ -55,10 +55,10 @@ Open work, in order:
   request was aborting the turn as `reasoning_characters` /
   `unsafeToReplay`. The 100k cap is retained as a truncate bound; it no
   longer fails the request. See the repair record below.
-- **Completed (this worktree, uncommitted):** destructive repetition inference
-  is removed from both execution owners while the typed 100,000-character
-  aggregate visible-output cap remains. The InputSurgeGuard capability repair
-  remains a separate worktree and rollback boundary.
+- **Completed (this branch, pending merge; `d16bd5e3`):** destructive repetition
+  inference is removed from both execution owners while the typed
+  100,000-character aggregate visible-output cap remains. The InputSurgeGuard
+  capability repair remains a separate worktree and rollback boundary.
 
 ## Guard classes
 
@@ -308,7 +308,8 @@ runtime or test behavior.
 
 ### Duplicate repetition detector repair
 
-Disposition: **implemented and verified in an isolated worktree; uncommitted.**
+Disposition: **implemented and verified in `d16bd5e3`; pending merge to
+`main`.**
 `GenerationGuard` no longer treats repeated text or reasoning as a terminal
 failure, and `SessionStreamProcessor` no longer owns a second foreground
 repetition abort. `RepetitionDetector` remains only as a bounded boolean
@@ -348,7 +349,7 @@ Retry, fallback, and provider-continuity semantics: cap overflow remains an
 Observability fields: retained typed output_characters code and counts; removed
   repetitive_text, repetitive_reasoning, repetitive_model_output terminal codes.
 Persisted-setting migration, if any: none.
-Rollback boundary: this isolated repetition-only worktree/diff.
+Rollback boundary: independently revertible `d16bd5e3`.
 Ledger row: duplicate repetition detectors.
 ```
 
@@ -367,8 +368,8 @@ behavior. They did not challenge the proxy with legitimate periodic output at
 the public execution boundaries or assert that the explicit aggregate budget,
 rather than repetition, remained the terminal containment owner.
 
-Verification is recorded in `EXPERIMENT-P2.md`; no commit ID exists because this
-repair remains intentionally uncommitted.
+Verification is recorded in `EXPERIMENT-P2.md`; implementation commit:
+`d16bd5e3`.
 
 ### Subagent steering mailbox repair
 

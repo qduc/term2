@@ -30,6 +30,7 @@ import {
 } from '../services/conversation/conversation-admission-workflow.js';
 import type { HistoryService } from '../services/history-service.js';
 import type { InputSurgeApproval } from '../services/input-surge-approval.js';
+import type { RestoredState } from '../services/conversation/conversation-replay.js';
 
 import type { ConversationLogWriter } from '../services/logging/conversation-log-writer.js';
 
@@ -379,6 +380,17 @@ export const useConversation = ({
 
   const clearConversation = useCallback(() => orchestrator.clearConversation(), [orchestrator]);
 
+  const restoreConversation = useCallback(
+    (
+      restored: Pick<RestoredState, 'messages' | 'history' | 'previousResponseId' | 'toolLedger' | 'updatedAt'> & {
+        usage?: RestoredState['usage'];
+        subagentUsage?: RestoredState['subagentUsage'];
+        costRecords?: RestoredState['costRecords'];
+      },
+    ) => orchestrator.restoreConversation(restored),
+    [orchestrator],
+  );
+
   const stopProcessing = useCallback(() => orchestrator.stopProcessing(), [orchestrator]);
 
   const stopProcessingWithNotice = useCallback(() => {
@@ -518,6 +530,7 @@ export const useConversation = ({
     handleApprovalDecision,
     onTypeAnswer,
     clearConversation,
+    restoreConversation,
     stopProcessing: stopProcessingWithNotice,
     cancelAskUser,
     rewindToTarget,

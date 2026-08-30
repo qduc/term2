@@ -19,7 +19,7 @@ Combining a fast React (Ink) terminal interface with an application-owned run lo
 - **Smart Shell Auto-Approval**: A hybrid heuristic and LLM safety evaluator that auto-approves safe read-only and workspace commands, eliminating prompt fatigue while strictly gating risky operations.
 - **Multi-Agent Orchestration**: Spawn specialized foreground or background subagents (`explorer`, `worker`, `mentor`, `librarian`) across tiered model profiles (`smart`, `balanced`, `cheap`, `chore`).
 - **Provider-Neutral Context Compaction**: Intelligently compacts long conversation histories (via `/compact` or automatic thresholds) while preserving cold-prefix architectural facts and hot-tail tool ledger integrity.
-- **Time-Travel Rewind and Forking**: Non-destructive conversation rewinding with discard previews (`/rewind`, `/undo`, `/retry`), session resumption (`--resume`), and session branching (`--fork`).
+- **Time-Travel Rewind and Forking**: Non-destructive conversation rewinding with discard previews (`/rewind`, `/undo`, `/retry`), session resumption (`/resume`, `--resume`), and session branching (`--fork`).
 - **Native Remote Development**: Execute commands and manage codebases on remote servers seamlessly over SSH with SSH agent authentication.
 - **Five Focused Operating Modes**: Standard, Plan, Lite, Mentor, and Orchestrator modes adapted to every phase of engineering.
 
@@ -295,6 +295,7 @@ TODO_LIST=$(term2 "List all TODO markers in source/")
 | `/retry-tool` | — | Re-execute the last failed or timed-out tool call. |
 | `/copy` | `[N]` | Copy the latest assistant response (or $N$-th prior response) to clipboard. |
 | `/usage` | — | Display exact token counts, cost breakdown, and provider rate-limit metrics. |
+| `/resume` | `[ls\|conversation-id]` | Resume the latest or a specific saved conversation; use `/resume ls` to list recent conversations. |
 | `/handoff` | — | Export current conversation context for handoff to another session or model. |
 | `/settings` | `[key] [value]` | View or modify runtime configuration settings. |
 | `/clear` | — | Clear current conversation history and start a fresh turn. |

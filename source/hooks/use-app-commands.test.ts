@@ -6,6 +6,7 @@ import { render } from 'ink-testing-library';
 import type { Message } from './use-conversation.js';
 import { createCopySlashCommand } from '../commands/copy-command.js';
 import { createUsageSlashCommand } from '../commands/usage-command.js';
+import { createResumeSlashCommand } from '../commands/resume-command.js';
 import { useAppCommands } from './use-app-commands.js';
 import { getLastFinalAssistantText } from '../utils/conversation/message-utils.js';
 import { parseModelProviderArg } from '../utils/ai/model-provider-arg.js';
@@ -75,6 +76,38 @@ it.sequential('createUsageSlashCommand shows current session usage', () => {
   expect(command.name).toBe('usage');
   expect(command.action()).toBe(true);
   expect(messages).toEqual(['Token usage: 20,000 input (1,000,000 cached), 20,000 output']);
+});
+
+it.sequential('createResumeSlashCommand lists saved conversations in the app', () => {
+  const messages: string[] = [];
+  const command = createResumeSlashCommand({
+    listConversations: () => [{ id: 'saved-1', updatedAt: '2026-08-30T00:00:00.000Z' }],
+    resumeConversation: vi.fn(),
+    addSystemMessage: (text) => messages.push(text),
+  });
+
+  expect(command.action('ls')).toBe(true);
+  expect(messages[0]).toContain('saved-1');
+  expect(messages[0]).toContain('Resume:  /resume saved-1');
+});
+
+it.sequential('createResumeSlashCommand resumes the requested target and rejects extra arguments', async () => {
+  const messages: string[] = [];
+  const resumeConversation = vi.fn(async () => {});
+  const command = createResumeSlashCommand({
+    listConversations: () => [],
+    resumeConversation,
+    addSystemMessage: (text) => messages.push(text),
+  });
+
+  expect(command.action('saved-1')).toBe(true);
+  await flushMicrotasks();
+  expect(resumeConversation).toHaveBeenCalledWith('saved-1');
+
+  expect(command.action('one two')).toBe(true);
+  expect(messages).toContain('Usage: /resume [ls | conversation-id]');
+  expect(command.action('../outside')).toBe(true);
+  expect(messages).toContain('Invalid conversation id. Usage: /resume [ls | conversation-id]');
 });
 
 it.sequential('createCopySlashCommand returns immediately and reports success after async clipboard copy', async () => {
@@ -222,6 +255,8 @@ const TestHookWrapper = ({
     onSkillSelected: () => {},
     requestModeSwitchConfirm,
     turnInFlight,
+    listConversations: () => [],
+    resumeConversation: () => {},
   });
 
   onHookResult(hookResult);
@@ -246,6 +281,7 @@ it.sequential('useAppCommands registers /rewind with its aliases and the separat
   expect(names).toContain('undo');
   expect(names).toContain('retry');
   expect(names).toContain('retry-tool');
+  expect(names).toContain('resume');
 });
 
 it.sequential('useAppCommands gives /retry a resend default and /undo an edit default', async () => {
@@ -751,6 +787,8 @@ it.sequential(
         retryLastToolOutput: async () => false,
         skillsService: { getAvailableSkills: () => [] } as any,
         onSkillSelected: () => {},
+        listConversations: () => [],
+        resumeConversation: () => {},
       });
       return null;
     };

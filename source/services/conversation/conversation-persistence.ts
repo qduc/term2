@@ -475,7 +475,7 @@ export function deleteConversation(id: string): boolean {
   return removed;
 }
 
-interface ConversationListEntry {
+export interface ConversationListEntry {
   id: string;
   updatedAt: string;
   projectPath?: string;

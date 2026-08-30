@@ -57,6 +57,15 @@ import { useFirstRunSetupGate } from './hooks/use-first-run-setup.js';
 import { TOOL_NAME_ASK_USER } from './tools/tool-names.js';
 import { copyToClipboard } from './utils/clipboard.js';
 import type { CopySelection } from './utils/copy-selections.js';
+import {
+  isConversationLocked,
+  listConversations,
+  loadConversationForProject,
+  loadLastConversation,
+  type ConversationListEntry,
+  type RestoredState,
+} from './services/conversation/conversation-persistence.js';
+import { normalizeAppModes } from './services/settings/settings-schema.js';
 
 export {
   appendStartupBannerId,
@@ -94,7 +103,7 @@ interface AppProps {
   initialMessages?: Message[];
   restoredStaticMessageIds?: string[];
   logWriter?: { append: (event: any) => void };
-  onRotateWriter?: (newSessionId: string) => void;
+  onRotateWriter?: (newSessionId: string, createdAt?: string) => void;
   generateId: () => string;
   onSessionIdChange?: (newId: string, createdAt: string) => void;
   onHasConversationContent?: (hasContent: boolean) => void;
@@ -135,6 +144,7 @@ const App: FC<AppProps> = ({
       : mode !== 'text';
   const [messageListEpoch, setMessageListEpoch] = useState(0);
   const [startupBannerIds, setStartupBannerIds] = useState(['startup-banner-0']);
+  const [activeRestoredStaticMessageIds, setActiveRestoredStaticMessageIds] = useState(restoredStaticMessageIds);
   const liteMode = useSetting(settingsService, 'app.liteMode') ?? false;
   const displayMode = useSetting(settingsService, 'ui.displayMode') ?? 'standard';
   const sessionUsage = useMemo(() => usageAccumulator ?? createUsageAccumulator(), [usageAccumulator]);
@@ -206,6 +216,7 @@ const App: FC<AppProps> = ({
     handleApprovalDecision,
     onTypeAnswer,
     clearConversation,
+    restoreConversation,
     stopProcessing,
     cancelAskUser,
     rewindToTarget,
@@ -329,6 +340,7 @@ const App: FC<AppProps> = ({
     onPrintUsage?.();
     await clearConversation();
     setStartupBannerIds(['startup-banner-0']);
+    setActiveRestoredStaticMessageIds([]);
     setMessageListEpoch((epoch) => epoch + 1);
   }, [clearConversation, onPrintUsage]);
 
@@ -453,6 +465,117 @@ const App: FC<AppProps> = ({
     clearTerminalForRedraw(stdout);
     setMessageListEpoch((epoch) => epoch + 1);
   }, [stdout]);
+
+  const resumeProjectPath = sshInfo?.remoteDir ?? process.cwd();
+  const resumeSshHost = sshInfo?.host;
+  const listSavedConversations = useCallback<() => ConversationListEntry[]>(
+    () => listConversations(resumeProjectPath, resumeSshHost).slice(0, 10),
+    [resumeProjectPath, resumeSshHost],
+  );
+
+  const resumeConversation = useCallback(
+    async (target?: string) => {
+      let restored: RestoredState | null = null;
+      if (target) {
+        const result = loadConversationForProject(target, resumeProjectPath, resumeSshHost);
+        if (result.status === 'project_mismatch') {
+          addSystemMessage(`Conversation ${target} belongs to a different project.`);
+          return;
+        }
+        if (result.status === 'unreadable') {
+          addSystemMessage(`Conversation ${target} could not be read.`);
+          return;
+        }
+        restored = result.status === 'loaded' ? result.conversation : null;
+      } else {
+        restored = loadLastConversation(resumeProjectPath, resumeSshHost);
+      }
+
+      if (!restored) {
+        addSystemMessage(`No conversation found to resume (${target ?? 'last'}).`);
+        return;
+      }
+
+      if (restored.id !== sessionId) {
+        const lock = isConversationLocked(restored.id);
+        if (lock?.status === 'held') {
+          addSystemMessage(
+            `Conversation ${restored.id} is already open in another terminal (pid ${lock.pid}). Close it first or use the CLI --fork option.`,
+          );
+          return;
+        }
+        if (lock?.status === 'corrupt') {
+          addSystemMessage(`Conversation ${restored.id} has a corrupt lockfile and cannot be resumed here.`);
+          return;
+        }
+      }
+
+      try {
+        if (restored.id !== sessionId) {
+          onRotateWriter?.(restored.id, restored.createdAt);
+        }
+        conversationService.resetWithNewId(restored.id);
+
+        const mode = restored.appMode
+          ? normalizeAppModes({
+              orchestratorMode: Boolean(restored.appMode.orchestratorMode),
+              liteMode: restored.appMode.liteMode,
+              planMode: restored.appMode.planMode,
+              mentorMode: restored.appMode.mentorMode,
+            })
+          : undefined;
+        const changes = [
+          ...(restored.model ? [{ key: 'agent.model', value: restored.model, persistence: 'runtime' as const }] : []),
+          ...(restored.provider
+            ? [{ key: 'agent.provider', value: restored.provider, persistence: 'runtime' as const }]
+            : []),
+          ...(restored.reasoningEffort &&
+          ['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(restored.reasoningEffort)
+            ? [{ key: 'agent.reasoningEffort', value: restored.reasoningEffort, persistence: 'runtime' as const }]
+            : []),
+          ...(mode
+            ? [
+                { key: 'app.orchestratorMode', value: mode.orchestratorMode, persistence: 'runtime' as const },
+                { key: 'app.liteMode', value: mode.liteMode, persistence: 'runtime' as const },
+                { key: 'app.planMode', value: mode.planMode, persistence: 'runtime' as const },
+                { key: 'app.mentorMode', value: mode.mentorMode, persistence: 'runtime' as const },
+              ]
+            : []),
+        ];
+        configurationService.apply(changes);
+
+        const savedProviderMatches = !restored.provider || restored.provider === settingsService.get('agent.provider');
+        const savedModelMatches = !restored.model || restored.model === settingsService.get('agent.model');
+        restoreConversation({
+          ...restored,
+          previousResponseId: savedProviderMatches && savedModelMatches ? restored.previousResponseId : null,
+        });
+        setSessionId(restored.id);
+        onSessionIdChange?.(restored.id, restored.createdAt);
+        setActiveRestoredStaticMessageIds(restored.messages.map((message) => message.id));
+        redrawMessageList();
+        for (const warning of restored.replayWarnings) {
+          addSystemMessage(`Conversation replay: ${warning}`);
+        }
+        addSystemMessage(`Resumed conversation: ${restored.id}`);
+      } catch (error: unknown) {
+        addSystemMessage(`Failed to resume conversation: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    },
+    [
+      addSystemMessage,
+      configurationService,
+      conversationService,
+      onRotateWriter,
+      onSessionIdChange,
+      redrawMessageList,
+      restoreConversation,
+      resumeProjectPath,
+      resumeSshHost,
+      sessionId,
+      settingsService,
+    ],
+  );
 
   // Resize redraw: Ink's <Static> renders committed messages once and never
   // re-renders them, so old messages retain their old width after a terminal
@@ -620,6 +743,8 @@ const App: FC<AppProps> = ({
     onSkillSelected: handleSkillSelected,
     requestModeSwitchConfirm: setPendingModeSwitch,
     turnInFlight: isProcessing,
+    listConversations: listSavedConversations,
+    resumeConversation,
   });
 
   const handleRewindSelect = useCallback(
@@ -1011,7 +1136,7 @@ const App: FC<AppProps> = ({
             bannerItems={startupBannerIds}
             settingsService={settingsService}
             isShellMode={isShellMode}
-            restoredStaticMessageIds={restoredStaticMessageIds}
+            restoredStaticMessageIds={activeRestoredStaticMessageIds}
             turnPaused={effectiveWaitingForApproval}
           />
         </Box>

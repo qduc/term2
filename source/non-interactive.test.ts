@@ -376,6 +376,130 @@ it('suppresses tool summaries on stderr when quiet=true', async () => {
   expect(stderr.getOutput()).toBe('');
 });
 
+it('streams NDJSON events to stdout in json mode and emits completed event', async () => {
+  const stdout = createStringWritable();
+  const stderr = createStringWritable();
+
+  const session: any = {
+    async sendMessage(_prompt: string, { onEvent }: any) {
+      onEvent?.({ type: 'reasoning_delta', delta: 'thinking' });
+      onEvent?.({
+        type: 'tool_started',
+        toolCallId: 'call-1',
+        toolName: 'bash',
+        arguments: { command: 'ls' },
+      });
+      onEvent?.({ type: 'text_delta', delta: 'hello' });
+      onEvent?.({ type: 'final', finalText: 'hello' });
+      return { type: 'response', finalText: 'hello', commandMessages: [] };
+    },
+    async handleApprovalDecision() {
+      return null;
+    },
+  };
+
+  const exitCode = await runWithSession(session, {
+    prompt: 'hi',
+    autoApprove: false,
+    json: true,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+  });
+
+  expect(exitCode).toBe(0);
+  expect(stderr.getOutput()).toBe('');
+
+  const lines = stdout
+    .getOutput()
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+  expect(lines).toEqual([
+    { type: 'reasoning_delta', delta: 'thinking' },
+    { type: 'tool_started', toolCallId: 'call-1', toolName: 'bash', arguments: { command: 'ls' } },
+    { type: 'text_delta', delta: 'hello' },
+    { type: 'final', finalText: 'hello' },
+    { type: 'completed', finalText: 'hello' },
+  ]);
+});
+
+it('emits NDJSON error event on error in json mode', async () => {
+  const stdout = createStringWritable();
+  const stderr = createStringWritable();
+
+  const session: any = {
+    async sendMessage(_prompt: string, { onEvent }: any) {
+      onEvent?.({ type: 'error', message: 'model exploded' });
+      throw new Error('model exploded');
+    },
+    async handleApprovalDecision() {
+      return null;
+    },
+  };
+
+  const exitCode = await runWithSession(session, {
+    prompt: 'hi',
+    autoApprove: false,
+    json: true,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+  });
+
+  expect(exitCode).toBe(1);
+  expect(stderr.getOutput()).toBe('');
+
+  const lines = stdout
+    .getOutput()
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+  expect(lines).toContainEqual({ type: 'error', message: 'model exploded' });
+  expect(lines).toContainEqual({ type: 'error', error: 'model exploded' });
+});
+
+it('emits NDJSON approval_rejected event in json mode when unapproved', async () => {
+  const stdout = createStringWritable();
+  const stderr = createStringWritable();
+
+  const session: any = {
+    async sendMessage(_prompt: string) {
+      return {
+        type: 'approval_required',
+        approval: {
+          agentName: 'CLI Agent',
+          toolName: 'bash',
+          argumentsText: 'rm -rf /',
+        },
+      };
+    },
+    async handleApprovalDecision() {
+      return { type: 'response', finalText: 'done', commandMessages: [] };
+    },
+  };
+
+  const exitCode = await runWithSession(session, {
+    prompt: 'hi',
+    autoApprove: true,
+    json: true,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+  });
+
+  expect(exitCode).toBe(0);
+  expect(stderr.getOutput()).toBe('');
+
+  const lines = stdout
+    .getOutput()
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+  expect(lines).toContainEqual({
+    type: 'approval_rejected',
+    reason: 'Heuristic validation failed: command is RED (dangerous) and cannot be executed automatically: rm -rf /',
+  });
+  expect(lines).toContainEqual({ type: 'completed', finalText: 'done' });
+});
+
 it('handles multiple consecutive approval rounds', async () => {
   const stdout = createStringWritable();
   const stderr = createStringWritable();

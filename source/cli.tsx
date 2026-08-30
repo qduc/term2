@@ -157,6 +157,7 @@ const cli = meow(
           --auto-approve                   Allow tool execution for a non-interactive prompt
       -q, --quiet                          Suppress non-error diagnostics on stderr in non-interactive mode
           --show-reasoning                 Stream reasoning deltas to stderr in non-interactive mode
+          --json                           Emit newline-delimited JSON (NDJSON) events in non-interactive mode
           --ssh <user@host>                Enable SSH mode for a remote host
           --remote-dir <path>              Remote working directory (required for non-lite SSH sessions)
           --ssh-port <port>                SSH port (default: 22)
@@ -178,6 +179,7 @@ const cli = meow(
       $ term2 --lite
       $ term2 --auto-approve "list files in the current directory"
       $ term2 -q "generate json payload"
+      $ term2 --json "explain this function"
       $ term2 --resume
       $ term2 --resume <conversation-id>
       $ term2 --resume <conversation-id> --fork
@@ -217,6 +219,10 @@ const cli = meow(
         default: false,
       },
       showReasoning: {
+        type: 'boolean',
+        default: false,
+      },
+      json: {
         type: 'boolean',
         default: false,
       },
@@ -737,6 +743,7 @@ if (hasPositionalPrompt) {
     autoApprove: cli.flags.autoApprove,
     quiet: cli.flags.quiet,
     showReasoning: cli.flags.showReasoning,
+    json: cli.flags.json,
     sessionClientFactory,
     logger,
     settingsService: settings,

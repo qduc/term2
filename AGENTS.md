@@ -65,7 +65,13 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   table). The security-floor question is answered (2026-08-30):
   `luna#medium` suffices on the security task (9.0 vs completed-terra 8.67,
   judge 3-sample pooled); the remaining work is the step-down mechanism
-  itself plus the security-path detection design.
+  itself plus the security-path detection design. **Follow-up research
+  (2026-08-30) found the mid-turn premise needs rework**: effort changes
+  invalidate the prompt cache just like model changes (Codex issue #35416,
+  Anthropic docs), GPT-5.6's write-paid caching changes the cost math, and
+  industry routers demote at turn boundaries or via subagents rather than
+  mid-turn. Read `docs/research/model-effort-step-down-cache-economics.md`
+  before designing the mechanism.
 - Test suite audit — foundation merged, milestone still non-destructive:
   build the evidence graph, not cleanup. Do not remove, rewrite, retier, or
   consolidate tests, and do not dispatch explorers, without the approval

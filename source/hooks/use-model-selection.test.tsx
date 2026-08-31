@@ -812,7 +812,7 @@ it.sequential('allows switching the main provider even when conversation history
     label: firstProvider,
     fetchModels: async () => [{ id: 'model-a', name: 'Model A' }],
   });
-  registerProvider({
+  registerTestProvider({
     id: secondProvider,
     label: secondProvider,
     fetchModels: async () => [{ id: 'model-b', name: 'Model B' }],

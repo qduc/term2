@@ -64,6 +64,7 @@ afterEach(() => {
 it('CLI --help documents the available command-line options', () => {
   const help = execFileSync('node', [cliPath(), '--help'], {
     env: createTestChildEnv({
+      HOME: testDir,
       DISABLE_LOGGING: '1',
     }),
     encoding: 'utf8',
@@ -142,6 +143,7 @@ it('CLI --resume ls prints list of conversations and exits', () => {
 
   const stdout = execFileSync('node', [cliPath(), '--resume', 'ls'], {
     env: createTestChildEnv({
+      HOME: testDir,
       TERM2_CONVERSATIONS_DIR: testDir,
       DISABLE_LOGGING: '1',
     }),
@@ -180,6 +182,7 @@ it('CLI --resume list also works', () => {
 
   const stdout = execFileSync('node', [cliPath(), '--resume', 'list'], {
     env: createTestChildEnv({
+      HOME: testDir,
       TERM2_CONVERSATIONS_DIR: testDir,
       DISABLE_LOGGING: '1',
     }),

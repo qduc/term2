@@ -108,7 +108,7 @@ it('throws when a caller-owned agentClient is provided without toolOwnership', (
 });
 
 it('logs a session rollover marker at the public conversation boundary', () => {
-  const client = partialClient({ consumeSessionRolloverRequest: () => null });
+  const client = partialClient({ consumeSessionRolloverRequest: () => ({ status: 'none' }) });
   const service = new ConversationService({
     agentClient: client,
     toolOwnership: new ToolOwnershipRegistry(),
@@ -122,6 +122,30 @@ it('logs a session rollover marker at the public conversation boundary', () => {
   expect(events).toEqual([
     { type: 'session_rollover', reason: 'context_pressure', brief: 'Continue from the durable notes.' },
   ]);
+});
+
+it('blocks a settled session rollover while an interaction is pending', () => {
+  const request = { reason: 'task_boundary' as const, brief: 'Continue.' };
+  const client = partialClient({
+    consumeSessionRolloverRequest: () => ({ status: 'ready' as const, request }),
+  });
+  const service = new ConversationService({
+    agentClient: client,
+    toolOwnership: new ToolOwnershipRegistry(),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+  service.presentPendingInteraction({
+    agentName: 'CLI Agent',
+    toolName: 'shell',
+    argumentsText: '{}',
+    rawInterruption: {},
+  });
+
+  expect(service.consumeSessionRolloverRequest()).toEqual({
+    status: 'blocked',
+    blocker: 'pending_interaction',
+    error: 'Session rollover was not performed because a user interaction or queued submission is pending.',
+  });
 });
 
 it('constructs with a caller-owned agentClient and toolOwnership', () => {

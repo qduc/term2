@@ -67,6 +67,7 @@ import {
   type RestoredState,
 } from './services/conversation/conversation-persistence.js';
 import { normalizeAppModes } from './services/settings/settings-schema.js';
+import { composeSessionRolloverBrief } from './services/session-rollover/session-rollover-brief.js';
 
 export {
   appendStartupBannerId,
@@ -211,6 +212,7 @@ const App: FC<AppProps> = ({
     backgroundSubagentApproval,
     resolveBackgroundSubagentApproval,
     sendUserMessage,
+    sendSessionRolloverBrief,
     admissionConfirmation,
     submitTurnForAdmission,
     resolveAdmissionConfirmation,
@@ -264,12 +266,6 @@ const App: FC<AppProps> = ({
     logWriter,
     notifier,
   });
-
-  sessionRolloverHandlerRef.current = async (request) => {
-    conversationService.logSessionRollover(request);
-    await clearConversation();
-    await sendUserMessage(request.brief);
-  };
 
   // Keep older test/integration harnesses compatible while the session facade
   // rolls out the adopted-subagent approval channel.
@@ -351,6 +347,13 @@ const App: FC<AppProps> = ({
     setActiveRestoredStaticMessageIds([]);
     setMessageListEpoch((epoch) => epoch + 1);
   }, [clearConversation, onPrintUsage]);
+
+  sessionRolloverHandlerRef.current = async (request) => {
+    const briefing = composeSessionRolloverBrief({ previousSessionId: sessionId, request });
+    conversationService.logSessionRollover(request);
+    await clearConversationAndRefreshBanner();
+    await sendSessionRolloverBrief(briefing);
+  };
 
   const handoff = useHandoffFlow({
     clearConversationAndRefreshBanner,

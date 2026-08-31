@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { SessionRolloverRequest } from '../../contracts/session-rollover.js';
+import type { SessionRolloverRequest, SessionRolloverRequestOutcome } from '../../contracts/session-rollover.js';
 import type { ToolDefinition } from '../types.js';
 import {
   createBaseMessage,
@@ -17,7 +17,7 @@ export const sessionRolloverParameters = z
   .strict();
 
 export function createSessionRolloverToolDefinition(
-  requestRollover: (request: SessionRolloverRequest) => void,
+  requestRollover: (request: SessionRolloverRequest) => SessionRolloverRequestOutcome,
 ): ToolDefinition<typeof sessionRolloverParameters> {
   return {
     name: 'session_rollover',
@@ -25,10 +25,7 @@ export function createSessionRolloverToolDefinition(
       'Request an idle-boundary rotation into a fresh session. Include a concise handoff brief with completed work, open work, and durable-state pointers.',
     parameters: sessionRolloverParameters,
     needsApproval: () => false,
-    execute: (params) => {
-      requestRollover(params);
-      return JSON.stringify({ ok: true, status: 'rollover_requested' });
-    },
+    execute: (params) => JSON.stringify(requestRollover(params)),
     formatCommandMessage: (item, index, calls) => {
       const callId = getCallIdFromItem(item);
       const args =

@@ -64,6 +64,78 @@ afterEach(() => {
 });
 
 describe('AgentClient application-run-loop execution', () => {
+  it('refuses session rollover while background work is live', () => {
+    const instance = client('rollover-background-guard', {
+      agentOverride: { name: 'override', model: 'test-model', instructions: 'test', tools: [] },
+      subagentBridge: {
+        listBackgroundSubagentStatuses: () => [
+          {
+            runId: 'run-1',
+            role: 'worker',
+            status: 'waiting_for_answer',
+            task: 'task',
+            taskPreview: 'task',
+            startedAt: 0,
+            elapsedMs: 1,
+            toolCounts: {},
+          },
+        ],
+        abort: () => {},
+        dispose: () => {},
+      },
+      backgroundShellRegistry: {
+        list: () => [{ id: 'job-1', command: 'sleep', status: 'cancelling', startedAt: 0 }],
+        cancel: () => true,
+        dispose: () => Promise.resolve(),
+      },
+    });
+
+    expect(instance.requestSessionRollover({ brief: 'continue' })).toEqual({
+      ok: false,
+      status: 'rollover_blocked',
+      error: 'Session rollover is blocked while background work is live.',
+      active: { shell: 1, subagent: 1 },
+    });
+    expect(instance.consumeSessionRolloverRequest()).toEqual({ status: 'none' });
+    instance.dispose();
+  });
+
+  it('rechecks background work when consuming an accepted rollover request', () => {
+    let status: 'completed' | 'running' = 'completed';
+    const instance = client('rollover-settlement-guard', {
+      agentOverride: { name: 'override', model: 'test-model', instructions: 'test', tools: [] },
+      subagentBridge: {
+        listBackgroundSubagentStatuses: () => [
+          {
+            runId: 'run-1',
+            role: 'worker',
+            status,
+            task: 'task',
+            taskPreview: 'task',
+            startedAt: 0,
+            elapsedMs: 1,
+            toolCounts: {},
+          },
+        ],
+        abort: () => {},
+        dispose: () => {},
+      },
+    });
+
+    expect(instance.requestSessionRollover({ brief: 'continue' })).toEqual({
+      ok: true,
+      status: 'rollover_requested',
+    });
+    status = 'running';
+    expect(instance.consumeSessionRolloverRequest()).toEqual({
+      status: 'blocked',
+      blocker: 'background_work',
+      error: 'Session rollover was not performed because background work became live before turn settlement.',
+      active: { shell: 0, subagent: 1 },
+    });
+    instance.dispose();
+  });
+
   it('injects a crossed context milestone reminder through the public stream history', async () => {
     const provider = `milestone-reminder-${Date.now()}`;
     providers.add(provider);

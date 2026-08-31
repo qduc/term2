@@ -70,7 +70,11 @@ import {
 import { projectConversationMessage } from '../services/conversation/conversation-message-projection.js';
 import { isLocalContextSummary } from '../contracts/provider-input.js';
 import { ContextMilestoneReminder } from '../services/agent-runtime/context-compaction/context-milestone-reminder.js';
-import type { SessionRolloverRequest } from '../contracts/session-rollover.js';
+import type {
+  SessionRolloverConsumption,
+  SessionRolloverRequest,
+  SessionRolloverRequestOutcome,
+} from '../contracts/session-rollover.js';
 
 type ChainedRunOptions = AgentClientRunOptions;
 
@@ -409,14 +413,49 @@ export class AgentClient {
     this.#subagentBridge?.setBackgroundApprovalPauseSink(sink);
   }
 
-  requestSessionRollover(request: SessionRolloverRequest): void {
+  requestSessionRollover(request: SessionRolloverRequest): SessionRolloverRequestOutcome {
+    const active = this.#liveBackgroundWork();
+    if (active.subagent > 0 || active.shell > 0) {
+      return {
+        ok: false,
+        status: 'rollover_blocked',
+        error: 'Session rollover is blocked while background work is live.',
+        active,
+      };
+    }
     this.#sessionRolloverRequest ??= request;
+    return { ok: true, status: 'rollover_requested' };
   }
 
-  consumeSessionRolloverRequest(): SessionRolloverRequest | null {
+  consumeSessionRolloverRequest(): SessionRolloverConsumption {
     const request = this.#sessionRolloverRequest;
     this.#sessionRolloverRequest = null;
-    return request;
+    if (!request) return { status: 'none' };
+
+    const active = this.#liveBackgroundWork();
+    if (active.subagent > 0 || active.shell > 0) {
+      return {
+        status: 'blocked',
+        blocker: 'background_work',
+        error: 'Session rollover was not performed because background work became live before turn settlement.',
+        active,
+      };
+    }
+    return { status: 'ready', request };
+  }
+
+  #liveBackgroundWork(): { shell: number; subagent: number } {
+    const subagent = this.listBackgroundSubagentStatuses().filter(
+      ({ status }) =>
+        status === 'running' ||
+        status === 'awaiting_approval' ||
+        status === 'waiting_for_answer' ||
+        status === 'cancelling',
+    ).length;
+    const shell = this.listBackgroundShellJobs().filter(
+      ({ status }) => status === 'running' || status === 'cancelling',
+    ).length;
+    return { shell, subagent };
   }
 
   /** Exact nested-tool state shared with the subagent runtime's tool factory. */

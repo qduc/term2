@@ -30,6 +30,24 @@ it.sequential('MessageList renders user and bot messages', async () => {
   expect(output.includes('hi there')).toBe(true);
 });
 
+it.sequential('MessageList presents a rollover briefing without a user-authored prompt marker', async () => {
+  const messages = [
+    {
+      id: 'rollover-brief',
+      sender: 'user' as const,
+      text: 'Continue with the open validation step.',
+      presentation: 'session_rollover' as const,
+    },
+  ];
+
+  const { lastFrame } = await renderInAct(<MessageList messages={messages} />);
+  const output = lastFrame() ?? '';
+
+  expect(output.includes('Session rollover briefing')).toBe(true);
+  expect(output.includes('Continue with the open validation step.')).toBe(true);
+  expect(output.includes('❯ Continue with the open validation step.')).toBe(false);
+});
+
 it.sequential('MessageList renders image attachment summaries without leaked sentinel ids', async () => {
   const messages = [
     {

@@ -45,7 +45,7 @@ import type {
   ResolvePendingInteractionRequest,
 } from '../session/pending-interaction-state.js';
 import { isAbortLikeError } from '../../utils/error-helpers.js';
-import type { SessionRolloverRequest } from '../../contracts/session-rollover.js';
+import type { SessionRolloverConsumption, SessionRolloverRequest } from '../../contracts/session-rollover.js';
 
 export type { ConversationTerminal, ApprovalDescriptor, PendingApproval } from '../../contracts/conversation.js';
 export type { CommandMessage } from '../../tools/types.js';
@@ -372,8 +372,22 @@ export class ConversationService {
     this.#runtime.state.queueModeNotice(text);
   }
 
-  consumeSessionRolloverRequest(): SessionRolloverRequest | null {
-    return this.#clientHandle.agentClient.consumeSessionRolloverRequest?.() ?? null;
+  consumeSessionRolloverRequest(): SessionRolloverConsumption {
+    const consumption = this.#clientHandle.agentClient.consumeSessionRolloverRequest?.() ?? { status: 'none' };
+    if (consumption.status !== 'ready') return consumption;
+
+    const interactionPending =
+      this.#runtime.pendingInteraction.getSnapshot() !== null ||
+      this.#runtime.approval.getPending() !== null ||
+      this.#runtime.approval.getPendingInterruption() !== null ||
+      this.#runtime.approval.getPostExecutePending().entries.length > 0 ||
+      this.#runtime.backgroundSubagentApprovals.getSnapshot().pendingCount > 0 ||
+      this.#adapter.queuedSubmissionCount() > 0;
+    if (!interactionPending) return consumption;
+
+    const error = 'Session rollover was not performed because a user interaction or queued submission is pending.';
+    this.#runtime.state.queueModeNotice(error);
+    return { status: 'blocked', blocker: 'pending_interaction', error };
   }
 
   logSessionRollover(request: SessionRolloverRequest): void {

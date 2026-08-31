@@ -12,7 +12,12 @@ type Props = {
 const ChatMessage: FC<Props> = ({ msg, maxWidth }) => {
   return (
     <Box flexDirection="column">
-      {msg.sender === 'user' ? (
+      {msg.sender === 'user' && msg.presentation === 'session_rollover' ? (
+        <>
+          <Text color={COLOR_REASONING}>↻ Session rollover briefing</Text>
+          <MarkdownRenderer maxWidth={maxWidth}>{msg.text}</MarkdownRenderer>
+        </>
+      ) : msg.sender === 'user' ? (
         <Text color={COLOR_ACCENT}>❯ {msg.text}</Text>
       ) : msg.sender === 'system' ? (
         <Text color={COLOR_REASONING}>{msg.text}</Text>

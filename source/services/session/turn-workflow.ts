@@ -594,8 +594,18 @@ export class TurnWorkflow {
       source: 'startStream',
       preserveExistingToolArgs: false,
     });
+    let committed = false;
     let next = await processor.next();
     while (!next.done) {
+      if (!committed) {
+        // The provider stream is producing output, so any failure later in this
+        // cycle is a fresh burst rather than a continuation of the failures that
+        // preceded this successful stream. Reset the transient budget so the
+        // classifier grants the new burst its own retries. (Mirrors the
+        // cycle-completion reset below and RetryingModel's commit semantics.)
+        committed = true;
+        attempt.advanceRetry({ ...attempt.retryCounts, transientRetryCount: 0 });
+      }
       emit(next.value);
       next = await processor.next();
     }
@@ -1142,12 +1152,25 @@ export class TurnWorkflow {
 
     const allEmittedIds = new Set([...state.previouslyEmittedIds]);
 
-    const acc = yield* this.deps.streamProcessor.process(stream, {
+    const processor = this.deps.streamProcessor.process(stream, {
       gen: state.token,
       source: state.source,
       preserveExistingToolArgs: true,
       previouslyEmittedCommandIds: allEmittedIds,
     });
+    let committed = false;
+    let next = await processor.next();
+    while (!next.done) {
+      if (!committed) {
+        // Same reset as the initial-path commit: once this continuation stream
+        // produces output, a later failure is a new burst with its own budget.
+        committed = true;
+        state.setRetryCounts({ ...state.retryCounts, transientRetryCount: 0 });
+      }
+      yield next.value;
+      next = await processor.next();
+    }
+    const acc = next.value;
 
     const finalizeResult = this.deps.streamProcessor.finalize(stream, state.token, state.inputMode, state.source);
     if (finalizeResult.kind === 'stale') {

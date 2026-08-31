@@ -127,6 +127,62 @@ it('executes initial turn successfully', async () => {
   expect(Object.isFrozen(receivedProviderHistorySnapshot)).toBe(true);
 });
 
+it('resets the transient retry budget when the initial stream commits before failing transiently', async () => {
+  let streamCount = 0;
+  const committedFailingStream = new MockStream([{ type: 'text_delta', text: 'partial output' }]);
+  (committedFailingStream as any)[Symbol.asyncIterator] = async function* () {
+    yield { type: 'text_delta', text: 'partial output' };
+    throw new Error('temporary provider failure');
+  };
+  const { workflow, composition } = setupWorkflow({
+    getProvider: () => 'openai',
+    startStream: async () => {
+      streamCount++;
+      if (streamCount === 1) return committedFailingStream;
+      const ok = new MockStream([{ type: 'text_delta', text: 'hello response' }]);
+      ok.finalOutput = 'hello response';
+      return ok;
+    },
+  });
+  const token = composition.generationGuard.capture();
+  const attempt = new TurnAttempt({
+    turn: { text: 'hello' },
+    token,
+    // The turn already exhausted its transient budget in an earlier burst.
+    initialRetryCounts: {
+      transientRetryCount: 3,
+      serviceTierFallbackCount: 0,
+      modelRetryCount: 0,
+      transportDowngradeCount: 0,
+    },
+    initialJournalSnapshot: [],
+    maxTransientRetries: 3,
+  });
+
+  let transientCountSeenByRecovery: number | undefined;
+  (workflow as any).deps.recoveryHandler.handle = async function* ({ attempt: a }: any) {
+    transientCountSeenByRecovery = a.retryCounts.transientRetryCount;
+    yield {
+      type: 'retry',
+      toolName: 'turn',
+      attempt: 1,
+      maxRetries: 3,
+      errorMessage: 'temporary provider failure',
+      retryType: 'upstream',
+    };
+    return { kind: 'run', instruction: { skipUserMessage: true } };
+  };
+
+  const result = await collect(workflow.executeInitial(attempt));
+
+  // The stream committed (yielded partial output) before dying, so the failure
+  // is a fresh burst: the recovery classifier must see a reset budget.
+  expect(transientCountSeenByRecovery).toBe(0);
+  // And the retried cycle then succeeds.
+  expect(streamCount).toBe(2);
+  expect(result.outcome.kind).toBe('response');
+});
+
 it('resets only the transient retry count after a successful initial stream cycle', async () => {
   const stream = new MockStream([{ type: 'text_delta', text: 'hello response' }]);
   stream.finalOutput = 'hello response';
@@ -197,6 +253,63 @@ it('resets the transient retry count after a recovered continuation stream cycle
     modelRetryCount: 3,
     transportDowngradeCount: 1,
   });
+});
+
+it('resets the transient retry budget when a continuation stream commits before failing transiently', async () => {
+  const committedFailingStream = new MockStream([{ type: 'text_delta', text: 'partial output' }]);
+  (committedFailingStream as any)[Symbol.asyncIterator] = async function* () {
+    yield { type: 'text_delta', text: 'partial output' };
+    throw new Error('temporary provider failure');
+  };
+  const { workflow, composition } = setupWorkflow({
+    getProvider: () => 'openai',
+    continueRunStream: async () => committedFailingStream,
+  });
+  const token = composition.generationGuard.capture();
+  prepareApprovalContinuation(composition, token);
+  let call = 0;
+  let transientCountSeenByRecovery: number | undefined;
+  (workflow as any).deps.continuationRecoveryHandler.handle = async function* ({ state }: any) {
+    call++;
+    if (call === 1) {
+      // Simulate an earlier burst that exhausted the budget.
+      state.setRetryCounts({
+        transientRetryCount: 3,
+        serviceTierFallbackCount: 0,
+        modelRetryCount: 0,
+        transportDowngradeCount: 0,
+      });
+      yield {
+        type: 'retry',
+        toolName: 'continuation',
+        attempt: 1,
+        maxRetries: 3,
+        errorMessage: 'temporary provider failure',
+        retryType: 'upstream',
+      };
+      return { kind: 'resume' };
+    }
+    transientCountSeenByRecovery = state.retryCounts.transientRetryCount;
+    yield {
+      type: 'retry',
+      toolName: 'continuation',
+      attempt: 1,
+      maxRetries: 3,
+      errorMessage: 'temporary provider failure',
+      retryType: 'upstream',
+    };
+    return { kind: 'fresh_start', retryCounts: state.retryCounts };
+  };
+
+  const { outcome } = await collect(
+    workflow.executeContinuationAttempt({ kind: 'approval_decision', answer: 'y', generation: token }),
+  );
+
+  // The second cycle also committed before failing, so its recovery must see a
+  // reset budget rather than the exhausted one from the first cycle.
+  expect(transientCountSeenByRecovery).toBe(0);
+  expect(outcome).toMatchObject({ kind: 'fresh_start_required' });
+  expect((outcome as any).retryCounts.transientRetryCount).toBe(0);
 });
 
 it('keeps transient retry counts after a failed continuation stream cycle', async () => {

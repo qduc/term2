@@ -679,7 +679,11 @@ export class ConversationOrchestrator {
 
   async sendUserMessage(
     input: string | UserTurn,
-    options?: { inputSurgeApproval?: InputSurgeApproval; busyMode?: 'steer' | 'follow_up' },
+    options?: {
+      inputSurgeApproval?: InputSurgeApproval;
+      busyMode?: 'steer' | 'follow_up';
+      presentation?: UserMessage['presentation'];
+    },
   ): Promise<void> {
     const turn = normalizeUserTurn(input);
     if (!hasUserTurnContent(turn)) {
@@ -691,6 +695,7 @@ export class ConversationOrchestrator {
       sender: 'user',
       text: formatUserTurnForDisplay(turn),
       ...(turn.skill ? { skill: turn.skill } : {}),
+      ...(options?.presentation ? { presentation: options.presentation } : {}),
     };
 
     // When no turn is in flight, append the user message directly to the

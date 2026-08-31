@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   stopProcessing: vi.fn(),
   addSystemMessage: vi.fn(),
   sendUserMessage: vi.fn(),
+  sendSessionRolloverBrief: vi.fn(),
   getUserMessages: vi.fn(() => []),
   undoToUserMessage: vi.fn(),
   setModel: vi.fn(),
@@ -59,6 +60,7 @@ const mocks = vi.hoisted(() => ({
   slashCommands: [] as any[],
   slashActionReturnValue: undefined as boolean | void | undefined,
   clearConversationCallback: null as null | (() => Promise<void>),
+  sessionRolloverCallback: null as null | ((request: any) => void | Promise<void>),
   requestModeSwitchConfirmCallback: null as null | ((pending: any) => void),
   messageListMounts: 0,
   inputValue: '',
@@ -148,52 +150,56 @@ vi.mock('./context/InputContext.js', () => ({
 }));
 
 vi.mock('./hooks/use-conversation.js', () => ({
-  useConversation: () => ({
-    messages: [],
-    lastUsage: null,
-    lastCodexRateLimit: null,
-    pendingApproval: mocks.conversationState.pendingApproval,
-    waitingForApproval: mocks.conversationState.waitingForApproval,
-    waitingForRejectionReason: mocks.conversationState.waitingForRejectionReason,
-    waitingForAskUserAnswer: mocks.conversationState.waitingForAskUserAnswer,
-    currentAskUserQuestionIndex: 0,
-    setWaitingForRejectionReason: mocks.setWaitingForRejectionReason,
-    setWaitingForAskUserAnswer: mocks.setWaitingForAskUserAnswer,
-    isProcessing: mocks.conversationState.isProcessing,
-    backgroundTaskDetails: mocks.conversationState.backgroundTaskDetails ?? [],
-    thinkingStartedAt: null,
-    toolCallStreamingInfo: null,
-    sendUserMessage: mocks.sendUserMessage,
-    admissionConfirmation: mocks.admissionConfirmation,
-    submitTurnForAdmission: mocks.submitTurnForAdmission,
-    resolveAdmissionConfirmation: mocks.resolveAdmissionConfirmation,
-    submitConversationTurn: mocks.submitConversationTurn,
-    submitApprovalDecision: mocks.submitApprovalDecision,
-    handleApprovalDecision: mocks.handleApprovalDecision,
-    onTypeAnswer: vi.fn(),
-    clearConversation: mocks.clearConversation,
-    stopProcessing: mocks.stopProcessing,
-    undoLastUserMessage: vi.fn(),
-    retryLastToolOutput: vi.fn(async () => false),
-    getUserMessages: mocks.getUserMessages,
-    undoToUserMessage: mocks.undoToUserMessage,
-    setModel: mocks.setModel,
-    setReasoningEffort: mocks.setReasoningEffort,
-    setTemperature: mocks.setTemperature,
-    addSystemMessage: mocks.addSystemMessage,
-    addShellMessage: mocks.addShellMessage,
-    getSubagentUsage: mocks.getSubagentUsage,
-    getCostSummary: vi.fn(() => null),
-    goToPreviousQuestion: mocks.goToPreviousQuestion,
-    goToNextQuestion: mocks.goToNextQuestion,
-    queueActive: false,
-    queuePaused: false,
-    queueLength: 0,
-    queuePauseReason: undefined,
-    pendingQueuedMessages: [],
-    resumeQueue: vi.fn(),
-    discardQueue: vi.fn(),
-  }),
+  useConversation: (options: any) => {
+    mocks.sessionRolloverCallback = options.onSessionRollover ?? null;
+    return {
+      messages: [],
+      lastUsage: null,
+      lastCodexRateLimit: null,
+      pendingApproval: mocks.conversationState.pendingApproval,
+      waitingForApproval: mocks.conversationState.waitingForApproval,
+      waitingForRejectionReason: mocks.conversationState.waitingForRejectionReason,
+      waitingForAskUserAnswer: mocks.conversationState.waitingForAskUserAnswer,
+      currentAskUserQuestionIndex: 0,
+      setWaitingForRejectionReason: mocks.setWaitingForRejectionReason,
+      setWaitingForAskUserAnswer: mocks.setWaitingForAskUserAnswer,
+      isProcessing: mocks.conversationState.isProcessing,
+      backgroundTaskDetails: mocks.conversationState.backgroundTaskDetails ?? [],
+      thinkingStartedAt: null,
+      toolCallStreamingInfo: null,
+      sendUserMessage: mocks.sendUserMessage,
+      sendSessionRolloverBrief: mocks.sendSessionRolloverBrief,
+      admissionConfirmation: mocks.admissionConfirmation,
+      submitTurnForAdmission: mocks.submitTurnForAdmission,
+      resolveAdmissionConfirmation: mocks.resolveAdmissionConfirmation,
+      submitConversationTurn: mocks.submitConversationTurn,
+      submitApprovalDecision: mocks.submitApprovalDecision,
+      handleApprovalDecision: mocks.handleApprovalDecision,
+      onTypeAnswer: vi.fn(),
+      clearConversation: mocks.clearConversation,
+      stopProcessing: mocks.stopProcessing,
+      undoLastUserMessage: vi.fn(),
+      retryLastToolOutput: vi.fn(async () => false),
+      getUserMessages: mocks.getUserMessages,
+      undoToUserMessage: mocks.undoToUserMessage,
+      setModel: mocks.setModel,
+      setReasoningEffort: mocks.setReasoningEffort,
+      setTemperature: mocks.setTemperature,
+      addSystemMessage: mocks.addSystemMessage,
+      addShellMessage: mocks.addShellMessage,
+      getSubagentUsage: mocks.getSubagentUsage,
+      getCostSummary: vi.fn(() => null),
+      goToPreviousQuestion: mocks.goToPreviousQuestion,
+      goToNextQuestion: mocks.goToNextQuestion,
+      queueActive: false,
+      queuePaused: false,
+      queueLength: 0,
+      queuePauseReason: undefined,
+      pendingQueuedMessages: [],
+      resumeQueue: vi.fn(),
+      discardQueue: vi.fn(),
+    };
+  },
 }));
 
 vi.mock('./hooks/use-setting.js', () => ({
@@ -284,6 +290,7 @@ const createServices = () => ({
     queueModeNotice: vi.fn(),
     addShellContext: vi.fn(),
     listUserTurns: vi.fn(() => []),
+    logSessionRollover: vi.fn(),
   } as any,
   settingsService: {
     get: vi.fn(() => false),
@@ -326,6 +333,7 @@ beforeEach(() => {
   mocks.stopProcessing.mockReset();
   mocks.addSystemMessage.mockReset();
   mocks.sendUserMessage.mockReset();
+  mocks.sendSessionRolloverBrief.mockReset();
   mocks.getUserMessages.mockReset();
   mocks.getUserMessages.mockReturnValue([]);
   mocks.undoToUserMessage.mockReset();
@@ -344,6 +352,7 @@ beforeEach(() => {
   mocks.cycleAppModes.mockReset();
   mocks.clearConversation.mockReset();
   mocks.clearConversationCallback = null;
+  mocks.sessionRolloverCallback = null;
   mocks.messageListMounts = 0;
   mocks.inputValue = '';
   mocks.stdoutWrite.mockReset();
@@ -379,6 +388,34 @@ beforeEach(() => {
 });
 
 describe('App orchestration', () => {
+  it.sequential('rotates a requested rollover and sends a marked protocol briefing into the new session', async () => {
+    const services = createServices();
+
+    await renderInAct(
+      <App {...services} sessionId="session-1" terminalTitleBase="term2" generateId={() => 'session-2'} />,
+    );
+
+    await act(async () => {
+      await mocks.sessionRolloverCallback?.({
+        brief: 'Done: implementation. Open: validation.',
+        reason: 'task_boundary',
+      });
+    });
+
+    expect(services.conversationService.logSessionRollover).toHaveBeenCalledWith({
+      brief: 'Done: implementation. Open: validation.',
+      reason: 'task_boundary',
+    });
+    expect(mocks.clearConversation).toHaveBeenCalledTimes(1);
+    expect(mocks.sendSessionRolloverBrief).toHaveBeenCalledWith(
+      expect.stringContaining('Previous session: `session-1`'),
+    );
+    expect(mocks.sendSessionRolloverBrief).toHaveBeenCalledWith(
+      expect.stringContaining('Done: implementation. Open: validation.'),
+    );
+    expect(mocks.sendUserMessage).not.toHaveBeenCalled();
+  });
+
   it.sequential('remounts MessageList when clearing conversation without clearing the terminal', async () => {
     const services = createServices();
 

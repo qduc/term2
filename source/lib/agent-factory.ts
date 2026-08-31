@@ -36,7 +36,7 @@ import type { BackgroundShellExecutionResult } from '../tools/system/shell.js';
 import { getCatalogModel } from '../providers/model-catalog/catalog.js';
 import type { ShellChildRegistry } from '../utils/shell/shell-child-registry.js';
 import type { SessionBrowser } from '../services/conversation/session-browser.js';
-import type { SessionRolloverRequest } from '../contracts/session-rollover.js';
+import type { SessionRolloverRequest, SessionRolloverRequestOutcome } from '../contracts/session-rollover.js';
 
 export interface AgentFactoryDeps {
   settings: ISettingsService;
@@ -72,7 +72,7 @@ export interface AgentFactoryDeps {
   allowAskUser?: boolean;
   /** Explicit interactive-root-only browser capability. */
   sessionBrowser?: SessionBrowser;
-  requestSessionRollover?: (request: SessionRolloverRequest) => void;
+  requestSessionRollover?: (request: SessionRolloverRequest) => SessionRolloverRequestOutcome;
 }
 
 export interface AgentBuildResult {

@@ -38,6 +38,10 @@ _Avoid_: Resume token, run state
 The persistent boundary containing a conversation's history, active settings, and turn coordination state.
 _Avoid_: Chat, connection
 
+**Session Rollover**:
+An agent-requested rotation performed after its current Turn settles: the old Session is marked and closed, and a new Session begins with a bounded handoff briefing as its first Turn. Live background work, pending interactions, and queued user submissions block the rotation rather than being discarded.
+_Avoid_: Compaction, model handoff, session reset
+
 **Transcript**:
 The ordered, provider-facing record of a conversation that is replayed to the model on each turn.
 _Avoid_: History, log, messages

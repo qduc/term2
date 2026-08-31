@@ -46,7 +46,10 @@ export type {
 } from '../types/message.js';
 
 const MAX_MESSAGE_COUNT = 300;
-type ConversationTransportOptions = AdmissionOptions & { inputSurgeApproval?: InputSurgeApproval };
+type ConversationTransportOptions = AdmissionOptions & {
+  inputSurgeApproval?: InputSurgeApproval;
+  presentation?: import('../types/message.js').UserMessage['presentation'];
+};
 
 const getInitialLastUsage = (messages: Message[]): NormalizedUsage | null => {
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -286,8 +289,12 @@ export const useConversation = ({
         onTurnStart: () => dispatch({ type: 'turn/started' }),
         onTurnEnd: () => {
           dispatch({ type: 'turn/completed' });
-          const request = conversationService.consumeSessionRolloverRequest?.();
-          if (request) void onSessionRollover?.(request);
+          const consumption = conversationService.consumeSessionRolloverRequest?.();
+          if (consumption?.status === 'ready') {
+            void onSessionRollover?.(consumption.request);
+          } else if (consumption?.status === 'blocked') {
+            addSystemMessage(consumption.error);
+          }
         },
         onApprovalRequested: (approval) => dispatch({ type: 'approval/requested', approval }),
         onApprovalResolved: () => dispatch({ type: 'approval/resolved' }),
@@ -348,6 +355,10 @@ export const useConversation = ({
   // Admission is the only public hook API that carries busy-mode policy.
   const sendUserMessage = useCallback(
     (input: string | UserTurn) => sendThroughOrchestrator(input),
+    [sendThroughOrchestrator],
+  );
+  const sendSessionRolloverBrief = useCallback(
+    (brief: string) => sendThroughOrchestrator(brief, { presentation: 'session_rollover' }),
     [sendThroughOrchestrator],
   );
 
@@ -529,6 +540,7 @@ export const useConversation = ({
     backgroundSubagentApproval,
     resolveBackgroundSubagentApproval,
     sendUserMessage,
+    sendSessionRolloverBrief,
     admissionConfirmation,
     submitTurnForAdmission,
     resolveAdmissionConfirmation,

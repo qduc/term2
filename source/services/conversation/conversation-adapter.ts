@@ -356,6 +356,10 @@ export class ConversationAdapter {
     return this.#queue ? this.#queue.state().kind : 'none';
   }
 
+  queuedSubmissionCount(): number {
+    return this.#queue?.state().queue.length ?? 0;
+  }
+
   #notifyQueueState(): void {
     if (!this.#queue || !this.#queueStateObserver) return;
     const state = this.#queue.state();

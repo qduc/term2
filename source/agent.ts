@@ -63,7 +63,7 @@ import { MemoryCapabilityBuilder } from './services/memory/memory-capabilities.j
 import type { ShellChildRegistry } from './utils/shell/shell-child-registry.js';
 import { createSessionBrowserToolDefinitions } from './tools/session-browser/session-browser-tools.js';
 import type { SessionBrowser } from './services/conversation/session-browser.js';
-import type { SessionRolloverRequest } from './contracts/session-rollover.js';
+import type { SessionRolloverRequest, SessionRolloverRequestOutcome } from './contracts/session-rollover.js';
 import { createSessionRolloverToolDefinition } from './tools/session-rollover/session-rollover-tool.js';
 
 export { getProjectTreeForPrompt } from './utils/project-tree.js';
@@ -231,7 +231,7 @@ export const getAgentDefinition = (
     allowAskUser?: boolean;
     /** Explicit interactive-root-only capability; never inferred from memory access. */
     sessionBrowser?: SessionBrowser;
-    requestSessionRollover?: (request: SessionRolloverRequest) => void;
+    requestSessionRollover?: (request: SessionRolloverRequest) => SessionRolloverRequestOutcome;
   },
   model?: string,
 ): AgentDefinition => {

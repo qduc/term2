@@ -1233,10 +1233,14 @@ it.sequential('MessageList reports a partly-failed run without painting the whol
 
   expect(summaryLine).toContain('✓ Ran 2 shell commands');
   expect(failureLine).toContain('✗ 1 failed: pnpm test');
+  // The failure line has the same indentation as the summary line (no extra indent).
+  const rawSummaryLine = stripAnsi(frame.split('\n').find((line) => line.includes('Ran 2 shell commands')) ?? '');
+  const rawFailureLine = stripAnsi(frame.split('\n').find((line) => line.includes('failed')) ?? '');
+  const getIndent = (line: string) => line.match(/^\s*/)?.[0].length ?? 0;
+  expect(getIndent(rawFailureLine)).toBe(getIndent(rawSummaryLine));
   // The summary itself is not the failure: no ✗ marker on it, and it is not red.
   expect(summaryLine.includes('✗')).toBe(false);
-  const rawSummary = frame.split('\n').find((line) => line.includes('Ran 2 shell commands')) ?? '';
-  expect(rawSummary.includes('\u001B[31m')).toBe(false);
+  expect(rawSummaryLine.includes('\u001B[31m')).toBe(false);
 });
 
 it.sequential('MessageList folds finished subagent into concise group in concise mode', async () => {

@@ -45,14 +45,12 @@ const CommandGroupSummary: FC<Props> = ({ members, status }) => {
         {summary}
       </Text>
       {failures !== '' && status !== 'failed' && (
-        <Box paddingLeft={2}>
-          <Text color={COLOR_TEXT_MUTED} wrap="truncate">
-            <Text color={TOOL_STATUS_COLOR.failed} bold>
-              {TOOL_STATUS_GLYPH.failed}
-            </Text>{' '}
-            {failures}
-          </Text>
-        </Box>
+        <Text color={COLOR_TEXT_MUTED} wrap="truncate">
+          <Text color={TOOL_STATUS_COLOR.failed} bold>
+            {TOOL_STATUS_GLYPH.failed}
+          </Text>{' '}
+          {failures}
+        </Text>
       )}
     </Box>
   );

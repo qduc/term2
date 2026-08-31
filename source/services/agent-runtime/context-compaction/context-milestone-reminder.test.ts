@@ -2,6 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { ContextMilestoneReminder } from './context-milestone-reminder.js';
 
 describe('ContextMilestoneReminder', () => {
+  it('asks for an immediate boundary decision before automatic compaction resumes', () => {
+    const [reminder] = new ContextMilestoneReminder().observe(
+      { renderedInputTokens: 200, outputReserveTokens: 0, safetyReserveTokens: 0, hardFitTokens: 200 },
+      { enabled: true, milestones: [100], autoBrief: true },
+      250,
+    );
+
+    expect(reminder).toContain('decide now');
+    expect(reminder).toContain('Automatic compaction is deferred for this request boundary only');
+    expect(reminder).toContain('session_rollover');
+  });
+
   it('emits each crossed milestone once, including milestones crossed in one jump', () => {
     const producer = new ContextMilestoneReminder();
     const config = { enabled: true, milestones: [100, 200, 300], autoBrief: true };

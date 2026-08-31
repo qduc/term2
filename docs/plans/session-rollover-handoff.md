@@ -11,6 +11,17 @@ or queued user submissions. The new session starts with a protocol-composed,
 visually marked rollover briefing that identifies the previous session and
 directs bounded `session_search`/`session_read` retrieval.
 
+When a request boundary first crosses a rollover milestone, that boundary gives
+the agent the reminder **before** automatic local compaction and defers that
+compaction once. The reminder requires an immediate boundary decision: roll
+over now if the task is at a natural boundary, otherwise continue and allow
+compaction at the next boundary. Once `session_rollover` is pending, compaction
+also stays deferred through the tool-result/final-response boundary. Either
+deferral is allowed only when the catalogued context window's hard-fit estimate
+still fits; preserving a valid provider request wins over avoiding wasted
+summary work. This avoids paying for a summary that an immediate rollover would
+discard without converting rollover into automatic policy.
+
 The implementation slice is complete. The session-tool retrieval study is also
 complete: `e8015e7a` captured the seven-session/79-call naturalistic baseline,
 and the later controlled phase ran six serial interactive cells across three

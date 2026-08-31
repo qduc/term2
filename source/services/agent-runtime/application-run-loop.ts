@@ -146,8 +146,11 @@ export interface ApplicationRunLoopOptions {
   readonly requestPreparation?: ApplicationRequestPreparation;
   /** Application-owned local compaction evaluated at each request boundary. */
   readonly boundaryCompaction?: ApplicationBoundaryCompaction;
-  /** Synchronous request-boundary observation, before any optional compaction await. */
-  readonly onRequestBoundary?: (history: readonly ProviderInputItem[], onReminder: (text: string) => void) => void;
+  /** Synchronous request-boundary policy, before any optional compaction await. */
+  readonly onRequestBoundary?: (
+    history: readonly ProviderInputItem[],
+    onReminder: (text: string) => void,
+  ) => { deferCompaction?: boolean } | void;
   /** Per-request output and deadline guard; model settings provide the normal runtime defaults. */
   readonly generationGuard?: GenerationGuardOptions;
   /**
@@ -880,9 +883,11 @@ export class ApplicationRunLoop {
         this.#admitPendingSteers(state, stream, queue);
         this.#evaluateRunBudget(state, stream, queue);
         if (state.pendingRunBudgetInteraction) return this.#pauseForRunBudgetInteraction(state, stream, queue);
-        options.onRequestBoundary?.(state.history, (text) => this.#queuePendingSystemNotice(text));
+        const boundaryDecision = options.onRequestBoundary?.(state.history, (text) =>
+          this.#queuePendingSystemNotice(text),
+        );
 
-        if (options.boundaryCompaction) {
+        if (options.boundaryCompaction && !boundaryDecision?.deferCompaction) {
           const compactionStartedAt = Date.now();
           const compaction = await options.boundaryCompaction.compact({
             history: state.history,

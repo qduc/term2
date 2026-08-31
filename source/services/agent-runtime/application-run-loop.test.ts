@@ -59,6 +59,88 @@ describe('normalizeApplicationInput opaque lane', () => {
 });
 
 describe('ApplicationRunLoop request-boundary compaction', () => {
+  it('defers boundary compaction when the boundary observer opens a rollover opportunity', async () => {
+    const compact = vi.fn(async () => ({ kind: 'unchanged' as const }));
+    let request: any;
+    const model: StreamedModelTurn = {
+      async *stream(value) {
+        request = value;
+        yield { type: 'completion', responseId: 'response-1', output: [] };
+      },
+    };
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(
+      agent,
+      [{ role: 'user', type: 'message', content: 'finish and hand off' }],
+      {
+        boundaryCompaction: { compact },
+        onRequestBoundary: (_history, onReminder) => {
+          onReminder('Consider session_rollover now.');
+          return { deferCompaction: true };
+        },
+      },
+    );
+
+    await stream.completed;
+
+    expect(compact).not.toHaveBeenCalled();
+    expect(JSON.stringify(request.input)).toContain('session_rollover');
+  });
+
+  it('keeps compaction deferred after the model requests rollover and returns its tool result', async () => {
+    const compact = vi.fn(async () => ({ kind: 'unchanged' as const }));
+    let requests = 0;
+    let rolloverPending = false;
+    const model: StreamedModelTurn = {
+      async *stream() {
+        requests += 1;
+        if (requests === 1) {
+          yield {
+            type: 'completion',
+            responseId: 'rollover-call',
+            output: [{ type: 'tool_call', id: 'call-rollover', name: 'request_rollover', arguments: '{}' }],
+          };
+          return;
+        }
+        yield {
+          type: 'completion',
+          responseId: 'rollover-final',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'Rollover requested.' }] }],
+        };
+      },
+    };
+    const tool: ToolDefinition = {
+      name: 'request_rollover',
+      description: 'Requests session rollover',
+      parameters: z.object({}),
+      needsApproval: () => false,
+      execute: () => {
+        rolloverPending = true;
+        return 'rollover_requested';
+      },
+      formatCommandMessage: () => [],
+    };
+    let boundary = 0;
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(
+      { ...agent, tools: [tool] },
+      [{ role: 'user', type: 'message', content: 'finish and hand off' }],
+      {
+        boundaryCompaction: { compact },
+        onRequestBoundary: (_history, onReminder) => {
+          boundary += 1;
+          if (boundary === 1) onReminder('Consider session_rollover now.');
+          return boundary === 1 || rolloverPending ? { deferCompaction: true } : undefined;
+        },
+      },
+    );
+
+    await stream.completed;
+
+    expect(requests).toBe(2);
+    expect(boundary).toBe(2);
+    expect(rolloverPending).toBe(true);
+    expect(compact).not.toHaveBeenCalled();
+  });
+
   it('dispatches the replacement input, clears chaining, and exposes replacement history', async () => {
     let request: any;
     const model: StreamedModelTurn = {

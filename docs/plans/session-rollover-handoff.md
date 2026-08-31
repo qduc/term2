@@ -63,6 +63,39 @@ fix, roughly half the wall time, ~2.2x lower metered cost, and a session
 that ends at 82k context instead of growing past 130k. Proceed to the M1/M2
 slice (milestone reminder + `session_rollover` tool) unpushed for review.
 
+## Follow-up task: tune session retrieval from observed usage
+
+Do not change `session_list`, `session_search`, or `session_read` defaults based
+on intuition. First collect retrieval histories from real rollover and resume
+continuations, then tune the tools or their prompt routing only where the data
+shows a repeatable problem.
+
+### Evidence to collect
+
+- Which session tools were called, in what order, and with what query, limit,
+  and output budget.
+- Retries, reformulations, redundant reads, and searches that returned no
+  useful evidence.
+- Whether the continuation completed the task correctly and whether retrieval
+  was necessary, insufficient, or excessive.
+- Retrieval latency, output size, and the continuation's total model-call and
+  token cost.
+- Cases where a strong handoff made retrieval unnecessary versus cases where
+  the old transcript was needed to recover missing state.
+
+Attribute events by the actual session ID, verified against that session's
+first user message. Do not use time-window attribution: overlapping term2
+sessions can otherwise be assigned one another's tool calls and costs.
+
+### Done condition
+
+Run a multi-task comparison covering rollover and ordinary resume flows. Report
+the baseline distributions and concrete failure cases before changing any
+session-tool API, default budget, or routing prompt. A proposed tuning is
+accepted only when it improves continuation quality or reduces unnecessary
+retrieval without increasing missed-history failures; otherwise retain the
+current tools and record the evidence.
+
 ## The idea (user's proposal, 2026-08-30)
 
 Instead of compacting a growing session, the agent itself can end it:

@@ -275,6 +275,11 @@ export const useConversation = ({
   messagesRef.current = messages;
 
   const orchestratorRef = useRef<ConversationOrchestrator | null>(null);
+  // Queue cancellation publishes a transient `cancelling` snapshot after the
+  // stop handler has already reset the UI. Do not let that late snapshot
+  // resurrect the processing indicator; the terminal idle/paused snapshot will
+  // clear this fence, and a new turn clears it at its start.
+  const stoppingRef = useRef(false);
   if (!orchestratorRef.current) {
     orchestratorRef.current = new ConversationOrchestrator({
       conversationService,
@@ -286,7 +291,10 @@ export const useConversation = ({
         trimMessages,
       },
       ui: {
-        onTurnStart: () => dispatch({ type: 'turn/started' }),
+        onTurnStart: () => {
+          stoppingRef.current = false;
+          dispatch({ type: 'turn/started' });
+        },
         onTurnEnd: () => {
           dispatch({ type: 'turn/completed' });
           const consumption = conversationService.consumeSessionRolloverRequest?.();
@@ -311,7 +319,16 @@ export const useConversation = ({
         onAskUserAnswerSubmitted: () => {},
         onAskUserAdvanceToNext: () => {},
         onAskUserGoBack: () => {},
-        onQueueStateChange: (snapshot) => dispatch({ type: 'queue/updated', snapshot }),
+        onQueueStateChange: (snapshot) => {
+          const active =
+            snapshot.stateKind === 'running' ||
+            snapshot.stateKind === 'awaiting_active_action' ||
+            snapshot.stateKind === 'cancelling' ||
+            snapshot.stateKind === 'completing';
+          if (stoppingRef.current && active) return;
+          if (stoppingRef.current) stoppingRef.current = false;
+          dispatch({ type: 'queue/updated', snapshot });
+        },
         onQueuedMessagePending: (id, text, delivery) =>
           dispatch({ type: 'queue/message_pending', id, text, delivery, queuedAt: Date.now() }),
         onQueuedMessageStarted: (id) => dispatch({ type: 'queue/message_started', id }),
@@ -409,7 +426,10 @@ export const useConversation = ({
     [orchestrator],
   );
 
-  const stopProcessing = useCallback(() => orchestrator.stopProcessing(), [orchestrator]);
+  const stopProcessing = useCallback(() => {
+    stoppingRef.current = true;
+    orchestrator.stopProcessing();
+  }, [orchestrator]);
 
   const stopProcessingWithNotice = useCallback(() => {
     stopProcessing();

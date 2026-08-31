@@ -16,11 +16,15 @@ const loggingService = {
 
 it.sequential('stopping an unsettled turn leaves the UI idle with a stopped notice', async () => {
   let resolveSend: (() => void) | undefined;
+  let publishQueueState: ((snapshot: { queueLength: number; stateKind: 'cancelling' }) => void) | undefined;
   const mockConversationService = {
     sessionId: 'session-id',
     abort: () => {},
     interruptFromUser: () => {},
     setRetryCallback: () => {},
+    setQueueStateObserver: (observer: typeof publishQueueState) => {
+      publishQueueState = observer ?? undefined;
+    },
     sendMessage: async (_input: unknown, _options?: unknown) => {
       await new Promise<void>((resolve) => {
         resolveSend = resolve;
@@ -63,6 +67,13 @@ it.sequential('stopping an unsettled turn leaves the UI idle with a stopped noti
   // immediately rather than waiting for the transport to finish.
   await act(async () => {
     stopFn?.();
+  });
+  expect(lastFrame!()).toBe('IDLE::hello|Stopped');
+
+  // Queue cancellation can report its in-flight state after the stop handler
+  // has reset the UI. That late notification must not bring Processing back.
+  await act(async () => {
+    publishQueueState?.({ queueLength: 0, stateKind: 'cancelling' });
   });
   expect(lastFrame!()).toBe('IDLE::hello|Stopped');
 

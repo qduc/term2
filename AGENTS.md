@@ -127,10 +127,12 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   controlled cells across three rollover-versus-resume pairs are in
   `docs/research/session-retrieval-observed-usage.md`. All controlled outcomes
   passed. One research rollover made a redundant search before an exact-ID
-  read, but that was not repeatable across the other rollovers; current
-  `session_list`, `session_search`, and `session_read` APIs, defaults, budgets,
-  and routing prompt remain unchanged. Read the report and paired protocol
-  before reopening the tuning question. **To resume on "audit the session
+  read, but that was not repeatable across the other rollovers; the study did
+  not change the APIs, defaults, budgets, or routing prompt. A later
+  model-usability correction replaced `session_read`'s long self-contained
+  continuation cursor with a short process-local handle; see "Cursor format
+  and stale semantics" in `docs/plans/memory-progressive-disclosure.md`. Read
+  the report and paired protocol before reopening the tuning question. **To resume on "audit the session
   tools again"**: follow the "Resume checklist" section at the top of
   `docs/research/session-retrieval-observed-usage.md` — extend the manifest,
   rerun the log analyzer, and only design a new controlled cell if a failure

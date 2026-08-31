@@ -96,11 +96,12 @@ it('projects replay messages, searches every kind, and pages oversized text with
   expect(first.charsUsed).toBe(JSON.stringify(first).length);
 });
 
-it('rejects malformed and stale cursors with sanitized errors', () => {
+it('returns short opaque cursors and rejects malformed and stale handles', () => {
   writeSession('session-a', '/project', undefined, 'x'.repeat(900));
   const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
   const page: any = browser.read({ id: 'session-a', maxChars: 512 });
-  expect(page.nextCursor).toBeTruthy();
+  expect(page.nextCursor).toMatch(/^c[0-9a-z]+$/);
+  expect(page.nextCursor.length).toBeLessThanOrEqual(8);
   expect(browser.read({ id: 'session-a', cursor: 'bad' })).toMatchObject({ error: { code: 'invalid_cursor' } });
   fs.appendFileSync(
     path.join(dir, 'session-a.jsonl'),
@@ -116,7 +117,7 @@ it('rejects malformed and stale cursors with sanitized errors', () => {
   });
 });
 
-it('rejects noncanonical, cross-session, terminal, and split-surrogate cursors', () => {
+it('binds opaque cursors to their browser and session', () => {
   writeSession('session-a', '/project', undefined, `a😀${'x'.repeat(900)}`);
   writeSession('session-b', '/project', undefined, 'other');
   const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
@@ -124,32 +125,27 @@ it('rejects noncanonical, cross-session, terminal, and split-surrogate cursors',
   expect(browser.read({ id: 'session-a', cursor: `${page.nextCursor}=` })).toMatchObject({
     error: { code: 'invalid_cursor' },
   });
-  const decoded = JSON.parse(Buffer.from(page.nextCursor, 'base64url').toString('utf8'));
-  const cursor = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
   expect(browser.read({ id: 'session-b', cursor: page.nextCursor })).toMatchObject({
     error: { code: 'invalid_cursor' },
   });
-  expect(browser.read({ id: 'session-a', cursor: cursor({ ...decoded, nextTextOffset: 2 }) })).toMatchObject({
+  expect(
+    new SessionBrowser(() => ({ projectPath: '/project' })).read({ id: 'session-a', cursor: page.nextCursor }),
+  ).toMatchObject({
     error: { code: 'invalid_cursor' },
   });
-  expect(
-    browser.read({
-      id: 'session-a',
-      cursor: cursor({ ...decoded, nextIndex: 2, nextTextOffset: 1 }),
-    }),
-  ).toMatchObject({ error: { code: 'invalid_cursor' } });
 });
 
 it('detects transcript changes even when the latest persisted timestamp is unchanged', () => {
   writeSession('session-a', '/project', undefined, 'x'.repeat(900));
   const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
   const page: any = browser.read({ id: 'session-a', maxChars: 512 });
-  const cursorState = JSON.parse(Buffer.from(page.nextCursor, 'base64url').toString('utf8'));
+  const envelopes = fs.readFileSync(path.join(dir, 'session-a.jsonl'), 'utf8').trim().split('\n');
+  const latestTimestamp = JSON.parse(envelopes.at(-1)!).ts;
   appendEnvelope(
     'session-a',
     99,
     { type: 'user_message', message: { id: 'later', sender: 'user', text: 'changed' } },
-    cursorState.updatedAt,
+    latestTimestamp,
   );
   expect(browser.read({ id: 'session-a', cursor: page.nextCursor })).toMatchObject({
     error: { code: 'stale_cursor' },
@@ -249,7 +245,7 @@ it('recovers all oversized text exactly once with advancing, bounded pages', () 
   const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
   const chunks: string[] = [];
   let cursor: string | undefined;
-  let previous: [number, number] = [-1, -1];
+  const cursors = new Set<string>();
   do {
     const page: any = browser.read({ id: 'paged', cursor, maxChars: 512, limit: 1 });
     expect(page.error).toBeUndefined();
@@ -260,11 +256,9 @@ it('recovers all oversized text exactly once with advancing, bounded pages', () 
     if (item.index === 0) chunks.push(item.text);
     cursor = page.nextCursor;
     if (cursor) {
-      const state = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
-      expect(
-        state.nextIndex > previous[0] || (state.nextIndex === previous[0] && state.nextTextOffset > previous[1]),
-      ).toBe(true);
-      previous = [state.nextIndex, state.nextTextOffset];
+      expect(cursor).toMatch(/^c[0-9a-z]+$/);
+      expect(cursors.has(cursor)).toBe(false);
+      cursors.add(cursor);
     }
   } while (cursor);
   expect(chunks.join('')).toBe(text);

@@ -11,7 +11,8 @@ beforeEach(() => {
 
 afterEach(() => {
   clearModelCache();
-  process.env.OPENAI_API_KEY = originalApiKey;
+  if (originalApiKey === undefined) delete process.env.OPENAI_API_KEY;
+  else process.env.OPENAI_API_KEY = originalApiKey;
 });
 
 it.sequential('fetchModels uses OpenRouter endpoint and caches results', async () => {

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { AgentClient } from './agent-client.js';
-import { registerProvider } from '../providers/registry.js';
+import { registerProvider, unregisterProvider } from '../providers/registry.js';
 import { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { z } from 'zod';
@@ -57,10 +57,9 @@ const client = (
 
 afterEach(() => {
   for (const provider of providers) {
-    // Providers are intentionally process-global; unique IDs keep this file
-    // isolated without mutating the registry during a test.
-    void provider;
+    unregisterProvider(provider);
   }
+  providers.clear();
 });
 
 describe('AgentClient application-run-loop execution', () => {

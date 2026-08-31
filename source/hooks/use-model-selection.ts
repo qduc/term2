@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useInputContext } from '../context/InputContext.js';
 import { filterModels, type ModelInfo } from '../services/model-service.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
-import { ModelCatalogSession } from '../services/models/model-catalog-session.js';
+import { ModelCatalogSession, type ModelFetcher } from '../services/models/model-catalog-session.js';
 import { parseModelProviderArg } from '../utils/ai/model-provider-arg.js';
 import { getModelSettingConfigForInput } from '../utils/ai/model-settings.js';
 import {
@@ -11,12 +11,16 @@ import {
   resolveProviderCredentials,
 } from '../utils/ai/provider-credentials.js';
 
-export const useModelSelection = (deps: { loggingService: ILoggingService; settingsService: ISettingsService }) => {
-  const { loggingService, settingsService } = deps;
+export const useModelSelection = (deps: {
+  loggingService: ILoggingService;
+  settingsService: ISettingsService;
+  modelFetcher?: ModelFetcher;
+}) => {
+  const { loggingService, settingsService, modelFetcher } = deps;
   const { mode, input, cursorOffset, triggerIndex, controller } = useInputContext();
   const catalogSession = useMemo(
-    () => new ModelCatalogSession({ settingsService, loggingService }),
-    [settingsService, loggingService],
+    () => new ModelCatalogSession({ settingsService, loggingService, fetcher: modelFetcher }),
+    [settingsService, loggingService, modelFetcher],
   );
 
   const [models, setModels] = useState<ModelInfo[]>([]);
@@ -56,7 +60,7 @@ export const useModelSelection = (deps: { loggingService: ILoggingService; setti
       }
     });
     return unsubscribe;
-  }, [settingsService]);
+  }, [settingsService, catalogSession]);
 
   // While the model graph is controller-owned, the binding is the source of
   // truth for both the query and the replacement start. Keep the legacy

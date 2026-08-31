@@ -3,7 +3,7 @@ import { getProviderIds, sortProvidersByOrder } from '../../providers/index.js';
 import type { ILoggingService, ISettingsService } from '../service-interfaces.js';
 import { getAvailableProviderIds } from '../../utils/ai/provider-credentials.js';
 
-type ModelFetcher = (provider: string) => Promise<ModelInfo[]>;
+export type ModelFetcher = (provider: string) => Promise<ModelInfo[]>;
 
 /** Owns model-catalog traversal, per-open caching, failed-provider suppression, and stale loads. */
 export class ModelCatalogSession {

@@ -23,6 +23,19 @@ export type TerminalSession = {
   dispose: () => void;
 };
 
+const CHILD_ENV_KEYS = ['PATH', 'SHELL', 'TMPDIR', 'TEMP', 'TMP', 'LANG', 'LC_ALL', 'CI', 'NODE_ENV'];
+
+/** Build a child environment without leaking ambient credentials or service URLs. */
+export function createTestChildEnv(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const key of CHILD_ENV_KEYS) {
+    if (process.env[key] !== undefined) env[key] = process.env[key];
+  }
+  env.TERM = 'xterm-256color';
+  env.FORCE_COLOR = '1';
+  return { ...env, ...overrides };
+}
+
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 // Timeout errors are the only window into a headless CI terminal; include the
@@ -38,12 +51,7 @@ const PYTHON_PTY_BRIDGE = ['import pty', 'import sys', 'sys.exit(pty.spawn(sys.a
 export function spawnTerminal(command: string, args: string[], options: SpawnTerminalOptions = {}): TerminalSession {
   const terminal = spawn('python3', ['-u', '-c', PYTHON_PTY_BRIDGE, command, ...args], {
     cwd: options.cwd ?? process.cwd(),
-    env: {
-      ...process.env,
-      TERM: 'xterm-256color',
-      FORCE_COLOR: '1',
-      ...options.env,
-    },
+    env: createTestChildEnv(options.env),
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 

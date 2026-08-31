@@ -6,6 +6,7 @@ import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { resolveSettingsDirectory } from './services/settings/settings-path.js';
+import { createTestChildEnv } from './test-helpers/terminal-e2e.js';
 
 const require = createRequire(import.meta.url);
 
@@ -62,10 +63,9 @@ afterEach(() => {
 
 it('CLI --help documents the available command-line options', () => {
   const help = execFileSync('node', [cliPath(), '--help'], {
-    env: {
-      ...process.env,
+    env: createTestChildEnv({
       DISABLE_LOGGING: '1',
-    },
+    }),
     encoding: 'utf8',
   });
 
@@ -141,11 +141,10 @@ it('CLI --resume ls prints list of conversations and exits', () => {
   fs.utimesSync(otherFilePath, now, now);
 
   const stdout = execFileSync('node', [cliPath(), '--resume', 'ls'], {
-    env: {
-      ...process.env,
+    env: createTestChildEnv({
       TERM2_CONVERSATIONS_DIR: testDir,
       DISABLE_LOGGING: '1',
-    },
+    }),
   }).toString();
 
   expect(stdout.includes('Recent Conversations (last 10):')).toBe(true);
@@ -180,11 +179,10 @@ it('CLI --resume list also works', () => {
   fs.utimesSync(filePath, now, now);
 
   const stdout = execFileSync('node', [cliPath(), '--resume', 'list'], {
-    env: {
-      ...process.env,
+    env: createTestChildEnv({
       TERM2_CONVERSATIONS_DIR: testDir,
       DISABLE_LOGGING: '1',
-    },
+    }),
   }).toString();
 
   expect(stdout.includes('Recent Conversations (last 10):')).toBe(true);
@@ -197,12 +195,11 @@ it('CLI --resume prints message and exits when no conversation is found', () => 
   let stderr = '';
   try {
     execFileSync('node', [cliPath(), '--resume', 'dummy'], {
-      env: {
-        ...process.env,
+      env: createTestChildEnv({
         HOME: tempHome,
         TERM2_CONVERSATIONS_DIR: testDir,
         DISABLE_LOGGING: '1',
-      },
+      }),
       stdio: ['pipe', 'pipe', 'pipe'],
     });
   } catch (err: any) {
@@ -226,12 +223,11 @@ it('CLI prompts before starting in non-lite mode from home directory', () => {
   try {
     try {
       execFileSync('node', [cliPath()], {
-        env: {
-          ...process.env,
+        env: createTestChildEnv({
           HOME: tempHome,
           TERM2_CONVERSATIONS_DIR: testDir,
           DISABLE_LOGGING: '1',
-        },
+        }),
         cwd: tempHome,
         input: 'n\n',
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -258,12 +254,11 @@ it('CLI prompts before starting in non-lite mode from root directory', () => {
   try {
     try {
       execFileSync('node', [cliPath()], {
-        env: {
-          ...process.env,
+        env: createTestChildEnv({
           HOME: tempHome,
           TERM2_CONVERSATIONS_DIR: testDir,
           DISABLE_LOGGING: '1',
-        },
+        }),
         cwd: '/',
         input: 'n\n',
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -316,12 +311,11 @@ it('CLI accepts a custom provider from settings.json in non-interactive mode', (
 
   try {
     execFileSync('node', [cliPath(), '--provider', providerName, 'hello'], {
-      env: {
-        ...process.env,
+      env: createTestChildEnv({
         HOME: tempHome,
         TERM2_CONVERSATIONS_DIR: testDir,
         DISABLE_LOGGING: '1',
-      },
+      }),
       stdio: ['pipe', 'pipe', 'pipe'],
     });
   } catch (err: any) {

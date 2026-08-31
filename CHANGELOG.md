@@ -1,3 +1,14 @@
+## [0.18.0] - 2026-08-31
+
+### Features
+- Added session rollover: context-milestone reminders and a new `session_rollover` tool that hands off a long conversation to a fresh session before it hits context limits.
+- Enriched background check-in notifications with a recent output tail and richer live status for long-running background shells and subagents.
+
+### Bug Fixes
+- Fixed session-rollover settings not appearing in the Settings UI and contract inventory.
+
+---
+
 ## [0.17.0] - 2026-08-30
 
 ### Features

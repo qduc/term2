@@ -11,15 +11,25 @@ import { Text } from 'ink';
 import { clearModelCache } from '../services/model-service.js';
 import { getProviderIds, registerProvider, unregisterProvider } from '../providers/index.js';
 
+type TestModelFetcher = (provider: string) => Promise<any[]>;
+const EMPTY_MODEL_FETCHER: TestModelFetcher = async () => [];
+const testProviderIds = new Set<string>();
+const registerTestProvider = (definition: Parameters<typeof registerProvider>[0]) => {
+  testProviderIds.add(definition.id);
+  registerProvider(definition);
+};
+
 type TestComponentProps = {
   onResults: (results: any) => void;
   settingsService?: ReturnType<typeof createMockSettingsService>;
   initialInput?: string;
+  modelFetcher?: TestModelFetcher;
 };
 
 type ImmediateToggleComponentProps = {
   onResults: (results: any) => void;
   settingsService?: ReturnType<typeof createMockSettingsService>;
+  modelFetcher?: TestModelFetcher;
 };
 
 beforeEach(() => {
@@ -28,6 +38,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  for (const providerId of testProviderIds) unregisterProvider(providerId);
+  testProviderIds.clear();
   vi.unstubAllEnvs();
 });
 
@@ -49,6 +61,7 @@ const TestComponent = ({
   onResults,
   settingsService,
   initialInput = '/model deepseek-v4-flash --provider=opencode go',
+  modelFetcher = EMPTY_MODEL_FETCHER,
 }: TestComponentProps) => {
   const { setInput, setCursorOffset } = useInputContext();
   const resolvedSettingsService = useMemo(
@@ -76,6 +89,7 @@ const TestComponent = ({
   const models = useModelSelection({
     loggingService,
     settingsService: resolvedSettingsService,
+    modelFetcher: modelFetcher as any,
   });
 
   useEffect(() => {
@@ -85,7 +99,11 @@ const TestComponent = ({
   return <Text>Provider: {models.provider}</Text>;
 };
 
-const ImmediateToggleComponent = ({ onResults, settingsService }: ImmediateToggleComponentProps) => {
+const ImmediateToggleComponent = ({
+  onResults,
+  settingsService,
+  modelFetcher = EMPTY_MODEL_FETCHER,
+}: ImmediateToggleComponentProps) => {
   const { setInput, setCursorOffset } = useInputContext();
   const resolvedSettingsService = useMemo(
     () =>
@@ -101,6 +119,7 @@ const ImmediateToggleComponent = ({ onResults, settingsService }: ImmediateToggl
   const models = useModelSelection({
     loggingService,
     settingsService: resolvedSettingsService,
+    modelFetcher: modelFetcher as any,
   });
   const didToggleRef = useRef(false);
 
@@ -171,10 +190,7 @@ it.sequential(
       'agent.provider': 'openrouter',
       'agent.model': 'previous-model',
     });
-    // The registered provider is first-party and has no key in this fixture.
-    const provider = (await import('../providers/registry.js')).getProvider('openrouter')!;
-    const originalFetcher = provider.fetchModels;
-    provider.fetchModels = async () => {
+    const modelFetcher: TestModelFetcher = async () => {
       fetchCount++;
       return [{ id: 'should-not-load' }];
     };
@@ -188,6 +204,7 @@ it.sequential(
             <TestComponent
               settingsService={settingsService}
               initialInput="/model "
+              modelFetcher={modelFetcher}
               onResults={(m) => {
                 capturedModels = m;
               }}
@@ -218,7 +235,6 @@ it.sequential(
         { id: 'previous-model', unavailableReason: 'missing-credentials' },
       ]);
     } finally {
-      provider.fetchModels = originalFetcher;
       renderer?.unmount();
     }
   },
@@ -231,10 +247,8 @@ it.sequential('does not commit an in-flight model fetch after its credential is 
     'agent.model': 'previous-model',
     'agent.openrouter.apiKey': 'configured-key',
   });
-  const provider = (await import('../providers/registry.js')).getProvider('openrouter')!;
-  const originalFetcher = provider.fetchModels;
   let resolveFetch!: (models: any[]) => void;
-  provider.fetchModels = () =>
+  const modelFetcher: TestModelFetcher = () =>
     new Promise((resolve) => {
       resolveFetch = resolve;
     });
@@ -248,6 +262,7 @@ it.sequential('does not commit an in-flight model fetch after its credential is 
           <TestComponent
             settingsService={settingsService}
             initialInput="/model "
+            modelFetcher={modelFetcher}
             onResults={(m) => {
               capturedModels = m;
             }}
@@ -268,7 +283,6 @@ it.sequential('does not commit an in-flight model fetch after its credential is 
       { id: 'previous-model', unavailableReason: 'missing-credentials' },
     ]);
   } finally {
-    provider.fetchModels = originalFetcher;
     renderer?.unmount();
   }
 });
@@ -352,7 +366,7 @@ it.sequential('exposes modelSettingConfig for settings-backed triggers', async (
   let capturedModels: any;
   clearModelCache();
   const testProvider = `setting-backed-provider-${Date.now()}-${Math.random()}`;
-  registerProvider({
+  registerTestProvider({
     id: testProvider,
     label: testProvider,
     fetchModels: (() => []) as any,
@@ -395,7 +409,7 @@ it.sequential('modelSettingConfig is undefined for command-backed triggers', asy
   let capturedModels: any;
   clearModelCache();
   const testProvider = `command-backed-provider-${Date.now()}-${Math.random()}`;
-  registerProvider({
+  registerTestProvider({
     id: testProvider,
     label: testProvider,
     fetchModels: (() => []) as any,
@@ -451,14 +465,10 @@ it.sequential(
     let modelsResponse = [{ id: 'model-a', name: 'Model A' }];
     let fetchCount = 0;
 
-    registerProvider({
+    registerTestProvider({
       id: providerId,
       label: providerId,
-      fetchModels: async () => {
-        fetchCount++;
-        await Promise.resolve();
-        return modelsResponse;
-      },
+      fetchModels: async () => modelsResponse,
     });
 
     settingsService.setPersistentDynamic('providers', [initialProviderConfig]);
@@ -473,6 +483,11 @@ it.sequential(
             <TestComponent
               settingsService={settingsService}
               initialInput="/model "
+              modelFetcher={async () => {
+                fetchCount++;
+                await Promise.resolve();
+                return modelsResponse;
+              }}
               onResults={(m) => {
                 capturedModels = m;
               }}
@@ -534,7 +549,7 @@ it.sequential('ignores stale model results after switching providers', async () 
   const secondProvider = `fast-provider-${Date.now()}-${Math.random()}`;
   let resolveFirst: (() => void) | undefined;
 
-  registerProvider({
+  registerTestProvider({
     id: firstProvider,
     label: firstProvider,
     fetchModels: async () => {
@@ -544,7 +559,7 @@ it.sequential('ignores stale model results after switching providers', async () 
       return [{ id: 'slow-model', name: 'Slow Model' }];
     },
   });
-  registerProvider({
+  registerTestProvider({
     id: secondProvider,
     label: secondProvider,
     fetchModels: async () => [{ id: 'fast-model', name: 'Fast Model' }],
@@ -564,6 +579,13 @@ it.sequential('ignores stale model results after switching providers', async () 
         <TestComponent
           settingsService={settingsService}
           initialInput="/model "
+          modelFetcher={async (provider) =>
+            provider === firstProvider
+              ? new Promise((resolve) => {
+                  resolveFirst = () => resolve([{ id: 'slow-model', name: 'Slow Model' }]);
+                })
+              : [{ id: 'fast-model', name: 'Fast Model' }]
+          }
           onResults={(m) => {
             capturedModels = m;
           }}
@@ -602,7 +624,7 @@ it.sequential('keeps completed provider results ready when switching back', asyn
   const secondProvider = `return-fast-provider-${Date.now()}-${Math.random()}`;
   let resolveFirst: (() => void) | undefined;
 
-  registerProvider({
+  registerTestProvider({
     id: firstProvider,
     label: firstProvider,
     fetchModels: async () => {
@@ -612,7 +634,7 @@ it.sequential('keeps completed provider results ready when switching back', asyn
       return [{ id: 'slow-model', name: 'Slow Model' }];
     },
   });
-  registerProvider({
+  registerTestProvider({
     id: secondProvider,
     label: secondProvider,
     fetchModels: async () => [{ id: 'fast-model', name: 'Fast Model' }],
@@ -624,6 +646,7 @@ it.sequential('keeps completed provider results ready when switching back', asyn
   const settingsService = createMockSettingsService({
     'agent.provider': firstProvider,
   });
+  let firstFetchCount = 0;
   let renderer: any;
 
   await flush(() => {
@@ -632,6 +655,15 @@ it.sequential('keeps completed provider results ready when switching back', asyn
         <TestComponent
           settingsService={settingsService}
           initialInput="/model "
+          modelFetcher={async (provider) =>
+            provider === firstProvider
+              ? firstFetchCount++ === 0
+                ? new Promise((resolve) => {
+                    resolveFirst = () => resolve([{ id: 'slow-model', name: 'Slow Model' }]);
+                  })
+                : [{ id: 'slow-model', name: 'Slow Model' }]
+              : [{ id: 'fast-model', name: 'Fast Model' }]
+          }
           onResults={(m) => {
             capturedModels = m;
           }}
@@ -679,7 +711,7 @@ it.sequential('pre-selects the current model of the setting it is changing (comm
     { id: 'model-c', name: 'Model C' },
   ];
 
-  registerProvider({
+  registerTestProvider({
     id: testProvider,
     label: testProvider,
     fetchModels: (() => modelsList) as any,
@@ -701,6 +733,7 @@ it.sequential('pre-selects the current model of the setting it is changing (comm
         <TestComponent
           settingsService={settingsService}
           initialInput="/model "
+          modelFetcher={async () => modelsList}
           onResults={(m) => {
             capturedModels = m;
           }}
@@ -728,7 +761,7 @@ it.sequential('pre-selects the current model of the setting it is changing (sett
     { id: 'mentor-3', name: 'Mentor 3' },
   ];
 
-  registerProvider({
+  registerTestProvider({
     id: testProvider,
     label: testProvider,
     fetchModels: (() => modelsList) as any,
@@ -750,6 +783,7 @@ it.sequential('pre-selects the current model of the setting it is changing (sett
         <TestComponent
           settingsService={settingsService}
           initialInput="/settings agent.mentorModel "
+          modelFetcher={async () => modelsList}
           onResults={(m) => {
             capturedModels = m;
           }}
@@ -773,12 +807,12 @@ it.sequential('allows switching the main provider even when conversation history
   const firstProvider = `history-provider-a-${Date.now()}-${Math.random()}`;
   const secondProvider = `history-provider-b-${Date.now()}-${Math.random()}`;
 
-  registerProvider({
+  registerTestProvider({
     id: firstProvider,
     label: firstProvider,
     fetchModels: async () => [{ id: 'model-a', name: 'Model A' }],
   });
-  registerProvider({
+  registerTestProvider({
     id: secondProvider,
     label: secondProvider,
     fetchModels: async () => [{ id: 'model-b', name: 'Model B' }],
@@ -799,6 +833,9 @@ it.sequential('allows switching the main provider even when conversation history
         <TestComponent
           settingsService={settingsService}
           initialInput="/settings agent.model "
+          modelFetcher={async (provider) =>
+            provider === firstProvider ? [{ id: 'model-a', name: 'Model A' }] : [{ id: 'model-b', name: 'Model B' }]
+          }
           onResults={(m) => {
             capturedModels = m;
           }}

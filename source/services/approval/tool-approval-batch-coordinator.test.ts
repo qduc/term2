@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest';
+import { afterEach, it, expect } from 'vitest';
 import { ToolApprovalBatchCoordinator } from './tool-approval-batch-coordinator.js';
 import { toolApprovalPolicyRegistry } from './tool-approval-policy-registry.js';
 import { SessionAccessState } from '../session/session-access-state.js';
@@ -7,6 +7,10 @@ import { createMockSettingsService } from '../settings/settings-service.mock.js'
 
 const makeNestedCompatibility = () =>
   new NestedToolCompatibilityState(createMockSettingsService({ 'sandbox.dockerHostControlProjects': [] }));
+
+afterEach(() => {
+  toolApprovalPolicyRegistry.clear();
+});
 
 it('prompts for unsandboxed shell even when the registry would auto-approve', async () => {
   toolApprovalPolicyRegistry.clear();

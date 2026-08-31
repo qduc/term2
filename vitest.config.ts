@@ -5,6 +5,7 @@ export default defineConfig({
     include: ['source/**/*.{test,spec}.{ts,tsx}', 'scripts/**/*.test.ts'],
     environment: 'node',
     globals: false,
+    setupFiles: ['./source/test-helpers/vitest-network-guard.ts'],
     restoreMocks: true,
     testTimeout: 10_000,
     hookTimeout: 10_000,

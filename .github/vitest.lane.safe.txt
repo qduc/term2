@@ -474,6 +474,7 @@ source/services/workspace/parse-worktree-list.test.ts
 source/services/workspace/worktree-transition.test.ts
 source/slash-commands.test.ts
 source/test-helpers/ink-testing.test.tsx
+source/test-helpers/vitest-network-guard.test.ts
 source/tools/agent/ask-mentor.test.ts
 source/tools/agent/ask-orchestrator.test.ts
 source/tools/agent/ask-user.test.ts

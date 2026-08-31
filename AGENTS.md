@@ -130,7 +130,11 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   read, but that was not repeatable across the other rollovers; current
   `session_list`, `session_search`, and `session_read` APIs, defaults, budgets,
   and routing prompt remain unchanged. Read the report and paired protocol
-  before reopening the tuning question.
+  before reopening the tuning question. **To resume on "audit the session
+  tools again"**: follow the "Resume checklist" section at the top of
+  `docs/research/session-retrieval-observed-usage.md` — extend the manifest,
+  rerun the log analyzer, and only design a new controlled cell if a failure
+  pattern now repeats across sessions.
 
 - `docs/plans/session-rollover-handoff.md` — **M1-M3 implemented and merged**
   (`fa4b371b`). Read before changing context-milestone reminders,

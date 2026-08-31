@@ -15,6 +15,32 @@ The acceptance bar remains the one in
 and ordinary-resume flows, outcome evidence, and concrete failure cases before
 any tuning proposal is accepted.
 
+## Resume checklist ("audit the session tools again")
+
+When asked to revisit this study, do not re-derive the method — extend it:
+
+1. Add newly verified sessions (session tool calls since 2026-08-31) to
+   `scripts/experiments/session-retrieval-baseline-sessions.json`, verified the
+   same way as the existing seven: filename == `session_init.id`, a first
+   persisted user message exists, and it matches the provider-traffic index's
+   `firstUserMessagePreview`.
+2. Rerun `scripts/experiments/session-retrieval-log-analysis.mjs` against the
+   updated manifest and diff the aggregate stats (call-type mix, latency,
+   result-size distribution) against the numbers in this file.
+3. Check specifically whether any pattern from "What this baseline cannot
+   establish" or "Insufficient or unstable retrieval" above now repeats across
+   multiple independent sessions (not one-offs): mistyped self-IDs,
+   stale/invalid cursors, redundant searches ahead of an exact-ID read, or
+   broad low-value browsing.
+4. Only if a pattern repeats: design one more controlled paired cell using
+   `docs/research/session-retrieval-paired-protocol.md` as the template
+   (fixed model/effort, rollover run before its resume pair, deterministic
+   oracle, exact-ID verification). Do not propose an API/default/prompt change
+   from naturalistic logs alone — that was the rule that closed this study
+   without a change the first time.
+5. If no repeated pattern turns up, update this Status section with the new
+   sample count and date and leave the tools unchanged again.
+
 ## Method
 
 `scripts/experiments/session-retrieval-log-analysis.mjs` scans the actual

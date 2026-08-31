@@ -160,6 +160,55 @@ describe('AgentClient application-run-loop execution', () => {
     expect(stream.history).toEqual(
       expect.arrayContaining([expect.objectContaining({ content: expect.stringContaining('session_rollover') })]),
     );
+    expect(JSON.stringify(stream.history)).not.toContain('Automatic compaction');
+    instance.dispose();
+  });
+
+  it('does not compact the final response boundary while session rollover is pending', async () => {
+    const provider = `pending-rollover-compaction-${Date.now()}`;
+    providers.add(provider);
+    let requests = 0;
+    registerProvider({
+      id: provider,
+      label: 'Pending rollover compaction test provider',
+      createStreamedModel: () => ({
+        async *stream() {
+          requests += 1;
+          yield {
+            type: 'completion' as const,
+            responseId: `response-${requests}`,
+            output: [{ type: 'message' as const, content: [{ type: 'text' as const, text: 'done' }] }],
+          };
+        },
+      }),
+      fetchModels: async () => [],
+    });
+    const instance = client(
+      provider,
+      {
+        agentOverride: {
+          name: 'override',
+          model: 'deepseek/deepseek-v4-flash',
+          instructions: 'test',
+          tools: [],
+        },
+      },
+      {
+        'agent.sessionRollover.enabled': true,
+        'agent.sessionRollover.milestones': [900_000],
+        'agent.contextCompaction.enabled': true,
+        'agent.contextCompaction.mode': 'local',
+        'agent.contextCompaction.compactThresholdTokens': 1_000,
+      },
+    );
+
+    const first = await instance.startStream('small first turn');
+    await first.completed;
+    expect(instance.requestSessionRollover({ brief: 'continue in a fresh session' })).toMatchObject({ ok: true });
+    const final = await instance.startStream('x'.repeat(20_000));
+    await final.completed;
+
+    expect(requests).toBe(2);
     instance.dispose();
   });
 

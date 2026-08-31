@@ -143,6 +143,14 @@ it never fabricates a smaller context by dropping the protected current turn.
 - Steering is admitted at the request boundary after the preceding tool results
   enter history. A steer admitted there belongs to the protected hot tail and
   must never be summarized out before its first model delivery.
+- A newly crossed session-rollover milestone gets one request-boundary decision
+  before automatic local compaction. Compaction is deferred only for that
+  decision and, if rollover is requested, its tool-result/final-response
+  boundary, so the agent can rotate without generating a summary that session
+  rotation would immediately discard. Continuing without rollover re-enables
+  normal compaction evaluation at the next boundary. Deferral requires a
+  catalogued model whose estimated request plus reserves still fits its context
+  window; otherwise compaction runs rather than risking a context-limit error.
 - Failed compaction is transactional: history and continuity remain unchanged.
   Below the hard context limit the original request may continue with a
   failure notice; at or above the limit, block with an actionable error rather

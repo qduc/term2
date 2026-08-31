@@ -360,10 +360,14 @@ export class AgentClient {
     };
   }
 
-  #observeContextMilestones(history: readonly ProviderInputItem[], onReminder: (text: string) => void): void {
+  #observeContextMilestones(
+    history: readonly ProviderInputItem[],
+    onReminder: (text: string) => void,
+  ): { deferCompaction: true } | undefined {
     const provider = this.#agentConfig.getProvider();
     const model = this.#agentConfig.getModel();
     const catalog = getCatalogModel(provider, model);
+    const agent = this.#agentConfig.getApplicationAgent();
     const threshold = resolveCompactionThreshold({
       contextWindow: catalog?.contextWindow,
       compactThreshold: this.#settings.get('agent.contextCompaction.compactThreshold') ?? 0.8,
@@ -371,21 +375,31 @@ export class AgentClient {
     });
     const estimate = estimateContext({
       history,
+      instructions: agent.instructions,
+      tools: agent.tools,
       contextWindow: catalog?.contextWindow,
       maxOutputTokens: catalog?.maxTokens,
     });
+    const canSafelyDeferCompaction =
+      catalog?.contextWindow !== undefined && estimate.hardFitTokens <= catalog.contextWindow;
     const config = {
       enabled: this.#settings.get('agent.sessionRollover.enabled') ?? true,
       milestones: this.#settings.get('agent.sessionRollover.milestones') ?? [],
       autoBrief: this.#settings.get('agent.sessionRollover.autoBrief') ?? true,
     };
-    for (const reminder of this.#contextMilestoneReminder.observe(
+    const reminders = this.#contextMilestoneReminder.observe(
       estimate,
       config,
-      threshold.available ? threshold.effectiveThreshold : undefined,
-    )) {
+      canSafelyDeferCompaction && this.#settings.get('agent.contextCompaction.enabled') && threshold.available
+        ? threshold.effectiveThreshold
+        : undefined,
+    );
+    for (const reminder of reminders) {
       onReminder(reminder);
     }
+    return canSafelyDeferCompaction && (reminders.length > 0 || this.#sessionRolloverRequest !== null)
+      ? { deferCompaction: true }
+      : undefined;
   }
 
   /**

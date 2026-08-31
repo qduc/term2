@@ -1,0 +1,84 @@
+{
+  "model": "codex/gpt-5.6-luna",
+  "effort": "medium",
+  "tasks": [
+    {
+      "id": "diagnosis-rich-coding",
+      "sourceSessionId": "9cc61896-a75e-4af9-b1bb-c4f6c432a75c",
+      "cells": [
+        {
+          "flow": "rollover",
+          "sessionId": "296b1363-dd2d-4d8e-b306-b1e057de3a02",
+          "continuationStartsWith": "Continue the interrupted task from the previous session.",
+          "oracleIncludes": ["Implemented the smallest fix", "22 passed", "171` tests passed"],
+          "evaluatorStatus": "/home/qduc/.agents/runtime/bench-r-retry-abort-backoff-20260831-092559/control/rollover.evaluator.status"
+        },
+        {
+          "flow": "ordinary_resume",
+          "sessionId": "9cc61896-a75e-4af9-b1bb-c4f6c432a75c",
+          "continuationStartsWith": "Continue the interrupted task from the diagnosis already in this session.",
+          "oracleIncludes": ["Implemented the retry-abort fix", "22 tests passed", "pnpm typecheck"],
+          "evaluatorStatus": "/home/qduc/.agents/runtime/bench-r-retry-abort-backoff-20260831-092559/control/ordinary-resume.evaluator.status"
+        }
+      ]
+    },
+    {
+      "id": "interrupted-research",
+      "sourceSessionId": "b9ba496e-e3ba-4c43-b026-dbb50196e55f",
+      "cells": [
+        {
+          "flow": "rollover",
+          "sessionId": "01eca185-0682-40c6-a25f-cd4377f92f5a",
+          "continuationStartsWith": "Complete the interrupted routing experiment and report the final decision",
+          "oracleIncludes": [
+            "Promote the candidate routing affordance",
+            "Reject the prompt rewrite",
+            "4 of 5 candidate runs",
+            "The candidate is therefore accepted"
+          ]
+        },
+        {
+          "flow": "ordinary_resume",
+          "sessionId": "b9ba496e-e3ba-4c43-b026-dbb50196e55f",
+          "continuationStartsWith": "Complete the interrupted routing experiment using the analysis already in this session",
+          "oracleIncludes": [
+            "candidate **routing affordance**",
+            "**prompt rewrite**",
+            "4 of 5 candidate runs",
+            "All three conditions pass"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sparse-operational-continuation",
+      "sourceSessionId": "8b8d3860-7d3c-4104-8d11-ab206bbb2426",
+      "cells": [
+        {
+          "flow": "rollover",
+          "sessionId": "26f365a3-4255-4a02-99a1-86a855eeba88",
+          "continuationStartsWith": "continue\n\nPrevious session ID:",
+          "oracleIncludes": [
+            "provider-black-box-canary",
+            "33297703254",
+            "350036e0",
+            "record the green confirmation in the handoff ledger; do not rerun CI",
+            "PTY-IDLE-CEILING-CLOSED"
+          ]
+        },
+        {
+          "flow": "ordinary_resume",
+          "sessionId": "8b8d3860-7d3c-4104-8d11-ab206bbb2426",
+          "continuationEquals": "continue",
+          "oracleIncludes": [
+            "provider-black-box-canary",
+            "33297703254",
+            "350036e0",
+            "record the green confirmation in the handoff ledger; do not rerun CI",
+            "PTY-IDLE-CEILING-CLOSED"
+          ]
+        }
+      ]
+    }
+  ]
+}

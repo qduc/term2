@@ -48,13 +48,6 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 
 ## Active or deferred
 
-- Session-tool retrieval tuning — **queued after session-rollover M3; evidence
-  collection has not started.** Follow the "Follow-up task: tune session
-  retrieval from observed usage" section in
-  `docs/plans/session-rollover-handoff.md`. Collect multi-task rollover and
-  ordinary-resume outcomes before changing `session_list`, `session_search`,
-  or `session_read` APIs, defaults, budgets, or routing prompts. The current
-  one-task trace is a seed observation, not a tuning basis.
 - Model/effort step-down for tool-continuation turns — **paused
   mid-validation, nothing implemented yet.** Production-log analysis found
   90%+ of expensive-tier (`sol`/`terra`) requests are pure tool-continuation
@@ -128,6 +121,20 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
   ownership boundaries.
 
 ## Completed — still read before touching these areas
+
+- Session-tool retrieval tuning — **study completed 2026-08-31; no product
+  tuning accepted.** The seven-session/79-call naturalistic baseline and six
+  controlled cells across three rollover-versus-resume pairs are in
+  `docs/research/session-retrieval-observed-usage.md`. All controlled outcomes
+  passed. One research rollover made a redundant search before an exact-ID
+  read, but that was not repeatable across the other rollovers; current
+  `session_list`, `session_search`, and `session_read` APIs, defaults, budgets,
+  and routing prompt remain unchanged. Read the report and paired protocol
+  before reopening the tuning question. **To resume on "audit the session
+  tools again"**: follow the "Resume checklist" section at the top of
+  `docs/research/session-retrieval-observed-usage.md` — extend the manifest,
+  rerun the log analyzer, and only design a new controlled cell if a failure
+  pattern now repeats across sessions.
 
 - `docs/plans/session-rollover-handoff.md` — **M1-M3 implemented and merged**
   (`fa4b371b`). Read before changing context-milestone reminders,

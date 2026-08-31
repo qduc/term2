@@ -11,10 +11,11 @@ or queued user submissions. The new session starts with a protocol-composed,
 visually marked rollover briefing that identifies the previous session and
 directs bounded `session_search`/`session_read` retrieval.
 
-The implementation slice is complete. Remaining work is experimental, not a
-code TODO: collect the multi-task retrieval evidence described below before
-tuning session-browser defaults, and require another real-run comparison before
-considering automatic rollover.
+The implementation slice is complete. Session-tool retrieval tuning is now a
+queued follow-up; evidence collection has not started. Its entry criteria and
+done condition are in "Follow-up task: tune session retrieval from observed
+usage" below. Require another real-run comparison before considering automatic
+rollover.
 
 Concept validated by a live experiment 2026-08-30 (see "Evidence" below), and by the overnight A/B
 benchmark 2026-08-31 (see "Overnight benchmark results" below): the rollover
@@ -78,6 +79,8 @@ that ends at 82k context instead of growing past 130k. This result cleared the
 M1/M2 prototype bar; it does not by itself clear automatic rollover.
 
 ## Follow-up task: tune session retrieval from observed usage
+
+**Status: queued after M3 (`fa4b371b`); evidence collection not started.**
 
 Do not change `session_list`, `session_search`, or `session_read` defaults based
 on intuition. First collect retrieval histories from real rollover and resume

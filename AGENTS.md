@@ -48,6 +48,13 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 
 ## Active or deferred
 
+- Session-tool retrieval tuning — **queued after session-rollover M3; evidence
+  collection has not started.** Follow the "Follow-up task: tune session
+  retrieval from observed usage" section in
+  `docs/plans/session-rollover-handoff.md`. Collect multi-task rollover and
+  ordinary-resume outcomes before changing `session_list`, `session_search`,
+  or `session_read` APIs, defaults, budgets, or routing prompts. The current
+  one-task trace is a seed observation, not a tuning basis.
 - Model/effort step-down for tool-continuation turns — **paused
   mid-validation, nothing implemented yet.** Production-log analysis found
   90%+ of expensive-tier (`sol`/`terra`) requests are pure tool-continuation

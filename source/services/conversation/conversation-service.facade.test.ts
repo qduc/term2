@@ -124,7 +124,7 @@ it('logs a session rollover marker at the public conversation boundary', () => {
   ]);
 });
 
-it('blocks a settled session rollover while an interaction is pending', () => {
+it('does not let a stale interaction projection block a settled session rollover', () => {
   const request = { reason: 'task_boundary' as const, brief: 'Continue.' };
   const client = partialClient({
     consumeSessionRolloverRequest: () => ({ status: 'ready' as const, request }),
@@ -139,6 +139,30 @@ it('blocks a settled session rollover while an interaction is pending', () => {
     toolName: 'shell',
     argumentsText: '{}',
     rawInterruption: {},
+  });
+
+  expect(service.consumeSessionRolloverRequest()).toEqual({
+    status: 'ready',
+    request,
+  });
+});
+
+it('blocks a settled session rollover while a standalone check-in interaction is pending', () => {
+  const request = { reason: 'task_boundary' as const, brief: 'Continue.' };
+  const client = partialClient({
+    consumeSessionRolloverRequest: () => ({ status: 'ready' as const, request }),
+  });
+  const service = new ConversationService({
+    agentClient: client,
+    toolOwnership: new ToolOwnershipRegistry(),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+  service.presentPendingInteraction({
+    agentName: 'System',
+    toolName: 'check_in',
+    argumentsText: 'Continue?',
+    rawInterruption: null,
+    checkIn: 'max_turns',
   });
 
   expect(service.consumeSessionRolloverRequest()).toEqual({

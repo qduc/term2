@@ -376,10 +376,14 @@ export class ConversationService {
     const consumption = this.#clientHandle.agentClient.consumeSessionRolloverRequest?.() ?? { status: 'none' };
     if (consumption.status !== 'ready') return consumption;
 
+    const interaction = this.#runtime.pendingInteraction.getSnapshot();
+    // Ordinary tool interactions mirror one of the approval owners below. A
+    // projection can briefly outlive that owner at settlement and must not
+    // veto rollover by itself. Check-ins are the exception: they are presented
+    // directly on the interaction surface and have no backing approval state.
     const interactionPending =
-      this.#runtime.pendingInteraction.getSnapshot() !== null ||
+      interaction?.approval.checkIn !== undefined ||
       this.#runtime.approval.getPending() !== null ||
-      this.#runtime.approval.getPendingInterruption() !== null ||
       this.#runtime.approval.getPostExecutePending().entries.length > 0 ||
       this.#runtime.backgroundSubagentApprovals.getSnapshot().pendingCount > 0 ||
       this.#adapter.queuedSubmissionCount() > 0;

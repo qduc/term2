@@ -12,9 +12,14 @@ const conversationDir = path.resolve(
 const trafficRoot = path.resolve(
   args.traffic ?? path.join(os.homedir(), '.local/state/term2-nodejs/logs/provider-traffic'),
 );
+const requestedSessionIds = args.sessions
+  ? new Set(JSON.parse(await fs.readFile(path.resolve(args.sessions), 'utf8')))
+  : null;
 
 const sessionSources = [];
 for (const name of (await fs.readdir(conversationDir)).filter((entry) => entry.endsWith('.jsonl')).sort()) {
+  const fileSessionId = name.slice(0, -'.jsonl'.length);
+  if (requestedSessionIds && !requestedSessionIds.has(fileSessionId)) continue;
   const filePath = path.join(conversationDir, name);
   const events = await readJsonLines(filePath);
   const calls = extractSessionCalls(events);
@@ -22,7 +27,6 @@ for (const name of (await fs.readdir(conversationDir)).filter((entry) => entry.e
 
   const init = events.find(({ event }) => event?.type === 'session_init')?.event;
   const firstUserMessage = events.find(({ event }) => event?.type === 'user_message')?.event?.message?.text;
-  const fileSessionId = name.slice(0, -'.jsonl'.length);
   const sessionId = typeof init?.id === 'string' ? init.id : fileSessionId;
   sessionSources.push({
     sessionId,
@@ -34,6 +38,11 @@ for (const name of (await fs.readdir(conversationDir)).filter((entry) => entry.e
     costs: extractCosts(events),
     retrievalTurns: extractRetrievalTurns(events, calls),
   });
+}
+if (requestedSessionIds) {
+  const found = new Set(sessionSources.map(({ sourceFile }) => sourceFile.slice(0, -'.jsonl'.length)));
+  const missing = [...requestedSessionIds].filter((sessionId) => !found.has(sessionId));
+  if (missing.length > 0) throw new Error(`Requested sessions were not analyzable: ${missing.join(', ')}`);
 }
 
 const traffic = await loadTraffic(trafficRoot, new Set(sessionSources.map(({ sessionId }) => sessionId)));
@@ -81,7 +90,7 @@ function parseArgs(argv) {
   const parsed = {};
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
-    if (value === '--conversations' || value === '--traffic') {
+    if (value === '--conversations' || value === '--traffic' || value === '--sessions') {
       const next = argv[index + 1];
       if (!next) throw new Error(`${value} requires a path`);
       parsed[value.slice(2)] = next;

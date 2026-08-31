@@ -2,10 +2,13 @@
 
 ## Status
 
-**In progress.** Naturalistic baseline captured 2026-08-31 from seven verified
-sessions and 79 calls to `session_list`, `session_search`, and `session_read`.
-The controlled paired rollover-versus-resume phase has not run yet. No session
-tool API, default, budget, or prompt has changed.
+**Completed with no product tuning.** The 2026-08-31 study includes a
+naturalistic baseline of seven verified sessions and 79 calls to
+`session_list`, `session_search`, and `session_read`, plus six controlled
+continuation cells across three rollover-versus-resume pairs. All six cells
+passed their deterministic outcome oracle. The controlled evidence did not
+show a repeatable quality failure or budget defect, so no session-tool API,
+default, budget, or routing prompt changed.
 
 The acceptance bar remains the one in
 `docs/plans/session-rollover-handoff.md`: multiple task shapes, both rollover
@@ -37,8 +40,13 @@ it with:
 
 ```bash
 node scripts/experiments/session-retrieval-log-analysis.mjs \
+  --sessions scripts/experiments/session-retrieval-baseline-sessions.json \
   > /tmp/session-retrieval-corpus.json
 ```
+
+The explicit session manifest freezes the seven-session naturalistic cohort.
+Without it, the analyzer intentionally scans every session containing a session
+tool call, including the later controlled rollover cells.
 
 ## Naturalistic baseline
 
@@ -135,8 +143,15 @@ change the tools.
 
 ## Controlled paired phase
 
-Run at least three task shapes, with the same model/effort and source state in
-each pair:
+The protocol design, source boundaries, prompt content, fixture facts,
+project-path caveat, and replay command are archived in
+`docs/research/session-retrieval-paired-protocol.md`. The exact-ID manifest is
+`scripts/experiments/session-retrieval-paired-runs.json`; the analyzer is
+`scripts/experiments/session-retrieval-paired-analysis.mjs`.
+
+All cells ran serially in real interactive term2/Herdr with
+`codex/gpt-5.6-luna` at medium effort. Each pair held model, effort, and source
+state fixed:
 
 1. **Diagnosis-rich coding handoff** — old transcript mostly unnecessary;
    verifies whether rollover avoids browsing and retains deterministic coding
@@ -144,25 +159,86 @@ each pair:
 2. **Interrupted experiment/research workflow** — decisive state is split
    between transcript and durable artifacts; tests query quality,
    reformulation, and selective reads.
-3. **Sparse operational continuation** — the user supplies no session ID and
-   little searchable vocabulary; tests `session_list` discovery and mistaken
-   identity recovery.
+3. **Sparse operational continuation** — the continuation instruction supplies
+   almost no searchable vocabulary; tests whether the bounded rollover's exact
+   previous-session ID is enough for selective recovery.
 
-For every task, compare:
+For every task, the comparison was:
 
 - **ordinary resume:** restore the source session through the product's resume
   path, then issue the continuation instruction;
 - **rollover:** start a fresh interactive root session with a bounded handoff,
   previous-session ID, and the existing session tools.
 
-Use the interactive root path because non-interactive term2 intentionally does
-not register `SessionBrowser`. Archive the exact source session, first message,
-continuation prompt, rollover brief, model/effort, and outcome oracle. Attribute
-every run by exact session ID and verify it against its first user message in
-both the conversation log and provider index. Run cells serially so provider
-usage cannot be mixed.
+The interactive root path was required because non-interactive term2
+intentionally does not register `SessionBrowser`. Every result below passed all
+three identity checks: conversation filename equals `session_init.id`, a first
+persisted user message exists, and the provider index's preview matches that
+message. Cost and traffic were sliced from the exact continuation user event,
+not a wall-clock attribution window.
 
-Collect per cell:
+The resulting cells were:
+
+| Task | Flow | Result session ID | Session calls | Requests | Elapsed | Tokens | Cost | Outcome |
+| --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- |
+| diagnosis-rich coding | rollover | `296b1363-dd2d-4d8e-b306-b1e057de3a02` | none | 21 | 220.5 s | 811,302 | $0.0347 | hidden evaluator PASS 9/9 + typecheck |
+| diagnosis-rich coding | ordinary resume | `9cc61896-a75e-4af9-b1bb-c4f6c432a75c` | none | 17 | 136.4 s | 1,233,639 | $0.0431 | hidden evaluator PASS 9/9 + typecheck |
+| interrupted research | rollover | `01eca185-0682-40c6-a25f-cd4377f92f5a` | 1 search, 1 read | 5 | 23.4 s | 69,053 | $0.0049 | checklist PASS |
+| interrupted research | ordinary resume | `b9ba496e-e3ba-4c43-b026-dbb50196e55f` | none | 1 | 8.6 s | 13,401 | $0.0010 | checklist PASS |
+| sparse operational | rollover | `26f365a3-4255-4a02-99a1-86a855eeba88` | 1 read | 2 | 9.3 s | 25,156 | $0.0033 | checklist PASS |
+| sparse operational | ordinary resume | `8b8d3860-7d3c-4104-8d11-ab206bbb2426` | none | 1 | 4.8 s | 12,848 | $0.0007 | checklist PASS |
+
+`Tokens` is provider-reported total input plus output for the continuation and
+includes cached input. Source-session work is excluded. Ordinary resume reuses
+the source session ID, so its first-message verification correctly checks the
+source's first prompt rather than the later continuation prompt.
+
+### Ordered retrieval evidence
+
+The coding handoff was self-sufficient: both cells made zero session calls and
+passed the same hidden evaluator. The rollover used fewer tokens and cost less,
+but took longer and made more requests; this pair supports handoff
+self-sufficiency, not a universal rollover performance advantage. Its two
+isolated coding trees had different project paths, so the rollover browser
+could not have read the project-scoped source transcript if the handoff had
+failed.
+
+The interrupted-research rollover made two calls in order:
+
+1. `session_search` with query
+   `acceptance rule routing versus prompt distinction retrieval desired-behavior invocation coding oracle`,
+   `limit: 10`, `maxChars: 6000`; 4 ms, 2,563 characters, six results.
+2. `session_read` of the exact source ID, `cursor: null`, `limit: 12`,
+   `maxChars: 10000`; 4 ms, 3,941 characters, six records.
+
+The read supplied the transcript-only acceptance rule and scope distinction and
+was necessary. The preceding search was redundant: the rollover brief already
+provided the exact source ID and named the missing facts. There were no errors,
+retries, reformulations, omitted records, or cursor failures.
+
+The sparse-operational rollover directly called `session_read` on the source
+ID with `cursor: null`, `limit: 20`, and `maxChars: 12000`; it returned all five
+records in 2,696 characters in 5 ms. That one read was necessary and sufficient.
+There was no list, search, retry, reformulation, omission, or error. The ordinary
+resume needed no retrieval because the original transcript was restored.
+
+### Decision
+
+The controlled phase confirms the existing routing can complete all three task
+shapes. It also supplies a concrete avoidable-search case, but not a repeatable
+failure that justifies changing product routing: the other retrieval-dependent
+rollover used the exact-ID read directly, and the strong coding handoff used no
+retrieval. Local tool execution remained 4–5 ms; the material cost came from an
+extra model continuation, not local scanning.
+
+Therefore retain the current APIs, defaults, budgets, and prompt. A future
+candidate may test an explicit “when a rollover gives an exact previous-session
+ID, read it directly before searching” routing instruction, but it should be a
+controlled prompt counterfactual with missed-history checks—not an inference
+shipped from this one redundant search. The naturalistic broad-output and stale
+self-cursor cases remain diagnostics, not established default defects.
+
+The study collected per cell:
 
 - ordered session-tool calls and full arguments;
 - result sizes, errors, omitted counts, execution latency, retries, and query
@@ -172,6 +248,7 @@ Collect per cell:
 - retrieval-bearing turn and whole-continuation requests, tokens, elapsed time,
   and cost.
 
-Do not propose or implement tool tuning until all three pairs settle and the
-report contains both baseline distributions and counterfactual failure cases.
+All three pairs are settled. The report now contains baseline distributions,
+necessary and redundant calls, cursor/error failure cases, and controlled
+counterfactual outcomes. The done condition is met without a product change.
 

@@ -11,11 +11,15 @@ or queued user submissions. The new session starts with a protocol-composed,
 visually marked rollover briefing that identifies the previous session and
 directs bounded `session_search`/`session_read` retrieval.
 
-The implementation slice is complete. Session-tool retrieval tuning is in
-progress: the seven-session naturalistic baseline is recorded in
-`docs/research/session-retrieval-observed-usage.md`; the controlled paired phase
-is next. Its entry criteria and done condition are in "Follow-up task: tune
-session retrieval from observed usage" below. Require another real-run
+The implementation slice is complete. The session-tool retrieval study is also
+complete: `e8015e7a` captured the seven-session/79-call naturalistic baseline,
+and the later controlled phase ran six serial interactive cells across three
+rollover-versus-resume pairs. All six outcomes passed; one exact-ID research
+rollover made a redundant search before a necessary read, but the other
+retrieval-dependent rollover read directly and the strong coding handoff made
+no session calls. No repeatable defect justified changing an API, default,
+budget, or routing prompt. Full evidence and the reproducible analyzer are in
+`docs/research/session-retrieval-observed-usage.md`. Require another real-run
 comparison before considering automatic rollover.
 
 Concept validated by a live experiment 2026-08-30 (see "Evidence" below), and by the overnight A/B
@@ -81,10 +85,13 @@ M1/M2 prototype bar; it does not by itself clear automatic rollover.
 
 ## Follow-up task: tune session retrieval from observed usage
 
-**Status: in progress after M3 (`fa4b371b`).** Naturalistic baseline captured:
-seven session IDs verified against first user messages, 79 session-tool calls,
-and multi-task outcome/failure evidence. The controlled rollover-versus-resume
-pairs have not run; see `docs/research/session-retrieval-observed-usage.md`.
+**Status: completed after M3 (`fa4b371b`); no product tuning accepted.** The
+study captured seven naturalistic sessions/79 calls and six controlled cells
+across three rollover-versus-resume pairs. Every controlled cell passed its
+deterministic outcome oracle and exact first-message attribution. The one
+redundant exact-ID search was not repeatable across the other controlled
+rollovers, so the APIs, defaults, budgets, and routing prompt remain unchanged.
+See `docs/research/session-retrieval-observed-usage.md`.
 
 Do not change `session_list`, `session_search`, or `session_read` defaults based
 on intuition. First collect retrieval histories from real rollover and resume
@@ -116,6 +123,11 @@ session-tool API, default budget, or routing prompt. A proposed tuning is
 accepted only when it improves continuation quality or reduces unnecessary
 retrieval without increasing missed-history failures; otherwise retain the
 current tools and record the evidence.
+
+Done 2026-08-31: the multi-task comparison, baseline distributions, necessary
+and redundant retrieval cases, cursor failures, exact-ID attribution, and
+outcome/cost evidence are recorded. The acceptance rule selected “retain the
+current tools and record the evidence.”
 
 ## The idea (user's proposal, 2026-08-30)
 

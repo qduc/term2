@@ -1,12 +1,26 @@
 # Session rollover — agent-triggered handoff as the compaction alternative
 
+## Resume here
+
+The M1-M3 minimal slice is merged in `fa4b371b` (M1/M2 implementation
+`38ec5576`, settings-surface repair `6a7cfac7`). The shipped behavior is
+agent-triggered only: context milestones advise the agent, and
+`session_rollover` requests rotation after the current turn settles. Rotation
+is blocked rather than discarding live background work, pending interactions,
+or queued user submissions. The new session starts with a protocol-composed,
+visually marked rollover briefing that identifies the previous session and
+directs bounded `session_search`/`session_read` retrieval.
+
+The implementation slice is complete. Remaining work is experimental, not a
+code TODO: collect the multi-task retrieval evidence described below before
+tuning session-browser defaults, and require another real-run comparison before
+considering automatic rollover.
+
 Concept validated by a live experiment 2026-08-30 (see "Evidence" below), and by the overnight A/B
 benchmark 2026-08-31 (see "Overnight benchmark results" below): the rollover
 arm matched the human fix's blind-judge quality at ~2.2x lower cost. This doc
-maps the concept onto the existing code and records the design decisions that
-remain. The M1/M2 slice (milestone reminder + `session_rollover` tool) is
-implemented on branch `session-rollover`, left unpushed pending user review;
-nothing here is merged to main.
+maps the concept onto the existing code and records the evidence and remaining
+experiments.
 
 ## Overnight benchmark results (2026-08-31, run by the rollover session)
 
@@ -60,8 +74,8 @@ Caveats, stated honestly:
 
 Verdict: **rollover holds up on this task** — quality parity with the human
 fix, roughly half the wall time, ~2.2x lower metered cost, and a session
-that ends at 82k context instead of growing past 130k. Proceed to the M1/M2
-slice (milestone reminder + `session_rollover` tool) unpushed for review.
+that ends at 82k context instead of growing past 130k. This result cleared the
+M1/M2 prototype bar; it does not by itself clear automatic rollover.
 
 ## Follow-up task: tune session retrieval from observed usage
 
@@ -176,7 +190,7 @@ The big discovery: **in-process session rotation is already built** for
 
 Registered in `agent.ts` like the session-browser tools. Parameters
 (zod-strict): `brief` (required string, bounded — e.g. ≤ 8k chars),
-`reason` (optional enum: `context_pressure` | `task_boundary` | other).
+`reason` (optional enum: `context_pressure` | `task_boundary`).
 `needsApproval: () => false` — ending your own session is not a destructive
 act; the harness, not the user, arbitrates (but see "When is it allowed").
 
@@ -218,20 +232,20 @@ trigger automatically at T."* Settings: `agent.sessionRollover.enabled`,
 remains the agent's decision. The reminder must dedupe per milestone
 (`shouldDeferAutomaticCompaction` is the dedupe precedent).
 
-### Guard conditions (when the tool is allowed to fire)
+### Guard conditions (implemented in `fa4b371b`)
 
-The tool must refuse (with a clear tool-error, not a crash) when:
+The tool refuses with a structured tool error, not a crash, when:
 
 - A turn is actively executing — rollover is an idle-boundary operation.
   (The tool call itself arrives during a turn; the rotation must be deferred
   to that turn's settlement, like background-event injection defers to
   turn boundaries — defer-to-idle, not abort-the-turn.)
-- Background work is live: background shell jobs and unadopted subagent runs
-  do not survive a session end (`conversation-replay.ts:881` already carries
-  this exact warning for interrupted sessions). Either block rollover while
-  `backgroundTaskControl` shows live items, or require the brief to name
-  them; blocking is the honest default for v1.
-- A pending approval / pending interaction exists.
+- Background shell jobs or asynchronous subagent runs are live. The agent
+  client checks both when the tool requests rollover and again when the turn
+  settles, closing the race where work starts later in the same model response.
+- A pending approval, other pending interaction, post-execute gate, background
+  approval, or queued user submission exists. `ConversationService` rechecks
+  these immediately before handing rotation to the app.
 
 ### Provider/cache implications (favorable)
 
@@ -240,14 +254,14 @@ starts clean — no `previous_response_id` to drop, no chain recovery, and the
 briefing turn is a tiny request. The old session's server-side state/cache is
 simply abandoned (writes were already paid; nothing is re-billed). Compare
 compaction: it pays a full-history summarization request *and* rebuilds the
-prefix. Rollover's only mandatory cost is writing the brief. Follow-up: check
-whether the per-session WebSocket transport (keyed by
-`providerHistoryKey ?? sessionId`) closes the stale socket on rotation or
-leaks it until dispose — implementation detail for the slice.
+prefix. Rollover's only mandatory cost is writing the brief.
+`ConversationService.resetWithNewId()` disposes the old client handle before
+creating the new session client, so retained provider transports are closed
+rather than left keyed to the abandoned session.
 
-## Decisions still open
+## Decisions and follow-ups
 
-1. **Rotation ownership** — chosen for M2: the narrower bridge. The tool
+1. **Rotation ownership — implemented:** the narrower bridge. The tool
    records one rollover request in the session client; the app consumes it
    after turn settlement, logs the marker, reuses the existing
    `handleClearConversation` sequence, and sends the brief as the new
@@ -257,13 +271,11 @@ leaks it until dispose — implementation detail for the slice.
    for later) would move that sequence behind `SessionRuntime` + UI
    subscribers.
    Decision shapes the slice's size.
-2. **Where the brief lives**: (a) as the new session's first turn only
-   (searchable via `firstUserMessage`), (b) also written to a file under the
-   runtime dir, (c) embedded in the `session_rollover` log event. Recommend
-   (a) + (c); (b) only if briefs grow large.
-3. **Naming**: `session_rollover` vs keeping "handoff" (collides with the
-   model-handoff flow). The user's word is "handoff"; the codebase's is
-   taken.
+2. **Where the brief lives — implemented:** as the new session's first user
+   turn (searchable via `firstUserMessage`) and in the old session's
+   `session_rollover` event. No separate runtime file is written.
+3. **Naming — implemented:** `session_rollover`; "handoff" remains the
+   model-switch flow.
 4. **Auto-rollover policy**: should the harness ever fire rollover itself
    (e.g. at hard context pressure, replacing auto-compaction), or is it
    strictly agent-triggered advice? v1: agent-triggered only; auto mode is a
@@ -275,12 +287,11 @@ leaks it until dispose — implementation detail for the slice.
    task. The prototype can be built before this but the comparison gates any
    default-on behavior.
 
-## Minimal slice proposal
+## Minimal slice status
 
 - M1: milestone reminder injection (settings + reminder producer + tests) —
-  small, independent, immediately useful.
+  merged in `38ec5576`.
 - M2: `session_rollover` tool + idle-boundary rotation + briefing turn +
-  `session_rollover` log event. The core. Needs decision 1.
-- M3: guard refinements (background-work blocking), UI presentation
-  (rollover banner), docs (`CONTEXT.md` vocabulary), then the validation
-  runs from decision 5.
+  `session_rollover` log event — merged in `38ec5576`.
+- M3: background-work and interaction guards, protocol briefing, rollover
+  presentation, and `CONTEXT.md` vocabulary — merged in `fa4b371b`.

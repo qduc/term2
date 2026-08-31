@@ -122,6 +122,13 @@ Multi-session work is tracked in `docs/plans/`. Each such plan opens with a **Re
 
 ## Completed — still read before touching these areas
 
+- `docs/plans/session-rollover-handoff.md` — **M1-M3 implemented and merged**
+  (`fa4b371b`). Read before changing context-milestone reminders,
+  `session_rollover`, session rotation, or rollover briefing presentation: the
+  tool defers rotation to turn settlement and blocks rather than discarding
+  live background work, pending interactions, or queued submissions. Automatic
+  rollover remains an experiment, not shipped policy.
+
 - **Grok on the Responses API** (`b065bbc9`, `40c4546a`, 2026-08-20) — no plan
   doc; the constraints are recorded here and in those commit messages. Grok runs
   on the Responses API so encrypted reasoning round-trips, which Chat Completions

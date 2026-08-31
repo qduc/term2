@@ -633,7 +633,7 @@ the result limit was chosen. Results never contain a partial snippet.
 ```ts
 {
   id: string; // safe opaque historical session ID
-  cursor?: string; // opaque base64url cursor issued by this tool
+  cursor?: string; // short opaque cursor issued by this SessionBrowser
   limit?: integer; // 1..50, default 20
   maxChars?: integer; // 512..12_000, default 12_000
 }
@@ -703,11 +703,18 @@ cursor.
 
 #### Cursor format and stale semantics
 
-The cursor is an opaque base64url encoding of canonical JSON:
+**Correction (2026-08-31):** `SessionBrowser` keeps cursor state in memory and
+returns a short process-local handle such as `c1`. The original implementation
+returned the full state below as base64url JSON. That made the tool stateless,
+but required small models to reproduce a long random-looking argument exactly
+and spent output and input tokens on backend metadata. Session browsing already
+runs through one process-owned `SessionBrowser`, so that trade-off was
+reversed.
+
+Each handle resolves internally to:
 
 ```ts
 {
-  v: 1;
   sessionId: string;
   updatedAt: string;
   revision: string; // 96-bit base64url digest of the browser projection
@@ -716,15 +723,13 @@ The cursor is an opaque base64url encoding of canonical JSON:
 }
 ```
 
-Canonical JSON property order is exactly the order shown. The cursor contains
-no transcript text. `revision` is the first 96 bits of SHA-256 over the
-projected session identity, metadata, records, and skipped count; it detects a
-transcript change even when two persisted events share the same timestamp.
-The cursor is validated strictly after decoding: no extra fields, matching
-`sessionId`, valid ISO timestamp string, canonical 16-character base64url
-`revision`, and non-negative safe integers are required. Malformed base64url,
-malformed JSON, version mismatch, extra fields, another session ID, or invalid
-position yields `invalid_cursor`.
+The state contains no transcript text. `revision` remains the first 96 bits of
+SHA-256 over the projected session identity, metadata, records, and skipped
+count, so it detects a transcript change even when two persisted events share
+the same timestamp. Unknown or malformed handles, handles issued by another
+`SessionBrowser` instance, handles presented with another session ID, and
+invalid saved positions yield `invalid_cursor`. Handles intentionally do not
+survive a process restart; callers restart the read without a cursor.
 
 On every continuation, reread the session and compare both its current
 `updatedAt` and projection revision to the cursor snapshot exactly. A different

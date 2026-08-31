@@ -30,13 +30,23 @@ type BrowserError = {
     message: string;
   };
 };
-type CursorState = { updatedAt: string; revision: string; nextIndex: number; nextTextOffset: number };
+type CursorState = {
+  sessionId: string;
+  updatedAt: string;
+  revision: string;
+  nextIndex: number;
+  nextTextOffset: number;
+};
 
 export type SessionListInput = { limit?: number; maxChars?: number };
 export type SessionSearchInput = { query: string; limit?: number; maxChars?: number };
 export type SessionReadInput = { id: string; cursor?: string; limit?: number; maxChars?: number };
 
 export class SessionBrowser {
+  readonly #cursorStates = new Map<string, CursorState>();
+  readonly #cursorHandles = new Map<string, string>();
+  #nextCursorId = 1;
+
   constructor(private readonly getContext: () => SessionBrowserContext) {}
 
   list(input: SessionListInput) {
@@ -160,8 +170,14 @@ export class SessionBrowser {
     const currentUpdatedAt = updatedAt(conversation);
     const currentRevision = revision(conversation, projection);
     const cursor: CursorState | null = input.cursor
-      ? decodeCursor(input.cursor, input.id)
-      : { updatedAt: currentUpdatedAt, revision: currentRevision, nextIndex: 0, nextTextOffset: 0 };
+      ? this.#decodeCursor(input.cursor, input.id)
+      : {
+          sessionId: input.id,
+          updatedAt: currentUpdatedAt,
+          revision: currentRevision,
+          nextIndex: 0,
+          nextTextOffset: 0,
+        };
     if (!cursor) return boundedError('invalid_cursor', 'The session cursor is invalid.', budget);
     if (input.cursor && (cursor.updatedAt !== currentUpdatedAt || cursor.revision !== currentRevision))
       return boundedError('stale_cursor', 'The session cursor is stale.', budget);
@@ -186,7 +202,7 @@ export class SessionBrowser {
       const afterIndex = index + 1;
       const nextCursor =
         afterIndex < projection.records.length
-          ? encodeCursor(input.id, currentUpdatedAt, currentRevision, afterIndex, 0)
+          ? this.#cursorFor(input.id, currentUpdatedAt, currentRevision, afterIndex, 0)
           : undefined;
       const candidate = fitted(
         {
@@ -211,7 +227,7 @@ export class SessionBrowser {
       if (items.length > 0) break;
       if (record.text.length === offset) return outputBudgetError(budget);
       const chunk = largestChunk(record, offset, (text) => {
-        const next = encodeCursor(input.id, currentUpdatedAt, currentRevision, index, offset + text.length);
+        const next = this.#cursorFor(input.id, currentUpdatedAt, currentRevision, index, offset + text.length);
         return fitted(
           {
             session,
@@ -230,7 +246,7 @@ export class SessionBrowser {
       break;
     }
     const nextCursor =
-      index < total ? encodeCursor(input.id, currentUpdatedAt, currentRevision, index, offset) : undefined;
+      index < total ? this.#cursorFor(input.id, currentUpdatedAt, currentRevision, index, offset) : undefined;
     // Records begun in this page are total - omitted. A mid-record chunk (the
     // cursor offset is nonzero) began its own record, so it is not counted as
     // omitted; every later record is.
@@ -248,6 +264,24 @@ export class SessionBrowser {
         budget,
       ) ?? outputBudgetError(budget)
     );
+  }
+
+  #cursorFor(sessionId: string, updatedAt: string, revision: string, nextIndex: number, nextTextOffset: number) {
+    const state = { sessionId, updatedAt, revision, nextIndex, nextTextOffset };
+    const stateKey = JSON.stringify(state);
+    const existing = this.#cursorHandles.get(stateKey);
+    if (existing) return existing;
+    const handle = `c${this.#nextCursorId.toString(36)}`;
+    this.#nextCursorId++;
+    this.#cursorStates.set(handle, state);
+    this.#cursorHandles.set(stateKey, handle);
+    return handle;
+  }
+
+  #decodeCursor(cursor: string, id: string): CursorState | null {
+    if (!/^c[0-9a-z]+$/.test(cursor)) return null;
+    const state = this.#cursorStates.get(cursor);
+    return state?.sessionId === id ? state : null;
   }
 
   private conversations() {
@@ -366,47 +400,6 @@ function largestChunk(record: ProjectedMessage, offset: number, fits: (text: str
   }
   return best;
 }
-function encodeCursor(
-  sessionId: string,
-  updatedAt: string,
-  revision: string,
-  nextIndex: number,
-  nextTextOffset: number,
-) {
-  return Buffer.from(JSON.stringify({ v: 1, sessionId, updatedAt, revision, nextIndex, nextTextOffset })).toString(
-    'base64url',
-  );
-}
-function decodeCursor(cursor: string, id: string): CursorState | null {
-  try {
-    if (!/^[A-Za-z0-9_-]+$/.test(cursor)) return null;
-    const decoded = Buffer.from(cursor, 'base64url').toString('utf8');
-    if (Buffer.from(decoded, 'utf8').toString('base64url') !== cursor) return null;
-    const value = JSON.parse(decoded) as Record<string, unknown>;
-    const nextIndex = value.nextIndex;
-    const nextTextOffset = value.nextTextOffset;
-    if (
-      decoded !== JSON.stringify(value) ||
-      Object.keys(value).join(',') !== 'v,sessionId,updatedAt,revision,nextIndex,nextTextOffset' ||
-      value.v !== 1 ||
-      value.sessionId !== id ||
-      !isUtcTimestamp(value.updatedAt) ||
-      typeof value.revision !== 'string' ||
-      !/^[A-Za-z0-9_-]{16}$/.test(value.revision) ||
-      typeof nextIndex !== 'number' ||
-      typeof nextTextOffset !== 'number' ||
-      !Number.isSafeInteger(nextIndex) ||
-      !Number.isSafeInteger(nextTextOffset) ||
-      nextIndex < 0 ||
-      nextTextOffset < 0
-    )
-      return null;
-    return { updatedAt: value.updatedAt, revision: value.revision, nextIndex, nextTextOffset };
-  } catch {
-    return null;
-  }
-}
-
 function isBrowsableSession(conversation: RestoredState) {
   return (
     SAFE_SESSION_ID.test(conversation.id) &&

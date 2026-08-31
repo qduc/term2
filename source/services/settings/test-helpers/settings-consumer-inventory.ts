@@ -76,6 +76,11 @@ export const CONTRACT_04_CONSUMER_INVENTORY = {
     'agent.contextCompaction.compactThreshold',
     'agent.contextCompaction.compactThresholdTokens',
   ],
+  'Session rollover — next request boundary or turn settlement': [
+    'agent.sessionRollover.enabled',
+    'agent.sessionRollover.milestones',
+    'agent.sessionRollover.autoBrief',
+  ],
   'Shell execution — next tool invocation': [
     'shell.timeout',
     'shell.backgroundTimeout',

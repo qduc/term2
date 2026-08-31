@@ -47,6 +47,12 @@ export const SETTING_DESCRIPTIONS: Record<string, string> = {
     'Context-window ratio for automatic context compaction (0-1, 0%-100%)',
   [SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD_TOKENS]:
     'Optional raw-token ceiling for automatic context compaction (null or integer >=1000)',
+  [SETTING_KEYS.AGENT_SESSION_ROLLOVER_ENABLED]:
+    'Remind the agent when context reaches milestones so it can plan a session rollover (true|false)',
+  [SETTING_KEYS.AGENT_SESSION_ROLLOVER_MILESTONES]:
+    'Context token milestones that trigger session rollover reminders (e.g. [200000, 300000, 400000])',
+  [SETTING_KEYS.AGENT_SESSION_ROLLOVER_AUTO_BRIEF]:
+    'Automatically pass the handoff brief into the new session upon rollover (true|false)',
   [SETTING_KEYS.AGENT_MENTOR_MODEL]: 'Mentor model to use (optional, enables ask_mentor tool)',
   [SETTING_KEYS.AGENT_MENTOR_PROVIDER]: 'Provider to use for mentor model (openai, openrouter, etc.)',
   [SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT]:
@@ -234,6 +240,9 @@ export const CATEGORY_KEYS = {
     SETTING_KEYS.AGENT_CONTEXT_COMPACTION_MODE,
     SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD,
     SETTING_KEYS.AGENT_CONTEXT_COMPACTION_COMPACT_THRESHOLD_TOKENS,
+    SETTING_KEYS.AGENT_SESSION_ROLLOVER_ENABLED,
+    SETTING_KEYS.AGENT_SESSION_ROLLOVER_MILESTONES,
+    SETTING_KEYS.AGENT_SESSION_ROLLOVER_AUTO_BRIEF,
     SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_MODEL,
     SETTING_KEYS.AGENT_SUBAGENT_EXPLORER_REASONING_EFFORT,
     SETTING_KEYS.AGENT_SUBAGENT_WORKER_MODEL,

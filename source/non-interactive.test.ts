@@ -1141,7 +1141,10 @@ it('runNonInteractive auto-approves only the finite parent run-budget extensions
     expect(exitCode).toBe(0);
     expect(toolExecutions).toBe(3);
     expect(requests).toHaveLength(3);
-    expect(stdout.getOutput()).toBe('Done.\n');
+    // A tool-only run with no final prose settles silently; the old fabricated
+    // "Done." fallback projected an assistant reply to an internal event. The
+    // bare trailing newline is the standard completed-response layout.
+    expect(stdout.getOutput()).toBe('\n');
     expect(stderr.getOutput()).toContain('[tool] read_file');
     expect(stderr.getOutput()).not.toContain('--auto-approve enabled');
   } finally {

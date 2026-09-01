@@ -181,6 +181,34 @@ it('does not consult the matching session singleton when injected access has no 
   if (outcome.kind === 'approval_required') expect(outcome.result.approval.dockerHostControl).toBeUndefined();
 });
 
+it('resolves whitespace-only final output to an empty string, not a fabricated terminal', async () => {
+  // Regression: whitespace-only model output used to persist as "\n\n" or be
+  // replaced by the fake terminal "Done."; both project as a visible assistant
+  // reply to an internal notification.
+  const stream = makeStream({
+    finalOutput: '\n\n',
+    history: [],
+    newItems: [],
+  });
+  const outcome = await buildConversationResult(
+    {
+      result: stream,
+      toolCallArgumentsById: new Map(),
+      emittedCommandIds: new Set(),
+    },
+    makeDeps(),
+  );
+
+  expect(outcome.kind).toBe('response');
+  if (outcome.kind === 'response') {
+    expect(outcome.result.finalText).toBe('');
+
+    const event = toTerminalEvent(outcome.result);
+    expect(event.type).toBe('final');
+    expect((event as { finalText?: string }).finalText).toBe('');
+  }
+});
+
 it('response outcome when stream has no interruptions', async () => {
   const stream = makeStream({
     finalOutput: 'Done.',

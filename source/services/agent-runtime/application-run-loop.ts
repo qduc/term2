@@ -1301,8 +1301,12 @@ export class ApplicationRunLoop {
       const assistantText = finalCompletion.output
         .filter((item): item is Extract<StreamedModelTurnOutput, { type: 'message' }> => item.type === 'message')
         .flatMap((item) => item.content)
+        // Whitespace-only output (e.g. a background-notification acknowledgment)
+        // must not enter the canonical history: the truthy check used to let
+        // "\n\n" through, accumulating junk in model context.
         .map((part) => part.text)
-        .join('');
+        .join('')
+        .trim();
       if (assistantText) {
         stream.finalOutput = assistantText;
         const item: ProviderInputItem = {

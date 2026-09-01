@@ -1463,6 +1463,34 @@ describe('ApplicationRunLoop', () => {
     expect(stream.lastResponseId).toBe('resp-1');
   });
 
+  it('does not persist whitespace-only assistant text into the canonical history', async () => {
+    // Regression: "\n\n" from a background-notification acknowledgment used to
+    // pass the truthy check and get pushed into the provider history and
+    // canonical persisted turn, accumulating junk in model context.
+    let request: any;
+    const model: StreamedModelTurn = {
+      async *stream(value) {
+        request = value;
+        yield {
+          type: 'completion',
+          responseId: 'resp-ws',
+          output: [{ type: 'message', content: [{ type: 'text', text: '\n\n' }] }],
+        };
+      },
+    };
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(
+      agent,
+      [{ role: 'user', type: 'message', content: 'notification' }],
+      { providerId: 'openai', supportsConversationChaining: true },
+    );
+
+    await collect(stream);
+    await stream.completed;
+
+    expect(stream.finalOutput).toBeUndefined();
+    expect(JSON.stringify(stream.history)).not.toContain('output_text');
+  });
+
   it('retains provider-opaque completion items in the live provider history', async () => {
     const model: StreamedModelTurn = {
       async *stream() {

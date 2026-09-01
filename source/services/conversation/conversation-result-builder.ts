@@ -113,15 +113,15 @@ export function createApprovalRequiredTerminal(options: {
 }
 
 const resolveFinalText = (streamedText: string | undefined, completedText: string | undefined): string => {
-  if (
-    completedText !== undefined &&
-    completedText !== '' &&
-    !(streamedText !== undefined && completedText === 'Done.')
-  ) {
-    return completedText;
+  // Whitespace-only model output is empty. Action-only or notification-only
+  // completions must not fabricate a terminal: downstream consumers already
+  // suppress empty text, so an action-only turn settles silently.
+  const trimmedCompleted = completedText?.trim();
+  if (trimmedCompleted && trimmedCompleted !== 'Done.') {
+    return trimmedCompleted;
   }
 
-  return streamedText ?? completedText ?? 'Done.';
+  return streamedText?.trim() ?? trimmedCompleted ?? '';
 };
 
 export async function buildConversationResult(

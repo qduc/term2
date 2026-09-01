@@ -489,6 +489,23 @@ describe('ConversationOrchestrator background subagent notifications mid-turn', 
 });
 
 describe('ConversationOrchestrator background subagent notifications', () => {
+  it('projects no assistant bot message when the model acknowledges a notification with no prose', async () => {
+    // Regression: an idle-path background notification opened a real model
+    // turn, and the fabricated terminal "Done." projected as a user-visible
+    // assistant reply to an operational event.
+    const h = makeHarness();
+    h.service.sendMessage.mockImplementation(
+      async (_input: string, _options?: { suppressUserMessageDisplay?: boolean }) => response(''),
+    );
+
+    h.emit(shellOutput());
+    await settle();
+
+    expect(h.service.sendMessage).toHaveBeenCalledTimes(1);
+    const botMessages = h.config.messages.getMessages().filter((message) => message.sender === 'bot');
+    expect(botMessages).toHaveLength(0);
+  });
+
   it('delivers a user-requested shell stop through an idle hidden turn', async () => {
     const h = makeHarness();
 

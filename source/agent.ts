@@ -55,7 +55,8 @@ import fs from 'fs';
 import path from 'path';
 import type { ISettingsService, ILoggingService } from './services/service-interfaces.js';
 import { ExecutionContext } from './services/execution-context.js';
-import { buildPromptSpec } from './prompts/prompt-constructor.js';
+import { buildPromptSpec, isLiteProfile } from './prompts/prompt-constructor.js';
+import { resolveProfile } from './services/profiles/index.js';
 import { shouldPreferPatchEditingModel } from './lib/tool-selection-policy.js';
 import { SkillsService } from './services/skills/skills-service.js';
 import { createActivateSkillToolDefinition } from './tools/agent/activate-skill.js';
@@ -277,8 +278,6 @@ export const getAgentDefinition = (
   if (!resolvedModel) throw new Error('Model cannot be undefined or empty');
 
   const planMode = settingsService.get('app.planMode');
-  const mentorMode = settingsService.get('app.mentorMode');
-  const liteMode = settingsService.get('app.liteMode');
   const orchestratorMode = settingsService.get('app.orchestratorMode');
   const searchViaShellSetting = settingsService.get('app.searchViaShell') ?? 'auto';
   const searchViaShell =
@@ -306,15 +305,23 @@ export const getAgentDefinition = (
       'orchestratorMode requires runSubagentAsync, getSubagentResult, getSubagentStatus, sendSubagentMessage, and cancelSubagentRun: cannot build orchestrator agent without asynchronous delegation.',
     );
   }
+  const profile = resolveProfile(settingsService.get('app.activeProfileId'), {
+    availableIntegrations: new Map([['builtin:integration/async-subagents', asyncSubagentEnabled]]),
+  });
+  const liteMode = isLiteProfile(profile);
+  const isContextSourceEnabled = (source: string): boolean =>
+    profile.context.sources.some((item) => item.source === source && item.enabled);
+  const environmentEnabled = isContextSourceEnabled('environment');
+  const projectInstructionsEnabled = isContextSourceEnabled('project-instructions');
+  const skillsCatalogEnabled = isContextSourceEnabled('skills-catalog');
+  const memoryContextEnabled = isContextSourceEnabled('memory');
+  const sessionBrowserContextEnabled = isContextSourceEnabled('session-browser');
   const memoryCapability = new MemoryCapabilityBuilder(settingsService, {
     onWarning: (message) => loggingService.warn(message),
   }).build({ kind: 'main' }, { projectPath: executionContext?.getCwd() ?? process.cwd() });
   const promptSpec = buildPromptSpec({
     model: resolvedModel,
-    liteMode,
-    orchestratorMode,
-    mentorMode,
-    planMode,
+    profile,
     searchViaShell,
     codeContextEnabled,
     runSubagentEnabled: Boolean(runSubagent) || asyncSubagentEnabled,
@@ -323,12 +330,12 @@ export const getAgentDefinition = (
     asyncSubagentControlsEnabled: asyncSubagentEnabled,
     backgroundShellEnabled: allowBackgroundShell && Boolean(backgroundShellRegistry),
     sandboxEnabled,
-    memoryEnabled: memoryCapability.access !== 'none',
+    memoryEnabled: memoryContextEnabled && memoryCapability.access !== 'none',
     memoryGuidance: memoryCapability.guidance,
-    sessionBrowserEnabled: Boolean(sessionBrowser),
+    sessionBrowserEnabled: sessionBrowserContextEnabled && Boolean(sessionBrowser),
     executionContext,
   });
-  let prompt = resolvePrompt(path.join(BASE_PROMPT_PATH, promptSpec.basePromptFile));
+  let prompt = promptSpec.basePromptContent ?? resolvePrompt(path.join(BASE_PROMPT_PATH, promptSpec.basePromptFile!));
 
   for (const fragmentFile of promptSpec.fragmentFiles) {
     try {
@@ -342,7 +349,7 @@ export const getAgentDefinition = (
     prompt = `${prompt}\n\n${inlineSection}`;
   }
 
-  if (memoryCapability.context) {
+  if (memoryContextEnabled && memoryCapability.context) {
     prompt = `${prompt}\n\n${memoryCapability.context}`;
   }
 
@@ -352,12 +359,12 @@ export const getAgentDefinition = (
   // the search-tool descriptions consistent so the model does not call a tool
   // that is not on its allowlist.
   const globAvailable = !searchViaShell && (liteMode || !isGpt5);
-  const envInfo = getEnvInfo(settingsService, executionContext, isLiteEnv);
-  const skipAgentsMd = isLiteEnv || (executionContext?.isRemote() ?? false);
+  const envInfo = environmentEnabled ? getEnvInfo(settingsService, executionContext, isLiteEnv) : '';
+  const skipAgentsMd = !projectInstructionsEnabled || (executionContext?.isRemote() ?? false);
   const agentsInstructions = skipAgentsMd ? '' : getAgentsInstructions(cwd);
 
   let skillsInstructions = '';
-  if (skillsService) {
+  if (skillsCatalogEnabled && skillsService) {
     const catalog = skillsService.getSkillCatalog();
     if (catalog) {
       skillsInstructions = `\n\n${catalog}`;
@@ -543,7 +550,9 @@ export const getAgentDefinition = (
 
   return {
     name: 'Terminal Assistant',
-    instructions: `${prompt}\n\nEnvironment: ${envInfo}${agentsInstructions}${skillsInstructions}`,
+    instructions: `${prompt}\n\n${
+      environmentEnabled ? `Environment: ${envInfo}` : ''
+    }${agentsInstructions}${skillsInstructions}`,
     tools,
     model: resolvedModel,
   };

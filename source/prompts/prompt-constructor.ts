@@ -1,4 +1,5 @@
 import type { ExecutionContext } from '../services/execution-context.js';
+import type { ResolvedProfile } from '../services/profiles/index.js';
 import { selectPromptProfile } from './prompt-profiles.js';
 import { getSearchViaShellAddendum } from './search-via-shell.js';
 import { getSubagentDelegationAddendum } from './subagent-delegation.js';
@@ -7,11 +8,7 @@ import { getBackgroundShellAddendum } from './background-shell.js';
 
 export type PromptConstructorOptions = {
   model: string;
-  liteMode: boolean;
-  /** Runtime-only mode flags; mode-specific workflows are sent as notices. */
-  orchestratorMode?: boolean;
-  mentorMode?: boolean;
-  planMode?: boolean;
+  profile: ResolvedProfile;
   searchViaShell?: boolean;
   codeContextEnabled?: boolean;
   runSubagentEnabled?: boolean;
@@ -27,15 +24,20 @@ export type PromptConstructorOptions = {
 };
 
 export type PromptSpec = {
-  basePromptFile: string;
+  basePromptFile?: string;
+  basePromptContent?: string;
   fragmentFiles: string[];
   inlineSections: string[];
 };
 
+export function isLiteProfile(profile: ResolvedProfile): boolean {
+  return profile.instructions.identity.kind === 'markdown';
+}
+
 export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
   const {
     model,
-    liteMode,
+    profile,
     searchViaShell = false,
     runSubagentEnabled = false,
     runSubagentForegroundEnabled = false,
@@ -49,11 +51,12 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     executionContext,
   } = options;
 
-  // Runtime modes are intentionally absent from profile selection. Their full
-  // workflows ride on the next user turn so rebuilding the agent does not
-  // invalidate the provider's instruction prefix.
-  const profile = selectPromptProfile({ model, liteMode });
-  const fragmentFiles = [...(profile.fragmentFiles ?? [])];
+  const liteMode = isLiteProfile(profile);
+  // Runtime modes are intentionally absent from model-family profile selection.
+  // Their full workflows ride on the next user turn so rebuilding the agent does
+  // not invalidate the provider's instruction prefix.
+  const promptProfile = selectPromptProfile({ model, liteMode: false });
+  const fragmentFiles = [...(promptProfile.fragmentFiles ?? [])];
   const inlineSections: string[] = [];
 
   const isRegularMode = !liteMode;
@@ -118,7 +121,12 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
   }
 
   return {
-    basePromptFile: profile.basePromptFile,
+    ...(liteMode
+      ? {
+          basePromptContent:
+            profile.instructions.identity.kind === 'markdown' ? profile.instructions.identity.content : undefined,
+        }
+      : { basePromptFile: promptProfile.basePromptFile }),
     fragmentFiles,
     inlineSections,
   };

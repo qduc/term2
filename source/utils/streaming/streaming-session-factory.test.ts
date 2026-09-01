@@ -301,3 +301,78 @@ it('tracks speed during tool_call_streaming_delta without error', () => {
 
   expect(speedReports.length).toBeGreaterThan(0);
 });
+
+it('measures each request in a turn separately, resetting at tool_dispatched', () => {
+  const lastUsageHistory: any[] = [];
+  let currentTime = 0;
+
+  const session = createStreamingSession(
+    {
+      appendMessages: () => {},
+      setMessages: () => {},
+      trimMessages: (messages) => messages,
+      annotateCommandMessage: (msg) => msg,
+      loggingService: {
+        info: () => {},
+        warn: () => {},
+        error: () => {},
+        debug: () => {},
+        security: () => {},
+        setCorrelationId: () => {},
+        getCorrelationId: () => undefined,
+        clearCorrelationId: () => {},
+      },
+      setLastUsage: (usage) => {
+        lastUsageHistory.push(usage);
+      },
+      setStreamingSpeed: () => {},
+      reasoningThrottleMs: 200,
+      now: () => currentTime,
+      createConversationEventHandler: () => () => {},
+    },
+    'sendUserMessage',
+  );
+
+  // First model request: streams 10 tokens over 1s (t=0 -> t=1000), then its own usage_update
+  // (per-request completion_tokens=10) arrives before the tool it called is dispatched.
+  currentTime = 0;
+  session.applyConversationEvent({ type: 'text_delta', delta: 'a'.repeat(4), fullText: 'a' } as const);
+  currentTime = 1000;
+  session.applyConversationEvent({ type: 'text_delta', delta: 'a'.repeat(36), fullText: 'aa' } as const);
+  session.applyConversationEvent({
+    type: 'usage_update',
+    usage: { prompt_tokens: 5, completion_tokens: 10, total_tokens: 15 },
+  } as const);
+  const firstRequestUsage = lastUsageHistory[lastUsageHistory.length - 1];
+  expect(firstRequestUsage.tokens_per_second).toBe(10); // 10 tok / 1s
+
+  // Tool executes for 5s: t=1000 -> t=6000. This resets the tracker for the next request.
+  session.applyConversationEvent({
+    type: 'tool_dispatched',
+    toolCallId: 'call-1',
+    toolName: 'bash',
+  } as const);
+
+  // Second model request resumes after the tool: 20 tokens over 1s (t=6000 -> t=7000), measured
+  // from zero — not diluted by the 5s tool gap or averaged with the first request's 10 tok/s.
+  currentTime = 6000;
+  session.applyConversationEvent({ type: 'text_delta', delta: 'b'.repeat(4), fullText: 'ab' } as const);
+  currentTime = 7000;
+  session.applyConversationEvent({ type: 'text_delta', delta: 'b'.repeat(76), fullText: 'abb' } as const);
+  session.applyConversationEvent({
+    type: 'usage_update',
+    usage: { prompt_tokens: 20, completion_tokens: 20, total_tokens: 40 },
+  } as const);
+  const secondRequestUsage = lastUsageHistory[lastUsageHistory.length - 1];
+  expect(secondRequestUsage.tokens_per_second).toBe(20); // 20 tok / 1s, not 30 tok / 7s
+
+  // Turn ends: final carries the run-cumulative total. It must not overwrite the second
+  // request's already-correct settled TPS with a value derived from the cumulative token count.
+  session.applyConversationEvent({
+    type: 'final',
+    finalText: 'abb',
+    usage: { prompt_tokens: 25, completion_tokens: 30, total_tokens: 55 },
+  } as const);
+
+  expect(secondRequestUsage.tokens_per_second).toBe(20);
+});

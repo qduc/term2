@@ -4,6 +4,12 @@
  * Handles both:
  * 1. Live generation speed during streaming (using exact token updates or character heuristics).
  * 2. Settled decoding speed calculated at the end of a generation turn.
+ *
+ * A single agent turn can involve multiple separate model requests interleaved with tool
+ * execution (model generates, calls a tool, tool runs, model resumes with a fresh request).
+ * Tool-execution latency is not generation, so the tracker is reset at each such boundary
+ * (see `reset()`) rather than averaged across the whole turn — each request's speed is measured
+ * independently, starting from zero.
  */
 
 export interface StreamingSpeedSnapshot {
@@ -16,17 +22,51 @@ export interface StreamingSpeedSnapshot {
 /** Average characters per token heuristic for English/code text when provider does not stream token counts. */
 const DEFAULT_CHARS_PER_TOKEN = 3.8;
 
+/** Live speed is computed over a trailing window so it tracks current throughput, not the whole-request average. */
+const LIVE_WINDOW_MS = 3000;
+
+interface TokenSample {
+  time: number;
+  tokens: number;
+}
+
 export class StreamingSpeedTracker {
-  private readonly startTime: number;
+  private startTime: number;
   private firstTokenTime: number | null = null;
   private lastUpdateTime: number | null = null;
   private accumulatedChars = 0;
   private exactTokens: number | null = null;
   private readonly charsPerToken: number;
+  /** Rolling history of (time, cumulative token count) samples, oldest first, used for windowed live TPS. */
+  private samples: TokenSample[] = [];
 
   constructor(options?: { startTime?: number; charsPerToken?: number }) {
     this.startTime = options?.startTime ?? Date.now();
     this.charsPerToken = options?.charsPerToken ?? DEFAULT_CHARS_PER_TOKEN;
+  }
+
+  /**
+   * Reset all accumulated state so the next recorded token starts a brand-new measurement,
+   * unrelated to anything recorded before this call. Call this at request boundaries within a
+   * turn — e.g. when a tool starts executing — so tool latency never mixes into decode speed and
+   * the next model request's speed isn't diluted by a previous request's average.
+   */
+  public reset(now: number = Date.now()): void {
+    this.startTime = now;
+    this.firstTokenTime = null;
+    this.lastUpdateTime = null;
+    this.accumulatedChars = 0;
+    this.exactTokens = null;
+    this.samples = [];
+  }
+
+  private recordSample(now: number): void {
+    this.samples.push({ time: now, tokens: this.getEstimatedTokens() });
+    // Drop samples older than the window plus one extra so we always have a boundary sample to interpolate from.
+    const cutoff = now - LIVE_WINDOW_MS * 2;
+    while (this.samples.length > 1 && this.samples[0].time < cutoff) {
+      this.samples.shift();
+    }
   }
 
   /**
@@ -40,6 +80,7 @@ export class StreamingSpeedTracker {
     }
     this.accumulatedChars += length;
     this.lastUpdateTime = now;
+    this.recordSample(now);
   }
 
   /**
@@ -52,6 +93,7 @@ export class StreamingSpeedTracker {
     }
     this.accumulatedChars = Math.max(this.accumulatedChars, cumulativeChars);
     this.lastUpdateTime = now;
+    this.recordSample(now);
   }
 
   /**
@@ -63,6 +105,7 @@ export class StreamingSpeedTracker {
     }
     this.exactTokens = completionTokens;
     this.lastUpdateTime = now;
+    this.recordSample(now);
   }
 
   /**
@@ -86,8 +129,11 @@ export class StreamingSpeedTracker {
   /**
    * Get live tokens per second during an in-flight stream.
    *
-   * Generation speed is measured from the arrival of the FIRST token to now (decoding speed),
-   * excluding prefill/TTFT latency.
+   * Computed over a trailing window (LIVE_WINDOW_MS) of recent samples rather than the
+   * whole-request average, so the displayed number tracks current throughput instead of trailing
+   * behind a slow start. Falls back to the full-history average until enough time has elapsed
+   * since the first token to fill a window. `reset()` clears history at request boundaries, so
+   * this never spans across a tool-execution gap or a prior request.
    */
   public getLiveTps(now: number = Date.now()): number | null {
     if (this.firstTokenTime === null) return null;
@@ -98,10 +144,29 @@ export class StreamingSpeedTracker {
       return null;
     }
 
-    const tokens = this.getEstimatedTokens();
-    if (tokens <= 0) return null;
+    const tokensNow = this.getEstimatedTokens();
+    if (tokensNow <= 0) return null;
 
-    const durationSec = generationDurationMs / 1000;
+    const windowStart = now - LIVE_WINDOW_MS;
+    // Find the newest sample at or before windowStart to anchor the window; if none exists
+    // (turn is younger than the window), anchor at the first token instead.
+    let anchor: TokenSample | null = null;
+    for (const sample of this.samples) {
+      if (sample.time <= windowStart) {
+        anchor = sample;
+      } else {
+        break;
+      }
+    }
+
+    const anchorTime = anchor ? anchor.time : this.firstTokenTime;
+    const anchorTokens = anchor ? anchor.tokens : 0;
+
+    const durationMs = now - anchorTime;
+    const tokens = tokensNow - anchorTokens;
+    if (durationMs < 200 || tokens <= 0) return null;
+
+    const durationSec = durationMs / 1000;
     const tps = tokens / durationSec;
     return Number.isFinite(tps) && tps > 0 ? Math.round(tps * 10) / 10 : null;
   }

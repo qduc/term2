@@ -145,6 +145,11 @@ export function createStreamingSession(deps: StreamingSessionFactoryDeps, label:
     } else if (event.type === 'tool_call_streaming_delta') {
       speedTracker.recordCumulativeChars(event.argumentCharCount, now());
       notifySpeed();
+    } else if (event.type === 'tool_dispatched') {
+      // Tool execution isn't token generation and belongs to a separate model request than
+      // whatever comes next; reset so the next request's speed is measured from zero instead of
+      // being diluted by tool latency or averaged together with this request.
+      speedTracker.reset(now());
     } else if (event.type === 'usage_update') {
       if (event.usage.completion_tokens) {
         speedTracker.recordUsageTokens(event.usage.completion_tokens, now());
@@ -163,11 +168,12 @@ export function createStreamingSession(deps: StreamingSessionFactoryDeps, label:
       deps.setLastUsage(event.usage);
     } else if (event.type === 'final') {
       deps.setStreamingSpeed?.(null);
-      const completionTokens = event.usage?.completion_tokens ?? streamingState.latestUsage?.completion_tokens;
-      const finalTps = speedTracker.getSettledTps(completionTokens, now());
-      const ttftMs = speedTracker.getTtftMs();
 
       if (event.usage && !streamingState.latestUsage) {
+        // No usage_update happened during this turn (e.g. a single non-tool-call request), so
+        // this is the only chance to compute settled TPS for it.
+        const finalTps = speedTracker.getSettledTps(event.usage.completion_tokens, now());
+        const ttftMs = speedTracker.getTtftMs();
         if (finalTps != null) {
           event.usage.tokens_per_second = finalTps;
         }
@@ -178,19 +184,15 @@ export function createStreamingSession(deps: StreamingSessionFactoryDeps, label:
         streamingState.latestUsage = event.usage;
         deps.setLastUsage(event.usage);
       } else if (event.usage) {
-        if (streamingState.latestUsage) {
-          if (finalTps != null) streamingState.latestUsage.tokens_per_second = finalTps;
-          if (ttftMs != null) streamingState.latestUsage.ttft_ms = ttftMs;
-        }
+        // A usage_update already computed the correct per-request TPS for the last request in
+        // this turn (before the tracker was reset for tool execution / subsequent requests).
+        // final's usage is the run-cumulative total, not a fresh generation to measure — leave
+        // the already-settled per-request value on streamingState.latestUsage untouched.
         deps.loggingService.debug(`UI keeping last streamed turn usage; final carries run total (${label})`, {
           finalUsage: event.usage,
           shownUsage: streamingState.latestUsage,
         });
       } else {
-        if (streamingState.latestUsage) {
-          if (finalTps != null) streamingState.latestUsage.tokens_per_second = finalTps;
-          if (ttftMs != null) streamingState.latestUsage.ttft_ms = ttftMs;
-        }
         deps.loggingService.debug(`UI final event has no usage (${label})`);
       }
     } else if (event.type === 'run_budget' && deps.setRunBudgetNotice) {

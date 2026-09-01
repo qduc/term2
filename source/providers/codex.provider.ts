@@ -1,5 +1,6 @@
 import type { ContextCompactionSessionState, StreamedModelTurn } from '../contracts/streamed-model-turn.js';
 import OpenAI from 'openai';
+import { randomUUID } from 'node:crypto';
 import { CodexResponsesModel, CodexResponsesTransport, CodexResponsesWSModel } from './codex-responses-model.js';
 import { RetryingModel } from './retrying-model.js';
 import fs from 'node:fs';
@@ -555,6 +556,11 @@ function codexAuthMiddleware(
         headers['chatgpt-account-id'] = accountId;
       }
 
+      const installationId = tokenManager.getInstallationId();
+      if (installationId) {
+        headers['x-codex-installation-id'] = installationId;
+      }
+
       return next({ url: ctx.url, init: { ...ctx.init, headers } });
     } catch (err: any) {
       loggingService.error('Codex OAuth fetch interceptor error', {
@@ -562,6 +568,45 @@ function codexAuthMiddleware(
       });
       throw err;
     }
+  };
+}
+
+export function addCodexCompactHeaders(
+  url: unknown,
+  headers: HeadersInit,
+  sessionId: string | undefined,
+): Record<string, string> {
+  const target = typeof url === 'string' ? url : url instanceof URL ? url.toString() : '';
+  const normalizedHeaders: Record<string, string> = {};
+  if (headers instanceof Headers) {
+    headers.forEach((value, key) => {
+      normalizedHeaders[key] = value;
+    });
+  } else if (Array.isArray(headers)) {
+    for (const [key, value] of headers) normalizedHeaders[key] = value;
+  } else if (headers) {
+    for (const [key, value] of Object.entries(headers)) normalizedHeaders[key] = String(value);
+  }
+  if (!target.includes('/responses/compact') || !sessionId) return normalizedHeaders;
+
+  const threadId = sessionId;
+  const turnId = randomUUID();
+  const windowId = `${threadId}:1`;
+  const turnMetadata = JSON.stringify({
+    installation_id: normalizedHeaders['x-codex-installation-id'],
+    session_id: sessionId,
+    thread_id: threadId,
+    turn_id: turnId,
+    window_id: windowId,
+    request_kind: 'compaction',
+  });
+  return {
+    ...normalizedHeaders,
+    'x-client-request-id': threadId,
+    'session-id': sessionId,
+    'thread-id': threadId,
+    'x-codex-window-id': windowId,
+    'x-codex-turn-metadata': turnMetadata,
   };
 }
 
@@ -587,7 +632,7 @@ function codexHeadersMiddleware(sessionContextService?: ISessionContextService):
       extraHeaders['session_id'] = sessionId;
     }
 
-    const mergedHeaders = injectHeaders(ctx.init?.headers, extraHeaders);
+    const mergedHeaders = addCodexCompactHeaders(ctx.url, injectHeaders(ctx.init?.headers, extraHeaders), sessionId);
     return next({ url: ctx.url, init: { ...ctx.init, headers: mergedHeaders } });
   };
 }

@@ -106,6 +106,7 @@ export class CodexResponsesTransport {
       {
         model: this.model,
         input: request.input,
+        parallel_tool_calls: false,
         ...(request.instructions !== undefined ? { instructions: request.instructions } : {}),
       },
       request.signal ? { signal: request.signal } : undefined,

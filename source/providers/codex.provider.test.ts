@@ -14,6 +14,7 @@ import {
   resolveCodexClientVersion,
   sanitizeCodexRequestInit,
   addCodexResponsesLiteHeader,
+  addCodexCompactHeaders,
   CodexProvider,
 } from './codex.provider.js';
 
@@ -815,6 +816,31 @@ it.sequential('Codex fetchModels injects ChatGPT-Account-Id header if present', 
       fs.unlinkSync(path.join(TEST_DIR, 'auth.json'));
     } catch {}
   }
+});
+
+it('adds upstream compaction identity headers only to the compact endpoint', () => {
+  const headers = addCodexCompactHeaders(
+    'https://chatgpt.com/backend-api/codex/responses/compact',
+    { authorization: 'Bearer <REDACTED>', 'x-codex-installation-id': 'installation-123' },
+    'session-123',
+  );
+
+  expect(headers).toMatchObject({
+    'session-id': 'session-123',
+    'thread-id': 'session-123',
+    'x-client-request-id': 'session-123',
+    'x-codex-window-id': 'session-123:1',
+  });
+  expect(JSON.parse(headers['x-codex-turn-metadata']!)).toMatchObject({
+    installation_id: 'installation-123',
+    session_id: 'session-123',
+    thread_id: 'session-123',
+    window_id: 'session-123:1',
+    request_kind: 'compaction',
+  });
+  expect(addCodexCompactHeaders('https://chatgpt.com/backend-api/codex/responses', headers, 'session-123')).toEqual(
+    headers,
+  );
 });
 
 it.sequential('Codex provider createStreamedModel custom fetch injects chatgpt-account-id header', async () => {

@@ -462,6 +462,7 @@ it('CodexResponsesTransport.compactHistory calls the compact endpoint and marks 
     expect(body).toEqual({
       model: 'gpt-5.6-sol',
       input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] }],
+      parallel_tool_calls: false,
     });
     return {
       output: [

@@ -21,6 +21,7 @@ import {
 
 const READ_FILE_DESCRIPTION =
   'Read file content from the workspace (like cat command). Supports reading specific line ranges. ' +
+  'Image files are returned as image content for visual models. ' +
   'Use this to inspect a known file or verify a specific claim about a location. ' +
   'Avoid reading tiny repeated chunks (e.g. 50 lines at a time); read the full file if it is under 1000 lines or use a larger window. ' +
   'Do NOT use this to search for text across files (use grep). ' +
@@ -28,16 +29,58 @@ const READ_FILE_DESCRIPTION =
   'Large results are truncated and the full payload is saved to a file; look for "Full output saved to" and read that path when you need more.';
 const READ_FILE_DESCRIPTION_OUTSIDE =
   'Read file content from the filesystem (like cat command). Supports reading specific line ranges. ' +
+  'Image files are returned as image content for visual models. ' +
   'Use this to inspect a known file or verify a specific claim about a location. ' +
   'Avoid reading tiny repeated chunks (e.g. 50 lines at a time); read the full file if it is under 1000 lines or use a larger window. ' +
   'Returns the file path, total line count, and the requested lines. ' +
   'Large results are truncated and the full payload is saved to a file; look for "Full output saved to" and read that path when you need more.';
 const READ_FILE_DESCRIPTION_ORCHESTRATOR =
   'Inspect a known file directly, including to understand a small or clear area of the workspace. ' +
+  'Image files are returned as image content for visual models. ' +
   'Delegate broad or separable exploration when it provides meaningful context compression or specialization. ' +
   'Supports line ranges — read the smallest relevant range. ' +
   'Returns the file path, total line count, and the requested lines. ' +
   'Large results are truncated and the full payload is saved to a file; look for "Full output saved to" and read that path when you need more.';
+
+/** Detect image formats that the model adapters can send as image content. */
+function detectImageMediaType(buffer: Buffer, filePath: string): string | undefined {
+  if (
+    buffer.length >= 8 &&
+    buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  ) {
+    return 'image/png';
+  }
+  if (buffer.length >= 3 && buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) return 'image/jpeg';
+  if (
+    buffer.length >= 6 &&
+    (buffer.subarray(0, 6).toString('ascii') === 'GIF87a' || buffer.subarray(0, 6).toString('ascii') === 'GIF89a')
+  ) {
+    return 'image/gif';
+  }
+  if (
+    buffer.length >= 12 &&
+    buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+  if (buffer.length >= 2 && buffer.subarray(0, 2).equals(Buffer.from([0x42, 0x4d]))) return 'image/bmp';
+  if (
+    buffer.length >= 4 &&
+    (buffer.subarray(0, 4).equals(Buffer.from([0x49, 0x49, 0x2a, 0x00])) ||
+      buffer.subarray(0, 4).equals(Buffer.from([0x4d, 0x4d, 0x00, 0x2a])))
+  ) {
+    return 'image/tiff';
+  }
+  if (buffer.length >= 4 && buffer.subarray(0, 4).equals(Buffer.from([0x00, 0x00, 0x01, 0x00]))) return 'image/x-icon';
+  if (
+    /\.svg$/i.test(filePath) &&
+    /^\s*(?:<\?xml[^>]*>\s*)?<svg(?:\s|>)/i.test(buffer.toString('utf8', 0, Math.min(buffer.length, 512)))
+  ) {
+    return 'image/svg+xml';
+  }
+  return undefined;
+}
 
 const readFileParametersSchema = z.object({
   path: z.string().describe('File path relative to workspace root'),
@@ -170,6 +213,20 @@ export const createReadFileToolDefinition = (
 
         if (buffer.length === 0) {
           return '';
+        }
+
+        const imageMediaType = detectImageMediaType(buffer, filePath);
+        if (imageMediaType) {
+          return [
+            {
+              type: 'text',
+              text: `Image: ${filePath} (${buffer.length} bytes, ${imageMediaType})`,
+            },
+            {
+              type: 'image',
+              image: { data: buffer.toString('base64'), mediaType: imageMediaType },
+            },
+          ];
         }
 
         if (looksLikeBinary(buffer)) {

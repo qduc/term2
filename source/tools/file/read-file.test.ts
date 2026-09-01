@@ -3,6 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { createReadFileToolDefinition } from './read-file.js';
+import { coerceToText } from '../format-helpers.js';
 import { SessionAccessState } from '../../services/session/session-access-state.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 
@@ -277,6 +278,32 @@ it.sequential('execute: refuses binary files without dumping contents', async ()
     expect(result).toContain('binary');
     expect(result).not.toContain('\u0000');
   });
+});
+
+it.sequential('execute: returns supported image files as a multimodal tool result', async () => {
+  await withTempDir(async (dir) => {
+    const filePath = 'screenshot.png';
+    const imageBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01, 0x02, 0x03]);
+    await fs.writeFile(path.join(dir, filePath), imageBytes);
+
+    const result = (await readFileToolDefinition.execute({ path: filePath })) as Array<Record<string, unknown>>;
+
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual({ type: 'text', text: 'Image: screenshot.png (12 bytes, image/png)' });
+    expect(result[1]).toEqual({
+      type: 'image',
+      image: { data: imageBytes.toString('base64'), mediaType: 'image/png' },
+    });
+  });
+});
+
+it('formatting a multimodal result does not expose encoded image data as text', () => {
+  expect(
+    coerceToText([
+      { type: 'text', text: 'Image: screenshot.png' },
+      { type: 'image', image: { data: 'very-large-base64-payload', mediaType: 'image/png' } },
+    ]),
+  ).toBe('Image: screenshot.png');
 });
 
 it.sequential('execute: truncates on a multibyte character boundary without corrupting UTF-8', async () => {

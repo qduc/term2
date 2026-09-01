@@ -63,6 +63,15 @@ export const coerceToText = (value: unknown): string => {
 
   if (Array.isArray(value)) {
     return value
+      .filter((part) => {
+        // Multimodal tool results can contain large binary payloads. They are
+        // sent to the model, but should not be rendered as command text.
+        return !(
+          typeof part === 'object' &&
+          part !== null &&
+          ['image', 'file'].includes(String((part as { type?: unknown }).type))
+        );
+      })
       .map((part) => coerceToText(part))
       .filter(Boolean)
       .join('\n');

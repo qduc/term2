@@ -5,6 +5,7 @@ import type {
   SubagentToolStartedEvent,
 } from '../conversation/conversation-events.js';
 import type { SubagentResult } from './types.js';
+import { isTerminalSubagentResult } from './types.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import { formatToolCommand, parseToolArguments } from '../../utils/conversation/conversation-utils.js';
 import { formatSubagentResult, truncatePreview } from './utils.js';
@@ -328,7 +329,7 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
 
     if (event.type !== 'subagent_completed' || event.async !== true) return false;
     const result = event.result;
-    if (!result?.agentId) return false;
+    if (!result?.agentId || !isTerminalSubagentResult(result)) return false;
     if (this.#settledTaskIds.has(result.agentId)) return false;
 
     const existing = this.#tasks.get(result.agentId);
@@ -530,7 +531,7 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
     if (event.type === 'subagent_completed' && event.async === true) {
       const result = (event as { result?: SubagentResult }).result;
       const runId = result?.agentId;
-      if (!result || !runId) return undefined;
+      if (!result || !runId || !isTerminalSubagentResult(result)) return undefined;
       const task = this.#tasks.get(runId);
       return {
         kind: 'completion',

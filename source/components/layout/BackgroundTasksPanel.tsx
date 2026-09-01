@@ -92,6 +92,8 @@ const formatObservation = (task: BackgroundTaskControlDetails): string => {
       return 'Response started';
     case 'text_received':
       return 'Text received';
+    case 'tool_input_received':
+      return `Tool input received: ${observation.toolName} (${observation.argumentCharCount} chars)`;
     case 'tool_started':
       return `Tool started: ${observation.toolName}`;
     case 'tool_completed': {

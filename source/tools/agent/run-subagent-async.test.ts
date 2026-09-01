@@ -325,6 +325,24 @@ describe('get_subagent_status tool', () => {
     expect(raw).not.toContain('hung');
   });
 
+  it('shows bounded in-flight tool argument progress without argument content', () => {
+    const tool = createGetSubagentStatusToolDefinition(() =>
+      makeStatus({
+        streamingTool: { name: 'apply_patch', argumentCharCount: 43_503 },
+        lastObservation: {
+          kind: 'tool_input_received',
+          at: 10_000,
+          toolName: 'apply_patch',
+          argumentCharCount: 43_503,
+        },
+      }),
+    );
+
+    const raw = tool.execute({ runId: 'run-123' });
+    expect(raw).toContain('streamingTool: apply_patch (43503 argument chars)');
+    expect(raw).not.toContain('operations');
+  });
+
   it('does not invent liveness evidence when the status has no observation timestamp', () => {
     const tool = createGetSubagentStatusToolDefinition(
       () => makeStatus(),

@@ -597,9 +597,14 @@ describe('NestedSubagentRunner end to end', () => {
     expect(result.finalText).toBe('Budget wrap-up summary.');
     expect(result.filesChanged).toEqual(['notes.md']);
     expect(result.toolsUsed).toEqual([{ toolName: 'fake_tool', count: 3 }]);
-    expect(events.find((event) => event.type === 'subagent_interrupted')).toMatchObject({
-      agentId: 'parent-call-1',
-      finalText: 'Budget wrap-up summary.',
+    expect(events.filter((event) => event.type === 'subagent_completed')).toHaveLength(1);
+    expect(events.find((event) => event.type === 'subagent_completed')).toMatchObject({
+      result: {
+        agentId: 'parent-call-1',
+        status: 'interrupted',
+        terminalCause: 'budget_exhausted',
+        finalText: 'Budget wrap-up summary.',
+      },
     });
     expect(warn).not.toHaveBeenCalled();
   });
@@ -671,8 +676,9 @@ describe('NestedSubagentRunner end to end', () => {
     expect(requests[1]?.tools).toEqual([]);
     expect(result).toMatchObject({ status: 'interrupted', terminalCause: 'budget_exhausted' });
     expect(result.toolsUsed).toEqual([{ toolName: 'fake_tool', count: 1 }]);
-    expect(events).toContainEqual(
-      expect.objectContaining({ type: 'subagent_interrupted', agentId: 'budget-tool-proposal' }),
-    );
+    expect(events.filter((event) => event.type === 'subagent_completed')).toHaveLength(1);
+    expect(events.find((event) => event.type === 'subagent_completed')).toMatchObject({
+      result: { agentId: 'budget-tool-proposal', status: 'interrupted', terminalCause: 'budget_exhausted' },
+    });
   });
 });

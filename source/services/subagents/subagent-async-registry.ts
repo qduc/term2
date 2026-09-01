@@ -14,6 +14,7 @@ import type {
   SubagentSteerAcknowledgement,
   ValidationEvidence,
 } from './types.js';
+import { isTerminalSubagentResult } from './types.js';
 import { SubagentRunControl } from './subagent-run-control.js';
 import { SubagentSession } from './subagent-session.js';
 import { isAbortLike, safeEmit, truncatePreview } from './utils.js';
@@ -92,6 +93,7 @@ type StoredRun = {
   turnHistory: TurnSnapshot[];
   pendingToolCounts: Map<string, number>;
   currentText: string;
+  streamingTool?: { name: string; argumentCharCount: number };
   /** Bounded liveness evidence; no streamed text or output is retained here. */
   lastActivityAt: number;
   lastObservation: BackgroundTaskObservation;
@@ -449,6 +451,7 @@ export class SubagentAsyncRegistry {
           }
         : {}),
       ...(run.currentText.trim() ? { currentText: run.currentText } : {}),
+      ...(run.streamingTool === undefined ? {} : { streamingTool: { ...run.streamingTool } }),
       ...(Object.keys(pendingToolCounts).length > 0 ? { pendingToolCounts } : {}),
     };
   }
@@ -462,7 +465,7 @@ export class SubagentAsyncRegistry {
   handleSubagentEvent(event: ConversationEvent): void {
     if (event.type === 'subagent_completed') {
       const run = this.#runs.get(event.result.agentId);
-      if (run?.lease && !run.settled) {
+      if (run?.lease && !run.settled && isTerminalSubagentResult(event.result)) {
         this.#accumulateEvidence(run.evidence, event.result);
         this.#settle(run, this.#assembleTerminalResult(run, event.result), false);
       }
@@ -472,6 +475,7 @@ export class SubagentAsyncRegistry {
       event.type !== 'subagent_tool_started' &&
       event.type !== 'subagent_text_turn' &&
       event.type !== 'subagent_streaming_text' &&
+      event.type !== 'subagent_streaming_tool' &&
       event.type !== 'subagent_command_message' &&
       event.type !== 'subagent_approval_required' &&
       event.type !== 'usage_update' &&
@@ -496,6 +500,7 @@ export class SubagentAsyncRegistry {
 
     if (event.type === 'retry') {
       run.responseInStream = false;
+      run.streamingTool = undefined;
       this.#observe(
         run,
         { kind: 'retrying', at: this.#now(), attempt: event.attempt, maxRetries: event.maxRetries },
@@ -518,6 +523,23 @@ export class SubagentAsyncRegistry {
       return;
     }
 
+    if (event.type === 'subagent_streaming_tool') {
+      const toolName = sanitizeBackgroundTaskToolLabel(event.toolName);
+      run.responseInStream = true;
+      run.streamingTool = { name: toolName, argumentCharCount: event.argumentCharCount };
+      this.#observe(
+        run,
+        {
+          kind: 'tool_input_received',
+          at: this.#now(),
+          toolName,
+          argumentCharCount: event.argumentCharCount,
+        },
+        'active',
+      );
+      return;
+    }
+
     if (event.type === 'subagent_text_turn') {
       this.#observe(run, { kind: 'text_received', at: this.#now() }, 'active');
       run.turnHistory.push({
@@ -535,6 +557,7 @@ export class SubagentAsyncRegistry {
       const toolStillRunning = event.message.status === 'pending' || event.message.status === 'running';
       if (toolStillRunning) return;
       run.responseInStream = false;
+      run.streamingTool = undefined;
       this.#observe(
         run,
         {
@@ -552,6 +575,7 @@ export class SubagentAsyncRegistry {
     if (!name) return;
     const displayName = sanitizeBackgroundTaskToolLabel(name);
     run.responseInStream = false;
+    run.streamingTool = undefined;
     this.#observe(run, { kind: 'tool_started', at: this.#now(), toolName: displayName }, 'active');
     run.toolCounts.set(name, (run.toolCounts.get(name) ?? 0) + 1);
     run.pendingToolCounts.set(name, (run.pendingToolCounts.get(name) ?? 0) + 1);
@@ -746,6 +770,7 @@ export class SubagentAsyncRegistry {
   #startSegment(run: StoredRun, request: SubagentRequest, input: string): void {
     if (run.settled) return;
     run.responseInStream = false;
+    run.streamingTool = undefined;
     this.#observe(run, { kind: 'request_dispatched', at: this.#now() }, 'waiting', 'provider');
     const controller = run.control.beginSegment();
     void this.#executeSegment(run, request, input, controller);
@@ -794,6 +819,10 @@ export class SubagentAsyncRegistry {
     }
     run.control.endSegment(controller);
     this.#accumulateEvidence(run.evidence, result);
+    // An approval interruption is a live pause, not a terminal result. The
+    // foreground lease owns its continuation; only a terminal interrupted
+    // result (with a cause) may settle and notify this registry.
+    if (!isTerminalSubagentResult(result)) return;
     if (run.control.cancellationRequested) {
       this.#settle(run, this.#assembleTerminalResult(run, result));
       return;
@@ -810,6 +839,7 @@ export class SubagentAsyncRegistry {
   #settle(run: StoredRun, result: SubagentResult, emit = true): void {
     if (run.settled) return;
     run.status = result.status;
+    run.streamingTool = undefined;
     this.#observe(run, { kind: 'settled', at: this.#now() }, 'settled');
     run.result = result;
     run.lastUsedAt = this.#now();

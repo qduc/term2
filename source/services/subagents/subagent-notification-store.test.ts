@@ -715,6 +715,35 @@ it('carries the cancellation status and error text of a cancelled run', () => {
   ]);
 });
 
+it.each([
+  ['completed', {}],
+  ['failed', { error: 'model exploded', finalText: '' }],
+  ['cancelled', { error: 'The subagent run was aborted.', finalText: '' }],
+  ['interrupted', { terminalCause: 'budget_exhausted' as const }],
+] as const)('queues exactly one terminal %s completion and ignores its late duplicate', (status, extra) => {
+  const store = makeStore();
+  const terminal = completed({ agentId: `terminal-${status}`, status, ...extra });
+
+  expect(store.recordLifecycle(started({ agentId: `terminal-${status}` }))).toBe(true);
+  expect(store.recordLifecycle(terminal)).toBe(true);
+  expect(store.enqueue(terminal)).toBe(true);
+  expect(store.enqueue(terminal)).toBe(false);
+  expect(store.drain()).toHaveLength(1);
+  expect(store.getTaskSnapshot()[0]).toMatchObject({ status, runId: `terminal-${status}` });
+});
+
+it('does not queue or settle a live approval interruption', () => {
+  const store = makeStore();
+  const runId = 'approval-pause';
+  const pause = completed({ agentId: runId, status: 'interrupted', finalText: 'waiting for approval' });
+
+  expect(store.recordLifecycle(started({ agentId: runId }))).toBe(true);
+  expect(store.recordLifecycle(pause)).toBe(false);
+  expect(store.enqueue(pause)).toBe(false);
+  expect(store.pendingCount).toBe(0);
+  expect(store.getTaskSnapshot()).toEqual([expect.objectContaining({ runId, status: 'running' })]);
+});
+
 it('drains every pending run in one call in completion order', () => {
   const store = makeStore();
   store.enqueue(completed({ agentId: 'run-a' }));

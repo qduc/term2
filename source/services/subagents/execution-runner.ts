@@ -35,6 +35,7 @@ import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.
 import { pinWorkerWorktree } from './worker-worktree.js';
 
 const MAX_PEEK_TEXT_LENGTH = 200;
+const STREAMING_TOOL_PROGRESS_STEP = 1_024;
 
 export class ExecutionSubagentRunner {
   #logger: ILoggingService;
@@ -266,6 +267,8 @@ export class ExecutionSubagentRunner {
     let loopProcessedError = false;
     let currentText = '';
     let emittedUsageUpdate = false;
+    let streamingToolName: string | undefined;
+    let lastStreamingToolProgress = 0;
 
     try {
       for await (const event of runtime.turns.start(userTurn, {
@@ -286,7 +289,33 @@ export class ExecutionSubagentRunner {
               { propagate: true },
             );
             break;
+          case 'tool_call_streaming_delta': {
+            if (!event.toolName) break;
+            const newTool = event.toolName !== streamingToolName || event.argumentCharCount < lastStreamingToolProgress;
+            if (
+              newTool ||
+              lastStreamingToolProgress === 0 ||
+              event.argumentCharCount >= lastStreamingToolProgress + STREAMING_TOOL_PROGRESS_STEP
+            ) {
+              streamingToolName = event.toolName;
+              lastStreamingToolProgress = event.argumentCharCount;
+              await safeEmit(
+                this.#logger,
+                onEvent,
+                {
+                  type: 'subagent_streaming_tool',
+                  agentId,
+                  toolName: event.toolName,
+                  argumentCharCount: event.argumentCharCount,
+                },
+                { propagate: true },
+              );
+            }
+            break;
+          }
           case 'tool_started':
+            streamingToolName = undefined;
+            lastStreamingToolProgress = 0;
             if (currentText.trim()) {
               await safeEmit(
                 this.#logger,
@@ -331,6 +360,8 @@ export class ExecutionSubagentRunner {
             );
             break;
           case 'final':
+            streamingToolName = undefined;
+            lastStreamingToolProgress = 0;
             if (currentText.trim()) {
               await safeEmit(
                 this.#logger,
@@ -390,12 +421,16 @@ export class ExecutionSubagentRunner {
             );
             break;
           case 'error':
+            streamingToolName = undefined;
+            lastStreamingToolProgress = 0;
             error = new Error(event.message);
             loopProcessedError = true;
             subagentStatus = isAbortLike(event.message, event) ? 'cancelled' : 'failed';
             break;
           case 'retry':
             currentText = '';
+            streamingToolName = undefined;
+            lastStreamingToolProgress = 0;
             await safeEmit(
               this.#logger,
               onEvent,

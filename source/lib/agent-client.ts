@@ -79,6 +79,11 @@ import type {
 
 type ChainedRunOptions = AgentClientRunOptions;
 
+type StreamedModelCacheEntry = {
+  model: StreamedModelTurn | Promise<StreamedModelTurn>;
+  ownership: 'owned' | 'borrowed';
+};
+
 function createScopedToolLifecycle(
   lifecycle: ToolExecutionLifecyclePort,
   scope: { agentId: string; role: string },
@@ -123,24 +128,17 @@ export class AgentClient {
   #backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
   #backgroundShellOutput?: BackgroundShellOutputBundle;
   #wrapUpOnCriticalRunBudget = false;
-  // Application streamed models own session-scoped transport state (notably
-  // ResponsesWS), so recreate them only when the provider configuration changes.
-  #streamedModelCache = new Map<string, StreamedModelTurn | Promise<StreamedModelTurn>>();
+  // Cache application streamed models, which may own session-scoped transport
+  // state (notably ResponsesWS), until the provider configuration changes.
+  #streamedModelCache = new Map<string, StreamedModelCacheEntry>();
   #contextMilestoneReminder = new ContextMilestoneReminder();
   #sessionRolloverRequest: SessionRolloverRequest | null = null;
 
   #clearStreamedModelCache(): void {
-    // Transient subagent clients share the session context with their parent,
-    // so the provider may return a session-owned model (and its live
-    // transport). They only own this cache's references; the root session
-    // remains responsible for closing the shared model.
-    if (this.#agentConfig.isTransientClient) {
-      this.#streamedModelCache.clear();
-      return;
-    }
     for (const cached of this.#streamedModelCache.values()) {
-      void Promise.resolve(cached)
-        .then((model) => (model as StreamedModelTurn & { close?: () => void }).close?.())
+      if (cached.ownership !== 'owned') continue;
+      void Promise.resolve(cached.model)
+        .then((model) => (model as StreamedModelTurn & { close?: () => unknown }).close?.())
         .catch(() => undefined);
     }
     this.#streamedModelCache.clear();
@@ -153,23 +151,29 @@ export class AgentClient {
       throw new Error(`Provider '${providerId}' does not expose an application streamed model.`);
     }
     const cacheKey = `${providerId}\u0000${selectedModel}`;
-    let model = this.#streamedModelCache.get(cacheKey);
-    if (!model) {
-      model = provider.createStreamedModel(selectedModel, {
-        settingsService: this.#settings,
-        loggingService: this.#logger,
-        sessionContextService: this.#sessionContextService,
-        onRetry: () => this.#retryCallback?.(),
-        retryAttempts: this.#retryAttempts,
-        requestCapture: this.#requestCapture,
-        contextCompactionSessionState: this.#contextCompactionSessionState,
+    const cached = this.#streamedModelCache.get(cacheKey);
+    if (cached) return cached.model;
+
+    const model = provider.createStreamedModel(selectedModel, {
+      settingsService: this.#settings,
+      loggingService: this.#logger,
+      sessionContextService: this.#sessionContextService,
+      onRetry: () => this.#retryCallback?.(),
+      retryAttempts: this.#retryAttempts,
+      requestCapture: this.#requestCapture,
+      contextCompactionSessionState: this.#contextCompactionSessionState,
+    });
+    const entry: StreamedModelCacheEntry = {
+      model,
+      // Transient subagent clients may receive session-shared models from a
+      // provider. They own only this cache entry, not the model's transport.
+      ownership: this.#agentConfig.isTransientClient ? 'borrowed' : 'owned',
+    };
+    this.#streamedModelCache.set(cacheKey, entry);
+    if (model instanceof Promise) {
+      void model.catch(() => {
+        if (this.#streamedModelCache.get(cacheKey) === entry) this.#streamedModelCache.delete(cacheKey);
       });
-      this.#streamedModelCache.set(cacheKey, model);
-      if (model instanceof Promise) {
-        void model.catch(() => {
-          if (this.#streamedModelCache.get(cacheKey) === model) this.#streamedModelCache.delete(cacheKey);
-        });
-      }
     }
     return model;
   }

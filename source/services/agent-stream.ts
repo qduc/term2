@@ -9,6 +9,7 @@
  */
 import type { ContinuationHandle } from '../contracts/continuation-handle.js';
 import type { ApplicationRunEvent } from '../contracts/application-stream.js';
+import type { RunTerminationCause } from '../contracts/run-termination.js';
 
 const APPLICATION_STREAM = Symbol('application-stream');
 
@@ -33,6 +34,8 @@ export interface AgentStream {
   runUsage?: unknown;
   /** Cumulative model-request cost records for the run, when the runner records them. */
   runCostRecords?: unknown[];
+  /** Logical run outcome, even when the provider returned a valid response. */
+  terminalCause?: RunTerminationCause;
 }
 
 /** Select provider items from the current run, falling back to full history. */

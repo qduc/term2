@@ -371,6 +371,7 @@ export async function buildConversationResult(
       usage: usage ?? extractUsage(result),
       costRecords: result.runCostRecords as ModelRequestCost[] | undefined,
       turnItems: derivedTurnItems.length > 0 ? derivedTurnItems : input.turnItems,
+      ...(result.terminalCause ? { terminalCause: result.terminalCause } : {}),
     },
   };
 }
@@ -430,5 +431,6 @@ export const toTerminalEvent = (result: ConversationTerminal): ConversationEvent
     ...(result.usage ? { usage: result.usage } : {}),
     ...(result.costRecords && result.costRecords.length > 0 ? { costRecords: result.costRecords } : {}),
     ...(result.turnItems ? { turnItems: result.turnItems } : {}),
+    ...(result.terminalCause ? { terminalCause: result.terminalCause } : {}),
   };
 };

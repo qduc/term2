@@ -75,6 +75,8 @@ export function mapSubagentResultToRunResult<T = string>(result: SubagentResult)
 
 function mapSubagentStatusToErrorCode(status: SubagentResult['status']): RunErrorCode {
   switch (status) {
+    case 'interrupted':
+      return 'budget_exhausted';
     case 'cancelled':
       return 'cancelled';
     case 'failed':

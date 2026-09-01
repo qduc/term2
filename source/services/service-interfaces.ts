@@ -122,13 +122,31 @@ export interface ProviderTrafficStreamDiagnostics {
 }
 
 /**
- * Same shape as {@link ProviderTrafficStreamDiagnostics} minus the raw event
- * transcript. Used where the caller must retain bounded category/counter/
- * timing evidence without retaining unbounded, potentially sensitive frame
- * payloads — in particular a genuine transport failure, which is not a
- * deliberate client abort and can carry an unbounded number of frames.
+ * A mechanically fixed-size/fixed-cardinality view of stream progress,
+ * distinct from {@link ProviderTrafficStreamDiagnostics}: every field here is
+ * either a single number or a `Record` with a closed, hard-coded key set
+ * (`progressCategoryCounts`), so its serialized size cannot grow no matter
+ * how many frames, or how novel/hostile their `type` strings, a stream sends.
+ *
+ * This is why it is a distinct interface rather than
+ * `Omit<ProviderTrafficStreamDiagnostics, 'events'>`: that would still expose
+ * `eventTypeCounts` (keyed by raw, provider-supplied `type` strings with no
+ * enforced vocabulary — unbounded key cardinality) and `closeReason` (free
+ * text the server chooses). Used where the caller must retain progress
+ * evidence about a stream without retaining anything unbounded or
+ * provider-authored — in particular a genuine transport failure, which is not
+ * a deliberate client abort and can carry an unbounded number of frames.
  */
-export type ProviderTrafficBoundedStreamDiagnostics = Omit<ProviderTrafficStreamDiagnostics, 'events'>;
+export interface ProviderTrafficBoundedStreamDiagnostics {
+  durationMs: number;
+  firstEventMs?: number;
+  lastEventMs?: number;
+  maxGapMs?: number;
+  /** Numeric WebSocket close code (RFC 6455 §7.4); never free text. */
+  closeCode?: number;
+  eventCount: number;
+  progressCategoryCounts: Record<ProviderTrafficProgressCategory, number>;
+}
 
 /**
  * What a transport-liveness guard observed while receiving a response, in the

@@ -1096,8 +1096,7 @@ it('ProviderTraffic retains bounded progress diagnostics for a failed request', 
       lastEventMs: 5_100,
       maxGapMs: 5_162,
       closeCode: 1006,
-      closeReason: 'abnormal closure',
-      eventTypeCounts: { 'response.output_text.delta': 24_140, close: 1 },
+      eventCount: 24_141,
       progressCategoryCounts: { text: 24_140, reasoning: 0, tool: 0, usage: 0, heartbeat_or_unknown: 1 },
     },
   });
@@ -1112,10 +1111,12 @@ it('ProviderTraffic retains bounded progress diagnostics for a failed request', 
 
   expect((received.error as Record<string, unknown>).diagnostics).toMatchObject({
     closeCode: 1006,
-    closeReason: 'abnormal closure',
+    eventCount: 24_141,
     progressCategoryCounts: { text: 24_140, reasoning: 0, tool: 0, usage: 0, heartbeat_or_unknown: 1 },
   });
   expect((received.error as Record<string, unknown>).diagnostics).not.toHaveProperty('events');
+  expect((received.error as Record<string, unknown>).diagnostics).not.toHaveProperty('eventTypeCounts');
+  expect((received.error as Record<string, unknown>).diagnostics).not.toHaveProperty('closeReason');
 
   const [, meta] = error.mock.calls[0]!;
   expect(meta.diagnostics).toMatchObject({ closeCode: 1006, progressCategoryCounts: { text: 24_140 } });

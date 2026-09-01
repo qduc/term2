@@ -125,9 +125,62 @@ describe('AbortedStreamRecorder', () => {
 
     const bounded = recorder.boundedDiagnostics();
     expect(bounded).not.toHaveProperty('events');
-    expect(bounded.eventTypeCounts).toEqual({ 'response.output_text.delta': 1, close: 1 });
+    expect(bounded.eventCount).toBe(2);
     expect(bounded.progressCategoryCounts.text).toBe(1);
     expect(bounded.closeCode).toBe(1006);
     expect(JSON.stringify(bounded)).not.toContain('sensitive payload text');
+  });
+
+  it('boundedDiagnostics has a fixed key set that does not grow with unique event types, and drops closeReason and eventTypeCounts entirely', () => {
+    const recorder = new AbortedStreamRecorder();
+    // Feed many unique, attacker-controllable `type` strings plus a raw close
+    // frame carrying sensitive-looking free text. If eventTypeCounts or
+    // closeReason leaked into the bounded view, the serialized size would grow
+    // with the number of unique types and would contain the close reason text.
+    for (let i = 0; i < 500; i += 1) {
+      recorder.observe({ type: `hostile.novel.event.type.${i}.${'x'.repeat(50)}` });
+    }
+    recorder.observe({
+      type: 'close',
+      code: 1006,
+      reason: 'SECRET-session-token-abc123 user@example.com leaked-in-close-reason',
+    });
+
+    const bounded = recorder.boundedDiagnostics();
+
+    // Fixed, mechanically bounded key set — five progress categories plus a
+    // handful of scalar fields, regardless of how many unique frame types or
+    // how much text the wire sent.
+    expect(Object.keys(bounded).sort()).toEqual(
+      [
+        'closeCode',
+        'durationMs',
+        'eventCount',
+        'firstEventMs',
+        'lastEventMs',
+        'maxGapMs',
+        'progressCategoryCounts',
+      ].sort(),
+    );
+    expect(Object.keys(bounded.progressCategoryCounts).sort()).toEqual(
+      ['heartbeat_or_unknown', 'reasoning', 'text', 'tool', 'usage'].sort(),
+    );
+    expect(bounded).not.toHaveProperty('eventTypeCounts');
+    expect(bounded).not.toHaveProperty('closeReason');
+    expect(bounded.eventCount).toBe(501);
+
+    const serialized = JSON.stringify(bounded);
+    expect(serialized.length).toBeLessThan(500);
+    expect(serialized).not.toContain('hostile.novel.event.type');
+    expect(serialized).not.toContain('SECRET-session-token');
+    expect(serialized).not.toContain('user@example.com');
+    expect(serialized).not.toContain('leaked-in-close-reason');
+
+    // The full (non-bounded) diagnostics still carries this, proving the
+    // omission is deliberate and specific to the bounded view, not a loss of
+    // capability everywhere.
+    const full = recorder.diagnostics();
+    expect(full.closeReason).toContain('leaked-in-close-reason');
+    expect(Object.keys(full.eventTypeCounts).length).toBe(501);
   });
 });

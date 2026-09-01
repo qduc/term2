@@ -1,19 +1,26 @@
 import type {
   ProviderTrafficStreamDiagnostics,
+  ProviderTrafficBoundedStreamDiagnostics,
   ProviderTrafficProgressCategory,
 } from '../services/service-interfaces.js';
 
 /**
  * Fixed, bounded set of progress categories a WebSocket Responses frame can be
  * classified into. This is deliberately a closed union (5 keys) rather than
- * the raw event `type` string: `eventTypeCounts` already tracks the raw type
- * (bounded in practice because the wire vocabulary is provider-defined, not
- * user-controlled), but a failure-side reader without wire knowledge cannot
- * tell from that alone whether a stalled or truncated stream was making text,
- * reasoning, or tool-call progress, saw usage accounting, or was idle on
- * heartbeat/unrecognized frames. Categorization never inspects payload
- * content — only the frame's `type` string and the presence of a `usage`
- * field — so it adds no sensitive data and no unbounded cardinality.
+ * the raw event `type` string: a failure-side reader without wire knowledge
+ * cannot tell from `eventTypeCounts` alone whether a stalled or truncated
+ * stream was making text, reasoning, or tool-call progress, saw usage
+ * accounting, or was idle on heartbeat/unrecognized frames. Categorization
+ * never inspects payload content — only the frame's `type` string and the
+ * presence of a `usage` field — so it adds no sensitive data and no unbounded
+ * cardinality.
+ *
+ * This is also why `boundedDiagnostics()` below reports only these five
+ * counters and not `eventTypeCounts`: the raw `type` string of a wire frame
+ * is provider-supplied text with no enforced vocabulary, so a hostile or
+ * novel frame could grow that map's key set or content without limit. The
+ * fixed-category counts are the only per-frame breakdown safe to put in a
+ * mechanically bounded view.
  */
 const classifyProgressCategory = (event: unknown, type: string): ProviderTrafficProgressCategory => {
   if (event && typeof event === 'object') {
@@ -57,6 +64,7 @@ export class AbortedStreamRecorder {
   #sawFailureFrame = false;
   #closeCode: number | undefined;
   #closeReason: string | undefined;
+  #eventCount = 0;
 
   constructor(now: () => number = Date.now) {
     this.#now = now;
@@ -64,6 +72,7 @@ export class AbortedStreamRecorder {
   }
 
   observe(event: unknown): void {
+    this.#eventCount += 1;
     const elapsed = this.#now() - this.#startedAtMs;
     if (this.#firstEventMs === undefined) this.#firstEventMs = elapsed;
     else this.#maxGapMs = Math.max(this.#maxGapMs, elapsed - (this.#lastEventMs ?? 0));
@@ -124,16 +133,33 @@ export class AbortedStreamRecorder {
   }
 
   /**
-   * A bounded view of {@link diagnostics} for callers that must not retain
-   * the raw transcript — in particular a genuine transport failure, which can
-   * carry tens of thousands of frames and, unlike a deliberate client abort,
-   * is not a case where replaying the exact payload is the point. Category
-   * counts, event-type counts, and timing survive; the raw `events` array
-   * does not.
+   * A mechanically bounded view for callers that must not retain unbounded or
+   * provider-supplied text — in particular a genuine transport failure, which
+   * can carry tens of thousands of frames and, unlike a deliberate client
+   * abort, is not a case where replaying the exact payload is the point.
+   *
+   * Every field here has a fixed size regardless of what the wire sends:
+   * `progressCategoryCounts` has exactly five fixed keys, `eventCount` and the
+   * timing fields are single numbers, and `closeCode` is a numeric WebSocket
+   * close code (RFC 6455 §7.4 is a 16-bit integer, not free text). Deliberately
+   * excluded, unlike {@link diagnostics}: `eventTypeCounts` (its keys are raw
+   * provider `type` strings with no enforced vocabulary or length — a hostile
+   * or novel frame stream could grow it without limit), the raw `events`
+   * transcript, `closeReason` (free-text the server chooses), and `responseId`
+   * (a provider-issued opaque string, kept out here on the same "no
+   * unbounded/free-form provider text" principle even though a single ID is
+   * small in practice).
    */
-  boundedDiagnostics(): Omit<ProviderTrafficStreamDiagnostics, 'events'> {
-    const { events: _events, ...bounded } = this.diagnostics();
-    return bounded;
+  boundedDiagnostics(): ProviderTrafficBoundedStreamDiagnostics {
+    return {
+      durationMs: this.#now() - this.#startedAtMs,
+      ...(this.#firstEventMs === undefined ? {} : { firstEventMs: this.#firstEventMs }),
+      ...(this.#lastEventMs === undefined ? {} : { lastEventMs: this.#lastEventMs }),
+      ...(this.#firstEventMs === undefined ? {} : { maxGapMs: this.#maxGapMs }),
+      ...(this.#closeCode !== undefined ? { closeCode: this.#closeCode } : {}),
+      eventCount: this.#eventCount,
+      progressCategoryCounts: { ...this.#progressCategoryCounts },
+    };
   }
 }
 

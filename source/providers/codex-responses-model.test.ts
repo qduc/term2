@@ -1179,21 +1179,21 @@ it('CodexResponsesWSModel records an abnormal WebSocket close as a failed outcom
   expect(closed!.args).toMatchObject({ outcome: 'failed', eventCount: 4 });
 
   const diagnostics = closed!.args.diagnostics;
-  // Bounded: category/counter/timing evidence survives, the raw transcript does not.
+  // Mechanically bounded: fixed category/counter/timing fields survive, but
+  // the raw transcript, the raw-type breakdown, and the free-text close
+  // reason do not — those are the unbounded/provider-authored surfaces.
   expect(diagnostics).not.toHaveProperty('events');
+  expect(diagnostics).not.toHaveProperty('eventTypeCounts');
+  expect(diagnostics).not.toHaveProperty('closeReason');
   expect(diagnostics.closeCode).toBe(1006);
-  expect(diagnostics.closeReason).toBe('abnormal closure');
-  expect(diagnostics.eventTypeCounts).toMatchObject({
-    'response.created': 1,
-    'response.output_text.delta': 1,
-    'response.reasoning_summary_text.delta': 1,
-    close: 1,
-  });
+  expect(diagnostics.eventCount).toBe(4);
   expect(diagnostics.progressCategoryCounts).toMatchObject({ text: 1, reasoning: 1 });
   expect(typeof diagnostics.durationMs).toBe('number');
-  // No sensitive payload content leaks through the bounded summary.
+  // No sensitive payload content, and no close reason text, leaks through the
+  // bounded summary.
   expect(JSON.stringify(diagnostics)).not.toContain('sensitive in-flight text');
   expect(JSON.stringify(diagnostics)).not.toContain('sensitive reasoning');
+  expect(JSON.stringify(diagnostics)).not.toContain('abnormal closure');
 });
 
 it('CodexResponsesWSModel labels a consumer-closed stream as aborted when its request signal is aborted', async () => {

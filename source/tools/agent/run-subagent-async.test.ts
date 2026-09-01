@@ -296,6 +296,44 @@ describe('get_subagent_status tool', () => {
     expect(raw.startsWith('{')).toBe(false);
   });
 
+  it('includes shared recent liveness evidence for a running subagent', () => {
+    const tool = createGetSubagentStatusToolDefinition(
+      () =>
+        makeStatus({
+          activityState: 'active',
+          lastObservation: { kind: 'text_received', at: 1_000 },
+        }),
+      () => 30_000,
+    );
+
+    expect(tool.execute({ runId: 'run-123' })).toContain('active, recent; last observed 29s ago');
+  });
+
+  it('keeps provider waiting separate from quiet evidence age', () => {
+    const tool = createGetSubagentStatusToolDefinition(
+      () =>
+        makeStatus({
+          activityState: 'waiting',
+          waitingReason: 'provider',
+          lastActivityAt: 0,
+        }),
+      () => 8 * 60_000,
+    );
+
+    const raw = tool.execute({ runId: 'run-123' });
+    expect(raw).toContain('waiting (provider), quiet; last observed 8m ago');
+    expect(raw).not.toContain('hung');
+  });
+
+  it('does not invent liveness evidence when the status has no observation timestamp', () => {
+    const tool = createGetSubagentStatusToolDefinition(
+      () => makeStatus(),
+      () => 8 * 60_000,
+    );
+
+    expect(tool.execute({ runId: 'run-123' })).not.toContain('liveness:');
+  });
+
   it('formats completed text turns, streaming text, and pending tools for a rich peek', () => {
     const tool = createGetSubagentStatusToolDefinition(() =>
       makeStatus({

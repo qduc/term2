@@ -6,7 +6,7 @@ import type { SubagentResult } from '../subagents/types.js';
 import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
 import type { CodexRateLimitInfo } from '../../contracts/streamed-model-turn.js';
 import type { RunBudgetEvent } from '../agent-runtime/run-budget.js';
-import type { BackgroundTaskObservation } from '../background-task-activity.js';
+import type { BackgroundTaskActivity, BackgroundTaskObservation } from '../background-task-activity.js';
 export type { CodexRateLimitInfo, CodexRateLimitWindow } from '../../contracts/streamed-model-turn.js';
 
 export type ConversationEvent =
@@ -364,6 +364,7 @@ export interface BackgroundCheckInDueEvent {
         name?: string;
         role: string;
         task: string;
+        activity?: BackgroundTaskActivity;
         activityState?: 'active' | 'waiting' | 'cancelling';
         waitingReason?: 'provider' | 'approval' | 'answer';
         toolCounts?: Record<string, number>;
@@ -375,6 +376,7 @@ export interface BackgroundCheckInDueEvent {
         kind: 'shell';
         id: string;
         command: string;
+        activity?: BackgroundTaskActivity;
         status?: string;
         lastObservation?: BackgroundTaskObservation;
         outputTail?: string;

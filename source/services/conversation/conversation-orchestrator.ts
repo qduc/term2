@@ -35,6 +35,7 @@ import type {
 import type { RunBudgetEvent } from '../agent-runtime/run-budget.js';
 import type { InputSurgeApproval } from '../input-surge-approval.js';
 import type { RestoredState } from './conversation-replay.js';
+import { formatBackgroundTaskLiveness } from '../background-task-activity.js';
 
 const REASONING_RESPONSE_THROTTLE_MS = 200;
 
@@ -220,6 +221,7 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
         lines.push(
           `  ${activityDesc}still running, elapsed ${elapsedSeconds}s, check-in #${notification.checkInIndex}`,
         );
+        if (details.activity) lines.push(`  liveness: ${formatBackgroundTaskLiveness(details.activity)}`);
 
         if (details.latestNarrative) {
           lines.push(`  latest narrative: "${details.latestNarrative}"`);
@@ -245,6 +247,7 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
       const lines = [header];
       const statusDesc = details.status ? `status: ${details.status} | ` : '';
       lines.push(`  ${statusDesc}still running, elapsed ${elapsedSeconds}s, check-in #${notification.checkInIndex}`);
+      if (details.activity) lines.push(`  liveness: ${formatBackgroundTaskLiveness(details.activity)}`);
 
       if (details.outputTail) {
         lines.push('  recent output:');

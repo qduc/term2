@@ -15,6 +15,11 @@ import type {
 } from '../../services/subagents/types.js';
 import { SUBAGENT_RUN_NAME_PATTERN, SubagentRegistryError } from '../../services/subagents/subagent-async-registry.js';
 import { isAbortLike, truncatePreview, formatSubagentResult } from '../../services/subagents/utils.js';
+import {
+  BACKGROUND_SUBAGENT_QUIET_AFTER_MS,
+  formatBackgroundTaskLiveness,
+  normalizeBackgroundTaskActivity,
+} from '../../services/background-task-activity.js';
 
 const ASYNC_ROLES = ['explorer', 'worker', 'mentor'] as const;
 
@@ -274,13 +279,32 @@ export function createGetSubagentResultToolDefinition(
   };
 }
 
-function formatSubagentStatus(status: SubagentRunStatus | SubagentRunStatus[]): string {
+function formatSubagentStatus(status: SubagentRunStatus | SubagentRunStatus[], now: number): string {
   const formatOne = (s: SubagentRunStatus): string => {
     const parts = [
       `${s.name ? `${s.name} (${s.runId})` : s.runId} [${s.role}] ${s.status}`,
       `task: ${s.taskPreview || '(none)'}`,
       `elapsed: ${Math.round(s.elapsedMs / 1000)}s`,
     ];
+    if (s.lastObservation !== undefined || s.lastActivityAt !== undefined) {
+      const activity = normalizeBackgroundTaskActivity({
+        status: s.status,
+        activityState:
+          s.status === 'awaiting_approval' || s.status === 'waiting_for_answer' ? 'waiting' : s.activityState,
+        waitingReason:
+          s.status === 'awaiting_approval'
+            ? 'approval'
+            : s.status === 'waiting_for_answer'
+            ? 'answer'
+            : s.waitingReason,
+        ...(s.lastObservation === undefined
+          ? { lastActivityAt: s.lastActivityAt }
+          : { lastObservation: s.lastObservation }),
+        now,
+        quietAfterMs: BACKGROUND_SUBAGENT_QUIET_AFTER_MS,
+      });
+      parts.push(`liveness: ${formatBackgroundTaskLiveness(activity)}`);
+    }
     if (s.lastToolName) parts.push(`lastTool: ${s.lastToolName}`);
     const toolSummary = Object.entries(s.toolCounts)
       .map(([name, count]) => `${name}(${count})`)
@@ -346,13 +370,14 @@ export function createGetSubagentStatusToolDefinition(
     context?: unknown,
     details?: unknown,
   ) => SubagentRunStatus | SubagentRunStatus[],
+  now: () => number = Date.now,
 ): ToolDefinition<typeof getSubagentStatusSchema> {
   return {
     name: 'get_subagent_status',
     description:
       'Non-blocking status of one async subagent run (runId provided) or all runs (runId omitted). ' +
       'Use this to answer a mid-run "what is it doing" question without blocking your turn. ' +
-      'Returns status, elapsed, last tool, and tool counts only — never the final report or diff evidence. ' +
+      'Returns status, elapsed, liveness evidence, last tool, and tool counts only — never the final report or diff evidence. ' +
       'For a finished or settled run, the completion notification inlines the full result; use get_subagent_result only to re-fetch one you already saw. ' +
       'This call never blocks and never awaits a run.',
     parameters: getSubagentStatusSchema,
@@ -361,7 +386,7 @@ export function createGetSubagentStatusToolDefinition(
     execute: (params, context, details) => {
       try {
         const status = getSubagentStatus(params, context, details);
-        return formatSubagentStatus(status);
+        return formatSubagentStatus(status, now());
       } catch (error: any) {
         return JSON.stringify({
           status: 'failed',

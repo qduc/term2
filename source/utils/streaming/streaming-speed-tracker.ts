@@ -25,6 +25,12 @@ const DEFAULT_CHARS_PER_TOKEN = 3.8;
 /** Live speed is computed over a trailing window so it tracks current throughput, not the whole-request average. */
 const LIVE_WINDOW_MS = 3000;
 
+/** Bounds for a request's observed chars-per-token ratio, so one noisy request can't skew future estimates wildly. */
+const MIN_CALIBRATED_CHARS_PER_TOKEN = 1;
+const MAX_CALIBRATED_CHARS_PER_TOKEN = 10;
+/** Minimum accumulated characters required before trusting a request's ratio for calibration. */
+const MIN_CHARS_FOR_CALIBRATION = 20;
+
 interface TokenSample {
   time: number;
   tokens: number;
@@ -36,7 +42,13 @@ export class StreamingSpeedTracker {
   private lastUpdateTime: number | null = null;
   private accumulatedChars = 0;
   private exactTokens: number | null = null;
-  private readonly charsPerToken: number;
+  /**
+   * Chars-per-token used for live estimates before exact usage arrives. Starts at
+   * `DEFAULT_CHARS_PER_TOKEN` and is recalibrated from each request's real usage in
+   * `recordUsageTokens`, so it survives `reset()` and carries forward to seed the next request's
+   * estimate within the same turn.
+   */
+  private charsPerToken: number;
   /** Rolling history of (time, cumulative token count) samples, oldest first, used for windowed live TPS. */
   private samples: TokenSample[] = [];
 
@@ -50,6 +62,9 @@ export class StreamingSpeedTracker {
    * unrelated to anything recorded before this call. Call this at request boundaries within a
    * turn — e.g. when a tool starts executing — so tool latency never mixes into decode speed and
    * the next model request's speed isn't diluted by a previous request's average.
+   *
+   * `charsPerToken` is deliberately NOT reset — it carries the last request's calibrated ratio
+   * forward to seed the next request's live estimate.
    */
   public reset(now: number = Date.now()): void {
     this.startTime = now;
@@ -105,7 +120,21 @@ export class StreamingSpeedTracker {
     }
     this.exactTokens = completionTokens;
     this.lastUpdateTime = now;
+    this.calibrateCharsPerToken(completionTokens);
     this.recordSample(now);
+  }
+
+  /**
+   * Recalibrate the chars-per-token ratio from this request's real accumulated chars vs. its
+   * exact token count, so the NEXT request's live estimate (before its own usage arrives) starts
+   * from an observed ratio instead of the generic default. Ignored if there isn't enough
+   * accumulated text to trust the sample (e.g. a tool-only request with no generated text).
+   */
+  private calibrateCharsPerToken(exactTokens: number): void {
+    if (exactTokens <= 0 || this.accumulatedChars < MIN_CHARS_FOR_CALIBRATION) return;
+    const ratio = this.accumulatedChars / exactTokens;
+    if (!Number.isFinite(ratio) || ratio <= 0) return;
+    this.charsPerToken = Math.min(MAX_CALIBRATED_CHARS_PER_TOKEN, Math.max(MIN_CALIBRATED_CHARS_PER_TOKEN, ratio));
   }
 
   /**

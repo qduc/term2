@@ -98,6 +98,23 @@ describe('StreamingSpeedTracker', () => {
     expect(settled).toBe(20); // 20 tokens / 1s, unaffected by the earlier request or the tool gap
   });
 
+  it('calibrates chars-per-token from real usage and carries it across reset() to the next request', () => {
+    const tracker = new StreamingSpeedTracker({ startTime: 0, charsPerToken: 4.0 });
+
+    // First request: 200 chars stream in, but the real usage says only 20 tokens -> true ratio
+    // is 10 chars/token, very different from the constructor's default of 4.0.
+    tracker.recordDelta('a'.repeat(200), 500);
+    tracker.recordUsageTokens(20, 1000);
+    expect(tracker.getEstimatedTokens()).toBe(20); // exact usage, not the heuristic
+
+    tracker.reset(2000); // tool boundary
+
+    // Second request: only 50 chars have streamed so far (no usage yet). With the stale 4.0
+    // default this would estimate 12-13 tokens; calibrated at 10 chars/token it should be ~5.
+    tracker.recordDelta('b'.repeat(50), 2500);
+    expect(tracker.getEstimatedTokens()).toBe(5);
+  });
+
   it('returns snapshot with full metrics', () => {
     const tracker = new StreamingSpeedTracker({ startTime: 1000, charsPerToken: 4.0 });
     tracker.recordDelta('a'.repeat(40), 1200); // 10 tokens

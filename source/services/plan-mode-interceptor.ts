@@ -1,4 +1,5 @@
 import type { ISettingsService } from './service-interfaces.js';
+import { resolveActiveEnforcement } from './profiles/index.js';
 
 type ToolInterceptor = (name: string, params: unknown, toolCallId?: string) => Promise<string | null>;
 
@@ -28,12 +29,9 @@ export const installPlanModeInterceptor = (
   };
 
   const interceptor: ToolInterceptor = async (name: string, params: unknown) => {
-    const isPlanMode = deps.settingsService.get('app.planMode');
-    if (!isPlanMode) {
-      return null;
-    }
+    const denials = resolveActiveEnforcement(deps.settingsService).denials;
 
-    if (['create_file', 'search_replace', 'apply_patch'].includes(name)) {
+    if (denials.has('filesystem-mutation') && ['create_file', 'search_replace', 'apply_patch'].includes(name)) {
       return `Plan mode is active (read-only). The "${name}" tool is disabled. Do not attempt file or state changes — investigate with read-only tools and present an ordered implementation plan. Tell the user to exit plan mode to execute it.`;
     }
 
@@ -41,7 +39,10 @@ export const installPlanModeInterceptor = (
       const role = extractRole(params);
       // Allow only read-only subagent roles; block worker and unknown roles
       // (an unknown role could be a write-capable custom subagent).
-      if (!role || !READ_ONLY_SUBAGENT_ROLES.has(role)) {
+      if (
+        (role !== undefined && !READ_ONLY_SUBAGENT_ROLES.has(role) && denials.has('delegated-write')) ||
+        (role === undefined && denials.has('unknown-delegated-role'))
+      ) {
         return `Plan mode is active (read-only). The "${name}" tool is restricted to read-only roles (explorer, mentor, librarian) — the "${
           role ?? 'unknown'
         }" role is disabled. Use a read-only subagent to investigate, then present an ordered implementation plan. Tell the user to exit plan mode to execute it.`;

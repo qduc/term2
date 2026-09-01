@@ -16,6 +16,7 @@ import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
 import type { ExecutionBudget } from '../agent-runtime/execution-budget.js';
 import { readRunBudgetPolicy } from '../agent-runtime/run-budget.js';
+import { resolveActiveProfile } from '../profiles/index.js';
 
 /** Upper bound on `agent.mentorSamples`; each sample is a full mentor call. */
 const MAX_MENTOR_SAMPLES = 8;
@@ -248,11 +249,13 @@ export class MentorRunner {
     // on the mentor's usual provider.
     const mentorModelName = consultation?.model ?? definition.model;
     const mentorProvider = consultation?.provider ?? definition.provider;
-    const mentorMode = this.#settings.get('app.mentorMode');
-
-    const baseInstructions = mentorMode
-      ? resolvePrompt(path.join(PROMPTS_DIR, 'mentor-mode.md'))
-      : definition.instructions;
+    const profile = resolveActiveProfile(this.#settings, {
+      availableIntegrations: new Map([['builtin:integration/mentor', true]]),
+    });
+    const baseInstructions =
+      profile.integrations.get('builtin:integration/mentor')?.available ?? false
+        ? resolvePrompt(path.join(PROMPTS_DIR, 'mentor-mode.md'))
+        : definition.instructions;
 
     const envInfo = getEnvInfo(this.#settings, this.#executionContext);
     const cwd = this.#executionContext?.getCwd() ?? process.cwd();

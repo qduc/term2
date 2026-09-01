@@ -2,6 +2,7 @@ import { parseInput } from '../../utils/input-parser.js';
 import { parseModelProviderArg } from '../../utils/ai/model-provider-arg.js';
 import type { SettingsService } from '../settings/settings-service.js';
 import type { ConversationConfigurationService } from '../runtime-setting-router.js';
+import { resolveActiveEnforcement } from '../profiles/index.js';
 import {
   handoffFlowReducer,
   createInitialHandoffState,
@@ -62,7 +63,7 @@ export class HandoffSession {
   async declineHandoff(): Promise<boolean> {
     const state = this.#state;
     if (!state) return false;
-    if (this.#deps.settingsService.get('app.planMode')) {
+    if (resolveActiveEnforcement(this.#deps.settingsService).handoffRestrictions.has('plan-read-only')) {
       await this.#deps.clearConversationAndRefreshBanner();
       this.#dispatch({ type: 'handoff/standard_mode_requested' });
       return true;
@@ -82,7 +83,7 @@ export class HandoffSession {
   async sendCapturedHandoff(): Promise<boolean> {
     const state = this.#state;
     if (!state || (state.stage !== 'selecting_model' && state.stage !== 'selecting_effort')) return false;
-    if (this.#deps.settingsService.get('app.planMode')) {
+    if (resolveActiveEnforcement(this.#deps.settingsService).handoffRestrictions.has('plan-read-only')) {
       this.#dispatch({ type: 'handoff/standard_mode_requested' });
       return true;
     }
@@ -124,7 +125,7 @@ export class HandoffSession {
   async confirmStandardMode(): Promise<boolean> {
     const state = this.#state;
     if (!state) return false;
-    this.#applyRuntimeSetting('app.planMode', false);
+    this.#applyRuntimeSetting('app.activeProfileId', 'builtin:standard');
     this.#deps.addSystemMessage('Plan mode disabled - switched to Standard mode');
     return this.#sendAndFinish(state);
   }

@@ -1,5 +1,6 @@
 import { it, expect } from 'vitest';
 import { OpenAIChatCompletionsModel } from './openai-chat-completions-model.js';
+import { OpenAICompatibleError } from './common/provider-errors.js';
 import { ApplicationRunLoop } from '../services/agent-runtime/application-run-loop.js';
 
 async function* emptyStream(): AsyncIterable<any> {
@@ -9,6 +10,139 @@ async function* emptyStream(): AsyncIterable<any> {
 async function* incompleteTextStream(): AsyncIterable<any> {
   yield { choices: [{ delta: { role: 'assistant', content: 'partial' } }] };
 }
+
+async function collect<T>(stream: AsyncIterable<T>): Promise<T[]> {
+  const events: T[] = [];
+  for await (const event of stream) events.push(event);
+  return events;
+}
+
+function modelFor(chunks: readonly unknown[]) {
+  return new OpenAIChatCompletionsModel(
+    {
+      chat: {
+        completions: {
+          create: async () =>
+            (async function* () {
+              yield* chunks;
+            })(),
+        },
+      },
+    },
+    'fixture-chat',
+  );
+}
+
+const testRequest = { input: [], tools: [] } as const;
+
+it.each([
+  ['502', 502],
+  ['a non-retryable 400', 400],
+])('holds leading whitespace until a top-level in-band %s error and normalizes it', async (_label, status) => {
+  const error = { code: status, message: status === 502 ? 'upstream unavailable' : 'invalid request' };
+  const events: unknown[] = [];
+  let caught: unknown;
+  try {
+    for await (const event of modelFor([
+      { choices: [{ delta: { content: ' ' }, finish_reason: 'error' }] },
+      { error },
+    ]).stream(testRequest))
+      events.push(event);
+  } catch (reason) {
+    caught = reason;
+  }
+  expect(events).toEqual([]);
+  expect(caught).toBeInstanceOf(OpenAICompatibleError);
+  expect(caught).toMatchObject({ status, message: error.message });
+});
+
+it('flushes leading whitespace before valid content and preserves it in completion history', async () => {
+  const events = await collect(
+    modelFor([
+      { choices: [{ delta: { content: ' ' } }] },
+      { choices: [{ delta: { content: 'hello' }, finish_reason: 'stop' }] },
+    ]).stream(testRequest),
+  );
+  expect(events).toEqual([
+    { type: 'text_delta', text: ' ' },
+    { type: 'text_delta', text: 'hello' },
+    expect.objectContaining({
+      type: 'completion',
+      output: [{ type: 'message', content: [{ type: 'text', text: ' hello' }] }],
+    }),
+  ]);
+});
+
+it('flushes leading whitespace before a successful finish', async () => {
+  const events = await collect(
+    modelFor([{ choices: [{ delta: { content: ' ' } }] }, { choices: [{ delta: {}, finish_reason: 'stop' }] }]).stream(
+      testRequest,
+    ),
+  );
+  expect(events).toEqual([
+    { type: 'text_delta', text: ' ' },
+    expect.objectContaining({
+      type: 'completion',
+      output: [{ type: 'message', content: [{ type: 'text', text: ' ' }] }],
+    }),
+  ]);
+});
+
+it('does not buffer a fifth leading whitespace character', async () => {
+  const iterator = modelFor([
+    { choices: [{ delta: { content: '    ' } }] },
+    { choices: [{ delta: { content: ' ' } }] },
+    { error: { code: 502, message: 'upstream unavailable' } },
+  ])
+    .stream(testRequest)
+    [Symbol.asyncIterator]();
+  await expect(iterator.next()).resolves.toEqual({ value: { type: 'text_delta', text: '    ' }, done: false });
+  await expect(iterator.next()).resolves.toEqual({ value: { type: 'text_delta', text: ' ' }, done: false });
+  await expect(iterator.next()).rejects.toMatchObject({ status: 502 });
+});
+
+it('keeps material text committed before a top-level in-band error', async () => {
+  const iterator = modelFor([
+    { choices: [{ delta: { content: 'hello' } }] },
+    { choices: [{ delta: { content: ' ' } }] },
+    { error: { code: 502, message: 'upstream unavailable' } },
+  ])
+    .stream(testRequest)
+    [Symbol.asyncIterator]();
+  await expect(iterator.next()).resolves.toEqual({ value: { type: 'text_delta', text: 'hello' }, done: false });
+  await expect(iterator.next()).resolves.toEqual({ value: { type: 'text_delta', text: ' ' }, done: false });
+  await expect(iterator.next()).rejects.toMatchObject({ status: 502 });
+});
+
+it('flushes leading whitespace before reasoning and tool materiality', async () => {
+  const reasoningIterator = modelFor([
+    { choices: [{ delta: { content: ' ' } }] },
+    { choices: [{ delta: { reasoning_content: 'think' } }] },
+    { error: { code: 502, message: 'upstream unavailable' } },
+  ])
+    .stream(testRequest)
+    [Symbol.asyncIterator]();
+  await expect(reasoningIterator.next()).resolves.toEqual({ value: { type: 'text_delta', text: ' ' }, done: false });
+  await expect(reasoningIterator.next()).resolves.toMatchObject({
+    value: { type: 'reasoning_delta', text: 'think' },
+    done: false,
+  });
+  await expect(reasoningIterator.next()).rejects.toMatchObject({ status: 502 });
+
+  const toolIterator = modelFor([
+    { choices: [{ delta: { content: ' ' } }] },
+    { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '{}' } }] } }] },
+    { error: { code: 502, message: 'upstream unavailable' } },
+  ])
+    .stream(testRequest)
+    [Symbol.asyncIterator]();
+  await expect(toolIterator.next()).resolves.toEqual({ value: { type: 'text_delta', text: ' ' }, done: false });
+  await expect(toolIterator.next()).resolves.toEqual({
+    value: { type: 'tool_call_streaming_delta', argumentCharCount: 2 },
+    done: false,
+  });
+  await expect(toolIterator.next()).rejects.toMatchObject({ status: 502 });
+});
 
 it('Chat model exposes only the application-owned streamed-turn contract', () => {
   const model = new OpenAIChatCompletionsModel({} as any, 'fixture-chat');

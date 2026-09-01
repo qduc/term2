@@ -1,4 +1,5 @@
 import { assertValidOpenAICompatibleMessages } from './common/openai-compatible-message-contract.js';
+import { OpenAICompatibleError } from './common/provider-errors.js';
 import { acceptsProviderOpaqueTag } from './provider-opaque-compatibility.js';
 import type { CostTrailerCapture } from './openai-compatible-response-normalizer.js';
 import type {
@@ -7,6 +8,12 @@ import type {
   StreamedModelTurnRequest,
   StreamedModelUsage,
 } from '../contracts/streamed-model-turn.js';
+
+const MAX_TRIVIAL_WHITESPACE_LENGTH = 4;
+
+function isTrivialWhitespace(text: string): boolean {
+  return text.length > 0 && text.length <= MAX_TRIVIAL_WHITESPACE_LENGTH && text.trim() === '';
+}
 
 /** Application-owned adapter for OpenAI-compatible chat-completions endpoints. */
 export class OpenAIChatCompletionsModel implements StreamedModelTurn {
@@ -72,7 +79,25 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
     let finishReason: string | undefined;
     let usage: StreamedModelUsage | undefined;
     let costUsd: number | string | undefined;
+    let pendingTrivialWhitespace = '';
+    let hasMaterialOutput = false;
+    let sawErrorFinish = false;
+    let errorFinishPayload: unknown;
+    // Keep only a bounded leading prefix uncommitted. This lets an immediately
+    // following in-band error retry without weakening RetryingModel's rule
+    // that every yielded event commits the attempt.
+    const flushPendingWhitespace = (): string | undefined => {
+      if (!pendingTrivialWhitespace) return undefined;
+      const text = pendingTrivialWhitespace;
+      pendingTrivialWhitespace = '';
+      hasMaterialOutput = true;
+      return text;
+    };
     for await (const chunk of response) {
+      if ((chunk as any).error != null) {
+        pendingTrivialWhitespace = '';
+        throw normalizeChatCompletionError((chunk as any).error);
+      }
       const choice = chunk.choices?.[0];
       const delta = choice?.delta;
       if (choice?.finish_reason != null) {
@@ -97,6 +122,11 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
       // silently dropped every reasoning token from the latter.
       const reasoningDelta = delta?.reasoning_content ?? delta?.reasoning;
       if (reasoningDelta) {
+        const flushedWhitespace = flushPendingWhitespace();
+        if (flushedWhitespace) {
+          text += flushedWhitespace;
+          yield { type: 'text_delta', text: flushedWhitespace };
+        }
         reasoning += reasoningDelta;
         yield {
           type: 'reasoning_delta',
@@ -106,10 +136,25 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
             openai_compatible_reasoning_content: true,
           },
         };
+        hasMaterialOutput = true;
       }
       if (delta?.content) {
-        text += delta.content;
-        yield { type: 'text_delta', text: delta.content };
+        const shouldHoldWhitespace =
+          !hasMaterialOutput &&
+          isTrivialWhitespace(delta.content) &&
+          pendingTrivialWhitespace.length + delta.content.length <= MAX_TRIVIAL_WHITESPACE_LENGTH;
+        if (shouldHoldWhitespace) {
+          pendingTrivialWhitespace += delta.content;
+        } else {
+          const flushedWhitespace = flushPendingWhitespace();
+          if (flushedWhitespace) {
+            text += flushedWhitespace;
+            yield { type: 'text_delta', text: flushedWhitespace };
+          }
+          text += delta.content;
+          hasMaterialOutput = true;
+          yield { type: 'text_delta', text: delta.content };
+        }
       }
       for (const call of delta?.tool_calls ?? []) {
         const index = call.index ?? 0;
@@ -120,11 +165,17 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
         current.arguments += argumentDelta;
         calls.set(index, current);
         if (argumentDelta) {
+          const flushedWhitespace = flushPendingWhitespace();
+          if (flushedWhitespace) {
+            text += flushedWhitespace;
+            yield { type: 'text_delta', text: flushedWhitespace };
+          }
           yield {
             type: 'tool_call_streaming_delta',
             ...(current.name ? { toolName: current.name } : {}),
             argumentCharCount: current.arguments.length,
           };
+          hasMaterialOutput = true;
         }
       }
       if (chunk.usage) {
@@ -139,8 +190,21 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
       if ((chunk as any).cost !== undefined && costUsd === undefined) {
         costUsd = (chunk as any).cost;
       }
+      if (choice?.finish_reason === 'error') {
+        sawErrorFinish = true;
+        errorFinishPayload = (chunk as any).error ?? choice?.error;
+      }
     }
     if (!sawFinishReason) throw new Error('OpenAI-compatible streamed response ended without a finish reason');
+    if (sawErrorFinish) {
+      pendingTrivialWhitespace = '';
+      throw normalizeChatCompletionError(errorFinishPayload);
+    }
+    const flushedWhitespace = flushPendingWhitespace();
+    if (flushedWhitespace) {
+      text += flushedWhitespace;
+      yield { type: 'text_delta', text: flushedWhitespace };
+    }
     for (const [index, call] of calls)
       yield { type: 'tool_call', id: call.id ?? `call_${index}`, name: call.name, arguments: call.arguments };
 
@@ -225,6 +289,43 @@ function normalizeChatUsage(usage: any): StreamedModelUsage {
     ...(cachedInputTokens !== undefined ? { cachedInputTokens } : {}),
     ...(cacheWriteTokens !== undefined ? { cacheWriteTokens } : {}),
   };
+}
+
+function normalizeChatCompletionError(error: unknown): OpenAICompatibleError {
+  const record = isRecord(error) ? error : undefined;
+  const nested = record && isRecord(record.error) ? record.error : undefined;
+  const code = record?.code ?? record?.status ?? record?.statusCode ?? nested?.code ?? nested?.status;
+  const numericStatus =
+    typeof code === 'number' && Number.isInteger(code)
+      ? code
+      : typeof code === 'string' && /^\d+$/.test(code.trim())
+      ? Number(code)
+      : undefined;
+  const symbolicCode = typeof code === 'string' ? code.toLowerCase() : '';
+  const status =
+    numericStatus ??
+    (symbolicCode.includes('rate_limit') || symbolicCode.includes('too_many_requests')
+      ? 429
+      : symbolicCode.includes('invalid')
+      ? 400
+      : symbolicCode.includes('auth')
+      ? 401
+      : symbolicCode.includes('permission')
+      ? 403
+      : symbolicCode.includes('not_found')
+      ? 404
+      : 502);
+  const message =
+    (typeof record?.message === 'string' && record.message) ||
+    (typeof nested?.message === 'string' && nested.message) ||
+    (typeof error === 'string' ? error : 'OpenAI-compatible provider returned an in-band error');
+  let responseBody: string | undefined;
+  try {
+    responseBody = JSON.stringify(error);
+  } catch {
+    responseBody = undefined;
+  }
+  return new OpenAICompatibleError(message, status, {}, responseBody);
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

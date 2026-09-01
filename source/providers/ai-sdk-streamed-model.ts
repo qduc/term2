@@ -17,8 +17,15 @@ import type {
   StreamedModelTurn,
   StreamedModelTurnInput,
   StreamedModelTurnRequest,
+  StreamedModelTurnEvent,
   StreamedModelTurnOutput,
 } from '../contracts/streamed-model-turn.js';
+
+const MAX_TRIVIAL_WHITESPACE_LENGTH = 4;
+
+function isTrivialWhitespace(text: string): boolean {
+  return text.length > 0 && text.length <= MAX_TRIVIAL_WHITESPACE_LENGTH && text.trim() === '';
+}
 
 type UnaryGenerateResult = Awaited<ReturnType<LanguageModelV3['doGenerate']>> & {
   /** Guarded vendor text, reasoning, and tool-call extensions for unary results. */
@@ -70,6 +77,19 @@ export function createAiSdkStreamedModel(
       const output: StreamedModelTurnOutput[] = [];
       const reasoning = new Map<string, { text: string; providerMetadata?: Record<string, unknown> }>();
       const toolCalls = new Map<string, { name: string; argumentCharCount: number }>();
+      let pendingTrivialWhitespace = '';
+      let hasMaterialOutput = false;
+      // Providers can emit a one-character placeholder immediately before an
+      // in-band error. Keep only a bounded leading prefix uncommitted so the
+      // RetryingModel's any-yield-is-committed invariant remains unchanged.
+      const flushPendingWhitespace = (): StreamedModelTurnEvent | undefined => {
+        if (!pendingTrivialWhitespace) return undefined;
+        const text = pendingTrivialWhitespace;
+        pendingTrivialWhitespace = '';
+        appendText(output, text);
+        hasMaterialOutput = true;
+        return { type: 'text_delta', text };
+      };
 
       for await (const part of result.stream) {
         if (part.type === 'response-metadata') {
@@ -77,7 +97,21 @@ export function createAiSdkStreamedModel(
           continue;
         }
         if (part.type === 'text-delta') {
+          // Empty text frames are not material. In particular, do not let one
+          // between a placeholder and an error force the placeholder out.
+          if (!part.delta && pendingTrivialWhitespace) continue;
+          if (
+            !hasMaterialOutput &&
+            isTrivialWhitespace(part.delta) &&
+            pendingTrivialWhitespace.length + part.delta.length <= MAX_TRIVIAL_WHITESPACE_LENGTH
+          ) {
+            pendingTrivialWhitespace += part.delta;
+            continue;
+          }
+          const flushedWhitespace = flushPendingWhitespace();
+          if (flushedWhitespace) yield flushedWhitespace;
           appendText(output, part.delta);
+          if (part.delta) hasMaterialOutput = true;
           yield { type: 'text_delta', text: part.delta };
           continue;
         }
@@ -93,6 +127,8 @@ export function createAiSdkStreamedModel(
           continue;
         }
         if (part.type === 'reasoning-delta') {
+          const flushedWhitespace = flushPendingWhitespace();
+          if (flushedWhitespace) yield flushedWhitespace;
           const current = reasoning.get(part.id) ?? { text: '' };
           current.text += part.delta;
           if (part.providerMetadata) current.providerMetadata = part.providerMetadata;
@@ -110,6 +146,7 @@ export function createAiSdkStreamedModel(
             text: part.delta,
             ...(current.providerMetadata ? { providerMetadata: current.providerMetadata } : {}),
           };
+          hasMaterialOutput = true;
           continue;
         }
         if (part.type === 'reasoning-end') {
@@ -128,6 +165,8 @@ export function createAiSdkStreamedModel(
           continue;
         }
         if (part.type === 'tool-input-delta') {
+          const flushedWhitespace = flushPendingWhitespace();
+          if (flushedWhitespace) yield flushedWhitespace;
           const current = toolCalls.get(part.id) ?? { name: '', argumentCharCount: 0 };
           current.argumentCharCount += part.delta.length;
           toolCalls.set(part.id, current);
@@ -136,6 +175,7 @@ export function createAiSdkStreamedModel(
             ...(current.name ? { toolName: current.name } : {}),
             argumentCharCount: current.argumentCharCount,
           };
+          hasMaterialOutput = true;
           continue;
         }
         if (
@@ -152,7 +192,10 @@ export function createAiSdkStreamedModel(
           continue;
         }
         if (part.type === 'tool-call') {
+          const flushedWhitespace = flushPendingWhitespace();
+          if (flushedWhitespace) yield flushedWhitespace;
           yield* publishToolCall(output, part.toolCallId, { name: part.toolName, arguments: part.input });
+          hasMaterialOutput = true;
           continue;
         }
         if (part.type === 'finish') {
@@ -162,6 +205,8 @@ export function createAiSdkStreamedModel(
           completionMetadata = part.providerMetadata;
           const id = responseId;
           if (!id) throw new Error('AI SDK streamed response did not include a response id');
+          const flushedWhitespace = flushPendingWhitespace();
+          if (flushedWhitespace) yield flushedWhitespace;
           appendUnendedReasoning(output, reasoning);
           const costUsd = extractAiSdkCostUsd(part.providerMetadata, part.usage);
           yield {
@@ -184,8 +229,12 @@ export function createAiSdkStreamedModel(
           };
           return;
         }
-        if (part.type === 'error') throw part.error;
+        if (part.type === 'error') {
+          pendingTrivialWhitespace = '';
+          throw part.error;
+        }
       }
+      pendingTrivialWhitespace = '';
       throw new Error('AI SDK streamed response ended without a finish event');
     },
   };

@@ -14,6 +14,7 @@ import { extractHistoryLength } from '../stream-snapshot.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { isMissingChainedToolOutputError, isOrphanedChainedToolOutputError } from '../../lib/chained-input-filter.js';
 import { isRetryRecoveryBudgetExhaustedError } from './retry-recovery-budget.js';
+import { streamHasCommittedOutput } from '../agent-stream.js';
 
 const TRANSIENT_BASE_DELAY_MS = 500;
 const TRANSIENT_MAX_DELAY_MS = 30_000;
@@ -46,10 +47,16 @@ export class DefaultRetryClassifier {
     // produced user-visible or externally meaningful work. Never replay that
     // partial turn automatically; the recovery executor still settles its tool
     // ledger truthfully before termination.
-    if (
-      context.hasCommittedOutput ||
-      (stream && ((stream.output?.length ?? 0) > 0 || (stream.newItems?.length ?? 0) > 0))
-    ) {
+    //
+    // streamHasCommittedOutput (not a bare length check) matters here: a run
+    // that fails before producing anything can still leave a run_budget
+    // evidence item or a context_compaction_* lifecycle item in
+    // stream.output/newItems -- pure bookkeeping pushed unconditionally by
+    // outputPush() in application-run-loop.ts, unrelated to whether any real
+    // model output or tool effect occurred. A bare `.length > 0` check
+    // treated that as "committed" and forced 'unrecoverable' on an otherwise
+    // safely recoverable failure.
+    if (context.hasCommittedOutput || (stream && streamHasCommittedOutput(stream))) {
       return { kind: 'unrecoverable' };
     }
 

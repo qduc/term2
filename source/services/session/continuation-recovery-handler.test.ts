@@ -1,6 +1,8 @@
 import { it, expect } from 'vitest';
 import { ContinuationRecoveryHandler } from './continuation-recovery-handler.js';
 import { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
+import { DefaultRetryClassifier } from '../retry/retry-classifier.js';
+import { DefaultConversationRecoveryPolicy } from '../retry/recovery-policy.js';
 
 function createMockState(overrides: any = {}) {
   return {
@@ -388,5 +390,91 @@ it('settles the turn through recoveryExecutor when refusing a retry_fresh plan f
 
   expect(applyCalls).toEqual([expect.objectContaining({ plan: { kind: 'terminate', events: [] } })]);
   expect(events.map((e: any) => e.type)).toEqual(['retry_scheduled', 'tool_recovery', 'retry_exhausted']);
+  expect((next.value as any).kind).toBe('terminated');
+});
+
+// Integration-level proof against the real DefaultRetryClassifier (the other
+// tests in this file mock retryClassifier, so none of them exercise the
+// actual "never replay after committed output" guard this continuation path
+// relies on). state.lastStream carries only bookkeeping evidence pushed
+// unconditionally by outputPush() in application-run-loop.ts -- see
+// agent-stream.test.ts's streamHasCommittedOutput cases -- so the real
+// classifier must still see this transient failure as recoverable rather
+// than forcing 'unrecoverable' off a bare stream.output.length check.
+it('recovers a mid-continuation transient failure through the real classifier when the stream carries only bookkeeping evidence', async () => {
+  const handler = new ContinuationRecoveryHandler({
+    logger: { warn: () => {}, getCorrelationId: () => undefined, error: () => {}, debug: () => {} } as any,
+    sessionId: 'test',
+    generationGuard: { isCurrent: () => true } as any,
+    retryClassifier: new DefaultRetryClassifier({} as any, () => 0),
+    recoveryPolicy: new DefaultConversationRecoveryPolicy(),
+    recoveryExecutor: {
+      apply: () => ({
+        kind: 'recovered',
+        instruction: { resumeState: { id: 'run-2' }, resumePreviousResponseId: 'prev-1' },
+      }),
+    } as any,
+    retryEventPresenter: {
+      present: () => ({ event: { type: 'retry_scheduled' }, logMessage: 'retry', logFields: {} }),
+    } as any,
+    resolveRetryLimit: () => 5,
+    toolTracker: { activeCallIdsForCurrentTurn: () => [] } as any,
+  });
+
+  const state = createMockState({
+    lastStream: {
+      completed: Promise.resolve(undefined),
+      output: [
+        { type: 'run_budget', evidence: { type: 'budget_stage', stage: 'warning' } },
+        { type: 'context_compaction_started', provider: 'openai' },
+      ],
+      newItems: [],
+    } as any,
+  });
+  const iterator = handler.handle({
+    error: new Error('Codex WebSocket closed before a terminal response event.'),
+    state,
+  });
+  let next = await iterator.next();
+  while (!next.done) next = await iterator.next();
+
+  expect((next.value as any).kind).toBe('resume');
+});
+
+// The other half: with the same real classifier, once state.lastStream
+// carries real streamed text, the failure must classify as unrecoverable and
+// the continuation must terminate rather than replay.
+it('terminates a mid-continuation failure through the real classifier once real text output is present', async () => {
+  const handler = new ContinuationRecoveryHandler({
+    logger: { warn: () => {}, getCorrelationId: () => undefined, error: () => {}, debug: () => {} } as any,
+    sessionId: 'test',
+    generationGuard: { isCurrent: () => true } as any,
+    retryClassifier: new DefaultRetryClassifier({} as any, () => 0),
+    recoveryPolicy: new DefaultConversationRecoveryPolicy(),
+    recoveryExecutor: {
+      apply: (input: any) =>
+        input.plan.kind === 'terminate' ? { kind: 'terminated', events: [] } : { kind: 'run', instruction: {} },
+    } as any,
+    retryEventPresenter: {
+      present: () => ({ event: { type: 'retry_scheduled' }, logMessage: 'retry', logFields: {} }),
+    } as any,
+    resolveRetryLimit: () => 5,
+    toolTracker: { activeCallIdsForCurrentTurn: () => [] } as any,
+  });
+
+  const state = createMockState({
+    lastStream: {
+      completed: Promise.resolve(undefined),
+      output: [{ type: 'text_delta', text: 'partial answer already shown to the user' }],
+      newItems: [],
+    } as any,
+  });
+  const iterator = handler.handle({
+    error: new Error('Codex WebSocket closed before a terminal response event.'),
+    state,
+  });
+  let next = await iterator.next();
+  while (!next.done) next = await iterator.next();
+
   expect((next.value as any).kind).toBe('terminated');
 });

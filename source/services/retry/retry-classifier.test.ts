@@ -48,6 +48,67 @@ it('classify terminates instead of bouncing on a budget-exhaustion error', () =>
   expect(result.kind).toBe('unrecoverable');
 });
 
+// outputPush() in application-run-loop.ts pushes run_budget evidence and
+// context_compaction_* lifecycle events into stream.output/newItems
+// unconditionally, even for a request that fails before producing anything.
+// A bare `.length > 0` check on those arrays used to treat their mere
+// presence as "committed output" and force 'unrecoverable' -- see
+// agent-stream.test.ts's streamHasCommittedOutput cases for the underlying
+// predicate. This proves the effect at the classifier level: an otherwise
+// safely recoverable transient failure still classifies as transient when
+// the only stream activity was bookkeeping.
+it('classify still recovers a transient failure when the stream carries only bookkeeping evidence', () => {
+  const classifier = makeClassifier();
+  const error = new Error('Codex WebSocket closed before a terminal response event.');
+  const stream = {
+    completed: Promise.resolve(undefined),
+    output: [
+      { type: 'run_budget', evidence: { type: 'budget_stage', stage: 'warning' } },
+      { type: 'context_compaction_started', provider: 'openai' },
+    ],
+    newItems: [],
+  } as any;
+
+  const result = classifier.classify(baseContext({ error, stream }));
+
+  expect(result.kind).toBe('transient');
+});
+
+// The other half: once the stream carries real streamed text, the same
+// transient failure must not replay -- the guard's actual purpose.
+it('classify refuses to replay a transient failure once the stream carries real text output', () => {
+  const classifier = makeClassifier();
+  const error = new Error('Codex WebSocket closed before a terminal response event.');
+  const stream = {
+    completed: Promise.resolve(undefined),
+    output: [
+      { type: 'run_budget', evidence: { type: 'budget_stage', stage: 'warning' } },
+      { type: 'text_delta', text: 'partial answer already shown to the user' },
+    ],
+    newItems: [],
+  } as any;
+
+  const result = classifier.classify(baseContext({ error, stream }));
+
+  expect(result.kind).toBe('unrecoverable');
+});
+
+// And truthful tool settlement: a dispatched (but not yet resolved) tool
+// call is exactly the case that must not be blindly replayed or redispatched.
+it('classify refuses to replay a transient failure once a tool call was dispatched', () => {
+  const classifier = makeClassifier();
+  const error = new Error('Codex WebSocket closed before a terminal response event.');
+  const stream = {
+    completed: Promise.resolve(undefined),
+    output: [{ type: 'tool_call_dispatched', callId: 'call-1', toolName: 'bash' }],
+    newItems: [],
+  } as any;
+
+  const result = classifier.classify(baseContext({ error, stream }));
+
+  expect(result.kind).toBe('unrecoverable');
+});
+
 it('classify does not return service_tier_fallback when already attempted', () => {
   const classifier = makeClassifier({ shouldRetryWithoutFlexServiceTier: () => true });
 

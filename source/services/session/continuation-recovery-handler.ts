@@ -111,6 +111,19 @@ export class ContinuationRecoveryHandler {
     // Only retry_fresh draws against the automatic-replay budget; replay_turn
     // comes exclusively from model_retry, excluded for the reason above.
     if (plan.kind === 'retry_fresh' && !state.recoveryBudget.claimAutomaticReplay()) {
+      // Refusing the plan must still settle open tool calls truthfully and
+      // clear the provider chain, exactly like an ordinary termination does --
+      // see the matching comment in initial-turn-recovery-handler.ts.
+      const terminateResult = this.deps.recoveryExecutor.apply({
+        plan: { kind: 'terminate', events: [] },
+        state: recoveryState,
+        retryCounts: state.retryCounts,
+      });
+      if (terminateResult.kind === 'terminated') {
+        for (const event of terminateResult.events) {
+          yield event;
+        }
+      }
       const providerName = this.deps.provider ?? 'provider';
       yield {
         type: 'retry_exhausted',

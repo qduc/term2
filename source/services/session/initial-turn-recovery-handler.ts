@@ -191,6 +191,23 @@ export class InitialTurnRecoveryHandler {
     // replay_turn is produced exclusively by model_retry, which is excluded
     // for the same reason noted above.
     if (plan.kind === 'retry_fresh' && !attempt.recoveryBudget.claimAutomaticReplay()) {
+      // Refusing the plan must still go through the same settlement path a
+      // normal termination does -- open tool calls settle truthfully (not as
+      // blind failures), and the chain is cleared so the next turn cannot
+      // send a text-only continuation against a response still awaiting tool
+      // output. Returning 'terminated' directly here (the original bug)
+      // skipped all of that.
+      const terminateResult = this.deps.recoveryExecutor.apply({
+        plan: { kind: 'terminate', events: [] },
+        state: recoveryState,
+        retryCounts: attempt.retryCounts,
+        maxModelRetries: attempt.maxModelRetries,
+      });
+      if (terminateResult.kind === 'terminated') {
+        for (const event of terminateResult.events) {
+          yield event;
+        }
+      }
       yield {
         type: 'retry_exhausted',
         provider: this.deps.provider ?? 'provider',
@@ -202,6 +219,7 @@ export class InitialTurnRecoveryHandler {
         } attempts. No model response was received.`,
         canRetry: true,
       };
+      this.#logFailure(error);
       return { kind: 'terminated' };
     }
     const result = this.deps.recoveryExecutor.apply({

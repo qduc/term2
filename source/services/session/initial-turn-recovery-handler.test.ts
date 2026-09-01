@@ -329,6 +329,56 @@ it('does not charge model_retry replays against the transport automatic-replay b
   expect(plans.every((plan: any) => plan.kind === 'replay_turn')).toBe(true);
 });
 
+// Refusing a plan for lack of automatic-replay budget must still settle the
+// turn truthfully -- open tool calls, chain state -- exactly like an
+// ordinary termination does. The original code returned 'terminated'
+// directly without ever calling recoveryExecutor.apply, silently skipping
+// that settlement (requirement: no blind redispatch or false failure/success
+// on tool execution state).
+it('settles the turn through recoveryExecutor when refusing a plan for exhausted replay budget', async () => {
+  const applyCalls: unknown[] = [];
+  const handler = new InitialTurnRecoveryHandler({
+    conversationStore: { getHistory: () => [] } as any,
+    freshStartRetriesAllowed: true,
+    generationGuard: { isCurrent: () => true } as any,
+    inputPlanner: { recordSuccess: () => {} } as any,
+    logger: { warn: () => {}, error: () => {}, getCorrelationId: () => undefined } as any,
+    recoveryExecutor: {
+      apply: (input: any) => {
+        applyCalls.push(input);
+        if (input.plan.kind === 'terminate') {
+          return {
+            kind: 'terminated',
+            events: [{ type: 'tool_recovery', recoveredCallIds: [], droppedCallIds: ['call-1'], message: 'dropped' }],
+          };
+        }
+        return { kind: 'run', instruction: { skipUserMessage: true }, events: [] };
+      },
+    } as any,
+    recoveryPolicy: new DefaultConversationRecoveryPolicy(),
+    retryClassifier: { classify: () => ({ kind: 'transient', attempt: 1, delayMs: 5 }) } as any,
+    retryEventPresenter: { present: () => ({ event: {}, logMessage: '', logFields: {} }) } as any,
+    sessionId: 'budget-refusal-settlement',
+  });
+  const attempt = createAttempt();
+  expect(attempt.recoveryBudget.claimAutomaticReplay()).toBe(true);
+
+  const events: any[] = [];
+  const iterator = handler.handle({ error: new Error('temporary'), attempt, stream: null });
+  let next = await iterator.next();
+  while (!next.done) {
+    events.push(next.value);
+    next = await iterator.next();
+  }
+
+  expect(applyCalls).toEqual([expect.objectContaining({ plan: { kind: 'terminate', events: [] } })]);
+  // First event is the transient-retry presentation (mocked to {}, so its
+  // type is undefined); what matters is the settlement and exhaustion events
+  // that follow once the budget refuses the plan.
+  expect(events.map((e: any) => e.type)).toEqual([undefined, 'tool_recovery', 'retry_exhausted']);
+  expect(next.value).toEqual({ kind: 'terminated' });
+});
+
 it('returns stale before classifying when the generation is outdated', async () => {
   const handler = new InitialTurnRecoveryHandler({
     conversationStore: {} as any,

@@ -337,3 +337,56 @@ it('does not charge a model_retry replay_turn plan against the automatic-replay 
   // for lack of automatic-replay budget.
   expect((next.value as any).kind).toBe('fresh_start');
 });
+
+// Mirrors the equivalent initial-turn-recovery-handler.test.ts case: refusing
+// a retry_fresh plan for lack of automatic-replay budget must still settle
+// the turn (open tool calls, chain state) through recoveryExecutor, not
+// return 'terminated' directly and skip it.
+it('settles the turn through recoveryExecutor when refusing a retry_fresh plan for exhausted replay budget', async () => {
+  const applyCalls: unknown[] = [];
+  const handler = new ContinuationRecoveryHandler({
+    logger: { warn: () => {}, getCorrelationId: () => undefined, error: () => {}, debug: () => {} } as any,
+    sessionId: 'test',
+    generationGuard: { isCurrent: () => true } as any,
+    retryClassifier: {
+      classify: () => ({ kind: 'transient', attempt: 1, delayMs: 5 }),
+    } as any,
+    recoveryPolicy: {
+      nextRetryCounts: (counts: any) => counts,
+      plan: () => ({ kind: 'retry_fresh', inputMode: 'full_history' }),
+    } as any,
+    recoveryExecutor: {
+      apply: (input: any) => {
+        applyCalls.push(input);
+        if (input.plan.kind === 'terminate') {
+          return {
+            kind: 'terminated',
+            events: [{ type: 'tool_recovery', recoveredCallIds: [], droppedCallIds: ['call-1'], message: 'dropped' }],
+          };
+        }
+        return { kind: 'run', instruction: { skipUserMessage: true } };
+      },
+    } as any,
+    retryEventPresenter: {
+      present: () => ({ event: { type: 'retry_scheduled' }, logMessage: 'retry', logFields: {} }),
+    } as any,
+    resolveRetryLimit: () => 5,
+    toolTracker: { activeCallIdsForCurrentTurn: () => [] } as any,
+  });
+
+  const recoveryBudget = new RetryRecoveryBudget();
+  expect(recoveryBudget.claimAutomaticReplay()).toBe(true);
+
+  const events: any[] = [];
+  const state = createMockState({ recoveryBudget });
+  const iterator = handler.handle({ error: new Error('rate limit'), state });
+  let next = await iterator.next();
+  while (!next.done) {
+    events.push(next.value);
+    next = await iterator.next();
+  }
+
+  expect(applyCalls).toEqual([expect.objectContaining({ plan: { kind: 'terminate', events: [] } })]);
+  expect(events.map((e: any) => e.type)).toEqual(['retry_scheduled', 'tool_recovery', 'retry_exhausted']);
+  expect((next.value as any).kind).toBe('terminated');
+});

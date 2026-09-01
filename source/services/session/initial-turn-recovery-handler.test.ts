@@ -57,6 +57,36 @@ async function watchdogTimeoutError(dispatch: 'unsent' | 'flushed'): Promise<unk
   return pending.catch((reason) => reason);
 }
 
+async function connectTimeoutError(dispatch: 'unsent' | 'flushed' | 'unknown'): Promise<unknown> {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  transport.fetchResponse = async (request: any) => {
+    if (dispatch !== 'unknown') recordWebSocketDispatch(request, dispatch);
+    const error = Object.assign(new Error('WebSocket connect timed out'), { code: 'ETIMEDOUT' });
+    return {
+      [Symbol.asyncIterator]: () => ({
+        next: () => Promise.reject(error),
+        return: async () => ({ done: true, value: undefined }),
+      }),
+    };
+  };
+  const model = new CodexResponsesWSModel(
+    { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+    'gpt-5-codex',
+    { getOrRefreshAccessToken: async () => 'token', getAccountId: () => undefined } as any,
+    undefined,
+    undefined,
+    undefined,
+    { firstFrameMs: 10, interFrameMs: 20 },
+    transport,
+  );
+  const pending = (async () => {
+    for await (const _event of model.stream({ input: [], tools: [] } as any)) {
+      // A connect-time failure must happen before any raw frame.
+    }
+  })();
+  return pending.catch((reason) => reason);
+}
+
 async function drain(generator: AsyncGenerator<unknown, unknown, void>): Promise<unknown> {
   // The handler yields presentation events before it reaches the recovery
   // executor, so a single step would never observe the plan.
@@ -65,10 +95,10 @@ async function drain(generator: AsyncGenerator<unknown, unknown, void>): Promise
   return step.value;
 }
 
-function recoveryHandlerRecordingPlans(plans: unknown[]) {
+function recoveryHandlerRecordingPlans(plans: unknown[], freshStartRetriesAllowed = true) {
   return new InitialTurnRecoveryHandler({
     conversationStore: { getHistory: () => [] } as any,
-    freshStartRetriesAllowed: true,
+    freshStartRetriesAllowed,
     generationGuard: { isCurrent: () => true } as any,
     inputPlanner: { recordSuccess: () => {} } as any,
     logger: { warn: () => {}, error: () => {}, getCorrelationId: () => undefined } as any,
@@ -98,7 +128,7 @@ it('recovers a provably unsent watchdog timeout as a fresh full-history retry', 
     const plans: unknown[] = [];
     await drain(recoveryHandlerRecordingPlans(plans).handle({ error, attempt: createAttempt(), stream: null }) as any);
 
-    expect(plans).toEqual([{ kind: 'retry_fresh', inputMode: 'full_history' }]);
+    expect(plans).toEqual([{ kind: 'retry_fresh', inputMode: 'full_history', disableChainingForAttempt: true }]);
   } finally {
     vi.useRealTimers();
   }
@@ -120,6 +150,32 @@ it('still terminates a watchdog timeout whose request may have been accepted', a
   } finally {
     vi.useRealTimers();
   }
+});
+
+it('recovers a connect-time ETIMEDOUT with positive unsent evidence even when fresh starts are disabled', async () => {
+  const error = await connectTimeoutError('unsent');
+  expect(error).toBeInstanceOf(UnsentWebSocketRequestError);
+  expect(error).not.toBeInstanceOf(AmbiguousModelOutcomeError);
+
+  const plans: unknown[] = [];
+  await drain(
+    recoveryHandlerRecordingPlans(plans, false).handle({ error, attempt: createAttempt(), stream: null }) as any,
+  );
+
+  expect(plans).toEqual([{ kind: 'retry_fresh', inputMode: 'full_history', disableChainingForAttempt: true }]);
+});
+
+it.each(['flushed', 'unknown'] as const)('keeps a connect-time ETIMEDOUT %s dispatch fail-closed', async (dispatch) => {
+  const error = await connectTimeoutError(dispatch);
+  expect(error).toBeInstanceOf(AmbiguousModelOutcomeError);
+  expect(error).not.toBeInstanceOf(UnsentWebSocketRequestError);
+
+  const plans: unknown[] = [];
+  await drain(
+    recoveryHandlerRecordingPlans(plans, false).handle({ error, attempt: createAttempt(), stream: null }) as any,
+  );
+
+  expect(plans).toEqual([{ kind: 'terminate', events: [] }]);
 });
 
 it('returns the scheduled delay for bounded conversation-state recovery', async () => {

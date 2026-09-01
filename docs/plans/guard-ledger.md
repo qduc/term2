@@ -1395,6 +1395,104 @@ e353680f  fix(retry): wire retry_exhausted to a real retry, not literal button t
 a7e44292  fix(retry): close the requirement-5 raw-array false-positive risk
 ```
 
+### Codex WebSocket connect-time timeout recovery
+
+Disposition: **repaired in `4f4ba2a0`; ledger closeout pending this docs commit.**
+
+Live request `d066fb9e` exposed a gap in the Codex WebSocket recovery
+boundary: the initial subagent request failed during socket connection with
+`ETIMEDOUT`, no raw frames arrived, and the send path had positively recorded
+the request as `unsent`. The adapter nevertheless wrapped the error as
+`AmbiguousModelOutcomeError`, so retry classification terminated the session
+instead of taking the one safe full-history recovery. This repair preserves the
+fail-closed behavior for `flushed` and `unknown` dispatch evidence.
+
+```text
+Harm prevented: a request proven never to have reached the provider being
+  terminated instead of receiving its single bounded full-history recovery.
+Scope and execution paths: Codex Responses WebSocket initial model requests,
+  including sessions whose fresh-start retries are disabled (subagents).
+Guard class: inactivity watchdog / transport recovery, gated by dispatch
+  evidence.
+Enforcement owner: CodexResponsesWSModel and websocket-request-dispatch state.
+Recovery owner: DefaultRetryClassifier and InitialTurnRecoveryHandler.
+Measured signal and observation boundary: no raw WebSocket frame was observed,
+  the connect-time failure carries a structured ETIMEDOUT code, and the exact
+  request object is positively recorded as unsent by the send path.
+Direct evidence or proxy: dispatch state and frame count are direct evidence;
+  ETIMEDOUT identifies the connect-time transport failure.
+Legitimate work that can produce the same signal: a frame flushed to an open
+  socket, or a send path that cannot observe its state; both remain ambiguous.
+Configuration sources and precedence: existing websocket first/inter-frame
+  watchdog settings; no default or precedence change.
+Effective default and clamping: shared recovery envelope remains 90s / 3
+  physical attempts / 1 automatic replay.
+Action and why the signal justifies it: convert only the positively unsent,
+  frame-free connect timeout to UnsentWebSocketRequestError, classify it as
+  chain_recovery, and rebuild full history once. This path does not replay the
+  possibly accepted request or re-run a tool call.
+Partial-work settlement: unchanged; recovery termination still settles open
+  tool calls truthfully and clears provider continuity.
+Retry, fallback, and provider-continuity semantics: flushed or unknown dispatch
+  remains AmbiguousModelOutcomeError and terminates; no recovery occurs after a
+  committed frame/output. Existing shared recovery limits remain authoritative.
+Observability fields: existing Codex failed-request traffic record and bounded
+  watchdog timing; no payload or credential changes.
+Persisted-setting migration, if any: none.
+Rollback boundary: the repair commit listed below.
+Ledger row: Codex WebSocket watchdog.
+```
+
+Red proof before production changes:
+
+```text
+NODE_ENV=test pnpm exec vitest run source/services/session/initial-turn-recovery-handler.test.ts -t "connect-time ETIMEDOUT"
+FAIL: positive `unsent` evidence was wrapped as AmbiguousModelOutcomeError;
+      the subagent-style session terminated instead of scheduling full-history
+      recovery. The `flushed` and `unknown` counterparts remained terminated.
+```
+
+Detection gap: the existing watchdog tests covered watchdog-generated timeout
+errors and dispatch states, but not a connect-time error emitted before the
+watchdog itself expired. The adapter's error wrapping therefore erased the
+positive dispatch evidence at exactly the boundary where the subagent policy
+needed to distinguish safe full-history recovery from a fresh-start replay.
+The regression now spans the real Codex adapter, the typed dispatch evidence,
+the classifier, and the fresh-start-disabled initial recovery owner, with
+flushed/unknown fail-closed counterparts.
+
+Verification (this branch):
+
+```text
+NODE_ENV=test pnpm exec vitest run source/services/session/initial-turn-recovery-handler.test.ts \
+  source/services/retry/retry-classifier.test.ts \
+  source/providers/codex-responses-model.test.ts \
+  source/providers/websocket-request-dispatch.test.ts
+PASS 4 files, 146 tests
+
+pnpm test:related ./source/providers/codex-responses-model.ts \
+  ./source/services/retry/retry-classifier.ts
+KNOWN BASELINE FAILURE: 156 files passed; 6 unrelated file-boundary safety
+  assertions failed in apply-patch.test.ts, create-file.test.ts, and
+  search-replace.test.ts.
+
+pnpm typecheck
+PASS
+
+git diff --check && pnpm exec prettier --check \
+  source/providers/codex-responses-model.ts \
+  source/services/retry/retry-classifier.ts \
+  source/services/retry/retry-classifier.test.ts \
+  source/services/session/initial-turn-recovery-handler.test.ts \
+  docs/plans/guard-ledger.md
+PASS
+
+pnpm test:provider-black-box
+PASS 19 files, 174 tests; 1 skipped
+```
+
+Final implementation commit: `4f4ba2a0`.
+
 ## Reference: catalogued guards
 
 Recorded so the next reader does not re-derive them. **No row here owes a test.**

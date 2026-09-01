@@ -1017,6 +1017,15 @@ const isDefinitelyUnsentWebSocketError = (error: unknown, seen = new Set<unknown
   return isDefinitelyUnsentWebSocketError(record.message, seen) || isDefinitelyUnsentWebSocketError(record.cause, seen);
 };
 
+const isConnectTimeoutError = (error: unknown, seen = new Set<unknown>()): boolean => {
+  if (!error || seen.has(error)) return false;
+  seen.add(error);
+  if (typeof error !== 'object') return false;
+  const record = error as Record<string, unknown>;
+  if (record.code === 'ETIMEDOUT' || record.code === 'UND_ERR_CONNECT_TIMEOUT') return true;
+  return isConnectTimeoutError(record.cause, seen);
+};
+
 /**
  * A receive-watchdog timeout that the send path proved never reached the wire.
  *
@@ -1034,6 +1043,19 @@ const asProvablyUnsentTimeout = (
   if (!timeoutError || timing.frameCount > 0) return undefined;
   if (readWebSocketDispatch(request) !== 'unsent') return undefined;
   return new UnsentWebSocketRequestError(timeoutError.message, { cause: timeoutError });
+};
+
+const asProvablyUnsentConnectTimeout = (
+  error: unknown,
+  request: object,
+  receivedRawFrame: boolean,
+): UnsentWebSocketRequestError | undefined => {
+  if (receivedRawFrame || readWebSocketDispatch(request) !== 'unsent' || !isConnectTimeoutError(error)) {
+    return undefined;
+  }
+  return new UnsentWebSocketRequestError(getErrorMessage(error) || 'Codex WebSocket connection timed out.', {
+    cause: error,
+  });
 };
 
 const asAmbiguousModelOutcome = (error: unknown): AmbiguousModelOutcomeError | undefined => {
@@ -1219,7 +1241,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     wireStateToken?: ChainedRequestToken,
     signal?: AbortSignal,
     receiveTiming?: () => WebSocketReceiveTiming,
-    asProvablyUnsent?: () => UnsentWebSocketRequestError | undefined,
+    asProvablyUnsent?: (error: unknown) => UnsentWebSocketRequestError | undefined,
   ): Promise<AsyncIterable<any>> {
     const logReceived = this.#logTrafficReceived.bind(this);
     const logFailed = this.#logTrafficFailed.bind(this);
@@ -1271,7 +1293,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         // The watchdog's own timeout may carry proof that the request never
         // reached the wire; the wire-state decision above still keys off the
         // error as thrown.
-        const failure = asProvablyUnsent?.() ?? error;
+        const failure = asProvablyUnsent?.(error) ?? error;
         // Bounded evidence of whatever progress the recorder observed before
         // the failure (category/counter/timing, no raw frame payload) — a
         // stream that fails after thousands of frames (e.g. an abrupt close)
@@ -1701,10 +1723,11 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   protected override async *rawStream(request: StreamedModelTurnRequest): AsyncIterable<any> {
     let receivedRawFrame = false;
     let attemptedWithServerHistory = false;
+    let effectiveRequest: any = request;
     try {
       const preparedRequest = this.#prepareCodexServerHistoryRequests(request);
       attemptedWithServerHistory = Boolean(this.#getEffectivePreviousResponseId(preparedRequest.request));
-      const effectiveRequest = preparedRequest.request;
+      effectiveRequest = preparedRequest.request;
       this.#assertChainRequestMakesProgress(effectiveRequest);
 
       let responseId: string | undefined;
@@ -1731,12 +1754,13 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       }
       this.#rememberConsumedToolResultCallIds(responseId, effectiveRequest.previousResponseId, effectiveRequest.input);
     } catch (error) {
-      this.#logWebSocketClosedEarly(error, receivedRawFrame);
+      const failure = asProvablyUnsentConnectTimeout(error, effectiveRequest, receivedRawFrame) ?? error;
+      this.#logWebSocketClosedEarly(failure, receivedRawFrame);
       this.#recordRejectedChainRequest(error);
-      if (isPreviousResponseUnavailableError(error) && attemptedWithServerHistory && !receivedRawFrame) {
+      if (isPreviousResponseUnavailableError(failure) && attemptedWithServerHistory && !receivedRawFrame) {
         this.#forgetCodexResponseId();
         if (!this.#shouldFallbackWithoutServerHistory(request)) {
-          throw error;
+          throw failure;
         }
         const fallbackRequest = this.#withoutCodexServerHistory(request);
         let responseId: string | undefined;
@@ -1764,10 +1788,10 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
           throw asAmbiguousModelOutcome(fallbackError) ?? fallbackError;
         }
       }
-      if (this.#shouldForgetCodexServerHistory(error)) {
+      if (this.#shouldForgetCodexServerHistory(failure)) {
         this.#forgetCodexResponseId();
       }
-      throw asAmbiguousModelOutcome(error) ?? error;
+      throw asAmbiguousModelOutcome(failure) ?? failure;
     }
   }
 
@@ -1917,7 +1941,9 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         wireStateToken,
         updatedRequest.signal,
         () => watchdog.receiveTiming(),
-        () => asProvablyUnsentTimeout(watchdog.timeoutError(), watchdog.receiveTiming(), updatedRequest),
+        (error) =>
+          asProvablyUnsentTimeout(watchdog.timeoutError(), watchdog.receiveTiming(), updatedRequest) ??
+          asProvablyUnsentConnectTimeout(error, updatedRequest, watchdog.receiveTiming().frameCount > 0),
       );
     } catch (error) {
       const timeoutError = watchdog.timeoutError();

@@ -13,19 +13,16 @@ describe('groupCommandRuns', () => {
     expect(result).toEqual(messages);
   });
 
-  it('folds a lone settled call once another kind of message closes the run', () => {
+  it('leaves a lone settled call ungrouped in its original form once another kind of message closes the run', () => {
     const messages = [
       { id: '1', sender: 'command', status: 'completed', toolName: 'grep' },
       { id: '2', sender: 'bot', status: 'finalized' },
     ];
     const result = groupCommandRuns(messages);
-    expect(result).toHaveLength(2);
-    expect(result[0]).toMatchObject({ sender: 'command-group', status: 'completed' });
-    expect((result[0] as any).members).toHaveLength(1);
-    expect(result[1]).toEqual(messages[1]);
+    expect(result).toEqual(messages);
   });
 
-  it('merges a closed run of terminal commands into one group', () => {
+  it('merges a closed run of multiple terminal commands into one group', () => {
     const messages = [
       { id: '1', sender: 'command', status: 'completed', toolName: 'grep' },
       { id: '2', sender: 'command', status: 'completed', toolName: 'read_file' },
@@ -50,7 +47,7 @@ describe('groupCommandRuns', () => {
     expect(result[1]).toEqual(messages[1]);
   });
 
-  it('grows the group while retaining the latest completed tool separate', () => {
+  it('grows the group while retaining the latest completed tool separate once 3 calls settle', () => {
     const messages = [
       { id: '1', sender: 'command', status: 'completed', toolName: 'grep' },
       { id: '2', sender: 'command', status: 'completed', toolName: 'read_file' },
@@ -81,14 +78,15 @@ describe('groupCommandRuns', () => {
     const messages = [
       { id: '1', sender: 'command', status: 'completed', toolName: 'grep' },
       { id: '2', sender: 'command', status: 'completed', toolName: 'read_file' },
-      { id: '3', sender: 'command', status: 'running', toolName: 'shell' },
+      { id: '3', sender: 'command', status: 'completed', toolName: 'glob' },
+      { id: '4', sender: 'command', status: 'running', toolName: 'shell' },
     ];
     const result = groupCommandRuns(messages);
     expect(result).toHaveLength(3);
     expect(result[0]).toMatchObject({ sender: 'command-group' });
-    expect((result[0] as any).members.map((m: any) => m.id)).toEqual(['1']);
-    expect(result[1]).toEqual(messages[1]);
-    expect(result[2]).toEqual(messages[2]);
+    expect((result[0] as any).members.map((m: any) => m.id)).toEqual(['1', '2']);
+    expect(result[1]).toEqual(messages[2]);
+    expect(result[2]).toEqual(messages[3]);
   });
 
   it('leaves every call from the first in-flight one onward unfolded', () => {
@@ -97,11 +95,12 @@ describe('groupCommandRuns', () => {
     const messages = [
       { id: '1', sender: 'command', status: 'completed', toolName: 'grep' },
       { id: '2', sender: 'command', status: 'completed', toolName: 'grep' },
-      { id: '3', sender: 'command', status: 'running', toolName: 'shell' },
-      { id: '4', sender: 'command', status: 'completed', toolName: 'read_file' },
+      { id: '3', sender: 'command', status: 'completed', toolName: 'grep' },
+      { id: '4', sender: 'command', status: 'running', toolName: 'shell' },
+      { id: '5', sender: 'command', status: 'completed', toolName: 'read_file' },
     ];
     const result = groupCommandRuns(messages);
-    expect(result.map((m: any) => m.id)).toEqual(['command-group:1', '2', '3', '4']);
+    expect(result.map((m: any) => m.id)).toEqual(['command-group:1', '3', '4', '5']);
   });
 
   it('folds nothing while fewer than two calls have settled', () => {
@@ -116,9 +115,10 @@ describe('groupCommandRuns', () => {
     const messages = [
       { id: '1', sender: 'command', status: 'completed', toolName: 'grep' },
       { id: '2', sender: 'command', status: 'completed', toolName: 'grep' },
-      { id: '3', sender: 'command', status: 'pending', toolName: 'shell' },
+      { id: '3', sender: 'command', status: 'completed', toolName: 'grep' },
+      { id: '4', sender: 'command', status: 'pending', toolName: 'shell' },
     ];
-    expect(groupCommandRuns(messages).map((m: any) => m.id)).toEqual(['command-group:1', '2', '3']);
+    expect(groupCommandRuns(messages).map((m: any) => m.id)).toEqual(['command-group:1', '3', '4']);
   });
 
   it('marks a run partial when only some members failed in a closed run', () => {
@@ -145,8 +145,8 @@ describe('groupCommandRuns', () => {
     const grow = (ids: string[]) =>
       groupCommandRuns(ids.map((id) => ({ id, sender: 'command', status: 'completed', toolName: 'read_file' })));
 
-    expect(grow(['a', 'b'])[0].id).toBe('command-group:a');
     expect(grow(['a', 'b', 'c'])[0].id).toBe('command-group:a');
+    expect(grow(['a', 'b', 'c', 'd'])[0].id).toBe('command-group:a');
   });
 
   it('groups multiple independent closed runs separately', () => {
@@ -166,7 +166,7 @@ describe('groupCommandRuns', () => {
     expect(result[3]).toEqual(messages[5]);
   });
 
-  it('folds all settled calls when options.isClosed is explicitly set', () => {
+  it('folds all settled calls when options.isClosed is explicitly set and >= 2 calls', () => {
     const messages = [
       { id: '1', sender: 'command', status: 'completed', toolName: 'grep' },
       { id: '2', sender: 'command', status: 'completed', toolName: 'read_file' },
@@ -177,12 +177,10 @@ describe('groupCommandRuns', () => {
     expect((result[0] as any).members).toHaveLength(2);
   });
 
-  it('folds a lone settled call when options.isClosed is explicitly set', () => {
+  it('leaves a lone settled call ungrouped when options.isClosed is explicitly set', () => {
     const messages = [{ id: '1', sender: 'command', status: 'completed', toolName: 'grep' }];
     const result = groupCommandRuns(messages, { isClosed: true });
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({ sender: 'command-group' });
-    expect((result[0] as any).members).toHaveLength(1);
+    expect(result).toEqual(messages);
   });
 
   it('merges adjacent CommandGroupMessages into a single unified group', () => {
@@ -227,16 +225,13 @@ describe('groupCommandRuns', () => {
 });
 
 describe('summarizeCommandGroup', () => {
-  it('folds a lone completed subagent once another message arrives', () => {
+  it('leaves a lone completed subagent ungrouped once another message arrives', () => {
     const messages = [
       { id: '1', sender: 'subagent', status: 'completed', role: 'explorer', task: 'find file' },
       { id: '2', sender: 'bot', status: 'finalized' },
     ];
     const result = groupCommandRuns(messages);
-    expect(result).toHaveLength(2);
-    expect(result[0]).toMatchObject({ sender: 'command-group', status: 'completed' });
-    expect((result[0] as any).members).toHaveLength(1);
-    expect(result[1]).toEqual(messages[1]);
+    expect(result).toEqual(messages);
   });
 
   it('merges commands and completed subagents into one concise group', () => {
@@ -258,6 +253,16 @@ describe('summarizeCommandGroup', () => {
       { sender: 'subagent' as const, status: 'completed' },
     ];
     expect(summarizeCommandGroup(members)).toBe('Delegated to 2 subagents');
+  });
+
+  it('summarizes memory and session tools with proper verbs and nouns', () => {
+    expect(summarizeCommandGroup([{ toolName: 'memory_update' }, { toolName: 'memory_update' }])).toBe(
+      'Updated 2 memories',
+    );
+    expect(summarizeCommandGroup([{ toolName: 'memory_create' }])).toBe('Saved 1 memory');
+    expect(summarizeCommandGroup([{ toolName: 'session_search' }, { toolName: 'session_read' }])).toBe(
+      'Searched 1 prior session, read 1 prior session',
+    );
   });
 
   it('summarizes async subagents with distinct category', () => {

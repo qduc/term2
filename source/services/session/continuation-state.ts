@@ -9,6 +9,7 @@ import type { GenerationToken } from '../generation-guard.js';
 import type { PersistedAssistantTurnItem } from '../conversation/conversation-persistence-types.js';
 import type { AssistantJournalItemLogEvent } from '../logging/conversation-log-events.js';
 import type { AbortedApprovalContext } from '../approval/approval-state.js';
+import { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
 
 export interface PreparedContinuation {
   state: ContinuationHandle;
@@ -57,9 +58,12 @@ export class ContinuationState {
   retryCounts: RetryCounts;
   lastStream: AgentStream | null;
   currentResumePreviousResponseId: string | null | undefined;
+  /** Shared with the initial attempt that started this logical turn, when one exists. */
+  readonly recoveryBudget: RetryRecoveryBudget;
 
-  constructor(token: number) {
+  constructor(token: number, recoveryBudget?: RetryRecoveryBudget) {
     this.token = token;
+    this.recoveryBudget = recoveryBudget ?? new RetryRecoveryBudget();
     this.currentState = { kind: 'continuation' };
     this.currentCallIds = [];
     this.source = 'continueRunStream';

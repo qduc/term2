@@ -157,6 +157,58 @@ it('resets only the transient retry count after a successful initial stream cycl
   });
 });
 
+// The shared 90s/3-attempt/1-replay recovery envelope belongs to the whole
+// logical turn, not just its first model request. Before this, a
+// continuation (tool-approval follow-up) built its own ContinuationState with
+// no budget at all, so tool-call turns -- the common case -- got unlimited
+// transport retries and replays regardless of the contract.
+it('shares the initial attempt recovery budget with a same-turn continuation', async () => {
+  const stream = new MockStream([{ type: 'text_delta', text: 'hello response' }]);
+  stream.finalOutput = 'hello response';
+  const mockClient: any = {
+    getProvider: () => 'openai',
+    async startStream() {
+      return stream;
+    },
+    continueRunStream: async () => {
+      const failed = new MockStream([]);
+      (failed as any)[Symbol.asyncIterator] = async function* () {
+        throw new Error('temporary provider failure');
+      };
+      return failed;
+    },
+  };
+
+  const { workflow, composition } = setupWorkflow(mockClient);
+  const token = composition.generationGuard.capture();
+  const attempt = new TurnAttempt({
+    turn: { text: 'hello' },
+    token,
+    initialRetryCounts: defaultRetryCounts,
+    initialJournalSnapshot: [],
+    maxTransientRetries: 3,
+  });
+
+  // Runs the real executeInitialAttempt, which is what sets the workflow's
+  // active recovery budget to attempt.recoveryBudget.
+  await collect(workflow.executeInitialAttempt(attempt));
+
+  prepareApprovalContinuation(composition, token);
+  let observedRecoveryBudget: unknown;
+  (workflow as any).deps.continuationRecoveryHandler.handle = async function* ({ state }: any) {
+    observedRecoveryBudget = state.recoveryBudget;
+    return { kind: 'terminated' };
+  };
+
+  // The mock recovery handler reports 'terminated', which the real workflow
+  // re-throws to end the turn -- only the budget-identity capture matters here.
+  await collect(
+    workflow.executeContinuationAttempt({ kind: 'approval_decision', answer: 'y', generation: token }),
+  ).catch(() => {});
+
+  expect(observedRecoveryBudget).toBe(attempt.recoveryBudget);
+});
+
 it('resets the transient retry count after a recovered continuation stream cycle succeeds', async () => {
   let streamCount = 0;
   const failedStream = new MockStream([]);

@@ -1,5 +1,6 @@
 import { it, expect } from 'vitest';
 import { ContinuationRecoveryHandler } from './continuation-recovery-handler.js';
+import { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
 
 function createMockState(overrides: any = {}) {
   return {
@@ -14,6 +15,7 @@ function createMockState(overrides: any = {}) {
     journalSnapshot: [],
     currentState: { id: 'run-1' },
     currentCallIds: ['call-1'],
+    recoveryBudget: new RetryRecoveryBudget(),
     setRetryCounts: (_counts: any) => {
       // mutate in place
     },
@@ -207,4 +209,91 @@ it('returns resume without widening currentCallIds back to the whole turn ledger
   expect(value.kind).toBe('resume');
   expect(state.currentState.id).toBe('run-2');
   expect(state.currentCallIds).toEqual(['call-1']);
+});
+
+// Continuation attempts (the tool-call loop) previously had no access to the
+// shared recovery budget at all, so a fresh_start replay here was unbounded.
+// This proves the budget is now consulted and a second replay in the same
+// logical turn is refused rather than silently allowed.
+it('refuses a second automatic fresh_start replay once the shared budget is used up', async () => {
+  const handler = new ContinuationRecoveryHandler({
+    logger: { warn: () => {}, getCorrelationId: () => undefined, error: () => {}, debug: () => {} } as any,
+    sessionId: 'test',
+    generationGuard: { isCurrent: () => true } as any,
+    retryClassifier: {
+      classify: () => ({ kind: 'transport_downgrade' }),
+    } as any,
+    recoveryPolicy: {
+      nextRetryCounts: (counts: any) => counts,
+      plan: () => ({ kind: 'retry_fresh', inputMode: 'full_history' }),
+    } as any,
+    recoveryExecutor: {
+      apply: () => ({ kind: 'run', instruction: { skipUserMessage: true } }),
+    } as any,
+    retryEventPresenter: {
+      present: () => ({ event: { type: 'retry_scheduled' }, logMessage: 'retry', logFields: {} }),
+    } as any,
+    resolveRetryLimit: () => 5,
+    toolTracker: { activeCallIdsForCurrentTurn: () => [] } as any,
+    provider: 'openai',
+  });
+
+  const recoveryBudget = new RetryRecoveryBudget();
+  // A prior replay elsewhere in this same logical turn already used up the
+  // one automatic replay the shared envelope allows.
+  expect(recoveryBudget.claimAutomaticReplay()).toBe(true);
+
+  const events: any[] = [];
+  const state = createMockState({ recoveryBudget });
+  const iterator = handler.handle({ error: new Error('previous response not found'), state });
+  let next = await iterator.next();
+  while (!next.done) {
+    events.push(next.value);
+    next = await iterator.next();
+  }
+
+  expect(events.map((e: any) => e.type)).toEqual(['retry_scheduled', 'retry_exhausted']);
+  expect((next.value as any).kind).toBe('terminated');
+});
+
+// The budget instance passed in must be the one actually consulted -- a
+// continuation that constructs its own budget instead of using the shared
+// one would let each continuation retry independently, defeating the "one
+// shared 90s/3-attempt/1-replay envelope per logical turn" contract.
+it('shares one recovery budget instance across the turn rather than tracking its own', async () => {
+  const handler = new ContinuationRecoveryHandler({
+    logger: { warn: () => {}, getCorrelationId: () => undefined, error: () => {}, debug: () => {} } as any,
+    sessionId: 'test',
+    generationGuard: { isCurrent: () => true } as any,
+    retryClassifier: {
+      classify: () => ({ kind: 'transient', attempt: 1, delayMs: 5 }),
+    } as any,
+    recoveryPolicy: {
+      nextRetryCounts: (counts: any) => counts,
+      plan: () => ({ kind: 'transient' } as any),
+    } as any,
+    recoveryExecutor: {
+      apply: () => ({
+        kind: 'recovered',
+        instruction: { resumeState: { id: 'run-3' }, resumePreviousResponseId: 'prev-2' },
+      }),
+    } as any,
+    retryEventPresenter: {
+      present: () => ({ event: { type: 'retry_scheduled' }, logMessage: 'retry', logFields: {} }),
+    } as any,
+    resolveRetryLimit: () => 5,
+    toolTracker: { activeCallIdsForCurrentTurn: () => [] } as any,
+  });
+
+  const recoveryBudget = new RetryRecoveryBudget();
+  expect(recoveryBudget.startedAt).toBeUndefined();
+
+  const state = createMockState({ recoveryBudget });
+  const iterator = handler.handle({ error: new Error('rate limit'), state });
+  let next = await iterator.next();
+  while (!next.done) next = await iterator.next();
+
+  // The retryable failure was noted on the caller-supplied budget, not a
+  // freshly constructed one.
+  expect(recoveryBudget.startedAt).toBeDefined();
 });

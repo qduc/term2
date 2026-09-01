@@ -84,6 +84,7 @@ import { contextCompactionFailureCategory } from '../../providers/openai-respons
 import type { OpenAIRootFreshTurnSelectorParityObserver } from '../openai-root-selector-parity-observer.js';
 import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
+import type { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
 
 export interface TurnWorkflowDeps {
   agentClient: ConversationAgentClient;
@@ -124,6 +125,14 @@ export class TurnWorkflow {
   #liveRun: LiveRun<ConversationEvent, LiveRunResult> | null = null;
   #nextLiveRunId = 0;
   #hookTurnId: string | undefined;
+  /**
+   * The recovery envelope of the initial attempt that started the current
+   * logical turn, if one is active. Continuation attempts (tool-call
+   * follow-ups, and standalone approval-resolution continuations) reuse it so
+   * the whole turn shares one 90s/3-attempt/1-replay budget rather than each
+   * continuation getting its own unbounded allowance.
+   */
+  #activeRecoveryBudget: RetryRecoveryBudget | undefined;
 
   constructor(private readonly deps: TurnWorkflowDeps) {
     this.#toolCallMarkers = deps.toolCallMarkers ?? new ToolCallMarkerStore();
@@ -327,6 +336,10 @@ export class TurnWorkflow {
       }
       attempt = creation.attempt;
     }
+    // Continuation attempts driven from within this same logical turn (tool
+    // approvals, abort resolution) reuse this budget instead of getting their
+    // own unbounded one; see #activeRecoveryBudget.
+    this.#activeRecoveryBudget = attempt.recoveryBudget;
 
     let skipUser = options.skipUserMessage ?? false;
     let currentResumeState = options.resumeState;
@@ -863,7 +876,7 @@ export class TurnWorkflow {
     }
 
     const prepared = this.deps.planApplier.prepareInit(init);
-    const state = new ContinuationState(init.generation);
+    const state = new ContinuationState(init.generation, this.#activeRecoveryBudget);
     state.initializeFrom(prepared, this.#activeCallIdsForInit(init, prepared));
 
     try {
@@ -1142,6 +1155,7 @@ export class TurnWorkflow {
     void
   > {
     const continuationOptions: AgentClientRunOptions = {
+      recoveryBudget: state.recoveryBudget,
       previousResponseId: state.currentResumePreviousResponseId ?? this.deps.providerContinuity.previousResponseId,
       sessionId: this.deps.sessionId,
       toolResultCallIds: state.currentCallIds,

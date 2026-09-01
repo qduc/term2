@@ -62,6 +62,7 @@ it('sessions do not share previousResponseId', async () => {
       options: {
         previousResponseId: null,
         sessionId: 'A',
+        recoveryBudget: expect.any(Object),
         providerHistorySnapshot: expect.objectContaining({
           revision: 1,
           history: [{ role: 'user', type: 'message', content: 'A1' }],
@@ -73,6 +74,7 @@ it('sessions do not share previousResponseId', async () => {
       options: {
         previousResponseId: null,
         sessionId: 'B',
+        recoveryBudget: expect.any(Object),
         providerHistorySnapshot: expect.objectContaining({
           revision: 1,
           history: [{ role: 'user', type: 'message', content: 'B1' }],
@@ -84,6 +86,7 @@ it('sessions do not share previousResponseId', async () => {
       options: {
         previousResponseId: 'resp-A1',
         sessionId: 'A',
+        recoveryBudget: expect.any(Object),
         providerHistorySnapshot: expect.objectContaining({
           revision: 2,
           history: [
@@ -94,6 +97,9 @@ it('sessions do not share previousResponseId', async () => {
       },
     },
   ]);
+  // Each turn gets its own recovery envelope; a follow-up turn in the same
+  // session must not silently carry over an already-partially-consumed one.
+  expect(startCalls[0].options.recoveryBudget).not.toBe(startCalls[2].options.recoveryBudget);
   expect(Object.isFrozen(startCalls[0].options.providerHistorySnapshot)).toBe(true);
   expect(startCalls[0].options.providerHistorySnapshot).not.toBe(startCalls[1].options.providerHistorySnapshot);
 });

@@ -8,6 +8,7 @@ import type { RetryEventPresenter } from '../retry/retry-event-presenter.js';
 import type { RetryCounts, RecoveryState } from '../retry/retry-contracts.js';
 import type { ContinuationState } from './continuation-state.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
+import { classifyProviderFailure } from '../retry/provider-failure-classification.js';
 
 export type ContinuationRecoveryHandlerDeps = {
   breakChaining?: () => void;
@@ -20,6 +21,7 @@ export type ContinuationRecoveryHandlerDeps = {
   retryEventPresenter: RetryEventPresenter;
   resolveRetryLimit: () => number;
   toolTracker: SessionToolTracker;
+  provider?: string;
 };
 
 export type ContinuationRecoveryResult =
@@ -60,6 +62,10 @@ export class ContinuationRecoveryHandler {
       return { kind: 'terminated' };
     }
 
+    if (classified.kind === 'transient' || classified.kind === 'chain_recovery' || classified.kind === 'model_retry') {
+      state.recoveryBudget.noteRetryableFailure();
+    }
+
     const presentation = this.deps.retryEventPresenter.present({
       failure: classified,
       maxTransientRetries,
@@ -97,6 +103,20 @@ export class ContinuationRecoveryHandler {
     };
     const transientDelayMs =
       classified.kind === 'transient' || classified.kind === 'chain_recovery' ? classified.delayMs : undefined;
+
+    if ((plan.kind === 'retry_fresh' || plan.kind === 'replay_turn') && !state.recoveryBudget.claimAutomaticReplay()) {
+      const providerName = this.deps.provider ?? 'provider';
+      yield {
+        type: 'retry_exhausted',
+        provider: providerName,
+        errorKind: classifyProviderFailure(error).errorKind,
+        attempts: state.recoveryBudget.physicalAttempts,
+        maxAttempts: state.recoveryBudget.maxPhysicalAttempts,
+        message: `Could not reach ${providerName} after ${state.recoveryBudget.physicalAttempts} attempts. No model response was received.`,
+        canRetry: true,
+      };
+      return { kind: 'terminated' };
+    }
 
     const recoveryResult = this.deps.recoveryExecutor.apply({
       plan,

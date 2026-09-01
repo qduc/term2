@@ -724,6 +724,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     retryEventPresenter,
     resolveRetryLimit,
     toolTracker,
+    provider: agentClient?.getProvider?.(),
   });
 
   const turnWorkflow = new TurnWorkflow({

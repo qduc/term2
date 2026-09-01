@@ -1235,10 +1235,16 @@ Enforcement owner: RetryRecoveryBudget (source/services/retry/
   only for its own post-failure backoff-retry loop; the first dispatch and
   successful tool-call continuations are ordinary work and do not consume the
   recovery allowance. Both recovery handlers also claim the single automatic
-  replay (claimAutomaticReplay()) before executing a retry_fresh recovery plan, and
-  start the 90s clock lazily (noteRetryableFailure(), on first retryable
-  failure, not at turn start) for transient/chain_recovery classifications
-  only. One RetryRecoveryBudget instance is shared for the whole logical
+  replay (claimAutomaticReplay()) before executing a retry_fresh recovery plan,
+  except `chain_recovery` with `cause: 'connection_interrupted'` after every
+  live-turn tool is `completed` and present in reconciled history
+  (`skipsAutomaticReplayClaim` in `committed-tool-continuation.ts`). That path
+  severs a dead chain and continues from durable pairs; it is not a replay of
+  committed work, so it must not spend the one-replay slot and fail a second
+  1006 in the same turn. It still claims a physical attempt and stays inside
+  the 90s / 3-attempt envelope. Handlers start the 90s clock lazily
+  (noteRetryableFailure(), on first retryable failure, not at turn start) for
+  transient/chain_recovery classifications only. One RetryRecoveryBudget instance is shared for the whole logical
   turn: created per TurnAttempt (turn-attempt.ts), threaded to
   AgentClientRunOptions.recoveryBudget for the initial request, and threaded
   to ContinuationState.recoveryBudget for every continuation attempt driven
@@ -1285,12 +1291,12 @@ Legitimate work that can produce the same signal: a slow provider needing
   application-run-loop.ts, independent of whether the request produced
   anything -- confirmed regression, defect 4 (this acceptance round).
 Genuine harmful case that must still trip the guard: real streamed
-  text/reasoning, a committed provider item (assistant message, tool result,
-  provider-opaque item), or a dispatched-but-unresolved tool call in the
-  stream all still correctly force unrecoverable / refuse the replay --
-  proven by the paired true-positive case next to every false-positive test
-  added this round (retry-classifier.test.ts, continuation-recovery-
-  handler.test.ts, agent-stream.test.ts).
+  text/reasoning with no completed tools, a committed provider item that is
+  not a settled tool pair, or a dispatched-but-unresolved / `unknown` tool
+  call still force unrecoverable / refuse the replay -- proven by the paired
+  true-positive cases in retry-classifier.test.ts. A recoverable 1006 after
+  every live-turn tool is completed and present in reconciled history is
+  admitted as `chain_recovery` instead (not a replay).
 Configuration sources and precedence: no user-facing setting.
   RETRY_RECOVERY_LIMITS (retry-recovery-budget.ts) declares fixed constants
   (maxRecoveryTimeMs 90_000, maxPhysicalAttempts 3, maxAutomaticReplays 1).

@@ -258,6 +258,48 @@ it('refuses a second automatic fresh_start replay once the shared budget is used
   expect((next.value as any).kind).toBe('terminated');
 });
 
+it('does not refuse a second settled-tool connection chain_recovery once automatic replay is spent', async () => {
+  const handler = new ContinuationRecoveryHandler({
+    logger: { warn: () => {}, getCorrelationId: () => undefined, error: () => {}, debug: () => {} } as any,
+    sessionId: 'test',
+    generationGuard: { isCurrent: () => true } as any,
+    retryClassifier: {
+      classify: () => ({ kind: 'chain_recovery', attempt: 1, delayMs: 0, cause: 'connection_interrupted' }),
+    } as any,
+    recoveryPolicy: {
+      nextRetryCounts: (counts: any) => counts,
+      plan: () => ({ kind: 'retry_fresh', inputMode: 'full_history', disableChainingForAttempt: true }),
+    } as any,
+    recoveryExecutor: {
+      apply: () => ({ kind: 'run', instruction: { skipUserMessage: true, disableChainingForAttempt: true } }),
+    } as any,
+    retryEventPresenter: {
+      present: () => ({ event: { type: 'retry_scheduled' }, logMessage: 'retry', logFields: {} }),
+    } as any,
+    resolveRetryLimit: () => 5,
+    toolTracker: {
+      inspectCommittedToolContinuation: () => ({
+        completedToolCount: 1,
+        allToolsCompleted: true,
+        completedPairsPresentInHistory: true,
+      }),
+    } as any,
+    provider: 'openai',
+  });
+
+  const recoveryBudget = new RetryRecoveryBudget();
+  expect(recoveryBudget.claimAutomaticReplay()).toBe(true);
+
+  const state = createMockState({ recoveryBudget });
+  const iterator = handler.handle({ error: new Error('closed early'), state });
+  let next = await iterator.next();
+  while (!next.done) next = await iterator.next();
+
+  expect((next.value as any).kind).toBe('fresh_start');
+  expect(recoveryBudget.physicalAttempts).toBe(1);
+  expect(recoveryBudget.automaticReplays).toBe(1);
+});
+
 // The budget instance passed in must be the one actually consulted -- a
 // continuation that constructs its own budget instead of using the shared
 // one would let each continuation retry independently, defeating the "one

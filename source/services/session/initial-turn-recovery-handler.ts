@@ -13,6 +13,8 @@ import { classifyProviderFailure } from '../retry/provider-failure-classificatio
 import { isRetryRecoveryBudgetExhaustedError } from '../retry/retry-recovery-budget.js';
 import type { SessionInputPlanner } from './session-input-planner.js';
 import type { TurnAttempt } from './turn-attempt.js';
+import type { SessionToolTracker } from './session-tool-tracker.js';
+import { skipsAutomaticReplayClaim } from '../retry/committed-tool-continuation.js';
 
 export type InitialTurnRecoveryResult =
   | { kind: 'run'; instruction: NextRunInstruction; delayMs?: number; useStandardServiceTier?: boolean }
@@ -32,6 +34,7 @@ export type InitialTurnRecoveryHandlerDeps = {
   retryEventPresenter: RetryEventPresenter;
   sessionId: string;
   provider?: string;
+  toolTracker?: Pick<SessionToolTracker, 'inspectCommittedToolContinuation'>;
 };
 
 export class InitialTurnRecoveryHandler {
@@ -48,11 +51,13 @@ export class InitialTurnRecoveryHandler {
       return { kind: 'stale' };
     }
 
+    const committedToolContinuation = this.deps.toolTracker?.inspectCommittedToolContinuation();
     let classified = this.deps.retryClassifier.classify({
       error,
       retryCounts: attempt.retryCounts,
       stream,
       hasCommittedOutput: attempt.modelEventSeen,
+      committedToolContinuation,
       maxTransientRetries: attempt.maxTransientRetries,
       maxModelRetries: attempt.maxModelRetries,
     });
@@ -192,7 +197,9 @@ export class InitialTurnRecoveryHandler {
     // for the same reason noted above.
     if (
       plan.kind === 'retry_fresh' &&
-      (!attempt.recoveryBudget.claimAutomaticReplay() || !attempt.recoveryBudget.claimPhysicalAttempt())
+      ((!skipsAutomaticReplayClaim(classified, committedToolContinuation) &&
+        !attempt.recoveryBudget.claimAutomaticReplay()) ||
+        !attempt.recoveryBudget.claimPhysicalAttempt())
     ) {
       // Refusing the plan must still go through the same settlement path a
       // normal termination does -- open tool calls settle truthfully (not as

@@ -118,6 +118,112 @@ it('classify refuses to replay a transient failure once a tool call was dispatch
   expect(result.kind).toBe('unrecoverable');
 });
 
+const flakyClose = () =>
+  new AmbiguousModelOutcomeError(
+    'Codex WebSocket connection closed before a terminal response event. (code=1006 reason="" unsent=0)',
+  );
+
+const settledReadFileContinuation = {
+  completedToolCount: 1,
+  allToolsCompleted: true,
+  completedPairsPresentInHistory: true,
+};
+
+it('classify chain-recovers a flaky close after every live-turn tool completed and is in history', () => {
+  const classifier = makeClassifier({}, () => 0);
+  const stream = {
+    completed: Promise.resolve(undefined),
+    output: [
+      { type: 'tool_call_dispatched', callId: 'call-1', toolName: 'read_file' },
+      { type: 'item', item: { type: 'function_call_output', callId: 'call-1', output: 'ok' } },
+    ],
+    newItems: [],
+  } as any;
+
+  const result = classifier.classify(
+    baseContext({
+      error: flakyClose(),
+      stream,
+      hasCommittedOutput: true,
+      committedToolContinuation: settledReadFileContinuation,
+    }),
+  );
+
+  expect(result).toMatchObject({ kind: 'chain_recovery', attempt: 1, cause: 'connection_interrupted' });
+});
+
+it('classify still refuses a flaky close when a dispatched tool has no completed result', () => {
+  const classifier = makeClassifier();
+  const stream = {
+    completed: Promise.resolve(undefined),
+    output: [{ type: 'tool_call_dispatched', callId: 'call-1', toolName: 'bash' }],
+    newItems: [],
+  } as any;
+
+  const result = classifier.classify(
+    baseContext({
+      error: flakyClose(),
+      stream,
+      hasCommittedOutput: true,
+      committedToolContinuation: {
+        completedToolCount: 0,
+        allToolsCompleted: false,
+        completedPairsPresentInHistory: false,
+      },
+    }),
+  );
+
+  expect(result.kind).toBe('unrecoverable');
+});
+
+it('classify still refuses a flaky close when completed tools are missing from reconciled history', () => {
+  const classifier = makeClassifier();
+  const stream = {
+    completed: Promise.resolve(undefined),
+    output: [{ type: 'tool_call_dispatched', callId: 'call-1', toolName: 'read_file' }],
+    newItems: [],
+  } as any;
+
+  const result = classifier.classify(
+    baseContext({
+      error: flakyClose(),
+      stream,
+      hasCommittedOutput: true,
+      committedToolContinuation: {
+        completedToolCount: 1,
+        allToolsCompleted: true,
+        completedPairsPresentInHistory: false,
+      },
+    }),
+  );
+
+  expect(result.kind).toBe('unrecoverable');
+});
+
+it('classify still refuses a flaky close after committed text when no tools completed', () => {
+  const classifier = makeClassifier();
+  const stream = {
+    completed: Promise.resolve(undefined),
+    output: [{ type: 'text_delta', text: 'partial answer already shown to the user' }],
+    newItems: [],
+  } as any;
+
+  const result = classifier.classify(
+    baseContext({
+      error: flakyClose(),
+      stream,
+      hasCommittedOutput: true,
+      committedToolContinuation: {
+        completedToolCount: 0,
+        allToolsCompleted: true,
+        completedPairsPresentInHistory: true,
+      },
+    }),
+  );
+
+  expect(result.kind).toBe('unrecoverable');
+});
+
 it('classify does not return service_tier_fallback when already attempted', () => {
   const classifier = makeClassifier({ shouldRetryWithoutFlexServiceTier: () => true });
 

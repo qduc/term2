@@ -2906,6 +2906,56 @@ describe('ApplicationRunLoop in-loop request retry', () => {
     expect(requests[0].previousResponseId).toBe('resp-prior');
   });
 
+  it('rolls back provisional chained-cycle text before throwing chained_delta_not_self_contained', async () => {
+    const requests: any[] = [];
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        requests.push(request);
+        yield { type: 'text_delta', text: 'Based on the file…' };
+        throw new WebSocketClosedEarlyError({ code: 1006 });
+      },
+    };
+
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => model,
+      waitBeforeModelRetry: async () => undefined,
+    });
+    const stream = loop.startStream(
+      {
+        ...agent,
+        modelSettings: { retry: { maxRetries: 2 } },
+      },
+      'no, you got it in reverse',
+      {
+        providerId: 'codex',
+        supportsConversationChaining: true,
+        previousResponseId: 'resp-prior',
+      },
+    );
+
+    const events: unknown[] = [];
+    const drain = (async () => {
+      try {
+        for await (const event of stream) events.push(event);
+      } catch {
+        // The chained continuation cannot retry in-loop; the iterator fails after rollback.
+      }
+    })();
+
+    await expect(stream.completed).rejects.toThrow('closed before a terminal response event');
+    await drain;
+
+    expect(requests).toHaveLength(1);
+    expect(stream.output.filter((event: any) => event.type === 'text_delta')).toEqual([]);
+    expect(events).toContainEqual({
+      type: 'model_attempt_rollback',
+      textCharacters: 'Based on the file…'.length,
+      reasoningCharacters: 0,
+      textDeltas: 1,
+      reasoningDeltas: 0,
+    });
+  });
+
   it('re-throws when maxRetries is exhausted', async () => {
     let attempts = 0;
     const model: StreamedModelTurn = {

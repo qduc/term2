@@ -1,3 +1,24 @@
+## [0.19.0] - 2026-09-01
+
+### Features
+- Added live and settled streaming speed (tokens/sec) to the status bar, with per-request token calibration from actual usage.
+- Added upstream provider name display in the status bar for OpenRouter requests.
+
+### Bug Fixes
+- Fixed Codex context compaction against the upstream v2 compact protocol.
+- Fixed dropped Codex/OpenAI WebSocket streams after completed tool calls.
+- Fixed the model continuing to generate after a session rollover handoff.
+- Fixed fabricated terminal text when a stream ends with empty or whitespace-only output.
+- Fixed interrupted background tasks being left in a non-terminal state, and a stop race that resurrected processing.
+- Fixed command group fragmentation and duplicate static lines in concise mode.
+- Fixed unrecovered WebSocket connect timeouts after a dropped connection.
+- Fixed retry handling: transport failures no longer masquerade as context compaction, upstream retryable errors are honored mid-turn, and an exhausted retry budget settles the turn truthfully.
+
+### Improvements
+- Shortened session read cursors to reduce context overhead on small models.
+
+---
+
 ## [0.18.0] - 2026-08-31
 
 ### Features

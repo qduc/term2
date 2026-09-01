@@ -1,4 +1,38 @@
-import type { ProviderTrafficStreamDiagnostics } from '../services/service-interfaces.js';
+import type {
+  ProviderTrafficStreamDiagnostics,
+  ProviderTrafficProgressCategory,
+} from '../services/service-interfaces.js';
+
+/**
+ * Fixed, bounded set of progress categories a WebSocket Responses frame can be
+ * classified into. This is deliberately a closed union (5 keys) rather than
+ * the raw event `type` string: `eventTypeCounts` already tracks the raw type
+ * (bounded in practice because the wire vocabulary is provider-defined, not
+ * user-controlled), but a failure-side reader without wire knowledge cannot
+ * tell from that alone whether a stalled or truncated stream was making text,
+ * reasoning, or tool-call progress, saw usage accounting, or was idle on
+ * heartbeat/unrecognized frames. Categorization never inspects payload
+ * content — only the frame's `type` string and the presence of a `usage`
+ * field — so it adds no sensitive data and no unbounded cardinality.
+ */
+const classifyProgressCategory = (event: unknown, type: string): ProviderTrafficProgressCategory => {
+  if (event && typeof event === 'object') {
+    const record = event as { usage?: unknown; response?: { usage?: unknown } };
+    if (record.usage !== undefined || record.response?.usage !== undefined) return 'usage';
+  }
+  if (type.includes('output_text')) return 'text';
+  if (type.includes('reasoning') || type.includes('summary')) return 'reasoning';
+  if (type.includes('function_call') || type.includes('tool')) return 'tool';
+  return 'heartbeat_or_unknown';
+};
+
+const emptyProgressCategoryCounts = (): Record<ProviderTrafficProgressCategory, number> => ({
+  text: 0,
+  reasoning: 0,
+  tool: 0,
+  usage: 0,
+  heartbeat_or_unknown: 0,
+});
 
 /**
  * Retains a streaming response so a stream that ends without a terminal event
@@ -14,11 +48,15 @@ export class AbortedStreamRecorder {
   readonly #now: () => number;
   readonly #startedAtMs: number;
   readonly #eventTypeCounts: Record<string, number> = {};
+  readonly #progressCategoryCounts: Record<ProviderTrafficProgressCategory, number> = emptyProgressCategoryCounts();
   #events: unknown[] | undefined = [];
   #firstEventMs: number | undefined;
   #lastEventMs: number | undefined;
   #maxGapMs = 0;
   #responseId: string | undefined;
+  #sawFailureFrame = false;
+  #closeCode: number | undefined;
+  #closeReason: string | undefined;
 
   constructor(now: () => number = Date.now) {
     this.#now = now;
@@ -34,10 +72,35 @@ export class AbortedStreamRecorder {
     const type = typeof (event as { type?: unknown })?.type === 'string' ? (event as { type: string }).type : 'unknown';
     this.#eventTypeCounts[type] = (this.#eventTypeCounts[type] ?? 0) + 1;
 
+    const category = classifyProgressCategory(event, type);
+    this.#progressCategoryCounts[category] += 1;
+
+    // A raw transport-level `error` or `close` frame (as opposed to a Responses
+    // API `response.failed` event) means the underlying WebSocket ended the
+    // exchange itself. The consumer that reads this recorder's output only
+    // learns that later, once it decides to stop reading and `.return()`s the
+    // generator this recorder is attached to — at which point the frame that
+    // explains why is long gone unless captured here.
+    if (type === 'error' || type === 'close') {
+      this.#sawFailureFrame = true;
+      const record = event as { code?: unknown; reason?: unknown };
+      if (typeof record?.code === 'number') this.#closeCode = record.code;
+      if (typeof record?.reason === 'string' && record.reason) this.#closeReason = record.reason;
+    }
+
     const responseId = readResponseId(event);
     if (responseId) this.#responseId = responseId;
 
     this.#events?.push(event);
+  }
+
+  /**
+   * True once a raw `error`/`close` transport frame has been observed. The
+   * caller uses this to classify an early `.return()` as an explained failure
+   * rather than an ordinary consumer-initiated stop.
+   */
+  sawFailureFrame(): boolean {
+    return this.#sawFailureFrame;
   }
 
   /** Drop the transcript once a terminal event makes it redundant. */
@@ -52,9 +115,25 @@ export class AbortedStreamRecorder {
       ...(this.#lastEventMs === undefined ? {} : { lastEventMs: this.#lastEventMs }),
       ...(this.#firstEventMs === undefined ? {} : { maxGapMs: this.#maxGapMs }),
       ...(this.#responseId ? { responseId: this.#responseId } : {}),
+      ...(this.#closeCode !== undefined ? { closeCode: this.#closeCode } : {}),
+      ...(this.#closeReason !== undefined ? { closeReason: this.#closeReason } : {}),
       eventTypeCounts: { ...this.#eventTypeCounts },
+      progressCategoryCounts: { ...this.#progressCategoryCounts },
       events: this.#events ? [...this.#events] : [],
     };
+  }
+
+  /**
+   * A bounded view of {@link diagnostics} for callers that must not retain
+   * the raw transcript — in particular a genuine transport failure, which can
+   * carry tens of thousands of frames and, unlike a deliberate client abort,
+   * is not a case where replaying the exact payload is the point. Category
+   * counts, event-type counts, and timing survive; the raw `events` array
+   * does not.
+   */
+  boundedDiagnostics(): Omit<ProviderTrafficStreamDiagnostics, 'events'> {
+    const { events: _events, ...bounded } = this.diagnostics();
+    return bounded;
   }
 }
 

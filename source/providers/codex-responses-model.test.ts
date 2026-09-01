@@ -1130,6 +1130,72 @@ it('CodexResponsesWSModel records a metadata-only outcome when a consumer closes
   expect(JSON.stringify(trafficCalls[1].args)).not.toContain('partial output must not be logged');
 });
 
+// Regression for the observability gap: a WebSocket that ends abnormally
+// (e.g. close code 1006) previously landed in the same 'consumer_closed'
+// bucket as a deliberate stop, with no diagnostics attached at all — a failed
+// artifact with thousands of frames retained no category/counter/timing
+// evidence of what the model was doing when the socket dropped.
+it('CodexResponsesWSModel records an abnormal WebSocket close as a failed outcome with bounded progress evidence', async () => {
+  const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  const trafficCalls: Array<{ method: string; args: any }> = [];
+  const mockProviderTraffic: IProviderTraffic = {
+    recordRequestStart(input) {
+      trafficCalls.push({ method: 'recordRequestStart', args: input });
+    },
+    async recordResponseReceived(input) {
+      trafficCalls.push({ method: 'recordResponseReceived', args: input });
+    },
+    recordRequestFailed(input) {
+      trafficCalls.push({ method: 'recordRequestFailed', args: input });
+    },
+    recordResponseClosed(input: any) {
+      trafficCalls.push({ method: 'recordResponseClosed', args: input });
+    },
+  };
+
+  transport.fetchResponse = async function () {
+    return makeStream([
+      { type: 'response.created', response: { id: 'resp_ws_close_1006' } },
+      { type: 'response.output_text.delta', delta: 'sensitive in-flight text' },
+      { type: 'response.reasoning_summary_text.delta', delta: 'sensitive reasoning' },
+      { type: 'close', code: 1006, reason: 'abnormal closure' },
+    ]);
+  };
+
+  const model = new CodexResponsesWSModel(
+    { baseURL: 'https://api.openai.com', apiKey: 'test-key', _options: {} } as any,
+    'gpt-5-codex',
+    { getOrRefreshAccessToken: async () => 'token', getAccountId: () => 'acc_123' } as any,
+    undefined,
+    mockProviderTraffic,
+    undefined,
+    transport,
+  );
+
+  await expect(collect(model.stream({ input: [], tools: [] }))).rejects.toThrow();
+
+  const closed = trafficCalls.find(({ method }) => method === 'recordResponseClosed');
+  expect(closed).toBeDefined();
+  expect(closed!.args).toMatchObject({ outcome: 'failed', eventCount: 4 });
+
+  const diagnostics = closed!.args.diagnostics;
+  // Bounded: category/counter/timing evidence survives, the raw transcript does not.
+  expect(diagnostics).not.toHaveProperty('events');
+  expect(diagnostics.closeCode).toBe(1006);
+  expect(diagnostics.closeReason).toBe('abnormal closure');
+  expect(diagnostics.eventTypeCounts).toMatchObject({
+    'response.created': 1,
+    'response.output_text.delta': 1,
+    'response.reasoning_summary_text.delta': 1,
+    close: 1,
+  });
+  expect(diagnostics.progressCategoryCounts).toMatchObject({ text: 1, reasoning: 1 });
+  expect(typeof diagnostics.durationMs).toBe('number');
+  // No sensitive payload content leaks through the bounded summary.
+  expect(JSON.stringify(diagnostics)).not.toContain('sensitive in-flight text');
+  expect(JSON.stringify(diagnostics)).not.toContain('sensitive reasoning');
+});
+
 it('CodexResponsesWSModel labels a consumer-closed stream as aborted when its request signal is aborted', async () => {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   const trafficCalls: Array<{ method: string; args: any }> = [];

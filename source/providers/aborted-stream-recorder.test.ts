@@ -80,4 +80,54 @@ describe('AbortedStreamRecorder', () => {
     expect(diagnostics.maxGapMs).toBeUndefined();
     expect(diagnostics.durationMs).toBe(300_000);
   });
+
+  it('classifies observed frames into bounded text/reasoning/tool/usage/heartbeat_or_unknown categories', () => {
+    const recorder = new AbortedStreamRecorder();
+    recorder.observe({ type: 'response.output_text.delta', delta: 'hi' });
+    recorder.observe({ type: 'response.reasoning_summary_text.delta', delta: 'thinking' });
+    recorder.observe({ type: 'response.function_call_arguments.delta', delta: '{}' });
+    recorder.observe({ type: 'response.completed', response: { usage: { total_tokens: 10 } } });
+    recorder.observe({ type: 'response.created' });
+    recorder.observe({ notAnEvent: true });
+
+    expect(recorder.diagnostics().progressCategoryCounts).toEqual({
+      text: 1,
+      reasoning: 1,
+      tool: 1,
+      usage: 1,
+      heartbeat_or_unknown: 2,
+    });
+  });
+
+  it("captures a raw close frame's code and reason so an abnormal close is explainable", () => {
+    const recorder = new AbortedStreamRecorder();
+    recorder.observe({ type: 'response.created' });
+    recorder.observe({ type: 'close', code: 1006, reason: 'abnormal closure' });
+
+    const diagnostics = recorder.diagnostics();
+    expect(diagnostics.closeCode).toBe(1006);
+    expect(diagnostics.closeReason).toBe('abnormal closure');
+    expect(recorder.sawFailureFrame()).toBe(true);
+  });
+
+  it('does not report a failure frame when none was observed', () => {
+    const recorder = new AbortedStreamRecorder();
+    recorder.observe({ type: 'response.output_text.delta', delta: 'hi' });
+
+    expect(recorder.sawFailureFrame()).toBe(false);
+    expect(recorder.diagnostics().closeCode).toBeUndefined();
+  });
+
+  it('boundedDiagnostics omits the raw transcript but keeps category/counter/timing evidence', () => {
+    const recorder = new AbortedStreamRecorder();
+    recorder.observe({ type: 'response.output_text.delta', delta: 'sensitive payload text' });
+    recorder.observe({ type: 'close', code: 1006 });
+
+    const bounded = recorder.boundedDiagnostics();
+    expect(bounded).not.toHaveProperty('events');
+    expect(bounded.eventTypeCounts).toEqual({ 'response.output_text.delta': 1, close: 1 });
+    expect(bounded.progressCategoryCounts.text).toBe(1);
+    expect(bounded.closeCode).toBe(1006);
+    expect(JSON.stringify(bounded)).not.toContain('sensitive payload text');
+  });
 });

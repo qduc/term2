@@ -80,17 +80,32 @@ export interface ProviderTrafficClosedResponse {
   requestId: string;
   provider: string;
   model: string;
-  outcome: 'consumer_closed' | 'aborted';
+  /**
+   * `'failed'` is a stream that ended because a raw transport `error`/`close`
+   * frame was observed before any terminal response event — distinct from
+   * `'consumer_closed'`, which is this application choosing to stop reading a
+   * still-live stream. Without the distinction, an abnormal WebSocket close
+   * (e.g. close code 1006) is indistinguishable from ordinary cleanup.
+   */
+  outcome: 'consumer_closed' | 'aborted' | 'failed';
   eventCount: number;
   modelClass?: string;
   modelWrapperClass?: string;
   /**
    * A stream that ends without a terminal event leaves no payload to
    * summarize, so the retained transcript and its timings are the only record
-   * of what the model was doing when it was cut off.
+   * of what the model was doing when it was cut off. Bounded (no raw event
+   * payload) for `'failed'`, since a transport failure is not the deliberate
+   * client abort that full transcript retention is for.
    */
-  diagnostics?: ProviderTrafficStreamDiagnostics;
+  diagnostics?: ProviderTrafficStreamDiagnostics | ProviderTrafficBoundedStreamDiagnostics;
 }
+
+/**
+ * Fixed, bounded classification of a Responses WebSocket frame's progress
+ * kind. Closed union on purpose — see `aborted-stream-recorder.ts`.
+ */
+export type ProviderTrafficProgressCategory = 'text' | 'reasoning' | 'tool' | 'usage' | 'heartbeat_or_unknown';
 
 export interface ProviderTrafficStreamDiagnostics {
   durationMs: number;
@@ -98,9 +113,22 @@ export interface ProviderTrafficStreamDiagnostics {
   lastEventMs?: number;
   maxGapMs?: number;
   responseId?: string;
+  /** Present only when a raw transport `close` frame was observed. */
+  closeCode?: number;
+  closeReason?: string;
   eventTypeCounts: Record<string, number>;
+  progressCategoryCounts: Record<ProviderTrafficProgressCategory, number>;
   events: unknown[];
 }
+
+/**
+ * Same shape as {@link ProviderTrafficStreamDiagnostics} minus the raw event
+ * transcript. Used where the caller must retain bounded category/counter/
+ * timing evidence without retaining unbounded, potentially sensitive frame
+ * payloads — in particular a genuine transport failure, which is not a
+ * deliberate client abort and can carry an unbounded number of frames.
+ */
+export type ProviderTrafficBoundedStreamDiagnostics = Omit<ProviderTrafficStreamDiagnostics, 'events'>;
 
 /**
  * What a transport-liveness guard observed while receiving a response, in the
@@ -133,6 +161,12 @@ export interface IProviderTraffic {
     wsAttempt?: number;
     wsMaxAttempts?: number;
     receiveTiming?: ProviderTrafficReceiveTiming;
+    /**
+     * Bounded category/counter/timing evidence of stream progress observed
+     * before the failure, when a stream had already started delivering
+     * frames. Absent when the failure happened before any frame arrived.
+     */
+    diagnostics?: ProviderTrafficBoundedStreamDiagnostics;
   }): void;
 }
 

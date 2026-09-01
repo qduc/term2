@@ -303,6 +303,8 @@ type RunState = {
   hookScope?: Term2HookScope;
   toolAttempts?: Map<string, number>;
   toolPlan?: ToolPlanEntry[];
+  /** A terminal tool has settled and no follow-up model request is needed. */
+  terminateAfterToolExecution?: boolean;
   approve?: (_interruption?: unknown) => void;
   reject?: (_interruption?: unknown, options?: { message?: string }) => void;
 };
@@ -1189,6 +1191,7 @@ export class ApplicationRunLoop {
         if (streamedToolCalls.length === 0) throw new Error('Application model turn ended without completion');
         if (criticalWrapUp) return finish(stream, state, queue);
         await this.#dispatchToolCalls(state, stream, queue, streamedToolCalls, toolContext);
+        if (state.terminateAfterToolExecution) return finish(stream, state, queue);
         if (state.pendingApprovals && state.pendingApprovals.length > 0) {
           stream.interruptions = state.pendingApprovals.map((item) => item.interruption);
           this.#turnPaused = true;
@@ -1341,6 +1344,8 @@ export class ApplicationRunLoop {
       if (!state.criticalWrapUpPending && toolCalls.length > 0) {
         await this.#dispatchToolCalls(state, stream, queue, toolCalls, toolContext);
       }
+
+      if (state.terminateAfterToolExecution) return finish(stream, state, queue);
 
       // A critical subagent gets exactly this final tool-free model call.
       if (criticalWrapUp) return finish(stream, state, queue);
@@ -1525,6 +1530,11 @@ export class ApplicationRunLoop {
         batchId,
         settlementOrder: group.map((entry) => entry.event.id),
       });
+      if (group.some((entry) => entry.definition?.terminateAfterExecution)) {
+        state.terminateAfterToolExecution = true;
+        state.toolPlan = undefined;
+        return;
+      }
     }
   }
 

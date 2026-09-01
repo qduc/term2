@@ -59,6 +59,43 @@ describe('normalizeApplicationInput opaque lane', () => {
 });
 
 describe('ApplicationRunLoop request-boundary compaction', () => {
+  it('does not send session rollover tool output back to the model', async () => {
+    let requests = 0;
+    const model: StreamedModelTurn = {
+      async *stream() {
+        requests += 1;
+        yield {
+          type: 'completion',
+          responseId: 'rollover-call',
+          output: [{ type: 'tool_call', id: 'call-rollover', name: 'session_rollover', arguments: '{"brief":"done"}' }],
+        };
+      },
+    };
+    const tool: ToolDefinition = {
+      name: 'session_rollover',
+      description: 'Rotate the session',
+      parameters: z.object({ brief: z.string() }),
+      terminateAfterExecution: true,
+      needsApproval: () => false,
+      execute: () => ({ ok: true, status: 'rollover_requested' }),
+      formatCommandMessage: () => [],
+    };
+
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream({ ...agent, tools: [tool] }, [
+      { role: 'user', type: 'message', content: 'hand off' },
+    ]);
+
+    await stream.completed;
+
+    expect(requests).toBe(1);
+    expect(stream.history).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'function_call', callId: 'call-rollover' }),
+        expect.objectContaining({ type: 'function_call_result', callId: 'call-rollover' }),
+      ]),
+    );
+  });
+
   it('defers boundary compaction when the boundary observer opens a rollover opportunity', async () => {
     const compact = vi.fn(async () => ({ kind: 'unchanged' as const }));
     let request: any;

@@ -104,6 +104,8 @@ export interface SchemaToolDefinition<TSchema extends ZodTypeAny> {
   effect?: 'mutating';
   /** Result is already serialized and bounded; generic string trimming would corrupt its contract. */
   preserveSerializedOutput?: boolean;
+  /** End the run after execution without sending this tool result to the model. */
+  terminateAfterExecution?: boolean;
   /** Optional provider-facing schema when a strict transport cannot express the runtime contract. */
   strictParameters?: ZodTypeAny;
   argumentParsing?: 'repair' | 'strict';
@@ -158,6 +160,8 @@ export interface AnyToolDefinition {
   effect?: 'mutating';
   /** Result is already serialized and bounded; generic string trimming would corrupt its contract. */
   preserveSerializedOutput?: boolean;
+  /** End the run after execution without sending this tool result to the model. */
+  terminateAfterExecution?: boolean;
   strictParameters?: ZodTypeAny;
   argumentParsing?: 'repair' | 'strict';
   approvalPresentation?: ApprovalPresentationCapability;

@@ -184,6 +184,46 @@ describe('groupCommandRuns', () => {
     expect(result[0]).toMatchObject({ sender: 'command-group' });
     expect((result[0] as any).members).toHaveLength(1);
   });
+
+  it('merges adjacent CommandGroupMessages into a single unified group', () => {
+    const group1 = {
+      id: 'command-group:1',
+      sender: 'command-group' as const,
+      status: 'completed' as const,
+      members: [
+        { id: '1', sender: 'command', status: 'completed', toolName: 'read_file' },
+        { id: '2', sender: 'command', status: 'completed', toolName: 'grep' },
+      ],
+    };
+    const group2 = {
+      id: 'command-group:3',
+      sender: 'command-group' as const,
+      status: 'completed' as const,
+      members: [{ id: '3', sender: 'command', status: 'completed', toolName: 'shell', command: 'ls' }],
+    };
+
+    const result = groupCommandRuns([group1, group2], { isClosed: true });
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ sender: 'command-group', status: 'completed' });
+    expect((result[0] as any).members).toHaveLength(3);
+    expect(summarizeCommandGroup((result[0] as any).members)).toBe(
+      'Read 1 file, searched for 1 pattern, ran 1 shell command',
+    );
+  });
+
+  it('merges an existing CommandGroupMessage with trailing commands', () => {
+    const group1 = {
+      id: 'command-group:1',
+      sender: 'command-group' as const,
+      status: 'completed' as const,
+      members: [{ id: '1', sender: 'command', status: 'completed', toolName: 'read_file' }],
+    };
+    const cmd2 = { id: '2', sender: 'command', status: 'completed', toolName: 'shell', command: 'pnpm test' };
+
+    const result = groupCommandRuns([group1, cmd2], { isClosed: true });
+    expect(result).toHaveLength(1);
+    expect((result[0] as any).members.map((m: any) => m.id)).toEqual(['1', '2']);
+  });
 });
 
 describe('summarizeCommandGroup', () => {

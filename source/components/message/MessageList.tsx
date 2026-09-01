@@ -111,7 +111,7 @@ const canRenderStatically = (message: MessageLike) => {
 };
 
 const isGroupableToolMessage = (message: MessageLike | undefined): boolean =>
-  message?.sender === 'command' || message?.sender === 'subagent';
+  message?.sender === 'command' || message?.sender === 'subagent' || message?.sender === 'command-group';
 
 // A run of command or subagent messages that reaches the very end of the array
 // might still grow (another tool call could land right after it). Concise-mode
@@ -288,7 +288,15 @@ const MessageList = <T extends MessageLike = Message>({
 
   const filteredMessages = useMemo(() => {
     if (displayMode === 'concise') {
-      return messages.filter((message) => message.sender !== 'reasoning');
+      return messages.filter((message) => {
+        if (message.sender === 'reasoning') {
+          return false;
+        }
+        if (message.sender === 'bot' && message.status !== 'streaming' && (!message.text || !message.text.trim())) {
+          return false;
+        }
+        return true;
+      });
     }
     return messages;
   }, [messages, displayMode]);
@@ -365,6 +373,11 @@ const MessageList = <T extends MessageLike = Message>({
       }
 
       if (committedSignature !== undefined) {
+        if (message.sender === 'command-group') {
+          // A command group is write-once to <Static>. If already committed,
+          // do not append another copy into additions.
+          continue;
+        }
         candidateMessageSignaturesRef.current.set(message.id, signature);
         deferred.push(message);
         hasDeferred = true;

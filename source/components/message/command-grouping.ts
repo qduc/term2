@@ -31,6 +31,7 @@ export type GroupableMessage = {
   tools?: any[];
   finalText?: string;
   error?: string;
+  members?: GroupableMessage[];
 };
 
 export type CommandGroupMessage = {
@@ -41,7 +42,14 @@ export type CommandGroupMessage = {
 };
 
 export const isGroupableMessage = (message: GroupableMessage | undefined): boolean =>
-  message?.sender === 'command' || message?.sender === 'subagent';
+  message?.sender === 'command' || message?.sender === 'subagent' || message?.sender === 'command-group';
+
+const extractMembers = (message: GroupableMessage): GroupableMessage[] => {
+  if (message.sender === 'command-group' && Array.isArray(message.members)) {
+    return message.members;
+  }
+  return [message];
+};
 
 const isRunningStatus = (status: string | undefined) => status === 'pending' || status === 'running';
 
@@ -155,25 +163,26 @@ export const groupCommandRuns = <T extends GroupableMessage>(
       j += 1;
     }
 
-    const run = messages.slice(i, j);
+    const rawRun = messages.slice(i, j);
     const hasTrailingNonCommandMessage = options?.isClosed || j < messages.length;
-    const inFlight = run.findIndex((member) => isRunningStatus(member.status));
-    const settled = inFlight === -1 ? run : run.slice(0, inFlight);
-    const inFlightAndAfter = inFlight === -1 ? [] : run.slice(inFlight);
+    const inFlight = rawRun.findIndex((member) => isRunningStatus(member.status));
+    const settledRaw = inFlight === -1 ? rawRun : rawRun.slice(0, inFlight);
+    const inFlightAndAfter = inFlight === -1 ? [] : rawRun.slice(inFlight);
+    const settled = settledRaw.flatMap(extractMembers);
 
     if (hasTrailingNonCommandMessage) {
       if (settled.length >= 1) {
         result.push(buildCommandGroupMessage(settled), ...inFlightAndAfter);
       } else {
-        result.push(...run);
+        result.push(...rawRun);
       }
     } else {
       if (settled.length >= 2) {
-        const lastRunTool = settled[settled.length - 1];
+        const lastRunTool = settled[settled.length - 1] as T;
         const toGroup = settled.slice(0, -1);
         result.push(buildCommandGroupMessage(toGroup), lastRunTool, ...inFlightAndAfter);
       } else {
-        result.push(...run);
+        result.push(...rawRun);
       }
     }
 

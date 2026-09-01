@@ -1271,3 +1271,80 @@ it.sequential('MessageList folds finished subagent into concise group in concise
   expect(summaryLine).toContain('✓ Searched for 1 pattern, delegated to 1 subagent');
   expect(summaryLine).not.toContain('$ run_subagent');
 });
+
+it.sequential(
+  'MessageList does not duplicate command group lines to Static as tools accumulate across streaming ticks in concise mode',
+  async () => {
+    const settingsService = createMockSettingsService({ 'ui.displayMode': 'concise' });
+    const cmd1 = {
+      id: 'cmd-1',
+      sender: 'command',
+      status: 'completed',
+      toolName: 'read_file',
+      toolArgs: { path: 'a.ts' },
+    };
+    const reasoning1 = { id: 'r-1', sender: 'reasoning', status: 'finalized', text: 'thinking 1' };
+    const cmd2 = { id: 'cmd-2', sender: 'command', status: 'completed', toolName: 'shell', command: 'ls' };
+    const reasoning2 = { id: 'r-2', sender: 'reasoning', status: 'finalized', text: 'thinking 2' };
+    const cmd3 = {
+      id: 'cmd-3',
+      sender: 'command',
+      status: 'completed',
+      toolName: 'read_file',
+      toolArgs: { path: 'b.ts' },
+    };
+    const botFinal = { id: 'bot-done', sender: 'bot', status: 'finalized', text: 'All done.' };
+
+    const renderer = await renderInAct(<MessageList settingsService={settingsService} messages={[cmd1]} />);
+
+    // Tick 2: reasoning 1 arrives
+    await rerenderInAct(renderer, <MessageList settingsService={settingsService} messages={[cmd1, reasoning1]} />);
+
+    // Tick 3: cmd2 arrives
+    await rerenderInAct(
+      renderer,
+      <MessageList settingsService={settingsService} messages={[cmd1, reasoning1, cmd2]} />,
+    );
+
+    // Tick 4: reasoning 2 arrives
+    await rerenderInAct(
+      renderer,
+      <MessageList settingsService={settingsService} messages={[cmd1, reasoning1, cmd2, reasoning2]} />,
+    );
+
+    // Tick 5: cmd3 arrives
+    await rerenderInAct(
+      renderer,
+      <MessageList settingsService={settingsService} messages={[cmd1, reasoning1, cmd2, reasoning2, cmd3]} />,
+    );
+
+    // Tick 6: final bot response closes the turn
+    await rerenderInAct(
+      renderer,
+      <MessageList settingsService={settingsService} messages={[cmd1, reasoning1, cmd2, reasoning2, cmd3, botFinal]} />,
+    );
+
+    const output = stripAnsi(renderer.lastFrame() ?? '');
+    // There should be exactly 1 summary line, not multiple accumulated lines
+    expect(countOccurrences(output, 'Read 2 files, ran 1 shell command')).toBe(1);
+    expect(countOccurrences(output, 'Read 1 file, ran 1 shell command')).toBe(0);
+    expect(countOccurrences(output, 'Read 1 file\n')).toBe(0);
+    expect(output.includes('All done.')).toBe(true);
+  },
+);
+
+it.sequential('MessageList merges command runs across empty/whitespace bot messages in concise mode', async () => {
+  const settingsService = createMockSettingsService({ 'ui.displayMode': 'concise' });
+  const messages = [
+    { id: 'cmd-1', sender: 'command', status: 'completed', toolName: 'read_file', toolArgs: { path: 'a.ts' } },
+    { id: 'bot-empty', sender: 'bot', status: 'finalized', text: '   ' },
+    { id: 'cmd-2', sender: 'command', status: 'completed', toolName: 'shell', command: 'ls' },
+    { id: 'bot-done', sender: 'bot', status: 'finalized', text: 'Finished.' },
+  ];
+
+  const { lastFrame } = await renderInAct(<MessageList settingsService={settingsService} messages={messages} />);
+
+  const output = stripAnsi(lastFrame() ?? '');
+  expect(countOccurrences(output, 'Read 1 file, ran 1 shell command')).toBe(1);
+  expect(output.includes('Finished.')).toBe(true);
+});

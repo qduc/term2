@@ -3,6 +3,7 @@ import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { ToolExecutionLedger, type SavedToolExecution, callIdOf } from '../tool-execution-ledger.js';
 import type { ConversationStore } from '../conversation/conversation-store.js';
 import { projectProviderHistory } from '../conversation/conversation-state-projector.js';
+import type { CommittedToolContinuation } from '../retry/retry-contracts.js';
 
 /**
  * Owns all tool-tracking state for a conversation session.
@@ -73,6 +74,26 @@ export class SessionToolTracker {
   /** Returns only completed tool-result call IDs recorded during the current turn. */
   completedResultCallIdsForCurrentTurn(): string[] {
     return this.toolLedger.completedResultCallIdsForCurrentTurn();
+  }
+
+  /**
+   * Admission evidence for post-tool connection recovery: whether every live-turn
+   * tool completed and whether reconciled history still holds those pairs.
+   */
+  inspectCommittedToolContinuation(): CommittedToolContinuation {
+    const turnId = this.getCurrentTurnId();
+    const live = this.toolLedger.export().filter((entry) => entry.turnId === turnId);
+    const completed = live.filter((entry) => entry.status === 'completed');
+    const historyCallIds = new Set(
+      this.getReconciledHistory()
+        .map((item) => callIdOf(item))
+        .filter((callId): callId is string => Boolean(callId)),
+    );
+    return {
+      completedToolCount: completed.length,
+      allToolsCompleted: live.length > 0 && live.every((entry) => entry.status === 'completed'),
+      completedPairsPresentInHistory: completed.every((entry) => historyCallIds.has(entry.callId)),
+    };
   }
 
   /**

@@ -36,6 +36,35 @@ it('activeCallIdsForCurrentTurn delegates to the ledger for the current turn', (
   expect(tracker.activeCallIdsForCurrentTurn()).toEqual(['call-a', 'call-b']);
 });
 
+it('inspectCommittedToolContinuation reports settled completed pairs present in reconciled history', () => {
+  const store = new ConversationStore();
+  store.addUserTurn({ text: 'read it' });
+  const tracker = new SessionToolTracker(store);
+  tracker.beginTurn();
+  tracker.recordFunctionCall({ type: 'function_call', callId: 'call-read', name: 'read_file', arguments: '{}' });
+  tracker.recordFunctionResult({ type: 'function_call_output', callId: 'call-read', output: 'contents' });
+
+  expect(tracker.inspectCommittedToolContinuation()).toEqual({
+    completedToolCount: 1,
+    allToolsCompleted: true,
+    completedPairsPresentInHistory: true,
+  });
+});
+
+it('inspectCommittedToolContinuation refuses settlement while a live-turn tool is still open', () => {
+  const tracker = new SessionToolTracker(new ConversationStore());
+  tracker.beginTurn();
+  tracker.recordFunctionCall({ type: 'function_call', callId: 'call-read', name: 'read_file', arguments: '{}' });
+  tracker.recordFunctionResult({ type: 'function_call_output', callId: 'call-read', output: 'ok' });
+  tracker.recordFunctionCall({ type: 'function_call', callId: 'call-shell', name: 'shell', arguments: '{}' });
+  tracker.markDispatched('call-shell');
+
+  expect(tracker.inspectCommittedToolContinuation()).toMatchObject({
+    completedToolCount: 1,
+    allToolsCompleted: false,
+  });
+});
+
 it('completedResultCallIdsForCurrentTurn exposes only completed current-turn results', () => {
   const tracker = new SessionToolTracker(new ConversationStore());
   tracker.beginTurn();

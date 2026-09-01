@@ -703,6 +703,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     retryEventPresenter,
     sessionId: id,
     provider: agentClient?.getProvider?.(),
+    toolTracker,
   });
 
   const planApplier = new ContinuationPlanApplier({

@@ -16,6 +16,7 @@ import { isMissingChainedToolOutputError, isOrphanedChainedToolOutputError } fro
 import { isRetryRecoveryBudgetExhaustedError } from './retry-recovery-budget.js';
 import { streamHasCommittedOutput } from '../agent-stream.js';
 import { UnsentWebSocketRequestError } from '../../providers/websocket-request-dispatch.js';
+import { isSettledCommittedToolContinuation } from './committed-tool-continuation.js';
 
 const TRANSIENT_BASE_DELAY_MS = 500;
 const TRANSIENT_MAX_DELAY_MS = 30_000;
@@ -57,7 +58,30 @@ export class DefaultRetryClassifier {
     // model output or tool effect occurred. A bare `.length > 0` check
     // treated that as "committed" and forced 'unrecoverable' on an otherwise
     // safely recoverable failure.
+    //
+    // Exception: a recoverable connection drop after every live-turn tool is
+    // completed and already in reconciled history is not a replay. It severs
+    // the dead chain and continues from those pairs. Open or unknown calls,
+    // missing pairs, and committed text with no completed tools stay closed.
     if (context.hasCommittedOutput || (stream && streamHasCommittedOutput(stream))) {
+      if (isSettledCommittedToolContinuation(context.committedToolContinuation)) {
+        const connectionInterrupted =
+          error instanceof UnsentWebSocketRequestError ||
+          (error instanceof AmbiguousModelOutcomeError && isRecoverableIncompleteStreamClose(error)) ||
+          isRecoverableIncompleteStreamClose(error);
+        if (connectionInterrupted) {
+          const nextAttempt = retryCounts.transientRetryCount + 1;
+          if (nextAttempt > maxTransientRetries) {
+            return { kind: 'unrecoverable' };
+          }
+          return {
+            kind: 'chain_recovery',
+            attempt: nextAttempt,
+            delayMs: computeTransientDelayMs(nextAttempt, this.random),
+            cause: 'connection_interrupted',
+          };
+        }
+      }
       return { kind: 'unrecoverable' };
     }
 

@@ -9,6 +9,7 @@ import type { RetryCounts, RecoveryState } from '../retry/retry-contracts.js';
 import type { ContinuationState } from './continuation-state.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
 import { classifyProviderFailure } from '../retry/provider-failure-classification.js';
+import { skipsAutomaticReplayClaim } from '../retry/committed-tool-continuation.js';
 
 export type ContinuationRecoveryHandlerDeps = {
   breakChaining?: () => void;
@@ -47,10 +48,12 @@ export class ContinuationRecoveryHandler {
     const maxTransientRetries = this.deps.resolveRetryLimit();
     const retryStream = state.lastStream;
 
+    const committedToolContinuation = this.deps.toolTracker.inspectCommittedToolContinuation?.();
     const classified = this.deps.retryClassifier.classify({
       error,
       retryCounts: state.retryCounts,
       stream: retryStream,
+      committedToolContinuation,
       maxTransientRetries,
     });
 
@@ -112,7 +115,9 @@ export class ContinuationRecoveryHandler {
     // comes exclusively from model_retry, excluded for the reason above.
     if (
       plan.kind === 'retry_fresh' &&
-      (!state.recoveryBudget.claimAutomaticReplay() || !state.recoveryBudget.claimPhysicalAttempt())
+      ((!skipsAutomaticReplayClaim(classified, committedToolContinuation) &&
+        !state.recoveryBudget.claimAutomaticReplay()) ||
+        !state.recoveryBudget.claimPhysicalAttempt())
     ) {
       // Refusing the plan must still settle open tool calls truthfully and
       // clear the provider chain, exactly like an ordinary termination does --

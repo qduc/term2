@@ -1128,11 +1128,7 @@ export class ApplicationRunLoop {
           const decision = classifyInLoopModelRetry(error, attempt, maxRetries, Math.random, {
             previousResponseId: activeRequest?.previousResponseId,
           });
-          if (decision.retryable && !options.signal?.aborted) {
-            attempt++;
-            state.input.splice(inputLengthBefore);
-            state.history.splice(historyLengthBefore);
-            state.criticalWrapUpDispatched = criticalWrapUpDispatchedBefore;
+          const rollbackProvisionalAttempt = (): void => {
             stream.output.splice(outputLengthBefore);
             if (stream.newItems !== stream.output) {
               stream.newItems.splice(newItemsLengthBefore);
@@ -1146,6 +1142,14 @@ export class ApplicationRunLoop {
                 reasoningDeltas: provisionalReasoningDeltas,
               });
             }
+          };
+
+          if (decision.retryable && !options.signal?.aborted) {
+            attempt++;
+            state.input.splice(inputLengthBefore);
+            state.history.splice(historyLengthBefore);
+            state.criticalWrapUpDispatched = criticalWrapUpDispatchedBefore;
+            rollbackProvisionalAttempt();
             if (decision.kind === 'chain_recovery') {
               state.disableChainingForAttempt = true;
               state.responseId = undefined;
@@ -1160,6 +1164,13 @@ export class ApplicationRunLoop {
             });
             await (this.#deps.waitBeforeModelRetry ?? sleepWithAbort)(decision.delayMs, options.signal);
             continue;
+          }
+
+          // Session recovery owns full-history rebuild for a chained delta.
+          // Retract this cycle's provisional tokens so a later chain_recovery
+          // does not append a second answer after a half-sentence.
+          if (!decision.retryable && decision.reason === 'chained_delta_not_self_contained') {
+            rollbackProvisionalAttempt();
           }
 
           // Dispatch began, but no terminal completion was accepted. Record an

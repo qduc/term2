@@ -59,12 +59,24 @@ export type RetryCounts = {
 
 // ── Classification Context ─────────────────────────────────────
 
+export type CommittedToolContinuation = {
+  completedToolCount: number;
+  allToolsCompleted: boolean;
+  completedPairsPresentInHistory: boolean;
+};
+
 export type ClassificationContext = {
   error: unknown;
   retryCounts: RetryCounts;
   stream: AgentStream | null;
   /** True once a model event has crossed the session stream boundary. */
   hasCommittedOutput?: boolean;
+  /**
+   * Live-turn tool settlement observed by the session ledger. Required to
+   * admit chain recovery after committed output: completed pairs already in
+   * history can continue, but open or unknown calls cannot.
+   */
+  committedToolContinuation?: CommittedToolContinuation;
   maxTransientRetries: number;
   maxModelRetries?: number;
 };

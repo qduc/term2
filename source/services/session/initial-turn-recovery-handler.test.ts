@@ -352,6 +352,52 @@ it('presents retry_exhausted for a budget-exhaustion error even though it classi
 // retries"). This proves the fix directly: two model_retry replays succeed
 // against a budget whose one automatic replay is already claimed by an
 // unrelated transport recovery.
+it('does not charge settled-tool connection chain_recovery against the automatic-replay budget', async () => {
+  const plans: unknown[] = [];
+  const handler = new InitialTurnRecoveryHandler({
+    conversationStore: { getHistory: () => [] } as any,
+    freshStartRetriesAllowed: true,
+    generationGuard: { isCurrent: () => true } as any,
+    inputPlanner: { recordSuccess: () => {} } as any,
+    logger: { warn: () => {}, error: () => {}, getCorrelationId: () => undefined } as any,
+    recoveryExecutor: {
+      apply: ({ plan }: any) => {
+        plans.push(plan);
+        return { kind: 'run', instruction: { skipUserMessage: true }, events: [] };
+      },
+    } as any,
+    recoveryPolicy: new DefaultConversationRecoveryPolicy(),
+    retryClassifier: {
+      classify: () => ({ kind: 'chain_recovery', attempt: 1, delayMs: 5, cause: 'connection_interrupted' }),
+    } as any,
+    retryEventPresenter: { present: () => ({ event: {}, logMessage: '', logFields: {} }) } as any,
+    sessionId: 'post-tool-ws-recovery',
+    toolTracker: {
+      inspectCommittedToolContinuation: () => ({
+        completedToolCount: 1,
+        allToolsCompleted: true,
+        completedPairsPresentInHistory: true,
+      }),
+    } as any,
+  });
+  const attempt = createAttempt();
+  expect(attempt.recoveryBudget.claimAutomaticReplay()).toBe(true);
+
+  const first: any = await drain(handler.handle({ error: new Error('closed early'), attempt, stream: null }) as any);
+  const second: any = await drain(
+    handler.handle({ error: new Error('closed early again'), attempt, stream: null }) as any,
+  );
+
+  expect(first.kind).toBe('run');
+  expect(second.kind).toBe('run');
+  expect(plans).toEqual([
+    { kind: 'retry_fresh', inputMode: 'full_history', disableChainingForAttempt: true },
+    { kind: 'retry_fresh', inputMode: 'full_history', disableChainingForAttempt: true },
+  ]);
+  expect(attempt.recoveryBudget.physicalAttempts).toBe(2);
+  expect(attempt.recoveryBudget.automaticReplays).toBe(1);
+});
+
 it('does not charge model_retry replays against the transport automatic-replay budget', async () => {
   const plans: unknown[] = [];
   const handler = new InitialTurnRecoveryHandler({

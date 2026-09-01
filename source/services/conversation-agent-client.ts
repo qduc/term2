@@ -15,6 +15,7 @@ import type { NestedToolCompatibilityState } from './session/nested-tool-compati
 import type { NormalizedUsage } from '../utils/ai/token-usage.js';
 import type { ModelRequestCost } from './cost/model-cost.js';
 import type { RunBudgetEvent } from './agent-runtime/run-budget.js';
+import type { RetryRecoveryBudget } from './retry/retry-recovery-budget.js';
 import type {
   SessionRolloverConsumption,
   SessionRolloverRequest,
@@ -22,6 +23,8 @@ import type {
 } from '../contracts/session-rollover.js';
 
 export type AgentClientRunOptions = {
+  /** Shared automatic retry/recovery capability for this logical turn. */
+  recoveryBudget?: RetryRecoveryBudget;
   previousResponseId?: string | null;
   /** Skip previous_response_id and transport history compression for this attempt. */
   disableChainingForAttempt?: boolean;

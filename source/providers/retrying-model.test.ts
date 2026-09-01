@@ -6,6 +6,7 @@ import type {
 } from '../contracts/streamed-model-turn.js';
 import { AmbiguousModelOutcomeError } from '../services/retry/retry-errors.js';
 import { RetryingModel } from './retrying-model.js';
+import { RetryRecoveryBudget, RetryRecoveryBudgetExhaustedError } from '../services/retry/retry-recovery-budget.js';
 
 const request = { input: [], tools: [] } as StreamedModelTurnRequest;
 
@@ -173,6 +174,31 @@ it('stream does not sleep when the signal is already aborted before the backoff'
   await expect(collect(model.stream({ ...request, signal: controller.signal }))).rejects.toMatchObject({
     name: 'AbortError',
   });
+  expect(calls).toBe(1);
+});
+
+// The typed error carries the triggering provider failure as `cause` and is
+// what the session-layer classifier and UI presentation key on. Regressing to
+// a bare Error silently drops both the cause chain and the retry_exhausted
+// presentation path.
+it('stream raises the typed budget-exhausted error, with the triggering failure as cause, once physical attempts are claimed out', async () => {
+  let calls = 0;
+  const underlying: StreamedModelTurn = {
+    async *stream() {
+      calls++;
+      throw retryableError();
+    },
+  };
+  const budget = new RetryRecoveryBudget({ maxPhysicalAttempts: 1 });
+  const model = new RetryingModel(underlying, { retryAttempts: 5, sleep: async () => {} });
+
+  const error = await collect(model.stream({ ...request, recoveryBudget: budget })).catch((e) => e);
+
+  expect(error).toBeInstanceOf(RetryRecoveryBudgetExhaustedError);
+  expect((error as RetryRecoveryBudgetExhaustedError).cause).toBeInstanceOf(Error);
+  expect((error as Error & { cause?: Error }).cause?.message).toBe('upstream unavailable');
+  // One physical dispatch consumed the entire budget; the wrapper must not
+  // dispatch a second one it can no longer account for.
   expect(calls).toBe(1);
 });
 

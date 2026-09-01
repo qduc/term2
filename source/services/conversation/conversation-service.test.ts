@@ -608,6 +608,7 @@ it('passes previous response ids into subsequent runs', async () => {
       options: {
         previousResponseId: null,
         sessionId: 'default',
+        recoveryBudget: expect.any(Object),
         providerHistorySnapshot: expect.objectContaining({
           revision: 1,
           history: [{ role: 'user', type: 'message', content: 'first' }],
@@ -619,6 +620,7 @@ it('passes previous response ids into subsequent runs', async () => {
       options: {
         previousResponseId: 'resp-1',
         sessionId: 'default',
+        recoveryBudget: expect.any(Object),
         providerHistorySnapshot: expect.objectContaining({
           revision: 2,
           history: [
@@ -680,6 +682,47 @@ it('retryLastToolOutput trims trailing assistant text and replays full history',
   expect(startCalls[0].options).toEqual(expect.objectContaining({ previousResponseId: null, sessionId: 'default' }));
 });
 
+// retryLastFailedTurn exists for the case a stream never delivered any
+// output at all (the retry_exhausted UI path only fires when nothing was
+// committed for the failed attempt -- see retry-classifier.ts's
+// hasCommittedOutput guard). Unlike retryLastToolOutput it has nothing to
+// trim: it just re-asks from the canonical, already-committed history.
+it('retryLastFailedTurn resends full history without adding a new user message', async () => {
+  const stream = new MockStream([{ type: 'text_delta', text: 'Recovered answer' }]);
+  stream.finalOutput = 'Recovered answer';
+
+  const startCalls: Array<{ input: unknown; options: unknown }> = [];
+  const mockClient = partialClient({
+    getProvider() {
+      return 'openai';
+    },
+    async startStream(input: any, options: any) {
+      startCalls.push({ input, options });
+      return stream;
+    },
+  });
+
+  const service = new ConversationService({
+    agentClient: mockClient,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+
+  service.importState({
+    history: [{ role: 'user', type: 'message', content: 'what is 2+2' }],
+    previousResponseId: null,
+    toolLedger: [],
+  });
+
+  const result = await service.retryLastFailedTurn();
+
+  expect(result?.type).toBe('response');
+  expect(asFinal(result as ConversationTerminal).finalText).toBe('Recovered answer');
+  expect(startCalls).toHaveLength(1);
+  // Full-history replay, not a second user turn appended to it.
+  expect((startCalls[0].input as any[]).map((item) => item.type)).toEqual(['message']);
+  expect((startCalls[0].input as any[])[0]).toMatchObject({ content: 'what is 2+2' });
+});
+
 it('forwards an opaque rewind target through the session boundary', () => {
   const service = new ConversationService({
     agentClient: partialClient(),
@@ -735,6 +778,7 @@ it('emits approval interruptions and resumes after approval', async () => {
         sessionId: 'default',
         toolResultCallIds: [],
         knownToolCallIds: [],
+        recoveryBudget: expect.any(Object),
         providerHistorySnapshot: expect.objectContaining({
           identity: expect.stringMatching(/^history:/),
           history: expect.any(Array),
@@ -1485,6 +1529,7 @@ it('handleApprovalDecision() rejects interruption when answer is n', async () =>
         sessionId: 'default',
         toolResultCallIds: [],
         knownToolCallIds: [],
+        recoveryBudget: expect.any(Object),
         providerHistorySnapshot: expect.objectContaining({
           identity: expect.stringMatching(/^history:/),
           history: expect.any(Array),

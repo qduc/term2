@@ -651,7 +651,16 @@ export function createConversationEventHandler(
         } else if (event.retryType === 'conversation_state') {
           text = `Conversation state was rejected by the provider. Rebuilding context and retrying... (Attempt ${event.attempt}/${event.maxRetries})`;
         } else if (event.retryType === 'upstream') {
-          text = `Upstream error or rate limit encountered. Retrying... (Attempt ${event.attempt}/${event.maxRetries})`;
+          const prefix =
+            event.errorKind === 'network'
+              ? 'Network connection unavailable'
+              : event.errorKind === 'rate_limit'
+              ? 'Rate limited'
+              : event.errorKind === 'provider'
+              ? 'Provider unavailable'
+              : 'Upstream error';
+          const wait = event.delayMs !== undefined ? ` in ${Math.ceil(event.delayMs / 1000)}s` : '';
+          text = `${prefix} — retrying ${event.attempt}/${event.maxRetries}${wait}`;
         } else if (event.retryType === 'parsing_error') {
           text = `Model parsing error detected. Retrying... (Attempt ${event.attempt}/${event.maxRetries})`;
         } else if (event.retryType === 'behavior') {
@@ -667,6 +676,18 @@ export function createConversationEventHandler(
           text,
         };
         setMessages((prev) => [...prev, systemMessage]);
+        return;
+      }
+
+      case 'retry_exhausted': {
+        const systemMessage: SystemMessage = {
+          id: createMessageId(),
+          sender: 'system',
+          text: event.canRetry
+            ? `${event.message}\n\nType /retry-turn to try again, or send a new message to move on.`
+            : event.message,
+        };
+        appendMessages([systemMessage]);
         return;
       }
 

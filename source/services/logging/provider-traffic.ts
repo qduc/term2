@@ -15,6 +15,7 @@ import type {
   ProviderTrafficRequest,
   ProviderTrafficResponse,
 } from '../service-interfaces.js';
+import { classifyProviderFailure } from '../retry/provider-failure-classification.js';
 
 export type SentTrafficRecord = {
   requestId: string;
@@ -1385,6 +1386,10 @@ export class ProviderTraffic implements IProviderTraffic {
     wsAttempt?: number;
     wsMaxAttempts?: number;
     receiveTiming?: ProviderTrafficReceiveTiming;
+    host?: string;
+    timeoutMs?: number;
+    phase?: string;
+    physicalAttempt?: number;
     diagnostics?: ProviderTrafficBoundedStreamDiagnostics;
   }): void {
     const trafficContext = this.sessionContextService.getContext() ?? null;
@@ -1409,11 +1414,18 @@ export class ProviderTraffic implements IProviderTraffic {
       modelWrapperClass: input.modelWrapperClass,
     };
 
+    const classification = classifyProviderFailure(input.error);
     const errorDetails: Record<string, any> = {
-      message:
-        typeof input.error === 'object' && input.error && 'message' in (input.error as any)
-          ? String((input.error as any).message)
-          : String(input.error),
+      errorKind: classification.errorKind,
+      message: classification.message,
+      retryable: classification.retryable,
+      ...(classification.code ? { code: classification.code } : {}),
+      ...(classification.status !== undefined ? { status: classification.status } : {}),
+      ...(classification.retryAfterMs !== undefined ? { retryAfterMs: classification.retryAfterMs } : {}),
+      ...(input.host ? { host: input.host } : {}),
+      ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+      phase: input.phase ?? 'request',
+      ...(input.physicalAttempt !== undefined ? { physicalAttempt: input.physicalAttempt } : {}),
     };
     if (input.wsAttempt !== undefined) {
       errorDetails.wsAttempt = input.wsAttempt;
@@ -1458,6 +1470,14 @@ export class ProviderTraffic implements IProviderTraffic {
       phase: 'provider_response',
       ...baseMeta,
       error: errorDetails.message,
+      errorKind: errorDetails.errorKind,
+      code: errorDetails.code,
+      status: errorDetails.status,
+      retryAfterMs: errorDetails.retryAfterMs,
+      retryable: errorDetails.retryable,
+      host: errorDetails.host,
+      timeoutMs: errorDetails.timeoutMs,
+      physicalAttempt: errorDetails.physicalAttempt,
       wsAttempt: input.wsAttempt,
       wsMaxAttempts: input.wsMaxAttempts,
       diagnostics: input.diagnostics,

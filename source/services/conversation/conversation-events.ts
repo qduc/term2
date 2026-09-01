@@ -22,6 +22,7 @@ export type ConversationEvent =
   | FinalResponseEvent
   | ErrorEvent
   | RetryEvent
+  | RetryExhaustedEvent
   | ToolRecoveryEvent
   | SubagentStartedEvent
   | SubagentToolStartedEvent
@@ -62,6 +63,19 @@ export interface RetryEvent {
   maxRetries: number;
   errorMessage: string;
   retryType?: 'hallucination' | 'parsing_error' | 'behavior' | 'flex_service_tier' | 'upstream' | 'conversation_state';
+  errorKind?: 'network' | 'provider' | 'rate_limit' | 'authentication' | 'cancelled' | 'unknown';
+  delayMs?: number;
+  retryAfterMs?: number;
+}
+
+export interface RetryExhaustedEvent {
+  type: 'retry_exhausted';
+  provider?: string;
+  errorKind: 'network' | 'provider' | 'rate_limit' | 'authentication' | 'cancelled' | 'unknown';
+  attempts: number;
+  maxAttempts: number;
+  message: string;
+  canRetry: boolean;
 }
 
 export interface ToolRecoveryEvent {
@@ -416,4 +430,36 @@ export interface ContextCompactionFailedEvent {
   errorCategory: 'request' | 'validation' | 'persistence';
   durationMs: number;
   strategy?: 'native' | 'local';
+}
+
+/**
+ * Event kinds that carry no committed model output and take no externally
+ * effectful action -- pure telemetry/lifecycle bookkeeping about the
+ * request. Notably, cost_update fires even for a request that produced
+ * nothing (its own `outcome` can be 'failed'), so treating its presence as
+ * "output was committed" would block safe recovery for the common case of a
+ * request that failed before ever streaming anything.
+ */
+const BOOKKEEPING_ONLY_EVENT_TYPES: ReadonlySet<ConversationEvent['type']> = new Set([
+  'usage_update',
+  'cost_update',
+  'run_budget',
+  'subagent_run_budget',
+  'codex_rate_limits',
+  'context_compaction_started',
+  'context_compaction_completed',
+  'context_compaction_failed',
+  'background_check_in_due',
+]);
+
+/**
+ * True when this event represents user-visible model output or an
+ * externally effectful action (a dispatched tool call, an approval
+ * requirement, a final response, ...). Used to decide whether an attempt has
+ * done anything that would make an automatic replay unsafe -- see
+ * TurnAttempt.markModelEventSeen and the "never replay after committed
+ * output" guard in retry-classifier.ts.
+ */
+export function isCommittedOutputEvent(event: ConversationEvent): boolean {
+  return !BOOKKEEPING_ONLY_EVENT_TYPES.has(event.type);
 }

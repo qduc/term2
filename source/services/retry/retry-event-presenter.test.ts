@@ -25,6 +25,8 @@ it('RetryEventPresenter handles transient retry (initial source)', () => {
     maxRetries: 5,
     errorMessage: 'Upstream down',
     retryType: 'upstream',
+    errorKind: 'unknown',
+    delayMs: 1000,
   });
 
   expect(presentation.logMessage).toBe('Transient upstream error detected, retrying turn');
@@ -34,6 +36,7 @@ it('RetryEventPresenter handles transient retry (initial source)', () => {
     retryAttempt: 2,
     maxRetries: 5,
     errorMessage: 'Upstream down',
+    errorKind: 'unknown',
     delayMs: 1000,
   });
 });
@@ -61,6 +64,8 @@ it('RetryEventPresenter handles transient retry (continuation source)', () => {
     maxRetries: 5,
     errorMessage: 'String error message',
     retryType: 'upstream',
+    errorKind: 'unknown',
+    delayMs: 2000,
   });
 
   expect(presentation.logMessage).toBe('Transient error in continuation, retrying');
@@ -70,6 +75,7 @@ it('RetryEventPresenter handles transient retry (continuation source)', () => {
     retryAttempt: 3,
     maxRetries: 5,
     errorMessage: 'String error message',
+    errorKind: 'unknown',
     delayMs: 2000,
   });
 });

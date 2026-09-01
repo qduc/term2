@@ -24,6 +24,7 @@ export type CreateLoggingMiddlewareOptions = {
   provider: string;
   model: string;
   providerTraffic: IProviderTraffic;
+  timeoutMs?: number;
 };
 
 const toRecord = (value: unknown): Record<string, unknown> | null => {
@@ -110,13 +111,16 @@ export function injectHeaders(initHeaders: HeadersInit | undefined, newHeaders: 
 }
 
 export function createLoggingMiddleware(options: CreateLoggingMiddlewareOptions): FetchMiddleware {
-  const { provider, model, providerTraffic } = options;
+  const { provider, model, providerTraffic, timeoutMs } = options;
+  let physicalAttempt = 0;
+  const attemptsBySignal = new WeakMap<AbortSignal, number>();
 
   return async (ctx, next) => {
     const requestBody = await readRequestBody(ctx.url, ctx.init);
     const parsedRequest = requestBody ? parseJsonObject(requestBody) : null;
     const requestModel = typeof parsedRequest?.model === 'string' ? parsedRequest.model : model;
     const requestId = randomUUID();
+    const attempt = attemptForSignal(ctx.init?.signal, attemptsBySignal, () => ++physicalAttempt);
     const sanitizedHeaders = ctx.init?.headers ? sanitizeHeaders(ctx.init.headers) : undefined;
 
     providerTraffic.recordRequestStart({
@@ -136,6 +140,10 @@ export function createLoggingMiddleware(options: CreateLoggingMiddlewareOptions)
         provider,
         model: requestModel,
         error,
+        host: hostFromRequest(ctx.url),
+        timeoutMs,
+        phase: 'request',
+        physicalAttempt: attempt,
       });
       throw error;
     }
@@ -157,4 +165,24 @@ export function createLoggingMiddleware(options: CreateLoggingMiddlewareOptions)
 
     return response;
   };
+}
+
+function attemptForSignal(
+  signal: AbortSignal | null | undefined,
+  attempts: WeakMap<AbortSignal, number>,
+  nextUnscoped: () => number,
+): number {
+  if (!signal) return nextUnscoped();
+  const next = (attempts.get(signal) ?? 0) + 1;
+  attempts.set(signal, next);
+  return next;
+}
+
+function hostFromRequest(input: RequestInfo | URL): string | undefined {
+  try {
+    const url = input instanceof URL ? input : typeof input === 'string' ? new URL(input) : new URL(input.url);
+    return url.hostname;
+  } catch {
+    return undefined;
+  }
 }

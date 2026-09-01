@@ -452,7 +452,28 @@ it('retry: adds system message about upstream retry', () => {
   const result = updater([]);
   expect(result.length).toBe(1);
   expect(result[0].sender).toBe('system');
-  expect(result[0].text).toBe('Upstream error or rate limit encountered. Retrying... (Attempt 1/3)');
+  expect(result[0].text).toBe('Upstream error — retrying 1/3');
+});
+
+it('retry: labels the upstream retry message with the sanitized failure kind', () => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'retry',
+    toolName: 'continuation',
+    attempt: 2,
+    maxRetries: 3,
+    errorMessage: 'rate limited',
+    retryType: 'upstream',
+    errorKind: 'rate_limit',
+    delayMs: 4200,
+  } as ConversationEvent);
+
+  const updater = deps.calls.setMessagesCalls[0]!;
+  const result = updater([]);
+  expect(result[0].text).toBe('Rate limited — retrying 2/3 in 5s');
 });
 
 it('retry: adds system message about parsing error retry', () => {

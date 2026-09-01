@@ -4,18 +4,23 @@ import type {
   StreamedModelTurnRequest,
 } from '../contracts/streamed-model-turn.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
+import { describeError, isAbortLikeError } from '../utils/error-helpers.js';
 import { isNetworkProtocolError } from '../services/retry/retry-error-classification.js';
 import {
   classifyUpstreamRetryableError,
   computeUpstreamRetryDelayMs,
 } from '../services/retry/upstream-retry-policy.js';
+import {
+  RetryRecoveryBudgetExhaustedError,
+  type RetryRecoveryBudget,
+} from '../services/retry/retry-recovery-budget.js';
 
 type RetryingModelOptions = {
   retryAttempts: number;
   loggingService?: Pick<ILoggingService, 'warn' | 'info'>;
   sleep?: (delayMs: number) => Promise<void>;
   random?: () => number;
-  onRetry?: () => void;
+  onRetry?: (info?: { attempt: number; delayMs: number; error: unknown }) => void;
 };
 
 /** Watches a signal and rejects with an AbortError when it fires. */
@@ -79,20 +84,29 @@ export class RetryingModel implements StreamedModelTurn {
   }
 
   async *stream(request: StreamedModelTurnRequest): AsyncIterable<StreamedModelTurnEvent> {
+    let lastError: unknown;
     for (let attempt = 0; ; attempt++) {
       let committed = false;
       try {
+        if (request.recoveryBudget && !request.recoveryBudget.claimPhysicalAttempt()) {
+          throw new RetryRecoveryBudgetExhaustedError(lastError);
+        }
         for await (const event of this.model.stream(request)) {
           committed = true;
           yield event;
         }
         return;
       } catch (error) {
-        if (committed || !this.#canRetry(error, attempt)) {
+        if (committed || isAbortLikeError(error) || !this.#canRetry(error, attempt)) {
           this.#logExhaustion(error, attempt);
           throw error;
         }
-        await this.#backoff(request.signal, error, attempt + 1);
+        lastError = error;
+        const budget = request.recoveryBudget;
+        budget?.noteRetryableFailure();
+        const retryAttempt = attempt + 1;
+        await this.#backoff(request.signal, error, retryAttempt, budget);
+        if (request.signal?.aborted) throw abortError();
       }
     }
   }
@@ -114,20 +128,32 @@ export class RetryingModel implements StreamedModelTurn {
     return attempt < this.options.retryAttempts && this.#isRetryable(error);
   }
 
-  async #backoff(signal: AbortSignal | undefined, error: unknown, attemptNumber: number): Promise<void> {
+  async #backoff(
+    signal: AbortSignal | undefined,
+    error: unknown,
+    attemptNumber: number,
+    budget?: RetryRecoveryBudget,
+  ): Promise<void> {
+    const upstream = classifyUpstreamRetryableError(error);
     const delayMs = computeUpstreamRetryDelayMs({
+      retryAfterMs: upstream.retryAfterMs,
       attemptIndex: attemptNumber - 1,
       random: this.#random,
     });
+    const remainingMs = budget?.remainingMs();
+    if (remainingMs !== undefined && delayMs > remainingMs) {
+      this.#logExhaustion(error, attemptNumber - 1);
+      throw error;
+    }
     this.options.loggingService?.warn('Retrying model request after upstream failure', {
       eventType: 'retry.model_transport',
       category: 'retry',
       attempt: attemptNumber,
       maxRetries: this.options.retryAttempts,
       delayMs,
-      error: error instanceof Error ? error.message : String(error),
+      error: describeError(error),
     });
-    this.options.onRetry?.();
+    this.options.onRetry?.({ attempt: attemptNumber, delayMs, error });
     await sleepOrAbort(this.#sleep, delayMs, signal);
   }
 
@@ -138,7 +164,7 @@ export class RetryingModel implements StreamedModelTurn {
       category: 'retry',
       attempts: attempt + 1,
       maxRetries: this.options.retryAttempts,
-      error: error instanceof Error ? error.message : String(error),
+      error: describeError(error),
     });
   }
 

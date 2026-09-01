@@ -1,7 +1,7 @@
 import type { ContinuationHandle } from '../../contracts/continuation-handle.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { SteerOutcome } from '../agent-runtime/application-run-loop.js';
-import type { ConversationEvent } from '../conversation/conversation-events.js';
+import { isCommittedOutputEvent, type ConversationEvent } from '../conversation/conversation-events.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
 import type { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
@@ -84,6 +84,7 @@ import { contextCompactionFailureCategory } from '../../providers/openai-respons
 import type { OpenAIRootFreshTurnSelectorParityObserver } from '../openai-root-selector-parity-observer.js';
 import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
+import type { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
 
 export interface TurnWorkflowDeps {
   agentClient: ConversationAgentClient;
@@ -124,6 +125,14 @@ export class TurnWorkflow {
   #liveRun: LiveRun<ConversationEvent, LiveRunResult> | null = null;
   #nextLiveRunId = 0;
   #hookTurnId: string | undefined;
+  /**
+   * The recovery envelope of the initial attempt that started the current
+   * logical turn, if one is active. Continuation attempts (tool-call
+   * follow-ups, and standalone approval-resolution continuations) reuse it so
+   * the whole turn shares one 90s/3-attempt/1-replay budget rather than each
+   * continuation getting its own unbounded allowance.
+   */
+  #activeRecoveryBudget: RetryRecoveryBudget | undefined;
 
   constructor(private readonly deps: TurnWorkflowDeps) {
     this.#toolCallMarkers = deps.toolCallMarkers ?? new ToolCallMarkerStore();
@@ -327,6 +336,10 @@ export class TurnWorkflow {
       }
       attempt = creation.attempt;
     }
+    // Continuation attempts driven from within this same logical turn (tool
+    // approvals, abort resolution) reuse this budget instead of getting their
+    // own unbounded one; see #activeRecoveryBudget.
+    this.#activeRecoveryBudget = attempt.recoveryBudget;
 
     let skipUser = options.skipUserMessage ?? false;
     let currentResumeState = options.resumeState;
@@ -348,7 +361,7 @@ export class TurnWorkflow {
 
     try {
       if (options.delayMs && options.delayMs > 0) {
-        await new Promise((resolve) => setTimeout(resolve, options.delayMs));
+        await this.#waitBeforeRetry(attempt, options.delayMs);
       }
       if (!this.deps.generationGuard.isCurrent(attempt.token)) {
         return { kind: 'stale' };
@@ -484,7 +497,7 @@ export class TurnWorkflow {
             currentDisableChainingForAttempt = handled.instruction.disableChainingForAttempt === true;
             currentAbortedContext = null;
             if (handled.delayMs && handled.delayMs > 0) {
-              await new Promise((resolve) => setTimeout(resolve, handled.delayMs));
+              await this.#waitBeforeRetry(attempt, handled.delayMs);
             }
             if (handled.useStandardServiceTier) {
               getMethod<[], void>(this.deps.agentClient, 'useStandardServiceTierForNextRequest')?.call(
@@ -596,6 +609,7 @@ export class TurnWorkflow {
     });
     let next = await processor.next();
     while (!next.done) {
+      if (isCommittedOutputEvent(next.value)) attempt.markModelEventSeen();
       emit(next.value);
       next = await processor.next();
     }
@@ -764,6 +778,7 @@ export class TurnWorkflow {
   ): Promise<AgentStream> {
     if (options.resumeState && typeof this.deps.agentClient.continueRunStream === 'function') {
       const resumeOptions: AgentClientRunOptions = {
+        recoveryBudget: attempt.recoveryBudget,
         previousResponseId: options.resumePreviousResponseId ?? this.deps.providerContinuity.previousResponseId,
         sessionId: this.deps.sessionId,
         providerHistorySnapshot: this.deps.conversationStore.getProviderHistorySnapshot(),
@@ -807,6 +822,7 @@ export class TurnWorkflow {
       }
     }
     const startOptions: AgentClientRunOptions = {
+      recoveryBudget: attempt.recoveryBudget,
       previousResponseId: options.disableChainingForAttempt ? undefined : selectedPreviousResponseId,
       sessionId: this.deps.sessionId,
       providerHistorySnapshot: attempt.providerHistorySnapshot,
@@ -829,6 +845,26 @@ export class TurnWorkflow {
     );
   }
 
+  async #waitBeforeRetry(attempt: TurnAttempt, delayMs: number): Promise<void> {
+    if (attempt.signal?.aborted) throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
+    if (!attempt.signal) {
+      await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+      return;
+    }
+    await new Promise<void>((resolve, reject) => {
+      const onAbort = () => {
+        clearTimeout(timer);
+        attempt.signal?.removeEventListener('abort', onAbort);
+        reject(Object.assign(new Error('Operation aborted'), { name: 'AbortError' }));
+      };
+      const timer = setTimeout(() => {
+        attempt.signal?.removeEventListener('abort', onAbort);
+        resolve();
+      }, delayMs);
+      attempt.signal!.addEventListener('abort', onAbort, { once: true });
+    });
+  }
+
   async *executeContinuationAttempt(
     init: ContinuationInit,
     policy?: ApprovalDecisionPolicy,
@@ -840,7 +876,7 @@ export class TurnWorkflow {
     }
 
     const prepared = this.deps.planApplier.prepareInit(init);
-    const state = new ContinuationState(init.generation);
+    const state = new ContinuationState(init.generation, this.#activeRecoveryBudget);
     state.initializeFrom(prepared, this.#activeCallIdsForInit(init, prepared));
 
     try {
@@ -1119,6 +1155,7 @@ export class TurnWorkflow {
     void
   > {
     const continuationOptions: AgentClientRunOptions = {
+      recoveryBudget: state.recoveryBudget,
       previousResponseId: state.currentResumePreviousResponseId ?? this.deps.providerContinuity.previousResponseId,
       sessionId: this.deps.sessionId,
       toolResultCallIds: state.currentCallIds,

@@ -100,7 +100,7 @@ it('run() warns from public stream items without inspecting private generated st
   expect('output' in (warning!.meta! as Record<string, unknown>)).toBe(false);
 });
 
-it('run() retries streamed recoverable errors without committing failed stream history', async () => {
+it('does not replay a turn after a model event has crossed the stream boundary', async () => {
   class FailingStream extends MockStream {
     constructor() {
       super([]);
@@ -149,14 +149,13 @@ it('run() retries streamed recoverable errors without committing failed stream h
   const { turnCoordinator } = bundle;
 
   const emitted: ConversationEvent[] = [];
-  for await (const ev of turnCoordinator.start('retry me')) {
-    emitted.push(ev);
-  }
+  await expect(async () => {
+    for await (const ev of turnCoordinator.start('retry me')) emitted.push(ev);
+  }).rejects.toThrow('Tool fake_tool not found');
 
-  expect(emitted.map((event: ConversationEvent) => event.type)).toEqual(['text_delta', 'retry', 'text_delta', 'final']);
-  expect(calls.length).toBe(2);
+  expect(emitted.map((event: ConversationEvent) => event.type)).toEqual(['text_delta', 'error']);
+  expect(calls.length).toBe(1);
   expect((calls[0] as unknown[]).length).toBe(1);
-  expect(calls[1] as unknown as unknown).toEqual([{ role: 'user', type: 'message', content: 'retry me' }]);
 });
 
 it('run() does not retry recoverable errors from a fresh start when disabled', async () => {

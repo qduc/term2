@@ -20,6 +20,7 @@ import type {
   StreamedModelTool,
   StreamedModelTurnOutput,
 } from '../../contracts/streamed-model-turn.js';
+import type { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
 import type {
   AnyToolDefinition,
   ToolExecutionLifecycleContext,
@@ -110,6 +111,8 @@ export interface ApplicationBoundaryCompaction {
 
 export interface ApplicationRunLoopOptions {
   readonly signal?: AbortSignal;
+  /** Shared automatic retry/recovery capability for this logical turn. */
+  readonly recoveryBudget?: RetryRecoveryBudget;
   /** Existing provider response to continue from on the first model turn. */
   readonly previousResponseId?: string | null;
   /** Skip previous_response_id and transport history compression for the next model request. */
@@ -245,6 +248,7 @@ type ToolPlanEntry = {
 
 type RunState = {
   agent: ApplicationAgent;
+  recoveryBudget?: RetryRecoveryBudget;
   input: StreamedModelTurnInput[];
   history: ProviderInputItem[];
   pendingApproval?: PendingApproval;
@@ -569,6 +573,7 @@ export class ApplicationRunLoop {
     if (!this.#turnOpen) this.#releasePendingSteers({ reason: 'superseded_by_new_turn' });
     const state: RunState = {
       agent,
+      recoveryBudget: options.recoveryBudget,
       input: normalizeInput(input),
       history: normalizeHistory(input),
       // A response ID is usable only after its provider origin is recorded.
@@ -1026,6 +1031,7 @@ export class ApplicationRunLoop {
               }
             : {}),
           ...(options.signal ? { signal: options.signal } : {}),
+          ...(state.recoveryBudget ? { recoveryBudget: state.recoveryBudget } : {}),
         };
         activeRequest = request;
         const generationGuard = new GenerationGuard({

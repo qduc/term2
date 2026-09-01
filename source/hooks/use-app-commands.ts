@@ -17,6 +17,7 @@ import { createHandoffSlashCommand } from '../commands/handoff-command.js';
 import { createGuardedSettingsCommand } from '../commands/guarded-settings-command.js';
 import { createSkillsSlashCommand } from '../commands/skills-command.js';
 import { createCompactSlashCommand } from '../commands/compact-command.js';
+import { createRetryFailedTurnSlashCommand } from '../commands/retry-failed-turn-command.js';
 import { guardAgainstBusyTurn } from '../utils/busy-turn-guard.js';
 import type { SkillsService, SkillInfo } from '../services/skills/skills-service.js';
 import type { Message } from '../types/message.js';
@@ -46,6 +47,7 @@ interface UseAppCommandsProps {
   onHandoff?: (capturedText: string) => void;
   sendUserMessage: (input: string | UserTurn) => Promise<void>;
   retryLastToolOutput: () => Promise<boolean>;
+  retryLastFailedTurn?: () => Promise<boolean>;
   compactContext?: () => Promise<string>;
   skillsService: SkillsService;
   onSkillSelected: (skill: SkillInfo) => void;
@@ -83,6 +85,7 @@ export const useAppCommands = ({
   onHandoff,
   sendUserMessage,
   retryLastToolOutput,
+  retryLastFailedTurn = async () => false,
   compactContext = async () => 'Context compaction is unavailable.',
   skillsService,
   onSkillSelected,
@@ -154,6 +157,7 @@ export const useAppCommands = ({
         }),
       ),
       guardBusyTurn(createRetryToolSlashCommand({ retryLastToolOutput, addSystemMessage })),
+      guardBusyTurn(createRetryFailedTurnSlashCommand({ retryLastFailedTurn, addSystemMessage })),
       guardBusyTurn(createCompactSlashCommand({ compactContext, addSystemMessage })),
       createModeToggleCommand(
         'app.liteMode',
@@ -244,6 +248,7 @@ export const useAppCommands = ({
     onHandoff,
     sendUserMessage,
     retryLastToolOutput,
+    retryLastFailedTurn,
     compactContext,
     togglePlanMode,
     skillsService,

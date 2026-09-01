@@ -1,6 +1,7 @@
 import type { ClassifiedFailure } from './retry-contracts.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { describeError } from '../../utils/error-helpers.js';
+import { classifyProviderFailure } from './provider-failure-classification.js';
 
 export type RetryEventPresenterInput = {
   failure: ClassifiedFailure;
@@ -45,6 +46,7 @@ export class RetryEventPresenter {
       }
 
       case 'transient': {
+        const providerFailure = classifyProviderFailure(error);
         const toolName = source === 'continuation' ? 'continuation' : 'turn';
         const event: ConversationEvent = {
           type: 'retry',
@@ -53,6 +55,9 @@ export class RetryEventPresenter {
           maxRetries: maxTransientRetries,
           errorMessage,
           retryType: 'upstream',
+          errorKind: providerFailure.errorKind,
+          delayMs: failure.delayMs,
+          ...(providerFailure.retryAfterMs !== undefined ? { retryAfterMs: providerFailure.retryAfterMs } : {}),
         };
         const logMessage =
           source === 'continuation'
@@ -64,6 +69,7 @@ export class RetryEventPresenter {
           retryAttempt: failure.attempt,
           maxRetries: maxTransientRetries,
           errorMessage,
+          errorKind: providerFailure.errorKind,
           delayMs: failure.delayMs,
         };
         return { event, logMessage, logFields };

@@ -11,6 +11,7 @@ import type { SessionLifecycle } from './session-lifecycle.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
 import type { AssistantTurnJournal } from '../logging/assistant-turn-journal.js';
 import { TurnAttempt } from './turn-attempt.js';
+import type { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
 
 export type InitialTurnRunOptions = {
   skipUserMessage?: boolean;
@@ -26,6 +27,7 @@ export type InitialTurnRunOptions = {
   useStandardServiceTier?: boolean;
   disableChainingForAttempt?: boolean;
   inputSurgeApproval?: InputSurgeApproval;
+  recoveryBudget?: RetryRecoveryBudget;
 };
 
 export type TurnAttemptFactoryDeps = {
@@ -72,6 +74,7 @@ export class TurnAttemptFactory {
         initialJournalSnapshot: this.deps.journal.getEvents(),
         maxTransientRetries: this.deps.resolveRetryLimit(),
         maxModelRetries: options.maxModelRetries,
+        recoveryBudget: options.recoveryBudget,
         signal: options.signal,
         onAbort: () => {
           this.deps.agentClient.abort();

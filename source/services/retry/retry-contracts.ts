@@ -51,6 +51,8 @@ export type ClassificationContext = {
   error: unknown;
   retryCounts: RetryCounts;
   stream: AgentStream | null;
+  /** True once a model event has crossed the session stream boundary. */
+  hasCommittedOutput?: boolean;
   maxTransientRetries: number;
   maxModelRetries?: number;
 };

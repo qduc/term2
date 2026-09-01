@@ -6,6 +6,7 @@ import { AmbiguousModelOutcomeError } from '../retry/retry-errors.js';
 import { recordWebSocketDispatch, UnsentWebSocketRequestError } from '../../providers/websocket-request-dispatch.js';
 import { DefaultConversationRecoveryPolicy } from '../retry/recovery-policy.js';
 import { DefaultRetryClassifier } from '../retry/retry-classifier.js';
+import { RetryRecoveryBudgetExhaustedError } from '../retry/retry-recovery-budget.js';
 
 function createAttempt() {
   return new TurnAttempt({
@@ -247,6 +248,136 @@ it.each([{ kind: 'transient', attempt: 1, delayMs: 5 }, { kind: 'model_retry' }]
     expect(plans).toEqual([{ kind: 'terminate', events: [] }]);
   },
 );
+
+// classifyProviderFailure sees a plain RetryRecoveryBudgetExhaustedError as
+// non-retryable "unknown", so the exhausted flag must recognize the typed
+// error directly instead of relying on that generic classification -- this
+// is the case the physical-attempt budget actually raises.
+it('presents retry_exhausted for a budget-exhaustion error even though it classifies as non-retryable', async () => {
+  const handler = new InitialTurnRecoveryHandler({
+    conversationStore: { getHistory: () => [] } as any,
+    freshStartRetriesAllowed: true,
+    generationGuard: { isCurrent: () => true } as any,
+    inputPlanner: { recordSuccess: () => {} } as any,
+    logger: { warn: () => {}, error: () => {}, getCorrelationId: () => undefined } as any,
+    recoveryExecutor: {
+      apply: () => ({ kind: 'terminated', events: [] }),
+    } as any,
+    recoveryPolicy: { plan: () => ({ kind: 'terminate', events: [] }) } as any,
+    retryClassifier: { classify: () => ({ kind: 'unrecoverable' }) } as any,
+    retryEventPresenter: { present: () => ({ event: {}, logMessage: '', logFields: {} }) } as any,
+    sessionId: 'budget-exhausted',
+    provider: 'openai',
+  });
+
+  const events: any[] = [];
+  const iterator = handler.handle({
+    error: new RetryRecoveryBudgetExhaustedError(new Error('upstream 503')),
+    attempt: createAttempt(),
+    stream: null,
+  });
+  let next = await iterator.next();
+  while (!next.done) {
+    events.push(next.value);
+    next = await iterator.next();
+  }
+
+  expect(events.map((e: any) => e.type)).toEqual(['retry_exhausted', 'error']);
+  expect(events[0]).toMatchObject({ type: 'retry_exhausted', provider: 'openai', canRetry: true });
+});
+
+// model_retry (hallucination detection) has its own maxModelRetries cap,
+// independent of the shared 90s/3-attempt/1-replay transport recovery
+// budget. Gating replay_turn behind the same 1-automatic-replay allowance as
+// transport retries silently cut an established, separately-tested retry
+// count in half (see the integration-level regression in
+// conversation-service.test.ts: "stops retrying after max hallucination
+// retries"). This proves the fix directly: two model_retry replays succeed
+// against a budget whose one automatic replay is already claimed by an
+// unrelated transport recovery.
+it('does not charge model_retry replays against the transport automatic-replay budget', async () => {
+  const plans: unknown[] = [];
+  const handler = new InitialTurnRecoveryHandler({
+    conversationStore: { getHistory: () => [] } as any,
+    freshStartRetriesAllowed: true,
+    generationGuard: { isCurrent: () => true } as any,
+    inputPlanner: { recordSuccess: () => {} } as any,
+    logger: { warn: () => {}, error: () => {}, getCorrelationId: () => undefined } as any,
+    recoveryExecutor: {
+      apply: ({ plan }: any) => {
+        plans.push(plan);
+        return { kind: 'run', instruction: { skipUserMessage: true }, events: [] };
+      },
+    } as any,
+    recoveryPolicy: new DefaultConversationRecoveryPolicy(),
+    retryClassifier: { classify: () => ({ kind: 'model_retry', errorContext: 'hallucination' }) } as any,
+    retryEventPresenter: { present: () => ({ event: {}, logMessage: '', logFields: {} }) } as any,
+    sessionId: 'model-retry-budget',
+  });
+  const attempt = createAttempt();
+  // An earlier, unrelated transport recovery already used the turn's one
+  // automatic replay.
+  expect(attempt.recoveryBudget.claimAutomaticReplay()).toBe(true);
+
+  const first: any = await drain(handler.handle({ error: new Error('hallucinated'), attempt, stream: null }) as any);
+  const second: any = await drain(
+    handler.handle({ error: new Error('hallucinated again'), attempt, stream: null }) as any,
+  );
+
+  expect(first.kind).toBe('run');
+  expect(second.kind).toBe('run');
+  expect(plans.every((plan: any) => plan.kind === 'replay_turn')).toBe(true);
+});
+
+// Refusing a plan for lack of automatic-replay budget must still settle the
+// turn truthfully -- open tool calls, chain state -- exactly like an
+// ordinary termination does. The original code returned 'terminated'
+// directly without ever calling recoveryExecutor.apply, silently skipping
+// that settlement (requirement: no blind redispatch or false failure/success
+// on tool execution state).
+it('settles the turn through recoveryExecutor when refusing a plan for exhausted replay budget', async () => {
+  const applyCalls: unknown[] = [];
+  const handler = new InitialTurnRecoveryHandler({
+    conversationStore: { getHistory: () => [] } as any,
+    freshStartRetriesAllowed: true,
+    generationGuard: { isCurrent: () => true } as any,
+    inputPlanner: { recordSuccess: () => {} } as any,
+    logger: { warn: () => {}, error: () => {}, getCorrelationId: () => undefined } as any,
+    recoveryExecutor: {
+      apply: (input: any) => {
+        applyCalls.push(input);
+        if (input.plan.kind === 'terminate') {
+          return {
+            kind: 'terminated',
+            events: [{ type: 'tool_recovery', recoveredCallIds: [], droppedCallIds: ['call-1'], message: 'dropped' }],
+          };
+        }
+        return { kind: 'run', instruction: { skipUserMessage: true }, events: [] };
+      },
+    } as any,
+    recoveryPolicy: new DefaultConversationRecoveryPolicy(),
+    retryClassifier: { classify: () => ({ kind: 'transient', attempt: 1, delayMs: 5 }) } as any,
+    retryEventPresenter: { present: () => ({ event: {}, logMessage: '', logFields: {} }) } as any,
+    sessionId: 'budget-refusal-settlement',
+  });
+  const attempt = createAttempt();
+  expect(attempt.recoveryBudget.claimAutomaticReplay()).toBe(true);
+
+  const events: any[] = [];
+  const iterator = handler.handle({ error: new Error('temporary'), attempt, stream: null });
+  let next = await iterator.next();
+  while (!next.done) {
+    events.push(next.value);
+    next = await iterator.next();
+  }
+
+  expect(applyCalls).toEqual([expect.objectContaining({ plan: { kind: 'terminate', events: [] } })]);
+  // First event is the transient-retry presentation (mocked to {}, so its
+  // type is undefined); what matters is the settlement and exhaustion events
+  // that follow once the budget refuses the plan.
+  expect(events.map((e: any) => e.type)).toEqual([undefined, 'tool_recovery', 'retry_exhausted']);
+  expect(next.value).toEqual({ kind: 'terminated' });
+});
 
 it('returns stale before classifying when the generation is outdated', async () => {
   const handler = new InitialTurnRecoveryHandler({

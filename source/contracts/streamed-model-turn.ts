@@ -1,4 +1,5 @@
 import type { JsonSchemaDefinition } from './model-types.js';
+import type { RetryRecoveryBudget } from '../services/retry/retry-recovery-budget.js';
 
 /** Provider-owned options and metadata retained at characterized protocol boundaries. */
 export type StreamedModelProviderOptions = Readonly<Record<string, unknown>>;
@@ -113,6 +114,8 @@ export interface StreamedModelTurnRequest {
   readonly codex?: StreamedModelCodexOptions;
   readonly providerOptions?: StreamedModelProviderOptions;
   readonly signal?: AbortSignal;
+  /** Runtime-only recovery capability; provider adapters must not serialize it. */
+  readonly recoveryBudget?: RetryRecoveryBudget;
   /**
    * Skip previous_response_id and transport history compression for this
    * request. Recovery uses this to send one self-contained full-history

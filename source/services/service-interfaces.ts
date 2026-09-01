@@ -179,6 +179,10 @@ export interface IProviderTraffic {
     wsAttempt?: number;
     wsMaxAttempts?: number;
     receiveTiming?: ProviderTrafficReceiveTiming;
+    host?: string;
+    timeoutMs?: number;
+    phase?: string;
+    physicalAttempt?: number;
     /**
      * Bounded category/counter/timing evidence of stream progress observed
      * before the failure, when a stream had already started delivering

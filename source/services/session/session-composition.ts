@@ -702,6 +702,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     retryClassifier,
     retryEventPresenter,
     sessionId: id,
+    provider: agentClient?.getProvider?.(),
   });
 
   const planApplier = new ContinuationPlanApplier({
@@ -723,6 +724,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     retryEventPresenter,
     resolveRetryLimit,
     toolTracker,
+    provider: agentClient?.getProvider?.(),
   });
 
   const turnWorkflow = new TurnWorkflow({

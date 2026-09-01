@@ -36,3 +36,29 @@ it('ChatMessage renders reasoning messages with Markdown formatting', async () =
     unmount();
   });
 });
+
+it('ChatMessage renders user messages with prompt marker', async () => {
+  let lastFrame!: () => string | undefined;
+  let unmount!: () => void;
+
+  await act(async () => {
+    const result = render(
+      <ChatMessage
+        msg={{
+          id: 'user-1',
+          sender: 'user',
+          text: 'How do I run tests?',
+        }}
+      />,
+    );
+    lastFrame = result.lastFrame;
+    unmount = result.unmount;
+  });
+
+  const frame = stripAnsi(lastFrame() || '');
+  expect(frame.includes('❯ How do I run tests?')).toBe(true);
+
+  await act(async () => {
+    unmount();
+  });
+});

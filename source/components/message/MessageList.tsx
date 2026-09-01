@@ -506,7 +506,8 @@ const MessageList = <T extends MessageLike = Message>({
     const prevMsg = getPreviousMessage() ?? getCrossBoundaryPreviousMessage();
     const isContinuation = prevMsg && prevMsg.sender === 'bot' && msg.sender === 'bot';
     const isFirst = idx === 0 && collection === dynamicItems && staticItems.length === 0;
-    const marginTop = isFirst || isContinuation ? 0 : 1;
+    const isUser = 'sender' in msg && msg.sender === 'user';
+    const marginTop = isFirst || isContinuation ? 0 : isUser ? 2 : 1;
 
     return (
       <Box key={msg.id} marginTop={marginTop} width={maxWidth}>

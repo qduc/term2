@@ -23,11 +23,13 @@ it.sequential('MessageList renders user and bot messages', async () => {
   const messages = [
     { id: '1', sender: 'user', text: 'hello' },
     { id: '2', sender: 'bot', text: 'hi there' },
+    { id: '3', sender: 'user', text: 'follow up' },
   ];
   const { lastFrame } = await renderInAct(<MessageList messages={messages} />);
   const output = lastFrame() ?? '';
   expect(output.includes('❯ hello')).toBe(true);
   expect(output.includes('hi there')).toBe(true);
+  expect(output.includes('❯ follow up')).toBe(true);
 });
 
 it.sequential('MessageList presents a rollover briefing without a user-authored prompt marker', async () => {

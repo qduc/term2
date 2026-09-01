@@ -18,7 +18,9 @@ const ChatMessage: FC<Props> = ({ msg, maxWidth }) => {
           <MarkdownRenderer maxWidth={maxWidth}>{msg.text}</MarkdownRenderer>
         </>
       ) : msg.sender === 'user' ? (
-        <Text color={COLOR_ACCENT}>❯ {msg.text}</Text>
+        <Text color={COLOR_ACCENT} bold>
+          ❯ {msg.text}
+        </Text>
       ) : msg.sender === 'system' ? (
         <Text color={COLOR_REASONING}>{msg.text}</Text>
       ) : msg.sender === 'reasoning' ? (

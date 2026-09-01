@@ -413,6 +413,31 @@ it.sequential('shows failure reason for recently failed tasks when error is pres
 });
 
 it.sequential(
+  'renders budget-exhausted interrupted tasks as terminal at normal and narrow widths, then ages them out',
+  async () => {
+    const interrupted = runningTask({
+      status: 'interrupted',
+      completedAt: 6_000,
+      task: 'partially completed work',
+    });
+    const renderer = await renderInAct(<BackgroundTasksPanel tasks={[interrupted]} now={7_000} columns={120} />);
+
+    let output = renderer.lastFrame() ?? '';
+    expect(output).toContain('Tasks · 0 active');
+    expect(output).toContain('Interrupted recently (budget exhausted)');
+    expect(output).not.toContain('Running');
+
+    await rerenderInAct(renderer, <BackgroundTasksPanel tasks={[interrupted]} now={7_000} columns={40} />);
+    output = renderer.lastFrame() ?? '';
+    expect(output).toContain('Interrupted');
+    expect(output).not.toContain('Running');
+
+    await rerenderInAct(renderer, <BackgroundTasksPanel tasks={[interrupted]} now={16_000} columns={40} />);
+    expect(renderer.lastFrame() ?? '').toBe('');
+  },
+);
+
+it.sequential(
   'distinguishes observed activity, provider waits, quiet work, and confirmed terminal failure',
   async () => {
     const renderer = await renderInAct(

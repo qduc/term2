@@ -376,3 +376,177 @@ it('measures each request in a turn separately, resetting at tool_dispatched', (
 
   expect(secondRequestUsage.tokens_per_second).toBe(20);
 });
+
+function silentLogger() {
+  return {
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+    debug: () => {},
+    security: () => {},
+    setCorrelationId: () => {},
+    getCorrelationId: () => undefined,
+    clearCorrelationId: () => {},
+  };
+}
+
+it('prefers provider completion_ms when settling usage_update TPS', () => {
+  let lastUsage: any = null;
+  let currentTime = 1000;
+  const session = createStreamingSession(
+    {
+      appendMessages: () => {},
+      setMessages: () => {},
+      trimMessages: (messages) => messages,
+      annotateCommandMessage: (msg) => msg,
+      loggingService: silentLogger(),
+      setLastUsage: (usage) => {
+        lastUsage = usage;
+      },
+      reasoningThrottleMs: 200,
+      now: () => currentTime,
+      createConversationEventHandler: () => () => {},
+    },
+    'sendUserMessage',
+  );
+
+  currentTime = 1200;
+  session.applyConversationEvent({ type: 'text_delta', delta: 'Hello', fullText: 'Hello' } as const);
+  currentTime = 3200;
+  session.applyConversationEvent({
+    type: 'usage_update',
+    usage: { prompt_tokens: 10, completion_tokens: 100, completion_ms: 1000, total_tokens: 110 },
+  } as const);
+
+  // Wall-clock from first token would be 2s -> 50 tok/s. Provider decode time is 1s.
+  expect(lastUsage?.tokens_per_second).toBe(100);
+  expect(lastUsage?.tokens_per_second_estimated).toBeUndefined();
+});
+
+it('does not attach TPS on a usage event with no visible tokens and no completion_ms', () => {
+  let lastUsage: any = null;
+  const session = createStreamingSession(
+    {
+      appendMessages: () => {},
+      setMessages: () => {},
+      trimMessages: (messages) => messages,
+      annotateCommandMessage: (msg) => msg,
+      loggingService: silentLogger(),
+      setLastUsage: (usage) => {
+        lastUsage = usage;
+      },
+      reasoningThrottleMs: 200,
+      now: () => 3000,
+      createConversationEventHandler: () => () => {},
+    },
+    'sendUserMessage',
+  );
+
+  session.applyConversationEvent({
+    type: 'usage_update',
+    usage: { prompt_tokens: 10, completion_tokens: 60, total_tokens: 70 },
+  } as const);
+
+  expect(lastUsage?.tokens_per_second).toBeUndefined();
+});
+
+it('subtracts reasoning_tokens when settling TPS', () => {
+  let lastUsage: any = null;
+  let currentTime = 0;
+  const session = createStreamingSession(
+    {
+      appendMessages: () => {},
+      setMessages: () => {},
+      trimMessages: (messages) => messages,
+      annotateCommandMessage: (msg) => msg,
+      loggingService: silentLogger(),
+      setLastUsage: (usage) => {
+        lastUsage = usage;
+      },
+      reasoningThrottleMs: 200,
+      now: () => currentTime,
+      createConversationEventHandler: () => () => {},
+    },
+    'sendUserMessage',
+  );
+
+  session.applyConversationEvent({ type: 'text_delta', delta: 'visible', fullText: 'visible' } as const);
+  currentTime = 1000;
+  session.applyConversationEvent({
+    type: 'usage_update',
+    usage: { completion_tokens: 100, reasoning_tokens: 80 },
+  } as const);
+
+  expect(lastUsage?.tokens_per_second).toBe(20);
+  expect(lastUsage?.tokens_per_second_estimated).toBeUndefined();
+});
+
+it('marks settled TPS estimated when hidden tokens inflate the numerator', () => {
+  let lastUsage: any = null;
+  let currentTime = 0;
+  const session = createStreamingSession(
+    {
+      appendMessages: () => {},
+      setMessages: () => {},
+      trimMessages: (messages) => messages,
+      annotateCommandMessage: (msg) => msg,
+      loggingService: silentLogger(),
+      setLastUsage: (usage) => {
+        lastUsage = usage;
+      },
+      reasoningThrottleMs: 200,
+      now: () => currentTime,
+      createConversationEventHandler: () => () => {},
+    },
+    'sendUserMessage',
+  );
+
+  session.applyConversationEvent({ type: 'text_delta', delta: 'a'.repeat(40), fullText: 'a'.repeat(40) } as const);
+  currentTime = 1000;
+  session.applyConversationEvent({
+    type: 'usage_update',
+    usage: { completion_tokens: 100 },
+  } as const);
+
+  expect(lastUsage?.tokens_per_second).toBe(100);
+  expect(lastUsage?.tokens_per_second_estimated).toBe(true);
+});
+
+it('seeds live estimates from the conversation chars-per-token ratio and reports recalibration', () => {
+  const calibrated: number[] = [];
+  const liveTps: number[] = [];
+  let currentTime = 0;
+  const session = createStreamingSession(
+    {
+      appendMessages: () => {},
+      setMessages: () => {},
+      trimMessages: (messages) => messages,
+      annotateCommandMessage: (msg) => msg,
+      loggingService: silentLogger(),
+      setLastUsage: () => {},
+      setStreamingSpeed: (speed) => {
+        if (speed) liveTps.push(speed.tps);
+      },
+      charsPerToken: 4,
+      onCharsPerTokenCalibrated: (ratio) => calibrated.push(ratio),
+      reasoningThrottleMs: 200,
+      now: () => currentTime,
+      createConversationEventHandler: () => () => {},
+    },
+    'sendUserMessage',
+  );
+
+  currentTime = 0;
+  session.applyConversationEvent({ type: 'text_delta', delta: 'a'.repeat(200), fullText: 'a'.repeat(200) } as const);
+  currentTime = 1000;
+  session.applyConversationEvent({ type: 'text_delta', delta: 'x', fullText: 'a'.repeat(200) + 'x' } as const);
+  // Seeded at 4 chars/token: ~50 tok/s, not the default 3.8 (~53 tok/s).
+  expect(liveTps.at(-1)).toBe(50);
+
+  session.applyConversationEvent({
+    type: 'usage_update',
+    usage: { completion_tokens: 20 },
+  } as const);
+
+  expect(calibrated[0]).toBe(10);
+});

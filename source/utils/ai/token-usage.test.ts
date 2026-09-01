@@ -248,6 +248,15 @@ it('formatContextUsage renders used/window in compact k/M units', () => {
   expect(formatContextUsage(0)).toBe('0k');
 });
 
+it('normalizeUsage preserves the estimated tokens-per-second hedge flag', () => {
+  expect(normalizeUsage({ completion_tokens: 20, tokens_per_second: 40, tokens_per_second_estimated: true })).toEqual({
+    completion_tokens: 20,
+    total_tokens: 20,
+    tokens_per_second: 40,
+    tokens_per_second_estimated: true,
+  });
+});
+
 it('addTokenUsage accumulates usage counters', () => {
   expect(
     addTokenUsage(

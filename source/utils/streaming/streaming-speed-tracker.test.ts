@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { StreamingSpeedTracker } from './streaming-speed-tracker.js';
+import { formatTokensPerSecond, StreamingSpeedTracker } from './streaming-speed-tracker.js';
 
 describe('StreamingSpeedTracker', () => {
   it('tracks TTFT correctly from request start to first token', () => {
@@ -42,15 +42,66 @@ describe('StreamingSpeedTracker', () => {
     tracker.recordDelta('chunk', 1500); // first token at 1500
 
     // 100 completion tokens from 1500 to 3500 (2.0s) -> 50.0 tok/s
-    const settled = tracker.getSettledTps(100, 3500);
-    expect(settled).toBe(50);
+    const settled = tracker.getSettledTps({ completionTokens: 100, endTime: 3500 });
+    expect(settled).toEqual({ tps: 50, approximate: false });
   });
 
-  it('falls back to request start time if first token timestamp was not captured', () => {
+  it('does not invent a wall-clock duration when no visible token was recorded', () => {
     const tracker = new StreamingSpeedTracker({ startTime: 1000 });
-    // Non-streaming final response with 60 tokens arriving at 3000 (2.0s) -> 30.0 tok/s
-    const settled = tracker.getSettledTps(60, 3000);
-    expect(settled).toBe(30);
+    expect(tracker.getSettledTps({ completionTokens: 60, endTime: 3000 })).toBeNull();
+  });
+
+  it('uses provider completion_ms instead of wall-clock when present', () => {
+    const tracker = new StreamingSpeedTracker({ startTime: 1000 });
+    tracker.recordDelta('chunk', 1500);
+
+    // Wall-clock would be 2500ms -> 40 tok/s. Provider decode time is 1000ms -> 100 tok/s.
+    const settled = tracker.getSettledTps({ completionTokens: 100, completionMs: 1000, endTime: 4000 });
+    expect(settled).toEqual({ tps: 100, approximate: false });
+  });
+
+  it('can settle from completion_ms even without a visible delta', () => {
+    const tracker = new StreamingSpeedTracker({ startTime: 1000 });
+    const settled = tracker.getSettledTps({ completionTokens: 80, completionMs: 2000, endTime: 4000 });
+    expect(settled).toEqual({ tps: 40, approximate: false });
+  });
+
+  it('subtracts reasoning_tokens from the settled numerator when reported', () => {
+    const tracker = new StreamingSpeedTracker({ startTime: 0 });
+    tracker.recordDelta('visible', 0);
+
+    // 100 completion tokens of which 80 are reasoning, over 1s of visible stream -> 20 tok/s.
+    const settled = tracker.getSettledTps({ completionTokens: 100, reasoningTokens: 80, endTime: 1000 });
+    expect(settled).toEqual({ tps: 20, approximate: false });
+  });
+
+  it('marks settled TPS approximate when completion tokens dwarf visible output and reasoning is unreported', () => {
+    const tracker = new StreamingSpeedTracker({ startTime: 0, charsPerToken: 4.0 });
+    tracker.recordDelta('a'.repeat(40), 0); // ~10 visible tokens
+
+    const settled = tracker.getSettledTps({ completionTokens: 100, endTime: 1000 });
+    expect(settled).toEqual({ tps: 100, approximate: true });
+  });
+
+  it('does not mark approximate when completion_ms is the duration source', () => {
+    const tracker = new StreamingSpeedTracker({ startTime: 0, charsPerToken: 4.0 });
+    tracker.recordDelta('a'.repeat(40), 0);
+
+    const settled = tracker.getSettledTps({ completionTokens: 100, completionMs: 1000, endTime: 1000 });
+    expect(settled).toEqual({ tps: 100, approximate: false });
+  });
+
+  it('keeps provider completion_ms paired with full completion_tokens', () => {
+    const tracker = new StreamingSpeedTracker({ startTime: 0 });
+    tracker.recordDelta('visible', 0);
+
+    const settled = tracker.getSettledTps({
+      completionTokens: 100,
+      reasoningTokens: 80,
+      completionMs: 1000,
+      endTime: 1000,
+    });
+    expect(settled).toEqual({ tps: 100, approximate: false });
   });
 
   it('reflects recent throughput after a slow start, not the whole-turn average', () => {
@@ -81,7 +132,7 @@ describe('StreamingSpeedTracker', () => {
     // First request: model streams 40 chars (10 tokens) over 1s: t=0 -> t=1000.
     tracker.recordDelta('a'.repeat(4), 0); // first token at t=0, 1 token
     tracker.recordDelta('a'.repeat(36), 1000); // 40 chars total = 10 tokens at t=1000
-    expect(tracker.getSettledTps(undefined, 1000)).toBe(10);
+    expect(tracker.getSettledTps({ endTime: 1000 })?.tps).toBe(10);
 
     // Tool executes for 5s: t=1000 -> t=6000. Turn boundary: reset for the next request.
     tracker.reset(6000);
@@ -94,8 +145,32 @@ describe('StreamingSpeedTracker', () => {
     tracker.recordDelta('b'.repeat(76), 7000); // 80 chars total = 20 tokens at t=7000
 
     expect(tracker.getTtftMs()).toBe(0); // measured from the reset point, not the original turn start
-    const settled = tracker.getSettledTps(undefined, 7000);
-    expect(settled).toBe(20); // 20 tokens / 1s, unaffected by the earlier request or the tool gap
+    const settled = tracker.getSettledTps({ endTime: 7000 });
+    expect(settled?.tps).toBe(20); // 20 tokens / 1s, unaffected by the earlier request or the tool gap
+  });
+
+  it('applies a mid-stream usage calibration to later deltas of the same request', () => {
+    const tracker = new StreamingSpeedTracker({ startTime: 0, charsPerToken: 4.0 });
+
+    tracker.recordDelta('a'.repeat(200), 0);
+    tracker.recordUsageTokens(20, 1000); // observed ratio is 10 chars/token
+    tracker.recordDelta('b'.repeat(50), 1500); // +5 tokens at the calibrated ratio
+
+    expect(tracker.getEstimatedTokens()).toBe(25);
+    expect(tracker.getLiveTps(1500)).toBe(16.7); // 25 tok / 1.5s
+  });
+
+  it('sums streamed text and tool-argument characters instead of taking the max', () => {
+    const tracker = new StreamingSpeedTracker({ startTime: 0, charsPerToken: 4.0 });
+    tracker.recordDelta('a'.repeat(40), 0); // 10 tokens of text
+    tracker.recordCumulativeChars(40, 500); // 10 more tokens of tool args
+
+    expect(tracker.getEstimatedTokens()).toBe(20);
+  });
+
+  it('formats tok/s with a tilde when the value is approximate', () => {
+    expect(formatTokensPerSecond(48.2)).toBe('48.2 tok/s');
+    expect(formatTokensPerSecond(48.2, true)).toBe('~48.2 tok/s');
   });
 
   it('calibrates chars-per-token from real usage and carries it across reset() to the next request', () => {

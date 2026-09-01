@@ -11,6 +11,7 @@ import type { SettingsService } from '../../services/settings/settings-service.j
 import type { SSHInfo } from '../../services/shell/shell-interaction-session.js';
 import type { RunBudgetEvent } from '../../services/agent-runtime/run-budget.js';
 import { formatContextUsage, type NormalizedUsage } from '../../utils/ai/token-usage.js';
+import { formatTokensPerSecond } from '../../utils/streaming/streaming-speed-tracker.js';
 import type { CodexRateLimitInfo, CodexRateLimitWindow } from '../../services/conversation/conversation-events.js';
 import type { StaticCommitBlocker } from '../message/MessageList.js';
 import { formatUsdMicros, type SessionCostSummary } from '../../services/cost/model-cost.js';
@@ -315,11 +316,12 @@ const StatusBar: FC<StatusBarProps> = ({
     let completionPiece = `↓${formatStatusBarTokens(lastUsage.completion_tokens)}`;
     const speed = lastUsage.tokens_per_second ?? liveStreamingSpeed?.tps;
     if (speed != null && speed > 0) {
-      completionPiece += ` (${speed.toFixed(1)} tok/s)`;
+      const approximate = lastUsage.tokens_per_second != null && Boolean(lastUsage.tokens_per_second_estimated);
+      completionPiece += ` (${formatTokensPerSecond(speed, approximate)})`;
     }
     tokenPieces.push(completionPiece);
   } else if (liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0) {
-    tokenPieces.push(`(${liveStreamingSpeed.tps.toFixed(1)} tok/s)`);
+    tokenPieces.push(`(${formatTokensPerSecond(liveStreamingSpeed.tps)})`);
   }
   const tokensText = tokenPieces.join(' ');
 

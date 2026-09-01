@@ -895,6 +895,27 @@ it.sequential('StatusBar renders token streaming speed when present in lastUsage
   expect(output).toContain('↓450 (48.2 tok/s)');
 });
 
+it.sequential('StatusBar prefixes estimated token speed with a tilde', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+  });
+
+  const { lastFrame } = await renderInAct(
+    <StatusBar
+      settingsService={settingsService}
+      lastUsage={{
+        prompt_tokens: 1200,
+        completion_tokens: 450,
+        tokens_per_second: 48.2,
+        tokens_per_second_estimated: true,
+      }}
+    />,
+  );
+  const output = lastFrame() ?? '';
+  expect(output).toContain('↓450 (~48.2 tok/s)');
+});
+
 it.sequential('StatusBar renders live streaming speed during in-flight generation', async () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',

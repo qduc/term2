@@ -9,6 +9,7 @@ import type { DefaultRetryClassifier } from '../retry/retry-classifier.js';
 import type { RetryEventPresenter } from '../retry/retry-event-presenter.js';
 import type { NextRunInstruction, RecoveryState } from '../retry/retry-contracts.js';
 import { describeError } from '../../utils/error-helpers.js';
+import { classifyProviderFailure } from '../retry/provider-failure-classification.js';
 import type { SessionInputPlanner } from './session-input-planner.js';
 import type { TurnAttempt } from './turn-attempt.js';
 
@@ -29,6 +30,7 @@ export type InitialTurnRecoveryHandlerDeps = {
   retryClassifier: DefaultRetryClassifier;
   retryEventPresenter: RetryEventPresenter;
   sessionId: string;
+  provider?: string;
 };
 
 export class InitialTurnRecoveryHandler {
@@ -49,6 +51,7 @@ export class InitialTurnRecoveryHandler {
       error,
       retryCounts: attempt.retryCounts,
       stream,
+      hasCommittedOutput: attempt.modelEventSeen,
       maxTransientRetries: attempt.maxTransientRetries,
       maxModelRetries: attempt.maxModelRetries,
     });
@@ -74,6 +77,12 @@ export class InitialTurnRecoveryHandler {
     }
 
     if (classified.kind === 'unrecoverable') {
+      const providerFailure = classifyProviderFailure(error);
+      const exhausted =
+        !stream &&
+        providerFailure.retryable &&
+        providerFailure.errorKind !== 'authentication' &&
+        providerFailure.errorKind !== 'cancelled';
       const droppedUserMessage =
         attempt.addedUserMessage && !stream
           ? { text: attempt.turn.text, imageCount: attempt.turn.images?.length ?? 0 }
@@ -103,6 +112,21 @@ export class InitialTurnRecoveryHandler {
       });
       for (const event of recoveryResult.events) {
         yield event;
+      }
+      if (exhausted) {
+        const providerName = this.deps.provider ?? 'provider';
+        yield {
+          type: 'retry_exhausted',
+          provider: providerName,
+          errorKind: providerFailure.errorKind,
+          attempts: Math.max(1, attempt.retryCounts.transientRetryCount + 1),
+          maxAttempts: attempt.maxTransientRetries + 1,
+          message: `Could not reach ${providerName} after ${Math.max(
+            1,
+            attempt.retryCounts.transientRetryCount + 1,
+          )} attempts. No model response was received.`,
+          canRetry: true,
+        };
       }
       yield {
         type: 'error',
@@ -137,6 +161,9 @@ export class InitialTurnRecoveryHandler {
       this.deps.breakChaining?.();
     }
 
+    if (classified.kind === 'transient' || classified.kind === 'chain_recovery' || classified.kind === 'model_retry') {
+      attempt.recoveryBudget.noteRetryableFailure();
+    }
     attempt.advanceRetry(this.deps.recoveryPolicy.nextRetryCounts(attempt.retryCounts, classified));
     const plan = this.deps.recoveryPolicy.plan({
       failure: classified,
@@ -151,6 +178,23 @@ export class InitialTurnRecoveryHandler {
       addedUserMessage: attempt.addedUserMessage,
       stream,
     };
+    if (
+      (plan.kind === 'retry_fresh' || plan.kind === 'replay_turn') &&
+      !attempt.recoveryBudget.claimAutomaticReplay()
+    ) {
+      yield {
+        type: 'retry_exhausted',
+        provider: this.deps.provider ?? 'provider',
+        errorKind: classifyProviderFailure(error).errorKind,
+        attempts: attempt.recoveryBudget.physicalAttempts,
+        maxAttempts: attempt.recoveryBudget.maxPhysicalAttempts,
+        message: `Could not reach ${this.deps.provider ?? 'provider'} after ${
+          attempt.recoveryBudget.physicalAttempts
+        } attempts. No model response was received.`,
+        canRetry: true,
+      };
+      return { kind: 'terminated' };
+    }
     const result = this.deps.recoveryExecutor.apply({
       plan,
       state: recoveryState,

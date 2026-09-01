@@ -664,6 +664,15 @@ export class ConversationService {
     });
   }
 
+  /** Retry the latest failed turn from the canonical session transcript. */
+  retryLastFailedTurn(options?: SendMessageOptions): Promise<ConversationTerminal | null> {
+    this.abort();
+    return this.#adapter.sendMessage('', {
+      ...options,
+      replayFromHistory: true,
+    });
+  }
+
   previewLargeUncachedInput(input: string | UserTurn, now?: number): LargeUncachedInputDecision {
     return this.#runtime.state.previewLargeUncachedInput(input, now);
   }

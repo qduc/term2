@@ -667,6 +667,30 @@ export class ConversationOrchestrator {
     }
   }
 
+  /** Start a fresh, user-authorized retry from canonical transcript state. */
+  async retryLastFailedTurn(): Promise<boolean> {
+    const { botResponseUpdater, reasoningUpdater, applyConversationEvent, streamingState } =
+      this.#beginTurn('retryLastFailedTurn');
+    try {
+      const result = await this.config.conversationService.retryLastFailedTurn({
+        onEvent: this.createOnEventHandler(applyConversationEvent),
+        replayFromHistory: true,
+      });
+      applyConversationEvent({ type: 'final', finalText: '' });
+      botResponseUpdater.flush();
+      this.applyServiceResult(result, streamingState, streamingState.latestUsage);
+      return result !== null;
+    } catch (error) {
+      this.logError('Error in retryLastFailedTurn', error);
+      if (!isAbortLikeError(error)) this.appendBotError(enhanceApiKeyError(describeError(error)));
+      return false;
+    } finally {
+      reasoningUpdater.flush();
+      botResponseUpdater.cancel();
+      this.#endTurn();
+    }
+  }
+
   async compactContext(): Promise<string> {
     this.#activeTurns += 1;
     this.config.ui.onTurnStart();

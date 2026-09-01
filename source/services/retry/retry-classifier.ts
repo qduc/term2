@@ -32,6 +32,17 @@ export class DefaultRetryClassifier {
   classify(context: ClassificationContext): ClassifiedFailure {
     const { error, retryCounts, stream, maxTransientRetries, maxModelRetries } = context;
 
+    // Once the application has emitted any model event, the request may have
+    // produced user-visible or externally meaningful work. Never replay that
+    // partial turn automatically; the recovery executor still settles its tool
+    // ledger truthfully before termination.
+    if (
+      context.hasCommittedOutput ||
+      (stream && ((stream.output?.length ?? 0) > 0 || (stream.newItems?.length ?? 0) > 0))
+    ) {
+      return { kind: 'unrecoverable' };
+    }
+
     const hallucinationDecision = decideRetry(
       error,
       retryCounts.modelRetryCount,

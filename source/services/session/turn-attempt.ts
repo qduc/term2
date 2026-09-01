@@ -6,6 +6,7 @@ import type { AssistantJournalItemLogEvent } from '../logging/conversation-log-e
 import type { SessionInputPlan } from './session-input-planner.js';
 import type { GenerationToken } from '../generation-guard.js';
 import type { ProviderHistorySnapshot } from '../conversation/conversation-store.js';
+import { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
 
 export class TurnAttempt {
   readonly #turn: UserTurn;
@@ -15,6 +16,7 @@ export class TurnAttempt {
   readonly #initialJournalSnapshot: AssistantJournalItemLogEvent[];
   readonly #maxTransientRetries: number;
   readonly #maxModelRetries?: number;
+  readonly #recoveryBudget: RetryRecoveryBudget;
 
   #retryCounts: RetryCounts;
   #stream: AgentStream | null = null;
@@ -22,6 +24,7 @@ export class TurnAttempt {
   #inputMode: 'delta' | 'full_history' | undefined = undefined;
   #providerHistorySnapshot: ProviderHistorySnapshot | undefined = undefined;
   #addedUserMessage = false;
+  #modelEventSeen = false;
   #closed = false;
 
   #signal?: AbortSignal;
@@ -36,6 +39,7 @@ export class TurnAttempt {
     initialJournalSnapshot: AssistantJournalItemLogEvent[];
     maxTransientRetries: number;
     maxModelRetries?: number;
+    recoveryBudget?: RetryRecoveryBudget;
     signal?: AbortSignal;
     onAbort?: () => void;
   }) {
@@ -46,6 +50,7 @@ export class TurnAttempt {
     this.#initialJournalSnapshot = options.initialJournalSnapshot;
     this.#maxTransientRetries = options.maxTransientRetries;
     this.#maxModelRetries = options.maxModelRetries;
+    this.#recoveryBudget = options.recoveryBudget ?? new RetryRecoveryBudget();
     this.#retryCounts = { ...options.initialRetryCounts };
     this.#signal = options.signal;
 
@@ -93,6 +98,10 @@ export class TurnAttempt {
     return this.#maxModelRetries;
   }
 
+  get recoveryBudget(): RetryRecoveryBudget {
+    return this.#recoveryBudget;
+  }
+
   get retryCounts(): RetryCounts {
     return this.#retryCounts;
   }
@@ -117,8 +126,20 @@ export class TurnAttempt {
     return this.#addedUserMessage;
   }
 
+  get modelEventSeen(): boolean {
+    return this.#modelEventSeen;
+  }
+
+  markModelEventSeen(): void {
+    this.#modelEventSeen = true;
+  }
+
   get closed(): boolean {
     return this.#closed;
+  }
+
+  get signal(): AbortSignal | undefined {
+    return this.#signal;
   }
 
   markUserMessageAdded(): void {

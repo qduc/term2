@@ -133,6 +133,10 @@ export interface IProviderTraffic {
     wsAttempt?: number;
     wsMaxAttempts?: number;
     receiveTiming?: ProviderTrafficReceiveTiming;
+    host?: string;
+    timeoutMs?: number;
+    phase?: string;
+    physicalAttempt?: number;
   }): void;
 }
 

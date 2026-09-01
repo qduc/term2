@@ -21,6 +21,7 @@ export type ConversationEvent =
   | FinalResponseEvent
   | ErrorEvent
   | RetryEvent
+  | RetryExhaustedEvent
   | ToolRecoveryEvent
   | SubagentStartedEvent
   | SubagentToolStartedEvent
@@ -61,6 +62,19 @@ export interface RetryEvent {
   maxRetries: number;
   errorMessage: string;
   retryType?: 'hallucination' | 'parsing_error' | 'behavior' | 'flex_service_tier' | 'upstream' | 'conversation_state';
+  errorKind?: 'network' | 'provider' | 'rate_limit' | 'authentication' | 'cancelled' | 'unknown';
+  delayMs?: number;
+  retryAfterMs?: number;
+}
+
+export interface RetryExhaustedEvent {
+  type: 'retry_exhausted';
+  provider?: string;
+  errorKind: 'network' | 'provider' | 'rate_limit' | 'authentication' | 'cancelled' | 'unknown';
+  attempts: number;
+  maxAttempts: number;
+  message: string;
+  canRetry: boolean;
 }
 
 export interface ToolRecoveryEvent {

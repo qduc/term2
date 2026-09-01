@@ -69,6 +69,7 @@ import {
 } from '../services/agent-runtime/context-compaction/index.js';
 import { projectConversationMessage } from '../services/conversation/conversation-message-projection.js';
 import { isLocalContextSummary } from '../contracts/provider-input.js';
+import { classifyProviderFailure } from '../services/retry/provider-failure-classification.js';
 import { ContextMilestoneReminder } from '../services/agent-runtime/context-compaction/context-milestone-reminder.js';
 import type {
   SessionRolloverConsumption,
@@ -1026,6 +1027,7 @@ export class AgentClient {
     void stream.completed.then(
       () => cleanup(),
       (error) => {
+        const failure = classifyProviderFailure(error);
         this.#logger.error('Agent stream failed', {
           eventType: 'provider.response.failed',
           category: 'provider',
@@ -1033,8 +1035,12 @@ export class AgentClient {
           traceId: correlationId ?? undefined,
           provider,
           model,
-          error: error instanceof Error ? error.message : String(error),
-          stack: error instanceof Error ? error.stack : undefined,
+          error: failure.message,
+          errorKind: failure.errorKind,
+          code: failure.code,
+          status: failure.status,
+          retryAfterMs: failure.retryAfterMs,
+          retryable: failure.retryable,
           inputType: Array.isArray(input) ? 'array' : typeof input,
           inputLength: typeof input === 'string' ? input.length : undefined,
           inputItems: Array.isArray(input) ? input.length : undefined,
@@ -1112,6 +1118,7 @@ export class AgentClient {
             ? { previousResponseId: options.previousResponseId }
             : {}),
           ...(options.disableChainingForAttempt ? { disableChainingForAttempt: true } : {}),
+          ...(options.recoveryBudget ? { recoveryBudget: options.recoveryBudget } : {}),
           providerId: provider,
           supportsConversationChaining: supportsChaining,
           sessionId: options.sessionId,
@@ -1151,6 +1158,7 @@ export class AgentClient {
         ? { previousResponseId: options.previousResponseId }
         : {}),
       ...(options.disableChainingForAttempt ? { disableChainingForAttempt: true } : {}),
+      ...(options.recoveryBudget ? { recoveryBudget: options.recoveryBudget } : {}),
       providerId: provider,
       supportsConversationChaining: supportsChaining,
       sessionId: options.sessionId,

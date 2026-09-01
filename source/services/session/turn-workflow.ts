@@ -348,7 +348,7 @@ export class TurnWorkflow {
 
     try {
       if (options.delayMs && options.delayMs > 0) {
-        await new Promise((resolve) => setTimeout(resolve, options.delayMs));
+        await this.#waitBeforeRetry(attempt, options.delayMs);
       }
       if (!this.deps.generationGuard.isCurrent(attempt.token)) {
         return { kind: 'stale' };
@@ -484,7 +484,7 @@ export class TurnWorkflow {
             currentDisableChainingForAttempt = handled.instruction.disableChainingForAttempt === true;
             currentAbortedContext = null;
             if (handled.delayMs && handled.delayMs > 0) {
-              await new Promise((resolve) => setTimeout(resolve, handled.delayMs));
+              await this.#waitBeforeRetry(attempt, handled.delayMs);
             }
             if (handled.useStandardServiceTier) {
               getMethod<[], void>(this.deps.agentClient, 'useStandardServiceTierForNextRequest')?.call(
@@ -596,6 +596,7 @@ export class TurnWorkflow {
     });
     let next = await processor.next();
     while (!next.done) {
+      attempt.markModelEventSeen();
       emit(next.value);
       next = await processor.next();
     }
@@ -764,6 +765,7 @@ export class TurnWorkflow {
   ): Promise<AgentStream> {
     if (options.resumeState && typeof this.deps.agentClient.continueRunStream === 'function') {
       const resumeOptions: AgentClientRunOptions = {
+        recoveryBudget: attempt.recoveryBudget,
         previousResponseId: options.resumePreviousResponseId ?? this.deps.providerContinuity.previousResponseId,
         sessionId: this.deps.sessionId,
         providerHistorySnapshot: this.deps.conversationStore.getProviderHistorySnapshot(),
@@ -807,6 +809,7 @@ export class TurnWorkflow {
       }
     }
     const startOptions: AgentClientRunOptions = {
+      recoveryBudget: attempt.recoveryBudget,
       previousResponseId: options.disableChainingForAttempt ? undefined : selectedPreviousResponseId,
       sessionId: this.deps.sessionId,
       providerHistorySnapshot: attempt.providerHistorySnapshot,
@@ -827,6 +830,26 @@ export class TurnWorkflow {
       retryCounts.modelRetryCount === 0 &&
       retryCounts.transportDowngradeCount === 0
     );
+  }
+
+  async #waitBeforeRetry(attempt: TurnAttempt, delayMs: number): Promise<void> {
+    if (attempt.signal?.aborted) throw Object.assign(new Error('Operation aborted'), { name: 'AbortError' });
+    if (!attempt.signal) {
+      await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+      return;
+    }
+    await new Promise<void>((resolve, reject) => {
+      const onAbort = () => {
+        clearTimeout(timer);
+        attempt.signal?.removeEventListener('abort', onAbort);
+        reject(Object.assign(new Error('Operation aborted'), { name: 'AbortError' }));
+      };
+      const timer = setTimeout(() => {
+        attempt.signal?.removeEventListener('abort', onAbort);
+        resolve();
+      }, delayMs);
+      attempt.signal!.addEventListener('abort', onAbort, { once: true });
+    });
   }
 
   async *executeContinuationAttempt(

@@ -216,10 +216,9 @@ function mergeInstructions(
   for (const slot of slots) {
     const entry = block[slot];
     if (!entry) continue;
-    const content = resolveEntry(entry, slot, registry, diagnostics);
-    if (!content) continue;
     const operation = entry.operation ?? 'replace';
-    if (operation !== 'replace' && !(slot === 'workflow' && (operation === 'before' || operation === 'after'))) {
+    const validForSlot = slot === 'workflow' ? ['replace', 'before', 'after'] : ['replace'];
+    if (!validForSlot.includes(operation)) {
       diagnostics.push(
         diagnostic(
           'unknown-operation',
@@ -229,6 +228,8 @@ function mergeInstructions(
       );
       continue;
     }
+    const content = resolveEntry(entry, slot, registry, diagnostics);
+    if (!content) continue;
     if (slot === 'identity') state.instructions.identity = content;
     else if (slot === 'workflow') {
       state.instructions.workflow =

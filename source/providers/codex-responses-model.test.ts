@@ -587,6 +587,42 @@ it('CodexResponsesTransport marks opaque context_management 500s as session-disa
   expect((error as any).contextCompactionFailure).toBe('request');
 });
 
+it('does not attribute a generic server_error 500 to context compaction without context-management evidence', async () => {
+  const sessionState = { disabled: false };
+  const error = Object.assign(new Error('server_error'), {
+    status: 500,
+    error: { message: 'Model is at capacity' },
+  });
+  const client = {
+    responses: {
+      create: async () => {
+        throw error;
+      },
+    },
+  };
+  const transport = new CodexResponsesTransport(client as any, 'gpt-5.3-codex-spark', false, {
+    supportsContextCompaction: true,
+    contextCompactionSessionState: sessionState,
+  });
+
+  await expect(
+    transport.fetchResponse(
+      {
+        input: [],
+        tools: [],
+        providerOptions: { contextCompaction: { enabled: true, threshold: 0.5 } },
+      },
+      false,
+      { model: 'gpt-5.3-codex-spark' },
+    ),
+  ).rejects.toBe(error);
+
+  // A transport failure must not be attributed to compaction, and must not
+  // disable session compaction as a side effect.
+  expect(sessionState.disabled).toBe(false);
+  expect((error as any).contextCompactionFailure).toBeUndefined();
+});
+
 it('keeps a native Codex compaction item as provider_opaque instead of throwing', async () => {
   const transport = new CodexResponsesTransport();
   transport.fetchResponse = async () =>

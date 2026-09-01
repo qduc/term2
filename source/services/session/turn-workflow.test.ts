@@ -923,6 +923,72 @@ const collect = async (iterable: AsyncGenerator<any, any, void>) => {
   return { events, outcome: next.value };
 };
 
+/** collect, but returns the thrown error alongside the events yielded before it. */
+const collectWithError = async (iterable: AsyncGenerator<any, any, void>) => {
+  const events: any[] = [];
+  try {
+    let next = await iterable.next();
+    while (!next.done) {
+      events.push(next.value);
+      next = await iterable.next();
+    }
+    return { events, error: undefined };
+  } catch (error) {
+    return { events, error };
+  }
+};
+
+it('emits context_compaction_failed once per failure episode across recovery replays', async () => {
+  const { workflow } = setupWorkflow({ openTurn: () => {} });
+  const compactionFailure = Object.assign(new Error('context_management failed with server_error'), {
+    status: 500,
+    error: { message: 'context_management failed with server_error' },
+  });
+
+  // The same request-boundary failure surfaces first from the initial attempt and
+  // again from the continuation replay of the same turn.
+  (workflow as any).executeInitialAttempt = async function* () {
+    throw compactionFailure;
+  };
+  (workflow as any).executeContinuationAttempt = async function* () {
+    throw compactionFailure;
+  };
+
+  const first = await collectWithError(workflow.executeInitial('turn one'));
+  const second = await collectWithError(
+    workflow.executeContinuation({ kind: 'approval_decision', answer: 'y', generation: 1 }),
+  );
+
+  expect(first.error).toBe(compactionFailure);
+  expect(second.error).toBe(compactionFailure);
+  const emitted = [...first.events, ...second.events].filter(
+    (event: any) => event.type === 'context_compaction_failed',
+  );
+  expect(emitted).toHaveLength(1);
+  expect(emitted[0]).toMatchObject({
+    type: 'context_compaction_failed',
+    errorCategory: 'request',
+    sessionId: 'test-session',
+  });
+
+  // A new turn boundary starts a fresh episode, so the next failure surfaces.
+  workflow.openTurn();
+  const third = await collectWithError(workflow.executeInitial('turn two'));
+  expect(third.events.filter((event: any) => event.type === 'context_compaction_failed')).toHaveLength(1);
+
+  // A returned outcome also ends the episode: a later failure surfaces even
+  // without an intervening turn boundary (direct-stream callers skip openTurn).
+  (workflow as any).executeInitialAttempt = async function* () {
+    return { kind: 'response', terminal: { type: 'response', finalText: 'ok' } };
+  };
+  await collect(workflow.executeInitial('turn three'));
+  (workflow as any).executeInitialAttempt = async function* () {
+    throw compactionFailure;
+  };
+  const fourth = await collectWithError(workflow.executeInitial('turn four'));
+  expect(fourth.events.filter((event: any) => event.type === 'context_compaction_failed')).toHaveLength(1);
+});
+
 it('executeInitial resolves aborted approvals through continuation', async () => {
   const { workflow } = setupWorkflow(null);
   const abortedContext = { token: 7, interruption: { id: 'interrupt-1' } };

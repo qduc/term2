@@ -129,6 +129,13 @@ export interface ProfileBlocks {
   requirements?: ProfileBlock;
 }
 
+export interface ProfileRegistry {
+  readonly profiles: ReadonlyMap<string, ProfileDefinition>;
+  readonly blocks: ReadonlyMap<string, RegisteredBlock>;
+  readonly policies: ReadonlyMap<string, EnforcementPolicyDefinition>;
+  readonly integrations: ReadonlyMap<string, IntegrationDefinition>;
+}
+
 export interface ProfileDefinition {
   schemaVersion: 1;
   id: string;
@@ -229,6 +236,22 @@ export interface ResolveOptions {
   availableIntegrations?: Iterable<string> | ReadonlyMap<string, boolean>;
   availableSettings?: Iterable<string>;
   term2Version?: string;
+}
+
+export interface ProfileResolutionDiagnostic {
+  readonly code: string;
+  readonly message: string;
+  readonly path?: string;
+}
+
+export class ProfileResolutionError extends Error {
+  readonly diagnostics: readonly ProfileResolutionDiagnostic[];
+
+  constructor(message: string, diagnostics: readonly ProfileResolutionDiagnostic[] = []) {
+    super(message);
+    this.name = 'ProfileResolutionError';
+    this.diagnostics = diagnostics;
+  }
 }
 
 /** Kept local to this module so legacy consumers can migrate without a dependency cycle. */

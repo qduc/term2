@@ -14,16 +14,30 @@ const localId = z
   .regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/);
 const operation = z.enum(['replace', 'before', 'after', 'remove']);
 
-const referenceSchema = z.object({ use: id, kind: z.string().optional() }).strict();
+const referenceSchema = z
+  .object({
+    use: id,
+    kind: z
+      .enum(['instructions', 'context', 'tools', 'enforcement', 'integrations', 'presentation', 'requirements'])
+      .optional(),
+  })
+  .strict();
 const instructionEntrySchema = z
   .object({
     id: localId.optional(),
     use: id.optional(),
     content: z.string().optional(),
+    systemOwned: z.literal('model-family-base').optional(),
     operation: operation.optional(),
   })
   .strict()
-  .refine((entry) => Boolean(entry.use) !== Boolean(entry.content), 'entry requires exactly one of use or content');
+  .refine(
+    (entry) =>
+      entry.operation === 'remove'
+        ? Boolean(entry.id) && !entry.use && !entry.content && !entry.systemOwned
+        : Number(Boolean(entry.use)) + Number(Boolean(entry.content)) + Number(Boolean(entry.systemOwned)) === 1,
+    'entry requires exactly one of use, content, or systemOwned (or an id for remove)',
+  );
 const instructionsSchema = z
   .object({
     kind: z.literal('instructions'),
@@ -165,7 +179,28 @@ export function validateRegisteredBlock(value: unknown): RegisteredBlock {
     .safeParse(value);
   if (!result.success)
     throw new ProfileValidationError(`Invalid registered block: ${result.error.message}`, result.error.issues);
-  return result.data as RegisteredBlock;
+  const definitionSchema = z.union([
+    instructionsSchema,
+    contextSchema,
+    toolsSchema,
+    enforcementSchema,
+    integrationsSchema,
+    presentationSchema,
+    requirementsBlockSchema,
+    enforcementPolicySchema,
+    integrationDefinitionSchema,
+  ]);
+  const definitionResult = definitionSchema.safeParse(result.data.definition);
+  if (!definitionResult.success)
+    throw new ProfileValidationError(
+      `Invalid registered block definition: ${definitionResult.error.message}`,
+      definitionResult.error.issues,
+    );
+  if (definitionResult.data.kind !== result.data.kind)
+    throw new ProfileValidationError(
+      `Registered block kind mismatch: expected ${result.data.kind}, got ${definitionResult.data.kind}`,
+    );
+  return { ...result.data, definition: definitionResult.data } as RegisteredBlock;
 }
 
 export function validatePolicy(value: unknown): EnforcementPolicyDefinition {
@@ -182,6 +217,6 @@ export function validateIntegration(value: unknown): IntegrationDefinition {
   return result.data;
 }
 
-export function isBlockReference(value: ProfileBlock): value is { use: string; kind?: string } {
-  return 'use' in value && !('kind' in value);
+export function isBlockReference(value: ProfileBlock): value is { use: string; kind?: import('./types.js').BlockKind } {
+  return 'use' in value && (!('kind' in value) || !('sources' in value));
 }

@@ -683,7 +683,9 @@ export function createConversationEventHandler(
         const systemMessage: SystemMessage = {
           id: createMessageId(),
           sender: 'system',
-          text: `${event.message}\n\n[Retry] [Cancel]`,
+          text: event.canRetry
+            ? `${event.message}\n\nType /retry-turn to try again, or send a new message to move on.`
+            : event.message,
         };
         appendMessages([systemMessage]);
         return;

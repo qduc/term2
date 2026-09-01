@@ -450,6 +450,11 @@ export const useConversation = ({
 
   const compactContext = useCallback(() => orchestrator.compactContext(), [orchestrator]);
 
+  const retryLastFailedTurn = useCallback<() => Promise<boolean>>(
+    () => orchestrator.retryLastFailedTurn(),
+    [orchestrator],
+  );
+
   const retryLastToolOutput = useCallback<() => Promise<boolean>>(
     () => orchestrator.retryLastToolOutput(),
     [orchestrator],
@@ -574,6 +579,7 @@ export const useConversation = ({
     cancelAskUser,
     rewindToTarget,
     retryLastToolOutput,
+    retryLastFailedTurn,
     compactContext,
     getUserMessages,
     setModel,

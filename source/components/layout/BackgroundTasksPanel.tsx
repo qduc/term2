@@ -148,6 +148,8 @@ const formatCompactTerminalStatus = (task: PanelTask): string => {
       return 'Cancelled';
     case 'timed_out':
       return 'Timed out';
+    case 'interrupted':
+      return 'Interrupted';
     default:
       return 'Running';
   }
@@ -231,13 +233,19 @@ const formatTerminalStatus = (task: PanelTask): string => {
       return 'Cancelled recently';
     case 'timed_out':
       return 'Timed out recently';
+    case 'interrupted':
+      return 'Interrupted recently (budget exhausted)';
     default:
       return 'Running';
   }
 };
 
 const isTerminal = (task: PanelTask): boolean =>
-  task.status === 'completed' || task.status === 'failed' || task.status === 'timed_out' || task.status === 'cancelled';
+  task.status === 'completed' ||
+  task.status === 'failed' ||
+  task.status === 'timed_out' ||
+  task.status === 'cancelled' ||
+  task.status === 'interrupted';
 
 const formatLiveStatus = (task: PanelTask, now: number): string => {
   const startedAt = 'startedAt' in task && typeof task.startedAt === 'number' ? task.startedAt : now;

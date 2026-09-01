@@ -3,6 +3,7 @@ import type { NormalizedUsage } from '../utils/ai/token-usage.js';
 import type { ModelRequestCost } from '../services/cost/model-cost.js';
 import type { Item } from './conversation-items.js';
 import type { RunBudgetEvent } from '../services/agent-runtime/run-budget.js';
+import type { RunTerminationCause } from './run-termination.js';
 
 export type ReasoningEffortSetting = 'default' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
@@ -164,6 +165,7 @@ export interface FinalTerminal {
   /** Cumulative model-request cost records for the completed run. */
   costRecords?: ModelRequestCost[];
   turnItems?: Item[];
+  terminalCause?: RunTerminationCause;
 }
 
 export type ConversationTerminal = ApprovalRequiredTerminal | FinalTerminal;

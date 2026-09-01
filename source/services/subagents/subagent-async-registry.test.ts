@@ -22,7 +22,7 @@ const result = (role: string, status: SubagentResult['status'] = 'completed'): S
   agentId: 'executor-id',
   role,
   status,
-  finalText: status === 'completed' ? 'done' : '',
+  finalText: status === 'completed' || status === 'interrupted' ? 'done' : '',
   filesChanged: [],
   toolsUsed: [],
   ...(status !== 'completed' ? { error: status } : {}),
@@ -39,6 +39,42 @@ const make = (run: (params: RunParams) => Promise<SubagentResult> = async ({ req
   new SubagentAsyncRegistry({ logger: createMockLogger(), run });
 
 describe('background observations', () => {
+  it('settles a budget-interrupted worker as non-success and rejects later steering', async () => {
+    const events: ConversationEvent[] = [];
+    const registry = new SubagentAsyncRegistry({
+      logger: createMockLogger(),
+      run: async () => ({
+        agentId: 'ignored-by-registry',
+        role: 'worker',
+        status: 'interrupted',
+        terminalCause: 'budget_exhausted',
+        finalText: 'Partial work; validation not run.',
+        filesChanged: ['notes.md'],
+        toolsUsed: [{ toolName: 'apply_patch', count: 1 }],
+      }),
+      onEvent: (event) => events.push(event),
+      createRunId: () => 'budget-worker',
+    });
+
+    const handle = registry.startRun({ role: 'worker', task: 'update notes' });
+    const settled = await registry.getResult(handle.runId);
+
+    expect(settled).toMatchObject({ status: 'interrupted', terminalCause: 'budget_exhausted' });
+    expect(registry.getRunStatus(handle.runId)).toMatchObject({ status: 'interrupted' });
+    expect(registry.sendMessage(handle.runId, 'continue')).toEqual({
+      ok: false,
+      code: 'not_active',
+      target: handle.runId,
+    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'subagent_completed',
+        result: expect.objectContaining({ status: 'interrupted' }),
+      }),
+    );
+    registry.dispose();
+  });
+
   it('keeps the latest local observation and latest usage independently from cumulative result evidence', () => {
     const registry = new SubagentAsyncRegistry({
       logger: createMockLogger(),

@@ -428,12 +428,14 @@ export class NestedSubagentRunner {
             }),
         });
         let settled: unknown;
+        let terminalCause: NestedSubagentResult['terminalCause'];
         // A transferred run never manufactures a second execution. Each
         // continuation resolves exactly one tool interruption, then this loop
         // observes the next returned segment (including batched siblings).
         try {
           for (;;) {
             settled = await stream.completed;
+            terminalCause = stream.terminalCause;
             this.#toolOwnership.claim(collectApprovalCallIds(stream.interruptions), {
               kind: 'subagent',
               agentId: runContext.agentId,
@@ -480,7 +482,8 @@ export class NestedSubagentRunner {
             const budgetResult: NestedSubagentResult = {
               agentId: runContext.agentId,
               role,
-              status: 'completed',
+              status: 'interrupted',
+              terminalCause: 'budget_exhausted',
               finalText: buildTurnBudgetExhaustedFinalText({
                 maxTurns,
                 partialText: extractFinalText(stream),
@@ -536,13 +539,14 @@ export class NestedSubagentRunner {
           // An interrupted run stopped at an approval pause with work still
           // pending; reporting it as completed told the parent model the
           // opposite of what the event stream said.
-          status: cancelled ? 'cancelled' : interrupted ? 'interrupted' : 'completed',
+          status: cancelled ? 'cancelled' : interrupted ? 'interrupted' : terminalCause ? 'interrupted' : 'completed',
           finalText: extractFinalText(stream),
           filesChanged: [...new Set(runContext.filesChanged)],
           toolsUsed: aggregateContextToolUsage(runContext.toolCounts),
           usage: normalizeAgentRunUsage((settled as { usage?: unknown } | undefined)?.usage) ?? extractUsage(stream),
           costRecords: stream.runCostRecords as ModelRequestCost[] | undefined,
           ...(interrupted && !cancelled ? { interrupted: true } : {}),
+          ...(terminalCause ? { terminalCause } : {}),
         };
         return JSON.stringify(result);
       },
@@ -735,7 +739,15 @@ export class NestedSubagentRunner {
                   parsed.worktreePath = worktreePath;
                 }
                 if (transferredSlot && parsed.usage) request.executionBudget!.recordUsage(parsed.usage);
-                if (parsed.status !== 'interrupted' && parsed.status !== 'running') {
+                // Once adopted, the background continuation loop resolves
+                // every approval pause itself, so by the time `execution`
+                // settles here `interrupted` is always a terminal outcome
+                // (e.g. `budget_exhausted`), never a live pending pause. It
+                // must still reach the completed lane with full evidence, or
+                // a budget-contained background worker settles with nobody
+                // ever told — the async registry and get_subagent_result
+                // would see nothing and keep reporting it as still running.
+                if (parsed.status !== 'running') {
                   const completed: SubagentResult = { ...parsed, status: parsed.status };
                   safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result: completed, async: true });
                 }
@@ -772,9 +784,12 @@ export class NestedSubagentRunner {
       if (childSlot && parsed.usage) {
         request.executionBudget!.recordUsage(parsed.usage);
       }
-      // An interrupted run has not finished, so it must not be announced as a
-      // completion. `subagent_completed` carries a SubagentResult, which cannot
-      // be `interrupted` — narrowing here keeps the event payload honest.
+      // The parent model already receives the full result (evidence included)
+      // as this tool call's return value below, regardless of which event
+      // fires here. This event only drives the live foreground transcript
+      // card, so an interrupted run — approval pause or budget containment
+      // alike — gets the lighter-weight `subagent_interrupted` update instead
+      // of announcing a completion it has not reached.
       if (parsed.status !== 'interrupted' && parsed.status !== 'running') {
         const completed: SubagentResult = { ...parsed, status: parsed.status };
         await safeEmit(

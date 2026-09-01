@@ -69,6 +69,46 @@ it('settles a terminal response when the retained WebSocket iterator never close
   expect(result).toBe('settled');
 });
 
+it('settles cancel_run when the WebSocket never emits another frame after the request signal aborts', async () => {
+  let returnCalls = 0;
+  fakeResponsesWSStream = () => ({
+    [Symbol.asyncIterator]() {
+      return {
+        // No frame ever arrives after the request is dispatched: simulates a
+        // Codex/Grok WebSocket that stops responding mid-turn.
+        next: () => new Promise<IteratorResult<any>>(() => undefined),
+        return: async () => {
+          returnCalls += 1;
+          return { done: true, value: undefined };
+        },
+      };
+    },
+  });
+  const model = new OpenAIResponsesWSModelWithPromptCacheKey(
+    { responses: { create: async () => ({}) } },
+    'gpt-5.6-luna',
+  );
+  const controller = new AbortController();
+
+  const streamed = collect(model.stream({ input: [], tools: [], signal: controller.signal }));
+  const settlement = streamed.then(
+    () => 'resolved' as const,
+    (error) => error,
+  );
+  controller.abort();
+
+  const result = await Promise.race([
+    settlement,
+    new Promise<'timed-out'>((resolve) => setTimeout(() => resolve('timed-out'), 200)),
+  ]);
+
+  expect(result).not.toBe('timed-out');
+  expect((result as Error).name).toBe('AbortError');
+  // The generator's own cleanup must not await an SDK return that would hang
+  // on socket closure; it fires the return best-effort instead.
+  expect(returnCalls).toBeLessThanOrEqual(1);
+});
+
 it('normalizes streamed Responses tool argument progress for the UI', () => {
   const state = createResponseEventNormalizationState();
   expect(

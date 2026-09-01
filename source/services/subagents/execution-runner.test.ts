@@ -138,7 +138,7 @@ describe('ExecutionSubagentRunner text-turn peek events', () => {
     expect(committedEvents(received)).not.toContainEqual(expect.objectContaining({ type: 'subagent_text_turn' }));
   });
 
-  it('settles a turn-budget stop as completed with partial work, not failed', async () => {
+  it('settles a turn-budget stop as interrupted with partial work, not completed', async () => {
     const warn = vi.fn();
     stream.events = [
       { type: 'tool_started', toolCallId: 'call-1', toolName: 'grep', arguments: {} },
@@ -164,7 +164,8 @@ describe('ExecutionSubagentRunner text-turn peek events', () => {
     // Simulate tool bookkeeping that the real tool path would have recorded.
     const result = await runner.run('run-budget', { role: 'explorer', task: 'inspect' }, definition);
 
-    expect(result.status).toBe('completed');
+    expect(result.status).toBe('interrupted');
+    expect(result.terminalCause).toBe('budget_exhausted');
     expect(result.error).toBeUndefined();
     expect(result.finalText).toContain('Turn budget exhausted (5)');
     expect(result.finalText).toContain('Found candidate files under source/.');

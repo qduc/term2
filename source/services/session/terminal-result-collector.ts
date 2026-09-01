@@ -74,6 +74,7 @@ export async function collectTerminalResult(
   // terminal the session cost accumulator — and so the status bar — never sees
   // a single record.
   let runCostRecords: ModelRequestCost[] | undefined;
+  let terminalCause: FinalResponseEvent['terminalCause'];
 
   const resolvedUsage = (): NormalizedUsage | undefined => {
     const usage = !isEmptyUsage(runUsage) ? runUsage : latestStreamedUsage;
@@ -131,6 +132,7 @@ export async function collectTerminalResult(
       }
       case 'final': {
         onFinalEvent?.(event);
+        terminalCause = event.terminalCause;
         hasFinalEvent = true;
         finalText = event.finalText;
         reasoningText = event.reasoningText ?? '';
@@ -198,5 +200,6 @@ export async function collectTerminalResult(
     ...(usage ? { usage } : {}),
     ...(runCostRecords?.length ? { costRecords: runCostRecords } : {}),
     turnItems,
+    ...(terminalCause ? { terminalCause } : {}),
   };
 }

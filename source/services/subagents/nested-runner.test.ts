@@ -44,6 +44,8 @@ function buildNestedRunner(
   options: {
     /** Make the nested tool pause for approval, so the nested run interrupts. */
     needsApproval?: boolean;
+    /** Require approval only on the first call, so a background transfer can adopt and then run to a budget stop unattended. */
+    needsApprovalOnce?: boolean;
     /** Override the role's turn budget. */
     maxTurns?: number;
     /** Override the role's provider output-token cap. */
@@ -56,6 +58,8 @@ function buildNestedRunner(
     failAfterApproval?: boolean;
     /** Drop the first terminal budget wrap-up request. */
     failFirstWrapUp?: boolean;
+    /** Have the terminal settlement response propose a tool; it must not run. */
+    settlementCallsTool?: boolean;
     /** Simulate mutable settings becoming invalid after launch-time role resolution. */
     failRoleResolutionAfterFirst?: boolean;
     /** Advertise conversation chaining on the nested provider. */
@@ -78,6 +82,9 @@ function buildNestedRunner(
           wrapUpAttempts++;
           if (options.failFirstWrapUp && wrapUpAttempts === 1) {
             throw new WebSocketClosedEarlyError({ code: 1006 });
+          }
+          if (options.settlementCallsTool) {
+            yield { type: 'tool_call', id: 'post-budget-call', name: 'fake_tool', arguments: '{"path":"notes.md"}' };
           }
           yield {
             type: 'completion',
@@ -110,13 +117,18 @@ function buildNestedRunner(
     ...(options.supportsConversationChaining ? { capabilities: { supportsConversationChaining: true } } : {}),
   });
 
+  let fakeToolCalls = 0;
   const fakeTool: ToolDefinition = {
     name: 'fake_tool',
     description: 'Fake tool that records its run through the subagent context',
     parameters: z.object({ path: z.string() }),
-    needsApproval: () => options.needsApproval ?? false,
+    needsApproval: () => {
+      if (options.needsApprovalOnce) return fakeToolCalls === 0;
+      return options.needsApproval ?? false;
+    },
     formatCommandMessage: () => [],
     execute: async (_params: any, context: unknown) => {
+      fakeToolCalls += 1;
       const runContext = getSubagentRunContext(context);
       runContext?.filesChanged.push('notes.md');
       if (runContext) runContext.toolCounts.fake_tool = (runContext.toolCounts.fake_tool ?? 0) + 1;
@@ -293,6 +305,51 @@ describe('NestedSubagentRunner end to end', () => {
       }),
     );
     expect(pause.apply(() => true)).toBe(false);
+  });
+
+  it('reports a background-transferred run that later hits its run budget, instead of settling silently', async () => {
+    const pauses: BackgroundSubagentApprovalPause[] = [];
+    const events: ConversationEvent[] = [];
+    const { runner } = buildNestedRunner({
+      needsApprovalOnce: true,
+      alwaysCallsTool: true,
+      maxTurns: 3,
+      onEvent: (event) => events.push(event),
+      onBackgroundApprovalPause: (pause) => pauses.push(pause),
+    });
+
+    const foreground = runner.runAsTool({ role: 'worker', task: 'update notes' }, parentToolContext(), {
+      toolCall: { callId: 'transferred-budget-stop' },
+    });
+    const lease = runner.getForegroundLease('transferred-budget-stop')!;
+    lease.adopt();
+    await expect(foreground).resolves.toMatchObject({ status: 'running', agentId: 'transferred-budget-stop' });
+    await vi.waitFor(() => expect(pauses).toHaveLength(1));
+
+    const [pause] = pauses;
+    expect(
+      pause.apply(({ handle, interruption }) => {
+        handle.approve?.(interruption);
+        return true;
+      }),
+    ).toBe(true);
+
+    // The approved call ran under a role turn budget of 3; the run continues
+    // unattended after adoption and later hits its budget wrap-up. That
+    // terminal settlement must still reach the async completion lane with
+    // its evidence intact — silence here would leave get_subagent_result and
+    // the notification store believing the run is still live, hiding the
+    // fact that it stopped (and any edits it already made) from the user.
+    await vi.waitFor(() =>
+      expect(events.find((event) => event.type === 'subagent_completed' && event.async === true)).toMatchObject({
+        result: {
+          agentId: 'transferred-budget-stop',
+          status: 'interrupted',
+          terminalCause: 'budget_exhausted',
+          filesChanged: ['notes.md'],
+        },
+      }),
+    );
   });
 
   it('does not re-resolve mutable role settings when a launched foreground run is transferred', async () => {
@@ -533,14 +590,16 @@ describe('NestedSubagentRunner end to end', () => {
     });
 
     // Budget containment is not a crash: one final tool-free report preserves
-    // partial side effects instead of throwing / status failed.
-    expect(result.status).toBe('completed');
+    // partial side effects while remaining visibly unfinished.
+    expect(result.status).toBe('interrupted');
+    expect(result.terminalCause).toBe('budget_exhausted');
     expect(result.error).toBeUndefined();
     expect(result.finalText).toBe('Budget wrap-up summary.');
     expect(result.filesChanged).toEqual(['notes.md']);
     expect(result.toolsUsed).toEqual([{ toolName: 'fake_tool', count: 3 }]);
-    expect(events.find((event) => event.type === 'subagent_completed')).toMatchObject({
-      result: { status: 'completed', agentId: 'parent-call-1' },
+    expect(events.find((event) => event.type === 'subagent_interrupted')).toMatchObject({
+      agentId: 'parent-call-1',
+      finalText: 'Budget wrap-up summary.',
     });
     expect(warn).not.toHaveBeenCalled();
   });
@@ -587,10 +646,33 @@ describe('NestedSubagentRunner end to end', () => {
       const result = await resultPromise;
       const wrapUpRequestIndex = requests.findIndex((request) => request.tools.length === 0);
 
-      expect(result.status).toBe('completed');
+      expect(result.status).toBe('interrupted');
+      expect(result.terminalCause).toBe('budget_exhausted');
       expect(requests[wrapUpRequestIndex + 1]?.tools).toEqual([]);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('returns a budget interruption when settlement proposes a tool without dispatching it', async () => {
+    const events: ConversationEvent[] = [];
+    const { runner, requests } = buildNestedRunner({
+      alwaysCallsTool: true,
+      maxTurns: 1,
+      settlementCallsTool: true,
+      onEvent: (event) => events.push(event),
+    });
+
+    const result = await runner.runAsTool({ role: 'worker', task: 'update notes' }, parentToolContext(), {
+      toolCall: { callId: 'budget-tool-proposal' },
+    });
+
+    expect(requests).toHaveLength(2);
+    expect(requests[1]?.tools).toEqual([]);
+    expect(result).toMatchObject({ status: 'interrupted', terminalCause: 'budget_exhausted' });
+    expect(result.toolsUsed).toEqual([{ toolName: 'fake_tool', count: 1 }]);
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: 'subagent_interrupted', agentId: 'budget-tool-proposal' }),
+    );
   });
 });

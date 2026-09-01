@@ -161,7 +161,7 @@ export interface ArtifactReference {
 /** Normalized result of a one-shot agent run. */
 export interface RunResult<T = string> {
   /** Terminal status. */
-  status: 'completed' | 'failed' | 'cancelled';
+  status: 'completed' | 'failed' | 'cancelled' | 'interrupted';
   /** Output text when status is completed; undefined on failure or cancel. */
   output?: T;
   /** Artifacts the agent produced or modified. */
@@ -186,6 +186,7 @@ export type RunErrorCode =
   | 'invalid_model_policy'
   | 'unknown_skill'
   | 'unknown_tool'
+  | 'budget_exhausted'
   | 'permission_denied'
   | 'unsupported_permission_scope'
   | 'invalid_scope_pattern'

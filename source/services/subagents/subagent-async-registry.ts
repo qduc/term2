@@ -52,7 +52,14 @@ export class SubagentRegistryError extends Error {
   }
 }
 
-type StoredRunStatus = 'running' | 'waiting_for_answer' | 'cancelling' | 'completed' | 'failed' | 'cancelled';
+type StoredRunStatus =
+  | 'running'
+  | 'waiting_for_answer'
+  | 'cancelling'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'interrupted';
 
 type AccumulatedEvidence = {
   filesChanged: Set<string>;
@@ -865,13 +872,14 @@ export class SubagentAsyncRegistry {
       ...(run.name !== undefined ? { name: run.name } : {}),
       role: run.role,
       status,
-      finalText: status === 'completed' ? segment.finalText : '',
+      finalText: status === 'completed' || status === 'interrupted' ? segment.finalText : '',
       filesChanged: [...run.evidence.filesChanged],
       toolsUsed: [...run.evidence.toolsUsed].map(([toolName, count]) => ({ toolName, count })),
       ...(error ? { error } : {}),
       ...(usage ? { usage } : {}),
       ...(diffStat.length > 0 ? { diffStat } : {}),
       ...(run.evidence.validation ? { validation: run.evidence.validation } : {}),
+      ...(segment.terminalCause ? { terminalCause: segment.terminalCause } : {}),
     };
   }
 

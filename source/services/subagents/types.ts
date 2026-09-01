@@ -2,6 +2,7 @@ import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { BackgroundTaskObservation } from '../background-task-activity.js';
 import type { ModelRequestCost } from '../../services/cost/model-cost.js';
 import type { ExecutionBudget } from '../agent-runtime/execution-budget.js';
+import type { RunTerminationCause } from '../../contracts/run-termination.js';
 
 export const SUBAGENT_ROLES = ['explorer', 'worker', 'mentor', 'librarian'] as const;
 export const PHASE_1_ASYNC_SUBAGENT_ROLES = ['explorer', 'mentor'] as const;
@@ -157,7 +158,7 @@ export interface SubagentResult {
   /** Optional user-provided alias retained after an async run settles. */
   name?: string;
   role: string;
-  status: 'completed' | 'failed' | 'cancelled';
+  status: 'completed' | 'failed' | 'cancelled' | 'interrupted';
   finalText: string;
   /** Whether finalText is a bounded preview rather than the complete final response. */
   finalTextTruncated?: boolean;
@@ -172,6 +173,8 @@ export interface SubagentResult {
   /** Cumulative model-request cost records for the subagent run. */
   costRecords?: ModelRequestCost[];
   error?: string;
+  /** Why a valid provider response still did not complete the logical run. */
+  terminalCause?: RunTerminationCause;
   /** SDK nested run result used to propagate/resume delegated approvals. */
   nestedRunResult?: unknown;
   /**
@@ -196,14 +199,19 @@ export interface SubagentResult {
 /**
  * What a nested (synchronous) subagent tool returns to its parent.
  *
- * Only this path can stop at an approval pause, so only this type carries the
- * `interrupted` status: the run is settled but unfinished, which is neither
- * `completed` nor `failed`. The asynchronous and public-API paths cannot
- * produce it, which is why it is not part of {@link SubagentResult}.
+ * `status: 'interrupted'` is shared with {@link SubagentResult} and covers
+ * two distinct causes, told apart by `interrupted` and `terminalCause`:
+ * - An approval pause (`interrupted: true`, no `terminalCause`) — only this
+ *   nested path can produce it, since only it stops mid-run for an approval.
+ * - A terminal containment stop, e.g. `terminalCause: 'budget_exhausted'`
+ *   (no `interrupted` flag) — the run is settled but unfinished, which is
+ *   neither `completed` nor `failed`; the async and public-API paths can
+ *   also produce this flavor.
+ * `running` is unique to this type: the one-shot foreground result after
+ * ownership transfers to the background.
  */
 export type NestedSubagentResult = Omit<SubagentResult, 'status'> & {
-  /** `running` is the one-shot foreground result after ownership transfers. */
-  status: SubagentResult['status'] | 'interrupted' | 'running';
+  status: SubagentResult['status'] | 'running';
   /** True when the run paused for an approval the parent must surface. */
   interrupted?: boolean;
 };
@@ -243,6 +251,7 @@ export interface SubagentRunStatus {
     | 'completed'
     | 'failed'
     | 'cancelled'
+    | 'interrupted'
     | 'not_found';
   task: string;
   taskPreview: string;

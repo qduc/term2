@@ -947,6 +947,9 @@ it("ProviderTraffic writes an aborted stream's transcript to the artifact and ke
       responseId: 'resp_runaway',
       eventTypeCounts: { 'response.reasoning_summary_text.delta': 2 },
       progressCategoryCounts: { text: 0, reasoning: 2, tool: 0, usage: 0, heartbeat_or_unknown: 0 },
+      toolArgumentDeltaFrames: 0,
+      toolArgumentDeltaCharacters: 0,
+      toolCallStartFrames: 0,
       events: [{ type: 'response.reasoning_summary_text.delta', delta: 'looping forever' }],
     },
   });
@@ -1098,6 +1101,9 @@ it('ProviderTraffic retains bounded progress diagnostics for a failed request', 
       closeCode: 1006,
       eventCount: 24_141,
       progressCategoryCounts: { text: 24_140, reasoning: 0, tool: 0, usage: 0, heartbeat_or_unknown: 1 },
+      toolArgumentDeltaFrames: 24_140,
+      toolArgumentDeltaCharacters: 96_560,
+      toolCallStartFrames: 1,
     },
   });
 
@@ -1113,6 +1119,9 @@ it('ProviderTraffic retains bounded progress diagnostics for a failed request', 
     closeCode: 1006,
     eventCount: 24_141,
     progressCategoryCounts: { text: 24_140, reasoning: 0, tool: 0, usage: 0, heartbeat_or_unknown: 1 },
+    toolArgumentDeltaFrames: 24_140,
+    toolArgumentDeltaCharacters: 96_560,
+    toolCallStartFrames: 1,
   });
   expect((received.error as Record<string, unknown>).diagnostics).not.toHaveProperty('events');
   expect((received.error as Record<string, unknown>).diagnostics).not.toHaveProperty('eventTypeCounts');

@@ -99,6 +99,26 @@ describe('AbortedStreamRecorder', () => {
     });
   });
 
+  it('retains bounded tool-argument growth evidence without retaining argument content', () => {
+    const recorder = new AbortedStreamRecorder();
+    recorder.observe({
+      type: 'response.output_item.added',
+      output_item: { type: 'function_call', name: 'apply_patch' },
+    });
+    recorder.observe({ type: 'response.function_call_arguments.delta', delta: 'secret-one' });
+    recorder.observe({ type: 'response.custom_tool_call_input.delta', delta: 'secret-two' });
+    recorder.observe({ type: 'response.mcp_call_arguments.delta', delta: 'secret-three' });
+
+    const bounded = recorder.boundedDiagnostics();
+
+    expect(bounded).toMatchObject({
+      toolArgumentDeltaFrames: 3,
+      toolArgumentDeltaCharacters: 'secret-onesecret-twosecret-three'.length,
+      toolCallStartFrames: 1,
+    });
+    expect(JSON.stringify(bounded)).not.toContain('secret');
+  });
+
   it("captures a raw close frame's code and reason so an abnormal close is explainable", () => {
     const recorder = new AbortedStreamRecorder();
     recorder.observe({ type: 'response.created' });
@@ -160,6 +180,9 @@ describe('AbortedStreamRecorder', () => {
         'lastEventMs',
         'maxGapMs',
         'progressCategoryCounts',
+        'toolArgumentDeltaCharacters',
+        'toolArgumentDeltaFrames',
+        'toolCallStartFrames',
       ].sort(),
     );
     expect(Object.keys(bounded.progressCategoryCounts).sort()).toEqual(

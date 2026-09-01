@@ -1158,6 +1158,8 @@ it('CodexResponsesWSModel records an abnormal WebSocket close as a failed outcom
       { type: 'response.created', response: { id: 'resp_ws_close_1006' } },
       { type: 'response.output_text.delta', delta: 'sensitive in-flight text' },
       { type: 'response.reasoning_summary_text.delta', delta: 'sensitive reasoning' },
+      { type: 'response.output_item.added', output_item: { type: 'function_call', name: 'apply_patch' } },
+      { type: 'response.function_call_arguments.delta', delta: 'sensitive patch arguments' },
       { type: 'close', code: 1006, reason: 'abnormal closure' },
     ]);
   };
@@ -1176,7 +1178,7 @@ it('CodexResponsesWSModel records an abnormal WebSocket close as a failed outcom
 
   const closed = trafficCalls.find(({ method }) => method === 'recordResponseClosed');
   expect(closed).toBeDefined();
-  expect(closed!.args).toMatchObject({ outcome: 'failed', eventCount: 4 });
+  expect(closed!.args).toMatchObject({ outcome: 'failed', eventCount: 6 });
 
   const diagnostics = closed!.args.diagnostics;
   // Mechanically bounded: fixed category/counter/timing fields survive, but
@@ -1186,13 +1188,19 @@ it('CodexResponsesWSModel records an abnormal WebSocket close as a failed outcom
   expect(diagnostics).not.toHaveProperty('eventTypeCounts');
   expect(diagnostics).not.toHaveProperty('closeReason');
   expect(diagnostics.closeCode).toBe(1006);
-  expect(diagnostics.eventCount).toBe(4);
+  expect(diagnostics.eventCount).toBe(6);
   expect(diagnostics.progressCategoryCounts).toMatchObject({ text: 1, reasoning: 1 });
+  expect(diagnostics).toMatchObject({
+    toolArgumentDeltaFrames: 1,
+    toolArgumentDeltaCharacters: 'sensitive patch arguments'.length,
+    toolCallStartFrames: 1,
+  });
   expect(typeof diagnostics.durationMs).toBe('number');
   // No sensitive payload content, and no close reason text, leaks through the
   // bounded summary.
   expect(JSON.stringify(diagnostics)).not.toContain('sensitive in-flight text');
   expect(JSON.stringify(diagnostics)).not.toContain('sensitive reasoning');
+  expect(JSON.stringify(diagnostics)).not.toContain('sensitive patch arguments');
   expect(JSON.stringify(diagnostics)).not.toContain('abnormal closure');
 });
 

@@ -65,6 +65,9 @@ export class AbortedStreamRecorder {
   #closeCode: number | undefined;
   #closeReason: string | undefined;
   #eventCount = 0;
+  #toolArgumentDeltaFrames = 0;
+  #toolArgumentDeltaCharacters = 0;
+  #toolCallStartFrames = 0;
 
   constructor(now: () => number = Date.now) {
     this.#now = now;
@@ -83,6 +86,14 @@ export class AbortedStreamRecorder {
 
     const category = classifyProgressCategory(event, type);
     this.#progressCategoryCounts[category] += 1;
+
+    if (isToolArgumentDeltaType(type)) {
+      this.#toolArgumentDeltaFrames += 1;
+      const delta = (event as { delta?: unknown }).delta;
+      if (typeof delta === 'string') this.#toolArgumentDeltaCharacters += delta.length;
+    } else if (isToolCallStart(event, type)) {
+      this.#toolCallStartFrames += 1;
+    }
 
     // A raw transport-level `error` or `close` frame (as opposed to a Responses
     // API `response.failed` event) means the underlying WebSocket ended the
@@ -128,6 +139,9 @@ export class AbortedStreamRecorder {
       ...(this.#closeReason !== undefined ? { closeReason: this.#closeReason } : {}),
       eventTypeCounts: { ...this.#eventTypeCounts },
       progressCategoryCounts: { ...this.#progressCategoryCounts },
+      toolArgumentDeltaFrames: this.#toolArgumentDeltaFrames,
+      toolArgumentDeltaCharacters: this.#toolArgumentDeltaCharacters,
+      toolCallStartFrames: this.#toolCallStartFrames,
       events: this.#events ? [...this.#events] : [],
     };
   }
@@ -139,8 +153,8 @@ export class AbortedStreamRecorder {
    * abort, is not a case where replaying the exact payload is the point.
    *
    * Every field here has a fixed size regardless of what the wire sends:
-   * `progressCategoryCounts` has exactly five fixed keys, `eventCount` and the
-   * timing fields are single numbers, and `closeCode` is a numeric WebSocket
+   * `progressCategoryCounts` has exactly five fixed keys; event, timing, and
+   * tool-argument growth fields are single numbers; and `closeCode` is a numeric WebSocket
    * close code (RFC 6455 §7.4 is a 16-bit integer, not free text). Deliberately
    * excluded, unlike {@link diagnostics}: `eventTypeCounts` (its keys are raw
    * provider `type` strings with no enforced vocabulary or length — a hostile
@@ -159,8 +173,27 @@ export class AbortedStreamRecorder {
       ...(this.#closeCode !== undefined ? { closeCode: this.#closeCode } : {}),
       eventCount: this.#eventCount,
       progressCategoryCounts: { ...this.#progressCategoryCounts },
+      toolArgumentDeltaFrames: this.#toolArgumentDeltaFrames,
+      toolArgumentDeltaCharacters: this.#toolArgumentDeltaCharacters,
+      toolCallStartFrames: this.#toolCallStartFrames,
     };
   }
+}
+
+const TOOL_ARGUMENT_DELTA_TYPES = new Set([
+  'response.function_call_arguments.delta',
+  'response.custom_tool_call_input.delta',
+  'response.mcp_call_arguments.delta',
+]);
+
+function isToolArgumentDeltaType(type: string): boolean {
+  return TOOL_ARGUMENT_DELTA_TYPES.has(type);
+}
+
+function isToolCallStart(event: unknown, type: string): boolean {
+  if (type !== 'response.output_item.added' || !event || typeof event !== 'object') return false;
+  const record = event as { output_item?: { type?: unknown }; item?: { type?: unknown } };
+  return (record.output_item ?? record.item)?.type === 'function_call';
 }
 
 function readResponseId(event: unknown): string | undefined {

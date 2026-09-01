@@ -1,5 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import type { ISettingsService } from './service-interfaces.js';
+import { resolveActiveProfile } from './profiles/active-profile.js';
+import { ProfileResolutionError } from './profiles/types.js';
 
 /**
  * Canonical mode-change notices injected into the next user message when the
@@ -77,6 +80,37 @@ export function primeActiveModeNoticeIfActive(
   if (modes.orchestratorMode) queue(ORCHESTRATOR_MODE_ENTER_NOTICE);
   else if (modes.planMode) queue(PLAN_MODE_ENTER_NOTICE);
   else if (modes.mentorMode) queue(MENTOR_MODE_ENTER_NOTICE);
+}
+
+/** Return the workflow notice associated with a canonical Profile identity. */
+export function profileEnterNotice(profileId: string): string | null {
+  if (profileId === 'builtin:plan') return PLAN_MODE_ENTER_NOTICE;
+  if (profileId === 'builtin:mentor') return MENTOR_MODE_ENTER_NOTICE;
+  if (profileId === 'builtin:orchestrator') return ORCHESTRATOR_MODE_ENTER_NOTICE;
+  return null;
+}
+
+/** Return the exit notice associated with a canonical Profile identity. */
+export function profileExitNotice(profileId: string): string | null {
+  if (profileId === 'builtin:plan') return PLAN_MODE_EXIT_NOTICE;
+  if (profileId === 'builtin:mentor') return MENTOR_MODE_EXIT_NOTICE;
+  if (profileId === 'builtin:orchestrator') return ORCHESTRATOR_MODE_EXIT_NOTICE;
+  return null;
+}
+
+/** Prime the active Profile's workflow once, without consulting legacy flags. */
+export function primeActiveProfileNoticeIfActive(
+  settingsService: ISettingsService,
+  queue: (text: string) => void,
+): void {
+  try {
+    const notice = profileEnterNotice(resolveActiveProfile(settingsService).identity.id);
+    if (notice) queue(notice);
+  } catch (error) {
+    // Startup priming should not make an otherwise recoverable settings state
+    // unusable. Activation itself remains strict and reports this error.
+    if (!(error instanceof ProfileResolutionError)) throw error;
+  }
 }
 
 export function primePlanModeNoticeIfActive(planMode: boolean, queue: (text: string) => void): void {

@@ -2,10 +2,11 @@ import type { ProviderInputItem } from '../contracts/provider-input.js';
 import { OPENAI_RESPONSES_OPAQUE_TAG } from './provider-opaque-compatibility.js';
 
 /**
- * Codex (chatgpt.com) does not accept Responses `context_management` on create.
- * It compacts through the standalone `/responses/compact` endpoint, which
- * returns retained messages plus one opaque `{ type: 'compaction' }` item.
- * Pass that window through as the next request's history.
+ * Codex (chatgpt.com) does not accept Responses `context_management` on ordinary
+ * turns. Compaction uses the Responses endpoint with a trailing
+ * `{ type: 'compaction_trigger' }`, which returns one opaque
+ * `{ type: 'compaction' }` output item. Pass that artifact through as the next
+ * request's history.
  */
 export function compactOutputToProviderHistory(output: readonly unknown[]): ProviderInputItem[] {
   return output.map((item) => {

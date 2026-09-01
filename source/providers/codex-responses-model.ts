@@ -99,19 +99,36 @@ export class CodexResponsesTransport {
     instructions?: string;
     signal?: AbortSignal;
   }): Promise<{ history: ReturnType<typeof compactOutputToProviderHistory> }> {
-    if (typeof this.client?.responses?.compact !== 'function') {
-      throw new Error('Codex compact endpoint is unavailable on this client');
+    if (typeof this.client?.responses?.create !== 'function') {
+      throw new Error('Codex Responses endpoint is unavailable on this client');
     }
-    const compacted = await this.client.responses.compact(
+    const stream = await this.client.responses.create(
       {
         model: this.model,
-        input: request.input,
-        parallel_tool_calls: false,
+        input: [...request.input, { type: 'compaction_trigger' }],
+        parallel_tool_calls: true,
+        stream: true,
+        store: false,
+        include: ['reasoning.encrypted_content'],
         ...(request.instructions !== undefined ? { instructions: request.instructions } : {}),
       },
       request.signal ? { signal: request.signal } : undefined,
     );
-    return { history: compactOutputToProviderHistory(compacted.output ?? []) };
+    let compactionItem: unknown;
+    let completed = false;
+    for await (const event of stream) {
+      if (event?.type === 'response.output_item.done' && event.item?.type === 'compaction') {
+        compactionItem = event.item;
+      } else if (event?.type === 'response.completed') {
+        completed = true;
+      } else if (event?.type === 'response.failed' || event?.type === 'error') {
+        throw new Error(event?.response?.error?.message ?? event?.message ?? 'Codex compaction failed');
+      }
+    }
+    if (!completed || !compactionItem) {
+      throw new Error('Codex compaction stream ended without a completed compaction item');
+    }
+    return { history: compactOutputToProviderHistory([compactionItem]) };
   }
 
   buildResponsesCreateRequest(request: StreamedModelTurnRequest, stream: boolean): any {
@@ -127,8 +144,8 @@ export class CodexResponsesTransport {
     const { context_management: _reservedContextManagement, ...safeExtraBody } = ((extraBody as
       | Record<string, unknown>
       | undefined) ?? {}) as Record<string, unknown>;
-    // Codex ChatGPT backend rejects context_management on create. Compaction
-    // is POST /responses/compact via compactHistory(), not this field.
+    // Codex ChatGPT backend uses the Responses compaction trigger via
+    // compactHistory(), not context_management on ordinary turns.
     return {
       requestData: {
         model: this.model,

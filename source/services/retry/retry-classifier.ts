@@ -95,6 +95,7 @@ export class DefaultRetryClassifier {
         kind: 'chain_recovery',
         attempt: nextAttempt,
         delayMs: computeTransientDelayMs(nextAttempt, this.random),
+        cause: 'provider_state_rejected',
       };
     }
 
@@ -113,6 +114,7 @@ export class DefaultRetryClassifier {
           kind: 'chain_recovery',
           attempt: nextAttempt,
           delayMs: computeTransientDelayMs(nextAttempt, this.random),
+          cause: 'connection_interrupted',
         };
       }
       return { kind: 'unrecoverable' };

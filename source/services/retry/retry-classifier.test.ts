@@ -214,7 +214,11 @@ it('classify returns bounded chain recovery for previous_response_not_found webs
     { status: 400 },
   );
 
-  expect(classifier.classify(baseContext({ error }))).toMatchObject({ kind: 'chain_recovery', attempt: 1 });
+  expect(classifier.classify(baseContext({ error }))).toMatchObject({
+    kind: 'chain_recovery',
+    attempt: 1,
+    cause: 'provider_state_rejected',
+  });
 });
 
 it('classify returns bounded chain recovery for Invalid previous_response_id websocket 400 payload', () => {
@@ -502,7 +506,7 @@ it('classify recovers the chain when an ambiguous outcome wraps a flaky websocke
 
   const result = classifier.classify(baseContext({ error }));
 
-  expect(result.kind).toBe('chain_recovery');
+  expect(result).toMatchObject({ kind: 'chain_recovery', cause: 'connection_interrupted' });
 });
 
 it('classify keeps an ambiguous outcome unrecoverable when the server closed deliberately', () => {

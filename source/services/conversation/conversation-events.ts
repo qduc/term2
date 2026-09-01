@@ -62,7 +62,14 @@ export interface RetryEvent {
   attempt: number;
   maxRetries: number;
   errorMessage: string;
-  retryType?: 'hallucination' | 'parsing_error' | 'behavior' | 'flex_service_tier' | 'upstream' | 'conversation_state';
+  retryType?:
+    | 'hallucination'
+    | 'parsing_error'
+    | 'behavior'
+    | 'flex_service_tier'
+    | 'upstream'
+    | 'conversation_state'
+    | 'connection_interrupted';
   errorKind?: 'network' | 'provider' | 'rate_limit' | 'authentication' | 'cancelled' | 'unknown';
   delayMs?: number;
   retryAfterMs?: number;

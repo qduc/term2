@@ -305,22 +305,17 @@ export const getAgentDefinition = (
     });
   } catch (error) {
     // The resolver reports unavailable required integrations as a resolution
-    // error. Preserve the agent's established prerequisite message at this
-    // boundary while allowing other profile diagnostics to propagate.
-    if (
-      !(
-        error instanceof ProfileResolutionError &&
-        error.diagnostics.some((diagnostic) => diagnostic.code === 'unavailable-integration')
-      )
-    ) {
-      throw error;
-    }
-    throw new Error(
-      'orchestratorMode requires runSubagentAsync, getSubagentResult, getSubagentStatus, sendSubagentMessage, and cancelSubagentRun: cannot build orchestrator agent without asynchronous delegation.',
-    );
-  }
-  const asyncSubagents = profile.integrations.get('builtin:integration/async-subagents');
-  if (asyncSubagents?.required && !asyncSubagents.available) {
+    // error rather than returning them, so this remap is the enforcement point:
+    // preserve the agent's established prerequisite message while allowing
+    // other profile diagnostics to propagate.
+    const unavailableAsyncSubagents =
+      error instanceof ProfileResolutionError &&
+      error.diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === 'unavailable-integration' &&
+          diagnostic.message.includes('builtin:integration/async-subagents'),
+      );
+    if (!unavailableAsyncSubagents) throw error;
     throw new Error(
       'orchestratorMode requires runSubagentAsync, getSubagentResult, getSubagentStatus, sendSubagentMessage, and cancelSubagentRun: cannot build orchestrator agent without asynchronous delegation.',
     );

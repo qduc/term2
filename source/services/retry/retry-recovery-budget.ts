@@ -57,7 +57,11 @@ export class RetryRecoveryBudget {
     return this.#startedAt !== undefined && this.elapsedMs >= this.maxRecoveryTimeMs;
   }
 
-  /** Claim exactly once immediately before one physical provider dispatch. */
+  /**
+   * Claim one physical dispatch made because recovery is in progress.
+   * Ordinary first attempts and successful tool-loop continuations are not
+   * recovery work; their callers must not spend this budget on them.
+   */
   claimPhysicalAttempt(): boolean {
     if (this.#physicalAttempts >= this.maxPhysicalAttempts || this.deadlineExceeded) return false;
     this.#physicalAttempts++;

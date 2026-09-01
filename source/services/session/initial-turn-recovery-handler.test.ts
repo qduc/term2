@@ -177,6 +177,7 @@ it('returns the scheduled delay for bounded conversation-state recovery', async 
   if (next.value.kind === 'run') {
     expect(next.value.delayMs).toBe(25);
   }
+  expect(attempt.recoveryBudget.physicalAttempts).toBe(1);
   expect(attempt.retryCounts).toEqual(nextCounts);
 });
 

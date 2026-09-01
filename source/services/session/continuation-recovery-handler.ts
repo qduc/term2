@@ -110,7 +110,10 @@ export class ContinuationRecoveryHandler {
 
     // Only retry_fresh draws against the automatic-replay budget; replay_turn
     // comes exclusively from model_retry, excluded for the reason above.
-    if (plan.kind === 'retry_fresh' && !state.recoveryBudget.claimAutomaticReplay()) {
+    if (
+      plan.kind === 'retry_fresh' &&
+      (!state.recoveryBudget.claimAutomaticReplay() || !state.recoveryBudget.claimPhysicalAttempt())
+    ) {
       // Refusing the plan must still settle open tool calls truthfully and
       // clear the provider chain, exactly like an ordinary termination does --
       // see the matching comment in initial-turn-recovery-handler.ts.

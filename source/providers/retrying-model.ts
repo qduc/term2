@@ -88,7 +88,11 @@ export class RetryingModel implements StreamedModelTurn {
     for (let attempt = 0; ; attempt++) {
       let committed = false;
       try {
-        if (request.recoveryBudget && !request.recoveryBudget.claimPhysicalAttempt()) {
+        // The first dispatch is ordinary turn/tool-loop work. The recovery
+        // envelope accounts only for a provider retry after a failed dispatch;
+        // session-level fresh replays claim their dispatch at the recovery
+        // boundary before entering this wrapper.
+        if (attempt > 0 && request.recoveryBudget && !request.recoveryBudget.claimPhysicalAttempt()) {
           throw new RetryRecoveryBudgetExhaustedError(lastError);
         }
         for await (const event of this.model.stream(request)) {

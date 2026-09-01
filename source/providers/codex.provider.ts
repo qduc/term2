@@ -453,8 +453,8 @@ async function fetchCodexModels(
 
 const CODEX_CAPABILITIES = {
   supportsConversationChaining: true,
-  // `context_management` on create is api.openai.com only. Codex
-  // (chatgpt.com/backend-api/codex) compacts via POST /responses/compact.
+  // `context_management` on ordinary create requests is api.openai.com only.
+  // Codex uses the Responses compaction_trigger protocol instead.
   supportsContextCompaction: false,
   supportsPromptCacheKey: true,
   usesStrictToolSchema: true,
@@ -575,8 +575,8 @@ export function addCodexCompactHeaders(
   url: unknown,
   headers: HeadersInit,
   sessionId: string | undefined,
+  body?: BodyInit | null,
 ): Record<string, string> {
-  const target = typeof url === 'string' ? url : url instanceof URL ? url.toString() : '';
   const normalizedHeaders: Record<string, string> = {};
   if (headers instanceof Headers) {
     headers.forEach((value, key) => {
@@ -587,7 +587,18 @@ export function addCodexCompactHeaders(
   } else if (headers) {
     for (const [key, value] of Object.entries(headers)) normalizedHeaders[key] = String(value);
   }
-  if (!target.includes('/responses/compact') || !sessionId) return normalizedHeaders;
+  let isCompaction = false;
+  if (typeof body === 'string') {
+    try {
+      const parsed = JSON.parse(body) as { input?: unknown[] };
+      const input = parsed.input;
+      const last = Array.isArray(input) ? input[input.length - 1] : undefined;
+      isCompaction = !!last && typeof last === 'object' && (last as { type?: unknown }).type === 'compaction_trigger';
+    } catch {
+      // Leave ordinary request headers untouched for malformed/non-JSON bodies.
+    }
+  }
+  if (!isCompaction || !sessionId) return normalizedHeaders;
 
   const threadId = sessionId;
   const turnId = randomUUID();
@@ -607,6 +618,8 @@ export function addCodexCompactHeaders(
     'thread-id': threadId,
     'x-codex-window-id': windowId,
     'x-codex-turn-metadata': turnMetadata,
+    'x-codex-beta-features': 'remote_compaction_v2',
+    'OpenAI-Beta': 'responses=experimental',
   };
 }
 
@@ -632,7 +645,12 @@ function codexHeadersMiddleware(sessionContextService?: ISessionContextService):
       extraHeaders['session_id'] = sessionId;
     }
 
-    const mergedHeaders = addCodexCompactHeaders(ctx.url, injectHeaders(ctx.init?.headers, extraHeaders), sessionId);
+    const mergedHeaders = addCodexCompactHeaders(
+      ctx.url,
+      injectHeaders(ctx.init?.headers, extraHeaders),
+      sessionId,
+      ctx.init?.body,
+    );
     return next({ url: ctx.url, init: { ...ctx.init, headers: mergedHeaders } });
   };
 }

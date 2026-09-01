@@ -43,4 +43,24 @@ Relevant caveats:
 
 This repo’s [`source/providers/codex-responses-model.ts` lines 97-114](/home/qduc/term2/source/providers/codex-responses-model.ts#L97-L114) calls the SDK’s `responses.compact` with `{ model, input, instructions? }`, then maps `response.output` into provider history and marks `type: "compaction"` items opaque. Its focused test verifies that narrow body and the mapping ([`codex-responses-model.test.ts` lines 460-487](/home/qduc/term2/source/providers/codex-responses-model.test.ts#L460-L487)).
 
-Implication: the local shape is conceptually compatible with upstream legacy compaction, but intentionally omits upstream-supported optional controls (`tools`, `parallel_tool_calls`, reasoning, service tier, prompt-cache key, text, and access programs). Any future parity work should first decide whether the SDK/client supplies those fields and the Responses-Lite header, and should keep the legacy endpoint distinct from V2’s `/responses` + `compaction_trigger` protocol. No source code was modified for this research.
+Implication: the local shape is conceptually compatible with upstream legacy compaction, but intentionally omits upstream-supported optional controls (`tools`, `parallel_tool_calls`, reasoning, service tier, prompt-cache key, text, and access programs). Any future parity work should first decide whether the SDK/client supplies those fields and the Responses-Lite header, and should keep the legacy endpoint distinct from V2’s `/responses` + `compaction_trigger` protocol.
+
+## Independent live-tested V2 implementation
+
+The [algal/pi-openai-server-compaction](https://github.com/algal/pi-openai-server-compaction)
+package reports live tests for both direct OpenAI and the ChatGPT Codex backend. Its
+current implementation uses the V2 route rather than the legacy endpoint:
+
+- Codex URL: `POST https://chatgpt.com/backend-api/codex/responses`.
+- Body: the normal Responses request shape, with a trailing
+  `{ "type": "compaction_trigger" }`, `stream: true`, `store: false`, and
+  `include: ["reasoning.encrypted_content"]`.
+- Codex headers include `x-codex-beta-features: remote_compaction_v2`, session/window
+  identity, and `OpenAI-Beta: responses=experimental`.
+- Response: SSE; require one `response.output_item.done` event whose item is
+  `type: "compaction"`, followed by `response.completed`.
+
+This distinction explains the observed live behavior: the authenticated legacy
+`/responses/compact` request returned JSON 404, while a minimal V2 request to
+`/responses` returned HTTP 200 and exactly one compaction item. The Codex adapter
+now follows this V2 contract.

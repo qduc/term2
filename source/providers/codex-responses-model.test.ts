@@ -457,27 +457,33 @@ it('CodexResponsesTransport never sends context_management on create', () => {
   expect(built.requestData).not.toHaveProperty('contextCompaction');
 });
 
-it('CodexResponsesTransport.compactHistory calls the compact endpoint and marks the opaque item', async () => {
-  const compact = vi.fn(async (body: any) => {
+it('CodexResponsesTransport.compactHistory uses the Responses compaction trigger and marks the opaque item', async () => {
+  const create = vi.fn(async (body: any) => {
     expect(body).toEqual({
       model: 'gpt-5.6-sol',
-      input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] }],
-      parallel_tool_calls: false,
-    });
-    return {
-      output: [
+      input: [
         { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] },
-        { type: 'compaction', id: 'cmp_1', encrypted_content: 'cipher' },
+        { type: 'compaction_trigger' },
       ],
-    };
+      parallel_tool_calls: true,
+      stream: true,
+      store: false,
+      include: ['reasoning.encrypted_content'],
+    });
+    return (async function* () {
+      yield {
+        type: 'response.output_item.done',
+        item: { type: 'compaction', id: 'cmp_1', encrypted_content: 'cipher' },
+      };
+      yield { type: 'response.completed', response: { id: 'resp_1' } };
+    })();
   });
-  const transport = new CodexResponsesTransport({ responses: { compact } } as any, 'gpt-5.6-sol', false);
+  const transport = new CodexResponsesTransport({ responses: { create } } as any, 'gpt-5.6-sol', false);
   const result = await transport.compactHistory({
     input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] }],
   });
-  expect(compact).toHaveBeenCalledTimes(1);
+  expect(create).toHaveBeenCalledTimes(1);
   expect(result.history).toEqual([
-    { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] },
     {
       type: 'compaction',
       id: 'cmp_1',

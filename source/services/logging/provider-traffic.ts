@@ -9,6 +9,7 @@ import type {
   ILoggingService,
   ISessionContextService,
   IProviderTraffic,
+  ProviderTrafficBoundedStreamDiagnostics,
   ProviderTrafficClosedResponse,
   ProviderTrafficReceiveTiming,
   ProviderTrafficRequest,
@@ -1353,7 +1354,8 @@ export class ProviderTraffic implements IProviderTraffic {
 
     // The retained transcript belongs in the traffic artifact, not the app log.
     const { events: _events, ...logSummary } = summary as typeof summary & { events?: unknown[] };
-    const logClosed = input.outcome === 'aborted' ? this.loggingService.warn : this.loggingService.debug;
+    const logClosed =
+      input.outcome === 'aborted' || input.outcome === 'failed' ? this.loggingService.warn : this.loggingService.debug;
     logClosed.call(this.loggingService, `${input.provider} response closed`, {
       eventType: `${eventPrefix}.response.closed`,
       category: 'provider',
@@ -1383,6 +1385,7 @@ export class ProviderTraffic implements IProviderTraffic {
     wsAttempt?: number;
     wsMaxAttempts?: number;
     receiveTiming?: ProviderTrafficReceiveTiming;
+    diagnostics?: ProviderTrafficBoundedStreamDiagnostics;
   }): void {
     const trafficContext = this.sessionContextService.getContext() ?? null;
     const isEvaluator = trafficContext?.evaluator === true;
@@ -1423,6 +1426,13 @@ export class ProviderTraffic implements IProviderTraffic {
     if (input.receiveTiming !== undefined) {
       errorDetails.receiveTiming = input.receiveTiming;
     }
+    // Bounded progress evidence (category/counter/timing, no raw frame
+    // payload) from any frames observed before the failure, so a failed
+    // artifact can distinguish a stall from a runaway generation without
+    // retaining the transcript. See docs on ProviderTrafficBoundedStreamDiagnostics.
+    if (input.diagnostics !== undefined) {
+      errorDetails.diagnostics = input.diagnostics;
+    }
 
     // 1. Write failure to artifact store
     this.#runArtifactStoreOperation('recordRequestComplete', input.requestId, () => {
@@ -1450,6 +1460,7 @@ export class ProviderTraffic implements IProviderTraffic {
       error: errorDetails.message,
       wsAttempt: input.wsAttempt,
       wsMaxAttempts: input.wsMaxAttempts,
+      diagnostics: input.diagnostics,
     });
   }
 }

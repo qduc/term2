@@ -946,6 +946,7 @@ it("ProviderTraffic writes an aborted stream's transcript to the artifact and ke
       maxGapMs: 1204,
       responseId: 'resp_runaway',
       eventTypeCounts: { 'response.reasoning_summary_text.delta': 2 },
+      progressCategoryCounts: { text: 0, reasoning: 2, tool: 0, usage: 0, heartbeat_or_unknown: 0 },
       events: [{ type: 'response.reasoning_summary_text.delta', delta: 'looping forever' }],
     },
   });
@@ -1065,6 +1066,60 @@ it('ProviderTraffic retains the receive timing of a failed websocket request', (
       interFrameBudgetMs: 600_000,
     },
   });
+});
+
+// A stream that fails after delivering frames (e.g. an abrupt WebSocket close)
+// previously reached recordRequestFailed with no evidence of what the model
+// was doing beforehand — the failed artifact retained nothing but the error
+// message. Bounded category/counter/timing diagnostics now travel with the
+// failure, without retaining the raw frame transcript.
+it('ProviderTraffic retains bounded progress diagnostics for a failed request', () => {
+  const rootDir = makeTempDir();
+  const store = new ProviderTrafficArtifactStore({ rootDir });
+  const error = vi.fn();
+  const traffic = new ProviderTraffic(
+    { debug: vi.fn(), warn: vi.fn(), error, getCorrelationId: () => undefined },
+    NULL_SESSION_CONTEXT_SERVICE,
+    store,
+  );
+  const requestId = 'ws-progress-req';
+
+  traffic.recordRequestStart({ requestId, provider: 'codex', model: 'gpt-5.6-luna', sentBody: { input: [] } });
+  traffic.recordRequestFailed({
+    requestId,
+    provider: 'codex',
+    model: 'gpt-5.6-luna',
+    error: new Error('WebSocket connection closed before a terminal response event. (code=1006)'),
+    diagnostics: {
+      durationMs: 5_162,
+      firstEventMs: 586,
+      lastEventMs: 5_100,
+      maxGapMs: 5_162,
+      closeCode: 1006,
+      eventCount: 24_141,
+      progressCategoryCounts: { text: 24_140, reasoning: 0, tool: 0, usage: 0, heartbeat_or_unknown: 1 },
+    },
+  });
+
+  const dayDir = fs.readdirSync(rootDir).find((entry) => /^\d{4}-\d{2}-\d{2}$/.test(entry));
+  const sessionDir = fs.readdirSync(path.join(rootDir, dayDir!))[0];
+  const requestFile = fs.readdirSync(path.join(rootDir, dayDir!, sessionDir)).find((name) => name.endsWith('.json'))!;
+  const received = readRequestFile(path.join(rootDir, dayDir!, sessionDir, requestFile)).received as Record<
+    string,
+    unknown
+  >;
+
+  expect((received.error as Record<string, unknown>).diagnostics).toMatchObject({
+    closeCode: 1006,
+    eventCount: 24_141,
+    progressCategoryCounts: { text: 24_140, reasoning: 0, tool: 0, usage: 0, heartbeat_or_unknown: 1 },
+  });
+  expect((received.error as Record<string, unknown>).diagnostics).not.toHaveProperty('events');
+  expect((received.error as Record<string, unknown>).diagnostics).not.toHaveProperty('eventTypeCounts');
+  expect((received.error as Record<string, unknown>).diagnostics).not.toHaveProperty('closeReason');
+
+  const [, meta] = error.mock.calls[0]!;
+  expect(meta.diagnostics).toMatchObject({ closeCode: 1006, progressCategoryCounts: { text: 24_140 } });
 });
 
 // --- Contract 07 Diagnostic Logging Safety & Fault Tolerance Characterizations ---

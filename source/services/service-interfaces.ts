@@ -80,17 +80,32 @@ export interface ProviderTrafficClosedResponse {
   requestId: string;
   provider: string;
   model: string;
-  outcome: 'consumer_closed' | 'aborted';
+  /**
+   * `'failed'` is a stream that ended because a raw transport `error`/`close`
+   * frame was observed before any terminal response event — distinct from
+   * `'consumer_closed'`, which is this application choosing to stop reading a
+   * still-live stream. Without the distinction, an abnormal WebSocket close
+   * (e.g. close code 1006) is indistinguishable from ordinary cleanup.
+   */
+  outcome: 'consumer_closed' | 'aborted' | 'failed';
   eventCount: number;
   modelClass?: string;
   modelWrapperClass?: string;
   /**
    * A stream that ends without a terminal event leaves no payload to
    * summarize, so the retained transcript and its timings are the only record
-   * of what the model was doing when it was cut off.
+   * of what the model was doing when it was cut off. Bounded (no raw event
+   * payload) for `'failed'`, since a transport failure is not the deliberate
+   * client abort that full transcript retention is for.
    */
-  diagnostics?: ProviderTrafficStreamDiagnostics;
+  diagnostics?: ProviderTrafficStreamDiagnostics | ProviderTrafficBoundedStreamDiagnostics;
 }
+
+/**
+ * Fixed, bounded classification of a Responses WebSocket frame's progress
+ * kind. Closed union on purpose — see `aborted-stream-recorder.ts`.
+ */
+export type ProviderTrafficProgressCategory = 'text' | 'reasoning' | 'tool' | 'usage' | 'heartbeat_or_unknown';
 
 export interface ProviderTrafficStreamDiagnostics {
   durationMs: number;
@@ -98,8 +113,39 @@ export interface ProviderTrafficStreamDiagnostics {
   lastEventMs?: number;
   maxGapMs?: number;
   responseId?: string;
+  /** Present only when a raw transport `close` frame was observed. */
+  closeCode?: number;
+  closeReason?: string;
   eventTypeCounts: Record<string, number>;
+  progressCategoryCounts: Record<ProviderTrafficProgressCategory, number>;
   events: unknown[];
+}
+
+/**
+ * A mechanically fixed-size/fixed-cardinality view of stream progress,
+ * distinct from {@link ProviderTrafficStreamDiagnostics}: every field here is
+ * either a single number or a `Record` with a closed, hard-coded key set
+ * (`progressCategoryCounts`), so its serialized size cannot grow no matter
+ * how many frames, or how novel/hostile their `type` strings, a stream sends.
+ *
+ * This is why it is a distinct interface rather than
+ * `Omit<ProviderTrafficStreamDiagnostics, 'events'>`: that would still expose
+ * `eventTypeCounts` (keyed by raw, provider-supplied `type` strings with no
+ * enforced vocabulary — unbounded key cardinality) and `closeReason` (free
+ * text the server chooses). Used where the caller must retain progress
+ * evidence about a stream without retaining anything unbounded or
+ * provider-authored — in particular a genuine transport failure, which is not
+ * a deliberate client abort and can carry an unbounded number of frames.
+ */
+export interface ProviderTrafficBoundedStreamDiagnostics {
+  durationMs: number;
+  firstEventMs?: number;
+  lastEventMs?: number;
+  maxGapMs?: number;
+  /** Numeric WebSocket close code (RFC 6455 §7.4); never free text. */
+  closeCode?: number;
+  eventCount: number;
+  progressCategoryCounts: Record<ProviderTrafficProgressCategory, number>;
 }
 
 /**
@@ -133,6 +179,12 @@ export interface IProviderTraffic {
     wsAttempt?: number;
     wsMaxAttempts?: number;
     receiveTiming?: ProviderTrafficReceiveTiming;
+    /**
+     * Bounded category/counter/timing evidence of stream progress observed
+     * before the failure, when a stream had already started delivering
+     * frames. Absent when the failure happened before any frame arrived.
+     */
+    diagnostics?: ProviderTrafficBoundedStreamDiagnostics;
   }): void;
 }
 

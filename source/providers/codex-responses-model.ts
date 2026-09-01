@@ -14,6 +14,7 @@ import type {
   ISessionContextService,
   IProviderTraffic,
   ProviderTrafficStreamDiagnostics,
+  ProviderTrafficBoundedStreamDiagnostics,
 } from '../services/service-interfaces.js';
 import { AbortedStreamRecorder } from './aborted-stream-recorder.js';
 import { isOrphanedChainedToolOutputError, OrphanedChainedToolOutputError } from '../lib/chained-input-filter.js';
@@ -1171,6 +1172,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     requestData: Record<string, unknown>,
     error: unknown,
     receiveTiming?: WebSocketReceiveTiming,
+    diagnostics?: ProviderTrafficBoundedStreamDiagnostics,
   ): void {
     const providerTraffic = this.providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
     const model = typeof requestData.model === 'string' ? requestData.model : this.#modelNameFallback();
@@ -1181,6 +1183,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       model,
       error,
       ...(receiveTiming ? { receiveTiming } : {}),
+      ...(diagnostics ? { diagnostics } : {}),
       modelClass: WS_RESPONSE_MODEL_CLASS,
       modelWrapperClass: WS_RESPONSE_WRAPPER_CLASS,
     });
@@ -1189,9 +1192,9 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   #logTrafficClosed(
     requestId: string,
     requestData: Record<string, unknown>,
-    outcome: 'consumer_closed' | 'aborted',
+    outcome: 'consumer_closed' | 'aborted' | 'failed',
     eventCount: number,
-    diagnostics?: ProviderTrafficStreamDiagnostics,
+    diagnostics?: ProviderTrafficStreamDiagnostics | ProviderTrafficBoundedStreamDiagnostics,
   ): void {
     const providerTraffic = this.providerTraffic ?? DUMMY_PROVIDER_TRAFFIC;
     const model = typeof requestData.model === 'string' ? requestData.model : this.#modelNameFallback();
@@ -1269,20 +1272,33 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         // reached the wire; the wire-state decision above still keys off the
         // error as thrown.
         const failure = asProvablyUnsent?.() ?? error;
-        logFailed(requestId, requestData, failure, receiveTiming?.());
+        // Bounded evidence of whatever progress the recorder observed before
+        // the failure (category/counter/timing, no raw frame payload) — a
+        // stream that fails after thousands of frames (e.g. an abrupt close)
+        // must not lose that evidence the way an unrecorded failure would.
+        logFailed(requestId, requestData, failure, receiveTiming?.(), recorder.boundedDiagnostics());
         throw failure;
       } finally {
         if (!sawTerminalEvent && !sourceExhausted && !streamFailed) {
           // A consumer-closed stream ended because we stopped reading, which is
           // ordinary; its partial output stays out of the log. An abort is the
           // failure we cannot otherwise explain, so it keeps the transcript.
-          const outcome = signal?.aborted ? 'aborted' : 'consumer_closed';
+          // A raw transport `error`/`close` frame observed before either of
+          // those means the stream did not end because we chose to stop
+          // reading — the socket ended the exchange — so it is neither
+          // ordinary nor a client abort, and gets its own outcome plus
+          // bounded (non-payload) progress evidence.
+          const outcome = signal?.aborted ? 'aborted' : recorder.sawFailureFrame() ? 'failed' : 'consumer_closed';
           logClosed(
             requestId,
             requestData,
             outcome,
             eventCount,
-            outcome === 'aborted' ? recorder.diagnostics() : undefined,
+            outcome === 'aborted'
+              ? recorder.diagnostics()
+              : outcome === 'failed'
+              ? recorder.boundedDiagnostics()
+              : undefined,
           );
         }
         recorder.release();

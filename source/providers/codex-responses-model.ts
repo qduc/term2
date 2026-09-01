@@ -43,6 +43,7 @@ import { markContextCompactionFailure } from './openai-responses-model.js';
 import { compactOutputToProviderHistory } from './codex-compact.js';
 import { OPENAI_RESPONSES_OPAQUE_TAG } from './provider-opaque-compatibility.js';
 import { ResponsesWebSocketSessions } from './responses-websocket-sessions.js';
+import { raceWebSocketAbort } from './websocket-abort-race.js';
 
 const DUMMY_PROVIDER_TRAFFIC: IProviderTraffic = {
   recordRequestStart() {},
@@ -186,8 +187,23 @@ export class CodexResponsesTransport {
             released = true;
             sessions.release(socket, { keepAlive });
           };
+          // A raw WebSocket message iterator only settles its pending `next()`
+          // when the socket itself emits something, so cancellation cannot
+          // reach it through `for await` alone: nothing ever binds the
+          // request's AbortSignal to the socket. Pull manually and race each
+          // wait against the signal so an abort settles this generator (and
+          // everything awaiting it, up through `cancel_run`) instead of
+          // leaving it suspended forever.
+          const iterator = messages[Symbol.asyncIterator]();
+          let iteratorFinished = false;
           try {
-            for await (const message of messages) {
+            while (true) {
+              const next = await raceWebSocketAbort(iterator.next(), request.signal);
+              if (next.done) {
+                iteratorFinished = true;
+                break;
+              }
+              const message = next.value;
               if (message.type === 'message') {
                 const event = message.message;
                 if (TERMINAL_RESPONSE_EVENT_TYPES.has(event?.type) || event?.type === 'response.completed') {
@@ -213,6 +229,16 @@ export class CodexResponsesTransport {
             throw normalizedError;
           } finally {
             release(terminalReceived);
+            // The session-scoped socket keeps running; only this generator's
+            // pull loop needs to detach. Never await an SDK iterator return
+            // that waits on the socket itself.
+            if (!iteratorFinished) {
+              try {
+                void iterator.return?.().catch(() => undefined);
+              } catch {
+                // Settlement above remains authoritative.
+              }
+            }
           }
         })();
       }

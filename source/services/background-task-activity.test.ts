@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   assessBackgroundTaskLiveness,
   BACKGROUND_TASK_TOOL_LABEL_LIMIT,
+  formatBackgroundTaskLiveness,
+  normalizeBackgroundTaskActivity,
   sanitizeBackgroundTaskToolLabel,
 } from './background-task-activity.js';
 
@@ -13,6 +15,34 @@ describe('assessBackgroundTaskLiveness', () => {
       ageMs: 0,
     });
     expect(assessBackgroundTaskLiveness({ lastObservedAt: 1_000, now: 1_050, quietAfterMs: 50 }).state).toBe('quiet');
+  });
+});
+
+describe('formatBackgroundTaskLiveness', () => {
+  it('keeps lifecycle and evidence-age axes separate', () => {
+    const activity = normalizeBackgroundTaskActivity({
+      status: 'running',
+      activityState: 'waiting',
+      waitingReason: 'provider',
+      lastObservation: { kind: 'request_dispatched', at: 0 },
+      now: 8 * 60_000,
+      quietAfterMs: 30_000,
+    });
+
+    expect(formatBackgroundTaskLiveness(activity)).toBe('waiting (provider), quiet; last observed 8m ago');
+  });
+
+  it('reports recent observations compactly and never infers a hang', () => {
+    const activity = normalizeBackgroundTaskActivity({
+      status: 'running',
+      activityState: 'active',
+      lastActivityAt: 1_000,
+      now: 30_000,
+      quietAfterMs: 30_000,
+    });
+
+    expect(formatBackgroundTaskLiveness(activity)).toBe('active, recent; last observed 29s ago');
+    expect(formatBackgroundTaskLiveness(activity)).not.toContain('hung');
   });
 });
 

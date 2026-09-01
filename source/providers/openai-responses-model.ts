@@ -17,6 +17,7 @@ import { ResponsesWS } from 'openai/resources/responses/ws';
 import { getModelContextWindow } from './model-catalog/catalog.js';
 import { ResponsesWebSocketSessions } from './responses-websocket-sessions.js';
 import { WebSocketClosedEarlyError, readWebSocketCloseFrame } from './websocket-close-evidence.js';
+import { raceWebSocketAbort } from './websocket-abort-race.js';
 
 const endpointOf = (client: any): string => {
   const value = client?.baseURL ?? client?._options?.baseURL;
@@ -706,7 +707,11 @@ export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesMod
       const normalizationState = createResponseEventNormalizationState();
       iterator = socket.stream()[Symbol.asyncIterator]();
       while (true) {
-        const next = await iterator.next();
+        // The socket iterator's pending `next()` only settles when the socket
+        // itself emits something; nothing else bound `request.signal` to it,
+        // so cancelling mid-turn left this loop (and cancel_run) suspended
+        // forever. Race the wait against the signal instead.
+        const next = await raceWebSocketAbort(iterator.next(), request.signal);
         if (next.done) {
           iteratorFinished = true;
           break;
@@ -735,16 +740,15 @@ export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesMod
       throw error;
     } finally {
       if (iterator && !iteratorFinished) {
-        if (terminal) {
-          // A terminal event ends one response, not the session-scoped socket.
-          // Do not await an SDK iterator return that waits for socket closure.
-          try {
-            void iterator.return?.().catch(() => undefined);
-          } catch {
-            // Terminal settlement remains authoritative.
-          }
-        } else {
-          await iterator.return?.();
+        // Neither branch awaits the SDK iterator's return: a terminal event
+        // ends one response, not the session-scoped socket, and a cancelled
+        // or errored wait must not trade one hang (the unsettled `next()`)
+        // for another (a `return()` that itself waits on socket closure).
+        // Settlement above (terminal/error/abort) is authoritative either way.
+        try {
+          void iterator.return?.().catch(() => undefined);
+        } catch {
+          // Settlement above remains authoritative.
         }
       }
       if (terminal) {

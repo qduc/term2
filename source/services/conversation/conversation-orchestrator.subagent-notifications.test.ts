@@ -9,6 +9,7 @@ import type { ConversationEvent } from './conversation-events.js';
 import type { SubagentResult } from '../subagents/types.js';
 import { SubagentNotificationStore } from '../subagents/subagent-notification-store.js';
 import { PendingInteractionState } from '../session/pending-interaction-state.js';
+import { normalizeBackgroundTaskActivity } from '../background-task-activity.js';
 
 const response = (text = 'ok'): ConversationTerminal => ({ type: 'response', finalText: text, commandMessages: [] });
 
@@ -329,6 +330,7 @@ describe('ConversationOrchestrator background subagent notifications mid-turn', 
     expect(text).toContain('pnpm test');
     expect(text).toContain('does not by itself mean anything is wrong');
     expect(text).toContain('Decide freely');
+    expect(text).not.toContain('liveness:');
     expect(h.service.sendMessage).not.toHaveBeenCalled();
     expect(h.config.messages.getMessages()).toContainEqual(
       expect.objectContaining({ sender: 'command', toolName: 'background_check_in_notification' }),
@@ -347,7 +349,16 @@ describe('ConversationOrchestrator background subagent notifications mid-turn', 
           name: 'researcher',
           role: 'worker',
           task: 'implement feature',
-          activityState: 'active',
+          activity: normalizeBackgroundTaskActivity({
+            status: 'running',
+            activityState: 'waiting',
+            waitingReason: 'provider',
+            lastObservation: { kind: 'request_dispatched', at: 0 },
+            now: 8 * 60_000,
+            quietAfterMs: 30_000,
+          }),
+          activityState: 'waiting',
+          waitingReason: 'provider',
           toolCounts: { view_file: 3, edit_file: 2 },
           lastToolName: 'edit_file(src/auth.ts)',
           latestNarrative: 'Working on auth implementation.',
@@ -359,7 +370,8 @@ describe('ConversationOrchestrator background subagent notifications mid-turn', 
     expect(h.service.injectIntoActiveTurn).toHaveBeenCalledTimes(1);
     const text = h.injectedTexts()[0];
     expect(text).toContain('background subagent researcher (agent-1)');
-    expect(text).toContain('status: active');
+    expect(text).toContain('status: waiting (provider)');
+    expect(text).toContain('liveness: waiting (provider), quiet; last observed 8m ago');
     expect(text).toContain('latest narrative: "Working on auth implementation."');
     expect(text).toContain('tools used: view_file (3), edit_file (2)');
     expect(text).toContain('last tool: edit_file(src/auth.ts)');

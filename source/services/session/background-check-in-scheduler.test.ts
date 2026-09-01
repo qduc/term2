@@ -224,6 +224,11 @@ describe('BackgroundCheckInScheduler', () => {
         id: 'sub-1',
         role: 'worker',
         task: 'refactor tests',
+        activity: {
+          phase: 'active',
+          lastObservation: { kind: 'tool_started', at: 290_000, toolName: 'edit_file' },
+          liveness: { state: 'recent', lastObservedAt: 290_000, ageMs: 10_000 },
+        },
         activityState: 'active',
         toolCounts: { grep_search: 3, edit_file: 1 },
         lastToolName: 'edit_file',
@@ -231,6 +236,44 @@ describe('BackgroundCheckInScheduler', () => {
         latestNarrative: 'Modifying test suites to verify new behavior.',
       },
     });
+  });
+
+  it('carries waiting-provider and quiet evidence into a model-facing check-in', () => {
+    let time = 0;
+    const subagent = subagentTask({ runId: 'sub-quiet' });
+    const { scheduler, emit } = makeScheduler({
+      tasks: () => [subagent],
+      now: () => time,
+      getSubagentStatus: () => ({
+        runId: 'sub-quiet',
+        role: 'explorer',
+        status: 'running',
+        task: 'wait for provider',
+        taskPreview: 'wait for provider',
+        startedAt: 0,
+        elapsedMs: 300_000,
+        activityState: 'waiting',
+        waitingReason: 'provider',
+        lastActivityAt: 0,
+        toolCounts: {},
+      }),
+    });
+
+    time = 300_000;
+    scheduler.tick();
+
+    expect(emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        details: expect.objectContaining({
+          activity: {
+            phase: 'waiting',
+            reason: 'provider',
+            lastObservation: { kind: 'request_dispatched', at: 0 },
+            liveness: { state: 'quiet', lastObservedAt: 0, ageMs: 300_000 },
+          },
+        }),
+      }),
+    );
   });
 
   it('populates rich shell job observation and status when getShellJob is provided', () => {
@@ -263,6 +306,11 @@ describe('BackgroundCheckInScheduler', () => {
         kind: 'shell',
         id: 'shell-1',
         command: 'pnpm test',
+        activity: {
+          phase: 'active',
+          lastObservation: { kind: 'shell_output_received', at: 295_000 },
+          liveness: { state: 'recent', lastObservedAt: 295_000, ageMs: 5_000 },
+        },
         status: 'running',
         lastObservation: { kind: 'shell_output_received', at: 295_000 },
       },

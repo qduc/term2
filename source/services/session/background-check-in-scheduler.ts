@@ -3,6 +3,11 @@ import type { BackgroundTask } from '../subagents/subagent-notification-store.js
 import type { SubagentRunStatus } from '../subagents/types.js';
 import type { BackgroundShellJob } from '../shell/background-shell-registry.js';
 import { truncatePreview } from '../subagents/utils.js';
+import {
+  BACKGROUND_SHELL_QUIET_AFTER_MS,
+  BACKGROUND_SUBAGENT_QUIET_AFTER_MS,
+  normalizeBackgroundTaskActivity,
+} from '../background-task-activity.js';
 
 /** Current values of `agent.backgroundCheckIn.*`, read fresh on every tick. */
 export interface BackgroundCheckInSettings {
@@ -53,6 +58,7 @@ function taskDetails(
     getShellJob?: (jobId: string) => BackgroundShellJob<unknown> | undefined;
     getShellOutputTail?: (jobId: string, maxBytes?: number) => string | undefined;
   },
+  now: number,
 ): BackgroundCheckInDueEvent['details'] {
   if (task.kind === 'shell') {
     const job = deps.getShellJob?.(task.jobId);
@@ -62,6 +68,18 @@ function taskDetails(
       kind: 'shell',
       id: task.jobId,
       command: task.command,
+      ...(job?.lastObservation || job?.lastActivityAt !== undefined
+        ? {
+            activity: normalizeBackgroundTaskActivity({
+              status: job?.status ?? task.status,
+              ...(job?.lastObservation === undefined
+                ? { lastActivityAt: job?.lastActivityAt }
+                : { lastObservation: job.lastObservation }),
+              now,
+              quietAfterMs: BACKGROUND_SHELL_QUIET_AFTER_MS,
+            }),
+          }
+        : {}),
       ...(job?.status ? { status: job.status } : {}),
       ...(job?.lastObservation ? { lastObservation: job.lastObservation } : {}),
       ...(outputTail ? { outputTail } : {}),
@@ -82,6 +100,28 @@ function taskDetails(
     ...(task.name !== undefined ? { name: task.name } : {}),
     role: task.role,
     task: task.task,
+    ...(subagentStatus?.lastObservation || subagentStatus?.lastActivityAt !== undefined
+      ? {
+          activity: normalizeBackgroundTaskActivity({
+            status: subagentStatus.status,
+            activityState:
+              subagentStatus.status === 'awaiting_approval' || subagentStatus.status === 'waiting_for_answer'
+                ? 'waiting'
+                : subagentStatus.activityState,
+            waitingReason:
+              subagentStatus.status === 'awaiting_approval'
+                ? 'approval'
+                : subagentStatus.status === 'waiting_for_answer'
+                ? 'answer'
+                : subagentStatus.waitingReason,
+            ...(subagentStatus.lastObservation === undefined
+              ? { lastActivityAt: subagentStatus.lastActivityAt }
+              : { lastObservation: subagentStatus.lastObservation }),
+            now,
+            quietAfterMs: BACKGROUND_SUBAGENT_QUIET_AFTER_MS,
+          }),
+        }
+      : {}),
     ...(subagentStatus?.activityState ? { activityState: subagentStatus.activityState } : {}),
     ...(subagentStatus?.waitingReason ? { waitingReason: subagentStatus.waitingReason } : {}),
     ...(subagentStatus?.toolCounts && Object.keys(subagentStatus.toolCounts).length > 0
@@ -160,11 +200,15 @@ export class BackgroundCheckInScheduler {
         target,
         checkInIndex,
         elapsedMs: now - task.startedAt,
-        details: taskDetails(task, {
-          getSubagentStatus: this.#getSubagentStatus,
-          getShellJob: this.#getShellJob,
-          getShellOutputTail: this.#getShellOutputTail,
-        }),
+        details: taskDetails(
+          task,
+          {
+            getSubagentStatus: this.#getSubagentStatus,
+            getShellJob: this.#getShellJob,
+            getShellOutputTail: this.#getShellOutputTail,
+          },
+          now,
+        ),
       });
     }
   }

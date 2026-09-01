@@ -59,6 +59,23 @@ export const assessBackgroundTaskLiveness = ({
   return { state: ageMs >= quietAfterMs ? 'quiet' : 'recent', lastObservedAt, ageMs };
 };
 
+/** Compact, bounded wording shared by model-facing background work surfaces. */
+export const formatBackgroundTaskLiveness = (activity: BackgroundTaskActivity): string => {
+  const phase = activity.phase === 'waiting' && activity.reason ? `waiting (${activity.reason})` : activity.phase;
+  return `${phase}, ${activity.liveness.state}; last observed ${formatObservationAge(activity.liveness.ageMs)} ago`;
+};
+
+const formatObservationAge = (ageMs: number): string => {
+  const totalSeconds = Math.floor(Math.max(0, ageMs) / 1_000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (totalMinutes < 60) return seconds === 0 ? `${totalMinutes}m` : `${totalMinutes}m ${seconds}s`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
+};
+
 export const isTerminalStatus = (status: string): boolean =>
   status === 'completed' || status === 'failed' || status === 'timed_out' || status === 'cancelled';
 

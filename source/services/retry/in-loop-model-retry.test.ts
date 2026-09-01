@@ -3,6 +3,7 @@ import { classifyInLoopModelRetry, computeInLoopBackoffDelayMs, sleepWithAbort }
 import { AmbiguousModelOutcomeError, ConversationStateNoProgressError } from './retry-errors.js';
 import { WebSocketClosedEarlyError } from '../../providers/websocket-close-evidence.js';
 import { GenerationGuardError } from '../agent-runtime/generation-guard.js';
+import { OpenAICompatibleError } from '../../providers/common/provider-errors.js';
 
 describe('in-loop-model-retry', () => {
   it('classifies WebSocketClosedEarlyError as retryable chain_recovery', () => {
@@ -107,6 +108,45 @@ describe('in-loop-model-retry', () => {
     expect(decision.retryable).toBe(false);
     if (!decision.retryable) {
       expect(decision.reason).toBe('no_progress');
+    }
+  });
+
+  it('recovers a mid-turn tool-continuation failure with a 502-classified OpenAICompatibleError (OpenRouter finish_reason: "error")', () => {
+    // Regression: OpenRouter can end a stream with finish_reason "error" and no
+    // in-band error object, mid-turn during a tool continuation. The provider
+    // adapter synthesizes an OpenAICompatibleError defaulting to status 502,
+    // which the upstream classifier marks retryable — but this in-loop
+    // classifier previously never consulted `upstream.retryable`, so it fell
+    // through to `unrecoverable` even though the same error would have retried
+    // at a turn boundary via isTransientRetryableError.
+    const error = new OpenAICompatibleError('stream ended with finish_reason error', 502, {});
+    const decision = classifyInLoopModelRetry(error, 0, 2, () => 0.5);
+
+    expect(decision.retryable).toBe(true);
+    if (decision.retryable) {
+      expect(decision.kind).toBe('chain_recovery');
+    }
+  });
+
+  it('still refuses in-loop retry for a non-retryable-status OpenAICompatibleError', () => {
+    const error = new OpenAICompatibleError('bad request', 400, {});
+    const decision = classifyInLoopModelRetry(error, 0, 2, () => 0.5);
+
+    expect(decision.retryable).toBe(false);
+    if (!decision.retryable) {
+      expect(decision.reason).toBe('unrecoverable');
+    }
+  });
+
+  it('refuses in-loop retry of a chained delta for a retryable-status OpenAICompatibleError', () => {
+    const error = new OpenAICompatibleError('stream ended with finish_reason error', 502, {});
+    const decision = classifyInLoopModelRetry(error, 0, 2, () => 0.5, {
+      previousResponseId: 'resp-prior',
+    });
+
+    expect(decision.retryable).toBe(false);
+    if (!decision.retryable) {
+      expect(decision.reason).toBe('chained_delta_not_self_contained');
     }
   });
 

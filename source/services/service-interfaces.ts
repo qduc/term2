@@ -118,13 +118,20 @@ export interface ProviderTrafficStreamDiagnostics {
   closeReason?: string;
   eventTypeCounts: Record<string, number>;
   progressCategoryCounts: Record<ProviderTrafficProgressCategory, number>;
+  /** Content-free count of raw tool-argument delta frames. */
+  toolArgumentDeltaFrames: number;
+  /** Sum of raw tool-argument delta string lengths. */
+  toolArgumentDeltaCharacters: number;
+  /** Raw function-call item starts observed before argument deltas. */
+  toolCallStartFrames: number;
   events: unknown[];
 }
 
 /**
  * A mechanically fixed-size/fixed-cardinality view of stream progress,
  * distinct from {@link ProviderTrafficStreamDiagnostics}: every field here is
- * either a single number or a `Record` with a closed, hard-coded key set
+ * either a single number (including content-free tool-argument growth counts)
+ * or a `Record` with a closed, hard-coded key set
  * (`progressCategoryCounts`), so its serialized size cannot grow no matter
  * how many frames, or how novel/hostile their `type` strings, a stream sends.
  *
@@ -146,6 +153,9 @@ export interface ProviderTrafficBoundedStreamDiagnostics {
   closeCode?: number;
   eventCount: number;
   progressCategoryCounts: Record<ProviderTrafficProgressCategory, number>;
+  toolArgumentDeltaFrames: number;
+  toolArgumentDeltaCharacters: number;
+  toolCallStartFrames: number;
 }
 
 /**

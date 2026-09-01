@@ -704,6 +704,112 @@ CLI sat at idle with 0 captured requests. Same class as the ledger's earlier
 unverified PTY timeouts; not exercised by the reasoning-length change.
 ```
 
+### Luna streamed tool-argument runaway: evidence gap, observability only
+
+Disposition: **no destructive guard change. Add bounded argument-growth
+diagnostics and wait for a captured recurrence.**
+
+Two Codex Responses Lite requests on 2026-09-01 (`73e65e60` and
+`64fff2f8`) remained active for 454,628ms and 785,758ms while producing
+25,165 and 43,503 raw tool-category frames. Their maximum inter-frame gaps
+were only 1,749ms and 2,111ms, so the provider-neutral inactivity watchdog
+correctly treated them as active. Both requests ended only after client
+cancellation. Because neither response reached a terminal event, the traffic
+artifacts contain no assembled tool arguments.
+
+The existing `GenerationGuard` should abort once one tool argument, cumulative
+tool-argument growth, or aggregate visible output exceeds 100,000 characters.
+However, the pre-incident abort diagnostics retained only a broad tool-frame
+count. That count includes function-call lifecycle frames and does not prove
+argument growth. Sampling completed Luna `apply_patch` requests from the same
+day found about 3.2-4.4 assembled argument characters per total raw frame. This
+makes an accounting bypass plausible for the 43,503-frame request, but it is not
+direct evidence: a pathological incomplete response can have a different frame
+mix from completed responses.
+
+```text
+Harm investigated: an indefinitely active model response streaming malformed or
+  runaway tool arguments without reaching a tool call or the existing 100k cap.
+Scope and execution paths: Codex Responses WebSocket requests recorded by
+  AbortedStreamRecorder; the existing GenerationGuard remains shared by root,
+  subagent, and non-interactive ApplicationRunLoop requests.
+Guard class: existing direct character containment budget plus an inactivity
+  watchdog; this change is observability only.
+Enforcement owner: unchanged — GenerationGuard in ApplicationRunLoop.
+Recovery owner: unchanged — typed ambiguous-outcome settlement; client
+  cancellation remains cancellation.
+Measured signal and observation boundary: exact raw string lengths on the three
+  supported Responses tool-argument delta frame types, before adapter flattening;
+  raw function-call item-start count is retained separately.
+Direct evidence or proxy: delta-character sum is direct wire-growth evidence;
+  frame count and duration alone are proxies and do not authorize termination.
+Legitimate work that can produce the same signal: a slow or large but finite
+  patch; no new action is attached to any signal.
+Configuration sources and precedence: unchanged.
+Effective default and clamping: existing 100,000-character caps and 600,000ms
+  inactivity window remain; total request deadline remains off by default.
+Action and why the signal justifies it: retain three fixed-cardinality numeric
+  counters only; do not abort, warn, or change retry classification.
+Partial-work settlement: unchanged.
+Retry, fallback, and provider-continuity semantics: unchanged.
+Observability fields: toolArgumentDeltaFrames,
+  toolArgumentDeltaCharacters, and toolCallStartFrames; no argument content,
+  tool name, call id, output index, or provider-authored free text.
+Persisted-setting migration, if any: none.
+Rollback boundary: AbortedStreamRecorder diagnostics fields and their type/test
+  contract.
+Ledger row: this section.
+```
+
+An honest deterministic ApplicationRunLoop red test cannot yet be built from
+the retained artifacts: synthesizing decreases, equal counts, or interleaved
+calls would prove only an imagined bypass, not the observed incident. The next
+recurrence will record exact argument-delta frame and character totals. If it
+crosses the existing cap without settlement, replay that captured frame shape
+through the Codex converter and `ApplicationRunLoop`; that replay is the required
+red proof before changing containment behavior. A total deadline is explicitly
+rejected here because both requests were actively producing frames and long
+active model work is legitimate.
+
+Red proof for the observability gap:
+
+```text
+pnpm test source/providers/aborted-stream-recorder.test.ts
+FAIL 2 tests: bounded diagnostics omitted exact tool-argument delta growth and
+the fixed-key-set contract did not include the three new numeric counters.
+PASS the 10 pre-existing tests.
+```
+
+Verification (2026-09-01):
+
+```text
+pnpm test source/providers/aborted-stream-recorder.test.ts \
+  source/services/logging/provider-traffic.test.ts \
+  source/providers/codex-responses-model.test.ts
+PASS 3 files, 143 tests
+
+pnpm typecheck
+PASS
+
+pnpm test:related ./source/providers/aborted-stream-recorder.ts \
+  ./source/services/service-interfaces.ts
+KNOWN BASELINE FAILURE: 155 files and 2,556 tests passed; six unrelated
+file-boundary safety assertions failed in apply-patch.test.ts,
+create-file.test.ts, and search-replace.test.ts. This exact failure class is
+already recorded in the Codex WebSocket connect-time timeout entry below.
+
+pnpm test:changed
+KNOWN BASELINE FAILURE: the same six assertions; 156 files and 2,596 tests
+passed, with 2 expected failures and 2 skipped.
+
+pnpm test:provider-black-box
+FLAKE: two unconstrained attempts failed different known PTY/contention waits;
+each named scenario passed alone. The CI-bounded gate passed:
+
+CI=1 pnpm test:provider-black-box
+PASS 19 files, 175 tests; 1 skipped
+```
+
 ### GenerationStreamDeadlines total-deadline false positive (provider-neutral inactivity watchdog)
 
 Incidents: 2026-08-27 OpenRouter `z-ai/glm-5.3-flash` and 2026-08-21 Neuralwatt

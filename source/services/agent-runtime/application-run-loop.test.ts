@@ -2979,4 +2979,40 @@ describe('ApplicationRunLoop in-loop request retry', () => {
       reasoningDeltas: 1,
     });
   });
+
+  it('emits usage_update with upstream_provider when providerMetadata carries OpenRouter provider', async () => {
+    const model: StreamedModelTurn = {
+      async *stream() {
+        yield { type: 'text_delta', text: '1 2 3' };
+        yield {
+          type: 'completion',
+          responseId: 'resp_openrouter',
+          output: [{ type: 'message', content: [{ type: 'text', text: '1 2 3' }] }],
+          usage: { inputTokens: 18, outputTokens: 6 },
+          providerMetadata: {
+            openrouter: {
+              provider: 'Novita',
+            },
+          },
+        };
+      },
+    };
+
+    const loop = new ApplicationRunLoop({
+      resolveModel: () => model,
+    });
+    const stream = loop.startStream(agent, 'say 1 2 3');
+    const eventsPromise = collect(stream);
+    await stream.completed;
+    const events = await eventsPromise;
+
+    expect(events).toContainEqual({
+      type: 'usage_update',
+      usage: expect.objectContaining({
+        prompt_tokens: 18,
+        completion_tokens: 6,
+        upstream_provider: 'Novita',
+      }),
+    });
+  });
 });

@@ -452,3 +452,45 @@ it('extractUsage finds normalizedUsage', () => {
   expect(result!.completion_tokens).toBe(54);
   expect(result!.reasoning_tokens).toBe(52);
 });
+
+it('normalizeUsage preserves upstream_provider', () => {
+  expect(normalizeUsage({ inputTokens: 10, outputTokens: 5, upstream_provider: 'Novita' })).toEqual({
+    prompt_tokens: 10,
+    completion_tokens: 5,
+    total_tokens: 15,
+    upstream_provider: 'Novita',
+  });
+  expect(normalizeUsage({ inputTokens: 10, outputTokens: 5, upstreamProvider: 'DeepInfra' })).toEqual({
+    prompt_tokens: 10,
+    completion_tokens: 5,
+    total_tokens: 15,
+    upstream_provider: 'DeepInfra',
+  });
+});
+
+it('extractUsage extracts upstream_provider from providerMetadata openrouter', () => {
+  const result = extractUsage({
+    usage: { prompt_tokens: 100, completion_tokens: 50 },
+    providerMetadata: {
+      openrouter: {
+        provider: 'Novita',
+      },
+    },
+  });
+  expect(result).toEqual({
+    prompt_tokens: 100,
+    completion_tokens: 50,
+    total_tokens: 150,
+    upstream_provider: 'Novita',
+  });
+});
+
+it('addTokenUsage preserves latest upstream_provider', () => {
+  const current = { prompt_tokens: 100, completion_tokens: 50, upstream_provider: 'Novita' };
+  const next = { prompt_tokens: 20, completion_tokens: 10, upstream_provider: 'Together' };
+  expect(addTokenUsage(current, next)).toEqual({
+    prompt_tokens: 120,
+    completion_tokens: 60,
+    upstream_provider: 'Together',
+  });
+});

@@ -230,6 +230,8 @@ interface StatusBarProps {
   lastCodexRateLimit?: CodexRateLimitInfo | null;
   grokCreditUsage?: GrokCreditUsage | null;
   openCodeGoUsage?: OpenCodeGoUsage | null;
+  openRouterUpstream?: string | null;
+  upstreamProvider?: string | null;
   largeUncachedWarning?: { estimatedTokens: number } | null;
   hasPendingConfirmation?: boolean;
   pendingLargeUncachedTokens?: number;
@@ -250,6 +252,8 @@ const StatusBar: FC<StatusBarProps> = ({
   lastCodexRateLimit,
   grokCreditUsage,
   openCodeGoUsage,
+  openRouterUpstream,
+  upstreamProvider: upstreamProviderProp,
   largeUncachedWarning,
   hasPendingConfirmation = false,
   pendingLargeUncachedTokens,
@@ -283,6 +287,9 @@ const StatusBar: FC<StatusBarProps> = ({
 
   const providerDef = getProvider(providerKey);
   const providerLabel = providerDef?.label || providerKey;
+  const upstreamProvider = openRouterUpstream ?? upstreamProviderProp ?? lastUsage?.upstream_provider;
+  const displayProviderLabel =
+    providerKey === 'openrouter' && upstreamProvider ? `${providerLabel} (${upstreamProvider})` : providerLabel;
 
   // Context gauge: last request's prompt tokens (the current conversation
   // context) over the vendored catalog's context window for the active model.
@@ -529,7 +536,7 @@ const StatusBar: FC<StatusBarProps> = ({
     },
     {
       id: 'provider-model',
-      text: model ? `${providerLabel}/${model}` : '',
+      text: model ? `${displayProviderLabel}/${model}` : '',
       color: accent,
       separator: 'group',
     },

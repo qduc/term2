@@ -75,6 +75,7 @@ export type StreamedModelUnaryResult = {
   readonly usage?: StreamedModelUsage;
   readonly finishReason?: string;
   readonly costUsd?: number | string;
+  readonly providerMetadata?: StreamedModelProviderOptions;
 };
 
 /** One application-owned streamed model invocation. */

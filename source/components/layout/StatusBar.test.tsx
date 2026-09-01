@@ -907,3 +907,61 @@ it.sequential('StatusBar renders live streaming speed during in-flight generatio
   const output = lastFrame() ?? '';
   expect(output).toContain('(52.4 tok/s)');
 });
+
+it.sequential('StatusBar displays OpenRouter upstream provider from lastUsage', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'meta-llama/llama-3.3-70b-instruct',
+    'agent.provider': 'openrouter',
+  });
+
+  const { lastFrame } = await renderInAct(
+    <StatusBar
+      settingsService={settingsService}
+      lastUsage={{ prompt_tokens: 18, completion_tokens: 6, upstream_provider: 'Novita' }}
+    />,
+  );
+  const output = lastFrame() ?? '';
+  expect(output).toContain('OpenRouter (Novita)/meta-llama/llama-3.3-70b-instruct');
+});
+
+it.sequential('StatusBar displays OpenRouter upstream provider from openRouterUpstream prop', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'meta-llama/llama-3.3-70b-instruct',
+    'agent.provider': 'openrouter',
+  });
+
+  const { lastFrame } = await renderInAct(
+    <StatusBar settingsService={settingsService} openRouterUpstream="DeepInfra" />,
+  );
+  const output = lastFrame() ?? '';
+  expect(output).toContain('OpenRouter (DeepInfra)/meta-llama/llama-3.3-70b-instruct');
+});
+
+it.sequential('StatusBar renders OpenRouter cleanly without upstream when not present', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'meta-llama/llama-3.3-70b-instruct',
+    'agent.provider': 'openrouter',
+  });
+
+  const { lastFrame } = await renderInAct(<StatusBar settingsService={settingsService} />);
+  const output = lastFrame() ?? '';
+  expect(output).toContain('OpenRouter/meta-llama/llama-3.3-70b-instruct');
+  expect(output).not.toContain('(');
+});
+
+it.sequential('StatusBar does not display upstream provider on non-OpenRouter provider', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+  });
+
+  const { lastFrame } = await renderInAct(
+    <StatusBar
+      settingsService={settingsService}
+      lastUsage={{ prompt_tokens: 18, completion_tokens: 6, upstream_provider: 'Novita' }}
+    />,
+  );
+  const output = lastFrame() ?? '';
+  expect(output).toContain('OpenAI/gpt-4o');
+  expect(output).not.toContain('Novita');
+});

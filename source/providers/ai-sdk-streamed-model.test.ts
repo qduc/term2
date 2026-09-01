@@ -450,4 +450,40 @@ it('extracts provider-reported cost from unary getResponse providerMetadata', as
 
   const result = await model.getResponse!({ input: [], tools: [] });
   expect(result.costUsd).toBe(0.00025);
+  expect(result.providerMetadata).toBeDefined();
+});
+
+it('extracts upstream provider from stream completion providerMetadata', async () => {
+  const model = createAiSdkStreamedModel({
+    provider: 'openrouter',
+    modelId: 'meta-llama/llama-3.3-70b-instruct',
+    specificationVersion: 'v3',
+    supportedUrls: {},
+    async doGenerate() {
+      throw new Error('not called');
+    },
+    async doStream() {
+      return {
+        stream: (async function* () {
+          yield { type: 'response-metadata', id: 'resp-1' };
+          yield { type: 'text-delta', id: 't-1', delta: '1 2 3' };
+          yield {
+            type: 'finish',
+            finishReason: { unified: 'stop' },
+            usage: { inputTokens: { total: 18 }, outputTokens: { total: 6 } },
+            providerMetadata: {
+              openrouter: {
+                provider: 'Novita',
+              },
+            },
+          };
+        })(),
+      } as unknown as Awaited<ReturnType<LanguageModelV3['doStream']>>;
+    },
+  } as unknown as LanguageModelV3);
+
+  const events = await collect(model.stream({ input: [], tools: [] }));
+  const completion = events.find((e: any) => e.type === 'completion') as any;
+  expect(completion).toBeDefined();
+  expect(completion.providerMetadata?.openrouter?.provider).toBe('Novita');
 });

@@ -40,6 +40,7 @@ import {
   type RunBudgetPolicy,
 } from './run-budget.js';
 import { addTokenUsage, normalizeUsage } from '../../utils/ai/token-usage.js';
+import { extractAiSdkUpstreamProvider } from '../../providers/ai-sdk-streamed-model.js';
 import { computeModelCost, type ModelRequestCost, type ServiceTier } from '../../services/cost/model-cost.js';
 import { getCatalogPricingVersion, getModelPricing } from '../../services/cost/pricing.js';
 import {
@@ -1211,8 +1212,16 @@ export class ApplicationRunLoop {
         state.responseProviderId = undefined;
       }
       let normalizedCompletionUsage: ReturnType<typeof normalizeModelUsage>;
+      const upstreamProvider = extractAiSdkUpstreamProvider(finalCompletion.providerMetadata);
       if (finalCompletion.usage !== undefined) {
         normalizedCompletionUsage = normalizeModelUsage(finalCompletion.usage);
+        if (upstreamProvider) {
+          if (normalizedCompletionUsage) {
+            normalizedCompletionUsage.upstream_provider = upstreamProvider;
+          } else {
+            normalizedCompletionUsage = { upstream_provider: upstreamProvider };
+          }
+        }
         if (normalizedCompletionUsage) {
           const accumulated = addTokenUsage(normalizeModelUsage(state.usage), normalizedCompletionUsage);
           state.usage = {
@@ -1234,6 +1243,8 @@ export class ApplicationRunLoop {
           // pass-through behavior when normalization cannot recognize it.
           state.usage = finalCompletion.usage;
         }
+      } else if (upstreamProvider) {
+        normalizedCompletionUsage = { upstream_provider: upstreamProvider };
       } else {
         normalizedCompletionUsage = undefined;
       }

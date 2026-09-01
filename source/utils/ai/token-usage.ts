@@ -13,6 +13,7 @@ export interface NormalizedUsage {
   completion_ms?: number;
   tokens_per_second?: number;
   ttft_ms?: number;
+  upstream_provider?: string;
 }
 
 export interface UsageAccumulator {
@@ -135,6 +136,12 @@ export function normalizeUsage(usage: any): NormalizedUsage | undefined {
 
   const tokensPerSecond = coalesceNumber(usage.tokens_per_second, usage.tokensPerSecond, usage.tps);
   const ttftMs = coalesceNumber(usage.ttft_ms, usage.ttftMs);
+  const upstreamProvider =
+    typeof usage.upstream_provider === 'string' && usage.upstream_provider.trim().length > 0
+      ? usage.upstream_provider.trim()
+      : typeof usage.upstreamProvider === 'string' && usage.upstreamProvider.trim().length > 0
+      ? usage.upstreamProvider.trim()
+      : undefined;
 
   const mapped: NormalizedUsage = {};
   if (promptTokens != null) mapped.prompt_tokens = promptTokens;
@@ -147,6 +154,7 @@ export function normalizeUsage(usage: any): NormalizedUsage | undefined {
   if (completionMs != null) mapped.completion_ms = completionMs;
   if (tokensPerSecond != null) mapped.tokens_per_second = tokensPerSecond;
   if (ttftMs != null) mapped.ttft_ms = ttftMs;
+  if (upstreamProvider != null) mapped.upstream_provider = upstreamProvider;
 
   return Object.keys(mapped).length > 0 ? mapped : undefined;
 }
@@ -182,6 +190,18 @@ export function extractUsage(payload: unknown): NormalizedUsage | undefined {
 
     const self = normalizeUsage(record);
     if (self) results.push(self);
+
+    const providerMetadata = asUsageContainer(record.providerMetadata);
+    const openrouterMeta = asUsageContainer(providerMetadata?.openrouter);
+    const openrouterProvider =
+      typeof openrouterMeta?.provider === 'string' && openrouterMeta.provider.trim().length > 0
+        ? openrouterMeta.provider.trim()
+        : typeof providerMetadata?.provider === 'string' && providerMetadata.provider.trim().length > 0
+        ? providerMetadata.provider.trim()
+        : undefined;
+    if (openrouterProvider) {
+      results.push({ upstream_provider: openrouterProvider });
+    }
   };
 
   enqueue(root);
@@ -347,7 +367,17 @@ export function addTokenUsage(
   const result: NormalizedUsage = { ...(current ?? {}) };
   if (!next) return result;
 
-  const addField = (field: keyof NormalizedUsage) => {
+  type NumericUsageField =
+    | 'prompt_tokens'
+    | 'completion_tokens'
+    | 'total_tokens'
+    | 'reasoning_tokens'
+    | 'cache_read_tokens'
+    | 'cache_creation_tokens'
+    | 'prompt_ms'
+    | 'completion_ms';
+
+  const addField = (field: NumericUsageField) => {
     const value = next[field];
     if (value == null) return;
     result[field] = (result[field] ?? 0) + value;
@@ -361,6 +391,10 @@ export function addTokenUsage(
   addField('cache_creation_tokens');
   addField('prompt_ms');
   addField('completion_ms');
+
+  if (next.tokens_per_second != null) result.tokens_per_second = next.tokens_per_second;
+  if (next.ttft_ms != null) result.ttft_ms = next.ttft_ms;
+  if (next.upstream_provider != null) result.upstream_provider = next.upstream_provider;
 
   return result;
 }

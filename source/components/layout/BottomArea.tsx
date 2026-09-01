@@ -61,6 +61,8 @@ export type BottomAreaProps = {
   runBudgetNotice?: RunBudgetEvent | null;
   grokCreditUsage?: GrokCreditUsage | null;
   openCodeGoUsage?: OpenCodeGoUsage | null;
+  openRouterUpstream?: string | null;
+  upstreamProvider?: string | null;
   onSubmit: (value: UserTurn, options?: { busyMode?: 'steer' | 'follow_up' }) => Promise<void>;
   onRejectionReasonInputReady?: () => void;
   slashCommands: SlashCommand[];
@@ -158,6 +160,8 @@ const BottomArea: FC<BottomAreaProps> = ({
   runBudgetNotice,
   grokCreditUsage,
   openCodeGoUsage,
+  openRouterUpstream,
+  upstreamProvider,
   onSettingChange,
   onSystemMessage,
   handoffState,
@@ -477,6 +481,8 @@ const BottomArea: FC<BottomAreaProps> = ({
         runBudgetNotice={runBudgetNotice}
         grokCreditUsage={grokCreditUsage}
         openCodeGoUsage={openCodeGoUsage}
+        openRouterUpstream={openRouterUpstream}
+        upstreamProvider={upstreamProvider}
         largeUncachedWarning={largeUncachedWarning}
         hasPendingConfirmation={
           (pendingLargeUncachedTurn !== null && pendingLargeUncachedTokens > 0) || pendingSurgeTurn !== null

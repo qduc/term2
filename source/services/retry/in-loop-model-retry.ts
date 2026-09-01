@@ -130,6 +130,16 @@ export function classifyInLoopModelRetry(
     return recoverChain();
   }
 
+  // Mid-turn tool-continuation failures (e.g. an OpenRouter stream that ends
+  // with finish_reason "error" and a 429/5xx-classified payload) previously
+  // fell through to `unrecoverable` here because only `upstreamDelay` was
+  // read off `upstream` above. Turn-boundary retry consults this same
+  // classifier via `isTransientRetryableError`; without this check, an error
+  // retryable at a turn boundary was silently unrecoverable mid-continuation.
+  if (upstream.retryable) {
+    return recoverChain();
+  }
+
   const errorString = String((error as { message?: unknown })?.message ?? error).toLowerCase();
   const isConnectionDrop =
     errorString.includes('websocket') ||

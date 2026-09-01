@@ -56,7 +56,7 @@ import path from 'path';
 import type { ISettingsService, ILoggingService } from './services/service-interfaces.js';
 import { ExecutionContext } from './services/execution-context.js';
 import { buildPromptSpec, isLiteProfile } from './prompts/prompt-constructor.js';
-import { resolveProfile } from './services/profiles/index.js';
+import { ProfileResolutionError, resolveActiveProfile } from './services/profiles/index.js';
 import { shouldPreferPatchEditingModel } from './lib/tool-selection-policy.js';
 import { SkillsService } from './services/skills/skills-service.js';
 import { createActivateSkillToolDefinition } from './tools/agent/activate-skill.js';
@@ -277,8 +277,6 @@ export const getAgentDefinition = (
 
   if (!resolvedModel) throw new Error('Model cannot be undefined or empty');
 
-  const planMode = settingsService.get('app.planMode');
-  const orchestratorMode = settingsService.get('app.orchestratorMode');
   const searchViaShellSetting = settingsService.get('app.searchViaShell') ?? 'auto';
   const searchViaShell =
     searchViaShellSetting === 'auto' ? shouldPreferPatchEditingModel(resolvedModel) : searchViaShellSetting === 'on';
@@ -300,14 +298,33 @@ export const getAgentDefinition = (
   // nested runner remains wired for foreground-only compatibility sessions and
   // for legacy lifecycle controls, but is not selectable alongside async work.
   const runSubagentForegroundEnabled = Boolean(runSubagent) && !asyncSubagentEnabled;
-  if (orchestratorMode && !asyncSubagentEnabled) {
+  let profile: ReturnType<typeof resolveActiveProfile>;
+  try {
+    profile = resolveActiveProfile(settingsService, {
+      availableIntegrations: new Map([['builtin:integration/async-subagents', asyncSubagentEnabled]]),
+    });
+  } catch (error) {
+    // The resolver reports unavailable required integrations as a resolution
+    // error. Preserve the agent's established prerequisite message at this
+    // boundary while allowing other profile diagnostics to propagate.
+    if (
+      !(
+        error instanceof ProfileResolutionError &&
+        error.diagnostics.some((diagnostic) => diagnostic.code === 'unavailable-integration')
+      )
+    ) {
+      throw error;
+    }
     throw new Error(
       'orchestratorMode requires runSubagentAsync, getSubagentResult, getSubagentStatus, sendSubagentMessage, and cancelSubagentRun: cannot build orchestrator agent without asynchronous delegation.',
     );
   }
-  const profile = resolveProfile(settingsService.get('app.activeProfileId'), {
-    availableIntegrations: new Map([['builtin:integration/async-subagents', asyncSubagentEnabled]]),
-  });
+  const asyncSubagents = profile.integrations.get('builtin:integration/async-subagents');
+  if (asyncSubagents?.required && !asyncSubagents.available) {
+    throw new Error(
+      'orchestratorMode requires runSubagentAsync, getSubagentResult, getSubagentStatus, sendSubagentMessage, and cancelSubagentRun: cannot build orchestrator agent without asynchronous delegation.',
+    );
+  }
   const liteMode = isLiteProfile(profile);
   const capabilities = profile.tools.capabilities;
   const isContextSourceEnabled = (source: string): boolean =>
@@ -355,7 +372,7 @@ export const getAgentDefinition = (
   }
 
   const cwd = executionContext?.getCwd() || process.cwd();
-  const isLiteEnv = liteMode && !planMode;
+  const isLiteEnv = liteMode;
   // The glob/find-files tool is only registered in certain configurations; keep
   // the search-tool descriptions consistent so the model does not call a tool
   // that is not on its allowlist.

@@ -41,6 +41,7 @@ import { DETAILED_DENIED_READ_INSTRUCTION } from '../../utils/shell/sandbox/deni
 import type { DeniedReadInfo } from '../../utils/shell/sandbox/denied-read-detector.js';
 import { getProjectAllowReadStore } from '../../utils/shell/sandbox/denied-read-stores.js';
 import { classifySandboxFailure } from '../../utils/shell/sandbox/sandbox-failure-classifier.js';
+import { resolveActiveEnforcement } from '../../services/profiles/index.js';
 import {
   createDockerHostControl,
   DOCKER_HOST_CONTROL_RETRY_INSTRUCTION,
@@ -842,7 +843,10 @@ export function createShellToolDefinition(deps: {
       if (dockerHostControlRequested && !hasDockerGrant) {
         return 'Error: Docker host control requires explicit approval.';
       }
-      if (settingsService.get('app.planMode') && isMutatingCommand(command, cwd, loggingService)) {
+      if (
+        resolveActiveEnforcement(settingsService).denials.has('shell-mutation') &&
+        isMutatingCommand(command, cwd, loggingService)
+      ) {
         return `Error: plan mode is read-only. Command not executed: ${command}`;
       }
       const sshService = executionContext?.getSSHService();

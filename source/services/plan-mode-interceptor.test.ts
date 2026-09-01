@@ -8,6 +8,7 @@ it('installPlanModeInterceptor rejects mutating tools when planMode is true', as
   const mockSettingsService = {
     get: (key: string) => {
       if (key === 'app.planMode') return planMode;
+      if (key === 'app.activeProfileId') return planMode ? 'builtin:plan' : 'builtin:standard';
       return false;
     },
   } as any;

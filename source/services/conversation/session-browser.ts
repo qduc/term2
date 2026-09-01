@@ -63,6 +63,7 @@ export class SessionBrowser {
     const selected = candidates.slice(0, clamp(input.limit, DEFAULT_LIMIT));
     const result = {
       sessions: [] as Array<Record<string, unknown>>,
+      scope: browsed.scope,
       total: candidates.length,
       omitted: 0,
       unavailable,
@@ -140,6 +141,7 @@ export class SessionBrowser {
     const selected = matches.slice(0, clamp(input.limit, DEFAULT_LIMIT));
     const result = {
       results: [] as Array<Record<string, unknown>>,
+      scope: browsed.scope,
       total: matches.length,
       omitted: 0,
       unavailable,
@@ -159,8 +161,14 @@ export class SessionBrowser {
     if (!SAFE_SESSION_ID.test(input.id)) return boundedError('not_found', 'Session was not found.', budget);
     const context = this.getContext();
     const loaded = loadConversationForProjectReadOnly(input.id, context.projectPath, context.sshHost);
-    if (loaded.status === 'not_found' || loaded.status === 'project_mismatch')
-      return boundedError('not_found', 'Session was not found.', budget);
+    if (loaded.status === 'not_found')
+      return boundedError('not_found', `Session was not found in scope ${context.projectPath}.`, budget);
+    if (loaded.status === 'project_mismatch')
+      return boundedError(
+        'not_found',
+        `Session exists but belongs to project ${loaded.conversation.projectPath}, which does not match the current scope (${context.projectPath}); it cannot be read from the current scope.`,
+        budget,
+      );
     if (loaded.status !== 'loaded' || loaded.conversation.id !== input.id || !loaded.conversation.createdAt)
       return boundedError('session_unavailable', 'Session transcript is unavailable.', budget);
     const conversation = loaded.conversation;
@@ -206,6 +214,7 @@ export class SessionBrowser {
           : undefined;
       const candidate = fitted(
         {
+          scope: context.projectPath,
           session,
           items: [...items, completeItem],
           ...(nextCursor ? { nextCursor } : {}),
@@ -230,6 +239,7 @@ export class SessionBrowser {
         const next = this.#cursorFor(input.id, currentUpdatedAt, currentRevision, index, offset + text.length);
         return fitted(
           {
+            scope: context.projectPath,
             session,
             items: [...items, pageItem(record, text, offset, false)],
             nextCursor: next,
@@ -254,6 +264,7 @@ export class SessionBrowser {
     return (
       fitted(
         {
+          scope: context.projectPath,
           session,
           items,
           ...(nextCursor ? { nextCursor } : {}),
@@ -289,6 +300,7 @@ export class SessionBrowser {
     const result = browseConversationsForProject(context.projectPath, context.sshHost);
     return {
       unavailable: result.unavailable,
+      scope: context.projectPath,
       conversations: result.conversations.sort(
         (a, b) => updatedAt(b).localeCompare(updatedAt(a)) || a.id.localeCompare(b.id),
       ),

@@ -138,6 +138,7 @@ it('registers prior-session browser tools only when the root composition explici
   const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
   const list = vi.spyOn(browser, 'list').mockReturnValue({
     sessions: [{ firstUserMessage: 'HISTORICAL_TRANSCRIPT_SENTINEL' }],
+    scope: '/project',
     total: 1,
     omitted: 0,
     unavailable: 0,

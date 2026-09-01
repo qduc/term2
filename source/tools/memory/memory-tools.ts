@@ -112,7 +112,7 @@ function safe(operation: () => Promise<unknown>, maxChars: number) {
         : error instanceof MemoryAlreadyExistsError
         ? boundedError('already_exists', 'A memory with this ID already exists.', maxChars)
         : error instanceof InvalidMemoryError
-        ? boundedError('invalid_memory', 'Memory input is invalid.', maxChars)
+        ? boundedError('invalid_memory', error.message || 'Memory input is invalid.', maxChars)
         : error instanceof MemoryStorageError
         ? boundedError('storage_error', 'Memory storage is unavailable or corrupted.', maxChars)
         : error instanceof MemoryCursorError

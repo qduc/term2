@@ -1,6 +1,11 @@
 import { expect, it } from 'vitest';
 import { createMemoryToolDefinitions } from './memory-tools.js';
-import { MemoryNotFoundError, MemoryStorageError, type MemoryStore } from '../../services/memory/memory-store.js';
+import {
+  InvalidMemoryError,
+  MemoryNotFoundError,
+  MemoryStorageError,
+  type MemoryStore,
+} from '../../services/memory/memory-store.js';
 import type { MemoryScope } from './memory-tools.js';
 import { getTrimConfig, setTrimConfig } from '../../utils/output/output-trim.js';
 
@@ -486,6 +491,29 @@ it('returns a bounded JSON failure under a tiny runtime byte cap instead of thro
   } finally {
     setTrimConfig(original);
   }
+});
+
+it('preserves the actionable validation message for invalid memory input', async () => {
+  const tools = createMemoryToolDefinitions({
+    ...store,
+    create: async () => {
+      throw new InvalidMemoryError('Summary must not exceed 1,000 characters.');
+    },
+  });
+
+  const result = JSON.parse(
+    (await readTool(tools, 'memory_create').execute({
+      scope: 'project',
+      id: 'project-rules',
+      title: 'Rules',
+      summary: 'too long',
+      content: 'content',
+    })) as string,
+  );
+
+  expect(result).toEqual({
+    error: { code: 'invalid_memory', message: 'Summary must not exceed 1,000 characters.' },
+  });
 });
 
 it('rejects blank queries and malformed or stale memory cursors with bounded public errors', async () => {

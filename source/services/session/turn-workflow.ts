@@ -1,7 +1,7 @@
 import type { ContinuationHandle } from '../../contracts/continuation-handle.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { SteerOutcome } from '../agent-runtime/application-run-loop.js';
-import type { ConversationEvent } from '../conversation/conversation-events.js';
+import { isCommittedOutputEvent, type ConversationEvent } from '../conversation/conversation-events.js';
 import type { ILoggingService } from '../service-interfaces.js';
 import type { SessionToolTracker } from './session-tool-tracker.js';
 import type { ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
@@ -609,7 +609,7 @@ export class TurnWorkflow {
     });
     let next = await processor.next();
     while (!next.done) {
-      attempt.markModelEventSeen();
+      if (isCommittedOutputEvent(next.value)) attempt.markModelEventSeen();
       emit(next.value);
       next = await processor.next();
     }

@@ -42,6 +42,7 @@ export interface UIPort {
   onStreamingThinkingStarted(timestamp: number): void;
   onStreamingThinkingCleared(): void;
   onStreamingToolInfo(info: { toolName?: string; argumentCharCount: number } | null): void;
+  onStreamingSpeedUpdate?(speed: { tps: number; ttftMs?: number } | null): void;
   /** @deprecated ask_user answers now live in PendingInteractionState. */
   onAskUserAnswerSubmitted(answer: string | string[]): void;
   /** @deprecated ask_user navigation now lives in PendingInteractionState. */

@@ -16,6 +16,7 @@ import { createStreamingUpdateCoordinator } from './streaming-updater.js';
 import type { NormalizedUsage } from '../ai/token-usage.js';
 import type { CodexRateLimitInfo } from '../../services/conversation/conversation-events.js';
 import { createMessageIdFactory } from '../message-id-factory.js';
+import { StreamingSpeedTracker } from './streaming-speed-tracker.js';
 
 export interface StreamingSessionFactoryDeps {
   appendMessages: ConversationEventHandlerDeps['appendMessages'];
@@ -25,6 +26,7 @@ export interface StreamingSessionFactoryDeps {
   loggingService: ILoggingService;
   setLastUsage: (usage: NormalizedUsage) => void;
   setCodexRateLimit?: (rateLimit: CodexRateLimitInfo) => void;
+  setStreamingSpeed?: (speed: { tps: number; ttftMs?: number } | null) => void;
   /**
    * Budget evidence that did not stop the run.
    *
@@ -120,30 +122,75 @@ export function createStreamingSession(deps: StreamingSessionFactoryDeps, label:
     streamingState,
   );
 
+  const speedTracker = new StreamingSpeedTracker({ startTime: now() });
+
+  const notifySpeed = () => {
+    if (!deps.setStreamingSpeed) return;
+    const liveTps = speedTracker.getLiveTps(now());
+    if (liveTps !== null) {
+      deps.setStreamingSpeed({
+        tps: liveTps,
+        ttftMs: speedTracker.getTtftMs() ?? undefined,
+      });
+    }
+  };
+
   const applyConversationEvent = (event: ConversationEvent) => {
-    if (event.type === 'usage_update') {
-      // Emit usage updates in real-time during streaming
+    if (event.type === 'text_delta') {
+      speedTracker.recordDelta(event.delta, now());
+      notifySpeed();
+    } else if (event.type === 'reasoning_delta') {
+      speedTracker.recordDelta(event.delta, now());
+      notifySpeed();
+    } else if (event.type === 'tool_call_streaming_delta') {
+      speedTracker.recordCumulativeChars(event.argumentCharCount, now());
+      notifySpeed();
+    } else if (event.type === 'usage_update') {
+      if (event.usage.completion_tokens) {
+        speedTracker.recordUsageTokens(event.usage.completion_tokens, now());
+      }
+      notifySpeed();
+      const currentTps = speedTracker.getSettledTps(event.usage.completion_tokens, now());
+      const ttftMs = speedTracker.getTtftMs();
+      if (currentTps != null) {
+        event.usage.tokens_per_second = currentTps;
+      }
+      if (ttftMs != null) {
+        event.usage.ttft_ms = ttftMs;
+      }
       deps.loggingService.debug(`UI received streaming usage (${label})`, { usage: event.usage });
       streamingState.latestUsage = event.usage;
       deps.setLastUsage(event.usage);
     } else if (event.type === 'final') {
+      deps.setStreamingSpeed?.(null);
+      const completionTokens = event.usage?.completion_tokens ?? streamingState.latestUsage?.completion_tokens;
+      const finalTps = speedTracker.getSettledTps(completionTokens, now());
+      const ttftMs = speedTracker.getTtftMs();
+
       if (event.usage && !streamingState.latestUsage) {
-        // No per-turn usage was streamed (e.g. a non-streaming provider). Fall
-        // back to the final event's usage so the footer still shows something.
+        if (finalTps != null) {
+          event.usage.tokens_per_second = finalTps;
+        }
+        if (ttftMs != null) {
+          event.usage.ttft_ms = ttftMs;
+        }
         deps.loggingService.debug(`UI received final usage (${label})`, { usage: event.usage });
         streamingState.latestUsage = event.usage;
         deps.setLastUsage(event.usage);
       } else if (event.usage) {
-        // The final event carries the run-cumulative total (the sum of every
-        // model turn in the run). The footer is a per-turn indicator, so keep
-        // the last streamed turn's usage rather than overwriting it with the
-        // run total. The run-cumulative still reaches the session accumulator
-        // via result.usage in applyServiceResult.
+        if (streamingState.latestUsage) {
+          if (finalTps != null) streamingState.latestUsage.tokens_per_second = finalTps;
+          if (ttftMs != null) streamingState.latestUsage.ttft_ms = ttftMs;
+        }
         deps.loggingService.debug(`UI keeping last streamed turn usage; final carries run total (${label})`, {
           finalUsage: event.usage,
           shownUsage: streamingState.latestUsage,
         });
       } else {
+        if (streamingState.latestUsage) {
+          if (finalTps != null) streamingState.latestUsage.tokens_per_second = finalTps;
+          if (ttftMs != null) streamingState.latestUsage.ttft_ms = ttftMs;
+        }
         deps.loggingService.debug(`UI final event has no usage (${label})`);
       }
     } else if (event.type === 'run_budget' && deps.setRunBudgetNotice) {

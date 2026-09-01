@@ -179,3 +179,125 @@ it('botResponseUpdater creates and updates streaming bot messages', () => {
     },
   ]);
 });
+
+it('reports live streaming speed and attaches settled TPS on final event', () => {
+  const speedReports: any[] = [];
+  let lastUsage: any = null;
+  let currentTime = 1000;
+
+  const session = createStreamingSession(
+    {
+      appendMessages: () => {},
+      setMessages: () => {},
+      trimMessages: (messages) => messages,
+      annotateCommandMessage: (msg) => msg,
+      loggingService: {
+        info: () => {},
+        warn: () => {},
+        error: () => {},
+        debug: () => {},
+        security: () => {},
+        setCorrelationId: () => {},
+        getCorrelationId: () => undefined,
+        clearCorrelationId: () => {},
+      },
+      setLastUsage: (usage) => {
+        lastUsage = usage;
+      },
+      setStreamingSpeed: (speed) => {
+        speedReports.push(speed);
+      },
+      reasoningThrottleMs: 200,
+      now: () => currentTime,
+      createConversationEventHandler: () => () => {},
+    },
+    'sendUserMessage',
+  );
+
+  // First token delta at 1200ms
+  currentTime = 1200;
+  session.applyConversationEvent({ type: 'text_delta', delta: 'Hello ', fullText: 'Hello ' } as const);
+
+  // Second delta at 2200ms (1000ms after first token, ~190 chars ≈ 50 tokens -> 50 tok/s)
+  currentTime = 2200;
+  session.applyConversationEvent({
+    type: 'text_delta',
+    delta: 'a'.repeat(184),
+    fullText: 'Hello ' + 'a'.repeat(184),
+  } as const);
+
+  expect(speedReports.length).toBeGreaterThan(0);
+  const latestReport = speedReports[speedReports.length - 1];
+  expect(latestReport).toEqual({
+    tps: expect.any(Number),
+    ttftMs: 200,
+  });
+
+  // Final event at 3200ms (2.0s generation duration, 100 completion tokens -> 50.0 tok/s)
+  currentTime = 3200;
+  session.applyConversationEvent({
+    type: 'final',
+    finalText: 'Done',
+    usage: { prompt_tokens: 500, completion_tokens: 100, total_tokens: 600 },
+  } as const);
+
+  // Speed report reset on final
+  expect(speedReports[speedReports.length - 1]).toBeNull();
+  // Final usage contains settled TPS
+  expect(lastUsage?.tokens_per_second).toBe(50);
+  expect(lastUsage?.ttft_ms).toBe(200);
+});
+
+it('tracks speed during tool_call_streaming_delta without error', () => {
+  const speedReports: any[] = [];
+  let currentTime = 1000;
+
+  const session = createStreamingSession(
+    {
+      appendMessages: () => {},
+      setMessages: () => {},
+      trimMessages: (messages) => messages,
+      annotateCommandMessage: (msg) => msg,
+      loggingService: {
+        info: () => {},
+        warn: () => {},
+        error: () => {},
+        debug: () => {},
+        security: () => {},
+        setCorrelationId: () => {},
+        getCorrelationId: () => undefined,
+        clearCorrelationId: () => {},
+      },
+      setLastUsage: () => {},
+      setStreamingSpeed: (speed) => {
+        speedReports.push(speed);
+      },
+      reasoningThrottleMs: 200,
+      now: () => currentTime,
+      createConversationEventHandler: () => () => {},
+    },
+    'sendUserMessage',
+  );
+
+  // Tool delta at 1200ms
+  currentTime = 1200;
+  expect(() => {
+    session.applyConversationEvent({
+      type: 'tool_call_streaming_delta',
+      toolName: 'read_file',
+      argumentCharCount: 50,
+    } as const);
+  }).not.toThrow();
+
+  // Tool delta at 2200ms
+  currentTime = 2200;
+  expect(() => {
+    session.applyConversationEvent({
+      type: 'tool_call_streaming_delta',
+      toolName: 'read_file',
+      argumentCharCount: 200,
+    } as const);
+  }).not.toThrow();
+
+  expect(speedReports.length).toBeGreaterThan(0);
+});

@@ -739,3 +739,27 @@ it('reset_all clears pendingQueuedMessages', () => {
   const next = conversationUIReducer(state, { type: 'reset_all' });
   expect(next.pendingQueuedMessages).toEqual([]);
 });
+
+it('streaming/speed_updated sets and clears liveStreamingSpeed', () => {
+  let state = createInitialUIState(null);
+  expect(state.liveStreamingSpeed).toBeNull();
+
+  state = conversationUIReducer(state, {
+    type: 'streaming/speed_updated',
+    speed: { tps: 45.5, ttftMs: 250 },
+  });
+  expect(state.liveStreamingSpeed).toEqual({ tps: 45.5, ttftMs: 250 });
+
+  state = conversationUIReducer(state, { type: 'turn/completed' });
+  expect(state.liveStreamingSpeed).toBeNull();
+});
+
+it('reset_transient resets liveStreamingSpeed', () => {
+  let state = createInitialUIState(null);
+  state = conversationUIReducer(state, {
+    type: 'streaming/speed_updated',
+    speed: { tps: 50.0 },
+  });
+  state = conversationUIReducer(state, { type: 'reset_transient' });
+  expect(state.liveStreamingSpeed).toBeNull();
+});

@@ -874,3 +874,36 @@ it.sequential('StatusBar renders config and metrics on a single line at a wide w
   expect(configAndMetricsLine).toContain('cached');
   expect(configAndMetricsLine).toContain('Ctx');
 });
+
+it.sequential('StatusBar renders token streaming speed when present in lastUsage', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+  });
+
+  const { lastFrame } = await renderInAct(
+    <StatusBar
+      settingsService={settingsService}
+      lastUsage={{
+        prompt_tokens: 1200,
+        completion_tokens: 450,
+        tokens_per_second: 48.2,
+      }}
+    />,
+  );
+  const output = lastFrame() ?? '';
+  expect(output).toContain('↓450 (48.2 tok/s)');
+});
+
+it.sequential('StatusBar renders live streaming speed during in-flight generation', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+  });
+
+  const { lastFrame } = await renderInAct(
+    <StatusBar settingsService={settingsService} liveStreamingSpeed={{ tps: 52.4, ttftMs: 300 }} />,
+  );
+  const output = lastFrame() ?? '';
+  expect(output).toContain('(52.4 tok/s)');
+});

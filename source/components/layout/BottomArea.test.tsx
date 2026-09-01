@@ -784,3 +784,35 @@ it.sequential('BottomArea renders multiple queued messages in order', async () =
     unmount();
   });
 });
+
+it.sequential('BottomArea renders live streaming speed during processing, thinking, and tool calling', async () => {
+  // 1. Processing with live speed
+  const { lastFrame: frame1, unmount: unmount1 } = await renderBottomArea({
+    ...baseProps,
+    isProcessing: true,
+    liveStreamingSpeed: { tps: 45.8 },
+  });
+  expect(frame1() ?? '').toContain('generating (45.8 tok/s)');
+  act(() => unmount1());
+
+  // 2. Thinking with live speed
+  const { lastFrame: frame2, unmount: unmount2 } = await renderBottomArea({
+    ...baseProps,
+    isProcessing: true,
+    thinkingStartedAt: Date.now() - 3000,
+    liveStreamingSpeed: { tps: 30.5 },
+  });
+  expect(frame2() ?? '').toContain('(30.5 tok/s)');
+  expect(frame2() ?? '').toContain('Thinking...');
+  act(() => unmount2());
+
+  // 3. Tool call with live speed
+  const { lastFrame: frame3, unmount: unmount3 } = await renderBottomArea({
+    ...baseProps,
+    isProcessing: true,
+    toolCallStreamingInfo: { toolName: 'read_file', argumentCharCount: 42 },
+    liveStreamingSpeed: { tps: 60.2 },
+  });
+  expect(frame3() ?? '').toContain('Calling read_file (42 chars · 60.2 tok/s)');
+  act(() => unmount3());
+});

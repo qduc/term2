@@ -11,6 +11,8 @@ export interface NormalizedUsage {
   cache_creation_tokens?: number;
   prompt_ms?: number;
   completion_ms?: number;
+  tokens_per_second?: number;
+  ttft_ms?: number;
 }
 
 export interface UsageAccumulator {
@@ -131,6 +133,9 @@ export function normalizeUsage(usage: any): NormalizedUsage | undefined {
     usage.outputMs,
   );
 
+  const tokensPerSecond = coalesceNumber(usage.tokens_per_second, usage.tokensPerSecond, usage.tps);
+  const ttftMs = coalesceNumber(usage.ttft_ms, usage.ttftMs);
+
   const mapped: NormalizedUsage = {};
   if (promptTokens != null) mapped.prompt_tokens = promptTokens;
   if (completionTokens != null) mapped.completion_tokens = completionTokens;
@@ -140,6 +145,8 @@ export function normalizeUsage(usage: any): NormalizedUsage | undefined {
   if (cacheCreationTokens != null) mapped.cache_creation_tokens = cacheCreationTokens;
   if (promptMs != null) mapped.prompt_ms = promptMs;
   if (completionMs != null) mapped.completion_ms = completionMs;
+  if (tokensPerSecond != null) mapped.tokens_per_second = tokensPerSecond;
+  if (ttftMs != null) mapped.ttft_ms = ttftMs;
 
   return Object.keys(mapped).length > 0 ? mapped : undefined;
 }

@@ -226,6 +226,7 @@ interface StatusBarProps {
   settingsService: SettingsService;
   sshInfo?: SSHInfo;
   lastUsage?: NormalizedUsage | null;
+  liveStreamingSpeed?: { tps: number; ttftMs?: number } | null;
   lastCodexRateLimit?: CodexRateLimitInfo | null;
   grokCreditUsage?: GrokCreditUsage | null;
   openCodeGoUsage?: OpenCodeGoUsage | null;
@@ -245,6 +246,7 @@ const StatusBar: FC<StatusBarProps> = ({
   settingsService,
   sshInfo,
   lastUsage,
+  liveStreamingSpeed,
   lastCodexRateLimit,
   grokCreditUsage,
   openCodeGoUsage,
@@ -302,7 +304,16 @@ const StatusBar: FC<StatusBarProps> = ({
 
   const tokenPieces: string[] = [];
   if (lastUsage?.prompt_tokens != null) tokenPieces.push(`↑${formatStatusBarTokens(lastUsage.prompt_tokens)}`);
-  if (lastUsage?.completion_tokens != null) tokenPieces.push(`↓${formatStatusBarTokens(lastUsage.completion_tokens)}`);
+  if (lastUsage?.completion_tokens != null) {
+    let completionPiece = `↓${formatStatusBarTokens(lastUsage.completion_tokens)}`;
+    const speed = lastUsage.tokens_per_second ?? liveStreamingSpeed?.tps;
+    if (speed != null && speed > 0) {
+      completionPiece += ` (${speed.toFixed(1)} tok/s)`;
+    }
+    tokenPieces.push(completionPiece);
+  } else if (liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0) {
+    tokenPieces.push(`(${liveStreamingSpeed.tps.toFixed(1)} tok/s)`);
+  }
   const tokensText = tokenPieces.join(' ');
 
   const cachePercent =

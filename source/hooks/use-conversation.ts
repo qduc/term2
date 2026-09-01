@@ -131,6 +131,7 @@ export const useConversation = ({
   const {
     thinkingStartedAt,
     toolCallStreamingInfo,
+    liveStreamingSpeed,
     lastUsage,
     lastCodexRateLimit,
     runBudgetNotice,
@@ -316,6 +317,7 @@ export const useConversation = ({
         onStreamingThinkingStarted: (timestamp) => dispatch({ type: 'streaming/thinking_started', timestamp }),
         onStreamingThinkingCleared: () => dispatch({ type: 'streaming/thinking_cleared' }),
         onStreamingToolInfo: (info) => dispatch({ type: 'streaming/tool_info', info }),
+        onStreamingSpeedUpdate: (speed) => dispatch({ type: 'streaming/speed_updated', speed }),
         onAskUserAnswerSubmitted: () => {},
         onAskUserAdvanceToNext: () => {},
         onAskUserGoBack: () => {},
@@ -552,6 +554,7 @@ export const useConversation = ({
     isProcessing,
     thinkingStartedAt,
     toolCallStreamingInfo,
+    liveStreamingSpeed,
     backgroundSubagentTasks: backgroundSubagentTaskState.tasks,
     backgroundSubagentTasksNow: backgroundSubagentTaskState.now,
     backgroundTaskDetails: backgroundTaskDetailsState.tasks,

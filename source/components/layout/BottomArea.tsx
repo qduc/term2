@@ -52,6 +52,7 @@ export type BottomAreaProps = {
   interruptConfirmVisible?: boolean;
   thinkingStartedAt?: number | null;
   toolCallStreamingInfo?: { toolName?: string; argumentCharCount: number } | null;
+  liveStreamingSpeed?: { tps: number; ttftMs?: number } | null;
   isShellMode?: boolean;
   onShellModeEnter?: () => void;
   onShellModeExit?: () => void;
@@ -136,6 +137,7 @@ const BottomArea: FC<BottomAreaProps> = ({
   interruptConfirmVisible = false,
   thinkingStartedAt = null,
   toolCallStreamingInfo = null,
+  liveStreamingSpeed = null,
   isShellMode = false,
   onShellModeEnter,
   onShellModeExit,
@@ -370,14 +372,28 @@ const BottomArea: FC<BottomAreaProps> = ({
             {isProcessing && toolCallStreamingInfo && (
               <Text color={COLOR_TEXT_SUBTLE}>
                 Calling {toolCallStreamingInfo.toolName ? <Text bold>{toolCallStreamingInfo.toolName}</Text> : 'tool'} (
-                {toolCallStreamingInfo.argumentCharCount} chars){'.'.repeat(dotCount)}
+                {toolCallStreamingInfo.argumentCharCount} chars
+                {liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0
+                  ? ` · ${liveStreamingSpeed.tps.toFixed(1)} tok/s`
+                  : ''}
+                ){'.'.repeat(dotCount)}
               </Text>
             )}
             {isProcessing && !toolCallStreamingInfo && thinkingStartedAt != null && (
-              <Text color={COLOR_TEXT_SUBTLE}>Thinking... {thinkingElapsedSeconds}s</Text>
+              <Text color={COLOR_TEXT_SUBTLE}>
+                Thinking... {thinkingElapsedSeconds}s
+                {liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0
+                  ? ` (${liveStreamingSpeed.tps.toFixed(1)} tok/s)`
+                  : ''}
+              </Text>
             )}
             {isProcessing && !toolCallStreamingInfo && thinkingStartedAt == null && (
-              <Text color={COLOR_TEXT_SUBTLE}>processing{'.'.repeat(dotCount)}</Text>
+              <Text color={COLOR_TEXT_SUBTLE}>
+                {liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0
+                  ? `generating (${liveStreamingSpeed.tps.toFixed(1)} tok/s)`
+                  : 'processing'}
+                {'.'.repeat(dotCount)}
+              </Text>
             )}
             {interruptConfirmVisible && <Text color={COLOR_WARNING}>Press ESC again to interrupt</Text>}
             <BackgroundTasksPanel
@@ -456,6 +472,7 @@ const BottomArea: FC<BottomAreaProps> = ({
         settingsService={settingsService}
         sshInfo={sshInfo}
         lastUsage={lastUsage}
+        liveStreamingSpeed={liveStreamingSpeed}
         lastCodexRateLimit={lastCodexRateLimit}
         runBudgetNotice={runBudgetNotice}
         grokCreditUsage={grokCreditUsage}

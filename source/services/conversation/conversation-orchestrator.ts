@@ -1367,6 +1367,7 @@ export class ConversationOrchestrator {
         loggingService: this.config.loggingService,
         setLastUsage: (usage) => this.config.ui.onUsageUpdate(usage),
         setCodexRateLimit: (rateLimit) => this.config.ui.onRateLimitUpdate(rateLimit),
+        setStreamingSpeed: (speed) => this.config.ui.onStreamingSpeedUpdate?.(speed),
         setRunBudgetNotice: (event) => this.config.ui.onRunBudgetNotice?.(event),
         reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
         now: this.config.now,

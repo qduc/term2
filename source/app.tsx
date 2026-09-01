@@ -199,6 +199,7 @@ const App: FC<AppProps> = ({
     isProcessing,
     thinkingStartedAt,
     toolCallStreamingInfo,
+    liveStreamingSpeed,
     backgroundSubagentTasks,
     backgroundSubagentTasksNow,
     backgroundTaskDetails,
@@ -1167,6 +1168,7 @@ const App: FC<AppProps> = ({
             interruptConfirmVisible={interruptConfirmVisible}
             thinkingStartedAt={thinkingStartedAt}
             toolCallStreamingInfo={toolCallStreamingInfo}
+            liveStreamingSpeed={liveStreamingSpeed}
             isShellMode={isShellMode}
             onShellModeEnter={enterShellMode}
             onShellModeExit={exitShellMode}

@@ -79,6 +79,7 @@ export interface ConversationUIState {
   // Streaming indicators
   thinkingStartedAt: number | null;
   toolCallStreamingInfo: { toolName?: string; argumentCharCount: number } | null;
+  liveStreamingSpeed: { tps: number; ttftMs?: number } | null;
 
   // Usage (included here so reset_all can clear them atomically)
   lastUsage: NormalizedUsage | null;
@@ -117,6 +118,7 @@ export type ConversationUIAction =
   | { type: 'streaming/thinking_started'; timestamp: number }
   | { type: 'streaming/thinking_cleared' }
   | { type: 'streaming/tool_info'; info: ConversationUIState['toolCallStreamingInfo'] }
+  | { type: 'streaming/speed_updated'; speed: ConversationUIState['liveStreamingSpeed'] }
 
   // --- Approval flow ---
   /** Approval is required; show the approval prompt. */
@@ -185,6 +187,7 @@ export function createInitialUIState(initialUsage: NormalizedUsage | null): Conv
     composerEntryMode: 'none',
     thinkingStartedAt: null,
     toolCallStreamingInfo: null,
+    liveStreamingSpeed: null,
     lastUsage: initialUsage,
     lastCodexRateLimit: null,
     runBudgetNotice: null,
@@ -334,6 +337,7 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
         turnPhase: { kind: 'processing' },
         thinkingStartedAt: null,
         toolCallStreamingInfo: null,
+        liveStreamingSpeed: null,
       };
 
     case 'turn/completed': {
@@ -352,6 +356,7 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
         ...state,
         turnPhase: nextPhase,
         thinkingStartedAt: null,
+        liveStreamingSpeed: null,
       };
     }
 
@@ -368,6 +373,9 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
 
     case 'streaming/tool_info':
       return { ...state, toolCallStreamingInfo: action.info };
+
+    case 'streaming/speed_updated':
+      return { ...state, liveStreamingSpeed: action.speed };
 
     // --- Approval flow ---
     case 'approval/requested':
@@ -592,6 +600,7 @@ export function conversationUIReducer(state: ConversationUIState, action: Conver
         composerEntryMode: 'none',
         thinkingStartedAt: null,
         toolCallStreamingInfo: null,
+        liveStreamingSpeed: null,
         queueSnapshot: null,
       };
 

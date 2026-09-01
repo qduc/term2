@@ -29,6 +29,21 @@ it('stream retries the same immutable request until exhausted', async () => {
   expect(seen.every((item) => item === request)).toBe(true);
 });
 
+it('does not spend recovery attempts on successful independent continuations', async () => {
+  const underlying: StreamedModelTurn = {
+    async *stream() {
+      yield { type: 'text_delta', text: 'ok' };
+    },
+  };
+  const budget = new RetryRecoveryBudget({ maxPhysicalAttempts: 1 });
+  const model = new RetryingModel(underlying, { retryAttempts: 2, sleep: async () => {} });
+
+  await collect(model.stream({ ...request, recoveryBudget: budget }));
+  await collect(model.stream({ ...request, recoveryBudget: budget }));
+
+  expect(budget.physicalAttempts).toBe(0);
+});
+
 it('stream does not replay a request with an ambiguous provider outcome', async () => {
   let calls = 0;
   const underlying: StreamedModelTurn = {
@@ -197,9 +212,10 @@ it('stream raises the typed budget-exhausted error, with the triggering failure 
   expect(error).toBeInstanceOf(RetryRecoveryBudgetExhaustedError);
   expect((error as RetryRecoveryBudgetExhaustedError).cause).toBeInstanceOf(Error);
   expect((error as Error & { cause?: Error }).cause?.message).toBe('upstream unavailable');
-  // One physical dispatch consumed the entire budget; the wrapper must not
-  // dispatch a second one it can no longer account for.
-  expect(calls).toBe(1);
+  // The initial dispatch is ordinary work. Only the retry after its failure
+  // consumes a recovery physical-attempt claim.
+  expect(calls).toBe(2);
+  expect(budget.physicalAttempts).toBe(1);
 });
 
 it('RetryingModel does not expose getResponse when the wrapped model has none', () => {

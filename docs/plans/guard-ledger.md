@@ -23,6 +23,12 @@ Provider or run-loop changes require the provider black-box suite.
 
 ## Resume here
 
+The retry/recovery budget contract is that ordinary successful tool-loop
+continuations do not consume the physical recovery-attempt allowance. Recovery
+handlers claim the physical dispatch when they schedule a `retry_fresh` plan,
+while `RetryingModel` claims only its own post-failure provider retries. The
+regression is covered by `source/providers/retrying-model.test.ts`.
+
 Discovery is done and **it did not pay**. Five keyword sweeps produced 3,738 raw
 hits across ~150 non-test files and ~30 enforcement owners; 260 non-test `throw
 new` sites were enumerated and traced. That yielded exactly **one** confirmed
@@ -1117,13 +1123,13 @@ Guard class: containment budget (wall time / physical-attempt count / replay
   (automatic full-history replay) is allowed to fire.
 Enforcement owner: RetryRecoveryBudget (source/services/retry/
   retry-recovery-budget.ts) is the sole budget instance/owner for a logical
-  turn. RetryingModel.stream() claims a physical attempt
-  (claimPhysicalAttempt()) before every physical dispatch to the underlying
-  provider -- including the turn's very first dispatch, and including
-  RetryingModel's own internal backoff-retry loop for upstream errors that
-  never surface to the session layer. InitialTurnRecoveryHandler and
-  ContinuationRecoveryHandler each claim the single automatic replay
-  (claimAutomaticReplay()) before executing a retry_fresh recovery plan, and
+  turn. InitialTurnRecoveryHandler and ContinuationRecoveryHandler claim one
+  physical attempt (claimPhysicalAttempt()) when they execute a retry_fresh
+  recovery plan. RetryingModel.stream() claims additional physical attempts
+  only for its own post-failure backoff-retry loop; the first dispatch and
+  successful tool-call continuations are ordinary work and do not consume the
+  recovery allowance. Both recovery handlers also claim the single automatic
+  replay (claimAutomaticReplay()) before executing a retry_fresh recovery plan, and
   start the 90s clock lazily (noteRetryableFailure(), on first retryable
   failure, not at turn start) for transient/chain_recovery classifications
   only. One RetryRecoveryBudget instance is shared for the whole logical
@@ -1218,10 +1224,8 @@ Retry, fallback, and provider-continuity semantics:
   failures are excluded from both noteRetryableFailure() and
   claimAutomaticReplay() so they retry independently up to their own
   maxModelRetries -- but each model_retry-driven replay_turn redispatch
-  still consumes one physical-attempt claim from the same shared budget,
-  since RetryingModel claims unconditionally before every physical dispatch
-  regardless of classification kind, so model_retry is bounded by
-  min(maxModelRetries, remaining physical attempts), not fully exempt.
+  does not consume a physical-attempt claim: model_retry is excluded from the
+  transport-recovery envelope and remains bounded by its own maxModelRetries.
 Observability fields: retry_exhausted ConversationEvent carries provider,
   errorKind, attempts, maxAttempts, message, canRetry.
   provider.response.failed structured evidence (via classifyProviderFailure)

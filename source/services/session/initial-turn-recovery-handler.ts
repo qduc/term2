@@ -190,7 +190,10 @@ export class InitialTurnRecoveryHandler {
     // transport_downgrade) draws against the automatic-replay budget.
     // replay_turn is produced exclusively by model_retry, which is excluded
     // for the same reason noted above.
-    if (plan.kind === 'retry_fresh' && !attempt.recoveryBudget.claimAutomaticReplay()) {
+    if (
+      plan.kind === 'retry_fresh' &&
+      (!attempt.recoveryBudget.claimAutomaticReplay() || !attempt.recoveryBudget.claimPhysicalAttempt())
+    ) {
       // Refusing the plan must still go through the same settlement path a
       // normal termination does -- open tool calls settle truthfully (not as
       // blind failures), and the chain is cleared so the next turn cannot

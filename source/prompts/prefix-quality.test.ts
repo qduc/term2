@@ -7,6 +7,7 @@ import { getAgentDefinition } from '../agent.js';
 import { createMockSettingsService } from '../services/settings/settings-service.mock.js';
 import { PLAN_MODE_ENTER_NOTICE, primePlanModeNoticeIfActive } from '../services/mode-notices.js';
 import { buildPromptSpec } from './prompt-constructor.js';
+import { resolveProfile } from '../services/profiles/index.js';
 
 const mockLogger = {
   debug: () => {},
@@ -99,8 +100,8 @@ it('instruction prefix stays on the stub in both modes; the workflow rides on th
 });
 
 it('product-controlled prefix does not attach the Plan Mode workflow file', () => {
-  const standard = buildPromptSpec({ model: 'gpt-4o', liteMode: false, planMode: false });
-  const plan = buildPromptSpec({ model: 'gpt-4o', liteMode: false, planMode: true });
+  const standard = buildPromptSpec({ model: 'gpt-4o', profile: resolveProfile('builtin:standard') });
+  const plan = buildPromptSpec({ model: 'gpt-4o', profile: resolveProfile('builtin:plan') });
 
   expect(standard.fragmentFiles).toContain('plan-mode-stub.md');
   expect(standard.fragmentFiles).not.toContain('plan-mode-info.md');

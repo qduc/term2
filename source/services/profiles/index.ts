@@ -3,3 +3,4 @@ export * from './schema.js';
 export * from './registry.js';
 export * from './resolver.js';
 export * from './legacy-adapter.js';
+export * from './active-profile.js';

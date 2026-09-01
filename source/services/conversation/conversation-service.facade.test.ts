@@ -466,7 +466,10 @@ it('re-primes Plan Mode notice after resetWithNewId when planMode is on', async 
     deps: {
       logger: mockLogger,
       sessionContextService,
-      settingsService: { get: (key: string) => (key === 'app.planMode' ? true : undefined) } as any,
+      settingsService: {
+        get: (key: string) =>
+          key === 'app.activeProfileId' ? 'builtin:plan' : key === 'app.planMode' ? true : undefined,
+      } as any,
     },
   });
 

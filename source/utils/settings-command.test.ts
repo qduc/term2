@@ -180,6 +180,29 @@ it('queues an implicit Plan Mode exit when /settings enables an exclusive mode',
   ]);
 });
 
+it('does not apply the implicit Plan Mode fallback for active profile changes', () => {
+  let planMode = true;
+  const applied: Array<{ key: string; value: unknown }> = [];
+  const command = createSettingsCommand({
+    settingsService: {
+      get: (key: string) => (key === 'app.planMode' ? planMode : false),
+      getDynamic: () => false,
+      isRuntimeModifiable: () => true,
+      setDynamic: (key: string) => {
+        if (key === 'app.activeProfileId') planMode = false;
+        return { status: 'saved' };
+      },
+    } as any,
+    addSystemMessage: () => {},
+    applyRuntimeSetting: (key, value) => applied.push({ key, value }),
+    replaceInput: () => {},
+  });
+
+  command.action('app.activeProfileId builtin:plan');
+
+  expect(applied).toEqual([{ key: 'app.activeProfileId', value: 'builtin:plan' }]);
+});
+
 it('viewing a single setting shows value and source', () => {
   const deps = createDeps({
     values: { 'agent.model': 'gpt-4o' },

@@ -35,7 +35,7 @@ import type { BackgroundSubagentApprovalChannel } from '../../core/index.js';
 import type { QueueStateKind, QueueStateObserver } from './conversation-adapter.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import { createConversationRuntime } from './conversation-runtime-factory.js';
-import { primeActiveModeNoticeIfActive } from '../mode-notices.js';
+import { primeActiveProfileNoticeIfActive } from '../mode-notices.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
 import { ToolCallMarkerStore } from '../../utils/streaming/extract-command-messages.js';
@@ -149,14 +149,9 @@ export class ConversationService {
     });
     this.#runtime = runtime;
     this.#adapter = adapter;
-    primeActiveModeNoticeIfActive(
-      {
-        planMode: Boolean(this.#deps.settingsService?.get('app.planMode')),
-        mentorMode: Boolean(this.#deps.settingsService?.get('app.mentorMode')),
-        orchestratorMode: Boolean(this.#deps.settingsService?.get('app.orchestratorMode')),
-      },
-      (text) => this.queueModeNotice(text),
-    );
+    if (this.#deps.settingsService) {
+      primeActiveProfileNoticeIfActive(this.#deps.settingsService, (text) => this.queueModeNotice(text));
+    }
   }
 
   setEventSink(sink: ConversationEventSink | null): void {
@@ -268,14 +263,9 @@ export class ConversationService {
     if (this.#retryCallback) {
       this.#runtime.settings.setRetryCallback(this.#retryCallback);
     }
-    primeActiveModeNoticeIfActive(
-      {
-        planMode: Boolean(this.#deps.settingsService?.get('app.planMode')),
-        mentorMode: Boolean(this.#deps.settingsService?.get('app.mentorMode')),
-        orchestratorMode: Boolean(this.#deps.settingsService?.get('app.orchestratorMode')),
-      },
-      (text) => this.queueModeNotice(text),
-    );
+    if (this.#deps.settingsService) {
+      primeActiveProfileNoticeIfActive(this.#deps.settingsService, (text) => this.queueModeNotice(text));
+    }
   }
 
   #logSink: ((event: LogEvent) => void) | null = null;

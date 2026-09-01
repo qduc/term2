@@ -26,7 +26,8 @@ import { ConversationConfigurationService } from './services/runtime-setting-rou
 import { useShellMode } from './hooks/use-shell-mode.js';
 import { ShellInteractionSession, type SSHInfo } from './services/shell/shell-interaction-session.js';
 import { useAppCommands } from './hooks/use-app-commands.js';
-import { type PendingModeSwitch, EXCLUSIVE_MODE_KEYS } from './commands/mode-commands.js';
+import type { PendingModeSwitch } from './commands/mode-commands.js';
+import { ProfileTransitionService } from './services/profiles/profile-transition.js';
 import { useHandoffFlow } from './hooks/use-handoff-flow.js';
 import { useTerminalFocusNotifier } from './hooks/use-terminal-focus-notifier.js';
 import { useAppKeyboardShortcuts } from './hooks/use-app-keyboard-shortcuts.js';
@@ -309,6 +310,15 @@ const App: FC<AppProps> = ({
       }),
     [setModel, setReasoningEffort, setTemperature, conversationService, settingsService],
   );
+  const profileTransitionService = useMemo(
+    () =>
+      new ProfileTransitionService({
+        settingsService,
+        rebuildAgent: () => setModel(settingsService.get('agent.model')),
+        queueModeNotice: (text) => conversationService.queueModeNotice(text),
+      }),
+    [setModel, conversationService, settingsService],
+  );
   const applyRuntimeSetting = useCallback(
     (key: string, value: unknown) => configurationService.applyRuntimeSetting(key, value),
     [configurationService],
@@ -365,6 +375,7 @@ const App: FC<AppProps> = ({
     controller,
     settingsService,
     applyRuntimeSetting,
+    queueModeNotice: (text) => conversationService.queueModeNotice(text),
     setModel,
     configurationService,
   });
@@ -443,22 +454,13 @@ const App: FC<AppProps> = ({
 
   const handleModeSwitchConfirm = useCallback(async () => {
     if (!pendingModeSwitch) return;
-    const { modeKey, modeLabel, targetValue, enabledDetail } = pendingModeSwitch;
+    const { targetProfileId, modeLabel, targetValue, enabledDetail } = pendingModeSwitch;
     setPendingModeSwitch(null);
     await clearConversationAndRefreshBanner();
-    if (targetValue) {
-      for (const key of EXCLUSIVE_MODE_KEYS) {
-        if (key !== modeKey && settingsService.get(key)) {
-          settingsService.set(key, false);
-          applyRuntimeSetting(key, false);
-        }
-      }
-    }
-    settingsService.set(modeKey, targetValue);
-    applyRuntimeSetting(modeKey, targetValue);
+    profileTransitionService.activate(targetProfileId);
     addSystemMessage('Welcome to term²! Type a message to start chatting.');
     addSystemMessage(`${modeLabel} mode ${targetValue ? `enabled${enabledDetail ?? ''}` : 'disabled'}`);
-  }, [pendingModeSwitch, clearConversationAndRefreshBanner, settingsService, applyRuntimeSetting, addSystemMessage]);
+  }, [pendingModeSwitch, clearConversationAndRefreshBanner, profileTransitionService, addSystemMessage]);
 
   const handleModeSwitchDecline = useCallback(() => {
     setPendingModeSwitch(null);
@@ -716,6 +718,7 @@ const App: FC<AppProps> = ({
 
   const { slashCommands, cycleAppModes } = useAppCommands({
     settingsService,
+    transitionService: profileTransitionService,
     addSystemMessage,
     applyRuntimeSetting,
     replaceInput,

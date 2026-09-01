@@ -20,7 +20,7 @@ import { NonInteractiveApprovalPolicy } from './services/approval/non-interactiv
 import type { HookLifecyclePort } from './services/hooks/hook-service.js';
 import type { HookEventFactory } from './services/hooks/hook-event-factory.js';
 import { pruneStaleTempArtifacts } from './utils/shell/temp-sweep.js';
-import { primeActiveModeNoticeIfActive } from './services/mode-notices.js';
+import { primeActiveProfileNoticeIfActive } from './services/mode-notices.js';
 
 export interface NonInteractiveConfig {
   prompt: string;
@@ -325,14 +325,11 @@ export async function runNonInteractive(
       hookEvents: config.hookEvents ?? clientHandle.hookEvents,
     });
     runtime = createdRuntime.runtime;
-    primeActiveModeNoticeIfActive(
-      {
-        planMode: Boolean(config.settingsService?.get('app.planMode')),
-        mentorMode: Boolean(config.settingsService?.get('app.mentorMode')),
-        orchestratorMode: Boolean(config.settingsService?.get('app.orchestratorMode')),
-      },
-      (text) => createdRuntime.runtime.state.queueModeNotice(text),
-    );
+    if (config.settingsService) {
+      primeActiveProfileNoticeIfActive(config.settingsService, (text) => {
+        createdRuntime.runtime.state.queueModeNotice(text);
+      });
+    }
     if (config.hookLifecycle && clientHandle.hookEvents) {
       await config.hookLifecycle.emit(
         clientHandle.hookEvents.create('session.start', {

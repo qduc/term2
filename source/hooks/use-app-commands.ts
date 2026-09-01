@@ -2,7 +2,12 @@ import { useMemo } from 'react';
 import type { SlashCommand } from '../slash-commands.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
 import type { UserTurn } from '../types/user-turn.js';
-import { useModeHelpers, createModeToggleCommand, type PendingModeSwitch } from '../commands/mode-commands.js';
+import {
+  useModeHelpers,
+  createModeToggleCommand,
+  createProfileCommand,
+  type PendingModeSwitch,
+} from '../commands/mode-commands.js';
 import { createCopySlashCommand } from '../commands/copy-command.js';
 import { createUsageSlashCommand } from '../commands/usage-command.js';
 import { createClearSlashCommand } from '../commands/clear-command.js';
@@ -25,9 +30,11 @@ import type { CopySelection } from '../utils/copy-selections.js';
 import type { RewindItem } from '../utils/conversation/rewind-items.js';
 import { createResumeSlashCommand } from '../commands/resume-command.js';
 import type { ConversationListEntry } from '../services/conversation/conversation-persistence.js';
+import type { ProfileTransitionService } from '../services/profiles/profile-transition.js';
 
 interface UseAppCommandsProps {
   settingsService: SettingsService;
+  transitionService: ProfileTransitionService;
   addSystemMessage: (text: string) => void;
   applyRuntimeSetting: (key: string, value: any) => void;
   replaceInput: (input: string) => void;
@@ -67,6 +74,7 @@ export { createRetryToolSlashCommand } from '../commands/retry-tool-command.js';
 
 export const useAppCommands = ({
   settingsService,
+  transitionService,
   addSystemMessage,
   applyRuntimeSetting,
   replaceInput,
@@ -94,9 +102,9 @@ export const useAppCommands = ({
   listConversations,
   resumeConversation,
 }: UseAppCommandsProps) => {
-  const { disableOtherModes, togglePlanMode, cycleAppModes } = useModeHelpers({
+  const { togglePlanMode, cycleAppModes } = useModeHelpers({
     settingsService,
-    applyRuntimeSetting,
+    transitionService,
     addSystemMessage,
   });
 
@@ -160,41 +168,40 @@ export const useAppCommands = ({
       guardBusyTurn(createRetryFailedTurnSlashCommand({ retryLastFailedTurn, addSystemMessage })),
       guardBusyTurn(createCompactSlashCommand({ compactContext, addSystemMessage })),
       createModeToggleCommand(
-        'app.liteMode',
+        'lite',
         'lite',
         'Toggle lite mode (minimal context, session-only)',
         ' - using minimal prompt, no codebase context',
         {
           settingsService,
-          applyRuntimeSetting,
+          transitionService,
           addSystemMessage,
-          disableOtherModes,
           messages,
           requestModeSwitchConfirm,
         },
       ),
       createModeToggleCommand(
-        'app.mentorMode',
+        'mentor',
         'mentor',
         'Toggle mentor mode (collaborative mode with mentor model)',
         ' - using simplified mentor prompt and ask_mentor tool',
         {
           settingsService,
-          applyRuntimeSetting,
+          transitionService,
           addSystemMessage,
-          disableOtherModes,
+          messages,
         },
       ),
       createModeToggleCommand(
-        'app.orchestratorMode',
+        'orchestrator',
         'orchestrator',
         'Toggle orchestrator mode (delegate all tool-backed work)',
         ' - tool-backed work must use subagents',
         {
           settingsService,
-          applyRuntimeSetting,
+          transitionService,
           addSystemMessage,
-          disableOtherModes,
+          messages,
         },
       ),
       createAutoApproveSlashCommand({ settingsService, applyRuntimeSetting, addSystemMessage, replaceInput }),
@@ -206,6 +213,7 @@ export const useAppCommands = ({
           return true;
         },
       },
+      createProfileCommand({ settingsService, transitionService, addSystemMessage }),
       createHandoffSlashCommand({ messages, addSystemMessage, onHandoff }),
       createGuardedSettingsCommand({
         settingsService,
@@ -231,13 +239,13 @@ export const useAppCommands = ({
     addSystemMessage,
     applyRuntimeSetting,
     clearConversation,
-    disableOtherModes,
     exit,
     getSessionUsage,
     refreshProviderUsage,
     messages,
     replaceInput,
     settingsService,
+    transitionService,
     getRewindItems,
     rewindToTarget,
     restoreTurnToInput,

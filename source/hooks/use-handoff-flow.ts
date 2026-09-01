@@ -17,6 +17,7 @@ export type UseHandoffFlowOptions = {
   settingsService: SettingsService;
   applyRuntimeSetting: (key: string, value: unknown) => void;
   setModel: (model: string) => void;
+  queueModeNotice: (text: string) => void;
   configurationService?: ConversationConfigurationService;
 };
 
@@ -55,6 +56,7 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
     settingsService,
     applyRuntimeSetting,
     setModel,
+    queueModeNotice,
     configurationService,
   } = deps;
 
@@ -67,6 +69,7 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
         settingsService,
         applyRuntimeSetting,
         setModel,
+        queueModeNotice,
         configurationService,
       }),
     [
@@ -76,6 +79,7 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
       settingsService,
       applyRuntimeSetting,
       setModel,
+      queueModeNotice,
       configurationService,
     ],
   );

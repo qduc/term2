@@ -3,6 +3,7 @@ import { parseModelProviderArg } from '../../utils/ai/model-provider-arg.js';
 import type { SettingsService } from '../settings/settings-service.js';
 import type { ConversationConfigurationService } from '../runtime-setting-router.js';
 import { resolveActiveEnforcement } from '../profiles/index.js';
+import { ProfileTransitionService } from '../profiles/profile-transition.js';
 import {
   handoffFlowReducer,
   createInitialHandoffState,
@@ -18,6 +19,7 @@ export type HandoffSessionDeps = {
   settingsService: SettingsService;
   applyRuntimeSetting: (key: string, value: unknown) => void;
   setModel: (model: string) => void;
+  queueModeNotice: (text: string) => void;
   configurationService?: ConversationConfigurationService;
 };
 
@@ -28,10 +30,16 @@ export type HandoffSessionDeps = {
 export class HandoffSession {
   #state: HandoffState | null = createInitialHandoffState();
   readonly #deps: HandoffSessionDeps;
+  readonly #transitionService: ProfileTransitionService;
   readonly #listeners = new Set<(state: HandoffState | null) => void>();
 
   constructor(deps: HandoffSessionDeps) {
     this.#deps = deps;
+    this.#transitionService = new ProfileTransitionService({
+      settingsService: deps.settingsService,
+      rebuildAgent: () => deps.setModel(deps.settingsService.get('agent.model')),
+      queueModeNotice: deps.queueModeNotice,
+    });
   }
 
   getState(): HandoffState | null {
@@ -125,7 +133,7 @@ export class HandoffSession {
   async confirmStandardMode(): Promise<boolean> {
     const state = this.#state;
     if (!state) return false;
-    this.#applyRuntimeSetting('app.activeProfileId', 'builtin:standard');
+    this.#transitionService.activate('builtin:standard');
     this.#deps.addSystemMessage('Plan mode disabled - switched to Standard mode');
     return this.#sendAndFinish(state);
   }

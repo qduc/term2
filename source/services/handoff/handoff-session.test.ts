@@ -10,6 +10,7 @@ const makeSession = (overrides: Record<string, unknown> = {}) => {
     settingsService,
     applyRuntimeSetting: vi.fn(),
     setModel: vi.fn(),
+    queueModeNotice: vi.fn(),
   });
   return { session, settingsService };
 };

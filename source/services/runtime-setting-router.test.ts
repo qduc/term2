@@ -14,20 +14,22 @@ const makeService = (overrides: Record<string, unknown> = {}) => {
     setDynamicTransaction: vi.fn(),
     setPersistentDynamic: vi.fn(),
     reset: vi.fn(),
+    set: vi.fn(),
     isRuntimeModifiable: vi.fn(() => true),
     getDynamic: vi.fn(() => 'default'),
     get: vi.fn(() => 'current-model'),
     ...overrides,
   } as any;
   const conversationService = { switchProvider: vi.fn(), queueModeNotice: vi.fn() };
+  const setModel = vi.fn();
   const service = new ConversationConfigurationService({
     settingsService,
     conversationService,
-    setModel: vi.fn(),
+    setModel,
     setReasoningEffort: vi.fn(),
     setTemperature: vi.fn(),
   });
-  return { service, settingsService, conversationService };
+  return { service, settingsService, conversationService, setModel };
 };
 
 it('applies all runtime changes through one settings transaction before runtime effects', () => {
@@ -97,4 +99,28 @@ it('queues the plan-mode exit notice when another exclusive mode implicitly turn
   service.apply([{ key: 'app.liteMode', value: true, persistence: 'runtime' }]);
 
   expect(conversationService.queueModeNotice).toHaveBeenCalledWith(PLAN_MODE_EXIT_NOTICE);
+});
+
+it('activating the plan profile queues its notice without rebuilding the agent', () => {
+  const { service, settingsService, conversationService, setModel } = makeService({
+    get: vi.fn((key: string) => (key === 'app.activeProfileId' ? 'builtin:standard' : 'gpt-4o')),
+  });
+
+  service.apply([{ key: 'app.activeProfileId', value: 'builtin:plan', persistence: 'runtime' }]);
+
+  expect(conversationService.queueModeNotice).toHaveBeenCalledWith(PLAN_MODE_ENTER_NOTICE);
+  expect(setModel).not.toHaveBeenCalled();
+  expect(settingsService.set).toHaveBeenCalledWith('app.activeProfileId', 'builtin:plan');
+});
+
+it('activating the mentor profile rebuilds the agent and queues its notice', () => {
+  const { service, settingsService, conversationService, setModel } = makeService({
+    get: vi.fn((key: string) => (key === 'app.activeProfileId' ? 'builtin:standard' : 'gpt-4o')),
+  });
+
+  service.apply([{ key: 'app.activeProfileId', value: 'builtin:mentor', persistence: 'runtime' }]);
+
+  expect(setModel).toHaveBeenCalledWith('gpt-4o');
+  expect(conversationService.queueModeNotice).toHaveBeenCalledWith(MENTOR_MODE_ENTER_NOTICE);
+  expect(settingsService.set).toHaveBeenCalledWith('app.activeProfileId', 'builtin:mentor');
 });

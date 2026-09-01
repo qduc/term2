@@ -857,6 +857,7 @@ it('runNonInteractive prefixes Plan Mode workflow onto the first turn when planM
   const logger: any = createNoopLogger();
   const settingsService: any = {
     get(key: string) {
+      if (key === 'app.activeProfileId') return 'builtin:plan';
       if (key === 'app.planMode') return true;
       return undefined;
     },

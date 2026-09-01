@@ -39,6 +39,7 @@ type HarnessProps = {
   settingsService: { set: (key: string, value: unknown) => void; get: (key: string) => unknown };
   applyRuntimeSetting: (key: string, value: unknown) => void;
   setModel: (model: string) => void;
+  queueModeNotice: (text: string) => void;
   controller: MenuController;
 };
 
@@ -52,6 +53,7 @@ const createDeps = () => {
   };
   const applyRuntimeSetting = vi.fn();
   const setModel = vi.fn();
+  const queueModeNotice = vi.fn();
   const controller: MenuController = new MenuControllerImpl({
     triggerRegistry: createDefaultTriggerRegistry([modelSlashCommand], ['command-model']),
   });
@@ -63,6 +65,7 @@ const createDeps = () => {
     settingsService,
     applyRuntimeSetting,
     setModel,
+    queueModeNotice,
     controller,
   };
 };
@@ -82,6 +85,7 @@ const Harness = ({
   settingsService,
   applyRuntimeSetting,
   setModel,
+  queueModeNotice,
   controller,
 }: HarnessProps) => {
   const hook = useHandoffFlow({
@@ -93,6 +97,7 @@ const Harness = ({
     settingsService: settingsService as any,
     applyRuntimeSetting,
     setModel,
+    queueModeNotice,
   });
 
   const hookRef = useRef(hook);
@@ -440,7 +445,7 @@ it.sequential(
 it.sequential('when in plan mode, declineHandoff transitions to confirm_standard_mode stage', async () => {
   const { deps, getSnapshot, renderer } = await renderHarness();
   deps.settingsService.get.mockImplementation((key: string) => {
-    if (key === 'app.planMode') return true;
+    if (key === 'app.activeProfileId') return 'builtin:plan';
     return undefined;
   });
 
@@ -468,8 +473,7 @@ it.sequential('when in plan mode, declineHandoff transitions to confirm_standard
   });
   await flush();
 
-  expect(deps.settingsService.set).toHaveBeenCalledWith('app.planMode', false);
-  expect(deps.applyRuntimeSetting).toHaveBeenCalledWith('app.planMode', false);
+  expect(deps.settingsService.set).toHaveBeenCalledWith('app.activeProfileId', 'builtin:standard');
   expect(deps.addSystemMessage).toHaveBeenCalledWith('Plan mode disabled - switched to Standard mode');
   expect(deps.sendUserMessage).toHaveBeenCalledWith({ text: 'Implement this:\n\nCaptured text' });
   expect(getSnapshot().handoffState).toBeNull();
@@ -484,7 +488,7 @@ it.sequential(
   async () => {
     const { deps, getSnapshot, renderer } = await renderHarness();
     deps.settingsService.get.mockImplementation((key: string) => {
-      if (key === 'app.planMode') return true;
+      if (key === 'app.activeProfileId') return 'builtin:plan';
       return undefined;
     });
 

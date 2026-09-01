@@ -8,6 +8,158 @@ async function collect(stream: AsyncIterable<unknown>) {
   return events;
 }
 
+function modelFor(parts: readonly unknown[]) {
+  return createAiSdkStreamedModel({
+    provider: 'example',
+    modelId: 'model',
+    specificationVersion: 'v3',
+    supportedUrls: {},
+    async doGenerate() {
+      return {} as unknown as Awaited<ReturnType<LanguageModelV3['doGenerate']>>;
+    },
+    async doStream() {
+      return {
+        stream: (async function* () {
+          yield { type: 'response-metadata', id: 'response-test' };
+          yield* parts;
+        })(),
+      } as unknown as Awaited<ReturnType<LanguageModelV3['doStream']>>;
+    },
+  } as unknown as LanguageModelV3);
+}
+
+const testRequest = { input: [], tools: [] } as const;
+
+it.each([
+  ['a single space', ' '],
+  ['four whitespace characters', '  \n\t'],
+])('holds %s until a retryable provider error and emits no committed event', async (_label, whitespace) => {
+  const error = Object.assign(new Error('upstream unavailable'), { status: 502 });
+  await expect(
+    collect(
+      modelFor([
+        { type: 'text-delta', delta: whitespace },
+        { type: 'error', error },
+      ]).stream(testRequest),
+    ),
+  ).rejects.toBe(error);
+});
+
+it('keeps an empty non-material frame from flushing leading whitespace before an error', async () => {
+  const error = Object.assign(new Error('upstream unavailable'), { status: 502 });
+  await expect(
+    collect(
+      modelFor([
+        { type: 'text-delta', delta: ' ' },
+        { type: 'text-delta', delta: '' },
+        { type: 'error', error },
+      ]).stream(testRequest),
+    ),
+  ).rejects.toBe(error);
+});
+
+it('does not commit leading whitespace before a non-retryable provider error either', async () => {
+  const error = Object.assign(new Error('invalid request'), { status: 400 });
+  await expect(
+    collect(
+      modelFor([
+        { type: 'text-delta', delta: ' ' },
+        { type: 'error', error },
+      ]).stream(testRequest),
+    ),
+  ).rejects.toBe(error);
+});
+
+it('flushes leading whitespace before subsequent material text and preserves it', async () => {
+  const events = await collect(
+    modelFor([
+      { type: 'text-delta', delta: ' ' },
+      { type: 'text-delta', delta: 'hello' },
+      { type: 'finish', finishReason: { unified: 'stop' }, usage: { inputTokens: {}, outputTokens: {} } },
+    ]).stream(testRequest),
+  );
+  expect(events).toEqual([
+    { type: 'text_delta', text: ' ' },
+    { type: 'text_delta', text: 'hello' },
+    expect.objectContaining({
+      type: 'completion',
+      output: [{ type: 'message', content: [{ type: 'text', text: ' hello' }] }],
+    }),
+  ]);
+});
+
+it('flushes leading whitespace before a successful finish', async () => {
+  const events = await collect(
+    modelFor([
+      { type: 'text-delta', delta: ' ' },
+      { type: 'finish', finishReason: { unified: 'stop' }, usage: { inputTokens: {}, outputTokens: {} } },
+    ]).stream(testRequest),
+  );
+  expect(events).toEqual([
+    { type: 'text_delta', text: ' ' },
+    expect.objectContaining({
+      type: 'completion',
+      output: [{ type: 'message', content: [{ type: 'text', text: ' ' }] }],
+    }),
+  ]);
+});
+
+it('does not buffer a fifth leading whitespace character', async () => {
+  const iterator = modelFor([
+    { type: 'text-delta', delta: '    ' },
+    { type: 'text-delta', delta: ' ' },
+    { type: 'error', error: Object.assign(new Error('upstream unavailable'), { status: 502 }) },
+  ])
+    .stream(testRequest)
+    [Symbol.asyncIterator]();
+  await expect(iterator.next()).resolves.toEqual({ value: { type: 'text_delta', text: '    ' }, done: false });
+  await expect(iterator.next()).resolves.toEqual({ value: { type: 'text_delta', text: ' ' }, done: false });
+  await expect(iterator.next()).rejects.toMatchObject({ status: 502 });
+});
+
+it('keeps material text committed before an in-band error', async () => {
+  const iterator = modelFor([
+    { type: 'text-delta', delta: 'hello' },
+    { type: 'text-delta', delta: ' ' },
+    { type: 'error', error: Object.assign(new Error('upstream unavailable'), { status: 502 }) },
+  ])
+    .stream(testRequest)
+    [Symbol.asyncIterator]();
+  await expect(iterator.next()).resolves.toEqual({ value: { type: 'text_delta', text: 'hello' }, done: false });
+  await expect(iterator.next()).resolves.toEqual({ value: { type: 'text_delta', text: ' ' }, done: false });
+  await expect(iterator.next()).rejects.toMatchObject({ status: 502 });
+});
+
+it('flushes leading whitespace before reasoning and tool materiality', async () => {
+  const reasoningIterator = modelFor([
+    { type: 'text-delta', delta: ' ' },
+    { type: 'reasoning-delta', id: 'thought', delta: 'think' },
+    { type: 'error', error: Object.assign(new Error('upstream unavailable'), { status: 502 }) },
+  ])
+    .stream(testRequest)
+    [Symbol.asyncIterator]();
+  await expect(reasoningIterator.next()).resolves.toEqual({ value: { type: 'text_delta', text: ' ' }, done: false });
+  await expect(reasoningIterator.next()).resolves.toEqual({
+    value: { type: 'reasoning_delta', id: 'thought', text: 'think' },
+    done: false,
+  });
+  await expect(reasoningIterator.next()).rejects.toMatchObject({ status: 502 });
+
+  const toolIterator = modelFor([
+    { type: 'text-delta', delta: ' ' },
+    { type: 'tool-input-delta', id: 'call', delta: '{}' },
+    { type: 'error', error: Object.assign(new Error('upstream unavailable'), { status: 502 }) },
+  ])
+    .stream(testRequest)
+    [Symbol.asyncIterator]();
+  await expect(toolIterator.next()).resolves.toEqual({ value: { type: 'text_delta', text: ' ' }, done: false });
+  await expect(toolIterator.next()).resolves.toEqual({
+    value: { type: 'tool_call_streaming_delta', argumentCharCount: 2 },
+    done: false,
+  });
+  await expect(toolIterator.next()).rejects.toMatchObject({ status: 502 });
+});
+
 it('translates one application turn to an AI SDK stream and publishes its authoritative completion', async () => {
   let seenOptions: LanguageModelV3CallOptions | undefined;
   const signal = new AbortController().signal;

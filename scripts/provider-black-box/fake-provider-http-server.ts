@@ -10,6 +10,7 @@ export type FakeProviderScenario =
   | 'incomplete'
   | 'tool-fragments'
   | 'reasoning'
+  | 'in-band-error-retry'
   // OpenRouter-style gateways spell chat-completions reasoning `reasoning`
   // rather than `reasoning_content`.
   | 'reasoning-field';
@@ -68,7 +69,7 @@ export async function startFakeProviderHttpServer(options: {
       return;
     }
     res.writeHead(200, { 'content-type': 'text/event-stream', connection: 'close', 'cache-control': 'no-cache' });
-    for (const frame of framesFor(options.protocol ?? 'chat-completions', scenario))
+    for (const frame of framesFor(options.protocol ?? 'chat-completions', scenario, requests.length))
       res.write(`data: ${JSON.stringify(frame)}\n\n`);
     if (scenario !== 'incomplete') res.write('data: [DONE]\n\n');
     res.end();
@@ -143,7 +144,11 @@ function replayTurn(
   res.end();
 }
 
-export function framesFor(protocol: FakeProviderProtocol, scenario: FakeProviderScenario): Record<string, unknown>[] {
+export function framesFor(
+  protocol: FakeProviderProtocol,
+  scenario: FakeProviderScenario,
+  requestNumber = 1,
+): Record<string, unknown>[] {
   if (protocol === 'anthropic')
     return [
       {
@@ -192,6 +197,14 @@ export function framesFor(protocol: FakeProviderProtocol, scenario: FakeProvider
     return [
       { id: 'chatcmpl_fake', choices: [{ index: 0, delta: { reasoning: 'Need gateway reasoning.' } }] },
       { id: 'chatcmpl_fake', choices: [{ index: 0, delta: { content: 'hello' }, finish_reason: 'stop' }] },
+    ];
+  if (scenario === 'in-band-error-retry' && requestNumber === 1)
+    return [
+      {
+        id: 'chatcmpl_fake',
+        choices: [{ index: 0, delta: { content: ' ' }, finish_reason: 'error' }],
+      },
+      { error: { code: 502, message: 'Model is at capacity', metadata: { error_type: 'provider_unavailable' } } },
     ];
   if (scenario === 'tool-fragments')
     return [

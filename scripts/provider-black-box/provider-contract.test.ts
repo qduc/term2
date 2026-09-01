@@ -8,6 +8,7 @@ import {
 } from '../../source/providers/registry.js';
 import '../../source/providers/index.js';
 import { createOpenAICompatibleProviderDefinition } from '../../source/providers/openai-compatible.provider.js';
+import { RetryingModel } from '../../source/providers/retrying-model.js';
 import type { ILoggingService, ISettingsService } from '../../source/services/service-interfaces.js';
 import { startFakeProviderHttpServer, type FakeProviderHttpServer } from './fake-provider-http-server.js';
 import { readFixtureEnvelope } from './fixture-envelope.js';
@@ -613,6 +614,26 @@ describe('provider boundary contracts through the registry', () => {
     expect(completion).toMatchObject({
       output: [{ type: 'tool_call', id: 'call_fake', name: 'fixture', arguments: '{"a":1}' }],
     });
+  });
+
+  it('retries an in-band 502 that follows trivial whitespace and succeeds', async () => {
+    const providerCase = providerCases[4]!;
+    server = await startFakeProviderHttpServer({ scenario: 'in-band-error-retry', protocol: providerCase.protocol });
+    const settings = createSettings(providerCase);
+    installOpenAiHttpRedirect(providerCase);
+    registerRuntimeProvider(providerCase, settings);
+
+    const provider = getProvider(providerCase.registryId)!;
+    const providerModel = await provider.createStreamedModel!(providerCase.model, {
+      settingsService: settings,
+      loggingService: quietLogging,
+    });
+    const model = new RetryingModel(providerModel, { retryAttempts: 1, sleep: async () => {} });
+    const events = await collect(model.stream(requestFor(providerCase)));
+
+    expect(events.filter((event) => event.type === 'text_delta')).toEqual([{ type: 'text_delta', text: 'hello' }]);
+    expect(events.at(-1)).toMatchObject({ type: 'completion' });
+    expect(server.requests).toHaveLength(2);
   });
 });
 

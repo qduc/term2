@@ -1,3 +1,19 @@
+## [0.20.0] - 2026-09-01
+
+### Features
+- Added live and settled streaming speed (tokens/sec) to the status bar, with per-request token calibration from actual usage.
+- Added upstream provider name display in the status bar for OpenRouter requests.
+- Added dynamic background-task check-in controls and removed the fixed check-in cap setting.
+- Added image support to `read_file` results.
+
+### Bug Fixes
+- Fixed message ordering around background notifications.
+- Fixed session-browser results to use the session's home workspace and show the workspace scope.
+- Fixed concise command rendering so lone commands remain ungrouped and tool categories are displayed.
+
+### Improvements
+- Shortened session read cursors to reduce context overhead on small models.
+
 ## [0.19.0] - 2026-09-01
 
 ### Features

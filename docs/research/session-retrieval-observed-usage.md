@@ -10,6 +10,143 @@ passed their deterministic outcome oracle. The controlled evidence did not
 show a repeatable quality failure or budget defect, so no session-tool API,
 default, budget, or routing prompt changed.
 
+**2026-09-02 follow-up: eleven new verified sessions, three repeated defect
+patterns, still no product change.** A second naturalistic cohort of eleven
+verified sessions (`2026-08-31`–`2026-09-01`, 60 calls) was added to the
+corpus via `scripts/experiments/session-retrieval-followup-2026-09-02-sessions.json`
+(the frozen seven-session manifest is untouched). The new cohort confirms
+three previously one-off or absent patterns at scale — project-scoping
+silence, cursor unreliability, and corpus-size latency — and each is now
+documented below with its root cause. No API, default, budget, or prompt was
+changed; the three patterns are candidate improvement targets for a future
+controlled phase.
+
+## 2026-09-02 follow-up: eleven verified sessions, 2026-08-31 → 2026-09-01
+
+Method is unchanged from the 2026-08-31 study: `session-retrieval-log-analysis.mjs`
+against the actual persisted conversation JSONL and provider-traffic index,
+with every session passing all three identity checks (filename ==
+`session_init.id`, first persisted user message exists, provider index preview
+matches). The new manifest is
+`scripts/experiments/session-retrieval-followup-2026-09-02-sessions.json`;
+rebuild the follow-up corpus with:
+
+```bash
+node scripts/experiments/session-retrieval-log-analysis.mjs \
+  --sessions scripts/experiments/session-retrieval-followup-2026-09-02-sessions.json \
+  > /tmp/session-retrieval-followup-corpus.json
+```
+
+Eleven sessions, 60 calls: 32 `session_search`, 24 `session_read`, 4
+`session_list`. Tool execution p50 8 ms, p90 6.4 s, maximum 19.9 s (vs. p50
+7 ms / p90 30 ms / max 9.9 s in the seven-session baseline). Serialized result
+size p50 3,672 chars, p90 10,496, max 12,000 (budget-capped). Six error
+outcomes: five `invalid_cursor`, one `not_found` — plus six `session_search`
+calls returning `total: 0` with zero signals that anything was wrong.
+
+| Session | First-user-message identity | Calls | Errors | Outcome |
+| --- | --- | --- | --- | --- |
+| `14c52133` | safe-root-fix doc continuation (`.agents/term2` project) | 1 list, 1 read, 2 search | none | implemented Phase 1 fix; searched its own project, list showed `total: 4` |
+| `2d1522b9` | find compact+rollover issue | 1 list, 2 read, 13 search | none | found coordination bug; **$2.46 retrieval turn**, 6 of 13 searches had match counts 653–6,250 |
+| `341ad874` | check log for model overload error (`.agents/term2`) | 1 list, 2 search | none | agent wrote: search "hit conversation logs, not agent sessions"; pivoted to list, `total: 1` |
+| `6760346e` | orchestrator: implement retry contract | 2 search | none | both searches `total: 0`; completed task from logs/memory instead |
+| `6cd53b32` | rollover briefing (retro-terminal worktree) | 1 read, 2 search | 1 `not_found` | searched twice (`total: 0`), then `session_read` of the exact previous-session ID from the briefing → `not_found` |
+| `6e995939` | continue after rollover request | 2 read, 1 search | none | recovered and merged the rollover guard; both pages of a long-cursor read completed |
+| `6f2959a0` | check last session about incident-retro hardening | 4 read, 1 search | 2 `invalid_cursor` | guessed `cursor: "110"` and `"c120"` (no such handles); agent wrote: "Cursor tokens are opaque" |
+| `9bff1663` | incident retrospective (codex) | 2 search | none | both searches `total: 0`; worked from memory instead |
+| `ad879de3` | upstream-error-retry doc continuation | 6 read, 2 search | 3 `invalid_cursor` | mangled the long base64 cursor twice (e.g. `nexhxTextOfFsx`), dropped `id` once; re-read from scratch |
+| `b6efa566` | "explain the session tools" (tool evaluation, like `6b120f67`) | 1 list, 5 read, 3 search | none | deliberate boundary testing; 1-item page and 11 s cursor page observed |
+| `ccf9f945` | restart/reproduce reliability lanes | 3 read, 2 search | none | clean recovery: read three exact-ID sessions in one page each |
+
+### Pattern 1 — project scoping silently empties the browser (6 zero-hit searches + 1 `not_found`)
+
+All six `total: 0` searches and the one `not_found` across `6760346e`,
+`6cd53b32`, and `9bff1663` share one root cause: the browser resolves its
+corpus from `executionContext.getCwd()` **at call time**, and all three
+sessions had run `enter_worktree` before searching. `browseConversationsForProject`
+keeps only conversations whose persisted `projectPath` equals the caller's
+cwd, so after entering a worktree the browser sees only conversations logged
+in that worktree directory — usually zero. `session_search` then returns
+`total: 0` with `unavailable: 0`, and `session_read` of a main-checkout
+session ID returns `not_found` (project mismatch is folded into `not_found`
+in `loadConversationForProjectReadOnly`). Nothing in any result signals that
+the scope changed. The repro (`SessionBrowser` constructed with the worktree
+path finds the same transcripts fine) confirms the data is present and the
+failure is purely scoping.
+
+This is the strongest new finding: three independent sessions were silently
+blinded to the entire transcript history, and two of them were the most
+retrieval-dependent (an incident retrospective and its rollover continuation
+— the exact-ID read the rollover briefing told the agent to make failed).
+
+### Pattern 2 — cursor failure modes changed but did not disappear
+
+The 2026-08-31 short-cursor fix (`79e7fcee`) replaced long self-contained
+base64url cursors with process-local `c1`-style handles. The new cohort
+shows both regimes:
+
+- `ad879de3` ran pre-fix: the model corrupted the long base64 cursor twice
+  (transcribed `nextTextOffset` as `nexhxTextOfFsx`), dropped `id` once,
+  and got `invalid_cursor` three times before re-reading from scratch.
+- `6f2959a0` ran post-fix: the model **invented** `cursor: "110"` and
+  `cursor: "c120"` instead of copying the returned handle, earning two
+  `invalid_cursor` errors, and wrote "Cursor tokens are opaque; let me walk
+  forward from `c2`".
+
+The fix removed copy-corruption but left an opaque handle the model reasons
+about as if it were an offset. Five `invalid_cursor` outcomes in 24 reads is
+21% read failure across the cohort.
+
+### Pattern 3 — corpus-size latency
+
+Execution time went from a p90 of 30 ms (seven-session baseline, small
+corpus) to a p90 of 6.4 s and a max of 19.9 s. `list`/`search` re-scan and
+re-project every `.jsonl` in the project directory on every call (203 files
+at time of writing); the slow tail is local scanning, not provider latency.
+Seven calls exceeded one second, all in the `/home/qduc/term2` project. The
+2026-08-31 baseline measured the same mechanism at small corpus scale; the
+new cohort shows it is a real scaling problem at current corpus size.
+
+### What the cohort confirms is already good
+
+- **Exact-ID reads with adequate budget are reliable and cheap.**
+  `ccf9f945` recovered three sessions in one page each; `6e995939` paged a
+  83-record session with a correctly copied cursor.
+- **Search match counts and budgets behave as documented.** No
+  `output_budget_exceeded`, no stale cursors in the new cohort; result sizes
+  respect `maxChars`.
+- **The live-session demotion works.** The five `total: 0` searches that
+  would have self-matched the query were not polluted by the live session.
+
+### What the cohort confirms is not good
+
+- **Silent project re-scoping** (Pattern 1) is a defect, not a tuning
+  question: the agent cannot see that its corpus just became empty.
+- **Cursor handles are the wrong abstraction for small models** (Pattern 2):
+  opaque tokens get invented when not copied verbatim.
+- **No-pagination access to the tail of a long session.** `session_read`
+  walks from the start; the 142-record incident session returned one record
+  per page at default budgets (observed in `6f2959a0`/`b6efa566`).
+- **Tool-kind matches crowd out conversation matches** (`341ad874` explicitly
+  complained; `2d1522b9`'s broad searches returned thousands of matches
+  dominated by command output).
+- **Broad browsing is expensive.** `2d1522b9` spent $2.46 in its
+  retrieval-bearing turn on 16 calls, six of them searches with match counts
+  in the hundreds to thousands.
+
+### Follow-up decision
+
+The acceptance bar from the 2026-08-31 study is unchanged: no API/default/
+prompt change from naturalistic logs alone. But the bar has now been met for
+the *scoping* pattern — it is a silent correctness failure in three
+independent sessions, not a quality variance — so the next step is a
+controlled repair cell (fixed model/effort, deterministic oracle) that
+verifies the browser either (a) pins its corpus to the session's home
+project rather than the live cwd, or (b) surfaces the effective scope in
+`list`/`search`/`read` results so a `total: 0` is distinguishable from a
+scope switch. Cursor handles and latency remain candidates; they need one
+more repeated case or a controlled counterfactual before changing.
+
 The acceptance bar remains the one in
 `docs/plans/session-rollover-handoff.md`: multiple task shapes, both rollover
 and ordinary-resume flows, outcome evidence, and concrete failure cases before
@@ -19,9 +156,11 @@ any tuning proposal is accepted.
 
 When asked to revisit this study, do not re-derive the method — extend it:
 
-1. Add newly verified sessions (session tool calls since 2026-08-31) to
-   `scripts/experiments/session-retrieval-baseline-sessions.json`, verified the
-   same way as the existing seven: filename == `session_init.id`, a first
+1. Add newly verified sessions to
+   `scripts/experiments/session-retrieval-followup-2026-09-02-sessions.json`
+   (the 2026-09-02 follow-up cohort; the frozen seven-session baseline in
+   `session-retrieval-baseline-sessions.json` stays untouched), verified the
+   same way as the existing sessions: filename == `session_init.id`, a first
    persisted user message exists, and it matches the provider-traffic index's
    `firstUserMessagePreview`.
 2. Rerun `scripts/experiments/session-retrieval-log-analysis.mjs` against the

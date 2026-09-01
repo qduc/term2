@@ -444,3 +444,196 @@ it.sequential('disposing one transient client does not close a shared streamed m
     unregisterProvider(providerId);
   }
 });
+
+it.sequential('disposes an owned synchronous streamed model exactly once', async () => {
+  const providerId = 'mock-owned-sync-streamed-model-dispose';
+  const close = vi.fn();
+  const model = {
+    close,
+    async *stream() {
+      yield { type: 'completion' as const, responseId: 'owned-sync-response', output: [] };
+    },
+  };
+  const createStreamedModel = vi.fn(() => model);
+  registerProvider(
+    {
+      id: providerId,
+      label: 'Owned synchronous streamed model dispose test provider',
+      createStreamedModel,
+      fetchModels: async () => [],
+    },
+    { allowOverride: true },
+  );
+
+  const client = new AgentClient({
+    providerOverride: providerId,
+    deps: {
+      logger: createMockLogger(),
+      settings: createMockSettings({ 'agent.provider': providerId, 'agent.model': 'owned-model' }),
+      sessionContextService: {
+        runWithContext: <T>(_context: unknown, fn: () => T) => fn(),
+        getContext: () => null,
+      },
+    },
+    toolOwnership: new ToolOwnershipRegistry(),
+  });
+
+  try {
+    const stream = await client.startStream('owned input');
+    await stream.completed;
+    client.dispose();
+    client.dispose();
+    await Promise.resolve();
+
+    expect(createStreamedModel).toHaveBeenCalledTimes(1);
+    expect(close).toHaveBeenCalledTimes(1);
+  } finally {
+    client.dispose();
+    unregisterProvider(providerId);
+  }
+});
+
+it.sequential('disposes an owned promised streamed model after it resolves', async () => {
+  const providerId = 'mock-owned-promised-streamed-model-dispose';
+  let resolveModel!: (model: any) => void;
+  const close = vi.fn();
+  const model = {
+    close,
+    async *stream() {
+      yield { type: 'completion' as const, responseId: 'owned-promised-response', output: [] };
+    },
+  };
+  const modelPromise = new Promise<any>((resolve) => {
+    resolveModel = resolve;
+  });
+  registerProvider(
+    {
+      id: providerId,
+      label: 'Owned promised streamed model dispose test provider',
+      createStreamedModel: () => modelPromise,
+      fetchModels: async () => [],
+    },
+    { allowOverride: true },
+  );
+
+  const client = new AgentClient({
+    providerOverride: providerId,
+    deps: {
+      logger: createMockLogger(),
+      settings: createMockSettings({ 'agent.provider': providerId, 'agent.model': 'owned-model' }),
+      sessionContextService: {
+        runWithContext: <T>(_context: unknown, fn: () => T) => fn(),
+        getContext: () => null,
+      },
+    },
+    toolOwnership: new ToolOwnershipRegistry(),
+  });
+
+  try {
+    const streamPromise = client.startStream('owned input');
+    await Promise.resolve();
+    client.dispose();
+    resolveModel(model);
+    const stream = await streamPromise;
+    await stream.completed;
+    await Promise.resolve();
+    client.dispose();
+
+    expect(close).toHaveBeenCalledTimes(1);
+  } finally {
+    resolveModel(model);
+    client.dispose();
+    unregisterProvider(providerId);
+  }
+});
+
+it.sequential('drops a borrowed promised streamed model without closing it', async () => {
+  const providerId = 'mock-borrowed-promised-streamed-model-dispose';
+  const close = vi.fn();
+  const model = {
+    close,
+    async *stream() {
+      yield { type: 'completion' as const, responseId: 'borrowed-promised-response', output: [] };
+    },
+  };
+  registerProvider(
+    {
+      id: providerId,
+      label: 'Borrowed promised streamed model dispose test provider',
+      createStreamedModel: () => Promise.resolve(model),
+      fetchModels: async () => [],
+    },
+    { allowOverride: true },
+  );
+
+  const client = new AgentClient({
+    agentOverride: { name: 'transient', model: 'borrowed-model', instructions: '', tools: [] },
+    providerOverride: providerId,
+    deps: {
+      logger: createMockLogger(),
+      settings: createMockSettings({ 'agent.provider': providerId, 'agent.model': 'borrowed-model' }),
+      sessionContextService: {
+        runWithContext: <T>(_context: unknown, fn: () => T) => fn(),
+        getContext: () => null,
+      },
+    },
+    toolOwnership: new ToolOwnershipRegistry(),
+  });
+
+  try {
+    const stream = await client.startStream('borrowed input');
+    await stream.completed;
+    client.dispose();
+    await Promise.resolve();
+
+    expect(close).not.toHaveBeenCalled();
+  } finally {
+    client.dispose();
+    unregisterProvider(providerId);
+  }
+});
+
+it.sequential('disposes safely when an owned streamed model promise rejects', async () => {
+  const providerId = 'mock-rejected-streamed-model-dispose';
+  const modelError = new Error('model creation failed');
+  let rejectModel!: (error: Error) => void;
+  const modelPromise = new Promise<any>((_resolve, reject) => {
+    rejectModel = reject;
+  });
+  registerProvider(
+    {
+      id: providerId,
+      label: 'Rejected streamed model dispose test provider',
+      createStreamedModel: () => modelPromise,
+      fetchModels: async () => [],
+    },
+    { allowOverride: true },
+  );
+
+  const client = new AgentClient({
+    providerOverride: providerId,
+    deps: {
+      logger: createMockLogger(),
+      settings: createMockSettings({ 'agent.provider': providerId, 'agent.model': 'rejected-model' }),
+      sessionContextService: {
+        runWithContext: <T>(_context: unknown, fn: () => T) => fn(),
+        getContext: () => null,
+      },
+    },
+    toolOwnership: new ToolOwnershipRegistry(),
+  });
+
+  try {
+    const streamPromise = client.startStream('rejected input');
+    await Promise.resolve();
+    const stream = await streamPromise;
+    client.dispose();
+    rejectModel(modelError);
+    await expect(stream.completed).rejects.toBe(modelError);
+    client.dispose();
+  } finally {
+    rejectModel(modelError);
+    client.dispose();
+    unregisterProvider(providerId);
+  }
+});

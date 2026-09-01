@@ -3,6 +3,7 @@ export type BackgroundTaskObservation =
   | { kind: 'request_dispatched'; at: number }
   | { kind: 'response_started'; at: number }
   | { kind: 'text_received'; at: number }
+  | { kind: 'tool_input_received'; at: number; toolName: string; argumentCharCount: number }
   | { kind: 'tool_started'; at: number; toolName: string }
   | { kind: 'tool_completed'; at: number; toolName?: string }
   | { kind: 'retrying'; at: number; attempt: number; maxRetries: number }

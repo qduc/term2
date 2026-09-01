@@ -306,6 +306,9 @@ function formatSubagentStatus(status: SubagentRunStatus | SubagentRunStatus[], n
       parts.push(`liveness: ${formatBackgroundTaskLiveness(activity)}`);
     }
     if (s.lastToolName) parts.push(`lastTool: ${s.lastToolName}`);
+    if (s.streamingTool) {
+      parts.push(`streamingTool: ${s.streamingTool.name} (${s.streamingTool.argumentCharCount} argument chars)`);
+    }
     const toolSummary = Object.entries(s.toolCounts)
       .map(([name, count]) => `${name}(${count})`)
       .join(', ');

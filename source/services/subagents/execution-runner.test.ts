@@ -26,7 +26,8 @@ import {
 } from './test-helpers/subagent-manager-fixtures.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 
-const committedEvents = (events: any[]) => events.filter((e) => e.type !== 'subagent_streaming_text');
+const committedEvents = (events: any[]) =>
+  events.filter((e) => e.type !== 'subagent_streaming_text' && e.type !== 'subagent_streaming_tool');
 
 const definition = {
   role: 'explorer',
@@ -136,6 +137,25 @@ describe('ExecutionSubagentRunner text-turn peek events', () => {
     await runner.run('run-1', { role: 'explorer', task: 'inspect' }, definition);
 
     expect(committedEvents(received)).not.toContainEqual(expect.objectContaining({ type: 'subagent_text_turn' }));
+  });
+
+  it('emits bounded tool-argument progress without forwarding argument content', async () => {
+    const { runner, received } = makeRunner([
+      { type: 'tool_call_streaming_delta', toolName: 'apply_patch', argumentCharCount: 1 },
+      { type: 'tool_call_streaming_delta', toolName: 'apply_patch', argumentCharCount: 500 },
+      { type: 'tool_call_streaming_delta', toolName: 'apply_patch', argumentCharCount: 1_025 },
+      { type: 'tool_call_streaming_delta', toolName: 'apply_patch', argumentCharCount: 2_049 },
+      { type: 'final', finalText: 'Done.' },
+    ]);
+
+    await runner.run('run-1', { role: 'explorer', task: 'inspect' }, definition);
+
+    expect(received.filter((event) => event.type === 'subagent_streaming_tool')).toEqual([
+      { type: 'subagent_streaming_tool', agentId: 'run-1', toolName: 'apply_patch', argumentCharCount: 1 },
+      { type: 'subagent_streaming_tool', agentId: 'run-1', toolName: 'apply_patch', argumentCharCount: 1_025 },
+      { type: 'subagent_streaming_tool', agentId: 'run-1', toolName: 'apply_patch', argumentCharCount: 2_049 },
+    ]);
+    expect(JSON.stringify(received)).not.toContain('operations');
   });
 
   it('settles a turn-budget stop as interrupted with partial work, not completed', async () => {

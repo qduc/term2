@@ -156,6 +156,36 @@ describe('background observations', () => {
     registry.dispose();
   });
 
+  it('treats bounded streamed tool-argument progress as recent provider activity', () => {
+    let now = 1_000;
+    const registry = new SubagentAsyncRegistry({
+      logger: createMockLogger(),
+      run: () => new Promise<SubagentResult>(() => undefined),
+      now: () => now,
+    });
+    const handle = registry.startRun({ role: 'worker', task: 'update files' });
+    now = 31_000;
+
+    registry.handleSubagentEvent({
+      type: 'subagent_streaming_tool',
+      agentId: handle.runId,
+      toolName: 'apply_patch',
+      argumentCharCount: 4_097,
+    } as ConversationEvent);
+
+    expect(registry.getRunStatus(handle.runId)).toMatchObject({
+      activityState: 'active',
+      streamingTool: { name: 'apply_patch', argumentCharCount: 4_097 },
+      lastObservation: {
+        kind: 'tool_input_received',
+        at: 31_000,
+        toolName: 'apply_patch',
+        argumentCharCount: 4_097,
+      },
+    });
+    registry.dispose();
+  });
+
   it('omits single-model metadata for pooled mentor consultations while retaining one request usage snapshot', async () => {
     const providerId = registerTestProvider({
       label: 'Pooled mentor observation provider',

@@ -28,6 +28,7 @@ export type ConversationEvent =
   | SubagentToolStartedEvent
   | SubagentTextTurnEvent
   | SubagentStreamingTextEvent
+  | SubagentStreamingToolEvent
   | SubagentCommandMessageEvent
   | SubagentApprovalRequiredEvent
   | SubagentCompletedEvent
@@ -262,6 +263,15 @@ export interface SubagentStreamingTextEvent {
   type: 'subagent_streaming_text';
   agentId: string;
   text: string;
+}
+
+/** Bounded metadata-only progress while a subagent streams tool arguments. */
+export interface SubagentStreamingToolEvent {
+  type: 'subagent_streaming_tool';
+  agentId: string;
+  toolName: string;
+  /** Cumulative argument size; argument content never crosses this boundary. */
+  argumentCharCount: number;
 }
 
 export interface SubagentCommandMessageEvent {

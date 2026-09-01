@@ -278,6 +278,8 @@ export interface SubagentRunStatus {
   toolCounts: Record<string, number>;
   turnHistory?: TurnSnapshot[];
   currentText?: string;
+  /** Metadata-only progress for the tool call whose arguments are still streaming. */
+  streamingTool?: { name: string; argumentCharCount: number };
   pendingToolCounts?: Record<string, number>;
   /** Registry-owned local observation used by the session UI projection. */
   lastObservation?: BackgroundTaskObservation;

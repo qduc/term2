@@ -18,7 +18,7 @@ export interface BackgroundSubagentCompletionNotification {
   runId: string;
   name?: string;
   role: string;
-  status: 'completed' | 'failed' | 'cancelled';
+  status: 'completed' | 'failed' | 'cancelled' | 'interrupted';
   /** Compact one-line preview for the user-facing display. */
   preview: string;
   /** Full model-facing report, inlined so the main agent need not call get_subagent_result. */
@@ -125,7 +125,7 @@ export type BackgroundNotification =
   | BackgroundUserControlNotification
   | BackgroundCheckInNotification;
 
-export type BackgroundSubagentTaskStatus = 'running' | 'completed' | 'failed' | 'cancelled';
+export type BackgroundSubagentTaskStatus = 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
 
 /** The single most recent tool call observed for a live background run. */
 export interface BackgroundSubagentTaskTool {

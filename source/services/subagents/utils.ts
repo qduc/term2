@@ -237,6 +237,9 @@ export function formatSubagentResult(result: SubagentResult): string {
   if (result.error) {
     lines.push(`Error: ${result.error}`);
   }
+  if (result.terminalCause) {
+    lines.push(`Termination cause: ${result.terminalCause}`);
+  }
 
   // Structured validation evidence (machine-checkable, before narrative).
   if (result.validation) {

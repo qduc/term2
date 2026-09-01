@@ -49,6 +49,7 @@ const statusText = (details: BackgroundTaskControlDetails): string => {
   if (status === 'completed') return 'completed · terminal';
   if (status === 'timed_out') return 'timed out · terminal';
   if (status === 'cancelled') return 'cancelled · terminal';
+  if (status === 'interrupted') return 'budget exhausted · terminal';
   const activity = details.activity;
   if (!activity) return status.replaceAll('_', ' ');
   if (activity.phase === 'waiting')

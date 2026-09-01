@@ -48,6 +48,7 @@ import {
   type GenerationGuardOptions,
 } from './generation-guard.js';
 import { classifyInLoopModelRetry, sleepWithAbort } from '../retry/in-loop-model-retry.js';
+import type { RunTerminationCause } from '../../contracts/run-termination.js';
 
 /**
  * Fields of `modelSettings` the run loop and provider adapters actually read.
@@ -288,6 +289,8 @@ type RunState = {
   currentProviderId?: string;
   /** Provider that originated responseId; absent on legacy handles. */
   responseProviderId?: string;
+  /** The logical run ended by containment, despite a valid provider response. */
+  terminalCause?: RunTerminationCause;
   /** Root-only provider request preparation, retained by continuations. */
   requestPreparation?: ApplicationRequestPreparation;
   sessionId?: string;
@@ -742,6 +745,7 @@ export class ApplicationRunLoop {
       interruptions: [],
       state: createContinuationHandle(state),
       rawResponses: [],
+      terminalCause: undefined,
       get runUsage() {
         return state.usage;
       },
@@ -1651,6 +1655,7 @@ export class ApplicationRunLoop {
     }
     if (event.type === 'budget_stage' && event.stage === 'critical' && state.wrapUpOnCriticalRunBudget) {
       state.criticalWrapUpPending = true;
+      state.terminalCause = 'budget_exhausted';
     }
     if (
       !state.wrapUpOnCriticalRunBudget &&
@@ -1702,6 +1707,7 @@ function outputPush(stream: AgentStream, queue: EventQueue, item: ApplicationRun
 
 function finish(stream: AgentStream, state: RunState, queue: EventQueue): unknown {
   stream.history = state.history;
+  stream.terminalCause = state.terminalCause;
   if (
     state.supportsConversationChaining &&
     state.responseId &&

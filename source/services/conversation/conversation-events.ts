@@ -6,6 +6,7 @@ import type { SubagentResult } from '../subagents/types.js';
 import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
 import type { CodexRateLimitInfo } from '../../contracts/streamed-model-turn.js';
 import type { RunBudgetEvent } from '../agent-runtime/run-budget.js';
+import type { RunTerminationCause } from '../../contracts/run-termination.js';
 import type { BackgroundTaskObservation } from '../background-task-activity.js';
 export type { CodexRateLimitInfo, CodexRateLimitWindow } from '../../contracts/streamed-model-turn.js';
 
@@ -178,6 +179,7 @@ export interface FinalResponseEvent {
   /** Cumulative cost records for the completed run. */
   costRecords?: ModelRequestCost[];
   turnItems?: PersistedAssistantTurnItem[];
+  terminalCause?: RunTerminationCause;
 }
 
 export interface ErrorEvent {

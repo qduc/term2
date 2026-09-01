@@ -262,6 +262,7 @@ export class ExecutionSubagentRunner {
     let costRecords: ModelRequestCost[] | undefined;
     let error: Error | undefined;
     let subagentStatus: SubagentResult['status'] = 'completed';
+    let terminalCause: SubagentResult['terminalCause'];
     let loopProcessedError = false;
     let currentText = '';
     let emittedUsageUpdate = false;
@@ -345,6 +346,8 @@ export class ExecutionSubagentRunner {
               currentText = '';
             }
             finalText = event.finalText;
+            terminalCause = event.terminalCause;
+            if (terminalCause) subagentStatus = 'interrupted';
             if (event.usage) {
               usage = event.usage;
               if (!emittedUsageUpdate) {
@@ -450,8 +453,8 @@ export class ExecutionSubagentRunner {
     const diffStat = buildDiffStat(filesChanged, diffDeltas);
     const validation = validationCapture.value;
 
-    // Turn-budget exhaustion is containment, not a crash: report partial work
-    // under status completed so the parent can continue from evidence.
+    // A legacy max-turn error has no terminal response to carry the typed cause;
+    // retain this compatibility path, but never call the partial result done.
     if (error && isMaxTurnsExceededError(error) && signal?.aborted !== true) {
       const maxTurns = extractMaxTurnsLimit(error) ?? definition.maxTurns;
       this.#logger.warn('Subagent turn budget exhausted', {
@@ -464,7 +467,8 @@ export class ExecutionSubagentRunner {
       return {
         agentId,
         role: request.role,
-        status: 'completed',
+        status: 'interrupted',
+        terminalCause: 'budget_exhausted',
         ...resultText,
         filesChanged: [...new Set(filesChanged)],
         toolsUsed: aggregateToolUsage(toolCounts),
@@ -498,7 +502,7 @@ export class ExecutionSubagentRunner {
     return {
       agentId,
       role: request.role,
-      status: 'completed',
+      status: subagentStatus,
       ...resultText,
       filesChanged: [...new Set(filesChanged)],
       toolsUsed: aggregateToolUsage(toolCounts),
@@ -507,6 +511,7 @@ export class ExecutionSubagentRunner {
       ...(diffStat.length > 0 ? { diffStat } : {}),
       ...(validation ? { validation } : {}),
       ...(worktreePath ? { worktreePath } : {}),
+      ...(terminalCause ? { terminalCause } : {}),
     };
   }
 }

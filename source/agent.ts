@@ -309,6 +309,7 @@ export const getAgentDefinition = (
     availableIntegrations: new Map([['builtin:integration/async-subagents', asyncSubagentEnabled]]),
   });
   const liteMode = isLiteProfile(profile);
+  const capabilities = profile.tools.capabilities;
   const isContextSourceEnabled = (source: string): boolean =>
     profile.context.sources.some((item) => item.source === source && item.enabled);
   const environmentEnabled = isContextSourceEnabled('environment');
@@ -449,6 +450,8 @@ export const getAgentDefinition = (
 
   if (liteMode) {
     // Lite mode keeps lightweight context and delegation policy, but still allows file edits.
+    // Keep workspace scope keyed to lite identity, not filesystem-read eligibility,
+    // so capability resolution cannot widen standard mode's read scope.
     if (!searchViaShell) {
       tools.push(
         createGrepToolDefinition({ executionContext, globAvailable, allowOutsideWorkspace: true, settingsService }),
@@ -501,39 +504,43 @@ export const getAgentDefinition = (
         }),
       );
     }
+  }
 
-    // Add mentor tool if the smart tier or its legacy mentor override is configured.
-    const mentorModel = settingsService.get('agent.smartModel') ?? settingsService.get('agent.mentorModel');
-    if (mentorModel && askMentor) {
-      tools.push(createAskMentorToolDefinition(askMentor));
-    }
+  // Add mentor tool if the smart tier or its legacy mentor override is configured.
+  const mentorModel = settingsService.get('agent.smartModel') ?? settingsService.get('agent.mentorModel');
+  if (capabilities.has('mentor') && mentorModel && askMentor) {
+    tools.push(createAskMentorToolDefinition(askMentor));
+  }
 
-    // One model-facing delegation tool selects the existing foreground nested
-    // runner or background registry callback; lifecycle ownership stays split.
-    if (runSubagent || asyncSubagentEnabled) {
-      tools.push(
-        createRunSubagentToolDefinition({
-          runSubagent: runSubagent
-            ? async (params, context, details) =>
-                toSubagentResult(await runSubagent(params, context, details), params.role)
-            : undefined,
-          runSubagentAsync: asyncSubagentEnabled ? runSubagentAsync : undefined,
-          configureCheckIn: setTaskCheckInPolicy,
-        }),
-      );
-    }
+  // One model-facing delegation tool selects the existing foreground nested
+  // runner or background registry callback; lifecycle ownership stays split.
+  if (capabilities.has('subagents') && (runSubagent || asyncSubagentEnabled)) {
+    tools.push(
+      createRunSubagentToolDefinition({
+        runSubagent: runSubagent
+          ? async (params, context, details) =>
+              toSubagentResult(await runSubagent(params, context, details), params.role)
+          : undefined,
+        runSubagentAsync: asyncSubagentEnabled ? runSubagentAsync : undefined,
+        configureCheckIn: setTaskCheckInPolicy,
+      }),
+    );
+  }
 
-    // Add async subagent tools (not in lite mode). The conjunction is
-    // `asyncSubagentEnabled` spelled out so the callbacks narrow: registering any
-    // of these without the rest would advertise delegation the prompt never explains.
-    if (runSubagentAsync && getSubagentResult && getSubagentStatus && sendSubagentMessage && cancelSubagentRun) {
-      tools.push(createGetSubagentResultToolDefinition(getSubagentResult, getSubagentStatus));
-      tools.push(createGetSubagentStatusToolDefinition(getSubagentStatus));
-      tools.push(
-        createSendMessageToolDefinition(sendSubagentMessage),
-        createCancelRunToolDefinition(cancelSubagentRun),
-      );
-    }
+  // Add async subagent tools. The conjunction is `asyncSubagentEnabled` spelled
+  // out so the callbacks narrow: registering any of these without the rest would
+  // advertise delegation the prompt never explains.
+  if (
+    capabilities.has('subagents') &&
+    runSubagentAsync &&
+    getSubagentResult &&
+    getSubagentStatus &&
+    sendSubagentMessage &&
+    cancelSubagentRun
+  ) {
+    tools.push(createGetSubagentResultToolDefinition(getSubagentResult, getSubagentStatus));
+    tools.push(createGetSubagentStatusToolDefinition(getSubagentStatus));
+    tools.push(createSendMessageToolDefinition(sendSubagentMessage), createCancelRunToolDefinition(cancelSubagentRun));
   }
 
   if (settingsService.get('enable_agent_workflow') && agentRuntime) {

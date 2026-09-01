@@ -129,6 +129,14 @@ export class AgentClient {
   #sessionRolloverRequest: SessionRolloverRequest | null = null;
 
   #clearStreamedModelCache(): void {
+    // Transient subagent clients share the session context with their parent,
+    // so the provider may return a session-owned model (and its live
+    // transport). They only own this cache's references; the root session
+    // remains responsible for closing the shared model.
+    if (this.#agentConfig.isTransientClient) {
+      this.#streamedModelCache.clear();
+      return;
+    }
     for (const cached of this.#streamedModelCache.values()) {
       void Promise.resolve(cached)
         .then((model) => (model as StreamedModelTurn & { close?: () => void }).close?.())

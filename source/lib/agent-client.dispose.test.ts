@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { AgentClient } from './agent-client.js';
-import { registerProvider } from '../providers/registry.js';
+import { registerProvider, unregisterProvider } from '../providers/registry.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import type { SubagentBridge } from './subagent-bridge.js';
 import { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
@@ -361,4 +361,86 @@ it.sequential('dispose without subagentBridge works safely', () => {
     client.dispose();
     client.dispose();
   }).not.toThrow();
+});
+
+it.sequential('disposing one transient client does not close a shared streamed model', async () => {
+  const providerId = 'mock-shared-streamed-model-dispose';
+  let release!: () => void;
+  let markStarted!: () => void;
+  let startedCount = 0;
+  const bothStarted = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let interrupted = false;
+  const close = vi.fn(() => {
+    interrupted = true;
+  });
+  const sharedModel = {
+    close,
+    async *stream() {
+      startedCount += 1;
+      if (startedCount === 2) markStarted();
+      await released;
+      if (interrupted) throw new Error('shared model was closed');
+      yield { type: 'completion' as const, responseId: 'shared-response', output: [] };
+    },
+  };
+  const createStreamedModel = vi.fn(() => sharedModel);
+  registerProvider(
+    {
+      id: providerId,
+      label: 'Shared streamed model dispose test provider',
+      createStreamedModel,
+      fetchModels: async () => [],
+    },
+    { allowOverride: true },
+  );
+
+  const sessionContextService = {
+    runWithContext: <T>(_context: unknown, fn: () => T) => fn(),
+    getContext: () => null,
+  };
+  const createTransientClient = () =>
+    new AgentClient({
+      agentOverride: { name: 'transient', model: 'shared-model', instructions: '', tools: [] },
+      providerOverride: providerId,
+      deps: {
+        logger: createMockLogger(),
+        settings: createMockSettings({ 'agent.provider': providerId, 'agent.model': 'shared-model' }),
+        sessionContextService,
+      },
+      toolOwnership: new ToolOwnershipRegistry(),
+    });
+
+  let firstClient: AgentClient | undefined;
+  let secondClient: AgentClient | undefined;
+  try {
+    firstClient = createTransientClient();
+    secondClient = createTransientClient();
+    const first = await firstClient.startStream('first');
+    const second = await secondClient.startStream('second');
+    const firstCompletion = first.completed.catch(() => undefined);
+    const secondCompletion = second.completed;
+
+    await bothStarted;
+    // A transient client only owns its reference to a session-shared model.
+    // Closing that reference must not close the model or interrupt its sibling.
+    // The first client is intentionally disposed after both requests are live.
+    // (The second client remains alive until the shared stream settles.)
+    firstClient.dispose();
+    await Promise.resolve();
+    expect(close).not.toHaveBeenCalled();
+    release();
+    await Promise.all([firstCompletion, secondCompletion]);
+    expect(close).not.toHaveBeenCalled();
+    expect(createStreamedModel).toHaveBeenCalledTimes(2);
+  } finally {
+    release();
+    firstClient?.dispose();
+    secondClient?.dispose();
+    unregisterProvider(providerId);
+  }
 });

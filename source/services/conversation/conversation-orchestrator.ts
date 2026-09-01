@@ -10,6 +10,7 @@ import { CHECK_IN_TOOL_NAME, isDeniedReadApproveAnswer } from '../../contracts/c
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { SessionCostSummary } from '../cost/model-cost.js';
 import { createStreamingSession } from '../../utils/streaming/streaming-session-factory.js';
+import { DEFAULT_CHARS_PER_TOKEN } from '../../utils/streaming/streaming-speed-tracker.js';
 import type { StreamingState } from '../../utils/conversation/conversation-utils.js';
 import { enhanceApiKeyError, isMaxTurnsError } from '../../utils/conversation/conversation-utils.js';
 import { clearStreamingBotMessage, computeNextMessages } from '../../utils/conversation/apply-conversation-result.js';
@@ -410,6 +411,8 @@ export class ConversationOrchestrator {
   #stoppingByUser = false;
   /** Stranded rows already reported, so the warning stays one per occurrence. */
   readonly #reportedStrandedCallIds = new Set<string>();
+  /** Live tok/s char ratio, calibrated from completed requests in this conversation. */
+  #charsPerToken = DEFAULT_CHARS_PER_TOKEN;
 
   constructor(private config: ConversationOrchestratorConfig) {
     this.createMessageId = config.createMessageId ?? createMessageIdFactory(config.now);
@@ -1369,6 +1372,10 @@ export class ConversationOrchestrator {
         setCodexRateLimit: (rateLimit) => this.config.ui.onRateLimitUpdate(rateLimit),
         setStreamingSpeed: (speed) => this.config.ui.onStreamingSpeedUpdate?.(speed),
         setRunBudgetNotice: (event) => this.config.ui.onRunBudgetNotice?.(event),
+        charsPerToken: this.#charsPerToken,
+        onCharsPerTokenCalibrated: (ratio) => {
+          this.#charsPerToken = ratio;
+        },
         reasoningThrottleMs: REASONING_RESPONSE_THROTTLE_MS,
         now: this.config.now,
       },

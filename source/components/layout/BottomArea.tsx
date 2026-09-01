@@ -17,6 +17,7 @@ import type { LoggingService } from '../../services/logging/logging-service.js';
 import type { HistoryService } from '../../services/history-service.js';
 import type { SSHInfo } from '../../services/shell/shell-interaction-session.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
+import { formatTokensPerSecond } from '../../utils/streaming/streaming-speed-tracker.js';
 import type { RunBudgetEvent } from '../../services/agent-runtime/run-budget.js';
 import type { CodexRateLimitInfo } from '../../services/conversation/conversation-events.js';
 import type { GrokCreditUsage } from '../../providers/grok-credit-usage.js';
@@ -378,7 +379,7 @@ const BottomArea: FC<BottomAreaProps> = ({
                 Calling {toolCallStreamingInfo.toolName ? <Text bold>{toolCallStreamingInfo.toolName}</Text> : 'tool'} (
                 {toolCallStreamingInfo.argumentCharCount} chars
                 {liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0
-                  ? ` · ${liveStreamingSpeed.tps.toFixed(1)} tok/s`
+                  ? ` · ${formatTokensPerSecond(liveStreamingSpeed.tps)}`
                   : ''}
                 ){'.'.repeat(dotCount)}
               </Text>
@@ -387,14 +388,14 @@ const BottomArea: FC<BottomAreaProps> = ({
               <Text color={COLOR_TEXT_SUBTLE}>
                 Thinking... {thinkingElapsedSeconds}s
                 {liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0
-                  ? ` (${liveStreamingSpeed.tps.toFixed(1)} tok/s)`
+                  ? ` (${formatTokensPerSecond(liveStreamingSpeed.tps)})`
                   : ''}
               </Text>
             )}
             {isProcessing && !toolCallStreamingInfo && thinkingStartedAt == null && (
               <Text color={COLOR_TEXT_SUBTLE}>
                 {liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0
-                  ? `generating (${liveStreamingSpeed.tps.toFixed(1)} tok/s)`
+                  ? `generating (${formatTokensPerSecond(liveStreamingSpeed.tps)})`
                   : 'processing'}
                 {'.'.repeat(dotCount)}
               </Text>

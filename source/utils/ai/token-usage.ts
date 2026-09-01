@@ -12,6 +12,8 @@ export interface NormalizedUsage {
   prompt_ms?: number;
   completion_ms?: number;
   tokens_per_second?: number;
+  /** True when tokens_per_second is a hedge (hidden tokens likely in the numerator). */
+  tokens_per_second_estimated?: boolean;
   ttft_ms?: number;
   upstream_provider?: string;
 }
@@ -135,6 +137,8 @@ export function normalizeUsage(usage: any): NormalizedUsage | undefined {
   );
 
   const tokensPerSecond = coalesceNumber(usage.tokens_per_second, usage.tokensPerSecond, usage.tps);
+  const tokensPerSecondEstimated =
+    usage.tokens_per_second_estimated === true || usage.tokensPerSecondEstimated === true;
   const ttftMs = coalesceNumber(usage.ttft_ms, usage.ttftMs);
   const upstreamProvider =
     typeof usage.upstream_provider === 'string' && usage.upstream_provider.trim().length > 0
@@ -153,6 +157,7 @@ export function normalizeUsage(usage: any): NormalizedUsage | undefined {
   if (promptMs != null) mapped.prompt_ms = promptMs;
   if (completionMs != null) mapped.completion_ms = completionMs;
   if (tokensPerSecond != null) mapped.tokens_per_second = tokensPerSecond;
+  if (tokensPerSecondEstimated) mapped.tokens_per_second_estimated = true;
   if (ttftMs != null) mapped.ttft_ms = ttftMs;
   if (upstreamProvider != null) mapped.upstream_provider = upstreamProvider;
 
@@ -392,7 +397,11 @@ export function addTokenUsage(
   addField('prompt_ms');
   addField('completion_ms');
 
-  if (next.tokens_per_second != null) result.tokens_per_second = next.tokens_per_second;
+  if (next.tokens_per_second != null) {
+    result.tokens_per_second = next.tokens_per_second;
+    if (next.tokens_per_second_estimated) result.tokens_per_second_estimated = true;
+    else delete result.tokens_per_second_estimated;
+  }
   if (next.ttft_ms != null) result.ttft_ms = next.ttft_ms;
   if (next.upstream_provider != null) result.upstream_provider = next.upstream_provider;
 

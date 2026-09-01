@@ -18,6 +18,24 @@ import type { CodexRateLimitInfo } from '../../services/conversation/conversatio
 import { createMessageIdFactory } from '../message-id-factory.js';
 import { StreamingSpeedTracker } from './streaming-speed-tracker.js';
 
+function attachSettledSpeed(usage: NormalizedUsage, tracker: StreamingSpeedTracker, now: number): void {
+  const settled = tracker.getSettledTps({
+    completionTokens: usage.completion_tokens,
+    reasoningTokens: usage.reasoning_tokens,
+    completionMs: usage.completion_ms,
+    endTime: now,
+  });
+  if (settled) {
+    usage.tokens_per_second = settled.tps;
+    if (settled.approximate) usage.tokens_per_second_estimated = true;
+    else delete usage.tokens_per_second_estimated;
+  }
+  const ttftMs = tracker.getTtftMs();
+  if (ttftMs != null) {
+    usage.ttft_ms = ttftMs;
+  }
+}
+
 export interface StreamingSessionFactoryDeps {
   appendMessages: ConversationEventHandlerDeps['appendMessages'];
   setMessages: ConversationEventHandlerDeps['setMessages'];
@@ -27,6 +45,9 @@ export interface StreamingSessionFactoryDeps {
   setLastUsage: (usage: NormalizedUsage) => void;
   setCodexRateLimit?: (rateLimit: CodexRateLimitInfo) => void;
   setStreamingSpeed?: (speed: { tps: number; ttftMs?: number } | null) => void;
+  /** Seed for live char/token estimates; typically the last calibrated ratio for this conversation. */
+  charsPerToken?: number;
+  onCharsPerTokenCalibrated?: (charsPerToken: number) => void;
   /**
    * Budget evidence that did not stop the run.
    *
@@ -122,7 +143,7 @@ export function createStreamingSession(deps: StreamingSessionFactoryDeps, label:
     streamingState,
   );
 
-  const speedTracker = new StreamingSpeedTracker({ startTime: now() });
+  const speedTracker = new StreamingSpeedTracker({ startTime: now(), charsPerToken: deps.charsPerToken });
 
   const notifySpeed = () => {
     if (!deps.setStreamingSpeed) return;
@@ -153,16 +174,10 @@ export function createStreamingSession(deps: StreamingSessionFactoryDeps, label:
     } else if (event.type === 'usage_update') {
       if (event.usage.completion_tokens) {
         speedTracker.recordUsageTokens(event.usage.completion_tokens, now());
+        deps.onCharsPerTokenCalibrated?.(speedTracker.getCharsPerToken());
       }
       notifySpeed();
-      const currentTps = speedTracker.getSettledTps(event.usage.completion_tokens, now());
-      const ttftMs = speedTracker.getTtftMs();
-      if (currentTps != null) {
-        event.usage.tokens_per_second = currentTps;
-      }
-      if (ttftMs != null) {
-        event.usage.ttft_ms = ttftMs;
-      }
+      attachSettledSpeed(event.usage, speedTracker, now());
       deps.loggingService.debug(`UI received streaming usage (${label})`, { usage: event.usage });
       streamingState.latestUsage = event.usage;
       deps.setLastUsage(event.usage);
@@ -172,14 +187,7 @@ export function createStreamingSession(deps: StreamingSessionFactoryDeps, label:
       if (event.usage && !streamingState.latestUsage) {
         // No usage_update happened during this turn (e.g. a single non-tool-call request), so
         // this is the only chance to compute settled TPS for it.
-        const finalTps = speedTracker.getSettledTps(event.usage.completion_tokens, now());
-        const ttftMs = speedTracker.getTtftMs();
-        if (finalTps != null) {
-          event.usage.tokens_per_second = finalTps;
-        }
-        if (ttftMs != null) {
-          event.usage.ttft_ms = ttftMs;
-        }
+        attachSettledSpeed(event.usage, speedTracker, now());
         deps.loggingService.debug(`UI received final usage (${label})`, { usage: event.usage });
         streamingState.latestUsage = event.usage;
         deps.setLastUsage(event.usage);

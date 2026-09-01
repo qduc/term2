@@ -19,8 +19,13 @@ export interface StreamingSpeedSnapshot {
   estimatedTokens: number;
 }
 
+export interface SettledStreamingSpeed {
+  tps: number;
+  approximate: boolean;
+}
+
 /** Average characters per token heuristic for English/code text when provider does not stream token counts. */
-const DEFAULT_CHARS_PER_TOKEN = 3.8;
+export const DEFAULT_CHARS_PER_TOKEN = 3.8;
 
 /** Live speed is computed over a trailing window so it tracks current throughput, not the whole-request average. */
 const LIVE_WINDOW_MS = 3000;
@@ -30,6 +35,13 @@ const MIN_CALIBRATED_CHARS_PER_TOKEN = 1;
 const MAX_CALIBRATED_CHARS_PER_TOKEN = 10;
 /** Minimum accumulated characters required before trusting a request's ratio for calibration. */
 const MIN_CHARS_FOR_CALIBRATION = 20;
+/** Completion tokens this far above the visible char estimate imply hidden tokens in the numerator. */
+const HIDDEN_TOKEN_RATIO = 2;
+
+export function formatTokensPerSecond(tps: number, approximate = false): string {
+  const value = tps.toFixed(1);
+  return approximate ? `~${value} tok/s` : `${value} tok/s`;
+}
 
 interface TokenSample {
   time: number;
@@ -40,8 +52,13 @@ export class StreamingSpeedTracker {
   private startTime: number;
   private firstTokenTime: number | null = null;
   private lastUpdateTime: number | null = null;
+  private streamedTextChars = 0;
+  private toolArgChars = 0;
+  private committedToolArgChars = 0;
   private accumulatedChars = 0;
   private exactTokens: number | null = null;
+  /** Character count at the last `recordUsageTokens` sample, so later deltas can be added on top. */
+  private charsAtExactTokens = 0;
   /**
    * Chars-per-token used for live estimates before exact usage arrives. Starts at
    * `DEFAULT_CHARS_PER_TOKEN` and is recalibrated from each request's real usage in
@@ -70,9 +87,21 @@ export class StreamingSpeedTracker {
     this.startTime = now;
     this.firstTokenTime = null;
     this.lastUpdateTime = null;
+    this.streamedTextChars = 0;
+    this.toolArgChars = 0;
+    this.committedToolArgChars = 0;
     this.accumulatedChars = 0;
     this.exactTokens = null;
+    this.charsAtExactTokens = 0;
     this.samples = [];
+  }
+
+  public getCharsPerToken(): number {
+    return this.charsPerToken;
+  }
+
+  private refreshAccumulatedChars(): void {
+    this.accumulatedChars = this.streamedTextChars + this.committedToolArgChars + this.toolArgChars;
   }
 
   private recordSample(now: number): void {
@@ -93,41 +122,49 @@ export class StreamingSpeedTracker {
     if (this.firstTokenTime === null) {
       this.firstTokenTime = now;
     }
-    this.accumulatedChars += length;
+    this.streamedTextChars += length;
+    this.refreshAccumulatedChars();
     this.lastUpdateTime = now;
     this.recordSample(now);
   }
 
   /**
    * Record cumulative characters streamed (e.g. from tool call argument streaming).
+   * Argument counts are cumulative per tool call, so a drop commits the previous
+   * tool's chars and starts a new one. Text and tool-arg chars are summed: both
+   * count toward completion tokens.
    */
   public recordCumulativeChars(cumulativeChars: number, now: number = Date.now()): void {
     if (cumulativeChars <= 0) return;
     if (this.firstTokenTime === null) {
       this.firstTokenTime = now;
     }
-    this.accumulatedChars = Math.max(this.accumulatedChars, cumulativeChars);
+    if (cumulativeChars < this.toolArgChars) {
+      this.committedToolArgChars += this.toolArgChars;
+    }
+    this.toolArgChars = cumulativeChars;
+    this.refreshAccumulatedChars();
     this.lastUpdateTime = now;
     this.recordSample(now);
   }
 
   /**
    * Record exact token counts if the provider streams usage updates.
+   * Calibrates the live chars-per-token ratio for this request's remaining
+   * deltas, not only the next request.
    */
   public recordUsageTokens(completionTokens: number, now: number = Date.now()): void {
-    if (this.firstTokenTime === null && completionTokens > 0) {
-      this.firstTokenTime = now;
-    }
     this.exactTokens = completionTokens;
     this.lastUpdateTime = now;
     this.calibrateCharsPerToken(completionTokens);
+    this.charsAtExactTokens = this.accumulatedChars;
     this.recordSample(now);
   }
 
   /**
    * Recalibrate the chars-per-token ratio from this request's real accumulated chars vs. its
-   * exact token count, so the NEXT request's live estimate (before its own usage arrives) starts
-   * from an observed ratio instead of the generic default. Ignored if there isn't enough
+   * exact token count, so later deltas of this request and the next request after `reset()`
+   * start from an observed ratio instead of the generic default. Ignored if there isn't enough
    * accumulated text to trust the sample (e.g. a tool-only request with no generated text).
    */
   private calibrateCharsPerToken(exactTokens: number): void {
@@ -150,7 +187,8 @@ export class StreamingSpeedTracker {
    */
   public getEstimatedTokens(): number {
     if (this.exactTokens !== null) {
-      return this.exactTokens;
+      const extraChars = Math.max(0, this.accumulatedChars - this.charsAtExactTokens);
+      return this.exactTokens + Math.round(extraChars / this.charsPerToken);
     }
     return Math.round(this.accumulatedChars / this.charsPerToken);
   }
@@ -201,24 +239,50 @@ export class StreamingSpeedTracker {
   }
 
   /**
-   * Calculate exact settled tokens per second when generation finishes.
+   * Calculate settled tokens per second when generation finishes.
    *
-   * @param finalCompletionTokens Exact completion tokens from provider's final usage.
-   * @param endTime Generation end timestamp.
+   * Prefers the provider's `completion_ms` when present. Otherwise measures
+   * wall-clock from the first visible token. Returns null rather than silently
+   * falling back to request start (which would mix TTFT into decode speed).
    */
-  public getSettledTps(finalCompletionTokens?: number, endTime: number = Date.now()): number | null {
-    const tokens = finalCompletionTokens ?? this.getEstimatedTokens();
-    if (tokens <= 0) return null;
+  public getSettledTps(options?: {
+    completionTokens?: number;
+    reasoningTokens?: number;
+    completionMs?: number;
+    endTime?: number;
+  }): SettledStreamingSpeed | null {
+    const rawTokens = options?.completionTokens ?? this.getEstimatedTokens();
+    if (rawTokens <= 0) return null;
 
-    // If firstTokenTime was never captured (e.g. non-streaming or instantaneous response),
-    // measure from request startTime.
-    const start = this.firstTokenTime ?? this.startTime;
-    const durationMs = endTime - start;
-    if (durationMs <= 0) return null;
+    const completionMs = options?.completionMs;
+    const hasProviderDuration = completionMs != null && completionMs > 0;
+    const endTime = options?.endTime ?? Date.now();
+    const durationMs = hasProviderDuration
+      ? completionMs
+      : this.firstTokenTime !== null
+      ? endTime - this.firstTokenTime
+      : null;
+    if (durationMs == null || durationMs <= 0) return null;
 
-    const durationSec = durationMs / 1000;
-    const tps = tokens / durationSec;
-    return Number.isFinite(tps) && tps > 0 ? Math.round(tps * 10) / 10 : null;
+    // Provider duration already covers hidden reasoning. Only strip those tokens
+    // from the wall-clock path, where the clock started at the first visible delta.
+    const reasoningTokens = options?.reasoningTokens ?? 0;
+    const visibleTokens = rawTokens - reasoningTokens;
+    const subtractedReasoning = !hasProviderDuration && reasoningTokens > 0 && visibleTokens > 0;
+    const tokens = subtractedReasoning ? visibleTokens : rawTokens;
+
+    const tps = tokens / (durationMs / 1000);
+    if (!Number.isFinite(tps) || tps <= 0) return null;
+
+    const approximate = !hasProviderDuration && !subtractedReasoning && this.isHiddenReasoningInflated(rawTokens);
+    return { tps: Math.round(tps * 10) / 10, approximate };
+  }
+
+  private isHiddenReasoningInflated(completionTokens: number): boolean {
+    if (this.accumulatedChars < MIN_CHARS_FOR_CALIBRATION) return false;
+    const visibleEstimate = this.accumulatedChars / this.charsPerToken;
+    if (!Number.isFinite(visibleEstimate) || visibleEstimate <= 0) return false;
+    return completionTokens >= visibleEstimate * HIDDEN_TOKEN_RATIO;
   }
 
   /**

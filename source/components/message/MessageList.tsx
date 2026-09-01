@@ -113,6 +113,12 @@ const canRenderStatically = (message: MessageLike) => {
 const isGroupableToolMessage = (message: MessageLike | undefined): boolean =>
   message?.sender === 'command' || message?.sender === 'subagent' || message?.sender === 'command-group';
 
+// These rows are produced asynchronously by background work. They are
+// chronological relative to the session, but must not be frozen into
+// <Static> while a streamed assistant response is still being assembled.
+const isBackgroundNotification = (message: RenderableMessage): boolean =>
+  message.sender === 'command' && message.toolName?.endsWith('_notification') === true;
+
 // A run of command or subagent messages that reaches the very end of the array
 // might still grow (another tool call could land right after it). Concise-mode
 // grouping keeps that whole run in the dynamic/active region — never committed
@@ -327,7 +333,7 @@ const MessageList = <T extends MessageLike = Message>({
   const candidateMessageSignaturesRef = useRef<Map<string, string>>(new Map());
   const previousActiveMessageIdsRef = useRef<Set<string>>(new Set());
 
-  const { staticItems, deferredHistory } = useMemo(() => {
+  const { staticItems, deferredHistory, deferredNotifications } = useMemo(() => {
     if (history.length === 0 && active.length === 0) {
       staticItemsRef.current = staticItemsRef.current.filter((item) => item.kind === 'banner');
       committedMessageSignaturesRef.current.clear();
@@ -337,6 +343,7 @@ const MessageList = <T extends MessageLike = Message>({
 
     const additions: StaticItem[] = [];
     const deferred: RenderableMessage[] = [];
+    const deferredNotifications: RenderableMessage[] = [];
     const hasActiveMessages = active.length > 0;
     const previousActiveMessageIds = previousActiveMessageIdsRef.current;
     const hasExistingStaticHistory = staticItemsRef.current.some((item) => item.kind === 'message');
@@ -379,12 +386,13 @@ const MessageList = <T extends MessageLike = Message>({
           continue;
         }
         candidateMessageSignaturesRef.current.set(message.id, signature);
-        deferred.push(message);
+        (isBackgroundNotification(message) ? deferredNotifications : deferred).push(message);
         hasDeferred = true;
         continue;
       }
 
       const shouldCommitImmediately =
+        (!isBackgroundNotification(message) || !hasActiveMessages) &&
         !hasDeferred &&
         shouldCommitMessageToStatic({
           hasActiveMessages,
@@ -408,7 +416,7 @@ const MessageList = <T extends MessageLike = Message>({
         if (candidateMessageSignaturesRef.current.get(message.id) !== signature) {
           candidateMessageSignaturesRef.current.set(message.id, signature);
         }
-        deferred.push(message);
+        (isBackgroundNotification(message) ? deferredNotifications : deferred).push(message);
         hasDeferred = true;
         continue;
       }
@@ -417,7 +425,7 @@ const MessageList = <T extends MessageLike = Message>({
         if (candidateMessageSignaturesRef.current.get(message.id) !== signature) {
           candidateMessageSignaturesRef.current.set(message.id, signature);
         }
-        deferred.push(message);
+        (isBackgroundNotification(message) ? deferredNotifications : deferred).push(message);
         hasDeferred = true;
         continue;
       }
@@ -433,7 +441,11 @@ const MessageList = <T extends MessageLike = Message>({
 
     previousActiveMessageIdsRef.current = new Set(active.map((message) => message.id));
 
-    return { staticItems: staticItemsRef.current, deferredHistory: deferred };
+    return {
+      staticItems: staticItemsRef.current,
+      deferredHistory: deferred,
+      deferredNotifications,
+    };
   }, [active, bannerItems, history, restoredStaticMessageIdSet]);
 
   // Active messages that were already committed to <Static> in a prior render
@@ -449,8 +461,8 @@ const MessageList = <T extends MessageLike = Message>({
       }
     }
     const filteredActive = committedActiveIds.size > 0 ? active.filter((m) => !committedActiveIds.has(m.id)) : active;
-    return [...deferredHistory, ...filteredActive];
-  }, [deferredHistory, active]);
+    return [...deferredHistory, ...filteredActive, ...deferredNotifications];
+  }, [deferredHistory, deferredNotifications, active]);
 
   const renderMessage = (
     msg: MessageLike | CommandGroupMessage,

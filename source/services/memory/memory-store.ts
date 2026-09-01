@@ -74,7 +74,9 @@ export class MemoryStorageError extends Error {
 }
 
 const ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const SUMMARY_LIMIT = 300;
+// Keep summaries bounded enough for the injected index, but do not reject
+// useful handoff context merely because it exceeds the former 300-char limit.
+const SUMMARY_LIMIT = 1_000;
 const DEFAULT_SEARCH_LIMIT = 10;
 const SEARCH_READ_CONCURRENCY = 8;
 type Index = { version: 1; memories: MemoryMetadata[] };

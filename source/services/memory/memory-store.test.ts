@@ -122,6 +122,15 @@ it('rejects corrupted index metadata with invalid field types', async () => {
   await expect(memory.list()).rejects.toThrow(/Memory index\.json/);
 });
 
+it('allows summaries longer than the old 300-character limit', async () => {
+  const memory = await store();
+  const longSummary = 'summary '.repeat(60);
+
+  const created = await memory.create({ ...input, id: 'long-summary', summary: longSummary });
+
+  expect(created.summary).toBe(longSummary.trim());
+});
+
 it('settles a failed create without leaving metadata when the content path is a directory', async () => {
   const memory = await store();
   await memory.list();

@@ -76,18 +76,22 @@ export class RetryEventPresenter {
       }
 
       case 'chain_recovery': {
+        const isConnectionInterrupted = failure.cause === 'connection_interrupted';
+        const retryType = isConnectionInterrupted ? 'connection_interrupted' : 'conversation_state';
         const event: ConversationEvent = {
           type: 'retry',
           toolName: 'conversation',
           attempt: failure.attempt,
           maxRetries: maxTransientRetries,
           errorMessage,
-          retryType: 'conversation_state',
+          retryType,
         };
-        const logMessage = 'Provider rejected conversation continuity, rebuilding full history';
+        const logMessage = isConnectionInterrupted
+          ? 'Connection interrupted before a terminal response event, rebuilding full history'
+          : 'Provider rejected conversation continuity, rebuilding full history';
         const logFields = {
-          eventType: 'retry.conversation_state',
-          retryType: 'conversation_state',
+          eventType: isConnectionInterrupted ? 'retry.connection_interrupted' : 'retry.conversation_state',
+          retryType,
           retryAttempt: failure.attempt,
           maxRetries: maxTransientRetries,
           errorMessage,

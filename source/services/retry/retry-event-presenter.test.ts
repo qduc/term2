@@ -149,7 +149,7 @@ it('RetryEventPresenter handles transport downgrade', () => {
 it('RetryEventPresenter identifies bounded conversation-state recovery separately from upstream failure', () => {
   const presenter = new RetryEventPresenter();
   const presentation = presenter.present({
-    failure: { kind: 'chain_recovery', attempt: 2, delayMs: 1000 },
+    failure: { kind: 'chain_recovery', attempt: 2, delayMs: 1000, cause: 'provider_state_rejected' },
     maxTransientRetries: 3,
     source: 'initial',
     error: new Error('No tool output found for function call call-1.'),
@@ -165,6 +165,32 @@ it('RetryEventPresenter identifies bounded conversation-state recovery separatel
   expect(presentation.logFields).toMatchObject({
     eventType: 'retry.conversation_state',
     retryAttempt: 2,
+    maxRetries: 3,
+  });
+});
+
+it('RetryEventPresenter labels a chain_recovery caused by a dropped connection as connection_interrupted, not a provider rejection', () => {
+  const presenter = new RetryEventPresenter();
+  const presentation = presenter.present({
+    failure: { kind: 'chain_recovery', attempt: 1, delayMs: 500, cause: 'connection_interrupted' },
+    maxTransientRetries: 3,
+    source: 'continuation',
+    error: new Error(
+      'Codex WebSocket connection closed before a terminal response event. (code=1006 reason="" unsent=0)',
+    ),
+  });
+
+  expect(presentation.event).toMatchObject({
+    type: 'retry',
+    toolName: 'conversation',
+    attempt: 1,
+    maxRetries: 3,
+    retryType: 'connection_interrupted',
+  });
+  expect(presentation.logFields).toMatchObject({
+    eventType: 'retry.connection_interrupted',
+    retryType: 'connection_interrupted',
+    retryAttempt: 1,
     maxRetries: 3,
   });
 });

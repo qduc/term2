@@ -35,6 +35,51 @@ it('retry_exhausted: points the user at the real /retry-turn command instead of 
   expect(result[0].text).toContain('/retry-turn');
 });
 
+// A real provider continuity rejection (e.g. Invalid previous_response_id)
+// and a recoverable WebSocket abnormal/incomplete close (e.g. code 1006) both
+// classify as chain_recovery and share the same recovery mechanics, but they
+// are different events and must not share a presentation: only the former is
+// a provider rejection of conversation state.
+it('retry: conversation_state text claims the provider rejected conversation state', () => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'retry',
+    toolName: 'conversation',
+    attempt: 1,
+    maxRetries: 3,
+    errorMessage: 'Invalid `previous_response_id`.',
+    retryType: 'conversation_state',
+  } as ConversationEvent);
+
+  const updater = deps.calls.setMessagesCalls[0]!;
+  const result = updater([]);
+  expect(result[0].text).toContain('Conversation state was rejected by the provider');
+});
+
+it('retry: connection_interrupted text describes a dropped connection, not a provider rejection', () => {
+  const deps = createMockDeps();
+  const state = createStreamingState();
+  const handler = createConversationEventHandler(deps, state);
+
+  handler({
+    type: 'retry',
+    toolName: 'conversation',
+    attempt: 1,
+    maxRetries: 3,
+    errorMessage: 'Codex WebSocket connection closed before a terminal response event. (code=1006)',
+    retryType: 'connection_interrupted',
+  } as ConversationEvent);
+
+  const updater = deps.calls.setMessagesCalls[0]!;
+  const result = updater([]);
+  expect(result[0].text).toContain('Connection was interrupted');
+  expect(result[0].text).not.toContain('rejected by the provider');
+  expect(result[0].text).not.toContain('Conversation state was rejected');
+});
+
 it('retry_exhausted: does not suggest retrying when canRetry is false', () => {
   const result = runOne({
     type: 'retry_exhausted',

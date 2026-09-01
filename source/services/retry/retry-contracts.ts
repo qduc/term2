@@ -8,11 +8,23 @@ import type { AssistantJournalItemLogEvent } from '../logging/conversation-log-e
 export type ClassifiedFailure =
   | { kind: 'transient'; attempt: number; delayMs: number }
   /**
-   * The provider rejected conversation continuity (for example, because a
-   * chained tool result is missing). Rebuild from full history, but charge it
-   * against the normal bounded transient-retry budget.
+   * Rebuild from full history, charged against the normal bounded
+   * transient-retry budget. `cause` distinguishes two different underlying
+   * events that share this recovery mechanism but must not share a
+   * presentation:
+   *  - 'provider_state_rejected': the provider actively rejected conversation
+   *    continuity (e.g. `previous_response_not_found`, a missing/orphaned
+   *    chained tool result).
+   *  - 'connection_interrupted': the connection dropped before a terminal
+   *    response event (e.g. WebSocket close code 1006); the provider made no
+   *    rejection claim at all.
    */
-  | { kind: 'chain_recovery'; attempt: number; delayMs: number }
+  | {
+      kind: 'chain_recovery';
+      attempt: number;
+      delayMs: number;
+      cause: 'provider_state_rejected' | 'connection_interrupted';
+    }
   | { kind: 'service_tier_fallback' }
   | { kind: 'transport_downgrade' }
   | {

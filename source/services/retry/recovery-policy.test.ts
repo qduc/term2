@@ -48,13 +48,24 @@ it('transient failure without stream produces retry_fresh with full_history', ()
 });
 
 it('chain recovery rebuilds from full history and consumes the transient retry budget', () => {
-  const result = policy.plan(baseRecoveryContext({ failure: { kind: 'chain_recovery', attempt: 2, delayMs: 1000 } }));
+  const result = policy.plan(
+    baseRecoveryContext({
+      failure: { kind: 'chain_recovery', attempt: 2, delayMs: 1000, cause: 'provider_state_rejected' },
+    }),
+  );
   expect(result).toEqual({
     kind: 'retry_fresh',
     inputMode: 'full_history',
     disableChainingForAttempt: true,
   });
-  expect(policy.nextRetryCounts(baseCounts(), { kind: 'chain_recovery', attempt: 2, delayMs: 1000 })).toMatchObject({
+  expect(
+    policy.nextRetryCounts(baseCounts(), {
+      kind: 'chain_recovery',
+      attempt: 2,
+      delayMs: 1000,
+      cause: 'provider_state_rejected',
+    }),
+  ).toMatchObject({
     transientRetryCount: 2,
   });
 });
@@ -115,7 +126,7 @@ it('fresh-start retries disabled still recovers a chain_recovery failure without
   // history, so a connect-time drop stays recoverable.
   const result = policy.plan(
     baseRecoveryContext({
-      failure: { kind: 'chain_recovery', attempt: 1, delayMs: 500 },
+      failure: { kind: 'chain_recovery', attempt: 1, delayMs: 500, cause: 'connection_interrupted' },
       stream: null,
       freshStartRetriesAllowed: false,
     }),

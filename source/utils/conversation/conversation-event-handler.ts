@@ -650,6 +650,8 @@ export function createConversationEventHandler(
           text = 'Flex service tier timed out. Falling back to standard service tier and retrying...';
         } else if (event.retryType === 'conversation_state') {
           text = `Conversation state was rejected by the provider. Rebuilding context and retrying... (Attempt ${event.attempt}/${event.maxRetries})`;
+        } else if (event.retryType === 'connection_interrupted') {
+          text = `Connection was interrupted before the response completed. Rebuilding context and retrying... (Attempt ${event.attempt}/${event.maxRetries})`;
         } else if (event.retryType === 'upstream') {
           const prefix =
             event.errorKind === 'network'

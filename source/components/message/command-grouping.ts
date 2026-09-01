@@ -13,7 +13,17 @@
 // stops redrawing incrementally and clears the screen *and the scrollback* on
 // every frame. Only the last run call and in-flight calls stay unfolded, and
 // those are bounded.
-import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
+import {
+  TOOL_NAME_APPLY_PATCH,
+  TOOL_NAME_CREATE_FILE,
+  TOOL_NAME_MEMORY_CREATE,
+  TOOL_NAME_MEMORY_DELETE,
+  TOOL_NAME_MEMORY_GET,
+  TOOL_NAME_MEMORY_LIST,
+  TOOL_NAME_MEMORY_SEARCH,
+  TOOL_NAME_MEMORY_UPDATE,
+  TOOL_NAME_SEARCH_REPLACE,
+} from '../../tools/tool-names.js';
 import { formatToolArgs } from './command-message-helpers.js';
 
 export type GroupableMessage = {
@@ -128,20 +138,20 @@ export type GroupCommandRunsOptions = {
 
 /**
  * Within each maximal run of consecutive `sender === 'command'` messages, folds
- * settled calls into a `CommandGroupMessage`.
+ * 2 or more settled calls into a `CommandGroupMessage`.
  *
  * In an open trailing run (where no subsequent non-command message has arrived),
  * the most recently completed tool call is retained separate below the group
  * summary line so its result stays visible. Once another kind of message
- * arrives, all settled calls in the run fold into the group.
+ * arrives, all settled calls fold into the group.
+ *
+ * A single settled call remains in its original command form (shortened to one
+ * concise line) rather than collapsing into a generic summary count (e.g.
+ * "Ran 1 tool call"), preserving clear, unambiguous context about what ran.
  *
  * Anything from the first still-running call onward is left alone, so work in
  * flight keeps showing what it is doing. Everything else passes through
  * unchanged.
- *
- * A single settled call in an open trailing run is left alone so its result
- * stays visible while work may continue. Once another kind of message closes
- * the run, even one call folds into the summary line.
  */
 export const groupCommandRuns = <T extends GroupableMessage>(
   messages: T[],
@@ -171,8 +181,10 @@ export const groupCommandRuns = <T extends GroupableMessage>(
     const settled = settledRaw.flatMap(extractMembers);
 
     if (hasTrailingNonCommandMessage) {
-      if (settled.length >= 1) {
+      if (settled.length >= 2) {
         result.push(buildCommandGroupMessage(settled), ...inFlightAndAfter);
+      } else if (settled.length === 1) {
+        result.push(settled[0] as T, ...inFlightAndAfter);
       } else {
         result.push(...rawRun);
       }
@@ -211,6 +223,16 @@ const TOOL_GROUP_CATEGORIES: Record<string, ToolGroupCategory> = {
   run_subagent_async: { verb: 'Delegated async to', singular: 'subagent', plural: 'subagents' },
   ask_user: { verb: 'Asked user', singular: 'question', plural: 'questions' },
   ask_mentor: { verb: 'Asked mentor', singular: 'question', plural: 'questions' },
+  [TOOL_NAME_MEMORY_LIST]: { verb: 'Listed', singular: 'memory', plural: 'memories' },
+  [TOOL_NAME_MEMORY_GET]: { verb: 'Retrieved', singular: 'memory', plural: 'memories' },
+  [TOOL_NAME_MEMORY_SEARCH]: { verb: 'Searched', singular: 'memory', plural: 'memories' },
+  memory_retrieve: { verb: 'Retrieved', singular: 'relevant memory', plural: 'relevant memories' },
+  [TOOL_NAME_MEMORY_CREATE]: { verb: 'Saved', singular: 'memory', plural: 'memories' },
+  [TOOL_NAME_MEMORY_UPDATE]: { verb: 'Updated', singular: 'memory', plural: 'memories' },
+  [TOOL_NAME_MEMORY_DELETE]: { verb: 'Deleted', singular: 'memory', plural: 'memories' },
+  session_list: { verb: 'Listed', singular: 'prior session', plural: 'prior sessions' },
+  session_search: { verb: 'Searched', singular: 'prior session', plural: 'prior sessions' },
+  session_read: { verb: 'Read', singular: 'prior session', plural: 'prior sessions' },
 };
 
 const DEFAULT_TOOL_GROUP_CATEGORY: ToolGroupCategory = { verb: 'Ran', singular: 'tool call', plural: 'tool calls' };

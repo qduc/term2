@@ -17,6 +17,7 @@ import type {
   SupportedSubagentRole,
   SubagentDefinition,
 } from './types.js';
+import { isTerminalSubagentResult } from './types.js';
 import { clampRunBudgetPolicy, readRunBudgetPolicy } from '../agent-runtime/run-budget.js';
 import type { SkillsService } from '../skills/skills-service.js';
 import { SUBAGENT_ROLES } from './types.js';
@@ -747,7 +748,7 @@ export class NestedSubagentRunner {
                 // a budget-contained background worker settles with nobody
                 // ever told — the async registry and get_subagent_result
                 // would see nothing and keep reporting it as still running.
-                if (parsed.status !== 'running') {
+                if (isTerminalSubagentResult(parsed)) {
                   const completed: SubagentResult = { ...parsed, status: parsed.status };
                   safeEmit(this.#logger, this.#onEvent, { type: 'subagent_completed', result: completed, async: true });
                 }
@@ -787,10 +788,10 @@ export class NestedSubagentRunner {
       // The parent model already receives the full result (evidence included)
       // as this tool call's return value below, regardless of which event
       // fires here. This event only drives the live foreground transcript
-      // card, so an interrupted run — approval pause or budget containment
-      // alike — gets the lighter-weight `subagent_interrupted` update instead
-      // of announcing a completion it has not reached.
-      if (parsed.status !== 'interrupted' && parsed.status !== 'running') {
+      // card. A live approval pause gets the lighter-weight
+      // `subagent_interrupted` update; a caused interruption such as budget
+      // exhaustion is terminal and must announce completion.
+      if (isTerminalSubagentResult(parsed)) {
         const completed: SubagentResult = { ...parsed, status: parsed.status };
         await safeEmit(
           this.#logger,

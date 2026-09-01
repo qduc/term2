@@ -216,6 +216,22 @@ export type NestedSubagentResult = Omit<SubagentResult, 'status'> & {
   interrupted?: boolean;
 };
 
+/**
+ * True only when a result represents a settled run. An interrupted result is
+ * terminal only when it carries a termination cause; an approval interruption
+ * is a live pause and must not enter completion or retrieval lanes.
+ */
+export function isTerminalSubagentResult(
+  result: Pick<SubagentResult, 'terminalCause'> & { status: SubagentResult['status'] | 'running' },
+): result is Pick<SubagentResult, 'terminalCause'> & { status: SubagentResult['status'] } {
+  return (
+    result.status === 'completed' ||
+    result.status === 'failed' ||
+    result.status === 'cancelled' ||
+    (result.status === 'interrupted' && result.terminalCause !== undefined)
+  );
+}
+
 /** The only state exposed while an asynchronous run is live. */
 export interface SubagentRunHandle {
   runId: string;

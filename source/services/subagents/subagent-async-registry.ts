@@ -14,6 +14,7 @@ import type {
   SubagentSteerAcknowledgement,
   ValidationEvidence,
 } from './types.js';
+import { isTerminalSubagentResult } from './types.js';
 import { SubagentRunControl } from './subagent-run-control.js';
 import { SubagentSession } from './subagent-session.js';
 import { isAbortLike, safeEmit, truncatePreview } from './utils.js';
@@ -462,7 +463,7 @@ export class SubagentAsyncRegistry {
   handleSubagentEvent(event: ConversationEvent): void {
     if (event.type === 'subagent_completed') {
       const run = this.#runs.get(event.result.agentId);
-      if (run?.lease && !run.settled) {
+      if (run?.lease && !run.settled && isTerminalSubagentResult(event.result)) {
         this.#accumulateEvidence(run.evidence, event.result);
         this.#settle(run, this.#assembleTerminalResult(run, event.result), false);
       }
@@ -794,6 +795,10 @@ export class SubagentAsyncRegistry {
     }
     run.control.endSegment(controller);
     this.#accumulateEvidence(run.evidence, result);
+    // An approval interruption is a live pause, not a terminal result. The
+    // foreground lease owns its continuation; only a terminal interrupted
+    // result (with a cause) may settle and notify this registry.
+    if (!isTerminalSubagentResult(result)) return;
     if (run.control.cancellationRequested) {
       this.#settle(run, this.#assembleTerminalResult(run, result));
       return;

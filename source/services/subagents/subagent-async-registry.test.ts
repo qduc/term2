@@ -75,6 +75,59 @@ describe('background observations', () => {
     registry.dispose();
   });
 
+  it.each([
+    ['completed', {}],
+    ['failed', { error: 'failed' }],
+    ['cancelled', { error: 'cancelled' }],
+    ['interrupted', { terminalCause: 'budget_exhausted' as const }],
+  ] as const)('emits exactly one completion and retains a %s result for retrieval', async (status, extra) => {
+    const events: ConversationEvent[] = [];
+    const registry = new SubagentAsyncRegistry({
+      logger: createMockLogger(),
+      run: async () => ({
+        ...result('explorer', status),
+        ...extra,
+      }),
+      onEvent: (event) => events.push(event),
+      createRunId: () => `terminal-${status}`,
+    });
+
+    const handle = registry.startRun({ role: 'explorer', task: 'inspect' });
+    await expect(registry.getResult(handle.runId)).resolves.toMatchObject({ status, ...extra });
+    expect(events.filter((event) => event.type === 'subagent_completed')).toHaveLength(1);
+    expect(registry.getRunStatus(handle.runId)).toMatchObject({ status });
+
+    registry.handleSubagentEvent({
+      type: 'subagent_completed',
+      async: true,
+      result: { ...result('explorer', status), ...extra, agentId: handle.runId },
+    } as unknown as ConversationEvent);
+    expect(events.filter((event) => event.type === 'subagent_completed')).toHaveLength(1);
+    await expect(registry.getResult(handle.runId)).resolves.toMatchObject({ status, ...extra });
+    registry.dispose();
+  });
+
+  it('does not settle an adopted run from a nonterminal approval interruption', () => {
+    const events: ConversationEvent[] = [];
+    const registry = new SubagentAsyncRegistry({
+      logger: createMockLogger(),
+      run: () => new Promise<SubagentResult>(() => undefined),
+      onEvent: (event) => events.push(event),
+    });
+    const lease = new ForegroundSubagentLease({ runId: 'approval-pause' });
+    registry.adoptForegroundLease(lease, { role: 'explorer', task: 'inspect' });
+
+    registry.handleSubagentEvent({
+      type: 'subagent_completed',
+      async: true,
+      result: { ...result('explorer', 'interrupted'), agentId: 'approval-pause' },
+    } as unknown as ConversationEvent);
+
+    expect(registry.getRunStatus('approval-pause')).toMatchObject({ status: 'running' });
+    expect(events.filter((event) => event.type === 'subagent_completed')).toHaveLength(0);
+    registry.dispose();
+  });
+
   it('keeps the latest local observation and latest usage independently from cumulative result evidence', () => {
     const registry = new SubagentAsyncRegistry({
       logger: createMockLogger(),

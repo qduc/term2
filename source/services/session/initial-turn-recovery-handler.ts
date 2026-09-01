@@ -163,7 +163,13 @@ export class InitialTurnRecoveryHandler {
       this.deps.breakChaining?.();
     }
 
-    if (classified.kind === 'transient' || classified.kind === 'chain_recovery' || classified.kind === 'model_retry') {
+    // model_retry (hallucination/parsing/behavior detection) is a distinct,
+    // pre-existing retry policy with its own maxModelRetries cap. It is not a
+    // provider transport failure, so it must not draw against or be capped by
+    // the shared transport-recovery envelope -- doing so silently truncated
+    // an established, independently-tested retry count (see the regression
+    // test this comment sits next to in initial-turn-recovery-handler.test.ts).
+    if (classified.kind === 'transient' || classified.kind === 'chain_recovery') {
       attempt.recoveryBudget.noteRetryableFailure();
     }
     attempt.advanceRetry(this.deps.recoveryPolicy.nextRetryCounts(attempt.retryCounts, classified));
@@ -180,10 +186,11 @@ export class InitialTurnRecoveryHandler {
       addedUserMessage: attempt.addedUserMessage,
       stream,
     };
-    if (
-      (plan.kind === 'retry_fresh' || plan.kind === 'replay_turn') &&
-      !attempt.recoveryBudget.claimAutomaticReplay()
-    ) {
+    // Only retry_fresh (service_tier_fallback/transient/chain_recovery/
+    // transport_downgrade) draws against the automatic-replay budget.
+    // replay_turn is produced exclusively by model_retry, which is excluded
+    // for the same reason noted above.
+    if (plan.kind === 'retry_fresh' && !attempt.recoveryBudget.claimAutomaticReplay()) {
       yield {
         type: 'retry_exhausted',
         provider: this.deps.provider ?? 'provider',

@@ -297,3 +297,43 @@ it('shares one recovery budget instance across the turn rather than tracking its
   // freshly constructed one.
   expect(recoveryBudget.startedAt).toBeDefined();
 });
+
+// Mirrors the equivalent initial-turn-recovery-handler.test.ts case: model_retry
+// has its own maxModelRetries cap and must not draw against the shared
+// transport automatic-replay budget.
+it('does not charge a model_retry replay_turn plan against the automatic-replay budget', async () => {
+  const handler = new ContinuationRecoveryHandler({
+    logger: { warn: () => {}, getCorrelationId: () => undefined, error: () => {}, debug: () => {} } as any,
+    sessionId: 'test',
+    generationGuard: { isCurrent: () => true } as any,
+    retryClassifier: {
+      classify: () => ({ kind: 'model_retry', errorContext: 'hallucination' }),
+    } as any,
+    recoveryPolicy: {
+      nextRetryCounts: (counts: any) => counts,
+      plan: () => ({ kind: 'replay_turn', inputMode: 'full_history', rollbackUserMessage: true }),
+    } as any,
+    recoveryExecutor: {
+      apply: () => ({ kind: 'run', instruction: { skipUserMessage: true } }),
+    } as any,
+    retryEventPresenter: {
+      present: () => ({ event: { type: 'retry_scheduled' }, logMessage: 'retry', logFields: {} }),
+    } as any,
+    resolveRetryLimit: () => 5,
+    toolTracker: { activeCallIdsForCurrentTurn: () => [] } as any,
+  });
+
+  const recoveryBudget = new RetryRecoveryBudget();
+  // An earlier, unrelated transport recovery already used the one automatic
+  // replay.
+  expect(recoveryBudget.claimAutomaticReplay()).toBe(true);
+
+  const state = createMockState({ recoveryBudget });
+  const iterator = handler.handle({ error: new Error('hallucinated'), state });
+  let next = await iterator.next();
+  while (!next.done) next = await iterator.next();
+
+  // Not 'terminated': the replay_turn plan was executed rather than refused
+  // for lack of automatic-replay budget.
+  expect((next.value as any).kind).toBe('fresh_start');
+});

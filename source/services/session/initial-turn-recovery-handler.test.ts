@@ -286,6 +286,49 @@ it('presents retry_exhausted for a budget-exhaustion error even though it classi
   expect(events[0]).toMatchObject({ type: 'retry_exhausted', provider: 'openai', canRetry: true });
 });
 
+// model_retry (hallucination detection) has its own maxModelRetries cap,
+// independent of the shared 90s/3-attempt/1-replay transport recovery
+// budget. Gating replay_turn behind the same 1-automatic-replay allowance as
+// transport retries silently cut an established, separately-tested retry
+// count in half (see the integration-level regression in
+// conversation-service.test.ts: "stops retrying after max hallucination
+// retries"). This proves the fix directly: two model_retry replays succeed
+// against a budget whose one automatic replay is already claimed by an
+// unrelated transport recovery.
+it('does not charge model_retry replays against the transport automatic-replay budget', async () => {
+  const plans: unknown[] = [];
+  const handler = new InitialTurnRecoveryHandler({
+    conversationStore: { getHistory: () => [] } as any,
+    freshStartRetriesAllowed: true,
+    generationGuard: { isCurrent: () => true } as any,
+    inputPlanner: { recordSuccess: () => {} } as any,
+    logger: { warn: () => {}, error: () => {}, getCorrelationId: () => undefined } as any,
+    recoveryExecutor: {
+      apply: ({ plan }: any) => {
+        plans.push(plan);
+        return { kind: 'run', instruction: { skipUserMessage: true }, events: [] };
+      },
+    } as any,
+    recoveryPolicy: new DefaultConversationRecoveryPolicy(),
+    retryClassifier: { classify: () => ({ kind: 'model_retry', errorContext: 'hallucination' }) } as any,
+    retryEventPresenter: { present: () => ({ event: {}, logMessage: '', logFields: {} }) } as any,
+    sessionId: 'model-retry-budget',
+  });
+  const attempt = createAttempt();
+  // An earlier, unrelated transport recovery already used the turn's one
+  // automatic replay.
+  expect(attempt.recoveryBudget.claimAutomaticReplay()).toBe(true);
+
+  const first: any = await drain(handler.handle({ error: new Error('hallucinated'), attempt, stream: null }) as any);
+  const second: any = await drain(
+    handler.handle({ error: new Error('hallucinated again'), attempt, stream: null }) as any,
+  );
+
+  expect(first.kind).toBe('run');
+  expect(second.kind).toBe('run');
+  expect(plans.every((plan: any) => plan.kind === 'replay_turn')).toBe(true);
+});
+
 it('returns stale before classifying when the generation is outdated', async () => {
   const handler = new InitialTurnRecoveryHandler({
     conversationStore: {} as any,

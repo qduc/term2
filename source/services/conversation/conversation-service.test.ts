@@ -608,6 +608,7 @@ it('passes previous response ids into subsequent runs', async () => {
       options: {
         previousResponseId: null,
         sessionId: 'default',
+        recoveryBudget: expect.any(Object),
         providerHistorySnapshot: expect.objectContaining({
           revision: 1,
           history: [{ role: 'user', type: 'message', content: 'first' }],
@@ -619,6 +620,7 @@ it('passes previous response ids into subsequent runs', async () => {
       options: {
         previousResponseId: 'resp-1',
         sessionId: 'default',
+        recoveryBudget: expect.any(Object),
         providerHistorySnapshot: expect.objectContaining({
           revision: 2,
           history: [
@@ -735,6 +737,7 @@ it('emits approval interruptions and resumes after approval', async () => {
         sessionId: 'default',
         toolResultCallIds: [],
         knownToolCallIds: [],
+        recoveryBudget: expect.any(Object),
         providerHistorySnapshot: expect.objectContaining({
           identity: expect.stringMatching(/^history:/),
           history: expect.any(Array),
@@ -1485,6 +1488,7 @@ it('handleApprovalDecision() rejects interruption when answer is n', async () =>
         sessionId: 'default',
         toolResultCallIds: [],
         knownToolCallIds: [],
+        recoveryBudget: expect.any(Object),
         providerHistorySnapshot: expect.objectContaining({
           identity: expect.stringMatching(/^history:/),
           history: expect.any(Array),

@@ -62,7 +62,11 @@ export class ContinuationRecoveryHandler {
       return { kind: 'terminated' };
     }
 
-    if (classified.kind === 'transient' || classified.kind === 'chain_recovery' || classified.kind === 'model_retry') {
+    // model_retry (hallucination/parsing/behavior detection) has its own
+    // pre-existing maxModelRetries cap and must not draw against or be capped
+    // by the shared transport-recovery envelope; see the matching comment in
+    // initial-turn-recovery-handler.ts.
+    if (classified.kind === 'transient' || classified.kind === 'chain_recovery') {
       state.recoveryBudget.noteRetryableFailure();
     }
 
@@ -104,7 +108,9 @@ export class ContinuationRecoveryHandler {
     const transientDelayMs =
       classified.kind === 'transient' || classified.kind === 'chain_recovery' ? classified.delayMs : undefined;
 
-    if ((plan.kind === 'retry_fresh' || plan.kind === 'replay_turn') && !state.recoveryBudget.claimAutomaticReplay()) {
+    // Only retry_fresh draws against the automatic-replay budget; replay_turn
+    // comes exclusively from model_retry, excluded for the reason above.
+    if (plan.kind === 'retry_fresh' && !state.recoveryBudget.claimAutomaticReplay()) {
       const providerName = this.deps.provider ?? 'provider';
       yield {
         type: 'retry_exhausted',

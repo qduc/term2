@@ -82,6 +82,14 @@ const orchestratorSubagentDeps = {
   cancelSubagentRun: () => ({ ok: true as const, runId: 'run-1', status: 'cancelling' as const }),
 };
 
+function getToolNames(settings: Record<string, any> = {}, dependencies: Record<string, any> = {}): string[] {
+  return getAgentDefinition({
+    settingsService: createMockSettingsService(settings),
+    loggingService: mockLogger,
+    ...dependencies,
+  }).tools.map((tool) => tool.name);
+}
+
 it('adds memory tools and summary-only context when memory is enabled, and neither when disabled', async () => {
   const { mkdtemp, writeFile, mkdir, rm } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');
@@ -256,6 +264,106 @@ it('uses configured workflow limits without exposing them in tool arguments', as
   if (typeof output !== 'string') throw new Error('run_agent_workflow must return text');
   const result = JSON.parse(output);
   expect(result).toMatchObject({ ok: false, error: { code: 'limit_exceeded' } });
+});
+
+it('keeps standard and lite tool names identical with bare dependencies', () => {
+  const standard = getToolNames({ 'agent.model': 'gpt-4o' });
+  const lite = getToolNames({ 'agent.model': 'gpt-4o', 'app.liteMode': true });
+
+  expect([...standard].sort()).toEqual([...lite].sort());
+  expect(standard).toEqual(
+    expect.arrayContaining([
+      'memory_list',
+      'memory_get',
+      'memory_search',
+      'memory_retrieve',
+      'memory_synthesize',
+      'memory_create',
+      'memory_update',
+      'memory_delete',
+      'read_code_outline',
+      'code_context_search',
+      'read_file',
+      'grep',
+      'glob',
+      'create_file',
+      'search_replace',
+    ]),
+  );
+  expect(standard).not.toEqual(expect.arrayContaining(['ask_mentor', 'run_subagent', 'ask_user']));
+});
+
+it('gates mentor and subagent tools on resolved capabilities while retaining ask_user', () => {
+  const fullDeps = {
+    askMentor: async () => 'mentor',
+    runSubagent: async () => makeSubagentResult('subagent'),
+    getAskUserAnswer: () => 'answer',
+    ...orchestratorSubagentDeps,
+  };
+  const standard = getToolNames({ 'agent.model': 'gpt-4o', 'agent.smartModel': 'gpt-4o' }, fullDeps);
+  const lite = getToolNames({ 'agent.model': 'gpt-4o', 'agent.smartModel': 'gpt-4o', 'app.liteMode': true }, fullDeps);
+  const delegatedTools = [
+    'ask_mentor',
+    'run_subagent',
+    'get_subagent_result',
+    'get_subagent_status',
+    'send_message',
+    'cancel_run',
+  ];
+
+  expect(standard).toEqual(expect.arrayContaining(delegatedTools));
+  expect(standard).toContain('ask_user');
+  expect(lite).toContain('ask_user');
+  expect(lite).not.toEqual(expect.arrayContaining(delegatedTools));
+  expect(standard.filter((name) => !delegatedTools.includes(name)).sort()).toEqual([...lite].sort());
+});
+
+it('uses the patch editing surface for gpt-5 in standard and lite modes', () => {
+  for (const liteMode of [false, true]) {
+    const names = getToolNames({ 'agent.model': 'gpt-5', ...(liteMode ? { 'app.liteMode': true } : {}) });
+
+    expect(names).toContain('apply_patch');
+    expect(names).not.toEqual(expect.arrayContaining(['grep', 'glob', 'create_file', 'search_replace']));
+  }
+});
+
+it('omits dedicated search tools in standard and lite modes when searchViaShell is on', () => {
+  for (const liteMode of [false, true]) {
+    const names = getToolNames({
+      'agent.model': 'gpt-4o',
+      'app.searchViaShell': 'on',
+      ...(liteMode ? { 'app.liteMode': true } : {}),
+    });
+
+    expect(names).not.toEqual(expect.arrayContaining(['grep', 'glob']));
+  }
+});
+
+it('omits code-context tools in standard and lite modes for remote execution', () => {
+  for (const liteMode of [false, true]) {
+    const names = getToolNames(
+      { 'agent.model': 'gpt-4o', ...(liteMode ? { 'app.liteMode': true } : {}) },
+      { executionContext: new ExecutionContext({ isRemote: () => true } as any, '/remote') },
+    );
+
+    expect(names).not.toEqual(expect.arrayContaining(['read_code_outline', 'code_context_search']));
+  }
+});
+
+it('keeps plan, mentor, and orchestrator tool surfaces equal to standard', () => {
+  const fullDeps = {
+    askMentor: async () => 'mentor',
+    runSubagent: async () => makeSubagentResult('subagent'),
+    getAskUserAnswer: () => 'answer',
+    ...orchestratorSubagentDeps,
+  };
+  const standard = getToolNames({ 'agent.model': 'gpt-4o', 'agent.smartModel': 'gpt-4o' }, fullDeps);
+
+  for (const mode of ['app.planMode', 'app.mentorMode', 'app.orchestratorMode']) {
+    const dependencies = mode === 'app.orchestratorMode' ? { ...fullDeps, ...orchestratorSubagentDeps } : fullDeps;
+    const names = getToolNames({ 'agent.model': 'gpt-4o', 'agent.smartModel': 'gpt-4o', [mode]: true }, dependencies);
+    expect([...names].sort()).toEqual([...standard].sort());
+  }
 });
 
 it('getAgentDefinition includes grep and glob when searchViaShell is false', () => {

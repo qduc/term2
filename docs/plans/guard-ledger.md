@@ -1397,7 +1397,7 @@ a7e44292  fix(retry): close the requirement-5 raw-array false-positive risk
 
 ### Codex WebSocket connect-time timeout recovery
 
-Disposition: **repaired in `4f4ba2a0`; ledger closeout pending this docs commit.**
+Disposition: **repaired in `4f4ba2a0`; documented in `ad2e247f`; merged in `640a1e37`.**
 
 Live request `d066fb9e` exposed a gap in the Codex WebSocket recovery
 boundary: the initial subagent request failed during socket connection with

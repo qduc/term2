@@ -6,6 +6,7 @@ import { AmbiguousModelOutcomeError } from '../retry/retry-errors.js';
 import { recordWebSocketDispatch, UnsentWebSocketRequestError } from '../../providers/websocket-request-dispatch.js';
 import { DefaultConversationRecoveryPolicy } from '../retry/recovery-policy.js';
 import { DefaultRetryClassifier } from '../retry/retry-classifier.js';
+import { RetryRecoveryBudgetExhaustedError } from '../retry/retry-recovery-budget.js';
 
 function createAttempt() {
   return new TurnAttempt({
@@ -247,6 +248,43 @@ it.each([{ kind: 'transient', attempt: 1, delayMs: 5 }, { kind: 'model_retry' }]
     expect(plans).toEqual([{ kind: 'terminate', events: [] }]);
   },
 );
+
+// classifyProviderFailure sees a plain RetryRecoveryBudgetExhaustedError as
+// non-retryable "unknown", so the exhausted flag must recognize the typed
+// error directly instead of relying on that generic classification -- this
+// is the case the physical-attempt budget actually raises.
+it('presents retry_exhausted for a budget-exhaustion error even though it classifies as non-retryable', async () => {
+  const handler = new InitialTurnRecoveryHandler({
+    conversationStore: { getHistory: () => [] } as any,
+    freshStartRetriesAllowed: true,
+    generationGuard: { isCurrent: () => true } as any,
+    inputPlanner: { recordSuccess: () => {} } as any,
+    logger: { warn: () => {}, error: () => {}, getCorrelationId: () => undefined } as any,
+    recoveryExecutor: {
+      apply: () => ({ kind: 'terminated', events: [] }),
+    } as any,
+    recoveryPolicy: { plan: () => ({ kind: 'terminate', events: [] }) } as any,
+    retryClassifier: { classify: () => ({ kind: 'unrecoverable' }) } as any,
+    retryEventPresenter: { present: () => ({ event: {}, logMessage: '', logFields: {} }) } as any,
+    sessionId: 'budget-exhausted',
+    provider: 'openai',
+  });
+
+  const events: any[] = [];
+  const iterator = handler.handle({
+    error: new RetryRecoveryBudgetExhaustedError(new Error('upstream 503')),
+    attempt: createAttempt(),
+    stream: null,
+  });
+  let next = await iterator.next();
+  while (!next.done) {
+    events.push(next.value);
+    next = await iterator.next();
+  }
+
+  expect(events.map((e: any) => e.type)).toEqual(['retry_exhausted', 'error']);
+  expect(events[0]).toMatchObject({ type: 'retry_exhausted', provider: 'openai', canRetry: true });
+});
 
 it('returns stale before classifying when the generation is outdated', async () => {
   const handler = new InitialTurnRecoveryHandler({

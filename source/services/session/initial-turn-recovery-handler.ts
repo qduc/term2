@@ -10,6 +10,7 @@ import type { RetryEventPresenter } from '../retry/retry-event-presenter.js';
 import type { NextRunInstruction, RecoveryState } from '../retry/retry-contracts.js';
 import { describeError } from '../../utils/error-helpers.js';
 import { classifyProviderFailure } from '../retry/provider-failure-classification.js';
+import { isRetryRecoveryBudgetExhaustedError } from '../retry/retry-recovery-budget.js';
 import type { SessionInputPlanner } from './session-input-planner.js';
 import type { TurnAttempt } from './turn-attempt.js';
 
@@ -80,9 +81,10 @@ export class InitialTurnRecoveryHandler {
       const providerFailure = classifyProviderFailure(error);
       const exhausted =
         !stream &&
-        providerFailure.retryable &&
-        providerFailure.errorKind !== 'authentication' &&
-        providerFailure.errorKind !== 'cancelled';
+        (isRetryRecoveryBudgetExhaustedError(error) ||
+          (providerFailure.retryable &&
+            providerFailure.errorKind !== 'authentication' &&
+            providerFailure.errorKind !== 'cancelled'));
       const droppedUserMessage =
         attempt.addedUserMessage && !stream
           ? { text: attempt.turn.text, imageCount: attempt.turn.images?.length ?? 0 }

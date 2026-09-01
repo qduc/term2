@@ -10,7 +10,10 @@ import {
   classifyUpstreamRetryableError,
   computeUpstreamRetryDelayMs,
 } from '../services/retry/upstream-retry-policy.js';
-import type { RetryRecoveryBudget } from '../services/retry/retry-recovery-budget.js';
+import {
+  RetryRecoveryBudgetExhaustedError,
+  type RetryRecoveryBudget,
+} from '../services/retry/retry-recovery-budget.js';
 
 type RetryingModelOptions = {
   retryAttempts: number;
@@ -81,11 +84,12 @@ export class RetryingModel implements StreamedModelTurn {
   }
 
   async *stream(request: StreamedModelTurnRequest): AsyncIterable<StreamedModelTurnEvent> {
+    let lastError: unknown;
     for (let attempt = 0; ; attempt++) {
       let committed = false;
       try {
         if (request.recoveryBudget && !request.recoveryBudget.claimPhysicalAttempt()) {
-          throw new Error('Retry recovery physical-attempt budget exhausted');
+          throw new RetryRecoveryBudgetExhaustedError(lastError);
         }
         for await (const event of this.model.stream(request)) {
           committed = true;
@@ -97,6 +101,7 @@ export class RetryingModel implements StreamedModelTurn {
           this.#logExhaustion(error, attempt);
           throw error;
         }
+        lastError = error;
         const budget = request.recoveryBudget;
         budget?.noteRetryableFailure();
         const retryAttempt = attempt + 1;

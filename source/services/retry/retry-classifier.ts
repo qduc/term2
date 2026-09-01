@@ -13,6 +13,7 @@ import { AmbiguousModelOutcomeError, ConversationStateNoProgressError } from './
 import { extractHistoryLength } from '../stream-snapshot.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { isMissingChainedToolOutputError, isOrphanedChainedToolOutputError } from '../../lib/chained-input-filter.js';
+import { isRetryRecoveryBudgetExhaustedError } from './retry-recovery-budget.js';
 
 const TRANSIENT_BASE_DELAY_MS = 500;
 const TRANSIENT_MAX_DELAY_MS = 30_000;
@@ -31,6 +32,15 @@ export class DefaultRetryClassifier {
 
   classify(context: ClassificationContext): ClassifiedFailure {
     const { error, retryCounts, stream, maxTransientRetries, maxModelRetries } = context;
+
+    // The shared transport/session recovery envelope already gave up (90s
+    // deadline, 3 physical attempts, or 1 automatic replay). Retrying again at
+    // this layer would just re-enter RetryingModel, which claims against the
+    // same exhausted budget and throws this same error immediately -- an
+    // unproductive bounce between layers instead of a clean stop.
+    if (isRetryRecoveryBudgetExhaustedError(error)) {
+      return { kind: 'unrecoverable' };
+    }
 
     // Once the application has emitted any model event, the request may have
     // produced user-visible or externally meaningful work. Never replay that

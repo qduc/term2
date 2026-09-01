@@ -5,6 +5,7 @@ import { MissingChainedToolOutputError, OrphanedChainedToolOutputError } from '.
 import type { ClassificationContext } from './retry-contracts.js';
 import { AmbiguousModelOutcomeError, ConversationStateNoProgressError } from './retry-errors.js';
 import { DefaultRetryClassifier } from './retry-classifier.js';
+import { RetryRecoveryBudgetExhaustedError } from './retry-recovery-budget.js';
 
 const makeClassifier = (agentClient: Record<string, any> = {}, random: () => number = Math.random) =>
   new DefaultRetryClassifier(agentClient as any, random);
@@ -30,6 +31,19 @@ it('classify terminates an ambiguous provider outcome instead of replaying the t
   const result = classifier.classify(
     baseContext({ error: new AmbiguousModelOutcomeError('request accepted but response was not acknowledged') }),
   );
+
+  expect(result.kind).toBe('unrecoverable');
+});
+
+// A budget-exhaustion error means RetryingModel already refused to claim
+// another physical attempt against the shared 90s/3-attempt envelope.
+// Classifying it as anything but terminal would send the session layer back
+// into a retry that immediately re-throws the same error, bouncing forever
+// between the two layers instead of stopping cleanly.
+it('classify terminates instead of bouncing on a budget-exhaustion error', () => {
+  const classifier = makeClassifier();
+
+  const result = classifier.classify(baseContext({ error: new RetryRecoveryBudgetExhaustedError() }));
 
   expect(result.kind).toBe('unrecoverable');
 });

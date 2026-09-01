@@ -134,6 +134,16 @@ export class TurnWorkflow {
    */
   #activeRecoveryBudget: RetryRecoveryBudget | undefined;
 
+  /**
+   * Set once `context_compaction_failed` has been yielded for the current failure
+   * episode. Recovery replays the same request-boundary failure through both the
+   * initial and continuation catch sites, and without this each replay appends
+   * another identical "Context compaction failed" system message. Cleared at the
+   * next turn boundary (openTurn) and whenever a turn returns an outcome, so a
+   * genuinely separate episode still surfaces.
+   */
+  #compactionFailureNotified = false;
+
   constructor(private readonly deps: TurnWorkflowDeps) {
     this.#toolCallMarkers = deps.toolCallMarkers ?? new ToolCallMarkerStore();
     this.#batchCoordinator =
@@ -157,11 +167,29 @@ export class TurnWorkflow {
    * first request, and the backoff before a retry restarts one.
    */
   openTurn(): void {
+    this.#compactionFailureNotified = false;
     this.deps.agentClient.openTurn?.();
   }
 
   closeTurn(): void {
     this.deps.agentClient.closeTurn?.();
+  }
+
+  /**
+   * Yields at most one `context_compaction_failed` per failure episode. Returns
+   * undefined (and emits nothing) when the same episode already notified, so
+   * recovery replays of one request-boundary failure render a single UI message.
+   */
+  #compactionFailureEvent(category: 'request' | 'validation'): ConversationEvent | undefined {
+    if (this.#compactionFailureNotified) return undefined;
+    this.#compactionFailureNotified = true;
+    return {
+      type: 'context_compaction_failed',
+      provider: 'openai',
+      sessionId: this.deps.sessionId,
+      errorCategory: category,
+      durationMs: 0,
+    };
   }
 
   steer(items: readonly ProviderInputItem[], options?: { id?: string }): Promise<SteerOutcome> {
@@ -188,17 +216,16 @@ export class TurnWorkflow {
     options: InitialTurnRunOptions = {},
   ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
     try {
-      return yield* this.#executeInitialBody(attemptOrInput, options);
+      const outcome = yield* this.#executeInitialBody(attemptOrInput, options);
+      // A returned outcome ends the failure episode even when the turn itself
+      // failed; only a thrown error keeps the episode (and the suppression) alive.
+      this.#compactionFailureNotified = false;
+      return outcome;
     } catch (error) {
       const failure = contextCompactionFailureCategory(error);
       if (failure) {
-        yield {
-          type: 'context_compaction_failed',
-          provider: 'openai',
-          sessionId: this.deps.sessionId,
-          errorCategory: failure,
-          durationMs: 0,
-        };
+        const event = this.#compactionFailureEvent(failure);
+        if (event) yield event;
       }
       throw error;
     }
@@ -263,17 +290,15 @@ export class TurnWorkflow {
     policy?: ApprovalDecisionPolicy,
   ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
     try {
-      return yield* this.#executeContinuationBodyImpl(init, policy);
+      const outcome = yield* this.#executeContinuationBodyImpl(init, policy);
+      // A returned outcome ends the failure episode (see executeInitial).
+      this.#compactionFailureNotified = false;
+      return outcome;
     } catch (error) {
       const failure = contextCompactionFailureCategory(error);
       if (failure) {
-        yield {
-          type: 'context_compaction_failed',
-          provider: 'openai',
-          sessionId: this.deps.sessionId,
-          errorCategory: failure,
-          durationMs: 0,
-        };
+        const event = this.#compactionFailureEvent(failure);
+        if (event) yield event;
       }
       throw error;
     }

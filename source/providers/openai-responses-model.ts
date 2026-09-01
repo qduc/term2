@@ -335,7 +335,12 @@ export function contextCompactionFailureCategory(error: unknown): ContextCompact
   const record = error as Record<string, unknown>;
   const status = Number(record.status ?? record.statusCode ?? (record.error as any)?.status);
   const text = JSON.stringify(error);
-  if (status === 500 && /context[_ ]management|server_error/i.test(text)) return 'request';
+  // Every branch requires explicit context-management evidence. `server_error` alone is
+  // OpenAI's generic 5xx marker and also appears on transport/provider failures that have
+  // nothing to do with compaction (e.g. an in-band Codex `server_error` frame on a long
+  // chained request). Matching it here misattributes the failure as a compaction failure
+  // and, via markContextCompactionFailure, disables compaction for the whole session.
+  if (status === 500 && /context[_ ]management/i.test(text)) return 'request';
   if (status === 400 && /unsupported_value/i.test(text) && /context[_ ]management/i.test(text)) return 'request';
   if (status === 400 && /integer_below_min_value|compact_threshold|context[_ ]management/i.test(text))
     return 'validation';

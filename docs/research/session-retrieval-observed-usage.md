@@ -20,6 +20,15 @@ silence, cursor unreliability, and corpus-size latency — and each is now
 documented below with its root cause. No API, default, budget, or prompt was
 changed; the three patterns are candidate improvement targets for a future
 controlled phase.
+**2026-09-03 controlled repair cell: scoping defect fixed in product.** The
+controlled repair cell (fixed model/effort, deterministic oracle) for the
+project-scoping pattern ran to completion and the repair shipped: the browser
+corpus now pins to the session's home workspace (the root the session started
+in) instead of the live cwd, and every `session_list`/`search`/`read` result
+surfaces an effective `scope`. The cell reproduced Pattern 1 on the
+pre-repair build and showed the pinned corpus resolving the exact-ID read from
+inside the worktree on the repair build. Cursor handles and corpus-size
+latency remain open candidates; see the decision below.
 
 ## 2026-09-02 follow-up: eleven verified sessions, 2026-08-31 → 2026-09-01
 
@@ -139,12 +148,47 @@ new cohort shows it is a real scaling problem at current corpus size.
 The acceptance bar from the 2026-08-31 study is unchanged: no API/default/
 prompt change from naturalistic logs alone. But the bar has now been met for
 the *scoping* pattern — it is a silent correctness failure in three
-independent sessions, not a quality variance — so the next step is a
+independent sessions, not a quality variance — so the next step was a
 controlled repair cell (fixed model/effort, deterministic oracle) that
 verifies the browser either (a) pins its corpus to the session's home
 project rather than the live cwd, or (b) surfaces the effective scope in
 `list`/`search`/`read` results so a `total: 0` is distinguishable from a
-scope switch. Cursor handles and latency remain candidates; they need one
+scope switch.
+
+**Repair cell result (2026-09-03).** The cell ran on `codex/gpt-5.6-luna`
+(medium) in a throwaway bench repo at
+`/home/qduc/.agents/runtime/bench-session-scope-20260902` with a deterministic
+two-message protocol: (1) create and `enter_worktree` a worktree of the bench
+repo, (2) recover a token that exists only in a seed session's transcript
+(via the session tools) while inside the worktree, then fix a failing
+`node --test` fixture and commit with the token as message suffix. The oracle
+required the recovered token in the final answer.
+
+- **Control (current build at the time):** session `4aec6622`. Inside the
+  worktree, `session_search` → `total: 0`, `session_read <seed>` →
+  `not_found` (opaque), `session_list` → `total: 0`, `session_search` →
+  `total: 0` — Pattern 1 reproduced, with no scope signal in any result. The
+  agent recovered only by `exit_worktree` (returning to the home root),
+  reading the seed there, re-entering the worktree, and completing the fix.
+  Oracle passed via the workaround; the defect was exposed as silent
+  empty-corpus results and two extra round-trips.
+- **Repair (pinned corpus + scope field):** session `0ea493f4`. Inside the
+  worktree, a single `session_read <seed>` returned the transcript (with the
+  new `"scope"` field), the agent fixed the fixture, committed with the
+  token, and reported it. Oracle passed with no workaround.
+
+Both cells passed their oracle (the agent is capable of recovering), so the
+outcome is not a quality verdict — it is the controlled counterfactual that
+the scoping pattern is a real, isolated defect and that pinning the corpus to
+the session's home workspace removes the failure mode the naturalistic
+sessions hit. The shipped repair implements (a) and (b) together: the browser
+pins to `executionContext.getHomeWorkspace()` and every result carries
+`scope`. The driver and replay instructions are in
+`scripts/experiments/session-retrieval-scope-cell.mjs`; raw cell transcripts
+are preserved under the bench dir's `raw-cells/` (local user state, not
+committed).
+
+Cursor handles and latency remain candidates; they need one
 more repeated case or a controlled counterfactual before changing.
 
 The acceptance bar remains the one in

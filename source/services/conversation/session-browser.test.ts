@@ -48,6 +48,7 @@ it('lists and isolates sessions by current local or SSH context', () => {
   writeSession('remote-b', '/project', 'host-b');
   writeSession('other', '/other');
 
+  expect((new SessionBrowser(() => ({ projectPath: '/project' })).list({}) as any).scope).toBe('/project');
   expect(
     (new SessionBrowser(() => ({ projectPath: '/project' })).list({}) as any).sessions.map(
       (session: any) => session.id,
@@ -61,6 +62,22 @@ it('lists and isolates sessions by current local or SSH context', () => {
   expect(new SessionBrowser(() => ({ projectPath: '/project' })).read({ id: 'remote-a' })).toMatchObject({
     error: { code: 'not_found' },
   });
+});
+
+it('includes the browser scope in read results and not-found diagnostics', () => {
+  writeSession('other-project', '/other');
+  const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
+
+  expect(browser.read({ id: 'missing' })).toMatchObject({
+    error: { code: 'not_found', message: expect.stringContaining('/project') },
+  });
+  expect(browser.read({ id: 'other-project' })).toMatchObject({
+    error: {
+      code: 'not_found',
+      message: expect.stringContaining('/other'),
+    },
+  });
+  expect((browser.read({ id: 'other-project' }) as any).error.message).toContain('/project');
 });
 
 it('projects replay messages, searches every kind, and pages oversized text without exposing internals', () => {
@@ -88,8 +105,10 @@ it('projects replay messages, searches every kind, and pages oversized text with
   const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
 
   const search: any = browser.search({ query: 'needle' });
+  expect(search.scope).toBe('/project');
   expect(search.results.map((result: any) => result.kind)).toEqual(['user', 'assistant']);
   const first: any = browser.read({ id, maxChars: 512, limit: 20 });
+  expect(first.scope).toBe('/project');
   expect(first.items.some((item: any) => item.kind === 'tool' && item.text.includes('hidden'))).toBe(false);
   expect(first.items.some((item: any) => !item.complete && item.text.length > 0)).toBe(true);
   expect(JSON.stringify(first).length).toBeLessThanOrEqual(512);

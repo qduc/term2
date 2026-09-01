@@ -6,6 +6,7 @@ import type { ClassificationContext } from './retry-contracts.js';
 import { AmbiguousModelOutcomeError, ConversationStateNoProgressError } from './retry-errors.js';
 import { DefaultRetryClassifier } from './retry-classifier.js';
 import { RetryRecoveryBudgetExhaustedError } from './retry-recovery-budget.js';
+import { UnsentWebSocketRequestError } from '../../providers/websocket-request-dispatch.js';
 
 const makeClassifier = (agentClient: Record<string, any> = {}, random: () => number = Math.random) =>
   new DefaultRetryClassifier(agentClient as any, random);
@@ -46,6 +47,14 @@ it('classify terminates instead of bouncing on a budget-exhaustion error', () =>
   const result = classifier.classify(baseContext({ error: new RetryRecoveryBudgetExhaustedError() }));
 
   expect(result.kind).toBe('unrecoverable');
+});
+
+it('classifies a positively unsent websocket request as non-replaying chain recovery', () => {
+  const classifier = makeClassifier({}, () => 0);
+
+  const result = classifier.classify(baseContext({ error: new UnsentWebSocketRequestError('connect timed out') }));
+
+  expect(result).toMatchObject({ kind: 'chain_recovery', attempt: 1, cause: 'connection_interrupted' });
 });
 
 // outputPush() in application-run-loop.ts pushes run_budget evidence and

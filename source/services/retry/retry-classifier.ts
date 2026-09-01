@@ -15,6 +15,7 @@ import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { isMissingChainedToolOutputError, isOrphanedChainedToolOutputError } from '../../lib/chained-input-filter.js';
 import { isRetryRecoveryBudgetExhaustedError } from './retry-recovery-budget.js';
 import { streamHasCommittedOutput } from '../agent-stream.js';
+import { UnsentWebSocketRequestError } from '../../providers/websocket-request-dispatch.js';
 
 const TRANSIENT_BASE_DELAY_MS = 500;
 const TRANSIENT_MAX_DELAY_MS = 30_000;
@@ -58,6 +59,23 @@ export class DefaultRetryClassifier {
     // safely recoverable failure.
     if (context.hasCommittedOutput || (stream && streamHasCommittedOutput(stream))) {
       return { kind: 'unrecoverable' };
+    }
+
+    // The provider has positive send-path evidence that no request frame left
+    // the socket. Rebuild from durable full history rather than treating this
+    // as an ordinary transient retry; subagent sessions disable fresh-start
+    // retries but can safely take this non-replaying recovery path.
+    if (error instanceof UnsentWebSocketRequestError) {
+      const nextAttempt = retryCounts.transientRetryCount + 1;
+      if (nextAttempt > maxTransientRetries) {
+        return { kind: 'unrecoverable' };
+      }
+      return {
+        kind: 'chain_recovery',
+        attempt: nextAttempt,
+        delayMs: computeTransientDelayMs(nextAttempt, this.random),
+        cause: 'connection_interrupted',
+      };
     }
 
     const hallucinationDecision = decideRetry(

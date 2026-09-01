@@ -2,6 +2,7 @@ import type { SettingsService } from './settings/settings-service.js';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import { setTrimConfig } from '../utils/output/output-trim.js';
 import { planModeNotice, runtimeModeNotice } from './mode-notices.js';
+import { ProfileTransitionService } from './profiles/profile-transition.js';
 
 export interface RuntimeSettingRouterConversationService {
   switchProvider(provider: string): void;
@@ -67,6 +68,16 @@ export class ConversationConfigurationService {
 }
 
 export function applyRuntimeSettingChange(key: string, value: unknown, deps: RuntimeSettingRouterDeps): void {
+  if (key === 'app.activeProfileId') {
+    const transitionService = new ProfileTransitionService({
+      settingsService: deps.settingsService,
+      rebuildAgent: () => deps.setModel(deps.settingsService.get('agent.model')),
+      queueModeNotice: (text) => deps.conversationService.queueModeNotice(text),
+    });
+    transitionService.activate(String(value));
+    return;
+  }
+
   if (key === 'agent.model') {
     deps.setModel(String(value));
     return;

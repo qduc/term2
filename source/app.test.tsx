@@ -971,7 +971,7 @@ describe('App orchestration', () => {
       // Trigger mode switch confirm request
       await act(async () => {
         mocks.requestModeSwitchConfirmCallback!({
-          modeKey: 'app.liteMode',
+          targetProfileId: 'builtin:lite',
           modeLabel: 'Lite',
           targetValue: true,
           enabledDetail: ' - using minimal prompt',
@@ -979,7 +979,7 @@ describe('App orchestration', () => {
       });
 
       expect(mocks.bottomAreaProps.pendingModeSwitch).toEqual({
-        modeKey: 'app.liteMode',
+        targetProfileId: 'builtin:lite',
         modeLabel: 'Lite',
         targetValue: true,
         enabledDetail: ' - using minimal prompt',
@@ -991,8 +991,7 @@ describe('App orchestration', () => {
       });
 
       expect(mocks.clearConversation).toHaveBeenCalled();
-      expect(services.settingsService.set).toHaveBeenCalledWith('app.planMode', false);
-      expect(services.settingsService.set).toHaveBeenCalledWith('app.liteMode', true);
+      expect(services.settingsService.set).toHaveBeenCalledWith('app.activeProfileId', 'builtin:lite');
       expect(mocks.addSystemMessage).toHaveBeenCalledWith('Welcome to term²! Type a message to start chatting.');
       expect(mocks.addSystemMessage).toHaveBeenCalledWith('Lite mode enabled - using minimal prompt');
       expect(mocks.bottomAreaProps.pendingModeSwitch).toBeNull();
@@ -1010,7 +1009,7 @@ describe('App orchestration', () => {
       // Trigger mode switch confirm request
       await act(async () => {
         mocks.requestModeSwitchConfirmCallback!({
-          modeKey: 'app.orchestratorMode',
+          targetProfileId: 'builtin:orchestrator',
           modeLabel: 'Orchestrator',
           targetValue: true,
           enabledDetail: ' - tool-backed work must use subagents',

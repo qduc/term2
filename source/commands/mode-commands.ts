@@ -1,6 +1,9 @@
 import { useCallback } from 'react';
 import type { SlashCommand } from '../slash-commands.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
+import { ProfileTransitionService } from '../services/profiles/profile-transition.js';
+import { resolveActiveProfile } from '../services/profiles/active-profile.js';
+import { ProfileResolutionError } from '../services/profiles/types.js';
 
 /** All exclusive mode keys. */
 export const EXCLUSIVE_MODE_KEYS = ['app.liteMode', 'app.orchestratorMode', 'app.planMode', 'app.mentorMode'] as const;
@@ -8,62 +11,32 @@ type ExclusiveModeKey = (typeof EXCLUSIVE_MODE_KEYS)[number];
 
 interface ModeHelpersDeps {
   settingsService: SettingsService;
-  applyRuntimeSetting: (key: string, value: any) => void;
+  transitionService: ProfileTransitionService;
   addSystemMessage: (text: string) => void;
 }
 
-export function useModeHelpers({ settingsService, applyRuntimeSetting, addSystemMessage }: ModeHelpersDeps) {
-  const disableOtherModes = useCallback(
-    (except: ExclusiveModeKey) => {
-      for (const key of EXCLUSIVE_MODE_KEYS) {
-        if (key !== except && settingsService.get(key)) {
-          settingsService.set(key, false);
-          applyRuntimeSetting(key, false);
-        }
-      }
-    },
-    [settingsService, applyRuntimeSetting],
-  );
-
+export function useModeHelpers({ settingsService, transitionService, addSystemMessage }: ModeHelpersDeps) {
   const togglePlanMode = useCallback(() => {
-    const currentValue = settingsService.get('app.planMode');
-    const newValue = !currentValue;
-
-    if (newValue) {
-      disableOtherModes('app.planMode');
-    }
-
-    settingsService.set('app.planMode', newValue);
-    applyRuntimeSetting('app.planMode', newValue);
-
-    addSystemMessage(
-      `Plan mode ${newValue ? 'enabled' : 'disabled'}${newValue ? ' - read-only research/planning mode' : ''}`,
-    );
-  }, [settingsService, applyRuntimeSetting, addSystemMessage, disableOtherModes]);
+    const isPlan = resolveActiveProfile(settingsService).identity.id === 'builtin:plan';
+    transitionService.activate(isPlan ? 'builtin:standard' : 'builtin:plan');
+    addSystemMessage(`Plan mode ${isPlan ? 'disabled' : 'enabled - read-only research/planning mode'}`);
+  }, [settingsService, transitionService, addSystemMessage]);
 
   const cycleAppModes = useCallback(() => {
-    const planMode = settingsService.get('app.planMode');
-    const nextPlanMode = !planMode;
-    const modeName = nextPlanMode ? 'Plan' : 'Standard';
-    const detail = nextPlanMode ? ' - read-only research/planning mode' : '';
+    const isPlan = resolveActiveProfile(settingsService).identity.id === 'builtin:plan';
+    transitionService.activate(isPlan ? 'builtin:standard' : 'builtin:plan');
+    addSystemMessage(
+      `Switched to ${isPlan ? 'Standard' : 'Plan'} mode${isPlan ? '' : ' - read-only research/planning mode'}`,
+    );
+  }, [settingsService, transitionService, addSystemMessage]);
 
-    if (nextPlanMode) {
-      disableOtherModes('app.planMode');
-    }
-
-    settingsService.set('app.planMode', nextPlanMode);
-    applyRuntimeSetting('app.planMode', nextPlanMode);
-
-    addSystemMessage(`Switched to ${modeName} mode${detail}`);
-  }, [settingsService, applyRuntimeSetting, addSystemMessage, disableOtherModes]);
-
-  return { disableOtherModes, togglePlanMode, cycleAppModes };
+  return { togglePlanMode, cycleAppModes };
 }
 
 export type { ExclusiveModeKey };
 
 export interface PendingModeSwitch {
-  modeKey: ExclusiveModeKey;
+  targetProfileId: string;
   modeLabel: string;
   targetValue: boolean;
   enabledDetail?: string;
@@ -71,38 +44,41 @@ export interface PendingModeSwitch {
 
 export interface CreateModeToggleCommandDeps {
   settingsService: SettingsService;
-  applyRuntimeSetting: (key: string, value: any) => void;
+  transitionService: ProfileTransitionService;
   addSystemMessage: (text: string) => void;
-  disableOtherModes: (except: ExclusiveModeKey) => void;
+  messages?: { sender: string }[];
   requestModeSwitchConfirm?: (pending: PendingModeSwitch) => void;
 }
 
 /**
  * Create a slash command for toggling an exclusive mode (lite, mentor, orchestrator).
- * When `messages` is provided, the command will block toggling mid-session or request confirmation.
+ * Lite changes are confirmed or blocked when `messages` contains session history.
  */
 export function createModeToggleCommand(
-  modeKey: ExclusiveModeKey,
+  profileId: 'lite' | 'mentor' | 'orchestrator',
   label: string,
   description: string,
   enabledDetail: string,
-  deps: CreateModeToggleCommandDeps & { messages?: { sender: string }[] },
+  deps: CreateModeToggleCommandDeps,
 ): SlashCommand {
   return {
     name: label,
     description,
     action: () => {
       const modeLabel = label.charAt(0).toUpperCase() + label.slice(1);
-      const newValue = !deps.settingsService.get(modeKey);
+      const current = resolveActiveProfile(deps.settingsService);
+      const targetProfileId =
+        current.identity.id === `builtin:${profileId}` ? 'builtin:standard' : `builtin:${profileId}`;
+      const targetValue = targetProfileId === `builtin:${profileId}`;
 
-      // History guard: some modes (lite, orchestrator) can't toggle mid-session.
+      // Lite changes the prompt/tool shape and must be confirmed when history exists.
       const hasHistory = deps.messages ? deps.messages.some((msg) => msg.sender !== 'system') : false;
-      if (hasHistory) {
+      if (profileId === 'lite' && hasHistory) {
         if (deps.requestModeSwitchConfirm) {
           deps.requestModeSwitchConfirm({
-            modeKey,
+            targetProfileId,
             modeLabel,
-            targetValue: newValue,
+            targetValue,
             enabledDetail,
           });
           return true;
@@ -114,14 +90,39 @@ export function createModeToggleCommand(
         return true;
       }
 
-      if (newValue) {
-        deps.disableOtherModes(modeKey);
+      deps.transitionService.activate(targetProfileId);
+      deps.addSystemMessage(`${modeLabel} mode ${targetValue ? `enabled${enabledDetail}` : 'disabled'}`);
+      return true;
+    },
+  };
+}
+
+export function createProfileCommand({
+  settingsService: _settingsService,
+  transitionService,
+  addSystemMessage,
+}: {
+  settingsService: SettingsService;
+  transitionService: ProfileTransitionService;
+  addSystemMessage: (text: string) => void;
+}): SlashCommand {
+  return {
+    name: 'profile',
+    description: 'Switch the active profile',
+    expectsArgs: true,
+    action: (args?: string) => {
+      const rawId = args?.trim();
+      if (!rawId) {
+        addSystemMessage('Available profiles: standard, lite, plan, mentor, orchestrator (usage: /profile <id>)');
+        return true;
       }
-
-      deps.settingsService.set(modeKey, newValue);
-      deps.applyRuntimeSetting(modeKey, newValue);
-
-      deps.addSystemMessage(`${modeLabel} mode ${newValue ? `enabled${enabledDetail}` : 'disabled'}`);
+      const targetId = rawId.includes(':') ? rawId : `builtin:${rawId}`;
+      try {
+        transitionService.activate(targetId);
+      } catch (error) {
+        if (!(error instanceof ProfileResolutionError)) throw error;
+        addSystemMessage(error.message);
+      }
       return true;
     },
   };

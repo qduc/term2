@@ -695,7 +695,7 @@ it.sequential('BottomArea shows mode switch confirmation prompt when pendingMode
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,
     pendingModeSwitch: {
-      modeKey: 'app.liteMode',
+      targetProfileId: 'builtin:lite',
       modeLabel: 'Lite',
       targetValue: true,
     },

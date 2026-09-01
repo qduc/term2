@@ -11,6 +11,7 @@ import { useAppCommands } from './use-app-commands.js';
 import { getLastFinalAssistantText } from '../utils/conversation/message-utils.js';
 import { parseModelProviderArg } from '../utils/ai/model-provider-arg.js';
 import { renderInAct } from '../test-helpers/ink-testing.js';
+import { ProfileTransitionService } from '../services/profiles/profile-transition.js';
 
 async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();
@@ -238,9 +239,14 @@ const TestHookWrapper = ({
     },
     isRuntimeModifiable: () => true,
   } as any;
+  const transitionService = new ProfileTransitionService(settingsService, {
+    rebuildAgent: () => {},
+    queueModeNotice: () => {},
+  });
 
   const hookResult = useAppCommands({
     settingsService,
+    transitionService,
     addSystemMessage: (text: string) => onSystemMessage?.(text),
     applyRuntimeSetting: (key: string, value: any) => onApply?.(key, value),
     replaceInput: () => {},
@@ -398,7 +404,6 @@ it.sequential('useAppCommands leaves display-only commands runnable while a turn
 
 it.sequential('useAppCommands togglePlanMode toggles plan mode', async () => {
   const settings = new Map<string, any>();
-  const applied: string[] = [];
   let hookResult: any;
 
   await renderInAct(
@@ -406,10 +411,6 @@ it.sequential('useAppCommands togglePlanMode toggles plan mode', async () => {
       settings,
       onHookResult: (res) => {
         hookResult = res;
-      },
-      onApply: (key: string, value: any) => {
-        applied.push(key);
-        settings.set(key, value);
       },
     }),
   );
@@ -418,19 +419,17 @@ it.sequential('useAppCommands togglePlanMode toggles plan mode', async () => {
   await act(async () => {
     hookResult.togglePlanMode();
   });
-  expect(settings.get('app.planMode')).toBe(true);
-  expect(applied.includes('app.planMode')).toBe(true);
+  expect(settings.get('app.activeProfileId')).toBe('builtin:plan');
 
   // Toggle planMode OFF
   await act(async () => {
     hookResult.togglePlanMode();
   });
-  expect(settings.get('app.planMode')).toBe(false);
+  expect(settings.get('app.activeProfileId')).toBe('builtin:standard');
 });
 
 it.sequential('useAppCommands cycleAppModes cycles Standard -> Plan -> Standard', async () => {
   const settings = new Map<string, any>();
-  const applied: string[] = [];
   let hookResult: any;
 
   await renderInAct(
@@ -439,35 +438,27 @@ it.sequential('useAppCommands cycleAppModes cycles Standard -> Plan -> Standard'
       onHookResult: (res) => {
         hookResult = res;
       },
-      onApply: (key: string, value: any) => {
-        applied.push(key);
-        settings.set(key, value);
-      },
     }),
   );
 
-  // Starts in Standard (planMode false)
-  expect(settings.get('app.planMode')).toBeFalsy();
+  // Starts in Standard (the settings service normalizes compatibility flags).
+  expect(settings.get('app.activeProfileId')).toBeUndefined();
 
   // Standard -> Plan
   await act(async () => {
     hookResult.cycleAppModes();
   });
-  expect(settings.get('app.planMode')).toBe(true);
+  expect(settings.get('app.activeProfileId')).toBe('builtin:plan');
 
   // Plan -> Standard
   await act(async () => {
     hookResult.cycleAppModes();
   });
-  expect(settings.get('app.planMode')).toBe(false);
+  expect(settings.get('app.activeProfileId')).toBe('builtin:standard');
 });
 
 it.sequential('useAppCommands /orchestrator enables exclusive orchestrator mode', async () => {
-  const settings = new Map<string, any>([
-    ['app.liteMode', true],
-    ['app.mentorMode', true],
-    ['app.planMode', true],
-  ]);
+  const settings = new Map<string, any>([['app.activeProfileId', 'builtin:standard']]);
   let hookResult: any;
 
   await renderInAct(
@@ -476,7 +467,6 @@ it.sequential('useAppCommands /orchestrator enables exclusive orchestrator mode'
       onHookResult: (res) => {
         hookResult = res;
       },
-      onApply: (key: string, value: any) => settings.set(key, value),
     }),
   );
 
@@ -484,10 +474,7 @@ it.sequential('useAppCommands /orchestrator enables exclusive orchestrator mode'
     hookResult.slashCommands.find((command: any) => command.name === 'orchestrator').action();
   });
 
-  expect(settings.get('app.orchestratorMode')).toBe(true);
-  expect(settings.get('app.liteMode')).toBe(false);
-  expect(settings.get('app.mentorMode')).toBe(false);
-  expect(settings.get('app.planMode')).toBe(false);
+  expect(settings.get('app.activeProfileId')).toBe('builtin:orchestrator');
 });
 
 it.sequential('useAppCommands allows /orchestrator when the session has non-system history', async () => {
@@ -508,7 +495,7 @@ it.sequential('useAppCommands allows /orchestrator when the session has non-syst
     hookResult.slashCommands.find((command: any) => command.name === 'orchestrator').action();
   });
 
-  expect(settings.get('app.orchestratorMode')).toBe(true);
+  expect(settings.get('app.activeProfileId')).toBe('builtin:orchestrator');
 });
 
 it.sequential('useAppCommands allows /mentor when the session has non-system history', async () => {
@@ -529,7 +516,7 @@ it.sequential('useAppCommands allows /mentor when the session has non-system his
     hookResult.slashCommands.find((command: any) => command.name === 'mentor').action();
   });
 
-  expect(settings.get('app.mentorMode')).toBe(true);
+  expect(settings.get('app.activeProfileId')).toBe('builtin:mentor');
 });
 
 it.sequential('useAppCommands does not request confirmation for /orchestrator when history exists', async () => {
@@ -555,7 +542,7 @@ it.sequential('useAppCommands does not request confirmation for /orchestrator wh
   });
 
   expect(requestedPending).toBeNull();
-  expect(settings.get('app.orchestratorMode')).toBe(true);
+  expect(settings.get('app.activeProfileId')).toBe('builtin:orchestrator');
 });
 
 it.sequential('useAppCommands requests confirmation for /lite when history exists', async () => {
@@ -581,7 +568,7 @@ it.sequential('useAppCommands requests confirmation for /lite when history exist
   });
 
   expect(requestedPending).toEqual({
-    modeKey: 'app.liteMode',
+    targetProfileId: 'builtin:lite',
     modeLabel: 'Lite',
     targetValue: true,
     enabledDetail: ' - using minimal prompt, no codebase context',
@@ -642,12 +629,7 @@ it.sequential(
 );
 
 it.sequential('useAppCommands enabling orchestrator disables all of: lite, plan, mentor', async () => {
-  const settings = new Map<string, any>([
-    ['app.liteMode', true],
-    ['app.planMode', true],
-    ['app.mentorMode', true],
-    ['app.orchestratorMode', false],
-  ]);
+  const settings = new Map<string, any>([['app.activeProfileId', 'builtin:standard']]);
   let hookResult: any;
 
   await renderInAct(
@@ -656,7 +638,6 @@ it.sequential('useAppCommands enabling orchestrator disables all of: lite, plan,
       onHookResult: (res) => {
         hookResult = res;
       },
-      onApply: (key: string, value: any) => settings.set(key, value),
     }),
   );
 
@@ -664,19 +645,12 @@ it.sequential('useAppCommands enabling orchestrator disables all of: lite, plan,
     hookResult.slashCommands.find((command: any) => command.name === 'orchestrator').action();
   });
 
-  expect(settings.get('app.orchestratorMode')).toBe(true);
-  expect(settings.get('app.liteMode')).toBe(false);
-  expect(settings.get('app.planMode')).toBe(false);
-  expect(settings.get('app.mentorMode')).toBe(false);
+  // Profile normalization owns clearing the compatibility mode flags.
+  expect(settings.get('app.activeProfileId')).toBe('builtin:orchestrator');
 });
 
 it.sequential('useAppCommands enabling plan disables all of: lite, orchestrator, mentor', async () => {
-  const settings = new Map<string, any>([
-    ['app.liteMode', true],
-    ['app.orchestratorMode', true],
-    ['app.mentorMode', true],
-    ['app.planMode', false],
-  ]);
+  const settings = new Map<string, any>([['app.activeProfileId', 'builtin:standard']]);
   let hookResult: any;
 
   await renderInAct(
@@ -685,7 +659,6 @@ it.sequential('useAppCommands enabling plan disables all of: lite, orchestrator,
       onHookResult: (res) => {
         hookResult = res;
       },
-      onApply: (key: string, value: any) => settings.set(key, value),
     }),
   );
 
@@ -693,17 +666,11 @@ it.sequential('useAppCommands enabling plan disables all of: lite, orchestrator,
     hookResult.slashCommands.find((command: any) => command.name === 'plan').action();
   });
 
-  expect(settings.get('app.planMode')).toBe(true);
-  expect(settings.get('app.liteMode')).toBe(false);
-  expect(settings.get('app.orchestratorMode')).toBe(false);
-  expect(settings.get('app.mentorMode')).toBe(false);
+  expect(settings.get('app.activeProfileId')).toBe('builtin:plan');
 });
 
 it.sequential('useAppCommands cycleAppModes when in mentor mode switches to plan and disables mentor', async () => {
-  const settings = new Map<string, any>([
-    ['app.mentorMode', true],
-    ['app.planMode', false],
-  ]);
+  const settings = new Map<string, any>([['app.activeProfileId', 'builtin:mentor']]);
   let hookResult: any;
 
   await renderInAct(
@@ -712,7 +679,6 @@ it.sequential('useAppCommands cycleAppModes when in mentor mode switches to plan
       onHookResult: (res) => {
         hookResult = res;
       },
-      onApply: (key: string, value: any) => settings.set(key, value),
     }),
   );
 
@@ -720,8 +686,7 @@ it.sequential('useAppCommands cycleAppModes when in mentor mode switches to plan
     hookResult.cycleAppModes();
   });
 
-  expect(settings.get('app.planMode')).toBe(true);
-  expect(settings.get('app.mentorMode')).toBe(false);
+  expect(settings.get('app.activeProfileId')).toBe('builtin:plan');
 });
 
 it.sequential('useAppCommands /handoff when no assistant response exists shows system message', async () => {
@@ -765,11 +730,16 @@ it.sequential(
     ];
 
     const TestWrapper = () => {
+      const settingsService = {
+        get: (key: string) => settings.get(key) ?? false,
+        set: (key: string, value: any) => settings.set(key, value),
+      } as any;
       hookResult = useAppCommands({
-        settingsService: {
-          get: (key: string) => settings.get(key) ?? false,
-          set: (key: string, value: any) => settings.set(key, value),
-        } as any,
+        settingsService,
+        transitionService: new ProfileTransitionService(settingsService, {
+          rebuildAgent: () => {},
+          queueModeNotice: () => {},
+        }),
         addSystemMessage: (text: string) => systemMessages.push(text),
         applyRuntimeSetting: () => {},
         replaceInput: () => {},

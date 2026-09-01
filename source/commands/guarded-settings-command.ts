@@ -1,7 +1,9 @@
 import type { SlashCommand } from '../slash-commands.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
 import { createSettingsCommand, parseSettingValue } from '../utils/settings-command.js';
-import type { ExclusiveModeKey, PendingModeSwitch } from './mode-commands.js';
+import type { PendingModeSwitch } from './mode-commands.js';
+import { planProfileTransition } from '../services/profiles/profile-transition.js';
+import { ProfileResolutionError } from '../services/profiles/types.js';
 
 interface CreateGuardedSettingsCommandDeps {
   settingsService: SettingsService;
@@ -39,7 +41,7 @@ export function createGuardedSettingsCommand({
           const rawVal = isReset ? false : parseSettingValue(settingParts.slice(1).join(' '));
           const targetValue = typeof rawVal === 'boolean' ? rawVal : true;
           requestModeSwitchConfirm({
-            modeKey: settingKey as ExclusiveModeKey,
+            targetProfileId: 'builtin:lite',
             modeLabel: 'Lite',
             targetValue,
             enabledDetail: ' - using minimal prompt, no codebase context',
@@ -51,6 +53,19 @@ export function createGuardedSettingsCommand({
           'Cannot switch modes mid-session (tool/context mismatch). Use `/clear` first, then change lite mode.',
         );
         return true;
+      }
+
+      if (!isReset && settingKey === 'app.activeProfileId') {
+        const rawValue = settingParts.slice(1).join(' ');
+        const canonicalId = rawValue.includes(':') ? rawValue : `builtin:${rawValue}`;
+        try {
+          planProfileTransition(settingsService, canonicalId);
+        } catch (error) {
+          if (!(error instanceof ProfileResolutionError)) throw error;
+          addSystemMessage(`Cannot switch to profile '${canonicalId}': ${error.message}`);
+          return true;
+        }
+        return settingsCommand.action(`app.activeProfileId ${canonicalId}`);
       }
 
       return settingsCommand.action(args);

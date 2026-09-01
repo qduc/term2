@@ -428,7 +428,12 @@ export function createSettingsCommand({
         applyRuntimeSetting(key, parsedValue);
       }
       const planIs = Boolean(settingsService.get(SETTING_KEYS.APP_PLAN_MODE));
-      if (applyRuntimeSetting && key !== SETTING_KEYS.APP_PLAN_MODE && planWas !== planIs) {
+      if (
+        applyRuntimeSetting &&
+        key !== SETTING_KEYS.APP_PLAN_MODE &&
+        key !== 'app.activeProfileId' &&
+        planWas !== planIs
+      ) {
         applyRuntimeSetting(SETTING_KEYS.APP_PLAN_MODE, planIs);
       }
       addSystemMessage(formatDurableSetMessage(durableResult, key, parsedValue));

@@ -52,6 +52,11 @@ export interface AgentConfigurationDeps {
   /** Explicit interactive-root-only browser capability. */
   sessionBrowser?: SessionBrowser;
   requestSessionRollover?: (request: SessionRolloverRequest) => SessionRolloverRequestOutcome;
+  configureTaskCheckIn?: (params: any) => any;
+  setTaskCheckInPolicy?: (
+    target: { kind: 'shell' | 'subagent'; id: string },
+    options: { enabled?: boolean; intervalMs?: number },
+  ) => void;
 }
 
 export class AgentConfiguration implements AgentSource {
@@ -84,6 +89,11 @@ export class AgentConfiguration implements AgentSource {
   #allowAskUser: boolean;
   #sessionBrowser?: SessionBrowser;
   #requestSessionRollover?: (request: SessionRolloverRequest) => SessionRolloverRequestOutcome;
+  #configureTaskCheckIn?: (params: any) => any;
+  #setTaskCheckInPolicy?: (
+    target: { kind: 'shell' | 'subagent'; id: string },
+    options: { enabled?: boolean; intervalMs?: number },
+  ) => void;
   #unsubscribeSettings: (() => void) | null = null;
   #isDisposed = false;
 
@@ -115,6 +125,8 @@ export class AgentConfiguration implements AgentSource {
     this.#allowAskUser = deps.allowAskUser ?? true;
     this.#sessionBrowser = deps.sessionBrowser;
     this.#requestSessionRollover = deps.requestSessionRollover;
+    this.#configureTaskCheckIn = deps.configureTaskCheckIn;
+    this.#setTaskCheckInPolicy = deps.setTaskCheckInPolicy;
 
     // Create editor
     this.#editor = createEditorImpl({
@@ -238,6 +250,8 @@ export class AgentConfiguration implements AgentSource {
       allowAskUser: this.#allowAskUser,
       sessionBrowser: this.#sessionBrowser,
       ...(this.#requestSessionRollover ? { requestSessionRollover: this.#requestSessionRollover } : {}),
+      configureTaskCheckIn: this.#configureTaskCheckIn,
+      setTaskCheckInPolicy: this.#setTaskCheckInPolicy,
     };
   }
 

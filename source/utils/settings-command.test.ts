@@ -49,7 +49,6 @@ const baseSettings = {
     backgroundCheckIn: {
       enabled: { value: true, source: 'default' },
       intervalMs: { value: 300_000, source: 'default' },
-      maxCheckInsPerTask: { value: 3, source: 'default' },
     },
   },
   shell: {
@@ -135,7 +134,6 @@ it('formatSettingsSummary renders values with sources', () => {
   expect(summary.includes('agent.runBudget.escalation: warn (default)')).toBe(true);
   expect(summary.includes('agent.backgroundCheckIn.enabled: true (default)')).toBe(true);
   expect(summary.includes('agent.backgroundCheckIn.intervalMs: 300000 (default)')).toBe(true);
-  expect(summary.includes('agent.backgroundCheckIn.maxCheckInsPerTask: 3 (default)')).toBe(true);
   expect(summary.includes('memory.enabled: true (default)')).toBe(true);
 });
 

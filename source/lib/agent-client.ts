@@ -127,6 +127,7 @@ export class AgentClient {
   #hookScope: Term2HookScope = 'root';
   #backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
   #backgroundShellOutput?: BackgroundShellOutputBundle;
+  #backgroundCheckInScheduler?: import('../services/session/background-check-in-scheduler.js').BackgroundCheckInScheduler;
   #wrapUpOnCriticalRunBudget = false;
   // Cache application streamed models, which may own session-scoped transport
   // state (notably ResponsesWS), until the provider configuration changes.
@@ -632,6 +633,8 @@ export class AgentClient {
         requestSessionRollover: deps.sessionBrowser
           ? (request: SessionRolloverRequest) => this.requestSessionRollover(request)
           : undefined,
+        configureTaskCheckIn: (params: any) => this.configureTaskCheckIn(params),
+        setTaskCheckInPolicy: (target: any, options: any) => this.setTaskCheckInPolicy(target, options),
       },
     );
     this.#maxTurns = maxTurns ?? (agentOverride ? 1 : 20);
@@ -942,6 +945,35 @@ export class AgentClient {
     for (const job of this.#backgroundShellRegistry?.list() ?? []) {
       this.#backgroundShellRegistry?.cancel(job.id);
     }
+  }
+
+  setBackgroundCheckInScheduler(
+    scheduler: import('../services/session/background-check-in-scheduler.js').BackgroundCheckInScheduler | undefined,
+  ): void {
+    this.#backgroundCheckInScheduler = scheduler;
+  }
+
+  configureTaskCheckIn(params: {
+    target: string;
+    enabled?: boolean;
+    interval_seconds?: number;
+    next_check_in_seconds?: number;
+  }): { ok: boolean; message?: string; error?: string } {
+    if (!this.#backgroundCheckInScheduler) {
+      return { ok: false, error: 'Background check-in scheduler is not active.' };
+    }
+    return this.#backgroundCheckInScheduler.configureTaskCheckIn(params.target, {
+      enabled: params.enabled,
+      intervalMs: params.interval_seconds !== undefined ? params.interval_seconds * 1000 : undefined,
+      nextDueInMs: params.next_check_in_seconds !== undefined ? params.next_check_in_seconds * 1000 : undefined,
+    });
+  }
+
+  setTaskCheckInPolicy(
+    target: { kind: 'shell' | 'subagent'; id: string },
+    options: { enabled?: boolean; intervalMs?: number },
+  ): void {
+    this.#backgroundCheckInScheduler?.setTaskPolicy(target, options);
   }
 
   disposeBackgroundShellJobs(): Promise<void> {

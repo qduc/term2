@@ -486,7 +486,6 @@ it('proactively checks in on a still-running background shell job on a timer', (
     const settings = new Map<string, unknown>([
       ['agent.backgroundCheckIn.enabled', true],
       ['agent.backgroundCheckIn.intervalMs', 60_000],
-      ['agent.backgroundCheckIn.maxCheckInsPerTask', 2],
     ]);
     const runtime = createSessionRuntime({
       sessionId: 'bg-checkin',
@@ -514,17 +513,17 @@ it('proactively checks in on a still-running background shell job on a timer', (
       }),
     ]);
 
-    // A second interval fires the second and, per the cap, final check-in.
+    // A second interval fires the second check-in.
     vi.advanceTimersByTime(60_000);
     expect(notifications).toBe(2);
-    // A third interval is silently capped.
+    // A third interval fires without an artificial cap.
     vi.advanceTimersByTime(60_000);
-    expect(notifications).toBe(2);
+    expect(notifications).toBe(3);
 
     runtime.dispose();
-    // Disposal stops the timer: no further check-in fires even across the cap boundary.
+    // Disposal stops the timer: no further check-in fires.
     vi.advanceTimersByTime(600_000);
-    expect(notifications).toBe(2);
+    expect(notifications).toBe(3);
   } finally {
     vi.useRealTimers();
   }

@@ -264,7 +264,7 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
         '',
         ...entries,
         '',
-        'Decide freely: doing nothing and letting it keep running is a valid choice. Only report to the user or intervene (steer or stop the task) if the elapsed time or task nature makes that the right call.',
+        'Decide freely: doing nothing and letting it keep running is a valid choice. To adjust check-in frequency or silence future check-ins for a task, call configure_task_check_in. Only report to the user or intervene (steer or stop the task) if the elapsed time or task nature makes that the right call.',
       ].join('\n'),
     );
   }

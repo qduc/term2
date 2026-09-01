@@ -43,7 +43,6 @@ const SETTINGS_SOURCE_KEYS = {
     backgroundCheckIn: {
       enabled: 'agent.backgroundCheckIn.enabled',
       intervalMs: 'agent.backgroundCheckIn.intervalMs',
-      maxCheckInsPerTask: 'agent.backgroundCheckIn.maxCheckInsPerTask',
     },
     sessionRollover: {
       enabled: 'agent.sessionRollover.enabled',

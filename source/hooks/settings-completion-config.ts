@@ -103,8 +103,6 @@ export const SETTING_DESCRIPTIONS: Record<string, string> = {
     'Wake the agent periodically to check on a still-running background shell job or subagent while idle',
   [SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_INTERVAL_MS]:
     'How often to check in on a still-running background task, in milliseconds (default 5 minutes)',
-  [SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_MAX_PER_TASK]:
-    'Maximum proactive check-ins per background task before the wake stops (default 3)',
   [SETTING_KEYS.AGENT_CODEX_WEBSOCKET_FIRST_FRAME_TIMEOUT_MS]:
     'Codex WebSocket timeout before the first response frame, in milliseconds',
   [SETTING_KEYS.AGENT_CODEX_WEBSOCKET_INTER_FRAME_TIMEOUT_MS]:
@@ -271,7 +269,6 @@ export const CATEGORY_KEYS = {
     SETTING_KEYS.AGENT_RUN_BUDGET_ESCALATION,
     SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_ENABLED,
     SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_INTERVAL_MS,
-    SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_MAX_PER_TASK,
     SETTING_KEYS.SHELL_AUTO_APPROVE_MODE,
     SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL,
     SETTING_KEYS.AGENT_AUTO_APPROVE_REASONING_EFFORT,

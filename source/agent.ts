@@ -27,6 +27,11 @@ import {
   createCodeContextSearchToolDefinition,
   createReadCodeOutlineToolDefinition,
 } from './tools/file/code-context.js';
+import {
+  createConfigureTaskCheckInToolDefinition,
+  type ConfigureTaskCheckInParams,
+  type ConfigureTaskCheckInResult,
+} from './tools/agent/configure-task-check-in.js';
 import { registerToolFormatters } from './tools/command-message-formatters.js';
 import { TOOL_NAME_ASK_USER } from './tools/tool-names.js';
 import type { AnyToolDefinition, ToolRegistry } from './tools/types.js';
@@ -232,6 +237,11 @@ export const getAgentDefinition = (
     /** Explicit interactive-root-only capability; never inferred from memory access. */
     sessionBrowser?: SessionBrowser;
     requestSessionRollover?: (request: SessionRolloverRequest) => SessionRolloverRequestOutcome;
+    configureTaskCheckIn?: (params: ConfigureTaskCheckInParams) => ConfigureTaskCheckInResult;
+    setTaskCheckInPolicy?: (
+      target: { kind: 'shell' | 'subagent'; id: string },
+      options: { enabled?: boolean; intervalMs?: number },
+    ) => void;
   },
   model?: string,
 ): AgentDefinition => {
@@ -258,6 +268,8 @@ export const getAgentDefinition = (
     allowAskUser = true,
     sessionBrowser,
     requestSessionRollover,
+    configureTaskCheckIn,
+    setTaskCheckInPolicy,
   } = deps;
   const defaultModel = settingsService.get('agent.model');
   const resolvedModel = model?.trim() || defaultModel;
@@ -363,6 +375,7 @@ export const getAgentDefinition = (
     sessionAccess,
     backgroundShellRegistry: rootBackgroundShellRegistry,
     backgroundShellWatches: rootBackgroundShellOutput?.watches,
+    configureCheckIn: setTaskCheckInPolicy,
     shellChildRegistry,
   });
   const tools: AnyToolDefinition[] = [
@@ -376,6 +389,10 @@ export const getAgentDefinition = (
       loggingService,
     }),
   ];
+
+  if (configureTaskCheckIn && (rootBackgroundShellRegistry || asyncSubagentEnabled)) {
+    tools.push(createConfigureTaskCheckInToolDefinition(configureTaskCheckIn));
+  }
 
   if (rootBackgroundShellRegistry) {
     const backgroundTools = createBackgroundShellJobToolDefinitions(
@@ -494,6 +511,7 @@ export const getAgentDefinition = (
                 toSubagentResult(await runSubagent(params, context, details), params.role)
             : undefined,
           runSubagentAsync: asyncSubagentEnabled ? runSubagentAsync : undefined,
+          configureCheckIn: setTaskCheckInPolicy,
         }),
       );
     }

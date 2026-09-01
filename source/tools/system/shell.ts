@@ -83,6 +83,18 @@ const monitorOptionsSchema = z.object({
   once: z.boolean().optional().describe('Retire the watch after its first notification (notify_limit 1).'),
 });
 
+const checkInOptionsSchema = z.object({
+  enabled: z
+    .boolean()
+    .optional()
+    .describe('Enable or disable proactive check-ins for this background shell job. Defaults to true.'),
+  interval_seconds: relaxedNumber
+    .int()
+    .positive()
+    .optional()
+    .describe('Custom interval in seconds between proactive check-ins.'),
+});
+
 const shellParametersSchema = z.object({
   command: z.string().min(1).describe('Single shell command to execute.'),
   timeout_ms: relaxedNumber
@@ -112,6 +124,9 @@ const shellParametersSchema = z.object({
     .describe(
       'When background is true, attach an output monitor in this same call. The job keeps running and matching output is delivered as shell_output notifications.',
     ),
+  check_in: checkInOptionsSchema
+    .optional()
+    .describe('When background is true, configure or mute proactive check-ins for this job.'),
 });
 
 // Tool invocation normalizes shape but does not apply Zod defaults before
@@ -675,6 +690,11 @@ export function createShellToolDefinition(deps: {
   backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
   /** Root session-owned output store + watch layer for background jobs. */
   backgroundShellWatches?: BackgroundShellWatches;
+  /** Optional proactive check-in configuration sink. */
+  configureCheckIn?: (
+    target: { kind: 'shell' | 'subagent'; id: string },
+    options: { enabled?: boolean; intervalMs?: number },
+  ) => void;
   shellChildRegistry?: ShellChildRegistry;
   /** Gateway-only: reject any spawn that omits the sanitized env. */
   gatewayMode?: boolean;
@@ -694,6 +714,7 @@ export function createShellToolDefinition(deps: {
     nestedCompatibility,
     backgroundShellRegistry,
     backgroundShellWatches,
+    configureCheckIn,
     shellChildRegistry,
     gatewayMode = false,
   } = deps;
@@ -791,7 +812,7 @@ export function createShellToolDefinition(deps: {
       }
     },
     execute: async (
-      { command, timeout_ms, max_output_length, sandbox = 'default', background = false, monitor },
+      { command, timeout_ms, max_output_length, sandbox = 'default', background = false, monitor, check_in },
       _context,
       details,
     ) => {
@@ -1231,6 +1252,15 @@ export function createShellToolDefinition(deps: {
               resultToStatus: (result) => result.status,
             });
             backgroundCleanupDeferred = true;
+            if (check_in !== undefined && configureCheckIn) {
+              configureCheckIn(
+                { kind: 'shell', id: job.id },
+                {
+                  enabled: check_in.enabled,
+                  intervalMs: check_in.interval_seconds !== undefined ? check_in.interval_seconds * 1000 : undefined,
+                },
+              );
+            }
             let watchId: string | undefined;
             if (monitor !== undefined) {
               if (!backgroundShellWatches) {

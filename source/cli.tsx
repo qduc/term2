@@ -45,7 +45,7 @@ import { killLiveShellChildren } from './utils/shell/execute-shell.js';
 import { createConversationLogWriter, LockConflictError } from './services/logging/conversation-log-writer.js';
 import { AGENT_AFFECTING_SETTINGS } from './services/logging/conversation-log-events.js';
 import { installPlanModeInterceptor } from './services/plan-mode-interceptor.js';
-import { normalizeAppModes } from './services/settings/settings-schema.js';
+import { LITE_PROFILE_ID, profileIdFromLegacyMode } from './services/profiles/legacy-adapter.js';
 import { createOwnedSessionClientFactory } from './services/session/session-client-factory.js';
 import os from 'os';
 import fs from 'fs';
@@ -518,33 +518,43 @@ if (providerFlag && !getProviderIds().includes(providerFlag)) {
 // IMPORTANT: only apply the implicit lite default when no other exclusive mode
 // is already active (orchestrator or mentor take precedence).
 {
-  let resolvedLiteMode: boolean;
+  let profileId: string;
   if (resumedConversation) {
-    resolvedLiteMode = (cliOverrides.app?.liteMode as boolean | undefined) ?? false;
+    profileId = cliOverrides.app?.liteMode
+      ? LITE_PROFILE_ID
+      : profileIdFromLegacyMode({
+          orchestratorMode: settings.get('app.orchestratorMode'),
+          liteMode: settings.get('app.liteMode'),
+          planMode: settings.get('app.planMode'),
+          mentorMode: settings.get('app.mentorMode'),
+        });
   } else if (cli.flags.lite) {
-    resolvedLiteMode = true;
+    profileId = LITE_PROFILE_ID;
   } else {
     const implicitLite = Boolean(hasPositionalPrompt && !cli.flags.autoApprove);
     const persistedOrchestrator = settings.get('app.orchestratorMode');
     const persistedMentor = settings.get('app.mentorMode');
     // Implicit lite must not override a higher-precedence mode already persisted.
-    resolvedLiteMode = implicitLite && !persistedOrchestrator && !persistedMentor;
+    profileId =
+      implicitLite && !persistedOrchestrator && !persistedMentor
+        ? LITE_PROFILE_ID
+        : profileIdFromLegacyMode({
+            orchestratorMode: settings.get('app.orchestratorMode'),
+            liteMode: settings.get('app.liteMode'),
+            planMode: settings.get('app.planMode'),
+            mentorMode: settings.get('app.mentorMode'),
+          });
   }
-  settings.set('app.liteMode', resolvedLiteMode, { persist: false });
+  settings.set('app.activeProfileId', profileId, { persist: false });
 }
 
-// Normalize all mode flags to enforce mutual exclusion with a consistent
-// precedence: orchestratorMode > liteMode > planMode > mentorMode.
-const normalized = normalizeAppModes({
+const profileId = profileIdFromLegacyMode({
   orchestratorMode: settings.get('app.orchestratorMode'),
   liteMode: settings.get('app.liteMode'),
   planMode: settings.get('app.planMode'),
   mentorMode: settings.get('app.mentorMode'),
 });
-settings.set('app.orchestratorMode', normalized.orchestratorMode, { persist: false });
-settings.set('app.liteMode', normalized.liteMode, { persist: false });
-settings.set('app.planMode', normalized.planMode, { persist: false });
-settings.set('app.mentorMode', normalized.mentorMode, { persist: false });
+settings.set('app.activeProfileId', profileId, { persist: false });
 
 // SSH Handling
 const sshFlag = cli.flags.ssh;

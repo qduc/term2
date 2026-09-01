@@ -1,5 +1,6 @@
 import type { ISettingsService } from '../services/service-interfaces.js';
-import { normalizeAppModes, type AppModes } from '../services/settings/settings-schema.js';
+import { legacyModeFromProfileId, profileIdFromLegacyMode } from '../services/profiles/legacy-adapter.js';
+import type { AppModes } from '../services/settings/settings-schema.js';
 import type { SessionSettingsSnapshot } from './contracts.js';
 
 export type EffectiveGatewayToolPolicy = Readonly<Record<string, boolean>>;
@@ -19,13 +20,13 @@ export function createSessionSettingsSnapshot(input: {
   defaultsRevision?: string | number;
 }): SessionSettingsSnapshot {
   const settings = input.settings;
-  const modes = normalizeAppModes({
+  const profileId = profileIdFromLegacyMode({
     mentorMode: settings.get('app.mentorMode') === true,
     liteMode: settings.get('app.liteMode') === true,
     planMode: settings.get('app.planMode') === true,
     orchestratorMode: settings.get('app.orchestratorMode') === true,
-  } as AppModes);
-  const mode = input.mode ?? resolveMode(modes);
+  });
+  const mode = input.mode ?? resolveMode(legacyModeFromProfileId(profileId) as AppModes);
   const policy = Object.freeze({
     allowWrite: false,
     autoApprove: false,

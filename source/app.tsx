@@ -66,7 +66,7 @@ import {
   type ConversationListEntry,
   type RestoredState,
 } from './services/conversation/conversation-persistence.js';
-import { normalizeAppModes } from './services/settings/settings-schema.js';
+import { profileIdFromLegacyMode } from './services/profiles/legacy-adapter.js';
 import { composeSessionRolloverBrief } from './services/session-rollover/session-rollover-brief.js';
 
 export {
@@ -530,14 +530,7 @@ const App: FC<AppProps> = ({
         }
         conversationService.resetWithNewId(restored.id);
 
-        const mode = restored.appMode
-          ? normalizeAppModes({
-              orchestratorMode: Boolean(restored.appMode.orchestratorMode),
-              liteMode: restored.appMode.liteMode,
-              planMode: restored.appMode.planMode,
-              mentorMode: restored.appMode.mentorMode,
-            })
-          : undefined;
+        const profileId = restored.appMode ? profileIdFromLegacyMode(restored.appMode) : undefined;
         const changes = [
           ...(restored.model ? [{ key: 'agent.model', value: restored.model, persistence: 'runtime' as const }] : []),
           ...(restored.provider
@@ -547,14 +540,7 @@ const App: FC<AppProps> = ({
           ['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(restored.reasoningEffort)
             ? [{ key: 'agent.reasoningEffort', value: restored.reasoningEffort, persistence: 'runtime' as const }]
             : []),
-          ...(mode
-            ? [
-                { key: 'app.orchestratorMode', value: mode.orchestratorMode, persistence: 'runtime' as const },
-                { key: 'app.liteMode', value: mode.liteMode, persistence: 'runtime' as const },
-                { key: 'app.planMode', value: mode.planMode, persistence: 'runtime' as const },
-                { key: 'app.mentorMode', value: mode.mentorMode, persistence: 'runtime' as const },
-              ]
-            : []),
+          ...(profileId ? [{ key: 'app.activeProfileId', value: profileId, persistence: 'runtime' as const }] : []),
         ];
         configurationService.apply(changes);
 

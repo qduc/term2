@@ -126,6 +126,7 @@ export const CONTRACT_04_CONSUMER_INVENTORY = {
   ],
   'Application composition and terminal notifications — live-effect router, UI, or next request': [
     'app.shellPath',
+    'app.activeProfileId',
     'app.mentorMode',
     'app.liteMode',
     'app.planMode',

@@ -5,13 +5,13 @@ import { clearModelCache } from '../model-service.js';
 import { getProvider, upsertProvider } from '../../providers/registry.js';
 import { createOpenAICompatibleProviderDefinition } from '../../providers/openai-compatible-lazy.js';
 import { resolveProviderId, resolveProviderName } from './custom-provider-normalization.js';
+import { legacyModeFromProfileId, profileIdFromLegacyMode } from '../profiles/legacy-adapter.js';
 import {
   DEFAULT_SETTINGS,
   OPTIONAL_DEFAULT_KEYS,
   RUNTIME_MODIFIABLE_SETTINGS,
   SENSITIVE_SETTING_KEYS,
   SettingsSchema,
-  normalizeAppModes,
   type SettingKey,
   type SettingSource,
   type SettingValue,
@@ -92,6 +92,8 @@ function setSettingValue(target: Record<string, any>, key: string, value: unknow
   }
   current[parts[parts.length - 1]] = cloneSettingValue(value);
 }
+
+const APP_MODE_KEYS = ['app.orchestratorMode', 'app.liteMode', 'app.planMode', 'app.mentorMode'] as const;
 
 function changedSettingPaths(before: unknown, after: unknown, prefix = ''): Array<[string, unknown]> {
   if (Object.is(before, after)) return [];
@@ -248,17 +250,20 @@ export class SettingsService {
     });
     this.sources = trackSettingSources(DEFAULT_SETTINGS, fileConfig, env, cli);
 
-    // Normalize exclusive app modes so conflicting persisted state is resolved
-    // on load, not lazily at first set() call.
+    // Normalize profile selection so conflicting persisted state is resolved
+    // on load, not lazily at first set() call. Legacy files without a
+    // non-default profile derive their canonical selection from the flags.
     {
       const app = this.settings.app ?? {};
-      const normalized = normalizeAppModes({
-        orchestratorMode: app.orchestratorMode ?? false,
-        liteMode: app.liteMode ?? false,
-        planMode: app.planMode ?? false,
-        mentorMode: app.mentorMode ?? false,
-      });
-      this.settings.app = { ...app, ...normalized };
+      const hasOwn = (section: unknown, key: string): boolean =>
+        section != null && typeof section === 'object' && Object.prototype.hasOwnProperty.call(section, key);
+      const hasPersistedProfileId =
+        hasOwn((rawFileConfig as any)?.app, 'activeProfileId') ||
+        hasOwn((env as any)?.app, 'activeProfileId') ||
+        hasOwn((cli as any)?.app, 'activeProfileId');
+      const profileId = hasPersistedProfileId ? app.activeProfileId : profileIdFromLegacyMode(app);
+      this.settings.app = { ...app, activeProfileId: profileId };
+      this.normalizeProfileSelection('app.activeProfileId', profileId);
     }
 
     // Normalize sandbox / auto-approve exclusivity on load: 'always' mode
@@ -588,26 +593,46 @@ export class SettingsService {
     this.validateSelectedProvider();
   }
 
-  private normalizeExclusiveAppModes(key: string, value: any): void {
-    if (
-      !key.startsWith('app.') ||
-      (key !== 'app.orchestratorMode' &&
-        key !== 'app.liteMode' &&
-        key !== 'app.planMode' &&
-        key !== 'app.mentorMode') ||
-      value !== true
-    ) {
+  private normalizeProfileSelection(key: string, value: unknown): void {
+    if (APP_MODE_KEYS.includes(key as (typeof APP_MODE_KEYS)[number])) {
+      const profileId = profileIdFromLegacyMode(this.settings.app);
+      this.settings.app = {
+        ...this.settings.app,
+        activeProfileId: profileId,
+        ...legacyModeFromProfileId(profileId),
+      };
       return;
     }
 
-    const app = this.settings.app ?? {};
-    this.settings.app = {
-      ...app,
-      orchestratorMode: key === 'app.orchestratorMode',
-      liteMode: key === 'app.liteMode',
-      planMode: key === 'app.planMode',
-      mentorMode: key === 'app.mentorMode',
-    };
+    if (key !== 'app.activeProfileId') return;
+
+    try {
+      const legacyMode = legacyModeFromProfileId(String(value));
+      this.settings.app = {
+        ...this.settings.app,
+        activeProfileId: String(value),
+        ...legacyMode,
+      };
+    } catch {
+      // The schema currently accepts arbitrary strings for forward-compatible
+      // profile ids. Until custom profiles are supported, leave an unknown id
+      // untouched rather than crashing a settings write.
+    }
+  }
+
+  private normalizeExclusiveAppModes(key: string, value: any): void {
+    if (APP_MODE_KEYS.includes(key as (typeof APP_MODE_KEYS)[number])) {
+      if (value === true) {
+        this.settings.app = {
+          ...this.settings.app,
+          orchestratorMode: key === 'app.orchestratorMode',
+          liteMode: key === 'app.liteMode',
+          planMode: key === 'app.planMode',
+          mentorMode: key === 'app.mentorMode',
+        };
+      }
+      this.normalizeProfileSelection(key, value);
+    }
   }
 
   /**
@@ -651,8 +676,10 @@ export class SettingsService {
       throw new Error(`Cannot modify '${key}' at runtime. Requires restart.`);
     }
 
+    const previousTrueModeKey = this.trueAppModeKey();
     this.validateAndApplySetting(key, value);
     this.normalizeExclusiveAppModes(key, value);
+    if (key === 'app.activeProfileId') this.normalizeProfileSelection(key, value);
 
     this.recordRuntimeOverride(key, value, 'cli');
 
@@ -660,20 +687,22 @@ export class SettingsService {
     this.sources.set(key, 'cli');
 
     // Enforce exclusive app mode invariants. When one mode is enabled, all
-    // sibling modes are cleared.  This is the single enforcement point so
-    // that neither slash-command handlers nor direct set() calls can bypass
-    // mutual exclusion.  (normalizeAppModes implements the precedence.)
+    // sibling modes are cleared. This is the single enforcement point so that
+    // neither slash-command handlers nor direct set() calls can bypass mutual
+    // exclusion.
     if (
       key.startsWith('app.') &&
       (key === 'app.orchestratorMode' || key === 'app.liteMode' || key === 'app.planMode' || key === 'app.mentorMode')
     ) {
       if (value === true) {
-        for (const modeKey of ['app.orchestratorMode', 'app.liteMode', 'app.planMode', 'app.mentorMode'] as const) {
+        for (const modeKey of APP_MODE_KEYS) {
           if (modeKey !== key) {
             this.sources.set(modeKey, 'cli');
           }
         }
       }
+    } else if (key === 'app.activeProfileId') {
+      for (const modeKey of APP_MODE_KEYS) this.sources.set(modeKey, 'cli');
     }
 
     // Same single-enforcement-point treatment for the sandbox / auto-approve
@@ -718,6 +747,13 @@ export class SettingsService {
     this.lastDurableWrite = durableResult;
 
     this.notifyChange(key);
+    if (APP_MODE_KEYS.includes(key as (typeof APP_MODE_KEYS)[number])) {
+      this.notifyChange('app.activeProfileId');
+    } else if (key === 'app.activeProfileId') {
+      const nextTrueModeKey = this.trueAppModeKey();
+      if (nextTrueModeKey) this.notifyChange(nextTrueModeKey);
+      else if (previousTrueModeKey) this.notifyChange(previousTrueModeKey);
+    }
     if (coupledKey) {
       this.notifyChange(coupledKey);
     }
@@ -796,8 +832,10 @@ export class SettingsService {
     // caches evicted.
     const previousProviders = key === 'providers' ? this.settings.providers : undefined;
 
+    const previousTrueModeKey = this.trueAppModeKey();
     this.validateAndApplySetting(key, value);
     this.normalizeExclusiveAppModes(key, value);
+    if (key === 'app.activeProfileId') this.normalizeProfileSelection(key, value);
 
     if (key === 'providers') {
       this.invalidateChangedProviderModelCaches(previousProviders, value);
@@ -806,6 +844,9 @@ export class SettingsService {
     this.recordRuntimeOverride(key, value, 'cli');
 
     this.sources.set(key, 'cli');
+    if (key === 'app.activeProfileId') {
+      for (const modeKey of APP_MODE_KEYS) this.sources.set(modeKey, 'cli');
+    }
 
     const coupledKey = this.normalizeSandboxAutoApproveExclusivity(key, value);
 
@@ -813,6 +854,13 @@ export class SettingsService {
     this.lastDurableWrite = durableResult;
 
     this.notifyChange(key);
+    if (APP_MODE_KEYS.includes(key as (typeof APP_MODE_KEYS)[number])) {
+      this.notifyChange('app.activeProfileId');
+    } else if (key === 'app.activeProfileId') {
+      const nextTrueModeKey = this.trueAppModeKey();
+      if (nextTrueModeKey) this.notifyChange(nextTrueModeKey);
+      else if (previousTrueModeKey) this.notifyChange(previousTrueModeKey);
+    }
     if (coupledKey) {
       this.notifyChange(coupledKey);
     }
@@ -873,7 +921,6 @@ export class SettingsService {
     }
 
     let coupledKey: string | undefined;
-
     if (key) {
       // Reset specific setting
       const keys = key.split('.');
@@ -899,6 +946,9 @@ export class SettingsService {
 
       const previousProviders = key === 'providers' ? this.settings.providers : undefined;
       obj[lastKey] = cloneSettingValue(defaultValue);
+      if (APP_MODE_KEYS.includes(key as (typeof APP_MODE_KEYS)[number]) || key === 'app.activeProfileId') {
+        this.normalizeProfileSelection(key, defaultValue);
+      }
       if (key === 'providers') {
         this.invalidateChangedProviderModelCaches(previousProviders, defaultValue);
       }
@@ -974,6 +1024,15 @@ export class SettingsService {
     }
   }
 
+  private trueAppModeKey(): (typeof APP_MODE_KEYS)[number] | undefined {
+    const app = this.settings.app;
+    if (app.orchestratorMode) return 'app.orchestratorMode';
+    if (app.liteMode) return 'app.liteMode';
+    if (app.planMode) return 'app.planMode';
+    if (app.mentorMode) return 'app.mentorMode';
+    return undefined;
+  }
+
   /**
    * Get all settings with their sources
    */
@@ -1015,30 +1074,32 @@ export class SettingsService {
     const next = structuredClone(current) as Record<string, any>;
     setSettingValue(next, key, value);
 
-    if (
-      key === 'app.orchestratorMode' ||
-      key === 'app.liteMode' ||
-      key === 'app.planMode' ||
-      key === 'app.mentorMode'
-    ) {
-      next.app =
-        value === true
-          ? {
-              ...next.app,
-              orchestratorMode: key === 'app.orchestratorMode',
-              liteMode: key === 'app.liteMode',
-              planMode: key === 'app.planMode',
-              mentorMode: key === 'app.mentorMode',
-            }
-          : {
-              ...next.app,
-              ...normalizeAppModes({
-                orchestratorMode: next.app?.orchestratorMode ?? false,
-                liteMode: next.app?.liteMode ?? false,
-                planMode: next.app?.planMode ?? false,
-                mentorMode: next.app?.mentorMode ?? false,
-              }),
-            };
+    if (APP_MODE_KEYS.includes(key as (typeof APP_MODE_KEYS)[number])) {
+      if (value === true) {
+        next.app = {
+          ...next.app,
+          orchestratorMode: key === 'app.orchestratorMode',
+          liteMode: key === 'app.liteMode',
+          planMode: key === 'app.planMode',
+          mentorMode: key === 'app.mentorMode',
+        };
+      }
+      const profileId = profileIdFromLegacyMode(next.app);
+      next.app = {
+        ...next.app,
+        activeProfileId: profileId,
+        ...legacyModeFromProfileId(profileId),
+      };
+    } else if (key === 'app.activeProfileId') {
+      try {
+        next.app = {
+          ...next.app,
+          ...legacyModeFromProfileId(String(value)),
+        };
+      } catch {
+        // Preserve forward-compatible unknown profile ids until custom profile
+        // registration supplies a projection for them.
+      }
     }
 
     // Sandbox / auto-approve exclusivity in the persisted copy, mirroring the
@@ -1058,11 +1119,18 @@ export class SettingsService {
     this.runtimeOverrides.set(key, cloneSettingValue(value));
     this.runtimeOverrideSources.set(key, source);
     if (value === true && key.startsWith('app.')) {
-      for (const modeKey of ['app.orchestratorMode', 'app.liteMode', 'app.planMode', 'app.mentorMode']) {
+      for (const modeKey of APP_MODE_KEYS) {
         if (modeKey !== key) {
           this.runtimeOverrides.set(modeKey, false);
           this.runtimeOverrideSources.set(modeKey, 'cli');
         }
+      }
+    }
+    if (key === 'app.activeProfileId') {
+      for (const modeKey of APP_MODE_KEYS) {
+        const settingName = modeKey.slice('app.'.length) as keyof SettingsData['app'];
+        this.runtimeOverrides.set(modeKey, this.settings.app[settingName]);
+        this.runtimeOverrideSources.set(modeKey, source);
       }
     }
     // Sandbox / auto-approve exclusivity, mirroring the app-mode block: the

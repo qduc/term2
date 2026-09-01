@@ -21,6 +21,8 @@ import {
   normalizeBackgroundTaskActivity,
 } from '../../services/background-task-activity.js';
 
+import { relaxedNumber } from '../utils.js';
+
 const ASYNC_ROLES = ['explorer', 'worker', 'mentor'] as const;
 
 const runSubagentAsyncSchema = z.object({
@@ -41,6 +43,20 @@ const runSubagentAsyncSchema = z.object({
     .string()
     .optional()
     .describe('Continue a completed run using its runId. Required for explicit session reuse.'),
+  check_in: z
+    .object({
+      enabled: z
+        .boolean()
+        .optional()
+        .describe('Enable or disable proactive check-ins for this background subagent. Defaults to true.'),
+      interval_seconds: relaxedNumber
+        .int()
+        .positive()
+        .optional()
+        .describe('Custom interval in seconds between proactive check-ins.'),
+    })
+    .optional()
+    .describe('Optional check-in configuration for this background subagent.'),
 });
 
 const getSubagentResultSchema = z.object({
@@ -173,6 +189,10 @@ export function createRunSubagentAsyncToolDefinition(
     context?: unknown,
     details?: unknown,
   ) => Promise<SubagentRunHandle>,
+  configureCheckIn?: (
+    target: { kind: 'shell' | 'subagent'; id: string },
+    options: { enabled?: boolean; intervalMs?: number },
+  ) => void,
 ): ToolDefinition<typeof runSubagentAsyncSchema> {
   return {
     name: 'run_subagent_async',
@@ -189,6 +209,16 @@ export function createRunSubagentAsyncToolDefinition(
     execute: async (params, context, details) => {
       try {
         const handle = await runSubagentAsync(params, context, details);
+        if (params.check_in !== undefined && configureCheckIn) {
+          configureCheckIn(
+            { kind: 'subagent', id: handle.runId },
+            {
+              enabled: params.check_in.enabled,
+              intervalMs:
+                params.check_in.interval_seconds !== undefined ? params.check_in.interval_seconds * 1000 : undefined,
+            },
+          );
+        }
         const handleOutput: Record<string, string> = { runId: handle.runId, status: handle.status };
         if (handle.name) handleOutput.name = handle.name;
         if (handle.status === 'running') {

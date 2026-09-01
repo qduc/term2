@@ -73,6 +73,11 @@ export interface AgentFactoryDeps {
   /** Explicit interactive-root-only browser capability. */
   sessionBrowser?: SessionBrowser;
   requestSessionRollover?: (request: SessionRolloverRequest) => SessionRolloverRequestOutcome;
+  configureTaskCheckIn?: (params: any) => any;
+  setTaskCheckInPolicy?: (
+    target: { kind: 'shell' | 'subagent'; id: string },
+    options: { enabled?: boolean; intervalMs?: number },
+  ) => void;
 }
 
 export interface AgentBuildResult {
@@ -409,6 +414,8 @@ export function buildAgent(
       allowAskUser: deps.allowAskUser,
       sessionBrowser: deps.sessionBrowser,
       ...(deps.requestSessionRollover ? { requestSessionRollover: deps.requestSessionRollover } : {}),
+      configureTaskCheckIn: deps.configureTaskCheckIn,
+      setTaskCheckInPolicy: deps.setTaskCheckInPolicy,
     },
     resolvedModel,
   );

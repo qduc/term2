@@ -525,9 +525,12 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     getSettings: () => ({
       enabled: settingsService?.get('agent.backgroundCheckIn.enabled') ?? true,
       intervalMs: settingsService?.get('agent.backgroundCheckIn.intervalMs') ?? 300_000,
-      maxCheckInsPerTask: settingsService?.get('agent.backgroundCheckIn.maxCheckInsPerTask') ?? 3,
     }),
   });
+  getMethod<[scheduler: BackgroundCheckInScheduler | undefined], void>(
+    agentClient,
+    'setBackgroundCheckInScheduler',
+  )?.call(agentClient, backgroundCheckInScheduler);
 
   const approvalFlow = new ApprovalFlowCoordinator({
     agentClient,
@@ -789,6 +792,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     if (disposed) return;
     disposed = true;
     backgroundCheckInScheduler.dispose();
+    getMethod<[scheduler: undefined], void>(agentClient, 'setBackgroundCheckInScheduler')?.call(agentClient, undefined);
     turnWorkflow.abortLiveRun();
     postExecutePending.close();
     generationGuard.invalidate();

@@ -234,11 +234,6 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
       source: settings.agent.backgroundCheckIn.intervalMs.source,
     },
     {
-      key: SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_MAX_PER_TASK,
-      value: settings.agent.backgroundCheckIn.maxCheckInsPerTask.value,
-      source: settings.agent.backgroundCheckIn.maxCheckInsPerTask.source,
-    },
-    {
       key: SETTING_KEYS.SHELL_TIMEOUT,
       value: settings.shell.timeout.value,
       source: settings.shell.timeout.source,

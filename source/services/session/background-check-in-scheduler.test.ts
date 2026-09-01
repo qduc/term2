@@ -27,7 +27,7 @@ const subagentTask = (overrides: Partial<BackgroundSubagentTask> = {}): Backgrou
 
 function makeScheduler(options: {
   tasks: () => readonly BackgroundTask[];
-  settings?: Partial<{ enabled: boolean; intervalMs: number; maxCheckInsPerTask: number }>;
+  settings?: Partial<{ enabled: boolean; intervalMs: number }>;
   getSubagentStatus?: (runId: string) => any;
   getShellJob?: (jobId: string) => any;
   getShellOutputTail?: (jobId: string, maxBytes?: number) => any;
@@ -44,7 +44,6 @@ function makeScheduler(options: {
     getSettings: () => ({
       enabled: true,
       intervalMs: 300_000,
-      maxCheckInsPerTask: 3,
       ...options.settings,
     }),
     now: options.now,
@@ -97,22 +96,117 @@ describe('BackgroundCheckInScheduler', () => {
     expect(emit.mock.calls[1][0]).toMatchObject({ checkInIndex: 2, elapsedMs: 600_000 });
   });
 
-  it('stops firing once the per-task cap is reached', () => {
+  it('continues firing without an artificial cap as long as task is running', () => {
     let time = 0;
     const { scheduler, emit } = makeScheduler({
       tasks: () => [shellTask()],
-      settings: { maxCheckInsPerTask: 1 },
       now: () => time,
     });
+
+    for (let i = 1; i <= 5; i++) {
+      time = i * 300_000;
+      scheduler.tick();
+      expect(emit).toHaveBeenCalledTimes(i);
+      expect(emit.mock.calls[i - 1][0]).toMatchObject({ checkInIndex: i, elapsedMs: time });
+    }
+  });
+
+  it('skips check-ins when a task is muted via setTaskPolicy', () => {
+    let time = 0;
+    const { scheduler, emit } = makeScheduler({
+      tasks: () => [shellTask()],
+      now: () => time,
+    });
+
+    scheduler.setTaskPolicy({ kind: 'shell', id: 'shell-1' }, { enabled: false });
 
     time = 300_000;
     scheduler.tick();
     time = 600_000;
     scheduler.tick();
+
+    expect(emit).not.toHaveBeenCalled();
+
+    // Re-enabling allows check-ins to resume
+    scheduler.setTaskPolicy({ kind: 'shell', id: 'shell-1' }, { enabled: true });
+    scheduler.tick();
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect(emit).toHaveBeenCalledWith(expect.objectContaining({ checkInIndex: 1 }));
+  });
+
+  it('respects a custom per-task intervalMs', () => {
+    let time = 0;
+    const { scheduler, emit } = makeScheduler({
+      tasks: () => [shellTask()],
+      now: () => time,
+    });
+
+    // Set 10-minute interval (600_000 ms)
+    scheduler.setTaskPolicy({ kind: 'shell', id: 'shell-1' }, { intervalMs: 600_000 });
+
+    time = 300_000;
+    scheduler.tick();
+    expect(emit).not.toHaveBeenCalled();
+
+    time = 600_000;
+    scheduler.tick();
+    expect(emit).toHaveBeenCalledTimes(1);
+  });
+
+  it('respects a custom one-off nextDueAt and resets to regular interval after firing', () => {
+    let time = 0;
+    const { scheduler, emit } = makeScheduler({
+      tasks: () => [shellTask()],
+      now: () => time,
+    });
+
+    // Delay first check-in to 15 minutes (900_000 ms)
+    scheduler.setTaskPolicy({ kind: 'shell', id: 'shell-1' }, { nextDueAt: 900_000 });
+
+    time = 300_000;
+    scheduler.tick();
+    time = 600_000;
+    scheduler.tick();
+    expect(emit).not.toHaveBeenCalled();
+
     time = 900_000;
     scheduler.tick();
-
     expect(emit).toHaveBeenCalledTimes(1);
+
+    // After firing, next one should be due at 900_000 + 300_000 = 1_200_000 ms
+    time = 1_000_000;
+    scheduler.tick();
+    expect(emit).toHaveBeenCalledTimes(1);
+
+    time = 1_200_000;
+    scheduler.tick();
+    expect(emit).toHaveBeenCalledTimes(2);
+  });
+
+  it('configures task check-ins via configureTaskCheckIn and resolves aliases/names', () => {
+    const time = 0;
+    const sub = subagentTask({ runId: 'run-xyz', name: 'worker-1' });
+    const { scheduler } = makeScheduler({
+      tasks: () => [sub],
+      now: () => time,
+    });
+
+    const notFound = scheduler.configureTaskCheckIn('unknown-job', { enabled: false });
+    expect(notFound.ok).toBe(false);
+
+    // Resolve by alias name
+    const byName = scheduler.configureTaskCheckIn('worker-1', { intervalMs: 120_000, enabled: false });
+    expect(byName.ok).toBe(true);
+    expect(scheduler.getTaskPolicy({ kind: 'subagent', id: 'run-xyz' })).toEqual(
+      expect.objectContaining({ enabled: false, intervalMs: 120_000 }),
+    );
+
+    // Resolve by canonical runId
+    const byId = scheduler.configureTaskCheckIn('run-xyz', { enabled: true, nextDueInMs: 50_000 });
+    expect(byId.ok).toBe(true);
+    expect(scheduler.getTaskPolicy({ kind: 'subagent', id: 'run-xyz' })).toEqual(
+      expect.objectContaining({ enabled: true, nextDueAt: 50_000 }),
+    );
   });
 
   it('does nothing while disabled', () => {

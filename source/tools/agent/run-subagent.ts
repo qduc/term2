@@ -12,6 +12,7 @@ import {
 import type { NestedSubagentResult, SubagentResult, SubagentRunHandle } from '../../services/subagents/types.js';
 import { SUBAGENT_RUN_NAME_PATTERN, SubagentRegistryError } from '../../services/subagents/subagent-async-registry.js';
 import { isAbortLike, formatSubagentResult } from '../../services/subagents/utils.js';
+import { relaxedNumber } from '../utils.js';
 
 function getRunSubagentDescription(backgroundEnabled: boolean): string {
   return (
@@ -57,6 +58,20 @@ const backgroundFields = {
     .string()
     .optional()
     .describe('Continue a completed background run using its runId. Background only; worker continuation is blocked.'),
+  check_in: z
+    .object({
+      enabled: z
+        .boolean()
+        .optional()
+        .describe('Enable or disable proactive check-ins for this background subagent. Defaults to true.'),
+      interval_seconds: relaxedNumber
+        .int()
+        .positive()
+        .optional()
+        .describe('Custom interval in seconds between proactive check-ins.'),
+    })
+    .optional()
+    .describe('Optional check-in configuration for this background subagent. Background only.'),
 };
 
 const worktreeField = {
@@ -90,6 +105,7 @@ export type RunSubagentParams =
   | ({ execution: 'foreground' } & ForegroundRunSubagentParams & {
         name?: string;
         continue_run_id?: string;
+        check_in?: { enabled?: boolean; interval_seconds?: number };
       })
   | {
       execution: 'background';
@@ -98,6 +114,7 @@ export type RunSubagentParams =
       name?: string;
       continue_run_id?: string;
       worktree?: string;
+      check_in?: { enabled?: boolean; interval_seconds?: number };
     };
 
 export type RunSubagentToolCallbacks = {
@@ -114,6 +131,10 @@ export type RunSubagentToolCallbacks = {
     context?: unknown,
     details?: unknown,
   ) => Promise<SubagentRunHandle>;
+  configureCheckIn?: (
+    target: { kind: 'shell' | 'subagent'; id: string },
+    options: { enabled?: boolean; intervalMs?: number },
+  ) => void;
 };
 
 function createRunSubagentSchema({ runSubagent, runSubagentAsync }: RunSubagentToolCallbacks) {
@@ -427,19 +448,28 @@ export function createRunSubagentToolDefinition(
         });
       }
       try {
-        return formatBackgroundHandle(
-          await resolvedCallbacks.runSubagentAsync(
-            {
-              role: params.role,
-              task: params.task,
-              name: params.name ?? undefined,
-              continue_run_id: params.continue_run_id ?? undefined,
-              ...(params.worktree ? { worktree: params.worktree } : {}),
-            },
-            context,
-            details,
-          ),
+        const handle = await resolvedCallbacks.runSubagentAsync(
+          {
+            role: params.role,
+            task: params.task,
+            name: params.name ?? undefined,
+            continue_run_id: params.continue_run_id ?? undefined,
+            ...(params.worktree ? { worktree: params.worktree } : {}),
+          },
+          context,
+          details,
         );
+        if (params.check_in !== undefined && resolvedCallbacks.configureCheckIn) {
+          resolvedCallbacks.configureCheckIn(
+            { kind: 'subagent', id: handle.runId },
+            {
+              enabled: params.check_in.enabled,
+              intervalMs:
+                params.check_in.interval_seconds !== undefined ? params.check_in.interval_seconds * 1000 : undefined,
+            },
+          );
+        }
+        return formatBackgroundHandle(handle);
       } catch (error: unknown) {
         if (isAbortLike(error instanceof Error ? error.message : undefined, error)) {
           throw error;

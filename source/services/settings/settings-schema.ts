@@ -141,9 +141,8 @@ export const AgentSettingsSchema = z.object({
     .object({
       enabled: z.boolean().default(true),
       intervalMs: z.number().int().positive().finite().default(300_000),
-      maxCheckInsPerTask: z.number().int().positive().finite().default(3),
     })
-    .default({ enabled: true, intervalMs: 300_000, maxCheckInsPerTask: 3 })
+    .default({ enabled: true, intervalMs: 300_000 })
     .describe(
       'Proactive check-ins on a still-running background shell job or subagent while the session is otherwise idle',
     ),
@@ -648,7 +647,6 @@ export interface SettingsWithSources {
     backgroundCheckIn: {
       enabled: SettingWithSource<boolean>;
       intervalMs: SettingWithSource<number>;
-      maxCheckInsPerTask: SettingWithSource<number>;
     };
     sessionRollover: {
       enabled: SettingWithSource<boolean>;
@@ -817,7 +815,6 @@ export const SETTING_KEYS = {
   AGENT_RUN_BUDGET_ESCALATION: 'agent.runBudget.escalation',
   AGENT_BACKGROUND_CHECK_IN_ENABLED: 'agent.backgroundCheckIn.enabled',
   AGENT_BACKGROUND_CHECK_IN_INTERVAL_MS: 'agent.backgroundCheckIn.intervalMs',
-  AGENT_BACKGROUND_CHECK_IN_MAX_PER_TASK: 'agent.backgroundCheckIn.maxCheckInsPerTask',
   AGENT_SESSION_ROLLOVER_ENABLED: 'agent.sessionRollover.enabled',
   AGENT_SESSION_ROLLOVER_MILESTONES: 'agent.sessionRollover.milestones',
   AGENT_SESSION_ROLLOVER_AUTO_BRIEF: 'agent.sessionRollover.autoBrief',
@@ -955,7 +952,6 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_RUN_BUDGET_ESCALATION,
   SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_ENABLED,
   SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_INTERVAL_MS,
-  SETTING_KEYS.AGENT_BACKGROUND_CHECK_IN_MAX_PER_TASK,
   SETTING_KEYS.AGENT_SESSION_ROLLOVER_ENABLED,
   SETTING_KEYS.AGENT_SESSION_ROLLOVER_MILESTONES,
   SETTING_KEYS.AGENT_SESSION_ROLLOVER_AUTO_BRIEF,
@@ -1107,7 +1103,6 @@ export const DEFAULT_SETTINGS: SettingsData = {
     backgroundCheckIn: {
       enabled: true,
       intervalMs: 300_000,
-      maxCheckInsPerTask: 3,
     },
     sessionRollover: {
       enabled: true,

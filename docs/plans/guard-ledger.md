@@ -59,6 +59,12 @@ Open work, in order:
   inference is removed from both execution owners while the typed
   100,000-character aggregate visible-output cap remains. The InputSurgeGuard
   capability repair remains a separate worktree and rollback boundary.
+- **Completed (branch `retry-recovery-contract`, pending merge to main):** the
+  retry/recovery containment budget (`RetryRecoveryBudget`: 90s / 3 physical
+  attempts / 1 automatic replay) and its never-replay-after-committed-output
+  precondition. Four confirmed false-positive/settlement defects repaired
+  across seven commits (`a00a899f` `3d9dab32` `839d2781` `66abfcec`
+  `e353680f` `28a18aab` `a7e44292`); see the full entry below.
 
 ## Guard classes
 
@@ -1060,6 +1066,329 @@ failure — so the gate is validated under CI's worker bound.
 NODE_ENV=test pnpm test
 PASS 558 files; 1 skipped. 7135 tests; 3 expected fail, 2 skipped. Emitted the
 existing TimeoutNaNWarning; no test failed.
+```
+
+### Retry/recovery containment budget and never-replay-after-committed-output precondition
+
+Disposition: **repaired on branch `retry-recovery-contract`; seven commits,
+pending merge to main.**
+
+This entry covers a shared retry/recovery containment budget introduced on
+this branch (an application-owned turn/tool-execution harness feature, not a
+scan-discovered pre-existing guard) plus the safety precondition that gates
+its one destructive action (replaying a full turn). Both were audited,
+found to have four confirmed defects across two acceptance rounds, and
+repaired with source-backed tests. Recorded here per this skill because the
+guard shares the containment-budget class and the never-replay precondition
+is exactly the "weak proxy interpreted as proof" failure mode this ledger
+exists to catch.
+
+Origin: the retry/recovery contract required (paraphrased from the task that
+produced this branch) one shared 90-second / 3-physical-transport-attempt /
+1-automatic-replay recovery envelope per logical turn, a rule that an
+automatic replay must never happen once output has already been committed
+to the user or a tool call has been dispatched, and truthful tool-execution
+settlement on every termination path. The partial implementation audited at
+the start of this branch got the budget's arithmetic right but scoped its
+wiring to only the first model request of a turn, conflated an unrelated
+pre-existing retry policy with the new budget, used a bare event-count/
+array-length proxy for "committed output" that fired on internal bookkeeping
+events, and skipped settlement on one termination path. All four are fixed
+below.
+
+```text
+Harm prevented: an automatic transport-level retry/recovery loop (physical
+  redispatch and full-history replay) running unbounded -- burning unlimited
+  wall time or dispatch attempts on a wedged/misbehaving provider -- and,
+  independently, an automatic replay duplicating already-delivered model
+  output or re-triggering an already-dispatched tool call because the
+  "was anything committed yet" check used a proxy broad enough to include
+  bookkeeping-only signals.
+Scope and execution paths: every provider request behind RetryingModel
+  (source/providers/retrying-model.ts), for both the initial model request of
+  a turn (InitialTurnRecoveryHandler) and every tool-call continuation request
+  within the same logical turn (ContinuationRecoveryHandler). One recovery
+  envelope per logical turn, shared across root turns and subagents -- both
+  drive through the same TurnWorkflow/TurnAttempt/AgentClient path; there is
+  no separate subagent owner.
+Guard class: containment budget (wall time / physical-attempt count / replay
+  count), gated by an admission-style evidence check (never-replay-after-
+  committed-output) that must pass before the budget's one destructive action
+  (automatic full-history replay) is allowed to fire.
+Enforcement owner: RetryRecoveryBudget (source/services/retry/
+  retry-recovery-budget.ts) is the sole budget instance/owner for a logical
+  turn. RetryingModel.stream() claims a physical attempt
+  (claimPhysicalAttempt()) before every physical dispatch to the underlying
+  provider -- including the turn's very first dispatch, and including
+  RetryingModel's own internal backoff-retry loop for upstream errors that
+  never surface to the session layer. InitialTurnRecoveryHandler and
+  ContinuationRecoveryHandler each claim the single automatic replay
+  (claimAutomaticReplay()) before executing a retry_fresh recovery plan, and
+  start the 90s clock lazily (noteRetryableFailure(), on first retryable
+  failure, not at turn start) for transient/chain_recovery classifications
+  only. One RetryRecoveryBudget instance is shared for the whole logical
+  turn: created per TurnAttempt (turn-attempt.ts), threaded to
+  AgentClientRunOptions.recoveryBudget for the initial request, and threaded
+  to ContinuationState.recoveryBudget for every continuation attempt driven
+  within the same turn via TurnWorkflow.#activeRecoveryBudget (set wherever
+  executeInitialAttempt resolves a TurnAttempt).
+Recovery owner: DefaultRecoveryExecutor.apply() (source/services/retry/
+  recovery-executor.ts) performs actual settlement on termination
+  (toolTracker.settleOpenCallsOnStreamFailure -- dispatched calls settle as
+  unknown, not failed; markOpenCallsAborted; providerContinuity.clear() so
+  the next turn cannot send a text-only continuation against a response
+  still awaiting tool output). Both recovery handlers call this before
+  returning terminated, including on budget refusal (fixed this branch,
+  `28a18aab` -- see confirmed defect 4 below).
+Measured signal and observation boundary: physical attempts -- dispatch
+  count to the provider's stream(), observed inside RetryingModel.stream()'s
+  retry loop. Wall time -- elapsed since the first retryable failure,
+  performance.now() (injectable). Automatic replays -- count of retry_fresh
+  plans actually executed, claimed before recoveryExecutor.apply() runs the
+  plan. Committed-output precondition -- two projections of the same
+  underlying signal: TurnAttempt.modelEventSeen (session ConversationEvents
+  emitted by TurnWorkflow.#consumeInitialStream, filtered through
+  isCommittedOutputEvent) for the initial-request path, and
+  streamHasCommittedOutput(stream) (raw ApplicationRunEvent[] in
+  stream.output/stream.newItems) checked by retry-classifier.ts for both
+  paths.
+Direct evidence or proxy: proxy for all three budget dimensions -- none
+  measures "will one more attempt help," only accumulated cost. Justified
+  because the alternative (no bound) risks unbounded burn on a wedged
+  provider. The committed-output precondition is also a proxy (event-type
+  membership in a bookkeeping-only set standing in for "was anything
+  actually delivered or dispatched") -- the exact class this ledger audits,
+  and the subject of confirmed defects 3 and 4 below.
+Legitimate work that can produce the same signal: a slow provider needing
+  several genuine transient retries within 90s (budget arithmetic covered by
+  retry-recovery-budget.test.ts, not separately re-verified this round).
+  model_retry (hallucination/parsing/behavior detection) is a distinct,
+  pre-existing, independently-capped retry mechanism (maxModelRetries) that
+  legitimately needs multiple replay attempts within one turn -- confirmed
+  regression, defect 2. A cost_update ConversationEvent fires even for a
+  request that produced nothing (outcome: 'failed') -- confirmed regression,
+  defect 3. run_budget evidence, the three context_compaction_* lifecycle
+  events, and codex_rate_limits are pushed unconditionally into
+  stream.output/stream.newItems by outputPush() in
+  application-run-loop.ts, independent of whether the request produced
+  anything -- confirmed regression, defect 4 (this acceptance round).
+Genuine harmful case that must still trip the guard: real streamed
+  text/reasoning, a committed provider item (assistant message, tool result,
+  provider-opaque item), or a dispatched-but-unresolved tool call in the
+  stream all still correctly force unrecoverable / refuse the replay --
+  proven by the paired true-positive case next to every false-positive test
+  added this round (retry-classifier.test.ts, continuation-recovery-
+  handler.test.ts, agent-stream.test.ts).
+Configuration sources and precedence: no user-facing setting.
+  RETRY_RECOVERY_LIMITS (retry-recovery-budget.ts) declares fixed constants
+  (maxRecoveryTimeMs 90_000, maxPhysicalAttempts 3, maxAutomaticReplays 1).
+  RetryRecoveryBudgetOptions accepts constructor overrides but no production
+  call site supplies them -- every real construction (TurnAttempt's default,
+  ContinuationState's default) uses the class defaults; overrides exist only
+  for tests. maxPhysicalAttempts(3) is a second, independent cap layered on
+  top of the pre-existing agent.retryAttempts setting consumed by
+  RetryingModel's own retry-count option: even a user-configured
+  retryAttempts higher than 3 cannot push total physical dispatches for one
+  logical turn past 3, because every dispatch through RetryingModel.stream()
+  -- across the session layer's retry_fresh/replay_turn redispatches and
+  RetryingModel's own internal backoff loop alike -- claims against the same
+  shared instance.
+Effective default and clamping: 90,000ms wall time (clock starts lazily on
+  first retryable failure), 3 physical transport attempts, 1 automatic
+  full-history replay -- fixed, not configurable, no min/max clamping beyond
+  the literal constants.
+Action and why the signal justifies it: claimPhysicalAttempt() returning
+  false -> RetryingModel throws the typed RetryRecoveryBudgetExhaustedError
+  (carries the triggering failure as `cause`) instead of dispatching another
+  physical attempt. claimAutomaticReplay() returning false -> the recovery
+  handler refuses the retry_fresh plan, settles the turn through
+  recoveryExecutor.apply({kind:'terminate'}), and emits a typed
+  retry_exhausted ConversationEvent. Both are "reject before start"
+  (admission-limit-shaped); an in-flight physical dispatch or an in-flight
+  tool call is never aborted by this guard.
+Partial-work settlement: recoveryExecutor.apply({kind:'terminate'}) settles
+  open tool calls truthfully and clears provider continuity (see Recovery
+  owner). Confirmed defect 4a below: this was skipped entirely on the
+  budget-refusal path before this branch.
+Retry, fallback, and provider-continuity semantics:
+  RetryRecoveryBudgetExhaustedError is recognized by retry-classifier.ts as
+  terminal (isRetryRecoveryBudgetExhaustedError check) so a still-armed
+  session-level classifier does not re-enter RetryingModel against the same
+  exhausted budget and bounce between layers. model_retry-classified
+  failures are excluded from both noteRetryableFailure() and
+  claimAutomaticReplay() so they retry independently up to their own
+  maxModelRetries -- but each model_retry-driven replay_turn redispatch
+  still consumes one physical-attempt claim from the same shared budget,
+  since RetryingModel claims unconditionally before every physical dispatch
+  regardless of classification kind, so model_retry is bounded by
+  min(maxModelRetries, remaining physical attempts), not fully exempt.
+Observability fields: retry_exhausted ConversationEvent carries provider,
+  errorKind, attempts, maxAttempts, message, canRetry.
+  provider.response.failed structured evidence (via classifyProviderFailure)
+  carries errorKind, code, status, retryAfterMs, retryable, and a sanitized
+  message (no raw stack, no secrets) -- logged through
+  ProviderTraffic.recordRequestFailed and AgentClient's stream-failure
+  logger.
+Persisted-setting migration, if any: none -- no setting exists for this
+  guard.
+Rollback boundary: branch `retry-recovery-contract` is the outer rollback
+  unit. Within it, each of the seven commits below targets one named defect
+  with its own tests and is independently revertible.
+Ledger row: this section.
+```
+
+Four confirmed defects, in commit order:
+
+**1. `a00a899f` -- typed budget-exhaustion error dropped, classifier could
+bounce between layers.** RetryingModel raised a bare `new Error(...)` on
+`claimPhysicalAttempt()` refusal instead of the dedicated
+`RetryRecoveryBudgetExhaustedError`, discarding the triggering failure's
+`cause` chain and classifying as non-retryable "unknown" through
+`classifyProviderFailure` -- which meant the `exhausted` flag driving the
+`retry_exhausted` UI event evaluated false for exactly the case it exists to
+catch, and nothing stopped the session-level classifier from issuing another
+retry that re-enters RetryingModel, reclaims against the same exhausted
+budget, and throws the same error again.
+
+**2. `66abfcec` -- model_retry silently capped at 1 by the transport
+budget.** Both recovery handlers charged every `retry_fresh` *and* every
+`replay_turn` plan against the shared 1-automatic-replay allowance.
+`replay_turn` is produced exclusively by `model_retry`
+(hallucination/parsing/behavior detection), a distinct pre-existing retry
+policy independently capped at `maxModelRetries` (tested elsewhere at 2).
+Folding it into the transport budget's single replay slot silently cut an
+established, separately-tested retry count in half. Bisected to a real
+regression: `conversation-service.test.ts`'s "stops retrying after max
+hallucination retries" test (expects 3 attempts: initial + 2 retries)
+returned 2 attempts when run against this branch's foundation commit
+(`c66e0ac4`) in an isolated worktree; the test predates this branch, so its
+own assertion (3 attempts) is itself the record of pre-regression behavior.
+
+**3. `839d2781` -- `cost_update` masquerading as committed output.**
+`TurnAttempt.markModelEventSeen()` fired for every `ConversationEvent` the
+initial stream emitted, with no filter. `cost_update` fires even for a
+request that produced nothing at all (its own `outcome` field can be
+`'failed'`), so a request that failed before streaming a single token still
+set `hasCommittedOutput = true`, forcing `retry-classifier.ts` to return
+`'unrecoverable'` regardless of the real classification -- silently
+disabling chain_recovery/transient/model_retry recovery for the ordinary
+case of "the first physical attempt failed immediately." Bisected to a real
+regression: `subagent-manager.retry.test.ts` (8/8 passing at the true
+pre-branch base `22ca9764`) dropped to 4/8 at this branch's foundation
+commit `c66e0ac4` in an isolated worktree; traced live with temporary
+instrumentation to the exact event
+`{"type":"cost_update","record":{...,"outcome":"failed"}}` with
+`stream.output`/`stream.newItems` both confirmed empty at the point the
+guard fired. Fixed with `isCommittedOutputEvent()`
+(conversation-events.ts), excluding known bookkeeping/telemetry
+ConversationEvent kinds.
+
+**4. `28a18aab` -- truthful settlement skipped on budget-refusal
+termination.** When the automatic-replay budget refused a `retry_fresh`
+plan, both handlers returned `{kind:'terminated'}` directly without ever
+calling `recoveryExecutor.apply()` -- skipping `settleOpenCallsOnStreamFailure`/
+`markOpenCallsAborted` (open tool calls never settled truthfully) and
+`providerContinuity.clear()` (the next turn could send a text-only
+continuation against a response still awaiting tool output). Every other
+termination path in both handlers already went through this call; this one
+early-returned around it. The pattern predates this branch's fixes -- it was
+already present in the foundation commit's original
+`plan.kind === 'retry_fresh' || plan.kind === 'replay_turn'` gate -- and
+commits `a00a899f`/`3d9dab32`/`66abfcec` all narrowed that gate's condition
+without closing this settlement gap.
+
+**Follow-up closed this acceptance round -- `a7e44292`, requirement-5
+raw-array false positive.** Defect 3 above closed the gap only on the
+session-layer `ConversationEvent` stream consumed by
+`InitialTurnRecoveryHandler`. `retry-classifier.ts`'s guard *also* checks
+`stream.output`/`stream.newItems` directly -- a raw `ApplicationRunEvent[]`
+array, the only signal `ContinuationRecoveryHandler` has (it never passes
+`hasCommittedOutput`) -- via a bare `.length > 0` check left as a known,
+unresolved risk in the prior acceptance receipt.
+
+Traced every `outputPush()` call site in `application-run-loop.ts` (16
+total, exhaustively) to enumerate every `ApplicationRunEvent` type that can
+reach `stream.output`/`stream.newItems`: `text_delta`, `reasoning_delta`,
+`tool_call_streaming_delta`, `item` (assistant text, tool calls, reasoning,
+provider-opaque items), `tool_call_dispatched`, `codex_rate_limits`, the
+three `context_compaction_*` lifecycle events, and `run_budget`. Of these,
+`run_budget` and `context_compaction_*` are pushed unconditionally as soon
+as they occur (independent of request outcome), and `codex_rate_limits` is
+quota metadata -- none carry committed model output or an externally
+effectful action. Confirmed `usage_update`, `cost_update`,
+`subagent_run_budget`, and `background_check_in_due` can never appear in
+these arrays: `usage_update` goes straight to the event queue via
+`queue.push` (never `outputPush`), and the other three are synthesized only
+at the session layer above this raw array.
+
+Fix: `streamHasCommittedOutput()` (source/services/agent-stream.ts), the
+raw-array counterpart to `isCommittedOutputEvent`, replaces the bare length
+check in `retry-classifier.ts`.
+
+Red proof before the production change (temporarily reverted
+`agent-stream.ts` and `retry-classifier.ts` to their pre-fix state, kept the
+new tests, confirmed failure, then restored -- diff was empty after
+restoring, confirming an exact revert):
+
+```text
+NODE_ENV=test pnpm exec vitest run \
+  source/services/agent-stream.test.ts \
+  source/services/retry/retry-classifier.test.ts \
+  source/services/session/continuation-recovery-handler.test.ts
+FAIL 7 tests:
+  agent-stream.test.ts: 5 failed with "streamHasCommittedOutput is not a
+    function" (function did not exist pre-fix).
+  retry-classifier.test.ts > "classify still recovers a transient failure
+    when the stream carries only bookkeeping evidence": expected
+    'transient', received 'unrecoverable'.
+  continuation-recovery-handler.test.ts > "recovers a mid-continuation
+    transient failure through the real classifier when the stream carries
+    only bookkeeping evidence": expected 'resume', received 'terminated'.
+PASS the 50 other tests in those 3 files unaffected (baseline unchanged).
+```
+
+Detection gap: defect 3's fix and tests covered only the ConversationEvent
+projection; nothing asserted the raw-array path used by the continuation
+handler, so the identical false-positive shape survived one full audit round
+undetected in the code the audit itself had just written.
+
+Focused verification (this acceptance round):
+
+```text
+NODE_ENV=test pnpm exec vitest run \
+  source/services/agent-stream.test.ts \
+  source/services/retry/retry-classifier.test.ts \
+  source/services/session/continuation-recovery-handler.test.ts \
+  source/services/session/initial-turn-recovery-handler.test.ts \
+  source/providers/retrying-model.test.ts \
+  source/services/subagents/subagent-manager.retry.test.ts \
+  source/services/conversation/conversation-service.test.ts \
+  source/services/conversation/conversation-events.test.ts
+PASS 8 files, 136 tests
+
+pnpm typecheck
+PASS
+
+NODE_ENV=test pnpm exec vitest run source/
+PASS 554 files (1 skipped), 7121 tests, 3 expected fail, 2 skipped
+
+pnpm test:provider-black-box
+PASS 19 files, 174 tests, 1 skipped
+```
+
+Final commit IDs (branch `retry-recovery-contract`, base `22ca9764`, merged
+main `30bf34f9` -> `14fc8198`):
+
+```text
+c66e0ac4  feat(retry): land retry/recovery contract foundation
+a00a899f  fix(retry): raise typed budget-exhaustion error and stop the classifier bounce
+3d9dab32  fix(retry): share the recovery budget with continuation attempts
+839d2781  fix(retry): stop cost_update from masquerading as committed model output
+66abfcec  fix(retry): stop model_retry from drawing on the transport recovery budget
+e353680f  fix(retry): wire retry_exhausted to a real retry, not literal button text
+28a18aab  fix(retry): settle the turn truthfully when refusing a plan for exhausted replay budget
+30bf34f9  Merge main into retry-recovery-contract
+a7e44292  fix(retry): close the requirement-5 raw-array false-positive risk
 ```
 
 ## Reference: catalogued guards

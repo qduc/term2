@@ -793,20 +793,16 @@ export class Term2Gateway {
     }
     if (body.reasoningEffort !== undefined) session.service.setReasoningEffort(body.reasoningEffort as any);
     if (body.mode !== undefined) {
-      const modes = { mentorMode: false, liteMode: false, planMode: false, orchestratorMode: false };
-      const key =
-        body.mode === 'mentor'
-          ? 'mentorMode'
-          : body.mode === 'lite'
-          ? 'liteMode'
-          : body.mode === 'plan'
-          ? 'planMode'
-          : body.mode === 'orchestrator'
-          ? 'orchestratorMode'
-          : undefined;
-      if (key) modes[key] = true;
-      for (const [modeKey, value] of Object.entries(modes))
-        settings.setDynamic(`app.${modeKey}`, value, { persist: false });
+      const profileId = (
+        {
+          standard: 'builtin:standard',
+          lite: 'builtin:lite',
+          plan: 'builtin:plan',
+          mentor: 'builtin:mentor',
+          orchestrator: 'builtin:orchestrator',
+        } as Record<string, string>
+      )[body.mode];
+      settings.setDynamic('app.activeProfileId', profileId, { persist: false });
     }
     const result = sessionConfigProjection(session);
     await this.#audit.write(
@@ -1867,6 +1863,14 @@ export function sessionConfigProjection(session: ServerSession): Record<string, 
   const get = (key: string, fallback: unknown) => service?.getDynamic(key) ?? fallback;
   const snapshotPolicy = snapshot.toolPolicy ?? {};
   const sessionPolicy = session.resources.settings.toolPolicy ?? {};
+  const activeProfileId = get('app.activeProfileId', undefined);
+  const modeByProfileId: Record<string, string> = {
+    'builtin:standard': 'standard',
+    'builtin:lite': 'lite',
+    'builtin:plan': 'plan',
+    'builtin:mentor': 'mentor',
+    'builtin:orchestrator': 'orchestrator',
+  };
   const toolPolicy = {
     allowWrite: sessionPolicy.allowWrite ?? snapshotPolicy.allowWrite ?? false,
     autoApprove: sessionPolicy.autoApprove ?? snapshotPolicy.autoApprove ?? false,
@@ -1877,15 +1881,10 @@ export function sessionConfigProjection(session: ServerSession): Record<string, 
     providerId: get('agent.provider', snapshot.providerId),
     modelId: get('agent.model', snapshot.modelId),
     reasoningEffort: get('agent.reasoningEffort', snapshot.reasoningEffort ?? 'default'),
-    mode: get('app.orchestratorMode', false)
-      ? 'orchestrator'
-      : get('app.liteMode', false)
-      ? 'lite'
-      : get('app.planMode', false)
-      ? 'plan'
-      : get('app.mentorMode', false)
-      ? 'mentor'
-      : snapshot.mode ?? 'standard',
+    mode:
+      (activeProfileId === undefined ? undefined : modeByProfileId[String(activeProfileId)]) ??
+      snapshot.mode ??
+      'standard',
     toolPolicy,
     defaultsRevision: snapshot.defaultsRevision,
   };

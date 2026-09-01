@@ -98,6 +98,7 @@ const SETTINGS_SOURCE_KEYS = {
   },
   app: {
     shellPath: 'app.shellPath',
+    activeProfileId: 'app.activeProfileId',
     mentorMode: 'app.mentorMode',
     liteMode: 'app.liteMode',
     planMode: 'app.planMode',

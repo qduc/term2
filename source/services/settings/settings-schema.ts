@@ -373,12 +373,13 @@ export const EnvironmentSettingsSchema = z.object({
 
 export const AppSettingsSchema = z.object({
   shellPath: z.string().optional(),
-  // Independent mode flags that can be enabled together and persist across sessions
+  // Legacy compatibility fields accepted at boundaries; activeProfileId is the canonical profile selection.
   // mentorMode: uses simplified mentor prompt and enables ask_mentor tool (if mentorModel configured)
   // liteMode: minimal context for general terminal assistance (no codebase tools/prompts)
   // planMode: when enabled, forces read-only operation (Plan mode)
   // orchestratorMode: prompt-guided delegation workflow; standard non-lite tools remain available for cache stability
   // Standard mode is the default (all flags false): full capabilities with auto-approve for apply_patch
+  activeProfileId: z.string().optional().default('builtin:standard'),
   mentorMode: z.boolean().optional().default(false),
   liteMode: z.boolean().optional().default(false),
   planMode: z.boolean().optional().default(false),
@@ -720,6 +721,7 @@ export interface SettingsWithSources {
   };
   app: {
     shellPath: SettingWithSource<string | undefined>;
+    activeProfileId: SettingWithSource<string>;
     mentorMode: SettingWithSource<boolean>;
     liteMode: SettingWithSource<boolean>;
     planMode: SettingWithSource<boolean>;
@@ -872,6 +874,7 @@ export const SETTING_KEYS = {
   LOGGING_SUPPRESS_CONSOLE: 'logging.suppressConsoleOutput',
   ENV_NODE_ENV: 'environment.nodeEnv',
   APP_SHELL_PATH: 'app.shellPath',
+  APP_ACTIVE_PROFILE_ID: 'app.activeProfileId',
   APP_MENTOR_MODE: 'app.mentorMode',
   APP_LITE_MODE: 'app.liteMode',
   APP_PLAN_MODE: 'app.planMode',
@@ -970,6 +973,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.SHELL_MAX_OUTPUT_CHARS,
   SETTING_KEYS.LOGGING_LOG_LEVEL,
   SETTING_KEYS.LOGGING_SUPPRESS_CONSOLE,
+  SETTING_KEYS.APP_ACTIVE_PROFILE_ID,
   SETTING_KEYS.APP_MENTOR_MODE,
   SETTING_KEYS.APP_LITE_MODE,
   SETTING_KEYS.APP_PLAN_MODE,
@@ -1192,6 +1196,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   },
   app: {
     shellPath: undefined,
+    activeProfileId: 'builtin:standard',
     mentorMode: false,
     liteMode: false,
     planMode: false,

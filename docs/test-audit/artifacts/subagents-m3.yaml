@@ -1,0 +1,669 @@
+schemaVersion: 2
+domains:
+  - id: subagents
+    label: Subagent execution, delegation, and policy boundaries
+suites:
+  - id: unit
+    label: Deterministic unit and seam tests
+seams:
+  - id: subagents-handoff-session
+    label: Boundary coordinating captured handoff state, model selection, and dispatch effects
+  - id: subagents-queue-controller
+    label: Boundary admitting, dispatching, pausing, recovering, and persisting queued turns
+  - id: subagents-run-id
+    label: Boundary allocating and parsing human-readable delegated-run identities
+  - id: subagents-execution-runner
+    label: Boundary converting an execution subagent stream into bounded events and a terminal result
+  - id: subagents-foreground-lease
+    label: Boundary transferring a paused foreground subagent continuation to background ownership
+  - id: subagents-mentor-runner
+    label: Boundary running persistent, sampled, and pooled mentor consultations
+  - id: subagents-nested-runner
+    label: Boundary executing nested role tools, approvals, transfers, and budget settlement
+  - id: subagents-role-loader
+    label: Boundary resolving role definitions, prompts, budgets, and reasoning settings
+  - id: subagents-async-registry
+    label: Boundary owning asynchronous run identity, lifecycle, status, steering, and retention
+  - id: subagents-manager-runtime
+    label: Boundary exposing the shared application-owned agent runtime from SubagentManager
+  - id: subagents-manager-prompts
+    label: Boundary selecting subagent prompt families and excluding top-level prompt policy
+  - id: subagents-manager-retry
+    label: Boundary classifying and retrying recoverable subagent model and transport failures
+  - id: subagents-manager-tools
+    label: Boundary registering role tools and guidance from model, search, remote, and skill settings
+  - id: subagents-notification-store
+    label: Boundary projecting subagent and related background events into ordered notifications and task cards
+  - id: subagents-run-control
+    label: Boundary controlling one subagent segment, deferred interruption, mailbox, and question waiter
+  - id: subagents-session
+    label: Boundary retaining provider, agent, history, and continuation state for one subagent
+  - id: subagents-tool-policy
+    label: Boundary attenuating subagent tool authority and wrapping execution, approval, and evidence policy
+  - id: subagents-worker-worktree
+    label: Boundary pinning worker execution to a selected local worktree
+  - id: subagents-provenance-gate
+    label: Boundary requiring interactive-equivalent provenance before non-interactive risky approval executes
+risks:
+  - id: subagents-state-loss
+    label: A delegated turn or handoff loses, replays, or misroutes state across a boundary.
+    severity: critical
+  - id: subagents-authority-escape
+    label: A delegated role gains authority, continuation, or execution scope outside its contract.
+    severity: critical
+  - id: subagents-approval-confusion
+    label: An approval, question answer, or continuation decision applies to the wrong call or generation.
+    severity: critical
+  - id: subagents-runaway-work
+    label: Delegated work exceeds its budget or remains live after cancellation without truthful settlement.
+    severity: high
+  - id: subagents-policy-drift
+    label: Role, prompt, model, search, or approval policy silently changes at a production seam.
+    severity: high
+  - id: subagents-event-loss
+    label: Lifecycle, usage, terminal, or background activity evidence is missing, duplicated, or misleading.
+    severity: high
+  - id: subagents-persistence-corruption
+    label: Queued work or recovery state is persisted, restored, or quarantined incorrectly.
+    severity: critical
+  - id: subagents-run-id-collision
+    label: A delegated-run identity collides, parses incorrectly, or targets a different active run.
+    severity: high
+  - id: subagents-worktree-escape
+    label: Worker execution is pinned to the wrong workspace or mutates the shared active-root selection.
+    severity: high
+  - id: subagents-provider-failure
+    label: A provider failure is retried unsafely or hides useful partial work and usage evidence.
+    severity: high
+  - id: subagents-result-misreport
+    label: Completed, failed, cancelled, interrupted, or partial delegated work is reported with the wrong status.
+    severity: high
+  - id: subagents-provenance-bypass
+    label: A metadata-less advisory authorizes a risky non-interactive command.
+    severity: critical
+  - id: subagents-notification-retention
+    label: A user misses, re-sees, or receives out-of-order background activity after delivery or continuation.
+    severity: high
+  - id: subagents-mailbox-overflow
+    label: Steering grows without bounds or admitted guidance is lost during interruption and continuation.
+    severity: high
+  - id: subagents-tool-evidence-loss
+    label: Tool usage, changed files, validation, or diff evidence is omitted or falsely attributed.
+    severity: medium
+fixtures:
+  - id: subagents-state-driver
+    label: Injected queue driver, IDs, snapshots, and deterministic command/event inputs
+  - id: subagents-persistence
+    label: In-memory queue persistence, invalid-record quarantine, and injected clocks
+  - id: subagents-provider
+    label: Registered deterministic providers and scripted subagent streams
+  - id: subagents-stream
+    label: Scripted text, tool, retry, usage, completion, and failure stream events
+  - id: subagents-lease
+    label: Continuation handles, foreground leases, approval pauses, and abort signals
+  - id: subagents-runtime
+    label: Application-owned runtime, tool ownership, session context, and role runner fixtures
+  - id: subagents-policy
+    label: Role definitions, settings, wrapped tools, filesystem scopes, and approval policy fixtures
+  - id: subagents-notifications
+    label: Lifecycle, shell, watch, check-in, usage, and completion event records
+  - id: subagents-session
+    label: In-memory provider session, agent, history, and response-chain state
+  - id: subagents-worktree
+    label: Deterministic local worktree list and active workspace root
+contracts:
+  - id: subagents-handoff-flow
+    statement: A captured handoff advances through message, model, and effort stages, applies selected runtime policy, sends the composed message, and clears state after completion.
+    seamIds: [subagents-handoff-session]
+    riskIds: [subagents-state-loss, subagents-policy-drift]
+  - id: subagents-queue-admission
+    statement: Queued submissions dispatch FIFO with one active execution, immutable dispatch snapshots, steer priority, duplicate identity rejection, and completion-barrier serialization.
+    seamIds: [subagents-queue-controller]
+    riskIds: [subagents-state-loss, subagents-result-misreport]
+  - id: subagents-queue-cancel-pause
+    statement: Manual cancellation and matching failure await cleanup, suppress stale terminal events, retain queued work when present, and return empty queues to idle.
+    seamIds: [subagents-queue-controller]
+    riskIds: [subagents-state-loss, subagents-result-misreport]
+  - id: subagents-queue-interactions
+    statement: Preflight, tool approval, and ask-user actions enter the matching awaiting state and accept only matching answers while rejecting stale or cross-kind resolutions.
+    seamIds: [subagents-queue-controller]
+    riskIds: [subagents-approval-confusion]
+  - id: subagents-queue-recovery
+    statement: Persisted queue mutations and awaiting states survive reload, interrupted active work is recovered conservatively, stale action identities are replaced or rejected, and invalid records are quarantined.
+    seamIds: [subagents-queue-controller]
+    riskIds: [subagents-persistence-corruption, subagents-approval-confusion]
+  - id: subagents-run-id-contract
+    statement: Generated run identities have the adjective-noun-number shape, remain short and parseable, provide a large identity space, and reject non-codename identifiers.
+    seamIds: [subagents-run-id]
+    riskIds: [subagents-run-id-collision]
+  - id: subagents-execution-observations
+    statement: Execution streams emit bounded text turns and tool progress at the correct boundaries, discard partial text on retry or error, and never forward tool argument content.
+    seamIds: [subagents-execution-runner]
+    riskIds: [subagents-event-loss, subagents-tool-evidence-loss]
+  - id: subagents-execution-settlement
+    statement: Execution results preserve complete final text in an artifact when display is truncated, classify budget stops as interrupted with partial work, dispose transient clients, and forward usage under the owning run id.
+    seamIds: [subagents-execution-runner]
+    riskIds: [subagents-result-misreport, subagents-event-loss, subagents-tool-evidence-loss]
+  - id: subagents-foreground-capability
+    statement: A foreground lease forwards abort before adoption, detaches parent abort after adoption, admits one generation-and-identity-checked continuation, and unblocks safely on cancel or settlement.
+    seamIds: [subagents-foreground-lease]
+    riskIds: [subagents-approval-confusion, subagents-authority-escape]
+  - id: subagents-mentor-settlement
+    statement: Direct mentor runs return truthful completed or cancelled results with final text and usage, enforce tool-free wrap-up, and restore the prior session after an injected session run.
+    seamIds: [subagents-mentor-runner]
+    riskIds: [subagents-result-misreport, subagents-provider-failure]
+  - id: subagents-mentor-independence
+    statement: Configured mentor samples use independent sessions, successful opinions survive partial failure, all pooled models are consulted and labelled, and a pool overrides the sample count.
+    seamIds: [subagents-mentor-runner]
+    riskIds: [subagents-state-loss, subagents-provider-failure]
+  - id: subagents-nested-transfer
+    statement: Nested tools preserve stable call identity, parent approval, foreground adoption, continuation ownership, and exactly one durable terminal event across approval, failure, cancellation, and transfer.
+    seamIds: [subagents-nested-runner]
+    riskIds: [subagents-approval-confusion, subagents-event-loss, subagents-result-misreport]
+  - id: subagents-nested-budget
+    statement: Nested execution projects role limits and provider chaining, contains looping or failed work with truthful partial evidence, and performs a tool-free budget settlement without dispatching proposed tools.
+    seamIds: [subagents-nested-runner]
+    riskIds: [subagents-runaway-work, subagents-result-misreport, subagents-tool-evidence-loss]
+  - id: subagents-role-definition
+    statement: Role resolution assigns tool-using roles a bounded default budget, keeps mentor single-turn, expresses explorer evidence-only ownership, and resolves legacy and tier reasoning settings correctly.
+    seamIds: [subagents-role-loader]
+    riskIds: [subagents-policy-drift, subagents-runaway-work]
+  - id: subagents-async-lifecycle
+    statement: Each asynchronous run has an owned session and identity, emits one matching terminal lifecycle event, retains terminal results until reset or eviction, and makes cancellation settle only after runner evidence.
+    seamIds: [subagents-async-registry]
+    riskIds: [subagents-event-loss, subagents-result-misreport, subagents-state-loss]
+  - id: subagents-async-observation
+    statement: Run status synchronously reports bounded activity, usage, tools, text turns, elapsed time, approval and provider waits, ignores foreign events, and returns not-found rather than throwing.
+    seamIds: [subagents-async-registry]
+    riskIds: [subagents-event-loss, subagents-runaway-work]
+  - id: subagents-async-steering
+    statement: Asynchronous steering resolves canonical run ids before names, answers only the matching question, bounds and coalesces guidance, defers interruption until tools finish, and prevents cancellation races or unsupported targets.
+    seamIds: [subagents-async-registry]
+    riskIds: [subagents-approval-confusion, subagents-mailbox-overflow, subagents-state-loss]
+  - id: subagents-async-continuity
+    statement: A completed continuation reuses the permitted run id, session, provider history key, and role policy, while concurrent or invalid continuations are rejected and nested launches receive distinct scoped keys.
+    seamIds: [subagents-async-registry]
+    riskIds: [subagents-state-loss, subagents-authority-escape, subagents-run-id-collision]
+  - id: subagents-runtime-wiring
+    statement: SubagentManager exposes an AgentRuntime backed by its shared subagent infrastructure, creates usable handles, preserves the public handle shape, and returns fresh runtime wrappers over shared executors.
+    seamIds: [subagents-manager-runtime]
+    riskIds: [subagents-authority-escape, subagents-state-loss]
+  - id: subagents-prompt-composition
+    statement: Execution subagents receive model-family and role instructions in the required order without top-level-only prompt content, while mentor runs retain their separate mentor prompt contract.
+    seamIds: [subagents-manager-prompts]
+    riskIds: [subagents-policy-drift, subagents-authority-escape]
+  - id: subagents-retry-policy
+    statement: Recoverable hallucinated-tool and transport failures retry within policy and emit retry evidence, while non-recoverable model errors and aborts do not retry and partial tool evidence survives cancellation.
+    seamIds: [subagents-manager-retry]
+    riskIds: [subagents-provider-failure, subagents-result-misreport, subagents-tool-evidence-loss]
+  - id: subagents-tool-registration
+    statement: Manager tool registration follows model search mode, role capabilities, remote context, and available skills, exposing matching tools and guidance while omitting unavailable tools.
+    seamIds: [subagents-manager-tools]
+    riskIds: [subagents-policy-drift, subagents-authority-escape]
+  - id: subagents-notification-projection
+    statement: Async lifecycle, usage, tool, shell, watch, and check-in events produce the correct visible task projection while foreground and non-projecting events remain absent.
+    seamIds: [subagents-notification-store]
+    riskIds: [subagents-event-loss, subagents-notification-retention]
+  - id: subagents-notification-delivery
+    statement: Notifications preserve message order, deduplicate exact identities, retain undelivered items ahead of newer items, expose bounded previews, and re-notify only after a genuine continuation.
+    seamIds: [subagents-notification-store]
+    riskIds: [subagents-event-loss, subagents-notification-retention]
+  - id: subagents-run-control
+    statement: One segment controller admits interruption only after active tools complete, bounds and preserves steering, owns one trimmed question waiter, and rejects or settles stale answers during cancellation.
+    seamIds: [subagents-run-control]
+    riskIds: [subagents-mailbox-overflow, subagents-approval-confusion, subagents-runaway-work]
+  - id: subagents-session-continuity
+    statement: A subagent session initializes and resets provider and agent state, caches agents and streamed models, tracks response identifiers, and chooses string or history input according to chaining capability.
+    seamIds: [subagents-session]
+    riskIds: [subagents-state-loss, subagents-provider-failure]
+  - id: subagents-tool-authority
+    statement: Tool construction grants only requested and role-compatible editors, memory, search, shell, and web tools, attenuates configured filesystem and network scopes, and preserves role-specific guidance.
+    seamIds: [subagents-tool-policy]
+    riskIds: [subagents-authority-escape, subagents-policy-drift]
+  - id: subagents-tool-execution-policy
+    statement: Wrapped tools report completion on throws, preserve bounded serialized output, apply shell and editor approval modes, reject explicit unsandboxed nested execution, and enforce write boundaries.
+    seamIds: [subagents-tool-policy]
+    riskIds: [subagents-authority-escape, subagents-approval-confusion]
+  - id: subagents-tool-evidence
+    statement: Validation capture recognizes validation commands without overwriting prior evidence, bounds excerpts, and write wrapping records changed paths and line deltas while documenting known shell-edit omissions.
+    seamIds: [subagents-tool-policy]
+    riskIds: [subagents-tool-evidence-loss, subagents-policy-drift]
+  - id: subagents-worktree-pinning
+    statement: Only local worker roles can pin to an existing named worktree, the returned execution context uses that path, unknown names fail clearly, and active workspace root publication is untouched.
+    seamIds: [subagents-worker-worktree]
+    riskIds: [subagents-worktree-escape, subagents-authority-escape]
+  - id: subagents-provenance
+    statement: A non-interactive YELLOW approval without interactive-equivalent provenance is blocked rather than executing the shell command.
+    seamIds: [subagents-provenance-gate]
+    riskIds: [subagents-provenance-bypass, subagents-authority-escape]
+  - id: subagents-result-format
+    statement: Formatted worker results include successful status, final text, and the selected worktree, while budget errors are recognized, parsed, and converted into a partial-results stop message.
+    seamIds: [subagents-execution-runner]
+    riskIds: [subagents-result-misreport, subagents-tool-evidence-loss]
+tests:
+  - kind: file
+    id: subagents-handoff-session
+    file: source/services/handoff/handoff-session.test.ts
+    domainId: subagents
+    suiteId: unit
+    contractIds: [subagents-handoff-flow]
+    fixtureIds: [subagents-state-driver]
+  - kind: file
+    id: subagents-queue-controller
+    file: source/services/queue/queue-controller.test.ts
+    domainId: subagents
+    suiteId: unit
+    contractIds: [subagents-queue-admission, subagents-queue-cancel-pause, subagents-queue-interactions, subagents-queue-recovery]
+    fixtureIds: [subagents-state-driver, subagents-persistence]
+  - kind: file
+    id: subagents-provenance-boundary
+    file: source/services/subagents/c11-d10-provenance-boundary.test.ts
+    domainId: subagents
+    suiteId: unit
+    contractIds: [subagents-provenance]
+    fixtureIds: [subagents-provider, subagents-policy]
+  - kind: file
+    id: subagents-codename-run-id
+    file: source/services/subagents/codename-run-id.test.ts
+    domainId: subagents
+    suiteId: unit
+    contractIds: [subagents-run-id-contract]
+    fixtureIds: []
+  - kind: file
+    id: subagents-execution-runner
+    file: source/services/subagents/execution-runner.test.ts
+    domainId: subagents
+    suiteId: unit
+    contractIds: [subagents-execution-observations, subagents-execution-settlement, subagents-result-format]
+    fixtureIds: [subagents-stream, subagents-provider, subagents-runtime]
+  - kind: file
+    id: subagents-foreground-subagent-lease
+    file: source/services/subagents/foreground-subagent-lease.test.ts
+    domainId: subagents
+    suiteId: unit
+    contractIds: [subagents-foreground-capability]
+    fixtureIds: [subagents-lease]
+  - kind: file
+    id: subagents-mentor-runner
+    file: source/services/subagents/mentor-runner.test.ts
+    domainId: subagents
+    suiteId: unit
+    contractIds: [subagents-mentor-settlement, subagents-mentor-independence]
+    fixtureIds: [subagents-provider, subagents-session]
+  - kind: file
+    id: subagents-nested-runner
+    file: source/services/subagents/nested-runner.test.ts
+    domainId: subagents
+    suiteId: unit
+    contractIds: [subagents-nested-transfer, subagents-nested-budget]
+    fixtureIds: [subagents-provider, subagents-runtime, subagents-lease]
+  - kind: file
+    id: subagents-role-loader
+    file: source/services/subagents/role-loader.test.ts
+    domainId: subagents
+    suiteId: unit
+    contractIds: [subagents-role-definition]
+    fixtureIds: [subagents-policy]
+  - kind: file
+    id: subagents-async-registry
+    file: source/services/subagents/subagent-async-registry.test.ts
+    domainId: subagents
+    suiteId: unit
+    contractIds: [subagents-async-lifecycle, subagents-async-observation, subagents-async-steering, subagents-async-continuity]
+    fixtureIds: [subagents-runtime, subagents-provider, subagents-lease, subagents-session]
+  - kind: file
+    id: subagents-manager-agent-runtime
+    file: source/services/subagents/subagent-manager.agent-runtime.test.ts
+    domainId: subagents
+    suiteId: unit
+    contractIds: [subagents-runtime-wiring]
+    fixtureIds: [subagents-runtime]
+  - kind: file
+    id: subagents-manager-prompts
+    file: source/services/subagents/subagent-manager.prompts.test.ts
+    domainId: subagents
+    suiteId: unit
+    contractIds: [subagents-prompt-composition]
+    fixtureIds: [subagents-provider, subagents-policy]
+  - kind: file
+    id: subagents-manager-retry
+    file: source/services/subagents/subagent-manager.retry.test.ts
+    domainId: subagents
+    suiteId: unit
+    contractIds: [subagents-retry-policy]
+    fixtureIds: [subagents-provider, subagents-runtime, subagents-stream]
+  - kind: file
+    id: subagents-manager-tools
+    file: source/services/subagents/subagent-manager.tools.test.ts
+    domainId: subagents
+    suiteId: unit
+    contractIds: [subagents-tool-registration]
+    fixtureIds: [subagents-provider, subagents-policy, subagents-runtime]
+  - kind: file
+    id: subagents-notification-store
+    file: source/services/subagents/subagent-notification-store.test.ts
+    domainId: subagents
+    suiteId: unit
+    contractIds: [subagents-notification-projection, subagents-notification-delivery]
+    fixtureIds: [subagents-notifications, subagents-runtime]
+  - kind: file
+    id: subagents-run-control
+    file: source/services/subagents/subagent-run-control.test.ts
+    domainId: subagents
+    suiteId: unit
+    contractIds: [subagents-run-control]
+    fixtureIds: [subagents-lease]
+  - kind: file
+    id: subagents-session
+    file: source/services/subagents/subagent-session.test.ts
+    domainId: subagents
+    suiteId: unit
+    contractIds: [subagents-session-continuity]
+    fixtureIds: [subagents-session]
+  - kind: file
+    id: subagents-tool-policy
+    file: source/services/subagents/tool-policy.test.ts
+    domainId: subagents
+    suiteId: unit
+    contractIds: [subagents-tool-authority, subagents-tool-execution-policy, subagents-tool-evidence]
+    fixtureIds: [subagents-policy, subagents-runtime, subagents-worktree]
+  - kind: file
+    id: subagents-utils
+    file: source/services/subagents/utils.test.ts
+    domainId: subagents
+    suiteId: unit
+    contractIds: [subagents-result-format]
+    fixtureIds: [subagents-runtime]
+  - kind: file
+    id: subagents-worker-worktree
+    file: source/services/subagents/worker-worktree.test.ts
+    domainId: subagents
+    suiteId: unit
+    contractIds: [subagents-worktree-pinning]
+    fixtureIds: [subagents-worktree]
+decisions:
+  - id: subagents-handoff-session-subagents-m3
+    testId: subagents-handoff-session
+    role: second_opinion
+    reviewer: subagents-m3
+    sourceArtifact: docs/test-audit/artifacts/subagents-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: "The session test covers the public handoff coordinator rather than only the reducer: it verifies staged state, trimmed message capture, model/provider persistence, final clearing, and dependency replacement while a handoff is active."
+    evidence:
+      - source/services/handoff/handoff-session.test.ts:18-32 verifies the entering-message to model-selection transition and composed captured message state.
+      - source/services/handoff/handoff-session.test.ts:34-56 verifies model/provider application and state clearing after effort completion.
+      - source/services/handoff/handoff-session.test.ts:58-77 verifies updateDeps preserves the active handoff state; source/hooks/handoff-flow-reducer.test.ts covers the reducer separately, not this dependency/effect boundary.
+    replacementTestIds: []
+    status: proposed
+  - id: subagents-queue-controller-subagents-m3
+    testId: subagents-queue-controller
+    role: second_opinion
+    reviewer: subagents-m3
+    sourceArtifact: docs/test-audit/artifacts/subagents-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: "This is the direct state-machine evidence for queue admission, dispatch snapshots, cancellation and failure recovery, typed interactive waits, persistence, and dispatch holding; no sibling exercises the same controller seam at comparable breadth."
+    evidence:
+      - source/services/queue/queue-controller.test.ts:13-213 verifies FIFO admission, one active execution, immutable snapshots, steer priority, and mutation-order persistence under concurrent submissions.
+      - source/services/queue/queue-controller.test.ts:215-414 verifies awaited cancellation cleanup, stale-event suppression, retained paused work, and matching failure recovery.
+      - source/services/queue/queue-controller.test.ts:693-1149 and :1154-1685 verify preflight, tool approval, ask-user, cancellation, persistence, recovery, and cross-kind stale-answer rejection.
+      - source/services/queue/queue-controller.test.ts:1830-1885 verifies hold/release dispatch policy; source/services/conversation/conversation-adapter.test.ts and source/hooks/conversation-ui-reducer.test.ts cover callers or projections, not this controller transition contract.
+    replacementTestIds: []
+    status: proposed
+  - id: subagents-provenance-boundary-subagents-m3
+    testId: subagents-provenance-boundary
+    role: second_opinion
+    reviewer: subagents-m3
+    sourceArtifact: docs/test-audit/artifacts/subagents-m3.yaml
+    recommendation: keep
+    confidence: medium
+    reason: "The intentionally failing regression records a known risky approval gap and the exact desired fail-closed observable; removing it would erase the only assigned evidence for interactive-equivalent provenance on the worker path."
+    evidence:
+      - source/services/subagents/c11-d10-provenance-boundary.test.ts:24-30 documents that metadata-less positive advisory behavior currently executes and names the required provenance fields.
+      - source/services/subagents/c11-d10-provenance-boundary.test.ts:34-78 drives the production worker shell wrapper with sandbox disabled and asserts a blocked-for-safety result; source/services/subagents/subagent-manager.security.test.ts:506-615 covers approved/rejected YELLOW policy but does not assert missing-provenance rejection.
+    replacementTestIds: []
+    status: proposed
+  - id: subagents-codename-run-id-subagents-m3
+    testId: subagents-codename-run-id
+    role: second_opinion
+    reviewer: subagents-m3
+    sourceArtifact: docs/test-audit/artifacts/subagents-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: medium
+    reason: "Run-id format and parsing are meaningful, but repeated random draws make generation/uniqueness assertions probabilistic and the 500-draw shape and length checks should be consolidated into deterministic format cases. The replacement must retain the large-space and parse/reject contracts."
+    evidence:
+      - source/services/subagents/codename-run-id.test.ts:10-28 performs two separate 500-draw random loops for pattern and length, with the length assertion duplicating a property of the alias contract.
+      - source/services/subagents/codename-run-id.test.ts:47-59 uses a probabilistic 2,000-draw uniqueness threshold rather than controlling the generator; this can fail for randomness without identifying a production defect.
+      - source/services/subagents/subagent-async-registry.test.ts:1771-1799 independently verifies generated codename shape and deterministic collision retry, so rewrite can remove repeated integration confidence without deleting the parser/space contract.
+    replacementTestIds: []
+    status: proposed
+  - id: subagents-execution-runner-subagents-m3
+    testId: subagents-execution-runner
+    role: second_opinion
+    reviewer: subagents-m3
+    sourceArtifact: docs/test-audit/artifacts/subagents-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: "The runner tests protect bounded display and event-boundary behavior, truthful budget settlement, artifact preservation, client disposal, and usage attribution at the execution seam; the mocked session composition isolates this contract rather than replacing it with a manager happy path."
+    evidence:
+      - source/services/subagents/execution-runner.test.ts:75-159 verifies text-turn boundaries, retry/error partial-text suppression, and bounded argument progress without argument leakage.
+      - source/services/subagents/execution-runner.test.ts:161-227 verifies budget interruption and complete-result artifact behavior including the 4,001-character regression boundary.
+      - source/services/subagents/execution-runner.test.ts:229-256 verifies transient-client disposal and both usage-update paths; no sibling asserts this runner's event translation and final-result ownership together.
+    replacementTestIds: []
+    status: proposed
+  - id: subagents-foreground-subagent-lease-subagents-m3
+    testId: subagents-foreground-subagent-lease
+    role: second_opinion
+    reviewer: subagents-m3
+    sourceArtifact: docs/test-audit/artifacts/subagents-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: "This focused seam test verifies capability-bearing approval transfer, generation fencing, one-shot adoption, release on cancellation/settlement, and failure atomicity; nested-runner and registry tests consume the lease but cannot replace its direct guard assertions."
+    evidence:
+      - source/services/subagents/foreground-subagent-lease.test.ts:6-50 verifies parent abort detachment and exact generation/identity continuation admission.
+      - source/services/subagents/foreground-subagent-lease.test.ts:70-131 verifies cancellation/settlement release, one-shot adoption, fresh generations, and stale pending decisions.
+      - source/services/subagents/foreground-subagent-lease.test.ts:133-204 verifies exact continuation closure pairing and that policy/resume failures do not lose or incorrectly retain a pause; source/services/subagents/nested-runner.test.ts:272-485 covers integration outcomes, not the lease primitive.
+    replacementTestIds: []
+    status: proposed
+  - id: subagents-mentor-runner-subagents-m3
+    testId: subagents-mentor-runner
+    role: second_opinion
+    reviewer: subagents-m3
+    sourceArtifact: docs/test-audit/artifacts/subagents-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: "Direct MentorRunner coverage spans cancellation/result usage, budget wrap-up, independent sampling, partial pool failure, pool precedence, and persistent default sessions. These are distinct from manager role-selection tests."
+    evidence:
+      - source/services/subagents/mentor-runner.test.ts:10-126 verifies cancelled and settled direct results, usage projection, settings-backed policy, and tool-free wrap-up.
+      - source/services/subagents/mentor-runner.test.ts:133-236 verifies independent samples, partial success, and all-fail behavior.
+      - source/services/subagents/mentor-runner.test.ts:243-397 verifies pooled model attribution, pool-over-samples precedence, and persistent-session behavior; source/services/subagents/subagent-manager.lifecycle.test.ts:172-223 checks prompt sourcing only, not these runner modes.
+    replacementTestIds: []
+    status: proposed
+  - id: subagents-nested-runner-subagents-m3
+    testId: subagents-nested-runner
+    role: second_opinion
+    reviewer: subagents-m3
+    sourceArtifact: docs/test-audit/artifacts/subagents-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: "The end-to-end nested runner suite protects application-owned nested calls, foreground transfer and approval continuation, exactly-once terminal settlement, parent approval, provider chaining, budget containment, partial findings, and un-dispatched settlement proposals."
+    evidence:
+      - source/services/subagents/nested-runner.test.ts:214-268 verifies stable nested call IDs and application-owned approval continuation.
+      - source/services/subagents/nested-runner.test.ts:271-485 verifies adopted pause, budget/failure/cancellation terminal lanes, resume-launch failure, and fulfilled-tool error handling.
+      - source/services/subagents/nested-runner.test.ts:487-683 verifies result evidence, maxTokens/chaining, parent approval, staged budget wrap-up/retry, and no tool dispatch after settlement; source/services/subagents/subagent-async-registry.test.ts:384-475 covers registry adoption bookkeeping but not nested provider/tool execution.
+    replacementTestIds: []
+    status: proposed
+  - id: subagents-role-loader-subagents-m3
+    testId: subagents-role-loader
+    role: second_opinion
+    reviewer: subagents-m3
+    sourceArtifact: docs/test-audit/artifacts/subagents-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: "These direct tests protect the role-loader's budget, responsibility prompt, and reasoning-setting resolution. Manager role tests consume definitions but do not isolate legacy/default tier precedence at this seam."
+    evidence:
+      - source/services/subagents/role-loader.test.ts:16-28 verifies the distinct default budgets for tool roles and mentor.
+      - source/services/subagents/role-loader.test.ts:31-48 verifies explorer evidence-only ownership instructions.
+      - source/services/subagents/role-loader.test.ts:50-83 verifies legacy mentor fallback and each tier-specific reasoning setting; no assigned sibling directly tests loadRoleDefinition precedence.
+    replacementTestIds: []
+    status: proposed
+  - id: subagents-async-registry-subagents-m3
+    testId: subagents-async-registry
+    role: second_opinion
+    reviewer: subagents-m3
+    sourceArtifact: docs/test-audit/artifacts/subagents-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: "This broad direct registry suite covers the ownership boundary for async identity, lifecycle, status snapshots, retention, adoption, cancellation, questions, steering, continuation policy, and provider-history scoping. Overlapping primitive tests do not replace its cross-feature race and ownership evidence."
+    evidence:
+      - source/services/subagents/subagent-async-registry.test.ts:41-363 verifies terminal result retention, observation/status projection, budget evidence, and foreign-event filtering.
+      - source/services/subagents/subagent-async-registry.test.ts:366-475 verifies foreground adoption, model capture, approval status, disposal, and exactly-once terminal behavior.
+      - source/services/subagents/subagent-async-registry.test.ts:518-825 verifies names, continuations, cancellation settlement, TTL eviction, disposal, and typed errors.
+      - source/services/subagents/subagent-async-registry.test.ts:1133-1639 verifies question/steering races, mailbox bounds, continuation segments, and cancellation precedence.
+      - source/services/subagents/subagent-async-registry.test.ts:1642-1800 verifies provider-history scoping, codename allocation, and deterministic collision retry; source/services/subagents/subagent-run-control.test.ts:15-104 covers the extracted primitive but not registry ownership or lifecycle integration.
+    replacementTestIds: []
+    status: proposed
+  - id: subagents-manager-agent-runtime-subagents-m3
+    testId: subagents-manager-agent-runtime
+    role: second_opinion
+    reviewer: subagents-m3
+    sourceArtifact: docs/test-audit/artifacts/subagents-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: medium
+    reason: "Manager runtime wiring matters, but four of five cases assert generic interface shape already covered by AgentRuntime tests, and the supposed parent attenuation case explicitly does not construct a parent and only checks requested tools are present. Rewrite around one production-wiring assertion plus a real delegated handle execution/attenuation case."
+    evidence:
+      - source/services/subagents/subagent-manager.agent-runtime.test.ts:79-134 repeats runtime/handle shape checks; source/services/agent-runtime/agent-runtime.test.ts:95-148 already asserts AgentHandle creation, public properties, and executor delegation.
+      - source/services/subagents/subagent-manager.agent-runtime.test.ts:136-158 is titled parent attenuation but comments that it cannot set a parent and asserts both requested tools are present, so it does not protect attenuation.
+      - source/services/subagents/subagent-manager.agent-runtime.test.ts:160-180 verifies fresh wrappers/shared executors, the one manager-specific concern worth retaining in a focused rewrite.
+    replacementTestIds: []
+    status: proposed
+  - id: subagents-manager-prompts-subagents-m3
+    testId: subagents-manager-prompts
+    role: second_opinion
+    reviewer: subagents-m3
+    sourceArtifact: docs/test-audit/artifacts/subagents-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: medium
+    reason: "Prompt-selection observables are meaningful product behavior, but the file is a split-suite fragment with a large dead import list and a multi-provider singleton case. Rewrite as a compact model-family/role matrix while retaining top-level exclusion and mentor separation."
+    evidence:
+      - source/services/subagents/subagent-manager.prompts.test.ts:47-148 verifies model-family prefix, role suffix, ordering, and three provider/model variants.
+      - source/services/subagents/subagent-manager.prompts.test.ts:150-223 verifies top-level prompt exclusion and separate mentor prompt composition; no sibling asserts these exact inclusion/exclusion strings.
+      - source/services/subagents/subagent-manager.prompts.test.ts:1-21 imports createMockExecutionContext, temp-dir helpers, getAgentTool, role constants, retry/error helpers, and ConversationEvent that are not used in this file, indicating cleanup can reduce setup without dropping prompt evidence.
+    replacementTestIds: []
+    status: proposed
+  - id: subagents-manager-retry-subagents-m3
+    testId: subagents-manager-retry
+    role: second_opinion
+    reviewer: subagents-m3
+    sourceArtifact: docs/test-audit/artifacts/subagents-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: medium
+    reason: "Retry policy is a meaningful manager contract and must remain, but the file repeats nearly identical recoverable hallucinated-tool scenarios through two stream shapes and carries unused split-suite imports. Rewrite into a compact error-class matrix retaining direct-stream and wrapped-event coverage, abort exclusion, partial evidence, and transport/incomplete-stream distinctions."
+    evidence:
+      - source/services/subagents/subagent-manager.retry.test.ts:23-151 covers recoverable retry, exhaustion, and non-recoverable no-retry behavior through wrapped error events.
+      - source/services/subagents/subagent-manager.retry.test.ts:153-219 repeats recoverable read-only retry through a direct thrown ModelBehaviorError, while :270-366 separately covers transport-drop and incomplete-stream recovery; these should remain distinct cases in a table rather than duplicated setup.
+      - source/services/subagents/subagent-manager.retry.test.ts:221-267 verifies cancellation retains tools/files evidence; source/services/subagents/subagent-manager.lifecycle.test.ts:94-168 covers lifecycle completion but not retry classification.
+    replacementTestIds: []
+    status: proposed
+  - id: subagents-manager-tools-subagents-m3
+    testId: subagents-manager-tools
+    role: second_opinion
+    reviewer: subagents-m3
+    sourceArtifact: docs/test-audit/artifacts/subagents-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: medium
+    reason: "Conditional manager registration is valuable and not deletable, but the file repeats provider/manager setup and partially overlaps the explorer tool-surface assertion in the roles sibling. Rewrite into a focused configuration matrix while preserving search mode, remote suppression, skills registration, and guidance outcomes."
+    evidence:
+      - source/services/subagents/subagent-manager.tools.test.ts:23-126 verifies searchViaShell auto/off registration and matching guidance across gpt-5 and gpt-4o.
+      - source/services/subagents/subagent-manager.tools.test.ts:128-163 verifies explorer web tools alongside shell search; source/services/subagents/subagent-manager.roles.test.ts:472-497 independently asserts explorer read/web/shell presence and no write tool, so only the conditional search behavior is unique here.
+      - source/services/subagents/subagent-manager.tools.test.ts:165-242 verifies remote code-context suppression and activate_skill/catalog wiring; source/services/subagents/subagent-manager.tools.test.ts:1-21 also retains unused imports from the split suite that can be removed without changing the manager seam.
+    replacementTestIds: []
+    status: proposed
+  - id: subagents-notification-store-subagents-m3
+    testId: subagents-notification-store
+    role: second_opinion
+    reviewer: subagents-m3
+    sourceArtifact: docs/test-audit/artifacts/subagents-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: "The store suite protects the user-visible projection and delivery ledger for async runs, tools, shell jobs, watches, check-ins, usage, continuation, dedupe, retention, and bounded previews. Registry tests emit events but do not replace this projection seam."
+    evidence:
+      - source/services/subagents/subagent-notification-store.test.ts:139-388 verifies exact-once notification ordering for completions, budget/stall evidence, shell/watch/check-in events, and non-projection rules.
+      - source/services/subagents/subagent-notification-store.test.ts:390-570 verifies task projection, usage, foreground filtering, retention expiry, continuation reactivation, and user-control notification.
+      - source/services/subagents/subagent-notification-store.test.ts:572-745 verifies visible tool states, lifecycle filtering, terminal status/error preservation, and live approval interruption behavior.
+      - source/services/subagents/subagent-notification-store.test.ts:747-833 verifies drain/retain ordering, delivered-id bounds, preview truncation, missing ids, and real registry integration; no sibling covers these store-level visible records.
+    replacementTestIds: []
+    status: proposed
+  - id: subagents-run-control-subagents-m3
+    testId: subagents-run-control
+    role: second_opinion
+    reviewer: subagents-m3
+    sourceArtifact: docs/test-audit/artifacts/subagents-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: "This small primitive suite directly protects deferred interruption, mailbox caps, one-question ownership, trimming, matching answers, and cancellation rejection. Registry tests exercise it indirectly but cannot substitute for these isolated invariants."
+    evidence:
+      - source/services/subagents/subagent-run-control.test.ts:5-31 verifies one active segment and interruption only after all active tools complete.
+      - source/services/subagents/subagent-run-control.test.ts:33-58 verifies message/character bounds and preservation of admitted guidance.
+      - source/services/subagents/subagent-run-control.test.ts:60-104 verifies one question waiter, trimmed text, matching answer, and cancellation settlement; source/services/subagents/subagent-async-registry.test.ts:1371-1463 covers registry integration around these limits, not the primitive contract.
+    replacementTestIds: []
+    status: proposed
+  - id: subagents-session-subagents-m3
+    testId: subagents-session
+    role: second_opinion
+    reviewer: subagents-m3
+    sourceArtifact: docs/test-audit/artifacts/subagents-m3.yaml
+    recommendation: keep
+    confidence: medium
+    reason: "SubagentSession is the state holder used by mentor and async continuation paths; these direct tests isolate cache invalidation, reset, response-chain tracking, and provider-dependent input shape that integration tests observe only indirectly."
+    evidence:
+      - source/services/subagents/subagent-session.test.ts:4-76 verifies initialization, provider-switch reset, idempotent agent/model caching, and provider state.
+      - source/services/subagents/subagent-session.test.ts:78-142 verifies full reset, maxTurns options, previous-response omission/tracking, and chained string versus history input.
+      - source/services/subagents/mentor-runner.test.ts:362-397 and source/services/subagents/subagent-async-registry.test.ts:612-624 consume sessions but do not assert this complete state contract.
+    replacementTestIds: []
+    status: proposed
+  - id: subagents-tool-policy-subagents-m3
+    testId: subagents-tool-policy
+    role: second_opinion
+    reviewer: subagents-m3
+    sourceArtifact: docs/test-audit/artifacts/subagents-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: "Direct policy/factory tests protect authority attenuation, memory/search registration, wrapper approval behavior, unsandboxed rejection, and validation/diff evidence. Manager security tests are valuable integration siblings, not replacements for this lower-level policy seam."
+    evidence:
+      - source/services/subagents/tool-policy.test.ts:65-196 verifies editor capability mapping, fine-grained scope denial, and search-tool description consistency.
+      - source/services/subagents/tool-policy.test.ts:199-357 verifies memory and orchestrator authority plus completion-on-throw and serialized-output preservation.
+      - source/services/subagents/tool-policy.test.ts:360-594 verifies shell/editor approval modes, boundary behavior, nested always-mode behavior, and explicit unsandboxed rejection; source/services/subagents/subagent-manager.security.test.ts:405-615 covers manager-wrapper integration with overlapping YELLOW/RED outcomes.
+      - source/services/subagents/tool-policy.test.ts:596-753 verifies the documented shell-edit gap, validation capture, bounded excerpts, and diffStat evidence; these direct helper contracts have no stronger sibling replacement.
+    replacementTestIds: []
+    status: proposed
+  - id: subagents-utils-subagents-m3
+    testId: subagents-utils
+    role: second_opinion
+    reviewer: subagents-m3
+    sourceArtifact: docs/test-audit/artifacts/subagents-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: "These focused pure-function assertions preserve worker-facing result formatting and the budget-stop recognition/message contract; execution and nested tests rely on these helpers but do not cover all parser variants directly."
+    evidence:
+      - source/services/subagents/utils.test.ts:10-23 verifies completed result formatting includes final text and pinned worktree.
+      - source/services/subagents/utils.test.ts:25-48 verifies class/message/string budget recognition, limit extraction, and partial narrative formatting.
+      - source/services/subagents/execution-runner.test.ts:161-197 and source/services/subagents/nested-runner.test.ts:578-610 verify callers' outcomes, not all utility inputs and output text.
+    replacementTestIds: []
+    status: proposed
+  - id: subagents-worker-worktree-subagents-m3
+    testId: subagents-worker-worktree
+    role: second_opinion
+    reviewer: subagents-m3
+    sourceArtifact: docs/test-audit/artifacts/subagents-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: "This isolated worktree seam verifies role and remote admission, named-worktree lookup, returned execution cwd, and non-publication of the active workspace root; manager security tests do not exercise pinWorkerWorktree directly."
+    evidence:
+      - source/services/subagents/worker-worktree.test.ts:21-36 verifies successful local worker pinning and unchanged active-root publication.
+      - source/services/subagents/worker-worktree.test.ts:38-76 verifies non-worker, remote, and unknown-name rejection messages.
+      - source/services/subagents/execution-runner.test.ts:199-215 checks final artifact output and source/services/subagents/subagent-manager.security.test.ts:101-400 checks write boundaries, but neither replaces worktree admission/pinning evidence.
+    replacementTestIds: []
+    status: proposed
+

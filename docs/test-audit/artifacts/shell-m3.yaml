@@ -1,0 +1,465 @@
+# Shell domain Milestone 3 second-opinion exploration.
+schemaVersion: 2
+domains:
+  - id: shell
+    label: Shell execution and safety
+suites:
+  - id: unit
+    label: Deterministic unit and seam tests
+seams:
+  - id: shell-tool
+    label: Boundary where shell requests become sandboxed or unsandboxed execution
+  - id: shell-command-classifier
+    label: Boundary classifying command and path input as GREEN, YELLOW, or RED
+  - id: shell-session-history
+    label: Boundary between interactive shell submissions and persisted conversation context
+  - id: shell-temp-artifacts
+    label: Boundary managing bounded shell output artifacts and stale temporary data
+risks:
+  - id: shell-safety-bypass
+    label: A command bypasses sandbox, approval, workspace, or output containment policy.
+    severity: critical
+  - id: shell-session-state-loss
+    label: Shell lifecycle, cancellation, or history state is lost or applied to the wrong command.
+    severity: critical
+  - id: shell-classifier-misclassification
+    label: Safe work prompts unnecessarily or dangerous work is treated as safe.
+    severity: high
+  - id: shell-output-loss
+    label: Shell output, completion status, or cleanup evidence is lost or reported inaccurately.
+    severity: high
+fixtures:
+  - id: shell-runner-fixture
+    label: Injected shell runner, registry, scheduler, and temporary workspace
+  - id: shell-command-corpus
+    label: Representative command and path safety corpus
+  - id: shell-real-process
+    label: Real child processes and process-group fixtures for containment tests
+  - id: shell-fake-approval
+    label: Deterministic approval handlers, pause controllers, and child-process doubles
+  - id: shell-temp-workspace
+    label: Temporary filesystem, process metadata, and output artifact fixtures
+contracts:
+  - id: shell-background-lifecycle
+    statement: A background shell call acknowledges immediately, retains output, exposes status and cancellation, emits terminal lifecycle events, and cleans up after settlement.
+    seamIds:
+      - shell-tool
+    riskIds:
+      - shell-safety-bypass
+      - shell-session-state-loss
+  - id: shell-monitoring
+    statement: Monitoring is available only for background jobs, reports retained matches in order, and setup failures do not hide the launched job.
+    seamIds:
+      - shell-tool
+    riskIds:
+      - shell-safety-bypass
+      - shell-session-state-loss
+  - id: shell-timeout-and-output-caps
+    statement: Foreground and background commands use their respective timeout and overflow policies, and caller output requests cannot exceed the configured session cap.
+    seamIds:
+      - shell-tool
+      - shell-temp-artifacts
+    riskIds:
+      - shell-safety-bypass
+      - shell-output-loss
+  - id: shell-sandbox-and-approval
+    statement: Shell execution follows sandbox availability, mode, approval, Docker authorization, SSH, RTK, and plan-mode policy without executing a command when a required guard fails.
+    seamIds:
+      - shell-tool
+    riskIds:
+      - shell-safety-bypass
+  - id: shell-denied-read-recovery
+    statement: Strict sandbox denied reads produce a scoped retry or held-call approval path, preserve raw command identity, and fail closed when required call metadata is absent.
+    seamIds:
+      - shell-tool
+    riskIds:
+      - shell-safety-bypass
+      - shell-session-state-loss
+  - id: shell-command-classification
+    statement: Shell command and path forms are classified with the intended GREEN, YELLOW, or RED severity, including nested executors, wrappers, and false-positive boundaries.
+    seamIds:
+      - shell-command-classifier
+    riskIds:
+      - shell-classifier-misclassification
+      - shell-safety-bypass
+  - id: shell-interactive-history
+    statement: Accepted interactive shell commands execute with their configured connection context and are flushed into one complete conversation context after all accepted work settles.
+    seamIds:
+      - shell-session-history
+    riskIds:
+      - shell-session-state-loss
+  - id: shell-command-logging
+    statement: Shell command logging honors the configured console-suppression setting without emitting suppressed command output.
+    seamIds:
+      - shell-tool
+    riskIds:
+      - shell-output-loss
+  - id: shell-temp-cleanup
+    statement: Shell output artifacts and stale temporary directories are parsed and pruned according to process liveness, age, and grace-period policy.
+    seamIds:
+      - shell-temp-artifacts
+    riskIds:
+      - shell-output-loss
+      - shell-safety-bypass
+tests:
+  - kind: file
+    id: shell-background-shell-output-store
+    file: source/services/shell/background-shell-output-store.test.ts
+    domainId: shell
+    suiteId: unit
+    contractIds:
+      - shell-background-lifecycle
+      - shell-timeout-and-output-caps
+    fixtureIds:
+      - shell-runner-fixture
+  - kind: file
+    id: shell-background-shell-registry
+    file: source/services/shell/background-shell-registry.test.ts
+    domainId: shell
+    suiteId: unit
+    contractIds:
+      - shell-background-lifecycle
+    fixtureIds:
+      - shell-runner-fixture
+  - kind: file
+    id: shell-background-shell-watches
+    file: source/services/shell/background-shell-watches.test.ts
+    domainId: shell
+    suiteId: unit
+    contractIds:
+      - shell-monitoring
+      - shell-timeout-and-output-caps
+    fixtureIds:
+      - shell-runner-fixture
+  - kind: file
+    id: shell-shell-interaction-session
+    file: source/services/shell/shell-interaction-session.test.ts
+    domainId: shell
+    suiteId: unit
+    contractIds:
+      - shell-interactive-history
+    fixtureIds:
+      - shell-fake-approval
+  - kind: file
+    id: shell-command-logger
+    file: source/utils/shell/command-logger.test.ts
+    domainId: shell
+    suiteId: unit
+    contractIds:
+      - shell-command-logging
+    fixtureIds:
+      - shell-runner-fixture
+  - kind: file
+    id: shell-command-safety-evaluator-false-positives
+    file: source/utils/shell/command-safety.evaluator-false-positives.test.ts
+    domainId: shell
+    suiteId: unit
+    contractIds:
+      - shell-command-classification
+    fixtureIds:
+      - shell-command-corpus
+  - kind: file
+    id: shell-command-safety-find
+    file: source/utils/shell/command-safety.find.test.ts
+    domainId: shell
+    suiteId: unit
+    contractIds:
+      - shell-command-classification
+    fixtureIds:
+      - shell-command-corpus
+  - kind: file
+    id: shell-command-safety-rm
+    file: source/utils/shell/command-safety.rm.test.ts
+    domainId: shell
+    suiteId: unit
+    contractIds:
+      - shell-command-classification
+    fixtureIds:
+      - shell-command-corpus
+  - kind: file
+    id: shell-command-safety-specialized-handlers
+    file: source/utils/shell/command-safety.specialized-handlers.test.ts
+    domainId: shell
+    suiteId: unit
+    contractIds:
+      - shell-command-classification
+    fixtureIds:
+      - shell-command-corpus
+  - kind: file
+    id: shell-execute-shell-exit-kill
+    file: source/utils/shell/execute-shell.exit-kill.test.ts
+    domainId: shell
+    suiteId: unit
+    contractIds:
+      - shell-background-lifecycle
+      - shell-timeout-and-output-caps
+    fixtureIds:
+      - shell-real-process
+  - kind: file
+    id: shell-execute-shell-network-approval-timeout
+    file: source/utils/shell/execute-shell.network-approval-timeout.test.ts
+    domainId: shell
+    suiteId: unit
+    contractIds:
+      - shell-timeout-and-output-caps
+      - shell-sandbox-and-approval
+    fixtureIds:
+      - shell-fake-approval
+  - kind: file
+    id: shell-execute-shell-orphan-bound
+    file: source/utils/shell/execute-shell.orphan-bound.test.ts
+    domainId: shell
+    suiteId: unit
+    contractIds:
+      - shell-timeout-and-output-caps
+      - shell-background-lifecycle
+    fixtureIds:
+      - shell-real-process
+  - kind: file
+    id: shell-execute-shell
+    file: source/utils/shell/execute-shell.test.ts
+    domainId: shell
+    suiteId: unit
+    contractIds:
+      - shell-timeout-and-output-caps
+      - shell-sandbox-and-approval
+    fixtureIds:
+      - shell-fake-approval
+      - shell-real-process
+  - kind: file
+    id: shell-denied-read-detector
+    file: source/utils/shell/sandbox/denied-read-detector.test.ts
+    domainId: shell
+    suiteId: unit
+    contractIds:
+      - shell-denied-read-recovery
+    fixtureIds:
+      - shell-command-corpus
+  - kind: file
+    id: shell-denied-read-stores
+    file: source/utils/shell/sandbox/denied-read-stores.test.ts
+    domainId: shell
+    suiteId: unit
+    contractIds:
+      - shell-denied-read-recovery
+    fixtureIds:
+      - shell-temp-workspace
+  - kind: file
+    id: shell-docker-host-control-grants
+    file: source/utils/shell/sandbox/docker-host-control-grants.test.ts
+    domainId: shell
+    suiteId: unit
+    contractIds:
+      - shell-sandbox-and-approval
+    fixtureIds:
+      - shell-fake-approval
+      - shell-temp-workspace
+decisions:
+  - id: shell-background-shell-output-store-shell-m3
+    testId: shell-background-shell-output-store
+    role: second_opinion
+    reviewer: shell-m3
+    sourceArtifact: docs/test-audit/artifacts/shell-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The store protects interleaved stream ordering, partial-line semantics, byte and line eviction counters, tail reads, and settled-job retention on the background output seam.
+    evidence:
+      - source/services/shell/background-shell-output-store.test.ts:5-209 covers distinct arrival, close, cap, retention, misuse, and option-validation outcomes against BackgroundShellOutputStore.
+      - No assigned sibling asserts the same store-level stream timeline and dropped-counter contract; source/tools/system/shell.test.ts is an out-of-assignment integration consumer rather than a replacement.
+    replacementTestIds: []
+    status: proposed
+  - id: shell-background-shell-registry-shell-m3
+    testId: shell-background-shell-registry
+    role: second_opinion
+    reviewer: shell-m3
+    sourceArtifact: docs/test-audit/artifacts/shell-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Registry lifecycle, cancellation, capacity, retention, event ordering, disposal, and foreground-to-background adoption are all observable ownership guarantees.
+    evidence:
+      - source/services/shell/background-shell-registry.test.ts:9-357 exercises registry-owned abort signals, cleanup-before-terminal publication, concurrent caps, and every foreground lease adoption edge.
+      - source/services/subagents/subagent-async-registry.test.ts:366-430 is an out-of-assignment sibling for subagent lease behavior but does not replace this shell registry's lifecycle and event contract.
+    replacementTestIds: []
+    status: proposed
+  - id: shell-background-shell-watches-shell-m3
+    testId: shell-background-shell-watches
+    role: second_opinion
+    reviewer: shell-m3
+    sourceArtifact: docs/test-audit/artifacts/shell-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Deterministic scheduler coverage protects replay offsets, debounce/coalescing, stream filtering, terminal flushing, sequence numbers, limits, and bounded matched text.
+    evidence:
+      - source/services/shell/background-shell-watches.test.ts:56-420 uses an injected FakeScheduler and checks active, replayed, and settled-job monitoring outcomes.
+      - No assigned sibling covers BackgroundShellWatches; source/tools/system/shell.test.ts:142-350 is an out-of-assignment tool integration consumer and is not equivalent scheduler-level evidence.
+    replacementTestIds: []
+    status: proposed
+  - id: shell-shell-interaction-session-shell-m3
+    testId: shell-shell-interaction-session
+    role: second_opinion
+    reviewer: shell-m3
+    sourceArtifact: docs/test-audit/artifacts/shell-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The session owns admission, SSH forwarding, completion ordering, exactly-once history flush, and failure-safe settlement; these are not merely formatting assertions.
+    evidence:
+      - source/services/shell/shell-interaction-session.test.ts:45-168 verifies accepted-command execution and history flushing across close-before-completion, multiple pending commands, and rejection.
+      - No assigned sibling targets ShellInteractionSession; source/tools/system/shell.test.ts contains shell tool execution integration but not this interactive history boundary.
+    replacementTestIds: []
+    status: proposed
+  - id: shell-command-logger-shell-m3
+    testId: shell-command-logger
+    role: second_opinion
+    reviewer: shell-m3
+    sourceArtifact: docs/test-audit/artifacts/shell-m3.yaml
+    recommendation: keep
+    confidence: medium
+    reason: Although small, the test protects the explicit no-console side effect when suppression is enabled.
+    evidence:
+      - source/utils/shell/command-logger.test.ts:26-40 spies on console.error and verifies logCommandExecution emits no call under logging.suppressConsoleOutput.
+      - No assigned sibling tests logCommandExecution or its suppression branch.
+    replacementTestIds: []
+    status: proposed
+  - id: shell-command-safety-evaluator-false-positives-shell-m3
+    testId: shell-command-safety-evaluator-false-positives
+    role: second_opinion
+    reviewer: shell-m3
+    sourceArtifact: docs/test-audit/artifacts/shell-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is a focused regression corpus for newly safe read/output commands, current-directory handling, dual-use yellow behavior, and git global-option parsing.
+    evidence:
+      - source/utils/shell/command-safety.evaluator-false-positives.test.ts:9-81 asserts both false-positive avoidance and preservation of approval-required classifications.
+      - The calibration siblings source/utils/shell/command-safety.test.ts, source/utils/shell/command-safety.path.test.ts, and source/utils/shell/command-safety.red-yellow-policy.test.ts cover adjacent policy families but do not assert these exact command forms.
+    replacementTestIds: []
+    status: proposed
+  - id: shell-command-safety-find-shell-m3
+    testId: shell-command-safety-find
+    role: second_opinion
+    reviewer: shell-m3
+    sourceArtifact: docs/test-audit/artifacts/shell-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The large corpus protects the find handler's recursive execution, terminator, wrapper, traversal, sensitive-path, and false-positive boundaries, including dangerous nested operations.
+    evidence:
+      - source/utils/shell/command-safety.find.test.ts:8-385 covers GREEN, YELLOW, and RED find forms plus interpreter and meta-executor bypasses.
+      - No assigned sibling exercises find handler semantics at this breadth; source/utils/shell/command-safety.specialized-handlers.test.ts only checks nested substitutions across several handlers.
+    replacementTestIds: []
+    status: proposed
+  - id: shell-command-safety-rm-shell-m3
+    testId: shell-command-safety-rm
+    role: second_opinion
+    reviewer: shell-m3
+    sourceArtifact: docs/test-audit/artifacts/shell-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: rm and rmdir safety depends on the special treatment of session-created and sandbox-temp targets while retaining hard blocks for root, system, sensitive, and wildcard targets.
+    evidence:
+      - source/utils/shell/command-safety.rm.test.ts:6-63 asserts the session callback, SANDBOX_TEMP_DIR carve-out, and dangerous target classifications.
+      - Calibration siblings source/utils/shell/command-safety.test.ts and source/utils/shell/command-safety.red-yellow-policy.test.ts include generic dangerous rm examples but not this session/temp-target distinction.
+    replacementTestIds: []
+    status: proposed
+  - id: shell-command-safety-specialized-handlers-shell-m3
+    testId: shell-command-safety-specialized-handlers
+    role: second_opinion
+    reviewer: shell-m3
+    sourceArtifact: docs/test-audit/artifacts/shell-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Nested command substitutions must remain visible to specialized git, find, and sed handlers, including assignment prefixes.
+    evidence:
+      - source/utils/shell/command-safety.specialized-handlers.test.ts:4-24 asserts RED classification for substitutions in command arguments and environment assignments.
+      - No assigned sibling checks assignment-prefix substitutions; source/utils/shell/command-safety.find.test.ts:295-318 covers only find interpreter/meta-executor forms.
+    replacementTestIds: []
+    status: proposed
+  - id: shell-execute-shell-exit-kill-shell-m3
+    testId: shell-execute-shell-exit-kill
+    role: second_opinion
+    reviewer: shell-m3
+    sourceArtifact: docs/test-audit/artifacts/shell-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Process-group cleanup at CLI exit cannot be represented by the fake child seams in execute-shell.test.ts.
+    evidence:
+      - source/utils/shell/execute-shell.exit-kill.test.ts:4-47 starts a detached real command, invokes killLiveShellChildren, and verifies the group leader is dead.
+      - source/utils/shell/execute-shell.test.ts:112-136 checks aborting a fake child, not process-group cleanup; the real-process boundary is therefore not redundant.
+    replacementTestIds: []
+    status: proposed
+  - id: shell-execute-shell-network-approval-timeout-shell-m3
+    testId: shell-execute-shell-network-approval-timeout
+    role: second_opinion
+    reviewer: shell-m3
+    sourceArtifact: docs/test-audit/artifacts/shell-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Fake timers and a lifecycle-faithful paused child protect timeout-budget accounting and SIGCONT-before-termination during network approval.
+    evidence:
+      - source/utils/shell/execute-shell.network-approval-timeout.test.ts:24-151 covers paused wait exclusion, remaining budget, abort ordering, synchronous completion, and ordinary timeout.
+      - source/utils/shell/execute-shell.test.ts:138-228 covers approval pause and serialization but does not assert timeout-budget resumption or abort ordering.
+    replacementTestIds: []
+    status: proposed
+  - id: shell-execute-shell-orphan-bound-shell-m3
+    testId: shell-execute-shell-orphan-bound
+    role: second_opinion
+    reviewer: shell-m3
+    sourceArtifact: docs/test-audit/artifacts/shell-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Real descendants holding pipes and ignoring SIGTERM are the exact containment failures that fake ChildProcess tests cannot reproduce.
+    evidence:
+      - source/utils/shell/execute-shell.orphan-bound.test.ts:35-123 uses real fixture processes to assert bounded drain, escalation, timedOut latching, and complete output.
+      - source/utils/shell/execute-shell.test.ts:269-294 covers overflow with a real child but not inherited descriptors or SIGTERM-ignoring descendants.
+    replacementTestIds: []
+    status: proposed
+  - id: shell-execute-shell-shell-m3
+    testId: shell-execute-shell
+    role: second_opinion
+    reviewer: shell-m3
+    sourceArtifact: docs/test-audit/artifacts/shell-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is the base execution contract: result fields, environment/TMPDIR, stdin closure, abort, network pause serialization, chunk taps, and overflow modes.
+    evidence:
+      - source/utils/shell/execute-shell.test.ts:11-294 covers injected callback behavior and real-child chunk/overflow behavior across independent result and containment outcomes.
+      - The timeout-focused sibling source/utils/shell/execute-shell.network-approval-timeout.test.ts complements rather than replaces the base execution and overflow cases.
+    replacementTestIds: []
+    status: proposed
+  - id: shell-denied-read-detector-shell-m3
+    testId: shell-denied-read-detector
+    role: second_opinion
+    reviewer: shell-m3
+    sourceArtifact: docs/test-audit/artifacts/shell-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Cross-platform denial parsing, sensitive-path classification, stable-parent narrowing, and retry instruction text are security-critical inputs to recovery.
+    evidence:
+      - source/utils/shell/sandbox/denied-read-detector.test.ts:14-187 covers macOS and Linux formats, missing-path distinction, network non-match, sensitivity, parent floors, and retry wording.
+      - No assigned sibling tests detectDeniedRead or suggestStableParent; source/tools/system/shell.test.ts:1945-2063 is an out-of-assignment integration consumer.
+    replacementTestIds: []
+    status: proposed
+  - id: shell-denied-read-stores-shell-m3
+    testId: shell-denied-read-stores
+    role: second_opinion
+    reviewer: shell-m3
+    sourceArtifact: docs/test-audit/artifacts/shell-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Scoped consume/re-stage semantics and durable project allow-read persistence prevent approvals from being lost, replayed, or shared accidentally.
+    evidence:
+      - source/utils/shell/sandbox/denied-read-stores.test.ts:17-124 checks destructive command/callId stores, force-unsandboxed support, fresh-instance persistence, ordering, dedupe, and corrupt-file fallback.
+      - source/tools/system/shell.test.ts:1977-2132 is an out-of-assignment integration sibling, but no assigned test replaces these store-level isolation and persistence assertions.
+    replacementTestIds: []
+    status: proposed
+  - id: shell-docker-host-control-grants-shell-m3
+    testId: shell-docker-host-control-grants
+    role: second_opinion
+    reviewer: shell-m3
+    sourceArtifact: docs/test-audit/artifacts/shell-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Docker grants and denials must be exact-command and session scoped, while persistent project grants survive session clearing.
+    evidence:
+      - source/utils/shell/sandbox/docker-host-control-grants.test.ts:18-113 covers one-shot consumption, denial settlement, no-session fail-closed behavior, session isolation, and project persistence.
+      - source/utils/shell/sandbox/docker-host-control.test.ts:15-53 checks lexical Docker detection but not grant/denial state; it cannot replace this state-machine coverage.
+    replacementTestIds: []
+    status: proposed

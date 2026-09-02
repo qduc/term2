@@ -1,0 +1,546 @@
+# Approval domain exploration: independent second opinion (Milestone 3).
+schemaVersion: 2
+domains:
+  - id: approval
+    label: Approval decisions, safety policy, and delegated-call ownership
+suites:
+  - id: unit
+    label: Deterministic unit and seam tests
+seams:
+  - id: approval-decision-execution
+    label: Boundary applying an approval answer to a retained continuation and scoped access state
+  - id: approval-decision-policy
+    label: Boundary deciding whether a tool interruption is approved, prompted, or rejected
+  - id: approval-flow-coordination
+    label: Boundary coordinating pending approval lifecycle, continuation, abort, and owner routing
+  - id: approval-presentation
+    label: Boundary mapping pending and approved tool calls to visible command messages
+  - id: approval-replay-ledger
+    label: Boundary replaying persisted approval records into the runtime approval ledger
+  - id: approval-state-store
+    label: Boundary storing pending and aborted approval contexts
+  - id: approval-background-queue
+    label: Boundary exposing background approval pauses as an ordered revisioned queue
+  - id: approval-batch-coordination
+    label: Boundary resolving multiple tool interruptions while preserving per-call decisions
+  - id: approval-noninteractive-policy
+    label: Boundary applying fail-closed approval policy without an interactive user
+  - id: approval-auto-evaluation
+    label: Boundary asking an evaluator model for structured shell/file approval advisories
+  - id: approval-auto-resolution
+    label: Boundary resolving cached advisories and settings into auto-approval outcomes
+  - id: approval-shell-safety
+    label: Boundary identifying unsandboxed shell and Docker host-control approval requirements
+  - id: approval-ownership
+    label: Boundary attributing tool call ids to parent or delegated owners
+risks:
+  - id: approval-unauthorized-execution
+    label: A denied or unsafe tool call executes because approval policy or settlement grants access incorrectly.
+    severity: critical
+  - id: approval-wrong-continuation
+    label: An approval answer resumes, rejects, or annotates a different tool call than the one requested.
+    severity: critical
+  - id: approval-stale-state
+    label: Aborted, consumed, or cross-session approval state remains usable and affects a later call.
+    severity: critical
+  - id: approval-scope-escape
+    label: A one-shot, session, project, or delegated approval grants more access than intended.
+    severity: critical
+  - id: approval-misleading-presentation
+    label: The terminal hides or labels the wrong pending or approved tool call.
+    severity: high
+  - id: approval-replay-grant
+    label: Persisted approval records are keyed or replayed incorrectly and grant the wrong tool authority.
+    severity: critical
+  - id: approval-queue-loss
+    label: Background approval entries reorder, disappear, or expose the wrong retained continuation.
+    severity: high
+  - id: approval-policy-fail-open
+    label: Missing, malformed, or low-confidence policy evidence silently auto-approves a tool call.
+    severity: critical
+  - id: approval-batch-accounting
+    label: A multi-call approval batch records an incorrect per-call outcome or bypasses a required prompt.
+    severity: critical
+  - id: approval-owner-confusion
+    label: A tool result or approval is attributed to the wrong parent or delegated run.
+    severity: critical
+contracts:
+  - id: approval-decision-settlement
+    statement: An approval answer applies only to the retained interruption, records approved or rejected outcome, releases ownership after settlement, and invokes the matching continuation or rejection callback.
+    seamIds:
+      - approval-decision-execution
+    riskIds:
+      - approval-unauthorized-execution
+      - approval-wrong-continuation
+  - id: approval-scoped-grants
+    statement: Denied-read, folder, edit, and Docker approval answers create only the requested one-shot, session, or project grant in the injected access state, while generic or mismatched answers create no grant.
+    seamIds:
+      - approval-decision-execution
+    riskIds:
+      - approval-scope-escape
+      - approval-unauthorized-execution
+  - id: approval-policy-outcomes
+    statement: Manual policy prompts, auto policy approves only eligible tools with acceptable advisory evidence, always mode excludes ask_user, and non-eligible or missing evidence remains a prompt.
+    seamIds:
+      - approval-decision-policy
+    riskIds:
+      - approval-policy-fail-open
+  - id: approval-flow-resolution
+    statement: Pending approval flow uses the pending generation and owner, emits the appropriate tool-start event on approval, rejects with the requested reason, and aborts or retargets without resuming stale work.
+    seamIds:
+      - approval-flow-coordination
+    riskIds:
+      - approval-wrong-continuation
+      - approval-stale-state
+      - approval-owner-confusion
+  - id: approval-presentation-matching
+    statement: Approval presentation selects the pending command by call id when available, falls back to tool name only without a call id, and annotates approved messages from capability metadata.
+    seamIds:
+      - approval-presentation
+    riskIds:
+      - approval-misleading-presentation
+  - id: approval-replay-contract
+    statement: Persisted approval records replay into the approval ledger using the record's tool identity and preserve the intended blanket or call-specific authority without cross-tool grants.
+    seamIds:
+      - approval-replay-ledger
+    riskIds:
+      - approval-replay-grant
+  - id: approval-state-lifecycle
+    statement: Pending approval context can be read, transitions atomically to aborted state while clearing pending state, preserves batch metadata, and an aborted context is consumed at most once.
+    seamIds:
+      - approval-state-store
+    riskIds:
+      - approval-stale-state
+      - approval-wrong-continuation
+  - id: approval-background-ordering
+    statement: Background approvals expose an immutable revisioned FIFO head, reject stale identity or revision operations, retain the head when application fails, and release each queued entry exactly once on removal or close.
+    seamIds:
+      - approval-background-queue
+    riskIds:
+      - approval-queue-loss
+      - approval-wrong-continuation
+  - id: approval-noninteractive-safety
+    statement: Non-interactive mode rejects by default, permits non-shell tools only when explicitly enabled, hard-rejects RED shell commands without evaluator access, and fails closed for missing, negative, or errored YELLOW evaluation.
+    seamIds:
+      - approval-noninteractive-policy
+      - approval-auto-evaluation
+    riskIds:
+      - approval-policy-fail-open
+      - approval-unauthorized-execution
+  - id: approval-batch-accounting
+    statement: Multi-call approval staging evaluates each interruption with the applicable registry, shell, Docker, and policy rules and records the resulting approved or rejected state for the exact call.
+    seamIds:
+      - approval-batch-coordination
+    riskIds:
+      - approval-batch-accounting
+      - approval-unauthorized-execution
+  - id: approval-auto-evaluator-safety
+    statement: Shell/file auto-approval evaluation bounds and contextualizes untrusted history, parses or repairs structured advisories, preserves system rejection for RED and sensitive inputs, and fails closed on malformed or uncertain evidence.
+    seamIds:
+      - approval-auto-evaluation
+    riskIds:
+      - approval-policy-fail-open
+      - approval-unauthorized-execution
+  - id: approval-auto-resolver
+    statement: Auto-approval resolver applies mode, sandbox eligibility, advisory cache, manual-decision context, and per-tool rules consistently, including unsandboxed sibling annotations.
+    seamIds:
+      - approval-auto-resolution
+    riskIds:
+      - approval-policy-fail-open
+      - approval-scope-escape
+  - id: approval-unsandboxed-boundary
+    statement: Unsandboxed shell and Docker host-control requests require human approval by default, may defer only when explicitly eligible, and ordinary sandboxed non-Docker commands do not acquire that requirement.
+    seamIds:
+      - approval-shell-safety
+    riskIds:
+      - approval-unauthorized-execution
+      - approval-policy-fail-open
+  - id: approval-ownership-routing
+    statement: Tool-call ownership defaults to the parent, claims are keyed by non-empty call id, later claims replace earlier ownership, and release or clear returns calls to the parent without evicting live claims.
+    seamIds:
+      - approval-ownership
+    riskIds:
+      - approval-owner-confusion
+      - approval-stale-state
+fixtures:
+  - id: approval-continuation-handles
+    label: Injected approval continuation callbacks retaining the exact interruption
+  - id: approval-access-state
+    label: Injected session and nested compatibility state for scoped approval grants
+  - id: approval-advisories
+    label: Structured low-risk, high-risk, and missing evaluator advisories
+  - id: approval-command-messages
+    label: Pending and approved command-message records with call and capability metadata
+  - id: approval-ledger-records
+    label: Approval records and ledger instances used to verify replay authority
+  - id: approval-pending-context
+    label: Pending approval context with batch decisions, prompted call, and owner metadata
+  - id: approval-background-entries
+    label: Revisioned FIFO background approval entries and callback leases
+  - id: approval-policy-registry
+    label: Tool approval registry and injected batch-policy callbacks
+  - id: approval-command-corpus
+    label: Representative RED, YELLOW, safe, and evaluator-error command inputs
+  - id: approval-evaluator-transcript
+    label: Bounded conversation history and structured evaluator chat responses
+  - id: approval-settings
+    label: Injected approval mode, sandbox, provider, and model settings
+  - id: approval-owner-records
+    label: Tool-call ownership claims for parent and delegated runs
+tests:
+  - kind: file
+    id: approval-approval-decision-executor
+    file: source/services/approval/approval-decision-executor.test.ts
+    domainId: approval
+    suiteId: unit
+    contractIds:
+      - approval-decision-settlement
+      - approval-scoped-grants
+    fixtureIds:
+      - approval-continuation-handles
+      - approval-access-state
+  - kind: file
+    id: approval-approval-decision-policy
+    file: source/services/approval/approval-decision-policy.test.ts
+    domainId: approval
+    suiteId: unit
+    contractIds:
+      - approval-policy-outcomes
+    fixtureIds:
+      - approval-advisories
+  - kind: file
+    id: approval-approval-flow-coordinator
+    file: source/services/approval/approval-flow-coordinator.test.ts
+    domainId: approval
+    suiteId: unit
+    contractIds:
+      - approval-flow-resolution
+      - approval-scoped-grants
+    fixtureIds:
+      - approval-continuation-handles
+      - approval-access-state
+  - kind: file
+    id: approval-approval-presentation-policy
+    file: source/services/approval/approval-presentation-policy.test.ts
+    domainId: approval
+    suiteId: unit
+    contractIds:
+      - approval-presentation-matching
+    fixtureIds:
+      - approval-command-messages
+  - kind: file
+    id: approval-approval-replay
+    file: source/services/approval/approval-replay.test.ts
+    domainId: approval
+    suiteId: unit
+    contractIds:
+      - approval-replay-contract
+    fixtureIds:
+      - approval-ledger-records
+  - kind: file
+    id: approval-approval-state
+    file: source/services/approval/approval-state.test.ts
+    domainId: approval
+    suiteId: unit
+    contractIds:
+      - approval-state-lifecycle
+    fixtureIds:
+      - approval-pending-context
+  - kind: file
+    id: approval-background-subagent-approval-controller
+    file: source/services/approval/background-subagent-approval-controller.test.ts
+    domainId: approval
+    suiteId: unit
+    contractIds:
+      - approval-background-ordering
+      - approval-ownership-routing
+    fixtureIds:
+      - approval-background-entries
+      - approval-owner-records
+  - kind: file
+    id: approval-background-subagent-approval-queue
+    file: source/services/approval/background-subagent-approval-queue.test.ts
+    domainId: approval
+    suiteId: unit
+    contractIds:
+      - approval-background-ordering
+    fixtureIds:
+      - approval-background-entries
+  - kind: file
+    id: approval-c11-d5-batch-denial-boundary
+    file: source/services/approval/c11-d5-batch-denial-boundary.test.ts
+    domainId: approval
+    suiteId: unit
+    contractIds:
+      - approval-batch-accounting
+    fixtureIds:
+      - approval-policy-registry
+  - kind: file
+    id: approval-non-interactive-approval-policy
+    file: source/services/approval/non-interactive-approval-policy.test.ts
+    domainId: approval
+    suiteId: unit
+    contractIds:
+      - approval-noninteractive-safety
+    fixtureIds:
+      - approval-command-corpus
+      - approval-settings
+      - approval-evaluator-transcript
+  - kind: file
+    id: approval-shell-auto-approval-evaluator
+    file: source/services/approval/shell-auto-approval-evaluator.test.ts
+    domainId: approval
+    suiteId: unit
+    contractIds:
+      - approval-auto-evaluator-safety
+    fixtureIds:
+      - approval-advisories
+      - approval-command-corpus
+      - approval-evaluator-transcript
+      - approval-settings
+  - kind: file
+    id: approval-shell-auto-approval-resolver
+    file: source/services/approval/shell-auto-approval-resolver.test.ts
+    domainId: approval
+    suiteId: unit
+    contractIds:
+      - approval-auto-resolver
+    fixtureIds:
+      - approval-advisories
+      - approval-evaluator-transcript
+      - approval-settings
+  - kind: file
+    id: approval-shell-sandbox-approval
+    file: source/services/approval/shell-sandbox-approval.test.ts
+    domainId: approval
+    suiteId: unit
+    contractIds:
+      - approval-unsandboxed-boundary
+    fixtureIds:
+      - approval-command-corpus
+      - approval-access-state
+  - kind: file
+    id: approval-tool-approval-batch-coordinator
+    file: source/services/approval/tool-approval-batch-coordinator.test.ts
+    domainId: approval
+    suiteId: unit
+    contractIds:
+      - approval-batch-accounting
+      - approval-unsandboxed-boundary
+      - approval-scoped-grants
+    fixtureIds:
+      - approval-policy-registry
+      - approval-command-corpus
+      - approval-access-state
+  - kind: file
+    id: approval-tool-ownership-registry
+    file: source/services/approval/tool-ownership-registry.test.ts
+    domainId: approval
+    suiteId: unit
+    contractIds:
+      - approval-ownership-routing
+    fixtureIds:
+      - approval-owner-records
+decisions:
+  - id: approval-approval-decision-executor-approval-m3
+    testId: approval-approval-decision-executor
+    role: second_opinion
+    reviewer: approval-m3
+    sourceArtifact: docs/test-audit/artifacts/approval-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This file protects the high-risk settlement and scoped-grant behavior across parent and delegated calls, including rejection cleanup and exceptional continuation settlement.
+    evidence:
+      - The exact continuation callback, per-call decision map, and ownership release are asserted in source/services/approval/approval-decision-executor.test.ts:76-160.
+      - Denied-read, folder/edit, and Docker one-shot/session/project scope are asserted against injected state in source/services/approval/approval-decision-executor.test.ts:162-332.
+      - The production seam is ApprovalDecisionExecutor.resolve in source/services/approval/approval-decision-executor.ts:60-307; no assigned sibling provides equivalent end-to-end grant cleanup coverage.
+    replacementTestIds: []
+    status: proposed
+  - id: approval-approval-state-approval-m3
+    testId: approval-approval-state
+    role: second_opinion
+    reviewer: approval-m3
+    sourceArtifact: docs/test-audit/artifacts/approval-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This compact state-machine test protects the single-use aborted continuation invariant and preservation of batch context at a high-risk lifecycle boundary.
+    evidence:
+      - Pending identity, abort transition, one-time consume, and batch metadata preservation are asserted in source/services/approval/approval-state.test.ts:4-84.
+      - The production seam is ApprovalState.setPending, abortPending, and consumeAborted in source/services/approval/approval-state.ts:42-89; flow tests consume this state but do not replace its direct transition coverage.
+    replacementTestIds: []
+    status: proposed
+  - id: approval-background-subagent-approval-controller-approval-m3
+    testId: approval-background-subagent-approval-controller
+    role: second_opinion
+    reviewer: approval-m3
+    sourceArtifact: docs/test-audit/artifacts/approval-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The controller is the ownership-sensitive adapter from a background lease to queue resolution; both successful exact application and close cleanup are meaningful.
+    evidence:
+      - Exact retained continuation application, queue removal, and ownership release are asserted in source/services/approval/background-subagent-approval-controller.test.ts:15-74.
+      - The production seam is BackgroundSubagentApprovalController.publish, resolve, and close in source/services/approval/background-subagent-approval-controller.ts:21-157; no assigned sibling covers this adapter's close path.
+    replacementTestIds: []
+    status: proposed
+  - id: approval-background-subagent-approval-queue-approval-m3
+    testId: approval-background-subagent-approval-queue
+    role: second_opinion
+    reviewer: approval-m3
+    sourceArtifact: docs/test-audit/artifacts/approval-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This queue has a substantial stateful API and the tests cover stale-operation protection, failure atomicity, callback cleanup, immutability, and listener reentrancy without a stronger assigned replacement.
+    evidence:
+      - FIFO/revision identity, update/remove, close, listener notification, application failure, release errors, deep freezing, and resubscription behavior are asserted throughout source/services/approval/background-subagent-approval-queue.test.ts:26-286.
+      - The production seam is BackgroundSubagentApprovalQueue in source/services/approval/background-subagent-approval-queue.ts:100-326; controller coverage exercises only its adapter-facing subset.
+    replacementTestIds: []
+    status: proposed
+  - id: approval-c11-d5-batch-denial-boundary-approval-m3
+    testId: approval-c11-d5-batch-denial-boundary
+    role: second_opinion
+    reviewer: approval-m3
+    sourceArtifact: docs/test-audit/artifacts/approval-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Although intentionally marked it.fails, this is explicit regression provenance for a security-relevant batch-accounting defect and should remain visible until the production fix makes the assertion pass.
+    evidence:
+      - The test names C11-D5 record_rejected and asserts rejected rather than approved at source/services/approval/c11-d5-batch-denial-boundary.test.ts:18-77.
+      - The production seam is ToolApprovalBatchCoordinator.stageBatch in source/services/approval/tool-approval-batch-coordinator.ts; the broader assigned batch file does not assert this denied-ledger boundary with isToolApproved false.
+    replacementTestIds: []
+    status: proposed
+  - id: approval-non-interactive-approval-policy-approval-m3
+    testId: approval-non-interactive-approval-policy
+    role: second_opinion
+    reviewer: approval-m3
+    sourceArtifact: docs/test-audit/artifacts/approval-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Non-interactive execution is a separate safety mode and this file verifies its fail-closed behavior across disabled mode, RED commands, missing model, negative advisory, and evaluator errors.
+    evidence:
+      - Exact decision payloads and no-chat behavior for disabled, non-shell, RED, missing-model, negative, and evaluator-error inputs are asserted in source/services/approval/non-interactive-approval-policy.test.ts:61-153.
+      - The production seam is NonInteractiveApprovalPolicy.decide in source/services/approval/non-interactive-approval-policy.ts:43-148; no assigned sibling tests the non-interactive decision envelope.
+    replacementTestIds: []
+    status: proposed
+  - id: approval-shell-auto-approval-evaluator-approval-m3
+    testId: approval-shell-auto-approval-evaluator
+    role: second_opinion
+    reviewer: approval-m3
+    sourceArtifact: docs/test-audit/artifacts/approval-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: >-
+      This large file is justified by the evaluator's security-sensitive contract: it verifies bounded untrusted context,
+      structured-output fallback, explicit uncertainty handling, and hard RED/sensitive-path rejection.
+    evidence:
+      - Mode gating, RED preservation, risk metadata, provider/model settings, unsandboxed annotations, and structured support behavior are asserted in source/services/approval/shell-auto-approval-evaluator.test.ts:50-397.
+      - Context bounds, tool-result adjacency, injection-resistant instructions, truncation/reasoning limits, normalized history, manual-decision precedent, repair, malformed fallback, and mixed shell/file evaluation are asserted in source/services/approval/shell-auto-approval-evaluator.test.ts:399-934.
+      - The production seam is evaluateShellAutoApprovalAdvisories in source/services/approval/shell-auto-approval-evaluator.ts; no assigned sibling covers the evaluator prompt and parsing contract at this breadth.
+    replacementTestIds: []
+    status: proposed
+  - id: approval-shell-auto-approval-resolver-approval-m3
+    testId: approval-shell-auto-approval-resolver
+    role: second_opinion
+    reviewer: approval-m3
+    sourceArtifact: docs/test-audit/artifacts/approval-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Resolver settings and cache semantics determine whether advisory evidence becomes execution authority, so the fail-closed matrix and unsandboxed sibling handling are proportionate.
+    evidence:
+      - Tool eligibility, advisory forwarding, mode and sandbox eligibility, fail-closed risk/auth/source checks, always-mode behavior, cache clearing, no-call-id evaluation, and unsandboxed prompt annotations are asserted in source/services/approval/shell-auto-approval-resolver.test.ts:58-315.
+      - The production seam is ShellAutoApprovalResolver.resolveAdvisoryForInterruption, isUnsandboxedApprovalEligible, shouldAutoApprove, and clearCache in source/services/approval/shell-auto-approval-resolver.ts; evaluator tests do not replace these resolver decisions.
+    replacementTestIds: []
+    status: proposed
+  - id: approval-shell-sandbox-approval-approval-m3
+    testId: approval-shell-sandbox-approval
+    role: second_opinion
+    reviewer: approval-m3
+    sourceArtifact: docs/test-audit/artifacts/approval-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This small classifier test directly protects the default human-approval boundary for sandbox escapes and Docker host control.
+    evidence:
+      - Shell/bash recognition, sandboxed and non-shell negatives, unsandboxed opt-in/opt-out, Docker invariance, and safe non-Docker behavior are asserted in source/services/approval/shell-sandbox-approval.test.ts:8-71.
+      - The production seam is isUnsandboxedShell and requiresHumanShellApproval in source/services/approval/shell-sandbox-approval.ts; batch tests cover selected callers but do not replace the direct predicate matrix.
+    replacementTestIds: []
+    status: proposed
+  - id: approval-tool-approval-batch-coordinator-approval-m3
+    testId: approval-tool-approval-batch-coordinator
+    role: second_opinion
+    reviewer: approval-m3
+    sourceArtifact: docs/test-audit/artifacts/approval-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Batch staging combines registry, Docker, unsandboxed, LLM, policy, and access-scope rules; the mixed-batch and outside-workspace cases protect composition behavior rather than duplicating single-tool predicates.
+    evidence:
+      - Registry bypass prevention for unsandboxed/Docker calls and indirect Docker denial are asserted in source/services/approval/tool-approval-batch-coordinator.test.ts:15-171.
+      - Always-mode, LLM eligibility, policy decline, registry exclusion, mixed batch ordering, and outside-workspace read/edit grants are asserted in source/services/approval/tool-approval-batch-coordinator.test.ts:246-392.
+      - The production seam is ToolApprovalBatchCoordinator.stageBatch in source/services/approval/tool-approval-batch-coordinator.ts; c11-d5-batch-denial-boundary is a focused regression supplement, not a replacement for these composition cases.
+    replacementTestIds: []
+    status: proposed
+  - id: approval-tool-ownership-registry-approval-m3
+    testId: approval-tool-ownership-registry
+    role: second_opinion
+    reviewer: approval-m3
+    sourceArtifact: docs/test-audit/artifacts/approval-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Ownership attribution is the authority-routing primitive for delegated approvals; defaulting, replacement, cleanup, and live-claim retention all protect different failure modes.
+    evidence:
+      - Parent defaults, claims by call id, replacement, empty-id handling, release/clear, and configured-limit live-claim retention are asserted in source/services/approval/tool-ownership-registry.test.ts:8-111.
+      - The production seam is ToolOwnershipRegistry.ownerOf, claim, release, and clear in source/services/approval/tool-ownership-registry.ts; flow and controller tests assert selected release outcomes but not the registry's complete retention matrix.
+    replacementTestIds: []
+    status: proposed
+  - id: approval-approval-decision-policy-approval-m3
+    testId: approval-approval-decision-policy
+    role: second_opinion
+    reviewer: approval-m3
+    sourceArtifact: docs/test-audit/artifacts/approval-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The policy boundary is security-relevant and the file covers both conservative prompting and explicit always/auto exceptions.
+    evidence:
+      - Manual prompting, missing or negative advisory behavior, ask_user exclusion, and risk-sensitive file decisions are asserted in source/services/approval/approval-decision-policy.test.ts:48-368.
+      - The production seam is ManualApprovalDecisionPolicy and ShellAutoApprovalDecisionPolicy in source/services/approval/approval-decision-policy.ts:16-80; related resolver tests exercise lower-level advisory resolution, not this policy's final outcome.
+    replacementTestIds: []
+    status: proposed
+  - id: approval-approval-flow-coordinator-approval-m3
+    testId: approval-approval-flow-coordinator
+    role: second_opinion
+    reviewer: approval-m3
+    sourceArtifact: docs/test-audit/artifacts/approval-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is the broad integration seam for foreground approval lifecycle, delegated ownership, denied-read recovery, and Docker/session grant routing; form-oriented cases are proportionate to the security boundary.
+    evidence:
+      - Abort, generation-token selection, continuation/rejection, owner routing, and event projection are asserted in source/services/approval/approval-flow-coordinator.test.ts:132-244 and :598-763.
+      - Nested Docker, denied-read, folder/session, and nested execution override behavior is asserted in source/services/approval/approval-flow-coordinator.test.ts:295-568 and :930-984.
+      - The production seam is ApprovalFlowCoordinator.prepareContinuation, prepareAbortResolution, retargetPendingInterruption, and resolveOwner in source/services/approval/approval-flow-coordinator.ts:53-440; the assigned batch and executor tests cover narrower components only.
+    replacementTestIds: []
+    status: proposed
+  - id: approval-approval-presentation-policy-approval-m3
+    testId: approval-approval-presentation-policy
+    role: second_opinion
+    reviewer: approval-m3
+    sourceArtifact: docs/test-audit/artifacts/approval-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The file directly guards visible approval targeting and capability-driven annotation with small deterministic fixtures.
+    evidence:
+      - Call-id precedence, tool-name fallback, and capability metadata annotation are asserted in source/services/approval/approval-presentation-policy.test.ts:13-96.
+      - The production seam is filterPendingCommandMessagesForApproval and annotateApprovedCommandMessage in source/services/approval/approval-presentation-policy.ts:21-77; no assigned sibling tests these presentation selectors.
+    replacementTestIds: []
+    status: proposed
+  - id: approval-approval-replay-approval-m3
+    testId: approval-approval-replay
+    role: second_opinion
+    reviewer: approval-m3
+    sourceArtifact: docs/test-audit/artifacts/approval-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Persisted approval replay is a cross-boundary authority reconstruction point, and the file intentionally pins both SDK semantics and application replay behavior.
+    evidence:
+      - The SDK approval-record keying characterization and replay outcomes are asserted in source/services/approval/approval-replay.test.ts:32-204.
+      - The production seam is replayApprovals and its ApprovalLedger item construction in source/services/approval/approval-replay.ts:22-86; no assigned sibling covers replay into the ledger.
+    replacementTestIds: []
+    status: proposed
+

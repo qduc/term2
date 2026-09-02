@@ -1,0 +1,852 @@
+schemaVersion: 2
+domains:
+  - id: tools
+    label: Tool definitions, adapters, and tool-local helpers
+suites:
+  - id: unit
+    label: Default Vitest unit suite
+  - id: integration
+    label: Opt-in Docker host-control integration suite
+seams:
+  - id: tools-agent-bridge
+    label: Tool boundary that turns agent-facing questions or delegated work into a callback or subagent result.
+  - id: tools-user-interaction
+    label: Tool boundary that carries a model ask_user request through approval and call-id keyed user answers.
+  - id: tools-checkin-scheduler
+    label: Tool boundary that validates and forwards proactive background-task check-in configuration.
+  - id: tools-subagent-registry
+    label: Tool boundary between subagent lifecycle tools and the async subagent registry and runner.
+  - id: tools-command-formatting
+    label: Boundary that converts tool arguments and outputs into terminal command messages.
+  - id: tools-file-write
+    label: Tool boundary that resolves paths and applies or creates filesystem mutations.
+  - id: tools-file-read
+    label: Tool boundary that resolves paths and returns bounded, text or multimodal file content.
+  - id: tools-file-search
+    label: Tool boundary that runs bounded glob and grep searches with workspace-aware policy.
+  - id: tools-code-index
+    label: Tool boundary that summarizes source structure and discovers related files or symbols.
+  - id: tools-patch-healing
+    label: Guarded model-assisted boundary that repairs stale edit context without changing requested edits.
+  - id: tools-memory
+    label: Tool boundary that exposes scoped memory retrieval and mutation with bounded serialized output.
+  - id: tools-workflow
+    label: Tool boundary that evaluates disposable JavaScript child-agent workflows under admission limits.
+  - id: tools-session-browser
+    label: Read-only tool boundary over persisted session listing, search, and progressive reads.
+  - id: tools-session-rollover
+    label: Tool boundary that requests idle session rotation and reports blockers.
+  - id: tools-shell
+    label: Shell tool construction and command-message boundary, including sandbox and host-control policy.
+  - id: tools-worktree
+    label: Tool boundary that changes the execution context root among runtime-issued worktrees.
+  - id: tools-schema
+    label: Tool parameter-schema boundary between provider arguments and typed tool executors.
+  - id: tools-path-policy
+    label: Shared path-resolution boundary enforcing workspace, temporary, skill, and hook rules.
+  - id: tools-web-fetch
+    label: Tool boundary that fetches a URL, converts content to Markdown, and bounds or spools output.
+  - id: tools-web-search
+    label: Tool boundary that selects a configured search provider and formats its response.
+  - id: tools-upstream-parser
+    label: Compatibility parser boundary from upstream apply-patch text and grammar to local operations.
+  - id: tools-format-helpers
+    label: Shared result-normalization boundary from heterogeneous tool output items to display text.
+  - id: tools-tool-registry
+    label: Process-local registry boundary that indexes explicitly registered tool formatters.
+risks:
+  - id: tools-risk-agent-boundary
+    label: Agent-facing tool calls lose context, block incorrectly, or expose the wrong lifecycle state.
+    severity: high
+  - id: tools-risk-user-answer-loss
+    label: A user answer is misassociated, treated as success when absent, or cannot resume the turn.
+    severity: high
+  - id: tools-risk-checkin-floor
+    label: Invalid check-in timing reaches the scheduler and causes excessive or ineffective wakeups.
+    severity: medium
+  - id: tools-risk-subagent-state
+    label: Delegated work is duplicated, awaited at the wrong time, leaks content, or loses failure state.
+    severity: high
+  - id: tools-risk-display-drift
+    label: Tool history displays misleading command, output, success, or argument information.
+    severity: medium
+  - id: tools-risk-file-mutation
+    label: A file mutation is applied to the wrong content, partially applied, or bypasses approval boundaries.
+    severity: critical
+  - id: tools-risk-file-read-boundary
+    label: Reads expose unintended paths or unbounded, binary, corrupt, or encoded content to the model.
+    severity: high
+  - id: tools-risk-search-boundary
+    label: Search silently uses the wrong dialect, scope, result bound, or workspace policy.
+    severity: high
+  - id: tools-risk-code-index
+    label: Code navigation returns incomplete, misleading, or language-inaccurate structural evidence.
+    severity: medium
+  - id: tools-risk-healing-corruption
+    label: Model-assisted edit healing changes requested lines or applies an ambiguous location.
+    severity: critical
+  - id: tools-risk-memory-integrity
+    label: Memory scope, ranking, cursor, error, or output-budget semantics become unsafe or misleading.
+    severity: high
+  - id: tools-risk-workflow-escape
+    label: A disposable workflow exceeds run, concurrency, byte, or capability limits.
+    severity: critical
+  - id: tools-risk-session-history
+    label: Session browsing violates identifier or pagination contracts or reports incomplete history incorrectly.
+    severity: medium
+  - id: tools-risk-rollover-loss
+    label: Rollover occurs with live work or fails to terminate at the requested idle boundary.
+    severity: high
+  - id: tools-risk-shell-registration
+    label: Shell construction and host-control grants are wired through an ownership seam that can drift.
+    severity: high
+  - id: tools-risk-worktree-misroot
+    label: Tool execution continues under the wrong worktree or changes root while background work is live.
+    severity: high
+  - id: tools-risk-schema-drift
+    label: Provider-shaped arguments accepted by a tool do not match its intended typed contract.
+    severity: high
+  - id: tools-risk-path-escape
+    label: Path normalization allows an unintended outside-workspace read or write.
+    severity: critical
+  - id: tools-risk-web-output
+    label: Web content is fetched from the wrong source, formatted incorrectly, or overflows model context.
+    severity: medium
+  - id: tools-risk-parser-drift
+    label: Upstream patch syntax is accepted incorrectly or converted to the wrong local operation.
+    severity: high
+  - id: tools-risk-result-normalization
+    label: Heterogeneous tool result shapes lose the most useful error or success text.
+    severity: medium
+  - id: tools-risk-name-drift
+    label: A tool name changes and breaks provider calls, routing, or persisted message interpretation.
+    severity: high
+fixtures: []
+contracts:
+  - id: tools-contract-ask-mentor
+    statement: The mentor tool sends either the question or a labeled context-plus-question prompt, returns ordinary failures as safe text, and propagates abort errors.
+    seamIds: [tools-agent-bridge]
+    riskIds: [tools-risk-agent-boundary]
+  - id: tools-contract-ask-orchestrator
+    statement: The orchestrator bridge accepts only a nonblank question of at most 1,200 characters, requires no approval, and waits for the supplied answer without contacting the user.
+    seamIds: [tools-agent-bridge]
+    riskIds: [tools-risk-agent-boundary]
+  - id: tools-contract-ask-user
+    statement: ask_user accepts bounded nonblank questions and valid choices, passes the tool call ID to answer lookup, and renders answered, declined, missing, and malformed responses with the correct success state.
+    seamIds: [tools-user-interaction, tools-command-formatting]
+    riskIds: [tools-risk-user-answer-loss, tools-risk-display-drift]
+  - id: tools-contract-checkin
+    statement: configure_task_check_in forwards validated task settings as JSON and rejects intervals below 300 seconds or one-shot delays below 30 seconds.
+    seamIds: [tools-checkin-scheduler]
+    riskIds: [tools-risk-checkin-floor]
+  - id: tools-contract-run-subagent
+    statement: run_subagent requires an explicit supported execution and role, dispatches only the available mode, preserves interruption and failure as model-visible plain text, and formats bounded result evidence.
+    seamIds: [tools-agent-bridge, tools-subagent-registry, tools-command-formatting, tools-schema]
+    riskIds: [tools-risk-agent-boundary, tools-risk-subagent-state, tools-risk-display-drift, tools-risk-schema-drift]
+  - id: tools-contract-async-subagent
+    statement: Async subagent lifecycle tools return handles and compact control acknowledgements, refuse premature result waits, expose bounded status and liveness evidence, and preserve typed registry errors.
+    seamIds: [tools-subagent-registry, tools-command-formatting, tools-schema]
+    riskIds: [tools-risk-subagent-state, tools-risk-display-drift]
+  - id: tools-contract-formatter-registry
+    statement: Explicit formatter registration makes a formatter retrievable by tool name while an unregistered registry has no built-in formatter entries.
+    seamIds: [tools-tool-registry]
+    riskIds: [tools-risk-display-drift]
+  - id: tools-contract-apply-patch
+    statement: apply_patch applies local and upstream-compatible create, update, move, and delete operations in order, reports malformed or ambiguous patches diagnostically, and enforces path approval, healing, locking, and session-created-file effects.
+    seamIds: [tools-file-write, tools-upstream-parser, tools-patch-healing, tools-path-policy]
+    riskIds: [tools-risk-file-mutation, tools-risk-path-escape, tools-risk-healing-corruption]
+  - id: tools-contract-code-context
+    statement: Code-context tools provide body-free outlines and bounded related or symbol results across supported languages, identify meaningful relations, reject unsafe symbols, and degrade explicitly when ripgrep or a language provider is unavailable.
+    seamIds: [tools-code-index, tools-file-read, tools-file-search, tools-schema]
+    riskIds: [tools-risk-code-index, tools-risk-search-boundary, tools-risk-schema-drift]
+  - id: tools-contract-create-file
+    statement: create_file creates parent directories and content, protects existing files with the confirmation flow, supports remote execution, and applies workspace, symlink, temporary-path, and session-access policy.
+    seamIds: [tools-file-write, tools-path-policy, tools-command-formatting]
+    riskIds: [tools-risk-file-mutation, tools-risk-path-escape, tools-risk-display-drift]
+  - id: tools-contract-edit-healing
+    statement: Search-replace healing may modify only when model output identifies a sufficiently similar unique file span, uses collision-safe prompt delimiters and configured provider selection, and fails closed on ambiguity, invalid output, provider failure, or timeout.
+    seamIds: [tools-patch-healing, tools-agent-bridge]
+    riskIds: [tools-risk-healing-corruption, tools-risk-agent-boundary]
+  - id: tools-contract-glob
+    statement: glob finds the requested files with path-segment, absolute-root, fd/find-fallback, SSH, scope, and result-limit semantics while enforcing read approval outside the workspace.
+    seamIds: [tools-file-search, tools-path-policy, tools-schema]
+    riskIds: [tools-risk-search-boundary, tools-risk-path-escape, tools-risk-schema-drift]
+  - id: tools-contract-grep
+    statement: grep preserves regex, fixed-string, case, include/exclude, multiline, quoting, and rg/fallback dialect semantics, and applies workspace and session read-approval policy.
+    seamIds: [tools-file-search, tools-path-policy, tools-command-formatting, tools-schema]
+    riskIds: [tools-risk-search-boundary, tools-risk-path-escape, tools-risk-display-drift]
+  - id: tools-contract-patch-healing
+    statement: Patch healing parses diff structure and changes context only when a unique model-healed location preserves every added and deleted line; ambiguous, contextless, enveloped, failed, or NO_MATCH output is rejected.
+    seamIds: [tools-patch-healing]
+    riskIds: [tools-risk-healing-corruption, tools-risk-file-mutation]
+  - id: tools-contract-read-file
+    statement: read_file returns accurate full or ranged text, handles missing and empty files, bounds and spools oversized output, refuses binary data, returns supported images multimodally, preserves UTF-8, and enforces read path policy.
+    seamIds: [tools-file-read, tools-path-policy, tools-command-formatting, tools-schema]
+    riskIds: [tools-risk-file-read-boundary, tools-risk-path-escape, tools-risk-display-drift]
+  - id: tools-contract-search-replace
+    statement: search_replace performs exact, relaxed, normalized, anchor, gap, EOL, escaped-content, batched, and parallel edits with ambiguity and placeholder guards, atomic batch failure, optional healing, and path approval.
+    seamIds: [tools-file-write, tools-patch-healing, tools-path-policy, tools-command-formatting]
+    riskIds: [tools-risk-file-mutation, tools-risk-healing-corruption, tools-risk-path-escape]
+  - id: tools-contract-upstream-parser
+    statement: The upstream patch parser converts supported add, update, delete, move, and environment-wrapped syntax into local operations, accepts its documented heredoc wrapper, rejects empty or incomplete patches, and exports matching grammar.
+    seamIds: [tools-upstream-parser]
+    riskIds: [tools-risk-parser-drift]
+  - id: tools-contract-format-helpers
+    statement: Patch result normalization prefers nonempty errors over messages and legacy paths, safely ignores unrecognized values, and joins useful item text in original order.
+    seamIds: [tools-format-helpers]
+    riskIds: [tools-risk-result-normalization]
+  - id: tools-contract-memory-tools
+    statement: Memory tools expose scoped list/get/search/retrieve/synthesize and mutation operations with correct scope rules, ranking and deduplication, bounded surrogate-safe output, cursor paging and staleness errors, and approval for destructive mutations.
+    seamIds: [tools-memory, tools-schema]
+    riskIds: [tools-risk-memory-integrity, tools-risk-schema-drift]
+  - id: tools-contract-workflow
+    statement: run_agent_workflow evaluates only JSON-safe child-agent code with inherited capabilities and bounded concurrency/run limits, returning admission-ordered success or typed failure summaries.
+    seamIds: [tools-workflow]
+    riskIds: [tools-risk-workflow-escape]
+  - id: tools-contract-session-browser
+    statement: Session browser tools expose read-only strictly bounded list/search/read operations with documented totals, omissions, live-session ordering, identifier validation, and progressive end reads.
+    seamIds: [tools-session-browser, tools-schema]
+    riskIds: [tools-risk-session-history, tools-risk-schema-drift]
+  - id: tools-contract-session-rollover
+    statement: session_rollover accepts only a bounded strict brief and supported reason, forwards it without approval, reports live-background blockers, and marks a successful request as terminating the current turn.
+    seamIds: [tools-session-rollover, tools-command-formatting]
+    riskIds: [tools-risk-rollover-loss]
+  - id: tools-contract-shell-grep-formatters
+    statement: Shell and grep formatters emit the correct tool name, command arguments, structured output interpretation, and success state for foreground and background acknowledgements.
+    seamIds: [tools-shell, tools-command-formatting]
+    riskIds: [tools-risk-display-drift, tools-risk-shell-registration]
+  - id: tools-contract-docker-host-control
+    statement: With an explicit opt-in Docker prerequisite, the shell tool blocks direct and wrapped host-control commands until a session-scoped grant is issued, then succeeds without the denied-socket failure and re-prompts after an indirect blocked attempt.
+    seamIds: [tools-shell]
+    riskIds: [tools-risk-shell-registration, tools-risk-file-mutation]
+  - id: tools-contract-worktree
+    statement: Worktree tools re-root and restore execution context only for an unambiguous runtime-issued worktree, refuse unknown, ambiguous, or busy transitions without changing root, and require no approval.
+    seamIds: [tools-worktree]
+    riskIds: [tools-risk-worktree-misroot]
+  - id: tools-contract-tool-names
+    statement: Public constants for core tool names remain equal to the names used by their tool definitions and routing contracts.
+    seamIds: [tools-schema]
+    riskIds: [tools-risk-name-drift]
+  - id: tools-contract-tool-parameter-schema
+    statement: Provider-facing tool schemas use omitted optional fields rather than null, reject malformed structures, apply defaults, and derive executor and approval parameter types from the same schema.
+    seamIds: [tools-schema]
+    riskIds: [tools-risk-schema-drift]
+  - id: tools-contract-utils
+    statement: Shared path utilities expand home paths, allow only explicitly permitted temporary or discovered-skill locations, and identify protected user or project hook paths without broadening outside-workspace access.
+    seamIds: [tools-path-policy]
+    riskIds: [tools-risk-path-escape, tools-risk-file-mutation]
+  - id: tools-contract-web-fetch
+    statement: web_fetch performs read-only URL fetching and Markdown conversion, maps GitHub blobs to raw URLs, handles errors, uses continuation tokens, and spools only oversized initial content while maintaining output bounds.
+    seamIds: [tools-web-fetch, tools-command-formatting, tools-schema]
+    riskIds: [tools-risk-web-output, tools-risk-schema-drift]
+  - id: tools-contract-web-search
+    statement: web_search is a read-only configured-provider lookup that returns actionable configuration errors and formats answer boxes, numbered results, empty results, and command success or fallback arguments correctly.
+    seamIds: [tools-web-search, tools-command-formatting]
+    riskIds: [tools-risk-web-output, tools-risk-display-drift]
+tests:
+  - kind: file
+    id: tools-ask-mentor
+    file: source/tools/agent/ask-mentor.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-ask-mentor]
+    fixtureIds: []
+  - kind: file
+    id: tools-ask-orchestrator
+    file: source/tools/agent/ask-orchestrator.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-ask-orchestrator]
+    fixtureIds: []
+  - kind: file
+    id: tools-ask-user
+    file: source/tools/agent/ask-user.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-ask-user]
+    fixtureIds: []
+  - kind: file
+    id: tools-configure-task-check-in
+    file: source/tools/agent/configure-task-check-in.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-checkin]
+    fixtureIds: []
+  - kind: file
+    id: tools-run-subagent-async
+    file: source/tools/agent/run-subagent-async.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-async-subagent]
+    fixtureIds: []
+  - kind: file
+    id: tools-run-subagent
+    file: source/tools/agent/run-subagent.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-run-subagent]
+    fixtureIds: []
+  - kind: file
+    id: tools-command-message-formatters
+    file: source/tools/command-message-formatters.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-formatter-registry]
+    fixtureIds: []
+  - kind: file
+    id: tools-apply-patch
+    file: source/tools/file/apply-patch.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-apply-patch]
+    fixtureIds: []
+  - kind: file
+    id: tools-code-context
+    file: source/tools/file/code-context.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-code-context]
+    fixtureIds: []
+  - kind: file
+    id: tools-create-file
+    file: source/tools/file/create-file.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-create-file]
+    fixtureIds: []
+  - kind: file
+    id: tools-edit-healing
+    file: source/tools/file/edit-healing.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-edit-healing]
+    fixtureIds: []
+  - kind: file
+    id: tools-glob
+    file: source/tools/file/glob.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-glob]
+    fixtureIds: []
+  - kind: file
+    id: tools-grep
+    file: source/tools/file/grep.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-grep]
+    fixtureIds: []
+  - kind: file
+    id: tools-patch-healing
+    file: source/tools/file/patch-healing.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-patch-healing]
+    fixtureIds: []
+  - kind: file
+    id: tools-read-file
+    file: source/tools/file/read-file.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-read-file]
+    fixtureIds: []
+  - kind: file
+    id: tools-search-replace
+    file: source/tools/file/search-replace.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-search-replace]
+    fixtureIds: []
+  - kind: file
+    id: tools-upstream-apply-patch
+    file: source/tools/file/upstream-apply-patch.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-upstream-parser]
+    fixtureIds: []
+  - kind: file
+    id: tools-format-helpers
+    file: source/tools/format-helpers.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-format-helpers]
+    fixtureIds: []
+  - kind: file
+    id: tools-memory-tools
+    file: source/tools/memory/memory-tools.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-memory-tools]
+    fixtureIds: []
+  - kind: file
+    id: tools-run-agent-workflow
+    file: source/tools/run-agent-workflow.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-workflow]
+    fixtureIds: []
+  - kind: file
+    id: tools-session-browser-tools
+    file: source/tools/session-browser/session-browser-tools.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-session-browser]
+    fixtureIds: []
+  - kind: file
+    id: tools-session-rollover-tool
+    file: source/tools/session-rollover/session-rollover-tool.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-session-rollover]
+    fixtureIds: []
+  - kind: file
+    id: tools-shell-and-grep-formatters
+    file: source/tools/shell-and-grep-formatters.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-shell-grep-formatters]
+    fixtureIds: []
+  - kind: file
+    id: tools-docker-host-control-integration
+    file: source/tools/system/docker-host-control.integration.test.ts
+    domainId: tools
+    suiteId: integration
+    contractIds: [tools-contract-docker-host-control]
+    fixtureIds: []
+  - kind: file
+    id: tools-worktree
+    file: source/tools/system/worktree.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-worktree]
+    fixtureIds: []
+  - kind: file
+    id: tools-tool-names
+    file: source/tools/tool-names.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-tool-names]
+    fixtureIds: []
+  - kind: file
+    id: tools-tool-parameter-schema
+    file: source/tools/tool-parameter-schema.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-tool-parameter-schema]
+    fixtureIds: []
+  - kind: file
+    id: tools-utils
+    file: source/tools/utils.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-utils]
+    fixtureIds: []
+  - kind: file
+    id: tools-web-fetch
+    file: source/tools/web/web-fetch.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-web-fetch]
+    fixtureIds: []
+  - kind: file
+    id: tools-web-search
+    file: source/tools/web/web-search.test.ts
+    domainId: tools
+    suiteId: unit
+    contractIds: [tools-contract-web-search]
+    fixtureIds: []
+decisions:
+  - id: tools-ask-mentor-tools-m3
+    testId: tools-ask-mentor
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The six cases cover prompt construction, safe ordinary failure, and abort semantics at a narrow callback seam.
+    evidence:
+      - source/tools/agent/ask-mentor.test.ts:34-78 asserts both context placement and the distinction between returned failure text and propagated abort.
+      - Production seam is source/tools/agent/ask-mentor.ts:51-69; the only same-domain schema overlap is the narrower ask_mentor null check in source/tools/tool-parameter-schema.test.ts:85-90.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-ask-orchestrator-tools-m3
+    testId: tools-ask-orchestrator
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is the only direct test of the bounded, subagent-only waiting bridge.
+    evidence:
+      - source/tools/agent/ask-orchestrator.test.ts:4-20 resolves a deliberately pending callback and verifies no premature result or user interaction.
+      - Production seam is source/tools/agent/ask-orchestrator.ts:10-46; source/services/subagents/tool-policy.test.ts:201-210 is an out-of-assignment registration-policy sibling, not duplicate execution coverage.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-ask-user-tools-m3
+    testId: tools-ask-user
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It protects the user-facing schema, call-id answer association, fallback state, and display rendering as separate observable contracts.
+    evidence:
+      - source/tools/agent/ask-user.test.ts:31-119 and :122-269 cover reserved labels, multi-select, missing answers, malformed arguments, and mismatched answer lengths.
+      - Production registration is source/agent.ts:449-453; lifecycle siblings are source/services/queue/queue-controller.test.ts:1006-1118 and source/services/session/pending-interaction-state.test.ts:19-87, both outside this assignment and not replacements for tool-local rendering.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-configure-task-check-in-tools-m3
+    testId: tools-configure-task-check-in
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Boundary tests pin the scheduler-facing minimums and JSON error contract without requiring a live scheduler.
+    evidence:
+      - source/tools/agent/configure-task-check-in.test.ts:14-105 asserts forwarded defaults, formatted output, and both lower-bound failures.
+      - Production seam is source/tools/agent/configure-task-check-in.ts:15-86; source/services/session/background-check-in-scheduler.test.ts:186-209 covers downstream alias resolution outside this assignment.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-run-subagent-async-tools-m3
+    testId: tools-run-subagent-async
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The file is broad but each lifecycle operation has a distinct nonblocking, status, typed-error, or display contract.
+    evidence:
+      - source/tools/agent/run-subagent-async.test.ts:50-571 covers handles, active/waiting guards, liveness evidence, cancellation, steering, mailbox limits, and synchronous status peeks.
+      - Production seams are source/tools/agent/run-subagent-async.ts:186-571 and source/services/subagents/subagent-async-registry.ts:649; no assigned sibling provides equivalent lifecycle coverage.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-run-subagent-tools-m3
+    testId: tools-run-subagent
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It guards the provider-compatible schema and the important separation between foreground execution and background delegation.
+    evidence:
+      - source/tools/agent/run-subagent.test.ts:45-195 and :216-295 cover dispatch selection, forbidden field smuggling, strict-provider nulls, plain results, and abort propagation; :297-469 covers display bounds and evidence.
+      - Production registration is source/agent.ts:531-555; out-of-assignment siblings source/lib/agent-client.application-run-loop.test.ts:176-246 and source/services/subagents/tool-policy.test.ts:801-920 exercise surrounding ownership, not this factory contract.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-command-message-formatters-tools-m3
+    testId: tools-command-message-formatters
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The registry's explicit-registration and empty-initial-state behavior is small and unique.
+    evidence:
+      - source/tools/command-message-formatters.test.ts:5-29 directly asserts clear/register/get behavior.
+      - Production seam is source/tools/command-message-formatters.ts:5-17; source/utils/streaming/extract-command-messages.test.ts:28-35 tests downstream formatter consumption outside this assignment.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-apply-patch-tools-m3
+    testId: tools-apply-patch
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This filesystem mutation suite covers success, ordering, concurrency, diagnostics, approval boundaries, healing opt-in, and session access; deletion execution is intentionally not inferred from parser coverage.
+    evidence:
+      - source/tools/file/apply-patch.test.ts:81-220, :254-503, and :511-639 assert on-disk effects and fail-closed diagnostics across local and upstream forms.
+      - Production seams are source/tools/file/apply-patch.ts:234-310 and source/tools/file/upstream-apply-patch.ts:45-91; the assigned sibling source/tools/file/upstream-apply-patch.test.ts:5-46 covers parsing only.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-code-context-tools-m3
+    testId: tools-code-context
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Multi-language outline and relation tests protect a substantial navigation contract that cannot be replaced by schema checks.
+    evidence:
+      - source/tools/file/code-context.test.ts:132-320 and :323-845 cover body omission, import/export/declaration extraction, relation ranking, language providers, safe identifiers, and explicit degradation.
+      - Production seams are source/tools/file/code-context.ts:122-255 and source/tools/languages/index.ts:14-33; source/tools/tool-parameter-schema.test.ts:135-157 duplicates only parameter shape checks.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-create-file-tools-m3
+    testId: tools-create-file
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The two-step overwrite confirmation, remote writes, symlink boundary, and session-created tracking are meaningful mutation safety contracts.
+    evidence:
+      - source/tools/file/create-file.test.ts:146-255, :258-463, and :505-592 assert both disk and remote effects plus confirmation invalidation and path policy.
+      - Production seam is source/tools/file/create-file.ts:71-160; related path-policy behavior in source/tools/utils.test.ts:7-81 does not duplicate create_file mutation behavior.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-edit-healing-tools-m3
+    testId: tools-edit-healing
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This suite verifies model-assisted recovery's conservative acceptance rules and provider/timeout failure paths.
+    evidence:
+      - source/tools/file/edit-healing.test.ts:71-204 and :206-365 assert similarity, delimiter safety, configured provider selection, abort, factory timeout, nonsettling streams, and missing model behavior.
+      - Production seam is source/tools/file/edit-healing.ts:154-276; source/tools/file/search-replace.test.ts:522-609 covers the caller integration and does not replace these helper-level guards.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-glob-tools-m3
+    testId: tools-glob
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: fd/find/SSH fallback, absolute pattern roots, scoped paths, and bounded results are distinct search behaviors with real filesystem evidence.
+    evidence:
+      - source/tools/file/glob.test.ts:77-220 and :235-409 cover search engines, SSH fallback, root precedence, limits, and no-match behavior.
+      - Production seams are source/tools/file/glob.ts:121-263 and source/tools/file/glob-target.ts:10-45; source/tools/tool-parameter-schema.test.ts:24-30 is only the shared nullability check.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-grep-tools-m3
+    testId: tools-grep
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Grep's shell dialect, quoting, fallback, and out-of-workspace approval cases protect both search correctness and read safety.
+    evidence:
+      - source/tools/file/grep.test.ts:66-331 and :349-442 cover rg/POSIX differences, regex modes, path quoting, filters, and approval policy.
+      - Production seam is source/tools/file/grep.ts:167-365; assigned schema overlap is source/tools/tool-parameter-schema.test.ts:64-69, while source/tools/shell-and-grep-formatters.test.ts:32-42 checks only display metadata.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-patch-healing-tools-m3
+    testId: tools-patch-healing
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Byte-for-byte preservation of requested additions/deletions and ambiguity rejection are high-risk edit guards with no sibling equivalent.
+    evidence:
+      - source/tools/file/patch-healing.test.ts:5-35 and :58-247 assert parser invariants, unique context, modified-line rejection, envelope rejection, and model failure handling.
+      - Production seam is source/tools/file/patch-healing.ts:44-247; caller coverage in source/tools/file/apply-patch.test.ts:511-591 is integration evidence rather than duplicate guard logic.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-read-file-tools-m3
+    testId: tools-read-file
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Full/ranged reads, workspace grants, output spooling, binary refusal, image results, and UTF-8 boundary handling are independently meaningful.
+    evidence:
+      - source/tools/file/read-file.test.ts:64-267 and :270-342 asserts content/range semantics, bounds, binary and image behavior, and safe Unicode truncation.
+      - Production seam is source/tools/file/read-file.ts:85-210; source/tools/tool-parameter-schema.test.ts:32-50 repeats schema/nullability only, and source/tools/utils.test.ts:27-61 covers the shared path helper.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-search-replace-tools-m3
+    testId: tools-search-replace
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: >-
+      The large suite earns its breadth: exact and relaxed matching, gaps, atomic batches, concurrency, line endings,
+      placeholders, healing, and approval all change independently.
+    evidence:
+      - source/tools/file/search-replace.test.ts:213-554, :612-1080, and :1107-1677 assert on-disk outcomes and unchanged-on-failure behavior for the matcher and mutator.
+      - Production seams are source/tools/file/search-replace.ts:87-228 and source/tools/file/search-replace-matcher.ts:51-398; source/tools/file/edit-healing.test.ts:71-181 covers helper healing decisions, not this caller's edit transaction.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-upstream-apply-patch-tools-m3
+    testId: tools-upstream-apply-patch
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Compatibility parsing is a distinct input contract and is not made redundant by apply_patch's on-disk execution checks.
+    evidence:
+      - source/tools/file/upstream-apply-patch.test.ts:5-46 asserts all operation kinds, heredoc normalization, rejection, and exported grammar tokens.
+      - Production seam is source/tools/file/upstream-apply-patch.ts:17-124; source/tools/file/apply-patch.test.ts:183-220 is the named assigned sibling that proves one parsed patch executes correctly.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-format-helpers-tools-m3
+    testId: tools-format-helpers
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Shared result coercion has a small direct matrix for legacy, invalid, empty, ordered, and error-first shapes.
+    evidence:
+      - source/tools/format-helpers.test.ts:4-61 directly asserts every recognized precedence and safe non-object path.
+      - Production seam is source/tools/format-helpers.ts:210-235; no assigned sibling directly tests pickPatchOutputItemText or formatPatchOutputItems.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-memory-tools-tools-m3
+    testId: tools-memory-tools
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Memory output budgets and cursors are safety-critical and the suite covers both ordinary CRUD and adversarial omission/count growth.
+    evidence:
+      - source/tools/memory/memory-tools.test.ts:40-260 and :262-536 assert scope, approval, deduplication, errors, ranking, surrogate safety, bounded omission diagnostics, paging, and stale cursors.
+      - Production seam is source/tools/memory/memory-tools.ts:152-542; source/services/memory/memory-store.test.ts:31-60 is an out-of-assignment persistence-layer sibling and cannot replace tool serialization coverage.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-run-agent-workflow-tools-m3
+    testId: tools-run-agent-workflow
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The tests directly exercise concurrent child admission and the maxRuns guard at the public tool boundary.
+    evidence:
+      - source/tools/run-agent-workflow.test.ts:4-54 proves concurrency and a rejected second run after the configured limit; :56-64 pins the model-visible workflow contract.
+      - Production seam is source/tools/run-agent-workflow.ts:19-47 and the guarded evaluator is source/services/agent-runtime/workflow/workflow-evaluator.ts:1-120; no assigned sibling covers this tool boundary.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-session-browser-tools-tools-m3
+    testId: tools-session-browser-tools
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Although compact, this file pins all three public browser definitions and the important progressive-read and omission semantics.
+    evidence:
+      - source/tools/session-browser/session-browser-tools.test.ts:17-37 asserts names, serialized-output preservation, strict bounds, identifiers, totals, live ordering, and from-end cursor rules.
+      - Production seam is source/tools/session-browser/session-browser-tools.ts:18-88; downstream source/services/conversation/session-browser.test.ts:207-230 tests cache invalidation outside this assignment.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-session-rollover-tool-tools-m3
+    testId: tools-session-rollover-tool
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It protects the termination flag and the live-background blocker, which are not ordinary schema behavior.
+    evidence:
+      - source/tools/session-rollover/session-rollover-tool.test.ts:5-40 asserts strict input, no approval, forwarded request, blocker payload, and invalid reason/brief.
+      - Production seam is source/tools/session-rollover/session-rollover-tool.ts:12-55; source/services/agent-runtime/application-run-loop.test.ts:171-200 is an out-of-assignment caller integration sibling.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-shell-and-grep-formatters-tools-m3
+    testId: tools-shell-and-grep-formatters
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: medium
+    reason: The cross-tool smoke file is narrow and redundant in part, but its background acknowledgement assertion covers a shell display branch not present in the assigned grep formatter test.
+    evidence:
+      - source/tools/shell-and-grep-formatters.test.ts:5-42 asserts shell foreground/background and grep command metadata in one display-facing contract.
+      - Assigned sibling source/tools/file/grep.test.ts:333-347 covers only grep toolName; out-of-assignment source/utils/streaming/extract-command-messages.test.ts:28-35 covers formatter registration/consumption, so there is no verified full replacement.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-docker-host-control-integration-tools-m3
+    testId: tools-docker-host-control-integration
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: architecture_signal
+    confidence: medium
+    reason: >-
+      The opt-in integration tier is appropriate: it skips without macOS, Docker, and an explicit environment opt-in,
+      and exercises a real host-control grant. The setup also exposes the shared shell-construction ownership seam for
+      review rather than making this test a retier or deletion candidate.
+    evidence:
+      - source/tools/system/docker-host-control.integration.test.ts:27-57 documents prerequisite skips and :59-134 proves direct, wrapped, and indirect Docker grant behavior.
+      - Exact construction seam is source/tools/system/docker-host-control.integration.test.ts:71-75 and source/agent.ts:389-407; the excluded calibration-family source/tools/system/shell.test.ts is the named sibling that already flagged shell construction, so coordinator should reconcile this signal.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-worktree-tools-m3
+    testId: tools-worktree
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Root changes and busy/ambiguous refusal are stateful execution-safety behavior with no duplicate assigned test.
+    evidence:
+      - source/tools/system/worktree.test.ts:24-113 asserts enter, exit, unknown, ambiguous, and busy transitions plus no approval.
+      - Production seam is source/tools/system/worktree.ts:60-194; its dependency boundary is distinct from shell construction despite both being system tools.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-tool-names-tools-m3
+    testId: tools-tool-names
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: medium
+    reason: This is a cheap direct tripwire for names used in provider-facing and routing contracts.
+    evidence:
+      - source/tools/tool-names.test.ts:11-18 asserts all exported constants in the file.
+      - Production consumers include source/tools/file/apply-patch.ts:104-123 and source/tools/memory/memory-tools.ts:174-178; no assigned test directly checks the constants as a group.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-tool-parameter-schema-tools-m3
+    testId: tools-tool-parameter-schema
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: high
+    reason: The central matrix repeats optional/nullability assertions already owned by tools-glob, tools-read-file, tools-grep, tools-web-fetch, tools-ask-mentor, and tools-code-context, while its read_file type-derivation assertion is unique; rewrite should retain the type-level cross-check and move or remove duplicated cases.
+    evidence:
+      - source/tools/tool-parameter-schema.test.ts:24-90 and :135-157 duplicates exact schema assertions in source/tools/file/glob.test.ts:58-63, source/tools/file/read-file.test.ts:56-61, source/tools/file/grep.test.ts:21-33 plus :64-69, source/tools/web/web-fetch.test.ts:20-23 and source/tools/agent/ask-mentor.test.ts:26-32.
+      - Production seam is source/tools/types.ts:98-122; the unique @ts-expect-error derivation check is source/tools/tool-parameter-schema.test.ts:40-50, so deletion or wholesale consolidation is not justified.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-utils-tools-m3
+    testId: tools-utils
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Shared path policy is high-risk and the tests distinguish narrowly permitted temporary and skill paths from broad outside paths and protected hooks.
+    evidence:
+      - source/tools/utils.test.ts:7-81 asserts home expansion, workspace rejection, sandbox temp exception, discovered-skill exception, and hook protection.
+      - Production seam is source/tools/utils.ts:12-167; consuming siblings source/tools/file/read-file.test.ts:127-223 and source/tools/file/create-file.test.ts:160-180 verify callers but not all utility policy branches.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-web-fetch-tools-m3
+    testId: tools-web-fetch
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Fetch conversion, URL rewriting, errors, continuation behavior, and temporary-file output bounds are distinct web-tool contracts.
+    evidence:
+      - source/tools/web/web-fetch.test.ts:25-193 asserts HTML conversion, HTTP errors, GitHub raw conversion, initial spooling, fit/no-spool, and continuation no-spool behavior.
+      - Production seam is source/tools/web/web-fetch.ts:72-139; source/tools/tool-parameter-schema.test.ts:71-83 overlaps only parameter optionality.
+    replacementTestIds: []
+    status: proposed
+  - id: tools-web-search-tools-m3
+    testId: tools-web-search
+    role: second_opinion
+    reviewer: tools-m3
+    sourceArtifact: docs/test-audit/artifacts/tools-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Provider configuration errors and answer/result Markdown formatting are observable behavior not covered by generic formatter tests.
+    evidence:
+      - source/tools/web/web-search.test.ts:31-76 and :78-215 asserts tool metadata, configuration failure, answer/result combinations, empty results, and argument fallback display.
+      - Production seam is source/tools/web/web-search.ts:33-135; no assigned sibling tests formatResultsAsMarkdown or provider-not-configured handling.
+    replacementTestIds: []
+    status: proposed

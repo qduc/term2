@@ -1,0 +1,377 @@
+# Independent provider-domain exploration artifact.
+schemaVersion: 2
+domains:
+  - id: providers
+    label: Provider adapters, registries, retry wrappers, and wire-session infrastructure
+suites:
+  - id: providers-b2-unit
+    label: Provider-domain unit tests
+seams:
+  - id: providers-b2-opaque-envelope-parser
+    label: Boundary that extracts provider lane identity from stored opaque-item shapes.
+  - id: providers-b2-opaque-lane-policy
+    label: Lane-compatibility policy deciding whether opaque history may be replayed.
+  - id: providers-b2-provider-settings-service
+    label: Provider settings normalization, validation, persistence, and registry synchronization.
+  - id: providers-b2-provider-selection-projection
+    label: Projection of built-in and custom provider settings into selectable UI items.
+  - id: providers-b2-provider-registry
+    label: Global provider definition registration, lookup, enumeration, and ordering.
+  - id: providers-b2-websocket-session-pool
+    label: Responses WebSocket acquisition, retention, replacement, and shutdown lifecycle.
+  - id: providers-b2-retry-stream-wrapper
+    label: Application-owned streamed-turn retry and pre-event commitment boundary.
+  - id: providers-b2-retry-recovery-budget
+    label: Physical-attempt accounting and exhaustion errors during provider recovery.
+  - id: providers-b2-exa-provider-adapter
+    label: Exa web-search adapter configuration gate and provider definition.
+risks:
+  - id: providers-b2-foreign-opaque-replay
+    label: Provider-private history is sent to an incompatible wire lane or valid history is discarded incorrectly.
+    severity: high
+  - id: providers-b2-provider-settings-corruption
+    label: Provider selection, credentials, validation, or persistence diverges from configured state.
+    severity: high
+  - id: providers-b2-registry-contract-drift
+    label: A provider is missing, malformed, or ordered contrary to the caller's requested precedence.
+    severity: high
+  - id: providers-b2-websocket-lifecycle-loss
+    label: Concurrent or retained provider sessions are closed, reused, or left unhandled at the wrong time.
+    severity: critical
+  - id: providers-b2-unsafe-stream-replay
+    label: A failed model request is replayed after visible output or an ambiguous upstream outcome.
+    severity: critical
+  - id: providers-b2-search-credential-gate
+    label: Search requests proceed without credentials or configured providers are not exposed consistently.
+    severity: medium
+fixtures:
+  - id: providers-b2-opaque-history-shapes
+    label: Envelope, restored-marker, ordinary, same-lane, legacy, and foreign opaque history values.
+  - id: providers-b2-provider-settings-doubles
+    label: In-memory settings doubles containing built-in, custom, malformed, active, and credential variants.
+  - id: providers-b2-registered-provider-definitions
+    label: Imported built-in provider definitions and synthetic provider-id order lists.
+  - id: providers-b2-fake-responses-sockets
+    label: Fake sockets with connecting, open, closed, headers, listeners, and close counters.
+  - id: providers-b2-streamed-turn-doubles
+    label: Synthetic streamed turns producing retryable, ambiguous, non-retryable, committed, and aborted outcomes.
+  - id: providers-b2-exa-settings-double
+    label: Exa settings and logging doubles with present, absent, and empty API keys.
+contracts:
+  - id: providers-b2-opaque-tag-extraction
+    statement: providerOpaqueTagOf returns the provider lane tag from both stored opaque envelopes and restored providerOpaque markers, and returns undefined for non-opaque or malformed values.
+    seamIds:
+      - providers-b2-opaque-envelope-parser
+    riskIds:
+      - providers-b2-foreign-opaque-replay
+  - id: providers-b2-opaque-lane-acceptance
+    statement: acceptsProviderOpaqueTag accepts a lane's own tag and the legacy shared tag only for Chat Completions lanes, while refusing another lane and refusing the legacy tag on Responses.
+    seamIds:
+      - providers-b2-opaque-lane-policy
+    riskIds:
+      - providers-b2-foreign-opaque-replay
+  - id: providers-b2-foreign-opaque-detection
+    statement: isForeignProviderOpaque reports true only when an identifiable opaque item is not accepted by the requested lane, and treats ordinary items as non-foreign.
+    seamIds:
+      - providers-b2-opaque-lane-policy
+    riskIds:
+      - providers-b2-foreign-opaque-replay
+  - id: providers-b2-provider-name-and-url-validation
+    statement: Provider wizard validation rejects empty names, rejects identifier formats that remain invalid after normalization, detects conflicts except for the item being edited, and requires valid base URLs only for URL-bearing provider types.
+    seamIds:
+      - providers-b2-provider-settings-service
+    riskIds:
+      - providers-b2-provider-settings-corruption
+  - id: providers-b2-provider-items-projection
+    statement: loadProviderItems exposes built-in and valid custom providers with correct labels, custom and active flags, credential status, malformed-entry filtering, and a fallback item for an unknown active provider.
+    seamIds:
+      - providers-b2-provider-selection-projection
+    riskIds:
+      - providers-b2-provider-settings-corruption
+  - id: providers-b2-provider-persistence-and-lifecycle
+    statement: saveProvider validates and persists new or edited providers without losing unrelated stored entries, synchronizes the registry and active id, and deleteCustomProvider removes the custom entry while falling back to OpenAI only when the deleted provider was active.
+    seamIds:
+      - providers-b2-provider-settings-service
+      - providers-b2-provider-registry
+    riskIds:
+      - providers-b2-provider-settings-corruption
+  - id: providers-b2-provider-registry-lookups
+    statement: The provider registry exposes expected built-in definitions, returns undefined for unknown ids, and enumerates definitions and ids with required callable and sensitive-setting properties.
+    seamIds:
+      - providers-b2-provider-registry
+    riskIds:
+      - providers-b2-registry-contract-drift
+  - id: providers-b2-provider-ordering
+    statement: sortProvidersByOrder honors requested known-provider precedence, appends unrequested providers in original relative order, ignores unknown requested ids, and leaves input order unchanged when no order is requested.
+    seamIds:
+      - providers-b2-provider-registry
+    riskIds:
+      - providers-b2-registry-contract-drift
+  - id: providers-b2-responses-socket-isolation
+    statement: ResponsesWebSocketSessions gives concurrent or in-flight acquisitions distinct sockets, reuses only an idle live socket for matching connection headers, and replaces stale or header-incompatible idle sockets.
+    seamIds:
+      - providers-b2-websocket-session-pool
+    riskIds:
+      - providers-b2-websocket-lifecycle-loss
+  - id: providers-b2-responses-socket-safety
+    statement: The Responses WebSocket session pool attaches an error listener to created sockets, retires retained sockets at the provider lifetime cap, retains young idle sockets, and closes all tracked sockets on close().
+    seamIds:
+      - providers-b2-websocket-session-pool
+    riskIds:
+      - providers-b2-websocket-lifecycle-loss
+  - id: providers-b2-retry-boundary
+    statement: RetryingModel retries retryable failures only before the first streamed event, preserves the same request object across attempts, does not replay ambiguous outcomes or non-retryable failures, and propagates committed-stream failures.
+    seamIds:
+      - providers-b2-retry-stream-wrapper
+    riskIds:
+      - providers-b2-unsafe-stream-replay
+  - id: providers-b2-retry-backoff-and-abort
+    statement: RetryingModel uses the upstream retry backoff schedule and allows an aborted turn to interrupt or skip pending backoff without invoking the wrapped model again.
+    seamIds:
+      - providers-b2-retry-stream-wrapper
+    riskIds:
+      - providers-b2-unsafe-stream-replay
+  - id: providers-b2-retry-budget-exhaustion
+    statement: RetryingModel claims only recovery attempts from the retry budget and raises a typed exhaustion error carrying the triggering provider failure as cause when claims run out.
+    seamIds:
+      - providers-b2-retry-recovery-budget
+    riskIds:
+      - providers-b2-unsafe-stream-replay
+  - id: providers-b2-exa-provider-definition
+    statement: The Exa provider definition exposes the stable id and label, callable search and configuration methods, and declares its API-key setting as sensitive.
+    seamIds:
+      - providers-b2-exa-provider-adapter
+    riskIds:
+      - providers-b2-search-credential-gate
+  - id: providers-b2-exa-credential-gate
+    statement: Exa configuration is true only for a non-empty API key, and a search without that key rejects with an actionable configuration error before making a request.
+    seamIds:
+      - providers-b2-exa-provider-adapter
+    riskIds:
+      - providers-b2-search-credential-gate
+  - id: providers-b2-web-search-registry-selection
+    statement: The web-search registry rejects duplicate ids, preserves registration order, supports an explicit or first-registration default, and resolves a configured provider with fallback to the default or undefined when empty.
+    seamIds:
+      - providers-b2-web-search-registry
+    riskIds:
+      - providers-b2-search-credential-gate
+  - id: providers-b2-tavily-provider-definition
+    statement: The Tavily provider definition exposes the stable id and label, callable search and configuration methods, and declares its API-key setting as sensitive.
+    seamIds:
+      - providers-b2-tavily-provider-adapter
+    riskIds:
+      - providers-b2-search-credential-gate
+  - id: providers-b2-tavily-credential-gate
+    statement: Tavily configuration is true only for a non-empty API key, and a search without that key rejects with an actionable configuration error before making a request.
+    seamIds:
+      - providers-b2-tavily-provider-adapter
+    riskIds:
+      - providers-b2-search-credential-gate
+  - id: providers-b2-websocket-close-classification
+    statement: A WebSocket close error preserves close code and reason evidence, distinguishes provably unsent requests from flushed or ambiguous dispatches, and remains classifiable for recoverable versus deliberate closes.
+    seamIds:
+      - providers-b2-websocket-close-evidence
+      - providers-b2-websocket-dispatch-evidence
+    riskIds:
+      - providers-b2-websocket-lifecycle-loss
+      - providers-b2-unsafe-stream-replay
+  - id: providers-b2-websocket-receive-guard
+    statement: The receive watchdog starts first-frame and inter-frame deadlines at consumption boundaries, aborts stalled streams with typed timeout outcomes, and invokes raw iterator cleanup while preserving stream or external-abort errors.
+    seamIds:
+      - providers-b2-websocket-receive-watchdog
+    riskIds:
+      - providers-b2-websocket-lifecycle-loss
+  - id: providers-b2-websocket-receive-observability
+    statement: The receive watchdog reports frame count, measured first-frame and maximum inter-frame latency, wait duration on timeout, and the budgets used for judgment without rewriting an external abort as a timeout.
+    seamIds:
+      - providers-b2-websocket-receive-watchdog
+    riskIds:
+      - providers-b2-websocket-lifecycle-loss
+  - id: providers-b2-websocket-dispatch-state
+    statement: WebSocket dispatch evidence defaults to unknown, records unsent and flushed states per request, and lets a later observation replace an earlier state.
+    seamIds:
+      - providers-b2-websocket-dispatch-evidence
+    riskIds:
+      - providers-b2-unsafe-stream-replay
+  - id: providers-b2-model-catalog-cache-and-stale-loads
+    statement: ModelCatalogSession caches successful provider loads, suppresses repeated failed loads until invalidation, and marks older resolved or rejected requests stale when a newer load starts.
+    seamIds:
+      - providers-b2-model-catalog-session
+    riskIds:
+      - providers-b2-model-catalog-stale-state
+  - id: providers-b2-model-catalog-provider-navigation
+    statement: ModelCatalogSession traverses only credential-available providers according to configured order and supports directional navigation from a missing current provider.
+    seamIds:
+      - providers-b2-model-catalog-session
+      - providers-b2-provider-registry
+    riskIds:
+      - providers-b2-model-catalog-stale-state
+  - id: providers-b2-model-catalog-invalidation
+    statement: Invalidating a provider clears its cached and failed state, makes an in-flight result stale, and permits a subsequent load after credentials recover.
+    seamIds:
+      - providers-b2-model-catalog-session
+    riskIds:
+      - providers-b2-model-catalog-stale-state
+  - id: providers-b2-provider-management-facade
+    statement: ProviderManagementSession persists provider ordering through the settings boundary and safely forwards deletion of an unknown provider without throwing.
+    seamIds:
+      - providers-b2-provider-management-session
+    riskIds:
+      - providers-b2-provider-settings-corruption
+  - id: providers-b2-web-search-registry
+    label: Web-search provider registration, default selection, configured lookup, and test isolation.
+  - id: providers-b2-tavily-provider-adapter
+    label: Tavily web-search adapter configuration gate and provider definition.
+  - id: providers-b2-websocket-close-evidence
+    label: Conversion of close frames and dispatch evidence into recovery-classifiable errors.
+  - id: providers-b2-websocket-dispatch-evidence
+    label: Per-request recording of whether a WebSocket frame was unsent, flushed, or unknown.
+  - id: providers-b2-websocket-receive-watchdog
+    label: First-frame and inter-frame receive deadlines, cleanup, abort propagation, and timing evidence.
+  - id: providers-b2-model-catalog-session
+    label: Model load cache, stale request suppression, credential-aware traversal, and invalidation.
+  - id: providers-b2-provider-management-session
+    label: Service facade forwarding provider management operations to settings-backed policy.
+tests:
+  - kind: file
+    id: providers-provider-opaque-compatibility
+    file: source/providers/provider-opaque-compatibility.test.ts
+    domainId: providers
+    suiteId: providers-b2-unit
+    contractIds:
+      - providers-b2-opaque-tag-extraction
+      - providers-b2-opaque-lane-acceptance
+      - providers-b2-foreign-opaque-detection
+    fixtureIds:
+      - providers-b2-opaque-history-shapes
+  - kind: file
+    id: providers-provider-service
+    file: source/providers/provider-service.test.ts
+    domainId: providers
+    suiteId: providers-b2-unit
+    contractIds:
+      - providers-b2-provider-name-and-url-validation
+      - providers-b2-provider-items-projection
+      - providers-b2-provider-persistence-and-lifecycle
+    fixtureIds:
+      - providers-b2-provider-settings-doubles
+  - kind: file
+    id: providers-registry
+    file: source/providers/registry.test.ts
+    domainId: providers
+    suiteId: providers-b2-unit
+    contractIds:
+      - providers-b2-provider-registry-lookups
+      - providers-b2-provider-ordering
+    fixtureIds:
+      - providers-b2-registered-provider-definitions
+  - kind: file
+    id: providers-responses-websocket-sessions
+    file: source/providers/responses-websocket-sessions.test.ts
+    domainId: providers
+    suiteId: providers-b2-unit
+    contractIds:
+      - providers-b2-responses-socket-isolation
+      - providers-b2-responses-socket-safety
+    fixtureIds:
+      - providers-b2-fake-responses-sockets
+  - kind: file
+    id: providers-retrying-model
+    file: source/providers/retrying-model.test.ts
+    domainId: providers
+    suiteId: providers-b2-unit
+    contractIds:
+      - providers-b2-retry-boundary
+      - providers-b2-retry-backoff-and-abort
+      - providers-b2-retry-budget-exhaustion
+    fixtureIds:
+      - providers-b2-streamed-turn-doubles
+  - kind: file
+    id: providers-exa-provider
+    file: source/providers/web-search/exa.provider.test.ts
+    domainId: providers
+    suiteId: providers-b2-unit
+    contractIds:
+      - providers-b2-exa-provider-definition
+      - providers-b2-exa-credential-gate
+    fixtureIds:
+      - providers-b2-exa-settings-double
+decisions:
+  - id: providers-provider-opaque-compatibility-providers-b2-m3
+    testId: providers-provider-opaque-compatibility
+    role: second_opinion
+    reviewer: providers-b2-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-b2-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The tests pin both persisted opaque-item representations and the asymmetric legacy compatibility rule at a provider-switch safety boundary.
+    evidence:
+      - source/providers/provider-opaque-compatibility.ts:57-79 implements two input shapes and explicitly excludes the legacy tag on Responses; the test covers each branch with structured booleans or undefined.
+      - No exact sibling test asserting providerOpaqueTagOf or acceptsProviderOpaqueTag was found in the repository search; this file is the direct evidence for the lane policy.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-provider-service-providers-b2-m3
+    testId: providers-provider-service
+    role: second_opinion
+    reviewer: providers-b2-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-b2-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is the direct contract coverage for provider wizard validation, malformed settings tolerance, selection projection, persistence, registry synchronization, and active-provider fallback.
+    evidence:
+      - source/providers/provider-service.ts:50-237 and 240-288 contain separate normalization, persistence, selection, credential, and active-provider branches exercised by the file's cases.
+      - The malformed-entry cases and preservation assertion protect tolerant settings migration behavior not represented by the happy-path provider management test.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-registry-providers-b2-m3
+    testId: providers-registry
+    role: second_opinion
+    reviewer: providers-b2-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-b2-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Registry lookup and ordering are small public functions whose failure would remove built-in providers or silently change user-visible provider precedence.
+    evidence:
+      - source/providers/index.ts: registry exports getProvider, getAllProviders, getProviderIds, and sortProvidersByOrder; this file checks known/unknown lookup, definition shape, and all ordering edge cases.
+      - source/providers/provider-service.test.ts also checks registry-derived labels and built-in inclusion, but does not assert the registry's enumeration or ordering contract, so it is not a replacement.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-responses-websocket-sessions-providers-b2-m3
+    testId: providers-responses-websocket-sessions
+    role: second_opinion
+    reviewer: providers-b2-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-b2-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The pool protects a critical concurrency and connection-lifetime boundary; fake sockets make the distinct-socket, reuse, retirement, listener, and shutdown outcomes directly observable.
+    evidence:
+      - source/providers/responses-websocket-sessions.ts:39-103 tracks session-key slots, in-flight counts, fingerprints, age, error listeners, and close cleanup; each branch has an explicit assertion in this file.
+      - No exact sibling test for ResponsesWebSocketSessions acquire/release lifecycle was found; the nearest websocket tests cover dispatch or close evidence rather than pooling.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-retrying-model-providers-b2-m3
+    testId: providers-retrying-model
+    role: second_opinion
+    reviewer: providers-b2-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-b2-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: RetryingModel combines safety-critical pre-event replay rules with retry classification, abortable backoff, and recovery-budget accounting; the cases distinguish outcomes that must not be conflated.
+    evidence:
+      - source/providers/retrying-model.ts:90-119 gates retries on commitment, abort state, classification, and budget claims; the test asserts call counts, event propagation, immutable request identity, and typed causes.
+      - source/services/retry/retry-error-classification.test.ts and source/services/retry/upstream-retry-policy.test.ts exercise lower-level policy helpers, but neither replaces this wrapper-level streamed-turn boundary.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-exa-provider-providers-b2-m3
+    testId: providers-exa-provider
+    role: second_opinion
+    reviewer: providers-b2-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-b2-m3.yaml
+    recommendation: keep
+    confidence: medium
+    reason: The tests preserve provider registration metadata and the credential admission guard, including the no-key path that must fail before network use.
+    evidence:
+      - source/providers/web-search/exa.provider.ts:29-37 rejects missing credentials before fetch and lines 95-110 define the sensitive-key-aware provider object; the file checks both public surfaces.
+      - source/providers/web-search/tavily.provider.test.ts covers the analogous Tavily adapter but is a different provider and cannot replace Exa's own setting key and registration metadata.
+    replacementTestIds: []
+    status: proposed

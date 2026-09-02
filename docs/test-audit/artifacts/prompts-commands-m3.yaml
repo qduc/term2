@@ -1,0 +1,616 @@
+schemaVersion: 2
+domains:
+  - id: prompts-commands
+    label: Prompt construction and slash-command behavior
+suites:
+  - id: unit
+    label: Deterministic unit and seam tests
+seams:
+  - id: prompts-commands-command-factory
+    label: Boundary where a slash-command factory turns injected callbacks into a command contract
+  - id: prompts-commands-settings-command
+    label: Boundary where slash commands persist settings, apply runtime values, and announce state
+  - id: prompts-commands-conversation-command
+    label: Boundary where slash commands request compaction, resume, or retry work
+  - id: prompts-commands-rewind-command
+    label: Boundary where rewind command text resolves a visible turn and chooses edit or resend behavior
+  - id: prompts-commands-skill-command
+    label: Boundary where a named skill is selected for the next request
+  - id: prompts-commands-slash-resolver
+    label: Boundary where typed command names resolve by exact or unique-prefix matching
+  - id: prompts-commands-profile-selection
+    label: Boundary where a model and profile select prompt base content
+  - id: prompts-commands-prompt-constructor
+    label: Boundary where profile, mode, and feature settings become a prompt specification
+  - id: prompts-commands-prompt-addendum
+    label: Boundary where runtime capability checks produce model-facing prompt guidance
+  - id: prompts-commands-prompt-files
+    label: Boundary where checked-in role and mode prompt files define agent behavior
+risks:
+  - id: prompts-commands-command-routing
+    label: A user command invokes the wrong action, clears input unexpectedly, or reports the wrong command state.
+    severity: high
+  - id: prompts-commands-setting-drift
+    label: A setting command persists a value without applying it at runtime, or announces a state that is not active.
+    severity: high
+  - id: prompts-commands-conversation-state-loss
+    label: Manual resume, compaction, or retry loses work, hides failure, or starts work without the expected user-visible state.
+    severity: critical
+  - id: prompts-commands-rewind-misaddress
+    label: Rewind targets the wrong visible turn or silently performs a different disposition than the user requested.
+    severity: critical
+  - id: prompts-commands-prompt-contract-drift
+    label: A model receives the wrong base prompt, mode workflow, or feature guidance after a prompt-construction change.
+    severity: high
+  - id: prompts-commands-authority-drift
+    label: Prompt guidance grants a role authority, delegation responsibility, or execution capability outside its intended contract.
+    severity: critical
+  - id: prompts-commands-environment-fallback
+    label: Prompt guidance assumes unavailable search binaries or fails to warn about unsafe shell invocation patterns.
+    severity: medium
+  - id: prompts-commands-guidance-regression
+    label: Reasoning or delegation guidance disappears or encourages wasteful, looping, or unowned work.
+    severity: high
+fixtures:
+  - id: prompts-commands-command-dependencies
+    label: Injected command callbacks, settings services, and system-message sinks
+  - id: prompts-commands-async-command-dependencies
+    label: Deferred compaction, resume, and retry promises with message sinks
+  - id: prompts-commands-rewind-harness
+    label: Visible rewind items and injected rewind, input, menu, and redraw callbacks
+  - id: prompts-commands-skill-catalog
+    label: Deterministic available-skill records and selection callbacks
+  - id: prompts-commands-prompt-file-fixtures
+    label: Checked-in base, mode, and role prompt files read as model-facing text
+  - id: prompts-commands-model-profile-corpus
+    label: Representative model names and built-in prompt profiles
+  - id: prompts-commands-prompt-option-matrix
+    label: Prompt feature flags, execution context, and resolved profile options
+  - id: prompts-commands-binary-capability-probe
+    label: Injected availability results for rg, fd, grep, and find
+contracts:
+  - id: prompts-commands-command-metadata
+    statement: Each command factory exposes its documented name, description, argument expectation, and completion metadata, and command actions return the handler result expected by the dispatcher.
+    seamIds:
+      - prompts-commands-command-factory
+    riskIds:
+      - prompts-commands-command-routing
+  - id: prompts-commands-auto-approval-transition
+    statement: Auto-approval accepts the four supported modes after normalization, persists and applies valid changes, announces the active mode, opens value selection for empty input, and leaves state unchanged for invalid input; always mode explicitly warns that the sandbox is disabled.
+    seamIds:
+      - prompts-commands-settings-command
+    riskIds:
+      - prompts-commands-setting-drift
+      - prompts-commands-command-routing
+  - id: prompts-commands-compaction-lifecycle
+    statement: Manual compaction immediately announces that work started, later reports the successful summary, and reports asynchronous failures without submitting a chat turn.
+    seamIds:
+      - prompts-commands-conversation-command
+    riskIds:
+      - prompts-commands-conversation-state-loss
+  - id: prompts-commands-resume-grammar
+    statement: Resume treats empty, list, and ls input as browse requests, accepts one safe conversation id for resumption, and reports malformed or multi-token input without resuming a target.
+    seamIds:
+      - prompts-commands-conversation-command
+      - prompts-commands-command-factory
+    riskIds:
+      - prompts-commands-conversation-state-loss
+      - prompts-commands-command-routing
+  - id: prompts-commands-retry-outcomes
+    statement: Retry-turn and retry-tool start their respective asynchronous retry operation and stay silent on success while reporting the documented message when no new response or tool call can be retried.
+    seamIds:
+      - prompts-commands-conversation-command
+    riskIds:
+      - prompts-commands-conversation-state-loss
+  - id: prompts-commands-rewind-resolution
+    statement: Rewind resolves last and explicit visible picker positions, handles offset store turn numbers, rejects invalid or conflicting targets, and reports when there is no available turn without mutating the conversation.
+    seamIds:
+      - prompts-commands-rewind-command
+    riskIds:
+      - prompts-commands-rewind-misaddress
+      - prompts-commands-conversation-state-loss
+  - id: prompts-commands-rewind-disposition
+    statement: A rewound turn is either restored to input for editing or resent with its text and images, explicit disposition arguments override defaults, aliases explain the canonical command, and redraw occurs only after a successful rewind.
+    seamIds:
+      - prompts-commands-rewind-command
+    riskIds:
+      - prompts-commands-rewind-misaddress
+      - prompts-commands-command-routing
+  - id: prompts-commands-sandbox-toggle
+    statement: The sandbox command toggles sandbox.enabled, applies the same value to runtime settings, and announces whether shell access is restricted or unrestricted.
+    seamIds:
+      - prompts-commands-settings-command
+    riskIds:
+      - prompts-commands-setting-drift
+  - id: prompts-commands-skill-activation
+    statement: Skills command selection is case-insensitive and whitespace-tolerant, activates the matching available skill and announces the next-request flow, while empty or unknown names route to browsing or an error without selecting a skill.
+    seamIds:
+      - prompts-commands-skill-command
+      - prompts-commands-command-factory
+    riskIds:
+      - prompts-commands-command-routing
+  - id: prompts-commands-slash-resolution
+    statement: Slash-command resolution prefers an exact case-insensitive name, accepts a unique case-insensitive prefix, and returns no command for an ambiguous prefix.
+    seamIds:
+      - prompts-commands-slash-resolver
+    riskIds:
+      - prompts-commands-command-routing
+  - id: prompts-commands-model-profile-routing
+    statement: Prompt profile selection maps lite mode and model-family strings to existing base prompt files, preserves the gpt-5.6 and codex boundaries, and falls back to a valid base for unknown models.
+    seamIds:
+      - prompts-commands-profile-selection
+    riskIds:
+      - prompts-commands-prompt-contract-drift
+  - id: prompts-commands-prompt-spec-composition
+    statement: Prompt construction composes the selected base, stable fragment order, and conditional inline or fragment guidance from profile and feature options, including sandbox, search, memory, session browser, and subagent capabilities.
+    seamIds:
+      - prompts-commands-prompt-constructor
+      - prompts-commands-prompt-addendum
+    riskIds:
+      - prompts-commands-prompt-contract-drift
+      - prompts-commands-authority-drift
+  - id: prompts-commands-cache-stable-mode-prefix
+    statement: Non-lite built-in modes receive equivalent cache-stable instruction prefixes with mode stubs, while full Plan workflow content is delivered through the Plan enter notice and lite mode remains minimal.
+    seamIds:
+      - prompts-commands-prompt-constructor
+      - prompts-commands-prompt-files
+    riskIds:
+      - prompts-commands-prompt-contract-drift
+  - id: prompts-commands-search-guidance
+    statement: Search-via-shell guidance selects rg and fd when locally available, falls back independently to grep and find when unavailable or remote, and includes explicit-path, stdin, regex-ordering, and shell-hygiene safeguards.
+    seamIds:
+      - prompts-commands-prompt-addendum
+    riskIds:
+      - prompts-commands-environment-fallback
+      - prompts-commands-guidance-regression
+  - id: prompts-commands-reasoning-guidance
+    statement: The reasoning-efficiency addendum is non-empty and instructs the model to match effort to difficulty, settle confirmed context, revise at most once, and end once the answer is complete.
+    seamIds:
+      - prompts-commands-prompt-addendum
+    riskIds:
+      - prompts-commands-guidance-regression
+  - id: prompts-commands-delegation-guidance
+    statement: Delegation guidance names the available execution mode, keeps diagnosis and outcome ownership with the parent, and frames bounded autonomous tasks without encouraging redundant direct work or librarian advertising.
+    seamIds:
+      - prompts-commands-prompt-addendum
+    riskIds:
+      - prompts-commands-authority-drift
+      - prompts-commands-guidance-regression
+  - id: prompts-commands-explorer-delegation-contract
+    statement: Explorer-facing and plan-facing prompt files bound evidence collection to a scoped question, keep analysis and synthesis with the parent, and require bounded task framing for delegated roles.
+    seamIds:
+      - prompts-commands-prompt-files
+    riskIds:
+      - prompts-commands-authority-drift
+  - id: prompts-commands-orchestrator-contract
+    statement: Orchestrator prompt text keeps the orchestrator as the user-facing outcome owner, permits bounded delegation and integration judgment, and documents honest completion, validation, steering, and cancellation boundaries.
+    seamIds:
+      - prompts-commands-prompt-files
+    riskIds:
+      - prompts-commands-authority-drift
+      - prompts-commands-guidance-regression
+  - id: prompts-commands-role-prompt-boundaries
+    statement: Worker and explorer role prompts require the available execution and escalation discipline, including validation evidence for workers and no direct user contact for execution roles.
+    seamIds:
+      - prompts-commands-prompt-files
+    riskIds:
+      - prompts-commands-authority-drift
+      - prompts-commands-guidance-regression
+tests:
+  - kind: file
+    id: prompts-commands-auto-approve
+    file: source/commands/auto-approve-command.test.ts
+    domainId: prompts-commands
+    suiteId: unit
+    contractIds:
+      - prompts-commands-command-metadata
+      - prompts-commands-auto-approval-transition
+    fixtureIds:
+      - prompts-commands-command-dependencies
+  - kind: file
+    id: prompts-commands-compact
+    file: source/commands/compact-command.test.ts
+    domainId: prompts-commands
+    suiteId: unit
+    contractIds:
+      - prompts-commands-compaction-lifecycle
+    fixtureIds:
+      - prompts-commands-async-command-dependencies
+  - kind: file
+    id: prompts-commands-resume
+    file: source/commands/resume-command.test.ts
+    domainId: prompts-commands
+    suiteId: unit
+    contractIds:
+      - prompts-commands-command-metadata
+      - prompts-commands-resume-grammar
+    fixtureIds:
+      - prompts-commands-async-command-dependencies
+      - prompts-commands-command-dependencies
+  - kind: file
+    id: prompts-commands-retry-failed-turn
+    file: source/commands/retry-failed-turn-command.test.ts
+    domainId: prompts-commands
+    suiteId: unit
+    contractIds:
+      - prompts-commands-retry-outcomes
+    fixtureIds:
+      - prompts-commands-async-command-dependencies
+  - kind: file
+    id: prompts-commands-retry-tool
+    file: source/commands/retry-tool-command.test.ts
+    domainId: prompts-commands
+    suiteId: unit
+    contractIds:
+      - prompts-commands-retry-outcomes
+    fixtureIds:
+      - prompts-commands-async-command-dependencies
+  - kind: file
+    id: prompts-commands-rewind
+    file: source/commands/rewind-command.test.ts
+    domainId: prompts-commands
+    suiteId: unit
+    contractIds:
+      - prompts-commands-rewind-resolution
+      - prompts-commands-rewind-disposition
+    fixtureIds:
+      - prompts-commands-rewind-harness
+  - kind: file
+    id: prompts-commands-sandbox
+    file: source/commands/sandbox-command.test.ts
+    domainId: prompts-commands
+    suiteId: unit
+    contractIds:
+      - prompts-commands-command-metadata
+      - prompts-commands-sandbox-toggle
+    fixtureIds:
+      - prompts-commands-command-dependencies
+  - kind: file
+    id: prompts-commands-skills
+    file: source/commands/skills-command.test.ts
+    domainId: prompts-commands
+    suiteId: unit
+    contractIds:
+      - prompts-commands-command-metadata
+      - prompts-commands-skill-activation
+    fixtureIds:
+      - prompts-commands-command-dependencies
+      - prompts-commands-skill-catalog
+  - kind: file
+    id: prompts-commands-explorer-delegation-contract
+    file: source/prompts/explorer-delegation-contract.test.ts
+    domainId: prompts-commands
+    suiteId: unit
+    contractIds:
+      - prompts-commands-explorer-delegation-contract
+    fixtureIds:
+      - prompts-commands-prompt-file-fixtures
+  - kind: file
+    id: prompts-commands-orchestrator-prompt
+    file: source/prompts/orchestrator-prompt.test.ts
+    domainId: prompts-commands
+    suiteId: unit
+    contractIds:
+      - prompts-commands-orchestrator-contract
+    fixtureIds:
+      - prompts-commands-prompt-file-fixtures
+  - kind: file
+    id: prompts-commands-prefix-quality
+    file: source/prompts/prefix-quality.test.ts
+    domainId: prompts-commands
+    suiteId: unit
+    contractIds:
+      - prompts-commands-cache-stable-mode-prefix
+      - prompts-commands-prompt-spec-composition
+    fixtureIds:
+      - prompts-commands-prompt-file-fixtures
+      - prompts-commands-prompt-option-matrix
+  - kind: file
+    id: prompts-commands-prompt-constructor
+    file: source/prompts/prompt-constructor.test.ts
+    domainId: prompts-commands
+    suiteId: unit
+    contractIds:
+      - prompts-commands-model-profile-routing
+      - prompts-commands-prompt-spec-composition
+      - prompts-commands-cache-stable-mode-prefix
+    fixtureIds:
+      - prompts-commands-model-profile-corpus
+      - prompts-commands-prompt-option-matrix
+  - kind: file
+    id: prompts-commands-prompt-profiles
+    file: source/prompts/prompt-profiles.test.ts
+    domainId: prompts-commands
+    suiteId: unit
+    contractIds:
+      - prompts-commands-model-profile-routing
+    fixtureIds:
+      - prompts-commands-model-profile-corpus
+      - prompts-commands-prompt-file-fixtures
+  - kind: file
+    id: prompts-commands-reasoning-efficiency
+    file: source/prompts/reasoning-efficiency.test.ts
+    domainId: prompts-commands
+    suiteId: unit
+    contractIds:
+      - prompts-commands-reasoning-guidance
+    fixtureIds: []
+  - kind: file
+    id: prompts-commands-search-via-shell
+    file: source/prompts/search-via-shell.test.ts
+    domainId: prompts-commands
+    suiteId: unit
+    contractIds:
+      - prompts-commands-search-guidance
+    fixtureIds:
+      - prompts-commands-binary-capability-probe
+  - kind: file
+    id: prompts-commands-subagent-delegation
+    file: source/prompts/subagent-delegation.test.ts
+    domainId: prompts-commands
+    suiteId: unit
+    contractIds:
+      - prompts-commands-delegation-guidance
+    fixtureIds: []
+  - kind: file
+    id: prompts-commands-worker-prompt
+    file: source/prompts/subagents/worker-prompt.test.ts
+    domainId: prompts-commands
+    suiteId: unit
+    contractIds:
+      - prompts-commands-role-prompt-boundaries
+    fixtureIds:
+      - prompts-commands-prompt-file-fixtures
+  - kind: file
+    id: prompts-commands-slash-commands
+    file: source/slash-commands.test.ts
+    domainId: prompts-commands
+    suiteId: unit
+    contractIds:
+      - prompts-commands-slash-resolution
+    fixtureIds:
+      - prompts-commands-command-dependencies
+decisions:
+  - id: prompts-commands-auto-approve-prompts-commands-m3
+    testId: prompts-commands-auto-approve
+    role: second_opinion
+    reviewer: prompts-commands-m3
+    sourceArtifact: docs/test-audit/artifacts/prompts-commands-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: high
+    reason: The setting transition contract is meaningful and unique at this command seam, but four action tests duplicate the same inline settings, apply, and message harness instead of using a compact case matrix or helper.
+    evidence:
+      - The file's metadata, empty-input, valid-mode, always-warning, normalization, and invalid-mode cases cover distinct observable outcomes at createAutoApproveSlashCommand.
+      - The valid, always, normalized, and invalid action cases each recreate equivalent settingsService, applyRuntimeSetting, and addSystemMessage dependencies; a table-driven fixture would reduce repetition without removing boundary cases.
+      - source/services/settings/settings-service.test.ts covers lower-level sandbox/always exclusivity, not this command's persistence, runtime-application, completion, or user-message contract, so it is not a replacement.
+    replacementTestIds: []
+    status: proposed
+  - id: prompts-commands-compact-prompts-commands-m3
+    testId: prompts-commands-compact
+    role: second_opinion
+    reviewer: prompts-commands-m3
+    sourceArtifact: docs/test-audit/artifacts/prompts-commands-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The file protects the user-visible asynchronous compaction lifecycle at the command boundary, including the blank-screen regression guard and failure conversion.
+    evidence:
+      - The deferred promise case proves the start announcement precedes completion; the success and rejection cases exercise both settled outcomes.
+      - source/services/session/turn-workflow.outcome-contract.test.ts exercises compaction/continuation workflow behavior, but does not assert createCompactSlashCommand's immediate announcement or failure message.
+    replacementTestIds: []
+    status: proposed
+  - id: prompts-commands-resume-prompts-commands-m3
+    testId: prompts-commands-resume
+    role: second_opinion
+    reviewer: prompts-commands-m3
+    sourceArtifact: docs/test-audit/artifacts/prompts-commands-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: medium
+    reason: Resume parsing and the browse-versus-target return contract matter, but the file repeats command construction and callback mocks across cases and overlaps with the same factory outcomes in the hook test.
+    evidence:
+      - The file uniquely checks metadata, empty/undefined/list browse routing, target dispatch, token-count rejection, and path-safe id rejection at createResumeSlashCommand.
+      - source/hooks/use-app-commands.test.ts repeats the empty/ls browse and target/extra-argument/invalid-id outcomes, although through hook wiring; this is sibling evidence of overlap, not a safe replacement for the focused factory seam.
+      - The repeated local command setup can be consolidated into a shared harness or table for grammar cases while retaining the async target dispatch assertion.
+    replacementTestIds: []
+    status: proposed
+  - id: prompts-commands-retry-failed-turn-prompts-commands-m3
+    testId: prompts-commands-retry-failed-turn
+    role: second_opinion
+    reviewer: prompts-commands-m3
+    sourceArtifact: docs/test-audit/artifacts/prompts-commands-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is the only focused command-seam evidence that retry-turn starts the failed-turn retry and translates a false result into its user-facing diagnostic while keeping success silent.
+    evidence:
+      - The two tests distinguish promise success from no-new-response reporting and assert the command's immediate true return.
+      - source/services/subagents/subagent-manager.retry.test.ts covers nested subagent retry events, not the retry-turn slash-command adapter, so it cannot replace this evidence.
+    replacementTestIds: []
+    status: proposed
+  - id: prompts-commands-retry-tool-prompts-commands-m3
+    testId: prompts-commands-retry-tool
+    role: second_opinion
+    reviewer: prompts-commands-m3
+    sourceArtifact: docs/test-audit/artifacts/prompts-commands-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The command is a separate public action from rewind and protects both silent successful retry and the no-tool diagnostic.
+    evidence:
+      - The tests assert retryLastToolOutput is invoked asynchronously, success remains silent, and false reports exactly No tool call to retry.
+      - source/utils/conversation/message-utils.test.ts asserts a lower-level transcript preparation rule for retry-tool, but not this command's callback and message behavior.
+    replacementTestIds: []
+    status: proposed
+  - id: prompts-commands-rewind-prompts-commands-m3
+    testId: prompts-commands-rewind
+    role: second_opinion
+    reviewer: prompts-commands-m3
+    sourceArtifact: docs/test-audit/artifacts/prompts-commands-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This broad file is a coherent focused suite for a high-risk command grammar and its edit/resend side effects; its helper harness avoids the duplication that would make a rewrite candidate.
+    evidence:
+      - Cases cover picker and last defaults, visible-position versus offset turn numbering, empty and invalid targets, edit/resend order and overrides, image preservation, aliases, and redraw gating.
+      - source/services/session/session-manager.test.ts and source/services/conversation/conversation-service.facade.test.ts cover domain rewind cleanup and persistence, not command argument resolution, disposition, or input/menu side effects.
+      - The shared makeHarness and makeCommand helpers centralize setup while keeping independently changeable target, disposition, alias, invalid-input, and side-effect contracts visible.
+    replacementTestIds: []
+    status: proposed
+  - id: prompts-commands-sandbox-prompts-commands-m3
+    testId: prompts-commands-sandbox
+    role: second_opinion
+    reviewer: prompts-commands-m3
+    sourceArtifact: docs/test-audit/artifacts/prompts-commands-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: high
+    reason: The toggle and announcement contract is valuable, but the two state-direction tests duplicate the full dependency harness and do not exercise the command's always-mode demotion note.
+    evidence:
+      - The true-to-false and false-to-true cases prove persistence, runtime application, and distinct status text at createSandboxSlashCommand.
+      - source/services/settings/settings-service.test.ts and source/components/layout/StatusBar.test.tsx cover lower-level normalization/display of sandbox and always settings, not command callback ordering and announcement.
+      - A small parameterized state table can retain both directions and add the production branch where enabling sandbox demotes always, while removing repeated setup.
+    replacementTestIds: []
+    status: proposed
+  - id: prompts-commands-skills-prompts-commands-m3
+    testId: prompts-commands-skills
+    role: second_opinion
+    reviewer: prompts-commands-m3
+    sourceArtifact: docs/test-audit/artifacts/prompts-commands-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: high
+    reason: Skill selection is a real next-request command contract, but four cases repeat the same service and callback setup and can be expressed as a compact input/outcome table alongside the metadata case.
+    evidence:
+      - The file protects metadata/completion, valid selection and announcement, unknown-name rejection, empty browse routing, case-insensitive matching, and whitespace normalization.
+      - No sibling test found imports createSkillsSlashCommand or asserts its activation/error text; the unique seam should remain covered.
+      - Each action case rebuilds equivalent selectedSkills, messages, inputs, and command dependencies, making setup-only consolidation defensible without deleting any behavior case.
+    replacementTestIds: []
+    status: proposed
+  - id: prompts-commands-explorer-delegation-contract-prompts-commands-m3
+    testId: prompts-commands-explorer-delegation-contract
+    role: second_opinion
+    reviewer: prompts-commands-m3
+    sourceArtifact: docs/test-audit/artifacts/prompts-commands-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This test protects product-authored parent/explorer ownership language across the model-specific and plan-mode prompt files, rather than a disposable rendering snapshot.
+    evidence:
+      - It checks bounded evidence collection, parent-owned analysis/synthesis, one-task framing, and distinct scope discipline across gpt-5.6, kimi, plan, orchestrator, explorer, worker, mentor, and librarian prompt files.
+      - No assigned sibling asserts the same cross-file explorer contract; source/tools/agent/run-subagent.test.ts checks tool description wording, a different generated seam.
+    replacementTestIds: []
+    status: proposed
+  - id: prompts-commands-orchestrator-prompt-prompts-commands-m3
+    testId: prompts-commands-orchestrator-prompt
+    role: second_opinion
+    reviewer: prompts-commands-m3
+    sourceArtifact: docs/test-audit/artifacts/prompts-commands-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The orchestrator markdown is product behavior governing user contact, delegation ownership, worktree coordination, and control semantics; these assertions are targeted contract checks rather than snapshots.
+    evidence:
+      - Cases cover outcome ownership, no obsolete direct-work advice, overrule authority, disagreement reporting, own-voice final reporting, worktree pinning, status/result discipline, structured validation evidence, and steering/cancellation limits.
+      - source/services/mode-notices.test.ts checks the mode-entry notice, while this file checks the detailed orchestrator role prompt; neither replaces the other.
+    replacementTestIds: []
+    status: proposed
+  - id: prompts-commands-prefix-quality-prompts-commands-m3
+    testId: prompts-commands-prefix-quality
+    role: second_opinion
+    reviewer: prompts-commands-m3
+    sourceArtifact: docs/test-audit/artifacts/prompts-commands-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This integration-level prompt contract verifies mode notices, prefix cache stability, agent assembly, and prompt fragment selection together; it catches wiring regressions that direct prompt-constructor tests cannot.
+    evidence:
+      - The cases read real prompt files, construct standard/plan/mentor agent definitions, and compare live instructions/tools plus Plan notice and stub/full workflow boundaries.
+      - source/prompts/prompt-constructor.test.ts directly checks PromptSpec values, but does not replace the getAgentDefinition and profileEnterNotice integration assertions here.
+      - source/agent.test.ts checks selected instruction inclusion for some features, but not the mode-prefix equality and Plan notice relationship.
+    replacementTestIds: []
+    status: proposed
+  - id: prompts-commands-prompt-constructor-prompts-commands-m3
+    testId: prompts-commands-prompt-constructor
+    role: second_opinion
+    reviewer: prompts-commands-m3
+    sourceArtifact: docs/test-audit/artifacts/prompts-commands-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is the focused contract matrix for the central prompt-spec constructor, spanning model routing, stable fragment composition, lite/non-lite differences, and conditional capability guidance.
+    evidence:
+      - Independent cases exercise gpt-5.6/codex boundaries, all non-lite profile equivalence, fragment order, approval and Plan stubs, lite minimization, sandbox/background/memory/session-browser, and foreground/background subagent guidance.
+      - source/agent.test.ts and source/prompts/prefix-quality.test.ts provide integration or selected feature checks, but neither covers this constructor's full option matrix and ordering contract.
+      - The cases have independently changeable feature contracts and already use small local option objects; no deletion or broad rewrite is justified by observed duplication.
+    replacementTestIds: []
+    status: proposed
+  - id: prompts-commands-prompt-profiles-prompts-commands-m3
+    testId: prompts-commands-prompt-profiles
+    role: second_opinion
+    reviewer: prompts-commands-m3
+    sourceArtifact: docs/test-audit/artifacts/prompts-commands-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The file guards the profile registry's filesystem validity and its all-model fallback guarantee, a small unique seam with direct failure impact on every prompt request.
+    evidence:
+      - One case enumerates every registered base file on disk and another probes lite, known families, unknown, and empty models for a non-empty selected base.
+      - source/prompts/prompt-constructor.test.ts checks selected outputs for representative models through buildPromptSpec, but does not enumerate registry file existence or unknown-model selection directly.
+    replacementTestIds: []
+    status: proposed
+  - id: prompts-commands-reasoning-efficiency-prompts-commands-m3
+    testId: prompts-commands-reasoning-efficiency
+    role: second_opinion
+    reviewer: prompts-commands-m3
+    sourceArtifact: docs/test-audit/artifacts/prompts-commands-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This small direct test protects the intentionally product-authored reasoning-efficiency addendum from becoming empty or losing its core behavioral guidance.
+    evidence:
+      - It asserts the exported value is a non-empty string and contains the heading plus settle-context and end-when-done guidance.
+      - No sibling test imports getReasoningEfficiencyAddendum or asserts these exact model-facing instructions; UI reasoning tests concern rendering, not prompt behavior.
+    replacementTestIds: []
+    status: proposed
+  - id: prompts-commands-search-via-shell-prompts-commands-m3
+    testId: prompts-commands-search-via-shell
+    role: second_opinion
+    reviewer: prompts-commands-m3
+    sourceArtifact: docs/test-audit/artifacts/prompts-commands-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The fallback matrix protects model-facing shell-search safety guidance under local and remote capability conditions, including warnings that prevent silent search mistakes.
+    evidence:
+      - Four capability combinations independently verify rg/fd selection and grep/find fallback; dedicated cases assert explicit-path/stdin and find-regex ordering guidance.
+      - source/agent.test.ts checks whether the assembled agent includes search guidance and one fallback phrase, but does not replace this addendum's independent capability matrix and hygiene assertions.
+    replacementTestIds: []
+    status: proposed
+  - id: prompts-commands-subagent-delegation-prompts-commands-m3
+    testId: prompts-commands-subagent-delegation
+    role: second_opinion
+    reviewer: prompts-commands-m3
+    sourceArtifact: docs/test-audit/artifacts/prompts-commands-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Delegation guidance is product behavior controlling authority and context ownership; the cases protect both foreground/self-service and orchestrator/background control variants.
+    evidence:
+      - Cases assert non-empty delegation and task-framing text, no obsolete direct-work or librarian guidance, parent-owned diagnosis, autonomous worker scope, and honest steering/cancellation/fresh-turn limits.
+      - source/tools/agent/run-subagent.test.ts and source/tools/agent/run-subagent-async.test.ts assert tool schemas/descriptions, not the generated model-facing addendum branches exercised here.
+      - The file's async and sync variants can change independently as execution capabilities evolve, so consolidation would risk losing policy distinctions.
+    replacementTestIds: []
+    status: proposed
+  - id: prompts-commands-worker-prompt-prompts-commands-m3
+    testId: prompts-commands-worker-prompt
+    role: second_opinion
+    reviewer: prompts-commands-m3
+    sourceArtifact: docs/test-audit/artifacts/prompts-commands-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This direct role-prompt test protects execution-agent safety and evidence discipline in checked-in worker and explorer instructions.
+    evidence:
+      - Cases require a worker validation command, automatic validation/diff-stat capture disclosure, honest shell-edit caveats, and genuine-blocker escalation without user contact for both worker and explorer.
+      - source/agent.test.ts checks a base-model validation phrase, and source/tools/agent/run-subagent.test.ts checks generated tool descriptions; neither verifies these role-file instructions.
+    replacementTestIds: []
+    status: proposed
+  - id: prompts-commands-slash-commands-prompts-commands-m3
+    testId: prompts-commands-slash-commands
+    role: second_opinion
+    reviewer: prompts-commands-m3
+    sourceArtifact: docs/test-audit/artifacts/prompts-commands-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This three-case singleton cluster is already minimal and directly protects exact precedence, unique-prefix usability, and ambiguity safety in the public resolver.
+    evidence:
+      - The exact, unique-prefix, and ambiguous-prefix cases partition resolveSlashCommand's observable outcomes with no repeated setup beyond tiny command values.
+      - source/components/InputBox.test.tsx only comments that production matching goes through; it does not assert resolver outcomes, and source/hooks/use-app-commands.test.tsx checks registration rather than resolution precedence.
+    replacementTestIds: []
+    status: proposed
+

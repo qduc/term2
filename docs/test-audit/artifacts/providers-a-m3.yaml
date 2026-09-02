@@ -1,0 +1,957 @@
+# Provider-a Milestone 3 explorer artifact.
+# Built incrementally per explorer brief; all evidence is independently reviewed.
+schemaVersion: 2
+domains:
+  - id: providers
+    label: Provider implementations, adapters, auth, and wire fidelity
+suites:
+  - id: providers-a-unit
+    label: Vitest provider unit and contract suite
+seams:
+  - id: providers-a-aborted-recorder
+    label: Aborted stream recorder diagnostics and bounded evidence projection
+  - id: providers-a-ai-sdk-anthropic
+    label: AI SDK Anthropic provider construction, caching, settings, and stream adaptation
+  - id: providers-a-ai-sdk-google
+    label: AI SDK Google provider construction, settings, stream adaptation, and error propagation
+  - id: providers-a-ai-sdk-normalizer
+    label: Assistant-message normalization before AI SDK model delegation
+  - id: providers-a-ai-sdk-openrouter
+    label: AI SDK OpenRouter provider construction, stream adaptation, settings, and cost metadata
+  - id: providers-a-provider-migration
+    label: Lazy provider registry factories and application-owned streamed-model seam
+  - id: providers-a-provider-settings
+    label: Explicit provider-setting forwarding across unary and streaming calls
+  - id: providers-a-streamed-model
+    label: Shared AI SDK streamed-model translation, completion authority, and provider metadata
+  - id: providers-a-anthropic-middleware
+    label: Anthropic middleware session-header injection and request preservation
+  - id: providers-a-chained-wire-state
+    label: Chained Responses request delta state, token correlation, invalidation, and cleanup
+  - id: providers-a-codex-auth
+    label: Codex OAuth loopback flow, credential import, secure storage, and refresh ownership
+  - id: providers-a-codex-compaction
+    label: Codex compact-output conversion into provider-opaque history
+  - id: providers-a-codex-turn-converter
+    label: Application streamed-turn conversion to Codex Responses wire items
+  - id: providers-a-codex-websocket
+    label: Codex WebSocket stream cancellation and terminal-event settlement
+  - id: providers-a-codex-provider
+    label: Codex registry, credentials, request headers, transports, and streamed-turn adapter
+  - id: providers-a-openai-message-contract
+    label: OpenAI-compatible assistant message validity boundary
+  - id: providers-a-openai-cache-messages
+    label: OpenAI-compatible prompt-cache breakpoint placement
+  - id: providers-a-custom-provider-adapter
+    label: Custom provider type selection, sanitization, and application-owned model adapters
+  - id: providers-a-fetch-composer
+    label: Provider fetch middleware composition, rate limits, traffic logging, and failure isolation
+  - id: providers-a-grok-auth
+    label: Grok OAuth flow, credential storage, refresh ownership, and login fallback
+  - id: providers-a-grok-credit
+    label: Grok billing credit parsing, authenticated fetch, and status classification
+  - id: providers-a-grok-responses-lane
+    label: Grok Responses opaque-lane tagging and encrypted reasoning metadata
+  - id: providers-a-grok-provider
+    label: Grok registration, model discovery, authenticated fetch, cache affinity, and lane selection
+  - id: providers-a-luna-wire
+    label: Luna Responses Lite wire protocol fingerprint, prefix, normalization, and chaining
+  - id: providers-a-model-catalog
+    label: Model catalog lookup, fallback precedence, and generated-data invariants
+  - id: providers-a-model-catalog-generator
+    label: Model catalog source generation and pi-ai field/provider mapping
+  - id: providers-a-oauth-account-store
+    label: Generic OAuth multi-account persistence, migration, atomic writes, and recovery
+  - id: providers-a-oauth-accounts-facade
+    label: OAuth account provider facade, selection/removal, and session account pinning
+risks:
+  - id: providers-a-diagnostics-loss
+    label: Aborted or stalled streams lose the evidence needed for diagnosis or retain unbounded sensitive payloads.
+    severity: high
+  - id: providers-a-anthropic-fidelity
+    label: Anthropic requests or responses silently lose caching, settings, limits, reasoning, tool, usage, or error semantics.
+    severity: high
+  - id: providers-a-google-fidelity
+    label: Google requests or responses silently lose settings, reasoning, tool, usage, or error semantics.
+    severity: high
+  - id: providers-a-message-history-corruption
+    label: Provider-bound history changes assistant reasoning and tool-call replay semantics.
+    severity: high
+  - id: providers-a-openrouter-fidelity
+    label: OpenRouter routing, settings, stream events, cancellation, or usage-cost metadata are not preserved.
+    severity: high
+  - id: providers-a-legacy-seam-regression
+    label: Provider factories regress to a legacy model seam instead of the application-owned streamed model boundary.
+    severity: high
+  - id: providers-a-settings-loss
+    label: Explicit provider settings reach one operation but not the other, or nested provider values override incorrectly.
+    severity: high
+  - id: providers-a-stream-translation
+    label: AI SDK stream frames are translated into incorrect application events or incomplete authoritative completions.
+    severity: critical
+  - id: providers-a-anthropic-header-regression
+    label: OpenCode Anthropic requests lose their required stable session header or mutate request payloads.
+    severity: medium
+  - id: providers-a-chain-continuity
+    label: Chained Responses requests send the wrong delta, stale response, or cross-session state.
+    severity: critical
+  - id: providers-a-codex-auth-regression
+    label: Codex login, token ownership, refresh, or secure persistence can log users out or leak credentials.
+    severity: critical
+  - id: providers-a-codex-wire-regression
+    label: Codex history and tool data are malformed, foreign opaque data leaks, or cancellation hangs a turn.
+    severity: critical
+  - id: providers-a-message-contract-regression
+    label: Invalid assistant history reaches OpenAI-compatible providers and is rejected or silently misinterpreted.
+    severity: high
+  - id: providers-a-cache-breakpoint-regression
+    label: Provider prompt-cache breakpoints are omitted, placed on the wrong messages, or exceed provider limits.
+    severity: high
+  - id: providers-a-fetch-policy-regression
+    label: Provider fetch middleware order, retry policy, traffic visibility, or diagnostic failure handling changes network behavior.
+    severity: high
+  - id: providers-a-grok-auth-regression
+    label: Grok OAuth credentials are mishandled, refresh tokens are double-spent, or login state is bypassed.
+    severity: critical
+  - id: providers-a-credit-reporting-regression
+    label: Grok credit usage is misreported or transient/auth/rate-limit failures are conflated.
+    severity: high
+  - id: providers-a-grok-lane-regression
+    label: Grok encrypted Responses items are tagged as another provider and become unreplayable or unsafe to send.
+    severity: critical
+  - id: providers-a-catalog-regression
+    label: Model metadata lookup or generated catalog data returns wrong limits, prices, provider fallback, or invalid entries.
+    severity: high
+  - id: providers-a-oauth-accounts-regression
+    label: Multi-account OAuth persistence or facade selection can lose credentials, duplicate accounts, or pin the wrong session.
+    severity: critical
+contracts:
+  - id: providers-a-aborted-diagnostics
+    statement: The aborted-stream recorder retains replayable events and exposes event counts, timing gaps, response identity, failure frames, progress categories, and bounded tool-growth evidence; release and bounded views omit redundant or sensitive payloads without dropping metrics.
+    seamIds:
+      - providers-a-aborted-recorder
+    riskIds:
+      - providers-a-diagnostics-loss
+  - id: providers-a-anthropic-request-response
+    statement: Anthropic provider calls select the requested or default model, cap output tokens, apply eligible prompt caching, preserve explicit settings and abort signals, and translate reasoning, text, tool, completion, usage, metadata, and provider errors faithfully.
+    seamIds:
+      - providers-a-ai-sdk-anthropic
+    riskIds:
+      - providers-a-anthropic-fidelity
+  - id: providers-a-google-request-response
+    statement: Google provider calls select the requested or default model, preserve explicit Google settings and abort signals, map reasoning and tool choices, and translate stream completion usage, metadata, and errors faithfully.
+    seamIds:
+      - providers-a-ai-sdk-google
+    riskIds:
+      - providers-a-google-fidelity
+  - id: providers-a-normalized-assistant-history
+    statement: Contiguous assistant messages are merged without crossing non-assistant boundaries, preserving reasoning and tool-call content, and the wrapper delegates normalized prompt or message inputs while preserving model properties.
+    seamIds:
+      - providers-a-ai-sdk-normalizer
+    riskIds:
+      - providers-a-message-history-corruption
+  - id: providers-a-openrouter-request-response
+    statement: OpenRouter provider calls preserve configured routing options, requested or default model selection, fetch and abort behavior, stream event and completion fidelity, unary/stream settings, and provider-reported cost metadata.
+    seamIds:
+      - providers-a-ai-sdk-openrouter
+    riskIds:
+      - providers-a-openrouter-fidelity
+  - id: providers-a-application-owned-provider-factories
+    statement: Lazy provider factories for configured provider families resolve application-owned streamed models, and AI SDK provider implementations expose that streamed-model seam rather than legacy model APIs.
+    seamIds:
+      - providers-a-provider-migration
+    riskIds:
+      - providers-a-legacy-seam-regression
+  - id: providers-a-explicit-settings-forwarding
+    statement: Explicit provider settings are forwarded with the intended outer and nested provider values to both unary getResponse and streaming calls for supported provider families.
+    seamIds:
+      - providers-a-provider-settings
+    riskIds:
+      - providers-a-settings-loss
+  - id: providers-a-streamed-model-contract
+    statement: The shared AI SDK streamed model translates prompts, tools, multimodal content, settings, reasoning, cancellation, and provider frames into application events while requiring authoritative completion identity and finish semantics and preserving usage, cost, opaque-item filtering, and upstream metadata.
+    seamIds:
+      - providers-a-streamed-model
+    riskIds:
+      - providers-a-stream-translation
+  - id: providers-a-anthropic-middleware-contract
+    statement: Anthropic middleware adds a stable correctly formatted session header only for OpenCode requests, preserves existing headers and body bytes, and passes non-JSON bodies through.
+    seamIds:
+      - providers-a-anthropic-middleware
+    riskIds:
+      - providers-a-anthropic-header-regression
+  - id: providers-a-chained-state-contract
+    statement: Chained wire state uses matching response identity, request fingerprint, and reusable prefix to send the correct delta; correlates concurrent acknowledgements by token; isolates keys; and invalidates or clears stored and pending state safely.
+    seamIds:
+      - providers-a-chained-wire-state
+    riskIds:
+      - providers-a-chain-continuity
+  - id: providers-a-codex-auth-contract
+    statement: Codex OAuth login validates callback state and permitted loopback ports, imports only access credentials, stores term2-owned refresh credentials securely, refreshes only its own store, and exposes actionable missing-credential errors.
+    seamIds:
+      - providers-a-codex-auth
+    riskIds:
+      - providers-a-codex-auth-regression
+  - id: providers-a-codex-wire-contract
+    statement: Codex conversion and transport preserve supported multimodal messages, reasoning metadata, tool calls/results, provider-opaque ownership, response completion semantics, and abort settlement without malformed wire data or hangs.
+    seamIds:
+      - providers-a-codex-compaction
+      - providers-a-codex-turn-converter
+      - providers-a-codex-websocket
+    riskIds:
+      - providers-a-codex-wire-regression
+  - id: providers-a-codex-provider-contract
+    statement: The Codex registry and provider preserve credential/account routing, model/version discovery, transport selection and parity, request settings and headers, application instructions/history, continuation model identity, and completed streamed-turn events.
+    seamIds:
+      - providers-a-codex-provider
+    riskIds:
+      - providers-a-codex-wire-regression
+      - providers-a-codex-auth-regression
+  - id: providers-a-openai-message-contract
+    statement: OpenAI-compatible message validation accepts provider-valid message payloads and rejects assistant messages lacking content or tool calls, even when reasoning metadata is present.
+    seamIds:
+      - providers-a-openai-message-contract
+    riskIds:
+      - providers-a-message-contract-regression
+  - id: providers-a-openai-cache-contract
+    statement: OpenAI-compatible prompt caching marks only eligible system/user/tool text breakpoints, preserves other content, and applies model eligibility and provider breakpoint limits.
+    seamIds:
+      - providers-a-openai-cache-messages
+    riskIds:
+      - providers-a-cache-breakpoint-regression
+  - id: providers-a-custom-adapter-contract
+    statement: Custom provider configuration selects the correct application-owned adapter, preserves replayable reasoning history, sanitizes supported Responses bodies, and applies provider traffic instrumentation without legacy model leakage.
+    seamIds:
+      - providers-a-custom-provider-adapter
+    riskIds:
+      - providers-a-legacy-seam-regression
+      - providers-a-message-history-corruption
+  - id: providers-a-fetch-composer-contract
+    statement: Provider fetch composition preserves middleware order and mutation/error semantics, applies rate-limit retry policy, records request/response/failure traffic, and never lets diagnostic failures suppress network work or replace provider errors.
+    seamIds:
+      - providers-a-fetch-composer
+    riskIds:
+      - providers-a-fetch-policy-regression
+  - id: providers-a-grok-auth-contract
+    statement: Grok OAuth login and token management validate PKCE state, store credentials securely, use fresh credentials, refresh once under races while preserving refresh ownership, and refuse unauthenticated or imported-token refreshes.
+    seamIds:
+      - providers-a-grok-auth
+    riskIds:
+      - providers-a-grok-auth-regression
+  - id: providers-a-grok-credit-contract
+    statement: Grok credit usage parsing preserves available percentages, periods, and product splits without inventing zero, while authenticated fetch classifies unauthorized, rate-limited, and other failures distinctly.
+    seamIds:
+      - providers-a-grok-credit
+    riskIds:
+      - providers-a-credit-reporting-regression
+  - id: providers-a-grok-lane-contract
+    statement: Grok Responses output and encrypted reasoning metadata are tagged to the Grok opaque lane, foreign opaque items are recognized, and the existing OpenAI default lane remains unchanged.
+    seamIds:
+      - providers-a-grok-responses-lane
+    riskIds:
+      - providers-a-grok-lane-regression
+  - id: providers-a-grok-provider-contract
+    statement: Grok registration and model discovery expose the declared capabilities, authenticate and version requests, pin prompt-cache affinity, and select Responses or chat-completions lanes according to configuration.
+    seamIds:
+      - providers-a-grok-provider
+    riskIds:
+      - providers-a-grok-lane-regression
+      - providers-a-grok-auth-regression
+  - id: providers-a-luna-wire-contract
+    statement: Luna Responses Lite extracts safe inputs and response IDs, fingerprints stable request configuration plus prefix, identifies reusable developer prefixes, normalizes output IDs without mutation, and integrates with chained state for delta requests.
+    seamIds:
+      - providers-a-luna-wire
+    riskIds:
+      - providers-a-chain-continuity
+  - id: providers-a-model-catalog-contract
+    statement: Model catalog lookup is case-insensitive and resolves exact, longest dash-bounded, vendor-qualified, provider-scoped, and cross-provider matches with correct metadata; shipped catalog entries satisfy positive limits, lowercase IDs, and valid generation metadata.
+    seamIds:
+      - providers-a-model-catalog
+    riskIds:
+      - providers-a-catalog-regression
+  - id: providers-a-model-catalog-generation-contract
+    statement: Catalog generation maps vendored pi-ai providers to term2 IDs, omits entries without context windows and pi-specific fields, sorts output stably, preserves metadata, and emits importable source.
+    seamIds:
+      - providers-a-model-catalog-generator
+    riskIds:
+      - providers-a-catalog-regression
+  - id: providers-a-oauth-store-contract
+    statement: Generic OAuth account storage supports active-account selection, replacement, refresh updates, migration, recovery, owner-only atomic persistence, and cleanup without duplicate accounts or stale temporary files.
+    seamIds:
+      - providers-a-oauth-account-store
+    riskIds:
+      - providers-a-oauth-accounts-regression
+  - id: providers-a-oauth-facade-contract
+    statement: The OAuth account facade recognizes supported providers, lists and selects accounts, removes accounts with survivor promotion, keeps provider stores separate, and pins in-use session credentials independently of later selection.
+    seamIds:
+      - providers-a-oauth-accounts-facade
+    riskIds:
+      - providers-a-oauth-accounts-regression
+tests:
+  - kind: file
+    id: providers-a-aborted-stream-recorder
+    file: source/providers/aborted-stream-recorder.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-aborted-diagnostics
+    fixtureIds: []
+  - kind: file
+    id: providers-a-ai-sdk-anthropic-provider
+    file: source/providers/ai-sdk-anthropic.provider.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-anthropic-request-response
+    fixtureIds: []
+  - kind: file
+    id: providers-a-ai-sdk-google-provider
+    file: source/providers/ai-sdk-google.provider.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-google-request-response
+    fixtureIds: []
+  - kind: file
+    id: providers-a-ai-sdk-message-normalizer
+    file: source/providers/ai-sdk-message-normalizer.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-normalized-assistant-history
+    fixtureIds: []
+  - kind: file
+    id: providers-a-ai-sdk-openrouter-provider
+    file: source/providers/ai-sdk-openrouter.provider.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-openrouter-request-response
+    fixtureIds: []
+  - kind: file
+    id: providers-a-ai-sdk-provider-migration
+    file: source/providers/ai-sdk-provider-migration.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-application-owned-provider-factories
+    fixtureIds: []
+  - kind: file
+    id: providers-a-ai-sdk-provider-settings
+    file: source/providers/ai-sdk-provider-settings.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-explicit-settings-forwarding
+    fixtureIds: []
+  - kind: file
+    id: providers-a-ai-sdk-streamed-model
+    file: source/providers/ai-sdk-streamed-model.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-streamed-model-contract
+    fixtureIds: []
+  - kind: file
+    id: providers-a-openai-compatible-messages
+    file: source/providers/common/openai-compatible-messages.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-openai-cache-contract
+    fixtureIds: []
+  - kind: file
+    id: providers-a-custom-provider-adapter
+    file: source/providers/custom-provider-adapter.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-custom-adapter-contract
+    fixtureIds: []
+  - kind: file
+    id: providers-a-fetch-composer
+    file: source/providers/fetch/composer.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-fetch-composer-contract
+    fixtureIds: []
+  - kind: file
+    id: providers-a-grok-auth
+    file: source/providers/grok-auth.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-grok-auth-contract
+    fixtureIds: []
+  - kind: file
+    id: providers-a-grok-credit-usage
+    file: source/providers/grok-credit-usage.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-grok-credit-contract
+    fixtureIds: []
+  - kind: file
+    id: providers-a-grok-responses-lane
+    file: source/providers/grok-responses-lane.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-grok-lane-contract
+    fixtureIds: []
+  - kind: file
+    id: providers-a-grok-provider
+    file: source/providers/grok.provider.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-grok-provider-contract
+    fixtureIds: []
+  - kind: file
+    id: providers-a-luna-responses-lite-wire-protocol
+    file: source/providers/luna-responses-lite-wire-protocol.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-luna-wire-contract
+    fixtureIds: []
+  - kind: file
+    id: providers-a-model-catalog-catalog
+    file: source/providers/model-catalog/catalog.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-model-catalog-contract
+    fixtureIds: []
+  - kind: file
+    id: providers-a-model-catalog-generate-catalog
+    file: source/providers/model-catalog/generate-catalog.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-model-catalog-generation-contract
+    fixtureIds: []
+  - kind: file
+    id: providers-a-oauth-account-store
+    file: source/providers/oauth-account-store.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-oauth-store-contract
+    fixtureIds: []
+  - kind: file
+    id: providers-a-oauth-accounts
+    file: source/providers/oauth-accounts.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-oauth-facade-contract
+    fixtureIds: []
+  - kind: file
+    id: providers-a-anthropic-middleware
+    file: source/providers/anthropic-middleware.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-anthropic-middleware-contract
+    fixtureIds: []
+  - kind: file
+    id: providers-a-chained-wire-state
+    file: source/providers/chained-wire-state.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-chained-state-contract
+    fixtureIds: []
+  - kind: file
+    id: providers-a-codex-auth
+    file: source/providers/codex-auth.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-codex-auth-contract
+    fixtureIds: []
+  - kind: file
+    id: providers-a-codex-compact
+    file: source/providers/codex-compact.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-codex-wire-contract
+    fixtureIds: []
+  - kind: file
+    id: providers-a-codex-turn-converter
+    file: source/providers/codex-turn-converter.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-codex-wire-contract
+    fixtureIds: []
+  - kind: file
+    id: providers-a-codex-websocket-cancellation-settlement
+    file: source/providers/codex-websocket-cancellation-settlement.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-codex-wire-contract
+    fixtureIds: []
+  - kind: case
+    id: providers-a-codex-provider-auth
+    title: Codex credential and account routing
+    file: source/providers/codex.provider.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-codex-auth-contract
+      - providers-a-codex-provider-contract
+    fixtureIds: []
+  - kind: case
+    id: providers-a-codex-provider-discovery
+    title: Codex registry and model/version discovery
+    file: source/providers/codex.provider.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-codex-provider-contract
+    fixtureIds: []
+  - kind: case
+    id: providers-a-codex-provider-transport
+    title: Codex HTTP/WebSocket request and completion translation
+    file: source/providers/codex.provider.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-codex-wire-contract
+      - providers-a-codex-provider-contract
+    fixtureIds: []
+  - kind: case
+    id: providers-a-codex-provider-continuation
+    title: Codex continuation state and transport lifecycle
+    file: source/providers/codex.provider.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-codex-provider-contract
+    fixtureIds: []
+  - kind: file
+    id: providers-a-openai-compatible-message-contract
+    file: source/providers/common/openai-compatible-message-contract.test.ts
+    domainId: providers
+    suiteId: providers-a-unit
+    contractIds:
+      - providers-a-openai-message-contract
+    fixtureIds: []
+decisions:
+  - id: providers-a-grok-provider-providers-a-m3
+    testId: providers-a-grok-provider
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Grok provider behavior combines registration capabilities, model discovery, authenticated headers, cache affinity, and selectable wire lanes that generic provider tests cannot establish.
+    evidence:
+      - Source assertions cover registration, model mapping/errors, OAuth and client headers, no-login suppression, x-grok-conv-id affinity, Responses default lane, capability declarations, and chat fallback in source/providers/grok.provider.test.ts:41-216.
+      - source/providers/grok-responses-lane.test.ts:10-75 verifies shared lane tagging, but does not replace Grok provider construction, authentication, discovery, or configuration selection.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-luna-responses-lite-wire-protocol-providers-a-m3
+    testId: providers-a-luna-responses-lite-wire-protocol
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Luna protocol fields define continuation correctness and provider-specific output normalization; the exhaustive focused cases are not redundant with generic state tests.
+    evidence:
+      - Source assertions cover input/response extraction, fingerprint exclusions and prefix sensitivity, prefix recognition, ID normalization/non-mutation, malformed values, and full ChainedWireState lifecycle in source/providers/luna-responses-lite-wire-protocol.test.ts:9-320.
+      - source/providers/chained-wire-state.test.ts:48-833 tests generic state transitions with a controllable protocol, while this file verifies the real Luna wire protocol implementation.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-model-catalog-catalog-providers-a-m3
+    testId: providers-a-model-catalog-catalog
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Catalog lookup precedence and generated-data invariants affect model limits and cost behavior, with synthetic fixtures deliberately distinguishing exact, prefix, vendor, and cross-provider rules.
+    evidence:
+      - Source assertions cover exact/case-insensitive/unknown lookups, longest bounded prefixes, vendor qualification, provider fallback, context/max-token/pricing metadata, and shipped catalog invariants in source/providers/model-catalog/catalog.test.ts:28-219.
+      - source/providers/model-catalog/generate-catalog.test.ts:27-75 tests source generation rather than lookup precedence or vendored catalog validity and is complementary.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-model-catalog-generate-catalog-providers-a-m3
+    testId: providers-a-model-catalog-generate-catalog
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Generation is a build/data boundary where unstable ordering, wrong provider mapping, or omitted metadata silently ships an incorrect catalog.
+    evidence:
+      - Source assertions cover pi-ai provider mapping, stable sort, missing-context omission, field filtering, embedded metadata, importable module shape, and vendored provider list in source/providers/model-catalog/generate-catalog.test.ts:27-75.
+      - source/providers/model-catalog/catalog.test.ts:193-219 validates the generated artifact's runtime invariants, but cannot replace generator transformation cases.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-oauth-account-store-providers-a-m3
+    testId: providers-a-oauth-account-store
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Generic OAuth account persistence protects credential loss and corruption across migration, selection, refresh, atomic failures, stale pointers, and temporary-file cleanup.
+    evidence:
+      - Source assertions cover missing stores, multi-account active selection/replacement/update/removal, legacy migration without read rewrite, permissions, atomic rename cleanup, startup sweep, and missing active-pointer recovery in source/providers/oauth-account-store.test.ts:20-141.
+      - source/providers/oauth-accounts.test.ts:34-100 tests the public facade and session pinning, while this test directly isolates generic persistence semantics.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-oauth-accounts-providers-a-m3
+    testId: providers-a-oauth-accounts
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The facade is the user-facing multi-account boundary and uniquely verifies selected versus in-use session identity, provider isolation, and survivor promotion.
+    evidence:
+      - Source assertions cover provider recognition/login commands, account listing and selection, provider separation, removal promotion, empty state, and session-pinned credential behavior in source/providers/oauth-accounts.test.ts:34-100.
+      - source/providers/oauth-account-store.test.ts:27-79 overlaps persistence operations but does not exercise facade provider routing or session-account pinning.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-anthropic-middleware-providers-a-m3
+    testId: providers-a-anthropic-middleware
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The middleware has a narrow provider-specific header contract with explicit positive, negative, case, stability, override, preservation, and binary-body cases.
+    evidence:
+      - Source assertions cover OpenCode detection, stable 30-character session IDs, explicit override, existing header/body preservation, and non-JSON pass-through in source/providers/anthropic-middleware.test.ts:35-176.
+      - No other assigned test imports createAnthropicMiddleware; provider stream tests exercise higher-level construction rather than this request mutation seam.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-openai-compatible-messages-providers-a-m3
+    testId: providers-a-openai-compatible-messages
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Prompt-cache breakpoint placement is a provider-specific policy with explicit cap, role, content-shape, model-filter, and no-op cases.
+    evidence:
+      - Source assertions verify system/last-user/last-tool selection, last-system-only behavior, text-block handling, untouched content, empty input, and eligible model filtering in source/providers/common/openai-compatible-messages.test.ts:4-108.
+      - source/providers/ai-sdk-anthropic.provider.test.ts:14-117 covers Anthropic cache options but not this OpenAI-compatible mutation helper's breakpoint cap and model matrix.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-custom-provider-adapter-providers-a-m3
+    testId: providers-a-custom-provider-adapter
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Custom provider dispatch crosses several application-owned adapter families and verifies replay sanitization plus logging integration; removing it could silently route a configured provider through the wrong wire protocol.
+    evidence:
+      - Source cases cover default/openai, Anthropic, Google, OpenCode/Minimax dispatch, preserved reasoning replay, and logging fetch integration in source/providers/custom-provider-adapter.test.ts:115-299.
+      - source/providers/ai-sdk-provider-migration.test.ts:12-43 covers lazy factory resolution for provider families, but does not exercise custom adapter type selection or OpenCode special routing.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-fetch-composer-providers-a-m3
+    testId: providers-a-fetch-composer
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This file is broad but its cases cover three cohesive fetch policies—composition/rate limiting, provider traffic observability, and diagnostic-failure isolation—each affecting real provider behavior and recovery.
+    evidence:
+      - Source assertions cover middleware nesting/mutation/errors, retry-after thresholds and forms, logging redaction/context/model selection, provider-fetch injection, response-body failure, and preservation of network/provider errors in source/providers/fetch/composer.test.ts:14-963.
+      - source/providers/anthropic-middleware.test.ts:35-176 covers one provider header middleware only; no assigned sibling replaces generic fetch composition or traffic failure handling.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-grok-auth-providers-a-m3
+    testId: providers-a-grok-auth
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Grok OAuth and refresh behavior is security-critical and distinct from Codex because the CLI credential shape, expiry representation, and endpoint differ.
+    evidence:
+      - Source assertions cover secure storage, CLI access-only import, fresh-token use, single-flight refresh, preservation of refresh tokens, expired-import refusal, missing credentials, failed refresh, PKCE exchange, and state mismatch in source/providers/grok-auth.test.ts:23-221.
+      - source/providers/codex-auth.test.ts:25-203 is a provider-specific OAuth sibling with different wire/credential shapes; it is not a replacement for Grok behavior.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-grok-credit-usage-providers-a-m3
+    testId: providers-a-grok-credit-usage
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Credit reporting is an independent user-facing contract where null versus zero and status-specific recovery semantics materially affect account decisions.
+    evidence:
+      - Source assertions parse a recorded live body, preserve optional periods/product splits, require null for missing percentages, send bearer credentials, and distinguish 401/403, 429 retry-after, and other statuses in source/providers/grok-credit-usage.test.ts:35-115.
+      - No other assigned test imports fetchGrokCreditUsage or parseGrokCreditUsage; provider fetch rate-limit tests cover a different generic middleware boundary.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-grok-responses-lane-providers-a-m3
+    testId: providers-a-grok-responses-lane
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Vendor-encrypted Responses data must remain in the Grok lane; this compact test directly protects cross-provider ciphertext isolation and default-lane compatibility.
+    evidence:
+      - Source assertions verify Grok opaque tagging, Grok encrypted-reasoning metadata, foreign OpenAI detection, and unchanged OpenAI default behavior in source/providers/grok-responses-lane.test.ts:10-75.
+      - source/providers/luna-responses-lite-wire-protocol.test.ts:213-277 tests Luna output normalization, not vendor opaque-lane tagging; no replacement exists in the assignment.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-chained-wire-state-providers-a-m3
+    testId: providers-a-chained-wire-state
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: ChainedWireState protects critical continuation correctness under stale state, changed fingerprints, concurrent out-of-order responses, key isolation, and lifecycle cleanup; its size reflects many independently failing state transitions rather than one redundant assertion.
+    evidence:
+      - Source cases cover baseline/prefix/full deltas, omitted IDs, token correlation, abandon, concurrent pending requests, invalidate/clear, protocol delegation, malformed output, per-key fingerprints, edge fields, and stored IDs in source/providers/chained-wire-state.test.ts:48-833.
+      - source/providers/luna-responses-lite-wire-protocol.test.ts:283-320 is an exact integration sibling for Luna, but it does not replace the generic state-machine branches and uses the real protocol rather than controllable protocol doubles.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-codex-auth-providers-a-m3
+    testId: providers-a-codex-auth
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: OAuth login and credential ownership are security-critical and the tests exercise both happy and adversarial loopback callbacks plus file permission/import behavior.
+    evidence:
+      - Source assertions cover owner-only storage, access-only CLI import, unreadable stores, PKCE authorization parameters, pasted redirects, state mismatch, permitted fallback port, and all-ports failure in source/providers/codex-auth.test.ts:25-203.
+      - source/providers/oauth-account-store.test.ts:99-130 overlaps generic file permissions and temporary cleanup, but cannot replace Codex-specific CLI import and loopback OAuth behavior.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-codex-compact-providers-a-m3
+    testId: providers-a-codex-compact
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This small test protects the provider-opaque compaction handoff and rejects malformed compact output before history is invented.
+    evidence:
+      - Source assertions verify OpenAI opaque tagging survives normalization and Codex wire conversion, plus rejection of non-object output in source/providers/codex-compact.test.ts:7-42.
+      - source/providers/codex-turn-converter.test.ts:121-166 provides complementary opaque-item filtering but does not test compact endpoint output tagging.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-codex-turn-converter-providers-a-m3
+    testId: providers-a-codex-turn-converter
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The converter is a high-risk wire boundary and the cases cover rich multimodal, reasoning, tool, precedence, invalid-shape, and opaque ownership semantics.
+    evidence:
+      - Source assertions verify exact Responses item mapping without string coercion, foreign reasoning rejection, canonical-field precedence, rich-shape validation, and provider-opaque replay/filtering in source/providers/codex-turn-converter.test.ts:5-165.
+      - source/providers/codex.provider.test.ts:1309-1347 overlaps selected tool/history serialization, but does not replace direct converter coverage of images, files, reasoning, malformed shapes, and foreign opaque data.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-codex-websocket-cancellation-settlement-providers-a-m3
+    testId: providers-a-codex-websocket-cancellation-settlement
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The test directly guards a shipped cancellation hang in the WebSocket transport and also prevents cancellation after completion from becoming a false failure.
+    evidence:
+      - Source comments and assertions exercise a never-settling socket iterator, AbortError settlement, best-effort cleanup, and already-delivered terminal events in source/providers/codex-websocket-cancellation-settlement.test.ts:23-103.
+      - source/providers/codex.provider.test.ts:1403-1432 covers timeout-driven abort on a different transport/model seam; it is complementary and cannot replace signal settlement when no frame arrives.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-codex-provider-providers-a-m3
+    testId: providers-a-codex-provider
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Although large, this file intentionally spans Codex authentication, account claims, model/version discovery, request headers, HTTP/WebSocket parity, continuation lifecycle, and full streamed-turn fidelity; these are distinct provider contracts with high regression impact.
+    evidence:
+  - id: providers-a-codex-provider-auth-providers-a-m3
+    testId: providers-a-codex-provider-auth
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Codex account claim precedence, credential refresh ownership, and account headers are security-sensitive and distinct from generic OAuth persistence.
+    evidence:
+      - Source assertions cover JWT claims, token-manager account extraction, imported/owned credentials, and ChatGPT-Account-Id request injection in source/providers/codex.provider.test.ts:108-352,688-820,855-923.
+      - source/providers/codex-auth.test.ts:25-203 covers login/storage helpers but not this provider-level account routing seam.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-codex-provider-discovery-providers-a-m3
+    testId: providers-a-codex-provider-discovery
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Registry capabilities, model endpoint parsing, client-version cache fallback, and local-server configuration govern whether Codex can be selected and called correctly.
+    evidence:
+      - Source assertions cover registration/capabilities, model parsing, local/npm/fallback/expired cache version paths, and CODEX_BASE_URL in source/providers/codex.provider.test.ts:354-433,435-680,925-948.
+      - No other assigned test covers Codex model discovery or version-cache behavior.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-codex-provider-transport-providers-a-m3
+    testId: providers-a-codex-provider-transport
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The registry-built transport is a critical provider boundary covering request fidelity, wire event conversion, usage/rate limits, instructions/history, HTTP/WebSocket parity, and EOF completion authority.
+    evidence:
+      - Source assertions cover sanitization/Luna/compaction headers, full registry streamed-turn behavior, transport parity, HTTP instruction mapping, and incomplete-response rejection in source/providers/codex.provider.test.ts:459-496,998-1238.
+      - source/providers/codex-turn-converter.test.ts:5-118 covers direct conversion, while this case verifies the registry/provider route and transport outputs.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-codex-provider-continuation-providers-a-m3
+    testId: providers-a-codex-provider-continuation
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Cached model identity and continuation transport constraints prevent state from crossing sessions or changing wire modes mid-chain.
+    evidence:
+      - Source assertions cover model reuse, transport-change rejection with cached continuation, no-session isolation, tool/history serialization, WebSocket event unwrapping, and receive timeout aborts in source/providers/codex.provider.test.ts:1240-1432.
+      - source/providers/chained-wire-state.test.ts:283-513 covers generic token/state ordering, but does not verify Codex provider cache ownership or transport-mode policy.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-openai-compatible-message-contract-providers-a-m3
+    testId: providers-a-openai-compatible-message-contract
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This focused validation test protects the provider admission boundary against invalid assistant replay that would otherwise be rejected upstream or lose tool semantics.
+    evidence:
+      - Source parameterized cases accept valid assistant/user/tool payloads and reject absent, empty, or reasoning-only assistant payloads in source/providers/common/openai-compatible-message-contract.test.ts:7-31.
+      - source/providers/ai-sdk-message-normalizer.test.ts:49-70 covers preserving reasoning-only messages, a distinct normalization contract rather than validation replacement.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-aborted-stream-recorder-providers-a-m3
+    testId: providers-a-aborted-stream-recorder
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The file directly exercises the recorder's diagnostic contract, including its safety-critical bounded projection and release behavior.
+    evidence:
+      - Tests cover replay, event categorization, timing gaps, response IDs, failure frames, release retention, and fixed-size redaction in source/providers/aborted-stream-recorder.test.ts:10-207.
+      - The seam is the AbortedStreamRecorder API imported from source/providers/aborted-stream-recorder.ts; no sibling test in this assignment asserts this recorder's bounded diagnostics.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-ai-sdk-anthropic-provider-providers-a-m3
+    testId: providers-a-ai-sdk-anthropic-provider
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This high-scrutiny provider test combines independently meaningful caching, limits, settings, stream translation, default-model, and error contracts with realistic AI SDK frames.
+    evidence:
+      - Source assertions verify cache markers by role and model predicate, settings and abort propagation, capped maxOutputTokens, reasoning/tool/completion/usage metadata, default model, and provider error identity in source/providers/ai-sdk-anthropic.provider.test.ts:14-286.
+      - No other assigned file directly exercises AiSdkAnthropicProvider; shared streamed-model behavior is separately covered by source/providers/ai-sdk-streamed-model.test.ts.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-ai-sdk-google-provider-providers-a-m3
+    testId: providers-a-ai-sdk-google-provider
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The test protects Google-specific option mapping and application-run-loop integration as well as default-model and error behavior; those are provider fidelity contracts not replaceable by generic stream tests.
+    evidence:
+      - Source assertions cover nested Google safety settings, thinkingConfig, tool choice, generation options, completion metadata/usage, custom provider names through ApplicationRunLoop, and propagated errors in source/providers/ai-sdk-google.provider.test.ts:11-215.
+      - No other assigned test directly invokes AiSdkGoogleProvider; generic translation coverage in source/providers/ai-sdk-streamed-model.test.ts does not verify Google provider construction.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-ai-sdk-message-normalizer-providers-a-m3
+    testId: providers-a-ai-sdk-message-normalizer
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is focused contract coverage for history normalization, including real-world split turns and wrapper delegation/property preservation.
+    evidence:
+      - Source cases distinguish contiguous merges, non-assistant boundaries, reasoning-only replay, AI SDK parts, real-world split turns, doGenerate/doStream delegation, and getter-backed model properties in source/providers/ai-sdk-message-normalizer.test.ts:5-485.
+      - No other assigned test imports mergeAssistantMessages or withMergedAssistantMessages; source/providers/ai-sdk-streamed-model.test.ts covers a different shared adapter seam.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-ai-sdk-openrouter-provider-providers-a-m3
+    testId: providers-a-ai-sdk-openrouter-provider
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: OpenRouter-specific request construction, stream behavior, settings forwarding, cancellation/error propagation, and cost metadata each protect provider fidelity and are tested with both unary and streaming paths.
+    evidence:
+      - Source assertions cover headers, compatibility, model defaulting, fetch, mapped stream events, abort signal and error identity, unary/stream settings, and costUsd in source/providers/ai-sdk-openrouter.provider.test.ts:10-358.
+      - Shared cost extraction is also exercised by source/providers/ai-sdk-streamed-model.test.ts:538-606, but that does not replace OpenRouter provider construction or end-to-end facade assertions.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-ai-sdk-provider-migration-providers-a-m3
+    testId: providers-a-ai-sdk-provider-migration
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The migration guard prevents reintroduction of legacy provider seams across all current AI SDK provider source files and verifies lazy factory resolution.
+    evidence:
+      - The test enumerates exact provider source paths and rejects legacy symbols while requiring getStreamedModel, and creates anthropic/google/custom lazy models in source/providers/ai-sdk-provider-migration.test.ts:6-51.
+      - No other assigned test scans this cross-file migration invariant; individual provider tests cannot detect a legacy symbol added to an untested provider file.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-ai-sdk-provider-settings-providers-a-m3
+    testId: providers-a-ai-sdk-provider-settings
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Parameterized coverage verifies the shared settings wrapper across Anthropic and Google on both operation types, including outer and nested settings precedence.
+    evidence:
+      - Source test invokes getResponse and stream for both fixture families and compares forwarded options in source/providers/ai-sdk-provider-settings.test.ts:16-72.
+      - OpenRouter settings are separately covered in source/providers/ai-sdk-openrouter.provider.test.ts:249-296; that is complementary provider-specific wiring, not a replacement for this shared wrapper test.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-a-ai-sdk-streamed-model-providers-a-m3
+    testId: providers-a-ai-sdk-streamed-model
+    role: second_opinion
+    reviewer: providers-a-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This shared adapter is a critical provider boundary with distinct buffering, cancellation, completion-authority, multimodal mapping, provider reasoning, opaque-item, cost, usage, and upstream metadata contracts.
+    evidence:
+      - Source cases assert whitespace/error buffering, event translation, tool argument fidelity, cancellation, required response metadata and finish events, reasoning mappings, missing usage, foreign opaque filtering, cost, and upstream provider metadata in source/providers/ai-sdk-streamed-model.test.ts:33-640.
+      - Provider-specific files source/providers/ai-sdk-anthropic.provider.test.ts, source/providers/ai-sdk-google.provider.test.ts, and source/providers/ai-sdk-openrouter.provider.test.ts overlap only on selected translation outcomes while guarding their own construction seams.
+    replacementTestIds: []
+    status: proposed

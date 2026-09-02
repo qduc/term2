@@ -1,0 +1,367 @@
+# Conversation domain split assignment: conversation-a; independent second opinion.
+schemaVersion: 2
+domains:
+  - id: conversation
+    label: Conversation services, persistence, replay, and public conversation boundary
+suites:
+  - id: unit
+    label: Default Vitest unit suite
+  - id: integration
+    label: Conversation service integration tests in the Vitest suite
+seams:
+  - id: conversation-a-adapter-boundary
+    label: ConversationAdapter turn execution, approval, queue, steering, cancellation, and event forwarding
+  - id: conversation-a-admission-boundary
+    label: ConversationAdmissionWorkflow admission checks, confirmation capabilities, history recording, and send ordering
+  - id: conversation-a-persistence-boundary
+    label: Conversation persistence and log-writer filesystem boundary for load, save, fork, migration, locking, and deletion
+  - id: conversation-a-event-classifier
+    label: Classification of conversation events as committed output or bookkeeping
+  - id: conversation-a-history-repair
+    label: Canonical inspection and repair of replayed conversation tool history
+  - id: conversation-a-input-routing
+    label: Mapping submitted text and approval answers to conversation interaction routes
+  - id: conversation-a-service-integration
+    label: ConversationService public streaming, approval continuation, retry, and terminal persistence integration
+  - id: conversation-a-message-projection
+    label: Conversion of provider message items into visible conversation message projections
+  - id: conversation-a-orchestrator-notifications
+    label: ConversationOrchestrator routing and presentation of background-task notifications and hidden turns
+  - id: conversation-a-orchestrator-boundary
+    label: ConversationOrchestrator public UI/business coordination for turns, approvals, queue, rewind, retry, and reset
+  - id: conversation-a-state-projection
+    label: Reconciliation of imported history and tool ledger into provider and model-request projections
+  - id: conversation-a-state-schema
+    label: Runtime validation and migration boundary for imported conversation state
+  - id: conversation-a-store-boundary
+    label: In-memory ConversationStore history mutation, snapshots, rewind targets, and tool-output inspection
+risks:
+  - id: conversation-a-risk-adapter-state-loss
+    label: Queue, cancellation, approval, or steering races lose work, settle the wrong request, or misreport terminal state.
+    severity: critical
+  - id: conversation-a-risk-admission-bypass
+    label: Unapproved or stale input bypasses admission policy, or a declined turn is recorded or sent.
+    severity: high
+  - id: conversation-a-risk-persistence-corruption
+    label: A crash, malformed record, lock, migration, or failed atomic publish loses or misidentifies resumable conversation state.
+    severity: critical
+  - id: conversation-a-risk-recovery-misclassification
+    label: Bookkeeping is mistaken for committed model output, causing unsafe recovery or loss of a real output signal.
+    severity: high
+  - id: conversation-a-risk-history-invalidity
+    label: Replayed duplicate or incomplete tool items produce invalid provider history or hide a real distinct turn.
+    severity: critical
+  - id: conversation-a-risk-input-misroute
+    label: User answers are sent as new turns or approval-specific answers are rewritten to the wrong capability.
+    severity: high
+  - id: conversation-a-risk-service-regression
+    label: Streaming, approval continuation, retry, or terminal-write behavior diverges across the public service path.
+    severity: critical
+  - id: conversation-a-risk-projection-display-drift
+    label: Provider history or synthetic messages are projected into the wrong visible role, text, image set, or model-request boundary.
+    severity: high
+  - id: conversation-a-risk-notification-loss
+    label: Background completion, question, watch, check-in, or stop notifications are duplicated, lost, misrouted, or rendered as user output.
+    severity: high
+  - id: conversation-a-risk-orchestrator-ui-drift
+    label: Public orchestration sends the wrong input, mutates UI state at the wrong time, or mishandles approval, rewind, retry, and queue outcomes.
+    severity: high
+  - id: conversation-a-risk-import-compatibility
+    label: Persisted or imported conversation state is rejected, silently mis-migrated, or projected into invalid provider history.
+    severity: critical
+fixtures:
+  - id: conversation-a-fixture-adapter-turn-flow
+    label: In-memory turnFlow, approval query, queue, and event-sink doubles used by ConversationAdapter tests
+  - id: conversation-a-fixture-admission-dependencies
+    label: Stub admission previews, history sink, logger, and asynchronous sender
+  - id: conversation-a-fixture-temp-conversation-dir
+    label: Temporary JSONL conversation directory and log writer used for persistence rotation
+  - id: conversation-a-fixture-conversation-events
+    label: Minimal typed conversation-event objects covering bookkeeping and committed-output variants
+  - id: conversation-a-fixture-replayed-history
+    label: Provider, wrapped, and canonical tool-call/result histories with duplicate and distinct call identities
+  - id: conversation-a-fixture-submission-flags
+    label: Submitted text plus ask-user, rejection, and approval state combinations
+  - id: conversation-a-fixture-service-streams
+    label: In-memory agent streams, interruptions, tool ownership, and continuation state for service integration
+  - id: conversation-a-fixture-message-items
+    label: Direct and wrapped provider message items containing text, images, notices, summaries, and malformed content
+  - id: conversation-a-fixture-background-events
+    label: Background subagent, shell, watch, check-in, question, and stop events with mocked service and UI ports
+  - id: conversation-a-fixture-orchestrator-config
+    label: Mock ConversationService, message port, UI port, usage accumulator, and pending interaction state
+  - id: conversation-a-fixture-imported-state
+    label: Persisted history and completed, aborted, or unknown tool ledger entries for projection and schema tests
+  - id: conversation-a-fixture-provider-history
+    label: Provider history items, tool calls, tool results, shell context, mode notices, and multimodal turns
+contracts:
+  - id: conversation-a-contract-adapter-turn-settlement
+    statement: ConversationAdapter settles each submitted execution exactly once, preserves the owning error or cancellation outcome, and keeps retained queue work available after cancellation or failure.
+    seamIds:
+      - conversation-a-adapter-boundary
+    riskIds:
+      - conversation-a-risk-adapter-state-loss
+  - id: conversation-a-contract-adapter-approval-and-steering
+    statement: ConversationAdapter routes approval and post-execute decisions to the matching live interaction, delivers or queues steering and edits without changing the wrong submission, and forwards observable events to their sinks.
+    seamIds:
+      - conversation-a-adapter-boundary
+    riskIds:
+      - conversation-a-risk-adapter-state-loss
+  - id: conversation-a-contract-admission-order-and-capability
+    statement: An admitted turn is recorded before it is sent, caller-supplied surge authority is discarded, and only a matching approved surge confirmation can create a content-bound bypass while other warnings do not.
+    seamIds:
+      - conversation-a-admission-boundary
+    riskIds:
+      - conversation-a-risk-admission-bypass
+  - id: conversation-a-contract-admission-stale-resolution
+    statement: A declined or stale confirmation neither records nor sends its turn, and resolving one confirmation cannot affect a newer confirmation.
+    seamIds:
+      - conversation-a-admission-boundary
+    riskIds:
+      - conversation-a-risk-admission-bypass
+  - id: conversation-a-contract-clear-rotates-resumable-session
+    statement: Clearing a conversation marks the old session and rotates to a fresh log while preserving the old session as resumable and leaving the new session initially empty.
+    seamIds:
+      - conversation-a-persistence-boundary
+    riskIds:
+      - conversation-a-risk-persistence-corruption
+  - id: conversation-a-contract-committed-output-classification
+    statement: Conversation event classification treats text, dispatched tools, and final output as committed output but excludes cost, usage, budget, and compaction bookkeeping from that recovery signal.
+    seamIds:
+      - conversation-a-event-classifier
+    riskIds:
+      - conversation-a-risk-recovery-misclassification
+  - id: conversation-a-contract-history-repair-safety
+    statement: Conversation history repair removes only replayed duplicate tool pairs or repeated full-history prefixes, handles provider representations consistently, preserves valid distinct text and calls, and retains the original provider items that survive repair.
+    seamIds:
+      - conversation-a-history-repair
+    riskIds:
+      - conversation-a-risk-history-invalidity
+  - id: conversation-a-contract-input-route-and-normalization
+    statement: Submitted text is routed to the active ask-user or rejection interaction, remains blocked during ordinary approval, and approval answers preserve special capabilities while normal text becomes a yes answer with its explanation.
+    seamIds:
+      - conversation-a-input-routing
+    riskIds:
+      - conversation-a-risk-input-misroute
+  - id: conversation-a-contract-service-stream-and-continuation
+    statement: The public ConversationService emits streamed text and terminal events, exposes approval details, resumes the retained run with its response state, retries eligible model behavior errors, and writes interrupted output only after a terminal continuation.
+    seamIds:
+      - conversation-a-service-integration
+    riskIds:
+      - conversation-a-risk-service-regression
+  - id: conversation-a-contract-message-projection
+    statement: Message projection accepts direct and one-level wrapped message items, preserves text and images, marks context and mode notices as synthetic user content, and rejects non-message or malformed shapes without inventing visible text.
+    seamIds:
+      - conversation-a-message-projection
+    riskIds:
+      - conversation-a-risk-projection-display-drift
+  - id: conversation-a-contract-background-notification-routing
+    statement: Background task events are announced exactly once, delivered to a running turn or retained for an idle hidden turn, and rendered as command activity without fabricated user or assistant prose.
+    seamIds:
+      - conversation-a-orchestrator-notifications
+    riskIds:
+      - conversation-a-risk-notification-loss
+  - id: conversation-a-contract-orchestrator-coordination
+    statement: ConversationOrchestrator coordinates public submissions, terminal and cost events, approval interactions, reset, stop, rewind, retry, and queue UI updates without mutating UI state when a domain operation rejects.
+    seamIds:
+      - conversation-a-orchestrator-boundary
+    riskIds:
+      - conversation-a-risk-orchestrator-ui-drift
+  - id: conversation-a-contract-state-projection
+    statement: Imported history and the tool ledger project into ordered provider history without duplicate or orphan tool items, preserve incomplete entries as warnings, honor compaction boundaries, and remain pure and idempotent.
+    seamIds:
+      - conversation-a-state-projection
+    riskIds:
+      - conversation-a-risk-import-compatibility
+  - id: conversation-a-contract-state-schema-validation
+    statement: Imported conversation state accepts supported historical and unknown tool statuses, migrates unrecognized legacy statuses to aborted, and rejects malformed state before projection.
+    seamIds:
+      - conversation-a-state-schema
+    riskIds:
+      - conversation-a-risk-import-compatibility
+  - id: conversation-a-contract-store-history-safety
+    statement: ConversationStore mutates and snapshots provider history defensively, identifies genuine user turns while excluding synthetic notices, and offers atomic rewind and tool-output operations with stable opaque targets and safe malformed-input handling.
+    seamIds:
+      - conversation-a-store-boundary
+    riskIds:
+      - conversation-a-risk-history-invalidity
+tests:
+  - kind: file
+    id: conversation-c11-d8-grant-kind-boundary-test
+    file: source/services/conversation/c11-d8-grant-kind-boundary.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-a-contract-adapter-approval-and-steering
+    fixtureIds:
+      - conversation-a-fixture-adapter-turn-flow
+  - kind: file
+    id: conversation-adapter-test
+    file: source/services/conversation/conversation-adapter.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-a-contract-adapter-turn-settlement
+      - conversation-a-contract-adapter-approval-and-steering
+    fixtureIds:
+      - conversation-a-fixture-adapter-turn-flow
+  - kind: file
+    id: conversation-admission-workflow-test
+    file: source/services/conversation/conversation-admission-workflow.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-a-contract-admission-order-and-capability
+      - conversation-a-contract-admission-stale-resolution
+    fixtureIds:
+      - conversation-a-fixture-admission-dependencies
+  - kind: file
+    id: conversation-clear-save-test
+    file: source/services/conversation/conversation-clear-save.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-a-contract-clear-rotates-resumable-session
+    fixtureIds:
+      - conversation-a-fixture-temp-conversation-dir
+  - kind: file
+    id: conversation-events-test
+    file: source/services/conversation/conversation-events.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-a-contract-committed-output-classification
+    fixtureIds:
+      - conversation-a-fixture-conversation-events
+  - kind: file
+    id: conversation-history-repair-test
+    file: source/services/conversation/conversation-history-repair.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-a-contract-history-repair-safety
+    fixtureIds:
+      - conversation-a-fixture-replayed-history
+  - kind: file
+    id: conversation-input-routing-test
+    file: source/services/conversation/conversation-input-routing.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-a-contract-input-route-and-normalization
+    fixtureIds:
+      - conversation-a-fixture-submission-flags
+  - kind: file
+    id: conversation-integration-test
+    file: source/services/conversation/conversation-integration.test.ts
+    domainId: conversation
+    suiteId: integration
+    contractIds:
+      - conversation-a-contract-service-stream-and-continuation
+    fixtureIds:
+      - conversation-a-fixture-service-streams
+decisions:
+  - id: conversation-c11-d8-grant-kind-boundary-test-conversation-a-m3
+    testId: conversation-c11-d8-grant-kind-boundary-test
+    role: second_opinion
+    reviewer: conversation-a-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-a-m3.yaml
+    recommendation: keep
+    confidence: medium
+    reason: The intentional failure is a durable proof for an additive approval event field and documents the currently observed missing grant-kind behavior rather than duplicating a passing assertion.
+    evidence:
+      - The test captures the approval_resolved event emitted by source/services/conversation/conversation-adapter.ts and asserts answer plus the proposed interactive grantKind field.
+      - No other assigned test asserts grantKind on approval_resolved; removing this proof would leave the C11-D8 event-shape contract unguarded.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-adapter-test-conversation-a-m3
+    testId: conversation-adapter-test
+    role: second_opinion
+    reviewer: conversation-a-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is the focused adapter boundary suite for queue ownership, approval races, cancellation classification, steering/editing, and event delivery; those outcomes are high-risk and are not safely inferred from public-service tests.
+    evidence:
+      - Tests exercise the explicit TurnFlow and SessionApprovalQuery seams in source/services/conversation/conversation-adapter.ts, including stale post-execute revision/session tokens and rollback when QueueController rejects an edit.
+      - The file asserts retained queued promises stay pending across abort, provider errors are preserved, and cancellation force-settles a turn that ignores abort; no other assigned file covers these adapter settlement races.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-admission-workflow-test-conversation-a-m3
+    testId: conversation-admission-workflow-test
+    role: second_opinion
+    reviewer: conversation-a-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The workflow owns the order and authority boundary for input surge and large uncached input confirmations; its stale-resolution and decline paths protect policy and data integrity.
+    evidence:
+      - source/services/conversation/conversation-admission-workflow.ts is exercised with spies that verify history.addMessage precedes send and that approval capability is content-bound after skill expansion.
+      - The file uniquely checks declined, repeated, and stale confirmations do not record or send; conversation-adapter.test.ts does not exercise this admission workflow seam.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-clear-save-test-conversation-a-m3
+    testId: conversation-clear-save-test
+    role: second_opinion
+    reviewer: conversation-a-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This filesystem proof protects clear-session durability and resumability with a minimal focused fixture.
+    evidence:
+      - The test drives createConversationLogWriter rotation and source/services/conversation/conversation-persistence.ts loadConversation, asserting old JSONL remains resumable while the new session has no history or response id.
+      - No other assigned test asserts the exact old-file-preserved/new-file-empty clear rotation outcome.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-events-test-conversation-a-m3
+    testId: conversation-events-test
+    role: second_opinion
+    reviewer: conversation-a-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The classifier is a small recovery-critical seam whose negative bookkeeping cases prevent unsafe recovery decisions.
+    evidence:
+      - source/services/conversation/conversation-events.ts isCommittedOutputEvent is asserted for both bookkeeping and committed-output discriminants.
+      - Search of assigned conversation tests found no sibling assertion of isCommittedOutputEvent; conversation-service tests consume events but do not pin this classifier table.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-history-repair-test-conversation-a-m3
+    testId: conversation-history-repair-test
+    role: second_opinion
+    reviewer: conversation-a-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Replay repair is high-scrutiny persistence behavior and the tests distinguish harmful duplication from legitimate repeated prose and distinct calls.
+    evidence:
+      - source/services/conversation/conversation-history-repair.ts repairConversationHistory is tested through provider, rawItem-wrapped, snake/camel id, and canonical forms while retained objects preserve provider-only fields.
+      - conversation-replay.test.ts separately checks replay outcomes but does not replace these focused repair invariants; no assigned sibling directly tests repairConversationHistory.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-input-routing-test-conversation-a-m3
+    testId: conversation-input-routing-test
+    role: second_opinion
+    reviewer: conversation-a-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The pure route and normalization table is the narrow guard for turning terminal UI input into the correct interaction action, including special approval capabilities.
+    evidence:
+      - source/services/conversation/conversation-input-routing.ts is tested for ask-user, rejection, blocked approval, denied-read, session-folder, Docker, and ordinary answer branches.
+      - No assigned sibling directly imports routeConversationTurnSubmission or normalizeApprovalDecision, so deletion would remove the only focused table coverage.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-integration-test-conversation-a-m3
+    testId: conversation-integration-test
+    role: second_opinion
+    reviewer: conversation-a-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: These compact integration scenarios validate the public service path across stream projection, approval continuation, retry, and the terminal-write gate; the last is a shipped persistence regression.
+    evidence:
+      - source/services/conversation/conversation-service.ts is exercised with createAgentStream and a real ProductionConversationService subclass, not only a mocked adapter method.
+      - The terminal-write scenario asserts interrupted output is absent before approval and cumulative continuation output is persisted once afterward; no other assigned file asserts this exact end-to-end gate.
+    replacementTestIds: []
+    status: proposed

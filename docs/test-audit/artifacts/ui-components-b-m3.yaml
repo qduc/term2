@@ -1,0 +1,707 @@
+schemaVersion: 2
+domains:
+  - id: ui-components
+    label: Interactive UI components under source/components
+suites:
+  - id: ui-components-b-unit
+    label: Vitest component and pure-helper tests
+fixtures: []
+tests:
+  - kind: file
+    id: ui-components-copy-menu
+    file: source/components/menu/CopyMenu.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-copy-preview-contract
+    fixtureIds: []
+  - kind: file
+    id: ui-components-mentor-pool-selection-menu
+    file: source/components/menu/MentorPoolSelectionMenu.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-mentor-phase-contract
+    fixtureIds: []
+  - kind: file
+    id: ui-components-model-selection-menu
+    file: source/components/menu/ModelSelectionMenu.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-model-state-contract
+    fixtureIds: []
+  - kind: file
+    id: ui-components-path-selection-menu
+    file: source/components/menu/PathSelectionMenu.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-path-warning-contract
+    fixtureIds: []
+  - kind: file
+    id: ui-components-provider-selection-menu
+    file: source/components/menu/ProviderSelectionMenu.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-provider-state-contract
+    fixtureIds: []
+  - kind: file
+    id: ui-components-resume-selection-menu
+    file: source/components/menu/ResumeSelectionMenu.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-resume-context-contract
+    fixtureIds: []
+  - kind: file
+    id: ui-components-rewind-menu
+    file: source/components/menu/RewindMenu.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-rewind-summary-contract
+    fixtureIds: []
+  - kind: file
+    id: ui-components-settings-selection-menu-scroll
+    file: source/components/menu/SettingsSelectionMenu.scroll.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-settings-navigation-contract
+    fixtureIds: []
+  - kind: file
+    id: ui-components-settings-value-selection-menu
+    file: source/components/menu/SettingsValueSelectionMenu.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-settings-value-contract
+    fixtureIds: []
+  - kind: file
+    id: ui-components-settings-selection-menu
+    file: source/components/menu/SettingsSelectionMenu.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-settings-navigation-contract
+    fixtureIds: []
+  - kind: file
+    id: ui-components-skill-selection-menu
+    file: source/components/menu/SkillSelectionMenu.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-skill-selection-contract
+    fixtureIds: []
+  - kind: file
+    id: ui-components-slash-command-menu
+    file: source/components/menu/SlashCommandMenu.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-slash-description-contract
+    fixtureIds: []
+  - kind: file
+    id: ui-components-chat-message
+    file: source/components/message/ChatMessage.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-chat-rendering-contract
+    fixtureIds: []
+  - kind: file
+    id: ui-components-message-list
+    file: source/components/message/MessageList.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-message-list-lifecycle-contract
+    fixtureIds: []
+  - kind: file
+    id: ui-components-subagent-activity-message
+    file: source/components/message/SubagentActivityMessage.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-subagent-activity-contract
+    fixtureIds: []
+  - kind: file
+    id: ui-components-command-grouping
+    file: source/components/message/command-grouping.test.ts
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-command-grouping-contract
+    fixtureIds: []
+  - kind: file
+    id: ui-components-command-message-helpers
+    file: source/components/message/command-message-helpers.test.ts
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-command-helper-contract
+    fixtureIds: []
+  - kind: file
+    id: ui-components-approval-prompt-ask-user
+    file: source/components/prompt/ApprovalPrompt.ask-user.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-approval-kind-contract
+      - ui-components-b-approval-input-contract
+    fixtureIds: []
+  - kind: file
+    id: ui-components-approval-prompt-denied-read
+    file: source/components/prompt/ApprovalPrompt.denied-read.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-approval-kind-contract
+      - ui-components-b-approval-input-contract
+    fixtureIds: []
+  - kind: file
+    id: ui-components-approval-prompt-folder-read
+    file: source/components/prompt/ApprovalPrompt.folder-read.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-approval-kind-contract
+      - ui-components-b-approval-input-contract
+    fixtureIds: []
+  - kind: file
+    id: ui-components-approval-prompt-read-file
+    file: source/components/prompt/ApprovalPrompt.read-file.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-approval-kind-contract
+      - ui-components-b-approval-input-contract
+    fixtureIds: []
+  - kind: file
+    id: ui-components-handoff-confirmation-prompt
+    file: source/components/prompt/HandoffConfirmationPrompt.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-handoff-contract
+    fixtureIds: []
+  - kind: file
+    id: ui-components-input-surge-confirmation-prompt
+    file: source/components/prompt/InputSurgeConfirmationPrompt.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-input-surge-contract
+    fixtureIds: []
+  - kind: file
+    id: ui-components-large-uncached-confirmation-prompt
+    file: source/components/prompt/LargeUncachedConfirmationPrompt.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-large-uncached-contract
+    fixtureIds: []
+  - kind: file
+    id: ui-components-mode-switch-confirmation-prompt
+    file: source/components/prompt/ModeSwitchConfirmationPrompt.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-mode-switch-contract
+    fixtureIds: []
+  - kind: file
+    id: ui-components-queue-paused-prompt
+    file: source/components/prompt/QueuePausedPrompt.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-b-unit
+    contractIds:
+      - ui-components-b-queue-paused-contract
+    fixtureIds: []
+seams:
+  - id: ui-components-b-settings-value-menu
+    label: SettingsValueSelectionMenu suggestion and footer boundary
+  - id: ui-components-b-skill-menu
+    label: SkillSelectionMenu selected-detail and scope boundary
+  - id: ui-components-b-slash-menu
+    label: SlashCommandMenu wrapped-description boundary
+  - id: ui-components-b-chat-message
+    label: ChatMessage sender-specific rendering boundary
+  - id: ui-components-b-message-list
+    label: MessageList static/live partition and ordering boundary
+  - id: ui-components-b-subagent-message
+    label: SubagentActivityMessage lifecycle rendering boundary
+  - id: ui-components-b-command-grouping
+    label: command-grouping aggregation boundary
+  - id: ui-components-b-command-helpers
+    label: command-message-helpers parsing and formatting boundary
+  - id: ui-components-b-approval-prompt
+    label: ApprovalPrompt approval-kind and keyboard-routing boundary
+  - id: ui-components-b-handoff-prompt
+    label: HandoffConfirmationPrompt choice boundary
+  - id: ui-components-b-input-surge-prompt
+    label: InputSurgeConfirmationPrompt warning boundary
+  - id: ui-components-b-large-uncached-prompt
+    label: LargeUncachedConfirmationPrompt warning boundary
+  - id: ui-components-b-mode-switch-prompt
+    label: ModeSwitchConfirmationPrompt safe-default boundary
+  - id: ui-components-b-queue-paused-prompt
+    label: QueuePausedPrompt recovery boundary
+risks:
+  - id: ui-components-b-settings-value-regression
+    label: A value picker hides suggestions, descriptions, numeric guidance, or controls.
+    severity: medium
+  - id: ui-components-b-skill-context-loss
+    label: Skill selection shows details or scope for the wrong skill.
+    severity: medium
+  - id: ui-components-b-message-rendering-regression
+    label: Chat, command, or subagent output has the wrong marker, formatting, status, or summary.
+    severity: high
+  - id: ui-components-b-message-order-loss
+    label: Live/static partitioning duplicates, reorders, or hides conversation output.
+    severity: critical
+  - id: ui-components-b-tool-summary-regression
+    label: Tool grouping or parsing reports wrong counts, status, arguments, or content.
+    severity: high
+  - id: ui-components-b-approval-choice-regression
+    label: Approval prompts expose unsafe choices, omit scope, submit wrong answers, or steal shortcuts.
+    severity: critical
+  - id: ui-components-b-confirmation-default-regression
+    label: A confirmation defaults to or interprets an unsafe consequential choice.
+    severity: high
+  - id: ui-components-b-queue-recovery-regression
+    label: A paused queue omits failure context or routes recovery input incorrectly.
+    severity: high
+contracts:
+  - id: ui-components-b-settings-value-contract
+    statement: SettingsValueSelectionMenu renders empty feedback, values, only the selected description, numeric guidance, and confirm/cancel controls.
+    seamIds:
+      - ui-components-b-settings-value-menu
+    riskIds:
+      - ui-components-b-settings-value-regression
+  - id: ui-components-b-skill-selection-contract
+    statement: SkillSelectionMenu lists skills, shows details only for the selected skill, identifies project scope, and truncates long names without losing the prefix.
+    seamIds:
+      - ui-components-b-skill-menu
+    riskIds:
+      - ui-components-b-skill-context-loss
+  - id: ui-components-b-slash-description-contract
+    statement: SlashCommandMenu keeps wrapped command descriptions aligned with their description column.
+    seamIds:
+      - ui-components-b-slash-menu
+    riskIds:
+      - ui-components-b-menu-guidance-regression
+  - id: ui-components-b-chat-rendering-contract
+    statement: ChatMessage applies Markdown formatting to reasoning and uses a prompt marker for user messages.
+    seamIds:
+      - ui-components-b-chat-message
+    riskIds:
+      - ui-components-b-message-rendering-regression
+  - id: ui-components-b-message-list-lifecycle-contract
+    statement: MessageList preserves order and identity while partitioning static/live history, keeps Markdown layout stable on finalization, and renders special entries without duplication or leakage.
+    seamIds:
+      - ui-components-b-message-list
+    riskIds:
+      - ui-components-b-message-order-loss
+      - ui-components-b-message-rendering-regression
+  - id: ui-components-b-subagent-activity-contract
+    statement: SubagentActivityMessage renders lifecycle labels and tool statuses, hides running tools, freezes transferred cards, and shows final or failure text correctly.
+    seamIds:
+      - ui-components-b-subagent-message
+    riskIds:
+      - ui-components-b-message-rendering-regression
+  - id: ui-components-b-command-grouping-contract
+    statement: command-grouping folds only eligible settled runs, preserves in-flight/trailing calls, maintains group identity, and summarizes mixed outcomes correctly.
+    seamIds:
+      - ui-components-b-command-grouping
+    riskIds:
+      - ui-components-b-tool-summary-regression
+      - ui-components-b-message-order-loss
+  - id: ui-components-b-command-helper-contract
+    statement: command-message-helpers safely parses tool output and formats every registered tool's arguments without generic leakage.
+    seamIds:
+      - ui-components-b-command-helpers
+    riskIds:
+      - ui-components-b-tool-summary-regression
+  - id: ui-components-b-approval-kind-contract
+    statement: ApprovalPrompt renders correct safety advisories and scope choices for ask-user, Docker, network, outside-workspace, denied-read, unsandboxed, and ordinary approvals.
+    seamIds:
+      - ui-components-b-approval-prompt
+    riskIds:
+      - ui-components-b-approval-choice-regression
+  - id: ui-components-b-approval-input-contract
+    statement: ApprovalPrompt maps navigation, direct selection, Enter, Escape, and stable y/n ownership to correct callbacks and answers, including multi-select/custom answers.
+    seamIds:
+      - ui-components-b-approval-prompt
+    riskIds:
+      - ui-components-b-approval-choice-regression
+  - id: ui-components-b-handoff-contract
+    statement: HandoffConfirmationPrompt renders the handoff question and confirmation choices.
+    seamIds:
+      - ui-components-b-handoff-prompt
+    riskIds:
+      - ui-components-b-confirmation-default-regression
+  - id: ui-components-b-input-surge-contract
+    statement: InputSurgeConfirmationPrompt presents the reason-bearing warning and routes decline to rejection.
+    seamIds:
+      - ui-components-b-input-surge-prompt
+    riskIds:
+      - ui-components-b-confirmation-default-regression
+  - id: ui-components-b-large-uncached-contract
+    statement: LargeUncachedConfirmationPrompt presents token/cache warning and routes decline to rejection.
+    seamIds:
+      - ui-components-b-large-uncached-prompt
+    riskIds:
+      - ui-components-b-confirmation-default-regression
+  - id: ui-components-b-mode-switch-contract
+    statement: ModeSwitchConfirmationPrompt describes enabling/disabling, defaults to safe No, and routes y/n, Enter, arrows, and Escape consistently.
+    seamIds:
+      - ui-components-b-mode-switch-prompt
+    riskIds:
+      - ui-components-b-confirmation-default-regression
+  - id: ui-components-b-queue-paused-contract
+    statement: QueuePausedPrompt shows count and conditional failure context and maps resume/discard keys to callbacks.
+    seamIds:
+      - ui-components-b-queue-paused-prompt
+    riskIds:
+      - ui-components-b-queue-recovery-regression
+decisions:
+  - id: ui-components-copy-menu-ui-components-b-m3
+    testId: ui-components-copy-menu
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It protects formatting edge cases and the user-visible distinction between full-response and code-block copy choices.
+    evidence:
+      - getCodePreview covers empty whitespace, newline normalization, exact truncation, and CopyMenu labels/previews at source/components/menu/CopyMenu.test.tsx:9-50.
+      - The seam is getCodePreview and CopyMenu in source/components/menu/CopyMenu.tsx; no assigned sibling asserts this full-response/code-block distinction.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-approval-prompt-folder-read-ui-components-b-m3
+    testId: ui-components-approval-prompt-folder-read
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This file distinguishes folder-capable read tools from shell and verifies absolute-glob directory naming and grant routing.
+    evidence:
+      - Grep folder wording/answer, absolute glob directory, and generic shell exclusion are asserted at source/components/prompt/ApprovalPrompt.folder-read.test.tsx:25-78.
+      - The seam is ApprovalPrompt outside-workspace folder handling in source/components/prompt/ApprovalPrompt.tsx; read-file sibling covers read/edit scopes, not grep/glob discrimination.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-approval-prompt-read-file-ui-components-b-m3
+    testId: ui-components-approval-prompt-read-file
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It covers read-folder access, Escape cancellation, and distinct outside-workspace edit file/folder scopes.
+    evidence:
+      - Read-folder answer, regular approval Escape, and edit permission labels/answer are asserted at source/components/prompt/ApprovalPrompt.read-file.test.tsx:23-95.
+      - The seam is ApprovalPrompt outsideWorkspaceEdit/read-file handling in source/components/prompt/ApprovalPrompt.tsx; folder-read sibling covers grep/glob classification, not edit scopes or cancellation.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-handoff-confirmation-prompt-ui-components-b-m3
+    testId: ui-components-handoff-confirmation-prompt
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: medium
+    reason: The render contract matters, but the test does not exercise any choice callback or keyboard route for this interactive prompt.
+    evidence:
+      - It only checks question and Yes/No labels and passes no-op callbacks at source/components/prompt/HandoffConfirmationPrompt.test.tsx:8-21.
+      - The seam is HandoffConfirmationPrompt in source/components/prompt/HandoffConfirmationPrompt.tsx; comparable callback/keyboard coverage exists in source/components/prompt/ModeSwitchConfirmationPrompt.test.tsx.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-input-surge-confirmation-prompt-ui-components-b-m3
+    testId: ui-components-input-surge-confirmation-prompt
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It pins the reason-bearing warning and verifies the decline keyboard route.
+    evidence:
+      - Reason, wording, choices, and n-to-decline behavior are asserted at source/components/prompt/InputSurgeConfirmationPrompt.test.tsx:8-45.
+      - The seam is InputSurgeConfirmationPrompt in source/components/prompt/InputSurgeConfirmationPrompt.tsx; no assigned sibling covers this warning.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-large-uncached-confirmation-prompt-ui-components-b-m3
+    testId: ui-components-large-uncached-confirmation-prompt
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It protects token-count formatting and prompt-cache warning disclosure plus asynchronous decline behavior.
+    evidence:
+      - It asserts 72,100 formatting, cache warning, choices, and n-to-decline after updates at source/components/prompt/LargeUncachedConfirmationPrompt.test.tsx:24-58.
+      - The seam is LargeUncachedConfirmationPrompt in source/components/prompt/LargeUncachedConfirmationPrompt.tsx; no assigned sibling covers this disclosure.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-mode-switch-confirmation-prompt-ui-components-b-m3
+    testId: ui-components-mode-switch-confirmation-prompt
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Safety-sensitive coverage verifies target-state wording, safe default, all keyboard routes, and navigation confirmation.
+    evidence:
+      - TargetValue wording, No default, Enter/y/n/Escape, and arrow navigation are asserted at source/components/prompt/ModeSwitchConfirmationPrompt.test.tsx:16-176.
+      - The seam is ModeSwitchConfirmationPrompt in source/components/prompt/ModeSwitchConfirmationPrompt.tsx; no assigned sibling covers mode-switch session-clearing confirmation.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-queue-paused-prompt-ui-components-b-m3
+    testId: ui-components-queue-paused-prompt
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It protects recovery affordances, failure/manual distinction, and both callback shortcuts.
+    evidence:
+      - Queue count, resume/discard labels, conditional failure reason, and r/d routing are asserted at source/components/prompt/QueuePausedPrompt.test.tsx:8-91.
+      - The seam is QueuePausedPrompt in source/components/prompt/QueuePausedPrompt.tsx; no assigned sibling covers queue-pause recovery presentation.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-skill-selection-menu-ui-components-b-m3
+    testId: ui-components-skill-selection-menu
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It protects selected-skill context, project scope, empty states, and terminal-width name truncation.
+    evidence:
+      - Names, selected-only details, project scope, empty/query-empty text, and long-name truncation are asserted at source/components/menu/SkillSelectionMenu.test.tsx:28-134.
+      - The seam is SkillSelectionMenu with SkillInfo in source/components/menu/SkillSelectionMenu.tsx and source/services/skills/skills-service.ts; no assigned sibling covers this picker.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-slash-command-menu-ui-components-b-m3
+    testId: ui-components-slash-command-menu
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The narrow test protects a layout invariant that otherwise makes wrapped command help misleading.
+    evidence:
+      - It checks wrapped continuation indentation against the description column at source/components/menu/SlashCommandMenu.test.tsx:19-34.
+      - The seam is SlashCommandMenu in source/components/menu/SlashCommandMenu.tsx; no assigned sibling asserts this wrapping invariant.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-chat-message-ui-components-b-m3
+    testId: ui-components-chat-message
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It verifies sender-specific presentation and that Markdown syntax is transformed rather than leaked literally.
+    evidence:
+      - Reasoning formatting and user prompt-marker assertions are at source/components/message/ChatMessage.test.tsx:10-60.
+      - The seam is ChatMessage in source/components/message/ChatMessage.tsx; no assigned sibling covers these sender variants.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-message-list-ui-components-b-m3
+    testId: ui-components-message-list
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is high-scrutiny lifecycle coverage with direct partition-helper and rerender tests for ordering, identity, and static/live rendering.
+    evidence:
+      - It covers special messages, static correction/clearing, command/subagent transitions, streamed ordering, Markdown stability, and splitStaticHistory/shouldCommitMessageToStatic at source/components/message/MessageList.test.tsx:22-620.
+      - The seam is MessageList and exported partition helpers in source/components/message/MessageList.tsx; no assigned sibling tests this ownership contract.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-subagent-activity-message-ui-components-b-m3
+    testId: ui-components-subagent-activity-message
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It exercises a coherent activity-card lifecycle, including legacy compatibility, tool results, transfer, and terminal states.
+    evidence:
+      - Labels, successful/failed/cancelled tools, running suppression, embedded failure handling, final text, background freeze, interruption, and failure suffixes are at source/components/message/SubagentActivityMessage.test.tsx:9-340.
+      - The seam is SubagentActivityMessage in source/components/message/SubagentActivityMessage.tsx; no assigned sibling covers this card.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-command-grouping-ui-components-b-m3
+    testId: ui-components-command-grouping
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Pure helper tests exhaustively protect grouping eligibility, in-flight visibility, identity, mixed status, and summaries without UI setup.
+    evidence:
+      - Trailing/open runs, parallel preservation, partial/failed status, stable IDs, separate runs, closure, group merging, and summaries are at source/components/message/command-grouping.test.ts:9-256.
+      - The seam is grouping and summary helpers in source/components/message/command-grouping.ts; no assigned sibling covers this policy.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-command-message-helpers-ui-components-b-m3
+    testId: ui-components-command-message-helpers
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It is contract-level parser/formatter coverage at a high fan-out seam, including registry completeness for registered tools.
+    evidence:
+      - Match counts, diagnostics, grep/read/subagent/web/outline/context parsers, paragraphs, JSON formatting, and registered-tool cases are at source/components/message/command-message-helpers.test.ts:20-339.
+      - The seam is command-message-helpers.ts feeding command renderers; no assigned sibling covers these outputs.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-approval-prompt-ask-user-ui-components-b-m3
+    testId: ui-components-approval-prompt-ask-user
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The ask-user file protects a distinct interactive protocol plus Docker/network safety branches, multi-select, custom answers, question navigation, and shortcut ownership.
+    evidence:
+      - Ask-user rendering/callbacks, cancellation, Docker/network variants, findings, multi-select, custom answers, multi-question navigation, and malformed args are at source/components/prompt/ApprovalPrompt.ask-user.test.tsx:38-881.
+      - The seam is ApprovalPrompt in source/components/prompt/ApprovalPrompt.tsx; exact siblings ApprovalPrompt.denied-read.test.tsx, ApprovalPrompt.folder-read.test.tsx, and ApprovalPrompt.read-file.test.tsx cover different scope metadata and cannot replace ask_user observables.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-approval-prompt-denied-read-ui-components-b-m3
+    testId: ui-components-approval-prompt-denied-read
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Sensitive and non-sensitive denied-read paths intentionally expose different grant choices, and answer/shortcut routing is covered for both.
+    evidence:
+      - Four-option, sensitive suppression, allow/deny/unsandboxed answers, suggested parent, and y/n ownership are asserted at source/components/prompt/ApprovalPrompt.denied-read.test.tsx:32-153.
+      - The seam is ApprovalPrompt deniedRead in source/components/prompt/ApprovalPrompt.tsx; folder-read and read-file siblings cover outside-workspace scopes, not sensitive denied-read behavior.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-mentor-pool-selection-menu-ui-components-b-m3
+    testId: ui-components-mentor-pool-selection-menu
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It checks phase-specific pool guidance, conditional reorder, metadata inheritance, and add-versus-edit wording.
+    evidence:
+      - Assertions cover empty pool, entry metadata, model-edit guidance, and new-draft labeling at source/components/menu/MentorPoolSelectionMenu.test.tsx:23-93.
+      - The seam is MentorPoolSelectionMenu in source/components/menu/MentorPoolSelectionMenu.tsx; no assigned sibling covers this phase contract.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-model-selection-menu-ui-components-b-m3
+    testId: ui-components-model-selection-menu
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It is the only assigned model-picker coverage and exercises availability guidance plus ordinary, provider-tab, and long-list states.
+    evidence:
+      - Loading/error/empty/list/refresh/provider/Codex/API-key/custom-provider/scroll assertions are at source/components/menu/ModelSelectionMenu.test.tsx:27-223.
+      - The seam is ModelSelectionMenu and its settings/auth inputs in source/components/menu/ModelSelectionMenu.tsx and source/services/settings/settings-service.mock.ts; no assigned sibling carries these observables.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-path-selection-menu-ui-components-b-m3
+    testId: ui-components-path-selection-menu
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It protects an explicit disclosure when path completion is bounded, not merely ordinary rendering.
+    evidence:
+      - The truncation warning and available path are asserted together at source/components/menu/PathSelectionMenu.test.tsx:8-28.
+      - The seam is PathSelectionMenu in source/components/menu/PathSelectionMenu.tsx; no assigned sibling asserts this workspace-limit warning.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-provider-selection-menu-ui-components-b-m3
+    testId: ui-components-provider-selection-menu
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It covers distinct provider lifecycle states and safety-sensitive setup/delete/discard guidance.
+    evidence:
+      - Wizard numbering, provider status/setup routes, destructive delete, validation, discard, and reorder are asserted at source/components/menu/ProviderSelectionMenu.test.tsx:8-187.
+      - The seam is ProviderSelectionMenu in source/components/menu/ProviderSelectionMenu.tsx; no assigned sibling covers these management phases.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-resume-selection-menu-ui-components-b-m3
+    testId: ui-components-resume-selection-menu
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It verifies selected-conversation isolation and canonical profile precedence, both of which can mislead resume actions.
+    evidence:
+      - IDs, selected details, unselected-detail exclusion, empty feedback, and canonical profile behavior are asserted at source/components/menu/ResumeSelectionMenu.test.tsx:27-120.
+      - The seam is ResumeSelectionMenu and ConversationListEntry rendering in source/components/menu/ResumeSelectionMenu.tsx and source/services/conversation/conversation-persistence.ts; no assigned sibling covers it.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-rewind-menu-ui-components-b-m3
+    testId: ui-components-rewind-menu
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It is destructive-action disclosure coverage with explicit pluralization, zero-reply, ordinal, truncation, and disposition cases.
+    evidence:
+      - Empty state, visible ordinals, discard counts/forms, unanswered turns, images/files, footer wording, truncation, and separators are asserted at source/components/menu/RewindMenu.test.tsx:21-137.
+      - The seam is RewindMenu consuming RewindItem in source/components/menu/RewindMenu.tsx and source/utils/conversation/rewind-items.ts; no assigned sibling covers it.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-settings-selection-menu-scroll-ui-components-b-m3
+    testId: ui-components-settings-selection-menu-scroll
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It protects visible-window boundaries and rerender behavior across broad search, category collapse, and category switching.
+    evidence:
+      - Exact inclusion/exclusion, one-row tabs, switch hint placement, and reduced rerender height are asserted at source/components/menu/SettingsSelectionMenu.scroll.test.tsx:15-193.
+      - The seam is SettingsSelectionMenu layout in source/components/menu/SettingsSelectionMenu.tsx with SettingCompletionItem from source/hooks/use-settings-completion.ts; no assigned sibling covers these transitions.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-settings-value-selection-menu-ui-components-b-m3
+    testId: ui-components-settings-value-selection-menu
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It covers empty search, selected-only description, numeric guidance, and confirmation controls for setting values.
+    evidence:
+      - No-match, values, selected description isolation, numeric hint, and footer assertions are at source/components/menu/SettingsValueSelectionMenu.test.tsx:15-77.
+      - The seam is SettingsValueSelectionMenu in source/components/menu/SettingsValueSelectionMenu.tsx; no assigned sibling covers value suggestions.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-settings-selection-menu-ui-components-b-m3
+    testId: ui-components-settings-selection-menu
+    role: second_opinion
+    reviewer: ui-components-b-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-b-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: medium
+    reason: The navigation contract matters, but the selected-item assertion only checks that an arrow and item text exist, not that the arrow marks that item.
+    evidence:
+      - Empty/search output, values, categories, and footer descriptions are strong, while selection is only output.includes('▶') plus shell.timeout at source/components/menu/SettingsSelectionMenu.test.tsx:75-89.
+      - The seam is SettingsSelectionMenu in source/components/menu/SettingsSelectionMenu.tsx; sibling source/components/menu/SettingsSelectionMenu.scroll.test.tsx covers window/category behavior, not this weak selected-row assertion.
+    replacementTestIds: []
+    status: proposed

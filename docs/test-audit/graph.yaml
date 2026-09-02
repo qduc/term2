@@ -17787,17 +17787,16 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
+  recommendation: keep
   confidence: high
-  reason: Coordinator decision of record after source verification. The intended multi-consumer contract
-    matters, but this case only asserts truth rather than that both consumers observe their expected values.
+  reason: "M4 batch B8 (audit-m4-b8 db3890cf) landed: the case no longer ends in\n    \ expect(true).toBe(true); one consumer sets input through the context and the\n    \ test asserts both consumers render that shared value, pinning the one-\n    \ provider-for-all-children contract."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
-  - source/context/InputContext.test.tsx:252-272 mounts two consumers but ends with expect(true).toBe(true),
-    so it would pass if the rendered values were wrong.
-  - source/context/InputContext.tsx:202-205 supplies one state provider to all children; the test should
-    assert both rendered outputs.
+  - source/context/InputContext.test.tsx:252-272 mounts two consumers and asserts the shared value is
+    rendered by both after flushReactUpdates.
+  - source/context/InputContext.tsx:202-205 supplies one state provider to all children; the multi-consumer
+    observation is now asserted rather than assumed.
   replacementTestIds: []
   status: reviewed
 - id: settings-config-input-context-input-cursor-primary
@@ -18906,20 +18905,18 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
+  recommendation: keep
   confidence: high
-  reason: Coordinator decision of record after source verification. The central matrix repeats optional/nullability
-    assertions already owned by tools-glob, tools-read-file, tools-grep, tools-web-fetch, tools-ask-mentor,
-    and tools-code-context, while its read_file type-derivation assertion is unique; rewrite should retain
-    the type-level cross-check and move or remove duplicated cases.
+  reason: "M4 batch B8 (audit-m4-b8 db3890cf) landed: the seven optional-vs-nullable\
+    \ singleton its became one it.each over a (title, build, accepts, rejects)\n    \ table that preserves every probe pair; the unique read_file type-derivation\
+    \ cross-check, search_replace structure, and code_context_search query-\n    \ specific cases remain as standalone cases."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
-  - source/tools/tool-parameter-schema.test.ts:24-90 and :135-157 duplicates exact schema assertions in
-    source/tools/file/glob.test.ts:58-63, source/tools/file/read-file.test.ts:56-61, source/tools/file/grep.test.ts:21-33
-    plus :64-69, source/tools/web/web-fetch.test.ts:20-23 and source/tools/agent/ask-mentor.test.ts:26-32.
-  - Production seam is source/tools/types.ts:98-122; the unique @ts-expect-error derivation check is source/tools/tool-parameter-schema.test.ts:40-50,
-    so deletion or wholesale consolidation is not justified.
+  - source/tools/tool-parameter-schema.test.ts:24-174 keeps the type-level derivation check and drives
+    the matrix from data rows, so a schema change to any listed tool updates one row.
+  - Per-tool schema optionality remains owned by each tool's own test file (glob, read-file, grep,
+    web-fetch, ask-mentor).
   replacementTestIds: []
   status: reviewed
 - id: tools-utils-primary
@@ -29232,23 +29229,14 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
-  confidence: medium
-  reason: "Coordinator DOWNGRADE with corrected evidence: the file contains exactly three expect(true).toBe(true)\
-    \ at lines 342/391/407, but each sits at the END of an otherwise meaningful test (heredoc command\
-    \ construction asserted at 334-335; mkdir command asserted at 382/398) after `await resultPromise`.\
-    \ The pattern is a trailing completion stand-in that neither asserts the resolution nor adds anything\
-    \ the await did not enforce \u2014 replace with await expect(resultPromise).resolves.toBeUndefined().\
-    \ Cleanup-grade rewrite, not empty tests."
+  recommendation: keep
+  confidence: high
+  reason: "M4 batch B8 (audit-m4-b8 db3890cf) landed: the three trailing\n    \ expect(true).toBe(true) completion stand-ins became explicit\n    \ await expect(resultPromise).resolves.toBeUndefined() assertions, so each\n    \ success path now pins the resolution it previously only awaited."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
-  - Lines 82-292 assert connection, command output, typed not-connected, and exec-failure behavior.
-  - Lines 430-605 assert each in-flight transport-drop settlement and preservation of partial output.
-  - Lines 642-765 assert opt-in timeout/abort boundaries and post-settlement stability.
-  - Lines 771-842 assert canonical quoting for hostile cwd and file/directory paths.
-  - Lines 342, 391, and 407 are standalone expect(true).toBe(true) statements in success cases, so those
-    assertions verify nothing.
+  - source/services/ssh-service.test.ts:327-343, :378-392, and :394-408 assert writeFile and mkdir resolve
+    undefined after a zero-exit stream, replacing the dead assertions.
   replacementTestIds: []
   status: reviewed
 - id: platform-services-stream-event-processor-test-primary
@@ -33637,18 +33625,18 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
-  confidence: medium
-  reason: Coordinator decision of record after source verification. The navigation contract matters, but
-    the selected-item assertion only checks that an arrow and item text exist, not that the arrow marks
-    that item.
+  recommendation: keep
+  confidence: high
+  reason: "M4 batch B8 (audit-m4-b8 db3890cf) landed: the marks-the-selected-item\
+    \ case now strips ANSI styling and asserts exactly one arrowed row, that the\
+    \ arrowed row contains the selected key (shell.timeout at selectedIndex 1)\n    \ and not the unselected key, and that the unselected row carries no arrow."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
-  - "Empty/search output, values, categories, and footer descriptions are strong, while selection is only\
-    \ output.includes('\u25B6') plus shell.timeout at source/components/menu/SettingsSelectionMenu.test.tsx:75-89."
+  - source/components/menu/SettingsSelectionMenu.test.tsx:75-95 asserts the single '\u25B6' row is the
+    selected item's key rather than any row containing both strings.
   - The seam is SettingsSelectionMenu in source/components/menu/SettingsSelectionMenu.tsx; sibling source/components/menu/SettingsSelectionMenu.scroll.test.tsx
-    covers window/category behavior, not this weak selected-row assertion.
+    covers window/category behavior.
   replacementTestIds: []
   status: reviewed
 - id: ui-components-skill-selection-menu-primary
@@ -33852,16 +33840,19 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
-  confidence: medium
-  reason: Coordinator decision of record after source verification. The render contract matters, but the
-    test does not exercise any choice callback or keyboard route for this interactive prompt.
+  recommendation: keep
+  confidence: high
+  reason: "M4 batch B8 (audit-m4-b8 db3890cf) landed: the file now exercises every\
+    \ choice route of this interactive prompt \u2014 y confirms, n declines, escape\
+    \ cancels, return confirms on the default Yes selection, and down-arrow-plus-\
+    \ return declines \u2014 plus the default-selection marker on render."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
-  - It only checks question and Yes/No labels and passes no-op callbacks at source/components/prompt/HandoffConfirmationPrompt.test.tsx:8-21.
-  - The seam is HandoffConfirmationPrompt in source/components/prompt/HandoffConfirmationPrompt.tsx; comparable
-    callback/keyboard coverage exists in source/components/prompt/ModeSwitchConfirmationPrompt.test.tsx.
+  - source/components/prompt/HandoffConfirmationPrompt.test.tsx asserts callbacks fire for y/n/return/
+    escape keys and that the down arrow moves the marker to No before return declines.
+  - Production useInput handler at source/components/prompt/HandoffConfirmationPrompt.tsx:14-38 dispatches
+    those exact keys, so the keyboard surface is now pinned end to end.
   replacementTestIds: []
   status: reviewed
 - id: ui-components-input-surge-confirmation-prompt-primary

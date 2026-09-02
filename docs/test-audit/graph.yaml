@@ -29212,24 +29212,19 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
+  recommendation: keep
   confidence: high
-  reason: Coordinator decision of record after source verification. The file protects an important stream
-    boundary, but several titles claim provider-envelope extraction or deduplication that the fixtures
-    do not exercise, and one title contradicts its assertion.
+  reason: "M4 batch B10 (audit-m4-b10 01c4a0d3) landed: the mislabeled titles were renamed to\n    \ what their fixtures actually assert - normalized text deltas, one tool_started per\n    \ streamed function_call when the callId repeats, and tool_call_streaming_delta\n    \ preservation/passthrough - and the approval-handling case now seeds the shared argument\n    \ map and asserts tool_started for the resumed, already-approved call."
   evidence:
-  - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
-    before this primary was written.'
-  - Lines 107-121 title the case as nested/direct model-envelope extraction, but the fixture contains
-    only already-normalized text_delta events at lines 109-110.
-  - Lines 351-376 title the case as emitting one tool_started for duplicates, while the assertion explicitly
-    expects two starts at lines 372-375.
-  - Lines 378-401 title the case as approval-handling interaction, but supplies only a normal function_call
-    item and no approval state.
-  - Lines 717-802 title several cases as Responses, custom/MCP, legacy, and Chat Completions extraction,
-    while every fixture is already a tool_call_streaming_delta event.
-  - Lines 873-890 likewise supplies normalized deltas for an AI SDK title, so the cases should be renamed
-    or given raw source-shaped fixtures while retaining the useful normalization checks.
+  - 'source/services/stream-event-processor.test.ts:107 titles the case as emitting each text
+    delta exactly once with its delta text and running fullText, matching the normalized
+    fixture.'
+  - 'source/services/stream-event-processor.test.ts:351 titles the repeated-callId case as one
+    tool_started per streamed function_call; 378-406 pre-seeds toolCallArgumentsById with an
+    approved call and asserts tool_started for the resumed call.'
+  - 'source/services/stream-event-processor.test.ts:721-936 retitles the seven delta cases as
+    preserving tool name / per-call argument char counts, lone-event passthrough, and
+    consecutive same-name events - no provider-envelope extraction claims remain.'
   replacementTestIds: []
   status: reviewed
 - id: platform-services-stream-snapshot-test-primary
@@ -30476,20 +30471,20 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
+  recommendation: keep
   confidence: high
-  reason: Coordinator decision of record after source verification. The facade contract matters, but this
-    case only observes saveOrder and that deleting an unknown id does not throw; it does not verify the
-    list, save, or real deletion forwarding promised by the public session seam.
+  reason: "M4 batch B10 (audit-m4-b10 01c4a0d3) landed: the facade suite now mocks the\n    \ provider-service policy module and verifies every public operation delegates with the\n    \ live settings authority - list() forwards to loadProviderItems and returns its items,\n    \ save() forwards draft and edit target to saveProvider, delete() forwards (missing and\n    \ known ids) to deleteCustomProvider - while the saveOrder persistence case is retained."
   evidence:
-  - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
-    before this primary was written.'
-  - source/services/providers/provider-management-session.ts:19-33 exposes four public operations, while
-    source/services/providers/provider-management-session.test.ts:4-17 exercises only saveOrder and delete
-    with a missing id.
-  - source/providers/provider-service.test.ts covers the underlying policy functions, but cannot establish
-    that ProviderManagementSession.list/save/delete delegate those operations, so it is not a replacement
-    for a rewritten facade test.
+  - 'source/services/providers/provider-management-session.test.ts:1-20 replaces the policy
+    imports with vi.mock so seam delegation is observed in isolation from provider-service
+    behavior.'
+  - 'source/services/providers/provider-management-session.test.ts:35-52 forwards list() to
+    loadProviderItems(settings) and save(draft, previous-name) to saveProvider(settings, draft,
+    previous-name), returning their results.'
+  - 'source/services/providers/provider-management-session.test.ts:54-63 delegates delete() for
+    missing and known ids to deleteCustomProvider(settings, id).'
+  - 'source/services/providers/provider-management-session.test.ts:27-33 keeps the explicit
+    saveOrder persistence through settings.setPersistent.'
   replacementTestIds: []
   status: reviewed
 - id: runtime-agent-chat-service-primary
@@ -34929,22 +34924,20 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
-  confidence: medium
-  reason: "Coordinator DOWNGRADE: rewrite_candidate stands as a SPLIT finding \u2014 2,030 lines / 51\
-    \ its across five disjoint seams (startup+assertion-verifier describe spanning 300-1600, workspace\
-    \ admission, v1 compacted-cursor routing, worker process boundary, logging/lifecycle) whose workspace-admission\
-    \ and cursor concerns have sibling owners elsewhere (workspace lease, state projection). Splitting\
-    \ preserves coverage; rewriting content is not needed."
+  recommendation: keep
+  confidence: high
+  reason: "M4 batch B10 (audit-m4-b10 01c4a0d3) landed: the 2,030-line gateway.test.ts was split\n    \ by seam into four sibling files (workspace admission, v1 compacted-cursor routing, worker\n    \ process boundary, safe-logging/lifecycle), each a focused describe, while gateway.test.ts\n    \ keeps the startup/transport-RPC/projection/recovery describe; the SPLIT finding is resolved\n    \ with coverage retained."
   evidence:
-  - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
-    before this primary was written.'
-  - source/gateway/gateway.test.ts:300-1597 combines startup, transport/RPC, public projection, interaction
-    resolution, recovery, and replay-ledger scenarios.
-  - source/gateway/gateway.test.ts:1600-1768 contains a separate workspace-admission block with ownership,
-    path, policy, and dynamic-grant behavior.
-  - source/gateway/gateway.test.ts:1771-1887 contains a separate compaction/cursor restart scenario.
-  - source/gateway/gateway.test.ts:1890-2029 contains worker-boundary, safe-logging, and lifecycle scenarios.
+  - 'source/gateway/gateway.test.ts:286-1584 keeps the startup-and-assertion-verifier describe
+    (startup, transport/RPC shape, public projection, interaction resolution, durable recovery,
+    replay ledger.'
+  - 'source/gateway/gateway.workspace-admission.test.ts:70-239 now holds the workspace-admission
+    describe (owner binding, canonical-root policy, dynamic grants).'
+  - 'source/gateway/gateway.compacted-cursor.test.ts:106-223 holds the v1 compacted-cursor case
+    (410 cursor_compacted after a durable compactThrough restart).'
+  - 'source/gateway/gateway.worker-boundary.test.ts:36-139 holds the worker process boundary
+    describe; source/gateway/gateway.logging-lifecycle.test.ts:5-40 holds safe-logging and
+    lifecycle.'
   replacementTestIds: []
   status: reviewed
 - id: entrypoints-interaction-protocol-test-primary
@@ -35038,24 +35031,17 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
-  confidence: medium
-  reason: 'Coordinator decision of record after source verification. The restart boundary and sanitization
-    assertions are valuable, but the named no-work-rerun claim is not exercised against a provider or
-    tool: the test increments a synthetic counter by zero. Rewrite should inject an observable runtime
-    spy while retaining the sequence and recovery checks.'
+  recommendation: keep
+  confidence: high
+  reason: "M4 batch B10 (audit-m4-b10 01c4a0d3) landed: the restart-matrix case no longer carries\n    \ the dead no-work-rerun counter (providerRuns.count += 0 asserting zero against nothing); the\n    \ counter and its unexercised claim were dropped and the title now says what the matrix\n    \ verifies (no sequence reuse or duplicated facts), so the file no longer claims to observe\n    \ provider/tool invocation."
   evidence:
-  - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
-    before this primary was written.'
-  - source/gateway/persistence-recovery-matrix.test.ts:41-89 verifies one recovered interaction fact,
-    checkpoint clearing, and no duplicate recovery publication.
-  - source/gateway/persistence-recovery-matrix.test.ts:91-127 verifies recovery publication re-sanitizes
-    checkpoint DTO text.
-  - source/gateway/persistence-recovery-matrix.test.ts:129-217 enumerates eight restart boundaries and
-    checks sequence continuity, but lines 201-215 only use providerRuns.count += 0 rather than invoking
-    a provider/tool.
-  - source/gateway/persistence.test.ts:218-244 is the named assigned sibling for pending-interaction recovery;
-    it does not replace this matrix's boundary coverage.
+  - 'source/gateway/persistence-recovery-matrix.test.ts:41-89 still recovers one pending
+    interaction exactly once and never leaves it actionable.'
+  - 'source/gateway/persistence-recovery-matrix.test.ts:91-127 still verifies recovery
+    publication re-sanitizes checkpoint DTO text.'
+  - 'source/gateway/persistence-recovery-matrix.test.ts:129-216 still enumerates the eight
+    durable restart boundaries with sequence-continuation and no-duplicated-fact assertions;
+    the retitled case no longer references the removed providerRuns counter.'
   replacementTestIds: []
   status: reviewed
 - id: entrypoints-persistence-test-primary
@@ -35274,22 +35260,18 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
+  recommendation: keep
   confidence: high
-  reason: Coordinator decision of record after source verification. The file protects important versioning,
-    persistence, ranking, facet, and hard-case contracts, but its explicitly named wrong-approval-versus-wrong-reject
-    test asserts two clamped zero scores and therefore cannot detect the relative penalty it claims to
-    test.
+  reason: "M4 batch B10 (audit-m4-b10 01c4a0d3) landed: the wrong-approval-versus-wrong-reject\n    \ case now gives each model one correct low-severity case plus one wrong high-severity case,\n    \ so the penalty is observable after clamping: wrong-approval scores 0 (-3 x 1.5) while\n    \ wrong-reject scores 0.25, and the test asserts the strict ordering and leaderboard\n    \ placement it previously could not detect."
   evidence:
-  - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
-    before this primary was written.'
-  - source/scripts/eval-auto-approval/leaderboard.test.ts:72-221 verifies legacy/current prompt scoping
-    and duplicate replacement, including separate prompt-version records.
-  - source/scripts/eval-auto-approval/leaderboard.test.ts:223-334 and 336-565 cover historical backfill,
-    facet rankings, hard-case thresholds, and report sections with concrete output assertions.
-  - source/scripts/eval-auto-approval/leaderboard.test.ts:666-709 documents a penalty comparison but both
-    one-case models are asserted only as score 0 after clamping; lines 711-749 provide a stronger adjacent
-    ranking check.
+  - 'source/scripts/eval-auto-approval/leaderboard.test.ts:666-712 builds comparable per-model
+    records via baseRecord (671-690) and expects wrongRejectEntry.score 0.25,
+    wrongApproveEntry.score 0 (clamped), a strict greater-than, and model-wrong-reject ranked
+    first (707-711).'
+  - 'source/scripts/eval-auto-approval/leaderboard.test.ts:714-751 and 754-777 extend the
+    comparison to a critical-severity case and pin the clamped multiplier penalty.'
+  - 'The prompt-version scoping (72-221) and backfill/facet/hard-case coverage (223-334,
+    336-565) are unchanged by the batch.'
   replacementTestIds: []
   status: reviewed
 - id: entrypoints-metrics-test-primary
@@ -35316,18 +35298,17 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
-  confidence: medium
-  reason: Coordinator decision of record after source verification. Prompt provenance is a meaningful
-    report contract, but the only test asserts one substring and does not observe the overall/category/failure
-    sections generated from the supplied metrics and records.
+  recommendation: keep
+  confidence: high
+  reason: "M4 batch B10 (audit-m4-b10 01c4a0d3) landed: the provenance substring case was\n    \ expanded into a full render assertion feeding one correct, one over-reject, and one\n    \ critical false-approval record, asserting the overall metric cells, per-category rows,\n    \ ordinary failures, and the critical-false-approval section generated from the supplied\n    \ metrics and records."
   evidence:
-  - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
-    before this primary was written.'
-  - source/scripts/eval-auto-approval/report.test.ts:5-25 supplies a prompt version and checks only its
-    Markdown substring.
-  - source/scripts/eval-auto-approval/report.ts:17-63 renders overall metrics, category rows, ordinary
-    failures, and critical false-approval sections not exercised by this test.
+  - 'source/scripts/eval-auto-approval/report.test.ts:5-62 feeds three prompt-versioned
+    records (one safe ok, one medium over-reject, one critical false-approve) into
+    generateReport with computeMetrics.'
+  - 'source/scripts/eval-auto-approval/report.test.ts:46-51 keeps prompt provenance and asserts
+    the overall cells (33.3% accuracy, 1 critical failure); 53-55 assert the per-category rows
+    for safe and destructive; 57-61 assert the ordinary-failure row and the critical
+    false-approval section.'
   replacementTestIds: []
   status: reviewed
 - id: entrypoints-runner-utils-test-primary

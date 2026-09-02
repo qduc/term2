@@ -1,0 +1,487 @@
+schemaVersion: 2
+domains:
+  - id: utils
+    label: Utility functions across app surfaces
+suites:
+  - id: unit
+    label: Default Vitest unit suite
+seams:
+  - id: utils-a-seam-input-normalization
+    label: Raw provider, model, text, and error inputs become stable utility values.
+  - id: utils-a-seam-credential-readiness
+    label: Settings, environment, and local auth state become provider readiness decisions.
+  - id: utils-a-seam-output-boundary
+    label: Tool and log output is transformed at byte, character, or structural safety boundaries.
+  - id: utils-a-seam-terminal-integration
+    label: Clipboard and renderer utilities select platform or terminal behavior.
+  - id: utils-a-seam-command-lifecycle
+    label: Commands are gated or warnings are injected based on active turn state.
+risks:
+  - id: utils-a-risk-input-misnormalization
+    label: Provider or utility inputs are parsed into incorrect values or lose compatibility data.
+    severity: high
+  - id: utils-a-risk-credential-misclassification
+    label: A provider is treated as runnable when credentials are absent, or rejected when available.
+    severity: critical
+  - id: utils-a-risk-output-leakage
+    label: Sensitive, oversized, malformed, or binary output crosses a logging or tool boundary unsafely.
+    severity: high
+  - id: utils-a-risk-terminal-failure
+    label: Platform and terminal capability differences cause copy or rendering behavior to fail unexpectedly.
+    severity: medium
+  - id: utils-a-risk-command-bypass
+    label: A busy command runs or a budget warning is omitted at a lifecycle boundary.
+    severity: high
+  - id: utils-a-risk-misleading-error
+    label: Abort, connection, or reauthentication failures are classified or reported misleadingly.
+    severity: high
+fixtures:
+  - id: utils-a-fixture-provider-environments
+    label: Stubbed provider environment variables and dynamic settings.
+  - id: utils-a-fixture-provider-traffic
+    label: JSON log records and temporary per-trace output directory.
+  - id: utils-a-fixture-terminal-capabilities
+    label: Platform, SSH, tmux, screen, and injected terminal writers or commands.
+  - id: utils-a-fixture-output-boundaries
+    label: Oversized Unicode, JSON, image, tool, and log payloads.
+  - id: utils-a-fixture-turn-state
+    label: Busy-turn, turn-limit, run-budget, and stall evidence contexts.
+  - id: utils-a-fixture-error-shapes
+    label: Abort-like, nested-cause, and undici socket error objects.
+contracts:
+  - id: utils-a-contract-model-provider-arg
+    statement: Model/provider command arguments return the trimmed model and optional provider, including provider values containing spaces.
+    seamIds: [utils-a-seam-input-normalization]
+    riskIds: [utils-a-risk-input-misnormalization]
+  - id: utils-a-contract-model-setting-resolution
+    statement: Model setting configuration preserves the prioritized model keys and resolves legacy setting commands to provider keys and fallbacks.
+    seamIds: [utils-a-seam-input-normalization]
+    riskIds: [utils-a-risk-input-misnormalization]
+  - id: utils-a-contract-provider-readiness
+    statement: Provider credential resolution distinguishes stored, environment, token-file, local no-auth, and missing credentials and filters unavailable providers.
+    seamIds: [utils-a-seam-credential-readiness]
+    riskIds: [utils-a-risk-credential-misclassification]
+  - id: utils-a-contract-provider-traffic-files
+    statement: Provider traffic extraction keeps sent and received payload metadata, and writing groups records into indexed per-trace files in stable order.
+    seamIds: [utils-a-seam-output-boundary]
+    riskIds: [utils-a-risk-output-leakage]
+  - id: utils-a-contract-token-usage
+    statement: Token usage normalizes provider and SDK shapes, preserves cache/reasoning metadata, extracts nested usage, and accumulates formatted session totals.
+    seamIds: [utils-a-seam-input-normalization]
+    riskIds: [utils-a-risk-input-misnormalization]
+  - id: utils-a-contract-single-file-diff-envelope
+    statement: A single-file diff rejects embedded multi-file envelopes while accepting supported end markers.
+    seamIds: [utils-a-seam-input-normalization]
+    riskIds: [utils-a-risk-input-misnormalization]
+  - id: utils-a-contract-busy-command-guard
+    statement: Wrapped slash commands execute only when no turn is in flight, otherwise notify without invoking the action while preserving command metadata and arguments.
+    seamIds: [utils-a-seam-command-lifecycle]
+    riskIds: [utils-a-risk-command-bypass]
+  - id: utils-a-contract-clipboard-routing
+    statement: Clipboard routing selects platform commands, ordered fallbacks, OSC 52 terminal wrappers, size limits, and explicit no-capability failures.
+    seamIds: [utils-a-seam-terminal-integration]
+    riskIds: [utils-a-risk-terminal-failure]
+  - id: utils-a-contract-copy-selections
+    statement: Fenced code extraction excludes markers and inline code, ignores unclosed fences, and puts the complete response before extracted blocks.
+    seamIds: [utils-a-seam-input-normalization]
+    riskIds: [utils-a-risk-input-misnormalization]
+  - id: utils-a-contract-error-description
+    statement: Abort-like detection recognizes supported error shapes without ordinary-error false positives, while description surfaces useful nested connection and reauthentication causes.
+    seamIds: [utils-a-seam-input-normalization]
+    riskIds: [utils-a-risk-misleading-error]
+  - id: utils-a-contract-header-sanitization
+    statement: Header sanitization normalizes input forms and casing while redacting credential-bearing headers and preserving safe metadata.
+    seamIds: [utils-a-seam-output-boundary]
+    riskIds: [utils-a-risk-output-leakage]
+  - id: utils-a-contract-home-start-guard
+    statement: Home-directory start warnings apply only at exact home or root for non-lite starts, and confirmation accepts affirmative answers only.
+    seamIds: [utils-a-seam-command-lifecycle]
+    riskIds: [utils-a-risk-command-bypass]
+  - id: utils-a-contract-tool-warning-injection
+    statement: Tool output warnings preserve valid text/JSON shapes and inject turn-limit, run-budget, and stall evidence only when pending context requires it.
+    seamIds: [utils-a-seam-command-lifecycle, utils-a-seam-output-boundary]
+    riskIds: [utils-a-risk-command-bypass, utils-a-risk-output-leakage]
+  - id: utils-a-contract-ink-render-options
+    statement: Ink render options disable incremental rendering.
+    seamIds: [utils-a-seam-terminal-integration]
+    riskIds: [utils-a-risk-terminal-failure]
+  - id: utils-a-contract-tool-result-bounds
+    statement: Tool result text remains unchanged below the UTF-8 cap and oversize text is safely truncated and spooled as a recoverable artifact, without binary corruption.
+    seamIds: [utils-a-seam-output-boundary]
+    riskIds: [utils-a-risk-output-leakage]
+  - id: utils-a-contract-bounded-json
+    statement: Serialized envelopes obey character and UTF-8 byte caps, preserve surrogate pairs, and return the smallest valid bounded failure representation.
+    seamIds: [utils-a-seam-output-boundary]
+    riskIds: [utils-a-risk-output-leakage]
+  - id: utils-a-contract-text-diff
+    statement: Text diff generation reports unchanged, added, deleted, and coerced nullish or primitive lines using stable +/-/space prefixes.
+    seamIds: [utils-a-seam-input-normalization]
+    riskIds: [utils-a-risk-input-misnormalization]
+  - id: utils-a-contract-log-truncation
+    statement: Log metadata truncation limits images, prompts, tool calls, tool output, and descriptions without mutating unchanged input, and text truncation preserves head and tail.
+    seamIds: [utils-a-seam-output-boundary]
+    riskIds: [utils-a-risk-output-leakage]
+tests:
+  - kind: file
+    id: utils-model-provider-arg-test
+    file: source/utils/ai/model-provider-arg.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-a-contract-model-provider-arg]
+    fixtureIds: []
+  - kind: file
+    id: utils-model-settings-test
+    file: source/utils/ai/model-settings.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-a-contract-model-setting-resolution]
+    fixtureIds: []
+  - kind: file
+    id: utils-provider-credentials-test
+    file: source/utils/ai/provider-credentials.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-a-contract-provider-readiness]
+    fixtureIds: [utils-a-fixture-provider-environments]
+  - kind: file
+    id: utils-provider-traffic-extractor-test
+    file: source/utils/ai/provider-traffic-extractor.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-a-contract-provider-traffic-files]
+    fixtureIds: [utils-a-fixture-provider-traffic]
+  - kind: file
+    id: utils-token-usage-test
+    file: source/utils/ai/token-usage.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-a-contract-token-usage]
+    fixtureIds: []
+  - kind: file
+    id: utils-apply-diff-test
+    file: source/utils/apply-diff.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-a-contract-single-file-diff-envelope]
+    fixtureIds: []
+  - kind: file
+    id: utils-busy-turn-guard-test
+    file: source/utils/busy-turn-guard.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-a-contract-busy-command-guard]
+    fixtureIds: [utils-a-fixture-turn-state]
+  - kind: file
+    id: utils-clipboard-test
+    file: source/utils/clipboard.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-a-contract-clipboard-routing]
+    fixtureIds: [utils-a-fixture-terminal-capabilities]
+  - kind: file
+    id: utils-copy-selections-test
+    file: source/utils/copy-selections.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-a-contract-copy-selections]
+    fixtureIds: []
+  - kind: file
+    id: utils-error-helpers-test
+    file: source/utils/error-helpers.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-a-contract-error-description]
+    fixtureIds: [utils-a-fixture-error-shapes]
+  - kind: file
+    id: utils-header-sanitizer-test
+    file: source/utils/header-sanitizer.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-a-contract-header-sanitization]
+    fixtureIds: []
+  - kind: file
+    id: utils-home-directory-start-guard-test
+    file: source/utils/home-directory-start-guard.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-a-contract-home-start-guard]
+    fixtureIds: []
+  - kind: file
+    id: utils-inject-warning-into-tool-output-test
+    file: source/utils/inject-warning-into-tool-output.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-a-contract-tool-warning-injection]
+    fixtureIds: [utils-a-fixture-turn-state]
+  - kind: file
+    id: utils-ink-render-options-test
+    file: source/utils/ink-render-options.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-a-contract-ink-render-options]
+    fixtureIds: []
+  - kind: file
+    id: utils-bound-tool-result-test
+    file: source/utils/output/bound-tool-result.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-a-contract-tool-result-bounds]
+    fixtureIds: [utils-a-fixture-output-boundaries]
+  - kind: file
+    id: utils-bounded-json-test
+    file: source/utils/output/bounded-json.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-a-contract-bounded-json]
+    fixtureIds: [utils-a-fixture-output-boundaries]
+  - kind: file
+    id: utils-output-diff-test
+    file: source/utils/output/diff.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-a-contract-text-diff]
+    fixtureIds: []
+  - kind: file
+    id: utils-log-truncation-test
+    file: source/utils/output/log-truncation.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-a-contract-log-truncation]
+    fixtureIds: [utils-a-fixture-output-boundaries]
+decisions:
+  - id: utils-model-provider-arg-test-r1
+    testId: utils-model-provider-arg-test
+    role: second_opinion
+    reviewer: utils-a-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Covers absent provider, provider values containing spaces, and trimming at the parser boundary.
+    evidence:
+      - Lines 4-9 assert model-only parsing leaves provider undefined.
+      - Lines 11-22 assert a spaced provider value and surrounding whitespace are parsed and trimmed.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-output-diff-test-r1
+    testId: utils-output-diff-test
+    role: second_opinion
+    reviewer: utils-a-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Covers the core LCS diff cases and deliberately verifies runtime coercion for nullish, numeric, and object inputs despite the typed API.
+    evidence:
+      - Lines 4-53 assert stable unchanged/add/delete/replacement prefixes across simple and multiline text.
+      - Lines 55-97 assert null/undefined, number, object, and mixed runtime coercion results.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-log-truncation-test-r1
+    testId: utils-log-truncation-test
+    role: second_opinion
+    reviewer: utils-a-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Protects sensitive-log minimization across image, prompt, tool-call, tool-output, description, reasoning, immutability, and head/tail text paths.
+    evidence:
+      - Lines 5-34 assert image URL truncation and preservation of the original metadata.
+      - Lines 53-177 cover system/developer prompts, tool descriptions, unchanged short/no-target paths, and combined metadata.
+      - Lines 179-206 assert reasoning omission and head/tail long-text truncation.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-copy-selections-test-r1
+    testId: utils-copy-selections-test
+    role: second_opinion
+    reviewer: utils-a-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Protects extraction semantics for language-tagged, plain, blank-line, inline, and unclosed fences plus selection ordering.
+    evidence:
+      - Lines 4-20 assert fence marker removal, blank-line preservation, inline-backtick exclusion, and unclosed-fence omission.
+      - Lines 22-29 assert full-response-first selection ordering and extracted code text.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-error-helpers-test-r1
+    testId: utils-error-helpers-test
+    role: second_opinion
+    reviewer: utils-a-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Although the abort keyword matrix is repetitive, it establishes intentional positive and negative classifications across runtime error shapes and the later describeError cases protect actionable diagnostics.
+    evidence:
+      - Lines 5-91 cover name/code/message and ordinary-error negative paths; lines 98-184 cover null/string/cause and undici edge cases.
+      - Lines 186-250 assert nested-cause formatting, socket-close recognition, and reauthentication guidance.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-header-sanitizer-test-r1
+    testId: utils-header-sanitizer-test
+    role: second_opinion
+    reviewer: utils-a-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Directly protects secret redaction across supported header input representations while retaining safe headers.
+    evidence:
+      - Lines 4-7 assert empty inputs produce no metadata.
+      - Lines 9-32 assert case-insensitive redaction and safe-header preservation for a record; lines 34-65 cover pairs and Headers.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-home-directory-start-guard-test-r1
+    testId: utils-home-directory-start-guard-test
+    role: second_opinion
+    reviewer: utils-a-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Covers the safety-sensitive exact-directory boundary, mode condition, affirmative parsing, and async confirmation result.
+    evidence:
+      - Lines 9-13 distinguish exact home from descendants and unrelated paths; lines 15-44 cover home/root warning conditions.
+      - Lines 46-56 assert accepted yes/y semantics and true/false confirmation outcomes.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-inject-warning-into-tool-output-test-r1
+    testId: utils-inject-warning-into-tool-output-test
+    role: second_opinion
+    reviewer: utils-a-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Protects warning insertion without corrupting several JSON output shapes and verifies turn/run budget gating, one-shot evidence, and non-verdict stall wording.
+    evidence:
+      - Lines 11-121 assert plain text, JSON strings/objects/arrays, envelope arrays, and shape-preserving fallback insertion.
+      - Lines 123-198 assert turn-limit thresholds, undefined/unbounded contexts, and loop-budget resolution.
+      - Lines 200-238 assert one-shot soft/stall evidence and unchanged output with no pending evidence.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-ink-render-options-test-r1
+    testId: utils-ink-render-options-test
+    role: second_opinion
+    reviewer: utils-a-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The single assertion protects a deliberate global rendering compatibility setting.
+    evidence:
+      - Lines 4-8 call getInkRenderOptions and assert incrementalRendering is false.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-bound-tool-result-test-r1
+    testId: utils-bound-tool-result-test
+    role: second_opinion
+    reviewer: utils-a-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Covers UTF-8-safe truncation, binary detection, short-path identity, and oversize artifact spooling with complete recoverability.
+    evidence:
+      - Lines 6-27 assert unchanged short text, multibyte boundary safety, and NUL-byte binary detection.
+      - Lines 29-49 assert no artifact below cap and full oversize text saved behind the shell note.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-bounded-json-test-r1
+    testId: utils-bounded-json-test
+    role: second_opinion
+    reviewer: utils-a-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Focused guard-boundary tests cover escaping-aware character accounting, independent byte caps, surrogate safety, and irreducible bounded failure output.
+    evidence:
+      - Lines 4-31 assert fixed-point serialized accounting and independent UTF-8 limits.
+      - Lines 33-46 assert surrogate-pair slicing and minimal valid JSON/literal fallback at the cap floor.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-model-settings-test-r1
+    testId: utils-model-settings-test
+    role: second_opinion
+    reviewer: utils-a-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Protects both configuration priority ordering and legacy command provider resolution in one focused contract test.
+    evidence:
+      - Lines 4-11 assert the five prioritized model keys and lines 13-19 assert cheap and legacy efficient provider mappings.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-provider-credentials-test-r1
+    testId: utils-provider-credentials-test
+    role: second_opinion
+    reviewer: utils-a-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Exercises the high-consequence readiness matrix across token-file presence, settings, host environment, custom provider types, local no-auth providers, and runtime registration cleanup.
+    evidence:
+      - Lines 20-49 distinguish missing versus present Codex auth-file readiness without token validation.
+      - Lines 52-72 cover settings/environment credentials and filtering unavailable first-party providers.
+      - Lines 81-149 cover remote custom credentials and explicit local no-auth behavior; lines 171-181 cover runtime-defined absence.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-provider-traffic-extractor-test-r1
+    testId: utils-provider-traffic-extractor-test
+    role: second_opinion
+    reviewer: utils-a-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Protects the operational extraction and persistence format used to inspect provider traffic.
+    evidence:
+      - Lines 7-45 assert sent/received selection, trace metadata, headers, and payload extraction.
+      - Lines 47-96 assert per-trace filenames, index counts/order, and serialized sent/received payloads.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-token-usage-test-r1
+    testId: utils-token-usage-test
+    role: second_opinion
+    reviewer: utils-a-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-a-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: high
+    reason: Most of the file is valuable normalization and accounting coverage, but it also codifies a known missing behavior as a passing assertion; retain the regression evidence while rewriting that case to assert extraction from the SDK run-state shape after the intended fix.
+    evidence:
+      - Lines 393-410 explicitly name and assert that extractUsage misses RunResult.state.usage, calling it a bug rather than an intended contract.
+      - Lines 412-425 separately assert the desired normalizeAgentRunUsage SDK conversion, providing the basis for a focused replacement assertion.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-apply-diff-test-r1
+    testId: utils-apply-diff-test
+    role: second_opinion
+    reviewer: utils-a-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Boundary regression coverage prevents silently accepting a multi-file envelope in the single-file API while preserving the explicit end marker.
+    evidence:
+      - Lines 5-19 assert rejection of update/add/delete envelope headers both at the start and embedded after a chunk.
+      - Lines 22-24 assert the supported end-of-patch marker still applies the change.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-busy-turn-guard-test-r1
+    testId: utils-busy-turn-guard-test
+    role: second_opinion
+    reviewer: utils-a-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Directly covers both sides of the busy-turn gate and preserves user-facing command metadata and argument forwarding.
+    evidence:
+      - Lines 12-32 assert execution when idle and suppression plus notification while busy.
+      - Lines 34-67 assert alias naming, argument forwarding, and name/description preservation.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-clipboard-test-r1
+    testId: utils-clipboard-test
+    role: second_opinion
+    reviewer: utils-a-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Covers platform ordering, terminal wrappers/chunking, native fallback/async behavior, SSH routing, size limits, and no-capability failures.
+    evidence:
+      - Lines 6-27 assert platform and Wayland/X11 candidate ordering.
+      - Lines 32-104 assert OSC 52 encoding, tmux/screen wrapping and chunking, TTY absence, and size rejection.
+      - Lines 108-262 assert native fallback, asynchronous command waiting, SSH/local OSC 52 routing, and failure errors.
+    replacementTestIds: []
+    status: proposed

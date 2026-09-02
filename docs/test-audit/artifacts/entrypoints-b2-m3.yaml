@@ -1,0 +1,403 @@
+schemaVersion: 2
+domains:
+  - id: entrypoints
+    label: App/CLI/gateway entrypoints and support surfaces
+suites:
+  - id: unit
+    label: Default Vitest unit suite
+  - id: integration
+    label: Vitest entrypoint integration suite
+seams:
+  - id: entrypoints-b2-stdout-routing
+    label: Non-interactive event-to-stdout and stderr projection
+  - id: entrypoints-b2-noninteractive-lifecycle
+    label: One-shot non-interactive session construction and disposal
+  - id: entrypoints-b2-noninteractive-approval
+    label: Non-interactive approval policy and tool restrictions
+  - id: entrypoints-b2-noninteractive-budget
+    label: Non-interactive run-budget continuation boundary
+  - id: entrypoints-b2-eval-dataset
+    label: Auto-approval evaluation dataset validation and filtering
+  - id: entrypoints-b2-eval-metrics
+    label: Auto-approval evaluation metric computation
+  - id: entrypoints-b2-eval-leaderboard
+    label: Persisted model leaderboard aggregation and report sections
+  - id: entrypoints-b2-eval-report
+    label: Auto-approval evaluation Markdown report rendering
+  - id: entrypoints-b2-eval-runner-utils
+    label: Evaluation runner cache, input, path, and retry utilities
+  - id: entrypoints-b2-ink-test-harness
+    label: Ink test rendering, act, visible text, and teardown helpers
+  - id: entrypoints-b2-network-test-guard
+    label: Vitest external network admission guard
+  - id: entrypoints-b2-user-turn
+    label: User-turn normalization and display projection
+risks:
+  - id: entrypoints-b2-risk-output-corruption
+    label: Non-interactive consumers receive missing, duplicated, or misrouted output.
+    severity: high
+  - id: entrypoints-b2-risk-session-leak
+    label: One-shot sessions leak clients, interceptors, hooks, or runtime resources.
+    severity: high
+  - id: entrypoints-b2-risk-unsafe-noninteractive-tool
+    label: Non-interactive mode executes a tool that requires interactive oversight.
+    severity: critical
+  - id: entrypoints-b2-risk-budget-overrun
+    label: Automatic continuation bypasses the configured finite run budget.
+    severity: high
+  - id: entrypoints-b2-risk-invalid-eval-input
+    label: Invalid evaluation cases or filters silently alter benchmark inputs.
+    severity: medium
+  - id: entrypoints-b2-risk-misleading-eval-metrics
+    label: Evaluation metrics misstate safety failures, errors, or latency.
+    severity: high
+  - id: entrypoints-b2-risk-stale-leaderboard
+    label: Persisted or scoped model results are merged and ranked incorrectly.
+    severity: high
+  - id: entrypoints-b2-risk-misleading-report
+    label: Evaluation report omits or mislabels findings needed to interpret results.
+    severity: medium
+  - id: entrypoints-b2-risk-runner-retry-or-cache
+    label: Runner retries unsafe failures or reuses results across incompatible inputs.
+    severity: high
+  - id: entrypoints-b2-risk-harness-regression
+    label: Test helpers stop observing Ink output or cleaning up rendered views.
+    severity: high
+  - id: entrypoints-b2-risk-network-leak
+    label: Tests make external network requests instead of failing before socket access.
+    severity: critical
+  - id: entrypoints-b2-risk-user-turn-disclosure
+    label: Internal attachment or skill payloads leak into displayed user text.
+    severity: medium
+fixtures:
+  - id: entrypoints-b2-fixture-fake-session
+    label: In-memory conversation session and writable stdout/stderr doubles
+  - id: entrypoints-b2-fixture-eval-files
+    label: Temporary JSON/YAML evaluation files and persisted report records
+  - id: entrypoints-b2-fixture-eval-records
+    label: Synthetic model result records spanning outcomes and facets
+  - id: entrypoints-b2-fixture-ink-view
+    label: Ink render result and effect-owning test component
+  - id: entrypoints-b2-fixture-registered-provider
+    label: Temporary registered streamed provider for run-budget execution
+contracts:
+  - id: entrypoints-b2-contract-stream-and-final-output
+    statement: runWithSession writes streamed text once, supplies final text when no deltas arrived, appends the normal completion newline, and returns exit code 0 for a response.
+    seamIds: [entrypoints-b2-stdout-routing]
+    riskIds: [entrypoints-b2-risk-output-corruption]
+  - id: entrypoints-b2-contract-no-manual-sync-wrapper
+    statement: Production TypeScript sources do not emit manual DEC Mode 2026 synchronization wrappers around stdout writes, leaving frame atomicity to the terminal renderer.
+    seamIds: [entrypoints-b2-stdout-routing]
+    riskIds: [entrypoints-b2-risk-output-corruption]
+  - id: entrypoints-b2-contract-json-event-output
+    statement: JSON mode emits each conversation event as newline-delimited JSON and emits a completed or error terminal event on the corresponding outcome.
+    seamIds: [entrypoints-b2-stdout-routing]
+    riskIds: [entrypoints-b2-risk-output-corruption]
+  - id: entrypoints-b2-contract-stderr-routing
+    statement: Non-interactive diagnostics and tool summaries go to stderr, while quiet mode suppresses summaries and reasoning is emitted only when requested.
+    seamIds: [entrypoints-b2-stdout-routing]
+    riskIds: [entrypoints-b2-risk-output-corruption]
+  - id: entrypoints-b2-contract-approval-policy
+    statement: Non-interactive approval decisions auto-approve safe commands, reject dangerous commands, use the configured evaluator for ambiguous commands, and report rejected outcomes.
+    seamIds: [entrypoints-b2-noninteractive-approval]
+    riskIds: [entrypoints-b2-risk-unsafe-noninteractive-tool]
+  - id: entrypoints-b2-contract-session-lifecycle
+    statement: runNonInteractive creates the configured session identity and lifecycle, applies profile workflow input, installs temporary restrictions, and removes or disposes owned resources on completion.
+    seamIds: [entrypoints-b2-noninteractive-lifecycle]
+    riskIds: [entrypoints-b2-risk-session-leak]
+  - id: entrypoints-b2-contract-noninteractive-boundaries
+    statement: Non-interactive execution blocks background shell, asynchronous subagents, and ask_user while allowing ordinary foreground tools, and stops after the configured finite parent budget extensions.
+    seamIds: [entrypoints-b2-noninteractive-approval, entrypoints-b2-noninteractive-budget]
+    riskIds: [entrypoints-b2-risk-unsafe-noninteractive-tool, entrypoints-b2-risk-budget-overrun]
+  - id: entrypoints-b2-contract-dataset-validation
+    statement: loadDataset accepts valid typed evaluation cases and rejects malformed cases with an identifying validation error.
+    seamIds: [entrypoints-b2-eval-dataset]
+    riskIds: [entrypoints-b2-risk-invalid-eval-input]
+  - id: entrypoints-b2-contract-dataset-filtering-and-policy
+    statement: filterDataset applies category, severity, and id filters together, while the checked default dataset preserves expected rejection labels for destructive and gray-zone cases.
+    seamIds: [entrypoints-b2-eval-dataset]
+    riskIds: [entrypoints-b2-risk-invalid-eval-input]
+  - id: entrypoints-b2-contract-evaluation-metrics
+    statement: computeMetrics reports classification totals, accuracy, precision/recall, false-approval safety failures, critical failures, and uncached latency percentiles from result records.
+    seamIds: [entrypoints-b2-eval-metrics]
+    riskIds: [entrypoints-b2-risk-misleading-eval-metrics]
+  - id: entrypoints-b2-contract-parse-error-metrics
+    statement: computeMetrics counts parse errors in total and parse-error rate while excluding errored results from classification accuracy and category counts.
+    seamIds: [entrypoints-b2-eval-metrics]
+    riskIds: [entrypoints-b2-risk-misleading-eval-metrics]
+  - id: entrypoints-b2-contract-result-version-and-dedupe
+    statement: Persisted model results use the legacy prompt identity when absent, keep prompt versions separate, and replace duplicate provider/model/case/version records with the latest result.
+    seamIds: [entrypoints-b2-eval-leaderboard]
+    riskIds: [entrypoints-b2-risk-stale-leaderboard]
+  - id: entrypoints-b2-contract-leaderboard-ranking
+    statement: Model leaderboards rank deduplicated results using breadth, severity weighting, wrong-approval penalties, category/severity facets, and high wrong-ratio case thresholds.
+    seamIds: [entrypoints-b2-eval-leaderboard]
+    riskIds: [entrypoints-b2-risk-stale-leaderboard]
+  - id: entrypoints-b2-contract-evaluation-report
+    statement: generateReport renders prompt-version metadata, overall and category metrics, and bounded failure details including critical false approvals in Markdown.
+    seamIds: [entrypoints-b2-eval-report]
+    riskIds: [entrypoints-b2-risk-misleading-report]
+  - id: entrypoints-b2-contract-runner-options-cache-and-paths
+    statement: Runner utilities derive report paths, reject non-positive concurrency/repeat options, and include evaluator and prompt versions in cache identity.
+    seamIds: [entrypoints-b2-eval-runner-utils]
+    riskIds: [entrypoints-b2-risk-runner-retry-or-cache]
+  - id: entrypoints-b2-contract-runner-input-and-retry
+    statement: Runner utilities expand ordered provider/model YAML lists, reject malformed provider mappings, retry rate-limit responses up to the limit using reset timing, and immediately rethrow non-rate-limit errors.
+    seamIds: [entrypoints-b2-eval-runner-utils]
+    riskIds: [entrypoints-b2-risk-runner-retry-or-cache]
+  - id: entrypoints-b2-contract-ink-observation
+    statement: Ink test helpers render and rerender views inside React act and strip terminal control sequences without changing visible text.
+    seamIds: [entrypoints-b2-ink-test-harness]
+    riskIds: [entrypoints-b2-risk-harness-regression]
+  - id: entrypoints-b2-contract-ink-teardown
+    statement: Ink test helpers register rendered views for act-wrapped unmount teardown and execute the pending teardown exactly once when drained.
+    seamIds: [entrypoints-b2-ink-test-harness]
+    riskIds: [entrypoints-b2-risk-harness-regression]
+  - id: entrypoints-b2-contract-network-block
+    statement: The Vitest setup guard rejects external fetch requests with the network-disabled diagnostic before allowing no external socket access.
+    seamIds: [entrypoints-b2-network-test-guard]
+    riskIds: [entrypoints-b2-risk-network-leak]
+  - id: entrypoints-b2-contract-user-turn-normalization
+    statement: User-turn normalization removes complete and orphaned image sentinels while preserving image and skill attachments and recognizing image-only content.
+    seamIds: [entrypoints-b2-user-turn]
+    riskIds: [entrypoints-b2-risk-user-turn-disclosure]
+  - id: entrypoints-b2-contract-user-turn-display
+    statement: User-turn display formatting exposes text, skill names, and image counts as placeholders without exposing skill bodies, image bytes, or sentinel IDs.
+    seamIds: [entrypoints-b2-user-turn]
+    riskIds: [entrypoints-b2-risk-user-turn-disclosure]
+tests:
+  - kind: file
+    id: entrypoints-no-manual-stdout-sync-guard-test
+    file: source/no-manual-stdout-sync.guard.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds: [entrypoints-b2-contract-no-manual-sync-wrapper]
+    fixtureIds: []
+  - kind: file
+    id: entrypoints-non-interactive-test
+    file: source/non-interactive.test.ts
+    domainId: entrypoints
+    suiteId: integration
+    contractIds:
+      - entrypoints-b2-contract-stream-and-final-output
+      - entrypoints-b2-contract-json-event-output
+      - entrypoints-b2-contract-stderr-routing
+      - entrypoints-b2-contract-approval-policy
+      - entrypoints-b2-contract-session-lifecycle
+      - entrypoints-b2-contract-noninteractive-boundaries
+    fixtureIds:
+      - entrypoints-b2-fixture-fake-session
+      - entrypoints-b2-fixture-registered-provider
+  - kind: file
+    id: entrypoints-dataset-test
+    file: source/scripts/eval-auto-approval/dataset.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds:
+      - entrypoints-b2-contract-dataset-validation
+      - entrypoints-b2-contract-dataset-filtering-and-policy
+    fixtureIds: [entrypoints-b2-fixture-eval-files]
+  - kind: file
+    id: entrypoints-leaderboard-test
+    file: source/scripts/eval-auto-approval/leaderboard.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds:
+      - entrypoints-b2-contract-result-version-and-dedupe
+      - entrypoints-b2-contract-leaderboard-ranking
+    fixtureIds:
+      - entrypoints-b2-fixture-eval-files
+      - entrypoints-b2-fixture-eval-records
+  - kind: file
+    id: entrypoints-metrics-test
+    file: source/scripts/eval-auto-approval/metrics.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds:
+      - entrypoints-b2-contract-evaluation-metrics
+      - entrypoints-b2-contract-parse-error-metrics
+    fixtureIds: [entrypoints-b2-fixture-eval-records]
+  - kind: file
+    id: entrypoints-report-test
+    file: source/scripts/eval-auto-approval/report.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds: [entrypoints-b2-contract-evaluation-report]
+    fixtureIds: [entrypoints-b2-fixture-eval-records]
+  - kind: file
+    id: entrypoints-runner-utils-test
+    file: source/scripts/eval-auto-approval/runner-utils.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds:
+      - entrypoints-b2-contract-runner-options-cache-and-paths
+      - entrypoints-b2-contract-runner-input-and-retry
+    fixtureIds: [entrypoints-b2-fixture-eval-files]
+  - kind: file
+    id: entrypoints-ink-testing-test
+    file: source/test-helpers/ink-testing.test.tsx
+    domainId: entrypoints
+    suiteId: unit
+    contractIds:
+      - entrypoints-b2-contract-ink-observation
+      - entrypoints-b2-contract-ink-teardown
+    fixtureIds: [entrypoints-b2-fixture-ink-view]
+  - kind: file
+    id: entrypoints-vitest-network-guard-test
+    file: source/test-helpers/vitest-network-guard.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds: [entrypoints-b2-contract-network-block]
+    fixtureIds: []
+  - kind: file
+    id: entrypoints-user-turn-test
+    file: source/types/user-turn.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds:
+      - entrypoints-b2-contract-user-turn-normalization
+      - entrypoints-b2-contract-user-turn-display
+    fixtureIds: []
+decisions:
+  - id: entrypoints-no-manual-stdout-sync-guard-test-entrypoints-b2-m3
+    testId: entrypoints-no-manual-stdout-sync-guard-test
+    role: second_opinion
+    reviewer: entrypoints-b2-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-b2-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The guard uniquely scans production TypeScript and rejects actual DEC Mode 2026 bytes, protecting renderer-owned frame atomicity rather than duplicating an ordinary output assertion.
+    evidence:
+      - source/no-manual-stdout-sync.guard.test.ts:5-17 documents why a second stdout wrapper causes blank or partial frames.
+      - source/no-manual-stdout-sync.guard.test.ts:23-39 recursively enumerates non-test TypeScript sources, and lines 42-53 asserts both synchronization markers are absent.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-dataset-test-entrypoints-b2-m3
+    testId: entrypoints-dataset-test
+    role: second_opinion
+    reviewer: entrypoints-b2-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-b2-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The fixture-backed tests cover both schema rejection and the filtering/policy labels that determine which auto-approval cases enter evaluation.
+    evidence:
+      - source/scripts/eval-auto-approval/dataset.test.ts:17-51 writes a valid case and rejects a case missing history with the case identifier in the error.
+      - source/scripts/eval-auto-approval/dataset.test.ts:53-64 verifies category, severity, id, and combined filtering.
+      - source/scripts/eval-auto-approval/dataset.test.ts:66-100 checks destructive and v2 gray-zone default cases retain reject expectations.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-metrics-test-entrypoints-b2-m3
+    testId: entrypoints-metrics-test
+    role: second_opinion
+    reviewer: entrypoints-b2-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-b2-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: A compact synthetic confusion matrix checks classification, critical false approvals, precision/recall, and uncached latency, while a separate errored record checks parse-error accounting and exclusion.
+    evidence:
+      - source/scripts/eval-auto-approval/metrics.test.ts:4-53 exercises four outcomes and asserts total, accuracy, critical failure, precision, recall, and p50/p95 values.
+      - source/scripts/eval-auto-approval/metrics.test.ts:55-83 checks parseErrorRate and confirms an errored result does not lower valid-result accuracy.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-report-test-entrypoints-b2-m3
+    testId: entrypoints-report-test
+    role: second_opinion
+    reviewer: entrypoints-b2-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-b2-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: medium
+    reason: Prompt provenance is a meaningful report contract, but the only test asserts one substring and does not observe the overall/category/failure sections generated from the supplied metrics and records.
+    evidence:
+      - source/scripts/eval-auto-approval/report.test.ts:5-25 supplies a prompt version and checks only its Markdown substring.
+      - source/scripts/eval-auto-approval/report.ts:17-63 renders overall metrics, category rows, ordinary failures, and critical false-approval sections not exercised by this test.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-runner-utils-test-entrypoints-b2-m3
+    testId: entrypoints-runner-utils-test
+    role: second_opinion
+    reviewer: entrypoints-b2-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-b2-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The utility tests use temporary files and injected clocks/sleeps to cover path derivation, input validation, cache invalidation, YAML expansion, and all retry branches without network dependence.
+    evidence:
+      - source/scripts/eval-auto-approval/runner-utils.test.ts:14-51 verifies report extension handling, positive option validation, evaluator-version inclusion, and prompt-version cache separation.
+      - source/scripts/eval-auto-approval/runner-utils.test.ts:53-95 verifies ordered provider/model expansion and malformed provider rejection from YAML.
+      - source/scripts/eval-auto-approval/runner-utils.test.ts:97-177 verifies reset-aware retry success, exhaustion, and immediate non-rate-limit failure.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-ink-testing-test-entrypoints-b2-m3
+    testId: entrypoints-ink-testing-test
+    role: second_opinion
+    reviewer: entrypoints-b2-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-b2-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: >-
+      This directly tests the harness seam rather than product UI: visible-text normalization,
+      act-wrapped initial render/rerender, and effect cleanup are all observed through the helper API.
+    evidence:
+      - source/test-helpers/ink-testing.test.tsx:8-28 verifies terminal-style stripping plus render and rerender output through lastFrame.
+      - source/test-helpers/ink-testing.test.tsx:30-48 verifies cleanup is deferred until runTeardowns and then occurs exactly once.
+      - source/test-helpers/ink-testing.tsx:25-55 registers module-level afterEach draining and act-wrapped unmount, the production harness behavior these assertions guard.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-vitest-network-guard-test-entrypoints-b2-m3
+    testId: entrypoints-vitest-network-guard-test
+    role: second_opinion
+    reviewer: entrypoints-b2-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-b2-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: >-
+      The test is the harness guard's direct safety sentinel: it verifies an external URL is rejected
+      with the exact setup diagnostic instead of reaching the provider.
+    evidence:
+      - source/test-helpers/vitest-network-guard.test.ts:3-7 awaits rejection of an external OpenRouter fetch and checks the network-disabled error.
+      - source/test-helpers/vitest-network-guard.ts:16-24 performs the rejection before delegating to originalFetch, so the test exercises the relevant admission boundary.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-user-turn-test-entrypoints-b2-m3
+    testId: entrypoints-user-turn-test
+    role: second_opinion
+    reviewer: entrypoints-b2-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-b2-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The tests cover the privacy-sensitive user-turn boundary across image-only content, sentinel normalization, skill preservation, and display placeholders without duplicating another assigned file.
+    evidence:
+      - source/types/user-turn.test.ts:4-42 verifies image count display, image-byte and sentinel-ID exclusion, sentinel removal, and image-only content acceptance.
+      - source/types/user-turn.test.ts:44-89 verifies skill-name placeholders, omission of skill bodies, and combined skill/image display.
+      - source/types/user-turn.test.ts:91-105 verifies normalizeUserTurn preserves the skill attachment and submitted text.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-leaderboard-test-entrypoints-b2-m3
+    testId: entrypoints-leaderboard-test
+    role: second_opinion
+    reviewer: entrypoints-b2-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-b2-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: high
+    reason: The file protects important versioning, persistence, ranking, facet, and hard-case contracts, but its explicitly named wrong-approval-versus-wrong-reject test asserts two clamped zero scores and therefore cannot detect the relative penalty it claims to test.
+    evidence:
+      - source/scripts/eval-auto-approval/leaderboard.test.ts:72-221 verifies legacy/current prompt scoping and duplicate replacement, including separate prompt-version records.
+      - source/scripts/eval-auto-approval/leaderboard.test.ts:223-334 and 336-565 cover historical backfill, facet rankings, hard-case thresholds, and report sections with concrete output assertions.
+      - source/scripts/eval-auto-approval/leaderboard.test.ts:666-709 documents a penalty comparison but both one-case models are asserted only as score 0 after clamping; lines 711-749 provide a stronger adjacent ranking check.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-non-interactive-test-entrypoints-b2-m3
+    testId: entrypoints-non-interactive-test
+    role: second_opinion
+    reviewer: entrypoints-b2-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-b2-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is broad entrypoint integration evidence with direct stream, approval, lifecycle, restriction, budget, and hard-fit observations; no other assigned file exercises this public non-interactive path.
+    evidence:
+      - source/non-interactive.test.ts:38-200 verifies text, final fallback, persistent sinks, reasoning, and error exit/output behavior.
+      - source/non-interactive.test.ts:202-288 and 460-613 verify automatic approval, rejection reporting, repeated rounds, and GREEN/RED decisions.
+      - source/non-interactive.test.ts:787-968 verifies configured lifecycle metadata, Plan Mode input, interceptor removal, and owned-client disposal.
+      - source/non-interactive.test.ts:970-1154 verifies caller-owned restrictions and finite parent run-budget extensions; lines 1156-1184 verify hard-fit diagnostics.
+    replacementTestIds: []
+    status: proposed
+

@@ -1,0 +1,768 @@
+schemaVersion: 2
+domains:
+  - id: session
+    label: Session lifecycle, recovery, and conversation-session seams.
+suites:
+  - id: unit
+    label: Default Vitest unit suite
+  - id: integration
+    label: Session integration suite
+seams:
+  - id: session-a-scheduler
+    label: Background check-in scheduling and task observation boundary.
+  - id: session-a-background-control
+    label: Session control boundary for background task inspection and transfer.
+  - id: session-a-conversation-runtime
+    label: Conversation session runtime and event projection boundary.
+  - id: session-a-continuation
+    label: Continuation planning, state, call identity, and recovery boundary.
+  - id: session-a-auto-approval
+    label: Shell auto-approval evaluation and approval admission boundary.
+  - id: session-a-input-surge
+    label: Input planning and surge admission boundary.
+  - id: session-a-provider-projection
+    label: Provider-specific input and response-chain projection boundary.
+  - id: session-a-tool-ledger
+    label: Tool lifecycle event and recovery ledger boundary.
+  - id: session-a-turn-state
+    label: Session turn, undo, and generation ownership boundary.
+  - id: session-a-usage
+    label: Stream usage extraction and conversation usage projection boundary.
+  - id: session-a-access
+    label: Session-scoped access grants and created-file capability boundary.
+  - id: session-a-client-factory
+    label: Owned session client, capability, and disposal boundary.
+  - id: session-a-hook-status
+    label: Public hook status projection for foreground and background work.
+  - id: session-a-pending-interaction
+    label: Pending user interaction identity and answer state boundary.
+  - id: session-a-post-execute
+    label: Post-execute pause, decision, and gate settlement boundary.
+  - id: session-a-repetition
+    label: Streaming repetition detection boundary.
+risks:
+  - id: session-a-risk-scheduler-drift
+    label: A running background task is checked in too early, late, repeatedly, or not at all.
+    severity: medium
+  - id: session-a-risk-background-state
+    label: Background task state, controls, or transfer results are stale or misreported.
+    severity: high
+  - id: session-a-risk-foreground-contamination
+    label: Background lifecycle is incorrectly inserted into or omitted from foreground conversation state.
+    severity: high
+  - id: session-a-risk-call-identity
+    label: Continuation emits duplicate, missing, or stale tool-call identities.
+    severity: critical
+  - id: session-a-risk-recovery-replay
+    label: A failed request is replayed unsafely, recovery is skipped, or retry limits are bypassed.
+    severity: critical
+  - id: session-a-risk-approval-bypass
+    label: A command bypasses required approval or a safe command is incorrectly blocked.
+    severity: critical
+  - id: session-a-risk-input-growth
+    label: Context growth causes runaway requests or a legitimate follow-up is blocked.
+    severity: high
+  - id: session-a-risk-provider-input
+    label: Provider receives the wrong input projection or response-chain linkage.
+    severity: high
+  - id: session-a-risk-tool-observability
+    label: Tool starts, malformed calls, or recovery ledger state are duplicated or hidden.
+    severity: high
+  - id: session-a-risk-turn-ownership
+    label: Undo, stale asynchronous work, or turn settlement mutates the wrong generation.
+    severity: critical
+  - id: session-a-risk-usage-loss
+    label: Reported usage is missing, double-counted, or detached from streamed usage evidence.
+    severity: medium
+  - id: session-a-risk-access-leak
+    label: Session-only access survives disposal or persistent project access is lost.
+    severity: high
+  - id: session-a-risk-resource-leak
+    label: Owned clients, registries, or suspended work survive disposal or affect replacements.
+    severity: high
+  - id: session-a-risk-status-lie
+    label: Public status reports idle while background work remains or misses approval waiting.
+    severity: high
+  - id: session-a-risk-stale-interaction
+    label: A late answer resolves a replaced interaction or a multi-question answer is corrupted.
+    severity: high
+  - id: session-a-risk-post-execute
+    label: A denied execution reruns without approval, runs after closure, or resolves the wrong call.
+    severity: critical
+  - id: session-a-risk-runaway-output
+    label: Repeated streamed output is not detected or normal prose is falsely stopped.
+    severity: high
+fixtures: []
+contracts:
+  - id: session-a-contract-scheduler-intervals
+    statement: A running background task emits a check-in only when its configured interval or one-off due time has elapsed, then resumes on the regular interval.
+    seamIds: [session-a-scheduler]
+    riskIds: [session-a-risk-scheduler-drift]
+  - id: session-a-contract-scheduler-task-policy
+    statement: Per-task enablement, interval, aliases, and canonical identifiers control whether and when that task emits check-ins.
+    seamIds: [session-a-scheduler]
+    riskIds: [session-a-risk-scheduler-drift]
+  - id: session-a-contract-scheduler-observation
+    statement: A due check-in identifies the task and elapsed time and carries available subagent or shell activity, status, and output-tail evidence.
+    seamIds: [session-a-scheduler]
+    riskIds: [session-a-risk-scheduler-drift, session-a-risk-background-state]
+  - id: session-a-contract-scheduler-lifecycle
+    statement: Disabled schedulers and non-running tasks emit no check-ins, and disposal clears the internal timer exactly once.
+    seamIds: [session-a-scheduler]
+    riskIds: [session-a-risk-scheduler-drift, session-a-risk-resource-leak]
+  - id: session-a-contract-background-details
+    statement: Background control lists live work before retained terminal work and returns executor-specific details including activity and terminal evidence.
+    seamIds: [session-a-background-control]
+    riskIds: [session-a-risk-background-state]
+  - id: session-a-contract-background-activity
+    statement: Active, provider-waiting, approval-waiting, quiet, cancelling, and settled background states remain distinguishable in inspection results.
+    seamIds: [session-a-background-control]
+    riskIds: [session-a-risk-background-state]
+  - id: session-a-contract-background-controls
+    statement: Stop and foreground-to-background controls report unavailable, stale, capacity, or success outcomes without emitting false notifications, while successful controls wake observers.
+    seamIds: [session-a-background-control]
+    riskIds: [session-a-risk-background-state, session-a-risk-foreground-contamination]
+  - id: session-a-contract-background-routing
+    statement: Background start, tool, and completion events update live background state and logs without adding background lifecycle messages to foreground history, while the launch acknowledgement remains finalized.
+    seamIds: [session-a-conversation-runtime, session-a-background-control]
+    riskIds: [session-a-risk-foreground-contamination]
+  - id: session-a-contract-call-id-resolution
+    statement: Continuation call-id resolution deduplicates interrupted and completed calls, excludes outputs already represented in history, and uses fallback ids only when requested or when no cycle ids resolve.
+    seamIds: [session-a-continuation]
+    riskIds: [session-a-risk-call-identity]
+  - id: session-a-contract-history-call-ids
+    statement: Known tool-call collection recognizes function-call and local-shell call shapes while ignoring output-only records.
+    seamIds: [session-a-continuation]
+    riskIds: [session-a-risk-call-identity]
+  - id: session-a-contract-continuation-plan
+    statement: Approval and abort continuation plans require the appropriate pending context, preserve continuation metadata, record rejected calls, and expose the correct continuation source.
+    seamIds: [session-a-continuation]
+    riskIds: [session-a-risk-recovery-replay, session-a-risk-call-identity]
+  - id: session-a-contract-continuation-setup
+    statement: Applying a continuation plan restores tool arguments, emits at most the deduplicated tool-start event, and captures the current journal snapshot.
+    seamIds: [session-a-continuation, session-a-tool-ledger]
+    riskIds: [session-a-risk-call-identity, session-a-risk-tool-observability]
+  - id: session-a-contract-continuation-state
+    statement: Continuation state initializes defaults and adopts explicitly supplied token, state, call ids, input mode, cumulative data, journal snapshot, and emitted-id lineage without deriving call ids from interruptions.
+    seamIds: [session-a-continuation]
+    riskIds: [session-a-risk-call-identity, session-a-risk-recovery-replay]
+  - id: session-a-contract-continuation-advance
+    statement: Advancing a continuation plan replaces state and call ids from the supplied values, merges emitted ids and journal data, and preserves the prior input mode when no new mode is supplied.
+    seamIds: [session-a-continuation]
+    riskIds: [session-a-risk-call-identity, session-a-risk-recovery-replay]
+  - id: session-a-contract-recovery-classification
+    statement: Recovery terminates unrecoverable failures, returns stale for an outdated generation, and maps recoverable failures to the classified recovery outcome and delay.
+    seamIds: [session-a-continuation, session-a-turn-state]
+    riskIds: [session-a-risk-recovery-replay, session-a-risk-turn-ownership]
+  - id: session-a-contract-recovery-evidence
+    statement: Recovery distinguishes provably unsent or settled-tool failures from ambiguous or post-text failures, using fresh retry, resume, or termination rather than unsafe blind replay.
+    seamIds: [session-a-continuation]
+    riskIds: [session-a-risk-recovery-replay]
+  - id: session-a-contract-recovery-budget
+    statement: A shared recovery budget limits automatic transport replays while allowing separately capped model retries and settles the turn through the recovery executor when a retry plan is refused.
+    seamIds: [session-a-continuation]
+    riskIds: [session-a-risk-recovery-replay]
+  - id: session-a-contract-auto-approval-modes
+    statement: Off omits evaluation, advisory evaluates without bypassing prompts, auto bypasses prompts only for model-approved eligible commands, always bypasses eligible command prompts without evaluator calls, and RED commands remain system-rejected.
+    seamIds: [session-a-auto-approval]
+    riskIds: [session-a-risk-approval-bypass]
+  - id: session-a-contract-auto-approval-advisory
+    statement: Auto-approval attaches model or system advisories with rationale, preserves ordered batch cache reuse, reevaluates call-id-less interruptions inline, and returns safe defaults for malformed or failed evaluator responses.
+    seamIds: [session-a-auto-approval]
+    riskIds: [session-a-risk-approval-bypass]
+  - id: session-a-contract-auto-approval-boundary
+    statement: Tools outside the auto-approval set are not evaluated, and an auto-approval evaluator error falls back to a user approval prompt rather than crashing or approving execution.
+    seamIds: [session-a-auto-approval]
+    riskIds: [session-a-risk-approval-bypass]
+  - id: session-a-contract-input-surge-admission
+    statement: Input surge blocks direct or unapproved oversized submissions, while an exact session-issued approval admits the unchanged approved content and rejects forged or modified content.
+    seamIds: [session-a-input-surge]
+    riskIds: [session-a-risk-input-growth, session-a-risk-approval-bypass]
+  - id: session-a-contract-input-surge-rollback
+    statement: Initial input preparation adds a user turn once, attaches the planned input and dispatch model, rolls back a newly inserted turn when the surge guard blocks, and does not roll it back after generation becomes stale.
+    seamIds: [session-a-input-surge, session-a-turn-state]
+    riskIds: [session-a-risk-input-growth, session-a-risk-turn-ownership]
+  - id: session-a-contract-followup-after-growth
+    statement: After approval or abandonment, including after large tool or replacement results, ordinary replacement and follow-up turns remain admissible; reconciled tool history remains usable after max-turn recovery.
+    seamIds: [session-a-input-surge]
+    riskIds: [session-a-risk-input-growth, session-a-risk-recovery-replay]
+  - id: session-a-contract-provider-projection
+    statement: Chaining providers receive the current text and previous response id, while non-chaining and compatible providers receive the appropriate full history, including reconstructed assistant text prefixes.
+    seamIds: [session-a-provider-projection]
+    riskIds: [session-a-risk-provider-input]
+  - id: session-a-contract-undo
+    statement: Undo returns the last genuine user turn, returns null when none exists, invalidates stale asynchronous writes, and forces a post-undo chaining turn to use full history without the old response id.
+    seamIds: [session-a-turn-state, session-a-provider-projection]
+    riskIds: [session-a-risk-turn-ownership, session-a-risk-provider-input]
+  - id: session-a-contract-tool-started
+    statement: Function-call stream items emit parsed tool_started events, duplicate call ids emit once, approval continuation replay does not persist a duplicate, and malformed arguments produce one structured diagnostic packet.
+    seamIds: [session-a-tool-ledger, session-a-conversation-runtime]
+    riskIds: [session-a-risk-tool-observability, session-a-risk-call-identity]
+  - id: session-a-contract-usage
+    statement: Conversation responses expose normalized usage from completion or raw responses, preserve cache usage, keep cumulative terminal totals distinct from per-request usage updates, and emit native usage events.
+    seamIds: [session-a-usage]
+    riskIds: [session-a-risk-usage-loss]
+  - id: session-a-contract-access-lifecycle
+    statement: Disposal and transient clearing remove session-only read, Docker, and created-file state while retaining settings-backed project Docker grants and their denial behavior.
+    seamIds: [session-a-access]
+    riskIds: [session-a-risk-access-leak]
+  - id: session-a-contract-client-isolation
+    statement: Each owned session gets isolated tool ownership, access, background-shell, continuity, and observer capabilities, while caller-owned compatibility clients are not disposed by the factory.
+    seamIds: [session-a-client-factory]
+    riskIds: [session-a-risk-resource-leak, session-a-risk-access-leak]
+  - id: session-a-contract-client-disposal
+    statement: Owned session disposal is idempotent, closes suspended gates and owned registries, clears capabilities, and does not close or alter a replacement session handle.
+    seamIds: [session-a-client-factory, session-a-post-execute]
+    riskIds: [session-a-risk-resource-leak, session-a-risk-post-execute]
+  - id: session-a-contract-hook-status
+    statement: Public hook status stays working while foreground or any background task remains active, reports approval waiting distinctly, and becomes idle only after all background work settles.
+    seamIds: [session-a-hook-status, session-a-background-control]
+    riskIds: [session-a-risk-status-lie]
+  - id: session-a-contract-pending-interaction
+    statement: Pending ask_user interactions accumulate answers across questions, expose a snapshot, resolve cancellation or decline immediately without recording an answer, and reject late decisions for replaced interactions.
+    seamIds: [session-a-pending-interaction]
+    riskIds: [session-a-risk-stale-interaction]
+  - id: session-a-contract-post-execute-registry
+    statement: Post-execute pending entries have session/run/call identity and revisioned snapshots; selective decisions settle once, reject stale or unknown ids atomically, wake observers, and close gates by rejecting.
+    seamIds: [session-a-post-execute]
+    riskIds: [session-a-risk-post-execute, session-a-risk-stale-interaction]
+  - id: session-a-contract-post-execute-pause
+    statement: A paused execution reruns only after its selected approval, fails closed on session close or missing call identity, resolves outside owned runs without shared entries, and isolates identical commands by call id.
+    seamIds: [session-a-post-execute]
+    riskIds: [session-a-risk-post-execute, session-a-risk-call-identity]
+  - id: session-a-contract-live-run
+    statement: A live run fails closed for stream failure, preserves unselected pending entries, cancels and wakes consumers, settles gates, and suppresses late events.
+    seamIds: [session-a-post-execute, session-a-turn-state]
+    riskIds: [session-a-risk-post-execute, session-a-risk-turn-ownership]
+  - id: session-a-contract-repetition
+    statement: Repetition detection recognizes repeated patterns across append calls while not flagging varied prose or whitespace-only output.
+    seamIds: [session-a-repetition]
+    riskIds: [session-a-risk-runaway-output]
+  - id: session-a-contract-runtime-surface
+    statement: The public session runtime omits composition internals while retaining callable compact-context and shutdown operations.
+    seamIds: [session-a-conversation-runtime]
+    riskIds: [session-a-risk-foreground-contamination]
+  - id: session-a-contract-reasoning-stream
+    statement: Reasoning deltas are projected as ordered conversation events with an accumulated full text, independently of ordinary text deltas.
+    seamIds: [session-a-conversation-runtime]
+    riskIds: [session-a-risk-foreground-contamination]
+tests:
+  - kind: file
+    id: session-background-check-in-scheduler-test
+    file: source/services/session/background-check-in-scheduler.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds: [session-a-contract-scheduler-intervals, session-a-contract-scheduler-task-policy, session-a-contract-scheduler-observation, session-a-contract-scheduler-lifecycle]
+    fixtureIds: []
+  - kind: file
+    id: session-background-subagent-ui-routing-integration-test
+    file: source/services/session/background-subagent-ui-routing.integration.test.ts
+    domainId: session
+    suiteId: integration
+    contractIds: [session-a-contract-background-routing]
+    fixtureIds: []
+  - kind: file
+    id: session-background-task-control-test
+    file: source/services/session/background-task-control.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds: [session-a-contract-background-details, session-a-contract-background-activity, session-a-contract-background-controls]
+    fixtureIds: []
+  - kind: file
+    id: session-continuation-call-id-resolver-test
+    file: source/services/session/continuation-call-id-resolver.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds: [session-a-contract-call-id-resolution, session-a-contract-history-call-ids]
+    fixtureIds: []
+  - kind: file
+    id: session-continuation-plan-applier-test
+    file: source/services/session/continuation-plan-applier.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds: [session-a-contract-continuation-plan, session-a-contract-continuation-setup, session-a-contract-continuation-advance]
+    fixtureIds: []
+  - kind: file
+    id: session-continuation-recovery-handler-test
+    file: source/services/session/continuation-recovery-handler.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds: [session-a-contract-recovery-classification, session-a-contract-recovery-evidence, session-a-contract-recovery-budget]
+    fixtureIds: []
+  - kind: file
+    id: session-continuation-state-test
+    file: source/services/session/continuation-state.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds: [session-a-contract-continuation-state, session-a-contract-continuation-advance]
+    fixtureIds: []
+  - kind: file
+    id: session-conversation-session-reasoning-test
+    file: source/services/session/conversation-session-reasoning.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds: [session-a-contract-reasoning-stream]
+    fixtureIds: []
+  - kind: file
+    id: session-conversation-session-auto-approval-test
+    file: source/services/session/conversation-session.auto-approval.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds: [session-a-contract-auto-approval-modes, session-a-contract-auto-approval-advisory, session-a-contract-auto-approval-boundary]
+    fixtureIds: []
+  - kind: file
+    id: session-conversation-session-input-surge-test
+    file: source/services/session/conversation-session.input-surge.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds: [session-a-contract-input-surge-admission, session-a-contract-followup-after-growth]
+    fixtureIds: []
+  - kind: file
+    id: session-conversation-session-provider-test
+    file: source/services/session/conversation-session.provider.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds: [session-a-contract-provider-projection]
+    fixtureIds: []
+  - kind: file
+    id: session-conversation-session-tool-started-test
+    file: source/services/session/conversation-session.tool-started.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds: [session-a-contract-tool-started]
+    fixtureIds: []
+  - kind: file
+    id: session-conversation-session-undo-test
+    file: source/services/session/conversation-session.undo.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds: [session-a-contract-undo]
+    fixtureIds: []
+  - kind: file
+    id: session-conversation-session-usage-test
+    file: source/services/session/conversation-session.usage.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds: [session-a-contract-usage]
+    fixtureIds: []
+  - kind: file
+    id: session-initial-input-preparer-test
+    file: source/services/session/initial-input-preparer.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds: [session-a-contract-input-surge-admission, session-a-contract-input-surge-rollback]
+    fixtureIds: []
+  - kind: file
+    id: session-initial-turn-recovery-handler-test
+    file: source/services/session/initial-turn-recovery-handler.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds: [session-a-contract-recovery-classification, session-a-contract-recovery-evidence, session-a-contract-recovery-budget]
+    fixtureIds: []
+  - kind: file
+    id: session-live-run-test
+    file: source/services/session/live-run.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds: [session-a-contract-live-run]
+    fixtureIds: []
+  - kind: file
+    id: session-pending-interaction-state-test
+    file: source/services/session/pending-interaction-state.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds: [session-a-contract-pending-interaction]
+    fixtureIds: []
+  - kind: file
+    id: session-post-execute-pause-policy-test
+    file: source/services/session/post-execute-pause-policy.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds: [session-a-contract-post-execute-pause]
+    fixtureIds: []
+  - kind: file
+    id: session-post-execute-pending-registry-test
+    file: source/services/session/post-execute-pending-registry.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds: [session-a-contract-post-execute-registry]
+    fixtureIds: []
+  - kind: file
+    id: session-repetition-detector-test
+    file: source/services/session/repetition-detector.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds: [session-a-contract-repetition]
+    fixtureIds: []
+  - kind: file
+    id: session-session-access-state-test
+    file: source/services/session/session-access-state.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds: [session-a-contract-access-lifecycle]
+    fixtureIds: []
+  - kind: file
+    id: session-session-client-factory-test
+    file: source/services/session/session-client-factory.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds: [session-a-contract-client-isolation, session-a-contract-client-disposal]
+    fixtureIds: []
+  - kind: file
+    id: session-session-composition-hooks-test
+    file: source/services/session/session-composition.hooks.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds: [session-a-contract-hook-status]
+    fixtureIds: []
+  - kind: file
+    id: session-session-composition-runtime-boundary-test
+    file: source/services/session/session-composition.runtime-boundary.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds: [session-a-contract-runtime-surface]
+    fixtureIds: []
+decisions:
+  - id: session-background-check-in-scheduler-test-session-a-m3
+    testId: session-background-check-in-scheduler-test
+    role: second_opinion
+    reviewer: session-a-m3
+    sourceArtifact: docs/test-audit/artifacts/session-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The file independently exercises scheduler timing, task policy, task observation enrichment, filtering, and idempotent disposal.
+    evidence:
+      - source/services/session/background-check-in-scheduler.test.ts:57-184 asserts interval boundaries, repeated indexes, mute/enable, custom interval, and one-off due scheduling.
+      - source/services/session/background-check-in-scheduler.test.ts:282-438 asserts rich subagent/shell observation and shell output-tail projection.
+      - source/services/session/background-check-in-scheduler.test.ts:440-456 asserts disposal clears its timer exactly once.
+    replacementTestIds: []
+    status: proposed
+  - id: session-background-subagent-ui-routing-integration-test-session-a-m3
+    testId: session-background-subagent-ui-routing-integration-test
+    role: second_opinion
+    reviewer: session-a-m3
+    sourceArtifact: docs/test-audit/artifacts/session-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is the assigned integration proof that background lifecycle is projected separately from foreground history while the launch acknowledgement is retained.
+    evidence:
+      - source/services/session/background-subagent-ui-routing.integration.test.ts:161-205 asserts started, tool-started, and completed lifecycle state/log events with no subagent message in foreground messages.
+      - source/services/session/background-subagent-ui-routing.integration.test.ts:207-238 asserts the finalized command launch and static history contents.
+    replacementTestIds: []
+    status: proposed
+  - id: session-background-task-control-test-session-a-m3
+    testId: session-background-task-control-test
+    role: second_opinion
+    reviewer: session-a-m3
+    sourceArtifact: docs/test-audit/artifacts/session-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The broad control-port contract is covered with explicit activity distinctions, ordering, stale/capability failures, transfer success, and observer notifications.
+    evidence:
+      - source/services/session/background-task-control.test.ts:28-133 asserts active/provider-waiting/quiet/approval/failed states remain distinct.
+      - source/services/session/background-task-control.test.ts:135-171 asserts live-before-terminal ordering and shell detail projection.
+      - source/services/session/background-task-control.test.ts:173-341 and 343-418 assert stop/transfer success, capacity, stale, and unavailable outcomes.
+    replacementTestIds: []
+    status: proposed
+  - id: session-continuation-call-id-resolver-test-session-a-m3
+    testId: session-continuation-call-id-resolver-test
+    role: second_opinion
+    reviewer: session-a-m3
+    sourceArtifact: docs/test-audit/artifacts/session-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Small focused tests protect call-id reconciliation at the provider continuation boundary, including history filtering and fallback policy.
+    evidence:
+      - source/services/session/continuation-call-id-resolver.test.ts:8-51 asserts deduplication, history exclusion, opt-in fallback, and empty-cycle fallback.
+      - source/services/session/continuation-call-id-resolver.test.ts:53-76 asserts abort sibling retention and recognition of function/local-shell history shapes while ignoring output-only history.
+    replacementTestIds: []
+    status: proposed
+  - id: session-continuation-plan-applier-test-session-a-m3
+    testId: session-continuation-plan-applier-test
+    role: second_opinion
+    reviewer: session-a-m3
+    sourceArtifact: docs/test-audit/artifacts/session-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The applier tests cover both plan kinds and the state/tool-ledger side effects needed to safely resume or reject continuation.
+    evidence:
+      - source/services/session/continuation-plan-applier.test.ts:32-131 asserts missing-context failure, prepared approval/abort metadata, and rejected-call recording.
+      - source/services/session/continuation-plan-applier.test.ts:133-198 asserts deduplicated tool start, argument restoration, and journal snapshot capture.
+      - source/services/session/continuation-plan-applier.test.ts:222-334 asserts approved/rejected state advancement and ledger-derived current call ids.
+    replacementTestIds: []
+    status: proposed
+  - id: session-continuation-recovery-handler-test-session-a-m3
+    testId: session-continuation-recovery-handler-test
+    role: second_opinion
+    reviewer: session-a-m3
+    sourceArtifact: docs/test-audit/artifacts/session-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: High-scrutiny continuation recovery coverage verifies stale handling, evidence-calibrated replay, shared budgets, settlement, and real classifier behavior.
+    evidence:
+      - source/services/session/continuation-recovery-handler.test.ts:38-223 asserts terminated/stale/fresh-start/resume outcomes and call-id preservation.
+      - source/services/session/continuation-recovery-handler.test.ts:225-493 asserts shared replay budget, model retry separation, and executor settlement on refusal.
+      - source/services/session/continuation-recovery-handler.test.ts:495-578 pairs bookkeeping-only recovery with termination after real streamed text using the real classifier.
+    replacementTestIds: []
+    status: proposed
+  - id: session-continuation-state-test-session-a-m3
+    testId: session-continuation-state-test
+    role: second_opinion
+    reviewer: session-a-m3
+    sourceArtifact: docs/test-audit/artifacts/session-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Focused state tests make continuation identity and input-mode lineage observable without requiring a provider.
+    evidence:
+      - source/services/session/continuation-state.test.ts:4-94 asserts defaults, prepared-field adoption, explicit call-id authority, and constructor-token fallback.
+      - source/services/session/continuation-state.test.ts:96-170 asserts plan advancement, supplied ledger call-id supersets, and input-mode preservation.
+    replacementTestIds: []
+    status: proposed
+  - id: session-conversation-session-reasoning-test-session-a-m3
+    testId: session-conversation-session-reasoning-test
+    role: second_opinion
+    reviewer: session-a-m3
+    sourceArtifact: docs/test-audit/artifacts/session-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Minimal end-to-end session coverage protects ordered reasoning deltas and accumulated reasoning text projection.
+    evidence:
+      - source/services/session/conversation-session-reasoning.test.ts:13-46 streams two reasoning deltas and a text delta, then asserts two ordered reasoning events and fullText thinking.
+    replacementTestIds: []
+    status: proposed
+  - id: session-conversation-session-auto-approval-test-session-a-m3
+    testId: session-conversation-session-auto-approval-test
+    role: second_opinion
+    reviewer: session-a-m3
+    sourceArtifact: docs/test-audit/artifacts/session-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: High-scrutiny auto-approval coverage spans mode policy, RED fail-closed behavior, batch caching, malformed/error fallback, and usage/ordering side effects.
+    evidence:
+      - source/services/session/conversation-session.auto-approval.test.ts:226-385 asserts off/always behavior, RED system rejection, safe advisory attachment, and evaluator options.
+      - source/services/session/conversation-session.auto-approval.test.ts:387-681 asserts ordered batch cache reuse, answer forwarding, malformed/error defaults, call-id-less inline evaluation, reset, and turn-completion cache clearing.
+      - source/services/session/conversation-session.auto-approval.test.ts:683-1003 asserts tool eligibility, auto/advisory policy, RED protection, batch prompt fallback, cumulative usage, and evaluator failure fallback.
+    replacementTestIds: []
+    status: proposed
+  - id: session-conversation-session-input-surge-test-session-a-m3
+    testId: session-conversation-session-input-surge-test
+    role: second_opinion
+    reviewer: session-a-m3
+    sourceArtifact: docs/test-audit/artifacts/session-a-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: high
+    reason: The follow-up admissibility cases are useful, but the max-turn reconciliation case explicitly does not reproduce the SDK behavior and only proves a synthetic harness path.
+    evidence:
+      - source/services/session/conversation-session.input-surge.test.ts:214-302 asserts normal follow-up and large-result behavior after approval or abandonment.
+      - source/services/session/conversation-session.input-surge.test.ts:304-343 marks the max-turn case TODO because the synthetic stream does not reliably reproduce SDK reconciliation, then asserts a rejected send and later recovery.
+      - source/services/session/conversation-session.input-surge.test.ts:345-372 asserts direct terminal-adapter submissions remain blocked even with a forged approval object.
+    replacementTestIds: []
+    status: proposed
+  - id: session-conversation-session-provider-test-session-a-m3
+    testId: session-conversation-session-provider-test
+    role: second_opinion
+    reviewer: session-a-m3
+    sourceArtifact: docs/test-audit/artifacts/session-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Provider projection behavior is tested across default OpenAI, compatible, non-compatible, and Codex chaining paths, including reconstructed assistant text.
+    evidence:
+      - source/services/session/conversation-session.provider.test.ts:11-82 contrasts text input for OpenAI with full-history input for non-OpenAI providers.
+      - source/services/session/conversation-session.provider.test.ts:84-159 asserts assistant prefix reconstruction in a subsequent full-history request.
+      - source/services/session/conversation-session.provider.test.ts:161-279 asserts compatible-provider history and Codex text/previousResponseId chaining.
+    replacementTestIds: []
+    status: proposed
+  - id: session-conversation-session-tool-started-test-session-a-m3
+    testId: session-conversation-session-tool-started-test
+    role: second_opinion
+    reviewer: session-a-m3
+    sourceArtifact: docs/test-audit/artifacts/session-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Focused tests protect tool-start parsing, structured malformed-call diagnostics, and duplicate suppression both within a stream and across approval continuation.
+    evidence:
+      - source/services/session/conversation-session.tool-started.test.ts:69-109 asserts JSON arguments become parsed tool_started arguments.
+      - source/services/session/conversation-session.tool-started.test.ts:111-168 asserts one INVALID_TOOL_CALL_FORMAT diagnostic with trace and validation metadata for duplicate malformed events.
+      - source/services/session/conversation-session.tool-started.test.ts:170-290 asserts one persisted/emitted start across continuation replay and duplicate function-call events.
+    replacementTestIds: []
+    status: proposed
+  - id: session-conversation-session-undo-test-session-a-m3
+    testId: session-conversation-session-undo-test
+    role: second_opinion
+    reviewer: session-a-m3
+    sourceArtifact: docs/test-audit/artifacts/session-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Undo coverage exercises return semantics, generation invalidation during a gated run, abort propagation, and post-undo provider projection.
+    evidence:
+      - source/services/session/conversation-session.undo.test.ts:10-57 asserts completed-turn return and null with no genuine user turn.
+      - source/services/session/conversation-session.undo.test.ts:59-160 asserts stale gated writes cannot reintroduce an undone user turn.
+      - source/services/session/conversation-session.undo.test.ts:162-285 asserts abort error behavior and full-history/no-previous-response-id after undo on OpenAI chaining.
+    replacementTestIds: []
+    status: proposed
+  - id: session-conversation-session-usage-test-session-a-m3
+    testId: session-conversation-session-usage-test
+    role: second_opinion
+    reviewer: session-a-m3
+    sourceArtifact: docs/test-audit/artifacts/session-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Usage tests cover response normalization and the distinct cumulative/per-request usage contract, including missing and cache metadata paths.
+    evidence:
+      - source/services/session/conversation-session.usage.test.ts:10-87 asserts normalized usage for ordinary and approval-completed responses.
+      - source/services/session/conversation-session.usage.test.ts:89-145 asserts cumulative terminal totals versus one per-request usage_update.
+      - source/services/session/conversation-session.usage.test.ts:181-285 asserts missing-usage diagnostics, rawResponses fallback, and cache usage preservation.
+      - source/services/session/conversation-session.usage.test.ts:287-387 asserts native usage_update projection for event metadata shapes.
+    replacementTestIds: []
+    status: proposed
+  - id: session-initial-input-preparer-test-session-a-m3
+    testId: session-initial-input-preparer-test
+    role: second_opinion
+    reviewer: session-a-m3
+    sourceArtifact: docs/test-audit/artifacts/session-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Focused admission tests protect exactly-once insertion, stale-generation ownership, rollback, and content-bound approvals including nested image and skill data.
+    evidence:
+      - source/services/session/initial-input-preparer.test.ts:24-78 asserts one inserted user turn, planned input attachment, and dispatch-model recording across repeated prepare calls.
+      - source/services/session/initial-input-preparer.test.ts:80-151 asserts blocked rollback and no rollback after a stale generation.
+      - source/services/session/initial-input-preparer.test.ts:153-234 asserts exact nested-content approval, forged approval rejection, and pre-augmentation binding.
+    replacementTestIds: []
+    status: proposed
+  - id: session-initial-turn-recovery-handler-test-session-a-m3
+    testId: session-initial-turn-recovery-handler-test
+    role: second_opinion
+    reviewer: session-a-m3
+    sourceArtifact: docs/test-audit/artifacts/session-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: High-scrutiny initial recovery tests establish evidence-calibrated watchdog/connect recovery, blocked fresh-start policy, shared budget separation, settlement, and stale handling.
+    evidence:
+      - source/services/session/initial-turn-recovery-handler.test.ts:128-189 asserts unsent watchdog/connect recovery and fail-closed flushed/unknown outcomes.
+      - source/services/session/initial-turn-recovery-handler.test.ts:191-341 asserts delay propagation, chain recovery despite fresh-start blocking, and blocked unsafe plans.
+      - source/services/session/initial-turn-recovery-handler.test.ts:344-518 asserts exhaustion presentation, model/transport budget separation, and recovery-executor settlement.
+      - source/services/session/initial-turn-recovery-handler.test.ts:520-539 asserts stale generation returns before classification.
+    replacementTestIds: []
+    status: proposed
+  - id: session-live-run-test-session-a-m3
+    testId: session-live-run-test
+    role: second_opinion
+    reviewer: session-a-m3
+    sourceArtifact: docs/test-audit/artifacts/session-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Small focused tests cover gate fail-closed behavior, selective snapshot retention, cancellation wakeup, and suppression of late events.
+    evidence:
+      - source/services/session/live-run.test.ts:5-34 asserts stream failure rejects its gates and selected decisions preserve unselected entries.
+      - source/services/session/live-run.test.ts:36-53 asserts cancellation rejects gates, wakes waiting consumers, and suppresses late publication.
+    replacementTestIds: []
+    status: proposed
+  - id: session-pending-interaction-state-test-session-a-m3
+    testId: session-pending-interaction-state-test
+    role: second_opinion
+    reviewer: session-a-m3
+    sourceArtifact: docs/test-audit/artifacts/session-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The state object has focused coverage for multi-question accumulation, cancellation/decline terminal paths, snapshots, and stale interaction identity.
+    evidence:
+      - source/services/session/pending-interaction-state.test.ts:19-59 asserts answer accumulation, immutable snapshot shape, and forward navigation.
+      - source/services/session/pending-interaction-state.test.ts:61-95 asserts cancellation and decline resolve immediately without leaving pending state.
+      - source/services/session/pending-interaction-state.test.ts:97-111 asserts late decisions for replaced interactions are rejected while the replacement remains current.
+    replacementTestIds: []
+    status: proposed
+  - id: session-post-execute-pause-policy-test-session-a-m3
+    testId: session-post-execute-pause-policy-test
+    role: second_opinion
+    reviewer: session-a-m3
+    sourceArtifact: docs/test-audit/artifacts/session-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Post-execute safety coverage verifies approval-gated rerun, closure fail-closed behavior, call-id requirements, ownership handoff, and call-specific isolation.
+    evidence:
+      - source/services/session/post-execute-pause-policy.test.ts:6-69 asserts selected approval reruns once, closure preserves original result, and missing SDK call id rejects without registering.
+      - source/services/session/post-execute-pause-policy.test.ts:71-86 asserts outside-run rejection resolution avoids shared entries.
+      - source/services/session/post-execute-pause-policy.test.ts:88-138 asserts identical commands remain isolated by call id and only selected execution reruns.
+    replacementTestIds: []
+    status: proposed
+  - id: session-post-execute-pending-registry-test-session-a-m3
+    testId: session-post-execute-pending-registry-test
+    role: second_opinion
+    reviewer: session-a-m3
+    sourceArtifact: docs/test-audit/artifacts/session-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The registry tests directly protect revisioned selective decisions, atomic validation, observer wakeup, close rejection, and deterministic entry identity.
+    evidence:
+      - source/services/session/post-execute-pending-registry.test.ts:12-41 asserts revisioned identity, one-time settlement, and stale repeat rejection.
+      - source/services/session/post-execute-pending-registry.test.ts:43-64 asserts level-triggered wakeup, atomic unknown-entry rejection, close behavior, and late registration failure.
+      - source/services/session/post-execute-pending-registry.test.ts:66-79 asserts stale and duplicate decisions do not mutate pending state.
+    replacementTestIds: []
+    status: proposed
+  - id: session-repetition-detector-test-session-a-m3
+    testId: session-repetition-detector-test
+    role: second_opinion
+    reviewer: session-a-m3
+    sourceArtifact: docs/test-audit/artifacts/session-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Compact boundary tests cover both chunk-spanning runaway detection and false-positive avoidance for prose and whitespace.
+    evidence:
+      - source/services/session/repetition-detector.test.ts:4-18 asserts repeated patterns are detected both in one append and across streaming chunks.
+      - source/services/session/repetition-detector.test.ts:20-25 asserts varied prose and whitespace-only output are not flagged.
+    replacementTestIds: []
+    status: proposed
+  - id: session-session-access-state-test-session-a-m3
+    testId: session-session-access-state-test
+    role: second_opinion
+    reviewer: session-a-m3
+    sourceArtifact: docs/test-audit/artifacts/session-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Session access lifecycle tests distinguish transient and settings-backed grants and cover created-file tracking and cleanup.
+    evidence:
+      - source/services/session/session-access-state.test.ts:5-37 asserts disposal/clearTransient remove transient read and Docker state while retaining project grants and denial state.
+      - source/services/session/session-access-state.test.ts:39-53 asserts normalized created-file tracking, removal, and transient cleanup.
+    replacementTestIds: []
+    status: proposed
+  - id: session-session-client-factory-test-session-a-m3
+    testId: session-session-client-factory-test
+    role: second_opinion
+    reviewer: session-a-m3
+    sourceArtifact: docs/test-audit/artifacts/session-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Factory coverage protects per-session isolation, option wiring, provider projection freezing, observer continuity, caller ownership, and disposal isolation.
+    evidence:
+      - source/services/session/session-client-factory.test.ts:11-158 asserts isolated capabilities, background-shell/ask-user option wiring, and caller-owned client non-disposal.
+      - source/services/session/session-client-factory.test.ts:160-268 asserts continuity and selector observers bind per handle and provider mode is frozen at creation.
+      - source/services/session/session-client-factory.test.ts:270-303 asserts old-handle disposal rejects suspended gates and does not close or affect its replacement.
+    replacementTestIds: []
+    status: proposed
+  - id: session-session-composition-hooks-test-session-a-m3
+    testId: session-session-composition-hooks-test
+    role: second_opinion
+    reviewer: session-a-m3
+    sourceArtifact: docs/test-audit/artifacts/session-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Runtime hook coverage verifies status remains working through foreground completion while background work exists, distinguishes approval waiting, and idles only after all tasks settle.
+    evidence:
+      - source/services/session/session-composition.hooks.test.ts:71-159 asserts a running subagent suppresses idle and completion transitions to idle.
+      - source/services/session/session-composition.hooks.test.ts:161-235 asserts the equivalent background-shell lifecycle.
+      - source/services/session/session-composition.hooks.test.ts:237-317 asserts waiting_for_approval and return to working around approval resolution.
+      - source/services/session/session-composition.hooks.test.ts:319-426 asserts multiple tasks keep status working until both settle.
+    replacementTestIds: []
+    status: proposed
+  - id: session-session-composition-runtime-boundary-test-session-a-m3
+    testId: session-session-composition-runtime-boundary-test
+    role: second_opinion
+    reviewer: session-a-m3
+    sourceArtifact: docs/test-audit/artifacts/session-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: A small public-surface test guards composition encapsulation while preserving the two intended callable runtime operations.
+    evidence:
+      - source/services/session/session-composition.runtime-boundary.test.ts:34-55 asserts internal fields are absent and compactContext/shutdown remain functions before disposal.
+    replacementTestIds: []
+    status: proposed

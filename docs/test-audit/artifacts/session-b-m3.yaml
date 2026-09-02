@@ -102,6 +102,7 @@ risks:
   - id: session-b-undo-journal-resurrection
     label: Retry recovery re-injects tool items from turns removed by undo or rewind.
     severity: critical
+fixtures: []
 contracts:
   - id: session-b-contract-composed-runtime-surface
     statement: The session composition factories return the documented session/runtime capability surface, including owned sinks and conversation adapter boundaries.
@@ -154,7 +155,10 @@ contracts:
     riskIds:
       - session-b-rewind-side-effect
   - id: session-b-contract-runtime-setting-mutations
-    statement: Runtime setting mutations are capability-aware: unsupported setters are no-ops, while supported provider-affecting changes reset session state before forwarding the exact requested value.
+    statement: >-
+      Runtime setting mutations are capability-aware: unsupported setters are
+      no-ops, while supported provider-affecting changes reset session state
+      before forwarding the exact requested value.
     seamIds:
       - session-b-runtime-settings-controller
     riskIds:
@@ -419,6 +423,114 @@ tests:
       - session-b-contract-undo-journal-recovery
     fixtureIds: []
 decisions:
+  - id: session-turn-coordinator-session-b-m3
+    testId: session-turn-coordinator
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: TurnCoordinator owns the cross-component foreground lifecycle, so its integration-level transition and stale-event cases are not replaceable by the narrower status-machine unit tests.
+    evidence:
+      - It verifies admission, turn-scope lifetime over approval, shell decision recording, modeled failure/error projection, stale completion suppression, pending generation forwarding, release for the next turn, and abort reconciliation in source/services/session/turn-coordinator.test.ts:109-525.
+      - The exact sibling source/services/session/turn-status-machine.test.ts covers state-machine transitions without workflow, approval-flow, scope, or event-stream integration; removing the coordinator file would leave those observables unprotected.
+    replacementTestIds: []
+    status: proposed
+  - id: session-turn-item-accumulator-session-b-m3
+    testId: session-turn-item-accumulator
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The accumulator's direct buffer-flush and reset contract is small, isolated, and feeds user-visible ordered turn items and usage.
+    evidence:
+      - It verifies empty flush no-ops, delta accumulation, buffer ordering before tool items, complete reset, and usage storage in source/services/session/turn-item-accumulator.test.ts:4-101.
+      - source/services/session/turn-workflow.test.ts and source/services/session/session-stream-processor.test.ts observe accumulated output indirectly, but neither replaces this direct state transition coverage.
+    replacementTestIds: []
+    status: proposed
+  - id: session-turn-outcome-boundary-session-b-m3
+    testId: session-turn-outcome-boundary
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This focused boundary test protects hook consumers from modeled-outcome omissions and verifies logical turn identity across pause/resume.
+    evidence:
+      - It captures only events emitted through HookLifecyclePort and validates turn.end for response, approval_required, stale, and failed outcomes plus one turn ID across continuation in source/services/session/turn-outcome-boundary.test.ts:125-183.
+      - The exact sibling source/services/session/turn-coordinator.test.ts tests conversation events and status, not hook-contract validity or hook ID continuity; the observables are complementary.
+    replacementTestIds: []
+    status: proposed
+  - id: session-turn-status-machine-session-b-m3
+    testId: session-turn-status-machine
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: TurnStatusMachine is a compact critical state/lease primitive; exhaustive transition, ownership, stale-lease, and outcome-emission cases provide a cheaper foundation for coordinator reasoning.
+    evidence:
+      - It covers valid and invalid phase transitions, observer notification suppression, completion versus approval outcomes, abort revocation, and stale lease non-mutation in source/services/session/turn-status-machine.test.ts:21-167.
+      - The exact sibling source/services/session/turn-coordinator.test.ts checks integration behavior but does not exercise all primitive transitions or stale lease methods directly.
+    replacementTestIds: []
+    status: proposed
+  - id: session-turn-workflow-call-ids-session-b-m3
+    testId: session-turn-workflow-call-ids
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Continuation call-ID selection is provider-validity-critical and this file isolates parallel, consumed-history, current-cycle, known-ID, snapshot, and abort-resolution cases.
+    evidence:
+      - It captures actual continueRunStream options and verifies required interrupted/completed IDs, exclusion of consumed outputs, current-cycle scoping, known IDs, frozen snapshots, and rejected/approved siblings in source/services/session/turn-workflow.call-ids.test.ts:130-266.
+      - The exact sibling source/services/session/session-input-planner.test.ts tests when to choose full history versus chaining, while this file tests the distinct call-ID payload inside a continuation; neither is a replacement for the other.
+    replacementTestIds: []
+    status: proposed
+  - id: session-turn-workflow-outcome-contract-session-b-m3
+    testId: session-turn-workflow-outcome-contract
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This focused file protects exact option and modeled-outcome contracts that are easy to break while repairing workflow internals, including the shipped post-execute auto-approval regression.
+    evidence:
+      - It verifies stopAfterApprovalResolution, zero lineage presence, hook ID forwarding, and post-execute auto-approval settlement with one stream consumption in source/services/session/turn-workflow.outcome-contract.test.ts:87-268.
+      - The exact sibling source/services/session/turn-workflow.test.ts covers broader initial/continuation behavior, but does not provide this focused option-presence and post-execute auto-approval contract evidence.
+    replacementTestIds: []
+    status: proposed
+  - id: session-turn-workflow-session-b-m3
+    testId: session-turn-workflow
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: >-
+      This is the broad high-scrutiny workflow regression suite: initial and
+      continuation execution, shared retry budgets, service-tier policy, lineage
+      parity, approval/post-execute recovery, compaction episodes, and fresh-start
+      redrives are independently meaningful.
+    evidence:
+      - It asserts provider options and snapshots at request boundaries, modeled recovery outcomes, retry-counter semantics, post-execute stream reuse, auto-approval and abort resolution, compaction-failure deduplication, and explicit no-live-run errors in source/services/session/turn-workflow.test.ts:77-1186.
+      - The exact sibling source/services/session/turn-workflow.call-ids.test.ts narrows to continuation call-ID options and source/services/session/turn-workflow.outcome-contract.test.ts narrows to option/auto-approval contracts; their focused scopes do not subsume the broad workflow matrix.
+    replacementTestIds: []
+    status: proposed
+  - id: session-undo-journal-recovery-session-b-m3
+    testId: session-undo-journal-recovery
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is explicit shipped-regression evidence for the critical undo-to-retry journal resurrection path, including the empty-history boundary.
+    evidence:
+      - It removes prior turns, invokes lifecycle afterUndo, runs DefaultRecoveryExecutor from the journal snapshot, and asserts old calls are absent while current calls appear exactly as call/result pairs; it also checks complete journal clearing in source/services/session/undo-journal-recovery.test.ts:68-153.
+      - The exact sibling source/services/session/session-lifecycle.test.ts checks that afterUndo invokes prune/cleanup, but does not execute recovery against real store/tracker/journal state and cannot replace this end-to-end regression proof.
+    replacementTestIds: []
+    status: proposed
   - id: session-session-runtime-characterization-session-b-m3
     testId: session-session-runtime-characterization
     role: second_opinion

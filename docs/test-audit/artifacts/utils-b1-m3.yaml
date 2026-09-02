@@ -1,0 +1,326 @@
+schemaVersion: 2
+domains:
+  - id: utils
+    label: Utility functions across app surfaces.
+suites:
+  - id: unit
+    label: Default Vitest unit suite
+  - id: integration
+    label: Integration suite for filesystem and settings persistence boundaries
+seams:
+  - id: utils-b1-output-trim
+    label: Output size trimming boundary for line and character caps.
+  - id: utils-b1-terminal-title
+    label: Terminal title construction and OSC delivery boundary.
+  - id: utils-b1-text-snippet
+    label: Match-centered bounded text snippet boundary.
+  - id: utils-b1-tool-output
+    label: Tool-result normalization and recursive string trimming boundary.
+  - id: utils-b1-project-tree
+    label: Filesystem project-tree filtering and budget boundary.
+  - id: utils-b1-resume-list
+    label: Saved-conversation list formatting and resume-command boundary.
+  - id: utils-b1-settings-command
+    label: Settings slash-command parsing, mutation, and persistence boundary.
+  - id: utils-b1-skill-paths
+    label: Project and user skill-root discovery boundary.
+risks:
+  - id: utils-b1-output-loss
+    label: Oversized model or tool output is not bounded while preserving useful head and tail context.
+    severity: high
+  - id: utils-b1-terminal-escape
+    label: Terminal title control sequences are malformed, unsafe, or not delivered through multiplexers and TTYs.
+    severity: medium
+  - id: utils-b1-snippet-corruption
+    label: Search snippets lose the match, exceed the cap, or split UTF-16 surrogate pairs.
+    severity: medium
+  - id: utils-b1-structured-output-corruption
+    label: Structured or multimodal tool results are flattened or truncated in a way that corrupts provider input.
+    severity: high
+  - id: utils-b1-tree-leak-or-omission
+    label: Prompt project trees leak sensitive or noisy paths, misrepresent nesting, or exceed configured budgets.
+    severity: high
+  - id: utils-b1-resume-command
+    label: Resume listings misidentify conversations or emit commands that omit local, SSH, or profile context.
+    severity: high
+  - id: utils-b1-settings-mutation
+    label: Settings commands report or apply invalid, non-durable, or incorrectly canonicalized mutations.
+    severity: high
+  - id: utils-b1-skill-discovery
+    label: Skill discovery omits supported scopes or constructs inconsistent project and user roots.
+    severity: medium
+fixtures:
+  - id: utils-b1-tty-writer
+    label: Injected OSC environment and TTY writer plus mocked fs descriptors.
+  - id: utils-b1-project-tree-tempdir
+    label: Temporary filesystem trees with cleanup after each case.
+  - id: utils-b1-settings-dependencies
+    label: In-memory settings command dependencies and temporary persistence directory.
+  - id: utils-b1-provider-registration
+    label: Dynamically registered provider used by model-setting parsing.
+  - id: utils-b1-resume-entries
+    label: Synthetic local, SSH, and profile-bearing saved-conversation entries.
+contracts:
+  - id: utils-b1-contract-output-pass-through
+    statement: Output at or below both configured limits is returned unchanged, including empty and single-line strings.
+    seamIds: [utils-b1-output-trim]
+    riskIds: [utils-b1-output-loss]
+  - id: utils-b1-contract-output-bounded-sides
+    statement: Output exceeding line or character limits is shortened with an explanatory marker while retaining beginning and ending context.
+    seamIds: [utils-b1-output-trim]
+    riskIds: [utils-b1-output-loss]
+  - id: utils-b1-contract-output-config
+    statement: Trim overrides and runtime configuration affect trimming, partial updates preserve unspecified values, and config reads return copies.
+    seamIds: [utils-b1-output-trim]
+    riskIds: [utils-b1-output-loss]
+  - id: utils-b1-contract-title-folder-label
+    statement: Project folder titles use the current folder and fall back to term2 for empty or dot paths; running labels add an indicator while idle labels do not.
+    seamIds: [utils-b1-terminal-title]
+    riskIds: [utils-b1-terminal-escape]
+  - id: utils-b1-contract-title-osc-delivery
+    statement: Terminal title sequences use OSC 0 framing and setTerminalTitle sends the sequence through the supplied TTY writer.
+    seamIds: [utils-b1-terminal-title]
+    riskIds: [utils-b1-terminal-escape]
+  - id: utils-b1-contract-centered-snippet
+    statement: Overlong content produces a match-centered snippet that contains the earliest relevant match and stays within the UTF-16 length cap.
+    seamIds: [utils-b1-text-snippet]
+    riskIds: [utils-b1-snippet-corruption]
+  - id: utils-b1-contract-snippet-unicode
+    statement: Case-folded expansion matches map back to source characters without emitting a dangling UTF-16 surrogate.
+    seamIds: [utils-b1-text-snippet]
+    riskIds: [utils-b1-snippet-corruption]
+  - id: utils-b1-contract-tool-text-recursion
+    statement: Plain and JSON tool outputs trim string values recursively while preserving unrelated structured fields.
+    seamIds: [utils-b1-tool-output]
+    riskIds: [utils-b1-structured-output-corruption, utils-b1-output-loss]
+  - id: utils-b1-contract-tool-content-parts
+    statement: Non-empty arrays whose entries carry string type discriminators remain structured and unmodified, while other arrays are coerced to strings.
+    seamIds: [utils-b1-tool-output]
+    riskIds: [utils-b1-structured-output-corruption]
+  - id: utils-b1-contract-tree-shape-budget
+    statement: Project trees render depth-first with space indentation, directory-first alphabetical ordering, depth markers, and distinct per-directory and total-budget omissions.
+    seamIds: [utils-b1-project-tree]
+    riskIds: [utils-b1-tree-leak-or-omission]
+  - id: utils-b1-contract-tree-filtering
+    statement: Sensitive and hidden/cache paths are pruned while safe allowlisted files and cross-ecosystem manifests remain visible.
+    seamIds: [utils-b1-project-tree]
+    riskIds: [utils-b1-tree-leak-or-omission]
+  - id: utils-b1-contract-resume-list
+    statement: Resume formatting handles empty, local, SSH, and multiple entries with dates, indexes, location metadata, and executable resume commands.
+    seamIds: [utils-b1-resume-list]
+    riskIds: [utils-b1-resume-command]
+  - id: utils-b1-contract-resume-identity-metadata
+    statement: Resume output uses dynamic short references when present and displays prompt, model, message count, and canonical profile metadata without legacy-mode mislabeling.
+    seamIds: [utils-b1-resume-list]
+    riskIds: [utils-b1-resume-command]
+  - id: utils-b1-contract-settings-observation
+    statement: Settings summaries and single-key queries expose current values together with their source, while no-argument queries activate autocomplete input.
+    seamIds: [utils-b1-settings-command]
+    riskIds: [utils-b1-settings-mutation]
+  - id: utils-b1-contract-settings-durable-mutation
+    statement: Settings mutations and resets apply permitted runtime hooks and truthfully report durable, memory-only, failed, or restart-required outcomes.
+    seamIds: [utils-b1-settings-command]
+    riskIds: [utils-b1-settings-mutation]
+  - id: utils-b1-contract-settings-validation-canonicalization
+    statement: Settings parsing converts primitive values, validates constrained limits, maps legacy modes to canonical profiles, and separates provider flags from model IDs.
+    seamIds: [utils-b1-settings-command]
+    riskIds: [utils-b1-settings-mutation]
+  - id: utils-b1-contract-skill-scope-discovery
+    statement: Project and user skill roots are derived in the same ordered way from the centralized supported scope list.
+    seamIds: [utils-b1-skill-paths]
+    riskIds: [utils-b1-skill-discovery]
+  - id: utils-b1-contract-osc-multiplexer
+    statement: OSC sequences remain bare in a terminal and are correctly wrapped for tmux or screen, including screen's 768-character chunks.
+    seamIds: [utils-b1-terminal-title]
+    riskIds: [utils-b1-terminal-escape]
+  - id: utils-b1-contract-tty-writer
+    statement: TTY writing safely no-ops without a TTY and opens, writes, and closes a fresh /dev/tty descriptor for each delivered message.
+    seamIds: [utils-b1-terminal-title]
+    riskIds: [utils-b1-terminal-escape]
+tests:
+  - kind: file
+    id: utils-output-trim-test
+    file: source/utils/output/output-trim.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-b1-contract-output-pass-through, utils-b1-contract-output-bounded-sides, utils-b1-contract-output-config]
+    fixtureIds: []
+  - kind: file
+    id: utils-terminal-title-test
+    file: source/utils/output/terminal-title.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-b1-contract-title-folder-label, utils-b1-contract-title-osc-delivery]
+    fixtureIds: [utils-b1-tty-writer]
+  - kind: file
+    id: utils-tty-osc-test
+    file: source/utils/output/tty-osc.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-b1-contract-osc-multiplexer, utils-b1-contract-tty-writer]
+    fixtureIds: [utils-b1-tty-writer]
+  - kind: file
+    id: utils-text-snippet-test
+    file: source/utils/output/text-snippet.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-b1-contract-centered-snippet, utils-b1-contract-snippet-unicode]
+    fixtureIds: []
+  - kind: file
+    id: utils-trim-tool-output-test
+    file: source/utils/output/trim-tool-output.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-b1-contract-tool-text-recursion, utils-b1-contract-tool-content-parts]
+    fixtureIds: []
+  - kind: file
+    id: utils-project-tree-test
+    file: source/utils/project-tree.test.ts
+    domainId: utils
+    suiteId: integration
+    contractIds: [utils-b1-contract-tree-shape-budget, utils-b1-contract-tree-filtering]
+    fixtureIds: [utils-b1-project-tree-tempdir]
+  - kind: file
+    id: utils-resume-list-test
+    file: source/utils/resume-list.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-b1-contract-resume-list, utils-b1-contract-resume-identity-metadata]
+    fixtureIds: [utils-b1-resume-entries]
+  - kind: file
+    id: utils-settings-command-test
+    file: source/utils/settings-command.test.ts
+    domainId: utils
+    suiteId: integration
+    contractIds: [utils-b1-contract-settings-observation, utils-b1-contract-settings-durable-mutation, utils-b1-contract-settings-validation-canonicalization]
+    fixtureIds: [utils-b1-settings-dependencies, utils-b1-provider-registration]
+  - kind: file
+    id: utils-skill-discovery-paths-test
+    file: source/utils/skill-discovery-paths.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-b1-contract-skill-scope-discovery]
+    fixtureIds: []
+decisions:
+  - id: utils-output-trim-test-utils-b1-m3
+    testId: utils-output-trim-test
+    role: second_opinion
+    reviewer: utils-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The file protects pass-through, line/character truncation, boundary behavior, and runtime configuration contracts with concrete output assertions.
+    evidence:
+      - source/utils/output/output-trim.test.ts:4-38 asserts unchanged small output and both line- and character-limit markers.
+      - source/utils/output/output-trim.test.ts:75-146 covers overrides, minimum retained lines, trim counts, and exact boundary behavior.
+      - source/utils/output/output-trim.test.ts:148-215 verifies partial config updates, defensive reads, and runtime config use with restoration.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-terminal-title-test-utils-b1-m3
+    testId: utils-terminal-title-test
+    role: second_opinion
+    reviewer: utils-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The file directly checks user-visible folder and running labels plus exact OSC framing and injected delivery without requiring a real terminal.
+    evidence:
+      - source/utils/output/terminal-title.test.ts:9-26 covers folder fallback and running versus idle title labels.
+      - source/utils/output/terminal-title.test.ts:29-44 asserts OSC 0 bytes and writer delivery through injected dependencies.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-text-snippet-test-utils-b1-m3
+    testId: utils-text-snippet-test
+    role: second_opinion
+    reviewer: utils-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The focused cases cover bounded match-centered output and two distinct Unicode lowercasing/surrogate hazards that could silently corrupt search context.
+    evidence:
+      - source/utils/output/text-snippet.test.ts:4-14 asserts the match, cap, and no dangling surrogate boundaries.
+      - source/utils/output/text-snippet.test.ts:16-30 covers source-position mapping for lowercase expansion and an expansion-only match.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-tty-osc-test-utils-b1-m3
+    testId: utils-tty-osc-test
+    role: second_opinion
+    reviewer: utils-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This file covers multiplexer-specific OSC framing and the null-safe, per-write descriptor lifecycle that the title helper delegates to.
+    evidence:
+      - source/utils/output/tty-osc.test.ts:7-35 asserts bare, tmux, screen, and 768-character chunked passthrough forms.
+      - source/utils/output/tty-osc.test.ts:39-73 verifies injected writer delivery, null-writer no-op, and tmux wrapping.
+      - source/utils/output/tty-osc.test.ts:75-150 verifies descriptor open/close and write ownership for each message, with restoration in finally.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-trim-tool-output-test-utils-b1-m3
+    testId: utils-trim-tool-output-test
+    role: second_opinion
+    reviewer: utils-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The file verifies recursive JSON trimming and protects the provider-facing multimodal exception from both corruption and accidental broad exemption.
+    evidence:
+      - source/utils/output/trim-tool-output.test.ts:4-39 checks plain, object, and nested-array string trimming while preserving structure.
+      - source/utils/output/trim-tool-output.test.ts:41-70 distinguishes unmodified content-part arrays from coerced non-content and empty arrays.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-project-tree-test-utils-b1-m3
+    testId: utils-project-tree-test
+    role: second_opinion
+    reviewer: utils-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Temporary trees exercise prompt-visible hierarchy, deterministic ordering, omission budgets, and security-oriented filtering against real filesystem entries.
+    evidence:
+      - source/utils/project-tree.test.ts:32-138 covers nesting, indentation, depth, per-directory/total budgets, and ordering.
+      - source/utils/project-tree.test.ts:140-225 covers sensitive/hidden/cache pruning and allowlisted manifests.
+      - source/utils/project-tree.test.ts:227-245 protects the default depth cap; source/utils/project-tree.test.ts:26-29 cleans every temp tree.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-resume-list-test-utils-b1-m3
+    testId: utils-resume-list-test
+    role: second_opinion
+    reviewer: utils-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The formatter's user-facing local/SSH commands and evolving short-reference/profile metadata are asserted as structured text, including the empty state.
+    evidence:
+      - source/utils/resume-list.test.ts:9-85 covers empty, local, SSH, and multi-entry indexes/commands.
+      - source/utils/resume-list.test.ts:32-46 asserts short reference display while retaining the canonical resume ID.
+      - source/utils/resume-list.test.ts:87-138 covers prompt/model/count metadata and canonical profile precedence over legacy flags.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-settings-command-test-utils-b1-m3
+    testId: utils-settings-command-test
+    role: second_opinion
+    reviewer: utils-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-b1-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: medium
+    reason: The file protects important settings observation, persistence, validation, and canonicalization contracts, but its provider-registration case leaves global state behind and explicitly records missing teardown work.
+    evidence:
+      - source/utils/settings-command.test.ts:118-218 covers summaries, autocomplete, profile writes, reads, and runtime updates.
+      - source/utils/settings-command.test.ts:219-279 verifies failed durable writes and persistence-disabled messaging with temporary directories.
+      - source/utils/settings-command.test.ts:439-460 registers a provider with no cleanup; lines 442-443 contain the TODO acknowledging teardown conversion.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-skill-discovery-paths-test-utils-b1-m3
+    testId: utils-skill-discovery-paths-test
+    role: second_opinion
+    reviewer: utils-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The compact unit file pins the centralized scope vocabulary and verifies identical ordering for project, user, and combined discovery roots.
+    evidence:
+      - source/utils/skill-discovery-paths.test.ts:10-12 pins all supported scope directory names in order.
+      - source/utils/skill-discovery-paths.test.ts:14-37 compares project, user, and combined roots derived from the same list.
+    replacementTestIds: []
+    status: proposed

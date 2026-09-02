@@ -220,6 +220,22 @@ tests:
       - ui-components-b-queue-paused-contract
     fixtureIds: []
 seams:
+  - id: ui-components-b-copy-menu
+    label: CopyMenu rendering and preview boundary
+  - id: ui-components-b-mentor-menu
+    label: MentorPoolSelectionMenu phase rendering boundary
+  - id: ui-components-b-model-menu
+    label: ModelSelectionMenu state and guidance boundary
+  - id: ui-components-b-path-menu
+    label: PathSelectionMenu warning boundary
+  - id: ui-components-b-provider-menu
+    label: ProviderSelectionMenu lifecycle rendering boundary
+  - id: ui-components-b-resume-menu
+    label: ResumeSelectionMenu context rendering boundary
+  - id: ui-components-b-rewind-menu
+    label: RewindMenu discard-summary boundary
+  - id: ui-components-b-settings-menu
+    label: SettingsSelectionMenu navigation and window boundary
   - id: ui-components-b-settings-value-menu
     label: SettingsValueSelectionMenu suggestion and footer boundary
   - id: ui-components-b-skill-menu
@@ -249,6 +265,24 @@ seams:
   - id: ui-components-b-queue-paused-prompt
     label: QueuePausedPrompt recovery boundary
 risks:
+  - id: ui-components-b-copy-preview-loss
+    label: Copy choices show misleading, missing, or overlong previews.
+    severity: medium
+  - id: ui-components-b-menu-guidance-regression
+    label: A menu omits or misstates actionable setup, empty-state, or navigation guidance.
+    severity: high
+  - id: ui-components-b-menu-window-regression
+    label: A long menu exposes the wrong visible entries or scroll position.
+    severity: medium
+  - id: ui-components-b-provider-safety-guidance
+    label: Provider availability, destructive confirmation, validation, or discard state is presented incorrectly.
+    severity: high
+  - id: ui-components-b-conversation-context-loss
+    label: Resume or rewind UI shows wrong context or misstates data to be discarded.
+    severity: high
+  - id: ui-components-b-settings-navigation-regression
+    label: Settings navigation hides matches, loses selection, or collapses incorrectly during search/category changes.
+    severity: high
   - id: ui-components-b-settings-value-regression
     label: A value picker hides suggestions, descriptions, numeric guidance, or controls.
     severity: medium
@@ -274,6 +308,57 @@ risks:
     label: A paused queue omits failure context or routes recovery input incorrectly.
     severity: high
 contracts:
+  - id: ui-components-b-copy-preview-contract
+    statement: CopyMenu renders each copyable item with a normalized bounded preview, while the full-response item has no code-preview suffix.
+    seamIds:
+      - ui-components-b-copy-menu
+    riskIds:
+      - ui-components-b-copy-preview-loss
+  - id: ui-components-b-mentor-phase-contract
+    statement: MentorPoolSelectionMenu explains pool cardinality and entry metadata, offers reorder only when applicable, and labels new-entry editing as an add flow.
+    seamIds:
+      - ui-components-b-mentor-menu
+    riskIds:
+      - ui-components-b-menu-guidance-regression
+  - id: ui-components-b-model-state-contract
+    statement: ModelSelectionMenu renders loading, error, empty-search, model-list, provider guidance, refresh, custom-provider, and scroll-position states with corresponding user-facing text.
+    seamIds:
+      - ui-components-b-model-menu
+    riskIds:
+      - ui-components-b-menu-guidance-regression
+      - ui-components-b-menu-window-regression
+  - id: ui-components-b-path-warning-contract
+    statement: PathSelectionMenu displays a workspace-truncation warning together with the available completion item.
+    seamIds:
+      - ui-components-b-path-menu
+    riskIds:
+      - ui-components-b-menu-guidance-regression
+  - id: ui-components-b-provider-state-contract
+    statement: ProviderSelectionMenu presents wizard steps, provider items, unavailable-provider routes, destructive confirmation, inline errors, discard warnings, and reorder contents according to phase and metadata.
+    seamIds:
+      - ui-components-b-provider-menu
+    riskIds:
+      - ui-components-b-provider-safety-guidance
+      - ui-components-b-menu-guidance-regression
+  - id: ui-components-b-resume-context-contract
+    statement: ResumeSelectionMenu lists saved conversations, shows details only for the selected conversation, gives accurate empty/search-empty feedback, and prefers canonical profile identity over legacy flags.
+    seamIds:
+      - ui-components-b-resume-menu
+    riskIds:
+      - ui-components-b-conversation-context-loss
+  - id: ui-components-b-rewind-summary-contract
+    statement: RewindMenu renders visible ordinals and turn text, accurately summarizes discarded replies/files/turns/images and unanswered turns, truncates long text, and labels edit/resend disposition.
+    seamIds:
+      - ui-components-b-rewind-menu
+    riskIds:
+      - ui-components-b-conversation-context-loss
+  - id: ui-components-b-settings-navigation-contract
+    statement: SettingsSelectionMenu renders matching settings and values, category tabs and switch guidance, selected descriptions, and a visible window that updates across search scope or category changes.
+    seamIds:
+      - ui-components-b-settings-menu
+    riskIds:
+      - ui-components-b-settings-navigation-regression
+      - ui-components-b-menu-window-regression
   - id: ui-components-b-settings-value-contract
     statement: SettingsValueSelectionMenu renders empty feedback, values, only the selected description, numeric guidance, and confirm/cancel controls.
     seamIds:

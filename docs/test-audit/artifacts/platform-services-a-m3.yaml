@@ -1,0 +1,749 @@
+schemaVersion: 2
+domains:
+  - id: platform-services
+    label: Service-layer seams not owned by other domains
+suites:
+  - id: unit
+    label: Default Vitest unit suite
+  - id: integration
+    label: Integration-style service suite
+seams:
+  - id: platform-services-a-stream-boundary
+    label: Native application stream items crossing service consumers
+  - id: platform-services-a-background-activity
+    label: Background task observation state and terminal-safe labels
+  - id: platform-services-a-workspace-execution
+    label: Session workspace and local-versus-remote execution context
+  - id: platform-services-a-durable-file-state
+    label: Filesystem-backed history and workspace enumeration
+  - id: platform-services-a-generation-invalidation
+    label: Stale turn work prevented from mutating session state
+  - id: platform-services-a-hook-runtime
+    label: Discovering, loading, registering, and dispatching user hooks
+  - id: platform-services-a-memory-policy-storage
+    label: Memory capability policy and durable store behavior
+  - id: platform-services-a-guard-thresholds
+    label: Input growth and uncached-input safety decisions
+  - id: platform-services-a-credit-refresh
+    label: Shared Grok credit usage refresh state
+  - id: platform-services-a-model-catalog
+    label: Provider model discovery, normalization, and cache boundaries
+  - id: platform-services-a-terminal-notification
+    label: Terminal capability detection and notification emission
+  - id: platform-services-a-interruption-normalization
+    label: Provider interruption records normalized for approval handling
+  - id: platform-services-a-mode-notices
+    label: Canonical profile transition notices
+risks:
+  - id: platform-services-a-stream-envelope-leak
+    label: Retired or nested provider stream envelopes reach application consumers.
+    severity: high
+  - id: platform-services-a-liveness-misreport
+    label: Background work is shown as hung or terminal labels leak control characters.
+    severity: medium
+  - id: platform-services-a-workspace-crossing
+    label: Local and remote workspace roots are confused or a lease retargets another session.
+    severity: high
+  - id: platform-services-a-persistence-loss
+    label: Durable history or memory state is lost, corrupted, or exposed across scopes.
+    severity: high
+  - id: platform-services-a-stale-mutation
+    label: Superseded asynchronous turn work mutates current session state.
+    severity: high
+  - id: platform-services-a-hook-boundary-bypass
+    label: Untrusted hook code loads, registration escapes its window, or callback failure halts dispatch.
+    severity: high
+  - id: platform-services-a-memory-policy-leak
+    label: A subject receives unintended memory tools or project memory crosses project boundaries.
+    severity: high
+  - id: platform-services-a-guard-decision-error
+    label: Input guards block safe requests or miss replay and uncached-input risk.
+    severity: high
+  - id: platform-services-a-credit-refresh-storm
+    label: Credit refreshes ignore cooldown, duplicate concurrent work, or retain invalid account data.
+    severity: medium
+  - id: platform-services-a-model-fetch-error
+    label: Model discovery uses the wrong endpoint, auth shape, cache entry, or error detail.
+    severity: medium
+  - id: platform-services-a-terminal-output-injection
+    label: Notification output emits unsafe control sequences or chooses an unusable transport.
+    severity: medium
+  - id: platform-services-a-interruption-shape-loss
+    label: Provider-specific interruption shapes lose tool identity, arguments, or call IDs.
+    severity: high
+  - id: platform-services-a-notice-drift
+    label: Profile notices do not map to canonical profile identity or active state.
+    severity: low
+fixtures: []
+contracts:
+  - id: platform-services-a-contract-native-stream-items
+    statement: Stream selection strips bookkeeping events, falls back to history when needed, and recognizes committed output only for meaningful or conservatively unknown events.
+    seamIds:
+      - platform-services-a-stream-boundary
+    riskIds:
+      - platform-services-a-stream-envelope-leak
+  - id: platform-services-a-contract-native-stream-consumers
+    statement: Application stream consumers use the native event protocol and production source contains no retired or nested SDK stream envelopes.
+    seamIds:
+      - platform-services-a-stream-boundary
+    riskIds:
+      - platform-services-a-stream-envelope-leak
+  - id: platform-services-a-contract-background-liveness
+    statement: Background activity clamps clock skew, reports lifecycle and observation age separately, and sanitizes bounded tool labels.
+    seamIds:
+      - platform-services-a-background-activity
+    riskIds:
+      - platform-services-a-liveness-misreport
+  - id: platform-services-a-contract-command-message-normalization
+    statement: Tool-call arguments are cached onto canonical results without mutation, while emitted command messages deduplicate and retain rejection records.
+    seamIds:
+      - platform-services-a-stream-boundary
+    riskIds:
+      - platform-services-a-stream-envelope-leak
+  - id: platform-services-a-contract-execution-workspace
+    statement: Execution contexts distinguish local and remote cwd, enforce absolute workspace roots, restore the session root, and keep pinned leases isolated.
+    seamIds:
+      - platform-services-a-workspace-execution
+    riskIds:
+      - platform-services-a-workspace-crossing
+  - id: platform-services-a-contract-workspace-enumeration
+    statement: Workspace enumeration is breadth-first and bounded, lists symlinks without traversing them, and follows the active workspace lease.
+    seamIds:
+      - platform-services-a-durable-file-state
+      - platform-services-a-workspace-execution
+    riskIds:
+      - platform-services-a-workspace-crossing
+  - id: platform-services-a-contract-generation-safety
+    statement: Undo, model change, import, reset, disposal, and abort-generation paths prevent stale stream mutation and reject stale approval continuation.
+    seamIds:
+      - platform-services-a-generation-invalidation
+    riskIds:
+      - platform-services-a-stale-mutation
+  - id: platform-services-a-contract-grok-credit-refresh
+    statement: Grok usage refreshes honor cooldown and retry backoff, collapse concurrent requests, preserve valid state on failures, and reset on account or credential changes.
+    seamIds:
+      - platform-services-a-credit-refresh
+    riskIds:
+      - platform-services-a-credit-refresh-storm
+  - id: platform-services-a-contract-history-durability
+    statement: History persists multimodal and legacy turns, trims and clears predictably, logs recoverable failures, quarantines corrupt input, and preserves prior data across failed saves.
+    seamIds:
+      - platform-services-a-durable-file-state
+    riskIds:
+      - platform-services-a-persistence-loss
+  - id: platform-services-a-contract-hook-discovery
+    statement: Hook discovery orders supported user and trusted project files, rejects symlink escapes, honors enable switches, and treats missing roots as empty.
+    seamIds:
+      - platform-services-a-hook-runtime
+    riskIds:
+      - platform-services-a-hook-boundary-bypass
+  - id: platform-services-a-contract-hook-editor-shim
+    statement: Hook editor setup creates the declaration and TypeScript path mapping files expected by hook authors.
+    seamIds:
+      - platform-services-a-hook-runtime
+    riskIds:
+      - platform-services-a-hook-boundary-bypass
+  - id: platform-services-a-contract-hook-module-loading
+    statement: Native and Jiti hook loaders accept callable registrations and wrap invalid exports and evaluation failures with source paths.
+    seamIds:
+      - platform-services-a-hook-runtime
+    riskIds:
+      - platform-services-a-hook-boundary-bypass
+  - id: platform-services-a-contract-hook-registry
+    statement: Hook registration preserves callback order and duplicates, permits unsubscribe, rolls back failed registration, isolates failures with timeout diagnostics, and deduplicates event IDs.
+    seamIds:
+      - platform-services-a-hook-runtime
+    riskIds:
+      - platform-services-a-hook-boundary-bypass
+  - id: platform-services-a-contract-hook-service
+    statement: Hook service starts once, loads valid discovered files in order, isolates failures, exposes emit and shutdown behavior, and reports discovery diagnostics.
+    seamIds:
+      - platform-services-a-hook-runtime
+    riskIds:
+      - platform-services-a-hook-boundary-bypass
+  - id: platform-services-a-contract-hook-system
+    statement: The hook system filters project trust, dispatches session and approval lifecycle events, distinguishes policy auto-approval, and ignores events after shutdown.
+    seamIds:
+      - platform-services-a-hook-runtime
+    riskIds:
+      - platform-services-a-hook-boundary-bypass
+  - id: platform-services-a-contract-input-surge-analysis
+    statement: Input surge analysis canonicalizes provider and wrapper shapes, detects duplicate calls and call-result pairs, and allows explicitly safe growth cases.
+    seamIds:
+      - platform-services-a-guard-thresholds
+    riskIds:
+      - platform-services-a-guard-decision-error
+  - id: platform-services-a-contract-large-uncached-guard
+    statement: Large uncached input warnings respond to provider/model/reasoning and idle or resumed-session changes, remain stable per pending input, and avoid unnecessary serialization.
+    seamIds:
+      - platform-services-a-guard-thresholds
+    riskIds:
+      - platform-services-a-guard-decision-error
+  - id: platform-services-a-contract-memory-capabilities
+    statement: Memory capability construction grants mode-appropriate read/write tools and guidance, injects only intended context, isolates project scopes, and honors disablement.
+    seamIds:
+      - platform-services-a-memory-policy-storage
+    riskIds:
+      - platform-services-a-memory-policy-leak
+  - id: platform-services-a-contract-memory-store
+    statement: File memory storage normalizes and validates records, recovers durable indexes, serializes mutations, bounds context, and handles missing content safely.
+    seamIds:
+      - platform-services-a-memory-policy-storage
+      - platform-services-a-durable-file-state
+    riskIds:
+      - platform-services-a-persistence-loss
+      - platform-services-a-memory-policy-leak
+  - id: platform-services-a-contract-mode-notices
+    statement: Mode notice helpers map canonical profile IDs to enter and exit notices and safely prime only resolvable active profiles.
+    seamIds:
+      - platform-services-a-mode-notices
+    riskIds:
+      - platform-services-a-notice-drift
+  - id: platform-services-a-contract-model-discovery
+    statement: Model discovery uses provider-specific endpoints and authentication, normalizes and filters results, enriches catalog context windows, caches correctly, and preserves error causes.
+    seamIds:
+      - platform-services-a-model-catalog
+    riskIds:
+      - platform-services-a-model-fetch-error
+  - id: platform-services-a-contract-notification-transport
+    statement: Notification transport selects supported OSC or bell paths by terminal and CI/TTY state, sanitizes payloads, and supports tmux and injected writers.
+    seamIds:
+      - platform-services-a-terminal-notification
+    riskIds:
+      - platform-services-a-terminal-output-injection
+  - id: platform-services-a-contract-interruption-shapes
+    statement: Interruption helpers safely inspect records, bind methods, recover canonical IDs, and normalize command arguments across provider shapes.
+    seamIds:
+      - platform-services-a-interruption-normalization
+    riskIds:
+      - platform-services-a-interruption-shape-loss
+tests:
+  - kind: file
+    id: platform-services-agent-stream-test
+    file: source/services/agent-stream.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds:
+      - platform-services-a-contract-native-stream-items
+    fixtureIds: []
+  - kind: file
+    id: platform-services-application-stream-boundary-test
+    file: source/services/application-stream-boundary.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds:
+      - platform-services-a-contract-native-stream-consumers
+    fixtureIds: []
+  - kind: file
+    id: platform-services-background-task-activity-test
+    file: source/services/background-task-activity.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds:
+      - platform-services-a-contract-background-liveness
+    fixtureIds: []
+  - kind: file
+    id: platform-services-command-message-streaming-test
+    file: source/services/command-message-streaming.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds:
+      - platform-services-a-contract-command-message-normalization
+    fixtureIds: []
+  - kind: file
+    id: platform-services-execution-context-test
+    file: source/services/execution-context.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds:
+      - platform-services-a-contract-execution-workspace
+    fixtureIds: []
+  - kind: file
+    id: platform-services-file-service-test
+    file: source/services/file-service.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds:
+      - platform-services-a-contract-workspace-enumeration
+    fixtureIds: []
+  - kind: file
+    id: platform-services-generation-guard-test
+    file: source/services/generation-guard.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds:
+      - platform-services-a-contract-generation-safety
+    fixtureIds: []
+  - kind: file
+    id: platform-services-grok-credit-usage-service-test
+    file: source/services/grok/grok-credit-usage-service.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds:
+      - platform-services-a-contract-grok-credit-refresh
+    fixtureIds: []
+  - kind: file
+    id: platform-services-history-service-test
+    file: source/services/history-service.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds:
+      - platform-services-a-contract-history-durability
+    fixtureIds: []
+  - kind: file
+    id: platform-services-hook-discovery-test
+    file: source/services/hooks/hook-discovery.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds:
+      - platform-services-a-contract-hook-discovery
+    fixtureIds: []
+  - kind: file
+    id: platform-services-hook-editor-shim-test
+    file: source/services/hooks/hook-editor-shim.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds:
+      - platform-services-a-contract-hook-editor-shim
+    fixtureIds: []
+  - kind: file
+    id: platform-services-hook-module-loader-test
+    file: source/services/hooks/hook-module-loader.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds:
+      - platform-services-a-contract-hook-module-loading
+    fixtureIds: []
+  - kind: file
+    id: platform-services-hook-registry-test
+    file: source/services/hooks/hook-registry.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds:
+      - platform-services-a-contract-hook-registry
+    fixtureIds: []
+  - kind: file
+    id: platform-services-hook-runtime-test
+    file: source/services/hooks/hook-runtime.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds:
+      - platform-services-a-contract-hook-system
+    fixtureIds: []
+  - kind: file
+    id: platform-services-hook-service-test
+    file: source/services/hooks/hook-service.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds:
+      - platform-services-a-contract-hook-service
+    fixtureIds: []
+  - kind: file
+    id: platform-services-hook-system-integration-test
+    file: source/services/hooks/hook-system.integration.test.ts
+    domainId: platform-services
+    suiteId: integration
+    contractIds:
+      - platform-services-a-contract-hook-system
+    fixtureIds: []
+  - kind: file
+    id: platform-services-input-surge-guard-test
+    file: source/services/input-surge-guard.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds:
+      - platform-services-a-contract-input-surge-analysis
+    fixtureIds: []
+  - kind: file
+    id: platform-services-interruption-info-test
+    file: source/services/interruption-info.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds:
+      - platform-services-a-contract-interruption-shapes
+    fixtureIds: []
+  - kind: file
+    id: platform-services-large-uncached-input-guard-test
+    file: source/services/large-uncached-input-guard.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds:
+      - platform-services-a-contract-large-uncached-guard
+    fixtureIds: []
+  - kind: file
+    id: platform-services-memory-capabilities-test
+    file: source/services/memory/memory-capabilities.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds:
+      - platform-services-a-contract-memory-capabilities
+    fixtureIds: []
+  - kind: file
+    id: platform-services-memory-store-test
+    file: source/services/memory/memory-store.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds:
+      - platform-services-a-contract-memory-store
+    fixtureIds: []
+  - kind: file
+    id: platform-services-mode-notices-test
+    file: source/services/mode-notices.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds:
+      - platform-services-a-contract-mode-notices
+    fixtureIds: []
+  - kind: file
+    id: platform-services-model-service-test
+    file: source/services/model-service.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds:
+      - platform-services-a-contract-model-discovery
+    fixtureIds: []
+  - kind: file
+    id: platform-services-notification-service-test
+    file: source/services/notification-service.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds:
+      - platform-services-a-contract-notification-transport
+    fixtureIds: []
+decisions:
+  - id: platform-services-agent-stream-test-r1
+    testId: platform-services-agent-stream-test
+    role: second_opinion
+    reviewer: platform-services-a-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The file asserts both event selection fallback and the committed-output safety boundary, including conservative handling of unknown events.
+    evidence:
+      - source/services/agent-stream.test.ts:5-40 asserts item unwrapping, removal of non-history events, and history fallback.
+      - source/services/agent-stream.test.ts:50-97 asserts bookkeeping is not committed output while text, committed items, dispatched calls, and unknown entries are handled distinctly.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-application-stream-boundary-test-r1
+    testId: platform-services-application-stream-boundary-test
+    role: second_opinion
+    reviewer: platform-services-a-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is a repository-level architectural guard against retired SDK envelopes and nested event shapes, not a tautological unit assertion.
+    evidence:
+      - source/services/application-stream-boundary.test.ts:24-36 asserts the run loop constructs a native stream and canonical consumers reject retired/nested envelopes.
+      - source/services/application-stream-boundary.test.ts:38-56 scans production source and fails on each retired envelope or nested model/event pattern.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-background-task-activity-test-r1
+    testId: platform-services-background-task-activity-test
+    role: second_opinion
+    reviewer: platform-services-a-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The focused cases protect clock-skew normalization, independent lifecycle/quiet axes, and terminal-control sanitization.
+    evidence:
+      - source/services/background-task-activity.test.ts:11-18 asserts skew clamping and the quiet threshold.
+      - source/services/background-task-activity.test.ts:22-46 asserts formatted waiting/quiet and active/recent output without inferring a hang.
+      - source/services/background-task-activity.test.ts:49-56 asserts control removal, length bound, and truncation marker.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-command-message-streaming-test-r1
+    testId: platform-services-command-message-streaming-test
+    role: second_opinion
+    reviewer: platform-services-a-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It covers the adapter's observable argument enrichment, non-mutation, duplicate suppression, and approval-rejection retention.
+    evidence:
+      - source/services/command-message-streaming.test.ts:8-39 asserts raw call argument capture and immutable result enrichment.
+      - source/services/command-message-streaming.test.ts:41-98 asserts extraction receives arguments, filters duplicate IDs, retains rejection records, and records emitted IDs.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-execution-context-test-r1
+    testId: platform-services-execution-context-test
+    role: second_opinion
+    reviewer: platform-services-a-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The test file exercises local/remote cwd ownership and workspace lease lifecycle, including the process-wide publication boundary.
+    evidence:
+      - source/services/execution-context.test.ts:25-64 asserts local versus remote service/cwd behavior and fallback cwd.
+      - source/services/execution-context.test.ts:66-102 asserts enter, exit, replacement, and absolute-root invariants.
+      - source/services/execution-context.test.ts:104-130 asserts remote rejection and pinned leases not retargeting a parent context.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-file-service-test-r1
+    testId: platform-services-file-service-test
+    role: second_opinion
+    reviewer: platform-services-a-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Temporary filesystem fixtures verify breadth-first caps, complete directory enumeration, active lease switching, and symlink non-traversal.
+    evidence:
+      - source/services/file-service.test.ts:14-35 asserts shallow entries win under a total cap and truncation metadata is set.
+      - source/services/file-service.test.ts:38-57 asserts no per-directory cap and non-truncated enumeration.
+      - source/services/file-service.test.ts:59-83 asserts getWorkspaceEntries follows enter/exit lease changes.
+      - source/services/file-service.test.ts:85-104 asserts symlinks are listed but directory links are not traversed.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-generation-guard-test-r1
+    testId: platform-services-generation-guard-test
+    role: second_opinion
+    reviewer: platform-services-a-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: >-
+      This is a cohesive stale-work safety suite: primitive token semantics are
+      followed by distinct invalidation sources and approval-abort behavior.
+    evidence:
+      - source/services/generation-guard.test.ts:8-63 asserts capture, current-token checks, invalidation, and conditional mutation.
+      - source/services/generation-guard.test.ts:118-399 asserts undo, pending approval, model change, import, reset, and disposal prevent assistant mutation and settle idle.
+      - source/services/generation-guard.test.ts:401-496 asserts current-token abort input starts a fresh turn while stale-token input is processed normally.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-grok-credit-usage-service-test-r1
+    testId: platform-services-grok-credit-usage-service-test
+    role: second_opinion
+    reviewer: platform-services-a-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Deterministic clock and fetch fixtures cover the service's cooldown, single-flight, backoff, credential/account invalidation, subscriber, and singleton contracts.
+    evidence:
+      - source/services/grok/grok-credit-usage-service.test.ts:39-92 asserts first refresh, cooldown/force behavior, and concurrent request collapse.
+      - source/services/grok/grok-credit-usage-service.test.ts:94-145 asserts non-rejection, last-value retention, and doubling backoff.
+      - source/services/grok/grok-credit-usage-service.test.ts:166-223 asserts permanent unauthorized stop, reset recovery, and retry-after floor.
+      - source/services/grok/grok-credit-usage-service.test.ts:225-293 asserts unauthenticated behavior, account isolation, subscriber unsubscribe, and process-wide singleton identity.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-history-service-test-r1
+    testId: platform-services-history-service-test
+    role: second_opinion
+    reviewer: platform-services-a-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The file tests both ordinary compatibility and explicit durability failure paths against real temporary files.
+    evidence:
+      - source/services/history-service.test.ts:39-126 asserts multimodal/legacy load, trimming, clear, and persistence.
+      - source/services/history-service.test.ts:128-192 asserts corrupt-load and failed-save logging while preserving usable in-memory state.
+      - source/services/history-service.test.ts:194-247 asserts corrupt-file quarantine and atomic-save preservation after a mid-write failure.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-hook-discovery-test-r1
+    testId: platform-services-hook-discovery-test
+    role: second_opinion
+    reviewer: platform-services-a-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Discovery tests exercise ordering, extension filtering, symlink escape rejection, trust gating, enable switches, and absent directories.
+    evidence:
+      - source/services/hooks/hook-discovery.test.ts:24-51 asserts user-before-project lexical ordering and supported extension filtering.
+      - source/services/hooks/hook-discovery.test.ts:53-71 asserts symlink rejection and untrusted project diagnostics.
+      - source/services/hooks/hook-discovery.test.ts:73-107 asserts both disable switches and missing-root empty behavior.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-hook-editor-shim-test-r1
+    testId: platform-services-hook-editor-shim-test
+    role: second_opinion
+    reviewer: platform-services-a-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This small filesystem test verifies the editor-facing generated files and parses the path mapping rather than only checking existence.
+    evidence:
+      - source/services/hooks/hook-editor-shim.test.ts:19-34 asserts both generated files, declaration content, and the exact TypeScript path mapping.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-hook-module-loader-test-r1
+    testId: platform-services-hook-module-loader-test
+    role: second_opinion
+    reviewer: platform-services-a-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Injected loader fixtures isolate export validation and evaluation wrapping while checking native and Jiti loader paths.
+    evidence:
+      - source/services/hooks/hook-module-loader.test.ts:6-27 asserts callable default/value acceptance and invalid default rejection with source path.
+      - source/services/hooks/hook-module-loader.test.ts:29-58 asserts evaluation cause preservation, async evaluation, constructor validation, and native validation path.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-hook-registry-test-r1
+    testId: platform-services-hook-registry-test
+    role: second_opinion
+    reviewer: platform-services-a-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Registry tests cover callback collection semantics, registration-window enforcement, rollback, failure isolation, timeout diagnostics, and concurrent deduplication.
+    evidence:
+      - source/services/hooks/hook-registry.test.ts:19-68 asserts ordered duplicate dispatch, selective unsubscribe, and closed-registration rejection.
+      - source/services/hooks/hook-registry.test.ts:70-110 asserts rollback plus callback failure/timeout isolation and diagnostics.
+      - source/services/hooks/hook-registry.test.ts:112-121 asserts concurrent same-event dispatch calls a callback once.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-hook-runtime-test-r1
+    testId: platform-services-hook-runtime-test
+    role: second_opinion
+    reviewer: platform-services-a-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The runtime composition test protects the important local-hook/remote-tool boundary with a real local hook and an assertion that remote execution is never invoked.
+    evidence:
+      - source/services/hooks/hook-runtime.test.ts:15-50 constructs distinct local and remote roots, hook files, and an SSH execution spy.
+      - source/services/hooks/hook-runtime.test.ts:53-79 initializes and emits through the runtime, then asserts only the local hook ran and SSH was unused.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-hook-service-test-r1
+    testId: platform-services-hook-service-test
+    role: second_opinion
+    reviewer: platform-services-a-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Service-level tests verify start idempotence, ordered loading, failure isolation, discovery diagnostics, injected registries, and post-shutdown behavior.
+    evidence:
+      - source/services/hooks/hook-service.test.ts:26-59 asserts one discovery/load pass, ordered emission, and no emission after shutdown.
+      - source/services/hooks/hook-service.test.ts:61-115 asserts valid-module retention and non-fatal load, registration, and discovery errors.
+      - source/services/hooks/hook-service.test.ts:117-133 asserts injected registry dispatch and shutdown behavior.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-hook-system-integration-test-r1
+    testId: platform-services-hook-system-integration-test
+    role: second_opinion
+    reviewer: platform-services-a-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is the assigned integration-style lifecycle test, exercising discovery and registry dispatch together across session and approval events.
+    evidence:
+      - source/services/hooks/hook-system.integration.test.ts:30-67 asserts trusted/untrusted project filtering through filesystem discovery.
+      - source/services/hooks/hook-system.integration.test.ts:69-170 asserts complete session/approval lifecycle ordering and post-shutdown suppression.
+      - source/services/hooks/hook-system.integration.test.ts:172-208 asserts policy auto-approval emits resolved without a preceding request.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-input-surge-guard-test-r1
+    testId: platform-services-input-surge-guard-test
+    role: second_opinion
+    reviewer: platform-services-a-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The cases distinguish representation canonicalization, supported identifier/result spellings, safe growth, replay blocks, and duplicate call/result blocks.
+    evidence:
+      - source/services/input-surge-guard.test.ts:9-84 asserts equivalent direct, wrapped, and canonical inputs plus supported result and ID spellings while ignoring non-tool IDs.
+      - source/services/input-surge-guard.test.ts:86-129 asserts exact stats and safe growth boundaries for message count, bytes, and minimum surge threshold.
+      - source/services/input-surge-guard.test.ts:131-194 asserts replay and duplicated pair blocking and pair reporting independent of result content.
+      - source/services/input-surge-guard.test.ts:196-242 asserts successful full-history recording does not defer or spuriously block later large-result inputs.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-interruption-info-test-r1
+    testId: platform-services-interruption-info-test
+    role: second_opinion
+    reviewer: platform-services-a-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: These are focused boundary-normalization tests over malformed records, method binding, ID aliases, and multiple provider command argument shapes.
+    evidence:
+      - source/services/interruption-info.test.ts:11-50 asserts safe record/string access and bound callable methods.
+      - source/services/interruption-info.test.ts:52-75 asserts top-level/raw ID aliases and approval-item precedence.
+      - source/services/interruption-info.test.ts:77-127 asserts string/object/legacy command parsing and unknown-tool defaults.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-large-uncached-input-guard-test-r1
+    testId: platform-services-large-uncached-input-guard-test
+    role: second_opinion
+    reviewer: platform-services-a-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-a-m3.yaml
+    recommendation: consolidation_candidate
+    confidence: high
+    reason: The file protects important guard thresholds and serialization behavior, but one standalone stable-key test duplicates the stronger earlier test and can be folded into it.
+    evidence:
+      - source/services/large-uncached-input-guard.test.ts:167-208 already asserts stable keys for repeated input and changed keys for changed input.
+      - source/services/large-uncached-input-guard.test.ts:354-376 repeats only the stable/nonempty warning-key assertion without adding a distinct transition or input case.
+      - source/services/large-uncached-input-guard.test.ts:213-307 and 378-414 contain distinct no-serialization, one-serialization, and precomputed-size contracts worth retaining.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-memory-capabilities-test-r1
+    testId: platform-services-memory-capabilities-test
+    role: second_opinion
+    reviewer: platform-services-a-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Capability tests cover the role matrix, read-only enforcement, context injection, project isolation, disablement, and synthesis boundaries.
+    evidence:
+      - source/services/memory/memory-capabilities.test.ts:38-81 asserts expected access/tool matrices and strict read-only subsets.
+      - source/services/memory/memory-capabilities.test.ts:83-153 asserts on-demand versus injected context behavior for subagents and main agents.
+      - source/services/memory/memory-capabilities.test.ts:155-220 asserts project isolation, disablement, librarian behavior, and root-only synthesis.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-memory-store-test-r1
+    testId: platform-services-memory-store-test
+    role: second_opinion
+    reviewer: platform-services-a-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Real temporary stores exercise validation, normalization, durable recovery, concurrent mutation serialization, search ranking, missing content, and bounded context rendering.
+    evidence:
+      - source/services/memory/memory-store.test.ts:22-66 asserts normalization, persistence across instances, path/input validation, update/remove, and absent reads.
+      - source/services/memory/memory-store.test.ts:68-123 asserts deterministic search and missing/corrupt index recovery plus invalid metadata rejection.
+      - source/services/memory/memory-store.test.ts:125-159 asserts long summaries and create/remove/search behavior when content paths are unavailable.
+      - source/services/memory/memory-store.test.ts:161-192 asserts search-before-limit and serialization across in-process and cross-instance mutations.
+      - source/services/memory/memory-store.test.ts:194-214 asserts summary-only budgeted context and clean-run empty context.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-mode-notices-test-r1
+    testId: platform-services-mode-notices-test
+    role: second_opinion
+    reviewer: platform-services-a-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The helper contract is tested through canonical Profile ID mapping, active-profile priming, and safe handling of unresolved IDs.
+    evidence:
+      - source/services/mode-notices.test.ts:14-32 asserts enter/exit notice content and canonical Profile-to-notice mappings, including null standard/lite cases.
+      - source/services/mode-notices.test.ts:34-46 asserts active plan priming and no throw/no queue for an unresolved profile.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-model-service-test-r1
+    testId: platform-services-model-service-test
+    role: second_opinion
+    reviewer: platform-services-a-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Provider-specific fake fetches and registry fixtures verify endpoint/auth differences, normalization, caching, catalog enrichment, error causes, and selective eviction.
+    evidence:
+      - source/services/model-service.test.ts:18-127 asserts OpenRouter/OpenAI endpoints, cache reuse, auth, sorting/filtering, and catalog context windows.
+      - source/services/model-service.test.ts:129-247 asserts custom OpenAI-compatible, Anthropic, and Google endpoint/auth normalization.
+      - source/services/model-service.test.ts:249-327 asserts ID/name filtering and error logging with and without causes.
+      - source/services/model-service.test.ts:329-388 asserts a provider config change evicts only the changed provider cache entry.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-notification-service-test-r1
+    testId: platform-services-notification-service-test
+    role: second_opinion
+    reviewer: platform-services-a-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Terminal matrix tests cover capability precedence, CI/TTY gating, payload sanitization, direct emission, tmux passthrough, and writer compatibility.
+    evidence:
+      - source/services/notification-service.test.ts:27-86 asserts OSC capability detection, bell gating, and method precedence/fallback.
+      - source/services/notification-service.test.ts:88-134 asserts emitted OSC/bell sequences, sanitized payloads, and unavailable-method behavior.
+      - source/services/notification-service.test.ts:136-194 asserts injected writers, tmux wrapping, OSC9 fallback, and bell output.
+    replacementTestIds: []
+    status: proposed

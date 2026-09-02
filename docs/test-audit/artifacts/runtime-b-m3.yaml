@@ -8,47 +8,47 @@ suites:
     label: Agent runtime unit and integration tests
 seams:
   - id: runtime-b-agent-resolution
-    label: Agent configuration and authority resolution boundary.
+    label: source/services/agent-runtime/agent-resolver.ts, permission-resolver.ts, and tools-resolver.ts configuration boundary.
   - id: runtime-b-agent-handle
-    label: Public AgentHandle run and result boundary.
+    label: source/services/agent-runtime/agent-handle.ts public run and result boundary.
   - id: runtime-b-run-loop-cost
-    label: Run-loop request cost settlement boundary.
+    label: source/services/agent-runtime/application-run-loop.ts request cost settlement boundary.
   - id: runtime-b-run-loop-lifecycle
-    label: Run-loop tool lifecycle callback boundary.
+    label: source/services/agent-runtime/application-run-loop.ts tool lifecycle callback boundary.
   - id: runtime-b-run-loop-parallel
-    label: Run-loop parallel dispatch and transcript ordering boundary.
+    label: source/services/agent-runtime/application-run-loop.ts parallel dispatch and transcript ordering boundary.
   - id: runtime-b-run-loop-budget
-    label: Run-loop budget escalation and continuation boundary.
+    label: source/services/agent-runtime/application-run-loop.ts and run-budget.ts escalation boundary.
   - id: runtime-b-runtime-composition
-    label: Production runtime composition boundary.
+    label: source/services/agent-runtime/compose-agent-runtime.ts production composition boundary.
   - id: runtime-b-context-compaction
-    label: Context compaction policy and transformation boundary.
+    label: source/services/agent-runtime/context-compaction/index.ts and local-context-compactor.ts transformation boundary.
   - id: runtime-b-execution-budget
-    label: Nested execution resource budget boundary.
+    label: source/services/agent-runtime/execution-budget.ts nested resource budget boundary.
   - id: runtime-b-executor
-    label: Subagent executor routing and result mapping boundary.
+    label: source/services/agent-runtime/executor.ts routing and result mapping boundary.
   - id: runtime-b-generation-guard
-    label: Generated output and tool-argument runaway guard boundary.
+    label: source/services/agent-runtime/generation-guard.ts output and tool runaway guard boundary.
   - id: runtime-b-model-resolution
-    label: Model policy and relative tier resolution boundary.
+    label: source/services/agent-runtime/model-resolver.ts model policy boundary.
   - id: runtime-b-permission-resolution
-    label: Permission and limit attenuation boundary.
+    label: source/services/agent-runtime/permission-resolver.ts permission and limit attenuation boundary.
   - id: runtime-b-scope-resolution
-    label: Filesystem and network scope containment boundary.
+    label: source/services/agent-runtime/scope-resolver.ts filesystem and network containment boundary.
   - id: runtime-b-skill-resolution
-    label: Skill instruction resolution boundary.
+    label: source/services/agent-runtime/skill-resolver.ts instruction boundary.
   - id: runtime-b-structured-output
-    label: Structured output schema and parsing boundary.
+    label: source/services/agent-runtime/structured-output.ts schema and parsing boundary.
   - id: runtime-b-attachments
-    label: Text attachment validation and serialization boundary.
+    label: source/services/agent-runtime/text-attachment.ts validation and serialization boundary.
   - id: runtime-b-tool-invocation
-    label: Approval ledger and invocation context boundary.
+    label: source/services/agent-runtime/tool-invocation-context.ts approval and context boundary.
   - id: runtime-b-tool-resolution
-    label: Permissioned tool selection boundary.
+    label: source/services/agent-runtime/tools-resolver.ts permissioned selection boundary.
   - id: runtime-b-workflow
-    label: Sandboxed workflow evaluation boundary.
+    label: source/services/agent-runtime/workflow/workflow-evaluator.ts and workflow-sandbox.ts boundary.
   - id: runtime-b-legacy-adapter
-    label: Legacy role and definition adaptation boundary.
+    label: source/services/agent-runtime/legacy-adapter.ts role and definition adaptation boundary.
 risks:
   - id: runtime-b-authority-escalation
     label: Child or legacy agent receives authority beyond its parent or role.
@@ -185,6 +185,10 @@ contracts:
     statement: Workflow code runs in a constrained sandbox with bounded runs/output/concurrency and deterministic controlled errors, while agent requests are marshalled faithfully.
     seamIds: [runtime-b-workflow]
     riskIds: [runtime-b-workflow-escape]
+  - id: runtime-b-reminder-contract
+    statement: Context milestone reminders report provider input at safe boundaries, emit crossed milestones once, and reconsider deferred rollover only at a bounded cadence without making it mandatory.
+    seamIds: [runtime-b-context-compaction]
+    riskIds: [runtime-b-context-overflow]
 fixtures: []
 tests:
   - kind: file
@@ -248,7 +252,7 @@ tests:
     file: source/services/agent-runtime/context-compaction/context-milestone-reminder.test.ts
     domainId: runtime
     suiteId: runtime-unit
-    contractIds: [runtime-b-compaction-contract]
+    contractIds: [runtime-b-reminder-contract]
     fixtureIds: []
   - kind: file
     id: runtime-local-context-compactor
@@ -542,7 +546,7 @@ decisions:
     reason: Adapter unit coverage protects role defaults, model fallback precedence, librarian gating, unknown-role failure, and resolved-to-legacy field fidelity.
     evidence:
       - source/services/agent-runtime/legacy-adapter.test.ts:22-135 asserts explorer/worker/mentor/librarian authority, configured and legacy model tiers, disabled-memory rejection, unknown-role rejection, and shape conversion.
-      - Out-of-assignment sibling source/services/agent-runtime/agent-runtime.integration.test.ts repeats some role round trips, but this file uniquely covers ancillary model fallback and librarian policy.
+      - Assigned sibling source/services/agent-runtime/agent-runtime.integration.test.ts repeats some role round trips, but this file uniquely covers ancillary model fallback and librarian policy.
     replacementTestIds: []
     status: proposed
   - id: runtime-model-resolver-runtime-b-m3
@@ -686,122 +690,5 @@ decisions:
     evidence:
       - source/services/agent-runtime/workflow/workflow-evaluator.test.ts:5-427 asserts independent/sequential runs, maxRuns/maxConcurrency, cancellation queues, cleanup, byte limits, capability checks, sandbox globals/constructor escapes, output validation, console bounds, and permit release.
       - No assigned sibling covers WorkflowEvaluator; workerFactory cases exercise sandbox ownership without real provider calls.
-    replacementTestIds: []
-    status: proposed
-  - id: runtime-run-budget-runtime-b-m3
-    testId: runtime-run-budget
-    role: second_opinion
-    reviewer: runtime-b-m3
-    sourceArtifact: docs/test-audit/artifacts/runtime-b-m3.yaml
-    recommendation: keep
-    confidence: high
-    reason: RunBudget unit coverage protects accounting dimensions, cache discounting, pause time, stage latching, stall evidence, finite grants, remaining envelopes, and child clamping.
-    evidence:
-      - source/services/agent-runtime/run-budget.test.ts:31-236 asserts priced/unpriced accounting, cache and subscription treatment, pause exclusion, stage and extension state, repetition evidence, nonnegative remainder, disabled escalation, and containment clamping.
-      - Assigned source/services/agent-runtime/application-run-loop.run-budget.test.ts verifies the separate integration transition; it does not replace this deterministic policy state-machine coverage.
-    replacementTestIds: []
-    status: proposed
-  - id: runtime-scope-resolver-security-runtime-b-m3
-    testId: runtime-scope-resolver-security
-    role: second_opinion
-    reviewer: runtime-b-m3
-    sourceArtifact: docs/test-audit/artifacts/runtime-b-m3.yaml
-    recommendation: keep
-    confidence: high
-    reason: Security regression coverage protects traversal, glob and host confusion, scope intersections, symlink realpath escape defense, and documented redirect behavior.
-    evidence:
-      - source/services/agent-runtime/scope-resolver.security.test.ts:34-326 asserts traversal/null-byte rejection, glob boundaries, host suffix/wildcard/port validation, parent-child intersections, symlink escapes including nonexistent descendants, and invalid URL handling.
-      - Assigned source/services/agent-runtime/scope-resolver.test.ts repeats ordinary normalization and matching, but does not cover filesystem realpath symlink escapes at all.
-    replacementTestIds: []
-    status: proposed
-  - id: runtime-scope-resolver-runtime-b-m3
-    testId: runtime-scope-resolver
-    role: second_opinion
-    reviewer: runtime-b-m3
-    sourceArtifact: docs/test-audit/artifacts/runtime-b-m3.yaml
-    recommendation: consolidation_candidate
-    confidence: medium
-    reason: The broad unit file is valuable, but a substantial duplicate cluster with the dedicated security file appears to be maintained twice; retain unique scope-resolution and empty-scope cases while consolidating exact duplicates.
-    evidence:
-      - Exact repeated observables include traversal, src/** boundaries, *.ts/** tests, host suffix and wildcard behavior, ports, and filesystem/network intersections in source/services/agent-runtime/scope-resolver.test.ts and source/services/agent-runtime/scope-resolver.security.test.ts:34-216.
-      - The security sibling adds realpath symlink cases, while this file adds normalization and empty-scope APIs; coordinator review is needed before moving or deleting any individual cases.
-    replacementTestIds: []
-    status: proposed
-  - id: runtime-skill-resolver-runtime-b-m3
-    testId: runtime-skill-resolver
-    role: second_opinion
-    reviewer: runtime-b-m3
-    sourceArtifact: docs/test-audit/artifacts/runtime-b-m3.yaml
-    recommendation: keep
-    confidence: medium
-    reason: Skill resolution protects empty input, missing-skill diagnostics, partial success, and instruction aggregation through a real SkillsService boundary.
-    evidence:
-      - source/services/agent-runtime/skill-resolver.test.ts:19-88 asserts empty/unknown/multiple-unknown/known/partial results and preserved available instructions.
-      - The final test title claims unsupported structured-output rejection but only asserts ordinary instruction output (source/services/agent-runtime/skill-resolver.test.ts:90-103); this is a localized weak assertion, not grounds to discard the file's other coverage.
-    replacementTestIds: []
-    status: proposed
-  - id: runtime-structured-output-runtime-b-m3
-    testId: runtime-structured-output
-    role: second_opinion
-    reviewer: runtime-b-m3
-    sourceArtifact: docs/test-audit/artifacts/runtime-b-m3.yaml
-    recommendation: keep
-    confidence: high
-    reason: Structured-output unit coverage protects supported schema vocabulary, nested validation, output-contract formatting, and typed parse/validation failures.
-    evidence:
-      - source/services/agent-runtime/structured-output.test.ts:10-215 asserts accepted and rejected keywords, primitive/object/enum/array validation, schema errors, instruction formatting, invalid JSON, and schema mismatch.
-      - Assigned source/services/agent-runtime/agent-runtime.test.ts checks facade integration for structured output, but this file exercises the pure validator and formatter boundary directly.
-    replacementTestIds: []
-    status: proposed
-  - id: runtime-text-attachment-runtime-b-m3
-    testId: runtime-text-attachment
-    role: second_opinion
-    reviewer: runtime-b-m3
-    sourceArtifact: docs/test-audit/artifacts/runtime-b-m3.yaml
-    recommendation: keep
-    confidence: high
-    reason: Attachment tests protect accepted text metadata, accumulated validation errors, path-name rejection, deterministic formatting, and multi-attachment boundaries.
-    evidence:
-      - source/services/agent-runtime/text-attachment.test.ts:10-155 asserts valid/default/application/text MIME types, binary and path rejection, empty fields, indexed errors, and serialization labels/separators.
-      - Assigned source/services/agent-runtime/agent-runtime.test.ts checks one public attachment integration path, not the complete validator and serializer matrix.
-    replacementTestIds: []
-    status: proposed
-  - id: runtime-tool-invocation-context-runtime-b-m3
-    testId: runtime-tool-invocation-context
-    role: second_opinion
-    reviewer: runtime-b-m3
-    sourceArtifact: docs/test-audit/artifacts/runtime-b-m3.yaml
-    recommendation: keep
-    confidence: high
-    reason: Invocation-context tests protect per-call and blanket approval precedence, snapshot replay, context continuity, nested approval inheritance, and the SDK argument-order regression.
-    evidence:
-      - source/services/agent-runtime/tool-invocation-context.test.ts:9-285 asserts ledger scoping/messages/copy semantics and run-loop context through initial, resumed, seeded, and newly approved calls.
-      - Out-of-assignment sibling source/services/approval/approval-replay.test.ts is a related replay boundary, but this file uniquely verifies replay as consumed by nested ApplicationRunLoop execution.
-    replacementTestIds: []
-    status: proposed
-  - id: runtime-tools-resolver-runtime-b-m3
-    testId: runtime-tools-resolver
-    role: second_opinion
-    reviewer: runtime-b-m3
-    sourceArtifact: docs/test-audit/artifacts/runtime-b-m3.yaml
-    recommendation: keep
-    confidence: high
-    reason: Tool resolver tests pin authorization ordering, known-tool validation, coarse permission checks, mixed result ordering, and empty-request semantics.
-    evidence:
-      - source/services/agent-runtime/tools-resolver.test.ts:5-238 asserts read/write/shell/web/nested permissions, unknown and denied errors, authorization-before-known ordering, and authorized-list versus coarse-gate behavior.
-      - Assigned source/services/agent-runtime/permission-resolver.test.ts derives capabilities but does not replace tool-definition selection and error ordering.
-    replacementTestIds: []
-    status: proposed
-  - id: runtime-workflow-evaluator-runtime-b-m3
-    testId: runtime-workflow-evaluator
-    role: second_opinion
-    reviewer: runtime-b-m3
-    sourceArtifact: docs/test-audit/artifacts/runtime-b-m3.yaml
-    recommendation: keep
-    confidence: high
-    reason: Workflow evaluator coverage spans concurrency/admission limits, cancellation, worker cleanup, sandbox isolation, capability attenuation, output/log bounds, marshaling, and controlled syntax/runtime failures.
-    evidence:
-      - source/services/agent-runtime/workflow/workflow-evaluator.test.ts:5-427 asserts independent and sequential runs, maxRuns/maxConcurrency, cancellation queues, cleanup, byte limits, tool equivalence, sandbox globals/constructor escapes, output validation, console bounds, and permit release.
-      - No assigned sibling covers WorkflowEvaluator; its workerFactory tests exercise the sandbox ownership seam without depending on real provider calls.
     replacementTestIds: []
     status: proposed

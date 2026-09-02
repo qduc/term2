@@ -1,0 +1,612 @@
+schemaVersion: 2
+domains:
+  - id: conversation
+    label: Conversation services, persistence, replay, and message projection utilities
+suites:
+  - id: unit
+    label: Default Vitest unit suite
+  - id: integration
+    label: Conversation persistence and service-boundary integration tests
+seams:
+  - id: conversation-b-seam-turn-normalization
+    label: Normalization and provider replay projection for persisted assistant turn items
+  - id: conversation-b-seam-journal-ledger
+    label: Reconstruction and deduplication of tool ledger entries from journals and turn history
+  - id: conversation-b-seam-queue-persistence
+    label: Atomic session queue sidecar persistence and quarantine
+  - id: conversation-b-seam-session-audit
+    label: Session transcript audit classification and persistence-backed recovery diagnostics
+  - id: conversation-b-seam-session-browser
+    label: Scoped session listing, reading, search, pagination, cursors, and safe projection
+  - id: conversation-b-seam-message-application
+    label: Applying terminal conversation results to streamed UI messages
+  - id: conversation-b-seam-streaming-event-projection
+    label: Conversation event projection for compaction, reasoning, text, retry, subagent, and tool events
+  - id: conversation-b-seam-message-utilities
+    label: Pure message selection, merge, undo, buffer, markdown frontier, and rewind projections
+risks:
+  - id: conversation-b-risk-provider-replay-invalidity
+    label: Normalized or resumed provider history loses metadata, duplicates tools, or contains unsupported opaque items.
+    severity: critical
+  - id: conversation-b-risk-ledger-reconstruction-drift
+    label: Journal recovery miscounts, duplicates, or loses tool executions and their provider history.
+    severity: high
+  - id: conversation-b-risk-queue-sidecar-corruption
+    label: Queue work is lost, partially published, or incorrectly loaded after persistence failure.
+    severity: high
+  - id: conversation-b-risk-session-recovery-misclassification
+    label: Session audit reports the wrong terminal state or fails to expose unpaid work and errors.
+    severity: high
+  - id: conversation-b-risk-browser-data-leak-or-stale-read
+    label: Session browsing leaks provider/tool internals, crosses scope boundaries, or serves stale or unbounded pages.
+    severity: high
+  - id: conversation-b-risk-streamed-message-duplication
+    label: Terminal results duplicate, lose, or incorrectly finalize streamed assistant content.
+    severity: high
+  - id: conversation-b-risk-event-ui-drift
+    label: Conversation events disappear, render misleading notices, or corrupt live activity state.
+    severity: high
+  - id: conversation-b-risk-message-rewind-drift
+    label: Message utilities select, merge, trim, buffer, or rewind the wrong visible turns.
+    severity: high
+fixtures:
+  - id: conversation-b-fixture-provider-turn-items
+    label: Direct, wrapped, canonical, and provider-opaque persisted turn items
+  - id: conversation-b-fixture-tool-journal-items
+    label: Repeated provider and canonical tool calls/results in turn and journal representations
+  - id: conversation-b-fixture-queue-sidecar-directory
+    label: Isolated temporary conversation directory with queue JSON sidecars
+  - id: conversation-b-fixture-session-envelopes
+    label: Typed and malformed transcript envelopes, tool activity, approvals, and background work
+  - id: conversation-b-fixture-browser-transcripts
+    label: Temporary scoped sessions with projected messages, malformed records, and pagination changes
+  - id: conversation-b-fixture-streaming-state
+    label: Streaming message state and mocked message/event-handler dependencies
+  - id: conversation-b-fixture-message-lists
+    label: Visible user, assistant, reasoning, command, and live-tail message arrays
+contracts:
+  - id: conversation-b-contract-turn-normalization-and-replay
+    statement: Run items normalize across provider wrappers and identifier spellings, preserve meaningful metadata and opaque payloads, and project persisted assistant turns back into provider history without malformed reasoning or argument loss.
+    seamIds:
+      - conversation-b-seam-turn-normalization
+    riskIds:
+      - conversation-b-risk-provider-replay-invalidity
+  - id: conversation-b-contract-journal-ledger-deduplication
+    statement: Tool ledger reconstruction yields one completed execution and one ordered call/result history for duplicate journal or turn representations while preserving reasoning and provider item forms.
+    seamIds:
+      - conversation-b-seam-journal-ledger
+    riskIds:
+      - conversation-b-risk-ledger-reconstruction-drift
+  - id: conversation-b-contract-queue-sidecar-durability
+    statement: Session queue persistence loads absent state safely, atomically publishes complete records, removes temporary files, and quarantines invalid live sidecars.
+    seamIds:
+      - conversation-b-seam-queue-persistence
+    riskIds:
+      - conversation-b-risk-queue-sidecar-corruption
+  - id: conversation-b-contract-session-audit-verdicts
+    statement: Session audit distinguishes empty, settled, interrupted-turn, interrupted-tool, and awaiting-approval outcomes while exposing unfinished tools, background work, subagents, errors, and truncation.
+    seamIds:
+      - conversation-b-seam-session-audit
+    riskIds:
+      - conversation-b-risk-session-recovery-misclassification
+  - id: conversation-b-contract-session-audit-persistence
+    statement: Auditing real conversation logs agrees with persisted replay state and identifies missing sessions, unfinished tools, approval stalls, and clean settlement without mutating the log.
+    seamIds:
+      - conversation-b-seam-session-audit
+    riskIds:
+      - conversation-b-risk-session-recovery-misclassification
+  - id: conversation-b-contract-session-browser-boundary
+    statement: Session browsing enforces local/SSH project scope, resolves safe references, projects only public message data, reports unavailable records, and provides bounded coherent list/search/read pagination with invalidation-aware cursors.
+    seamIds:
+      - conversation-b-seam-session-browser
+    riskIds:
+      - conversation-b-risk-browser-data-leak-or-stale-read
+  - id: conversation-b-contract-terminal-result-application
+    statement: Applying a terminal response finalizes or appends exactly the unrepresented assistant text, merges command messages, skips empty output, and clears streaming bookkeeping consistently.
+    seamIds:
+      - conversation-b-seam-message-application
+    riskIds:
+      - conversation-b-risk-streamed-message-duplication
+  - id: conversation-b-contract-compaction-event-presentation
+    statement: Context compaction lifecycle events produce one truthful, duration-aware system notice and replace superseded start notices while failures remain visible.
+    seamIds:
+      - conversation-b-seam-streaming-event-projection
+    riskIds:
+      - conversation-b-risk-event-ui-drift
+  - id: conversation-b-contract-reasoning-and-markdown-streaming
+    statement: Reasoning and text deltas preserve accumulated content, finalize only stable markdown boundaries, protect code fences and whitespace, and flush live tails at tool/final boundaries.
+    seamIds:
+      - conversation-b-seam-streaming-event-projection
+    riskIds:
+      - conversation-b-risk-event-ui-drift
+      - conversation-b-risk-streamed-message-duplication
+  - id: conversation-b-contract-retry-event-presentation
+    statement: Retry events render accurate provider-state, connection, authentication, exhaustion, and retryability messages without fake controls or misleading failure categories.
+    seamIds:
+      - conversation-b-seam-streaming-event-projection
+    riskIds:
+      - conversation-b-risk-event-ui-drift
+  - id: conversation-b-contract-subagent-activity-projection
+    statement: Subagent lifecycle and command events maintain one correctly linked live card, bounded tool history, terminal status, transfer/background semantics, and safe fallback reconciliation.
+    seamIds:
+      - conversation-b-seam-streaming-event-projection
+    riskIds:
+      - conversation-b-risk-event-ui-drift
+  - id: conversation-b-contract-tool-event-lifecycle
+    statement: Tool lifecycle events flush preceding output, render and transition command activity, reconcile completions by call identity, recover dropped work, and preserve authoritative final output.
+    seamIds:
+      - conversation-b-seam-streaming-event-projection
+    riskIds:
+      - conversation-b-risk-event-ui-drift
+      - conversation-b-risk-streamed-message-duplication
+  - id: conversation-b-contract-message-selection-and-rewind
+    statement: Message helpers identify genuine undoable turns, retrieve the requested assistant response, merge commands without unsafe duplication, and align rewind UI items with opaque store targets and discard statistics.
+    seamIds:
+      - conversation-b-seam-message-utilities
+    riskIds:
+      - conversation-b-risk-message-rewind-drift
+  - id: conversation-b-contract-message-buffer-and-frontier
+    statement: Message buffering inserts notices before all live tails within its cap, and markdown frontier calculation returns absolute safe commit offsets without splitting code or reference structures.
+    seamIds:
+      - conversation-b-seam-message-utilities
+    riskIds:
+      - conversation-b-risk-message-rewind-drift
+  - id: conversation-b-contract-conversation-formatting
+    statement: Conversation utility helpers parse tool arguments, format supported tool commands, initialize independent streaming state, classify key errors, and render shell output with correct return-code semantics.
+    seamIds:
+      - conversation-b-seam-message-utilities
+    riskIds:
+      - conversation-b-risk-event-ui-drift
+tests:
+  - kind: file
+    id: conversation-b-conversation-turn-items-test
+    file: source/services/conversation/conversation-turn-items.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-b-contract-turn-normalization-and-replay
+    fixtureIds:
+      - conversation-b-fixture-provider-turn-items
+  - kind: file
+    id: conversation-b-journal-to-ledger-test
+    file: source/services/conversation/journal-to-ledger.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-b-contract-journal-ledger-deduplication
+    fixtureIds:
+      - conversation-b-fixture-tool-journal-items
+  - kind: file
+    id: conversation-b-queue-persistence-test
+    file: source/services/conversation/queue-persistence.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-b-contract-queue-sidecar-durability
+    fixtureIds:
+      - conversation-b-fixture-queue-sidecar-directory
+  - kind: file
+    id: conversation-b-run-item-normalizer-test
+    file: source/services/conversation/run-item-normalizer.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-b-contract-turn-normalization-and-replay
+    fixtureIds:
+      - conversation-b-fixture-provider-turn-items
+  - kind: file
+    id: conversation-b-session-audit-persistence-test
+    file: source/services/conversation/session-audit.persistence.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-b-contract-session-audit-persistence
+    fixtureIds:
+      - conversation-b-fixture-session-envelopes
+  - kind: file
+    id: conversation-b-session-audit-test
+    file: source/services/conversation/session-audit.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-b-contract-session-audit-verdicts
+    fixtureIds:
+      - conversation-b-fixture-session-envelopes
+  - kind: file
+    id: conversation-b-session-browser-test
+    file: source/services/conversation/session-browser.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-b-contract-session-browser-boundary
+    fixtureIds:
+      - conversation-b-fixture-browser-transcripts
+  - kind: file
+    id: conversation-b-apply-conversation-result-test
+    file: source/utils/conversation/apply-conversation-result.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-b-contract-terminal-result-application
+    fixtureIds:
+      - conversation-b-fixture-streaming-state
+      - conversation-b-fixture-message-lists
+  - kind: file
+    id: conversation-b-conversation-event-handler-compaction-test
+    file: source/utils/conversation/conversation-event-handler.compaction.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-b-contract-compaction-event-presentation
+    fixtureIds:
+      - conversation-b-fixture-streaming-state
+  - kind: file
+    id: conversation-b-conversation-event-handler-reasoning-test
+    file: source/utils/conversation/conversation-event-handler.reasoning.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-b-contract-reasoning-and-markdown-streaming
+    fixtureIds:
+      - conversation-b-fixture-streaming-state
+  - kind: file
+    id: conversation-b-conversation-event-handler-retry-test
+    file: source/utils/conversation/conversation-event-handler.retry.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-b-contract-retry-event-presentation
+    fixtureIds:
+      - conversation-b-fixture-streaming-state
+  - kind: file
+    id: conversation-b-conversation-event-handler-subagent-test
+    file: source/utils/conversation/conversation-event-handler.subagent.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-b-contract-subagent-activity-projection
+    fixtureIds:
+      - conversation-b-fixture-streaming-state
+      - conversation-b-fixture-message-lists
+  - kind: file
+    id: conversation-b-conversation-event-handler-text-delta-test
+    file: source/utils/conversation/conversation-event-handler.text-delta.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-b-contract-reasoning-and-markdown-streaming
+    fixtureIds:
+      - conversation-b-fixture-streaming-state
+  - kind: file
+    id: conversation-b-conversation-event-handler-tools-test
+    file: source/utils/conversation/conversation-event-handler.tools.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-b-contract-tool-event-lifecycle
+      - conversation-b-contract-retry-event-presentation
+      - conversation-b-contract-reasoning-and-markdown-streaming
+    fixtureIds:
+      - conversation-b-fixture-streaming-state
+      - conversation-b-fixture-message-lists
+  - kind: file
+    id: conversation-b-conversation-utils-test
+    file: source/utils/conversation/conversation-utils.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-b-contract-conversation-formatting
+    fixtureIds:
+      - conversation-b-fixture-streaming-state
+  - kind: file
+    id: conversation-b-markdown-commit-frontier-test
+    file: source/utils/conversation/markdown-commit-frontier.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-b-contract-message-buffer-and-frontier
+    fixtureIds:
+      - conversation-b-fixture-message-lists
+  - kind: file
+    id: conversation-b-message-buffer-test
+    file: source/utils/conversation/message-buffer.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-b-contract-message-buffer-and-frontier
+    fixtureIds:
+      - conversation-b-fixture-message-lists
+  - kind: file
+    id: conversation-b-message-utils-test
+    file: source/utils/conversation/message-utils.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-b-contract-message-selection-and-rewind
+    fixtureIds:
+      - conversation-b-fixture-message-lists
+  - kind: file
+    id: conversation-b-rewind-items-test
+    file: source/utils/conversation/rewind-items.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-b-contract-message-selection-and-rewind
+    fixtureIds:
+      - conversation-b-fixture-message-lists
+decisions:
+  - id: conversation-b-conversation-turn-items-test-m3
+    testId: conversation-b-conversation-turn-items-test
+    role: second_opinion
+    reviewer: conversation-b-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Persisted assistant items and provider-opaque replay are a compatibility boundary with concrete regressions around reasoning, arguments, metadata, and compaction markers.
+    evidence:
+      - Lines 13-27 assert rawContent reasoning is captured rather than dropped during persistence.
+      - Lines 80-127 assert standalone reasoning avoids duplicate reasoning_content, while lines 129-241 preserve encrypted reasoning, object arguments, and provider-native call/result metadata.
+      - Lines 248-312 assert provider_opaque items retain their payload and marker and do not fall through to malformed reasoning.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-b-journal-to-ledger-test-m3
+    testId: conversation-b-journal-to-ledger-test
+    role: second_opinion
+    reviewer: conversation-b-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The test protects recovery-specific deduplication across both turn items and journal events and deliberately checks three provider representations.
+    evidence:
+      - Lines 8-34 define wrapped, direct, and canonical call/result representations with the same logical call.
+      - Lines 63-79 assert one completed ledger entry and exactly three retained history items after duplicate result input.
+      - Lines 81-103 repeat the same invariant through assistant_journal_item envelopes, so journal and turn recovery cannot drift.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-b-queue-persistence-test-m3
+    testId: conversation-b-queue-persistence-test
+    role: second_opinion
+    reviewer: conversation-b-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This focused filesystem test protects the queue sidecar durability contract with an isolated directory and checks both normal publish and invalid-state quarantine.
+    evidence:
+      - Lines 16-25 isolate the conversations directory and clean it after each operation.
+      - Lines 36-46 assert a complete record can be loaded and its temporary publish file is removed.
+      - Lines 49-59 assert quarantine removes the sidecar from the load path and leaves an invalid diagnostic file.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-b-run-item-normalizer-test-m3
+    testId: conversation-b-run-item-normalizer-test
+    role: second_opinion
+    reviewer: conversation-b-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Run-item normalization is a direct provider adapter boundary; its table spans wrappers, reasoning metadata, call-id variants, result spellings, opaque payloads, and unknown input.
+    evidence:
+      - Lines 4-48 assert direct and wrapped reasoning plus separation of assistant reasoning metadata.
+      - Lines 50-140 cover function/apply-patch call variants, eleven result spellings, canonical items, wrapper precedence, and output preservation.
+      - Lines 142-205 assert opaque cloning/idempotence, malformed opaque rejection, unknown-value rejection, and ordering of mixed normalized items.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-b-session-audit-persistence-test-m3
+    testId: conversation-b-session-audit-persistence-test
+    role: second_opinion
+    reviewer: conversation-b-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: These tests exercise the real log writer and persistence loader, complementing pure audit classification with a crash/recovery-facing filesystem proof.
+    evidence:
+      - Lines 20-30 establish an isolated temporary directory and restore the global test directory after cleanup.
+      - Lines 37-52 write a complete user/tool/assistant transcript and assert a settled audit with a completed tool count.
+      - Lines 54-75 write a transcript ending after dispatch and assert interrupted_mid_tool, the unfinished call, and matching aborted replay state; lines 78-91 cover approval waiting.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-b-session-audit-test-m3
+    testId: conversation-b-session-audit-test
+    role: second_opinion
+    reviewer: conversation-b-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The pure audit suite owns the outcome precedence and bookkeeping matrix, including approval, interruption, unknown status, background tasks, and undo semantics.
+    evidence:
+      - Lines 25-111 assert empty, settled, interrupted-turn/tool, awaiting-approval precedence, and distinct unknown tool counting.
+      - Lines 113-157 expose unfinished subagents/shells, errors, truncation, and agreement with replay's unpaid-call set.
+      - Lines 159-208 cover formatted diagnostics, undo cleanup, transfer/interruption retirement, and failed/aborted tool counts.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-b-session-browser-test-m3
+    testId: conversation-b-session-browser-test
+    role: second_opinion
+    reviewer: conversation-b-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: SessionBrowser is a high-risk public retrieval boundary; the large matrix is cohesive and covers authorization, privacy, pagination, cursor invalidation, totals, and no-write behavior.
+    evidence:
+      - Lines 42-114 assert short-reference resolution, ambiguity, local/SSH scope, and scoped not-found diagnostics.
+      - Lines 116-188 and 232-317 assert bounded public projections, hidden provider/tool fields, opaque cursor binding, malformed-record handling, and unavailable counts.
+      - Lines 319-400 and 443-510 assert exact-once chunk recovery, snapshot reuse, scope/current-session rechecks, totals, tail reads, and invalid anchor combinations.
+      - Lines 512-539 assert tiny-budget coherence and that browsing does not create persistence directories.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-b-apply-conversation-result-test-m3
+    testId: conversation-b-apply-conversation-result-test
+    role: second_opinion
+    reviewer: conversation-b-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This focused suite guards the streamed-to-terminal result seam against duplicated assistant text, lost tails, empty output, and stale streaming state.
+    evidence:
+      - Lines 48-99 assert synchronous append and promotion of an existing live bot message without duplicate text.
+      - Lines 101-162 cover flushed-prefix/tail finalization and the no-streaming-message no-append case.
+      - Lines 164-202 assert command merge and whitespace-only suppression; lines 204-225 cover live-id lookup and complete state reset.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-b-conversation-event-handler-compaction-test-m3
+    testId: conversation-b-conversation-event-handler-compaction-test
+    role: second_opinion
+    reviewer: conversation-b-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Compaction notices are product-visible lifecycle output and the suite checks truthful formatting, replacement rather than stacking, and failure visibility.
+    evidence:
+      - Lines 15-91 assert start, token-count, measured-duration, zero-duration, no-count, and failure presentations.
+      - Lines 93-117 assert repeated starts supersede one another and completion updates the existing notice.
+      - Lines 119-159 assert in-place completion and that every supported compaction event reaches the transcript.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-b-conversation-event-handler-reasoning-test-m3
+    testId: conversation-b-conversation-event-handler-reasoning-test
+    role: second_opinion
+    reviewer: conversation-b-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Reasoning streaming has distinct mutable-tail and tool-boundary semantics; these tests verify state offsets and visible finalization rather than merely checking a callback.
+    evidence:
+      - Lines 7-51 assert accumulation after flushed positions and suppression of empty reasoning.
+      - Lines 53-93 assert paragraph-boundary finalization versus an unfinished single paragraph.
+      - Lines 95-183 cover text-boundary flushing, in-place replacement, trailing whitespace mutability, and state/cancellation effects.
+      - Lines 185-211 assert a reasoning restart after a tool does not retain the prior prefix.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-b-conversation-event-handler-retry-test-m3
+    testId: conversation-b-conversation-event-handler-retry-test
+    role: second_opinion
+    reviewer: conversation-b-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Retry messaging is a user-facing error contract; the cases distinguish actionable exhaustion from authentication and provider-state versus connection failures.
+    evidence:
+      - Lines 15-36 assert exhausted retry output names the real /retry-turn mechanism and removes fake controls.
+      - Lines 38-81 assert conversation-state rejection and connection interruption use distinct truthful language.
+      - Lines 83-96 assert non-retryable authentication errors do not suggest retrying.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-b-conversation-event-handler-subagent-test-m3
+    testId: conversation-b-conversation-event-handler-subagent-test
+    role: second_opinion
+    reviewer: conversation-b-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-b-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: medium
+    reason: The file protects a valuable subagent-card contract, but at least one case title promises formatting behavior that the assertion explicitly says must not occur, reducing signal and obscuring the intended boundary.
+    evidence:
+      - Lines 571-597 title the case “formats shell command with args” but invoke only subagent_tool_started and assert tools remains []; no formatted command is asserted.
+      - Lines 7-84 and 216-418 cover the actual lifecycle/linkage/transfer contract with concrete card state and tool-history assertions, so the candidate is a narrow case rewrite rather than deletion of the file.
+      - Lines 860-966 separately assert repeated tool results and start-event suppression with observable outcomes, leaving the misleading case as redundant weak signal within this file.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-b-conversation-event-handler-text-delta-test-m3
+    testId: conversation-b-conversation-event-handler-text-delta-test
+    role: second_opinion
+    reviewer: conversation-b-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Text streaming is a distinct high-value presentation seam from reasoning streaming; the cases protect code fences, paragraph commits, live replacement, and whitespace boundaries.
+    evidence:
+      - Lines 7-48 assert code-fence-safe splitting and preservation of the language-line newline.
+      - Lines 50-138 assert stable paragraph/heading commits and atomic finalized-prefix/live-suffix replacement.
+      - Lines 140-229 assert no premature finalization, existing-live finalization, trailing-whitespace mutability, and leading-whitespace preservation through final output.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-b-conversation-event-handler-tools-test-m3
+    testId: conversation-b-conversation-event-handler-tools-test
+    role: second_opinion
+    reviewer: conversation-b-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-b-m3.yaml
+    recommendation: architecture_signal
+    confidence: high
+    reason: This broad handler suite covers the critical tool lifecycle, but three explicit regression cases document unresolved production behavior rather than waste; they should drive a handler fix or a deliberate contract rewrite before cleanup.
+    evidence:
+      - Lines 7-329 assert text/reasoning flush, pending/running transitions, argument formatting, subagent distinctions, duplicate-start suppression, and completion reconciliation.
+      - Lines 331-519 cover recovery notes and retry presentation across hallucination, generic, flex-tier, upstream, parsing, and behavior errors.
+      - Lines 588-622 explicitly label equal-length corrected final text and shorter authoritative final text as failing guards, then assert the authoritative final text; this is a production correctness signal.
+      - Lines 624-663 explicitly document the missing-callId stale-running case and assert one replacement where the comments say the current result has two messages.
+      - Lines 665-740 assert id preservation and batch callId matching, demonstrating that the suite contains substantial unique lifecycle evidence despite the architecture signal.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-b-conversation-utils-test-m3
+    testId: conversation-b-conversation-utils-test
+    role: second_opinion
+    reviewer: conversation-b-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-b-m3.yaml
+    recommendation: keep
+    confidence: medium
+    reason: This is a compact pure-helper table covering parsing, command display, state initialization, error classification, and shell output; exact strings are the visible UI contract here.
+    evidence:
+      - Lines 16-50 cover object/string/null argument parsing and invalid JSON preservation.
+      - Lines 56-141 cover shell, grep, search-replace, apply-patch, mentor, unknown-tool, and null argument formatting.
+      - Lines 147-185 assert independent streaming-state initialization and API-key error enhancement/pass-through.
+      - Lines 191-243 assert strict max-turn classification and stdout/stderr/return-code/newline shell rendering.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-b-markdown-commit-frontier-test-m3
+    testId: conversation-b-markdown-commit-frontier-test
+    role: second_opinion
+    reviewer: conversation-b-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The markdown frontier table protects streaming safety at parser-sensitive boundaries that ordinary text-delta cases do not fully isolate.
+    evidence:
+      - Lines 4-25 assert paragraph, Setext-heading, open-fence, and closed-fence offsets.
+      - Lines 28-49 assert document-wide reference definitions remain mutable while inline links may commit and whitespace-only prefixes never commit.
+      - Lines 52-57 assert the returned offset is absolute and monotonic when an existing committed prefix is supplied.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-b-message-buffer-test-m3
+    testId: conversation-b-message-buffer-test
+    role: second_opinion
+    reviewer: conversation-b-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The small buffer suite directly protects ordering around live streaming tails and the message cap, including a trailing run containing both reasoning and bot slots.
+    evidence:
+      - Lines 8-25 assert newest-message retention for normal append under large and small caps.
+      - Lines 27-47 assert insertion before the whole trailing live run while preserving finalized content before it.
+      - Lines 49-53 assert the cap is honored without dropping the live tail.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-b-message-utils-test-m3
+    testId: conversation-b-message-utils-test
+    role: second_opinion
+    reviewer: conversation-b-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-b-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: medium
+    reason: Most helper coverage is useful, but one test title contradicts both its comments and assertion, weakening discoverability and making the intended stale-running contract easy to misread.
+    evidence:
+      - Lines 139-164 title the case “removes stale running messages” but the comments and assertion explicitly expect the stale running message to stay and length two.
+      - Lines 119-137 and 166-182 cover adjacent command merge behavior with clearer assertions, so the contradictory case should be renamed or rewritten to state the actual Phase 1 behavior rather than removed wholesale.
+      - Lines 19-94 and 188-297 provide distinct assistant-text, trim, undo, user-entry, and index contracts.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-b-rewind-items-test-m3
+    testId: conversation-b-rewind-items-test
+    role: second_opinion
+    reviewer: conversation-b-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Rewind item construction is a narrow UI/business boundary that translates store targets and UI indices; its mismatch and alignment cases protect against destructive selection errors.
+    evidence:
+      - Lines 19-49 assert opaque target IDs, UI-text precedence, and discard statistics propagation.
+      - Lines 52-78 assert end-alignment when either the store or UI has fewer turns.
+      - Lines 80-88 assert unmatched and empty inputs produce no selectable rewind item.
+    replacementTestIds: []
+    status: proposed
+report:
+  classified: 19/19
+  unclassified: none
+

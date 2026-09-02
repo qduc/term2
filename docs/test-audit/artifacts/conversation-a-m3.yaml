@@ -35,6 +35,12 @@ seams:
     label: Runtime validation and migration boundary for imported conversation state
   - id: conversation-a-store-boundary
     label: In-memory ConversationStore history mutation, snapshots, rewind targets, and tool-output inspection
+  - id: conversation-a-replay-boundary
+    label: Replay and decoding of persisted envelopes into resumable conversation state and visible messages
+  - id: conversation-a-result-builder-boundary
+    label: Conversion of provider stream results and interruptions into conversation outcomes and terminal events
+  - id: conversation-a-facade-boundary
+    label: Public ConversationService facade ownership, reset, observer, context, and compaction boundary
 risks:
   - id: conversation-a-risk-adapter-state-loss
     label: Queue, cancellation, approval, or steering races lose work, settle the wrong request, or misreport terminal state.
@@ -94,6 +100,12 @@ fixtures:
     label: Persisted history and completed, aborted, or unknown tool ledger entries for projection and schema tests
   - id: conversation-a-fixture-provider-history
     label: Provider history items, tool calls, tool results, shell context, mode notices, and multimodal turns
+  - id: conversation-a-fixture-replay-envelopes
+    label: Legacy/current log envelopes, compact turns, journal fragments, tool activity, and provider-opaque items
+  - id: conversation-a-fixture-result-builder-streams
+    label: Stream outcomes with interruptions, usage, tool items, approval ownership, and final output
+  - id: conversation-a-fixture-facade-clients
+    label: Caller-owned and factory-owned clients with resettable sinks, observers, and compaction gates
 contracts:
   - id: conversation-a-contract-adapter-turn-settlement
     statement: ConversationAdapter settles each submitted execution exactly once, preserves the owning error or cancellation outcome, and keeps retained queue work available after cancellation or failure.
@@ -185,6 +197,25 @@ contracts:
       - conversation-a-store-boundary
     riskIds:
       - conversation-a-risk-history-invalidity
+  - id: conversation-a-contract-replay-and-decoding
+    statement: Replay and decoding reconstruct resumable metadata, ordered history, tool ledger, visible messages, interruptions, journal recovery, and forward-compatible unknown or opaque records from valid persisted envelopes.
+    seamIds:
+      - conversation-a-replay-boundary
+    riskIds:
+      - conversation-a-risk-persistence-corruption
+      - conversation-a-risk-import-compatibility
+  - id: conversation-a-contract-result-outcomes
+    statement: Result building preserves terminal outcome distinctions, approval ownership and metadata, usage and reasoning items, final output corrections, safe auto-approval policy, and command-message rendering without fabricating output.
+    seamIds:
+      - conversation-a-result-builder-boundary
+    riskIds:
+      - conversation-a-risk-service-regression
+  - id: conversation-a-contract-facade-ownership-and-reset
+    statement: The public ConversationService requires coherent client ownership dependencies, exposes only its public facade, and preserves event, log, queue, retry, background, and mode behavior across reset and compaction lifecycle operations.
+    seamIds:
+      - conversation-a-facade-boundary
+    riskIds:
+      - conversation-a-risk-service-regression
 tests:
   - kind: file
     id: conversation-c11-d8-grant-kind-boundary-test
@@ -260,6 +291,109 @@ tests:
       - conversation-a-contract-service-stream-and-continuation
     fixtureIds:
       - conversation-a-fixture-service-streams
+  - kind: file
+    id: conversation-message-projection-test
+    file: source/services/conversation/conversation-message-projection.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-a-contract-message-projection
+    fixtureIds:
+      - conversation-a-fixture-message-items
+  - kind: file
+    id: conversation-orchestrator-subagent-notifications-test
+    file: source/services/conversation/conversation-orchestrator.subagent-notifications.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-a-contract-background-notification-routing
+    fixtureIds:
+      - conversation-a-fixture-background-events
+  - kind: file
+    id: conversation-orchestrator-test
+    file: source/services/conversation/conversation-orchestrator.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-a-contract-orchestrator-coordination
+    fixtureIds:
+      - conversation-a-fixture-orchestrator-config
+  - kind: file
+    id: conversation-persistence-test
+    file: source/services/conversation/conversation-persistence.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-a-contract-clear-rotates-resumable-session
+      - conversation-a-contract-state-projection
+    fixtureIds:
+      - conversation-a-fixture-temp-conversation-dir
+      - conversation-a-fixture-imported-state
+  - kind: file
+    id: conversation-replay-test
+    file: source/services/conversation/conversation-replay.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-a-contract-replay-and-decoding
+    fixtureIds:
+      - conversation-a-fixture-replay-envelopes
+  - kind: file
+    id: conversation-result-builder-test
+    file: source/services/conversation/conversation-result-builder.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-a-contract-result-outcomes
+    fixtureIds:
+      - conversation-a-fixture-result-builder-streams
+  - kind: file
+    id: conversation-service-facade-test
+    file: source/services/conversation/conversation-service.facade.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-a-contract-facade-ownership-and-reset
+    fixtureIds:
+      - conversation-a-fixture-facade-clients
+  - kind: file
+    id: conversation-service-test
+    file: source/services/conversation/conversation-service.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-a-contract-service-stream-and-continuation
+      - conversation-a-contract-adapter-turn-settlement
+    fixtureIds:
+      - conversation-a-fixture-service-streams
+  - kind: file
+    id: conversation-state-projector-test
+    file: source/services/conversation/conversation-state-projector.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-a-contract-state-projection
+    fixtureIds:
+      - conversation-a-fixture-imported-state
+      - conversation-a-fixture-provider-history
+  - kind: file
+    id: conversation-state-schema-test
+    file: source/services/conversation/conversation-state-schema.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-a-contract-state-schema-validation
+    fixtureIds:
+      - conversation-a-fixture-imported-state
+  - kind: file
+    id: conversation-store-test
+    file: source/services/conversation/conversation-store.test.ts
+    domainId: conversation
+    suiteId: unit
+    contractIds:
+      - conversation-a-contract-store-history-safety
+    fixtureIds:
+      - conversation-a-fixture-provider-history
 decisions:
   - id: conversation-c11-d8-grant-kind-boundary-test-conversation-a-m3
     testId: conversation-c11-d8-grant-kind-boundary-test
@@ -272,6 +406,150 @@ decisions:
     evidence:
       - The test captures the approval_resolved event emitted by source/services/conversation/conversation-adapter.ts and asserts answer plus the proposed interactive grantKind field.
       - No other assigned test asserts grantKind on approval_resolved; removing this proof would leave the C11-D8 event-shape contract unguarded.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-state-projector-test-conversation-a-m3
+    testId: conversation-state-projector-test
+    role: second_opinion
+    reviewer: conversation-a-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: >-
+      State projection is a high-scrutiny sibling cluster: it reconciles history and ledger for model requests while preserving additive snapshots, warning about incomplete work, and respecting compaction boundaries.
+    evidence:
+      - source/services/conversation/conversation-state-projector.ts projectProviderHistory, projectModelRequestHistory, projectSnapshot, and projectImportedState are all exercised with completed, aborted, unknown, compacted, orphaned, and replacement-checkpoint histories.
+      - The tests assert purity/idempotence and distinguish additive history from model-request history; conversation-replay.test.ts tests replay construction but does not replace these projection-specific invariants.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-state-schema-test-conversation-a-m3
+    testId: conversation-state-schema-test
+    role: second_opinion
+    reviewer: conversation-a-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Runtime schema validation is the import guard before projection, and its compatibility migration for unknown historical statuses is a distinct contract from projection behavior.
+    evidence:
+      - source/services/conversation/conversation-state-schema.ts ImportedConversationStateSchema is tested for supported state, malformed rejection, unknown/dispatchedAt acceptance, legacy-status migration, and existing aborted status.
+      - No assigned sibling directly invokes ImportedConversationStateSchema; replay and persistence tests exercise downstream loading but do not establish pre-projection validation semantics.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-store-test-conversation-a-m3
+    testId: conversation-store-test
+    role: second_opinion
+    reviewer: conversation-a-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: ConversationStore is the authoritative in-memory history boundary; its defensive snapshots, synthetic-item filtering, opaque rewind targets, multimodal preservation, and tool-output/file preview behavior underpin recovery and user-visible rewind.
+    evidence:
+      - source/services/conversation/conversation-store.ts is tested for atomic revision replacement, deep clone/freeze including cycles, append/replace/clear, all provider tool-result variants, malformed arguments, and direct/wrapped/canonical tool calls.
+      - The rewind matrix checks stale-target nonmutation, reply/turn/file discard counts, shell/mode-notice exclusion, and image counts; conversation-state-projector.test.ts handles a different ledger-to-provider projection seam.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-replay-test-conversation-a-m3
+    testId: conversation-replay-test
+    role: second_opinion
+    reviewer: conversation-a-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Replay is a high-scrutiny compatibility boundary with golden legacy/current fixtures and extensive crash, tool-order, background activity, and forward-compatibility cases.
+    evidence:
+      - source/services/conversation/conversation-replay.ts and conversation-decoder.ts are exercised from raw envelopes and checked for metadata, ordered history/ledger, visible messages, interrupted state, journal fragments, opaque items, and malformed known events.
+      - The compact-history regression asserts one ordered call/result pair after replay, while the golden fixtures verify v2 and v3 resumability; no other assigned test covers this replay/decoder matrix.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-result-builder-test-conversation-a-m3
+    testId: conversation-result-builder-test
+    role: second_opinion
+    reviewer: conversation-a-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Result construction is the boundary where provider stream state becomes a terminal outcome, so the approval, auto-approval, retry, output-correction, usage, reasoning, ownership, and no-fabricated-output cases earn focused coverage.
+    evidence:
+      - source/services/conversation/conversation-result-builder.ts buildConversationResult and toTerminalEvent are tested with injected access, ownership, approval policy, tool ledger, and stream dependencies.
+      - The suite asserts whitespace-only output stays empty, run-budget pauses remain resumable, ask_user is not auto-approved, and native reasoning metadata is persisted; these distinctions are not replaced by service-level terminal assertions.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-service-facade-test-conversation-a-m3
+    testId: conversation-service-facade-test
+    role: second_opinion
+    reviewer: conversation-a-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The facade is the public conversation surface and its ownership, reset, observer, shell-context, compaction, and session-rollover behavior is product behavior rather than disposable wiring coverage.
+    evidence:
+      - source/services/conversation/conversation-service.ts is exercised through caller-owned and factory-owned client construction, with assertions on public methods, sinks, observers, and exported state rather than private runtime fields.
+      - Reset tests verify event/log/queue/retry/background observers remain attached and ownership tests reject incomplete construction; no other assigned file covers this facade lifecycle contract.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-service-test-conversation-a-m3
+    testId: conversation-service-test
+    role: second_opinion
+    reviewer: conversation-a-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This broad public-service suite protects FIFO queueing, approval continuation, provider-history recovery, streamed events, retries, reset/provider changes, background-task cancellation policy, and exported state across the main conversation API.
+    evidence:
+      - source/services/conversation/conversation-service.ts is exercised with actual ConversationService construction and in-memory agent streams, including terminal-less abort, approval rejection, tool replay, hallucination retries, and background-task controls.
+      - conversation-integration.test.ts is a compact end-to-end regression slice; this file additionally covers the public queue, reset, provider-switch, retry, and background lifecycle cases, so neither is a redundant replacement for the other.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-message-projection-test-conversation-a-m3
+    testId: conversation-message-projection-test
+    role: second_opinion
+    reviewer: conversation-a-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This focused projection table protects the visible conversation contract across provider wrappers, multimodal content, synthetic notices, malformed content, and non-message items.
+    evidence:
+      - source/services/conversation/conversation-message-projection.ts projectConversationMessage is exercised with direct and rawItem-wrapped inputs and checks exact text, image, role, and synthetic flags.
+      - conversation-store.test.ts checks related turn extraction but does not assert the projection object's role/text/images/isSynthetic result; no assigned sibling replaces this focused boundary coverage.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-orchestrator-subagent-notifications-test-conversation-a-m3
+    testId: conversation-orchestrator-subagent-notifications-test
+    role: second_opinion
+    reviewer: conversation-a-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Background notifications are a broad asynchronous routing surface with distinct idle, active, pending-approval, deduplication, and rendering obligations; the fixture isolates those product-visible outcomes.
+    evidence:
+      - source/services/conversation/conversation-orchestrator.ts is exercised through ConversationService injection and sendMessage mocks for shell, watch, check-in, question, completion, failure, and user-stop events.
+      - The file asserts no fabricated user/bot rows, exactly-once run announcements, retention after failed delivery, and active-turn delivery without waiting for turn settlement; no other assigned file covers this notification matrix.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-orchestrator-test-conversation-a-m3
+    testId: conversation-orchestrator-test
+    role: second_opinion
+    reviewer: conversation-a-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is the direct orchestration boundary suite for UI-visible turn lifecycle and mutation outcomes, including approval navigation, queue pending rows, rewind acceptance, cancellation semantics, and cost propagation.
+    evidence:
+      - source/services/conversation/conversation-orchestrator.ts is driven through mocked MessagePort, UIPort, ConversationService, usage, and pending-interaction dependencies, with assertions on calls and rendered rows rather than private fields.
+      - The stale rewind case verifies abort, UI reset, and message mutation do not occur when the service rejects the target; queue and approval cases cover distinct ownership from conversation-service.test.ts.
+    replacementTestIds: []
+    status: proposed
+  - id: conversation-persistence-test-conversation-a-m3
+    testId: conversation-persistence-test
+    role: second_opinion
+    reviewer: conversation-a-m3
+    sourceArtifact: docs/test-audit/artifacts/conversation-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This high-scrutiny filesystem suite covers the durable recovery boundary across legacy/current formats, crash journals and sidecars, malformed records, locks, migration, fork, project identity, atomic publish, and deletion; its breadth reflects one persistence contract rather than accidental duplication.
+    evidence:
+      - source/services/conversation/conversation-persistence.ts and createConversationLogWriter are exercised through temporary directories with actual JSONL, sidecar, lock, migration, fork, and last.json operations.
+      - Exact proofs include sidecar-vs-canonical recovery, typed unreadable project loads, distinct staging paths, corrupt/stale/held lock diagnostics, and failed publish preserving the prior valid file; no other assigned file covers this complete durability matrix.
     replacementTestIds: []
     status: proposed
   - id: conversation-adapter-test-conversation-a-m3

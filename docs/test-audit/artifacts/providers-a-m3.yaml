@@ -125,6 +125,7 @@ risks:
   - id: providers-a-oauth-accounts-regression
     label: Multi-account OAuth persistence or facade selection can lose credentials, duplicate accounts, or pin the wrong session.
     severity: critical
+fixtures: []
 contracts:
   - id: providers-a-aborted-diagnostics
     statement: The aborted-stream recorder retains replayable events and exposes event counts, timing gaps, response identity, failure frames, progress categories, and bounded tool-growth evidence; release and bounded views omit redundant or sensitive payloads without dropping metrics.
@@ -777,15 +778,6 @@ decisions:
       - source/providers/codex.provider.test.ts:1403-1432 covers timeout-driven abort on a different transport/model seam; it is complementary and cannot replace signal settlement when no frame arrives.
     replacementTestIds: []
     status: proposed
-  - id: providers-a-codex-provider-providers-a-m3
-    testId: providers-a-codex-provider
-    role: second_opinion
-    reviewer: providers-a-m3
-    sourceArtifact: docs/test-audit/artifacts/providers-a-m3.yaml
-    recommendation: keep
-    confidence: high
-    reason: Although large, this file intentionally spans Codex authentication, account claims, model/version discovery, request headers, HTTP/WebSocket parity, continuation lifecycle, and full streamed-turn fidelity; these are distinct provider contracts with high regression impact.
-    evidence:
   - id: providers-a-codex-provider-auth-providers-a-m3
     testId: providers-a-codex-provider-auth
     role: second_opinion

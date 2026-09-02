@@ -1,0 +1,584 @@
+schemaVersion: 2
+domains:
+  - id: hooks
+    label: Conversation and input hooks
+suites:
+  - id: unit
+    label: Deterministic unit and seam tests
+  - id: ui-rendering
+    label: Ink hook rendering and input tests
+seams:
+  - id: hooks-a-seam-ui-reducer
+    label: Conversation UI reducer projecting turn, approval, streaming, and queue state
+  - id: hooks-a-seam-handoff-reducer
+    label: Handoff flow state transition and message composition boundary
+  - id: hooks-a-seam-message-id
+    label: Message identifier factory boundary
+  - id: hooks-a-seam-path-completion
+    label: Path completion matching and ranking boundary
+  - id: hooks-a-seam-settings-completion
+    label: Settings completion categorization, filtering, and selection boundary
+  - id: hooks-a-seam-conversation-hook
+    label: useConversation orchestration-to-UI projection boundary
+  - id: hooks-a-seam-command-registry
+    label: App slash-command construction and busy-mode policy boundary
+  - id: hooks-a-seam-command-helpers
+    label: Direct slash-command helper and assistant-response utility boundary
+  - id: hooks-a-seam-keyboard-input
+    label: Global shortcut and prompt input ownership boundary
+  - id: hooks-a-seam-message-hook
+    label: Conversation message collection and presentation helper boundary
+  - id: hooks-a-seam-settings-hook
+    label: Conversation runtime-setting callback boundary
+  - id: hooks-a-seam-approval-presentation
+    label: Approval presentation filtering boundary
+  - id: hooks-a-seam-background-state
+    label: Background task observation, clock, and notification boundary
+  - id: hooks-a-seam-first-run-gate
+    label: First-run credential gate and provider/model setup boundary
+  - id: hooks-a-seam-debounce
+    label: Trailing-edge debounced React value boundary
+  - id: hooks-a-seam-escape
+    label: Input-local Escape gesture boundary
+risks:
+  - id: hooks-a-risk-ui-state-drift
+    label: The UI displays stale or contradictory turn, approval, streaming, or queue state.
+    severity: high
+  - id: hooks-a-risk-approval-confusion
+    label: An answer, rejection, or approval is applied to the wrong interaction or loses user input.
+    severity: critical
+  - id: hooks-a-risk-handoff-state-loss
+    label: A handoff prompt, selected mode, or captured response is lost or sent in the wrong stage.
+    severity: high
+  - id: hooks-a-risk-message-collision
+    label: Distinct visible messages receive colliding identifiers within a session.
+    severity: high
+  - id: hooks-a-risk-completion-misranking
+    label: Valid path or setting completions disappear or an inferior match is selected first.
+    severity: medium
+  - id: hooks-a-risk-stop-resurrection
+    label: A stopped turn remains busy or is resurrected by a late transport or queue notification.
+    severity: high
+  - id: hooks-a-risk-command-policy-bypass
+    label: A slash command mutates conversation state during a turn or a display command is incorrectly blocked.
+    severity: high
+  - id: hooks-a-risk-command-helper-regression
+    label: A command helper parses input or reports usage, copies, or displays an assistant response incorrectly.
+    severity: medium
+  - id: hooks-a-risk-input-fanout
+    label: A shortcut handles a key owned by a prompt, causing duplicate or unintended actions.
+    severity: high
+  - id: hooks-a-risk-message-history-loss
+    label: Conversation messages are initialized, capped, classified, or restored incorrectly.
+    severity: high
+  - id: hooks-a-risk-setting-forwarding
+    label: A model, effort, or temperature change is dropped or sent to a stale conversation service.
+    severity: medium
+  - id: hooks-a-risk-approval-row-leak
+    label: A pending command row for the active approval is shown or hidden incorrectly.
+    severity: high
+  - id: hooks-a-risk-background-stale-ui
+    label: Background activity, elapsed time, or approval notifications become stale or keep redrawing unnecessarily.
+    severity: high
+  - id: hooks-a-risk-first-run-bypass
+    label: Setup is skipped without usable credentials or remains active after setup completes.
+    severity: high
+  - id: hooks-a-risk-debounce-stale-update
+    label: Consumers observe an intermediate, delayed, or post-unmount debounced value.
+    severity: medium
+  - id: hooks-a-risk-escape-gesture-conflict
+    label: Escape clears input too early, fails to clear it, or conflicts with app-level interruption.
+    severity: high
+fixtures:
+  - id: hooks-a-fixture-ui-state-actions
+    label: Reducer actions and representative turn, approval, queue, and usage snapshots
+  - id: hooks-a-fixture-ask-user-approval
+    label: Mixed single-select and multi-select ask_user approval payload
+  - id: hooks-a-fixture-handoff-state
+    label: Handoff stages, captured text, and optional handoff message
+  - id: hooks-a-fixture-clock
+    label: Controlled timestamps and message-id clock values
+  - id: hooks-a-fixture-path-entries
+    label: File and directory path entries with matching and ranking queries
+  - id: hooks-a-fixture-settings-catalog
+    label: Setting keys, categories, descriptions, and current values
+  - id: hooks-a-fixture-ink-renderer
+    label: Ink renderInAct harness and rendered hook output frames
+  - id: hooks-a-fixture-command-dependencies
+    label: Slash command callbacks, message history, and settings transition dependencies
+  - id: hooks-a-fixture-key-input
+    label: Ink key events and explicit input-owner states
+  - id: hooks-a-fixture-message-array
+    label: User, bot, command, reasoning, and system message arrays
+  - id: hooks-a-fixture-conversation-service
+    label: Mock conversation service callbacks, observers, and transport promises
+  - id: hooks-a-fixture-background-state
+    label: Background task snapshots, details, approval subscriptions, and fake clocks
+  - id: hooks-a-fixture-provider-credentials
+    label: Provider settings and credential environment state for first-run setup
+  - id: hooks-a-fixture-timers
+    label: Controlled debounce and Escape hint timers
+contracts:
+  - id: hooks-a-contract-ui-initial-and-turn-state
+    statement: A fresh UI state exposes idle defaults, and turn start/completion set processing and clear transient indicators without losing an approval requested during processing.
+    seamIds: [hooks-a-seam-ui-reducer]
+    riskIds: [hooks-a-risk-ui-state-drift]
+  - id: hooks-a-contract-ui-streaming-state
+    statement: Thinking timestamps retain the first start until cleared, tool information can be set or cleared, and streaming speed is cleared at turn or transient reset.
+    seamIds: [hooks-a-seam-ui-reducer]
+    riskIds: [hooks-a-risk-ui-state-drift]
+  - id: hooks-a-contract-ui-approval-and-ask-user
+    statement: Approval transitions expose the requested interaction, reject invalid waiting actions, and preserve ordered string or array answers across mixed ask_user questions.
+    seamIds: [hooks-a-seam-ui-reducer]
+    riskIds: [hooks-a-risk-approval-confusion]
+  - id: hooks-a-contract-ui-queue-and-reset
+    statement: Queue snapshots derive active, paused, processing, and length flags for each queue state, while queue messages update only the addressed row and resets clear the appropriate state.
+    seamIds: [hooks-a-seam-ui-reducer]
+    riskIds: [hooks-a-risk-ui-state-drift]
+  - id: hooks-a-contract-ui-session-metrics
+    statement: Usage, rate-limit, and cost summaries are updated and cleared through their actions, with transient and full resets preserving or clearing the durable metrics they own.
+    seamIds: [hooks-a-seam-ui-reducer]
+    riskIds: [hooks-a-risk-ui-state-drift]
+  - id: hooks-a-contract-handoff-transitions
+    statement: Handoff state starts, captures a message only from its entry stage, advances through model and standard-mode stages, and clears on send or cancellation while preserving captured text.
+    seamIds: [hooks-a-seam-handoff-reducer]
+    riskIds: [hooks-a-risk-handoff-state-loss]
+  - id: hooks-a-contract-message-ids
+    statement: Message identifier generation is unique for repeated calls at one timestamp and restarts its suffix when the clock advances.
+    seamIds: [hooks-a-seam-message-id]
+    riskIds: [hooks-a-risk-message-collision]
+  - id: hooks-a-contract-path-completion
+    statement: Path completion matches case-insensitive subsequences, excludes nonmatches, preserves the result cap, and ranks basename or leaf-directory matches ahead of weaker path matches.
+    seamIds: [hooks-a-seam-path-completion]
+    riskIds: [hooks-a-risk-completion-misranking]
+  - id: hooks-a-contract-settings-completion
+    statement: Settings completion exposes stable categories, maps known and unknown keys predictably, filters by category, and clamps selection indexes to valid bounds.
+    seamIds: [hooks-a-seam-settings-completion]
+    riskIds: [hooks-a-risk-completion-misranking]
+  - id: hooks-a-contract-stop-settlement
+    statement: Stopping an unsettled conversation turn immediately leaves the UI idle with a stopped message, and a late cancelling queue snapshot or transport settlement cannot resurrect or undo that state.
+    seamIds: [hooks-a-seam-conversation-hook]
+    riskIds: [hooks-a-risk-stop-resurrection]
+  - id: hooks-a-contract-command-policy
+    statement: App command construction exposes the intended aliases and mode commands, blocks conversation-mutating commands only while busy, and leaves display-only commands available.
+    seamIds: [hooks-a-seam-command-registry]
+    riskIds: [hooks-a-risk-command-policy-bypass]
+  - id: hooks-a-contract-command-helpers
+    statement: Assistant-response, model-provider parsing, usage, resume, and copy command helpers return the documented values, handled status, and user-facing messages for valid and invalid inputs.
+    seamIds: [hooks-a-seam-command-helpers]
+    riskIds: [hooks-a-risk-command-helper-regression]
+  - id: hooks-a-contract-mode-and-handoff-commands
+    statement: Mode commands apply exclusive profile transitions and history confirmation policy, while handoff reports missing assistant output or forwards the latest response when available.
+    seamIds: [hooks-a-seam-command-registry]
+    riskIds: [hooks-a-risk-command-policy-bypass, hooks-a-risk-handoff-state-loss]
+  - id: hooks-a-contract-keyboard-ownership
+    statement: Global shortcuts handle Ctrl+C and input-owned model/effort or mode gestures, but suppress Escape and app shortcuts while another prompt or manager owns input.
+    seamIds: [hooks-a-seam-keyboard-input]
+    riskIds: [hooks-a-risk-input-fanout]
+  - id: hooks-a-contract-conversation-messages
+    statement: The message hook initializes and appends messages, caps the retained list from the front, classifies shell outcomes, and returns user messages with their original UI indexes.
+    seamIds: [hooks-a-seam-message-hook]
+    riskIds: [hooks-a-risk-message-history-loss]
+  - id: hooks-a-contract-conversation-settings
+    statement: Conversation setting callbacks delegate model, reasoning effort, and temperature values and remain stable for one service while updating for a new service.
+    seamIds: [hooks-a-seam-settings-hook]
+    riskIds: [hooks-a-risk-setting-forwarding]
+  - id: hooks-a-contract-approval-presentation
+    statement: Approval presentation hides only matching pending or running command rows according to call-id or tool-name policy while retaining unrelated, completed, and non-command messages.
+    seamIds: [hooks-a-seam-approval-presentation]
+    riskIds: [hooks-a-risk-approval-row-leak]
+  - id: hooks-a-contract-background-observation
+    statement: useConversation observes background snapshots and unsubscribes on unmount, ticks elapsed time for live or in-flight work but not retained terminal details, and notifies when approvals become pending.
+    seamIds: [hooks-a-seam-background-state]
+    riskIds: [hooks-a-risk-background-stale-ui]
+  - id: hooks-a-contract-clear-and-stop-effects
+    statement: Conversation clearing resets messages and session identity through the callback or a fresh fallback id, while stop, error logging, thinking visibility, shell cancellation, and retry callbacks update the visible conversation correctly.
+    seamIds: [hooks-a-seam-conversation-hook]
+    riskIds: [hooks-a-risk-message-history-loss, hooks-a-risk-stop-resurrection]
+  - id: hooks-a-contract-restored-conversation
+    statement: useConversation renders restored messages and derives last usage from the latest restored assistant message.
+    seamIds: [hooks-a-seam-conversation-hook]
+    riskIds: [hooks-a-risk-message-history-loss]
+  - id: hooks-a-contract-debounced-value
+    statement: A debounced value updates only after the source is quiet, uses the latest value, flushes immediately when requested, and cancels pending updates on unmount.
+    seamIds: [hooks-a-seam-debounce]
+    riskIds: [hooks-a-risk-debounce-stale-update]
+  - id: hooks-a-contract-escape-gesture
+    statement: One Escape shows a hint, a second or combined Escape clears non-empty input, an input-local callback can consume Escape, and an empty buffer during an in-flight turn is left to the app interrupt.
+    seamIds: [hooks-a-seam-escape]
+    riskIds: [hooks-a-risk-escape-gesture-conflict]
+  - id: hooks-a-contract-first-run-setup
+    statement: First-run setup is bypassed with effective credentials, moves from provider to model after credential changes, follows provider changes, and completes or can be requested again through the setup gate.
+    seamIds: [hooks-a-seam-first-run-gate]
+    riskIds: [hooks-a-risk-first-run-bypass]
+tests:
+  - kind: file
+    id: hooks-conversation-ui-reducer-ask-user-bugfix
+    file: source/hooks/conversation-ui-reducer.ask-user-bugfix.test.ts
+    domainId: hooks
+    suiteId: unit
+    contractIds: [hooks-a-contract-ui-approval-and-ask-user]
+    fixtureIds: [hooks-a-fixture-ask-user-approval]
+  - kind: file
+    id: hooks-conversation-ui-reducer
+    file: source/hooks/conversation-ui-reducer.test.ts
+    domainId: hooks
+    suiteId: unit
+    contractIds: [hooks-a-contract-ui-initial-and-turn-state, hooks-a-contract-ui-streaming-state, hooks-a-contract-ui-approval-and-ask-user, hooks-a-contract-ui-queue-and-reset, hooks-a-contract-ui-session-metrics]
+    fixtureIds: [hooks-a-fixture-ui-state-actions]
+  - kind: file
+    id: hooks-handoff-flow-reducer
+    file: source/hooks/handoff-flow-reducer.test.ts
+    domainId: hooks
+    suiteId: unit
+    contractIds: [hooks-a-contract-handoff-transitions]
+    fixtureIds: [hooks-a-fixture-handoff-state]
+  - kind: file
+    id: hooks-message-id
+    file: source/hooks/message-id.test.ts
+    domainId: hooks
+    suiteId: unit
+    contractIds: [hooks-a-contract-message-ids]
+    fixtureIds: [hooks-a-fixture-clock]
+  - kind: file
+    id: hooks-path-completion-filter
+    file: source/hooks/path-completion-filter.test.ts
+    domainId: hooks
+    suiteId: unit
+    contractIds: [hooks-a-contract-path-completion]
+    fixtureIds: [hooks-a-fixture-path-entries]
+  - kind: file
+    id: hooks-settings-completion-logic
+    file: source/hooks/settings-completion-logic.test.ts
+    domainId: hooks
+    suiteId: unit
+    contractIds: [hooks-a-contract-settings-completion]
+    fixtureIds: [hooks-a-fixture-settings-catalog]
+  - kind: file
+    id: hooks-stop-processing-probe
+    file: source/hooks/stop-processing-probe.test.tsx
+    domainId: hooks
+    suiteId: ui-rendering
+    contractIds: [hooks-a-contract-stop-settlement]
+    fixtureIds: [hooks-a-fixture-ink-renderer, hooks-a-fixture-conversation-service]
+  - kind: file
+    id: hooks-use-app-commands
+    file: source/hooks/use-app-commands.test.ts
+    domainId: hooks
+    suiteId: ui-rendering
+    contractIds: [hooks-a-contract-command-policy, hooks-a-contract-command-helpers, hooks-a-contract-mode-and-handoff-commands]
+    fixtureIds: [hooks-a-fixture-command-dependencies, hooks-a-fixture-message-array]
+  - kind: file
+    id: hooks-use-app-keyboard-shortcuts
+    file: source/hooks/use-app-keyboard-shortcuts.test.tsx
+    domainId: hooks
+    suiteId: ui-rendering
+    contractIds: [hooks-a-contract-keyboard-ownership]
+    fixtureIds: [hooks-a-fixture-key-input, hooks-a-fixture-ink-renderer]
+  - kind: file
+    id: hooks-use-conversation-messages
+    file: source/hooks/use-conversation-messages.test.tsx
+    domainId: hooks
+    suiteId: ui-rendering
+    contractIds: [hooks-a-contract-conversation-messages]
+    fixtureIds: [hooks-a-fixture-message-array, hooks-a-fixture-ink-renderer]
+  - kind: file
+    id: hooks-use-conversation-settings
+    file: source/hooks/use-conversation-settings.test.tsx
+    domainId: hooks
+    suiteId: ui-rendering
+    contractIds: [hooks-a-contract-conversation-settings]
+    fixtureIds: [hooks-a-fixture-conversation-service, hooks-a-fixture-ink-renderer]
+  - kind: file
+    id: hooks-use-conversation-approval-pending-filter
+    file: source/hooks/use-conversation.approval-pending-filter.test.ts
+    domainId: hooks
+    suiteId: unit
+    contractIds: [hooks-a-contract-approval-presentation]
+    fixtureIds: [hooks-a-fixture-message-array]
+  - kind: file
+    id: hooks-use-conversation-background-tasks
+    file: source/hooks/use-conversation.background-tasks.test.tsx
+    domainId: hooks
+    suiteId: ui-rendering
+    contractIds: [hooks-a-contract-background-observation]
+    fixtureIds: [hooks-a-fixture-background-state, hooks-a-fixture-ink-renderer, hooks-a-fixture-timers]
+  - kind: file
+    id: hooks-use-conversation-clear
+    file: source/hooks/use-conversation.clear.test.tsx
+    domainId: hooks
+    suiteId: ui-rendering
+    contractIds: [hooks-a-contract-clear-and-stop-effects]
+    fixtureIds: [hooks-a-fixture-conversation-service, hooks-a-fixture-message-array, hooks-a-fixture-ink-renderer]
+  - kind: file
+    id: hooks-use-conversation-resume
+    file: source/hooks/use-conversation.resume.test.tsx
+    domainId: hooks
+    suiteId: ui-rendering
+    contractIds: [hooks-a-contract-restored-conversation]
+    fixtureIds: [hooks-a-fixture-message-array, hooks-a-fixture-ink-renderer]
+  - kind: file
+    id: hooks-use-debounced-value
+    file: source/hooks/use-debounced-value.test.tsx
+    domainId: hooks
+    suiteId: ui-rendering
+    contractIds: [hooks-a-contract-debounced-value]
+    fixtureIds: [hooks-a-fixture-timers, hooks-a-fixture-ink-renderer]
+  - kind: file
+    id: hooks-use-escape-key
+    file: source/hooks/use-escape-key.test.tsx
+    domainId: hooks
+    suiteId: ui-rendering
+    contractIds: [hooks-a-contract-escape-gesture]
+    fixtureIds: [hooks-a-fixture-key-input, hooks-a-fixture-ink-renderer, hooks-a-fixture-timers]
+  - kind: file
+    id: hooks-use-first-run-setup
+    file: source/hooks/use-first-run-setup.test.tsx
+    domainId: hooks
+    suiteId: ui-rendering
+    contractIds: [hooks-a-contract-first-run-setup]
+    fixtureIds: [hooks-a-fixture-provider-credentials, hooks-a-fixture-ink-renderer]
+decisions:
+  - id: hooks-conversation-ui-reducer-ask-user-bugfix-hooks-a-m3
+    testId: hooks-conversation-ui-reducer-ask-user-bugfix
+    role: second_opinion
+    reviewer: hooks-a-m3
+    sourceArtifact: docs/test-audit/artifacts/hooks-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The regression-specific sequence protects array-valued multi-select answers across a mixed ask_user flow.
+    evidence:
+      - The test drives approval/requested, answer_submitted, and advance_to_next through conversationUIReducer and asserts the second answer remains an array at source/hooks/conversation-ui-reducer.ask-user-bugfix.test.ts:58-72.
+      - The broader reducer test covers answer accumulation at source/hooks/conversation-ui-reducer.test.ts:244-264 but does not cover a mixed single-select then multi-select array regression.
+    replacementTestIds: []
+    status: proposed
+  - id: hooks-conversation-ui-reducer-hooks-a-m3
+    testId: hooks-conversation-ui-reducer
+    role: second_opinion
+    reviewer: hooks-a-m3
+    sourceArtifact: docs/test-audit/artifacts/hooks-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is the high-scrutiny reducer contract suite spanning lifecycle, approval, queue, usage, reset, immutability, and queued-row behavior.
+    evidence:
+      - The file exercises the production reducer and flag projection directly at source/hooks/conversation-ui-reducer.ts:183-611, including all current action families.
+      - Queue state distinctions and row-preserving edits are asserted at source/hooks/conversation-ui-reducer.test.ts:400-510 and :544-740; no assigned sibling provides equivalent reducer transition coverage.
+    replacementTestIds: []
+    status: proposed
+  - id: hooks-handoff-flow-reducer-hooks-a-m3
+    testId: hooks-handoff-flow-reducer
+    role: second_opinion
+    reviewer: hooks-a-m3
+    sourceArtifact: docs/test-audit/artifacts/hooks-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Pure transition tests cheaply lock stage guards, null behavior, captured-text preservation, and default message composition.
+    evidence:
+      - The hook path re-exports the service reducer, and this file directly verifies each action's observable stage transition at source/hooks/handoff-flow-reducer.test.ts:36-161.
+      - Cross-domain source/services/handoff/handoff-session.test.ts:18-31 covers a higher-level session operation, not the complete reducer no-op matrix.
+    replacementTestIds: []
+    status: proposed
+  - id: hooks-message-id-hooks-a-m3
+    testId: hooks-message-id
+    role: second_opinion
+    reviewer: hooks-a-m3
+    sourceArtifact: docs/test-audit/artifacts/hooks-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The two clock cases protect uniqueness and sequence reset, which are distinct observable identifier guarantees.
+    evidence:
+      - source/hooks/message-id.test.ts:4-19 injects a deterministic clock and asserts exact IDs for same-time calls and a time advance.
+      - The hook re-exports createMessageIdFactory from source/utils/message-id-factory.js, so this is a direct seam test rather than a render-only characterization.
+    replacementTestIds: []
+    status: proposed
+  - id: hooks-path-completion-filter-hooks-a-m3
+    testId: hooks-path-completion-filter
+    role: second_opinion
+    reviewer: hooks-a-m3
+    sourceArtifact: docs/test-audit/artifacts/hooks-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Matching, caps, and ranking are independently observable completion behavior with representative file and directory cases.
+    evidence:
+      - source/hooks/path-completion-filter.test.ts:8-35 covers subsequence semantics and :37-119 covers filtering, caps, directory, leaf-directory, basename, and ranking behavior.
+      - The implementation delegates matching/scoring to source/utils/subsequence-filter.ts:1-49 and applies basename and leaf-directory weighting at source/hooks/path-completion-filter.ts:13-33; no sibling asserts these path-entry outcomes.
+    replacementTestIds: []
+    status: proposed
+  - id: hooks-settings-completion-logic-hooks-a-m3
+    testId: hooks-settings-completion-logic
+    role: second_opinion
+    reviewer: hooks-a-m3
+    sourceArtifact: docs/test-audit/artifacts/hooks-a-m3.yaml
+    recommendation: keep
+    confidence: medium
+    reason: Direct pure-helper tests are a proportionate foundation for category and selection policy even though hook-level tests repeat selected examples.
+    evidence:
+      - source/hooks/settings-completion-logic.test.ts:6-79 directly checks category IDs, known/unknown mappings, category filtering, and bounds.
+      - Cross-file source/hooks/use-settings-completion.test.ts:326-355 repeats category and category-filter assertions and :480-519 repeats clampIndex cases, but it exercises the hook's exported integration surface; it does not make the pure seam redundant.
+    replacementTestIds: []
+    status: proposed
+  - id: hooks-stop-processing-probe-hooks-a-m3
+    testId: hooks-stop-processing-probe
+    role: second_opinion
+    reviewer: hooks-a-m3
+    sourceArtifact: docs/test-audit/artifacts/hooks-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The test protects a timing-sensitive stop fence that cannot be represented by a settled-turn unit test.
+    evidence:
+      - source/hooks/stop-processing-probe.test.tsx:17-87 parks sendMessage, stops before settlement, injects a late cancelling snapshot, and then releases transport while asserting the UI remains idle with Stopped.
+      - The production fence is explicit at source/hooks/use-conversation.ts:279-335 and stopProcessing sets it before orchestration at :433-441; source/services/conversation/conversation-orchestrator.test.ts:381-399 tests cancellation semantics but not this UI race.
+    replacementTestIds: []
+    status: proposed
+  - id: hooks-use-app-commands-hooks-a-m3
+    testId: hooks-use-app-commands
+    role: second_opinion
+    reviewer: hooks-a-m3
+    sourceArtifact: docs/test-audit/artifacts/hooks-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This high-scrutiny file covers command registration, busy-turn gating, mode/profile transitions, and handoff behavior through the assembled hook; its mixed direct command checks do not erase the hook-level contract.
+    evidence:
+      - source/hooks/use-app-commands.test.ts:21-80 covers latest assistant text, model-provider parsing, and usage helper outputs; :119-214 covers asynchronous copy success/failure, numbered response selection, and code-block menu selection.
+      - source/hooks/use-app-commands.test.ts:277-403 verifies aliases, busy blocking, idle execution, and display-only command availability, while :405-720 verifies profile/mode exclusivity and history confirmation.
+      - source/hooks/use-app-commands.test.ts:722-824 verifies both handoff absence and successful handoff outcomes through useAppCommands.
+      - The two createResumeSlashCommand cases at source/hooks/use-app-commands.test.ts:82-117 duplicate action-case observables in source/commands/resume-command.test.ts:40-67 and :69-105; empty/ls replaceInput belongs better in the command test, and target-id plus usage/invalid-id errors likewise belong there. The file remains keep because its broader assembled useAppCommands coverage is not duplicated by that command factory test.
+    replacementTestIds: []
+    status: proposed
+  - id: hooks-use-app-keyboard-shortcuts-hooks-a-m3
+    testId: hooks-use-app-keyboard-shortcuts
+    role: second_opinion
+    reviewer: hooks-a-m3
+    sourceArtifact: docs/test-audit/artifacts/hooks-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The test directly verifies the high-risk input-owner gate, interrupt gesture, approval bridge, global Ctrl+C, and raw control-byte shortcuts.
+    evidence:
+      - source/hooks/use-app-keyboard-shortcuts.test.tsx:107-222 covers Ctrl+C, Escape confirmation, timeout, text/menu precedence, and Shift+Tab gating.
+      - source/hooks/use-app-keyboard-shortcuts.test.tsx:224-322 exercises approval, handoff, surge, large-uncached, and background-task input ownership, including the rejection bridge; the Ink fan-out rationale is stated at :224-227.
+      - Cross-domain source/components/InputBox.test.tsx contains input rendering behavior but does not replace this hook's explicit isActive and owner assertions.
+    replacementTestIds: []
+    status: proposed
+  - id: hooks-use-conversation-messages-hooks-a-m3
+    testId: hooks-use-conversation-messages
+    role: second_opinion
+    reviewer: hooks-a-m3
+    sourceArtifact: docs/test-audit/artifacts/hooks-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The hook's stateful message collection and shell-result projection have separate meaningful outcomes covered with a compact harness.
+    evidence:
+      - source/hooks/use-conversation-messages.test.tsx:40-102 covers initialization, append/no-op, capping, and system messages.
+      - source/hooks/use-conversation-messages.test.tsx:104-156 covers completed, failed, timed-out, and error shell messages, while :158-192 covers indexed user-message extraction and direct replacement.
+      - The production seam composes appendMessagesCapped, getUserMessageEntries, and createMessageId at source/hooks/use-conversation-messages.ts:11-63; no sibling test covers this combined hook API.
+    replacementTestIds: []
+    status: proposed
+  - id: hooks-use-conversation-settings-hooks-a-m3
+    testId: hooks-use-conversation-settings
+    role: second_opinion
+    reviewer: hooks-a-m3
+    sourceArtifact: docs/test-audit/artifacts/hooks-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The hook is a small adapter whose delegation and callback identity are observable API guarantees for the UI.
+    evidence:
+      - source/hooks/use-conversation-settings.test.tsx:35-69 asserts exact model, effort, and temperature forwarding to ConversationService.
+      - source/hooks/use-conversation-settings.test.tsx:71-102 verifies stable callbacks for the same service and replacement callbacks for a new service; service-layer setter tests at source/services/session/session-runtime-controller.test.ts:31-78 cover different reset policy rather than this React adapter.
+    replacementTestIds: []
+    status: proposed
+  - id: hooks-use-conversation-approval-pending-filter-hooks-a-m3
+    testId: hooks-use-conversation-approval-pending-filter
+    role: second_opinion
+    reviewer: hooks-a-m3
+    sourceArtifact: docs/test-audit/artifacts/hooks-a-m3.yaml
+    recommendation: consolidation_candidate
+    confidence: medium
+    reason: This file directly tests a service policy from a hook-named path, and its two filtering examples substantially overlap the dedicated policy test; consolidate after preserving its non-command and completed-row assertions.
+    evidence:
+      - source/hooks/use-conversation.approval-pending-filter.test.ts:4-36 verifies call-id matching while retaining a user row and completed command row, and :38-64 verifies tool-name fallback.
+      - The dedicated sibling source/services/approval/approval-presentation-policy.test.ts:13-43 verifies call-id precedence and :45-69 verifies tool-name fallback with an explicit capability resolver.
+      - The sibling does not currently assert the assigned file's retention of non-command/completed rows, so consolidation should move or add that assertion rather than delete evidence outright.
+    replacementTestIds: []
+    status: proposed
+  - id: hooks-use-conversation-background-tasks-hooks-a-m3
+    testId: hooks-use-conversation-background-tasks
+    role: second_opinion
+    reviewer: hooks-a-m3
+    sourceArtifact: docs/test-audit/artifacts/hooks-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: These cases protect live-vs-retained clock policy, observer cleanup, background snapshot rendering, and approval notification transitions.
+    evidence:
+      - source/hooks/use-conversation.background-tasks.test.tsx:19-64 verifies snapshot observer updates and unsubscription; :66-108 verifies retained terminal details do not tick.
+      - source/hooks/use-conversation.background-tasks.test.tsx:110-197 verifies ticking during an in-flight turn and live background task, while :199-246 verifies approvalNeeded notification.
+      - The clock policy is implemented at source/hooks/use-conversation.ts:222-254 and depends on needsBackgroundTaskClock at source/components/layout/background-task-clock.js; no sibling combines this useConversation surface.
+    replacementTestIds: []
+    status: proposed
+  - id: hooks-use-conversation-clear-hooks-a-m3
+    testId: hooks-use-conversation-clear
+    role: second_opinion
+    reviewer: hooks-a-m3
+    sourceArtifact: docs/test-audit/artifacts/hooks-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The file covers distinct clear, error, stream, stop, shell cancellation, and retry callback effects at the public conversation-hook boundary.
+    evidence:
+      - source/hooks/use-conversation.clear.test.tsx:24-108 verifies callback and fallback clear paths reset messages and session identity.
+      - source/hooks/use-conversation.clear.test.tsx:110-214 verifies normalized error logging and transient thinking visibility; :216-305 verifies stopped and aborted shell messages; :307-333 verifies retry callback wiring.
+      - The relevant production wiring spans source/hooks/use-conversation.ts:262-351 and :420-441; orchestrator tests cover lower-level cancellation but not the rendered hook effects.
+    replacementTestIds: []
+    status: proposed
+  - id: hooks-use-conversation-resume-hooks-a-m3
+    testId: hooks-use-conversation-resume
+    role: second_opinion
+    reviewer: hooks-a-m3
+    sourceArtifact: docs/test-audit/artifacts/hooks-a-m3.yaml
+    recommendation: keep
+    confidence: medium
+    reason: Restored message rendering and latest-assistant usage derivation are a narrow, user-visible resume characterization.
+    evidence:
+      - source/hooks/use-conversation.resume.test.tsx:36-47 asserts restored message order and :49-75 asserts lastUsage comes from the latest restored assistant message, including cache-read tokens.
+      - The derivation is in source/hooks/use-conversation.ts:54-66 and initialization at :118-129; no sibling test asserts this exact useConversation initial-state projection.
+    replacementTestIds: []
+    status: proposed
+  - id: hooks-use-debounced-value-hooks-a-m3
+    testId: hooks-use-debounced-value
+    role: second_opinion
+    reviewer: hooks-a-m3
+    sourceArtifact: docs/test-audit/artifacts/hooks-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Fake-timer cases cover trailing debounce, latest-value selection, urgent flush, and cleanup without relying on wall-clock timing.
+    evidence:
+      - source/hooks/use-debounced-value.test.tsx:28-67 verifies quiet-period and latest-value behavior, :69-86 verifies shouldFlush, and :88-104 verifies unmount cleanup.
+      - The production hook explicitly schedules and cleans a timer at source/hooks/use-debounced-value.ts:14-27; no sibling test covers its generic hook contract.
+    replacementTestIds: []
+    status: proposed
+  - id: hooks-use-escape-key-hooks-a-m3
+    testId: hooks-use-escape-key
+    role: second_opinion
+    reviewer: hooks-a-m3
+    sourceArtifact: docs/test-audit/artifacts/hooks-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The test protects the terminal-specific single/double Escape gesture and its precedence against app interruption and consuming callbacks.
+    evidence:
+      - source/hooks/use-escape-key.test.tsx:65-115 verifies two separate Escape presses and two ESC bytes in one chunk; :117-144 verifies non-empty clearing during a turn versus empty-buffer deferral.
+      - source/hooks/use-escape-key.test.tsx:146-170 verifies an onEscape consumer suppresses the hint; production precedence is explicit at source/hooks/use-escape-key.ts:42-72.
+      - Cross-domain source/components/InputBox.test.tsx covers component integration, but does not replace this hook's direct combined-byte and turn-in-flight cases.
+    replacementTestIds: []
+    status: proposed
+  - id: hooks-use-first-run-setup-hooks-a-m3
+    testId: hooks-use-first-run-setup
+    role: second_opinion
+    reviewer: hooks-a-m3
+    sourceArtifact: docs/test-audit/artifacts/hooks-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The test exercises credential-sensitive provider/model progression and re-entry, including provider switching that could otherwise strand the setup gate.
+    evidence:
+      - source/hooks/use-first-run-setup.test.tsx:29-40 verifies bypass with effective credentials.
+      - source/hooks/use-first-run-setup.test.tsx:42-110 verifies provider phase, credential transition to model, provider changes back to setup, completion, and requestSetup re-entry while checking fetchModels is not called.
+      - The state transitions and controller opening/replacement seam are implemented at source/hooks/use-first-run-setup.ts:53-132; cross-domain source/components/input/FirstRunSetupPrompt.test.tsx tests prompt rendering rather than gate policy.
+    replacementTestIds: []
+    status: proposed

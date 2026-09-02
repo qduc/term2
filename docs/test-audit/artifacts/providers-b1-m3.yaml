@@ -366,6 +366,46 @@ decisions:
       - Lines 115-213 exercise pasted and HTTP callback paths, invalid host/path rejection, state mismatch rejection, and eventual token exchange at runPkceLoopbackLogin.
     replacementTestIds: []
     status: proposed
+  - id: providers-openrouter-provider-create-runner-providers-b1-m3
+    testId: providers-openrouter-provider-create-runner
+    role: second_opinion
+    reviewer: providers-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: These two assertions protect the public registry contract that OpenRouter can construct an application-owned streamed model with credentials and retry wrapping without a runner; no other assigned test asserts that factory boundary.
+    evidence:
+      - Lines 18-29 obtain the registered provider and assert createStreamedModel, stream, and wrappedModel presence with configured settings credentials.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-openrouter-provider-request-preprocessing-providers-b1-m3
+    testId: providers-openrouter-provider-request-preprocessing
+    role: second_opinion
+    reviewer: providers-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This file exercises the middleware through composeFetch with Gemini/Anthropic signature rules and a non-JSON body, complementing rather than replacing the direct middleware tests for cache-control routing.
+    evidence:
+      - Lines 5-41 assert unsigned reasoning.text removal only for the signature-required formats while retaining signed, other-format, and encrypted entries.
+      - Lines 43-59 assert a non-JSON body reaches the base fetch unchanged.
+      - 'Exact sibling comparison: source/providers/openrouter.provider.test.ts:21-67 covers direct middleware invocation plus Anthropic cache_control allowlisting; its overlapping unsigned-Anthropic case does not cover this file''s Gemini format or composeFetch boundary.'
+    replacementTestIds: []
+    status: proposed
+  - id: providers-openrouter-provider-providers-b1-m3
+    testId: providers-openrouter-provider
+    role: second_opinion
+    reviewer: providers-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The direct middleware suite protects cache-control allowlisting and Anthropic signature handling; although two behaviors overlap the neighboring preprocessing test, the cache-control contract is unique here and the remaining assertions are complementary.
+    evidence:
+      - Lines 21-39 assert unsigned Anthropic reasoning.text removal while preserving signed and summary details.
+      - Lines 41-67 assert cache_control is added to the last user message only for anthropic-routed models and messages remain unchanged outside the allowlist.
+      - 'Lines 69-80 independently assert direct middleware pass-through for a non-JSON request; source/providers/openrouter.provider.request-preprocessing.test.ts:43-59 verifies the same observable through composed fetch, so neither file wholly replaces the other''s distinct cache or composition coverage.'
+    replacementTestIds: []
+    status: proposed
   - id: providers-openai-responses-model-providers-b1-m3
     testId: providers-openai-responses-model
     role: second_opinion
@@ -377,7 +417,7 @@ decisions:
     evidence:
       - Lines 112-280 assert tool-progress/reasoning normalization and terminal-state success/error distinctions; lines 282-639 assert HTTP/WebSocket settings, input conversion, compaction capability gates, and opaque/reasoning replay.
       - Lines 882-952 assert HTTP premature EOF and WebSocket error/close failures; lines 954-1028 assert terminal stop, sequential reuse, cancellation settlement, and concurrent stream ownership.
-      - Exact out-of-assignment sibling comparison: source/providers/grok.provider.test.ts:178-216 checks Grok's choice of this model class and capabilities, not the Responses model's wire/event/lifecycle behavior.
+      - 'Exact out-of-assignment sibling comparison: source/providers/grok.provider.test.ts:178-216 checks Grok''s choice of this model class and capabilities, not the Responses model''s wire/event/lifecycle behavior.'
     replacementTestIds: []
     status: proposed
   - id: providers-openai-provider-providers-b1-m3
@@ -430,7 +470,7 @@ decisions:
     evidence:
       - Lines 21-233 cover provider detection, session header injection, stable/overridden IDs, parent/subagent/evaluator isolation, and preservation of existing init fields.
       - Lines 239-328 cover ID format/determinism, provider detection, transport routing, whitespace normalization, and Anthropic cache eligibility.
-      - Exact sibling comparison: source/providers/openai-compatible.provider.test.ts:705-1135 observes resulting network requests, whereas this file asserts the injector and routing functions directly.
+      - 'Exact sibling comparison: source/providers/openai-compatible.provider.test.ts:705-1135 observes resulting network requests, whereas this file asserts the injector and routing functions directly.'
     replacementTestIds: []
     status: proposed
   - id: providers-openai-chained-input-compatibility-providers-b1-m3
@@ -484,7 +524,7 @@ decisions:
     evidence:
       - Lines 178-328 cover streamed-model factory, stored-name alias lookup, and optional stored credentials; lines 330-703 cover request fields, reasoning, authentication, and endpoint shape.
       - Lines 705-894 and 941-1135 verify OpenCode endpoint-specific transports, credentials, session headers, discovery, and cross-instance isolation through the provider factory.
-      - Exact sibling comparison: source/providers/opencode.provider.test.ts:21-328 tests injector, ID generation, provider detection, and pure transport selection rather than this provider factory's captured network requests.
+      - 'Exact sibling comparison: source/providers/opencode.provider.test.ts:21-328 tests injector, ID generation, provider detection, and pure transport selection rather than this provider factory''s captured network requests.'
     replacementTestIds: []
     status: proposed
   - id: providers-openai-responses-model-compaction-frames-providers-b1-m3

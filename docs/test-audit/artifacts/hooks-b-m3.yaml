@@ -1,0 +1,494 @@
+schemaVersion: 2
+domains:
+  - id: hooks
+    label: Hook/UI-state behaviors
+suites:
+  - id: unit
+    label: Default Vitest unit suite
+seams:
+  - id: hooks-b-seam-provider-state
+    label: Provider/model selection and provider-specific status state.
+  - id: hooks-b-seam-handoff-workflow
+    label: Handoff state transitions and model/effort selection routing.
+  - id: hooks-b-seam-selection-filtering
+    label: Hook-owned filtering, indexing, and navigation state.
+  - id: hooks-b-seam-settings-shell
+    label: Settings completion and interactive shell state boundaries.
+  - id: hooks-b-seam-terminal-lifecycle
+    label: Terminal dimensions, focus events, and notification lifecycle.
+fixtures:
+  - id: hooks-b-fixture-react-ink-harness
+    label: React/Ink rendered hook harness with captured hook state.
+  - id: hooks-b-fixture-mock-settings
+    label: In-memory settings service used to drive hook configuration.
+  - id: hooks-b-fixture-async-provider
+    label: Controllable provider model fetchers and registered test providers.
+  - id: hooks-b-fixture-shell-session
+    label: Shell interaction session with mocked command execution and sink.
+  - id: hooks-b-fixture-terminal-stream
+    label: Mock stdout/stdin event sources for terminal lifecycle events.
+risks:
+  - id: hooks-b-risk-stale-provider-state
+    label: A provider switch or credential change leaves stale models or usage visible.
+    severity: high
+  - id: hooks-b-risk-handoff-misrouting
+    label: Handoff text is lost, duplicated, or sent through the wrong model-selection path.
+    severity: high
+  - id: hooks-b-risk-input-attachment-loss
+    label: Recalled or drafted image attachments disappear during input-history navigation.
+    severity: medium
+  - id: hooks-b-risk-navigation-boundary-error
+    label: Selection, filtering, completion, or scroll boundaries choose an invalid item.
+    severity: medium
+  - id: hooks-b-risk-settings-policy-drift
+    label: Settings visibility, category, query, or runtime routing drifts from policy.
+    severity: medium
+  - id: hooks-b-risk-shell-history-loss
+    label: Shell results or pending history are not projected when shell mode closes.
+    severity: high
+  - id: hooks-b-risk-terminal-lifecycle-leak
+    label: Terminal listeners, focus state, or notification gates remain wrong across lifecycle events.
+    severity: medium
+  - id: hooks-b-risk-completion-runaway
+    label: Unstable injected dependencies cause repeated completion loads or render loops.
+    severity: high
+contracts:
+  - id: hooks-b-contract-grok-credit-gating
+    statement: Grok credit usage seeds and refreshes only for the Grok provider, with explicit refresh forcing a fetch.
+    seamIds: [hooks-b-seam-provider-state]
+    riskIds: [hooks-b-risk-stale-provider-state]
+  - id: hooks-b-contract-handoff-settlement
+    statement: Handoff input, model/effort choices, cancellation, and plan-mode confirmation settle exactly once with the intended message and state.
+    seamIds: [hooks-b-seam-handoff-workflow]
+    riskIds: [hooks-b-risk-handoff-misrouting]
+  - id: hooks-b-contract-history-attachments
+    statement: Input-history navigation restores both recalled conversation images and the user's draft images.
+    seamIds: [hooks-b-seam-selection-filtering]
+    riskIds: [hooks-b-risk-input-attachment-loss]
+  - id: hooks-b-contract-mentor-pool-selection
+    statement: Mentor-pool lists preserve catalog metadata, expose saved/custom models, and apply model/provider picks without dropping reasoning settings.
+    seamIds: [hooks-b-seam-provider-state]
+    riskIds: [hooks-b-risk-stale-provider-state]
+  - id: hooks-b-contract-model-fetch-coherence
+    statement: Model selection honors provider credentials, ignores stale asynchronous results, invalidates changed-provider caches, and preselects configured models.
+    seamIds: [hooks-b-seam-provider-state]
+    riskIds: [hooks-b-risk-stale-provider-state]
+  - id: hooks-b-contract-path-completion-stability
+    statement: Path completion loads workspace entries without an infinite render/refetch loop when injected logger identity is unstable.
+    seamIds: [hooks-b-seam-selection-filtering]
+    riskIds: [hooks-b-risk-completion-runaway]
+  - id: hooks-b-contract-provider-wizard
+    statement: Provider selection navigates built-in/custom flows safely, validates edits, persists valid drafts, and handles deletion/discard boundaries.
+    seamIds: [hooks-b-seam-provider-state]
+    riskIds: [hooks-b-risk-stale-provider-state, hooks-b-risk-navigation-boundary-error]
+  - id: hooks-b-contract-resume-filtering
+    statement: Resume filtering matches conversation id, message, model, and SSH host case-insensitively and preserves all results for an empty query.
+    seamIds: [hooks-b-seam-selection-filtering]
+    riskIds: [hooks-b-risk-navigation-boundary-error]
+  - id: hooks-b-contract-rewind-scroll
+    statement: Rewind selection computes an initial scroll offset that keeps the selected last turn visible.
+    seamIds: [hooks-b-seam-selection-filtering]
+    riskIds: [hooks-b-risk-navigation-boundary-error]
+  - id: hooks-b-contract-runtime-provider-route
+    statement: Applying the agent.provider runtime setting delegates provider changes to conversation-service switchProvider.
+    seamIds: [hooks-b-seam-provider-state]
+    riskIds: [hooks-b-risk-stale-provider-state]
+  - id: hooks-b-contract-selection-navigation
+    statement: Generic selection wraps, clamps, pages, and skips inactive entries in the documented directions.
+    seamIds: [hooks-b-seam-selection-filtering]
+    riskIds: [hooks-b-risk-navigation-boundary-error]
+  - id: hooks-b-contract-settings-completion
+    statement: Settings completion exposes policy-approved entries, filters by category/query, and clamps selection indices.
+    seamIds: [hooks-b-seam-settings-shell]
+    riskIds: [hooks-b-risk-settings-policy-drift, hooks-b-risk-navigation-boundary-error]
+  - id: hooks-b-contract-shell-settlement
+    statement: Shell submission clears input, projects command output, and flushes pending shell history when leaving shell mode.
+    seamIds: [hooks-b-seam-settings-shell]
+    riskIds: [hooks-b-risk-shell-history-loss]
+  - id: hooks-b-contract-skill-filtering
+    statement: Skill completion filtering matches skill names or descriptions case-insensitively and handles empty/no-match inputs.
+    seamIds: [hooks-b-seam-selection-filtering]
+    riskIds: [hooks-b-risk-navigation-boundary-error]
+  - id: hooks-b-contract-slash-command-dispatch
+    statement: Slash completion recognizes command arguments and selection dispatch updates input/cursor and closes according to action results.
+    seamIds: [hooks-b-seam-selection-filtering]
+    riskIds: [hooks-b-risk-navigation-boundary-error]
+  - id: hooks-b-contract-terminal-columns
+    statement: Terminal columns reflect mount width, debounce resize events, collapse bursts, and remove listeners on unmount.
+    seamIds: [hooks-b-seam-terminal-lifecycle]
+    riskIds: [hooks-b-risk-terminal-lifecycle-leak]
+  - id: hooks-b-contract-terminal-focus-notifications
+    statement: Focus mode escape sequences and approval/completion notifications are gated by focus and app notification settings.
+    seamIds: [hooks-b-seam-terminal-lifecycle]
+    riskIds: [hooks-b-risk-terminal-lifecycle-leak]
+tests:
+   - kind: file
+     id: hooks-use-grok-credit-usage-test
+     file: source/hooks/use-grok-credit-usage.test.tsx
+     domainId: hooks
+     suiteId: unit
+     contractIds: [hooks-b-contract-grok-credit-gating]
+     fixtureIds: [hooks-b-fixture-react-ink-harness, hooks-b-fixture-mock-settings]
+   - kind: file
+     id: hooks-use-handoff-flow-test
+     file: source/hooks/use-handoff-flow.test.tsx
+     domainId: hooks
+     suiteId: unit
+     contractIds: [hooks-b-contract-handoff-settlement]
+     fixtureIds: [hooks-b-fixture-react-ink-harness, hooks-b-fixture-mock-settings]
+   - kind: file
+     id: hooks-use-input-history-test
+     file: source/hooks/use-input-history.test.tsx
+     domainId: hooks
+     suiteId: unit
+     contractIds: [hooks-b-contract-history-attachments]
+     fixtureIds: [hooks-b-fixture-react-ink-harness]
+   - kind: file
+     id: hooks-use-mentor-pool-selection-test
+     file: source/hooks/use-mentor-pool-selection.test.ts
+     domainId: hooks
+     suiteId: unit
+     contractIds: [hooks-b-contract-mentor-pool-selection]
+     fixtureIds: []
+   - kind: file
+     id: hooks-use-model-selection-test
+     file: source/hooks/use-model-selection.test.tsx
+     domainId: hooks
+     suiteId: unit
+     contractIds: [hooks-b-contract-model-fetch-coherence]
+     fixtureIds: [hooks-b-fixture-react-ink-harness, hooks-b-fixture-mock-settings, hooks-b-fixture-async-provider]
+   - kind: file
+     id: hooks-use-path-completion-test
+     file: source/hooks/use-path-completion.test.tsx
+     domainId: hooks
+     suiteId: unit
+     contractIds: [hooks-b-contract-path-completion-stability]
+     fixtureIds: [hooks-b-fixture-react-ink-harness]
+   - kind: file
+     id: hooks-use-provider-selection-test
+     file: source/hooks/use-provider-selection.test.ts
+     domainId: hooks
+     suiteId: unit
+     contractIds: [hooks-b-contract-provider-wizard]
+     fixtureIds: [hooks-b-fixture-react-ink-harness, hooks-b-fixture-mock-settings]
+   - kind: file
+     id: hooks-use-resume-selection-test
+     file: source/hooks/use-resume-selection.test.ts
+     domainId: hooks
+     suiteId: unit
+     contractIds: [hooks-b-contract-resume-filtering]
+     fixtureIds: []
+   - kind: file
+     id: hooks-use-rewind-selection-test
+     file: source/hooks/use-rewind-selection.test.ts
+     domainId: hooks
+     suiteId: unit
+     contractIds: [hooks-b-contract-rewind-scroll]
+     fixtureIds: []
+   - kind: file
+     id: hooks-use-runtime-settings-test
+     file: source/hooks/use-runtime-settings.test.tsx
+     domainId: hooks
+     suiteId: unit
+     contractIds: [hooks-b-contract-runtime-provider-route]
+     fixtureIds: [hooks-b-fixture-react-ink-harness, hooks-b-fixture-mock-settings]
+   - kind: file
+     id: hooks-use-selection-test
+     file: source/hooks/use-selection.test.ts
+     domainId: hooks
+     suiteId: unit
+     contractIds: [hooks-b-contract-selection-navigation]
+     fixtureIds: [hooks-b-fixture-react-ink-harness]
+   - kind: file
+     id: hooks-use-settings-completion-scroll-test
+     file: source/hooks/use-settings-completion.scroll.test.ts
+     domainId: hooks
+     suiteId: unit
+     contractIds: [hooks-b-contract-settings-completion]
+     fixtureIds: [hooks-b-fixture-react-ink-harness, hooks-b-fixture-mock-settings]
+   - kind: file
+     id: hooks-use-settings-completion-test
+     file: source/hooks/use-settings-completion.test.ts
+     domainId: hooks
+     suiteId: unit
+     contractIds: [hooks-b-contract-settings-completion]
+     fixtureIds: []
+   - kind: file
+     id: hooks-use-shell-mode-test
+     file: source/hooks/use-shell-mode.test.tsx
+     domainId: hooks
+     suiteId: unit
+     contractIds: [hooks-b-contract-shell-settlement]
+     fixtureIds: [hooks-b-fixture-react-ink-harness, hooks-b-fixture-shell-session]
+   - kind: file
+     id: hooks-use-skill-selection-test
+     file: source/hooks/use-skill-selection.test.ts
+     domainId: hooks
+     suiteId: unit
+     contractIds: [hooks-b-contract-skill-filtering]
+     fixtureIds: []
+   - kind: file
+     id: hooks-use-slash-commands-test
+     file: source/hooks/use-slash-commands.test.ts
+     domainId: hooks
+     suiteId: unit
+     contractIds: [hooks-b-contract-slash-command-dispatch]
+     fixtureIds: []
+   - kind: file
+     id: hooks-use-terminal-columns-test
+     file: source/hooks/use-terminal-columns.test.tsx
+     domainId: hooks
+     suiteId: unit
+     contractIds: [hooks-b-contract-terminal-columns]
+     fixtureIds: [hooks-b-fixture-react-ink-harness, hooks-b-fixture-terminal-stream]
+   - kind: file
+     id: hooks-use-terminal-focus-notifier-test
+     file: source/hooks/use-terminal-focus-notifier.test.tsx
+     domainId: hooks
+     suiteId: unit
+     contractIds: [hooks-b-contract-terminal-focus-notifications]
+     fixtureIds: [hooks-b-fixture-react-ink-harness, hooks-b-fixture-mock-settings, hooks-b-fixture-terminal-stream]
+decisions:
+   - id: hooks-use-grok-credit-usage-test-r1
+     testId: hooks-use-grok-credit-usage-test
+     role: second_opinion
+     reviewer: hooks-b-m3
+     sourceArtifact: docs/test-audit/artifacts/hooks-b-m3.yaml
+     recommendation: keep
+     confidence: high
+     reason: The file exercises provider gating, seed/edge refresh, cached rendering, and forced refresh through the real hook.
+     evidence:
+       - source/hooks/use-grok-credit-usage.test.tsx:59-80 asserts one entry seed and refresh only on busy-to-idle.
+       - source/hooks/use-grok-credit-usage.test.tsx:96-139 asserts non-Grok suppression, cached rendering, and force refresh only for Grok.
+     replacementTestIds: []
+     status: proposed
+   - id: hooks-use-terminal-focus-notifier-test-r1
+     testId: hooks-use-terminal-focus-notifier-test
+     role: second_opinion
+     reviewer: hooks-b-m3
+     sourceArtifact: docs/test-audit/artifacts/hooks-b-m3.yaml
+     recommendation: keep
+     confidence: high
+     reason: The terminal focus hook is tested at the stdout protocol, stdin event, notification gating, and unmount lifecycle boundaries.
+     evidence:
+       - source/hooks/use-terminal-focus-notifier.test.tsx:81-97 asserts enable/disable focus escape sequences on mount/unmount.
+       - source/hooks/use-terminal-focus-notifier.test.tsx:99-158 asserts focus-out/in state transitions and approval/complete notifications only while unfocused.
+       - source/hooks/use-terminal-focus-notifier.test.tsx:160-176 asserts app.notifications=false suppresses both notification types.
+     replacementTestIds: []
+     status: proposed
+   - id: hooks-use-shell-mode-test-r1
+     testId: hooks-use-shell-mode-test
+     role: second_opinion
+     reviewer: hooks-b-m3
+     sourceArtifact: docs/test-audit/artifacts/hooks-b-m3.yaml
+     recommendation: rewrite_candidate
+     confidence: high
+     reason: The two history-flush tests drive the same enter-submit-exit path and differ only in the literal echo command, so they are better represented as one parameterized case while retaining both output tokens.
+     evidence:
+       - source/hooks/use-shell-mode.test.tsx:70-87 enters shell mode, submits echo one, exits, and asserts serialized history projection.
+       - source/hooks/use-shell-mode.test.tsx:89-106 repeats the identical lifecycle and assertion with echo two; no distinct branch or failure mode is exercised.
+     replacementTestIds: []
+     status: proposed
+   - id: hooks-use-skill-selection-test-r1
+     testId: hooks-use-skill-selection-test
+     role: second_opinion
+     reviewer: hooks-b-m3
+     sourceArtifact: docs/test-audit/artifacts/hooks-b-m3.yaml
+     recommendation: rewrite_candidate
+     confidence: high
+     reason: The file tests a copied filter helper instead of rendering or importing useSkillSelection, leaving production hook wiring and query extraction untested.
+     evidence:
+       - source/hooks/use-skill-selection.test.ts:20-30 explicitly says filtering is extracted and defines a local filterSkills implementation.
+       - source/hooks/use-skill-selection.test.ts:33-81 invokes only filterSkills; no useSkillSelection import or hook harness appears in the file.
+     replacementTestIds: []
+     status: proposed
+   - id: hooks-use-slash-commands-test-r1
+     testId: hooks-use-slash-commands-test
+     role: second_opinion
+     reviewer: hooks-b-m3
+     sourceArtifact: docs/test-audit/artifacts/hooks-b-m3.yaml
+     recommendation: keep
+     confidence: high
+     reason: The file directly imports hook-owned helpers and covers filtering, argument extraction, autocomplete boundaries, and input/cursor effects of command dispatch.
+     evidence:
+       - source/hooks/use-slash-commands.test.ts:29-109 asserts empty, partial, exact, argument-bearing, no-match, and ordered command filtering.
+       - source/hooks/use-slash-commands.test.ts:111-254 asserts autocomplete and argument extraction edge cases.
+       - source/hooks/use-slash-commands.test.ts:297-398 asserts successful, argument-autocomplete, and undo dispatch effects on action, close, input, and cursor.
+     replacementTestIds: []
+     status: proposed
+   - id: hooks-use-terminal-columns-test-r1
+     testId: hooks-use-terminal-columns-test
+     role: second_opinion
+     reviewer: hooks-b-m3
+     sourceArtifact: docs/test-audit/artifacts/hooks-b-m3.yaml
+     recommendation: keep
+     confidence: high
+     reason: Focused fake-timer tests protect initial width, debounce semantics, burst collapse, and cleanup of the resize listener.
+     evidence:
+       - source/hooks/use-terminal-columns.test.tsx:36-67 asserts mount width and delayed resize update.
+       - source/hooks/use-terminal-columns.test.tsx:69-104 asserts rapid-event collapse and zero resize listeners after unmount.
+     replacementTestIds: []
+     status: proposed
+   - id: hooks-use-runtime-settings-test-r1
+     testId: hooks-use-runtime-settings-test
+     role: second_opinion
+     reviewer: hooks-b-m3
+     sourceArtifact: docs/test-audit/artifacts/hooks-b-m3.yaml
+     recommendation: keep
+     confidence: high
+     reason: The rendered hook applies a provider setting through the runtime callback and observes the conversation-service boundary.
+     evidence:
+       - source/hooks/use-runtime-settings.test.tsx:17-38 supplies a conversation service spy and constructs useRuntimeSettings.
+       - source/hooks/use-runtime-settings.test.tsx:40-50 applies agent.provider and asserts the exact switchProvider call.
+     replacementTestIds: []
+     status: proposed
+   - id: hooks-use-selection-test-r1
+     testId: hooks-use-selection-test
+     role: second_opinion
+     reviewer: hooks-b-m3
+     sourceArtifact: docs/test-audit/artifacts/hooks-b-m3.yaml
+     recommendation: keep
+     confidence: high
+     reason: The generic hook's navigation contract is exercised across wrapping, clamping, paging, and inactive-item skipping.
+     evidence:
+       - source/hooks/use-selection.test.ts:27-75 asserts up/down wrap behavior and initial selection.
+       - source/hooks/use-selection.test.ts:115-175 asserts page movement and endpoint clamps.
+       - source/hooks/use-selection.test.ts:177-291 asserts inactive skipping for directional, page, home, and end navigation.
+     replacementTestIds: []
+     status: proposed
+   - id: hooks-use-settings-completion-scroll-test-r1
+     testId: hooks-use-settings-completion-scroll-test
+     role: second_opinion
+     reviewer: hooks-b-m3
+     sourceArtifact: docs/test-audit/artifacts/hooks-b-m3.yaml
+     recommendation: keep
+     confidence: high
+     reason: The rendered hook covers category-aware completion state and the special all-tabs search mode, complementing pure helper coverage.
+     evidence:
+       - source/hooks/use-settings-completion.scroll.test.ts:50-98 asserts active category filtering, category switching, and selection/scroll reset.
+       - source/hooks/use-settings-completion.scroll.test.ts:100-125 asserts a query searches all task tabs and exposes shell.timeout.
+     replacementTestIds: []
+     status: proposed
+   - id: hooks-use-settings-completion-test-r1
+     testId: hooks-use-settings-completion-test
+     role: second_opinion
+     reviewer: hooks-b-m3
+     sourceArtifact: docs/test-audit/artifacts/hooks-b-m3.yaml
+     recommendation: rewrite_candidate
+     confidence: high
+     reason: Most helper coverage is useful, but one assertion is tautological and max-result checks only upper bounds, so the file should be tightened rather than treated as uniformly strong evidence.
+     evidence:
+       - source/hooks/use-settings-completion.test.ts:148-171 computes expected output but line 169 asserts every item against the constant predicate every(() => true), which verifies nothing.
+       - source/hooks/use-settings-completion.test.ts:412-424 checks only result.length <= maxResults for maxResults 2, 4, and 100; an empty or under-populated result could pass without proving the limit behavior.
+       - source/hooks/use-settings-completion.test.ts:522-540 repeats helper composition with weak some() checks, indicating the rewrite should retain boundary assertions while removing tautological/underconstrained checks.
+     replacementTestIds: []
+     status: proposed
+   - id: hooks-use-path-completion-test-r1
+     testId: hooks-use-path-completion-test
+     role: second_opinion
+     reviewer: hooks-b-m3
+     sourceArtifact: docs/test-audit/artifacts/hooks-b-m3.yaml
+     recommendation: keep
+     confidence: high
+     reason: The test is a focused regression against unstable injected logger identity causing repeated loading/rendering.
+     evidence:
+       - source/hooks/use-path-completion.test.tsx:55-64 recreates the logging service on every render and invokes the production hook.
+       - source/hooks/use-path-completion.test.tsx:67-83 asserts exactly one load call and bounded renders after the harness settles.
+     replacementTestIds: []
+     status: proposed
+   - id: hooks-use-provider-selection-test-r1
+     testId: hooks-use-provider-selection-test
+     role: second_opinion
+     reviewer: hooks-b-m3
+     sourceArtifact: docs/test-audit/artifacts/hooks-b-m3.yaml
+     recommendation: keep
+     confidence: high
+     reason: This is a high-scrutiny provider-management suite covering safe deletion, wizard validation/persistence, edit/discard races, and scrolling.
+     evidence:
+       - source/hooks/use-provider-selection.test.ts:65-172 asserts list population and custom-provider entry into edit_fields.
+       - source/hooks/use-provider-selection.test.ts:261-365 asserts custom deletion confirmation, refusal, confirmation, and active-provider fallback.
+       - source/hooks/use-provider-selection.test.ts:458-571 asserts the complete add-provider wizard and persisted provider fields.
+       - source/hooks/use-provider-selection.test.ts:647-891 asserts modified/unmodified back-out and late duplicate-name rejection.
+     replacementTestIds: []
+     status: proposed
+   - id: hooks-use-resume-selection-test-r1
+     testId: hooks-use-resume-selection-test
+     role: second_opinion
+     reviewer: hooks-b-m3
+     sourceArtifact: docs/test-audit/artifacts/hooks-b-m3.yaml
+     recommendation: rewrite_candidate
+     confidence: high
+     reason: Every assertion exercises a locally redefined filter rather than useResumeSelection, so production hook changes can pass without this test noticing.
+     evidence:
+       - source/hooks/use-resume-selection.test.ts:30-40 defines filterConversations inline with the same filtering algorithm instead of importing or rendering useResumeSelection.
+       - source/hooks/use-resume-selection.test.ts:42-78 invokes only that local function for empty, id, message, model, SSH-host, and no-match cases.
+     replacementTestIds: []
+     status: proposed
+   - id: hooks-use-rewind-selection-test-r1
+     testId: hooks-use-rewind-selection-test
+     role: second_opinion
+     reviewer: hooks-b-m3
+     sourceArtifact: docs/test-audit/artifacts/hooks-b-m3.yaml
+     recommendation: keep
+     confidence: medium
+     reason: The one-case helper test protects the nonzero initial offset needed to display a selected final turn.
+     evidence:
+       - source/hooks/use-rewind-selection.test.ts:2-6 imports getRewindScrollOffset and asserts six items with last index selected yields offset 1.
+     replacementTestIds: []
+     status: proposed
+   - id: hooks-use-handoff-flow-test-r1
+     testId: hooks-use-handoff-flow-test
+     role: second_opinion
+     reviewer: hooks-b-m3
+     sourceArtifact: docs/test-audit/artifacts/hooks-b-m3.yaml
+     recommendation: keep
+     confidence: high
+     reason: This is a high-risk stateful workflow test with real menu-controller intent interception and plan-mode branches.
+     evidence:
+       - source/hooks/use-handoff-flow.test.tsx:184-213 asserts captured text, trimmed handoff input, state stage, and cleared editor.
+       - source/hooks/use-handoff-flow.test.tsx:342-390 asserts model/provider/effort application and exactly composed send behavior.
+       - source/hooks/use-handoff-flow.test.tsx:496-572 asserts plan-mode decline and escape transition to standard-mode confirmation.
+     replacementTestIds: []
+     status: proposed
+   - id: hooks-use-input-history-test-r1
+     testId: hooks-use-input-history-test
+     role: second_opinion
+     reviewer: hooks-b-m3
+     sourceArtifact: docs/test-audit/artifacts/hooks-b-m3.yaml
+     recommendation: keep
+     confidence: high
+     reason: The regression test directly invokes the hook controls and verifies both recalled and draft image attachment identity.
+     evidence:
+       - source/hooks/use-input-history.test.tsx:43-48 supplies a recalled turn containing an image and a history service implementation.
+       - source/hooks/use-input-history.test.tsx:57-68 asserts navigateUp recalls the image and navigateDown restores the draft image.
+     replacementTestIds: []
+     status: proposed
+   - id: hooks-use-mentor-pool-selection-test-r1
+     testId: hooks-use-mentor-pool-selection-test
+     role: second_opinion
+     reviewer: hooks-b-m3
+     sourceArtifact: docs/test-audit/artifacts/hooks-b-m3.yaml
+     recommendation: keep
+     confidence: high
+     reason: Pure helper tests cover list-action gating, model merging/metadata, selection fallback, provider precedence, and draft persistence.
+     evidence:
+       - source/hooks/use-mentor-pool-selection.test.ts:11-28 asserts reorder appears only for pools with at least two entries and reasoning labels.
+       - source/hooks/use-mentor-pool-selection.test.ts:30-68 asserts custom/saved/inherited model merging and typed-ID fallback.
+       - source/hooks/use-mentor-pool-selection.test.ts:70-111 asserts provider/model application and draft/mentor/agent provider precedence.
+     replacementTestIds: []
+     status: proposed
+   - id: hooks-use-model-selection-test-r1
+     testId: hooks-use-model-selection-test
+     role: second_opinion
+     reviewer: hooks-b-m3
+     sourceArtifact: docs/test-audit/artifacts/hooks-b-m3.yaml
+     recommendation: keep
+     confidence: high
+     reason: The broad hook suite protects credential admission, async stale-result handling, cache invalidation, provider direction, trigger mode, and configured-model selection.
+     evidence:
+       - source/hooks/use-model-selection.test.tsx:184-288 asserts missing-credential suppression and removal of credentials during an in-flight fetch.
+       - source/hooks/use-model-selection.test.tsx:449-520 asserts changed custom-provider configuration invalidates cached models.
+       - source/hooks/use-model-selection.test.tsx:545-702 asserts stale results are ignored while completed results remain available after switching back.
+       - source/hooks/use-model-selection.test.tsx:704-861 asserts command/settings-backed preselection and switching with conversation history.
+     replacementTestIds: []
+     status: proposed

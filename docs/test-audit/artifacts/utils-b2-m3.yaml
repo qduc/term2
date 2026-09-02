@@ -1,0 +1,344 @@
+schemaVersion: 2
+domains:
+  - id: utils
+    label: Utility functions across app surfaces.
+suites:
+  - id: unit
+    label: Default Vitest unit suite.
+seams:
+  - id: utils-b2-slash-dispatch
+    label: Text submission boundary that resolves and invokes registered slash commands.
+  - id: utils-b2-ssh-config
+    label: SSH config text parsing and wildcard-aware host resolution.
+  - id: utils-b2-command-message-extraction
+    label: Provider tool-call results normalized into UI command messages.
+  - id: utils-b2-streaming-session
+    label: Conversation events routed to streaming state, UI messages, usage, and metrics.
+  - id: utils-b2-streaming-speed
+    label: Stream deltas and usage converted into live and settled throughput metrics.
+  - id: utils-b2-update-coordination
+    label: Streaming updates coalesced, deduplicated, flushed, or cancelled.
+  - id: utils-b2-throttle
+    label: Generic scheduler-backed throttling of latest arguments.
+  - id: utils-b2-value-suggestions
+    label: Settings schemas and curated values converted into filtered suggestions.
+  - id: utils-b2-secret-setting
+    label: Setting-key classification that prevents credential values from suggestions.
+risks:
+  - id: utils-b2-risk-command-routing
+    label: Slash text is sent as chat or registered actions receive wrong input-clearing behavior.
+    severity: high
+  - id: utils-b2-risk-ssh-resolution
+    label: SSH aliases lose connection parameters or wildcard defaults are applied incorrectly.
+    severity: medium
+  - id: utils-b2-risk-command-rendering
+    label: Tool rows show wrong commands, status, output, or remain indefinitely running.
+    severity: high
+  - id: utils-b2-risk-stream-state
+    label: Streamed text, reasoning, usage, or tool boundaries corrupt visible conversation state.
+    severity: high
+  - id: utils-b2-risk-speed-metrics
+    label: Throughput and latency metrics mislead users through wrong duration or token accounting.
+    severity: medium
+  - id: utils-b2-risk-update-scheduling
+    label: Streaming UI updates are delayed, duplicated, stale, or cannot be settled.
+    severity: medium
+  - id: utils-b2-risk-setting-suggestions
+    label: Settings editors offer incomplete, invalid, or poorly filtered values.
+    severity: medium
+  - id: utils-b2-risk-secret-exposure
+    label: Credential-like setting values are echoed or suggested and can be malformed by paste.
+    severity: critical
+fixtures:
+  - id: utils-b2-fixture-deterministic-scheduler
+    label: In-memory clock and timer scheduler used to control throttle deadlines.
+  - id: utils-b2-fixture-tool-formatters
+    label: Registered command-message formatters for supported tools.
+  - id: utils-b2-fixture-settings-schema
+    label: Production SettingsSchema introspection used for schema-derived suggestions and type checks.
+contracts:
+  - id: utils-b2-contract-slash-action
+    statement: A registered slash command receives the parsed argument tail and successful handling clears the input.
+    seamIds: [utils-b2-slash-dispatch]
+    riskIds: [utils-b2-risk-command-routing]
+  - id: utils-b2-contract-slash-false
+    statement: A registered command that returns false is handled but leaves the input unchanged.
+    seamIds: [utils-b2-slash-dispatch]
+    riskIds: [utils-b2-risk-command-routing]
+  - id: utils-b2-contract-slash-fallback
+    statement: Plain text and unknown slash command names are not handled and do not invoke actions or mutate input.
+    seamIds: [utils-b2-slash-dispatch]
+    riskIds: [utils-b2-risk-command-routing]
+  - id: utils-b2-contract-ssh-parse
+    statement: SSH config entries parse host aliases and supported HostName, User, Port, and IdentityFile attributes.
+    seamIds: [utils-b2-ssh-config]
+    riskIds: [utils-b2-risk-ssh-resolution]
+  - id: utils-b2-contract-ssh-syntax
+    statement: SSH parsing accepts case-insensitive keywords, comments, blank lines, whitespace, and equals-sign attributes.
+    seamIds: [utils-b2-ssh-config]
+    riskIds: [utils-b2-risk-ssh-resolution]
+  - id: utils-b2-contract-ssh-merge
+    statement: Explicit SSH hosts resolve with wildcard defaults, explicit values override defaults, and absent hosts return undefined.
+    seamIds: [utils-b2-ssh-config]
+    riskIds: [utils-b2-risk-ssh-resolution]
+  - id: utils-b2-contract-command-normalization
+    statement: Canonical and provider-shaped tool results pair with calls and yield stable command messages with normalized output and status.
+    seamIds: [utils-b2-command-message-extraction]
+    riskIds: [utils-b2-risk-command-rendering]
+  - id: utils-b2-contract-command-formatters
+    statement: Registered shell, grep, file, patch, mentor, and context tools render useful command text and structured arguments.
+    seamIds: [utils-b2-command-message-extraction]
+    riskIds: [utils-b2-risk-command-rendering]
+  - id: utils-b2-contract-background-job-rows
+    statement: Background shell job calls render completed, missing, active, and retained-tail states so running rows can resolve.
+    seamIds: [utils-b2-command-message-extraction]
+    riskIds: [utils-b2-risk-command-rendering]
+  - id: utils-b2-contract-marker-isolation
+    statement: Tool-call approval markers are scoped to and consumed from the intended marker store without leaking across stores.
+    seamIds: [utils-b2-command-message-extraction]
+    riskIds: [utils-b2-risk-command-rendering]
+  - id: utils-b2-contract-stream-messages
+    statement: Streaming session updates create and update bot messages while wiring event-handler state to the session state.
+    seamIds: [utils-b2-streaming-session]
+    riskIds: [utils-b2-risk-stream-state]
+  - id: utils-b2-contract-stream-usage
+    statement: Per-request usage is exposed to the footer, final cumulative usage does not overwrite settled turn usage, and missing usage is logged safely.
+    seamIds: [utils-b2-streaming-session]
+    riskIds: [utils-b2-risk-stream-state]
+  - id: utils-b2-contract-stream-metrics
+    statement: Session events report live speed, settle TPS and TTFT, and reset measurement across tool-dispatch request boundaries.
+    seamIds: [utils-b2-streaming-session]
+    riskIds: [utils-b2-risk-speed-metrics]
+  - id: utils-b2-contract-speed-live
+    statement: Speed tracking reports TTFT and trailing-window live TPS from deltas, exact usage, and text plus tool-argument characters.
+    seamIds: [utils-b2-streaming-speed]
+    riskIds: [utils-b2-risk-speed-metrics]
+  - id: utils-b2-contract-speed-settled
+    statement: Settled TPS uses provider completion duration when available, otherwise visible-token wall time with reasoning and approximation rules.
+    seamIds: [utils-b2-streaming-speed]
+    riskIds: [utils-b2-risk-speed-metrics]
+  - id: utils-b2-contract-speed-reset-calibration
+    statement: Speed reset starts a fresh request while preserving calibrated chars-per-token for later estimates.
+    seamIds: [utils-b2-streaming-speed]
+    riskIds: [utils-b2-risk-speed-metrics]
+  - id: utils-b2-contract-coordinated-updates
+    statement: Streaming update coordination emits the first and latest values, suppresses duplicates, and supports deterministic scheduling.
+    seamIds: [utils-b2-update-coordination]
+    riskIds: [utils-b2-risk-update-scheduling]
+  - id: utils-b2-contract-update-settlement
+    statement: Coordinated updates can flush pending work immediately or cancel it without a later timer emission.
+    seamIds: [utils-b2-update-coordination]
+    riskIds: [utils-b2-risk-update-scheduling]
+  - id: utils-b2-contract-throttle
+    statement: Generic throttling emits immediately when due, batches latest arguments, and exposes flush and cancel settlement operations.
+    seamIds: [utils-b2-throttle]
+    riskIds: [utils-b2-risk-update-scheduling]
+  - id: utils-b2-contract-setting-suggestions
+    statement: Setting suggestions provide curated values or derive enum and boolean values from the production schema.
+    seamIds: [utils-b2-value-suggestions]
+    riskIds: [utils-b2-risk-setting-suggestions]
+  - id: utils-b2-contract-suggestion-filtering
+    statement: Suggestion filtering ranks partial matches and adds valid custom number or free-form string values only when permitted.
+    seamIds: [utils-b2-value-suggestions]
+    riskIds: [utils-b2-risk-setting-suggestions]
+  - id: utils-b2-contract-secret-classification
+    statement: API-key setting paths are classified as secret while similarly named non-credential paths are not.
+    seamIds: [utils-b2-secret-setting]
+    riskIds: [utils-b2-risk-secret-exposure]
+tests:
+  - kind: file
+    id: utils-slash-command-dispatch-test
+    file: source/utils/slash-command-dispatch.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-b2-contract-slash-action, utils-b2-contract-slash-false, utils-b2-contract-slash-fallback]
+    fixtureIds: []
+  - kind: file
+    id: utils-ssh-config-parser-test
+    file: source/utils/ssh-config-parser.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-b2-contract-ssh-parse, utils-b2-contract-ssh-syntax, utils-b2-contract-ssh-merge]
+    fixtureIds: []
+  - kind: file
+    id: utils-extract-command-messages-test
+    file: source/utils/streaming/extract-command-messages.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-b2-contract-command-normalization, utils-b2-contract-command-formatters, utils-b2-contract-background-job-rows, utils-b2-contract-marker-isolation]
+    fixtureIds: [utils-b2-fixture-tool-formatters]
+  - kind: file
+    id: utils-streaming-session-factory-test
+    file: source/utils/streaming/streaming-session-factory.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-b2-contract-stream-messages, utils-b2-contract-stream-usage, utils-b2-contract-stream-metrics]
+    fixtureIds: []
+  - kind: file
+    id: utils-streaming-speed-tracker-test
+    file: source/utils/streaming/streaming-speed-tracker.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-b2-contract-speed-live, utils-b2-contract-speed-settled, utils-b2-contract-speed-reset-calibration]
+    fixtureIds: []
+  - kind: file
+    id: utils-streaming-updater-test
+    file: source/utils/streaming/streaming-updater.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-b2-contract-coordinated-updates, utils-b2-contract-update-settlement]
+    fixtureIds: [utils-b2-fixture-deterministic-scheduler]
+  - kind: file
+    id: utils-throttle-test
+    file: source/utils/throttle.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-b2-contract-throttle]
+    fixtureIds: [utils-b2-fixture-deterministic-scheduler]
+  - kind: file
+    id: utils-value-suggestions-secret-test
+    file: source/utils/value-suggestions.secret.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-b2-contract-secret-classification]
+    fixtureIds: []
+  - kind: file
+    id: utils-value-suggestions-test
+    file: source/utils/value-suggestions.test.ts
+    domainId: utils
+    suiteId: unit
+    contractIds: [utils-b2-contract-setting-suggestions, utils-b2-contract-suggestion-filtering]
+    fixtureIds: [utils-b2-fixture-settings-schema]
+decisions:
+  - id: utils-slash-command-dispatch-test-utils-b2-m3
+    testId: utils-slash-command-dispatch-test
+    role: second_opinion
+    reviewer: utils-b2-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-b2-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Protects the local-command routing boundary, including false-return input preservation and ordinary-text fallback.
+    evidence:
+      - Lines 6-16 assert parsed args reach a registered action and successful handling clears input.
+      - Lines 18-27 assert an explicit false return still handles the command without clearing input.
+      - Lines 29-47 assert plain text and unknown commands invoke neither action nor input replacement.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-value-suggestions-test-utils-b2-m3
+    testId: utils-value-suggestions-test
+    role: second_opinion
+    reviewer: utils-b2-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-b2-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: medium
+    reason: Core suggestion behavior is valuable, but the type-check section observes SettingsSchema and Zod internals instead of the exported value-suggestion API and is mislabeled as testing unimported helpers.
+    evidence:
+      - Lines 38-117 and 185-286 assert meaningful curated, schema-derived, filtering, and custom-value outcomes worth retaining.
+      - Lines 15-35 walk SettingsSchema through private _def fields, coupling the test to Zod representation details.
+      - Lines 119-183 label cases as isNumberSetting or isStringSetting but import neither function; they instead inspect resolveSettingAtPath and ZodNumber or ZodString instances.
+      - Sibling source/utils/value-suggestions.secret.test.ts:4-15 separately protects secret-key classification, so this rewrite need not absorb that security contract.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-value-suggestions-secret-test-utils-b2-m3
+    testId: utils-value-suggestions-secret-test
+    role: second_opinion
+    reviewer: utils-b2-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-b2-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Deliberately isolates the security-sensitive credential-key classifier from ordinary suggestion behavior; its tiny focused assertions are proportional.
+    evidence:
+      - Lines 4-9 assert API-key paths are secret, including nested provider keys and the root apiKey key.
+      - Lines 11-15 assert baseUrl, model, and apiKeyLabel are not false positives.
+      - Sibling source/utils/value-suggestions.test.ts:185-232 checks free-form and predefined suggestion behavior but does not assert the classifier's negative or positive key-pattern policy.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-throttle-test-utils-b2-m3
+    testId: utils-throttle-test
+    role: second_opinion
+    reviewer: utils-b2-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-b2-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Establishes the reusable scheduler-backed throttle primitive independently of the streaming wrapper, including latest arguments and timer settlement.
+    evidence:
+      - Lines 4-33 provide a controllable scheduler, isolating timing behavior from wall-clock nondeterminism.
+      - Lines 35-48 assert immediate first emission followed by latest-argument batching.
+      - Lines 50-76 assert flush and cancel semantics and verify cancelled work does not arrive later.
+      - Sibling source/utils/streaming/streaming-updater.test.ts:36-90 tests the wrapper's duplicate filtering; retaining this primitive test avoids attributing wrapper behavior to throttle.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-streaming-updater-test-utils-b2-m3
+    testId: utils-streaming-updater-test
+    role: second_opinion
+    reviewer: utils-b2-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-b2-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Protects the streaming-specific coordinator contract, especially duplicate suppression layered over latest-value throttling and explicit settlement.
+    evidence:
+      - Lines 5-33 define a deterministic scheduler fixture that makes timer behavior observable without real time.
+      - Lines 36-62 assert rapid updates coalesce to the latest value and duplicate values are skipped.
+      - Lines 64-90 assert flush emits pending state immediately and cancel prevents its delayed emission.
+      - Sibling source/utils/throttle.test.ts:35-76 covers only the generic throttle; it does not cover coordinator duplicate suppression.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-streaming-speed-tracker-test-utils-b2-m3
+    testId: utils-streaming-speed-tracker-test
+    role: second_opinion
+    reviewer: utils-b2-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-b2-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Directly verifies the stateful speed algorithm's timing, token-source, windowing, reset, calibration, formatting, and snapshot contracts.
+    evidence:
+      - Lines 5-47 cover TTFT, live threshold and heuristics, exact usage, and settled visible-token TPS.
+      - Lines 49-105 cover missing-token, completion_ms, reasoning, and approximate settled-speed edge cases.
+      - Lines 107-169 cover trailing-window throughput, reset isolation, calibration, and text-plus-tool character accounting.
+      - Lines 171-203 cover display formatting and complete snapshots.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-streaming-session-factory-test-utils-b2-m3
+    testId: utils-streaming-session-factory-test
+    role: second_opinion
+    reviewer: utils-b2-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-b2-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Exercises the factory as a composition seam and protects visible messages, per-turn usage semantics, speed forwarding, and tool-request resets.
+    evidence:
+      - Lines 4-181 assert event-handler state wiring, usage logging, cumulative-final handling, and bot message creation or update.
+      - Lines 183-303 assert live and settled speed reporting and safe tool-call streaming deltas.
+      - Lines 305-378 assert separate request measurements across tool dispatch rather than averaging the tool gap.
+      - Lines 393-552 assert completion_ms preference, no-token behavior, reasoning subtraction, approximation, and calibration.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-extract-command-messages-test-utils-b2-m3
+    testId: utils-extract-command-messages-test
+    role: second_opinion
+    reviewer: utils-b2-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-b2-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Broad but cohesive coverage protects the provider-to-command-row adapter, including status-sensitive background jobs and approval marker isolation.
+    evidence:
+      - Lines 44-267 assert shell failure extraction, call matching, canonical items, and provider argument fallbacks.
+      - Lines 269-692 assert grep success semantics and apply_patch success, failure, native-call, and structured-argument rendering.
+      - Lines 694-850 assert ask_mentor, read_file, read_code_outline, and code_context_search formatter outputs.
+      - Lines 80-122 and 852-1005 cover per-store markers and cancel, completed, missing, active, and retained-tail job rows.
+    replacementTestIds: []
+    status: proposed
+  - id: utils-ssh-config-parser-test-utils-b2-m3
+    testId: utils-ssh-config-parser-test
+    role: second_opinion
+    reviewer: utils-b2-m3
+    sourceArtifact: docs/test-audit/artifacts/utils-b2-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Covers the parser's supported syntax and the resolver's wildcard merge semantics with direct structured assertions.
+    evidence:
+      - Lines 4-45 cover simple and multiple entries plus IdentityFile parsing.
+      - Lines 47-72 cover case-insensitive keywords and comments or blank lines.
+      - Lines 74-165 cover wildcard defaults, host overrides, missing hosts, tabs, spaces, and equals syntax.
+    replacementTestIds: []
+    status: proposed

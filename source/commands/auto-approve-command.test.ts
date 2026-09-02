@@ -3,13 +3,30 @@ import { createAutoApproveSlashCommand } from './auto-approve-command.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
 import { AUTO_APPROVE_TRIGGER } from '../components/input/triggers.js';
 
-it('createAutoApproveSlashCommand returns a command with correct metadata', () => {
+function createHarness(initialMode = 'off') {
+  const settings: Record<string, string> = { 'shell.autoApproveMode': initialMode };
+  const applied: Record<string, unknown> = {};
+  const messages: string[] = [];
+  const replaceInput = vi.fn();
   const cmd = createAutoApproveSlashCommand({
-    settingsService: { get: () => 'off', set: vi.fn() } as unknown as SettingsService,
-    applyRuntimeSetting: vi.fn(),
-    addSystemMessage: vi.fn(),
-    replaceInput: vi.fn(),
+    settingsService: {
+      get: (key: string) => settings[key],
+      set: (key: string, value: string) => {
+        settings[key] = value;
+      },
+    } as unknown as SettingsService,
+    applyRuntimeSetting: (key, value) => {
+      applied[key] = value;
+    },
+    addSystemMessage: (message) => messages.push(message),
+    replaceInput,
   });
+
+  return { cmd, settings, applied, messages, replaceInput };
+}
+
+it('createAutoApproveSlashCommand returns a command with correct metadata', () => {
+  const { cmd } = createHarness();
 
   expect(cmd.name).toBe('auto-approve');
   expect(cmd.description).toBe('Set tool auto-approval mode (off, advisory, auto, always)');
@@ -22,24 +39,14 @@ it('createAutoApproveSlashCommand returns a command with correct metadata', () =
 });
 
 it('action with empty args triggers value selection menu via replaceInput', () => {
-  const replaceInput = vi.fn();
-  const setMock = vi.fn();
-  const applyMock = vi.fn();
-  const msgMock = vi.fn();
-
-  const cmd = createAutoApproveSlashCommand({
-    settingsService: { get: () => 'off', set: setMock } as unknown as SettingsService,
-    applyRuntimeSetting: applyMock,
-    addSystemMessage: msgMock,
-    replaceInput,
-  });
+  const { cmd, settings, applied, messages, replaceInput } = createHarness();
 
   const resultEmpty = cmd.action('');
   expect(resultEmpty).toBe(false);
   expect(replaceInput).toHaveBeenCalledWith(AUTO_APPROVE_TRIGGER);
-  expect(setMock).not.toHaveBeenCalled();
-  expect(applyMock).not.toHaveBeenCalled();
-  expect(msgMock).not.toHaveBeenCalled();
+  expect(settings['shell.autoApproveMode']).toBe('off');
+  expect(applied).toEqual({});
+  expect(messages).toEqual([]);
 
   replaceInput.mockClear();
   const resultUndefined = cmd.action();
@@ -53,23 +60,7 @@ it('action with empty args triggers value selection menu via replaceInput', () =
 });
 
 it('action with valid mode updates settings and applies runtime setting', () => {
-  const settings: Record<string, string> = { 'shell.autoApproveMode': 'off' };
-  const applied: Record<string, any> = {};
-  const messages: string[] = [];
-
-  const cmd = createAutoApproveSlashCommand({
-    settingsService: {
-      get: (k: string) => settings[k],
-      set: (k: string, v: string) => {
-        settings[k] = v;
-      },
-    } as unknown as SettingsService,
-    applyRuntimeSetting: (k, v) => {
-      applied[k] = v;
-    },
-    addSystemMessage: (msg) => messages.push(msg),
-    replaceInput: vi.fn(),
-  });
+  const { cmd, settings, applied, messages } = createHarness();
 
   const result = cmd.action('auto');
   expect(result).toBe(true);
@@ -79,23 +70,7 @@ it('action with valid mode updates settings and applies runtime setting', () => 
 });
 
 it('action with always mode shows special YOLO warning', () => {
-  const settings: Record<string, string> = { 'shell.autoApproveMode': 'off' };
-  const applied: Record<string, any> = {};
-  const messages: string[] = [];
-
-  const cmd = createAutoApproveSlashCommand({
-    settingsService: {
-      get: (k: string) => settings[k],
-      set: (k: string, v: string) => {
-        settings[k] = v;
-      },
-    } as unknown as SettingsService,
-    applyRuntimeSetting: (k, v) => {
-      applied[k] = v;
-    },
-    addSystemMessage: (msg) => messages.push(msg),
-    replaceInput: vi.fn(),
-  });
+  const { cmd, settings, applied, messages } = createHarness();
 
   const result = cmd.action('always');
   expect(result).toBe(true);
@@ -106,23 +81,7 @@ it('action with always mode shows special YOLO warning', () => {
 });
 
 it('action handles mixed case and surrounding whitespace', () => {
-  const settings: Record<string, string> = { 'shell.autoApproveMode': 'off' };
-  const applied: Record<string, any> = {};
-  const messages: string[] = [];
-
-  const cmd = createAutoApproveSlashCommand({
-    settingsService: {
-      get: (k: string) => settings[k],
-      set: (k: string, v: string) => {
-        settings[k] = v;
-      },
-    } as unknown as SettingsService,
-    applyRuntimeSetting: (k, v) => {
-      applied[k] = v;
-    },
-    addSystemMessage: (msg) => messages.push(msg),
-    replaceInput: vi.fn(),
-  });
+  const { cmd, settings, applied, messages } = createHarness();
 
   const result = cmd.action('  Advisory  ');
   expect(result).toBe(true);
@@ -132,23 +91,7 @@ it('action handles mixed case and surrounding whitespace', () => {
 });
 
 it('action with invalid mode returns error message and does not change settings', () => {
-  const settings: Record<string, string> = { 'shell.autoApproveMode': 'off' };
-  const applied: Record<string, any> = {};
-  const messages: string[] = [];
-
-  const cmd = createAutoApproveSlashCommand({
-    settingsService: {
-      get: (k: string) => settings[k],
-      set: (k: string, v: string) => {
-        settings[k] = v;
-      },
-    } as unknown as SettingsService,
-    applyRuntimeSetting: (k, v) => {
-      applied[k] = v;
-    },
-    addSystemMessage: (msg) => messages.push(msg),
-    replaceInput: vi.fn(),
-  });
+  const { cmd, settings, applied, messages } = createHarness();
 
   const result = cmd.action('super-auto');
   expect(result).toBe(false);

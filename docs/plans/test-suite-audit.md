@@ -6,9 +6,10 @@ exploration) closed 2026-09-03: all 585 test files at the `d36c392a` inventory
 have validated graph records (28 reviewer artifacts + coordinator
 adjudication), and the source graph (`docs/test-audit/graph.yaml`) holds 605
 tests / 694 contracts / 1230 decisions. Milestone 4 (cleanup batches) is in
-progress: batch B1 (hooks-real-code) landed 2026-09-03 as `audit-m4-b1`
-`7c90b29a`; deferred decisions (suite-topology change, runtime-history location,
-mutation-testing proportionality) gate parts of it.
+progress: batches B1 (hooks-real-code) and B2 (commands) landed 2026-09-03 as
+`audit-m4-b1` (`7c90b29a`) and `audit-m4-b2` (`13c97871`); deferred decisions
+(suite-topology change, runtime-history location, mutation-testing proportionality)
+gate parts of it.
 
 ## Resume here
 
@@ -142,7 +143,7 @@ graph primary decisions to keep/high with a note naming the batch and commit):
 - **B2 commands** (prompts-commands wave-1 rewrites): auto-approve-command,
   sandbox-command, skills-command, resume-command — de-duplicate harness setup;
   drop the two redundant /resume cases from hooks/use-app-commands.test.ts only if
-  resume-command coverage keeps them.
+  resume-command coverage keeps them. **Landed in `audit-m4-b2` (`13c97871`).**
 - **B3 util-fixes**: settings-command (add provider unregister teardown),
   value-suggestions (test the exported isNumberSetting/isStringSetting or retitle).
 - **B4 conversation-utils**: conversation-event-handler.subagent (fix the

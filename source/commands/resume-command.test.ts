@@ -20,13 +20,22 @@ const mockConversations: ConversationListEntry[] = [
   },
 ];
 
-it('createResumeSlashCommand returns correct command metadata', () => {
-  const cmd = createResumeSlashCommand({
+function createHarness() {
+  const replaceInput = vi.fn();
+  const resumeConversation = vi.fn();
+  const messages: string[] = [];
+  const command = createResumeSlashCommand({
     listConversations: () => mockConversations,
-    resumeConversation: vi.fn(),
-    addSystemMessage: vi.fn(),
-    replaceInput: vi.fn(),
+    resumeConversation,
+    addSystemMessage: (message) => messages.push(message),
+    replaceInput,
   });
+
+  return { command, replaceInput, resumeConversation, messages };
+}
+
+it('createResumeSlashCommand returns correct command metadata', () => {
+  const { command: cmd } = createHarness();
 
   expect(cmd.name).toBe('resume');
   expect(cmd.description).toBe('Resume a saved conversation (browse with /resume)');
@@ -38,20 +47,11 @@ it('createResumeSlashCommand returns correct command metadata', () => {
 });
 
 it('action with empty args or ls triggers replaceInput with RESUME_TRIGGER', () => {
-  const replaceInput = vi.fn();
-  const resumeMock = vi.fn();
-  const msgMock = vi.fn();
-
-  const cmd = createResumeSlashCommand({
-    listConversations: () => mockConversations,
-    resumeConversation: resumeMock,
-    addSystemMessage: msgMock,
-    replaceInput,
-  });
+  const { command: cmd, replaceInput, resumeConversation } = createHarness();
 
   expect(cmd.action('')).toBe(false);
   expect(replaceInput).toHaveBeenCalledWith(RESUME_TRIGGER);
-  expect(resumeMock).not.toHaveBeenCalled();
+  expect(resumeConversation).not.toHaveBeenCalled();
 
   replaceInput.mockClear();
   expect(cmd.action(undefined)).toBe(false);
@@ -67,34 +67,17 @@ it('action with empty args or ls triggers replaceInput with RESUME_TRIGGER', () 
 });
 
 it('action with specific conversation id calls resumeConversation', async () => {
-  const replaceInput = vi.fn();
-  const resumeMock = vi.fn(async () => {});
-  const msgMock = vi.fn();
-
-  const cmd = createResumeSlashCommand({
-    listConversations: () => mockConversations,
-    resumeConversation: resumeMock,
-    addSystemMessage: msgMock,
-    replaceInput,
-  });
+  const { command: cmd, replaceInput, resumeConversation } = createHarness();
 
   const result = cmd.action('conv-1');
   expect(result).toBe(true);
-  expect(resumeMock).toHaveBeenCalledWith('conv-1');
+  await Promise.resolve();
+  expect(resumeConversation).toHaveBeenCalledWith('conv-1');
   expect(replaceInput).not.toHaveBeenCalled();
 });
 
 it('action with invalid argument format returns error message', () => {
-  const replaceInput = vi.fn();
-  const resumeMock = vi.fn();
-  const messages: string[] = [];
-
-  const cmd = createResumeSlashCommand({
-    listConversations: () => mockConversations,
-    resumeConversation: resumeMock,
-    addSystemMessage: (msg) => messages.push(msg),
-    replaceInput,
-  });
+  const { command: cmd, resumeConversation, messages } = createHarness();
 
   expect(cmd.action('conv-1 extra')).toBe(true);
   expect(messages[0]).toBe('Usage: /resume [ls | conversation-id]');
@@ -102,5 +85,5 @@ it('action with invalid argument format returns error message', () => {
   messages.length = 0;
   expect(cmd.action('../bad/path')).toBe(true);
   expect(messages[0]).toContain('Invalid conversation id');
-  expect(resumeMock).not.toHaveBeenCalled();
+  expect(resumeConversation).not.toHaveBeenCalled();
 });

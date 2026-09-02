@@ -16888,11 +16888,9 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
+  recommendation: keep
   confidence: high
-  reason: Coordinator decision of record after source verification. The setting transition contract is
-    meaningful and unique at this command seam, but four action tests duplicate the same inline settings,
-    apply, and message harness instead of using a compact case matrix or helper.
+  reason: "M4 batch B2 (audit-m4-b2 13c97871) landed: the command test now uses one shared settings/apply/message harness while retaining each distinct metadata, empty-input, valid-mode, always-warning, normalization, and invalid-mode outcome."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
@@ -16904,6 +16902,8 @@ decisions:
   - source/services/settings/settings-service.test.ts covers lower-level sandbox/always exclusivity, not
     this command's persistence, runtime-application, completion, or user-message contract, so it is not
     a replacement.
+  - source/commands/auto-approve-command.test.ts:6-101 now constructs the command through createHarness while
+    retaining metadata and all five action outcomes.
   replacementTestIds: []
   status: reviewed
 - id: prompts-commands-compact-primary
@@ -16930,11 +16930,9 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
-  confidence: medium
-  reason: Coordinator decision of record after source verification. Resume parsing and the browse-versus-target
-    return contract matter, but the file repeats command construction and callback mocks across cases
-    and overlaps with the same factory outcomes in the hook test.
+  recommendation: keep
+  confidence: high
+  reason: "M4 batch B2 (audit-m4-b2 13c97871) landed: the command test now uses one shared command/callback harness while retaining metadata, browse routing, async target dispatch, token-count rejection, and path-safe id rejection."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
@@ -16948,6 +16946,8 @@ decisions:
   - 'Verification strengthened the overlap: hooks use-app-commands.test.ts re-asserts the same action
     observables (replaceInput text, target resumeConversation call, identical usage/invalid-id strings);
     consolidation home decision deferred to the hooks-a artifact.'
+  - source/commands/resume-command.test.ts:23-89 now constructs cases through createHarness and retains the
+    async target assertion plus all grammar boundary assertions.
   replacementTestIds: []
   status: reviewed
 - id: prompts-commands-retry-failed-turn-primary
@@ -17014,11 +17014,9 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
+  recommendation: keep
   confidence: high
-  reason: Coordinator decision of record after source verification. The toggle and announcement contract
-    is valuable, but the two state-direction tests duplicate the full dependency harness and do not exercise
-    the command's always-mode demotion note.
+  reason: "M4 batch B2 (audit-m4-b2 13c97871) landed: the command test now uses a parameterized state table for both toggle directions and the production always-mode demotion branch, retaining persistence, runtime application, and status text assertions."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
@@ -17029,6 +17027,8 @@ decisions:
     and announcement.
   - A small parameterized state table can retain both directions and add the production branch where enabling
     sandbox demotes always, while removing repeated setup.
+  - source/commands/sandbox-command.test.ts:16-77 now parameterizes true-to-false, false-to-true, and always
+    demotion outcomes with one dependency harness.
   replacementTestIds: []
   status: reviewed
 - id: prompts-commands-skills-primary
@@ -17036,11 +17036,9 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
+  recommendation: keep
   confidence: high
-  reason: Coordinator decision of record after source verification. Skill selection is a real next-request
-    command contract, but four cases repeat the same service and callback setup and can be expressed as
-    a compact input/outcome table alongside the metadata case.
+  reason: "M4 batch B2 (audit-m4-b2 13c97871) landed: the command test now uses one shared service/callback harness and a compact input/outcome table alongside metadata, retaining selection, announcement, rejection, browse, case-insensitive, and whitespace outcomes."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
@@ -17050,6 +17048,8 @@ decisions:
     seam should remain covered.
   - Each action case rebuilds equivalent selectedSkills, messages, inputs, and command dependencies, making
     setup-only consolidation defensible without deleting any behavior case.
+  - source/commands/skills-command.test.ts:21-92 now uses createHarness and five named table rows for all
+    action outcomes.
   replacementTestIds: []
   status: reviewed
 - id: prompts-commands-explorer-delegation-contract-primary
@@ -28046,11 +28046,10 @@ decisions:
     display-only command availability, while :405-720 verifies profile/mode exclusivity and history confirmation.
   - source/hooks/use-app-commands.test.ts:722-824 verifies both handoff absence and successful handoff
     outcomes through useAppCommands.
-  - The two createResumeSlashCommand cases at source/hooks/use-app-commands.test.ts:82-117 duplicate action-case
-    observables in source/commands/resume-command.test.ts:40-67 and :69-105; empty/ls replaceInput belongs
-    better in the command test, and target-id plus usage/invalid-id errors likewise belong there. The
-    file remains keep because its broader assembled useAppCommands coverage is not duplicated by that
-    command factory test.
+  - M4 batch B2 moved the two direct createResumeSlashCommand action cases to
+    source/commands/resume-command.test.ts; assembled useAppCommands coverage remains in this file.
+  - The removed direct resume cases were covered by source/commands/resume-command.test.ts:49-88; the file
+    remains keep because its broader assembled useAppCommands coverage is not duplicated by that command test.
   replacementTestIds: []
   status: reviewed
 - id: hooks-use-app-keyboard-shortcuts-primary

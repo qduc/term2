@@ -18,13 +18,22 @@ const MOCK_SKILLS: SkillInfo[] = [
   createMockSkill('disabled-skill', '# Disabled\nThis skill is disabled.'),
 ];
 
-it('createSkillsSlashCommand returns a command with correct metadata', () => {
-  const cmd = createSkillsSlashCommand({
+function createHarness() {
+  const selectedSkills: SkillInfo[] = [];
+  const messages: string[] = [];
+  const inputs: string[] = [];
+  const command = createSkillsSlashCommand({
     skillsService: { getAvailableSkills: () => MOCK_SKILLS } as unknown as SkillsService,
-    onSkillSelected: () => {},
-    addSystemMessage: () => {},
-    replaceInput: () => {},
+    onSkillSelected: (skill) => selectedSkills.push(skill),
+    addSystemMessage: (message) => messages.push(message),
+    replaceInput: (input) => inputs.push(input),
   });
+
+  return { command, selectedSkills, messages, inputs };
+}
+
+it('createSkillsSlashCommand returns a command with correct metadata', () => {
+  const { command: cmd } = createHarness();
 
   expect(cmd.name).toBe('skills');
   expect(cmd.description).toBe('Activate a skill for the next request');
@@ -32,92 +41,56 @@ it('createSkillsSlashCommand returns a command with correct metadata', () => {
   expect(cmd.completion).toEqual({ type: 'skills', trigger: '/skills ' });
 });
 
-it('action with valid skill name calls onSkillSelected and addSystemMessage', () => {
-  const selectedSkills: SkillInfo[] = [];
-  const messages: string[] = [];
+it.each([
+  {
+    title: 'valid skill name announces activation',
+    args: 'codebase-design',
+    result: true,
+    selected: 'codebase-design',
+    message: 'Skill "codebase-design" activated. Type your request (or press Esc to cancel).',
+  },
+  {
+    title: 'unknown skill name shows an error',
+    args: 'nonexistent',
+    result: true,
+    selected: undefined,
+    message: 'Unknown skill: "nonexistent"',
+  },
+  {
+    title: 'empty args browse available skills',
+    args: '',
+    result: false,
+    selected: undefined,
+    message: undefined,
+    expectNoMessage: true,
+    input: '/skills ',
+  },
+  {
+    title: 'matches skill names case-insensitively',
+    args: 'CODEBASE-DESIGN',
+    result: true,
+    selected: 'codebase-design',
+    message: undefined,
+  },
+  {
+    title: 'normalizes surrounding whitespace',
+    args: '  codebase-design  ',
+    result: true,
+    selected: 'codebase-design',
+    message: undefined,
+  },
+])('action $title', ({ args, result, selected, message, input, expectNoMessage }) => {
+  const { command, selectedSkills, messages, inputs } = createHarness();
 
-  const cmd = createSkillsSlashCommand({
-    skillsService: { getAvailableSkills: () => MOCK_SKILLS } as unknown as SkillsService,
-    onSkillSelected: (skill) => selectedSkills.push(skill),
-    addSystemMessage: (msg) => messages.push(msg),
-    replaceInput: () => {},
-  });
-
-  const result = cmd.action('codebase-design');
-  expect(result).toBe(true);
-  expect(selectedSkills.length).toBe(1);
-  expect(selectedSkills[0]!.name).toBe('codebase-design');
-  expect(messages.length).toBe(1);
-  expect(messages[0]).toBe('Skill "codebase-design" activated. Type your request (or press Esc to cancel).');
-});
-
-it('action with unknown skill name shows error message', () => {
-  const selectedSkills: SkillInfo[] = [];
-  const messages: string[] = [];
-
-  const cmd = createSkillsSlashCommand({
-    skillsService: { getAvailableSkills: () => MOCK_SKILLS } as unknown as SkillsService,
-    onSkillSelected: (skill) => selectedSkills.push(skill),
-    addSystemMessage: (msg) => messages.push(msg),
-    replaceInput: () => {},
-  });
-
-  const result = cmd.action('nonexistent');
-  expect(result).toBe(true);
-  expect(selectedSkills.length).toBe(0);
-  expect(messages.length).toBe(1);
-  expect(messages[0]).toContain('Unknown skill: "nonexistent"');
-});
-
-it('action with empty args autocompletes to /skills ', () => {
-  const selectedSkills: SkillInfo[] = [];
-  const messages: string[] = [];
-  const inputs: string[] = [];
-
-  const cmd = createSkillsSlashCommand({
-    skillsService: { getAvailableSkills: () => MOCK_SKILLS } as unknown as SkillsService,
-    onSkillSelected: (skill) => selectedSkills.push(skill),
-    addSystemMessage: (msg) => messages.push(msg),
-    replaceInput: (val) => inputs.push(val),
-  });
-
-  const result = cmd.action('');
-  expect(result).toBe(false);
-  expect(selectedSkills.length).toBe(0);
-  expect(messages.length).toBe(0);
-  expect(inputs).toEqual(['/skills ']);
-});
-
-it('action matches skill name case-insensitively', () => {
-  const selectedSkills: SkillInfo[] = [];
-  const messages: string[] = [];
-
-  const cmd = createSkillsSlashCommand({
-    skillsService: { getAvailableSkills: () => MOCK_SKILLS } as unknown as SkillsService,
-    onSkillSelected: (skill) => selectedSkills.push(skill),
-    addSystemMessage: (msg) => messages.push(msg),
-    replaceInput: () => {},
-  });
-
-  const result = cmd.action('CODEBASE-DESIGN');
-  expect(result).toBe(true);
-  expect(selectedSkills.length).toBe(1);
-  expect(selectedSkills[0]!.name).toBe('codebase-design');
-});
-
-it('action with skill name that has extra whitespace still matches', () => {
-  const selectedSkills: SkillInfo[] = [];
-  const messages: string[] = [];
-
-  const cmd = createSkillsSlashCommand({
-    skillsService: { getAvailableSkills: () => MOCK_SKILLS } as unknown as SkillsService,
-    onSkillSelected: (skill) => selectedSkills.push(skill),
-    addSystemMessage: (msg) => messages.push(msg),
-    replaceInput: () => {},
-  });
-
-  const result = cmd.action('  codebase-design  ');
-  expect(result).toBe(true);
-  expect(selectedSkills.length).toBe(1);
-  expect(selectedSkills[0]!.name).toBe('codebase-design');
+  expect(command.action(args)).toBe(result);
+  expect(selectedSkills).toHaveLength(selected === undefined ? 0 : 1);
+  if (selected !== undefined) {
+    expect(selectedSkills[0]!.name).toBe(selected);
+  }
+  if (message) {
+    expect(messages[0]).toContain(message);
+  } else if (expectNoMessage) {
+    expect(messages).toEqual([]);
+  }
+  expect(inputs).toEqual(input ? [input] : []);
 });

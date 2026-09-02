@@ -458,6 +458,7 @@ const CODEX_CAPABILITIES = {
   supportsContextCompaction: false,
   supportsPromptCacheKey: true,
   usesStrictToolSchema: true,
+  nativePatchModelPrefixes: ['gpt-5'],
 } as const;
 
 export class CodexProvider {

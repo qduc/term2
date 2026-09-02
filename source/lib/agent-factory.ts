@@ -20,8 +20,6 @@ import { getModelDefaultReasoningLevel, getProviderDefaultReasoningLevel } from 
 import { toolApprovalPolicyRegistry } from '../services/approval/tool-approval-policy-registry.js';
 import { shouldBypassToolApproval } from '../services/approval/shell-auto-approval-resolver.js';
 import type { AgentRuntime } from '../services/agent-runtime/agent-runtime.js';
-import { isProtectedHookPath, isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../tools/utils.js';
-import { SANDBOX_TEMP_DIR } from '../utils/shell/temp-dir.js';
 import {
   isZodToolParameterSchema,
   type AnyToolDefinition,
@@ -37,6 +35,9 @@ import { getCatalogModel } from '../providers/model-catalog/catalog.js';
 import type { ShellChildRegistry } from '../utils/shell/shell-child-registry.js';
 import type { SessionBrowser } from '../services/conversation/session-browser.js';
 import type { SessionRolloverRequest, SessionRolloverRequestOutcome } from '../contracts/session-rollover.js';
+import { isProtectedHookPath, isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../tools/utils.js';
+import { SANDBOX_TEMP_DIR } from '../utils/shell/temp-dir.js';
+import { UPSTREAM_APPLY_PATCH_GRAMMAR, parseUpstreamApplyPatch } from '../tools/file/upstream-apply-patch.js';
 
 export interface AgentFactoryDeps {
   settings: ISettingsService;
@@ -90,7 +91,7 @@ type ProviderCapabilities = {
   supportsContextCompaction?: boolean;
   supportsPromptCacheKey?: boolean;
   usesStrictToolSchema?: boolean;
-  nativePatchModelPrefixes?: string[];
+  nativePatchModelPrefixes?: readonly string[];
 };
 
 function getProviderCapabilities(providerId: string): ProviderCapabilities {
@@ -141,7 +142,7 @@ export function buildAgentTools({
     providerId: deps.providerId,
     capabilities: providerCapabilities,
   });
-  const tools: ToolRegistry = toolDefinitions
+  let tools: ToolRegistry = toolDefinitions
     .filter(() => true)
     .map((definition) => {
       const providerParameters = definition.strictParameters ?? definition.parameters;
@@ -225,48 +226,59 @@ export function buildAgentTools({
       return { ...validatedDefinition, ...shim };
     });
 
-  // The application-owned apply_patch definition remains in the tool list.
-  // Native SDK patch tools are intentionally no longer constructed here.
+  // The application-owned executor remains in the tool list, but capable
+  // Responses providers receive its upstream custom/freeform declaration.
   if (shouldUseNativePatchTool) {
-    const applyPatch = tools.find((tool) => tool.name === 'apply_patch');
+    const applyPatchIndex = tools.findIndex((tool) => tool.name === 'apply_patch');
+    const applyPatch = applyPatchIndex >= 0 ? tools[applyPatchIndex] : undefined;
     if (applyPatch) {
-      applyPatch.needsApproval = async (params, context) => {
-        if (shouldBypassToolApproval(applyPatch.name, deps.settings.get('shell.autoApproveMode'))) {
-          return false;
-        }
-        const operation = context ?? params;
-        const operationPath =
-          operation && typeof operation === 'object' ? (operation as { path?: unknown }).path : undefined;
+      const nativeApplyPatch: AnyToolDefinition = {
+        ...applyPatch,
+        description:
+          'The `apply_patch` tool can be used to edit files. This is a FREEFORM tool, so do not wrap the patch in JSON.',
+        modelTool: {
+          type: 'custom',
+          format: {
+            type: 'grammar',
+            syntax: 'lark',
+            definition: UPSTREAM_APPLY_PATCH_GRAMMAR,
+          },
+        },
+        parseModelArguments: parseUpstreamApplyPatch,
+      };
+      tools = tools.map((tool, index) => (index === applyPatchIndex ? nativeApplyPatch : tool));
+      nativeApplyPatch.needsApproval = async (params, context) => {
+        if (shouldBypassToolApproval(applyPatch.name, deps.settings.get('shell.autoApproveMode'))) return false;
+        const rawOperations =
+          params && typeof params === 'object' && Array.isArray((params as { operations?: unknown }).operations)
+            ? (params as { operations: unknown[] }).operations
+            : [params ?? context];
         const workspaceRoot = path.resolve(deps.executionContext?.getCwd() || process.cwd());
-        let resolved: string;
-        try {
-          resolved = resolveWorkspacePath(String(operationPath ?? ''), workspaceRoot);
-        } catch {
-          // Preserve explicit approval for lexically outside paths.
-          return true;
+        for (const rawOperation of rawOperations) {
+          if (!rawOperation || typeof rawOperation !== 'object') return true;
+          const operation = rawOperation as { path?: unknown; type?: unknown; moveTo?: unknown };
+          let resolved: string;
+          try {
+            resolved = resolveWorkspacePath(String(operation.path ?? ''), workspaceRoot);
+          } catch {
+            return true;
+          }
+          const prefix = workspaceRoot.endsWith(path.sep) ? workspaceRoot : `${workspaceRoot}${path.sep}`;
+          const insideWorkspace =
+            (resolved !== workspaceRoot && resolved.startsWith(prefix)) ||
+            resolved === SANDBOX_TEMP_DIR ||
+            resolved.startsWith(SANDBOX_TEMP_DIR + path.sep);
+          if (!insideWorkspace || isProtectedHookPath(resolved, workspaceRoot)) {
+            if (!deps.sessionAccess?.allowsEdit(resolved, workspaceRoot)) return true;
+          }
+          if (operation.type === 'delete_file' || operation.moveTo) return true;
+          if (deps.executionContext?.isRemote() && deps.executionContext.getSSHService()) return true;
+          const physicallyInside =
+            (await isWorkspacePathPhysicallyInside(resolved, workspaceRoot)) ||
+            (await isWorkspacePathPhysicallyInside(resolved, SANDBOX_TEMP_DIR));
+          if (!physicallyInside && !deps.sessionAccess?.allowsEdit(resolved, workspaceRoot)) return true;
         }
-
-        const prefix = workspaceRoot.endsWith(path.sep) ? workspaceRoot : `${workspaceRoot}${path.sep}`;
-        const insideWorkspace =
-          (resolved !== workspaceRoot && resolved.startsWith(prefix)) ||
-          resolved === SANDBOX_TEMP_DIR ||
-          resolved.startsWith(SANDBOX_TEMP_DIR + path.sep);
-        if (!insideWorkspace || isProtectedHookPath(resolved, workspaceRoot)) {
-          if (deps.sessionAccess?.allowsEdit(resolved, workspaceRoot)) return false;
-          return true;
-        }
-
-        // Native patch calls use the same physical boundary as application
-        // tools; never auto-approve a path that follows an escaping symlink.
-        // Remote symlink state is not visible through the local filesystem, so
-        // remote writes require explicit approval.
-        if (deps.executionContext?.isRemote() && deps.executionContext.getSSHService()) {
-          return true;
-        }
-        const physicallyInside =
-          (await isWorkspacePathPhysicallyInside(resolved, workspaceRoot)) ||
-          (await isWorkspacePathPhysicallyInside(resolved, SANDBOX_TEMP_DIR));
-        return !physicallyInside && !deps.sessionAccess?.allowsEdit(resolved, workspaceRoot);
+        return false;
       };
     }
     deps.logger.debug('Using native applyPatchTool from SDK', {

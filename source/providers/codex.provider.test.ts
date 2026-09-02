@@ -363,6 +363,7 @@ it('Codex provider is registered in the registry', () => {
     supportsContextCompaction: false,
     usesStrictToolSchema: true,
     supportsPromptCacheKey: true,
+    nativePatchModelPrefixes: ['gpt-5'],
   });
 });
 

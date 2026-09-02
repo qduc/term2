@@ -105,10 +105,14 @@ function toResponsesApiInput(
       };
     }
     if (item?.type === 'tool_call') {
-      return { type: 'function_call', call_id: item.id, name: item.name, arguments: item.arguments };
+      return item.toolType === 'custom'
+        ? { type: 'custom_tool_call', call_id: item.id, name: item.name, input: item.arguments }
+        : { type: 'function_call', call_id: item.id, name: item.name, arguments: item.arguments };
     }
     if (item?.type === 'tool_result') {
-      return { type: 'function_call_output', call_id: item.id, output: toResponsesApiOutput(item.output) };
+      return item.toolType === 'custom'
+        ? { type: 'custom_tool_call_output', call_id: item.id, output: toResponsesApiOutput(item.output) }
+        : { type: 'function_call_output', call_id: item.id, output: toResponsesApiOutput(item.output) };
     }
     if (item?.type === 'reasoning') {
       // Read only this lane's key: a sibling lane's blob is another vendor's
@@ -132,9 +136,31 @@ function toResponsesApiInput(
   });
 }
 
-function toResponsesToolChoice(choice: NonNullable<StreamedModelTurnRequest['toolChoice']>): unknown {
+function toResponsesToolChoice(
+  choice: NonNullable<StreamedModelTurnRequest['toolChoice']>,
+  tools: readonly StreamedModelTurnRequest['tools'][number][],
+): unknown {
   if (choice === 'auto' || choice === 'required' || choice === 'none') return choice;
-  return { type: 'function', name: choice.name };
+  const selected = tools.find((tool) => tool.name === choice.name);
+  return { type: selected?.type === 'custom' ? 'custom' : 'function', name: choice.name };
+}
+
+function toResponsesApiTool(tool: StreamedModelTurnRequest['tools'][number]): Record<string, unknown> {
+  if (tool.type === 'custom') {
+    return {
+      type: 'custom',
+      name: tool.name,
+      ...(tool.description ? { description: tool.description } : {}),
+      format: tool.format,
+    };
+  }
+  return {
+    type: 'function',
+    name: tool.name,
+    ...(tool.description ? { description: tool.description } : {}),
+    parameters: tool.parameters,
+    ...(tool.strict !== undefined ? { strict: tool.strict } : {}),
+  };
 }
 
 function toResponsesOutputFormat(
@@ -233,10 +259,10 @@ function requestBody(
     input: projectedInput,
     stream,
     ...(request.instructions !== undefined ? { instructions: request.instructions } : {}),
-    ...((request.tools ?? []).length
-      ? { tools: (request.tools ?? []).map((tool) => ({ type: 'function', ...tool })) }
+    ...((request.tools ?? []).length ? { tools: (request.tools ?? []).map(toResponsesApiTool) } : {}),
+    ...(request.toolChoice !== undefined
+      ? { tool_choice: toResponsesToolChoice(request.toolChoice, request.tools ?? []) }
       : {}),
-    ...(request.toolChoice !== undefined ? { tool_choice: toResponsesToolChoice(request.toolChoice) } : {}),
     ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
     ...(request.topP !== undefined ? { top_p: request.topP } : {}),
     ...(request.frequencyPenalty !== undefined ? { frequency_penalty: request.frequencyPenalty } : {}),
@@ -292,12 +318,13 @@ function reasoningMetadata(item: any, lane: string): StreamedModelProviderOption
 }
 
 function toTurnOutput(item: any, lane: string = OPENAI_RESPONSES_OPAQUE_TAG): StreamedModelTurnOutput {
-  if (item?.type === 'function_call') {
+  if (item?.type === 'function_call' || item?.type === 'custom_tool_call') {
     return {
       type: 'tool_call',
       id: item.call_id ?? item.callId,
       name: item.name,
-      arguments: item.arguments ?? '{}',
+      arguments: item.type === 'custom_tool_call' ? item.input ?? '' : item.arguments ?? '{}',
+      ...(item.type === 'custom_tool_call' ? { toolType: 'custom' as const } : {}),
     };
   }
   if (item?.type === 'message') {
@@ -466,7 +493,7 @@ export function normalizeResponseEvent(
   }
   if (event.type === 'response.output_item.added') {
     const item = event.output_item ?? event.item;
-    if (item?.type === 'function_call' && typeof item.name === 'string') {
+    if ((item?.type === 'function_call' || item?.type === 'custom_tool_call') && typeof item.name === 'string') {
       const index = typeof event.output_index === 'number' ? event.output_index : item.id ?? 0;
       state.toolNamesByIndex.set(index, item.name);
       state.toolArgumentLengthsByIndex.set(index, 0);
@@ -523,10 +550,17 @@ export function normalizeResponseEvent(
   }
   if (event.type === 'response.output_item.done') {
     const item = event.item;
-    if (item?.type === 'function_call') {
+    if (item?.type === 'function_call' || item?.type === 'custom_tool_call') {
       const index = typeof event.output_index === 'number' ? event.output_index : item.id ?? item.call_id ?? 0;
       if (typeof item.name === 'string') state.toolNamesByIndex.set(index, item.name);
-      const fullArguments = typeof item.arguments === 'string' ? item.arguments : '';
+      const fullArguments =
+        item.type === 'custom_tool_call'
+          ? typeof item.input === 'string'
+            ? item.input
+            : ''
+          : typeof item.arguments === 'string'
+          ? item.arguments
+          : '';
       const previousLength = Math.max(
         state.toolArgumentLengthsByIndex.get(index) ?? 0,
         typeof item.id === 'string' ? state.toolArgumentLengthsByIndex.get(item.id) ?? 0 : 0,

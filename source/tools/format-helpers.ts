@@ -41,6 +41,8 @@ export interface ToolResultItem {
   name?: string;
   /** Tool call arguments (string or parsed object). */
   arguments?: unknown;
+  /** Raw input used by Responses custom/freeform tools. */
+  input?: unknown;
   /** Alternate key for arguments used by some shapes. */
   args?: unknown;
   /** apply_patch_call uses `operation` instead of `arguments`. */

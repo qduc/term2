@@ -752,6 +752,79 @@ it('Codex HTTP writes every supported request setting and the abort signal to th
   expect(capturedOptions).toEqual({ signal: controller.signal, headers: { 'x-test': 'yes' } });
 });
 
+it('Codex Responses serializes custom grammar tools and custom tool calls', async () => {
+  let capturedBody: any;
+  const client = {
+    responses: {
+      create: async (body: any) => {
+        capturedBody = body;
+        return makeStream([
+          {
+            type: 'response.output_item.done',
+            item: {
+              type: 'custom_tool_call',
+              call_id: 'call_patch',
+              name: 'apply_patch',
+              input: '*** Begin Patch\n*** End Patch',
+            },
+          },
+          {
+            type: 'response.completed',
+            response: {
+              id: 'resp_custom_patch',
+              output: [
+                {
+                  type: 'custom_tool_call',
+                  call_id: 'call_patch',
+                  name: 'apply_patch',
+                  input: '*** Begin Patch\n*** End Patch',
+                },
+              ],
+              usage: {},
+            },
+          },
+        ]);
+      },
+    },
+  };
+  const model = new CodexResponsesModel(client as any, 'gpt-5.3-codex');
+  const events = await collect(
+    model.stream({
+      input: [],
+      tools: [
+        {
+          type: 'custom',
+          name: 'apply_patch',
+          description: 'freeform patch',
+          format: { type: 'grammar', syntax: 'lark', definition: 'start: patch' },
+        },
+      ],
+    }),
+  );
+
+  expect(capturedBody.tools).toEqual([
+    {
+      type: 'custom',
+      name: 'apply_patch',
+      description: 'freeform patch',
+      format: { type: 'grammar', syntax: 'lark', definition: 'start: patch' },
+    },
+  ]);
+  expect(events).toContainEqual({
+    type: 'completion',
+    responseId: 'resp_custom_patch',
+    output: [
+      {
+        type: 'tool_call',
+        id: 'call_patch',
+        name: 'apply_patch',
+        arguments: '*** Begin Patch\n*** End Patch',
+        toolType: 'custom',
+      },
+    ],
+  });
+});
+
 it('CodexResponsesModel.buildResponsesCreateRequest strips temperature and max_output_tokens from requestData', () => {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   transport.buildResponsesCreateRequest = function () {

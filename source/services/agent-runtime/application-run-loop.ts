@@ -17,7 +17,7 @@ import type {
   StreamedModelTurnInput,
   ContextCompactionSessionState,
   StreamedModelTurnRequest,
-  StreamedModelTool,
+  StreamedModelToolDefinition,
   StreamedModelTurnOutput,
 } from '../../contracts/streamed-model-turn.js';
 import type { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
@@ -1421,13 +1421,19 @@ export class ApplicationRunLoop {
     const plan: ToolPlanEntry[] = events.map((event): ToolPlanEntry => {
       const definition = state.agent.tools.find((tool) => tool.name === event.name);
       const callItem: ProviderInputItem = {
-        type: 'function_call',
+        type: event.toolType === 'custom' ? 'custom_tool_call' : 'function_call',
         callId: event.id,
         name: event.name,
-        arguments: event.arguments,
+        ...(event.toolType === 'custom' ? { input: event.arguments } : { arguments: event.arguments }),
       };
       state.history.push(callItem);
-      state.input.push({ type: 'tool_call', id: event.id, name: event.name, arguments: event.arguments });
+      state.input.push({
+        type: 'tool_call',
+        id: event.id,
+        name: event.name,
+        arguments: event.arguments,
+        ...(event.toolType ? { toolType: event.toolType } : {}),
+      });
       outputPush(stream, queue, { type: 'item', item: callItem });
       return {
         event,
@@ -1449,7 +1455,15 @@ export class ApplicationRunLoop {
       // accepted object shape but intentionally does not Zod-parse it, which
       // would apply schema defaults before execute. web_fetch relies on its
       // executor fallbacks on the strict JSON-schema path.
-      entry.params = normalizeToolParameters(parseArguments(event.arguments), definition.parameters);
+      try {
+        const parsedArguments = definition.parseModelArguments
+          ? definition.parseModelArguments(event.arguments)
+          : parseArguments(event.arguments);
+        entry.params = normalizeToolParameters(parsedArguments, definition.parameters);
+      } catch (error) {
+        entry.output = `Error: Invalid patch: ${error instanceof Error ? error.message : String(error)}`;
+        continue;
+      }
       const stallEvent = state.runBudget?.observeToolCall({
         name: event.name,
         argumentsText: event.arguments,
@@ -1603,13 +1617,18 @@ export class ApplicationRunLoop {
   ): void {
     const output = typeof result === 'string' ? result : JSON.stringify(result);
     const resultItem: ProviderInputItem = {
-      type: 'function_call_result',
+      type: entry.event.toolType === 'custom' ? 'custom_tool_call_output' : 'function_call_result',
       callId: entry.event.id,
       name: entry.event.name,
       output,
     };
     state.history.push(resultItem);
-    state.input.push({ type: 'tool_result', id: entry.event.id, output });
+    state.input.push({
+      type: 'tool_result',
+      id: entry.event.id,
+      output,
+      ...(entry.event.toolType ? { toolType: entry.event.toolType } : {}),
+    });
     outputPush(stream, queue, { type: 'item', item: resultItem });
     this.#evaluateRunBudget(state, stream, queue);
   }
@@ -1955,12 +1974,22 @@ function getInterruptionCallId(value: unknown): string | undefined {
   return typeof callId === 'string' ? callId : undefined;
 }
 
-function toModelTools(tools: ToolRegistry): StreamedModelTool[] {
-  return tools.map((tool) => ({
-    name: tool.name,
-    description: tool.description,
-    parameters: isJsonSchema(tool.parameters) ? tool.parameters : z.toJSONSchema(tool.parameters),
-  }));
+function toModelTools(tools: ToolRegistry): StreamedModelToolDefinition[] {
+  return tools.map((tool) =>
+    tool.modelTool
+      ? {
+          type: tool.modelTool.type,
+          name: tool.name,
+          description: tool.description,
+          format: tool.modelTool.format,
+        }
+      : {
+          type: 'function' as const,
+          name: tool.name,
+          description: tool.description,
+          parameters: isJsonSchema(tool.parameters) ? tool.parameters : z.toJSONSchema(tool.parameters),
+        },
+  );
 }
 
 function isJsonSchema(value: unknown): value is Record<string, unknown> {
@@ -2128,22 +2157,28 @@ function normalizeInputItem(item: ProviderInputItem): StreamedModelTurnInput[] {
     const { providerOpaque: _marker, ...providerItem } = item;
     return [{ type: 'provider_opaque', provider: item.providerOpaque.provider, item: providerItem }];
   }
-  if (item.type === 'function_call') {
+  if (item.type === 'function_call' || item.type === 'custom_tool_call') {
     return [
       {
         type: 'tool_call',
         id: String(item.callId ?? item.call_id ?? ''),
         name: String(item.name ?? ''),
-        arguments: String(item.arguments ?? '{}'),
+        arguments: String(item.type === 'custom_tool_call' ? item.input ?? '' : item.arguments ?? '{}'),
+        ...(item.type === 'custom_tool_call' ? { toolType: 'custom' as const } : {}),
       },
     ];
   }
-  if (item.type === 'function_call_result' || item.type === 'function_call_output') {
+  if (
+    item.type === 'function_call_result' ||
+    item.type === 'function_call_output' ||
+    item.type === 'custom_tool_call_output'
+  ) {
     return [
       {
         type: 'tool_result',
         id: String(item.callId ?? item.call_id ?? item.tool_call_id ?? ''),
         output: normalizeToolResultOutput(item.output),
+        ...(item.type === 'custom_tool_call_output' ? { toolType: 'custom' as const } : {}),
       },
     ];
   }

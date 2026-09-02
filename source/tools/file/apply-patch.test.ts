@@ -3,6 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { createApplyPatchToolDefinition } from './apply-patch.js';
+import { parseUpstreamApplyPatch } from './upstream-apply-patch.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
 import { SessionAccessState } from '../../services/session/session-access-state.js';
@@ -176,6 +177,47 @@ it.sequential('execute: applies batched patch operations in order', async () => 
 
     const content = await fs.readFile(path.join(dir, 'batch.txt'), 'utf8');
     expect(content).toBe('Hello\nUniverse\n');
+  });
+});
+
+it.sequential('execute: applies an upstream multi-file patch including move and delete', async () => {
+  await withTempDir(async (dir) => {
+    const tool = createTool();
+    await fs.writeFile(path.join(dir, 'old.txt'), 'before\n');
+    await fs.writeFile(path.join(dir, 'remove.txt'), 'remove\n');
+
+    const params = parseUpstreamApplyPatch(
+      [
+        '*** Begin Patch',
+        '*** Update File: old.txt',
+        '*** Move to: moved.txt',
+        '@@',
+        '-before',
+        '+after',
+        '*** Delete File: remove.txt',
+        '*** End Patch',
+      ].join('\n'),
+    );
+    const result = await tool.execute(params as any);
+
+    expect(parsePlainResult(result).output.every((item) => item.success)).toBe(true);
+    await expect(fs.readFile(path.join(dir, 'old.txt'))).rejects.toThrow();
+    await expect(fs.readFile(path.join(dir, 'remove.txt'))).rejects.toThrow();
+    await expect(fs.readFile(path.join(dir, 'moved.txt'), 'utf8')).resolves.toBe('after\n');
+  });
+});
+
+it.sequential('execute: accepts an upstream envelope in the legacy JSON diff field', async () => {
+  await withTempDir(async (dir) => {
+    const tool = createTool();
+    const result = await tool.execute({
+      type: 'update_file',
+      path: 'ignored-by-envelope.txt',
+      diff: ['*** Begin Patch', '*** Add File: nested/new.txt', '+hello', '*** End Patch'].join('\n'),
+    } as any);
+
+    expect(parsePlainResult(result).output[0].success).toBe(true);
+    await expect(fs.readFile(path.join(dir, 'nested/new.txt'), 'utf8')).resolves.toBe('hello\n');
   });
 });
 

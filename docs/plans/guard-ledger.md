@@ -1660,7 +1660,7 @@ Observability fields: crossed threshold and provider-reported input value in the
   reminder; rollover lifecycle events carry correlation ID, IDs, reason, brief
   size, provider input usage, and settlement latency without the brief text.
 Persisted-setting migration, if any: none.
-Rollback boundary: the session-rollover follow-up package commit.
+Rollback boundary: implementation `09ba6067`, merged in `37d156ac`.
 Ledger row: Session rollover advisory.
 ```
 

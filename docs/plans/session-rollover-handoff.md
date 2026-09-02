@@ -13,6 +13,10 @@ durably identifies the predecessor, so `session_read({ id: "previous" })`
 survives restart. The briefing directs that bounded read before search when the
 predecessor is known.
 
+The result-aware termination, provider-usage reminders, durable predecessor,
+semantic/short references, correlated telemetry, and outcome UX follow-up is
+merged in `37d156ac` (implementation `09ba6067`).
+
 At the request boundary after a completed provider request, the reminder uses
 that request's provider-reported input-token usage. It has no local-estimator
 fallback. Configured milestones fire once and a deferred decision is

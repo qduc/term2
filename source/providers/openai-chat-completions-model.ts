@@ -406,14 +406,23 @@ const opaqueMarkerOf = (item: any): { provider: unknown } | undefined =>
 
 function openAICompatibleMessages(input: StreamedModelTurnRequest['input'], providerId = 'openai-compatible'): any[] {
   const messages: any[] = [];
-  // Continuity payloads in the order their turns occurred. They are attached
-  // after coalescing rather than inline: a payload is only known once the
-  // completion arrives, which is after the turn's tool calls were dispatched
-  // into history (`application-run-loop.ts`, the provider_opaque loop that runs
-  // past the tool results). So an opaque item trails the assistant group it
-  // describes, and until coalescing has re-merged that turn's split tool-call
-  // messages there is no single group to anchor it on.
-  const opaquePayloads: Record<string, unknown>[] = [];
+  // Depending on whether history came straight from the run loop or persistence,
+  // a continuity payload can lead or trail the assistant group it describes.
+  // Keep only the open group association; do not pair whole-history arrays by
+  // position because assistant groups can be coalesced.
+  let pendingOpaqueTarget: any | undefined;
+  let pendingOpaquePayload: Record<string, unknown> | undefined;
+  let leadingPayloadGroupOpen = false;
+  const registerAssistant = (message: any): void => {
+    if (pendingOpaquePayload) {
+      attachOpaquePayload(message, pendingOpaquePayload);
+      pendingOpaquePayload = undefined;
+      leadingPayloadGroupOpen = true;
+      return;
+    }
+    if (leadingPayloadGroupOpen) return;
+    if (!pendingOpaqueTarget) pendingOpaqueTarget = message;
+  };
   // Native reasoning restored from a conversation persisted before the opaque
   // lane existed, recognized by its `providerMetadata` marker.
   let pendingLegacyNativeReasoning = '';
@@ -441,7 +450,21 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input'], prov
       if (!isOwnOpaqueTag(tag, providerId)) continue;
       const rawPayload = item.type === 'provider_opaque' ? item.item : item;
       const { providerOpaque: _marker, type: _type, ...payload } = rawPayload as any;
-      opaquePayloads.push(payload);
+      // A normalized reasoning item immediately before the payload is its
+      // leading twin. It is also an explicit boundary that retires any older
+      // assistant group which emitted no opaque payload.
+      if (hasReasoningFields()) {
+        pendingOpaqueTarget = undefined;
+        pendingOpaquePayload = payload;
+        leadingPayloadGroupOpen = false;
+      } else if (pendingOpaqueTarget) {
+        attachOpaquePayload(pendingOpaqueTarget, payload);
+        pendingOpaqueTarget = undefined;
+        leadingPayloadGroupOpen = false;
+      } else {
+        pendingOpaquePayload = payload;
+        leadingPayloadGroupOpen = false;
+      }
       continue;
     }
     if (item.type === 'reasoning') {
@@ -482,6 +505,12 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input'], prov
         ...(item.role === 'assistant' && hasReasoningFields() ? reasoningFields() : {}),
       };
       messages.push(message);
+      if (item.role === 'user') {
+        pendingOpaqueTarget = undefined;
+        pendingOpaquePayload = undefined;
+        leadingPayloadGroupOpen = false;
+      }
+      if (item.role === 'assistant') registerAssistant(message);
       if (item.role === 'assistant') pendingLegacyNativeReasoning = '';
       continue;
     }
@@ -493,9 +522,10 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input'], prov
       } else if (previous?.role === 'assistant' && previous.content != null) {
         // Prose the same turn produced, immediately before its tool calls: a
         // user or tool message would separate two different turns. One turn
-        // must stay one assistant message, because `attachOpaquePayloads` pairs
-        // the i-th continuity payload with the i-th assistant message.
+        // must stay one assistant message so its continuity payload and tool
+        // calls remain on the same wire message.
         previous.tool_calls = [toolCall];
+        registerAssistant(previous);
       } else {
         const message = {
           role: 'assistant',
@@ -503,6 +533,7 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input'], prov
           tool_calls: [toolCall],
         };
         messages.push(message);
+        registerAssistant(message);
       }
       pendingLegacyNativeReasoning = '';
       continue;
@@ -521,39 +552,23 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input'], prov
   // message/tool call, not a valid standalone message; if no such item follows
   // — an interrupted turn — omit it rather than inventing a message to carry
   // it or back-dating it onto an earlier one that did not produce it.
-  return attachOpaquePayloads(coalesceReasoningToolCallBatches(messages), opaquePayloads);
+  return coalesceReasoningToolCallBatches(messages);
 }
 
-/**
- * Splices each turn's continuity payload onto the assistant message that turn
- * produced. Both lists are in turn order and coalescing has already collapsed a
- * turn's parallel tool calls into one assistant message, so the i-th payload
- * belongs to the i-th assistant message. Surplus payloads — turns that
- * coalescing merged into a single message — fold into the last one rather than
- * being dropped.
- */
-function attachOpaquePayloads(messages: any[], payloads: Record<string, unknown>[]): any[] {
-  if (!payloads.length) return messages;
-  const assistants = messages.filter((message) => message?.role === 'assistant');
-  if (!assistants.length) return messages;
-
-  payloads.forEach((payload, index) => {
-    const target = assistants[Math.min(index, assistants.length - 1)];
-    // The payload carries this turn's reasoning in the provider's own spelling,
-    // so it supersedes any normalized `reasoning_content` reconstructed for the
-    // same message — keeping both would send the same tokens twice, in two
-    // different fields.
-    for (const field of REASONING_WIRE_FIELDS) {
-      if (!(field in payload)) delete target[field];
-    }
-    Object.assign(target, payload);
-    // A reasoning-bearing tool-call message states `content: null` explicitly
-    // rather than omitting it; a payload that adds the reasoning has to carry
-    // that pairing too, or the two ways a message can acquire reasoning would
-    // serialize differently.
-    if (Array.isArray(target.tool_calls) && !('content' in target)) target.content = null;
-  });
-  return messages;
+function attachOpaquePayload(target: any, payload: Record<string, unknown>): void {
+  // The payload carries this turn's reasoning in the provider's own spelling,
+  // so it supersedes any normalized `reasoning_content` reconstructed for the
+  // same message — keeping both would send the same tokens twice, in two
+  // different fields.
+  for (const field of REASONING_WIRE_FIELDS) {
+    if (!(field in payload)) delete target[field];
+  }
+  Object.assign(target, payload);
+  // A reasoning-bearing tool-call message states `content: null` explicitly
+  // rather than omitting it; a payload that adds the reasoning has to carry
+  // that pairing too, or the two ways a message can acquire reasoning would
+  // serialize differently.
+  if (Array.isArray(target.tool_calls) && !('content' in target)) target.content = null;
 }
 
 function coalesceReasoningToolCallBatches(messages: any[]): any[] {

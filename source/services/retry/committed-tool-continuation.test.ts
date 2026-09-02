@@ -15,7 +15,7 @@ it('admits continuation only when completed tools exist, all are completed, and 
   expect(isSettledCommittedToolContinuation(settled)).toBe(true);
 });
 
-it('skips the automatic-replay claim only for connection-interrupted chain recovery of settled tools', () => {
+it('skips the automatic-replay claim for either chain-recovery cause when tools are settled', () => {
   expect(
     skipsAutomaticReplayClaim(
       { kind: 'chain_recovery', attempt: 1, delayMs: 5, cause: 'connection_interrupted' },
@@ -27,7 +27,7 @@ it('skips the automatic-replay claim only for connection-interrupted chain recov
       { kind: 'chain_recovery', attempt: 1, delayMs: 5, cause: 'provider_state_rejected' },
       settled,
     ),
-  ).toBe(false);
+  ).toBe(true);
   expect(skipsAutomaticReplayClaim({ kind: 'transient', attempt: 1, delayMs: 5 }, settled)).toBe(false);
   expect(
     skipsAutomaticReplayClaim(

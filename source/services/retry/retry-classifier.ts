@@ -28,6 +28,12 @@ const computeTransientDelayMs = (attempt: number, random: () => number): number 
   return Math.round(baseDelay * jitter);
 };
 
+const isProviderStateRejection = (error: unknown): boolean =>
+  isPreviousResponseNotFoundError(error) ||
+  isMissingServerToolOutputError(error) ||
+  isMissingChainedToolOutputError(error) ||
+  isOrphanedChainedToolOutputError(error);
+
 export class DefaultRetryClassifier {
   constructor(private agentClient: ConversationAgentClient, private random: () => number = Math.random) {
     void this.agentClient;
@@ -59,17 +65,19 @@ export class DefaultRetryClassifier {
     // treated that as "committed" and forced 'unrecoverable' on an otherwise
     // safely recoverable failure.
     //
-    // Exception: a recoverable connection drop after every live-turn tool is
-    // completed and already in reconciled history is not a replay. It severs
-    // the dead chain and continues from those pairs. Open or unknown calls,
-    // missing pairs, and committed text with no completed tools stay closed.
+    // Exception: a recoverable connection drop or provider state rejection
+    // after every live-turn tool is completed and already in reconciled history
+    // is not a replay. It severs the dead chain and continues from those pairs.
+    // Open or unknown calls, missing pairs, and committed text with no
+    // completed tools stay closed.
     if (context.hasCommittedOutput || (stream && streamHasCommittedOutput(stream))) {
       if (isSettledCommittedToolContinuation(context.committedToolContinuation)) {
         const connectionInterrupted =
           error instanceof UnsentWebSocketRequestError ||
           (error instanceof AmbiguousModelOutcomeError && isRecoverableIncompleteStreamClose(error)) ||
           isRecoverableIncompleteStreamClose(error);
-        if (connectionInterrupted) {
+        const providerStateRejected = isProviderStateRejection(error);
+        if (connectionInterrupted || providerStateRejected) {
           const nextAttempt = retryCounts.transientRetryCount + 1;
           if (nextAttempt > maxTransientRetries) {
             return { kind: 'unrecoverable' };
@@ -78,7 +86,7 @@ export class DefaultRetryClassifier {
             kind: 'chain_recovery',
             attempt: nextAttempt,
             delayMs: computeTransientDelayMs(nextAttempt, this.random),
-            cause: 'connection_interrupted',
+            cause: providerStateRejected ? 'provider_state_rejected' : 'connection_interrupted',
           };
         }
       }
@@ -123,12 +131,7 @@ export class DefaultRetryClassifier {
       return { kind: 'unrecoverable' };
     }
 
-    if (
-      isPreviousResponseNotFoundError(error) ||
-      isMissingServerToolOutputError(error) ||
-      isMissingChainedToolOutputError(error) ||
-      isOrphanedChainedToolOutputError(error)
-    ) {
+    if (isProviderStateRejection(error)) {
       const nextAttempt = retryCounts.transientRetryCount + 1;
       if (nextAttempt > maxTransientRetries) {
         return { kind: 'unrecoverable' };

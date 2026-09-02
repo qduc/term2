@@ -1236,13 +1236,13 @@ Enforcement owner: RetryRecoveryBudget (source/services/retry/
   successful tool-call continuations are ordinary work and do not consume the
   recovery allowance. Both recovery handlers also claim the single automatic
   replay (claimAutomaticReplay()) before executing a retry_fresh recovery plan,
-  except `chain_recovery` with `cause: 'connection_interrupted'` after every
-  live-turn tool is `completed` and present in reconciled history
-  (`skipsAutomaticReplayClaim` in `committed-tool-continuation.ts`). That path
-  severs a dead chain and continues from durable pairs; it is not a replay of
-  committed work, so it must not spend the one-replay slot and fail a second
-  1006 in the same turn. It still claims a physical attempt and stays inside
-  the 90s / 3-attempt envelope. Handlers start the 90s clock lazily
+  except `chain_recovery` with either cause after every live-turn tool is
+  `completed` and present in reconciled history (`skipsAutomaticReplayClaim`
+  in `committed-tool-continuation.ts`). That path severs a dead or rejected
+  chain and continues from durable pairs; it is not a replay of committed work,
+  so it must not spend the one-replay slot and fail a later recovery in the same
+  turn. It still claims a physical attempt and stays inside the 90s / 3-attempt
+  envelope. Handlers start the 90s clock lazily
   (noteRetryableFailure(), on first retryable failure, not at turn start) for
   transient/chain_recovery classifications only. One RetryRecoveryBudget instance is shared for the whole logical
   turn: created per TurnAttempt (turn-attempt.ts), threaded to
@@ -1294,9 +1294,10 @@ Genuine harmful case that must still trip the guard: real streamed
   text/reasoning with no completed tools, a committed provider item that is
   not a settled tool pair, or a dispatched-but-unresolved / `unknown` tool
   call still force unrecoverable / refuse the replay -- proven by the paired
-  true-positive cases in retry-classifier.test.ts. A recoverable 1006 after
-  every live-turn tool is completed and present in reconciled history is
-  admitted as `chain_recovery` instead (not a replay).
+  true-positive cases in retry-classifier.test.ts. A recoverable connection
+  interruption or provider state rejection after every live-turn tool is
+  completed and present in reconciled history is admitted as `chain_recovery`
+  instead (not a replay).
 Configuration sources and precedence: no user-facing setting.
   RETRY_RECOVERY_LIMITS (retry-recovery-budget.ts) declares fixed constants
   (maxRecoveryTimeMs 90_000, maxPhysicalAttempts 3, maxAutomaticReplays 1).
@@ -1506,6 +1507,26 @@ e353680f  fix(retry): wire retry_exhausted to a real retry, not literal button t
 30bf34f9  Merge main into retry-recovery-contract
 a7e44292  fix(retry): close the requirement-5 raw-array false-positive risk
 ```
+
+### Settled-tool provider-state rejection recovery
+
+The provider-state branch must use the same settled-tool admission rule as
+connection-interruption recovery. A chained request can receive a pre-output
+400 such as `Invalid previous_response_id` after all tool calls from the live
+turn have completed and their pairs are durable. In that case, automatic
+full-history recovery with chaining disabled severs the invalid provider anchor
+without replaying a tool. Open or unknown tool calls, missing history pairs,
+and committed output without settled-tool evidence remain unrecoverable.
+
+The enforcement owner is `DefaultRetryClassifier`; the shared
+`isSettledCommittedToolContinuation()` predicate is the evidence gate, and
+`skipsAutomaticReplayClaim()` applies to both `chain_recovery` causes because
+neither path replays committed work. The recovery owner remains
+`InitialTurnRecoveryHandler` / `ContinuationRecoveryHandler`, which execute
+`retry_fresh` with `inputMode: 'full_history'` and
+`disableChainingForAttempt: true`. Regression coverage belongs in the
+classifier, shared settled-tool budget predicate, and initial recovery handler.
+Implementation commit: `a9c19cf2`.
 
 ### Codex WebSocket connect-time timeout recovery
 

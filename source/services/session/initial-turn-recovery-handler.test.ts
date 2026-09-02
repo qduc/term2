@@ -23,6 +23,15 @@ function createAttempt() {
   });
 }
 
+function invalidPreviousResponseError(): Error {
+  return Object.assign(
+    new Error(
+      'Error: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"Invalid `previous_response_id`."}}',
+    ),
+    { status: 400 },
+  );
+}
+
 async function watchdogTimeoutError(dispatch: 'unsent' | 'flushed'): Promise<unknown> {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   transport.fetchResponse = async (request: any) => {
@@ -95,7 +104,7 @@ async function drain(generator: AsyncGenerator<unknown, unknown, void>): Promise
   return step.value;
 }
 
-function recoveryHandlerRecordingPlans(plans: unknown[], freshStartRetriesAllowed = true) {
+function recoveryHandlerRecordingPlans(plans: unknown[], freshStartRetriesAllowed = true, toolTracker?: any) {
   return new InitialTurnRecoveryHandler({
     conversationStore: { getHistory: () => [] } as any,
     freshStartRetriesAllowed,
@@ -112,6 +121,7 @@ function recoveryHandlerRecordingPlans(plans: unknown[], freshStartRetriesAllowe
     retryClassifier: new DefaultRetryClassifier({} as any, () => 0),
     retryEventPresenter: { present: () => ({ event: {}, logMessage: '', logFields: {} }) } as any,
     sessionId: 'watchdog-recovery',
+    ...(toolTracker ? { toolTracker } : {}),
   });
 }
 
@@ -271,6 +281,31 @@ it('recovers a chain_recovery failure without a stream even when fresh starts ar
   expect(result.kind).toBe('run');
   expect(plans).toEqual([{ kind: 'retry_fresh', inputMode: 'full_history', disableChainingForAttempt: true }]);
 });
+
+it.each([true, false] as const)(
+  'recovers a provider state rejection after settled tools with fresh starts %s',
+  async (freshStartRetriesAllowed) => {
+    const plans: unknown[] = [];
+    const handler = recoveryHandlerRecordingPlans(plans, freshStartRetriesAllowed, {
+      inspectCommittedToolContinuation: () => ({
+        completedToolCount: 1,
+        allToolsCompleted: true,
+        completedPairsPresentInHistory: true,
+      }),
+    });
+    const attempt = createAttempt();
+    attempt.markModelEventSeen();
+    expect(attempt.recoveryBudget.claimAutomaticReplay()).toBe(true);
+
+    const result: any = await drain(
+      handler.handle({ error: invalidPreviousResponseError(), attempt, stream: null }) as any,
+    );
+
+    expect(result.kind).toBe('run');
+    expect(plans).toEqual([{ kind: 'retry_fresh', inputMode: 'full_history', disableChainingForAttempt: true }]);
+    expect(attempt.recoveryBudget.automaticReplays).toBe(1);
+  },
+);
 
 // The half that stays closed. Both of these can reach a plan that replays the
 // task from the beginning -- `model_retry` maps to `replay_turn` with

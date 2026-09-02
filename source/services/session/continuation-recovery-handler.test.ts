@@ -26,6 +26,15 @@ function createMockState(overrides: any = {}) {
   };
 }
 
+function invalidPreviousResponseError(): Error {
+  return Object.assign(
+    new Error(
+      'Error: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"Invalid `previous_response_id`."}}',
+    ),
+    { status: 400 },
+  );
+}
+
 it('returns terminated for unrecoverable error', async () => {
   const handler = new ContinuationRecoveryHandler({
     logger: { warn: () => {}, getCorrelationId: () => undefined, error: () => {}, debug: () => {} } as any,
@@ -297,6 +306,54 @@ it('does not refuse a second settled-tool connection chain_recovery once automat
 
   expect((next.value as any).kind).toBe('fresh_start');
   expect(recoveryBudget.physicalAttempts).toBe(1);
+  expect(recoveryBudget.automaticReplays).toBe(1);
+});
+
+it('recovers a settled-tool provider state rejection without spending automatic replay', async () => {
+  const plans: unknown[] = [];
+  const handler = new ContinuationRecoveryHandler({
+    logger: { warn: () => {}, getCorrelationId: () => undefined, error: () => {}, debug: () => {} } as any,
+    sessionId: 'test',
+    generationGuard: { isCurrent: () => true } as any,
+    retryClassifier: new DefaultRetryClassifier({} as any, () => 0),
+    recoveryPolicy: new DefaultConversationRecoveryPolicy(),
+    recoveryExecutor: {
+      apply: ({ plan }: any) => {
+        plans.push(plan);
+        return { kind: 'run', instruction: { skipUserMessage: true }, events: [] };
+      },
+    } as any,
+    retryEventPresenter: {
+      present: () => ({ event: { type: 'retry_scheduled' }, logMessage: 'retry', logFields: {} }),
+    } as any,
+    resolveRetryLimit: () => 5,
+    toolTracker: {
+      inspectCommittedToolContinuation: () => ({
+        completedToolCount: 1,
+        allToolsCompleted: true,
+        completedPairsPresentInHistory: true,
+      }),
+    } as any,
+    provider: 'codex',
+  });
+
+  const recoveryBudget = new RetryRecoveryBudget();
+  expect(recoveryBudget.claimAutomaticReplay()).toBe(true);
+  const state = createMockState({
+    recoveryBudget,
+    lastStream: {
+      completed: Promise.resolve(undefined),
+      output: [{ type: 'tool_call_dispatched', callId: 'call-1', toolName: 'read_file' }],
+      newItems: [],
+    },
+  });
+
+  const iterator = handler.handle({ error: invalidPreviousResponseError(), state });
+  let next = await iterator.next();
+  while (!next.done) next = await iterator.next();
+
+  expect((next.value as any).kind).toBe('fresh_start');
+  expect(plans).toEqual([{ kind: 'retry_fresh', inputMode: 'full_history', disableChainingForAttempt: true }]);
   expect(recoveryBudget.automaticReplays).toBe(1);
 });
 

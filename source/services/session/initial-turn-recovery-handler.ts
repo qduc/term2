@@ -65,10 +65,10 @@ export class InitialTurnRecoveryHandler {
     // Blocking fresh starts (subagents) exists to stop a task replaying from the
     // beginning, so it must not block a retry that provably replays nothing.
     // `chain_recovery` only severs the response chain and rebuilds the request
-    // from full history, which already carries every completed tool result, so a
-    // connect-time drop cannot re-run work. Every other kind can reach a plan
-    // that does replay -- `model_retry` maps to `replay_turn` with
-    // `rollbackUserMessage` -- and stays blocked.
+    // from full history, which already carries every completed tool result, so
+    // a connection interruption or provider state rejection cannot re-run work.
+    // Every other kind can reach a plan that does replay -- `model_retry` maps
+    // to `replay_turn` with `rollbackUserMessage` -- and stays blocked.
     if (!this.deps.freshStartRetriesAllowed && !stream && classified.kind !== 'chain_recovery') {
       this.deps.logger.warn('Retry requires fresh start but fresh-start retries are disabled for this session', {
         eventType: 'retry.fresh_start_blocked',

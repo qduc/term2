@@ -1,0 +1,73 @@
+# Schema-valid example artifact for the 2026-09-02 calibration wave.
+# SHARED INPUT for both reviewers — copy this SHAPE, not these facts.
+# The test path below is fabricated; it is not part of the assigned sample.
+schemaVersion: 2
+domains:
+  - id: example
+    label: Example domain illustrating artifact shape
+suites:
+  - id: unit
+    label: Default Vitest unit suite
+seams:
+  - id: example-seam-classifier
+    label: >-
+      Boundary where a raw command string becomes a safety classification the
+      approval flow acts on.
+risks:
+  - id: example-risk-misclassification
+    label: >-
+      A command that should prompt is auto-approved, or a safe command prompts,
+      degrading either safety or flow.
+    severity: high
+fixtures: []
+contracts:
+  - id: example-contract-yellow-ambiguous
+    statement: >-
+      An ambiguous write-capable command family is classified as approval
+      required (YELLOW) rather than hard blocked (RED), so the model can still
+      decide with human oversight.
+    seamIds:
+      - example-seam-classifier
+    riskIds:
+      - example-risk-misclassification
+tests:
+  - kind: file
+    id: example-example-classifier-test
+    file: source/__example__/example-classifier.test.ts
+    domainId: example
+    suiteId: unit
+    contractIds:
+      - example-contract-yellow-ambiguous
+    fixtureIds: []
+decisions:
+  - id: example-example-classifier-test-r1
+    testId: example-example-classifier-test
+    role: second_opinion
+    reviewer: calibration-neutral
+    sourceArtifact: docs/test-audit/calibration-neutral.yaml
+    recommendation: keep
+    confidence: medium
+    reason: >-
+      Illustrative decision: two second opinions on one test coexist; neither
+      is the decision of record.
+    evidence:
+      - >-
+        Illustrative evidence statement naming an observable outcome and an
+        exact sibling path when a duplication claim is made.
+    replacementTestIds: []
+    status: proposed
+  - id: example-example-classifier-test-r2
+    testId: example-example-classifier-test
+    role: second_opinion
+    reviewer: calibration-adversarial
+    sourceArtifact: docs/test-audit/calibration-adversarial.yaml
+    recommendation: rewrite_candidate
+    confidence: low
+    reason: >-
+      Illustrative dissent: a second reviewer may disagree; the coordinator
+      reconciles and writes the decision of record later.
+    evidence:
+      - >-
+        Illustrative counter-evidence for the same contract expressed weakly.
+    replacementTestIds: []
+    status: proposed

@@ -1,9 +1,1648 @@
 schemaVersion: 2
-domains: []
-suites: []
-seams: []
-risks: []
-fixtures: []
-contracts: []
-tests: []
-decisions: []
+domains:
+- id: runtime
+  label: Application run-loop behavior
+- id: providers
+  label: Codex Responses provider adapter
+- id: ui-components
+  label: Ink UI components
+- id: shell
+  label: Shell execution and safety
+- id: session
+  label: Conversation session lifecycle
+- id: subagents
+  label: Subagent execution and policy
+suites:
+- id: unit
+  label: Deterministic unit and seam tests
+- id: provider-adapter
+  label: Provider adapter contract tests
+- id: ui-rendering
+  label: Ink rendering tests
+seams:
+- id: application-run-loop
+  label: Boundary between streamed model turns, tools, history, and application events
+- id: codex-responses-adapter
+  label: Boundary translating Codex HTTP/WebSocket frames into provider-neutral turns
+- id: command-message-renderer
+  label: Boundary translating tool outcomes into visible terminal activity
+- id: shell-tool
+  label: Boundary where shell requests become sandboxed or unsandboxed execution
+- id: conversation-session
+  label: Public session facade coordinating turns, approvals, history, and continuity
+- id: subagent-manager
+  label: Boundary creating delegated runs and applying role-specific tool policy
+- id: command-classifier
+  label: Boundary classifying command and path input as GREEN, YELLOW, or RED
+risks:
+- id: runtime-replay-corruption
+  label: A streamed turn is duplicated, persisted in the wrong order, or resumed with unsafe state.
+  severity: critical
+- id: runtime-runaway-or-stall
+  label: A provider or tool runs without containment, or legitimate output is aborted as runaway work.
+  severity: high
+- id: provider-wire-corruption
+  label: Provider output or continuation input is malformed, incomplete, or associated with the wrong
+    response.
+  severity: critical
+- id: provider-unsafe-replay
+  label: A request with unknown outcome is replayed, duplicating a tool action or user turn.
+  severity: critical
+- id: ui-misleading-status
+  label: The terminal shows the wrong action, status, result, or approval outcome.
+  severity: high
+- id: shell-safety-bypass
+  label: A command bypasses sandbox, approval, workspace, or output containment policy.
+  severity: critical
+- id: session-state-loss
+  label: A resume, abort, undo, provider switch, or failed turn loses or replays conversation state.
+  severity: critical
+- id: session-approval-confusion
+  label: Approval state leaks between sessions or a decision is applied to the wrong call.
+  severity: critical
+- id: subagent-authority-escape
+  label: A delegated role gains tools, filesystem, network, or shell authority outside its contract.
+  severity: critical
+- id: classifier-misclassification
+  label: Safe work prompts unnecessarily or dangerous work is treated as safe.
+  severity: high
+fixtures:
+- id: fake-streams
+  label: Deterministic async model streams and terminal completion fixtures
+- id: injected-transport
+  label: Injected Codex transport and provider traffic recorder
+- id: mock-session-client
+  label: Mock conversation client, session composition, and continuation state
+- id: ink-renderer
+  label: Ink renderInAct output frames with fake timers
+- id: shell-runner
+  label: Injected shell runner, registry, scheduler, and temporary workspace
+- id: subagent-provider
+  label: Registered deterministic test providers and delegated run fixtures
+- id: command-corpus
+  label: Representative command and path safety corpus
+contracts:
+- id: runtime-opaque-input
+  statement: Restored provider-owned items are carried as opaque items without leaking the internal marker,
+    while unsupported unmarked items are rejected.
+  seamIds:
+  - application-run-loop
+  riskIds:
+  - runtime-replay-corruption
+  - provider-wire-corruption
+- id: runtime-boundary-compaction
+  statement: A request boundary may defer or apply compaction, preserve the resulting history, and continue
+    only when the compaction or rollover outcome permits it.
+  seamIds:
+  - application-run-loop
+  riskIds:
+  - runtime-replay-corruption
+  - session-state-loss
+- id: runtime-stream-containment
+  statement: Legitimate streamed text and reasoning survive configured repetition and idle thresholds,
+    while output, argument, runaway, and deadline violations stop the request with replay-safety evidence.
+  seamIds:
+  - application-run-loop
+  riskIds:
+  - runtime-runaway-or-stall
+  - runtime-replay-corruption
+- id: runtime-event-and-history-order
+  statement: Model deltas, provider items, assistant text, tool calls, and tool results are emitted and
+    persisted in an order that a following request can replay.
+  seamIds:
+  - application-run-loop
+  riskIds:
+  - runtime-replay-corruption
+- id: runtime-chain-provenance
+  statement: A response identifier is forwarded only for a supported same-provider continuation, and provider
+    switches or failed chain recovery fall back to full history.
+  seamIds:
+  - application-run-loop
+  riskIds:
+  - runtime-replay-corruption
+  - provider-unsafe-replay
+- id: runtime-approval-continuation
+  statement: Tool approval pauses expose the requested call, resume or reject the matching call, and return
+    its result to the model without losing later calls.
+  seamIds:
+  - application-run-loop
+  riskIds:
+  - session-approval-confusion
+  - runtime-replay-corruption
+- id: runtime-steer-settlement
+  statement: User steering is admitted at the next request boundary, can be edited or retracted while
+    pending, and is released when no boundary remains.
+  seamIds:
+  - application-run-loop
+  riskIds:
+  - runtime-replay-corruption
+  - session-state-loss
+- id: runtime-budget-and-tool-errors
+  statement: Run budgets contain repeated tool work, ordinary tool exceptions become model-visible results,
+    and cancellation or invariant failures still terminate the run.
+  seamIds:
+  - application-run-loop
+  riskIds:
+  - runtime-runaway-or-stall
+- id: runtime-retry-rollback
+  statement: Retryable provider failures retry within policy without duplicate visible deltas, while ambiguous
+    or non-replayable failures are surfaced and provisional state is rolled back.
+  seamIds:
+  - application-run-loop
+  riskIds:
+  - runtime-replay-corruption
+  - provider-unsafe-replay
+- id: provider-terminal-reconstruction
+  statement: A Codex terminal response with empty or missing output is completed from its own streamed
+    output items, while non-empty or item-less output remains unchanged.
+  seamIds:
+  - codex-responses-adapter
+  riskIds:
+  - provider-wire-corruption
+- id: provider-frame-conversion
+  statement: Codex text, reasoning, tool calls, custom tools, usage, and provider errors become the corresponding
+    provider-neutral stream events and errors.
+  seamIds:
+  - codex-responses-adapter
+  riskIds:
+  - provider-wire-corruption
+- id: provider-request-shape
+  statement: Requests sent to Codex contain supported settings and normalized input while omitting forbidden
+    fields and preserving prompt-cache and include options.
+  seamIds:
+  - codex-responses-adapter
+  riskIds:
+  - provider-wire-corruption
+- id: provider-lite-continuity
+  statement: Luna requests use Responses Lite prefixes and metadata, send only the appropriate delta after
+    chaining, and recover to full history when the chain is invalid.
+  seamIds:
+  - codex-responses-adapter
+  riskIds:
+  - provider-wire-corruption
+  - provider-unsafe-replay
+- id: provider-tool-history-filter
+  statement: Codex continuation requests retain paired and interleaved tool results, remove consumed or
+    orphaned items only when justified, and never silently replay an invalid orphan.
+  seamIds:
+  - codex-responses-adapter
+  riskIds:
+  - provider-wire-corruption
+  - provider-unsafe-replay
+- id: provider-websocket-outcome
+  statement: WebSocket completion, close, abort, and transport failures are recorded with enough evidence
+    to distinguish safe retry from ambiguous outcome.
+  seamIds:
+  - codex-responses-adapter
+  riskIds:
+  - provider-unsafe-replay
+- id: provider-watchdog-and-close
+  statement: WebSocket receive deadlines abort stalled requests and record timing, while completed streams
+    detach without hanging and close is safe to call.
+  seamIds:
+  - codex-responses-adapter
+  riskIds:
+  - provider-wire-corruption
+  - provider-unsafe-replay
+- id: ui-tool-status
+  statement: CommandMessage renders the tool-specific action, arguments, success/failure/approval status,
+    and background or subagent activity as the corresponding visible terminal text.
+  seamIds:
+  - command-message-renderer
+  riskIds:
+  - ui-misleading-status
+- id: ui-concise-and-standard-output
+  statement: Concise mode reduces each tool outcome to its status line and relevant summary, while standard
+    mode preserves the structured result appropriate to that tool.
+  seamIds:
+  - command-message-renderer
+  riskIds:
+  - ui-misleading-status
+- id: ui-output-boundaries
+  statement: Long command, search, error, and source output is truncated at the documented boundary with
+    the retained tail or count, and unparseable output falls through visibly.
+  seamIds:
+  - command-message-renderer
+  riskIds:
+  - ui-misleading-status
+- id: shell-background-lifecycle
+  statement: A background shell call acknowledges immediately, retains output, exposes status and cancellation,
+    emits terminal lifecycle events, and cleans up after settlement.
+  seamIds:
+  - shell-tool
+  riskIds:
+  - shell-safety-bypass
+  - session-state-loss
+- id: shell-monitoring
+  statement: Monitoring is available only for background jobs, reports retained matches in order, and
+    setup failures do not hide the launched job.
+  seamIds:
+  - shell-tool
+  riskIds:
+  - shell-safety-bypass
+  - session-state-loss
+- id: shell-timeout-and-output-caps
+  statement: Foreground and background commands use their respective timeout and overflow policies, and
+    caller output requests cannot exceed the configured session cap.
+  seamIds:
+  - shell-tool
+  riskIds:
+  - shell-safety-bypass
+- id: shell-sandbox-and-approval
+  statement: Shell execution follows sandbox availability, mode, approval, Docker authorization, SSH,
+    RTK, and plan-mode policy without executing a command when a required guard fails.
+  seamIds:
+  - shell-tool
+  riskIds:
+  - shell-safety-bypass
+- id: shell-denied-read-recovery
+  statement: Strict sandbox denied reads produce a scoped retry or held-call approval path, preserve raw
+    command identity, and fail closed when required call metadata is absent.
+  seamIds:
+  - shell-tool
+  riskIds:
+  - shell-safety-bypass
+  - session-approval-confusion
+- id: shell-schema-and-description
+  statement: Shell schemas apply safe defaults and expose descriptions that match search, orchestrator,
+    sandbox, and saved-output policy.
+  seamIds:
+  - shell-tool
+  riskIds:
+  - shell-safety-bypass
+- id: session-public-events
+  statement: A session emits ordered text, tool, approval, retry, recovery, final, and error events that
+    accurately describe one turn.
+  seamIds:
+  - conversation-session
+  riskIds:
+  - session-state-loss
+  - runtime-replay-corruption
+- id: session-approval-state
+  statement: Approval decisions target the pending call, answer sinks are used only for accepted answers,
+    and abort, reset, undo, or rejection cannot resume stale approval state.
+  seamIds:
+  - conversation-session
+  riskIds:
+  - session-approval-confusion
+  - session-state-loss
+- id: session-continuity
+  statement: Resume, provider/model changes, abort, and invalid response identifiers select the correct
+    delta or full-history request while preserving the transcript that remains valid.
+  seamIds:
+  - conversation-session
+  riskIds:
+  - session-state-loss
+  - provider-unsafe-replay
+- id: session-isolation
+  statement: Independent sessions do not share response identifiers, approval context, recovery envelopes,
+    or provider history snapshots.
+  seamIds:
+  - conversation-session
+  riskIds:
+  - session-approval-confusion
+  - session-state-loss
+- id: session-history-ledger
+  statement: Completed tool pairs are reconciled into canonical history, aborted or undone calls are not
+    replayed, and retained earlier turns remain available after undo.
+  seamIds:
+  - conversation-session
+  riskIds:
+  - runtime-replay-corruption
+  - session-state-loss
+- id: session-large-input
+  statement: Large-input preview is non-mutating, avoids unnecessary estimation, and records the guard
+    state only after a successful provider request.
+  seamIds:
+  - conversation-session
+  riskIds:
+  - session-state-loss
+  - runtime-runaway-or-stall
+- id: subagent-run-lifecycle
+  statement: Each delegated run has an isolated identity, returns a completed/failed/cancelled result,
+    and emits matching start, tool, and completion events.
+  seamIds:
+  - subagent-manager
+  riskIds:
+  - subagent-authority-escape
+  - session-state-loss
+- id: subagent-role-capabilities
+  statement: Mentor, explorer, and worker roles receive the configured model, prompt, and role-appropriate
+    tool surface, with mentor history reset and continuation behavior preserved.
+  seamIds:
+  - subagent-manager
+  riskIds:
+  - subagent-authority-escape
+- id: subagent-shell-policy
+  statement: Explorer shell is read-only, worker shell never requires an interactive approval channel,
+    and dangerous or unsandboxed worker requests are blocked or evaluator-approved according to policy.
+  seamIds:
+  - subagent-manager
+  riskIds:
+  - subagent-authority-escape
+  - shell-safety-bypass
+- id: subagent-write-boundary
+  statement: Worker writes and shell redirections stay inside the workspace, successful writes are reported,
+    and concurrent writes to one path are rejected without waiting.
+  seamIds:
+  - subagent-manager
+  riskIds:
+  - subagent-authority-escape
+  - shell-safety-bypass
+- id: subagent-network-scope
+  statement: Network scopes deny empty authority, require wildcard authority for hostless search, validate
+    finite URL hosts, and reject redirect-unsafe finite fetch scopes.
+  seamIds:
+  - subagent-manager
+  riskIds:
+  - subagent-authority-escape
+- id: subagent-tool-cache
+  statement: Role agent tools are cached per role and rebuilt by clearCache without losing nested tool
+    approval and boundary behavior.
+  seamIds:
+  - subagent-manager
+  riskIds:
+  - subagent-authority-escape
+- id: subagent-failure-usage
+  statement: Missing client configuration and provider failures return a failed result while preserving
+    available usage evidence.
+  seamIds:
+  - subagent-manager
+  riskIds:
+  - runtime-runaway-or-stall
+- id: safety-approval-classification
+  statement: Empty input is rejected and commands requiring review, including malformed, unknown, sensitive,
+    destructive, and nested destructive commands, return an approval-required result.
+  seamIds:
+  - command-classifier
+  riskIds:
+  - classifier-misclassification
+- id: safety-git-policy
+  statement: Read-only git inspection is GREEN, mutating or destructive git operations and unknown git
+    forms are YELLOW, and dangerous flags cannot hide that review requirement.
+  seamIds:
+  - command-classifier
+  riskIds:
+  - classifier-misclassification
+  - shell-safety-bypass
+- id: safety-path-policy
+  statement: Safe project and temporary paths are GREEN, secrets and hidden paths are YELLOW, and sensitive
+    home credential paths are RED according to path context.
+  seamIds:
+  - command-classifier
+  riskIds:
+  - classifier-misclassification
+  - shell-safety-bypass
+- id: safety-red-yellow-boundary
+  statement: Ambiguous or workspace-scale operations remain YELLOW for model or user review, while inherently
+    dangerous direct operations remain RED.
+  seamIds:
+  - command-classifier
+  riskIds:
+  - classifier-misclassification
+  - shell-safety-bypass
+tests:
+- kind: file
+  id: runtime-application-run-loop
+  file: source/services/agent-runtime/application-run-loop.test.ts
+  domainId: runtime
+  suiteId: unit
+  contractIds:
+  - runtime-opaque-input
+  - runtime-boundary-compaction
+  - runtime-stream-containment
+  - runtime-event-and-history-order
+  - runtime-chain-provenance
+  - runtime-approval-continuation
+  - runtime-steer-settlement
+  - runtime-budget-and-tool-errors
+  - runtime-retry-rollback
+  fixtureIds:
+  - fake-streams
+  - mock-session-client
+- kind: file
+  id: providers-codex-responses-model
+  file: source/providers/codex-responses-model.test.ts
+  domainId: providers
+  suiteId: provider-adapter
+  contractIds:
+  - provider-terminal-reconstruction
+  - provider-frame-conversion
+  - provider-request-shape
+  - provider-lite-continuity
+  - provider-tool-history-filter
+  - provider-websocket-outcome
+  - provider-watchdog-and-close
+  fixtureIds:
+  - fake-streams
+  - injected-transport
+- kind: file
+  id: ui-components-command-message
+  file: source/components/message/CommandMessage.test.tsx
+  domainId: ui-components
+  suiteId: ui-rendering
+  contractIds:
+  - ui-tool-status
+  - ui-concise-and-standard-output
+  - ui-output-boundaries
+  fixtureIds:
+  - ink-renderer
+- kind: file
+  id: shell-system-shell
+  file: source/tools/system/shell.test.ts
+  domainId: shell
+  suiteId: unit
+  contractIds:
+  - shell-background-lifecycle
+  - shell-monitoring
+  - shell-timeout-and-output-caps
+  - shell-sandbox-and-approval
+  - shell-denied-read-recovery
+  - shell-schema-and-description
+  fixtureIds:
+  - shell-runner
+- kind: file
+  id: session-conversation-session-characterization
+  file: source/services/session/conversation-session.characterization.test.ts
+  domainId: session
+  suiteId: unit
+  contractIds:
+  - session-public-events
+  - session-approval-state
+  - session-continuity
+  fixtureIds:
+  - mock-session-client
+  - fake-streams
+- kind: file
+  id: session-conversation-session-isolation
+  file: source/services/session/conversation-session.isolation.test.ts
+  domainId: session
+  suiteId: unit
+  contractIds:
+  - session-isolation
+  - session-continuity
+  - session-approval-state
+  fixtureIds:
+  - mock-session-client
+- kind: file
+  id: session-conversation-session-lifecycle
+  file: source/services/session/conversation-session.lifecycle.test.ts
+  domainId: session
+  suiteId: unit
+  contractIds:
+  - session-continuity
+  - session-history-ledger
+  - session-large-input
+  - session-approval-state
+  fixtureIds:
+  - mock-session-client
+  - fake-streams
+- kind: file
+  id: session-conversation-session-stream
+  file: source/services/session/conversation-session.stream.test.ts
+  domainId: session
+  suiteId: unit
+  contractIds:
+  - session-public-events
+  - session-history-ledger
+  - session-continuity
+  - session-approval-state
+  fixtureIds:
+  - mock-session-client
+  - fake-streams
+- kind: file
+  id: subagents-subagent-manager-lifecycle
+  file: source/services/subagents/subagent-manager.lifecycle.test.ts
+  domainId: subagents
+  suiteId: unit
+  contractIds:
+  - subagent-run-lifecycle
+  - subagent-role-capabilities
+  - subagent-failure-usage
+  fixtureIds:
+  - subagent-provider
+- kind: file
+  id: subagents-subagent-manager-misc
+  file: source/services/subagents/subagent-manager.misc.test.ts
+  domainId: subagents
+  suiteId: unit
+  contractIds:
+  - subagent-failure-usage
+  fixtureIds:
+  - subagent-provider
+- kind: file
+  id: subagents-subagent-manager-roles
+  file: source/services/subagents/subagent-manager.roles.test.ts
+  domainId: subagents
+  suiteId: unit
+  contractIds:
+  - subagent-role-capabilities
+  - subagent-shell-policy
+  - subagent-tool-cache
+  fixtureIds:
+  - subagent-provider
+  - shell-runner
+- kind: file
+  id: subagents-subagent-manager-security
+  file: source/services/subagents/subagent-manager.security.test.ts
+  domainId: subagents
+  suiteId: unit
+  contractIds:
+  - subagent-shell-policy
+  - subagent-write-boundary
+  - subagent-network-scope
+  - subagent-failure-usage
+  fixtureIds:
+  - subagent-provider
+  - shell-runner
+- kind: file
+  id: shell-command-safety
+  file: source/utils/shell/command-safety.test.ts
+  domainId: shell
+  suiteId: unit
+  contractIds:
+  - safety-approval-classification
+  fixtureIds:
+  - command-corpus
+- kind: file
+  id: shell-command-safety-git
+  file: source/utils/shell/command-safety.git.test.ts
+  domainId: shell
+  suiteId: unit
+  contractIds:
+  - safety-git-policy
+  fixtureIds:
+  - command-corpus
+- kind: file
+  id: shell-command-safety-path
+  file: source/utils/shell/command-safety.path.test.ts
+  domainId: shell
+  suiteId: unit
+  contractIds:
+  - safety-path-policy
+  fixtureIds:
+  - command-corpus
+- kind: case
+  id: shell-command-safety-red-yellow-policy-ambiguous
+  file: source/utils/shell/command-safety.red-yellow-policy.test.ts
+  title: ambiguous command families are YELLOW instead of RED
+  domainId: shell
+  suiteId: unit
+  contractIds:
+  - safety-red-yellow-boundary
+  fixtureIds:
+  - command-corpus
+- kind: case
+  id: shell-command-safety-red-yellow-policy-dangerous
+  file: source/utils/shell/command-safety.red-yellow-policy.test.ts
+  title: inherently dangerous direct commands remain RED
+  domainId: shell
+  suiteId: unit
+  contractIds:
+  - safety-red-yellow-boundary
+  fixtureIds:
+  - command-corpus
+- kind: case
+  id: shell-command-safety-red-yellow-policy-paths
+  file: source/utils/shell/command-safety.red-yellow-policy.test.ts
+  title: read-only risky paths are YELLOW, not hard-blocked
+  domainId: shell
+  suiteId: unit
+  contractIds:
+  - safety-path-policy
+  fixtureIds:
+  - command-corpus
+- kind: case
+  id: shell-command-safety-red-yellow-policy-workspace
+  file: source/utils/shell/command-safety.red-yellow-policy.test.ts
+  title: workspace-scale edit commands are YELLOW instead of RED
+  domainId: shell
+  suiteId: unit
+  contractIds:
+  - safety-red-yellow-boundary
+  fixtureIds:
+  - command-corpus
+decisions:
+- id: runtime-application-run-loop-primary
+  testId: runtime-application-run-loop
+  role: primary
+  reviewer: test-audit-coordinator
+  sourceArtifact: docs/test-audit/calibration-report.md
+  recommendation: keep
+  confidence: high
+  reason: 'Unanimous across both calibration reviewers and the coordinator: canonical Run Loop seam (compaction/rollover,
+    generation guard, terminal events, turn budget, in-loop retry); no sibling in the sample or its family
+    carries the same evidence.'
+  evidence:
+  - Both second opinions are keep/high with verified observable-outcome evidence.
+  - Retention removes no evidence and the area is high-scrutiny per plan guardrails.
+  replacementTestIds: &id001 []
+  status: reviewed
+- id: runtime-application-run-loop-second-neutral
+  testId: runtime-application-run-loop
+  role: second_opinion
+  reviewer: calibration-neutral
+  sourceArtifact: docs/test-audit/calibration-neutral.yaml
+  recommendation: keep
+  confidence: high
+  reason: The file protects the run-loop's highest-risk public contracts across normal turns, approvals,
+    retries, provider continuity, and containment; removing it could allow duplicated history or unsafe
+    replay to ship.
+  evidence:
+  - source/services/agent-runtime/application-run-loop.test.ts asserts provider-opaque normalization,
+    response-aware rollover, and compaction failure preservation through startStream() history and events.
+  - The same file asserts visible text/reasoning beyond prior repetition thresholds, deadline and idle
+    abort codes, and output/tool-argument caps before excess output is forwarded.
+  - The tests assert assistant text precedes tool calls, approval continuations feed results to the next
+    model request, steers are admitted/retracted/edited, and retry rollback avoids duplicated deltas.
+  replacementTestIds: []
+  status: proposed
+- id: runtime-application-run-loop-second-adversarial
+  testId: runtime-application-run-loop
+  role: second_opinion
+  reviewer: calibration-adversarial
+  sourceArtifact: docs/test-audit/calibration-adversarial.yaml
+  recommendation: keep
+  confidence: high
+  reason: The file is broad but its cases exercise the ApplicationRunLoop public streamed-turn contract
+    across opaque input, compaction, event settlement, guards, tools, steering, usage, and retry; no assigned
+    sibling carries these same run-loop observables more strongly or cheaply.
+  evidence:
+  - normalizeApplicationInput cases at source/services/agent-runtime/application-run-loop.test.ts:30-60
+    assert provider_opaque conversion, marker removal, and rejection of an unmarked unsupported item.
+  - Source production boundary is ApplicationRunLoop.startStream in source/services/agent-runtime/application-run-loop.ts;
+    tests observe stream.history, completed, events, and tool results rather than private implementation
+    fields.
+  - The guard cases at source/services/agent-runtime/application-run-loop.test.ts:501-1035 distinguish
+    legitimate repeated output, text/reasoning caps, total deadlines, and idle deadlines, so collapsing
+    them would allow a regression in one guard class to escape.
+  - If this evidence disappeared, a model could be retried after a crossed stream boundary, a tool loop
+    could run past its turn budget, or cumulative usage and tool history could be committed twice without
+    this boundary suite detecting it.
+  - 'I ruled out consolidation, deletion, and rewrite: the assigned sample has no second ApplicationRunLoop
+    test file, and the assertions cover independently changeable recovery, approval, steering, usage,
+    and guard outcomes.'
+  replacementTestIds: []
+  status: proposed
+- id: providers-codex-responses-model-primary
+  testId: providers-codex-responses-model
+  role: primary
+  reviewer: test-audit-coordinator
+  sourceArtifact: docs/test-audit/calibration-report.md
+  recommendation: keep
+  confidence: high
+  reason: 'Unanimous: provider-fidelity seam (wrapCodexStream reconstruction, transport isolation, terminal
+    settlement) with unique wire-format evidence.'
+  evidence:
+  - Both second opinions keep/high; no sibling file reconstructs streamed output_item.done frames.
+  - High-scrutiny provider fidelity; retention required.
+  replacementTestIds: *id001
+  status: reviewed
+- id: providers-codex-responses-model-second-neutral
+  testId: providers-codex-responses-model
+  role: second_opinion
+  reviewer: calibration-neutral
+  sourceArtifact: docs/test-audit/calibration-neutral.yaml
+  recommendation: keep
+  confidence: high
+  reason: This is the only assigned provider boundary exercising HTTP, WebSocket, Responses Lite, terminal
+    reconstruction, continuation filtering, and ambiguous-outcome classification together; deleting it
+    could silently corrupt provider wire traffic or replay an uncertain request.
+  evidence:
+  - source/providers/codex-responses-model.test.ts asserts empty and missing response.output reconstruction,
+    per-response item isolation, call-id backfill, and public CodexResponsesModel.stream completion output.
+  - The file captures request bodies and asserts Codex option projection, forbidden temperature/max-output
+    fields, replay-id removal, Luna developer prefixes, and tool-continuation input.
+  - The file asserts close-before-terminal and first-frame/idle timeout outcomes distinguish UnsentWebSocketRequestError
+    from AmbiguousModelOutcomeError, while watchdog timing reaches provider traffic.
+  replacementTestIds: []
+  status: proposed
+- id: providers-codex-responses-model-second-adversarial
+  testId: providers-codex-responses-model
+  role: second_opinion
+  reviewer: calibration-adversarial
+  sourceArtifact: docs/test-audit/calibration-adversarial.yaml
+  recommendation: keep
+  confidence: high
+  reason: This is the sole assigned boundary test for Codex Responses HTTP/WebSocket reconstruction, chained
+    state, compaction, retry, and transport evidence; its wire-level assertions are the contract rather
+    than incidental implementation detail.
+  evidence:
+  - source/providers/codex-responses-model.test.ts:89-303 asserts reconstruction of streamed output items,
+    missing terminal output, call_id backfill, frozen responses, and suspicious-output diagnostics.
+  - source/providers/codex-responses-model.test.ts:925-1097 and 1515-1812 assert distinct Responses-Lite
+    versus standard chaining and server-managed history behavior.
+  - source/providers/codex-responses-model.test.ts:2594-2671 and 4398-4676 distinguish ambiguous close/send
+    outcomes from provably unsent requests and idle/first-frame watchdog outcomes.
+  - If this evidence disappeared, a missing function-call identifier, stale previous response id, or ambiguous
+    WebSocket send could silently produce malformed provider requests or unsafe recovery.
+  - 'I ruled out consolidation, deletion, and rewrite: no other assigned provider file asserts these exact
+    normalized wire outcomes, and exact request/response shapes are observable provider interoperability
+    requirements.'
+  replacementTestIds: []
+  status: proposed
+- id: ui-components-command-message-primary
+  testId: ui-components-command-message
+  role: primary
+  reviewer: test-audit-coordinator
+  sourceArtifact: docs/test-audit/calibration-report.md
+  recommendation: keep
+  confidence: high
+  reason: 'Unanimous: unique render contract for command/tool/background-activity messages (verbs over
+    raw tool names, worktree transitions, background shell/subagent notifications).'
+  evidence:
+  - Both second opinions keep/high; component-level render assertions are not carried by any other file.
+  replacementTestIds: *id001
+  status: reviewed
+- id: ui-components-command-message-second-neutral
+  testId: ui-components-command-message
+  role: second_opinion
+  reviewer: calibration-neutral
+  sourceArtifact: docs/test-audit/calibration-neutral.yaml
+  recommendation: keep
+  confidence: high
+  reason: These are user-visible terminal rendering contracts rather than implementation snapshots; removing
+    them could show a successful command as failed, hide an approval denial, or misreport background work
+    and output.
+  evidence:
+  - source/components/message/CommandMessage.test.tsx asserts distinct visible headers for background
+    subagents, background shells, check-ins, stop/move actions, and legacy or unified launches.
+  - The file asserts concise success/running/failure/denial glyphs, no duplicate command arguments, elapsed-time
+    behavior, and shell runtime extraction in both standard and concise modes.
+  - The file asserts four-line output boundaries, search match counts, source line numbering, subagent
+    summaries, and generic fallback for an unparseable standard renderer.
+  replacementTestIds: []
+  status: proposed
+- id: ui-components-command-message-second-adversarial
+  testId: ui-components-command-message
+  role: second_opinion
+  reviewer: calibration-adversarial
+  sourceArtifact: docs/test-audit/calibration-adversarial.yaml
+  recommendation: keep
+  confidence: high
+  reason: The large renderer suite protects user-visible terminal semantics across tool families and display
+    modes; its text assertions are outside-in and no assigned sibling renders the same component contract.
+  evidence:
+  - source/components/message/CommandMessage.test.tsx:54-352 asserts background activity, orchestration
+    verbs, arguments, and worktree transitions as visible text rather than component internals.
+  - source/components/message/CommandMessage.test.tsx:445-697 and 829-973 assert diffs, approval denial,
+    concise statuses, failure reasons, and shell output presentation.
+  - source/components/message/CommandMessage.test.tsx:992-1815 covers search counts, specialized renderers,
+    ask-user/mentor, subagent status glyphs, runtime display, and parse-failure fallback.
+  - If this evidence disappeared, a denied command could render as successful, a running command could
+    appear completed, or a tool result could lose the action and output the user needs to interpret execution.
+  - 'I ruled out rewrite and consolidation: no assigned sibling targets CommandMessage, and the apparently
+    repetitive concise/standard cases cover independently changeable visible branches.'
+  replacementTestIds: []
+  status: proposed
+- id: shell-system-shell-primary
+  testId: shell-system-shell
+  role: primary
+  reviewer: test-audit-coordinator
+  sourceArtifact: docs/test-audit/calibration-report.md
+  recommendation: keep
+  confidence: high
+  reason: 'Retention unanimous. The adversarial second opinion adds architecture_signal: the production
+    shell tool owns background jobs, watches, sandbox routing, Docker grants, RTK/SSH, correlation, and
+    plan-mode policy in one construction seam. Ownership adjudication is queued for the milestone-3 tools-domain
+    artifact; it does not change retention.'
+  evidence:
+  - calibration-neutral keep/high verified against the tool boundary tests (monitors, timeout/overflow
+    policy).
+  - calibration-adversarial architecture_signal verified (single construction seam with many injected
+    owners); recorded as a production signal, not a test defect.
+  replacementTestIds: *id001
+  status: reviewed
+- id: shell-system-shell-second-neutral
+  testId: shell-system-shell
+  role: second_opinion
+  reviewer: calibration-neutral
+  sourceArtifact: docs/test-audit/calibration-neutral.yaml
+  recommendation: keep
+  confidence: high
+  reason: The shell tool is the effectful safety boundary and the file tests its asynchronous lifecycle
+    and policy matrix through injected runners; removing it could execute commands outside sandbox, lose
+    background output, or leave approval state dangling.
+  evidence:
+  - source/tools/system/shell.test.ts asserts immediate background acknowledgement, retained tail, cancellation
+    signal, lifecycle events, deferred cleanup, timeout status, and output caps using BackgroundShellRegistry
+    and BackgroundShellWatches.
+  - The file asserts Docker host authorization isolation, sandbox availability failures, SSH/RTK routing,
+    plan-mode mutation blocking, correlation restoration, and foreground-to-background adoption without
+    a second execution.
+  - The file asserts strict denied-read retry metadata and one-shot overrides, while a missing SDK call
+    ID fails closed; it also asserts foreground monitoring is rejected before execution.
+  replacementTestIds: []
+  status: proposed
+- id: shell-system-shell-second-adversarial
+  testId: shell-system-shell
+  role: second_opinion
+  reviewer: calibration-adversarial
+  sourceArtifact: docs/test-audit/calibration-adversarial.yaml
+  recommendation: architecture_signal
+  confidence: high
+  reason: The tests are meaningful boundary evidence, but the production shell tool owns background jobs,
+    output watches, sandbox routing, Docker host grants, denied-read recovery, RTK, SSH, correlation,
+    and plan-mode policy in one construction seam; the test setup has to inject and reset all of those
+    owners.
+  evidence:
+  - source/tools/system/shell.test.ts:5-32 imports and resets background registry/output/watch state,
+    denied-read stores, Docker grant state, execution context, nested compatibility, sandbox, and logging
+    seams before exercising one shell definition.
+  - source/tools/system/shell.test.ts:142-344 asserts background monitor registration, retained tails,
+    setup failure, and settlement; source/tools/system/shell.ts exports createBackgroundShellJobToolDefinitions
+    and createShellToolDefinition as one tool boundary.
+  - source/tools/system/shell.test.ts:1129-1613 and 1765-2187 separately exercise Docker, sandbox availability,
+    RTK, plan mode, denied reads, and held-call overrides, showing policy ownership is concentrated rather
+    than a single shell execution rule.
+  - If this evidence disappeared, a denied read could loop without a bounded retry, an approved Docker
+    grant could leak to another session, or a command could execute unsandboxed after availability degraded.
+  - 'I ruled out deletion, consolidation, and retiering: background lifecycle, sandbox safety, Docker
+    grants, and denied-read recovery have distinct externally observable failure risks and no sibling
+    in the assigned sample carries them.'
+  replacementTestIds: []
+  status: proposed
+- id: session-conversation-session-characterization-primary
+  testId: session-conversation-session-characterization
+  role: primary
+  reviewer: test-audit-coordinator
+  sourceArtifact: docs/test-audit/calibration-report.md
+  recommendation: keep
+  confidence: high
+  reason: 'Retention unanimous. Both reviewers independently flagged non-retention issues: adversarial
+    architecture_signal (tests reach approvalState/statusMachine/toolTracker/TurnItemAccumulator; 24 verified
+    references) and neutral needs_review (case ownership crosses session/approval/client seams). Cross-domain
+    seam adjudication is queued for milestone 3; the file protects unique public-API characterization
+    evidence.'
+  evidence:
+  - No reviewer proposed removal or rewrite; the disagreement is about seam ownership, not evidence value.
+  - Second opinions attach as recorded; primary keeps the test and defers the ownership question to domain
+    exploration.
+  replacementTestIds: *id001
+  status: reviewed
+- id: session-conversation-session-characterization-second-neutral
+  testId: session-conversation-session-characterization
+  role: second_opinion
+  reviewer: calibration-neutral
+  sourceArtifact: docs/test-audit/calibration-neutral.yaml
+  recommendation: needs_review
+  confidence: medium
+  reason: The file contains valuable public approval, event, continuity, and setting behavior, but its
+    characterization cases overlap adjacent session stream/lifecycle coverage and the intended retained
+    boundary is not clear enough for consolidation or rewrite from this file alone; deleting it could
+    lose a sequence not named by a sibling.
+  evidence:
+  - source/services/session/conversation-session.characterization.test.ts asserts setSubagentEventSink
+    cleanup, traffic context, runtime setting delegation, and auto-approval usage/final text behavior
+    not all represented by the assigned sibling files.
+  - Its approval then approval, approval then rejection, and abort/reset/undo sequences assert terminal
+    event order and pending-state invalidation; source/services/session/conversation-session.stream.test.ts
+    also asserts approval continuation event order.
+  - The file uses createConversationSession with MockStream and hand-built approval state, so the setup
+    crosses session composition, approval state, and client seams; ownership of the characterization cases
+    needs cross-domain review.
+  replacementTestIds: []
+  status: proposed
+- id: session-conversation-session-characterization-second-adversarial
+  testId: session-conversation-session-characterization
+  role: second_opinion
+  reviewer: calibration-adversarial
+  sourceArtifact: docs/test-audit/calibration-adversarial.yaml
+  recommendation: architecture_signal
+  confidence: high
+  reason: The cases preserve important session behavior, but several are explicitly characterization tests
+    that reach through the production composition to approvalState, appState.statusMachine, toolTracker,
+    and TurnItemAccumulator; that coupling exposes an ownership/API boundary problem and should guide
+    a public-boundary rewrite rather than deletion.
+  evidence:
+  - source/services/session/conversation-session.characterization.test.ts:11-13 constructs createProductionSessionRuntimeInternals
+    and injects a TurnItemAccumulator instead of using only the public adapter.
+  - source/services/session/conversation-session.characterization.test.ts:1238-1320 and 1524-1568 directly
+    assert composition.approvalState, composition.appState.statusMachine, and composition.toolTracker.ledger,
+    which are implementation-owned state surfaces.
+  - The same file also asserts meaningful public outcomes at source/services/session/conversation-session.characterization.test.ts:1013-1180
+    and 1326-1522, so a deletion recommendation would orphan approval ordering and recovery contracts.
+  - If this evidence disappeared while the composition remained unchanged, abort, reset, or undo could
+    leave a pending approval or stale tool ledger that is resumed on a later turn.
+  - 'I ruled out deletion and blanket consolidation: source/services/session/conversation-session.stream.test.ts
+    and lifecycle.test.ts do not assert the same undo/reset internal-state outcomes; the remedy is to
+    move these cases behind a stable public session contract.'
+  replacementTestIds: []
+  status: proposed
+- id: session-conversation-session-isolation-primary
+  testId: session-conversation-session-isolation
+  role: primary
+  reviewer: test-audit-coordinator
+  sourceArtifact: docs/test-audit/calibration-report.md
+  recommendation: keep
+  confidence: high
+  reason: 'Unanimous: unique cross-session isolation contracts (previousResponseId/recovery-budget/history-snapshot
+    isolation, pending-approval isolation across sessions, aborted-approval no-replay).'
+  evidence:
+  - Both second opinions keep/high with corroborating observable assertions (A/B interleaving, B handleApprovalDecision
+    null, no continueRunStream after abort).
+  replacementTestIds: *id001
+  status: reviewed
+- id: session-conversation-session-isolation-second-neutral
+  testId: session-conversation-session-isolation
+  role: second_opinion
+  reviewer: calibration-neutral
+  sourceArtifact: docs/test-audit/calibration-neutral.yaml
+  recommendation: keep
+  confidence: high
+  reason: Isolation is a meaningful cross-session contract with critical security and state-loss consequences;
+    removing this file could let one session reuse another's response ID or approval continuation.
+  evidence:
+  - source/services/session/conversation-session.isolation.test.ts runs sessions A and B through one mock
+    client and asserts A2 uses resp-A1 while B1 uses no A state, with distinct frozen history snapshots
+    and recovery budgets.
+  - The file asserts pending approval in session A cannot be answered through session B, while A still
+    resumes its own continuation.
+  - The file asserts queueModeNotice is attached only to the next user turn for both chaining and non-chaining
+    providers and that an abandoned approval does not replay cached tool arguments.
+  replacementTestIds: []
+  status: proposed
+- id: session-conversation-session-isolation-second-adversarial
+  testId: session-conversation-session-isolation
+  role: second_opinion
+  reviewer: calibration-adversarial
+  sourceArtifact: docs/test-audit/calibration-adversarial.yaml
+  recommendation: keep
+  confidence: high
+  reason: The file uniquely tests cross-session isolation and queued mode-notice persistence, which cannot
+    be inferred from the same-session lifecycle and stream tests.
+  evidence:
+  - source/services/session/conversation-session.isolation.test.ts:21-105 proves session A and B do not
+    share previousResponseId, recovery envelopes, or frozen history snapshots.
+  - source/services/session/conversation-session.isolation.test.ts:107-172 proves pending approval in
+    session A does not become actionable in session B while A can still continue.
+  - source/services/session/conversation-session.isolation.test.ts:174-299 asserts chaining/non-chaining
+    notice insertion and prefix stability, including persistence as one user turn.
+  - If this evidence disappeared, one session could reuse another session's response chain or pending
+    approval, or a queued mode notice could be attached to the wrong later user turn.
+  - 'I ruled out consolidation and deletion: source/services/session/conversation-session.lifecycle.test.ts
+    and stream.test.ts exercise continuity within one session, not the cross-session inputs and approval
+    state asserted here.'
+  replacementTestIds: []
+  status: proposed
+- id: session-conversation-session-lifecycle-primary
+  testId: session-conversation-session-lifecycle
+  role: primary
+  reviewer: test-audit-coordinator
+  sourceArtifact: docs/test-audit/calibration-report.md
+  recommendation: keep
+  confidence: high
+  reason: 'Unanimous: resume full-history resync, generation-guard stale completion, provider continuity
+    clearing, undo ledger semantics, Invalid previous_response_id rebuild.'
+  evidence:
+  - Both second opinions keep/high; verified against lifecycle test titles and evidence statements.
+  replacementTestIds: *id001
+  status: reviewed
+- id: session-conversation-session-lifecycle-second-neutral
+  testId: session-conversation-session-lifecycle
+  role: second_opinion
+  reviewer: calibration-neutral
+  sourceArtifact: docs/test-audit/calibration-neutral.yaml
+  recommendation: keep
+  confidence: high
+  reason: Lifecycle transitions determine whether persisted history and provider continuity remain safe
+    after resume, abort, import, undo, and recovery; a missing regression here can send stale or incomplete
+    history on the next user turn.
+  evidence:
+  - source/services/session/conversation-session.lifecycle.test.ts asserts resumed sessions first resend
+    full history, then return to delta chaining, and stale completion after importState() is ignored.
+  - The file asserts provider/model switch and abort clear continuity while preserving transcript history,
+    and invalid previous_response_id triggers a full-history retry.
+  - The file asserts undo removes only the abandoned turn's tool ledger entries and that large-input preview
+    is non-mutating and records guard state only after success.
+  replacementTestIds: []
+  status: proposed
+- id: session-conversation-session-lifecycle-second-adversarial
+  testId: session-conversation-session-lifecycle
+  role: second_opinion
+  reviewer: calibration-adversarial
+  sourceArtifact: docs/test-audit/calibration-adversarial.yaml
+  recommendation: keep
+  confidence: high
+  reason: Lifecycle tests cover resume, generation invalidation, image input, initial failure rollback,
+    provider/model changes, undo ledger retention, and abort continuity at the public session coordinator
+    boundary; the cases are not interchangeable with stream-only tests.
+  evidence:
+  - source/services/session/conversation-session.lifecycle.test.ts:13-188 asserts stale imported generations
+    are ignored and a resumed session uses full history once before returning to chaining.
+  - source/services/session/conversation-session.lifecycle.test.ts:335-406 asserts droppedUserMessage
+    only when a user turn was actually added after a pre-stream failure.
+  - source/services/session/conversation-session.lifecycle.test.ts:448-561 and 816-940 assert provider/model
+    changes and abort/invalid previous_response_id force correct full-history replay while preserving
+    transcript turns.
+  - If this evidence disappeared, a resumed or aborted conversation could resend an expired provider token
+    and lose the transcript, or a pre-stream failure could leave a phantom user turn.
+  - 'I ruled out consolidation and deletion: the similarly named stream tests at source/services/session/conversation-session.stream.test.ts:426-518
+    cover long non-chaining follow-ups, but not resume generation, provider/model mutation, or abort continuity.'
+  replacementTestIds: []
+  status: proposed
+- id: session-conversation-session-stream-primary
+  testId: session-conversation-session-stream
+  role: primary
+  reviewer: test-audit-coordinator
+  sourceArtifact: docs/test-audit/calibration-report.md
+  recommendation: keep
+  confidence: high
+  reason: 'Unanimous: stream event ordering, no-replay-after-model-event, tool_recovery ordering, importState
+    reconciliation, callId preservation.'
+  evidence:
+  - Both second opinions keep/high.
+  replacementTestIds: *id001
+  status: reviewed
+- id: session-conversation-session-stream-second-neutral
+  testId: session-conversation-session-stream
+  role: second_opinion
+  reviewer: calibration-neutral
+  sourceArtifact: docs/test-audit/calibration-neutral.yaml
+  recommendation: keep
+  confidence: high
+  reason: The file verifies the public event stream and failure settlement at the session boundary; removing
+    it could replay a turn after visible output, drop settled tool pairs, or surface approval without
+    its call identity.
+  evidence:
+  - source/services/session/conversation-session.stream.test.ts asserts text_delta to final ordering and
+    that a model event crossing the stream boundary suppresses a fresh-start retry.
+  - The file asserts completed tool pairs survive a later stream failure, tool_recovery precedes error,
+    and importState reconciles ledger pairs into canonical history.
+  - The file asserts approval continuation emits tool_started/text/final and preserves callId across successive
+    approval_required results.
+  replacementTestIds: []
+  status: proposed
+- id: session-conversation-session-stream-second-adversarial
+  testId: session-conversation-session-stream
+  role: second_opinion
+  reviewer: calibration-adversarial
+  sourceArtifact: docs/test-audit/calibration-adversarial.yaml
+  recommendation: keep
+  confidence: high
+  reason: Public event ordering, stream-boundary retry suppression, tool-pair settlement, recovery event
+    ordering, approval continuation, and call-id preservation are meaningful contracts with no single
+    stronger sibling replacement.
+  evidence:
+  - source/services/session/conversation-session.stream.test.ts:20-101 asserts text_delta/fullText/final
+    ordering and warning metadata derived from public stream items without private generated state.
+  - source/services/session/conversation-session.stream.test.ts:103-382 asserts no replay after a crossed
+    stream boundary and tool_recovery before error with canonical tool history settlement.
+  - source/services/session/conversation-session.stream.test.ts:520-728 asserts approval continuation
+    event order, malformed-call retry, and callId preservation across both terminal adapter paths.
+  - If this evidence disappeared, consumers could see an error before tool recovery, retry a partially
+    emitted turn, or approve the wrong tool after a call-id change.
+  - 'I ruled out consolidation and deletion: lifecycle.test.ts does not assert these public stream event
+    sequences or recovery ordering, and the two long-follow-up cases differ by coordinator versus terminal-adapter
+    API surface.'
+  replacementTestIds: []
+  status: proposed
+- id: subagents-subagent-manager-lifecycle-primary
+  testId: subagents-subagent-manager-lifecycle
+  role: primary
+  reviewer: test-audit-coordinator
+  sourceArtifact: docs/test-audit/calibration-report.md
+  recommendation: keep
+  confidence: high
+  reason: 'Unanimous: per-call session isolation, foreground-adoption approval-pause gate, started/completed
+    event contract, mentor base instructions.'
+  evidence:
+  - Both second opinions keep/high.
+  replacementTestIds: *id001
+  status: reviewed
+- id: subagents-subagent-manager-lifecycle-second-neutral
+  testId: subagents-subagent-manager-lifecycle
+  role: second_opinion
+  reviewer: calibration-neutral
+  sourceArtifact: docs/test-audit/calibration-neutral.yaml
+  recommendation: keep
+  confidence: high
+  reason: These tests protect delegated-run identity, event lifecycle, cancellation, mentor prompt sourcing,
+    and final answer selection; removing them could report the wrong child or leak pre-tool narration
+    as the answer.
+  evidence:
+  - source/services/subagents/subagent-manager.lifecycle.test.ts asserts concurrent runs complete with
+    distinct agentIds and foreground adoption is refused until an approval-pause sink exists.
+  - The file asserts started, tool-started, and completed events share the result agentId and that an
+    unknown role still emits a failed completion.
+  - The file reads source/prompts/subagents/mentor.md and asserts its body reaches mentor instructions,
+    while finalText excludes pre-tool narration.
+  replacementTestIds: []
+  status: proposed
+- id: subagents-subagent-manager-lifecycle-second-adversarial
+  testId: subagents-subagent-manager-lifecycle
+  role: second_opinion
+  reviewer: calibration-adversarial
+  sourceArtifact: docs/test-audit/calibration-adversarial.yaml
+  recommendation: keep
+  confidence: high
+  reason: Lifecycle, isolation, foreground-adoption eligibility, event emission, role-unknown completion,
+    markdown instruction sourcing, and post-tool finalText are distinct public manager contracts.
+  evidence:
+  - source/services/subagents/subagent-manager.lifecycle.test.ts:27-59 asserts concurrent calls receive
+    distinct agent identities; :61-90 asserts foreground adoption is refused without the approval-pause
+    sink.
+  - source/services/subagents/subagent-manager.lifecycle.test.ts:94-168 asserts started/tool-started/completed
+    event publication even for an unknown role.
+  - source/services/subagents/subagent-manager.lifecycle.test.ts:172-223 reads the role markdown and checks
+    it reaches provider instructions; :227-266 checks finalText excludes pre-tool narration.
+  - If this evidence disappeared, concurrent subagents could share identity or state, lifecycle observers
+    could miss failed runs, or the result could expose pre-tool narration as the final answer.
+  - 'I ruled out consolidation and deletion: roles.test.ts covers role tool/model selection but does not
+    assert these lifecycle event and final-result outcomes.'
+  replacementTestIds: []
+  status: proposed
+- id: subagents-subagent-manager-misc-primary
+  testId: subagents-subagent-manager-misc
+  role: primary
+  reviewer: test-audit-coordinator
+  sourceArtifact: docs/test-audit/calibration-report.md
+  recommendation: rewrite_candidate
+  confidence: medium
+  reason: 'Adversarial reviewer and coordinator agree (neutral keeps): the file is an orphan fragment
+    of a split suite carrying one weak single-case assertion and ~25 lines of dead imports, while the
+    contract it protects (missing createClient factory yields a failed result, not a throw) is unique
+    and must be retained. Milestone 4 should strip the dead imports and/or fold the case into a failure-boundary
+    table in a sibling file.'
+  evidence:
+  - 'Verified by coordinator full read: only test constructing RealSubagentManager; production throw at
+    execution-runner.ts:123; unused imports include TestSubagentManager, ROLE_*, MAX_SUBAGENT_MODEL_RETRIES,
+    ModelBehaviorError, wrapResultAsAgentStream, wrapErrorAsAgentStream, getAgentTool.'
+  - calibration-adversarial rewrite_candidate/high; calibration-neutral keep/high recorded as dissent.
+  - 'Not consolidation/deletion: no sibling covers the missing-createClient path.'
+  replacementTestIds: *id001
+  status: reviewed
+- id: subagents-subagent-manager-misc-second-neutral
+  testId: subagents-subagent-manager-misc
+  role: second_opinion
+  reviewer: calibration-neutral
+  sourceArtifact: docs/test-audit/calibration-neutral.yaml
+  recommendation: keep
+  confidence: high
+  reason: This is a focused failure contract for the real manager when client construction is missing;
+    removing it could turn a deterministic configuration failure into an exception or misleading successful
+    result.
+  evidence:
+  - source/services/subagents/subagent-manager.misc.test.ts constructs RealSubagentManager without createClient
+    and asserts status failed with the exact factory-missing error.
+  - The test uses the production manager and ToolOwnershipRegistry rather than TestSubagentManager, so
+    the failure is not covered by the neighboring happy-path provider fixtures.
+  replacementTestIds: []
+  status: proposed
+- id: subagents-subagent-manager-misc-second-adversarial
+  testId: subagents-subagent-manager-misc
+  role: second_opinion
+  reviewer: calibration-adversarial
+  sourceArtifact: docs/test-audit/calibration-adversarial.yaml
+  recommendation: rewrite_candidate
+  confidence: high
+  reason: The missing createClient factory is a meaningful failed-result contract, but this orphan file
+    expresses one case weakly and carries a large set of unused helper/type imports from a split suite;
+    rewrite it as a focused failure-boundary test or fold it into the manager failure table.
+  evidence:
+  - source/services/subagents/subagent-manager.misc.test.ts:24-38 is a singleton test whose only observable
+    is failed status plus the exact missing-factory error.
+  - source/services/subagents/subagent-manager.misc.test.ts:2-22 imports TestSubagentManager, provider/stream
+    helpers, roles, ModelBehaviorError, retry constants, ConversationEvent, and several fixture helpers
+    that the case never uses.
+  - The production boundary source/services/subagents/subagent-manager.ts must return a failed result
+    when no createClient factory exists; removing the assertion without retaining it would let construction
+    regress to an unhandled throw or misleading success.
+  - 'I ruled out deletion: no assigned sibling asserts the exact "createClient factory not provided" outcome,
+    so rewrite/fold must retain that assertion.'
+  replacementTestIds: []
+  status: proposed
+- id: subagents-subagent-manager-roles-primary
+  testId: subagents-subagent-manager-roles
+  role: primary
+  reviewer: test-audit-coordinator
+  sourceArtifact: docs/test-audit/calibration-report.md
+  recommendation: keep
+  confidence: high
+  reason: 'Neutral reviewer and coordinator keep (adversarial rewrite/medium on form): the file protects
+    many distinct role contracts (mentor history/reset, model settings fallback, abort propagation, explorer
+    read-only shell gating, worker tool caching). A partial case-level overlap was verified: the explorer
+    web-tools case repeats an observable also asserted by same-domain sibling subagent-manager.tools.test.ts;
+    the adversarial claim of an exact explorer-surface overlap is softened to partial on verification
+    and queued for the milestone-3 subagents artifact.'
+  evidence:
+  - calibration-neutral keep/high.
+  - calibration-adversarial rewrite/medium attaches; its evidence is form-based and mostly accurate (singleton
+    tool-surface setup, explorer web-tools overlap), with overlap scope corrected.
+  replacementTestIds: *id001
+  status: reviewed
+- id: subagents-subagent-manager-roles-second-neutral
+  testId: subagents-subagent-manager-roles
+  role: second_opinion
+  reviewer: calibration-neutral
+  sourceArtifact: docs/test-audit/calibration-neutral.yaml
+  recommendation: keep
+  confidence: high
+  reason: Role capability and cache behavior are safety-sensitive and are not equivalent to lifecycle
+    tests; removing this file could give an explorer write tools or make a worker silently lose native
+    policy checks.
+  evidence:
+  - source/services/subagents/subagent-manager.roles.test.ts asserts mentor model selection/fallback,
+    history persistence, and resetMentorSession fresh input.
+  - The file asserts explorer has read/web/shell tools but no write tools, while worker tool sets differ
+    for GPT and non-GPT models.
+  - The file asserts role-agent tool identity is cached per role, clearCache rebuilds it, and cached nested
+    worker tools retain shell approval behavior.
+  replacementTestIds: []
+  status: proposed
+- id: subagents-subagent-manager-roles-second-adversarial
+  testId: subagents-subagent-manager-roles
+  role: second_opinion
+  reviewer: calibration-adversarial
+  sourceArtifact: docs/test-audit/calibration-adversarial.yaml
+  recommendation: rewrite_candidate
+  confidence: high
+  reason: Role selection is valuable, but the file repeats singleton tool-surface setup and contains an
+    exact explorer-surface overlap; rewrite into a role/model capability table while retaining history/reset
+    and shell-policy-specific cases.
+  evidence:
+  - source/services/subagents/subagent-manager.roles.test.ts:411-442 asserts explorer read_file, grep,
+    glob, web_search, web_fetch, and shell presence plus all write-tool absence.
+  - source/services/subagents/subagent-manager.roles.test.ts:472-497 repeats the same observable read_file,
+    web_search, web_fetch, shell, and no-write-tool result; the exact sibling is the test titled `run()
+    with explorer role uses read-only tools only` in the same path.
+  - source/services/subagents/subagent-manager.roles.test.ts:124-206 and 527-581 assert independently
+    changeable mentor model/history and GPT versus non-GPT worker tool choices, so deletion is not safe.
+  - The production boundary source/services/subagents/subagent-manager.ts selects role definitions and
+    source/services/subagents/test-helpers/subagent-manager-fixtures.ts registers the deterministic provider;
+    a table rewrite can preserve the observable tool surface without duplicating provider setup.
+  replacementTestIds: []
+  status: proposed
+- id: subagents-subagent-manager-security-primary
+  testId: subagents-subagent-manager-security
+  role: primary
+  reviewer: test-audit-coordinator
+  sourceArtifact: docs/test-audit/calibration-report.md
+  recommendation: keep
+  confidence: high
+  reason: 'Neutral reviewer and coordinator keep (adversarial rewrite/medium on form): high-scrutiny security
+    boundary (unsandboxed enforcement, workspace write boundary, network redirect safety). The verified
+    three near-identical unsandboxed-wrapper cases are an it.each refactor candidate for milestone 4 without
+    coverage change.'
+  evidence:
+  - calibration-neutral keep/high.
+  - calibration-adversarial rewrite/medium attaches; its three-wrapper duplication claim verified verbatim
+    (same command and assertion across worker/nested/read-only wrappers).
+  replacementTestIds: *id001
+  status: reviewed
+- id: subagents-subagent-manager-security-second-neutral
+  testId: subagents-subagent-manager-security
+  role: second_opinion
+  reviewer: calibration-neutral
+  sourceArtifact: docs/test-audit/calibration-neutral.yaml
+  recommendation: keep
+  confidence: high
+  reason: This file exercises the delegated authority boundary with actual temporary workspaces, policy
+    wrappers, and provider-driven tool invocation; removal could permit writes, shell escape, network
+    redirect escape, or lost failure usage.
+  evidence:
+  - source/services/subagents/subagent-manager.security.test.ts asserts worker, nested, and read-only
+    wrappers reject unsandboxed shell execution, and worker writes outside the workspace return an error
+    without approval.
+  - The file asserts successful-only filesChanged tracking, same-path concurrent write rejection, explorer
+    GREEN/YELLOW policy, and evaluator-approved versus evaluator-rejected YELLOW commands.
+  - The file asserts finite web_fetch scopes reject redirect-unsafe use, hostless web_search requires
+    wildcard, empty scopes deny both tools, and provider error.state.usage is retained.
+  replacementTestIds: []
+  status: proposed
+- id: subagents-subagent-manager-security-second-adversarial
+  testId: subagents-subagent-manager-security
+  role: second_opinion
+  reviewer: calibration-adversarial
+  sourceArtifact: docs/test-audit/calibration-adversarial.yaml
+  recommendation: rewrite_candidate
+  confidence: medium
+  reason: Security contracts are high value and must remain, but the file mixes write-boundary, shell
+    auto-approval, usage, and network redirect concerns and repeats three wrapper cases with identical
+    input/output assertions; rewrite into focused policy tables and separate failure/result contracts.
+  evidence:
+  - source/services/subagents/subagent-manager.security.test.ts:42-66 has three separate tests invoking
+    worker, nested, and read-only wrappers with the same curl command and the same unsandboxed rejection
+    observable.
+  - source/services/subagents/subagent-manager.security.test.ts:101-261 covers both in-boundary and outside-boundary
+    writes across model-specific tools, while :263-400 adds filesChanged success filtering and concurrent
+    write locks; these are independently changeable contracts that should not be deleted together.
+  - source/services/subagents/subagent-manager.security.test.ts:405-615 covers safe, RED, evaluator-approved
+    YELLOW, and evaluator-rejected YELLOW shell behavior; :661-728 covers finite/wildcard/empty network
+    scopes.
+  - If this evidence disappeared, a nested worker could bypass the no-unsandboxed rule, write outside
+    its lease, run a rejected YELLOW command, or use a network host outside the configured scope.
+  - I ruled out consolidation/deletion of the wrapper checks themselves because each wrapper is a distinct
+    production seam; the recommendation is a table rewrite that still invokes each wrapper and preserves
+    every rejection outcome.
+  replacementTestIds: []
+  status: proposed
+- id: shell-command-safety-primary
+  testId: shell-command-safety
+  role: primary
+  reviewer: test-audit-coordinator
+  sourceArtifact: docs/test-audit/calibration-report.md
+  recommendation: rewrite_candidate
+  confidence: medium
+  reason: "Adversarial reviewer and coordinator agree the wrapper expresses its own live contract weakly\
+    \ (neutral keeps): the file is the only test of validateCommandSafety, which is the boolean gate shell.ts\
+    \ actually calls, and its contracts (empty-command throw, nested-substitution RED, sed GREEN family)\
+    \ are unique \u2014 but titles and comments carry stale red/green vocabulary that contradicts SafetyStatus\
+    \ semantics (\"red (now yellow-ish)\"). Milestone 4: tests-only relabel and table-drive; no production\
+    \ change and no coverage loss."
+  evidence:
+  - calibration-adversarial rewrite_candidate/high; calibration-neutral keep/high recorded as dissent.
+  - Coordinator full read verified stale labels and the unique contracts; the seam under test is production-live,
+    so relabel/table, not re-seam.
+  replacementTestIds: *id001
+  status: reviewed
+- id: shell-command-safety-second-neutral
+  testId: shell-command-safety
+  role: second_opinion
+  reviewer: calibration-neutral
+  sourceArtifact: docs/test-audit/calibration-neutral.yaml
+  recommendation: keep
+  confidence: high
+  reason: This file tests the public boolean approval gate across parser, nested shell, path, sensitive-file,
+    unknown-command, redirect, and sed boundaries; removing it could make review-required commands auto-approve
+    or safe sed reads prompt.
+  evidence:
+  - source/utils/shell/command-safety.test.ts asserts empty commands throw, malformed syntax and unknown
+    commands require approval, nested rm is detected, and namespaced filenames are not falsely flagged.
+  - The file asserts sensitive home/config paths and system redirects require approval while read-only
+    sed forms remain safe.
+  - The assertion is intentionally the consumer-facing validateCommandSafety boolean; status detail is
+    separately exercised by shell-command-safety.red-yellow-policy.test.ts and path analysis tests.
+  replacementTestIds: []
+  status: proposed
+- id: shell-command-safety-second-adversarial
+  testId: shell-command-safety
+  role: second_opinion
+  reviewer: calibration-adversarial
+  sourceArtifact: docs/test-audit/calibration-adversarial.yaml
+  recommendation: rewrite_candidate
+  confidence: high
+  reason: The boolean compatibility wrapper still protects useful cases, but it weakly expresses the current
+    RED/YELLOW/GREEN policy and has stale red labels; rewrite against classifyCommand/analyzePathRisk
+    or explicitly document the compatibility boundary.
+  evidence:
+  - source/utils/shell/command-safety.test.ts:8-18 asserts malformed syntax and `rm -rf /` only as boolean
+    true, so it cannot distinguish approval-required YELLOW from hard-blocked RED.
+  - source/utils/shell/command-safety.test.ts:28-54 titles absolute/system/home paths "red" while the
+    current implementation source/utils/shell/command-safety/path-analysis.ts:230-235 returns SafetyStatus.YELLOW
+    for absolute system paths; the boolean assertion hides that semantic drift.
+  - source/utils/shell/command-safety.red-yellow-policy.test.ts:21-27 asserts the same `rm -rf /` observable
+    through classifyCommand as SafetyStatus.RED, and :29-35 asserts `/etc/passwd` as SafetyStatus.YELLOW
+    through analyzePathRisk; these are concrete sibling comparisons for the overlapping cases.
+  - source/utils/shell/command-safety.test.ts:57-83 contains five singleton sed cases that can be expressed
+    as one status table, while the production index source/utils/shell/command-safety/index.ts exports
+    both the detailed status API and the legacy boolean wrapper.
+  replacementTestIds: []
+  status: proposed
+- id: shell-command-safety-git-primary
+  testId: shell-command-safety-git
+  role: primary
+  reviewer: test-audit-coordinator
+  sourceArtifact: docs/test-audit/calibration-report.md
+  recommendation: rewrite_candidate
+  confidence: medium
+  reason: 'Adversarial reviewer and coordinator agree (neutral keeps): 22 singleton one-assertion tests
+    express one command-family contract (git subcommand classification through the live wrapper seam)
+    that is otherwise unasserted; the last three cases actually probe a generic unknown-flag rule mislabeled
+    as git behavior. Milestone 4: one it.each table over (command, expected) pairs, including a correctly-labeled
+    unknown-flag rule case.'
+  evidence:
+  - calibration-adversarial rewrite_candidate/medium; calibration-neutral keep/high recorded as dissent.
+  - Coordinator full read verified 22 singleton its and unique content (no other file classifies git write
+    subcommands).
+  replacementTestIds: *id001
+  status: reviewed
+- id: shell-command-safety-git-second-neutral
+  testId: shell-command-safety-git
+  role: second_opinion
+  reviewer: calibration-neutral
+  sourceArtifact: docs/test-audit/calibration-neutral.yaml
+  recommendation: keep
+  confidence: high
+  reason: Git is a high-frequency command family with a distinct safe inspection versus mutating operation
+    policy; removing this focused corpus could regress one subcommand or let a dangerous flag bypass review.
+  evidence:
+  - source/utils/shell/command-safety.git.test.ts groups git status/log/diff/show/blame/reflog/ls-files/grep
+    as GREEN and git push/commit/reset/clean/rebase/merge/add/checkout as YELLOW.
+  - The same file asserts force, hard, and delete flags upgrade otherwise safe git forms, and unknown
+    or flag-only git invocations remain YELLOW.
+  - No assigned sibling asserts this full git subcommand and flag matrix; command-safety.test.ts checks
+    only generic git log malformed syntax.
+  replacementTestIds: []
+  status: proposed
+- id: shell-command-safety-git-second-adversarial
+  testId: shell-command-safety-git
+  role: second_opinion
+  reviewer: calibration-adversarial
+  sourceArtifact: docs/test-audit/calibration-adversarial.yaml
+  recommendation: rewrite_candidate
+  confidence: medium
+  reason: Git classification is meaningful, but twenty singleton assertions repeat one command-family
+    contract; rewrite as a table of read-only, mutating, flag, and unknown-subcommand cases so additions
+    do not require repeated boilerplate and the status-level API remains explicit.
+  evidence:
+  - source/utils/shell/command-safety.git.test.ts:5-35 has eight independent singleton GREEN tests, while
+    :38-93 has twelve singleton YELLOW tests for mutating, destructive, flag, and unknown forms.
+  - Every case calls the legacy validateCommandSafety boolean API, so the suite cannot distinguish why
+    a command requires approval; source/utils/shell/command-safety/index.ts exports classifyCommandDetailed
+    for that outside-in reason.
+  - 'The production contract is still meaningful: deleting this file would allow a regression such as
+    `git status` becoming approval-required or `git push` becoming green; the proposed rewrite retains
+    those exact command/outcome pairs.'
+  - 'I ruled out consolidation/deletion: no assigned sibling covers the full git subcommand matrix, and
+    the general command-safety file does not contain these git read/write family cases.'
+  replacementTestIds: []
+  status: proposed
+- id: shell-command-safety-path-primary
+  testId: shell-command-safety-path
+  role: primary
+  reviewer: test-audit-coordinator
+  sourceArtifact: docs/test-audit/calibration-report.md
+  recommendation: keep
+  confidence: high
+  reason: 'Unanimous: exhaustive table-driven analyzePathRisk matrix (secret/credential/key naming, case-insensitivity,
+    traversal, home/system/tmp/absolute-path policy). It is the named replacement for the red-yellow-policy
+    paths case.'
+  evidence:
+  - Both second opinions keep/high; coordinator full read (412 lines) verified the matrix and cross-file
+    replacement role.
+  replacementTestIds: *id001
+  status: reviewed
+- id: shell-command-safety-path-second-neutral
+  testId: shell-command-safety-path
+  role: second_opinion
+  reviewer: calibration-neutral
+  sourceArtifact: docs/test-audit/calibration-neutral.yaml
+  recommendation: keep
+  confidence: high
+  reason: Path risk is a broad policy contract spanning project membership, home privacy, extensions,
+    hidden files, traversal, and temporary paths; removing this parameterized corpus could create both
+    safety holes and pervasive false positives.
+  evidence:
+  - source/utils/shell/command-safety.path.test.ts asserts safe and suspicious JSON families, case-insensitive
+    matching, sensitive extensions, and safe false-positive filenames.
+  - The file distinguishes traversal/system/hidden paths, sensitive home paths, absolute project paths,
+    and temporary paths with exact GREEN/YELLOW/RED outcomes.
+  - The sibling case shell-command-safety-red-yellow-policy-paths in source/utils/shell/command-safety.red-yellow-policy.test.ts
+    overlaps only the three risky path examples; it does not replace this wider path corpus.
+  replacementTestIds: []
+  status: proposed
+- id: shell-command-safety-path-second-adversarial
+  testId: shell-command-safety-path
+  role: second_opinion
+  reviewer: calibration-adversarial
+  sourceArtifact: docs/test-audit/calibration-adversarial.yaml
+  recommendation: keep
+  confidence: high
+  reason: This is the dedicated path-analysis matrix and groups related examples by category; it uniquely
+    protects allowlists, sensitive JSON/extensions, home/system/traversal, project, and temporary-path
+    behavior at the direct path API.
+  evidence:
+  - source/utils/shell/command-safety.path.test.ts:9-263 covers safe and suspicious JSON, credential patterns,
+    case handling, and sensitive extensions as direct analyzePathRisk outcomes.
+  - source/utils/shell/command-safety.path.test.ts:264-405 covers traversal, home, system, hidden, project,
+    temporary, and absolute-path boundaries, including safe exceptions and sensitive overrides.
+  - The production boundary source/utils/shell/command-safety/path-analysis.ts:124-320 contains path-specific
+    policy that is not exercised by the git matrix or the command-family-only tests.
+  - 'I ruled out consolidation, rewrite, and deletion: the file already groups parameterized category
+    cases, and the overlapping `/etc/passwd` example in red-yellow-policy.test.ts is only one policy sentinel,
+    not a replacement for this matrix.'
+  replacementTestIds: []
+  status: proposed
+- id: shell-command-safety-red-yellow-policy-ambiguous-primary
+  testId: shell-command-safety-red-yellow-policy-ambiguous
+  role: primary
+  reviewer: test-audit-coordinator
+  sourceArtifact: docs/test-audit/calibration-report.md
+  recommendation: keep
+  confidence: high
+  reason: 'Canonical case record "ambiguous command families are YELLOW instead of RED": unique assertions
+    (verified: mkfs/dd/shutdown and the plain-command YELLOW families appear in no other test file).'
+  evidence:
+  - calibration-neutral keep/high on this case.
+  - calibration-adversarial covered the file-level (dissent on granularity, recorded).
+  replacementTestIds: *id001
+  status: reviewed
+- id: shell-command-safety-red-yellow-policy-ambiguous-second-neutral
+  testId: shell-command-safety-red-yellow-policy-ambiguous
+  role: second_opinion
+  reviewer: calibration-neutral
+  sourceArtifact: docs/test-audit/calibration-neutral.yaml
+  recommendation: keep
+  confidence: high
+  reason: Ambiguous write-capable command families must remain reviewable rather than hard-blocked; removing
+    this case could change user/model decision opportunities for install, copy, move, SSH, chmod, or pip
+    commands.
+  evidence:
+  - source/utils/shell/command-safety.red-yellow-policy.test.ts asserts npm install, curl, cp, mv, ssh,
+    chmod, and pip install classifyCommand() as SafetyStatus.YELLOW.
+  - The exact sibling source/utils/shell/command-safety.path.test.ts does not assert command-family classification,
+    so it cannot replace this command-level contract.
+  replacementTestIds: []
+  status: proposed
+- id: shell-command-safety-red-yellow-policy-dangerous-primary
+  testId: shell-command-safety-red-yellow-policy-dangerous
+  role: primary
+  reviewer: test-audit-coordinator
+  sourceArtifact: docs/test-audit/calibration-report.md
+  recommendation: keep
+  confidence: high
+  reason: 'Canonical case record "inherently dangerous direct commands remain RED": unique assertions
+    (verified: mkfs/dd/shutdown and the plain-command YELLOW families appear in no other test file).'
+  evidence:
+  - calibration-neutral keep/high on this case.
+  - calibration-adversarial covered the file-level (dissent on granularity, recorded).
+  replacementTestIds: *id001
+  status: reviewed
+- id: shell-command-safety-red-yellow-policy-dangerous-second-neutral
+  testId: shell-command-safety-red-yellow-policy-dangerous
+  role: second_opinion
+  reviewer: calibration-neutral
+  sourceArtifact: docs/test-audit/calibration-neutral.yaml
+  recommendation: keep
+  confidence: high
+  reason: Inherently destructive commands must remain hard-blocked; removing this case could downgrade
+    rm, mkfs, dd, sudo rm, or shutdown to an approval path that can execute them.
+  evidence:
+  - source/utils/shell/command-safety.red-yellow-policy.test.ts asserts rm -rf /, mkfs /dev/sda, dd to
+    /dev/sda, sudo rm -rf /, and shutdown now classifyCommand() as SafetyStatus.RED.
+  - source/utils/shell/command-safety.test.ts checks rm -rf / only through validateCommandSafety() true,
+    so it does not assert the RED boundary or the complete destructive corpus.
+  replacementTestIds: []
+  status: proposed
+- id: shell-command-safety-red-yellow-policy-paths-primary
+  testId: shell-command-safety-red-yellow-policy-paths
+  role: primary
+  reviewer: test-audit-coordinator
+  sourceArtifact: docs/test-audit/calibration-report.md
+  recommendation: consolidation_candidate
+  confidence: medium
+  reason: 'Canonical case record "read-only risky paths are YELLOW, not hard-blocked": its three inputs
+    (/etc/passwd, /var/log/system.log, ../secrets.json) are each already asserted YELLOW by shell-command-safety-path
+    (directory-traversal and absolute-system-paths cases), so the case adds a duplicate regression surface.
+    Neutral reviewer and coordinator agree; named replacement carries the same evidence. Milestone 4 removes
+    this one case only; the file''s other cases stay.'
+  evidence:
+  - calibration-neutral consolidation_candidate/medium naming shell-command-safety-path as the sibling.
+  - Coordinator verified all three inputs appear in path.test.ts (traversal ../secrets.json; system paths
+    /etc/passwd and /var/log/system.log).
+  - calibration-adversarial returned file-level keep and did not expand cases; dissent on granularity
+    recorded.
+  replacementTestIds:
+  - shell-command-safety-path
+  status: reviewed
+- id: shell-command-safety-red-yellow-policy-paths-second-neutral
+  testId: shell-command-safety-red-yellow-policy-paths
+  role: second_opinion
+  reviewer: calibration-neutral
+  sourceArtifact: docs/test-audit/calibration-neutral.yaml
+  recommendation: consolidation_candidate
+  confidence: medium
+  reason: This case asserts the same path-level YELLOW outcome already asserted by the named shell-command-safety-path
+    file, so retaining both adds a small duplicate regression surface; the command-level cases in this
+    file remain independently valuable.
+  evidence:
+  - source/utils/shell/command-safety.red-yellow-policy.test.ts calls analyzePathRisk() for /etc/passwd,
+    /var/log/system.log, and ../secrets.json and expects SafetyStatus.YELLOW.
+  - The named sibling source/utils/shell/command-safety.path.test.ts asserts /etc/passwd and ../secrets.json
+    as YELLOW in its 'absolute system paths' and 'directory traversal' cases, while its broader corpus
+    covers the same path policy.
+  - If this case vanished, those exact path outcomes would still be asserted by shell-command-safety-path;
+    the realistic escaped defect is only a future divergence between the two path policy entry points.
+  replacementTestIds: []
+  status: proposed
+- id: shell-command-safety-red-yellow-policy-workspace-primary
+  testId: shell-command-safety-red-yellow-policy-workspace
+  role: primary
+  reviewer: test-audit-coordinator
+  sourceArtifact: docs/test-audit/calibration-report.md
+  recommendation: keep
+  confidence: high
+  reason: 'Canonical case record "workspace-scale edit commands are YELLOW instead of RED": unique assertions
+    (verified: mkfs/dd/shutdown and the plain-command YELLOW families appear in no other test file).'
+  evidence:
+  - calibration-neutral keep/high on this case.
+  - calibration-adversarial covered the file-level (dissent on granularity, recorded).
+  replacementTestIds: *id001
+  status: reviewed
+- id: shell-command-safety-red-yellow-policy-workspace-second-neutral
+  testId: shell-command-safety-red-yellow-policy-workspace
+  role: second_opinion
+  reviewer: calibration-neutral
+  sourceArtifact: docs/test-audit/calibration-neutral.yaml
+  recommendation: keep
+  confidence: high
+  reason: Workspace-scale edits are ambiguous but effectful and must remain YELLOW rather than RED; removing
+    this case could make sed -i or find -exec operations either unusably hard-blocked or silently safe.
+  evidence:
+  - source/utils/shell/command-safety.red-yellow-policy.test.ts asserts sed -i and find -exec cp classifyCommand()
+    as SafetyStatus.YELLOW.
+  - source/utils/shell/command-safety.test.ts covers sed forms but does not assert the find -exec family
+    or the deliberate YELLOW boundary for workspace-scale edits.
+  replacementTestIds: []
+  status: proposed

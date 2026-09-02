@@ -1,15 +1,23 @@
 # Test suite audit
 
-Status: in progress. The solo foundation is being built; explorer calibration and cleanup require later approval.
+Status: Milestones 1-2 complete. Calibration wave ran 2026-09-02 and PASSED its
+go/no-go (report: `docs/test-audit/calibration-report.md`); reviewer
+discrimination is demonstrated. The source graph (`docs/test-audit/graph.yaml`)
+holds the 16 calibration files' canonical records. Milestone 3 (domain
+exploration over the remaining 569 files) is in progress; cleanup has not
+started.
 
 ## Resume here
 
-Work in `/home/qduc/term2/.worktrees/test-suite-audit-foundation` on branch
-`test-suite-audit-foundation`.
+Start future audit work from current `main` in a dedicated worktree. The original
+`test-suite-audit-foundation` worktree has been removed; its work is present on
+`main`.
 
-The current milestone is non-destructive. Finish the typed graph, read-only helper,
-centralized baseline, and verification. Do not dispatch explorers and do not remove,
-rewrite, retier, or consolidate tests during this milestone.
+Read `docs/test-audit/calibration-report.md` for the calibration verdict and
+adjudicated decisions, and `docs/test-audit/shards.md` for the domain boundaries.
+Milestone 3 remains non-destructive (read-only exploration producing graph
+records). Do not remove, rewrite, retier, or consolidate tests until approved
+cleanup batches (Milestone 4).
 
 The graph source of truth is `docs/test-audit/graph.yaml`. Its validator and query
 code lives under `scripts/test-audit/`; run `pnpm test-audit validate` after every
@@ -72,8 +80,12 @@ re-deriving the vocabulary or safety rules.
 
 ### 2. Calibration wave
 
-Waiting for explicit approval. Two explorers independently inspect the same 10–20
-test files. The coordinator reconciles disagreements and changes the rubric or schema
+Complete 2026-09-02. Two independently configured reviewers inspected the same
+16 files; the coordinator reconciled disagreements and wrote the decisions of
+record. Report: `docs/test-audit/calibration-report.md`. The wave PASSED its
+go/no-go: discrimination is demonstrated (seven verified non-keep decisions
+from the adversarial stance; no invented claims; granularity canon settled at
+case level where a file needs it).r schema
 before wider fan-out.
 
 A four-file probe ran first, recorded in `docs/test-audit/calibration-probe.md`.
@@ -93,7 +105,8 @@ survives review.
 
 ### 3. Domain exploration
 
-Waiting for calibration. Run non-overlapping domain assignments in waves. Selective
+In progress. Run non-overlapping domain assignments in waves over the remaining
+569 files (the 16 calibration files already have canonical records). Selective
 second review is mandatory for deletion candidates, high-risk seams, low-confidence
 records, expensive retained tests, and a sample of ordinary keeps.
 

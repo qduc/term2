@@ -1,0 +1,212 @@
+# Coordinator control artifact — 2026-09-02 calibration wave
+# EXCLUDED from both reviewers. Recorded before either reviewer was dispatched.
+# Expected classifications are the coordinator's independent judgment for the
+# go/no-go comparison. `inspected: deep` = coordinator read the file in full;
+# `outline` = coordinator read only describe/it titles and structure.
+# This file is NOT a graph artifact and must never be merged.
+wave: 2026-09-02
+coordinator: orchestrator session (term2)
+commit: d36c392a
+inventory: 582 files / 7503 cases collected 2026-09-02
+sample_size: 16
+
+non-keep_controls:
+  - command-safety.git.test.ts -> rewrite_candidate
+  - subagent-manager.misc.test.ts -> rewrite_candidate
+  - command-safety.red-yellow-policy.test.ts case 3 -> consolidation_candidate (named replacement: command-safety.path.test.ts)
+
+files:
+  - file: source/services/agent-runtime/application-run-loop.test.ts
+    domain: runtime
+    expected: keep
+    confidence: high
+    inspected: outline
+    basis: >-
+      89 its over seven describe blocks (opaque-lane normalization, request-boundary
+      compaction/rollover, terminal provider events, generation guard, core loop,
+      turn budget, in-loop retry). Canonical Run Loop seam; high-scrutiny area per
+      plan guardrails. Expectation keep; not deep-read.
+
+  - file: source/providers/codex-responses-model.test.ts
+    domain: providers
+    expected: keep
+    confidence: high
+    inspected: outline
+    basis: >-
+      94 its; wrapCodexStream output reconstruction from output_item.done, transport
+      isolation, terminal settlement. Provider fidelity; high-scrutiny. Expectation
+      keep; not deep-read.
+
+  - file: source/components/message/CommandMessage.test.tsx
+    domain: ui-components
+    expected: keep
+    confidence: high
+    inspected: outline
+    basis: >-
+      85 its; render contract for command/tool messages incl. background shell and
+      subagent activity, verbs not raw tool names, worktree transitions. Unique
+      component seam. Expectation keep; not deep-read.
+
+  - file: source/tools/system/shell.test.ts
+    domain: shell
+    expected: keep
+    confidence: high
+    inspected: outline
+    basis: >-
+      44 its; live shell-tool boundary: background monitor tools, timeout/overflow
+      policy. Integration-level seam; expectation keep; not deep-read.
+
+  - file: source/services/session/conversation-session.characterization.test.ts
+    domain: session
+    expected: keep
+    confidence: medium
+    inspected: outline
+    basis: >-
+      31 its of public-API characterization (approval forwarding, snapshot shape,
+      setter passthroughs, auto-approve flows, terminal ordering). Sibling overlap
+      with auto-approval/usage/tool-started files possible at case level; no file-level
+      non-keep evident from titles.
+
+  - file: source/services/session/conversation-session.isolation.test.ts
+    domain: session
+    expected: keep
+    confidence: high
+    inspected: deep
+    basis: >-
+      Read in full (374 lines, 6 its). #1: cross-session previousResponseId,
+      recovery-budget, and frozen history-snapshot isolation (interleaved A/B/A2);
+      #2: cross-session pending-approval isolation (B handleApprovalDecision -> null
+      while A pending, A continues); #6: aborted approval does not replay cached tool
+      args as command messages and never calls continueRunStream. #3-#5: queueModeNotice
+      chaining/non-chaining prefixing and 3-turn prefix stability (prompt-cache growth).
+      queueModeNotice is also exercised in lifecycle/session-composition/handoff/
+      profile-transition tests; #3-#5 may be case-level consolidation candidates if a
+      sibling carries the same observables — adjudication target. File-level keep.
+
+  - file: source/services/session/conversation-session.lifecycle.test.ts
+    domain: session
+    expected: keep
+    confidence: medium
+    inspected: outline
+    basis: >-
+      16 its: resume full-history resync, generation-guard stale completion, provider
+      continuity clearing, undo ledger semantics, Invalid previous_response_id
+      rebuild. queueModeNotice present here too (overlap with isolation #3-#5 to
+      adjudicate). Expectation keep.
+
+  - file: source/services/session/conversation-session.stream.test.ts
+    domain: session
+    expected: keep
+    confidence: medium
+    inspected: outline
+    basis: >-
+      13 its: stream event ordering, no-replay-after-model-event, tool_recovery,
+      importState reconciliation, callId preservation on approval terminals.
+      Expectation keep.
+
+  - file: source/services/subagents/subagent-manager.lifecycle.test.ts
+    domain: subagents
+    expected: keep
+    confidence: medium
+    inspected: outline
+    basis: >-
+      6 its: per-call session isolation, foreground-adoption approval-pause sink gate,
+      started/completed events, unknown-role completed event, mentor base instructions,
+      finalText contract. Expectation keep.
+
+  - file: source/services/subagents/subagent-manager.misc.test.ts
+    domain: subagents
+    expected: rewrite_candidate
+    confidence: medium
+    inspected: deep
+    basis: >-
+      Read in full (38 lines, 1 it). Only test file constructing RealSubagentManager;
+      unique contract: a manager without a createClient factory returns status
+      'failed' with error 'SubagentManager: createClient factory not provided' rather
+      than throwing (production throw at execution-runner.ts:123 is caught into a
+      failed result). Weakly expressed: asserts status + exact message only, and the
+      file carries ~25 lines of dead imports (TestSubagentManager, ROLE_*,
+      MAX_SUBAGENT_MODEL_RETRIES, ModelBehaviorError, wrapResultAsAgentStream,
+      wrapErrorAsAgentStream, getAgentTool, createMockExecutionContext,
+      registerTestProvider) — orphan fragment of a larger split. Rewrite: strip dead
+      imports or fold the case into a sibling file with a table of misconfiguration
+      outcomes. Not consolidation/deletion: no other file covers the path.
+
+  - file: source/services/subagents/subagent-manager.roles.test.ts
+    domain: subagents
+    expected: keep
+    confidence: medium
+    inspected: outline
+    basis: >-
+      20+ its across mentor/explorer/worker role describes: role model settings,
+      history reset, abort propagation, read-only tool gates, unsandboxed rejection,
+      agent-tool caching. Expectation keep.
+
+  - file: source/services/subagents/subagent-manager.security.test.ts
+    domain: subagents
+    expected: keep
+    confidence: high
+    inspected: outline
+    basis: >-
+      Security boundary (unsandboxed enforcement, workspace write boundary, shell
+      safety gating, network redirect safety); high-scrutiny. Expectation keep;
+      not deep-read.
+
+  - file: source/utils/shell/command-safety.test.ts
+    domain: shell
+    expected: keep
+    confidence: medium
+    inspected: deep
+    basis: >-
+      Read in full (83 lines, 21 its). Old boolean wrapper API (validateCommandSafety,
+      the seam shell.ts:522 actually calls). Unique: throws on empty command; nested
+      substitution RED; unknown-command YELLOW; sed read-only/pipe/redirect GREEN
+      family. sed -i YELLOW duplicated in red-yellow-policy + tool-policy; rm -rf / RED
+      also in .rm and .specialized-handlers. Titles/comments stale ("red (now
+      yellow-ish, needs approval)") — a case-level modernization rewrite of the sed
+      block is defensible but the file's core contracts are unique and cheap. Keep.
+
+  - file: source/utils/shell/command-safety.git.test.ts
+    domain: shell
+    expected: rewrite_candidate
+    confidence: medium
+    inspected: deep
+    basis: >-
+      Read in full (95 lines, 22 its). One assertion per it over git subcommand
+      classification through the live wrapper seam. Content is unique (no other file
+      classifies git write subcommands such as push/commit/reset/clean/rebase/merge/
+      add/checkout). Weak expression: 22 singleton its where one it.each table over
+      (command, expected) pairs carries identical evidence; last three its
+      (git log --force / diff --hard / status --delete) actually probe a generic
+      unknown-flag rule using git examples and are mislabeled as git behavior. Not
+      deletion: wrapper seam is production-live and classification is otherwise
+      untested at this level.
+
+  - file: source/utils/shell/command-safety.path.test.ts
+    domain: shell
+    expected: keep
+    confidence: high
+    inspected: deep
+    basis: >-
+      Read in full (412 lines, ~25 its). Table-driven analyzePathRisk matrix: JSON
+      secret/credential/cloud/key/SSO/monitoring lists, case-insensitivity, sensitive
+      extensions, traversal, home/system/hidden paths, absolute-in-project vs
+      absolute-outside-project vs /tmp handling. Exhaustive and cheap. Is itself the
+      natural named replacement for red-yellow-policy's duplicated risky-paths case.
+      Keep.
+
+  - file: source/utils/shell/command-safety.red-yellow-policy.test.ts
+    domain: shell
+    expected: keep
+    confidence: medium
+    inspected: deep
+    basis: >-
+      Read in full (43 lines, 4 its). Case 1 (npm/curl/cp/mv/ssh/chmod/pip YELLOW-not-
+      RED) and case 2 (mkfs/dd/shutdown/sudo-rm/rm RED) are unique at classification
+      level — mkfs/dd/shutdown appear in NO other test file. Case 3 ('read-only risky
+      paths': /etc/passwd, /var/log/system.log, ../secrets.json) is fully duplicated by
+      path.test.ts cases (same three inputs) -> case-level consolidation_candidate with
+      named replacement command-safety.path.test.ts. Case 4 (sed -i / find -exec cp
+      YELLOW-not-RED) partially duplicates core sed -i assertion and find.test exec
+      coverage. File-level keep because cases 1-2 are unique; case-level expansion is
+      the correct granularity here.

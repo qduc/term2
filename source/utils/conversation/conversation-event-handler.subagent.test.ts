@@ -568,7 +568,7 @@ it('subagent_command_message: creates subagent message if not present', () => {
   expect(result[0].tools).toEqual(['read_file "source/app.tsx" (Success)']);
 });
 
-it('subagent_tool_started: formats shell command with args', () => {
+it('subagent_tool_started: does not surface a formatted tool until the command message arrives', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
@@ -593,6 +593,11 @@ it('subagent_tool_started: formats shell command with args', () => {
     messages = update(messages);
   }
 
+  // tool_started keeps the live card running; tools are only formatted when the
+  // subagent_command_message for that tool arrives (see the next case).
+  expect(messages).toHaveLength(1);
+  expect(messages[0].agentId).toBe('agent-1');
+  expect(messages[0].status).toBe('running');
   expect(messages[0].tools).toEqual([]);
 });
 

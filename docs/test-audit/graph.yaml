@@ -27738,21 +27738,18 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
-  confidence: medium
-  reason: Coordinator decision of record after source verification. The file protects a valuable subagent-card
-    contract, but at least one case title promises formatting behavior that the assertion explicitly says
-    must not occur, reducing signal and obscuring the intended boundary.
+  recommendation: keep
+  confidence: high
+  reason: "M4 batch B4 (audit-m4-b4 8b8e8842) landed: the mislabeled subagent_tool_started case now\
+    \ asserts the real boundary — a started tool stays off the live card until the command message\
+    \ arrives — so titles and assertions agree."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
-  - "Lines 571-597 title the case \u201Cformats shell command with args\u201D but invoke only subagent_tool_started\
-    \ and assert tools remains []; no formatted command is asserted."
-  - Lines 7-84 and 216-418 cover the actual lifecycle/linkage/transfer contract with concrete card state
-    and tool-history assertions, so the candidate is a narrow case rewrite rather than deletion of the
-    file.
-  - Lines 860-966 separately assert repeated tool results and start-event suppression with observable
-    outcomes, leaving the misleading case as redundant weak signal within this file.
+  - The subagent_tool_started case now asserts the live card stays running with no formatted tool until
+    subagent_command_message arrives (the next case pins the formatting outcome).
+  - Lifecycle/linkage/transfer, repeated-tool-result, and start-suppression cases are unchanged and
+    retain concrete card-state and tool-history assertions.
   replacementTestIds: []
   status: reviewed
 - id: conversation-b-conversation-event-handler-text-delta-test-primary
@@ -27784,8 +27781,8 @@ decisions:
   reason: "Coordinator OVERRIDE of the reviewer architecture_signal: verified by executing the file \u2014\
     \ all 31 tests PASS at this source revision, including the three at lines 588-663 whose comments claim\
     \ \"Fails:\". The comments are stale (left from an earlier bug state); the assertions pin current\
-    \ correct finalText/over-accumulation/no-callId reconciliation behavior. M4: delete the stale Fails\
-    \ comments. Keep."
+    \ correct finalText/over-accumulation/no-callId reconciliation behavior. M4 batch B4 (audit-m4-b4\
+    \ 8b8e8842) removed the stale comments and retitled the three cases to the behavior they pin. Keep."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
@@ -27864,19 +27861,19 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
-  confidence: medium
-  reason: Coordinator decision of record after source verification. Most helper coverage is useful, but
-    one test title contradicts both its comments and assertion, weakening discoverability and making the
-    intended stale-running contract easy to misread.
+  recommendation: keep
+  confidence: high
+  reason: "M4 batch B4 (audit-m4-b4 8b8e8842) landed: the contradictory case was renamed to the behavior\
+    \ it pins — a running message whose callId differs from the new completed command stays and the\
+    \ completed command appends — and the case now asserts both message ids."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
-  - "Lines 139-164 title the case \u201Cremoves stale running messages\u201D but the comments and assertion\
-    \ explicitly expect the stale running message to stay and length two."
-  - Lines 119-137 and 166-182 cover adjacent command merge behavior with clearer assertions, so the contradictory
-    case should be renamed or rewritten to state the actual Phase 1 behavior rather than removed wholesale.
-  - Lines 19-94 and 188-297 provide distinct assistant-text, trim, undo, user-entry, and index contracts.
+  - The mergeCommandMessages case formerly titled 'removes stale running messages' now states and asserts
+    that Phase 2 only cleans callIds present among the surviving completed commands, so an unrelated
+    running message stays alongside the appended completion.
+  - Adjacent same-callId dedup, different-callId completed, no-callId, assistant-text, trim, undo,
+    user-entry, and index cases are unchanged.
   replacementTestIds: []
   status: reviewed
 - id: conversation-b-rewind-items-test-primary

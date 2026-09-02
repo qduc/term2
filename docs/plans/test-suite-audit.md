@@ -6,10 +6,11 @@ exploration) closed 2026-09-03: all 585 test files at the `d36c392a` inventory
 have validated graph records (28 reviewer artifacts + coordinator
 adjudication), and the source graph (`docs/test-audit/graph.yaml`) holds 605
 tests / 694 contracts / 1230 decisions. Milestone 4 (cleanup batches) is in
-progress: batches B1 (hooks-real-code), B2 (commands), and B3 (util-fixes) landed
-2026-09-03 as `audit-m4-b1` (`7c90b29a`), `audit-m4-b2` (`13c97871`), and
-`audit-m4-b3` (`3f09d676`); deferred decisions (suite-topology change,
-runtime-history location, mutation-testing proportionality) gate parts of it.
+progress: batches B1 (hooks-real-code), B2 (commands), B3 (util-fixes), and B4
+(conversation-utils) landed 2026-09-03 as `audit-m4-b1` (`7c90b29a`),
+`audit-m4-b2` (`13c97871`), `audit-m4-b3` (`3f09d676`), and `audit-m4-b4`
+(`8b8e8842`); deferred decisions (suite-topology change, runtime-history location,
+mutation-testing proportionality) gate parts of it.
 
 ## Resume here
 
@@ -150,7 +151,7 @@ graph primary decisions to keep/high with a note naming the batch and commit):
 - **B4 conversation-utils**: conversation-event-handler.subagent (fix the
   title/assert mismatch at 571-595), message-utils (fix title/comment/assert
   contradiction ~153-163), conversation-event-handler.tools (strip stale
-  "Fails:" comments at 588-663 — keep file).
+  "Fails:" comments at 588-663 — keep file). **Landed in `audit-m4-b4` (`8b8e8842`).**
 - **B5 runtime-lib**: openai-agent-client (exercise production retry path),
   openai-agent-client.chat (replace truthiness asserts), subagent-bridge
   (cancelAsyncRuns must assert delegation; fix sink-lifetime test).

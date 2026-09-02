@@ -22,6 +22,7 @@ let pidAlivenessOverride: ((pid: number) => boolean) | null = null;
 export type LoadConversationForProjectResult =
   | { status: 'loaded'; conversation: RestoredState }
   | { status: 'not_found' }
+  | { status: 'ambiguous'; candidates: Array<{ id: string; shortRef: string }> }
   | { status: 'project_mismatch'; conversation: RestoredState }
   | { status: 'unreadable'; error: unknown };
 
@@ -301,7 +302,15 @@ export function loadConversationForProject(
   expectedSshHost?: string,
 ): LoadConversationForProjectResult {
   ensureConversationsDir();
-  return loadConversationForProjectReadOnly(id, expectedProjectPath, expectedSshHost);
+  if (fs.existsSync(getConversationPath(id))) {
+    return loadConversationForProjectReadOnly(id, expectedProjectPath, expectedSshHost);
+  }
+  const resolution = resolveConversationReference(
+    id,
+    browseConversationsForProject(expectedProjectPath, expectedSshHost).conversations,
+  );
+  if (resolution.kind === 'ambiguous') return { status: 'ambiguous', candidates: resolution.candidates };
+  return loadConversationForProjectReadOnly(resolution.id, expectedProjectPath, expectedSshHost);
 }
 
 /** Browser-only load that must not trigger directory creation or legacy migration. */
@@ -370,6 +379,53 @@ export function browseConversationsForProject(
     }
   }
   return { conversations, unavailable };
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_PREFIX = /^[0-9a-f-]{4,36}$/i;
+
+export function resolveConversationReference(
+  reference: string,
+  conversations: readonly Pick<RestoredState, 'id'>[],
+): { kind: 'resolved'; id: string } | { kind: 'ambiguous'; candidates: Array<{ id: string; shortRef: string }> } {
+  const exact = conversations.find((conversation) => conversation.id === reference);
+  if (exact || UUID.test(reference) || !UUID_PREFIX.test(reference)) {
+    return { kind: 'resolved', id: exact?.id ?? reference };
+  }
+  const matches = conversations.filter(
+    (conversation) => UUID.test(conversation.id) && conversation.id.toLowerCase().startsWith(reference.toLowerCase()),
+  );
+  if (matches.length === 1) return { kind: 'resolved', id: matches[0].id };
+  if (matches.length > 1) {
+    const refs = uniqueConversationShortRefs(conversations);
+    return {
+      kind: 'ambiguous',
+      candidates: matches.map((conversation) => ({
+        id: conversation.id,
+        shortRef: refs.get(conversation.id) ?? conversation.id,
+      })),
+    };
+  }
+  return { kind: 'resolved', id: reference };
+}
+
+export function uniqueConversationShortRefs(conversations: readonly Pick<RestoredState, 'id'>[]): Map<string, string> {
+  const ids = conversations.map((conversation) => conversation.id);
+  return new Map(
+    ids.map((id) => {
+      if (!UUID.test(id)) return [id, id];
+      let length = Math.min(8, id.length);
+      while (
+        length < id.length &&
+        ids.some(
+          (candidate) => candidate !== id && candidate.toLowerCase().startsWith(id.slice(0, length).toLowerCase()),
+        )
+      ) {
+        length += 1;
+      }
+      return [id, id.slice(0, length)];
+    }),
+  );
 }
 
 export function loadLastConversation(expectedProjectPath?: string, expectedSshHost?: string): RestoredState | null {
@@ -477,6 +533,7 @@ export function deleteConversation(id: string): boolean {
 
 export interface ConversationListEntry {
   id: string;
+  shortRef?: string;
   updatedAt: string;
   projectPath?: string;
   sshHost?: string;
@@ -564,7 +621,9 @@ export function listConversations(expectedProjectPath?: string, expectedSshHost?
         // skip
       }
     }
-    return entries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const sorted = entries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const shortRefs = uniqueConversationShortRefs(sorted);
+    return sorted.map((entry) => ({ ...entry, shortRef: shortRefs.get(entry.id) ?? entry.id }));
   } catch {
     return [];
   }

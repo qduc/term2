@@ -137,8 +137,12 @@ const isStructurallyValidKnownEvent = (event: UnknownObject): boolean => {
       return true;
     case 'session_rollover':
       return (
-        hasString(event, 'brief') &&
-        (event['reason'] === undefined || isOneOf(event['reason'], ['context_pressure', 'task_boundary']))
+        (event['reason'] === undefined || isOneOf(event['reason'], ['context_pressure', 'task_boundary'])) &&
+        (hasString(event, 'brief') ||
+          (isOneOf(event['phase'], ['requested', 'blocked', 'completed']) &&
+            hasString(event, 'rolloverId') &&
+            hasString(event, 'sourceSessionId') &&
+            hasNumber(event, 'briefSize')))
       );
     default:
       return true;

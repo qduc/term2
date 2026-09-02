@@ -24,7 +24,16 @@ export function createSessionRolloverToolDefinition(
     description:
       'Request an idle-boundary rotation into a fresh session. Include a concise handoff brief with completed work, open work, and durable-state pointers.',
     parameters: sessionRolloverParameters,
-    terminateAfterExecution: true,
+    terminateAfterExecution: (result) =>
+      typeof result === 'string' &&
+      (() => {
+        try {
+          const parsed = JSON.parse(result) as Partial<SessionRolloverRequestOutcome>;
+          return parsed.ok === true && parsed.status === 'rollover_requested';
+        } catch {
+          return false;
+        }
+      })(),
     needsApproval: () => false,
     execute: (params) => JSON.stringify(requestRollover(params)),
     formatCommandMessage: (item, index, calls) => {

@@ -1,35 +1,37 @@
-import type { ContextEstimate } from './index.js';
-
 export type ContextMilestoneReminderConfig = {
   enabled: boolean;
   milestones: readonly number[];
   autoBrief: boolean;
 };
 
-/** Emits each configured milestone at most once for the lifetime of this instance. */
+const RECONSIDERATION_INTERVAL_TOKENS = 50_000;
+
+/** Emits configured milestones and bounded reconsideration reminders from provider usage. */
 export class ContextMilestoneReminder {
   readonly #fired = new Set<number>();
+  #nextReconsideration?: number;
 
-  observe(estimate: ContextEstimate, config: ContextMilestoneReminderConfig, compactionThreshold?: number): string[] {
-    if (!config.enabled) return [];
+  observe(inputTokens: number | undefined, config: ContextMilestoneReminderConfig): string[] {
+    if (!config.enabled || inputTokens === undefined || !Number.isFinite(inputTokens) || inputTokens < 0) return [];
 
     const reminders: string[] = [];
     for (const milestone of config.milestones) {
       if (!Number.isFinite(milestone) || milestone <= 0 || this.#fired.has(milestone)) continue;
-      if (estimate.renderedInputTokens < milestone) continue;
+      if (inputTokens < milestone) continue;
       this.#fired.add(milestone);
-      reminders.push(
-        `Context is at approximately ${estimate.renderedInputTokens} tokens (milestone: ${milestone}). ${
-          config.autoBrief
-            ? 'You must decide now whether the current task has reached a natural boundary. If it has, externalize state (docs/memory) and call session_rollover with a handoff brief before doing more work.'
-            : 'You must decide now whether the current task has reached a natural boundary. If it has, call session_rollover with a handoff brief before doing more work.'
-        }${
-          compactionThreshold === undefined
-            ? ''
-            : ` Automatic compaction is deferred for this request boundary only; if you continue, it may run at the next boundary after approximately ${compactionThreshold} tokens.`
-        }`,
-      );
+      reminders.push(this.#message(inputTokens, `crossed rollover milestone: ${milestone}`, config));
+    }
+    if (reminders.length > 0) {
+      this.#nextReconsideration = inputTokens + RECONSIDERATION_INTERVAL_TOKENS;
+    } else if (this.#nextReconsideration !== undefined && inputTokens >= this.#nextReconsideration) {
+      reminders.push(this.#message(inputTokens, 'reconsideration after deferral', config));
+      this.#nextReconsideration = inputTokens + RECONSIDERATION_INTERVAL_TOKENS;
     }
     return reminders;
+  }
+
+  #message(inputTokens: number, trigger: string, config: ContextMilestoneReminderConfig): string {
+    const preparation = config.autoBrief ? 'externalize the necessary state in a durable artifact and ' : '';
+    return `The provider reported ${inputTokens} input tokens for the latest completed request (${trigger}). If the task is at a safe natural boundary, ${preparation}call session_rollover with a bounded handoff brief. If stopping now would strand work, lose important context, or interrupt an indivisible step, continue until the next safe natural boundary and reconsider then. Rollover remains optional at every later reminder.`;
   }
 }

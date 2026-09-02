@@ -117,15 +117,36 @@ it('logs a session rollover marker at the public conversation boundary', () => {
   const events: unknown[] = [];
   service.setLogSink((event) => events.push(event));
 
-  service.logSessionRollover({ reason: 'context_pressure', brief: 'Continue from the durable notes.' });
+  service.logSessionRollover({
+    type: 'session_rollover',
+    phase: 'requested',
+    rolloverId: 'rollover-1',
+    sourceSessionId: 'default',
+    reason: 'context_pressure',
+    briefSize: 32,
+    providerInputTokens: 210_000,
+  });
 
   expect(events).toEqual([
-    { type: 'session_rollover', reason: 'context_pressure', brief: 'Continue from the durable notes.' },
+    {
+      type: 'session_rollover',
+      phase: 'requested',
+      rolloverId: 'rollover-1',
+      sourceSessionId: 'default',
+      reason: 'context_pressure',
+      briefSize: 32,
+      providerInputTokens: 210_000,
+    },
   ]);
 });
 
 it('does not let a stale interaction projection block a settled session rollover', () => {
-  const request = { reason: 'task_boundary' as const, brief: 'Continue.' };
+  const request = {
+    reason: 'task_boundary' as const,
+    brief: 'Continue.',
+    rolloverId: 'rollover-1',
+    requestedAt: 1,
+  };
   const client = partialClient({
     consumeSessionRolloverRequest: () => ({ status: 'ready' as const, request }),
   });
@@ -148,7 +169,12 @@ it('does not let a stale interaction projection block a settled session rollover
 });
 
 it('blocks a settled session rollover while a standalone check-in interaction is pending', () => {
-  const request = { reason: 'task_boundary' as const, brief: 'Continue.' };
+  const request = {
+    reason: 'task_boundary' as const,
+    brief: 'Continue.',
+    rolloverId: 'rollover-2',
+    requestedAt: Date.now(),
+  };
   const client = partialClient({
     consumeSessionRolloverRequest: () => ({ status: 'ready' as const, request }),
   });
@@ -157,6 +183,8 @@ it('blocks a settled session rollover while a standalone check-in interaction is
     toolOwnership: new ToolOwnershipRegistry(),
     deps: { logger: mockLogger, sessionContextService },
   });
+  const events: unknown[] = [];
+  service.setLogSink((event) => events.push(event));
   service.presentPendingInteraction({
     agentName: 'System',
     toolName: 'check_in',
@@ -169,7 +197,20 @@ it('blocks a settled session rollover while a standalone check-in interaction is
     status: 'blocked',
     blocker: 'pending_interaction',
     error: 'Session rollover was not performed because a user interaction or queued submission is pending.',
+    request,
   });
+  expect(events).toEqual([
+    expect.objectContaining({
+      type: 'session_rollover',
+      phase: 'blocked',
+      rolloverId: 'rollover-2',
+      sourceSessionId: 'default',
+      reason: 'task_boundary',
+      briefSize: 9,
+      blocker: 'pending_interaction',
+      settlementLatencyMs: expect.any(Number),
+    }),
+  ]);
 });
 
 it('constructs with a caller-owned agentClient and toolOwnership', () => {

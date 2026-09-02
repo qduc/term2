@@ -58,6 +58,8 @@ export interface SessionInitEvent {
   provider?: string;
   reasoningEffort?: string;
   forkedFrom?: string;
+  /** Durable predecessor identity for a session created by rollover. */
+  rolloverFrom?: string;
 }
 
 export interface SettingsChangedEvent {
@@ -302,11 +304,38 @@ export interface SessionClearedEvent {
   type: 'session_cleared';
 }
 
-export interface SessionRolloverEvent {
-  type: 'session_rollover';
-  reason?: 'context_pressure' | 'task_boundary';
-  brief: string;
-}
+export type SessionRolloverEvent =
+  | {
+      type: 'session_rollover';
+      phase: 'requested';
+      rolloverId: string;
+      sourceSessionId: string;
+      reason?: 'context_pressure' | 'task_boundary';
+      briefSize: number;
+      providerInputTokens?: number;
+    }
+  | {
+      type: 'session_rollover';
+      phase: 'blocked';
+      rolloverId: string;
+      sourceSessionId: string;
+      reason?: 'context_pressure' | 'task_boundary';
+      briefSize: number;
+      providerInputTokens?: number;
+      blocker: 'background_work' | 'pending_interaction';
+      settlementLatencyMs: number;
+    }
+  | {
+      type: 'session_rollover';
+      phase: 'completed';
+      rolloverId: string;
+      sourceSessionId: string;
+      successorSessionId: string;
+      reason?: 'context_pressure' | 'task_boundary';
+      briefSize: number;
+      providerInputTokens?: number;
+      settlementLatencyMs: number;
+    };
 
 export type LogEvent =
   | SessionInitEvent

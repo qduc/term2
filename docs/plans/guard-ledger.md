@@ -1626,6 +1626,55 @@ PASS 19 files, 174 tests; 1 skipped
 
 Final implementation commit: `4f4ba2a0`.
 
+### Session rollover milestone advisory
+
+The rollover reminder is an advisory guard, not an execution or retention
+limit. Its signal and action were changed with the rollover follow-up package:
+
+```text
+Harm prevented: a long-running session passing useful handoff boundaries without
+  the agent reconsidering whether a fresh session would be clearer.
+Scope and execution paths: root ApplicationRunLoop request boundaries only.
+Guard class: advisory guard.
+Enforcement owner: ContextMilestoneReminder.
+Recovery owner: the agent; rollover remains agent-triggered and optional.
+Measured signal and observation boundary: provider-reported input tokens from
+  the latest completed request, observed at the following request boundary.
+Direct evidence or proxy: direct provider usage for context size; it is only a
+  proxy for whether the current task is safe to interrupt.
+Legitimate work that can produce the same signal: an indivisible implementation,
+  migration, or validation step; reminder copy explicitly permits continuing.
+Configuration sources and precedence: agent.sessionRollover.enabled,
+  agent.sessionRollover.milestones, and agent.sessionRollover.autoBrief through
+  the ordinary settings service.
+Effective default and clamping: enabled at 200k / 300k / 400k; invalid
+  non-positive milestones are ignored; reconsideration occurs after each
+  additional 50k provider-reported input tokens following deferral.
+Action and why the signal justifies it: inject advice to choose a safe natural
+  boundary; never rotate, reject, truncate, abort, or make a later reminder
+  mandatory.
+Partial-work settlement: unchanged; the agent may continue to a safe boundary.
+Retry, fallback, and provider-continuity semantics: no estimator fallback and no
+  automatic retry; an accepted session_rollover starts fresh provider state.
+Observability fields: crossed threshold and provider-reported input value in the
+  reminder; rollover lifecycle events carry correlation ID, IDs, reason, brief
+  size, provider input usage, and settlement latency without the brief text.
+Persisted-setting migration, if any: none.
+Rollback boundary: the session-rollover follow-up package commit.
+Ledger row: Session rollover advisory.
+```
+
+Focused verification passed 11 files / 327 tests and `pnpm typecheck`. The full
+suite run passed 578 files and 7,478 tests. It exposed two CLI resume-list
+expectations introduced by the short-ref presentation; after retaining the full
+ID beside the short ref, the complete CLI integration and resume-list files
+passed (13 tests). The other six full-suite failures were the catalogued
+worktree-boundary approval assertions in `apply-patch.test.ts`,
+`create-file.test.ts`, and `search-replace.test.ts`. Three provider black-box
+attempts each progressed through provider contracts and most lifecycle cases,
+then hit a different pre-request PTY startup timeout; no rollover/provider
+assertion failed.
+
 ## Reference: catalogued guards
 
 Recorded so the next reader does not re-derive them. **No row here owes a test.**
@@ -1669,6 +1718,7 @@ Catalogued, no hypothesized failure mode:
 | Code-context search bounds | 512KiB / 10,000 files / 20 results | `max_results` |
 | Background shell watch match text | 4096 chars / 1500 ms idle | watch options |
 | Turns-left advisory | threshold 5 | no |
+| Session rollover advisory | provider-reported input milestones 200k / 300k / 400k, then 50k reconsideration cadence; advises a safe-boundary choice and never rotates automatically | milestones and enable flag |
 | Terminal result exhaustion | typed `TerminalResultCollectorExhaustionError extends AmbiguousModelOutcomeError`; preserves `unsafeToReplay` and local-vs-provider provenance | no |
 | Codex WebSocket watchdog | 90s to first raw event, 600s between; a first-frame expiry recovers as `retry_fresh`/`full_history` only when the send path recorded the frame as provably `unsent`, otherwise it stays ambiguous and terminates; reports measured latencies and its budgets to the traffic log | `agent.codex.websocketFirstFrameTimeoutMs` / `…InterFrameTimeoutMs` |
 | Queue/background registry capacity | owner-specific | varies |

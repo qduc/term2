@@ -89,11 +89,12 @@ describe('AgentClient application-run-loop execution', () => {
       },
     });
 
-    expect(instance.requestSessionRollover({ brief: 'continue' })).toEqual({
+    expect(instance.requestSessionRollover({ brief: 'continue' })).toMatchObject({
       ok: false,
       status: 'rollover_blocked',
       error: 'Session rollover is blocked while background work is live.',
       active: { shell: 1, subagent: 1 },
+      rolloverId: expect.any(String),
     });
     expect(instance.consumeSessionRolloverRequest()).toEqual({ status: 'none' });
     instance.dispose();
@@ -121,16 +122,23 @@ describe('AgentClient application-run-loop execution', () => {
       },
     });
 
-    expect(instance.requestSessionRollover({ brief: 'continue' })).toEqual({
+    const accepted = instance.requestSessionRollover({ brief: 'continue' });
+    expect(accepted).toMatchObject({
       ok: true,
       status: 'rollover_requested',
+      rolloverId: expect.any(String),
     });
     status = 'running';
-    expect(instance.consumeSessionRolloverRequest()).toEqual({
+    expect(instance.consumeSessionRolloverRequest()).toMatchObject({
       status: 'blocked',
       blocker: 'background_work',
       error: 'Session rollover was not performed because background work became live before turn settlement.',
       active: { shell: 0, subagent: 1 },
+      request: {
+        brief: 'continue',
+        rolloverId: accepted.rolloverId,
+        requestedAt: expect.any(Number),
+      },
     });
     instance.dispose();
   });
@@ -138,19 +146,38 @@ describe('AgentClient application-run-loop execution', () => {
   it('injects a crossed context milestone reminder through the public stream history', async () => {
     const provider = `milestone-reminder-${Date.now()}`;
     providers.add(provider);
+    let requests = 0;
     registerProvider({
       id: provider,
       label: 'Milestone reminder test provider',
       createStreamedModel: () => ({
         async *stream() {
-          yield { type: 'completion' as const, responseId: 'response-1', output: [] };
+          requests += 1;
+          if (requests === 1) {
+            yield {
+              type: 'completion' as const,
+              responseId: 'response-1',
+              usage: { inputTokens: 2 },
+              output: [{ type: 'tool_call' as const, id: 'call-1', name: 'noop', arguments: '{}' }],
+            };
+            return;
+          }
+          yield { type: 'completion' as const, responseId: 'response-2', usage: { inputTokens: 3 }, output: [] };
         },
       }),
       fetchModels: async () => [],
     });
+    const noop: AnyToolDefinition = {
+      name: 'noop',
+      description: 'continue the run',
+      parameters: z.object({}),
+      needsApproval: () => false,
+      execute: () => 'ok',
+      formatCommandMessage: () => [],
+    };
     const instance = client(
       provider,
-      { agentOverride: { name: 'override', model: 'test-model', instructions: 'test', tools: [] } },
+      { agentOverride: { name: 'override', model: 'test-model', instructions: 'test', tools: [noop] } },
       { 'agent.sessionRollover.enabled': true, 'agent.sessionRollover.milestones': [1] },
     );
 
@@ -160,7 +187,45 @@ describe('AgentClient application-run-loop execution', () => {
     expect(stream.history).toEqual(
       expect.arrayContaining([expect.objectContaining({ content: expect.stringContaining('session_rollover') })]),
     );
+    expect(JSON.stringify(stream.history)).toContain('provider reported 2 input tokens');
     expect(JSON.stringify(stream.history)).not.toContain('Automatic compaction');
+    instance.dispose();
+  });
+
+  it('attaches the latest provider-reported input usage to an accepted rollover request', async () => {
+    const provider = `rollover-usage-${Date.now()}`;
+    providers.add(provider);
+    registerProvider({
+      id: provider,
+      label: 'Rollover usage test provider',
+      createStreamedModel: () => ({
+        async *stream() {
+          yield {
+            type: 'completion' as const,
+            responseId: 'response-1',
+            usage: { inputTokens: 210_000 },
+            output: [],
+          };
+        },
+      }),
+      fetchModels: async () => [],
+    });
+    const instance = client(provider, {
+      agentOverride: { name: 'override', model: 'test-model', instructions: 'test', tools: [] },
+    });
+
+    const stream = await instance.startStream('first turn');
+    await stream.completed;
+    const outcome = instance.requestSessionRollover({ brief: 'continue' });
+
+    expect(outcome).toMatchObject({ ok: true, rolloverId: expect.any(String) });
+    expect(instance.consumeSessionRolloverRequest()).toMatchObject({
+      status: 'ready',
+      request: {
+        rolloverId: outcome.rolloverId,
+        providerInputTokens: 210_000,
+      },
+    });
     instance.dispose();
   });
 

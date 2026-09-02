@@ -31,7 +31,7 @@ import {
 import type { HistoryService } from '../services/history-service.js';
 import type { InputSurgeApproval } from '../services/input-surge-approval.js';
 import type { RestoredState } from '../services/conversation/conversation-replay.js';
-import type { SessionRolloverRequest } from '../contracts/session-rollover.js';
+import type { PendingSessionRolloverRequest } from '../contracts/session-rollover.js';
 
 import type { ConversationLogWriter } from '../services/logging/conversation-log-writer.js';
 
@@ -100,7 +100,7 @@ export const useConversation = ({
   initialMessages?: Message[];
   sessionId?: string;
   onClear?: () => void | Promise<void>;
-  onSessionRollover?: (request: SessionRolloverRequest) => void | Promise<void>;
+  onSessionRollover?: (request: PendingSessionRolloverRequest) => void | Promise<void>;
   settingsService?: SettingsService;
   historyService: Pick<HistoryService, 'addMessage'>;
   replaceInput?: (text: string) => void;
@@ -302,7 +302,9 @@ export const useConversation = ({
           if (consumption?.status === 'ready') {
             void onSessionRollover?.(consumption.request);
           } else if (consumption?.status === 'blocked') {
-            addSystemMessage(consumption.error);
+            addSystemMessage(
+              `Session rollover was not performed: ${consumption.error}\n\nThe handoff brief is preserved for manual retry; it will not be retried automatically:\n\n${consumption.request.brief}`,
+            );
           }
         },
         onApprovalRequested: (approval) => dispatch({ type: 'approval/requested', approval }),

@@ -5,6 +5,7 @@ import type { SavedAppMode } from '../services/conversation/conversation-persist
 
 interface ConversationListEntry {
   id: string;
+  shortRef?: string;
   updatedAt: string;
   projectPath?: string;
   sshHost?: string;
@@ -38,7 +39,8 @@ export function formatResumeList(
 
   entries.forEach((entry, index) => {
     const num = `${index + 1}.`;
-    const idStr = chalk.cyan.bold(entry.id);
+    const reference = entry.shortRef ?? entry.id;
+    const idStr = chalk.cyan.bold(reference === entry.id ? reference : `${reference} (${entry.id})`);
 
     let dateStr = entry.updatedAt;
     try {

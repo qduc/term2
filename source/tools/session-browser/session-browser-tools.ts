@@ -31,7 +31,7 @@ export function createSessionBrowserToolDefinitions(browser: SessionBrowser): To
     ),
     definition(
       'session_read',
-      'Read a prior local session transcript progressively by cursor. `total` is the projected record count for the whole session; `omitted` counts records not begun in this page (a partially emitted chunk still counts as begun), so `total - omitted` records were started here.',
+      'Read a prior local session transcript progressively by cursor. Use `id: "previous"` for the persisted rollover predecessor, or an exact/unambiguous UUID prefix. Ambiguous prefixes return candidates and are never guessed. `total` is the projected record count for the whole session; `omitted` counts records not begun in this page (a partially emitted chunk still counts as begun), so `total - omitted` records were started here.',
       z.object({ id, cursor: z.string().optional(), limit, maxChars }).strict(),
       (params) => browser.read(params),
     ),

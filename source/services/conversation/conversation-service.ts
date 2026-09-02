@@ -45,7 +45,8 @@ import type {
   ResolvePendingInteractionRequest,
 } from '../session/pending-interaction-state.js';
 import { isAbortLikeError } from '../../utils/error-helpers.js';
-import type { SessionRolloverConsumption, SessionRolloverRequest } from '../../contracts/session-rollover.js';
+import type { SessionRolloverConsumption } from '../../contracts/session-rollover.js';
+import type { SessionRolloverEvent } from '../logging/conversation-log-events.js';
 
 export type { ConversationTerminal, ApprovalDescriptor, PendingApproval } from '../../contracts/conversation.js';
 export type { CommandMessage } from '../../tools/types.js';
@@ -364,6 +365,10 @@ export class ConversationService {
 
   consumeSessionRolloverRequest(): SessionRolloverConsumption {
     const consumption = this.#clientHandle.agentClient.consumeSessionRolloverRequest?.() ?? { status: 'none' };
+    if (consumption.status === 'blocked') {
+      this.#logBlockedRollover(consumption);
+      return consumption;
+    }
     if (consumption.status !== 'ready') return consumption;
 
     const interaction = this.#runtime.pendingInteraction.getSnapshot();
@@ -381,11 +386,33 @@ export class ConversationService {
 
     const error = 'Session rollover was not performed because a user interaction or queued submission is pending.';
     this.#runtime.state.queueModeNotice(error);
-    return { status: 'blocked', blocker: 'pending_interaction', error };
+    const blocked = {
+      status: 'blocked' as const,
+      blocker: 'pending_interaction' as const,
+      error,
+      request: consumption.request,
+    };
+    this.#logBlockedRollover(blocked);
+    return blocked;
   }
 
-  logSessionRollover(request: SessionRolloverRequest): void {
-    this.#runtime.logs.log({ type: 'session_rollover', ...request });
+  logSessionRollover(event: SessionRolloverEvent): void {
+    this.#runtime.logs.log(event);
+  }
+
+  #logBlockedRollover(consumption: Extract<SessionRolloverConsumption, { status: 'blocked' }>): void {
+    const { request } = consumption;
+    this.logSessionRollover({
+      type: 'session_rollover',
+      phase: 'blocked',
+      rolloverId: request.rolloverId,
+      sourceSessionId: this.sessionId,
+      ...(request.reason ? { reason: request.reason } : {}),
+      briefSize: request.brief.length,
+      ...(request.providerInputTokens !== undefined ? { providerInputTokens: request.providerInputTokens } : {}),
+      blocker: consumption.blocker,
+      settlementLatencyMs: Math.max(0, Date.now() - request.requestedAt),
+    });
   }
 
   /**

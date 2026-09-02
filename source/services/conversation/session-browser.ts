@@ -1,6 +1,8 @@
 import {
   browseConversationsForProject,
   loadConversationForProjectReadOnly,
+  resolveConversationReference,
+  uniqueConversationShortRefs,
   type RestoredState,
 } from './conversation-persistence.js';
 import {
@@ -26,8 +28,15 @@ type Kind = 'user' | 'assistant' | 'reasoning' | 'system' | 'tool' | 'subagent';
 type ProjectedMessage = { index: number; kind: Kind; text: string };
 type BrowserError = {
   error: {
-    code: 'not_found' | 'session_unavailable' | 'invalid_cursor' | 'stale_cursor' | 'output_budget_exceeded';
+    code:
+      | 'not_found'
+      | 'ambiguous_reference'
+      | 'session_unavailable'
+      | 'invalid_cursor'
+      | 'stale_cursor'
+      | 'output_budget_exceeded';
     message: string;
+    candidates?: Array<{ id: string; shortRef: string }>;
   };
 };
 type CursorState = {
@@ -54,6 +63,7 @@ export class SessionBrowser {
     const browsed = this.conversations();
     let unavailable = browsed.unavailable;
     const conversations = browsed.conversations;
+    const shortRefs = uniqueConversationShortRefs(conversations);
     const candidates: Array<{ conversation: RestoredState; projection: NonNullable<ReturnType<typeof project>> }> = [];
     for (const conversation of conversations) {
       const projection = project(conversation);
@@ -72,6 +82,7 @@ export class SessionBrowser {
       const firstUser = projection.records.find((record) => record.kind === 'user' && record.text);
       const item = {
         id: conversation.id,
+        shortRef: shortRefs.get(conversation.id) ?? conversation.id,
         createdAt: conversation.createdAt,
         updatedAt: updatedAt(conversation),
         ...(firstUser ? { firstUserMessage: prefixSnippet(firstUser.text) } : {}),
@@ -92,10 +103,12 @@ export class SessionBrowser {
     const browsed = this.conversations();
     let unavailable = browsed.unavailable;
     const conversations = browsed.conversations;
+    const shortRefs = uniqueConversationShortRefs(conversations);
     let skippedMessageCount = 0;
     const currentSessionId = this.getContext().currentSessionId;
     const matches: Array<{
       sessionId: string;
+      shortRef: string;
       kind: Kind;
       messageIndex: number;
       snippet: { text: string; truncated: boolean };
@@ -115,6 +128,7 @@ export class SessionBrowser {
         if (score)
           matches.push({
             sessionId: conversation.id,
+            shortRef: shortRefs.get(conversation.id) ?? conversation.id,
             kind: record.kind,
             messageIndex: record.index,
             snippet: matchCenteredSnippet(record.text, terms, SNIPPET_CHARS),
@@ -160,7 +174,32 @@ export class SessionBrowser {
     const budget = input.maxChars ?? DEFAULT_READ_CHARS;
     if (!SAFE_SESSION_ID.test(input.id)) return boundedError('not_found', 'Session was not found.', budget);
     const context = this.getContext();
-    const loaded = loadConversationForProjectReadOnly(input.id, context.projectPath, context.sshHost);
+    const browsed = this.conversations();
+    const resolution = resolveSessionReference(input.id, browsed.conversations, context.currentSessionId);
+    if (resolution.kind === 'ambiguous') {
+      return (
+        fitted(
+          {
+            error: {
+              code: 'ambiguous_reference',
+              message: 'Session reference is ambiguous; use a longer prefix or an exact ID.',
+              candidates: resolution.candidates,
+            },
+          },
+          budget,
+        ) ??
+        boundedError(
+          'ambiguous_reference',
+          `Session reference is ambiguous. Candidates: ${resolution.candidates
+            .map((candidate) => candidate.shortRef)
+            .join(', ')}.`,
+          budget,
+        )
+      );
+    }
+    if (resolution.kind === 'not_found') return boundedError('not_found', resolution.message, budget);
+    const resolvedId = resolution.id;
+    const loaded = loadConversationForProjectReadOnly(resolvedId, context.projectPath, context.sshHost);
     if (loaded.status === 'not_found')
       return boundedError('not_found', `Session was not found in scope ${context.projectPath}.`, budget);
     if (loaded.status === 'project_mismatch')
@@ -169,7 +208,7 @@ export class SessionBrowser {
         `Session exists but belongs to project ${loaded.conversation.projectPath}, which does not match the current scope (${context.projectPath}); it cannot be read from the current scope.`,
         budget,
       );
-    if (loaded.status !== 'loaded' || loaded.conversation.id !== input.id || !loaded.conversation.createdAt)
+    if (loaded.status !== 'loaded' || loaded.conversation.id !== resolvedId || !loaded.conversation.createdAt)
       return boundedError('session_unavailable', 'Session transcript is unavailable.', budget);
     const conversation = loaded.conversation;
     const projection = project(conversation);
@@ -178,9 +217,9 @@ export class SessionBrowser {
     const currentUpdatedAt = updatedAt(conversation);
     const currentRevision = revision(conversation, projection);
     const cursor: CursorState | null = input.cursor
-      ? this.#decodeCursor(input.cursor, input.id)
+      ? this.#decodeCursor(input.cursor, resolvedId)
       : {
-          sessionId: input.id,
+          sessionId: resolvedId,
           updatedAt: currentUpdatedAt,
           revision: currentRevision,
           nextIndex: 0,
@@ -193,6 +232,7 @@ export class SessionBrowser {
       return boundedError('invalid_cursor', 'The session cursor is invalid.', budget);
     const session = {
       id: conversation.id,
+      shortRef: uniqueConversationShortRefs(browsed.conversations).get(conversation.id) ?? conversation.id,
       createdAt: conversation.createdAt,
       updatedAt: currentUpdatedAt,
       ...(conversation.model ? { model: conversation.model } : {}),
@@ -210,7 +250,7 @@ export class SessionBrowser {
       const afterIndex = index + 1;
       const nextCursor =
         afterIndex < projection.records.length
-          ? this.#cursorFor(input.id, currentUpdatedAt, currentRevision, afterIndex, 0)
+          ? this.#cursorFor(resolvedId, currentUpdatedAt, currentRevision, afterIndex, 0)
           : undefined;
       const candidate = fitted(
         {
@@ -236,7 +276,7 @@ export class SessionBrowser {
       if (items.length > 0) break;
       if (record.text.length === offset) return outputBudgetError(budget);
       const chunk = largestChunk(record, offset, (text) => {
-        const next = this.#cursorFor(input.id, currentUpdatedAt, currentRevision, index, offset + text.length);
+        const next = this.#cursorFor(resolvedId, currentUpdatedAt, currentRevision, index, offset + text.length);
         return fitted(
           {
             scope: context.projectPath,
@@ -256,7 +296,7 @@ export class SessionBrowser {
       break;
     }
     const nextCursor =
-      index < total ? this.#cursorFor(input.id, currentUpdatedAt, currentRevision, index, offset) : undefined;
+      index < total ? this.#cursorFor(resolvedId, currentUpdatedAt, currentRevision, index, offset) : undefined;
     // Records begun in this page are total - omitted. A mid-record chunk (the
     // cursor offset is nonzero) began its own record, so it is not counted as
     // omitted; every later record is.
@@ -306,6 +346,27 @@ export class SessionBrowser {
       ),
     };
   }
+}
+
+type SessionReferenceResolution =
+  | { kind: 'resolved'; id: string }
+  | { kind: 'not_found'; message: string }
+  | { kind: 'ambiguous'; candidates: Array<{ id: string; shortRef: string }> };
+
+function resolveSessionReference(
+  reference: string,
+  conversations: readonly RestoredState[],
+  currentSessionId?: string,
+): SessionReferenceResolution {
+  if (reference === 'previous') {
+    const current = conversations.find((conversation) => conversation.id === currentSessionId);
+    if (!current?.rolloverFrom) {
+      return { kind: 'not_found', message: 'This session has no persisted rollover predecessor.' };
+    }
+    return { kind: 'resolved', id: current.rolloverFrom };
+  }
+
+  return resolveConversationReference(reference, conversations);
 }
 
 function project(conversation: RestoredState) {

@@ -67,17 +67,71 @@ class Lifecycle {
   }
 }
 
+/** Build the Responses image_url/file_id reference for an application image reference. */
+function toResponsesImageReference(image: unknown): Record<string, unknown> {
+  if (typeof image === 'string') return { image_url: image };
+  if (!image || typeof image !== 'object') return {};
+  const record = image as { id?: unknown; fileId?: unknown; url?: unknown; data?: unknown; mediaType?: unknown };
+  if (typeof record.id === 'string' || typeof record.fileId === 'string') {
+    return { file_id: typeof record.fileId === 'string' ? record.fileId : record.id };
+  }
+  if (typeof record.url === 'string') return { image_url: record.url };
+  if (typeof record.data === 'string' || record.data instanceof Uint8Array) {
+    const data = typeof record.data === 'string' ? record.data : Buffer.from(record.data).toString('base64');
+    const mediaType = typeof record.mediaType === 'string' ? record.mediaType : 'application/octet-stream';
+    return { image_url: `data:${mediaType};base64,${data}` };
+  }
+  return {};
+}
+
 function toResponsesApiContentPart(role: string, part: any): any {
   if (part?.type === 'image') {
-    const image = part.image;
-    const url = typeof image === 'string' ? image : image?.id ?? image?.url;
-    return { type: 'input_image', image_url: url, detail: part.detail ?? 'auto' };
+    return { type: 'input_image', ...toResponsesImageReference(part.image), detail: part.detail ?? 'auto' };
   }
   return { type: role === 'assistant' ? 'output_text' : 'input_text', text: part?.text ?? '' };
 }
 
-function toResponsesApiOutput(output: unknown): string {
+function toResponsesFileReference(file: unknown): Record<string, unknown> {
+  if (typeof file === 'string') return { file_id: file };
+  if (!file || typeof file !== 'object') return {};
+  const record = file as { id?: unknown; url?: unknown; data?: unknown; filename?: unknown };
+  const filename = typeof record.filename === 'string' ? { filename: record.filename } : {};
+  if (typeof record.id === 'string') return { file_id: record.id, ...filename };
+  if (typeof record.url === 'string') return { file_url: record.url, ...filename };
+  if (typeof record.data === 'string' || record.data instanceof Uint8Array) {
+    if (typeof record.filename !== 'string') {
+      throw new Error('Unsupported Responses tool result file: inline data requires a filename.');
+    }
+    return {
+      file_data: typeof record.data === 'string' ? record.data : Buffer.from(record.data).toString('base64'),
+      filename: record.filename,
+    };
+  }
+  return {};
+}
+
+/** Convert one application tool-result part to a Responses output part. */
+function toResponsesToolResultPart(part: any): any {
+  if (typeof part === 'string') return { type: 'input_text', text: part };
+  if (part?.type === 'image') {
+    return {
+      type: 'input_image',
+      ...toResponsesImageReference(part.image),
+      ...(part.detail ? { detail: part.detail } : {}),
+    };
+  }
+  if (part?.type === 'file') {
+    return { type: 'input_file', ...toResponsesFileReference(part.file) };
+  }
+  return { type: 'input_text', text: part?.text ?? '' };
+}
+
+function toResponsesApiOutput(output: unknown): string | unknown[] {
   if (typeof output === 'string') return output;
+  // A multimodal content-part array (read_file images) becomes Responses
+  // output parts so the image reaches the model; JSON-stringifying it would
+  // deliver a text blob instead of the image.
+  if (Array.isArray(output)) return output.map(toResponsesToolResultPart);
   // Tool execution historically supplied structured values. Keep the
   // application result wrapped under `text` when serializing those values so
   // continuation requests remain byte-for-byte compatible with the old wire

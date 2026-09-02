@@ -39,6 +39,18 @@ const trimJsonStrings = (value: unknown, maxLines?: number, maxCharacters?: numb
   return value;
 };
 
+/**
+ * True for a multimodal tool result: a non-empty array whose every entry is an
+ * object carrying a string `type` discriminator, the shape the provider
+ * converters know how to serialize.
+ */
+const isContentPartArray = (value: unknown): boolean =>
+  Array.isArray(value) &&
+  value.length > 0 &&
+  value.every(
+    (part) => typeof part === 'object' && part !== null && typeof (part as { type?: unknown }).type === 'string',
+  );
+
 export const trimToolOutput = (output: unknown, maxLines?: number, maxCharacters?: number): unknown => {
   if (typeof output !== 'string') {
     // A structured content-part result (read_file returns
@@ -46,7 +58,11 @@ export const trimToolOutput = (output: unknown, maxLines?: number, maxCharacters
     // trimmed. Return it unmodified — trimming string leaves would truncate an
     // image's base64 `data` and corrupt it, and coercing via String() would
     // flatten the array to "[object Object],[object Object]".
-    if (Array.isArray(output)) {
+    //
+    // Only content-part arrays get this exemption. Any other array keeps the
+    // old String() coercion, so a tool returning arbitrary objects does not
+    // silently escape the size limit or reach a converter that rejects it.
+    if (isContentPartArray(output)) {
       return output;
     }
     return String(output ?? '');

@@ -231,6 +231,47 @@ it('stream() converts multimodal tool-result content parts into content parts, n
   ]);
 });
 
+it('stream() degrades an unrenderable tool-result image to text instead of a null image_url', async () => {
+  // An image reference with no url/id/data has nothing to send. Emitting
+  // `image_url: { url: undefined }` would put a malformed part on the wire and
+  // fail the whole request, losing the turn rather than one image.
+  let capturedBody: any;
+  const client = {
+    chat: {
+      completions: {
+        create: async (body: any) => {
+          capturedBody = body;
+          return emptyStream();
+        },
+      },
+    },
+  };
+  const model = new OpenAIChatCompletionsModel(client, 'gpt-4o');
+
+  for await (const _event of model.stream({
+    input: [
+      { type: 'tool_call', id: 'call-img', name: 'read_file', arguments: '{}' },
+      {
+        type: 'tool_result',
+        id: 'call-img',
+        output: [
+          { type: 'text', text: 'Image: logo.png' },
+          { type: 'image', image: { mediaType: 'image/png' } },
+        ],
+      },
+    ],
+    tools: [],
+  } as any)) {
+    // drain
+  }
+
+  const toolMessage = capturedBody.messages.find((m: any) => m.role === 'tool');
+  expect(toolMessage.content).toEqual([
+    { type: 'text', text: 'Image: logo.png' },
+    { type: 'text', text: '[unsupported image content omitted]' },
+  ]);
+});
+
 it('stream() sends non-empty instructions as the leading system message before input history', async () => {
   let capturedBody: any;
   const client = {

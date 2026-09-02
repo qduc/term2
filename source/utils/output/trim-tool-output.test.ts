@@ -54,3 +54,17 @@ it('trimToolOutput preserves structured content-part arrays instead of coercing 
   expect(Array.isArray(result)).toBe(true);
   expect(result).toEqual(parts);
 });
+
+it('trimToolOutput coerces a non-content-part array so it cannot escape the size limit', () => {
+  // Only arrays that look like content parts (objects with a string `type`)
+  // are multimodal results. Any other array keeps the old String() coercion:
+  // exempting it would both skip trimming and hand the provider converters a
+  // shape they reject.
+  const result = trimToolOutput([{ value: 1 }, 'plain'], undefined, 50);
+
+  expect(typeof result).toBe('string');
+});
+
+it('trimToolOutput coerces an empty array rather than treating it as content parts', () => {
+  expect(trimToolOutput([], undefined, 50)).toBe('');
+});

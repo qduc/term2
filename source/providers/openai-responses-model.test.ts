@@ -504,6 +504,44 @@ it('getResponse (HTTP) converts multimodal tool-result content parts into output
   ]);
 });
 
+it('getResponse (HTTP) degrades unrenderable tool-result image and file parts to text', async () => {
+  // A reference-less input_image, or inline file data with no filename, has no
+  // valid wire form. Previously the file case threw mid-serialization, which
+  // aborted the whole turn for one unusable part.
+  let capturedBody: any;
+  const client = {
+    responses: {
+      create: async (body: any) => {
+        capturedBody = body;
+        return { id: 'resp_1', output: [], usage: {} };
+      },
+    },
+  };
+
+  const model = new OpenAIResponsesModelWithPromptCacheKey(client, 'gpt-5.4-nano');
+  await model.getResponse({
+    input: [
+      { type: 'tool_call', id: 'call_1', name: 'read_file', arguments: '{}' },
+      {
+        type: 'tool_result',
+        id: 'call_1',
+        // Deliberately malformed references: the typed contract forbids these,
+        // but a normalized-from-persistence item can still carry them.
+        output: [
+          { type: 'image', image: { mediaType: 'image/png' } },
+          { type: 'file', file: { data: 'cG5n' } },
+        ],
+      },
+    ],
+    tools: [],
+  } as any);
+
+  expect(capturedBody.input[1].output).toEqual([
+    { type: 'input_text', text: '[unsupported image content omitted]' },
+    { type: 'input_text', text: '[unsupported file content omitted]' },
+  ]);
+});
+
 it('stream (websocket) preserves typed settings, including zero values, in response.create', async () => {
   fakeResponsesWSStream = async function* () {
     yield { type: 'message', message: { type: 'response.completed', response: { id: 'resp_ws_settings' } } };

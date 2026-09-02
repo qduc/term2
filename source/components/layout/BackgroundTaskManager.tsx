@@ -234,12 +234,16 @@ const BackgroundTaskManager: FC<BackgroundTaskManagerProps> = ({
 
   useInput(
     (input, key) => {
+      // Some terminals report the raw BEL control byte (\x07) for Ctrl+G
+      // instead of setting key.ctrl, mirroring the Ctrl+O/Ctrl+T fallback in
+      // useAppKeyboardShortcuts.
+      const isCtrlG = (key.ctrl && input.toLowerCase() === 'g') || input === '\x07';
       if (!open) {
-        if (key.ctrl && input.toLowerCase() === 'g') openManager();
+        if (isCtrlG) openManager();
         return;
       }
 
-      if (key.escape || (key.ctrl && input.toLowerCase() === 'g')) {
+      if (key.escape || isCtrlG) {
         close();
         return;
       }

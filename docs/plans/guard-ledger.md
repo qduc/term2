@@ -1526,6 +1526,7 @@ neither path replays committed work. The recovery owner remains
 `retry_fresh` with `inputMode: 'full_history'` and
 `disableChainingForAttempt: true`. Regression coverage belongs in the
 classifier, shared settled-tool budget predicate, and initial recovery handler.
+Implementation commit: `a9c19cf2`.
 
 ### Codex WebSocket connect-time timeout recovery
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SettingsService } from '../services/settings/settings-service.js';
 import type { UserTurn } from '../types/user-turn.js';
 import type { MenuController } from '../components/input/menu-types.js';
@@ -60,19 +60,9 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
     configurationService,
   } = deps;
 
-  const handoffSession = useMemo(
-    () =>
-      new HandoffSession({
-        clearConversationAndRefreshBanner,
-        addSystemMessage,
-        sendUserMessage,
-        settingsService,
-        applyRuntimeSetting,
-        setModel,
-        queueModeNotice,
-        configurationService,
-      }),
-    [
+  const handoffSessionRef = useRef<HandoffSession | null>(null);
+  if (!handoffSessionRef.current) {
+    handoffSessionRef.current = new HandoffSession({
       clearConversationAndRefreshBanner,
       addSystemMessage,
       sendUserMessage,
@@ -81,8 +71,19 @@ export const useHandoffFlow = (deps: UseHandoffFlowOptions): UseHandoffFlowRetur
       setModel,
       queueModeNotice,
       configurationService,
-    ],
-  );
+    });
+  }
+  const handoffSession = handoffSessionRef.current;
+  handoffSession.updateDeps({
+    clearConversationAndRefreshBanner,
+    addSystemMessage,
+    sendUserMessage,
+    settingsService,
+    applyRuntimeSetting,
+    setModel,
+    queueModeNotice,
+    configurationService,
+  });
   const [handoffState, setHandoffState] = useState<HandoffState | null>(() => handoffSession.getState());
   useEffect(() => handoffSession.subscribe(setHandoffState), [handoffSession]);
   const handoffStateRef = useRef<HandoffState | null>(handoffState);

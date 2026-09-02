@@ -128,7 +128,7 @@ const Harness = ({
 const renderHarness = async () => {
   const deps = createDeps();
   let snapshot: HarnessSnapshot | undefined;
-  let renderer: { unmount: () => void } | undefined;
+  let renderer: ReturnType<typeof render> | undefined;
 
   await act(async () => {
     renderer = render(
@@ -206,6 +206,57 @@ it.sequential('startHandoff and submitting entering_message captures the handoff
     stage: 'confirm_model',
   });
   expect(getSnapshot().controller.getSnapshot().editor.text).toBe('');
+
+  await act(async () => {
+    renderer.unmount();
+  });
+});
+
+it.sequential('preserves handoffState and captures message when props change during entering_message', async () => {
+  const { deps, getSnapshot, renderer } = await renderHarness();
+
+  await act(async () => {
+    getSnapshot().hook.startHandoff('Captured text');
+  });
+  await flush();
+
+  expect(getSnapshot().handoffState).toEqual({
+    capturedText: 'Captured text',
+    stage: 'entering_message',
+  });
+
+  // Re-render with a new callback reference to simulate parent re-render
+  await act(async () => {
+    renderer.rerender(
+      <Harness
+        {...deps}
+        queueModeNotice={() => {}}
+        onSnapshot={(next) => {
+          // Update snapshot via the harness prop
+          Object.assign(getSnapshot(), next);
+        }}
+      />,
+    );
+  });
+  await flush();
+
+  expect(getSnapshot().handoffState).toEqual({
+    capturedText: 'Captured text',
+    stage: 'entering_message',
+  });
+
+  let handled = false;
+  await act(async () => {
+    handled = await getSnapshot().hook.submitHandoffInput({ text: 'Implement this now' } as any);
+  });
+  await flush();
+
+  expect(handled).toBe(true);
+  expect(getSnapshot().handoffState).toEqual({
+    capturedText: 'Captured text',
+    handoffMessage: 'Implement this now',
+    stage: 'confirm_model',
+  });
 
   await act(async () => {
     renderer.unmount();

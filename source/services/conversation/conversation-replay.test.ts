@@ -636,6 +636,54 @@ it('replayEvents: replays watch firings ahead of the job terminal row in stored 
   });
 });
 
+it('replayEvents: preserves chronological order of background shell notifications and subsequent assistant turns', () => {
+  const restored = replayEvents([
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),
+    env({ type: 'user_message', message: { id: 'u1', sender: 'user', text: 'launch monitor' } }),
+    env({ type: 'background_shell_started', jobId: 'shell-1', command: 'gh run watch' }),
+    env({
+      type: 'assistant_turn',
+      turnId: 'turn-1',
+      turn: { items: [{ type: 'assistant_text', text: 'Started monitor.' }] },
+    }),
+    env({
+      type: 'background_shell_output',
+      jobId: 'shell-1',
+      command: 'gh run watch',
+      watchId: 'watch-1',
+      seq: 1,
+      matchedLines: 'CI is running',
+    }),
+    env({
+      type: 'assistant_turn',
+      turnId: 'turn-2',
+      turn: { items: [{ type: 'assistant_text', text: 'CI update: in progress.' }] },
+    }),
+    env({
+      type: 'background_shell_completed',
+      jobId: 'shell-1',
+      command: 'gh run watch',
+      status: 'completed',
+      output: 'exit 0',
+    }),
+    env({
+      type: 'assistant_turn',
+      turnId: 'turn-3',
+      turn: { items: [{ type: 'assistant_text', text: 'Fixed and verified.' }] },
+    }),
+  ]);
+
+  const messages = restored.messages;
+  expect(messages.map((m) => `${m.sender}:${(m as any).toolName ?? (m as any).text}`)).toEqual([
+    'user:launch monitor',
+    'bot:Started monitor.',
+    'command:background_shell_output_notification',
+    'bot:CI update: in progress.',
+    'command:background_shell_notification',
+    'bot:Fixed and verified.',
+  ]);
+});
+
 it('replayEvents: renders firings for a job that never settled and dedupes by watchId:seq', () => {
   const restored = replayEvents([
     env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z' }),

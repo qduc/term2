@@ -134,8 +134,13 @@ it.sequential('passes direct application requests to non-tracing providers', asy
   });
 
   await client.chat('Hello again');
-  expect(lastRunRequest).toBeTruthy();
-  expect(lastRunRequest.input).toBeTruthy();
+  // The user message is the first input item of the provider request; later
+  // items are history appended by later request passes of the turn loop.
+  expect(lastRunRequest.input[0]).toEqual({
+    type: 'message',
+    role: 'user',
+    content: [{ type: 'text', text: 'Hello again' }],
+  });
 });
 
 it.sequential('passes direct application requests to tracing-capable providers', async () => {
@@ -150,6 +155,11 @@ it.sequential('passes direct application requests to tracing-capable providers',
   });
 
   await client.chat('Hello tracing');
-  expect(lastRunRequest).toBeTruthy();
-  expect(lastRunRequest.input).toBeTruthy();
+  // The user message is the first input item of the provider request; later
+  // items are history appended by later request passes of the turn loop.
+  expect(lastRunRequest.input[0]).toEqual({
+    type: 'message',
+    role: 'user',
+    content: [{ type: 'text', text: 'Hello tracing' }],
+  });
 });

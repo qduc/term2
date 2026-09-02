@@ -17351,18 +17351,16 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
-  confidence: medium
-  reason: Coordinator decision of record after source verification. The routing seam is meaningful, but
-    the file contains two materially identical final tests for forwarding text/reasoning deltas to the
-    required journal; rewrite can retain one stronger case while preserving the unique dispatch and checkpoint
-    cases.
+  recommendation: keep
+  confidence: high
+  reason: "M4 batch B6 (audit-m4-b6 1522a0fb) landed: the duplicate journal-forwarding\
+    \ case ('to the required journal', ~538) was deleted. The sibling case at 513\
+    \ holds the journal-delta forwarding contract, and the delta-events-are-not-raw-\
+    \ forwarded property is pinned by the exact-sink dispatch case at 142-186."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
-  - conversation-logger.test.ts has both "dispatchEventToLog forwards text and reasoning deltas to the
-    journal" and "dispatchEventToLog forwards text and reasoning deltas to the required journal", with
-    equivalent setup and identical assertions.
+  - conversation-logger.test.ts:513-536 pins reasoning/text deltas reaching the journal in order.
   - conversation-logger.test.ts also uniquely asserts sink replacement, sink failure handling, turn stamping,
     background events, checkpoint-before-error, and event-specific routing, so whole-file deletion is
     not supported.
@@ -28951,21 +28949,19 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: consolidation_candidate
-  confidence: medium
-  reason: "Coordinator DOWNGRADE with corrected evidence: line 354's test does NOT repeat the stability\
-    \ assertion of 167 \u2014 167 asserts key equality across same-input calls and change on input change\
-    \ (idle-warn path); 354 asserts key NON-EMPTY on the provider-change warn path, a property 167 cannot\
-    \ imply. Consolidation is still defensible: fold 354's single non-empty assertion into 167 (or the\
-    \ provider-change test) and drop the near-duplicate setup."
+  recommendation: keep
+  confidence: high
+  reason: "M4 batch B6 (audit-m4-b6 1522a0fb) landed: the provider-change warn-path\
+    \ key non-empty assertion (formerly a standalone case at 354) is folded into the\
+    \ key-stability test at 167, and the near-duplicate standalone case was deleted.\
+    \ The same provider-change warn scenario keeps its key non-empty assertion in\
+    \ the serialization-count warn-path case at 276."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
-  - source/services/large-uncached-input-guard.test.ts:167-208 already asserts stable keys for repeated
-    input and changed keys for changed input.
-  - source/services/large-uncached-input-guard.test.ts:354-376 repeats only the stable/nonempty warning-key
-    assertion without adding a distinct transition or input case.
-  - source/services/large-uncached-input-guard.test.ts:213-307 and 378-414 contain distinct no-serialization,
+  - source/services/large-uncached-input-guard.test.ts:167-210 asserts stable keys for repeated
+    input, changed keys for changed input, and non-empty warn-path keys.
+  - source/services/large-uncached-input-guard.test.ts:213-307 and 358-414 contain distinct no-serialization,
     one-serialization, and precomputed-size contracts worth retaining.
   replacementTestIds: []
   status: reviewed
@@ -31836,21 +31832,20 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
+  recommendation: keep
   confidence: high
-  reason: Coordinator decision of record after source verification. The follow-up admissibility cases
-    are useful, but the max-turn reconciliation case explicitly does not reproduce the SDK behavior and
-    only proves a synthetic harness path.
+  reason: "M4 batch B6 (audit-m4-b6 1522a0fb) landed: the self-declared TODO max-turn\
+    \ case (304-343) was deleted. The synthetic stream cannot reproduce the SDK's\
+    \ max-turn reconciliation (the case admitted as much), and the only guard-level\
+    \ property it could touch is directly covered by input-surge-guard.test.ts's allow\
+    \ cases plus the forged-approval block case that remains in this file."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
-  - source/services/session/conversation-session.input-surge.test.ts:214-302 asserts normal follow-up
+  - source/services/session/conversation-session.input-surge.test.ts:207-295 asserts normal follow-up
     and large-result behavior after approval or abandonment.
-  - source/services/session/conversation-session.input-surge.test.ts:304-343 marks the max-turn case TODO
-    because the synthetic stream does not reliably reproduce SDK reconciliation, then asserts a rejected
-    send and later recovery.
-  - source/services/session/conversation-session.input-surge.test.ts:345-372 asserts direct terminal-adapter
-    submissions remain blocked even with a forged approval object.
+  - source/services/session/conversation-session.input-surge.test.ts:297-331 asserts direct
+    terminal-adapter submissions remain blocked even with a forged approval object.
   replacementTestIds: []
   status: reviewed
 - id: session-conversation-session-provider-test-primary
@@ -32179,18 +32174,17 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
-  confidence: medium
-  reason: Coordinator decision of record after source verification. The factory surface matters, but several
-    cases assert object shape or source-text import absence, and one disposal case does not verify its
-    named previousResponseId behavior.
+  recommendation: keep
+  confidence: high
+  reason: "M4 batch B6 (audit-m4-b6 1522a0fb) landed: the dispose() case now runs a\
+    \ committed turn (lastResponseId resp-1) and asserts the chain anchor is cleared\
+    \ through the state facade after dispose, instead of a vacuous no-throw under a\
+    \ title claiming a previousResponseId reset."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
-  - The same file mixes useful compaction and lifecycle behavior with structural assertions such as Object.getPrototypeOf(appState),
-    property presence, and readFileSync source checks in source/services/session/session-composition.test.ts:165-274.
-  - The case named dispose() resets previousResponseId so next run starts fresh only asserts that dispose
-    does not throw at source/services/session/session-composition.test.ts:358-367.
+  - source/services/session/session-composition.test.ts:358-387 commits resp-1 through a real run, then
+    asserts stateFacade.getCurrentSnapshot().previousResponseId is null after dispose().
   replacementTestIds: []
   status: reviewed
 - id: session-session-context-service-primary

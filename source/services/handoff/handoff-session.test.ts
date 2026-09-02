@@ -54,3 +54,24 @@ it('sends the captured handoff after effort selection and clears its state', asy
 
   expect(session.getState()).toBeNull();
 });
+
+it('updates dependencies while preserving current handoff state', () => {
+  const { session } = makeSession();
+  session.startHandoff('captured');
+  expect(session.getState()).toEqual({ capturedText: 'captured', stage: 'entering_message' });
+
+  const newAddSystemMessage = vi.fn();
+  session.updateDeps({
+    clearConversationAndRefreshBanner: vi.fn(async () => {}),
+    addSystemMessage: newAddSystemMessage,
+    sendUserMessage: vi.fn(async () => {}),
+    settingsService: { get: vi.fn(() => false), set: vi.fn() } as any,
+    applyRuntimeSetting: vi.fn(),
+    setModel: vi.fn(),
+    queueModeNotice: vi.fn(),
+  });
+
+  expect(session.getState()).toEqual({ capturedText: 'captured', stage: 'entering_message' });
+  expect(session.captureMessage('ship it')).toBe(true);
+  expect(session.getState()?.handoffMessage).toBe('ship it');
+});

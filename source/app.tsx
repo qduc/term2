@@ -317,14 +317,18 @@ const App: FC<AppProps> = ({
       }),
     [setModel, setReasoningEffort, setTemperature, conversationService, settingsService],
   );
+  const queueModeNotice = useCallback(
+    (text: string) => conversationService.queueModeNotice(text),
+    [conversationService],
+  );
   const profileTransitionService = useMemo(
     () =>
       new ProfileTransitionService({
         settingsService,
         rebuildAgent: () => setModel(settingsService.get('agent.model')),
-        queueModeNotice: (text) => conversationService.queueModeNotice(text),
+        queueModeNotice,
       }),
-    [setModel, conversationService, settingsService],
+    [setModel, queueModeNotice, settingsService],
   );
   const applyRuntimeSetting = useCallback(
     (key: string, value: unknown) => configurationService.applyRuntimeSetting(key, value),
@@ -409,7 +413,7 @@ const App: FC<AppProps> = ({
     controller,
     settingsService,
     applyRuntimeSetting,
-    queueModeNotice: (text) => conversationService.queueModeNotice(text),
+    queueModeNotice,
     setModel,
     configurationService,
   });

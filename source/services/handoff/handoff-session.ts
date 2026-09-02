@@ -29,11 +29,20 @@ export type HandoffSessionDeps = {
  */
 export class HandoffSession {
   #state: HandoffState | null = createInitialHandoffState();
-  readonly #deps: HandoffSessionDeps;
-  readonly #transitionService: ProfileTransitionService;
+  #deps: HandoffSessionDeps;
+  #transitionService: ProfileTransitionService;
   readonly #listeners = new Set<(state: HandoffState | null) => void>();
 
   constructor(deps: HandoffSessionDeps) {
+    this.#deps = deps;
+    this.#transitionService = new ProfileTransitionService({
+      settingsService: deps.settingsService,
+      rebuildAgent: () => deps.setModel(deps.settingsService.get('agent.model')),
+      queueModeNotice: deps.queueModeNotice,
+    });
+  }
+
+  updateDeps(deps: HandoffSessionDeps): void {
     this.#deps = deps;
     this.#transitionService = new ProfileTransitionService({
       settingsService: deps.settingsService,

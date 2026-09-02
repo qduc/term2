@@ -9,6 +9,9 @@ import {
   safeJsonParse,
 } from '../format-helpers.js';
 
+export const MIN_CHECK_IN_INTERVAL_SECONDS = 300; // 5 minutes
+export const MIN_NEXT_CHECK_IN_SECONDS = 30; // 30 seconds (scheduler tick granularity)
+
 export const configureTaskCheckInSchema = z.object({
   target: z
     .string()
@@ -24,14 +27,21 @@ export const configureTaskCheckInSchema = z.object({
     .describe('Set to false to disable/mute future proactive check-ins for this task, or true to enable them.'),
   interval_seconds: relaxedNumber
     .int()
-    .positive()
+    .min(
+      MIN_CHECK_IN_INTERVAL_SECONDS,
+      `interval_seconds must be at least ${MIN_CHECK_IN_INTERVAL_SECONDS} seconds (5 minutes)`,
+    )
     .optional()
-    .describe('Set a recurring interval in seconds between future check-ins for this task.'),
+    .describe(
+      `Set a recurring interval in seconds between future check-ins for this task (minimum ${MIN_CHECK_IN_INTERVAL_SECONDS} seconds / 5 minutes).`,
+    ),
   next_check_in_seconds: relaxedNumber
     .int()
-    .positive()
+    .min(MIN_NEXT_CHECK_IN_SECONDS, `next_check_in_seconds must be at least ${MIN_NEXT_CHECK_IN_SECONDS} seconds`)
     .optional()
-    .describe('Schedule the next check-in specifically after this many seconds from now.'),
+    .describe(
+      `Schedule the next check-in specifically after this many seconds from now (minimum ${MIN_NEXT_CHECK_IN_SECONDS} seconds).`,
+    ),
 });
 
 export type ConfigureTaskCheckInParams = z.infer<typeof configureTaskCheckInSchema>;
@@ -54,9 +64,15 @@ export function createConfigureTaskCheckInToolDefinition(
     needsApproval: () => false,
     parallelSafe: true,
     execute: (rawParams) => {
-      const params = rawParams as ConfigureTaskCheckInParams;
+      const parsed = configureTaskCheckInSchema.safeParse(rawParams);
+      if (!parsed.success) {
+        return JSON.stringify({
+          ok: false,
+          error: parsed.error.issues.map((i) => i.message).join('; '),
+        });
+      }
       try {
-        const result = configureTaskCheckIn(params);
+        const result = configureTaskCheckIn(parsed.data);
         return JSON.stringify(result);
       } catch (error: any) {
         return JSON.stringify({

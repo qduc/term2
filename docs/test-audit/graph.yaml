@@ -30892,19 +30892,18 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
-  confidence: medium
-  reason: Coordinator decision of record after source verification. The chat facade behavior matters,
-    but two direct-request cases assert only truthiness and the outputType/fallback observables substantially
-    repeat source/lib/agent-chat-service.test.ts; rewrite can retain the AgentClient-specific provider
-    coverage while removing weak characterization.
+  recommendation: keep
+  confidence: high
+  reason: "M4 batch B5 (audit-m4-b5 66ff03d0) landed: the two direct-request cases now assert the exact\
+    \ user-message input item the provider receives (type/role/content text) instead of request.input\
+    \ truthiness, for both the non-tracing and tracing-capable provider registrations."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
-  - source/lib/openai-agent-client.chat.test.ts:69-123 repeats the outputType forwarding and final message
-    fallback observable covered by source/lib/agent-chat-service.test.ts:227-320.
-  - source/lib/openai-agent-client.chat.test.ts:125-155 asserts only that request.input is truthy for
-    both provider variants, without checking provider-specific request shape.
+  - The direct-request cases assert the provider request's first input item equals the sent user message
+    with its exact text, replacing the truthiness-only characterization.
+  - The outputType forwarding and final-message fallback cases remain as AgentClient-boundary evidence of
+    the chat facade (agent-chat-service.test.ts covers the service class directly).
   replacementTestIds: []
   status: reviewed
 - id: runtime-openai-agent-client-flex-tier-primary
@@ -30932,22 +30931,22 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
+  recommendation: keep
   confidence: high
-  reason: Coordinator decision of record after source verification. The file mixes real OpenRouterError
-    metadata checks with locally recomputed retry formulas and a second broad copy of wrapNeedsApproval
-    coverage; it should be split or rewritten around production predicates rather than preserving arithmetic
-    that never calls production retry code.
+  reason: "M4 batch B5 (audit-m4-b5 66ff03d0) landed: the locally recomputed retry arithmetic (which\
+    \ could never fail against production) is gone; one compact case now drives the production\
+    \ classifyUpstreamRetryableError/computeUpstreamRetryDelayMs policy with OpenRouterError statuses and\
+    \ Retry-After headers. The OpenRouterError metadata seam is retained."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
-  - source/lib/openai-agent-client.test.ts:31-234 computes exponential delays, jitter, classifications,
-    and retry counts from local expressions, so those cases cannot fail when production retry behavior
-    changes.
-  - source/lib/openai-agent-client.test.ts:243-420 duplicates wrapNeedsApproval observables carried more
-    directly by source/lib/tool-invoke.test.ts:201-272 and source/lib/tool-invoke.test.ts:278-420.
-  - source/lib/openai-agent-client.test.ts:6-26 still provides a meaningful OpenRouterError metadata seam,
-    so this is a rewrite/consolidation concern rather than a deletion claim.
+  - The retry section exercised only local expressions (baseDelay*2^n, Math.random, status comparisons);
+    the same scenarios are now asserted against classifyUpstreamRetryableError and computeUpstreamRetryDelayMs,
+    the code RetryingModel actually calls.
+  - 'The wrapNeedsApproval block is retained: it carries observables absent from tool-invoke.test.ts''s
+    four wrapNeedsApproval cases (context passthrough, fail-safe-to-true on throw, strict-schema null
+    optional, needsApproval-time normalization), and the tool-input-normalization contract has a second
+    holder in tool-invoke.test.ts.'
   replacementTestIds: []
   status: reviewed
 - id: runtime-openai-agent-client-public-methods-primary
@@ -31061,22 +31060,19 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
-  confidence: medium
-  reason: Coordinator decision of record after source verification. The core delegation and context-scoping
-    coverage is valuable, but one test named as delegation asserts zero calls and another sink-lifetime
-    test only checks an already-zero active count; rewrite those assertions while retaining the distinct
-    manager/context contracts.
+  recommendation: keep
+  confidence: high
+  reason: "M4 batch B5 (audit-m4-b5 66ff03d0) landed: the cancelAsyncRuns case now pins the real contract\
+    \ — the deprecated Phase-1 seam stays inert while the actual cancelBackgroundRuns control delegates to\
+    \ SubagentManager.cancelAllAsyncRuns — and the sink-lifetime case no longer claims what it cannot\
+    \ observe, asserting instead that async runs leave the foreground lease count untouched."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
-  - source/lib/subagent-bridge.test.ts:659-666 names cancelAsyncRuns delegation but expects trackCancelAllAsyncRuns.callCount
-    to remain 0, so it cannot detect a missing delegation.
-  - source/lib/subagent-bridge.test.ts:617-625 names event-sink lifetime but only asserts activeSubagentsCount
-    is 0; source/lib/subagent-bridge.background-sink.test.ts:262-308 contains stronger sink completion
-    evidence.
-  - source/lib/subagent-bridge.test.ts:230-372 and 531-657 provide distinct context-key, async registry,
-    duplicate-name, and public-control observables.
+  - Production cancelAsyncRuns is a documented deprecated no-op (subagent-bridge.ts); cancelBackgroundRuns
+    performs the delegation, and the rewritten case asserts both sides.
+  - Sink lifetime/event routing evidence lives in subagent-bridge.background-sink.test.ts; the rewritten
+    async case pins the foreground/async lease-count distinction.
   replacementTestIds: []
   status: reviewed
 - id: runtime-subagent-provider-session-primary

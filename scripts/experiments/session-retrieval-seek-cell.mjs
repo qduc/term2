@@ -13,7 +13,7 @@
  *   node scripts/experiments/session-retrieval-seek-cell.mjs \
  *     --cli /home/qduc/term2/dist/cli.js \
  *     --bench /home/qduc/.agents/runtime/bench-session-seek-<ts> \
- *     --label control [--timeout-secs 1800] [--skip-seed] [--no-cell]
+ *     --label control [--timeout-secs 1800] [--skip-seed] [--seed-id <id>] [--no-cell]
  *
  * Writes <bench>/<label>.result.json with seed ID, token, cell session ID,
  * session-tool call log, defect metrics, and oracle verdict.
@@ -40,10 +40,17 @@ function parseArgs(argv) {
   const args = { timeoutSecs: 1800 };
   for (let i = 0; i < argv.length; i += 1) {
     const value = argv[i];
-    if (value === '--cli' || value === '--bench' || value === '--label' || value === '--timeout-secs') {
+    if (
+      value === '--cli' ||
+      value === '--bench' ||
+      value === '--label' ||
+      value === '--timeout-secs' ||
+      value === '--seed-id'
+    ) {
       const next = argv[i + 1];
       if (!next) throw new Error(`${value} requires a value`);
       if (value === '--timeout-secs') args.timeoutSecs = Number(next);
+      else if (value === '--seed-id') args.seedId = next;
       else args[value.slice(2)] = next;
       i += 1;
     } else if (value === '--skip-seed') {
@@ -64,7 +71,9 @@ function run(cmd, args, opts = {}) {
   const result = spawnSync(cmd, args, { encoding: 'utf8', timeout: 600_000, ...opts });
   if (result.error) throw new Error(`${cmd} spawn failed: ${result.error.message}`);
   if (result.status !== 0) {
-    throw new Error(`${cmd} ${args.join(' ')} exited ${result.status}: ${(result.stderr || result.stdout).slice(0, 2000)}`);
+    throw new Error(
+      `${cmd} ${args.join(' ')} exited ${result.status}: ${(result.stderr || result.stdout).slice(0, 2000)}`,
+    );
   }
   return result.stdout;
 }
@@ -190,7 +199,9 @@ function summarizeCall(call) {
     tool: call.tool,
     args: call.args,
     status: call.result?.status ?? null,
-    error: parsed?.error ?? (typeof output === 'string' && output.includes('did not match schema') ? { code: 'schema' } : null),
+    error:
+      parsed?.error ??
+      (typeof output === 'string' && output.includes('did not match schema') ? { code: 'schema' } : null),
     total: parsed?.total,
     omitted: parsed?.omitted,
     nextCursor: parsed?.nextCursor,
@@ -210,7 +221,10 @@ function defectMetrics(calls, token) {
     if (args.cursor != null && args.cursor !== '' && !HANDLE_RE.test(String(args.cursor))) {
       invented.push(String(args.cursor));
     }
-    if ((typeof args.maxChars === 'number' && args.maxChars > 12_000) || (typeof args.limit === 'number' && args.limit > 50)) {
+    if (
+      (typeof args.maxChars === 'number' && args.maxChars > 12_000) ||
+      (typeof args.limit === 'number' && args.limit > 50)
+    ) {
       schema.push({ tool: call.tool, maxChars: args.maxChars, limit: args.limit });
     }
     if (summary.error?.code === 'invalid_cursor') invalidCursor += 1;
@@ -227,8 +241,7 @@ function defectMetrics(calls, token) {
     schemaBoundary: schema,
     reachedToken,
     firstReadOmitted: firstSeedRead?.omitted ?? null,
-    reproduced:
-      reads.length >= 5 || invented.length > 0 || invalidCursor > 0,
+    reproduced: reads.length >= 5 || invented.length > 0 || invalidCursor > 0,
   };
 }
 
@@ -344,7 +357,10 @@ function settleAgent(name, timeoutSecs) {
     const status = agentStatus(name);
     if (status === 'blocked') return 'blocked';
     if (status === 'working') sawWorking = true;
-    if ((status === 'idle' || status === 'done') && (sawWorking || Date.now() - deadline + timeoutSecs * 1000 > 90_000)) {
+    if (
+      (status === 'idle' || status === 'done') &&
+      (sawWorking || Date.now() - deadline + timeoutSecs * 1000 > 90_000)
+    ) {
       return status;
     }
     sleep(5_000);
@@ -353,7 +369,17 @@ function settleAgent(name, timeoutSecs) {
 }
 
 function runCell(cli, bench, label, timeoutSecs, message) {
-  const tab = herdr('tab', 'create', '--workspace', HERDR_WORKSPACE, '--cwd', bench, '--label', `seek-${label}`, '--no-focus');
+  const tab = herdr(
+    'tab',
+    'create',
+    '--workspace',
+    HERDR_WORKSPACE,
+    '--cwd',
+    bench,
+    '--label',
+    `seek-${label}`,
+    '--no-focus',
+  );
   const tabResult = tab.result ?? tab;
   const tabId = (tabResult.tab ?? {}).tab_id;
   const paneId = (tabResult.root_pane ?? {}).pane_id;
@@ -373,11 +399,22 @@ function runCell(cli, bench, label, timeoutSecs, message) {
     herdr('pane', 'send-keys', paneId, 'enter');
     phaseStates.push(settleAgent(agentName, timeoutSecs));
     sleep(3_000);
-    const read = herdr('agent', 'read', agentName, '--source', 'recent-unwrapped', '--lines', '400', '--format', 'text');
+    const read = herdr(
+      'agent',
+      'read',
+      agentName,
+      '--source',
+      'recent-unwrapped',
+      '--lines',
+      '400',
+      '--format',
+      'text',
+    );
     const transcript = read?.result?.text ?? read?.text ?? read?._raw ?? JSON.stringify(read);
     const candidates = listProjectSessions(bench).filter(({ mtimeMs }) => mtimeMs >= cellStart - 5_000);
     const cellSession = candidates[candidates.length - 1];
-    if (!cellSession) throw new Error(`cell session not found under project ${bench}; transcript head:\n${transcript.slice(0, 1500)}`);
+    if (!cellSession)
+      throw new Error(`cell session not found under project ${bench}; transcript head:\n${transcript.slice(0, 1500)}`);
     return { tabId, paneId, agentName, phaseStates, sessionId: cellSession.id, transcript };
   } finally {
     if (tabId) herdr('tab', 'close', tabId);
@@ -392,18 +429,25 @@ function main() {
   let seedId = null;
   let token = null;
   let seedMeta = null;
-  if (!args.skipSeed) {
+  if (!args.skipSeed && !args.seedId) {
     seedMeta = writeSeed(bench);
     seedId = seedMeta.seedId;
     token = seedMeta.token;
     console.log(`seed: ${seedId} token: ${token} records: ${seedMeta.records} priorChars: ${seedMeta.priorChars}`);
   } else {
-    const sessions = listProjectSessions(bench);
-    const seed = [...sessions].reverse().find((candidate) => extractToken(candidate.id));
-    if (!seed) throw new Error('--skip-seed but no bench-born session with a 32-hex last assistant found');
-    seedId = seed.id;
-    token = extractToken(seed.id);
-    console.log(`reused seed: ${seedId} token: ${token}`);
+    if (args.seedId) {
+      seedId = args.seedId;
+      token = extractToken(seedId);
+      if (!token) throw new Error(`--seed-id ${seedId} does not contain a valid final 32-hex assistant token`);
+      console.log(`reused seed: ${seedId} token: ${token}`);
+    } else {
+      const sessions = listProjectSessions(bench);
+      const seed = [...sessions].reverse().find((candidate) => extractToken(candidate.id));
+      if (!seed) throw new Error('--skip-seed but no bench-born session with a 32-hex last assistant found');
+      seedId = seed.id;
+      token = extractToken(seed.id);
+      console.log(`reused seed: ${seedId} token: ${token}`);
+    }
   }
 
   if (args.noCell) {
@@ -443,7 +487,9 @@ function main() {
   const outPath = path.join(bench, `${args.label}.result.json`);
   fs.writeFileSync(outPath, JSON.stringify(result, null, 2) + '\n');
   console.log(
-    `cell ${args.label}: session ${cell.sessionId} state ${cell.phaseStates.at(-1)} oracle ${oraclePass ? 'PASS' : 'FAIL'} reproduced ${defects.reproduced}`,
+    `cell ${args.label}: session ${cell.sessionId} state ${cell.phaseStates.at(-1)} oracle ${
+      oraclePass ? 'PASS' : 'FAIL'
+    } reproduced ${defects.reproduced}`,
   );
   console.log(`result: ${outPath}`);
 }

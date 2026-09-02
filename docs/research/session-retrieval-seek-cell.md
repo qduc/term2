@@ -127,6 +127,17 @@ cost, but does not by itself select or justify a repair. Full raw evidence,
 including the generated token, remains in the local result file
 `<bench>/control.result.json`.
 
+The two labeled repair builds were then run against the same seed and prompt:
+
+- `repair-index` (`f016a26a`): oracle pass in four `session_read` calls. The
+  model used `startIndex: 50`, then `startIndex: 57`; the defect metric did
+  not reproduce.
+- `repair-tail` (`687d60f5`): oracle pass in one `session_read` call using
+  `from: "end"`; the defect metric did not reproduce.
+
+The tail anchor was the lowest-call path in this cell. These are labeled
+candidate results, not a product decision; neither candidate is merged.
+
 ```bash
 printf '["<cell-session-id>"]' > /tmp/seek-cell-sessions.json
 node scripts/experiments/session-retrieval-log-analysis.mjs \

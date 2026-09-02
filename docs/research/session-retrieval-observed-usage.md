@@ -2,9 +2,9 @@
 
 ## Status
 
-**Open: seek/tail repair comparison remains unrun.** The control cell has now
-run successfully and reproduced the forward-only pagination cost; no API or
-default change has shipped.
+**Open: seek/tail product decision remains unmade.** The control cell and two
+labeled repair candidates have run; the tail anchor reduced the task to one
+read and the numeric index to four. No API or default change has shipped.
 The 2026-08-31 study included a naturalistic baseline of seven verified
 sessions and 79 calls, plus six controlled continuation cells across three
 rollover-versus-resume pairs, all passing their oracle — that phase closed

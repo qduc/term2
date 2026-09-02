@@ -50,8 +50,11 @@ scenario is the one whose CLI never reached the state it waits for.
   Interactive ready/idle waits use `child.waitForIdleInput()`, not a prompt
   glyph. The shipped CLI publishes an incrementing generation to
   `TERM2_HARNESS_IDLE_PATH` when the composer owns the keyboard and no turn is
-  in flight (`source/lib/harness-input-idle.ts`). A PTY-stripped `❯` is not a
-  readiness signal, and first-run/menu ownership must not count as idle.
+  in flight (`source/lib/harness-input-idle.ts`). Text submission uses
+  `writePtyTextAndSubmit()`, which waits for the CLI's companion composer-state
+  acknowledgment before sending Enter; fixed sleeps and PTY echo do not prove
+  Ink consumed the text. A PTY-stripped `❯` is not a readiness signal, and
+  first-run/menu ownership must not count as idle.
 - `scripts/provider-black-box/provider-capability-matrix.ts` and
   `provider-session-capability-manifest.ts` own the test-side capability rows,
   typed lifecycle ledgers, and aggregate accounting.

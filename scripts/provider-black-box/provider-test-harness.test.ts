@@ -6,8 +6,10 @@ import {
   createIsolatedWorkspaceLease,
   removeIsolatedWorkspaceRoot,
   withIsolatedWorkspace,
+  writePtyTextAndSubmit,
   writePtyTextAndWaitForVisibleEcho,
   type IsolatedWorkspaceLease,
+  type PtyChildDriver,
 } from './provider-test-harness.js';
 
 const CHILD = join(process.cwd(), 'scripts/provider-black-box/provider-harness-child.mjs');
@@ -123,6 +125,23 @@ describe('provider black-box harness', () => {
       await expect(child.waitForExit()).resolves.toMatchObject({ exitCode: 0 });
       expect(child.readVisible()).toContain('echo: stateful prompt');
     });
+  });
+
+  it('waits for application-owned composer acknowledgement before writing Enter', async () => {
+    const events: string[] = [];
+    const child = {
+      readComposerRevision: () => 4,
+      write: async (value: string) => {
+        events.push(`write:${JSON.stringify(value)}`);
+      },
+      waitForComposerValue: async (value: string, options?: { afterRevision?: number }) => {
+        events.push(`ack:${JSON.stringify(value)}:${options?.afterRevision}`);
+      },
+    } as PtyChildDriver;
+
+    await writePtyTextAndSubmit(child, 'fixture prompt');
+
+    expect(events).toEqual(['write:"fixture prompt"', 'ack:"fixture prompt":4', 'write:"\\r"']);
   });
 
   it('isolates HOME and Windows USERPROFILE for child processes', async () => {

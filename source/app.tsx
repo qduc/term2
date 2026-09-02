@@ -989,8 +989,8 @@ const App: FC<AppProps> = ({
   }, [isOverallBusy, terminalTitleBase]);
 
   useEffect(() => {
-    publishHarnessInputState({ owner: inputOwner.kind, processing: effectiveIsProcessing });
-  }, [effectiveIsProcessing, inputOwner.kind]);
+    publishHarnessInputState({ owner: inputOwner.kind, processing: effectiveIsProcessing, inputValue: input });
+  }, [effectiveIsProcessing, input, inputOwner.kind]);
 
   const handleNavigateQuestion = useCallback(
     (direction: 'prev' | 'next') => {

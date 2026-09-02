@@ -9,7 +9,9 @@ import { stripVTControlCharacters } from 'node:util';
 import { resolveSettingsDirectory } from '../../source/services/settings/settings-path.js';
 import {
   HARNESS_IDLE_ENV,
+  readHarnessComposerState,
   readHarnessIdleGeneration,
+  waitForHarnessComposerValue,
   waitForHarnessIdleGeneration,
 } from '../../source/lib/harness-input-idle.js';
 
@@ -33,7 +35,6 @@ process.on('exit', () => {
 // duplicates that flake independently.
 export const DEFAULT_TIMEOUT_MS = 40_000;
 const DEFAULT_WRITE_TIMEOUT_MS = 5_000;
-const PTY_INPUT_SETTLE_MS = 50;
 const DEFAULT_TERMINATE_GRACE_MS = 500;
 const DEFAULT_TERMINATE_TIMEOUT_MS = 2_000;
 const ROOT_REMOVAL_MAX_RETRIES = 5;
@@ -132,8 +133,12 @@ export interface PtyChildDriver {
   waitForState(predicate: (snapshot: ChildSnapshot) => boolean, timeoutMs?: number): Promise<ChildSnapshot>;
   /** Latest composer-idle generation, or 0 before the child has accepted input. */
   readIdleGeneration(): number;
+  /** Latest application-owned composer revision, or 0 before publication. */
+  readComposerRevision(): number;
   /** Wait until the child publishes an idle generation greater than `after`. */
   waitForIdleInput(options?: { after?: number; timeoutMs?: number }): Promise<number>;
+  /** Wait until the application-owned composer has consumed an exact value. */
+  waitForComposerValue(value: string, options?: { afterRevision?: number; timeoutMs?: number }): Promise<void>;
   waitForExit(timeoutMs?: number): Promise<ChildExit>;
   terminate(options?: { signal?: NodeJS.Signals; graceMs?: number; timeoutMs?: number }): Promise<ChildExit>;
   kill(signal?: NodeJS.Signals): void;
@@ -665,6 +670,10 @@ function createPtyChild(options: {
       if (!idlePath) return 0;
       return readHarnessIdleGeneration(idlePath);
     },
+    readComposerRevision: () => {
+      if (!idlePath) return 0;
+      return readHarnessComposerState(idlePath)?.revision ?? 0;
+    },
     waitForIdleInput: async ({ after = 0, timeoutMs } = {}) => {
       const idlePath = options.env[HARNESS_IDLE_ENV];
       if (!idlePath) {
@@ -700,6 +709,15 @@ function createPtyChild(options: {
         )}.`,
       );
     },
+    waitForComposerValue: async (value, { afterRevision, timeoutMs = DEFAULT_WRITE_TIMEOUT_MS } = {}) => {
+      if (!idlePath) {
+        throw new Error(`${HARNESS_IDLE_ENV} is required to wait for composer input.`);
+      }
+      await waitForHarnessComposerValue(idlePath, value, {
+        afterRevision: afterRevision ?? readHarnessComposerState(idlePath)?.revision ?? 0,
+        timeoutMs,
+      });
+    },
     waitForExit,
     terminate,
     kill: (signal = 'SIGTERM') => {
@@ -732,17 +750,15 @@ export async function writePtyTextAndWaitForVisibleEcho(
   );
 }
 
-/** Write ordinary terminal text, wait for its rendered echo, then submit it. */
+/** Write ordinary terminal text, wait for application consumption, then submit it. */
 export async function writePtyTextAndSubmit(
   child: PtyChildDriver,
   text: string,
   timeoutMs = DEFAULT_WRITE_TIMEOUT_MS,
 ): Promise<void> {
+  const afterRevision = child.readComposerRevision();
   await child.write(text, timeoutMs);
-  // The PTY exposes local echo before the Ink input handler has consumed the
-  // line. This is the smallest verified bridge settle window; it is not a
-  // provider/application-state wait.
-  await new Promise<void>((resolve) => setTimeout(resolve, PTY_INPUT_SETTLE_MS));
+  await child.waitForComposerValue(text, { afterRevision, timeoutMs });
   await child.write('\r', timeoutMs);
 }
 

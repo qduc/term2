@@ -73,6 +73,7 @@ import { isLocalContextSummary } from '../contracts/provider-input.js';
 import { classifyProviderFailure } from '../services/retry/provider-failure-classification.js';
 import { ContextMilestoneReminder } from '../services/agent-runtime/context-compaction/context-milestone-reminder.js';
 import type {
+  PendingSessionRolloverRequest,
   SessionRolloverConsumption,
   SessionRolloverRequest,
   SessionRolloverRequestOutcome,
@@ -134,7 +135,8 @@ export class AgentClient {
   // state (notably ResponsesWS), until the provider configuration changes.
   #streamedModelCache = new Map<string, StreamedModelCacheEntry>();
   #contextMilestoneReminder = new ContextMilestoneReminder();
-  #sessionRolloverRequest: SessionRolloverRequest | null = null;
+  #sessionRolloverRequest: PendingSessionRolloverRequest | null = null;
+  #lastCompletedProviderInputTokens?: number;
 
   #clearStreamedModelCache(): void {
     for (const cached of this.#streamedModelCache.values()) {
@@ -378,16 +380,12 @@ export class AgentClient {
   #observeContextMilestones(
     history: readonly ProviderInputItem[],
     onReminder: (text: string) => void,
+    lastCompletedInputTokens?: number,
   ): { deferCompaction: true } | undefined {
     const provider = this.#agentConfig.getProvider();
     const model = this.#agentConfig.getModel();
     const catalog = getCatalogModel(provider, model);
     const agent = this.#agentConfig.getApplicationAgent();
-    const threshold = resolveCompactionThreshold({
-      contextWindow: catalog?.contextWindow,
-      compactThreshold: this.#settings.get('agent.contextCompaction.compactThreshold') ?? 0.8,
-      compactThresholdTokens: this.#settings.get('agent.contextCompaction.compactThresholdTokens') ?? null,
-    });
     const estimate = estimateContext({
       history,
       instructions: agent.instructions,
@@ -402,13 +400,7 @@ export class AgentClient {
       milestones: this.#settings.get('agent.sessionRollover.milestones') ?? [],
       autoBrief: this.#settings.get('agent.sessionRollover.autoBrief') ?? true,
     };
-    const reminders = this.#contextMilestoneReminder.observe(
-      estimate,
-      config,
-      canSafelyDeferCompaction && this.#settings.get('agent.contextCompaction.enabled') && threshold.available
-        ? threshold.effectiveThreshold
-        : undefined,
-    );
+    const reminders = this.#contextMilestoneReminder.observe(lastCompletedInputTokens, config);
     for (const reminder of reminders) {
       onReminder(reminder);
     }
@@ -443,17 +435,37 @@ export class AgentClient {
   }
 
   requestSessionRollover(request: SessionRolloverRequest): SessionRolloverRequestOutcome {
+    const rolloverId = randomUUID();
     const active = this.#liveBackgroundWork();
     if (active.subagent > 0 || active.shell > 0) {
+      this.#logger.info('Session rollover blocked', {
+        eventType: 'session.rollover.blocked',
+        rolloverId,
+        sourceSessionId: this.#sessionContextService.getContext()?.sessionId,
+        blocker: 'background_work',
+        reason: request.reason,
+        briefSize: request.brief.length,
+        providerInputTokens: this.#lastCompletedProviderInputTokens,
+        active,
+      });
       return {
         ok: false,
         status: 'rollover_blocked',
         error: 'Session rollover is blocked while background work is live.',
         active,
+        rolloverId,
       };
     }
-    this.#sessionRolloverRequest ??= request;
-    return { ok: true, status: 'rollover_requested' };
+    const pending: PendingSessionRolloverRequest = {
+      ...request,
+      rolloverId,
+      requestedAt: Date.now(),
+      ...(this.#lastCompletedProviderInputTokens !== undefined
+        ? { providerInputTokens: this.#lastCompletedProviderInputTokens }
+        : {}),
+    };
+    this.#sessionRolloverRequest ??= pending;
+    return { ok: true, status: 'rollover_requested', rolloverId: this.#sessionRolloverRequest.rolloverId };
   }
 
   consumeSessionRolloverRequest(): SessionRolloverConsumption {
@@ -468,6 +480,7 @@ export class AgentClient {
         blocker: 'background_work',
         error: 'Session rollover was not performed because background work became live before turn settlement.',
         active,
+        request,
       };
     }
     return { status: 'ready', request };
@@ -1074,7 +1087,15 @@ export class AgentClient {
       if (this.#currentCorrelationId === correlationId) this.#clearCorrelationId();
     };
     void stream.completed.then(
-      () => cleanup(),
+      () => {
+        if (stream.latestProviderInputTokens !== undefined) {
+          this.#lastCompletedProviderInputTokens = stream.latestProviderInputTokens;
+          if (this.#sessionRolloverRequest) {
+            this.#sessionRolloverRequest.providerInputTokens = stream.latestProviderInputTokens;
+          }
+        }
+        cleanup();
+      },
       (error) => {
         const failure = classifyProviderFailure(error);
         this.#logger.error('Agent stream failed', {
@@ -1178,7 +1199,8 @@ export class AgentClient {
           runBudget,
           ...(this.#wrapUpOnCriticalRunBudget ? { wrapUpOnCriticalRunBudget: true } : {}),
           ...(options.onRunBudgetEvent ? { onRunBudgetEvent: options.onRunBudgetEvent } : {}),
-          onRequestBoundary: (history, onReminder) => this.#observeContextMilestones(history, onReminder),
+          onRequestBoundary: (history, onReminder, observation) =>
+            this.#observeContextMilestones(history, onReminder, observation.lastCompletedInputTokens),
         });
       };
       const stream = run();
@@ -1217,7 +1239,8 @@ export class AgentClient {
       runBudget,
       ...(this.#wrapUpOnCriticalRunBudget ? { wrapUpOnCriticalRunBudget: true } : {}),
       ...(options.onRunBudgetEvent ? { onRunBudgetEvent: options.onRunBudgetEvent } : {}),
-      onRequestBoundary: (history, onReminder) => this.#observeContextMilestones(history, onReminder),
+      onRequestBoundary: (history, onReminder, observation) =>
+        this.#observeContextMilestones(history, onReminder, observation.lastCompletedInputTokens),
       ...(options.stopAfterApprovalResolution ? { stopAfterApprovalResolution: true } : {}),
     });
     this.#observeCompletion(stream, state, provider, this.#agentConfig.getModel());

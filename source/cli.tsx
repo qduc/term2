@@ -389,6 +389,13 @@ if (resumeRequested) {
     const result = resumeProjectPath
       ? loadConversationForProject(resumeTarget, resumeProjectPath, expectedSshHost)
       : { status: 'not_found' as const };
+    if (result.status === 'ambiguous') {
+      console.error(`Error: Conversation reference ${resumeTarget} is ambiguous.`);
+      for (const candidate of result.candidates) {
+        console.error(`  ${candidate.shortRef}  ${candidate.id}`);
+      }
+      process.exit(1);
+    }
     if (result.status === 'project_mismatch') {
       console.error(
         `Error: Conversation ${resumeTarget} belongs to a different project path (${
@@ -887,8 +894,10 @@ const logWriterDir = getConversationsDir();
 // once at startup; sidecars for still-resumable crashed sessions are kept.
 collectOrphanedDeltaSidecars();
 const logWriter = createConversationLogWriter({ sessionId: effectiveSessionId, dir: logWriterDir, logger });
-function buildInitMeta(id: string, createdAt: string) {
+function buildInitMeta(id: string, createdAt: string, rolloverFrom?: string) {
   const cwd = executionContext?.getCwd();
+  const persistedRolloverFrom =
+    rolloverFrom ?? (resumedConversation?.id === id ? resumedConversation.rolloverFrom : undefined);
   return {
     id,
     createdAt,
@@ -904,6 +913,7 @@ function buildInitMeta(id: string, createdAt: string) {
     ...(settings.get('agent.provider') ? { provider: settings.get('agent.provider') } : {}),
     ...(settings.get('agent.reasoningEffort') ? { reasoningEffort: settings.get('agent.reasoningEffort') } : {}),
     ...(resumedConversation?.forkedFrom ? { forkedFrom: resumedConversation.forkedFrom } : {}),
+    ...(persistedRolloverFrom ? { rolloverFrom: persistedRolloverFrom } : {}),
   };
 }
 try {
@@ -959,9 +969,9 @@ const { waitUntilExit } = render(
         initialMessages={initialMessages}
         restoredStaticMessageIds={restoredStaticMessageIds}
         logWriter={logWriter}
-        onRotateWriter={(newId, createdAt) => {
+        onRotateWriter={(newId, createdAt, rolloverFrom) => {
           logWriter.append({ type: 'session_cleared' });
-          logWriter.rotate(newId, buildInitMeta(newId, createdAt ?? new Date().toISOString()));
+          logWriter.rotate(newId, buildInitMeta(newId, createdAt ?? new Date().toISOString(), rolloverFrom));
           effectiveHasConversationContent = false;
         }}
         generateId={generateId}

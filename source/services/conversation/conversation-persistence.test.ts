@@ -97,6 +97,28 @@ it.sequential('generateId: returns unique IDs', () => {
   expect(persistenceModule.generateId()).not.toBe(persistenceModule.generateId());
 });
 
+it.sequential('loadConversationForProject resolves unique UUID prefixes and reports ambiguous candidates', async () => {
+  const first = '12345678-1234-4abc-8def-1234567890ab';
+  const second = '12345678-abcd-4abc-8def-1234567890ab';
+  for (const id of [first, second]) {
+    const writer = createConversationLogWriter({ sessionId: id, dir: testDir, logger: stubLogger });
+    writer.init({ id, createdAt: '2026-01-01T00:00:00.000Z', projectPath: '/project' });
+    await writer.close();
+  }
+
+  expect(persistenceModule.loadConversationForProject('12345678-1', '/project')).toMatchObject({
+    status: 'loaded',
+    conversation: { id: first },
+  });
+  expect(persistenceModule.loadConversationForProject('12345678', '/project')).toMatchObject({
+    status: 'ambiguous',
+    candidates: expect.arrayContaining([
+      { id: first, shortRef: '12345678-1' },
+      { id: second, shortRef: '12345678-a' },
+    ]),
+  });
+});
+
 it.sequential('getResumeCommand: returns correct format', () => {
   const id = 'test-uuid-123';
   expect(persistenceModule.getResumeCommand(id)).toBe('term2 --resume test-uuid-123');

@@ -19,7 +19,7 @@ afterEach(() => {
   setConversationsDirForTest(null);
 });
 
-function writeSession(id: string, projectPath: string, sshHost?: string, text = 'hello') {
+function writeSession(id: string, projectPath: string, sshHost?: string, text = 'hello', rolloverFrom?: string) {
   const writer = createConversationLogWriter({ sessionId: id, dir, logger });
   writer.init({
     id,
@@ -28,6 +28,7 @@ function writeSession(id: string, projectPath: string, sshHost?: string, text = 
     sshHost,
     model: 'model',
     provider: 'provider',
+    rolloverFrom,
   });
   writer.append({ type: 'user_message', message: { id: `${id}-u`, sender: 'user', text } });
   writer.append({
@@ -37,6 +38,38 @@ function writeSession(id: string, projectPath: string, sshHost?: string, text = 
   });
   void writer.close();
 }
+
+it('exposes unique UUID short refs and resolves exact, prefix, ambiguous, and previous references', () => {
+  const previous = '12345678-1234-4abc-8def-1234567890ab';
+  const colliding = '12345678-abcd-4abc-8def-1234567890ab';
+  const current = 'abcdef12-3456-4abc-8def-1234567890ab';
+  writeSession(previous, '/project', undefined, 'predecessor detail');
+  writeSession(colliding, '/project', undefined, 'other detail');
+  writeSession(current, '/project', undefined, 'current detail', previous);
+  appendEnvelope(current, 99, {
+    type: 'session_init',
+    id: current,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    projectPath: '/project',
+  });
+  const browser = new SessionBrowser(() => ({ projectPath: '/project', currentSessionId: current }));
+
+  const listed: any = browser.list({});
+  const previousEntry = listed.sessions.find((session: any) => session.id === previous);
+  expect(previousEntry.shortRef).toBe('12345678-1');
+  expect((browser.read({ id: previousEntry.shortRef }) as any).session.id).toBe(previous);
+  expect((browser.read({ id: 'previous' }) as any).session).toMatchObject({ id: previous, shortRef: '12345678-1' });
+  expect(browser.read({ id: '12345678' })).toMatchObject({
+    error: {
+      code: 'ambiguous_reference',
+      candidates: expect.arrayContaining([
+        { id: previous, shortRef: '12345678-1' },
+        { id: colliding, shortRef: '12345678-a' },
+      ]),
+    },
+  });
+  expect((browser.read({ id: previous }) as any).session.id).toBe(previous);
+});
 
 function appendEnvelope(id: string, seq: number, event: unknown, ts = '2026-01-01T00:00:01.000Z') {
   fs.appendFileSync(path.join(dir, `${id}.jsonl`), `${JSON.stringify({ v: 3, seq, ts, event })}\n`);

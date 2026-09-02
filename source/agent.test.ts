@@ -161,6 +161,7 @@ it('registers prior-session browser tools only when the root composition explici
     expect.arrayContaining(['session_list', 'session_search', 'session_read']),
   );
   expect(present.instructions).toContain('Prior-session transcripts');
+  expect(present.instructions).toContain('`id: "previous"` directly');
   expect(present.instructions).not.toContain('session transcript text');
   expect(present.instructions).not.toContain('HISTORICAL_TRANSCRIPT_SENTINEL');
   expect(list).not.toHaveBeenCalled();

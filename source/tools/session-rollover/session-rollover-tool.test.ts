@@ -3,7 +3,7 @@ import { createSessionRolloverToolDefinition, sessionRolloverParameters } from '
 
 describe('session_rollover tool', () => {
   it('validates the bounded strict request and records it without approval', async () => {
-    const request = vi.fn(() => ({ ok: true as const, status: 'rollover_requested' as const }));
+    const request = vi.fn(() => ({ ok: true as const, status: 'rollover_requested' as const, rolloverId: 'r1' }));
     const tool = createSessionRolloverToolDefinition(request);
 
     expect(sessionRolloverParameters.safeParse({ brief: 'done', reason: 'task_boundary' }).success).toBe(true);
@@ -13,7 +13,7 @@ describe('session_rollover tool', () => {
     const output = await tool.execute({ brief: 'done', reason: 'task_boundary' });
 
     expect(request).toHaveBeenCalledWith({ brief: 'done', reason: 'task_boundary' });
-    expect(JSON.parse(String(output))).toEqual({ ok: true, status: 'rollover_requested' });
+    expect(JSON.parse(String(output))).toEqual({ ok: true, status: 'rollover_requested', rolloverId: 'r1' });
   });
 
   it('returns a tool error when live background work blocks rollover', async () => {
@@ -22,6 +22,7 @@ describe('session_rollover tool', () => {
       status: 'rollover_blocked',
       error: 'Session rollover is blocked while background work is live.',
       active: { shell: 1, subagent: 2 },
+      rolloverId: 'r2',
     }));
 
     expect(JSON.parse(String(await tool.execute({ brief: 'done' })))).toEqual({
@@ -29,6 +30,7 @@ describe('session_rollover tool', () => {
       status: 'rollover_blocked',
       error: 'Session rollover is blocked while background work is live.',
       active: { shell: 1, subagent: 2 },
+      rolloverId: 'r2',
     });
   });
 

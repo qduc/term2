@@ -106,7 +106,7 @@ interface AppProps {
   initialMessages?: Message[];
   restoredStaticMessageIds?: string[];
   logWriter?: { append: (event: any) => void };
-  onRotateWriter?: (newSessionId: string, createdAt?: string) => void;
+  onRotateWriter?: (newSessionId: string, createdAt?: string, rolloverFrom?: string) => void;
   generateId: () => string;
   onSessionIdChange?: (newId: string, createdAt: string) => void;
   onHasConversationContent?: (hasContent: boolean) => void;
@@ -156,8 +156,10 @@ const App: FC<AppProps> = ({
   const [backgroundTaskManagerOpen, setBackgroundTaskManagerOpen] = useState(false);
   const handleClearConversationRef = useRef<(() => Promise<void>) | null>(null);
   const sessionRolloverHandlerRef = useRef<
-    ((request: import('./contracts/session-rollover.js').SessionRolloverRequest) => void | Promise<void>) | null
+    ((request: import('./contracts/session-rollover.js').PendingSessionRolloverRequest) => void | Promise<void>) | null
   >(null);
+  const latestRotatedSessionIdRef = useRef<string | undefined>(undefined);
+  const pendingRolloverSuccessorIdRef = useRef<string | undefined>(undefined);
   const pendingSkillRef = useRef<SkillInfo | null>(null);
   const sandboxApprovalCoordinatorRef = useRef<SandboxNetworkApprovalCoordinator | null>(null);
   const [sandboxPromptRequest, setSandboxPromptRequest] = useState<SandboxNetworkAccessRequest | null>(null);
@@ -275,6 +277,7 @@ const App: FC<AppProps> = ({
   const backgroundApprovalState =
     backgroundSubagentApproval ?? ({ revision: 0, current: null, pendingCount: 0, closed: false } as const);
   const backgroundApprovalEntry = backgroundApprovalState.current;
+  const rolloverSourceSessionIdRef = useRef<string | undefined>(undefined);
 
   // Notify cli.tsx when the conversation has content so it can decide whether
   // to show the "To resume this conversation" message.
@@ -283,10 +286,14 @@ const App: FC<AppProps> = ({
   }, [messages, onHasConversationContent]);
 
   const handleClearConversation = useCallback(async () => {
-    const newId = generateId();
+    const newId = pendingRolloverSuccessorIdRef.current ?? generateId();
+    pendingRolloverSuccessorIdRef.current = undefined;
+    latestRotatedSessionIdRef.current = newId;
     const newCreatedAt = new Date().toISOString();
+    const rolloverFrom = rolloverSourceSessionIdRef.current;
+    rolloverSourceSessionIdRef.current = undefined;
     if (onRotateWriter) {
-      onRotateWriter(newId);
+      onRotateWriter(newId, newCreatedAt, rolloverFrom);
     }
     conversationService.resetWithNewId(newId);
     setSessionId(newId);
@@ -361,9 +368,36 @@ const App: FC<AppProps> = ({
   }, [clearConversation, onPrintUsage]);
 
   sessionRolloverHandlerRef.current = async (request) => {
-    const briefing = composeSessionRolloverBrief({ previousSessionId: sessionId, request });
-    conversationService.logSessionRollover(request);
+    const sourceSessionId = sessionId;
+    conversationService.logSessionRollover({
+      type: 'session_rollover',
+      phase: 'requested',
+      rolloverId: request.rolloverId,
+      sourceSessionId,
+      ...(request.reason ? { reason: request.reason } : {}),
+      briefSize: request.brief.length,
+      ...(request.providerInputTokens !== undefined ? { providerInputTokens: request.providerInputTokens } : {}),
+    });
+    const plannedSuccessorId = generateId();
+    pendingRolloverSuccessorIdRef.current = plannedSuccessorId;
+    latestRotatedSessionIdRef.current = plannedSuccessorId;
+    rolloverSourceSessionIdRef.current = sessionId;
     await clearConversationAndRefreshBanner();
+    const successorSessionId = latestRotatedSessionIdRef.current;
+    if (!successorSessionId) throw new Error('Session rollover completed without a successor session ID.');
+    const settlementLatencyMs = Math.max(0, Date.now() - request.requestedAt);
+    conversationService.logSessionRollover({
+      type: 'session_rollover',
+      phase: 'completed',
+      rolloverId: request.rolloverId,
+      sourceSessionId,
+      successorSessionId,
+      ...(request.reason ? { reason: request.reason } : {}),
+      briefSize: request.brief.length,
+      ...(request.providerInputTokens !== undefined ? { providerInputTokens: request.providerInputTokens } : {}),
+      settlementLatencyMs,
+    });
+    const briefing = composeSessionRolloverBrief({ previousSessionId: sourceSessionId, successorSessionId, request });
     await sendSessionRolloverBrief(briefing);
   };
 
@@ -496,6 +530,14 @@ const App: FC<AppProps> = ({
         const result = loadConversationForProject(target, resumeProjectPath, resumeSshHost);
         if (result.status === 'project_mismatch') {
           addSystemMessage(`Conversation ${target} belongs to a different project.`);
+          return;
+        }
+        if (result.status === 'ambiguous') {
+          addSystemMessage(
+            `Conversation reference ${target} is ambiguous. Candidates: ${result.candidates
+              .map((candidate) => `${candidate.shortRef} (${candidate.id})`)
+              .join(', ')}.`,
+          );
           return;
         }
         if (result.status === 'unreadable') {

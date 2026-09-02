@@ -155,6 +155,7 @@ export interface ApplicationRunLoopOptions {
   readonly onRequestBoundary?: (
     history: readonly ProviderInputItem[],
     onReminder: (text: string) => void,
+    observation: { readonly lastCompletedInputTokens?: number },
   ) => { deferCompaction?: boolean } | void;
   /** Per-request output and deadline guard; model settings provide the normal runtime defaults. */
   readonly generationGuard?: GenerationGuardOptions;
@@ -245,6 +246,7 @@ type ToolPlanEntry = {
   parallelSafe: boolean;
   status: 'ready' | 'approval_pending' | 'completed';
   output?: string;
+  result?: unknown;
 };
 
 type RunState = {
@@ -259,6 +261,8 @@ type RunState = {
   approvalMessage?: string;
   responseId?: string;
   usage?: unknown;
+  /** Provider-reported input usage from the latest completed request. */
+  lastCompletedInputTokens?: number;
   /** The run's user context (from options), preserved across continuation. */
   context?: unknown;
   /** This run's approval ledger, preserved across continuation. */
@@ -895,8 +899,14 @@ export class ApplicationRunLoop {
         this.#admitPendingSteers(state, stream, queue);
         this.#evaluateRunBudget(state, stream, queue);
         if (state.pendingRunBudgetInteraction) return this.#pauseForRunBudgetInteraction(state, stream, queue);
-        const boundaryDecision = options.onRequestBoundary?.(state.history, (text) =>
-          this.#queuePendingSystemNotice(text),
+        const boundaryDecision = options.onRequestBoundary?.(
+          state.history,
+          (text) => this.#queuePendingSystemNotice(text),
+          {
+            ...(state.lastCompletedInputTokens !== undefined
+              ? { lastCompletedInputTokens: state.lastCompletedInputTokens }
+              : {}),
+          },
         );
 
         if (options.boundaryCompaction && !boundaryDecision?.deferCompaction) {
@@ -1237,6 +1247,9 @@ export class ApplicationRunLoop {
           }
         }
         if (normalizedCompletionUsage) {
+          if (normalizedCompletionUsage.prompt_tokens !== undefined) {
+            state.lastCompletedInputTokens = normalizedCompletionUsage.prompt_tokens;
+          }
           const accumulated = addTokenUsage(normalizeModelUsage(state.usage), normalizedCompletionUsage);
           state.usage = {
             ...(accumulated.prompt_tokens !== undefined ? { inputTokens: accumulated.prompt_tokens } : {}),
@@ -1531,17 +1544,20 @@ export class ApplicationRunLoop {
         const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
         if (rejected) throw rejected.reason;
         for (const [index, result] of results.entries()) {
-          this.#appendToolResult(state, stream, queue, group[index], (result as PromiseFulfilledResult<unknown>).value);
+          const value = (result as PromiseFulfilledResult<unknown>).value;
+          group[index].result = value;
+          this.#appendToolResult(state, stream, queue, group[index], value);
         }
       } else {
         const result = await this.#invokePlannedTool(group[0], toolContext, state);
+        group[0].result = result;
         this.#appendToolResult(state, stream, queue, group[0], result);
       }
       this.#deps.logDiagnostic?.('tool batch settled', {
         batchId,
         settlementOrder: group.map((entry) => entry.event.id),
       });
-      if (group.some((entry) => entry.definition?.terminateAfterExecution)) {
+      if (group.some((entry) => shouldTerminateAfterExecution(entry.definition, entry.result))) {
         state.terminateAfterToolExecution = true;
         state.toolPlan = undefined;
         return;
@@ -1741,6 +1757,17 @@ export class ApplicationRunLoop {
   }
 }
 
+function shouldTerminateAfterExecution(definition: AnyToolDefinition | undefined, result: unknown): boolean {
+  const policy = definition?.terminateAfterExecution;
+  if (typeof policy === 'boolean') return policy;
+  if (!policy) return false;
+  try {
+    return policy(result);
+  } catch {
+    return false;
+  }
+}
+
 function outputPush(stream: AgentStream, queue: EventQueue, item: ApplicationRunEvent): void {
   stream.output.push(item);
   if (stream.newItems !== stream.output) stream.newItems.push(item);
@@ -1750,6 +1777,7 @@ function outputPush(stream: AgentStream, queue: EventQueue, item: ApplicationRun
 function finish(stream: AgentStream, state: RunState, queue: EventQueue): unknown {
   stream.history = state.history;
   stream.terminalCause = state.terminalCause;
+  stream.latestProviderInputTokens = state.lastCompletedInputTokens;
   if (
     state.supportsConversationChaining &&
     state.responseId &&

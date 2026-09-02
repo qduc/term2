@@ -46,6 +46,7 @@ export interface RestoredState {
   costRecords?: ModelRequestCost[];
   replayWarnings: string[];
   forkedFrom?: string;
+  rolloverFrom?: string;
 }
 
 const INTERRUPTED_SYSTEM_MESSAGE = 'Previous turn was interrupted — send a message to continue.';
@@ -163,6 +164,7 @@ interface ReplayState {
   provider?: string;
   reasoningEffort?: string;
   forkedFrom?: string;
+  rolloverFrom?: string;
   previousResponseId: string | null;
   history: ProviderInputItem[];
   toolLedger: SavedToolExecution[];
@@ -520,6 +522,7 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
       state.provider = event.provider;
       state.reasoningEffort = event.reasoningEffort;
       state.forkedFrom = event.forkedFrom;
+      state.rolloverFrom = event.rolloverFrom ?? state.rolloverFrom;
       return;
     }
     case 'settings_changed': {
@@ -1368,5 +1371,6 @@ export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
     costRecords,
     replayWarnings: state.warnings,
     forkedFrom: state.forkedFrom,
+    rolloverFrom: state.rolloverFrom,
   };
 }

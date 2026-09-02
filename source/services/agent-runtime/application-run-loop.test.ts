@@ -12,10 +12,12 @@ import {
   runWithOpenAIRequestPrefixBindingScope,
 } from '../../providers/openai-request-prefix-binding.js';
 import { isDeepStrictEqual } from 'node:util';
-import type { StreamedModelTurn } from '../../contracts/streamed-model-turn.js';
+import type { StreamedModelTurn, StreamedModelTurnRequest } from '../../contracts/streamed-model-turn.js';
 import type { ToolDefinition } from '../../tools/types.js';
 import { HarnessInvariantError } from '../../lib/harness-invariant-error.js';
 import { WebSocketClosedEarlyError } from '../../providers/websocket-close-evidence.js';
+import { createSessionRolloverToolDefinition } from '../../tools/session-rollover/session-rollover-tool.js';
+import { wrapToolInvoke } from '../../lib/tool-invoke.js';
 
 const agent: ApplicationAgent = {
   name: 'test-agent',
@@ -59,7 +61,7 @@ describe('normalizeApplicationInput opaque lane', () => {
 });
 
 describe('ApplicationRunLoop request-boundary compaction', () => {
-  it('does not send session rollover tool output back to the model', async () => {
+  it('terminates only when a result-aware rollover tool accepts the request', async () => {
     let requests = 0;
     const model: StreamedModelTurn = {
       async *stream() {
@@ -75,7 +77,11 @@ describe('ApplicationRunLoop request-boundary compaction', () => {
       name: 'session_rollover',
       description: 'Rotate the session',
       parameters: z.object({ brief: z.string() }),
-      terminateAfterExecution: true,
+      terminateAfterExecution: (result) =>
+        typeof result === 'object' &&
+        result !== null &&
+        (result as { ok?: unknown }).ok === true &&
+        (result as { status?: unknown }).status === 'rollover_requested',
       needsApproval: () => false,
       execute: () => ({ ok: true, status: 'rollover_requested' }),
       formatCommandMessage: () => [],
@@ -95,6 +101,131 @@ describe('ApplicationRunLoop request-boundary compaction', () => {
       ]),
     );
   });
+
+  it.each([
+    ['schema diagnostics', 'Tool input validation failed: brief is required'],
+    [
+      'a blocked rollover',
+      {
+        ok: false,
+        status: 'rollover_blocked',
+        error: 'Session rollover is blocked while background work is live.',
+      },
+    ],
+    ['a recoverable execution error', 'Error: rollover request failed'],
+  ])('returns %s to the model and continues', async (_case, toolResult) => {
+    const requests: StreamedModelTurnRequest[] = [];
+    const model: StreamedModelTurn = {
+      async *stream(request) {
+        requests.push(request);
+        if (requests.length === 1) {
+          yield {
+            type: 'completion',
+            responseId: 'rollover-call',
+            output: [{ type: 'tool_call', id: 'call-rollover', name: 'session_rollover', arguments: '{}' }],
+          };
+          return;
+        }
+        yield {
+          type: 'completion',
+          responseId: 'follow-up',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'Handled the rollover result.' }] }],
+        };
+      },
+    };
+    const tool: ToolDefinition = {
+      name: 'session_rollover',
+      description: 'Rotate the session',
+      parameters: z.object({ brief: z.string() }),
+      terminateAfterExecution: (result) =>
+        typeof result === 'object' &&
+        result !== null &&
+        (result as { ok?: unknown }).ok === true &&
+        (result as { status?: unknown }).status === 'rollover_requested',
+      needsApproval: () => false,
+      execute: () => toolResult,
+      formatCommandMessage: () => [],
+    };
+
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream({ ...agent, tools: [tool] }, [
+      { role: 'user', type: 'message', content: 'hand off' },
+    ]);
+
+    await stream.completed;
+
+    expect(requests).toHaveLength(2);
+    const expectedOutput = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult);
+    expect(requests[1].input).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'tool_result', id: 'call-rollover', output: expectedOutput }),
+      ]),
+    );
+  });
+
+  it.each([
+    {
+      name: 'malformed schema input',
+      arguments: '{}',
+      tool: () =>
+        wrapToolInvoke(
+          createSessionRolloverToolDefinition(() => ({
+            ok: true,
+            status: 'rollover_requested',
+            rolloverId: 'must-not-run',
+          })),
+        ),
+      expected: 'Tool input did not match schema',
+    },
+    {
+      name: 'a blocked rollover',
+      arguments: '{"brief":"continue"}',
+      tool: () =>
+        createSessionRolloverToolDefinition(() => ({
+          ok: false,
+          status: 'rollover_blocked',
+          error: 'background work is live',
+          active: { shell: 1, subagent: 0 },
+          rolloverId: 'blocked-1',
+        })),
+      expected: 'rollover_blocked',
+    },
+    {
+      name: 'a recoverable rollover error',
+      arguments: '{"brief":"continue"}',
+      tool: () =>
+        createSessionRolloverToolDefinition(() => {
+          throw new Error('temporary rollover failure');
+        }),
+      expected: 'temporary rollover failure',
+    },
+  ])(
+    'continues after the production session_rollover tool returns $name',
+    async ({ arguments: args, tool, expected }) => {
+      const requests: StreamedModelTurnRequest[] = [];
+      const model: StreamedModelTurn = {
+        async *stream(request) {
+          requests.push(request);
+          if (requests.length === 1) {
+            yield {
+              type: 'completion',
+              responseId: 'rollover-call',
+              output: [{ type: 'tool_call', id: 'call-rollover', name: 'session_rollover', arguments: args }],
+            };
+            return;
+          }
+          yield { type: 'completion', responseId: 'follow-up', output: [] };
+        },
+      };
+      const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream({ ...agent, tools: [tool()] }, [
+        { role: 'user', type: 'message', content: 'hand off' },
+      ]);
+
+      await stream.completed;
+
+      expect(requests).toHaveLength(2);
+      expect(JSON.stringify(requests[1].input)).toContain(expected);
+    },
+  );
 
   it('defers boundary compaction when the boundary observer opens a rollover opportunity', async () => {
     const compact = vi.fn(async () => ({ kind: 'unchanged' as const }));

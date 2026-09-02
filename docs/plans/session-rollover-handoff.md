@@ -8,19 +8,19 @@ agent-triggered only: context milestones advise the agent, and
 `session_rollover` requests rotation after the current turn settles. Rotation
 is blocked rather than discarding live background work, pending interactions,
 or queued user submissions. The new session starts with a protocol-composed,
-visually marked rollover briefing that identifies the previous session and
-directs bounded `session_search`/`session_read` retrieval.
+visually marked rollover briefing. Its `session_init.rolloverFrom` metadata
+durably identifies the predecessor, so `session_read({ id: "previous" })`
+survives restart. The briefing directs that bounded read before search when the
+predecessor is known.
 
-When a request boundary first crosses a rollover milestone, that boundary gives
-the agent the reminder **before** automatic local compaction and defers that
-compaction once. The reminder requires an immediate boundary decision: roll
-over now if the task is at a natural boundary, otherwise continue and allow
-compaction at the next boundary. Once `session_rollover` is pending, compaction
-also stays deferred through the tool-result/final-response boundary. Either
-deferral is allowed only when the catalogued context window's hard-fit estimate
-still fits; preserving a valid provider request wins over avoiding wasted
-summary work. This avoids paying for a summary that an immediate rollover would
-discard without converting rollover into automatic policy.
+At the request boundary after a completed provider request, the reminder uses
+that request's provider-reported input-token usage. It has no local-estimator
+fallback. Configured milestones fire once and a deferred decision is
+reconsidered after each additional 50,000 reported input tokens. Every reminder
+permits continuing to the next safe natural boundary and keeps rollover
+optional. The model-facing copy does not describe internal context-management
+mechanisms. Existing hard-fit estimation remains separate and is used only to
+decide whether internal boundary work can safely be deferred.
 
 The implementation slice is complete. The session-tool retrieval study is also
 complete: `e8015e7a` captured the seven-session/79-call naturalistic baseline,
@@ -250,17 +250,14 @@ Execution path (the one genuinely new orchestration piece):
 
 ### Reminder injection (milestones)
 
-Where: alongside the existing compaction estimate at the request boundary in
-`agent-client.ts` — when `renderedInputTokens` crosses a configured milestone
-and has not been reminded for that milestone yet, queue a system reminder
-via the existing injection lane. Copy: *"Context is at N tokens. If the
-current task has reached a natural boundary, externalize state (docs/memory)
-and consider calling `session_rollover` with a handoff brief. Compaction will
-trigger automatically at T."* Settings: `agent.sessionRollover.enabled`,
-`agent.sessionRollover.milestones` (default e.g. [200k, 300k, 400k...]),
-`agent.sessionRollover.autoBrief` — the reminders are advice; the tool call
-remains the agent's decision. The reminder must dedupe per milestone
-(`shouldDeferAutomaticCompaction` is the dedupe precedent).
+`ApplicationRunLoop` retains the latest completed request's normalized,
+provider-reported input usage and supplies it to `ContextMilestoneReminder` at
+the following request boundary. The producer has no estimator fallback. It
+deduplicates configured milestones (defaults: 200k, 300k, 400k) and, after a
+deferral, offers reconsideration at a bounded 50k-token cadence. Reminder text
+distinguishes a safe natural boundary from an indivisible step and never makes
+rollover mandatory. Settings remain `agent.sessionRollover.enabled`,
+`agent.sessionRollover.milestones`, and `agent.sessionRollover.autoBrief`.
 
 ### Guard conditions (implemented in `fa4b371b`)
 
@@ -276,6 +273,28 @@ The tool refuses with a structured tool error, not a crash, when:
 - A pending approval, other pending interaction, post-execute gate, background
   approval, or queued user submission exists. `ConversationService` rechecks
   these immediately before handing rotation to the app.
+
+`terminateAfterExecution` is result-aware for this tool. Only the accepted
+`{ ok: true, status: "rollover_requested" }` result ends the run segment.
+Schema diagnostics, `rollover_blocked`, and recoverable execution errors are
+committed as tool results and returned to the model for correction or reaction.
+
+### Durable references and lifecycle evidence
+
+The successor's `session_init.rolloverFrom` stores the full predecessor UUID;
+replay preserves it across resume. `SessionBrowser` resolves `previous`, exact
+IDs, and unambiguous UUID prefixes inside the current project/SSH scope. List,
+search, and read projections expose a shortest-unique UUID `shortRef` starting
+at eight characters. Ambiguous prefixes return candidate IDs and refs rather
+than guessing; persisted identities and cursors continue to use full UUIDs.
+
+One generated `rolloverId` correlates the source-side requested event,
+settlement-time blocked event, and successor-side completed event. Events carry
+source/successor IDs where applicable, reason, brief size, provider-reported
+input usage, and settlement latency; they do not carry the brief text. The
+successor briefing states the completed successor explicitly. A blocked outcome
+states that no rollover occurred and includes the preserved brief for manual,
+never automatic, retry.
 
 ### Provider/cache implications (favorable)
 
@@ -302,8 +321,11 @@ rather than left keyed to the abandoned session.
    subscribers.
    Decision shapes the slice's size.
 2. **Where the brief lives — implemented:** as the new session's first user
-   turn (searchable via `firstUserMessage`) and in the old session's
-   `session_rollover` event. No separate runtime file is written.
+   turn (searchable via `firstUserMessage`). Correlated requested, blocked, and
+   completed `session_rollover` events record IDs, sizes, usage, and timing but
+   deliberately do not duplicate the full brief. A settlement-time blocker
+   returns the preserved brief for explicit manual retry; it is never retried
+   automatically.
 3. **Naming — implemented:** `session_rollover`; "handoff" remains the
    model-switch flow.
 4. **Auto-rollover policy**: should the harness ever fire rollover itself

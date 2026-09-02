@@ -29,6 +29,22 @@ it('formatResumeList: formats a local conversation', () => {
   expect(result.includes('Resume:  term2 --resume local-conv-id-123')).toBe(true);
 });
 
+it('formatResumeList: uses the dynamically unique short reference in display and commands', () => {
+  const result = stripAnsi(
+    formatResumeList([
+      {
+        id: '12345678-1234-4abc-8def-1234567890ab',
+        shortRef: '12345678-1',
+        updatedAt: '2026-05-28T14:40:16.000Z',
+      },
+    ]),
+  );
+
+  expect(result).toContain('1. 12345678-1');
+  expect(result).toContain('(12345678-1234-4abc-8def-1234567890ab)');
+  expect(result).toContain('Resume:  term2 --resume 12345678-1234-4abc-8def-1234567890ab');
+});
+
 it('formatResumeList: formats a remote/SSH conversation', () => {
   const entries = [
     {

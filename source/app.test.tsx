@@ -399,19 +399,40 @@ describe('App orchestration', () => {
       await mocks.sessionRolloverCallback?.({
         brief: 'Done: implementation. Open: validation.',
         reason: 'task_boundary',
+        rolloverId: 'rollover-1',
+        requestedAt: Date.now(),
+        providerInputTokens: 210_000,
       });
     });
 
     expect(services.conversationService.logSessionRollover).toHaveBeenCalledWith({
-      brief: 'Done: implementation. Open: validation.',
+      type: 'session_rollover',
+      phase: 'requested',
+      rolloverId: 'rollover-1',
+      sourceSessionId: 'session-1',
       reason: 'task_boundary',
+      briefSize: 39,
+      providerInputTokens: 210_000,
     });
+    expect(services.conversationService.logSessionRollover).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'session_rollover',
+        phase: 'completed',
+        rolloverId: 'rollover-1',
+        sourceSessionId: 'session-1',
+        successorSessionId: 'session-2',
+        settlementLatencyMs: expect.any(Number),
+      }),
+    );
     expect(mocks.clearConversation).toHaveBeenCalledTimes(1);
     expect(mocks.sendSessionRolloverBrief).toHaveBeenCalledWith(
       expect.stringContaining('Previous session: `session-1`'),
     );
     expect(mocks.sendSessionRolloverBrief).toHaveBeenCalledWith(
       expect.stringContaining('Done: implementation. Open: validation.'),
+    );
+    expect(mocks.sendSessionRolloverBrief).toHaveBeenCalledWith(
+      expect.stringContaining('Outcome: completed into successor session `session-2`'),
     );
     expect(mocks.sendUserMessage).not.toHaveBeenCalled();
   });

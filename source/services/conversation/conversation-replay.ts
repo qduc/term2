@@ -187,6 +187,8 @@ interface ReplayState {
   pendingCommandMessages: SavedMessage[];
   /** Observational lifecycle only: replay never creates a process from these records. */
   backgroundShellJobs: Map<string, ReplayedBackgroundShellJob>;
+  /** Index in state.messages where the current/in-flight turn began. */
+  activeTurnStartIndex: number;
 }
 
 const makeHistoryItemForToolCall = (item: Extract<PersistedAssistantTurnItem, { type: 'tool_call' }>): unknown =>
@@ -565,6 +567,7 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
     }
     case 'user_message': {
       state.messages.push(cloneMessage(event.message));
+      state.activeTurnStartIndex = state.messages.length;
       state.trailingUserMessage = true;
       state.history.push({
         role: 'user',
@@ -750,6 +753,27 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
           ...(event.error ? { error: event.error } : {}),
         },
       });
+      const status = event.status === 'cancelled' ? 'aborted' : event.status === 'completed' ? 'completed' : 'failed';
+      state.messages.push({
+        id: `background-shell-${event.jobId}`,
+        sender: 'command',
+        status,
+        command: 'background_shell_notification',
+        output: event.output,
+        success: status === 'completed',
+        toolName: 'background_shell_notification',
+        toolArgs: {
+          jobs: [
+            {
+              jobId: event.jobId,
+              command: event.command,
+              status: event.status,
+              ...(event.error ? { error: event.error } : {}),
+            },
+          ],
+        },
+      });
+      state.activeTurnStartIndex = state.messages.length;
       return;
     }
     case 'background_shell_output': {
@@ -771,6 +795,26 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
       if (firings.some((f) => f.watchId === firing.watchId && f.seq === firing.seq)) return;
       job.firings = [...firings, firing];
       state.backgroundShellJobs.set(event.jobId, job);
+      state.messages.push({
+        id: `background-shell-output-${event.jobId}-${firing.watchId}-${firing.seq}`,
+        sender: 'command',
+        status: 'completed',
+        command: 'background_shell_output_notification',
+        output: firing.matchedLines,
+        success: true,
+        toolName: 'background_shell_output_notification',
+        toolArgs: {
+          jobId: event.jobId,
+          command: event.command,
+          watchId: firing.watchId,
+          seq: firing.seq,
+          matchedLines: firing.matchedLines,
+          ...(firing.coalescedCount !== undefined ? { coalescedCount: firing.coalescedCount } : {}),
+          ...(firing.seqRange !== undefined ? { seqRange: firing.seqRange } : {}),
+          ...(firing.droppedBytes !== undefined ? { droppedBytes: firing.droppedBytes } : {}),
+        },
+      });
+      state.activeTurnStartIndex = state.messages.length;
       return;
     }
     case 'error': {
@@ -780,21 +824,21 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
         status: 'finalized',
         text: `Error: ${event.message}`,
       });
+      state.activeTurnStartIndex = state.messages.length;
       return;
     }
     case 'assistant_turn': {
       const currentUserTurnIndex = state.messages.filter((message) => message.sender === 'user').length;
       const lastUserIndex = state.messages.map((m) => m.sender).lastIndexOf('user');
-      if (lastUserIndex !== -1) {
-        state.messages = state.messages.slice(0, lastUserIndex + 1);
-      } else {
-        state.messages = [];
-      }
+      const startIndex =
+        state.trailingUserMessage && lastUserIndex !== -1 ? lastUserIndex + 1 : state.activeTurnStartIndex;
+      state.messages = state.messages.slice(0, startIndex);
       const turnId = `bot-turn-${state.messages.length}-${ts}`;
       const replayedMessages = replayAssistantTurn(event.turn, turnId, event.usage, event.displayUsage);
       for (const m of replayedMessages) {
         state.messages.push(m);
       }
+      state.activeTurnStartIndex = state.messages.length;
       const compactState = stateFromAssistantTurn(event);
       state.history = synthesizeHistoryFromAssistantTurn(state.history, event.turn);
       if (event.snapshot) {
@@ -862,64 +906,30 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
  */
 function appendReplayedBackgroundShellJobs(state: ReplayState): void {
   for (const job of state.backgroundShellJobs.values()) {
-    // Monitor firings replay first, in stored order, so they sit ahead of the
-    // job's terminal row exactly as they were produced before its settlement.
-    for (const firing of job.firings ?? []) {
-      state.messages.push({
-        id: `background-shell-output-${job.jobId}-${firing.watchId}-${firing.seq}`,
-        sender: 'command',
-        status: 'completed',
-        command: 'background_shell_output_notification',
-        output: firing.matchedLines,
-        success: true,
-        toolName: 'background_shell_output_notification',
-        toolArgs: {
-          jobId: job.jobId,
-          command: job.command,
-          watchId: firing.watchId,
-          seq: firing.seq,
-          matchedLines: firing.matchedLines,
-          ...(firing.coalescedCount !== undefined ? { coalescedCount: firing.coalescedCount } : {}),
-          ...(firing.seqRange !== undefined ? { seqRange: firing.seqRange } : {}),
-          ...(firing.droppedBytes !== undefined ? { droppedBytes: firing.droppedBytes } : {}),
-        },
-      });
-    }
-    const completed = job.completed;
-    const interrupted = !completed;
-    const jobStatus = interrupted ? 'interrupted' : completed.status;
-    const output = interrupted
-      ? 'Background shell job was interrupted when the previous session ended and was not restarted.'
-      : completed.output;
-    const error = interrupted ? 'Lost on restart.' : completed.error;
-    const status =
-      interrupted || completed.status === 'cancelled'
-        ? 'aborted'
-        : completed.status === 'completed'
-        ? 'completed'
-        : 'failed';
+    if (job.completed) continue;
+
+    const output = 'Background shell job was interrupted when the previous session ended and was not restarted.';
+    const error = 'Lost on restart.';
     state.messages.push({
       id: `background-shell-${job.jobId}`,
       sender: 'command',
-      status,
+      status: 'aborted',
       command: 'background_shell_notification',
       output,
-      success: status === 'completed',
+      success: false,
       toolName: 'background_shell_notification',
       toolArgs: {
         jobs: [
           {
             jobId: job.jobId,
             command: job.command,
-            status: jobStatus,
-            ...(error ? { error } : {}),
+            status: 'interrupted',
+            error,
           },
         ],
       },
     });
-    if (interrupted) {
-      state.warnings.push(`Background shell job ${job.jobId} was interrupted by restart and was not restarted.`);
-    }
+    state.warnings.push(`Background shell job ${job.jobId} was interrupted by restart and was not restarted.`);
   }
 }
 
@@ -1257,6 +1267,7 @@ export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
     pendingJournals: new Map(),
     pendingCommandMessages: [],
     backgroundShellJobs: new Map(),
+    activeTurnStartIndex: 0,
   };
 
   for (const envelope of envelopes) {

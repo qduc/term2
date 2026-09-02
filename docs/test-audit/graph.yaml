@@ -13948,19 +13948,17 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/calibration-report.md
-  recommendation: rewrite_candidate
-  confidence: medium
-  reason: 'Adversarial reviewer and coordinator agree (neutral keeps): the file is an orphan fragment
-    of a split suite carrying one weak single-case assertion and ~25 lines of dead imports, while the
-    contract it protects (missing createClient factory yields a failed result, not a throw) is unique
-    and must be retained. Milestone 4 should strip the dead imports and/or fold the case into a failure-boundary
-    table in a sibling file.'
+  recommendation: keep
+  confidence: high
+  reason: "M4 batch B9 (audit-m4-b9 229bb354) landed: the orphan fragment now imports only the names\n    \ it uses (real manager, logger/settings/session-context fixtures, ToolOwnershipRegistry); the\n    \ singleton missing-createClient failure contract is retained unchanged."
   evidence:
   - 'Verified by coordinator full read: only test constructing RealSubagentManager; production throw at
-    execution-runner.ts:123; unused imports include TestSubagentManager, ROLE_*, MAX_SUBAGENT_MODEL_RETRIES,
-    ModelBehaviorError, wrapResultAsAgentStream, wrapErrorAsAgentStream, getAgentTool.'
-  - calibration-adversarial rewrite_candidate/high; calibration-neutral keep/high recorded as dissent.
-  - 'Not consolidation/deletion: no sibling covers the missing-createClient path.'
+    execution-runner.ts:123.'
+  - source/services/subagents/subagent-manager.misc.test.ts:1-8 keeps createMockLogger, createMockSettings,
+    createSessionContextService, RealSubagentManager, and ToolOwnershipRegistry; the unused
+    TestSubagentManager/ROLE_*/stream/error helpers are gone.
+  - source/services/subagents/subagent-manager.misc.test.ts:10-24 still asserts failed status plus the exact
+    factory-missing error on the production manager.
   replacementTestIds: *id001
   status: reviewed
 - id: subagents-subagent-manager-misc-second-neutral
@@ -19045,23 +19043,16 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
-  confidence: medium
-  reason: Coordinator decision of record after source verification. Run-id format and parsing are meaningful,
-    but repeated random draws make generation/uniqueness assertions probabilistic and the 500-draw shape
-    and length checks should be consolidated into deterministic format cases. The replacement must retain
-    the large-space and parse/reject contracts.
+  recommendation: keep
+  confidence: high
+  reason: "M4 batch B9 (audit-m4-b9 229bb354) landed: the two 500-draw loops and the 2,000-draw\n    \ uniqueness threshold became one fixed 50-draw case asserting shape, alias pattern, and the\n    \ 31-char ceiling per id; parse/reject and id-space cases retained unchanged."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
-  - source/services/subagents/codename-run-id.test.ts:10-28 performs two separate 500-draw random loops
-    for pattern and length, with the length assertion duplicating a property of the alias contract.
-  - source/services/subagents/codename-run-id.test.ts:47-59 uses a probabilistic 2,000-draw uniqueness
-    threshold rather than controlling the generator; this can fail for randomness without identifying
-    a production defect.
-  - source/services/subagents/subagent-async-registry.test.ts:1771-1799 independently verifies generated
-    codename shape and deterministic collision retry, so rewrite can remove repeated integration confidence
-    without deleting the parser/space contract.
+  - source/services/subagents/codename-run-id.test.ts:15-26 samples a fixed 50 draws and asserts shape,
+    the alias regex, and the 31-character ceiling per id - no probabilistic threshold remains.
+  - source/services/subagents/codename-run-id.test.ts:28-50 keeps the parse/reject and id-space contracts;
+    subagent-async-registry.test.ts:1771-1799 still independently covers collision retry.
   replacementTestIds: []
   status: reviewed
 - id: subagents-execution-runner-primary
@@ -19207,24 +19198,18 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
-  confidence: medium
-  reason: Coordinator decision of record after source verification. Manager runtime wiring matters, but
-    four of five cases assert generic interface shape already covered by AgentRuntime tests, and the supposed
-    parent attenuation case explicitly does not construct a parent and only checks requested tools are
-    present. Rewrite around one production-wiring assertion plus a real delegated handle execution/attenuation
-    case.
+  recommendation: keep
+  confidence: high
+  reason: "M4 batch B9 (audit-m4-b9 229bb354) landed: three shape-only cases and the\n    \ parent-attenuation case that never constructed a parent were dropped; one real delegated\n    \ handle execution case now runs a handle through the manager runtime to a completed\n    \ provider result, and the fresh-wrapper/shared-executor case is retained."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
-  - source/services/subagents/subagent-manager.agent-runtime.test.ts:79-134 repeats runtime/handle shape
-    checks; source/services/agent-runtime/agent-runtime.test.ts:95-148 already asserts AgentHandle creation,
-    public properties, and executor delegation.
-  - source/services/subagents/subagent-manager.agent-runtime.test.ts:136-158 is titled parent attenuation
-    but comments that it cannot set a parent and asserts both requested tools are present, so it does
-    not protect attenuation.
-  - source/services/subagents/subagent-manager.agent-runtime.test.ts:160-180 verifies fresh wrappers/shared
-    executors, the one manager-specific concern worth retaining in a focused rewrite.
+  - 'source/services/subagents/subagent-manager.agent-runtime.test.ts:12-57 delegates a real handle.run()
+    through the manager ExecutionSubagentRunner: the registered provider completes, instructions/task
+    are composed, and the executed tool surface is narrowed to read_file without shell.'
+  - source/services/subagents/subagent-manager.agent-runtime.test.ts:59-84 keeps the fresh-wrappers/shared
+    executors observation; generic handle shape/delegation stays covered by
+    source/services/agent-runtime/agent-runtime.test.ts:95-148.
   replacementTestIds: []
   status: reviewed
 - id: subagents-manager-prompts-primary
@@ -19232,22 +19217,17 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
-  confidence: medium
-  reason: Coordinator decision of record after source verification. Prompt-selection observables are meaningful
-    product behavior, but the file is a split-suite fragment with a large dead import list and a multi-provider
-    singleton case. Rewrite as a compact model-family/role matrix while retaining top-level exclusion
-    and mentor separation.
+  recommendation: keep
+  confidence: high
+  reason: "M4 batch B9 (audit-m4-b9 229bb354) landed: the three-provider singleton became a\n    \ model-family/role it.each matrix asserting the family marker, role opener, section markers,\n    \ and marker-before-role ordering per row; the direct-stream contract, top-level exclusion,\n    \ and mentor isolation cases are retained with the dead imports stripped."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
-  - source/services/subagents/subagent-manager.prompts.test.ts:47-148 verifies model-family prefix, role
-    suffix, ordering, and three provider/model variants.
-  - source/services/subagents/subagent-manager.prompts.test.ts:150-223 verifies top-level prompt exclusion
-    and separate mentor prompt composition; no sibling asserts these exact inclusion/exclusion strings.
-  - source/services/subagents/subagent-manager.prompts.test.ts:1-21 imports createMockExecutionContext,
-    temp-dir helpers, getAgentTool, role constants, retry/error helpers, and ConversationEvent that are
-    not used in this file, indicating cleanup can reduce setup without dropping prompt evidence.
+  - source/services/subagents/subagent-manager.prompts.test.ts:48-108 drives Codex-explorer,
+    Anthropic-worker, and GPT-5-explorer rows through one table; production selection is
+    role-loader.ts:143-155 (model family to base prompt file) with :254-265 composition order.
+  - source/services/subagents/subagent-manager.prompts.test.ts:110-183 retains top-level exclusion and
+    mentor separation; the imports now cover only names the file uses.
   replacementTestIds: []
   status: reviewed
 - id: subagents-manager-retry-primary
@@ -19255,24 +19235,18 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
-  confidence: medium
-  reason: Coordinator decision of record after source verification. Retry policy is a meaningful manager
-    contract and must remain, but the file repeats nearly identical recoverable hallucinated-tool scenarios
-    through two stream shapes and carries unused split-suite imports. Rewrite into a compact error-class
-    matrix retaining direct-stream and wrapped-event coverage, abort exclusion, partial evidence, and
-    transport/incomplete-stream distinctions.
+  recommendation: keep
+  confidence: high
+  reason: "M4 batch B9 (audit-m4-b9 229bb354) landed: the five wrapped/direct error-class\n    \ scenarios became one it.each matrix where each row keeps its own delivery style, recovery\n    \ point, and retry-event/warn-log expectations; the cancellation partial-evidence case and the\n    \ transport-drop vs incomplete-stream distinction are retained unchanged."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
-  - source/services/subagents/subagent-manager.retry.test.ts:23-151 covers recoverable retry, exhaustion,
-    and non-recoverable no-retry behavior through wrapped error events.
-  - source/services/subagents/subagent-manager.retry.test.ts:153-219 repeats recoverable read-only retry
-    through a direct thrown ModelBehaviorError, while :270-366 separately covers transport-drop and incomplete-stream
-    recovery; these should remain distinct cases in a table rather than duplicated setup.
-  - source/services/subagents/subagent-manager.retry.test.ts:221-267 verifies cancellation retains tools/files
-    evidence; source/services/subagents/subagent-manager.lifecycle.test.ts:94-168 covers lifecycle completion
-    but not retry classification.
+  - source/services/subagents/subagent-manager.retry.test.ts:52-105 declares the error-class rows
+    (wrapped recoverable, exhaustion, non-recoverable no-retry, AbortError cancel, direct-thrown
+    recoverable); :107-181 runs each row through the shared manager harness with per-row retry detail.
+  - source/services/subagents/subagent-manager.retry.test.ts:182-327 retains cancellation partial evidence
+    plus transport-drop and incomplete-stream recovery as cases distinct from the matrix; lifecycle
+    coverage of completion remains in subagent-manager.lifecycle.test.ts:94-168.
   replacementTestIds: []
   status: reviewed
 - id: subagents-manager-tools-primary
@@ -19280,24 +19254,18 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
-  confidence: medium
-  reason: Coordinator decision of record after source verification. Conditional manager registration is
-    valuable and not deletable, but the file repeats provider/manager setup and partially overlaps the
-    explorer tool-surface assertion in the roles sibling. Rewrite into a focused configuration matrix
-    while preserving search mode, remote suppression, skills registration, and guidance outcomes.
+  recommendation: keep
+  confidence: high
+  reason: "M4 batch B9 (audit-m4-b9 229bb354) landed: the worker/explorer search scenarios became\n    \ a four-row search-mode configuration matrix (gpt-5 auto, gpt-4o auto, gpt-5 off, explorer\n    \ gpt-5 auto) asserting tool registration and guidance per row; the explorer web-tool presence\n    \ overlap with the roles sibling was dropped; remote suppression and skills registration retained."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
-  - source/services/subagents/subagent-manager.tools.test.ts:23-126 verifies searchViaShell auto/off registration
-    and matching guidance across gpt-5 and gpt-4o.
-  - source/services/subagents/subagent-manager.tools.test.ts:128-163 verifies explorer web tools alongside
-    shell search; source/services/subagents/subagent-manager.roles.test.ts:472-497 independently asserts
-    explorer read/web/shell presence and no write tool, so only the conditional search behavior is unique
-    here.
-  - source/services/subagents/subagent-manager.tools.test.ts:165-242 verifies remote code-context suppression
-    and activate_skill/catalog wiring; source/services/subagents/subagent-manager.tools.test.ts:1-21 also
-    retains unused imports from the split suite that can be removed without changing the manager seam.
+  - source/services/subagents/subagent-manager.tools.test.ts:28-73 declares the search-mode rows and
+    :75-115 asserts grep/glob/shell registration plus include/exclude guidance per row (policy at
+    source/services/subagents/tool-policy.ts:795-806/819-872).
+  - source/services/subagents/subagent-manager.tools.test.ts:116-155 retains remote code-context
+    suppression; :156-193 retains activate_skill/catalog wiring; explorer read/web/shell presence
+    stays covered by source/services/subagents/subagent-manager.roles.test.ts:472-497.
   replacementTestIds: []
   status: reviewed
 - id: subagents-notification-store-primary

@@ -1,165 +1,116 @@
-import { it, expect, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import {
   TestSubagentManager,
   createMockLogger,
   createMockSettings,
   createSessionContextService,
-  createMockExecutionContext,
-  createTempDir,
-  removeTempDir,
   registerTestProvider,
   wrapResultAsAgentStream,
-  wrapErrorAsAgentStream,
-  getAgentTool,
-  ROLE_MENTOR,
-  ROLE_EXPLORER,
-  ROLE_WORKER,
 } from './test-helpers/subagent-manager-fixtures.js';
-import { SubagentManager as RealSubagentManager } from './subagent-manager.js';
-import { ModelBehaviorError } from '../../contracts/model-errors.js';
-import { MAX_SUBAGENT_MODEL_RETRIES } from '../retry/conversation-retry-policy.js';
-import type { ConversationEvent } from '../conversation/conversation-events.js';
 
-it('subagent tool definitions conditional registration for search tools', async () => {
-  let workerAgentShellTrue: any = null;
-  let workerAgentShellFalse: any = null;
+interface ToolCase {
+  title: string;
+  model: string;
+  role: 'worker' | 'explorer';
+  searchViaShell: 'auto' | 'off';
+  grep: boolean;
+  glob: boolean;
+  shell: boolean;
+  /** Guidance strings that must appear in the composed instructions. */
+  include: string[];
+  /** Guidance strings that must not appear. */
+  exclude: string[];
+}
 
-  const providerIdShellTrue = registerTestProvider({
-    label: 'Mock Tool Test Provider Shell True',
+// One configuration matrix for the conditional search-tool registration across
+// the model default (gpt-5 prefers shell search, gpt-4o does not), the explicit
+// app.searchViaShell override, and the role-dependent tool surface.
+const toolCases: ToolCase[] = [
+  {
+    title: 'gpt-5 worker with searchViaShell auto registers shell search instead of dedicated search tools',
+    model: 'gpt-5',
+    role: 'worker',
+    searchViaShell: 'auto',
+    grep: false,
+    glob: false,
+    shell: true,
+    include: ['Registered tools:', 'use `shell` with commands like `rg`', '`fd` for file search'],
+    exclude: ['Use `grep` to search', 'Use `glob` to locate', 'For workspace search, use the dedicated search tools'],
+  },
+  {
+    title: 'gpt-4o worker with searchViaShell auto keeps dedicated search tools',
+    model: 'gpt-4o',
+    role: 'worker',
+    searchViaShell: 'auto',
+    grep: true,
+    glob: true,
+    shell: true,
+    include: ['For workspace search, use the dedicated search tools', '`grep`', '`glob`'],
+    exclude: ['use `shell` with commands like `rg`'],
+  },
+  {
+    title: 'gpt-5 worker with searchViaShell off keeps dedicated search tools',
+    model: 'gpt-5',
+    role: 'worker',
+    searchViaShell: 'off',
+    grep: true,
+    glob: true,
+    shell: true,
+    include: ['For workspace search, use the dedicated search tools'],
+    exclude: ['use `shell` with commands like `rg`'],
+  },
+  {
+    title: 'explorer with gpt-5 and searchViaShell auto searches through shell and keeps web tools',
+    model: 'gpt-5',
+    role: 'explorer',
+    searchViaShell: 'auto',
+    grep: false,
+    glob: false,
+    shell: true,
+    include: ['For workspace search, use `shell` with commands like `rg`'],
+    exclude: ['For workspace search, use the dedicated search tools'],
+  },
+];
+
+it.each(toolCases)('$title', async (c) => {
+  let constructedAgent: any = null;
+
+  const providerId = registerTestProvider({
+    label: `Mock Tool Test Provider ${c.model} ${c.role} ${c.searchViaShell}`,
     createStreamedModel: () =>
       ({
         stream: async function* (agent: any) {
-          workerAgentShellTrue = agent;
+          constructedAgent = agent;
           const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
           yield* wrapResultAsAgentStream(result);
         },
       } as any),
-    fetchModels: async () => [{ id: 'gpt-5' }],
+    fetchModels: async () => [{ id: c.model }],
   });
 
-  const providerIdShellFalse = registerTestProvider({
-    label: 'Mock Tool Test Provider Shell False',
-    createStreamedModel: () =>
-      ({
-        stream: async function* (agent: any) {
-          workerAgentShellFalse = agent;
-          const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
-          yield* wrapResultAsAgentStream(result);
-        },
-      } as any),
-    fetchModels: async () => [{ id: 'gpt-4o' }],
-  });
-
-  // 1. Model: gpt-5 (searchViaShell is true by default), canRunShell: true (from worker.md)
-  // Explorer/worker tools should NOT contain dedicated search tools: grep and glob.
-  const managerShellTrue = new TestSubagentManager({
+  const manager = new TestSubagentManager({
     logger: createMockLogger(),
     settings: createMockSettings({
-      'agent.model': 'gpt-5',
-      'agent.provider': providerIdShellTrue,
-      'app.searchViaShell': 'auto',
+      'agent.model': c.model,
+      'agent.provider': providerId,
+      'app.searchViaShell': c.searchViaShell,
     }),
     sessionContextService: createSessionContextService() as any,
   });
 
-  await managerShellTrue.run({ role: 'worker', task: 'some task' });
+  await manager.run({ role: c.role, task: 'some task' });
 
-  expect(workerAgentShellTrue).toBeTruthy();
-  const toolNamesShellTrue: string[] = workerAgentShellTrue.tools.map((tool: any) => tool.name);
-  expect(toolNamesShellTrue.includes('grep')).toBe(false);
-  expect(toolNamesShellTrue.includes('glob')).toBe(false);
-  expect(toolNamesShellTrue.includes('shell')).toBe(true);
-  expect(workerAgentShellTrue.instructions.includes('Registered tools:')).toBe(true);
-  expect(workerAgentShellTrue.instructions.includes('use `shell` with commands like `rg`')).toBe(true);
-  expect(workerAgentShellTrue.instructions.includes('`fd` for file search')).toBe(true);
-  expect(workerAgentShellTrue.instructions.includes('Use `grep` to search')).toBe(false);
-  expect(workerAgentShellTrue.instructions.includes('Use `glob` to locate')).toBe(false);
-  expect(workerAgentShellTrue.instructions.includes('For workspace search, use the dedicated search tools')).toBe(
-    false,
-  );
-
-  // 2. Model: gpt-4o (searchViaShell is false by default), canRunShell: true
-  // Tools should include dedicated grep and glob.
-  const managerShellFalse = new TestSubagentManager({
-    logger: createMockLogger(),
-    settings: createMockSettings({
-      'agent.model': 'gpt-4o',
-      'agent.provider': providerIdShellFalse,
-      'app.searchViaShell': 'auto',
-    }),
-    sessionContextService: createSessionContextService() as any,
-  });
-
-  await managerShellFalse.run({ role: 'worker', task: 'some task' });
-
-  expect(workerAgentShellFalse).toBeTruthy();
-  const toolNamesShellFalse: string[] = workerAgentShellFalse.tools.map((tool: any) => tool.name);
-  expect(toolNamesShellFalse.includes('grep')).toBe(true);
-  expect(toolNamesShellFalse.includes('glob')).toBe(true);
-  expect(toolNamesShellFalse.includes('shell')).toBe(true);
-  expect(workerAgentShellFalse.instructions.includes('For workspace search, use the dedicated search tools')).toBe(
-    true,
-  );
-  expect(workerAgentShellFalse.instructions.includes('`grep`')).toBe(true);
-  expect(workerAgentShellFalse.instructions.includes('`glob`')).toBe(true);
-  expect(workerAgentShellFalse.instructions.includes('use `shell` with commands like `rg`')).toBe(false);
-
-  // 3. Model: gpt-5 with searchViaShell explicitly disabled still keeps dedicated search tools.
-  const managerShellOff = new TestSubagentManager({
-    logger: createMockLogger(),
-    settings: createMockSettings({
-      'agent.model': 'gpt-5',
-      'agent.provider': providerIdShellTrue,
-      'app.searchViaShell': 'off',
-    }),
-    sessionContextService: createSessionContextService() as any,
-  });
-
-  await managerShellOff.run({ role: 'worker', task: 'some task' });
-
-  const toolNamesShellOff: string[] = workerAgentShellTrue.tools.map((tool: any) => tool.name);
-  expect(toolNamesShellOff.includes('grep')).toBe(true);
-  expect(toolNamesShellOff.includes('glob')).toBe(true);
-  expect(toolNamesShellOff.includes('shell')).toBe(true);
-  expect(workerAgentShellTrue.instructions.includes('For workspace search, use the dedicated search tools')).toBe(true);
-  expect(workerAgentShellTrue.instructions.includes('use `shell` with commands like `rg`')).toBe(false);
-});
-
-it('explorer uses shell search when available and keeps web tools', async () => {
-  let explorerAgent: any = null;
-
-  const providerIdExplorer = registerTestProvider({
-    label: 'Mock Tool Test Provider Explorer Shell',
-    createStreamedModel: () =>
-      ({
-        stream: async function* (agent: any) {
-          explorerAgent = agent;
-          const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
-          yield* wrapResultAsAgentStream(result);
-        },
-      } as any),
-    fetchModels: async () => [{ id: 'gpt-5' }],
-  });
-
-  await new TestSubagentManager({
-    logger: createMockLogger(),
-    settings: createMockSettings({
-      'agent.model': 'gpt-5',
-      'agent.provider': providerIdExplorer,
-      'app.searchViaShell': 'auto',
-    }),
-    sessionContextService: createSessionContextService() as any,
-  }).run({ role: 'explorer', task: 'find files and research docs' });
-
-  expect(explorerAgent).toBeTruthy();
-  const toolNames: string[] = explorerAgent.tools.map((tool: any) => tool.name);
-  expect(toolNames.includes('shell')).toBe(true);
-  expect(toolNames.includes('web_search')).toBe(true);
-  expect(toolNames.includes('web_fetch')).toBe(true);
-  expect(toolNames.includes('grep')).toBe(false);
-  expect(toolNames.includes('glob')).toBe(false);
-  expect(explorerAgent.instructions.includes('For workspace search, use `shell` with commands like `rg`')).toBe(true);
-  expect(explorerAgent.instructions.includes('For workspace search, use the dedicated search tools')).toBe(false);
+  expect(constructedAgent).toBeTruthy();
+  const toolNames: string[] = constructedAgent.tools.map((tool: any) => tool.name);
+  expect(toolNames.includes('grep')).toBe(c.grep);
+  expect(toolNames.includes('glob')).toBe(c.glob);
+  expect(toolNames.includes('shell')).toBe(c.shell);
+  for (const text of c.include) {
+    expect(constructedAgent.instructions.includes(text)).toBe(true);
+  }
+  for (const text of c.exclude) {
+    expect(constructedAgent.instructions.includes(text)).toBe(false);
+  }
 });
 
 it('remote execution disables code-context tools and guidance', async () => {

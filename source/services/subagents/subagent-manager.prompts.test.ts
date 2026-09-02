@@ -1,24 +1,12 @@
-import { it, expect, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import {
   TestSubagentManager,
   createMockLogger,
   createMockSettings,
   createSessionContextService,
-  createMockExecutionContext,
-  createTempDir,
-  removeTempDir,
   registerTestProvider,
   wrapResultAsAgentStream,
-  wrapErrorAsAgentStream,
-  getAgentTool,
-  ROLE_MENTOR,
-  ROLE_EXPLORER,
-  ROLE_WORKER,
 } from './test-helpers/subagent-manager-fixtures.js';
-import { SubagentManager as RealSubagentManager } from './subagent-manager.js';
-import { ModelBehaviorError } from '../../contracts/model-errors.js';
-import { MAX_SUBAGENT_MODEL_RETRIES } from '../retry/conversation-retry-policy.js';
-import type { ConversationEvent } from '../conversation/conversation-events.js';
 
 it('subagent direct streamed model preserves the final response contract', async () => {
   const providerId = registerTestProvider({
@@ -44,107 +32,79 @@ it('subagent direct streamed model preserves the final response contract', async
   expect(result.finalText).toBe('done');
 });
 
-it('execution subagents select subagent-safe model-family prompts and append role instructions', async () => {
-  let constructedAgentExplorer: any = null;
-  let constructedAgentWorker: any = null;
-  let constructedAgentGpt5: any = null;
+interface PromptCase {
+  title: string;
+  model: string;
+  role: 'explorer' | 'worker';
+  /** Family marker the model-family base profile injects. */
+  familyMarker: string;
+  /** Role opener the role body contributes. */
+  roleOpener: string;
+}
 
-  const providerIdCodex = registerTestProvider({
-    label: 'Mock Prompt Test Provider GPT-5 Codex',
+// Execution subagents compose a model-family base profile first and append the
+// role body, so the family marker must precede the role opener for every
+// (family, role) pair below.
+const promptCases: PromptCase[] = [
+  {
+    title: 'codex-family explorer',
+    model: 'gpt-5-codex',
+    role: 'explorer',
+    familyMarker: 'nested Codex-family subagent',
+    roleOpener: 'You are an explorer subagent.',
+  },
+  {
+    title: 'anthropic-family worker',
+    model: 'claude-3-sonnet',
+    role: 'worker',
+    familyMarker: 'nested Anthropic-family subagent',
+    roleOpener: 'You are a worker subagent.',
+  },
+  {
+    title: 'gpt-5-family explorer',
+    model: 'gpt-5',
+    role: 'explorer',
+    familyMarker: 'nested GPT-5-family subagent',
+    roleOpener: 'You are an explorer subagent.',
+  },
+];
+
+it.each(promptCases)('execution subagent prompt selects the $title base profile and role instructions', async (c) => {
+  let constructedAgent: any = null;
+
+  const providerId = registerTestProvider({
+    label: `Mock Prompt Test Provider ${c.model}`,
     createStreamedModel: () =>
       ({
         stream: async function* (agent: any) {
-          constructedAgentExplorer = agent;
+          constructedAgent = agent;
           const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
           yield* wrapResultAsAgentStream(result);
         },
       } as any),
-    fetchModels: async () => [{ id: 'gpt-5-codex' }],
+    fetchModels: async () => [{ id: c.model }],
   });
 
-  const providerIdClaude = registerTestProvider({
-    label: 'Mock Prompt Test Provider Claude 3 Sonnet',
-    createStreamedModel: () =>
-      ({
-        stream: async function* (agent: any) {
-          constructedAgentWorker = agent;
-          const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
-          yield* wrapResultAsAgentStream(result);
-        },
-      } as any),
-    fetchModels: async () => [{ id: 'claude-3-sonnet' }],
-  });
-
-  const providerIdGpt5 = registerTestProvider({
-    label: 'Mock Prompt Test Provider GPT-5 Modern',
-    createStreamedModel: () =>
-      ({
-        stream: async function* (agent: any) {
-          constructedAgentGpt5 = agent;
-          const result = { status: 'completed', finalOutput: 'done', history: [], messages: [] };
-          yield* wrapResultAsAgentStream(result);
-        },
-      } as any),
-    fetchModels: async () => [{ id: 'gpt-5' }],
-  });
-
-  // 1. Run explorer subagent with gpt-5-codex
-  const managerExplorer = new TestSubagentManager({
+  const manager = new TestSubagentManager({
     logger: createMockLogger(),
     settings: createMockSettings({
-      'agent.model': 'gpt-5-codex',
-      'agent.provider': providerIdCodex,
+      'agent.model': c.model,
+      'agent.provider': providerId,
     }),
     sessionContextService: createSessionContextService() as any,
   });
 
-  await managerExplorer.run({ role: 'explorer', task: 'explorer task' });
+  await manager.run({ role: c.role, task: `${c.role} task` });
 
-  expect(constructedAgentExplorer).toBeTruthy();
-  expect(constructedAgentExplorer.instructions.includes('nested Codex-family subagent')).toBe(true);
-  expect(constructedAgentExplorer.instructions.includes('You are an explorer subagent.')).toBe(true);
-  expect(constructedAgentExplorer.instructions.includes('## Worktree Hygiene')).toBe(true);
-  expect(constructedAgentExplorer.instructions.includes('## Available Tool Guidance')).toBe(true);
+  expect(constructedAgent).toBeTruthy();
+  expect(constructedAgent.instructions.includes(c.familyMarker)).toBe(true);
+  expect(constructedAgent.instructions.includes(c.roleOpener)).toBe(true);
+  expect(constructedAgent.instructions.includes('## Worktree Hygiene')).toBe(true);
+  expect(constructedAgent.instructions.includes('## Available Tool Guidance')).toBe(true);
 
-  const codexIdx = constructedAgentExplorer.instructions.indexOf('nested Codex-family subagent');
-  const explorerIdx = constructedAgentExplorer.instructions.indexOf('You are an explorer subagent');
-  expect(codexIdx < explorerIdx).toBe(true);
-
-  // 2. Run worker subagent with claude-3-sonnet
-  const managerWorker = new TestSubagentManager({
-    logger: createMockLogger(),
-    settings: createMockSettings({
-      'agent.model': 'claude-3-sonnet',
-      'agent.provider': providerIdClaude,
-    }),
-    sessionContextService: createSessionContextService() as any,
-  });
-
-  await managerWorker.run({ role: 'worker', task: 'worker task' });
-
-  expect(constructedAgentWorker).toBeTruthy();
-  expect(constructedAgentWorker.instructions.includes('nested Anthropic-family subagent')).toBe(true);
-  expect(constructedAgentWorker.instructions.includes('You are a worker subagent.')).toBe(true);
-
-  const sonnetIdx = constructedAgentWorker.instructions.indexOf('nested Anthropic-family subagent');
-  const workerIdx = constructedAgentWorker.instructions.indexOf('You are a worker subagent');
-  expect(sonnetIdx < workerIdx).toBe(true);
-
-  // 3. Run explorer subagent with gpt-5
-  const managerGpt5Explorer = new TestSubagentManager({
-    logger: createMockLogger(),
-    settings: createMockSettings({
-      'agent.model': 'gpt-5',
-      'agent.provider': providerIdGpt5,
-    }),
-    sessionContextService: createSessionContextService() as any,
-  });
-
-  await managerGpt5Explorer.run({ role: 'explorer', task: 'research task' });
-
-  expect(constructedAgentGpt5).toBeTruthy();
-  expect(constructedAgentGpt5.instructions.includes('nested GPT-5-family subagent')).toBe(true);
-  expect(constructedAgentGpt5.instructions.includes('You are an explorer subagent.')).toBe(true);
+  const familyIdx = constructedAgent.instructions.indexOf(c.familyMarker);
+  const roleIdx = constructedAgent.instructions.indexOf(c.roleOpener);
+  expect(familyIdx < roleIdx).toBe(true);
 });
 
 it('execution subagent prompts exclude top-level-only prompt content', async () => {

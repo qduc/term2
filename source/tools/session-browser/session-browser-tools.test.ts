@@ -30,4 +30,8 @@ it('exposes read-only browser tools with strict bounded parameter schemas', asyn
   expect(tools[1]!.description).toContain('`total` is the number of ranked matches before `limit` is applied');
   expect(tools[1]!.description).toContain('Matches from the currently active session sort last');
   expect(tools[2]!.description).toContain('`total - omitted` records were started here');
+  expect(tools[2]!.description).toContain('`from: "end"`');
+  expect(tools[2]!.parameters.safeParse({ id: 'a', from: 'end' }).success).toBe(true);
+  expect(tools[2]!.parameters.safeParse({ id: 'a', from: 'start' }).success).toBe(false);
+  expect(tools[2]!.parameters.safeParse({ id: 'a', from: 'end', cursor: 'c1' }).success).toBe(false);
 });

@@ -468,6 +468,38 @@ it('reports read totals and per-page remaining record counts', () => {
   expect(third.nextCursor).toBeUndefined();
 });
 
+it('starts an initial read at the final projected record with from end', () => {
+  const id = 'tail-session';
+  const writer = createConversationLogWriter({ sessionId: id, dir, logger });
+  writer.init({ id, createdAt: '2026-01-01T00:00:00.000Z', projectPath: '/project' });
+  for (let i = 0; i < 30; i++) {
+    writer.append({ type: 'user_message', message: { id: `u${i}`, sender: 'user', text: `old record ${i}` } });
+    writer.append({
+      type: 'assistant_turn',
+      turn: { items: [{ type: 'assistant_text', text: i === 29 ? 'final record' : `old answer ${i}` }] },
+      state: { previousResponseId: null },
+    });
+  }
+  void writer.close();
+  const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
+
+  const tail: any = browser.read({ id, from: 'end', limit: 1 });
+  expect(tail.items).toEqual([expect.objectContaining({ kind: 'assistant', text: 'final record', complete: true })]);
+  expect(tail.items[0].index).toBeGreaterThan(0);
+  expect(tail.omitted).toBe(0);
+  expect(tail.nextCursor).toBeUndefined();
+});
+
+it('rejects combining a tail anchor with a cursor continuation', () => {
+  writeSession('tail-cursor', '/project', undefined, 'x'.repeat(900));
+  const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
+  const first: any = browser.read({ id: 'tail-cursor', maxChars: 512 });
+
+  expect(browser.read({ id: 'tail-cursor', from: 'end', cursor: first.nextCursor })).toMatchObject({
+    error: { code: 'invalid_cursor' },
+  });
+});
+
 it('counts a chunked record as begun when the budget forces a partial page', () => {
   writeSession('chunky', '/project', undefined, 'x'.repeat(900));
   const page: any = new SessionBrowser(() => ({ projectPath: '/project' })).read({ id: 'chunky', maxChars: 512 });

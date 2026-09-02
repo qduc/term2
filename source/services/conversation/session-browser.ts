@@ -60,7 +60,7 @@ type ReadSnapshot = {
 
 export type SessionListInput = { limit?: number; maxChars?: number };
 export type SessionSearchInput = { query: string; limit?: number; maxChars?: number };
-export type SessionReadInput = { id: string; cursor?: string; limit?: number; maxChars?: number };
+export type SessionReadInput = { id: string; cursor?: string; from?: 'end'; limit?: number; maxChars?: number };
 
 export class SessionBrowser {
   readonly #cursorStates = new Map<string, CursorState>();
@@ -185,6 +185,8 @@ export class SessionBrowser {
   read(input: SessionReadInput): unknown {
     const budget = input.maxChars ?? DEFAULT_READ_CHARS;
     if (!SAFE_SESSION_ID.test(input.id)) return boundedError('not_found', 'Session was not found.', budget);
+    if (input.cursor !== undefined && input.from === 'end')
+      return boundedError('invalid_cursor', 'The `from: "end"` anchor is only valid on an initial read.', budget);
     const context = this.getContext();
     const cached = input.cursor ? this.#snapshotForContinuation(input.cursor, input.id, context) : null;
     let conversation: RestoredState;
@@ -279,7 +281,7 @@ export class SessionBrowser {
           sessionId: resolvedId,
           updatedAt: currentUpdatedAt,
           revision: currentRevision,
-          nextIndex: 0,
+          nextIndex: input.from === 'end' ? Math.max(0, projection.records.length - 1) : 0,
           nextTextOffset: 0,
         };
     if (!cursor) return boundedError('invalid_cursor', 'The session cursor is invalid.', budget);

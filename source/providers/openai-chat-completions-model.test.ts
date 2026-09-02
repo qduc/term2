@@ -192,6 +192,45 @@ it('stream() sends message content as OpenAI-compatible content parts, not raw s
   expect(capturedBody).not.toHaveProperty('include');
 });
 
+it('stream() converts multimodal tool-result content parts into content parts, not a JSON string', async () => {
+  let capturedBody: any;
+  const client = {
+    chat: {
+      completions: {
+        create: async (body: any) => {
+          capturedBody = body;
+          return emptyStream();
+        },
+      },
+    },
+  };
+  const model = new OpenAIChatCompletionsModel(client, 'gpt-4o');
+
+  for await (const _event of model.stream({
+    input: [
+      { type: 'message', role: 'user', content: [{ type: 'text', text: 'read the image' }] },
+      { type: 'tool_call', id: 'call-img', name: 'read_file', arguments: '{}' },
+      {
+        type: 'tool_result',
+        id: 'call-img',
+        output: [
+          { type: 'text', text: 'Image: logo.png (1234 bytes, image/png)' },
+          { type: 'image', image: { data: 'cG5n', mediaType: 'image/png' } },
+        ],
+      },
+    ],
+    tools: [],
+  } as any)) {
+    // drain
+  }
+
+  const toolMessage = capturedBody.messages.find((m: any) => m.role === 'tool');
+  expect(toolMessage.content).toEqual([
+    { type: 'text', text: 'Image: logo.png (1234 bytes, image/png)' },
+    { type: 'image_url', image_url: { url: 'data:image/png;base64,cG5n' } },
+  ]);
+});
+
 it('stream() sends non-empty instructions as the leading system message before input history', async () => {
   let capturedBody: any;
   const client = {

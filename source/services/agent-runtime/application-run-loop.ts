@@ -44,9 +44,11 @@ import { extractAiSdkUpstreamProvider } from '../../providers/ai-sdk-streamed-mo
 import { computeModelCost, type ModelRequestCost, type ServiceTier } from '../../services/cost/model-cost.js';
 import { getCatalogPricingVersion, getModelPricing } from '../../services/cost/pricing.js';
 import {
+  DEFAULT_TOOL_ARGUMENT_RUNAWAY_SIGNATURE,
   GenerationGuard,
   GenerationGuardError,
   GenerationStreamDeadlines,
+  ToolArgumentRunawayGuard,
   type GenerationGuardOptions,
 } from './generation-guard.js';
 import { classifyInLoopModelRetry, sleepWithAbort } from '../retry/in-loop-model-retry.js';
@@ -1063,12 +1065,24 @@ export class ApplicationRunLoop {
             () => requestAbortController.abort(),
             () => generationGuard.progress,
           );
+          const toolArgumentRunaway = isLunaChainedRequest(state, request)
+            ? new ToolArgumentRunawayGuard(
+                {
+                  ...DEFAULT_TOOL_ARGUMENT_RUNAWAY_SIGNATURE,
+                  timeoutMs: generationGuard.toolArgumentRunawayMs,
+                },
+                () => requestAbortController.abort(),
+              )
+            : undefined;
           let iterator: AsyncIterator<StreamedModelTurnEvent> | undefined;
           let iteratorFinished = false;
           try {
             iterator = model.stream(request)[Symbol.asyncIterator]();
             while (true) {
-              const next = await deadline.wait(iterator.next());
+              const nextOperation = iterator.next();
+              const next = await deadline.wait(
+                toolArgumentRunaway ? toolArgumentRunaway.wait(nextOperation) : nextOperation,
+              );
               if (next.done) {
                 iteratorFinished = true;
                 return;
@@ -1078,11 +1092,13 @@ export class ApplicationRunLoop {
               deadline.recordActivity();
               const event = next.value;
               if (event.type === 'completion') {
+                toolArgumentRunaway?.observeToolCallCompleted();
                 generationGuard.observeCompletion(event.output);
                 completion = event;
                 continue;
               }
               if (event.type === 'text_delta') {
+                toolArgumentRunaway?.observeText();
                 generationGuard.observeText(event.text);
                 provisionalTextCharacters += event.text.length;
                 provisionalTextDeltas++;
@@ -1104,6 +1120,7 @@ export class ApplicationRunLoop {
                 continue;
               }
               if (event.type === 'tool_call_streaming_delta') {
+                toolArgumentRunaway?.observeToolArgumentProgress(event.argumentCharCount);
                 generationGuard.observeToolArgumentProgress(event.argumentCharCount);
                 outputPush(stream, queue, event);
                 continue;
@@ -1113,6 +1130,7 @@ export class ApplicationRunLoop {
                 continue;
               }
               if (event.type === 'tool_call') {
+                toolArgumentRunaway?.observeToolCallCompleted();
                 generationGuard.observeToolCall(event.arguments);
                 pendingNativeReasoning = commitPendingNativeReasoning(state, stream, queue, pendingNativeReasoning);
                 sawToolCall = true;
@@ -1121,6 +1139,7 @@ export class ApplicationRunLoop {
             }
           } finally {
             deadline.dispose();
+            toolArgumentRunaway?.dispose();
             if (iterator && !iteratorFinished) void iterator.return?.().catch(() => undefined);
           }
         };
@@ -1766,6 +1785,17 @@ function shouldTerminateAfterExecution(definition: AnyToolDefinition | undefined
   } catch {
     return false;
   }
+}
+
+function isLunaChainedRequest(state: RunState, request: StreamedModelTurnRequest): boolean {
+  return (
+    state.currentProviderId === 'codex' &&
+    state.agent.model === 'gpt-5.6-luna' &&
+    typeof request.previousResponseId === 'string' &&
+    request.previousResponseId.length > 0 &&
+    request.input.length === 1 &&
+    request.input[0]?.type === 'tool_result'
+  );
 }
 
 function outputPush(stream: AgentStream, queue: EventQueue, item: ApplicationRunEvent): void {

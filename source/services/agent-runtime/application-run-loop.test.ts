@@ -698,6 +698,130 @@ describe('ApplicationRunLoop generation guard', () => {
     await expect(terminal.completed).rejects.toMatchObject({ code: 'tool_argument_characters', unsafeToReplay: true });
   });
 
+  it('cancels a chained Luna request with one unfinished high-rate tiny-delta tool call', async () => {
+    vi.useFakeTimers();
+    try {
+      let signal: AbortSignal | undefined;
+      let streaming!: () => void;
+      const streamingPromise = new Promise<void>((resolve) => {
+        streaming = resolve;
+      });
+      const model: StreamedModelTurn = {
+        async *stream(request) {
+          signal = request.signal;
+          yield { type: 'reasoning_delta' as const, text: 'planning' };
+          for (let count = 1; count <= 5; count++) {
+            yield { type: 'tool_call_streaming_delta' as const, argumentCharCount: count };
+          }
+          streaming();
+          await new Promise<void>((resolve) =>
+            request.signal?.addEventListener('abort', () => resolve(), { once: true }),
+          );
+        },
+      };
+      const lunaAgent = { ...agent, model: 'gpt-5.6-luna' };
+      const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(
+        lunaAgent,
+        [{ type: 'function_call_result', callId: 'call_previous', output: 'tool result' }],
+        {
+          providerId: 'codex',
+          supportsConversationChaining: true,
+          previousResponseId: 'resp_previous',
+          generationGuard: { ...guard, requestDeadlineMs: 0, toolArgumentRunawayMs: 10 },
+        } as any,
+      );
+      await streamingPromise;
+      const completion = expect(stream.completed).rejects.toMatchObject({
+        code: 'tool_argument_runaway',
+        unsafeToReplay: true,
+      });
+
+      await vi.advanceTimersByTimeAsync(9);
+      expect(signal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+
+      await completion;
+      expect(signal?.aborted).toBe(true);
+      expect(stream.output).toContainEqual({ type: 'reasoning_delta', text: 'planning' });
+      expect(stream.history).toEqual([
+        { type: 'function_call_result', callId: 'call_previous', output: 'tool result' },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    ['a non-Luna model', { model: 'test-model', providerId: 'codex', previousResponseId: 'resp_previous' }],
+    ['an unchained Luna request', { model: 'gpt-5.6-luna', providerId: 'codex', previousResponseId: undefined }],
+    ['a non-Codex Luna request', { model: 'gpt-5.6-luna', providerId: 'openai', previousResponseId: 'resp_previous' }],
+  ])('does not apply the Luna tool-call runaway deadline to %s', async (_case, identity) => {
+    vi.useFakeTimers();
+    try {
+      const model: StreamedModelTurn = {
+        async *stream() {
+          for (let count = 1; count <= 5; count++) {
+            yield { type: 'tool_call_streaming_delta' as const, argumentCharCount: count };
+          }
+          await new Promise<void>((resolve) => setTimeout(resolve, 11));
+          yield { type: 'completion' as const, responseId: 'valid', output: [] };
+        },
+      };
+      const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(
+        { ...agent, model: identity.model },
+        [{ type: 'function_call_result', callId: 'call_previous', output: 'tool result' }],
+        {
+          providerId: identity.providerId,
+          supportsConversationChaining: identity.previousResponseId !== undefined,
+          previousResponseId: identity.previousResponseId,
+          generationGuard: { ...guard, requestDeadlineMs: 0, toolArgumentRunawayMs: 10 },
+        } as any,
+      );
+      const completion = expect(stream.completed).resolves.toBeDefined();
+
+      await vi.advanceTimersByTimeAsync(11);
+
+      await completion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not apply the Luna deadline to a full-history request ending in a tool result', async () => {
+    vi.useFakeTimers();
+    try {
+      const model: StreamedModelTurn = {
+        async *stream() {
+          for (let count = 1; count <= 5; count++) {
+            yield { type: 'tool_call_streaming_delta' as const, argumentCharCount: count };
+          }
+          await new Promise<void>((resolve) => setTimeout(resolve, 11));
+          yield { type: 'completion' as const, responseId: 'valid', output: [] };
+        },
+      };
+      const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(
+        { ...agent, model: 'gpt-5.6-luna' },
+        [
+          { type: 'message', role: 'user', content: 'full history' },
+          { type: 'function_call_result', callId: 'call_previous', output: 'tool result' },
+        ],
+        {
+          providerId: 'codex',
+          supportsConversationChaining: true,
+          previousResponseId: 'resp_previous',
+          generationGuard: { ...guard, requestDeadlineMs: 0, toolArgumentRunawayMs: 10 },
+        } as any,
+      );
+      const completion = expect(stream.completed).resolves.toBeDefined();
+
+      await vi.advanceTimersByTimeAsync(11);
+
+      await completion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('validates completion-only text and reasoning before committing history', async () => {
     const textOnlyModel: StreamedModelTurn = {
       async *stream() {

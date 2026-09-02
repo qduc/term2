@@ -1,5 +1,9 @@
-import { expect, it } from 'vitest';
-import { GenerationGuard, GenerationGuardError } from './generation-guard.js';
+import { afterEach, expect, it, vi } from 'vitest';
+import { GenerationGuard, GenerationGuardError, ToolArgumentRunawayGuard } from './generation-guard.js';
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 it('accepts reasoning at the character cap and silently drops the excess rather than aborting', () => {
   const guard = new GenerationGuard({ maxReasoningCharacters: 5, maxOutputCharacters: 5 });
@@ -69,4 +73,94 @@ it('keeps the default 100,000-character aggregate output containment settlement'
   } catch (error) {
     expect(error).toMatchObject({ code: 'output_characters', unsafeToReplay: true });
   }
+});
+
+it('uses the approved 60-second Luna unfinished-tool-call window', () => {
+  expect(new GenerationGuard().toolArgumentRunawayMs).toBe(60_000);
+});
+
+it('aborts one continuously incomplete tiny-delta tool call at its runaway deadline', async () => {
+  vi.useFakeTimers();
+  const abort = vi.fn();
+  const guard = new ToolArgumentRunawayGuard(
+    { timeoutMs: 1_000, minDeltaFramesPerSecond: 4, maxAverageCharsPerFrame: 3, maxInterDeltaMs: 300 },
+    abort,
+  );
+  const pending = guard.wait(new Promise<never>(() => undefined));
+  const rejection = expect(pending).rejects.toMatchObject({
+    code: 'tool_argument_runaway',
+    unsafeToReplay: true,
+    message: expect.stringContaining('5 argument deltas'),
+  });
+
+  guard.observeToolArgumentProgress(1);
+  for (let count = 2; count <= 5; count++) {
+    await vi.advanceTimersByTimeAsync(200);
+    guard.observeToolArgumentProgress(count);
+  }
+  await vi.advanceTimersByTimeAsync(199);
+  expect(abort).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1);
+
+  await rejection;
+  expect(abort).toHaveBeenCalledOnce();
+  guard.dispose();
+});
+
+it('does not abort a slow valid tool call that lacks the tiny-delta runaway signature', async () => {
+  vi.useFakeTimers();
+  const abort = vi.fn();
+  const guard = new ToolArgumentRunawayGuard(
+    { timeoutMs: 1_000, minDeltaFramesPerSecond: 4, maxAverageCharsPerFrame: 3, maxInterDeltaMs: 300 },
+    abort,
+  );
+
+  guard.observeToolArgumentProgress(500);
+  await vi.advanceTimersByTimeAsync(1_000);
+
+  expect(abort).not.toHaveBeenCalled();
+  guard.observeToolCallCompleted();
+  guard.dispose();
+});
+
+it('disarms the tool-argument runaway timer when assistant text or a second call appears', async () => {
+  vi.useFakeTimers();
+  const textAbort = vi.fn();
+  const textGuard = new ToolArgumentRunawayGuard(
+    { timeoutMs: 100, minDeltaFramesPerSecond: 1, maxAverageCharsPerFrame: 3, maxInterDeltaMs: 100 },
+    textAbort,
+  );
+  textGuard.observeToolArgumentProgress(1);
+  textGuard.observeText();
+
+  const secondCallAbort = vi.fn();
+  const secondCallGuard = new ToolArgumentRunawayGuard(
+    { timeoutMs: 100, minDeltaFramesPerSecond: 1, maxAverageCharsPerFrame: 3, maxInterDeltaMs: 100 },
+    secondCallAbort,
+  );
+  secondCallGuard.observeToolArgumentProgress(2);
+  secondCallGuard.observeToolArgumentProgress(1);
+
+  await vi.advanceTimersByTimeAsync(100);
+
+  expect(textAbort).not.toHaveBeenCalled();
+  expect(secondCallAbort).not.toHaveBeenCalled();
+  textGuard.dispose();
+  secondCallGuard.dispose();
+});
+
+it('disarms rather than aborting on malformed cumulative argument progress', async () => {
+  vi.useFakeTimers();
+  const abort = vi.fn();
+  const guard = new ToolArgumentRunawayGuard(
+    { timeoutMs: 100, minDeltaFramesPerSecond: 1, maxAverageCharsPerFrame: 3, maxInterDeltaMs: 100 },
+    abort,
+  );
+  guard.observeToolArgumentProgress(Number.NaN);
+  guard.observeToolArgumentProgress(1);
+
+  await vi.advanceTimersByTimeAsync(100);
+
+  expect(abort).not.toHaveBeenCalled();
+  guard.dispose();
 });

@@ -1,8 +1,8 @@
 ---
 title: Background explorer looked hung; Luna was dripping nameless tool-argument deltas
 date: 2026-09-02
-type: incident diagnosis (no code changed)
-status: analysis complete, fix not implemented
+type: incident diagnosis
+status: analysis complete; 60-second signature containment implemented in follow-up
 ---
 
 # Background explorer looked hung; Luna was dripping nameless tool-argument deltas
@@ -183,7 +183,7 @@ So OpenAI's client would sit on the same Luna WS drip until 5 minutes of *silenc
   83k characters over ~14 minutes at ~1.4–1.8 chars/frame and still never
   trip it. Eight Luna WS envelopes in 26 hours ended only by cancel or 1006.
 
-## What not to change from this report alone
+## What this report alone did not authorize
 
 - Do not add a wall-clock request deadline. The 2026-09-01 ledger entry
   rejected that because long *active* Luna work is legitimate; this
@@ -191,6 +191,18 @@ So OpenAI's client would sit on the same Luna WS drip until 5 minutes of *silenc
 - Do not lower the 100k tool-argument cap from these numbers. The largest
   local capture is 83,447 characters and still did not cross it.
 - Do not treat explorer `node` blocking or `ask_orchestrator` as the defect.
+
+## Follow-up disposition
+
+Nine captured recurrences ultimately established a narrow runtime cluster: one
+chained Luna Responses-Lite tool call, zero text, 48.8–55.5 argument deltas per
+second, 1.04–2.59 characters per delta, and no terminal call. Successful sampled
+Luna `apply_patch` calls completed within 54.7 seconds. The user subsequently
+selected a 60-second cost-containment policy, accepting that an unusually long
+valid call may be cancelled. `ToolArgumentRunawayGuard` now applies only to that
+chained Luna request shape and requires the observed rate, delta size, and active
+gap signature before aborting. The full contract and verification record live in
+the Luna row of `docs/plans/guard-ledger.md`.
 
 ## Candidate repairs (not implemented)
 
@@ -202,11 +214,9 @@ So OpenAI's client would sit on the same Luna WS drip until 5 minutes of *silenc
 2. **Name map:** `convertCodexRawStream` should keep emitting argument
    progress when `output_item.added` has no name; the optional `toolName` is
    already on the event type.
-3. **Containment:** still needs a red replay of this frame shape through
-   `convertCodexRawStream` + `ApplicationRunLoop` before any new abort. The
-   ledger’s bar (cross 100k without settlement) was not met. A *rate* or
-   *incomplete-call duration* guard would be a new class and needs its own
-   incident-backed design; this report does not authorize it.
+3. **Containment:** implemented later through `ToolArgumentRunawayGuard` after
+   nine recurrences established the rate/delta cluster and the user selected the
+   60-second tradeoff. This original report did not itself authorize that change.
 
 ## Replay
 

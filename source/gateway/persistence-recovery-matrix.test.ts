@@ -126,7 +126,7 @@ describe('persistence restart boundary matrix', () => {
     journal.close();
   });
 
-  it('restarts through each named durable boundary without sequence reuse or work rerun', async () => {
+  it('restarts through each named durable boundary without sequence reuse or duplicated facts', async () => {
     const boundaries: Boundary[] = [
       'before_user_message_fsync',
       'after_user_message_fsync',
@@ -142,7 +142,6 @@ describe('persistence restart boundary matrix', () => {
       const directory = path.join(root(), boundary);
       const first = createGatewayEventJournal({ sessionId, directory });
       const turnId = `turn-${boundary}`;
-      const providerRuns = { count: 0 };
       await first.append({ sessionId, type: 'session_created', payload: {} }, { durability: 'critical' });
       switch (boundary) {
         case 'before_user_message_fsync':
@@ -204,7 +203,6 @@ describe('persistence restart boundary matrix', () => {
 
       const restarted = createGatewayEventJournal({ sessionId, directory });
       expect(restarted.highWater().lastAppendedSequence).toBe(lastBeforeRestart);
-      providerRuns.count += 0; // A restart must not invoke a provider or tool.
       await restarted.append(
         { sessionId, type: 'turn_failed', payload: { turnId, reason: 'recovered' } },
         { durability: 'critical' },
@@ -212,7 +210,6 @@ describe('persistence restart boundary matrix', () => {
       const next = restarted.events().at(-1)!.id;
       expect(next).toBe(lastBeforeRestart + 1);
       expect(new Set([...observed, next]).size).toBe(observed.length + 1);
-      expect(providerRuns.count).toBe(0);
       restarted.close();
     }
   });

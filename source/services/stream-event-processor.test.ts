@@ -104,7 +104,7 @@ it('preserves newline between code fence language and first code line across tex
   expect(events.some((e) => e.type === 'text_delta' && e.fullText === '```typescript\nif (enabled) {\n')).toBe(true);
 });
 
-it('extracts text once from nested and direct model envelopes', async () => {
+it('emits each text delta exactly once with its delta text and running fullText', async () => {
   const stream = makeStream([
     { type: 'text_delta', text: 'nested' },
     { type: 'text_delta', text: ' direct' },
@@ -348,7 +348,7 @@ it('does not invent a tool_started identity when a provider function call has no
   expect(events.some(({ type }) => type === 'tool_started')).toBe(false);
 });
 
-it('emits one tool_started for duplicate function_call events with the same callId', async () => {
+it('emits a tool_started for each streamed function_call even when the callId repeats', async () => {
   const functionCall = {
     type: 'item',
     item: {
@@ -376,6 +376,11 @@ it('emits one tool_started for duplicate function_call events with the same call
 });
 
 it('emits tool_started even when the callId was already emitted by approval handling', async () => {
+  // Approval handling already recorded this callId in the shared argument map
+  // before the stream was paused; the resumed stream re-emits the function_call
+  // and the processor must still surface tool_started for the executing call.
+  const opts = baseOpts();
+  opts.toolCallArgumentsById.set('call-approved', { arguments: '{"command":"git status"}' });
   const stream = makeStream([
     {
       type: 'item',
@@ -390,7 +395,6 @@ it('emits tool_started even when the callId was already emitted by approval hand
     },
   ]);
   const acc = createStreamAccumulator();
-  const opts = baseOpts();
   const events: any[] = [];
 
   for await (const ev of processStreamEvents(stream, acc, opts, baseDeps())) {
@@ -714,7 +718,7 @@ it('extracts codex rate limits from nested or flat structures in raw events', as
   expect(info.secondary.used_percent).toBe(14);
 });
 
-it('emits tool_call_streaming_delta for Responses API argument deltas', async () => {
+it('preserves tool name and accumulated argument char count across tool_call_streaming_delta events', async () => {
   const stream = makeStream([
     { type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 9 },
     { type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 16 },
@@ -735,7 +739,7 @@ it('emits tool_call_streaming_delta for Responses API argument deltas', async ()
   expect(deltas[1].argumentCharCount).toBe(16); // full args length
 });
 
-it('emits tool_call_streaming_delta for custom tool input deltas', async () => {
+it('preserves tool_call_streaming_delta fields for a custom tool name across deltas', async () => {
   const stream = makeStream([
     { type: 'tool_call_streaming_delta', toolName: 'custom_tool', argumentCharCount: 5 },
     { type: 'tool_call_streaming_delta', toolName: 'custom_tool', argumentCharCount: 9 },
@@ -753,7 +757,7 @@ it('emits tool_call_streaming_delta for custom tool input deltas', async () => {
   expect(deltas[1].argumentCharCount).toBe(9);
 });
 
-it('emits tool_call_streaming_delta for MCP tool call argument deltas', async () => {
+it('preserves tool_call_streaming_delta fields for a namespaced tool name', async () => {
   const stream = makeStream([{ type: 'tool_call_streaming_delta', toolName: 'mcp_tool', argumentCharCount: 7 }]);
   const acc = createStreamAccumulator();
   const events: any[] = [];
@@ -767,7 +771,7 @@ it('emits tool_call_streaming_delta for MCP tool call argument deltas', async ()
   expect(deltas[0].argumentCharCount).toBe(7);
 });
 
-it('emits tool_call_streaming_delta for legacy response.output_item.delta fallback', async () => {
+it('preserves a lone tool_call_streaming_delta event unchanged', async () => {
   const stream = makeStream([{ type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 9 }]);
   const acc = createStreamAccumulator();
   const events: any[] = [];
@@ -781,7 +785,7 @@ it('emits tool_call_streaming_delta for legacy response.output_item.delta fallba
   expect(deltas[0].argumentCharCount).toBe(9);
 });
 
-it('emits tool_call_streaming_delta for Chat Completions API tool_calls deltas', async () => {
+it('passes through tool_call_streaming_delta events with already-accumulated argument counts', async () => {
   const stream = makeStream([
     { type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 5 },
     { type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 13 },
@@ -793,7 +797,6 @@ it('emits tool_call_streaming_delta for Chat Completions API tool_calls deltas',
   }
 
   const deltas = events.filter((e) => e.type === 'tool_call_streaming_delta');
-  // First chunk has empty arguments, so only 2 deltas emitted (chunks 2 and 3)
   expect(deltas.length).toBe(2);
   expect(deltas[0].toolName).toBe('shell');
   expect(deltas[0].argumentCharCount).toBe(5); // '{"cmd'.length
@@ -870,7 +873,7 @@ it('tool_call_streaming_delta tracks argument char count independently per tool 
   expect(deltas[2].argumentCharCount).toBe(28); // 12 + ',"detailed":true'.length
 });
 
-it('emits tool_call_streaming_delta for AI SDK tool-input start and delta events', async () => {
+it('passes through consecutive tool_call_streaming_delta events for the same tool name', async () => {
   const stream = makeStream([
     { type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 9 },
     { type: 'tool_call_streaming_delta', toolName: 'shell', argumentCharCount: 16 },

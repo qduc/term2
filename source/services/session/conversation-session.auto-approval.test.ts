@@ -680,22 +680,22 @@ it('turn completion clears cached advisories so a new turn gets a fresh evaluati
   expect(chatCalls.length).toBe(2);
 });
 
-it('non-shell tools do not trigger advisory evaluation or attach llmAdvisory', async () => {
+it('tools outside the auto-approval set do not trigger advisory evaluation or attach llmAdvisory', async () => {
   const initialStream = createInterruptedStream([
     createNonShellInterruption({
       callId: 'call-patch',
-      toolName: 'apply_patch',
-      argumentsValue: { path: 'source/app.tsx' },
+      toolName: 'web_search',
+      argumentsValue: { query: 'term2' },
     }),
   ]);
   const { bundle, chatCalls } = createSessionHarness({
     startStreams: [initialStream],
   });
 
-  const result = await bundle.terminalAdapter.sendMessage('apply the patch');
+  const result = await bundle.terminalAdapter.sendMessage('search the web');
   const approval = getApprovalResult(result).approval;
 
-  expect(approval.toolName).toBe('apply_patch');
+  expect(approval.toolName).toBe('web_search');
   expect(approval.llmAdvisory).toBe(undefined);
   expect(chatCalls.length).toBe(0);
 });

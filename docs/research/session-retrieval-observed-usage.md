@@ -2,7 +2,9 @@
 
 ## Status
 
-**Open: seek/tail cell is designed and has not been run.**
+**Open: seek/tail repair comparison remains unrun.** The control cell has now
+run successfully and reproduced the forward-only pagination cost; no API or
+default change has shipped.
 The 2026-08-31 study included a naturalistic baseline of seven verified
 sessions and 79 calls, plus six controlled continuation cells across three
 rollover-versus-resume pairs, all passing their oracle — that phase closed
@@ -12,8 +14,9 @@ re-ran the analyzer over the full local corpus (30 sessions with session-tool
 calls): there were no new naturalistic sessions after the 02b cohort. The
 seek/tail patterns remain over the repeat bar. The controlled cell is in
 `docs/research/session-retrieval-seek-cell.md` and
-`scripts/experiments/session-retrieval-seek-cell.mjs`. It has not been run,
-and no API/default/prompt change for cursors or tail access has been made.
+`scripts/experiments/session-retrieval-seek-cell.mjs`. Its control run
+required eight forward `session_read` calls to reach the final record; no
+API/default/prompt change for cursors or tail access has been made.
 Two more patterns (full-UUID hallucination, schema-boundary parameter
 guessing) still have only single-cohort evidence.
 
@@ -112,9 +115,10 @@ no-tail-pagination therefore stay over the bar, and the next action is the
 seek/tail control cell rather than more log mining.
 
 **Bar check:** cursor-invention and no-tail-pagination have repeated evidence
-across independent naturalistic sessions. That is enough to *design* one
-controlled cell (see `docs/research/session-retrieval-seek-cell.md`). It is
-not enough to change the API: do not ship a seek/tail/numeric-cursor repair
+across independent naturalistic sessions. That was enough to design and run
+one controlled cell (see `docs/research/session-retrieval-seek-cell.md`). The
+control reproduces the no-tail cost, but it is not enough to change the API:
+do not ship a seek/tail/numeric-cursor repair
 from these logs. The two newly observed patterns (ID hallucination,
 schema-boundary guessing) still have only single-cohort evidence.
 

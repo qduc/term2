@@ -1,6 +1,6 @@
 ---
 title: Session retrieval seek/tail control cell
-status: designed, not run
+status: control run complete; repair comparison not run
 ---
 
 # Session retrieval seek/tail control cell
@@ -113,6 +113,19 @@ prompt against a later CLI; do not invent that CLI in the same change as
 this protocol.
 
 ## Replay
+
+## Control result (2026-09-02)
+
+The control ran against the current build from `cc1b29d6` in the isolated
+bench `/home/qduc/.agents/runtime/bench-session-seek-20260902`. The synthetic
+fixture invariants held (`60` projected records and `52,200` prior
+characters), and the oracle passed. Recovering the final record required
+eight `session_read` calls: the first returned `omitted: 57`, and the final
+read returned `omitted: 0`. No invented cursor, invalid cursor, or
+schema-boundary failure occurred. This reproduces the forward-only pagination
+cost, but does not by itself select or justify a repair. Full raw evidence,
+including the generated token, remains in the local result file
+`<bench>/control.result.json`.
 
 ```bash
 printf '["<cell-session-id>"]' > /tmp/seek-cell-sessions.json

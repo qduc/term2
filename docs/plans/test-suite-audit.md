@@ -122,11 +122,67 @@ mandatory second reviews are reconciled.
 
 ### 4. Cleanup batches
 
-Waiting for audit approval. Implement approved changes in bounded worktrees, with
-area-specific regression gates and before/after measurements.
+Approved by the milestone-3 result (main `e3d1b8b7`). Implement approved changes in
+bounded worktrees, with area-specific regression gates and before/after
+measurements. The candidate pool is the graph's non-keep primaries (44 files: 37
+rewrite_candidate, 5 consolidation_candidate, 1 retier_candidate, 1
+architecture_signal).
 
 Completion criterion: each batch is independently reviewable, bisectable, and
 reversible, and no approved Behavior Contract loses evidence accidentally.
+
+Batch table (each in its own worktree; after landing, flip the affected tests'
+graph primary decisions to keep/high with a note naming the batch and commit):
+
+- **B1 hooks-real-code** (high rewrites): use-resume-selection, use-skill-selection,
+  use-shell-mode — stop testing local reimplementations; extract/export the real
+  pure filter from the hook module and test it, collapse the duplicate shell-mode
+  flush case.
+- **B2 commands** (prompts-commands wave-1 rewrites): auto-approve-command,
+  sandbox-command, skills-command, resume-command — de-duplicate harness setup;
+  drop the two redundant /resume cases from hooks/use-app-commands.test.ts only if
+  resume-command coverage keeps them.
+- **B3 util-fixes**: settings-command (add provider unregister teardown),
+  value-suggestions (test the exported isNumberSetting/isStringSetting or retitle).
+- **B4 conversation-utils**: conversation-event-handler.subagent (fix the
+  title/assert mismatch at 571-595), message-utils (fix title/comment/assert
+  contradiction ~153-163), conversation-event-handler.tools (strip stale
+  "Fails:" comments at 588-663 — keep file).
+- **B5 runtime-lib**: openai-agent-client (exercise production retry path),
+  openai-agent-client.chat (replace truthiness asserts), subagent-bridge
+  (cancelAsyncRuns must assert delegation; fix sink-lifetime test).
+- **B6 session-obs**: conversation-session.input-surge (delete or honestly reframe
+  the 304-343 TODO case), session-composition (fix dispose test ~358-367),
+  conversation-logger (delete the duplicate journal-forwarding test at ~538),
+  large-uncached-input-guard (fold the 354-376 non-empty assertion into 167's
+  test).
+- **B7 consolidations**: app.startup-banner (delete; app-helpers covers it),
+  use-conversation.approval-pending-filter (fold retention cases into
+  approval-presentation-policy.test.ts then delete the misnamed file),
+  scope-resolver (delete the ~5 traversal cases duplicated in
+  scope-resolver.security.test.ts; keep normalization cases),
+  command-safety.red-yellow-policy paths case (replace with
+  shell-command-safety-path per calibration), command-safety.git (dedupe/table).
+- **B8 shell-tools-misc**: tool-parameter-schema (table-ify the 7 optional-vs-
+  nullable its), SettingsSelectionMenu, HandoffConfirmationPrompt,
+  InputContext "multiple components" tautology case, ssh-service trailing
+  tautologies.
+- **B9 subagents**: codename-run-id + the five subagent-manager split files
+  (mega-case splits, dead imports, scenario dedupe per second-wave1 opinion).
+- **B10 eval+stream+provider**: eval-auto-approval leaderboard + report,
+  stream-event-processor (title/fixture repairs at the cited ranges),
+  provider-management-session (add list/save facade tests), gateway.test
+  (split into its five seam files), persistence-recovery-matrix (drop dead
+  counter, retitle).
+- **Topology (needs user decision, do not execute blind)**: cli.e2e retier out of
+  the default vitest include into test:e2e (requires config exclude + CI change);
+  docker-host-control.integration architecture_signal (report to owners, no test
+  change).
+
+Runtime baseline: `pnpm exec vitest run --reporter=json` from the worktree with no
+concurrent test processes (~50 s at d36c392a; see `docs/test-audit/baseline.md`).
+Per-batch: run the touched files' tests, then the no-isolate lane
+(`pnpm test:lane`), and a fresh full-suite run for the count delta.
 
 ## Baseline method
 
@@ -197,6 +253,11 @@ assignment. Read that file before cutting a Milestone 3 assignment.
 - Exact calibration sample. Narrowed to a stratified 16 drawn from the shard table,
   but not fixed until the calibration probe reports whether explorer judgment is
   usable at all.
-- Whether runtime history belongs in checked-in artifacts or CI.
+- Whether runtime history belongs in checked-in artifacts or CI. *(Open; gates
+  nothing before M4 batch execution.)*
 - Whether mutation testing is proportional for disputed high-value contracts.
-- Whether the default/CI suite topology should change.
+  *(Open; gates nothing before M4 batch execution.)*
+- Whether the default/CI suite topology should change. *(Open; gates the M4
+  topology batch only — cli.e2e out of the default vitest include into
+  `test:e2e`, which needs a config exclude plus a CI run of `test:e2e`. Ask the
+  user before executing.)*

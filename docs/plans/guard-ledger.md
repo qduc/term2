@@ -704,10 +704,11 @@ CLI sat at idle with 0 captured requests. Same class as the ledger's earlier
 unverified PTY timeouts; not exercised by the reasoning-length change.
 ```
 
-### Luna streamed tool-argument runaway: evidence gap, observability only
+### Luna streamed tool-argument runaway: 60-second signature containment
 
-Disposition: **no destructive guard change. Add bounded argument-growth
-diagnostics and wait for a captured recurrence.**
+Disposition: **bounded diagnostics captured nine recurrences. A Luna-specific
+60-second unfinished-tool-call guard is implemented on the application run-loop
+boundary.**
 
 Two Codex Responses Lite requests on 2026-09-01 (`73e65e60` and
 `64fff2f8`) remained active for 454,628ms and 785,758ms while producing
@@ -761,17 +762,15 @@ Rollback boundary: AbortedStreamRecorder diagnostics fields and their type/test
 Ledger row: this section.
 ```
 
-An honest deterministic ApplicationRunLoop red test cannot yet be built from
-the retained artifacts: synthesizing decreases, equal counts, or interleaved
-calls would prove only an imagined bypass, not the observed incident. The next
-recurrence will record exact argument-delta frame and character totals. If it
-crosses the existing cap without settlement, replay that captured frame shape
-through the Codex converter and `ApplicationRunLoop`; that replay is the required
-red proof before changing containment behavior. A total deadline is explicitly
-rejected here because both requests were actively producing frames and long
-active model work is legitimate.
+At the two-incident checkpoint, an honest deterministic ApplicationRunLoop red
+test could not be built because the retained artifacts lacked direct argument
+growth. The added diagnostics closed that gap: seven subsequent captures supplied
+exact frame and character totals and established the narrow cluster used below.
+A provider-wide total deadline remains rejected because active long-running model
+work is legitimate; the implemented detector instead requires the Luna-specific
+unfinished-tool-call signature.
 
-**Local corpus 2026-09-01 → 2026-09-02: eight Luna WS drips, still under cap.**
+**Local corpus 2026-09-01 → 2026-09-02: nine Luna WS drips, still under cap.**
 Full table: [`docs/research/subagent-explorer-luna-tool-arg-runaway.md`](../research/subagent-explorer-luna-tool-arg-runaway.md).
 The original pair (`73e65e60`, `64fff2f8`) was not the last. After the argument
 counters shipped, the same `gpt-5.6-luna` `OpenAIResponsesWSModel` shape
@@ -779,13 +778,97 @@ recurred five more times on 2026-09-01 (sessions `72a7c0c2`, `a6632777`, and
 three in `8cea3578`) ending in WS 1006, then again on 2026-09-02 as background
 explorer `cardinal-tor-206` (parent `8713abd8`, envelope
 `09-07-38.560Z_03ccb.json`) ending in parent cancel. Recorded argument growth
-ranges 8,034–83,447 characters; none crossed 100,000, so `GenerationGuard`
-still must not abort from these numbers. Max gaps stayed 1.4–5.5s (not idle).
+ranges 8,034–83,447 characters; none crossed 100,000, so the existing character
+cap could not contain them. Max gaps stayed 1.4–5.5s (not idle).
 What is new on 2026-09-02 is packaging: `get_subagent_status` showed
 `waiting (provider), quiet` with `lastTool: read_file` and no `streamingTool`,
 because `ExecutionSubagentRunner` drops `tool_call_streaming_delta` events that
-omit `toolName`. Containment disposition is unchanged. The liveness hole is a
-separate, smaller repair.
+omit `toolName`. The liveness hole is a separate, smaller repair from the later
+signature-containment change.
+
+The ninth recurrence (`efcc4250` / `59f67077`) supplied the same direct shape:
+26,498 argument-delta frames and 28,376 characters over 500 seconds, one call
+start, zero text, maximum gap 5,095ms, and no terminal response. Across all nine
+captures the shared runtime signature is one chained Luna Responses-Lite call,
+zero text, one unfinished function call, 48.8–55.5 argument deltas/second,
+1.04–2.59 characters/delta, and maximum gaps of 1.4–5.5 seconds. Request-side
+controls falsified mode, effort, parent model, previous tool, tool-result size,
+and chaining by itself as sufficient triggers. Successful sampled Luna
+`apply_patch` calls completed within 54.7 seconds; on 2026-09-02 the user chose
+60 seconds as the cost-containment boundary and accepted that unusually long
+valid calls may be cancelled.
+
+```text
+Harm prevented: a Luna Responses-Lite request consuming minutes of provider
+  time while continuously emitting tiny argument fragments for a tool call that
+  never completes.
+Scope and execution paths: ApplicationRunLoop requests whose effective outbound
+  identity is codex/gpt-5.6-luna, with previousResponseId and exactly one
+  tool_result input; root, subagent, and non-interactive callers share the owner.
+Guard class: runaway detector with a 60-second containment deadline.
+Enforcement owner: ToolArgumentRunawayGuard in ApplicationRunLoop.
+Recovery owner: existing typed GenerationGuardError settlement; no automatic
+  in-loop replay of the chained delta.
+Measured signal and observation boundary: cumulative application-level
+  tool_call_streaming_delta counts and monotonic growth from the first delta;
+  text and terminal tool-call events disarm the detector.
+Direct evidence or proxy: elapsed time and argument growth are direct; rate,
+  average delta size, and absence of completion are signature proxies.
+Legitimate work that can produce the same signal: an unusually long valid Luna
+  tool call; the accepted 60-second policy may cancel it.
+Configuration sources and precedence: fixed Luna policy, with a test-only
+  GenerationGuardOptions override; no persisted setting.
+Effective default and clamping: 60,000ms, at least 45 deltas/second, at most 2.8
+  characters/delta, and at most 10,000ms between deltas.
+Action and why the signal justifies it: abort only the active request after the
+  complete observed incident signature persists for 60 seconds; other models,
+  providers, unchained requests, full-history requests, text-producing requests,
+  completed calls, and multi-call count resets are excluded.
+Partial-work settlement: no tool call is dispatched before its terminal event;
+  already-forwarded reasoning remains visible as partial stream output and no
+  incomplete tool call enters history.
+Retry, fallback, and provider-continuity semantics: typed unsafe-to-replay
+  generation failure; chained-delta session recovery remains the only path that
+  can rebuild self-contained history.
+Observability fields: typed tool_argument_runaway code plus bounded duration,
+  frame rate, average characters per frame, frame count, and maximum gap; no
+  argument content.
+Persisted-setting migration, if any: none.
+Rollback boundary: ToolArgumentRunawayGuard and its ApplicationRunLoop wiring.
+Ledger row: this section.
+```
+
+Red proof before production edits:
+
+```text
+pnpm test source/services/agent-runtime/generation-guard.test.ts \
+  source/services/agent-runtime/application-run-loop.test.ts
+FAIL 4 tests: ToolArgumentRunawayGuard did not exist and the chained Luna
+request remained active until the test timeout.
+```
+
+Containment verification (2026-09-02):
+
+```text
+pnpm test source/services/agent-runtime/generation-guard.test.ts \
+  source/services/agent-runtime/application-run-loop.test.ts
+PASS 2 files, 110 tests
+
+pnpm typecheck
+PASS
+
+CI=1 pnpm test:provider-black-box
+PASS 19 files, 176 tests; 1 skipped
+
+pnpm test:changed
+BASELINE: 115 files and 2,162 tests passed; seven unrelated tests failed.
+The same seven failures reproduce on unchanged main: six workspace-boundary
+approval assertions and one auto-approval advisory assertion.
+
+pnpm test
+BASELINE: 578 files and 7,510 tests passed; the same seven unrelated tests
+failed, with 3 expected failures and 2 skipped.
+```
 
 Red proof for the observability gap:
 

@@ -7,6 +7,7 @@ export type GenerationGuardCode =
   | 'tool_argument_characters'
   | 'cumulative_tool_argument_characters'
   | 'output_characters'
+  | 'tool_argument_runaway'
   | 'request_deadline'
   | 'stream_inactivity';
 
@@ -34,6 +35,8 @@ export interface GenerationGuardOptions {
    * disables it.
    */
   readonly maxStreamIdleMs?: number;
+  /** Luna-only unfinished tiny-delta tool-call deadline; 0 disables it. */
+  readonly toolArgumentRunawayMs?: number;
 }
 
 export const DEFAULT_GENERATION_GUARD_OPTIONS: Readonly<Required<GenerationGuardOptions>> = {
@@ -50,6 +53,7 @@ export const DEFAULT_GENERATION_GUARD_OPTIONS: Readonly<Required<GenerationGuard
   // provider that buffers its whole answer for minutes still deliver it.
   requestDeadlineMs: 0,
   maxStreamIdleMs: 600_000,
+  toolArgumentRunawayMs: 60_000,
 };
 
 type ResolvedGenerationGuardOptions = Required<GenerationGuardOptions>;
@@ -92,6 +96,10 @@ export class GenerationGuard {
 
   get maxStreamIdleMs(): number {
     return this.#options.maxStreamIdleMs;
+  }
+
+  get toolArgumentRunawayMs(): number {
+    return this.#options.toolArgumentRunawayMs;
   }
 
   get textCharacters(): number {
@@ -323,6 +331,124 @@ class DeadlineGate {
   }
 }
 
+export interface ToolArgumentRunawaySignatureOptions {
+  readonly minDeltaFramesPerSecond: number;
+  readonly maxAverageCharsPerFrame: number;
+  readonly maxInterDeltaMs: number;
+}
+
+export const DEFAULT_TOOL_ARGUMENT_RUNAWAY_SIGNATURE: Readonly<ToolArgumentRunawaySignatureOptions> = {
+  minDeltaFramesPerSecond: 45,
+  maxAverageCharsPerFrame: 2.8,
+  maxInterDeltaMs: 10_000,
+};
+
+/**
+ * Contains the observed Luna failure where one tool call emits tiny argument
+ * deltas continuously but never reaches a terminal tool-call event.
+ */
+export class ToolArgumentRunawayGuard {
+  readonly #options: ToolArgumentRunawaySignatureOptions & { readonly timeoutMs: number };
+  readonly #abort: () => void;
+  readonly #gate = new DeadlineGate();
+  #timer: ReturnType<typeof setTimeout> | undefined;
+  #firstDeltaAt: number | undefined;
+  #lastDeltaAt: number | undefined;
+  #lastArgumentCharacters: number | undefined;
+  #deltaFrames = 0;
+  #argumentCharacters = 0;
+  #maxInterDeltaMs = 0;
+  #disarmed = false;
+
+  constructor(
+    options: ToolArgumentRunawaySignatureOptions & { readonly timeoutMs: number },
+    abortActiveRequest: () => void,
+  ) {
+    this.#options = options;
+    this.#abort = abortActiveRequest;
+  }
+
+  observeText(): void {
+    this.#disarm();
+  }
+
+  observeToolArgumentProgress(argumentCharCount: number): void {
+    if (this.#disarmed || this.#options.timeoutMs <= 0) return;
+    const now = performance.now();
+    if (!Number.isFinite(argumentCharCount) || argumentCharCount < 0) {
+      this.#disarm();
+      return;
+    }
+    const reported = Math.floor(argumentCharCount);
+    if (this.#lastArgumentCharacters !== undefined && reported < this.#lastArgumentCharacters) {
+      // A cumulative-count reset means another call started; the incident
+      // signature is exactly one unfinished call, so do not infer a runaway.
+      this.#disarm();
+      return;
+    }
+    if (this.#firstDeltaAt === undefined) {
+      this.#firstDeltaAt = now;
+      this.#timer = setTimeout(() => this.#evaluate(), this.#options.timeoutMs);
+      this.#timer.unref?.();
+    } else if (this.#lastDeltaAt !== undefined) {
+      this.#maxInterDeltaMs = Math.max(this.#maxInterDeltaMs, now - this.#lastDeltaAt);
+    }
+    const growth = this.#lastArgumentCharacters === undefined ? reported : reported - this.#lastArgumentCharacters;
+    this.#argumentCharacters += growth;
+    this.#lastArgumentCharacters = reported;
+    this.#lastDeltaAt = now;
+    this.#deltaFrames++;
+    if (now - this.#firstDeltaAt >= this.#options.timeoutMs) this.#evaluate();
+  }
+
+  observeToolCallCompleted(): void {
+    this.#disarm();
+  }
+
+  wait<T>(operation: Promise<T>): Promise<T> {
+    return this.#gate.wait(operation);
+  }
+
+  dispose(): void {
+    this.#disarm();
+  }
+
+  #evaluate(): void {
+    if (this.#disarmed || this.#firstDeltaAt === undefined || this.#lastDeltaAt === undefined) return;
+    const now = performance.now();
+    const elapsedMs = Math.max(1, now - this.#firstDeltaAt);
+    const maxGapMs = Math.max(this.#maxInterDeltaMs, now - this.#lastDeltaAt);
+    const framesPerSecond = (this.#deltaFrames * 1_000) / elapsedMs;
+    const averageCharsPerFrame = this.#argumentCharacters / Math.max(1, this.#deltaFrames);
+    if (
+      framesPerSecond < this.#options.minDeltaFramesPerSecond ||
+      averageCharsPerFrame > this.#options.maxAverageCharsPerFrame ||
+      maxGapMs > this.#options.maxInterDeltaMs
+    ) {
+      return;
+    }
+    this.#disarmed = true;
+    if (this.#timer !== undefined) clearTimeout(this.#timer);
+    this.#timer = undefined;
+    const error = new GenerationGuardError(
+      'tool_argument_runaway',
+      `Model output was stopped because one tool call remained incomplete for ${Math.round(
+        elapsedMs / 1_000,
+      )}s while streaming ${this.#deltaFrames} argument deltas (${framesPerSecond.toFixed(
+        1,
+      )} frames/s, ${averageCharsPerFrame.toFixed(2)} chars/frame, max gap ${maxGapMs}ms).`,
+    );
+    this.#gate.fail(error);
+    this.#abort();
+  }
+
+  #disarm(): void {
+    this.#disarmed = true;
+    if (this.#timer !== undefined) clearTimeout(this.#timer);
+    this.#timer = undefined;
+  }
+}
+
 /**
  * Races stream reads against two independent limits that both abort the active
  * provider request: an optional total wall-clock ceiling (opt-in) and a
@@ -398,5 +524,6 @@ export function resolveGenerationGuardOptions(options?: GenerationGuardOptions):
       DEFAULT_GENERATION_GUARD_OPTIONS.maxCumulativeToolArgumentCharacters,
     requestDeadlineMs: options?.requestDeadlineMs ?? DEFAULT_GENERATION_GUARD_OPTIONS.requestDeadlineMs,
     maxStreamIdleMs: options?.maxStreamIdleMs ?? DEFAULT_GENERATION_GUARD_OPTIONS.maxStreamIdleMs,
+    toolArgumentRunawayMs: options?.toolArgumentRunawayMs ?? DEFAULT_GENERATION_GUARD_OPTIONS.toolArgumentRunawayMs,
   };
 }

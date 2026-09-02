@@ -838,6 +838,22 @@ Rollback boundary: ToolArgumentRunawayGuard and its ApplicationRunLoop wiring.
 Ledger row: this section.
 ```
 
+Capture follow-up: when an application abort interrupts a Codex WebSocket after
+at least one frame has arrived (including a guard-triggered abort),
+`CodexResponsesWSModel` records the existing `aborted` artifact with the
+`AbortedStreamRecorder` partial transcript instead of reducing the event to the
+bounded transport-failure counters. A pre-first-frame abort remains on the
+bounded failure path. This preserves the raw frame evidence needed to inspect a
+future Luna drip while keeping that transcript out of the application log.
+Focused verification:
+
+```text
+pnpm test source/providers/codex-responses-model.test.ts \
+  source/providers/aborted-stream-recorder.test.ts
+```
+
+Typecheck and the provider black-box suite also passed for the capture change.
+
 Red proof before production edits:
 
 ```text

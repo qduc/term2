@@ -1,4 +1,4 @@
-import { it, expect, beforeEach, afterEach } from 'vitest';
+import { it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { buildConversationResult, toTerminalEvent } from './conversation-result-builder.js';
 import { ApprovalFlowCoordinator as ProductionApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
 import { ApprovalState } from '../approval/approval-state.js';
@@ -670,6 +670,41 @@ it('unsandboxed shell auto-approves via LLM when sandbox enabled and mode auto',
     expect(outcome.advisory?.approved).toBe(true);
     expect(outcome.advisory?.source).toBe('llm');
   }
+});
+
+it('read_file outside workspace auto-approves via LLM in auto mode and grants folder read', async () => {
+  const stream = makeStream({
+    interruptions: [
+      {
+        name: 'read_file',
+        callId: 'c-read-file',
+        arguments: { path: '/tmp/project/config.json' },
+      },
+    ],
+    state: {},
+  });
+  const allowReadFolder = vi.fn();
+  const sessionAccess = { allowReadFolder, allowEditFile: vi.fn() } as any;
+  const deps = {
+    ...makeDeps(
+      'auto',
+      undefined,
+      true,
+      async () =>
+        '{"results":[{"reasoning":"safe external read","riskLevel":"low","authorization":"implied","confidence":"high"}]}',
+    ),
+    sessionAccess,
+  };
+
+  const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
+
+  expect(outcome.kind).toBe('auto_approve');
+  if (outcome.kind === 'auto_approve') {
+    expect(outcome.callId).toBe('c-read-file');
+    expect(outcome.advisory?.approved).toBe(true);
+    expect(outcome.advisory?.source).toBe('llm');
+  }
+  expect(allowReadFolder).toHaveBeenCalledWith('/tmp/project');
 });
 
 it('unsandboxed shell with RED command is never auto-approved even in auto mode', async () => {

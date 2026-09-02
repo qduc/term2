@@ -1,4 +1,4 @@
-import { afterEach, it, expect } from 'vitest';
+import { afterEach, it, expect, vi } from 'vitest';
 import { ToolApprovalBatchCoordinator } from './tool-approval-batch-coordinator.js';
 import { toolApprovalPolicyRegistry } from './tool-approval-policy-registry.js';
 import { SessionAccessState } from '../session/session-access-state.js';
@@ -190,7 +190,8 @@ const runBatch = async (
     eligible?: boolean;
     policyDecision?: 'approve' | 'prompt';
     registryAutoApprove?: boolean;
-    mode?: 'off' | 'always';
+    mode?: 'off' | 'always' | 'auto';
+    sessionAccess?: any;
   } = {},
 ) => {
   if (opts.registryAutoApprove) {
@@ -227,6 +228,7 @@ const runBatch = async (
     } as any,
     logger: { getCorrelationId: () => undefined } as any,
     sessionId: 's1',
+    sessionAccess: opts.sessionAccess,
     nestedCompatibility: makeNestedCompatibility(),
   });
   const result = await drain(
@@ -343,6 +345,50 @@ it('mixed batch: sandboxed shell auto-approves while unsandboxed shell prompts',
     expect(result.terminal.approval.callId).toBe('batch-mixed-unsandboxed');
   }
   toolApprovalPolicyRegistry.clear();
+});
+
+it('auto mode auto-approves read_file outside workspace and grants session folder read', async () => {
+  const allowReadFolder = vi.fn();
+  const sessionAccess = { allowReadFolder, allowEditFile: vi.fn() };
+  const { result, appliedPlan } = await runBatch(
+    {
+      name: 'read_file',
+      callId: 'call-read-outside',
+      arguments: { path: '/tmp/project/config.json' },
+      agent: { name: 'TestAgent' },
+    },
+    {
+      mode: 'auto',
+      policyDecision: 'approve',
+      sessionAccess,
+    },
+  );
+
+  expect(result.kind).toBe('ready');
+  expect(appliedPlan).toBe(true);
+  expect(allowReadFolder).toHaveBeenCalledWith('/tmp/project');
+});
+
+it('auto mode auto-approves create_file outside workspace and grants session edit file', async () => {
+  const allowEditFile = vi.fn();
+  const sessionAccess = { allowReadFolder: vi.fn(), allowEditFile };
+  const { result, appliedPlan } = await runBatch(
+    {
+      name: 'create_file',
+      callId: 'call-create-outside',
+      arguments: { path: '/tmp/project/out.txt', content: 'data' },
+      agent: { name: 'TestAgent' },
+    },
+    {
+      mode: 'auto',
+      policyDecision: 'approve',
+      sessionAccess,
+    },
+  );
+
+  expect(result.kind).toBe('ready');
+  expect(appliedPlan).toBe(true);
+  expect(allowEditFile).toHaveBeenCalledWith('/tmp/project/out.txt');
 });
 
 async function drain<T>(generator: AsyncGenerator<unknown, T, void>): Promise<T> {

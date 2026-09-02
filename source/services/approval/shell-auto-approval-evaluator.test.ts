@@ -1,3 +1,5 @@
+import os from 'node:os';
+import path from 'node:path';
 import { it, expect } from 'vitest';
 import { evaluateShellAutoApprovalAdvisories } from './shell-auto-approval-evaluator.js';
 
@@ -854,4 +856,79 @@ it('keeps RED commands system-rejected even if the LLM approves them', async () 
   expect(redAdvisory?.source).toBe('system');
   expect(redAdvisory?.reasoning ?? '').toMatch(/Blocked by safety heuristics \(RED\):/);
   expect(redAdvisory?.reasoning ?? '').toMatch(/Model advisory: The model incorrectly approved/);
+});
+
+it('evaluates file tool calls and flags sensitive credential paths as RED system rejections', async () => {
+  const sensitivePath = path.join(os.homedir(), '.ssh', 'id_rsa');
+  const advisories = await evaluateShellAutoApprovalAdvisories({
+    commands: [
+      {
+        id: 'call-ssh',
+        toolName: 'read_file',
+        targetPath: sensitivePath,
+        description: 'read file outside workspace',
+      },
+    ],
+    history: [{ role: 'user', type: 'message', content: 'read my ssh key' }],
+    settingsService: createMockSettings('auto') as any,
+    agentClient: {
+      chatJson: async () => ({
+        results: [
+          { reasoning: 'Approved reading key.', riskLevel: 'low', authorization: 'explicit', confidence: 'high' },
+        ],
+      }),
+      chat: async () => {
+        throw new Error('prompt fallback should not run');
+      },
+    } as any,
+    logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
+  });
+
+  const advisory = advisories.get('call-ssh');
+  expect(advisory?.approved).toBe(false);
+  expect(advisory?.source).toBe('system');
+  expect(advisory?.reasoning).toContain('Blocked by safety heuristics (RED): targets sensitive credential path');
+});
+
+it('evaluates mixed batch of shell commands and file tools', async () => {
+  let evaluatedPrompt = '';
+  const advisories = await evaluateShellAutoApprovalAdvisories({
+    commands: [
+      {
+        id: 'call-file',
+        toolName: 'read_file',
+        targetPath: '/tmp/project/config.json',
+        description: 'read file outside workspace',
+      },
+      {
+        id: 'call-shell',
+        command: 'pnpm test',
+      },
+    ],
+    history: [{ role: 'user', type: 'message', content: 'test and verify config' }],
+    settingsService: createMockSettings('auto') as any,
+    agentClient: {
+      chatJson: async (prompt: string) => {
+        evaluatedPrompt = prompt;
+        return {
+          results: [
+            { reasoning: 'safe read', riskLevel: 'low', authorization: 'implied', confidence: 'high' },
+            { reasoning: 'safe test', riskLevel: 'low', authorization: 'implied', confidence: 'high' },
+          ],
+        };
+      },
+      chat: async () => '',
+    } as any,
+    logger: createMockLogger() as any,
+    sessionContextService: createSessionContextService() as any,
+  });
+
+  expect(evaluatedPrompt).toContain('[Request 1: read_file]');
+  expect(evaluatedPrompt).toContain('Target: /tmp/project/config.json');
+  expect(evaluatedPrompt).toContain('[Command 2]');
+  expect(evaluatedPrompt).toContain('pnpm test');
+
+  expect(advisories.get('call-file')?.approved).toBe(true);
+  expect(advisories.get('call-shell')?.approved).toBe(true);
 });

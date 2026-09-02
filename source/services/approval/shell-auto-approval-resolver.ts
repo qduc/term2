@@ -4,12 +4,92 @@ import type { LLMAdvisory } from '../../contracts/conversation.js';
 import {
   evaluateShellAutoApprovalAdvisories,
   type ShellAutoApprovalManualDecision,
+  type ShellAutoApprovalCommand,
 } from './shell-auto-approval-evaluator.js';
 import { getCallIdFromObject, getToolInfoFromInterruption } from '../interruption-info.js';
 import type { ShellAutoApprovalAgentClient } from '../conversation-agent-client.js';
 import { TOOL_NAME_ASK_USER } from '../../tools/tool-names.js';
 
 export type AutoApproveMode = 'off' | 'advisory' | 'auto' | 'always';
+
+export const FILE_READ_AUTO_APPROVE_TOOLS: ReadonlySet<string> = new Set([
+  'read_file',
+  'grep',
+  'find_files',
+  'glob',
+  'read_code_outline',
+  'code_context_search',
+]);
+
+export const FILE_MUTATION_AUTO_APPROVE_TOOLS: ReadonlySet<string> = new Set([
+  'create_file',
+  'search_replace',
+  'apply_patch',
+]);
+
+export function isAutoApprovableTool(toolName: string | undefined): boolean {
+  if (!toolName) return false;
+  return (
+    toolName === 'shell' ||
+    toolName === 'bash' ||
+    FILE_READ_AUTO_APPROVE_TOOLS.has(toolName) ||
+    FILE_MUTATION_AUTO_APPROVE_TOOLS.has(toolName)
+  );
+}
+
+export function extractToolTargetPaths(toolName: string, rawArgs: unknown): string[] {
+  if (typeof rawArgs === 'string') {
+    try {
+      rawArgs = JSON.parse(rawArgs);
+    } catch {
+      return [];
+    }
+  }
+  if (!rawArgs || typeof rawArgs !== 'object') return [];
+  const rec = rawArgs as Record<string, any>;
+  if (typeof rec.path === 'string') {
+    return [rec.path];
+  }
+  if (Array.isArray(rec.paths)) {
+    return rec.paths.filter((p: unknown): p is string => typeof p === 'string');
+  }
+  if (Array.isArray(rec.operations)) {
+    return rec.operations.map((op: any) => op?.path).filter((p: unknown): p is string => typeof p === 'string');
+  }
+  return [];
+}
+
+export function formatToolOperationDescription(toolName: string, rawArgs: unknown): string {
+  if (typeof rawArgs === 'string') {
+    try {
+      rawArgs = JSON.parse(rawArgs);
+    } catch {
+      return toolName;
+    }
+  }
+  const rec = (rawArgs && typeof rawArgs === 'object' ? rawArgs : {}) as Record<string, any>;
+  if (toolName === 'read_file') {
+    const range = rec.start_line ? ` (lines ${rec.start_line}-${rec.end_line ?? ''})` : '';
+    return `read file outside workspace${range}`;
+  }
+  if (toolName === 'grep' || toolName === 'find_files') {
+    const pat = rec.pattern ? ` pattern "${rec.pattern}"` : '';
+    return `search outside workspace${pat}`;
+  }
+  if (toolName === 'read_code_outline' || toolName === 'code_context_search') {
+    return `code outline / search outside workspace`;
+  }
+  if (toolName === 'create_file') {
+    return `create / overwrite file outside workspace`;
+  }
+  if (toolName === 'search_replace') {
+    return `search and replace edit outside workspace`;
+  }
+  if (toolName === 'apply_patch') {
+    return `apply patch outside workspace`;
+  }
+  return `${toolName} outside workspace`;
+}
 
 /**
  * YOLO suppresses approval prompts for every tool. `ask_user` is different:
@@ -100,36 +180,42 @@ export class ShellAutoApprovalResolver {
   }): Promise<LLMAdvisory | undefined> {
     const { interruption, siblings } = input;
     const { toolName, argumentsText, rawArguments } = getToolInfoFromInterruption(interruption);
-    if (toolName !== 'shell' && toolName !== 'bash') {
+    if (!isAutoApprovableTool(toolName)) {
       return undefined;
     }
 
     const callId = getCallIdFromObject(interruption);
 
-    const shellCommands = siblings
-      .map((i) => {
-        const info = getToolInfoFromInterruption(i);
-        const id = getCallIdFromObject(i);
-        return {
+    const eligibleItems: ShellAutoApprovalCommand[] = [];
+    for (const i of siblings) {
+      const info = getToolInfoFromInterruption(i);
+      const id = getCallIdFromObject(i);
+      if (!id || !isAutoApprovableTool(info.toolName)) {
+        continue;
+      }
+      if (info.toolName === 'shell' || info.toolName === 'bash') {
+        eligibleItems.push({
           id,
-          command: info.argumentsText,
           toolName: info.toolName,
+          command: info.argumentsText,
           unsandboxed: parseUnsandboxedFlag(info.rawArguments),
-        };
-      })
-      .filter(
-        (info): info is { id: string; command: string; toolName: string; unsandboxed: boolean } =>
-          !!info.id && (info.toolName === 'shell' || info.toolName === 'bash'),
-      );
+        });
+      } else {
+        const targetPaths = extractToolTargetPaths(info.toolName, info.rawArguments);
+        eligibleItems.push({
+          id,
+          toolName: info.toolName,
+          targetPath: targetPaths[0],
+          targetPaths,
+          description: formatToolOperationDescription(info.toolName, info.rawArguments),
+        });
+      }
+    }
 
-    const unevaluated = shellCommands.filter((c) => !this.advisoriesByCallId.has(c.id));
+    const unevaluated = eligibleItems.filter((c) => !this.advisoriesByCallId.has(c.id));
     if (unevaluated.length > 0) {
       const results = await evaluateShellAutoApprovalAdvisories({
-        commands: unevaluated.map(({ id, command, unsandboxed }) => ({
-          id,
-          command,
-          ...(unsandboxed ? { unsandboxed: true } : {}),
-        })),
+        commands: unevaluated,
         history: this.deps.conversationStore.getHistory(),
         manualDecisions: this.manualDecisions,
         settingsService: this.deps.settingsService,
@@ -147,13 +233,24 @@ export class ShellAutoApprovalResolver {
       return this.advisoriesByCallId.get(callId);
     }
 
-    // No callId: evaluate this single command inline without caching.
+    // No callId: evaluate this single item inline without caching.
+    const isShell = toolName === 'shell' || toolName === 'bash';
+    const singlePaths = isShell ? [] : extractToolTargetPaths(toolName, rawArguments);
     const single = await evaluateShellAutoApprovalAdvisories({
       commands: [
         {
           id: '__single__',
-          command: argumentsText,
-          ...(parseUnsandboxedFlag(rawArguments) ? { unsandboxed: true } : {}),
+          toolName,
+          ...(isShell
+            ? {
+                command: argumentsText,
+                ...(parseUnsandboxedFlag(rawArguments) ? { unsandboxed: true } : {}),
+              }
+            : {
+                targetPath: singlePaths[0],
+                targetPaths: singlePaths,
+                description: formatToolOperationDescription(toolName, rawArguments),
+              }),
         },
       ],
       history: this.deps.conversationStore.getHistory(),

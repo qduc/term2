@@ -28396,18 +28396,17 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
+  recommendation: keep
   confidence: high
-  reason: Coordinator decision of record after source verification. Every assertion exercises a locally
-    redefined filter rather than useResumeSelection, so production hook changes can pass without this
-    test noticing.
+  reason: "M4 cleanup batch B1 (audit-m4-b1 7c90b29a) landed the rewrite: the filter now lives in the hook\
+    \ module as exported filterConversations, and the tests import it, so production filtering and its tests\
+    \ share one implementation."
   evidence:
-  - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
-    before this primary was written.'
-  - source/hooks/use-resume-selection.test.ts:30-40 defines filterConversations inline with the same filtering
-    algorithm instead of importing or rendering useResumeSelection.
-  - source/hooks/use-resume-selection.test.ts:42-78 invokes only that local function for empty, id, message,
-    model, SSH-host, and no-match cases.
+  - "source/hooks/use-resume-selection.ts:9 exports filterConversations; the hook's filteredConversations\
+    \ memo (line 40) delegates to it."
+  - "source/hooks/use-resume-selection.test.ts:31-67 imports filterConversations from the hook module and\
+    \ covers empty-query, id, first-message, model, SSH-host, and no-match cases against the production\
+    \ function."
   replacementTestIds: []
   status: reviewed
 - id: hooks-use-rewind-selection-test-primary
@@ -28510,18 +28509,14 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
+  recommendation: keep
   confidence: high
-  reason: Coordinator decision of record after source verification. The two history-flush tests drive
-    the same enter-submit-exit path and differ only in the literal echo command, so they are better represented
-    as one parameterized case while retaining both output tokens.
+  reason: "M4 cleanup batch B1 (audit-m4-b1 7c90b29a) landed the rewrite: the two duplicate history-flush\
+    \ tests were merged into one parameterized case that retains both output tokens while covering one\
+    \ lifecycle."
   evidence:
-  - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
-    before this primary was written.'
-  - source/hooks/use-shell-mode.test.tsx:70-87 enters shell mode, submits echo one, exits, and asserts
-    serialized history projection.
-  - source/hooks/use-shell-mode.test.tsx:89-106 repeats the identical lifecycle and assertion with echo
-    two; no distinct branch or failure mode is exercised.
+  - "source/hooks/use-shell-mode.test.tsx:70-87 renders the hook, submits each of echo one and echo two,\
+    \ exits shell mode, and asserts the serialized history projection per command."
   replacementTestIds: []
   status: reviewed
 - id: hooks-use-skill-selection-test-primary
@@ -28529,18 +28524,17 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
+  recommendation: keep
   confidence: high
-  reason: Coordinator decision of record after source verification. The file tests a copied filter helper
-    instead of rendering or importing useSkillSelection, leaving production hook wiring and query extraction
-    untested.
+  reason: "M4 cleanup batch B1 (audit-m4-b1 7c90b29a) landed the rewrite: the filter now lives in the hook\
+    \ module as exported filterSkills, and the tests import it, so production filtering and its tests share\
+    \ one implementation."
   evidence:
-  - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
-    before this primary was written.'
-  - source/hooks/use-skill-selection.test.ts:20-30 explicitly says filtering is extracted and defines
-    a local filterSkills implementation.
-  - source/hooks/use-skill-selection.test.ts:33-81 invokes only filterSkills; no useSkillSelection import
-    or hook harness appears in the file.
+  - "source/hooks/use-skill-selection.ts:9 exports filterSkills; the hook's filteredSkills memo (line 36)\
+    \ delegates to it."
+  - "source/hooks/use-skill-selection.test.ts:23-71 imports filterSkills from the hook module and covers\
+    \ empty-query, name, description, partial, no-match, empty-array, and multi-match cases against the\
+    \ production function."
   replacementTestIds: []
   status: reviewed
 - id: hooks-use-slash-commands-test-primary

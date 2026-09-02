@@ -5,8 +5,9 @@ go/no-go (report: `docs/test-audit/calibration-report.md`). Milestone 3 (domain
 exploration) closed 2026-09-03: all 585 test files at the `d36c392a` inventory
 have validated graph records (28 reviewer artifacts + coordinator
 adjudication), and the source graph (`docs/test-audit/graph.yaml`) holds 605
-tests / 694 contracts / 1230 decisions. Milestone 4 (cleanup batches) has not
-started; deferred decisions (suite-topology change, runtime-history location,
+tests / 694 contracts / 1230 decisions. Milestone 4 (cleanup batches) is in
+progress: batch B1 (hooks-real-code) landed 2026-09-03 as `audit-m4-b1`
+`7c90b29a`; deferred decisions (suite-topology change, runtime-history location,
 mutation-testing proportionality) gate parts of it.
 
 ## Resume here
@@ -137,7 +138,7 @@ graph primary decisions to keep/high with a note naming the batch and commit):
 - **B1 hooks-real-code** (high rewrites): use-resume-selection, use-skill-selection,
   use-shell-mode — stop testing local reimplementations; extract/export the real
   pure filter from the hook module and test it, collapse the duplicate shell-mode
-  flush case.
+  flush case. **Landed in `audit-m4-b1` (`7c90b29a`).**
 - **B2 commands** (prompts-commands wave-1 rewrites): auto-approve-command,
   sandbox-command, skills-command, resume-command — de-duplicate harness setup;
   drop the two redundant /resume cases from hooks/use-app-commands.test.ts only if

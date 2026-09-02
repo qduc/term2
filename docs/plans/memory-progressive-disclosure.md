@@ -731,12 +731,16 @@ the same timestamp. Unknown or malformed handles, handles issued by another
 invalid saved positions yield `invalid_cursor`. Handles intentionally do not
 survive a process restart; callers restart the read without a cursor.
 
-On every continuation, reread the session and compare both its current
-`updatedAt` and projection revision to the cursor snapshot exactly. A different
-value yields `stale_cursor` and no items. The caller restarts without a cursor;
-it must not apply an old offset to a changed transcript. A deleted session is
-`not_found`. The cursor is not a capability: authorization is rechecked against
-current project/SSH context before parsing it.
+On every continuation, revalidate the canonical log and delta-sidecar source
+version. `SessionBrowser` may reuse its one browser-owned projected snapshot
+only while that version, directory membership, and the authorizing
+project/SSH context are unchanged. Otherwise it rereads the session and
+compares both its current `updatedAt` and projection revision to the cursor
+snapshot exactly. A different value yields `stale_cursor` and no items. The
+caller restarts without a cursor; it must not apply an old offset to a changed
+transcript. A deleted session is `not_found`. The cursor is not a capability:
+authorization is rechecked against current project/SSH context before any
+cached page is returned.
 
 After a complete item the cursor is the next position in the projected-record
 array with offset zero; after a partial item it is that item's strictly larger

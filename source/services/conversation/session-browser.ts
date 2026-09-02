@@ -1,5 +1,7 @@
 import {
   browseConversationsForProject,
+  getConversationSourceVersionReadOnly,
+  getConversationsDirectoryVersionReadOnly,
   loadConversationForProjectReadOnly,
   resolveConversationReference,
   uniqueConversationShortRefs,
@@ -46,6 +48,15 @@ type CursorState = {
   nextIndex: number;
   nextTextOffset: number;
 };
+type ReadSnapshot = {
+  contextKey: string;
+  directoryVersion: string;
+  sourceVersion: string;
+  conversation: RestoredState;
+  projection: { records: ProjectedMessage[]; skipped: number };
+  shortRef: string;
+  previousDependency?: { sessionId: string; sourceVersion: string };
+};
 
 export type SessionListInput = { limit?: number; maxChars?: number };
 export type SessionSearchInput = { query: string; limit?: number; maxChars?: number };
@@ -54,6 +65,7 @@ export type SessionReadInput = { id: string; cursor?: string; limit?: number; ma
 export class SessionBrowser {
   readonly #cursorStates = new Map<string, CursorState>();
   readonly #cursorHandles = new Map<string, string>();
+  #readSnapshot: ReadSnapshot | null = null;
   #nextCursorId = 1;
 
   constructor(private readonly getContext: () => SessionBrowserContext) {}
@@ -174,46 +186,91 @@ export class SessionBrowser {
     const budget = input.maxChars ?? DEFAULT_READ_CHARS;
     if (!SAFE_SESSION_ID.test(input.id)) return boundedError('not_found', 'Session was not found.', budget);
     const context = this.getContext();
-    const browsed = this.conversations();
-    const resolution = resolveSessionReference(input.id, browsed.conversations, context.currentSessionId);
-    if (resolution.kind === 'ambiguous') {
-      return (
-        fitted(
-          {
-            error: {
-              code: 'ambiguous_reference',
-              message: 'Session reference is ambiguous; use a longer prefix or an exact ID.',
-              candidates: resolution.candidates,
+    const cached = input.cursor ? this.#snapshotForContinuation(input.cursor, input.id, context) : null;
+    let conversation: RestoredState;
+    let projection: NonNullable<ReturnType<typeof project>>;
+    let resolvedId: string;
+    let shortRef: string;
+
+    if (cached) {
+      ({ conversation, projection, shortRef } = cached);
+      resolvedId = conversation.id;
+    } else {
+      const browsed = this.conversations();
+      const resolution = resolveSessionReference(input.id, browsed.conversations, context.currentSessionId);
+      if (resolution.kind === 'ambiguous') {
+        return (
+          fitted(
+            {
+              error: {
+                code: 'ambiguous_reference',
+                message: 'Session reference is ambiguous; use a longer prefix or an exact ID.',
+                candidates: resolution.candidates,
+              },
             },
-          },
-          budget,
-        ) ??
-        boundedError(
-          'ambiguous_reference',
-          `Session reference is ambiguous. Candidates: ${resolution.candidates
-            .map((candidate) => candidate.shortRef)
-            .join(', ')}.`,
-          budget,
-        )
-      );
+            budget,
+          ) ??
+          boundedError(
+            'ambiguous_reference',
+            `Session reference is ambiguous. Candidates: ${resolution.candidates
+              .map((candidate) => candidate.shortRef)
+              .join(', ')}.`,
+            budget,
+          )
+        );
+      }
+      if (resolution.kind === 'not_found') return boundedError('not_found', resolution.message, budget);
+      resolvedId = resolution.id;
+      const indexedConversation = browsed.conversations.find((candidate) => candidate.id === resolvedId);
+      const indexedSourceVersion = browsed.sourceVersions.get(resolvedId);
+      let sourceVersion: string | undefined;
+      if (
+        indexedConversation &&
+        indexedSourceVersion &&
+        getConversationSourceVersionReadOnly(resolvedId) === indexedSourceVersion
+      ) {
+        conversation = indexedConversation;
+        sourceVersion = indexedSourceVersion;
+      } else {
+        const loaded = loadConversationForProjectReadOnly(resolvedId, context.projectPath, context.sshHost);
+        if (loaded.status === 'not_found')
+          return boundedError('not_found', `Session was not found in scope ${context.projectPath}.`, budget);
+        if (loaded.status === 'project_mismatch')
+          return boundedError(
+            'not_found',
+            `Session exists but belongs to project ${loaded.conversation.projectPath}, which does not match the current scope (${context.projectPath}); it cannot be read from the current scope.`,
+            budget,
+          );
+        if (loaded.status !== 'loaded' || loaded.conversation.id !== resolvedId || !loaded.conversation.createdAt)
+          return boundedError('session_unavailable', 'Session transcript is unavailable.', budget);
+        conversation = loaded.conversation;
+        sourceVersion = loaded.sourceVersion;
+      }
+      const projected = project(conversation);
+      if (!projected || !isBrowsableSession(conversation))
+        return boundedError('session_unavailable', 'Session transcript is unavailable.', budget);
+      projection = projected;
+      shortRef = uniqueConversationShortRefs(browsed.conversations).get(conversation.id) ?? conversation.id;
+      if (sourceVersion && browsed.directoryVersion) {
+        const previousDependency =
+          input.id === 'previous' && context.currentSessionId
+            ? browsed.sourceVersions.get(context.currentSessionId)
+            : undefined;
+        this.#readSnapshot = {
+          contextKey: contextKey(context),
+          directoryVersion: browsed.directoryVersion,
+          sourceVersion,
+          conversation,
+          projection,
+          shortRef,
+          ...(context.currentSessionId && previousDependency
+            ? { previousDependency: { sessionId: context.currentSessionId, sourceVersion: previousDependency } }
+            : {}),
+        };
+      } else {
+        this.#readSnapshot = null;
+      }
     }
-    if (resolution.kind === 'not_found') return boundedError('not_found', resolution.message, budget);
-    const resolvedId = resolution.id;
-    const loaded = loadConversationForProjectReadOnly(resolvedId, context.projectPath, context.sshHost);
-    if (loaded.status === 'not_found')
-      return boundedError('not_found', `Session was not found in scope ${context.projectPath}.`, budget);
-    if (loaded.status === 'project_mismatch')
-      return boundedError(
-        'not_found',
-        `Session exists but belongs to project ${loaded.conversation.projectPath}, which does not match the current scope (${context.projectPath}); it cannot be read from the current scope.`,
-        budget,
-      );
-    if (loaded.status !== 'loaded' || loaded.conversation.id !== resolvedId || !loaded.conversation.createdAt)
-      return boundedError('session_unavailable', 'Session transcript is unavailable.', budget);
-    const conversation = loaded.conversation;
-    const projection = project(conversation);
-    if (!projection || !isBrowsableSession(conversation))
-      return boundedError('session_unavailable', 'Session transcript is unavailable.', budget);
     const currentUpdatedAt = updatedAt(conversation);
     const currentRevision = revision(conversation, projection);
     const cursor: CursorState | null = input.cursor
@@ -232,7 +289,7 @@ export class SessionBrowser {
       return boundedError('invalid_cursor', 'The session cursor is invalid.', budget);
     const session = {
       id: conversation.id,
-      shortRef: uniqueConversationShortRefs(browsed.conversations).get(conversation.id) ?? conversation.id,
+      shortRef,
       createdAt: conversation.createdAt,
       updatedAt: currentUpdatedAt,
       ...(conversation.model ? { model: conversation.model } : {}),
@@ -317,6 +374,30 @@ export class SessionBrowser {
     );
   }
 
+  #snapshotForContinuation(cursorHandle: string, inputId: string, context: SessionBrowserContext) {
+    if (!/^c[0-9a-z]+$/.test(cursorHandle)) return null;
+    const cursor = this.#cursorStates.get(cursorHandle);
+    const snapshot = this.#readSnapshot;
+    if (!cursor || !snapshot || cursor.sessionId !== snapshot.conversation.id) return null;
+    // Reuse is authorization-neutral: the exact context that authorized the
+    // snapshot must still be active, and every persistence source that can
+    // affect this page must still have the same cheap filesystem version.
+    if (snapshot.contextKey !== contextKey(context)) return null;
+    if (getConversationsDirectoryVersionReadOnly() !== snapshot.directoryVersion) return null;
+    if (getConversationSourceVersionReadOnly(cursor.sessionId) !== snapshot.sourceVersion) return null;
+    if (inputId !== cursor.sessionId) {
+      const dependency = snapshot.previousDependency;
+      if (
+        inputId !== 'previous' ||
+        !dependency ||
+        dependency.sessionId !== context.currentSessionId ||
+        getConversationSourceVersionReadOnly(dependency.sessionId) !== dependency.sourceVersion
+      )
+        return null;
+    }
+    return snapshot;
+  }
+
   #cursorFor(sessionId: string, updatedAt: string, revision: string, nextIndex: number, nextTextOffset: number) {
     const state = { sessionId, updatedAt, revision, nextIndex, nextTextOffset };
     const stateKey = JSON.stringify(state);
@@ -341,6 +422,8 @@ export class SessionBrowser {
     return {
       unavailable: result.unavailable,
       scope: context.projectPath,
+      sourceVersions: result.sourceVersions,
+      directoryVersion: result.directoryVersion,
       conversations: result.conversations.sort(
         (a, b) => updatedAt(b).localeCompare(updatedAt(a)) || a.id.localeCompare(b.id),
       ),
@@ -421,6 +504,9 @@ function project(conversation: RestoredState) {
 
 function updatedAt(conversation: RestoredState) {
   return conversation.updatedAt ?? conversation.createdAt;
+}
+function contextKey(context: SessionBrowserContext) {
+  return JSON.stringify([context.projectPath, context.sshHost ?? null, context.currentSessionId ?? null]);
 }
 function clamp(value: number | undefined, fallback: number) {
   return Math.max(1, Math.min(50, value ?? fallback));

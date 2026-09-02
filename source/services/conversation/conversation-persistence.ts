@@ -16,18 +16,24 @@ const paths = envPaths('term2');
 const CONVERSATIONS_DIR = path.join(paths.data, 'conversations');
 const LOG_CONVERSATIONS_DIR = path.join(paths.log, 'conversations');
 const MIGRATION_SENTINEL = '.migrated-from-log';
+const SAFE_SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 let conversationsDirOverride: string | null = null;
 let pidAlivenessOverride: ((pid: number) => boolean) | null = null;
 
 export type LoadConversationForProjectResult =
-  | { status: 'loaded'; conversation: RestoredState }
+  | { status: 'loaded'; conversation: RestoredState; sourceVersion?: string }
   | { status: 'not_found' }
   | { status: 'ambiguous'; candidates: Array<{ id: string; shortRef: string }> }
   | { status: 'project_mismatch'; conversation: RestoredState }
   | { status: 'unreadable'; error: unknown };
 
 /** Read-only browser enumeration; malformed logs are counted without exposing paths or errors. */
-export type BrowseConversationsForProjectResult = { conversations: RestoredState[]; unavailable: number };
+export type BrowseConversationsForProjectResult = {
+  conversations: RestoredState[];
+  unavailable: number;
+  sourceVersions: Map<string, string>;
+  directoryVersion?: string;
+};
 
 export function getConversationsDir(): string {
   return conversationsDirOverride ?? process.env['TERM2_CONVERSATIONS_DIR'] ?? CONVERSATIONS_DIR;
@@ -117,6 +123,35 @@ function getLockPath(id: string): string {
 
 function getLastConversationPath(): string {
   return path.join(getConversationsDir(), 'last.json');
+}
+
+function statVersion(filePath: string): string | null {
+  try {
+    const stat = fs.statSync(filePath);
+    return JSON.stringify([stat.dev, stat.ino, stat.mode, stat.size, stat.mtimeMs, stat.ctimeMs]);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Cheap read-only version of the complete source replayed by the browser.
+ * The delta sidecar is included because an interrupted live turn can change
+ * the restored transcript without changing the canonical JSONL file.
+ */
+export function getConversationSourceVersionReadOnly(id: string): string | null {
+  if (!SAFE_SESSION_ID.test(id)) return null;
+  const fileVersion = statVersion(getConversationPath(id));
+  if (!fileVersion) return null;
+  const sidecarPath = deltaSidecarPathFor(getConversationPath(id));
+  const sidecarVersion = fs.existsSync(sidecarPath) ? statVersion(sidecarPath) : 'absent';
+  if (!sidecarVersion) return null;
+  return JSON.stringify([fileVersion, sidecarVersion]);
+}
+
+/** Directory membership version used to invalidate cached short references. */
+export function getConversationsDirectoryVersionReadOnly(): string | null {
+  return statVersion(getConversationsDir());
 }
 
 function normalizeProjectPath(projectPath: string): string {
@@ -324,6 +359,7 @@ export function loadConversationForProjectReadOnly(
     return { status: 'not_found' };
   }
   try {
+    const sourceVersionBefore = getConversationSourceVersionReadOnly(id);
     const envelopes = readEnvelopes(filePath);
     const conversation = replayEvents(envelopes);
     conversation.updatedAt = restoredUpdatedAt(filePath, envelopes);
@@ -333,15 +369,20 @@ export function loadConversationForProjectReadOnly(
     if (!conversationMatchesProject(conversation, expectedProjectPath, expectedSshHost)) {
       return { status: 'project_mismatch', conversation };
     }
-    return { status: 'loaded', conversation };
+    const sourceVersionAfter = getConversationSourceVersionReadOnly(id);
+    return {
+      status: 'loaded',
+      conversation,
+      ...(sourceVersionBefore && sourceVersionBefore === sourceVersionAfter
+        ? { sourceVersion: sourceVersionBefore }
+        : {}),
+    };
   } catch (error) {
     // A raw read failure must settle as a typed unreadable result so the CLI
     // can print an actionable diagnostic instead of crashing with an fs stack.
     return { status: 'unreadable', error };
   }
 }
-
-const SAFE_SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
 /**
  * Enumerates canonical local logs through the same decoder/replay/context path
@@ -352,14 +393,16 @@ export function browseConversationsForProject(
   expectedSshHost?: string,
 ): BrowseConversationsForProjectResult {
   const dir = getConversationsDir();
+  const directoryVersionBefore = getConversationsDirectoryVersionReadOnly();
   let files: string[];
   try {
-    if (!fs.existsSync(dir)) return { conversations: [], unavailable: 0 };
+    if (!fs.existsSync(dir)) return { conversations: [], unavailable: 0, sourceVersions: new Map() };
     files = fs.readdirSync(dir).filter((file) => file.endsWith('.jsonl'));
   } catch {
-    return { conversations: [], unavailable: 0 };
+    return { conversations: [], unavailable: 0, sourceVersions: new Map() };
   }
   const conversations: RestoredState[] = [];
+  const sourceVersions = new Map<string, string>();
   let unavailable = 0;
   for (const file of files) {
     const id = file.slice(0, -'.jsonl'.length);
@@ -371,6 +414,7 @@ export function browseConversationsForProject(
     const loaded = loadConversationForProjectReadOnly(id, expectedProjectPath, expectedSshHost);
     if (loaded.status === 'loaded' && loaded.conversation.id === id && loaded.conversation.createdAt) {
       conversations.push(loaded.conversation);
+      if (loaded.sourceVersion) sourceVersions.set(id, loaded.sourceVersion);
     } else if (
       loaded.status === 'unreadable' ||
       (loaded.status === 'loaded' && (loaded.conversation.id !== id || !loaded.conversation.createdAt))
@@ -378,7 +422,15 @@ export function browseConversationsForProject(
       unavailable++;
     }
   }
-  return { conversations, unavailable };
+  const directoryVersionAfter = getConversationsDirectoryVersionReadOnly();
+  return {
+    conversations,
+    unavailable,
+    sourceVersions,
+    ...(directoryVersionBefore && directoryVersionBefore === directoryVersionAfter
+      ? { directoryVersion: directoryVersionBefore }
+      : {}),
+  };
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

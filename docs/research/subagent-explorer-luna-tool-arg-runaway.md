@@ -160,6 +160,17 @@ child's 29,942 argument frames were in flight. The 2026-09-01 rows were
 visible as long Codex requests on the root (or as 1006 recoveries), not as a
 false "provider stall" on a background explorer.
 
+## What the openai/codex client does about this
+
+Inspected `https://github.com/openai/codex` at `bdfd769640927a627dd48ab3fcc1ae8bc08bdd0a` (clone in `/tmp/openai-codex`, not in this repo). The official Codex client does **not** detect or stop this drip.
+
+1. **Idle timeout only, re-armed on every frame.** `DEFAULT_STREAM_IDLE_TIMEOUT_MS` is 300_000 (5 minutes) in `model-provider-info`. SSE (`codex-client/src/sse.rs`) and Responses WebSocket (`ResponsesWebsocketConnection::run_websocket_response_stream`) both `timeout(idle_timeout, next_frame)`. Any `function_call_arguments.delta` resets the clock. Our captures have max gaps of 1.4–5.5s, so Codex's 5-minute idle window would not fire either. Term2's Codex inter-frame / `maxStreamIdleMs` window is 600s — same class, looser.
+2. **Argument deltas are ignored.** `process_responses_event` in `codex-api/src/sse/responses.rs` lists `response.function_call_arguments.delta` and `.done` as unhandled (`trace!` only). The websocket path uses the same parser. Codex waits for a complete `output_item` / `response.completed`. There is no running character count on the stream, so a call that never `done`s is invisible except as “still receiving frames.”
+3. **8 KiB truncate is post-hoc history, not a stream abort.** `MAX_EXECUTED_TOOL_CALL_ARGUMENT_BYTES = 8 * 1024` in `protocol/src/models/executed_tool_calls.rs` truncates the *recorded* `ExecutedToolCall` after a complete `ToolCall` exists. It does not cancel the provider request. If `output_item.done` never arrives, this code never runs.
+4. **No analogue of `GenerationGuard` tool-argument caps.** `max_output_tokens` in this tree is a code-mode / `exec` / shell *result* budget (default 10k tokens for JS exec), not a model-generation cap on tool-call arguments. Guardian is an approval reviewer (`guardian-v2`), not a stream containment budget. `SafetyBuffering` is a server moderation-delay signal, not a runaway detector.
+
+So OpenAI's client would sit on the same Luna WS drip until 5 minutes of *silence*, a 1006, or the user cancels — same endings we already see. They do not have a method we can copy to abort an *active* fine-grained argument stream.
+
 ## Harm
 
 - A background explorer can spend ~9 minutes of Codex time after its last

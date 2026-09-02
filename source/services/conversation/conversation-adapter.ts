@@ -9,6 +9,7 @@ import type { InputSurgeApproval } from '../input-surge-approval.js';
 import { userTurnToProviderItem } from './user-turn-item.js';
 import type { ProviderInputItem } from '../../contracts/provider-input.js';
 import type { SessionRuntime, SessionLogs, SessionApprovalQuery } from '../../core/index.js';
+import { getProfileLabel } from '../profiles/labels.js';
 import type { SessionManager } from '../session/session-manager.js';
 import type { PendingInteractionState } from '../session/pending-interaction-state.js';
 import type { AskUserAnswerSink, SubagentEventSinkHost } from '../conversation-agent-client.js';
@@ -372,11 +373,7 @@ export class ConversationAdapter {
 
   #getTrafficMode(): string {
     if (!this.#settingsService) return 'standard';
-    if (this.#settingsService.get('app.orchestratorMode')) return 'orchestrator';
-    if (this.#settingsService.get('app.liteMode')) return 'lite';
-    if (this.#settingsService.get('app.planMode')) return 'plan';
-    if (this.#settingsService.get('app.mentorMode')) return 'mentor';
-    return 'standard';
+    return getProfileLabel(String(this.#settingsService.get('app.activeProfileId')));
   }
 
   #withTrafficContext<T>(currentTurn: string | undefined, fn: () => T): T {

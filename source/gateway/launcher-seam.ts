@@ -1,6 +1,5 @@
 import type { ISettingsService } from '../services/service-interfaces.js';
-import { legacyModeFromProfileId, profileIdFromLegacyMode } from '../services/profiles/legacy-adapter.js';
-import type { AppModes } from '../services/settings/settings-schema.js';
+import { getProfileLabel } from '../services/profiles/labels.js';
 import type { SessionSettingsSnapshot } from './contracts.js';
 
 export type EffectiveGatewayToolPolicy = Readonly<Record<string, boolean>>;
@@ -20,13 +19,7 @@ export function createSessionSettingsSnapshot(input: {
   defaultsRevision?: string | number;
 }): SessionSettingsSnapshot {
   const settings = input.settings;
-  const profileId = profileIdFromLegacyMode({
-    mentorMode: settings.get('app.mentorMode') === true,
-    liteMode: settings.get('app.liteMode') === true,
-    planMode: settings.get('app.planMode') === true,
-    orchestratorMode: settings.get('app.orchestratorMode') === true,
-  });
-  const mode = input.mode ?? resolveMode(legacyModeFromProfileId(profileId) as AppModes);
+  const mode = input.mode ?? getProfileLabel(String(settings.get('app.activeProfileId')));
   const policy = Object.freeze({
     allowWrite: false,
     autoApprove: false,
@@ -42,12 +35,4 @@ export function createSessionSettingsSnapshot(input: {
     effectiveToolPolicy: policy,
     ...(input.defaultsRevision === undefined ? {} : { defaultsRevision: input.defaultsRevision }),
   });
-}
-
-function resolveMode(modes: AppModes): string {
-  if (modes.orchestratorMode) return 'orchestrator';
-  if (modes.liteMode) return 'lite';
-  if (modes.planMode) return 'plan';
-  if (modes.mentorMode) return 'mentor';
-  return 'standard';
 }

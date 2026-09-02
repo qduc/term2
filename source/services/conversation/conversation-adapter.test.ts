@@ -1197,6 +1197,9 @@ it('ConversationAdapter populates firstUserMessagePreview in session context', a
     sessionId: 'session-1',
     startedAt: '2026-06-12T00:00:00.000Z',
     logger,
+    settingsService: {
+      get: (key: string) => (key === 'app.activeProfileId' ? 'builtin:plan' : undefined),
+    } as any,
     sessionContextService,
     userTurns,
     logs,
@@ -1209,6 +1212,7 @@ it('ConversationAdapter populates firstUserMessagePreview in session context', a
   expect(capturedContext).toMatchObject({
     sessionId: 'session-1',
     firstUserMessagePreview: 'First message with newline',
+    mode: 'plan',
   });
 });
 

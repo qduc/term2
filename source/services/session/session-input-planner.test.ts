@@ -357,3 +357,27 @@ it('previewLargeUncachedInput full-history size matches build()+serialize', () =
 
   expect(decision.estimatedBytes).toBe(getSerializedInputBytes(streamInput));
 });
+
+it('uses the canonical active profile when recording large-input guard mode context', () => {
+  let activeProfileId = 'builtin:lite';
+  const planner = new SessionInputPlanner({
+    agentClient: { getProvider: () => 'openai', supportsConversationChaining: () => true } as any,
+    toolTracker: { getReconciledHistory: () => [] } as any,
+    providerContinuity: new ProviderContinuity(),
+    settingsService: {
+      get: (key: string) => (key === 'app.activeProfileId' ? activeProfileId : undefined),
+    } as any,
+  });
+
+  planner.recordSuccess('prior', { kind: 'delta' });
+  activeProfileId = 'builtin:plan';
+  const planDecision = planner.previewLargeUncachedInput('x'.repeat(300_000), 1_000);
+  activeProfileId = 'builtin:standard';
+  const standardDecision = planner.previewLargeUncachedInput('x'.repeat(300_000), 1_000);
+
+  expect(planDecision.action).toBe('warn');
+  expect(standardDecision.action).toBe('warn');
+  // The warning key includes the traffic mode. A legacy-boolean projection
+  // would read both canonical states as standard and produce the same key.
+  expect(planDecision.warningKey).not.toBe(standardDecision.warningKey);
+});

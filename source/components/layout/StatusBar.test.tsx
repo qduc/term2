@@ -313,7 +313,7 @@ it.sequential('StatusBar renders Plan mode badge', async () => {
     'agent.model': 'gpt-4o',
     'agent.provider': 'openai',
     'shell.autoApproveMode': 'off',
-    'app.planMode': true,
+    'app.activeProfileId': 'builtin:plan',
   });
 
   const { lastFrame } = await renderInAct(<StatusBar settingsService={settingsService} />);
@@ -328,13 +328,28 @@ it.sequential('StatusBar renders Orchestrator mode badge instead of Standard', a
     'agent.model': 'gpt-5',
     'agent.provider': 'openai',
     'shell.autoApproveMode': 'off',
-    'app.orchestratorMode': true,
+    'app.activeProfileId': 'builtin:orchestrator',
   });
 
   const { lastFrame } = await renderInAct(<StatusBar settingsService={settingsService} />);
   const output = lastFrame() ?? '';
 
   expect(output.includes('Orchestrator')).toBe(true);
+  expect(output.includes('Standard')).toBe(false);
+});
+
+it.sequential('StatusBar renders Lite mode badge from the active profile', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-5',
+    'agent.provider': 'openai',
+    'shell.autoApproveMode': 'off',
+    'app.activeProfileId': 'builtin:lite',
+  });
+
+  const { lastFrame } = await renderInAct(<StatusBar settingsService={settingsService} />);
+  const output = lastFrame() ?? '';
+
+  expect(output.includes('Lite')).toBe(true);
   expect(output.includes('Standard')).toBe(false);
 });
 
@@ -804,7 +819,7 @@ it.sequential('StatusBar drops cost and cache before dropping the mode label or 
     'agent.provider': 'codex',
     'agent.reasoningEffort': 'medium',
     'agent.smartModel': 'claude-sonnet-4-6',
-    'app.mentorMode': true,
+    'app.activeProfileId': 'builtin:mentor',
     'shell.autoApproveMode': 'always',
     'sandbox.enabled': false,
   });
@@ -829,7 +844,7 @@ it.sequential('StatusBar drops cost and cache before dropping the mode label or 
     expect(line.length).toBeLessThanOrEqual(columns);
   }
 
-  // mentorMode makes the mode label itself read 'Mentor' rather than
+  // The mentor profile makes the mode label itself read 'Mentor' rather than
   // 'Standard' — that substitution is unrelated to dropping, so what this
   // asserts is that the (always-shown) mode label and provider/model survive
   // while the droppable mentor-model, cost, and cache segments do not.

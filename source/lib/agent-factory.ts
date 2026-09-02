@@ -199,10 +199,14 @@ export function buildAgentTools({
                 executeAgain: executeOriginal,
               })
             : result;
-          const trimmedResult = definition.preserveSerializedOutput
-            ? String(finalResult ?? '')
-            : trimToolOutput(finalResult, undefined, maxOutputLengthValue ?? undefined);
-          return definition.preserveSerializedOutput ? trimmedResult : injectRunBudgetWarning(trimmedResult, _context);
+          if (definition.preserveSerializedOutput) {
+            return String(finalResult ?? '');
+          }
+          const trimmedResult = trimToolOutput(finalResult, undefined, maxOutputLengthValue ?? undefined);
+          // Structured content-part results (read_file images) carry no single
+          // text slot for the run-budget advisory; deliver them unmodified so
+          // the image reaches the provider converter.
+          return typeof trimmedResult === 'string' ? injectRunBudgetWarning(trimmedResult, _context) : trimmedResult;
         },
       };
       // Validate arguments against the tool's own schema before execute, the

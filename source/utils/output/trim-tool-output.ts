@@ -39,8 +39,16 @@ const trimJsonStrings = (value: unknown, maxLines?: number, maxCharacters?: numb
   return value;
 };
 
-export const trimToolOutput = (output: unknown, maxLines?: number, maxCharacters?: number): string => {
+export const trimToolOutput = (output: unknown, maxLines?: number, maxCharacters?: number): unknown => {
   if (typeof output !== 'string') {
+    // A structured content-part result (read_file returns
+    // `[{type:'text'},{type:'image'},...]` for images) is not text to be
+    // trimmed. Return it unmodified — trimming string leaves would truncate an
+    // image's base64 `data` and corrupt it, and coercing via String() would
+    // flatten the array to "[object Object],[object Object]".
+    if (Array.isArray(output)) {
+      return output;
+    }
     return String(output ?? '');
   }
 

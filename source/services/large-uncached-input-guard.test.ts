@@ -203,6 +203,8 @@ it('warning key is stable for the same pending input and changes when input chan
   expect(first.action).toBe('warn');
   expect(second.action).toBe('warn');
   expect(changed.action).toBe('warn');
+  // Warn-path decisions always carry a warning key (never the allow-path '').
+  expect(first.warningKey).not.toBe('');
   expect(first.warningKey).toBe(second.warningKey);
   expect(first.warningKey).not.toBe(changed.warningKey);
 });
@@ -349,30 +351,6 @@ it('mightWarn is true after idle timeout', () => {
       mode: 'standard',
     }),
   ).toBe(true);
-});
-
-it('still produces a stable warning key on the warn path', () => {
-  const guard = new LargeUncachedInputGuard();
-  guard.recordSuccessfulInput({
-    input: 'small',
-    now: 1_000,
-    provider: 'openai',
-    model: 'gpt-5',
-    reasoningEffort: 'medium',
-    mode: 'standard',
-  });
-
-  const decision = guard.inspect({
-    input: largeInput(),
-    now: 2_000,
-    provider: 'openrouter',
-    model: 'gpt-5',
-    reasoningEffort: 'medium',
-    mode: 'standard',
-  });
-
-  expect(decision.action).toBe('warn');
-  expect(decision.warningKey).not.toBe('');
 });
 
 // Composer previews pass a precomputed size (cached finalized history + draft)

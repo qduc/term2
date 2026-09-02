@@ -8,11 +8,11 @@ Status: Milestones 1-3 complete. Calibration wave ran 2026-09-02 and PASSED its
   tests / 694 contracts / 1230 decisions. Milestone 4 (cleanup batches) is in
   progress: batches B1 (hooks-real-code), B2 (commands), B3 (util-fixes), B4
   (conversation-utils), B5 (runtime-lib), B6 (session-obs), B7
-  (consolidations), and B8 (shell-tools-misc) landed 2026-09-03 as
+  (consolidations), B8 (shell-tools-misc), and B9 (subagents) landed 2026-09-03 as
   `audit-m4-b1` (`7c90b29a`), `audit-m4-b2`
   (`13c97871`), `audit-m4-b3` (`3f09d676`), `audit-m4-b4` (`8b8e8842`), `audit-m4-b5`
-  (`66ff03d0`), `audit-m4-b6` (`1522a0fb`), `audit-m4-b7` (`2b2b4201`), and
-  `audit-m4-b8` (`db3890cf`); the graph
+  (`66ff03d0`), `audit-m4-b6` (`1522a0fb`), `audit-m4-b7` (`2b2b4201`),
+  `audit-m4-b8` (`db3890cf`), and `audit-m4-b9` (`229bb354`); the graph
   now holds 602 tests / 694 contracts / 1224 decisions after B7 removed two
   whole-test-file records (app.startup-banner, the misnamed hook-named
   approval-pending-filter) and one case record (red-yellow-policy paths); deferred
@@ -180,8 +180,12 @@ graph primary decisions to keep/high with a note naming the batch and commit):
   nullable its), SettingsSelectionMenu, HandoffConfirmationPrompt,
   InputContext "multiple components" tautology case, ssh-service trailing
   tautologies. **Landed in `audit-m4-b8` (`db3890cf`).**
-- **B9 subagents**: codename-run-id + the five subagent-manager split files
-  (mega-case splits, dead imports, scenario dedupe per second-wave1 opinion).
+- **B9 subagents**: codename-run-id (drop the probabilistic 500/2000-draw loops
+  for one fixed deterministic sample), the five subagent-manager split files
+  (dead imports stripped; prompt/tool/retry scenarios table-ified into it.each
+  matrices; three agent-runtime shape cases + the fake parent-attenuation case
+  replaced by one real delegated handle execution through the manager runtime).
+  **Landed in `audit-m4-b9` (`229bb354`).**
 - **B10 eval+stream+provider**: eval-auto-approval leaderboard + report,
   stream-event-processor (title/fixture repairs at the cited ranges),
   provider-management-session (add list/save facade tests), gateway.test

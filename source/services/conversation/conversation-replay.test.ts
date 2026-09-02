@@ -6,6 +6,7 @@ import { replayEvents } from './conversation-replay.js';
 import { decodeLogEnvelope, decodeSavedMessage } from './conversation-decoder.js';
 import type { BotMessage, CommandMessage, ReasoningMessage } from '../../types/message.js';
 import { normalizeApplicationInput } from '../agent-runtime/application-run-loop.js';
+import { profileIdFromLegacyMode } from '../profiles/legacy-adapter.js';
 
 let seq = 0;
 function env(event: LogEvent): LogEnvelope {
@@ -40,6 +41,7 @@ it('replayEvents: session_init populates session metadata', () => {
       createdAt: '2026-01-01T00:00:00Z',
       projectPath: '/p',
       sshHost: 'h',
+      activeProfileId: 'builtin:plan',
       model: 'gpt-5',
       provider: 'openai',
       reasoningEffort: 'high',
@@ -49,6 +51,7 @@ it('replayEvents: session_init populates session metadata', () => {
   expect(restored.id).toBe('sess-1');
   expect(restored.projectPath).toBe('/p');
   expect(restored.sshHost).toBe('h');
+  expect(restored.activeProfileId).toBe('builtin:plan');
   expect(restored.model).toBe('gpt-5');
   expect(restored.provider).toBe('openai');
   expect(restored.reasoningEffort).toBe('high');
@@ -91,6 +94,29 @@ it('replayEvents: cross-model invalidation nulls previousResponseId', () => {
   ];
   const restored = replayEvents(envelopes);
   expect(restored.previousResponseId).toBe(null);
+});
+
+it('replayEvents: canonical profile setting changes update the restored profile', () => {
+  const restored = replayEvents([
+    env({ type: 'session_init', id: 'sess', createdAt: '2026-01-01T00:00:00Z', activeProfileId: 'builtin:standard' }),
+    env({ type: 'settings_changed', key: 'app.activeProfileId', value: 'builtin:mentor' }),
+  ]);
+
+  expect(restored.activeProfileId).toBe('builtin:mentor');
+});
+
+it('replayEvents: legacy-only session state remains resumable through precedence migration', () => {
+  const restored = replayEvents([
+    env({
+      type: 'session_init',
+      id: 'legacy-session',
+      createdAt: '2026-01-01T00:00:00Z',
+      appMode: { mentorMode: true, liteMode: true, planMode: true, orchestratorMode: true },
+    }),
+  ]);
+
+  expect(restored.activeProfileId).toBeUndefined();
+  expect(profileIdFromLegacyMode(restored.appMode)).toBe('builtin:orchestrator');
 });
 
 it('replayEvents: v3 assistant_turn restores state without cumulative snapshot', () => {

@@ -114,3 +114,25 @@ it('formatResumeList: formats a local conversation with prompt, model, and mode 
   expect(result.includes('Prompt:  "hello dear agent"')).toBe(true);
   expect(result.includes('Resume:  term2 --resume local-conv-id-123')).toBe(true);
 });
+
+it('formatResumeList: prefers canonical profile identity and falls back to legacy precedence', () => {
+  const result = stripAnsi(
+    formatResumeList([
+      {
+        id: 'canonical-profile',
+        updatedAt: '2026-05-28T14:40:16.000Z',
+        activeProfileId: 'builtin:plan',
+        appMode: { mentorMode: true, liteMode: false, planMode: false, orchestratorMode: false },
+      },
+      {
+        id: 'legacy-profile',
+        updatedAt: '2026-05-28T14:40:16.000Z',
+        appMode: { mentorMode: true, liteMode: true, planMode: false, orchestratorMode: true },
+      },
+    ]),
+  );
+
+  expect(result).toContain('mode: plan');
+  expect(result).toContain('mode: orchestrator');
+  expect(result).not.toContain('mode: mentor');
+});

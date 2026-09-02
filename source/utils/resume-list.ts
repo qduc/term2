@@ -2,6 +2,8 @@ import chalk from 'chalk';
 import { getResumeCommand } from '../services/conversation/conversation-persistence.js';
 
 import type { SavedAppMode } from '../services/conversation/conversation-persistence-types.js';
+import { profileIdFromLegacyMode } from '../services/profiles/legacy-adapter.js';
+import { getProfileLabel } from '../services/profiles/labels.js';
 
 interface ConversationListEntry {
   id: string;
@@ -10,19 +12,15 @@ interface ConversationListEntry {
   projectPath?: string;
   sshHost?: string;
   firstUserMessage?: string;
+  activeProfileId?: string;
   appMode?: SavedAppMode;
   model?: string;
   provider?: string;
   messageCount?: number;
 }
 
-function getActiveMode(appMode?: SavedAppMode): string {
-  if (!appMode) return 'standard';
-  if (appMode.orchestratorMode) return 'orchestrator';
-  if (appMode.liteMode) return 'lite';
-  if (appMode.planMode) return 'plan';
-  if (appMode.mentorMode) return 'mentor';
-  return 'standard';
+function getActiveMode(activeProfileId?: string, appMode?: SavedAppMode): string {
+  return getProfileLabel(activeProfileId ?? profileIdFromLegacyMode(appMode));
 }
 
 export function formatResumeList(
@@ -67,7 +65,7 @@ export function formatResumeList(
     if (entry.model) {
       metaParts.push(`model: ${entry.model}`);
     }
-    const activeMode = getActiveMode(entry.appMode);
+    const activeMode = getActiveMode(entry.activeProfileId, entry.appMode);
     if (activeMode !== 'standard') {
       metaParts.push(`mode: ${activeMode}`);
     }

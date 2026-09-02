@@ -2,6 +2,8 @@ import React, { FC } from 'react';
 import { Box, Text } from 'ink';
 import type { ConversationListEntry } from '../../services/conversation/conversation-persistence.js';
 import type { SavedAppMode } from '../../services/conversation/conversation-persistence-types.js';
+import { profileIdFromLegacyMode } from '../../services/profiles/legacy-adapter.js';
+import { getProfileLabel } from '../../services/profiles/labels.js';
 import { SelectionMarker, MenuFooter } from '../common/MenuContainer.js';
 import { COLOR_ACCENT, COLOR_BORDER, COLOR_BORDER_ACTIVE, COLOR_TEXT, COLOR_TEXT_SUBTLE } from '../theme.js';
 
@@ -31,13 +33,8 @@ function formatDate(dateString: string): string {
   return dateString;
 }
 
-function getActiveMode(appMode?: SavedAppMode): string {
-  if (!appMode) return 'standard';
-  if (appMode.orchestratorMode) return 'orchestrator';
-  if (appMode.liteMode) return 'lite';
-  if (appMode.planMode) return 'plan';
-  if (appMode.mentorMode) return 'mentor';
-  return 'standard';
+function getActiveMode(activeProfileId?: string, appMode?: SavedAppMode): string {
+  return getProfileLabel(activeProfileId ?? profileIdFromLegacyMode(appMode));
 }
 
 const ResumeSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0, query }) => {
@@ -111,8 +108,8 @@ const ResumeSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0
                     {selectedEntry.messageCount !== undefined &&
                       ` • ${selectedEntry.messageCount} msg${selectedEntry.messageCount === 1 ? '' : 's'}`}
                     {selectedEntry.model && ` • ${selectedEntry.model}`}
-                    {getActiveMode(selectedEntry.appMode) !== 'standard' &&
-                      ` • mode: ${getActiveMode(selectedEntry.appMode)}`}
+                    {getActiveMode(selectedEntry.activeProfileId, selectedEntry.appMode) !== 'standard' &&
+                      ` • mode: ${getActiveMode(selectedEntry.activeProfileId, selectedEntry.appMode)}`}
                   </Text>
                 </Box>
                 {selectedEntry.firstUserMessage && (

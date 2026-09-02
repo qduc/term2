@@ -152,6 +152,8 @@ it.sequential('writer + loadConversation: round-trips a basic conversation', () 
     id,
     createdAt: '2026-05-26T00:00:00.000Z',
     projectPath: '/workspace/x',
+    activeProfileId: 'builtin:plan',
+    appMode: { mentorMode: false, liteMode: false, planMode: true, orchestratorMode: false },
     model: 'gpt-4o',
     provider: 'openai',
   });
@@ -166,6 +168,7 @@ it.sequential('writer + loadConversation: round-trips a basic conversation', () 
   const restored = persistenceModule.loadConversation(id);
   expect(restored).toBeTruthy();
   expect(restored!.id).toBe(id);
+  expect(restored!.activeProfileId).toBe('builtin:plan');
   expect(restored!.previousResponseId).toBe('resp-1');
   expect(restored!.history.length).toBe(2);
   expect(restored!.messages.length).toBe(2);
@@ -404,13 +407,19 @@ it.sequential('listConversations: lists sessions sorted by mtime desc', () => {
   }
   const id2 = persistenceModule.generateId();
   const w2 = createConversationLogWriter({ sessionId: id2, dir: testDir, logger: stubLogger });
-  w2.init({ id: id2, createdAt: '2026-05-26T00:00:00.000Z', projectPath: '/p2' });
+  w2.init({
+    id: id2,
+    createdAt: '2026-05-26T00:00:00.000Z',
+    projectPath: '/p2',
+    activeProfileId: 'builtin:mentor',
+  });
   void w2.close();
 
   const list = persistenceModule.listConversations();
   expect(list.length).toBe(2);
   expect(list[0].id).toBe(id2);
   expect(list[0].projectPath).toBe('/p2');
+  expect(list[0].activeProfileId).toBe('builtin:mentor');
 });
 
 it.sequential('listConversations: filters sessions by workspace and ssh host', () => {

@@ -33,6 +33,7 @@ export interface RestoredState {
   updatedAt?: string;
   projectPath?: string;
   sshHost?: string;
+  activeProfileId?: string;
   appMode?: SavedAppMode;
   model?: string;
   provider?: string;
@@ -159,6 +160,7 @@ interface ReplayState {
   createdAt: string;
   projectPath?: string;
   sshHost?: string;
+  activeProfileId?: string;
   appMode?: SavedAppMode;
   model?: string;
   provider?: string;
@@ -517,6 +519,7 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
       state.createdAt = event.createdAt;
       state.projectPath = event.projectPath;
       state.sshHost = event.sshHost;
+      state.activeProfileId = event.activeProfileId;
       state.appMode = event.appMode;
       state.model = event.model;
       state.provider = event.provider;
@@ -551,6 +554,9 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
           };
           return;
         }
+        case 'app.activeProfileId':
+          if (typeof event.value === 'string') state.activeProfileId = event.value;
+          return;
         default:
           return;
       }
@@ -1358,6 +1364,7 @@ export function replayEvents(envelopes: PersistedLogEnvelope[]): RestoredState {
     createdAt: state.createdAt,
     projectPath: state.projectPath,
     sshHost: state.sshHost,
+    activeProfileId: state.activeProfileId,
     appMode: state.appMode,
     model: state.model,
     provider: state.provider,

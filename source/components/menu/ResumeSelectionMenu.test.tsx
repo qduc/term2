@@ -88,3 +88,34 @@ it('ResumeSelectionMenu displays fallback text when there are no conversations',
     unmount();
   });
 });
+
+it('ResumeSelectionMenu prefers canonical profile identity over legacy mode flags', async () => {
+  let lastFrame!: () => string | undefined;
+  let unmount!: () => void;
+
+  await act(async () => {
+    const result = render(
+      <ResumeSelectionMenu
+        items={[
+          {
+            id: 'canonical-profile',
+            updatedAt: '2026-08-30T10:00:00.000Z',
+            activeProfileId: 'builtin:plan',
+            appMode: { mentorMode: true, liteMode: false, planMode: false, orchestratorMode: false },
+          },
+        ]}
+        selectedIndex={0}
+        query=""
+      />,
+    );
+    lastFrame = result.lastFrame;
+    unmount = result.unmount;
+  });
+
+  expect(lastFrame()).toContain('mode: plan');
+  expect(lastFrame()).not.toContain('mode: mentor');
+
+  await act(async () => {
+    unmount();
+  });
+});

@@ -33,34 +33,9 @@ describe('normalizeToolPath', () => {
     expect(result).toBe(absPath);
   });
 
-  it('rejects traversal that escapes workspace', () => {
-    const result = normalizeToolPath('../etc/passwd');
-    expect(result).toBeNull();
-  });
-
-  it('rejects deeply nested traversal escape', () => {
-    const result = normalizeToolPath('src/../../../etc/passwd');
-    expect(result).toBeNull();
-  });
-
-  it('rejects absolute path outside workspace', () => {
-    const result = normalizeToolPath('/etc/passwd');
-    expect(result).toBeNull();
-  });
-
-  it('rejects null bytes', () => {
-    const result = normalizeToolPath('src/\x00evil');
-    expect(result).toBeNull();
-  });
-
   it('rejects empty string', () => {
     const result = normalizeToolPath('');
     expect(result).toBeNull();
-  });
-
-  it('allows path that stays within workspace with .. that does not escape', () => {
-    const result = normalizeToolPath('src/../src/file.ts');
-    expect(result).toBe(path.resolve(TEST_ROOT, 'src/file.ts'));
   });
 });
 

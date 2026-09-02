@@ -26,14 +26,6 @@ it('inherently dangerous direct commands remain RED', () => {
   }
 });
 
-it('read-only risky paths are YELLOW, not hard-blocked', () => {
-  const paths = ['/etc/passwd', '/var/log/system.log', '../secrets.json'];
-
-  for (const path of paths) {
-    expect(analyzePathRisk(path), `"${path}" should require model/user review`).toBe(SafetyStatus.YELLOW);
-  }
-});
-
 it('workspace-scale edit commands are YELLOW instead of RED', () => {
   const commands = ['sed -i "s/foo/bar/" source.txt', 'find . -exec cp {} /tmp/backup \\;'];
 

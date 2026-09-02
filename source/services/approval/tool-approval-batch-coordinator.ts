@@ -4,7 +4,13 @@ import { createApprovalRequiredTerminal } from '../conversation/conversation-res
 import type { ApprovalDecisionPolicy } from './approval-decision-policy.js';
 import type { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
 import type { ShellAutoApprovalResolver } from './shell-auto-approval-resolver.js';
-import { shouldBypassToolApproval } from './shell-auto-approval-resolver.js';
+import {
+  shouldBypassToolApproval,
+  isAutoApprovableTool,
+  extractToolTargetPaths,
+} from './shell-auto-approval-resolver.js';
+import { supportsFolderSessionRead } from '../../contracts/conversation.js';
+import { resolveSessionReadFolder } from './session-read-grant-target.js';
 import type { ContinuationPlanApplier } from '../session/continuation-plan-applier.js';
 import type { ContinuationState } from '../session/continuation-state.js';
 import {
@@ -154,8 +160,7 @@ export class ToolApprovalBatchCoordinator {
         decision = 'approve';
       } else {
         llmAdvisory =
-          (toolName === 'shell' || toolName === 'bash') &&
-          this.deps.shellAutoApproval.getAutoApproveMode?.() !== 'always'
+          isAutoApprovableTool(toolName) && this.deps.shellAutoApproval.getAutoApproveMode?.() !== 'always'
             ? await this.deps.shellAutoApproval.resolveAdvisoryForInterruption({
                 interruption,
                 siblings,
@@ -204,6 +209,23 @@ export class ToolApprovalBatchCoordinator {
             usage: input.state.cumulativeUsage,
           }),
         };
+      }
+
+      if (decision === 'approve') {
+        if (supportsFolderSessionRead(toolName)) {
+          const folder = resolveSessionReadFolder(toolName, parseResult.arguments);
+          if (folder && this.deps.sessionAccess) {
+            this.deps.sessionAccess.allowReadFolder(folder);
+          }
+        }
+        if (toolName === 'create_file' || toolName === 'search_replace' || toolName === 'apply_patch') {
+          const targetPaths = extractToolTargetPaths(toolName, parseResult.arguments);
+          if (this.deps.sessionAccess) {
+            for (const p of targetPaths) {
+              this.deps.sessionAccess.allowEditFile(p);
+            }
+          }
+        }
       }
 
       const nextPlan = this.deps.approvalFlow.prepareContinuation(

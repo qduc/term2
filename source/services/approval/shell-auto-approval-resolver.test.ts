@@ -55,7 +55,7 @@ const makeMockAgentClient = (_advisories: Record<string, LLMAdvisory>): any => {
   };
 };
 
-it('non-shell tools return undefined advisory', async () => {
+it('non-auto-approvable tools return undefined advisory', async () => {
   const resolver = new ShellAutoApprovalResolver({
     conversationStore: new ConversationStore(),
     agentClient: makeMockAgentClient({}),
@@ -65,11 +65,44 @@ it('non-shell tools return undefined advisory', async () => {
   });
 
   const advisory = await resolver.resolveAdvisoryForInterruption({
-    interruption: { name: 'glob', arguments: { query: 'foo' } },
+    interruption: { name: 'ask_user', arguments: { query: 'foo' } },
     siblings: [],
   });
 
   expect(advisory).toBe(undefined);
+});
+
+it('resolves advisories for file read and mutation tools', async () => {
+  const chatCalls: string[] = [];
+  const resolver = new ShellAutoApprovalResolver({
+    conversationStore: new ConversationStore(),
+    agentClient: {
+      chat: async (prompt: string) => {
+        chatCalls.push(prompt);
+        return JSON.stringify({
+          results: [
+            { reasoning: 'reads temp log file', riskLevel: 'low', authorization: 'implied', confidence: 'high' },
+          ],
+        });
+      },
+    } as any,
+    logger,
+    settingsService: makeMockSettings('auto') as any,
+    sessionContextService: createSessionContextService() as any,
+  });
+
+  const advisory = await resolver.resolveAdvisoryForInterruption({
+    interruption: { name: 'read_file', callId: 'call-read-1', arguments: JSON.stringify({ path: '/tmp/test.log' }) },
+    siblings: [{ name: 'read_file', callId: 'call-read-1', arguments: JSON.stringify({ path: '/tmp/test.log' }) }],
+  });
+
+  expect(chatCalls.length).toBe(1);
+  expect(chatCalls[0]).toContain('[Request 1: read_file]');
+  expect(chatCalls[0]).toContain('/tmp/test.log');
+  expect(advisory).toBeDefined();
+  expect(advisory?.approved).toBe(true);
+  expect(advisory?.riskLevel).toBe('low');
+  expect(resolver.shouldAutoApprove(advisory)).toBe(true);
 });
 
 it('forwards recorded manual decisions into the auto-approval evaluation', async () => {

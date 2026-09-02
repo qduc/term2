@@ -233,3 +233,137 @@ it('ShellAutoApprovalDecisionPolicy returns prompt when advisory says not approv
   });
   expect(result).toBe('prompt');
 });
+
+it('ShellAutoApprovalDecisionPolicy approves file read and mutation tools with valid LLM advisory', async () => {
+  const client = createMockAgentClient();
+  const conversationStore = new ConversationStore();
+
+  const shellAutoApproval = new ShellAutoApprovalResolver({
+    conversationStore,
+    agentClient: client as any,
+    logger,
+    settingsService: {
+      get: <T>(key: string): T | undefined => (key === 'shell.autoApproveMode' ? ('auto' as unknown as T) : undefined),
+    } as any,
+    sessionContextService: {
+      runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      getContext: () => null,
+    },
+  });
+
+  const policy = new ShellAutoApprovalDecisionPolicy(shellAutoApproval);
+
+  const lowRiskAdvisory = {
+    reasoning: 'reads log file outside workspace',
+    approved: true,
+    model: 'test',
+    source: 'llm' as const,
+    riskLevel: 'low' as const,
+    authorization: 'implied' as const,
+    confidence: 'high' as const,
+  };
+
+  // Group 2: read_file
+  await expect(
+    policy.decide({
+      toolName: 'read_file',
+      argumentsText: '{"path":"/tmp/test.log"}',
+      callId: 'c-read',
+      llmAdvisory: lowRiskAdvisory,
+    }),
+  ).resolves.toBe('approve');
+
+  // Group 2: grep
+  await expect(
+    policy.decide({
+      toolName: 'grep',
+      argumentsText: '{"path":"/tmp","pattern":"foo"}',
+      callId: 'c-grep',
+      llmAdvisory: lowRiskAdvisory,
+    }),
+  ).resolves.toBe('approve');
+
+  // Group 3: create_file
+  await expect(
+    policy.decide({
+      toolName: 'create_file',
+      argumentsText: '{"path":"/tmp/output.txt","content":"hello"}',
+      callId: 'c-create',
+      llmAdvisory: {
+        ...lowRiskAdvisory,
+        reasoning: 'creates temp output file',
+        riskLevel: 'medium',
+      },
+    }),
+  ).resolves.toBe('approve');
+
+  // Group 3: apply_patch
+  await expect(
+    policy.decide({
+      toolName: 'apply_patch',
+      argumentsText: '{"path":"/tmp/config.json","diff":"..."}',
+      callId: 'c-patch',
+      llmAdvisory: {
+        ...lowRiskAdvisory,
+        reasoning: 'patches temp config',
+        riskLevel: 'medium',
+      },
+    }),
+  ).resolves.toBe('approve');
+});
+
+it('ShellAutoApprovalDecisionPolicy rejects ask_user and high-risk file operations', async () => {
+  const client = createMockAgentClient();
+  const conversationStore = new ConversationStore();
+
+  const shellAutoApproval = new ShellAutoApprovalResolver({
+    conversationStore,
+    agentClient: client as any,
+    logger,
+    settingsService: {
+      get: <T>(key: string): T | undefined => (key === 'shell.autoApproveMode' ? ('auto' as unknown as T) : undefined),
+    } as any,
+    sessionContextService: {
+      runWithContext: <T>(_context: any, fn: () => T) => fn(),
+      getContext: () => null,
+    },
+  });
+
+  const policy = new ShellAutoApprovalDecisionPolicy(shellAutoApproval);
+
+  // ask_user is never auto-approved
+  await expect(
+    policy.decide({
+      toolName: 'ask_user',
+      argumentsText: 'question',
+      callId: 'c-ask',
+      llmAdvisory: {
+        reasoning: 'harmless question',
+        approved: true,
+        model: 'test',
+        source: 'llm',
+        riskLevel: 'low',
+        authorization: 'explicit',
+        confidence: 'high',
+      },
+    }),
+  ).resolves.toBe('prompt');
+
+  // high risk read_file is prompted
+  await expect(
+    policy.decide({
+      toolName: 'read_file',
+      argumentsText: '{"path":"~/.ssh/id_rsa"}',
+      callId: 'c-read-ssh',
+      llmAdvisory: {
+        reasoning: 'sensitive credential',
+        approved: false,
+        model: 'test',
+        source: 'llm',
+        riskLevel: 'high',
+        authorization: 'unknown',
+        confidence: 'high',
+      },
+    }),
+  ).resolves.toBe('prompt');
+});

@@ -21,7 +21,14 @@ import { asRecord, getCallIdFromObject, getString, getToolInfoFromInterruption }
 import { selectAgentStreamItems, type AgentStream } from '../agent-stream.js';
 import { createContinuationHandle } from '../../contracts/continuation-handle.js';
 import type { ApprovalFlowCoordinator } from '../approval/approval-flow-coordinator.js';
-import { shouldBypassToolApproval, type ShellAutoApprovalResolver } from '../approval/shell-auto-approval-resolver.js';
+import {
+  shouldBypassToolApproval,
+  isAutoApprovableTool,
+  extractToolTargetPaths,
+  type ShellAutoApprovalResolver,
+} from '../approval/shell-auto-approval-resolver.js';
+import { supportsFolderSessionRead } from '../../contracts/conversation.js';
+import { resolveSessionReadFolder } from '../approval/session-read-grant-target.js';
 import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
 import { parseToolCallArguments } from '../tool-call-arguments.js';
 import { buildPersistedAssistantTurnItems } from './conversation-turn-items.js';
@@ -282,7 +289,7 @@ export async function buildConversationResult(
     }
 
     let llmAdvisory: LLMAdvisory | undefined;
-    if ((toolName === 'shell' || toolName === 'bash') && !forceHumanApproval) {
+    if (isAutoApprovableTool(toolName) && !forceHumanApproval) {
       if (shellAutoApproval.getAutoApproveMode() === 'always') {
         return {
           kind: 'auto_approve',
@@ -297,16 +304,32 @@ export async function buildConversationResult(
       });
 
       if (shellAutoApproval.shouldAutoApprove(llmAdvisory)) {
-        logger.debug('Shell command auto-approved by LLM', {
+        logger.debug('Tool auto-approved by LLM', {
           eventType: 'approval.auto_approved',
           category: 'approval',
           phase: 'approval',
           sessionId,
           callId,
-          command: argumentsText,
+          toolName,
+          arguments: argumentsText,
           model: llmAdvisory!.model,
           reasoning: llmAdvisory!.reasoning,
         });
+
+        if (supportsFolderSessionRead(toolName)) {
+          const folder = resolveSessionReadFolder(toolName, parseResult.arguments);
+          if (folder && sessionAccess) {
+            sessionAccess.allowReadFolder(folder);
+          }
+        }
+        if (toolName === 'create_file' || toolName === 'search_replace' || toolName === 'apply_patch') {
+          const targetPaths = extractToolTargetPaths(toolName, parseResult.arguments);
+          if (sessionAccess) {
+            for (const p of targetPaths) {
+              sessionAccess.allowEditFile(p);
+            }
+          }
+        }
 
         return {
           kind: 'auto_approve',

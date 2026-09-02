@@ -2,13 +2,20 @@
 
 ## Status
 
-**Completed with no product tuning.** The 2026-08-31 study includes a
-naturalistic baseline of seven verified sessions and 79 calls to
-`session_list`, `session_search`, and `session_read`, plus six controlled
-continuation cells across three rollover-versus-resume pairs. All six cells
-passed their deterministic outcome oracle. The controlled evidence did not
-show a repeatable quality failure or budget defect, so no session-tool API,
-default, budget, or routing prompt changed.
+**Open: seek/tail cell is designed and has not been run.**
+The 2026-08-31 study included a naturalistic baseline of seven verified
+sessions and 79 calls, plus six controlled continuation cells across three
+rollover-versus-resume pairs, all passing their oracle — that phase closed
+with no product change. Later follow-ups shipped the Pattern 1 scoping
+repair and added two more naturalistic cohorts. A 2026-09-02 resume pass
+re-ran the analyzer over the full local corpus (30 sessions with session-tool
+calls): there were no new naturalistic sessions after the 02b cohort. The
+seek/tail patterns remain over the repeat bar. The controlled cell is in
+`docs/research/session-retrieval-seek-cell.md` and
+`scripts/experiments/session-retrieval-seek-cell.mjs`. It has not been run,
+and no API/default/prompt change for cursors or tail access has been made.
+Two more patterns (full-UUID hallucination, schema-boundary parameter
+guessing) still have only single-cohort evidence.
 
 **2026-09-02 follow-up: eleven new verified sessions, three repeated defect
 patterns, still no product change.** A second naturalistic cohort of eleven
@@ -27,8 +34,89 @@ corpus now pins to the session's home workspace (the root the session started
 in) instead of the live cwd, and every `session_list`/`search`/`read` result
 surfaces an effective `scope`. The cell reproduced Pattern 1 on the
 pre-repair build and showed the pinned corpus resolving the exact-ID read from
-inside the worktree on the repair build. Cursor handles and corpus-size
-latency remain open candidates; see the decision below.
+inside the worktree on the repair build. At that time cursor handles and
+corpus-size latency were left open; see the 2026-09-02b follow-up and the
+seek/tail cell below.
+
+**2026-09-02 second follow-up: 7 naturalistic sessions after excluding the
+scope-cell seed; cursor-invention and no-tail-pagination cross the repeat
+bar; two new patterns found.** A third cohort
+(`2026-09-01T12:37Z`–`2026-09-02T08:44Z`) is frozen in
+`scripts/experiments/session-retrieval-followup-2026-09-02b-sessions.json`.
+Rebuild with:
+
+```bash
+node scripts/experiments/session-retrieval-log-analysis.mjs \
+  --sessions scripts/experiments/session-retrieval-followup-2026-09-02b-sessions.json \
+  > /tmp/session-retrieval-followup-2026-09-02b-corpus.json
+```
+
+The first draft of this cohort listed 8 IDs / 102 calls. One of those IDs,
+`c9dbd57e`, is the throwaway bench seed from the Pattern 1 scope cell
+(`projectPath` `/home/qduc/.agents/runtime/bench-session-scope-20260902`, one
+`session_search`), not a naturalistic term2 session. It is omitted from the
+manifest. The remaining seven verified sessions have 101 calls: 66
+`session_read`, 34 `session_search`, 1 `session_list`. A 2026-09-02 analyzer
+rerun against that manifest reproduced these aggregates: execution time p90
+8.1 s, max 36.0 s (`62917aa6` `session_search`); result size p50 9,365 chars,
+p90 at the 12,000-char budget cap.
+
+- **Pattern 1 (project scoping) did not reproduce.** No naturalistic session
+  in this cohort entered a worktree before a session-tool call, so the
+  shipped pin-to-home-workspace repair was not exercised by a scope-switch
+  case. The two `not_found` results this round both trace to hallucinated IDs
+  (see below), not scope. The analyzer does not read back the new `scope`
+  field, so this is an absence-of-counterexample, not a direct confirmation
+  the fix still holds under worktree use.
+- **Pattern 2 (invented cursors) repeated.** Post-`79e7fcee` handle invention
+  now has two cohorts: `6f2959a0` (`cursor: "110"`, `"c120"`) in the 2026-09-02
+  follow-up, plus `d4ca2fcb` (`"55"` then `"40"`) and `e1088190` (`"0"`) here.
+  The numeric guesses are not copy-corruption of a returned `c`-prefixed
+  handle; they are offset-like seeks. `"55"` never reached cursor validation
+  because it shipped with `limit: 80` (schema error). Rate in this cohort: 2
+  `invalid_cursor` / 66 reads, plus the one schema-blocked guess.
+- **No-tail-pagination repeated at scale.** `52d99eda` issued 34
+  `session_read` calls: 7 budget-bound pages through 8-record session
+  `85fe816a` (`omitted` 6→0, cursors `c2`→`cy`), then 27 pages through
+  116-record session `e1088190` (`omitted` 112→0). `5e1b21b4` independently
+  walked the same 8-record session in 8 pages. `e1088190` itself opened a
+  341-record session (`07515169`) at `omitted: 339` and stopped. Forward-only
+  `session_read` is the same gap noted in the first follow-up (142-record
+  session, 1 record/page at default budget).
+- **New pattern — full-UUID hallucination.** Session `62917aa6` called
+  `session_read` with `id: "6e995939-34d9-4bed-b908-afa5c95690c9"` and
+  `id: "6cd53b32-0000-0000-0000-000000000000"` — neither is a real session
+  ID. Both look like spliced or half-remembered UUIDs (a correct prefix
+  paired with a fabricated suffix), not a corrupted copy of a prior tool
+  result. The same session also searched a third fabricated ID
+  (`860f4aed-9dcd-4bed-b908-afa5c95690c9`). This is distinct from
+  cursor-invention: here the primary `id` argument itself is fabricated from
+  memory rather than quoted from a prior `session_list`/`session_search`
+  result. Both reads returned a silent `not_found`, indistinguishable from a
+  real miss.
+- **New pattern — schema-boundary parameter guessing.** Twice (`d4ca2fcb`,
+  `e1088190`) the model passed `maxChars` or `limit` above the documented
+  maximum (`maxChars: 20000`/`16000` against the 12,000 cap; `limit: 80`
+  against the 50 cap), producing a Zod validation error before any real
+  result. Both times the model retried in-bounds on the next call, so the
+  cost was one wasted round-trip, not a stuck failure — but the pattern
+  repeated twice in one small cohort.
+
+**2026-09-02 resume pass: no fourth naturalistic cohort.** A full-corpus
+analyzer run (`node scripts/experiments/session-retrieval-log-analysis.mjs`,
+30 sessions, 2026-09-02T09:04Z) found four session-tool sessions outside the
+three committed/frozen manifests: two already-documented paired cells
+(`01eca185`, `26f365a3`), the Pattern 1 repair cell (`0ea493f4`), and the
+live study-continuation session. Nothing new to add. Cursor-invention and
+no-tail-pagination therefore stay over the bar, and the next action is the
+seek/tail control cell rather than more log mining.
+
+**Bar check:** cursor-invention and no-tail-pagination have repeated evidence
+across independent naturalistic sessions. That is enough to *design* one
+controlled cell (see `docs/research/session-retrieval-seek-cell.md`). It is
+not enough to change the API: do not ship a seek/tail/numeric-cursor repair
+from these logs. The two newly observed patterns (ID hallucination,
+schema-boundary guessing) still have only single-cohort evidence.
 
 ## 2026-09-02 follow-up: eleven verified sessions, 2026-08-31 → 2026-09-01
 
@@ -188,8 +276,11 @@ pins to `executionContext.getHomeWorkspace()` and every result carries
 are preserved under the bench dir's `raw-cells/` (local user state, not
 committed).
 
-Cursor handles and latency remain candidates; they need one
-more repeated case or a controlled counterfactual before changing.
+Cursor-invention and no-tail-pagination now have that repeated case; the
+seek/tail control cell is the counterfactual. Corpus-size latency is still
+only a scaling observation (no cell). An in-progress local worktree
+`.worktrees/session-read-pagination-cache` is a list/read snapshot cache,
+not a seek/tail API, and is not part of this study.
 
 The acceptance bar remains the one in
 `docs/plans/session-rollover-handoff.md`: multiple task shapes, both rollover
@@ -200,29 +291,28 @@ any tuning proposal is accepted.
 
 When asked to revisit this study, do not re-derive the method — extend it:
 
-1. Add newly verified sessions to
-   `scripts/experiments/session-retrieval-followup-2026-09-02-sessions.json`
-   (the 2026-09-02 follow-up cohort; the frozen seven-session baseline in
-   `session-retrieval-baseline-sessions.json` stays untouched), verified the
-   same way as the existing sessions: filename == `session_init.id`, a first
-   persisted user message exists, and it matches the provider-traffic index's
+1. If the seek/tail control cell has not been run, run it before mining more
+   logs. Protocol: `docs/research/session-retrieval-seek-cell.md`. Driver:
+   `scripts/experiments/session-retrieval-seek-cell.mjs`. Do not implement a
+   product repair until that control reproduces the page-walk / invented-cursor
+   shape against the current build.
+2. Add newly verified *naturalistic* sessions to a new dated follow-up
+   manifest (do not edit the frozen baseline, 2026-09-02, or 2026-09-02b
+   lists). Exclude live sessions, paired-protocol cells, and bench-project
+   seeds. Verify the same way: filename == `session_init.id`, a first persisted
+   user message exists, and it matches the provider-traffic index's
    `firstUserMessagePreview`.
-2. Rerun `scripts/experiments/session-retrieval-log-analysis.mjs` against the
-   updated manifest and diff the aggregate stats (call-type mix, latency,
+3. Rerun `scripts/experiments/session-retrieval-log-analysis.mjs` against the
+   new manifest and diff the aggregate stats (call-type mix, latency,
    result-size distribution) against the numbers in this file.
-3. Check specifically whether any pattern from "What this baseline cannot
-   establish" or "Insufficient or unstable retrieval" above now repeats across
-   multiple independent sessions (not one-offs): mistyped self-IDs,
-   stale/invalid cursors, redundant searches ahead of an exact-ID read, or
-   broad low-value browsing.
-4. Only if a pattern repeats: design one more controlled paired cell using
-   `docs/research/session-retrieval-paired-protocol.md` as the template
-   (fixed model/effort, rollover run before its resume pair, deterministic
-   oracle, exact-ID verification). Do not propose an API/default/prompt change
-   from naturalistic logs alone — that was the rule that closed this study
-   without a change the first time.
-5. If no repeated pattern turns up, update this Status section with the new
-   sample count and date and leave the tools unchanged again.
+4. Check specifically whether any pattern that is still *single-cohort*
+   (full-UUID hallucination, schema-boundary guessing) or listed under "What
+   this baseline cannot establish" now repeats across independent sessions.
+   Cursor-invention and no-tail-pagination already crossed that bar.
+5. Do not propose an API/default/prompt change from naturalistic logs alone —
+   that was the rule that closed this study without a change the first time,
+   and it still applies to every pattern except Pattern 1 (already repaired
+   via a controlled cell).
 
 ## Method
 

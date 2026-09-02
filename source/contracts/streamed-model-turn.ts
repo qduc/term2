@@ -18,6 +18,12 @@ export interface StreamedModelCodexOptions {
 export type StreamedModelImageReference = string | { readonly id: string };
 export type StreamedModelFileReference = string | { readonly id: string } | { readonly url: string };
 
+export type StreamedModelCustomToolFormat = {
+  readonly type: 'grammar';
+  readonly syntax: 'lark';
+  readonly definition: string;
+};
+
 export type StreamedModelTextPart = { readonly type: 'text'; readonly text: string };
 
 export type StreamedModelMessagePart =
@@ -99,7 +105,7 @@ export interface StreamedModelTurnRequest {
   /** Provider response to continue from when the provider supports server-side history. */
   readonly previousResponseId?: string | null;
   readonly input: readonly StreamedModelTurnInput[];
-  readonly tools: readonly StreamedModelTool[];
+  readonly tools: readonly StreamedModelToolDefinition[];
   /** Test/runtime-local tool objects; provider adapters must not serialize this field. */
   readonly applicationTools?: readonly unknown[];
   readonly toolChoice?: 'auto' | 'required' | 'none' | { readonly name: string };
@@ -148,11 +154,18 @@ export type StreamedModelTurnInput =
       readonly text: string;
       readonly providerMetadata?: StreamedModelProviderOptions;
     }
-  | { readonly type: 'tool_call'; readonly id: string; readonly name: string; readonly arguments: string }
+  | {
+      readonly type: 'tool_call';
+      readonly id: string;
+      readonly name: string;
+      readonly arguments: string;
+      readonly toolType?: 'function' | 'custom';
+    }
   | {
       readonly type: 'tool_result';
       readonly id: string;
       readonly output: string | readonly StreamedModelToolResultPart[];
+      readonly toolType?: 'function' | 'custom';
     }
   | {
       /**
@@ -168,9 +181,20 @@ export type StreamedModelTurnInput =
 export interface StreamedModelTool {
   readonly name: string;
   readonly description?: string;
+}
+
+export type StreamedModelFunctionTool = StreamedModelTool & {
+  readonly type?: 'function';
   readonly parameters: Readonly<Record<string, unknown>>;
   readonly strict?: boolean;
-}
+};
+
+export type StreamedModelCustomTool = StreamedModelTool & {
+  readonly type: 'custom';
+  readonly format: StreamedModelCustomToolFormat;
+};
+
+export type StreamedModelToolDefinition = StreamedModelFunctionTool | StreamedModelCustomTool;
 
 export type StreamedModelTurnEvent =
   | { readonly type: 'text_delta'; readonly text: string }
@@ -193,7 +217,13 @@ export type StreamedModelTurnEvent =
    */
   | { readonly type: 'context_compaction_started'; readonly provider: string }
   | { readonly type: 'context_compaction_completed'; readonly provider: string; readonly durationMs: number }
-  | { readonly type: 'tool_call'; readonly id: string; readonly name: string; readonly arguments: string }
+  | {
+      readonly type: 'tool_call';
+      readonly id: string;
+      readonly name: string;
+      readonly arguments: string;
+      readonly toolType?: 'function' | 'custom';
+    }
   | {
       readonly type: 'completion';
       readonly responseId: string;

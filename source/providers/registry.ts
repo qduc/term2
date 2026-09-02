@@ -62,7 +62,7 @@ export interface ProviderDefinition {
      */
     promptCacheKeyPlacement?: 'responses-extra-body' | 'codex';
     usesStrictToolSchema?: boolean;
-    nativePatchModelPrefixes?: string[];
+    nativePatchModelPrefixes?: readonly string[];
   };
 
   /**

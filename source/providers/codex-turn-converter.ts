@@ -40,14 +40,14 @@ export function toCodexResponsesItem(item: StreamedModelTurnInput): unknown {
     }
     case 'tool_call':
       return {
-        type: 'function_call',
+        type: item.toolType === 'custom' ? 'custom_tool_call' : 'function_call',
         call_id: requireNonEmptyString(item.id, 'tool call id'),
         name: requireNonEmptyString(item.name, 'tool call name'),
-        arguments: item.arguments,
+        ...(item.toolType === 'custom' ? { input: item.arguments } : { arguments: item.arguments }),
       };
     case 'tool_result':
       return {
-        type: 'function_call_output',
+        type: item.toolType === 'custom' ? 'custom_tool_call_output' : 'function_call_output',
         call_id: requireNonEmptyString(item.id, 'tool result id'),
         output: toCodexToolResultOutput(item.output),
       };

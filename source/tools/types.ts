@@ -2,6 +2,7 @@ import type { z, ZodTypeAny } from 'zod';
 import type { ApprovalPresentationCapability } from './tool-capabilities.js';
 import type { DeniedReadMetadata, PostExecuteDecision } from '../contracts/conversation.js';
 import type { Term2HookScope } from '../services/hooks/hook-contracts.js';
+import type { StreamedModelCustomToolFormat } from '../contracts/streamed-model-turn.js';
 
 /**
  * The one physical tool-execution seam.  It is observational: callbacks do
@@ -109,6 +110,13 @@ export interface SchemaToolDefinition<TSchema extends ZodTypeAny> {
   /** Optional provider-facing schema when a strict transport cannot express the runtime contract. */
   strictParameters?: ZodTypeAny;
   argumentParsing?: 'repair' | 'strict';
+  /** Provider-facing freeform tool declaration for transports that support it. */
+  modelTool?: {
+    readonly type: 'custom';
+    readonly format: StreamedModelCustomToolFormat;
+  };
+  /** Converts a provider's raw freeform tool input into the executor's params. */
+  parseModelArguments?: (input: string) => unknown;
   approvalPresentation?: ApprovalPresentationCapability;
   needsApproval: (params: z.infer<TSchema>, context?: unknown) => Promise<boolean> | boolean;
   execute: (params: z.infer<TSchema>, context?: unknown, details?: unknown) => Promise<unknown> | unknown;
@@ -164,6 +172,11 @@ export interface AnyToolDefinition {
   terminateAfterExecution?: boolean | ((result: unknown) => boolean);
   strictParameters?: ZodTypeAny;
   argumentParsing?: 'repair' | 'strict';
+  modelTool?: {
+    readonly type: 'custom';
+    readonly format: StreamedModelCustomToolFormat;
+  };
+  parseModelArguments?: (input: string) => unknown;
   approvalPresentation?: ApprovalPresentationCapability;
   needsApproval(params: unknown, context?: unknown): Promise<boolean> | boolean;
   execute(params: unknown, context?: unknown, details?: unknown): Promise<unknown> | unknown;

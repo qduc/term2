@@ -193,7 +193,8 @@ function isToolArgumentDeltaType(type: string): boolean {
 function isToolCallStart(event: unknown, type: string): boolean {
   if (type !== 'response.output_item.added' || !event || typeof event !== 'object') return false;
   const record = event as { output_item?: { type?: unknown }; item?: { type?: unknown } };
-  return (record.output_item ?? record.item)?.type === 'function_call';
+  const itemType = (record.output_item ?? record.item)?.type;
+  return itemType === 'function_call' || itemType === 'custom_tool_call';
 }
 
 function readResponseId(event: unknown): string | undefined {

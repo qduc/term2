@@ -394,6 +394,9 @@ function toToolResultPart(
 }
 
 function toTool(tool: StreamedModelTurnRequest['tools'][number]): LanguageModelV3FunctionTool {
+  if (tool.type === 'custom') {
+    throw new Error(`AI SDK transport does not support custom tool '${tool.name}'.`);
+  }
   return {
     type: 'function',
     name: tool.name,

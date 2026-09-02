@@ -400,7 +400,12 @@ it.sequential('buildAgent advertises apply_patch as operations-only to strict-sc
 
   expect(tool.parameters.required).toEqual(['operations']);
   expect(Object.keys(tool.parameters.properties)).toEqual(['operations']);
-  expect(Object.keys(tool.parameters.properties.operations.items.properties).sort()).toEqual(['diff', 'path', 'type']);
+  expect(Object.keys(tool.parameters.properties.operations.items.properties).sort()).toEqual([
+    'diff',
+    'moveTo',
+    'path',
+    'type',
+  ]);
 });
 
 it.sequential('buildAgent excludes custom apply_patch when native patch tool is enabled', () => {
@@ -418,7 +423,13 @@ it.sequential('buildAgent includes native applyPatchTool for supported models', 
 
   const result = buildAgent({ model: 'gpt-5.1' }, deps);
 
-  expect(result.agent.tools.some((tool: any) => tool.name === 'apply_patch')).toBe(true);
+  const applyPatch = result.agent.tools.find((tool: any) => tool.name === 'apply_patch') as any;
+  expect(applyPatch).toBeTruthy();
+  expect(applyPatch.modelTool).toMatchObject({ type: 'custom', format: { type: 'grammar', syntax: 'lark' } });
+  expect(applyPatch.modelTool.format.definition).toContain('start: begin_patch hunk+ end_patch');
+  expect(applyPatch.parseModelArguments('*** Begin Patch\n*** Delete File: old.txt\n*** End Patch')).toEqual({
+    operations: [{ type: 'delete_file', path: 'old.txt', diff: '' }],
+  });
   expect(logger.debugCalls.some(([message]) => message === 'Using native applyPatchTool from SDK')).toBe(true);
 });
 

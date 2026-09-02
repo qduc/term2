@@ -61,6 +61,35 @@ function toCodexToolChoice(choice: unknown): unknown {
   throw new Error('Unsupported Codex tool choice.');
 }
 
+function toCodexResponsesTool(tool: StreamedModelTurnRequest['tools'][number]): Record<string, unknown> {
+  if (tool.type === 'custom') {
+    return {
+      type: 'custom',
+      name: tool.name,
+      ...(tool.description ? { description: tool.description } : {}),
+      format: tool.format,
+    };
+  }
+  return {
+    type: 'function',
+    name: tool.name,
+    ...(tool.description ? { description: tool.description } : {}),
+    parameters: tool.parameters,
+    ...(tool.strict !== undefined ? { strict: tool.strict } : {}),
+  };
+}
+
+function toCodexToolChoiceForTools(
+  choice: StreamedModelTurnRequest['toolChoice'],
+  tools: readonly StreamedModelTurnRequest['tools'][number][],
+): unknown {
+  if (choice && typeof choice === 'object' && typeof choice.name === 'string') {
+    const selected = tools.find((tool) => tool.name === choice.name);
+    return { type: selected?.type === 'custom' ? 'custom' : 'function', name: choice.name };
+  }
+  return toCodexToolChoice(choice);
+}
+
 const TERMINAL_RESPONSE_EVENT_TYPES = new Set([
   'response.completed',
   'response.failed',
@@ -152,8 +181,10 @@ export class CodexResponsesTransport {
         input: toCodexResponsesInput(request.input),
         stream,
         ...(request.instructions !== undefined ? { instructions: request.instructions } : {}),
-        ...(request.tools.length > 0 ? { tools: request.tools.map((tool) => ({ type: 'function', ...tool })) } : {}),
-        ...(request.toolChoice !== undefined ? { tool_choice: toCodexToolChoice(request.toolChoice) } : {}),
+        ...(request.tools.length > 0 ? { tools: request.tools.map(toCodexResponsesTool) } : {}),
+        ...(request.toolChoice !== undefined
+          ? { tool_choice: toCodexToolChoiceForTools(request.toolChoice, request.tools) }
+          : {}),
         ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
         ...(request.topP !== undefined ? { top_p: request.topP } : {}),
         ...(request.frequencyPenalty !== undefined ? { frequency_penalty: request.frequencyPenalty } : {}),
@@ -394,7 +425,10 @@ async function* convertCodexRawStream(source: AsyncIterable<any>): AsyncIterable
       }
     } else if (event?.type === 'response.output_item.added' && event.output_item?.type === 'compaction') {
       yield { type: 'context_compaction_started', provider: OPENAI_RESPONSES_OPAQUE_TAG };
-    } else if (event?.type === 'response.output_item.added' && event.output_item?.type === 'function_call') {
+    } else if (
+      event?.type === 'response.output_item.added' &&
+      (event.output_item?.type === 'function_call' || event.output_item?.type === 'custom_tool_call')
+    ) {
       const index = typeof event.output_index === 'number' ? event.output_index : event.output_item.id ?? 0;
       if (typeof event.output_item.name === 'string') toolNamesByIndex.set(index, event.output_item.name);
       toolArgumentLengthsByIndex.set(index, 0);
@@ -410,7 +444,10 @@ async function* convertCodexRawStream(source: AsyncIterable<any>): AsyncIterable
       toolArgumentLengthsByIndex.set(index, argumentCharCount);
       const toolName = toolNamesByIndex.get(index);
       yield { type: 'tool_call_streaming_delta', ...(toolName ? { toolName } : {}), argumentCharCount };
-    } else if (event?.type === 'response.output_item.done' && event.item?.type === 'function_call') {
+    } else if (
+      event?.type === 'response.output_item.done' &&
+      (event.item?.type === 'function_call' || event.item?.type === 'custom_tool_call')
+    ) {
       const call = toCodexToolCallOutput(event.item);
       output.push(call);
       pendingToolCalls.push(call);
@@ -462,12 +499,25 @@ function toCodexToolCallOutput(item: any): Extract<StreamedModelTurnEvent, { typ
   const id = codexString(item?.call_id) ?? codexString(item?.id);
   const name = codexString(item?.name);
   if (!id || !name) throw new Error('Codex function call output is missing its call id or name.');
-  return { type: 'tool_call', id, name, arguments: typeof item.arguments === 'string' ? item.arguments : '{}' };
+  return {
+    type: 'tool_call',
+    id,
+    name,
+    arguments:
+      item.type === 'custom_tool_call'
+        ? typeof item.input === 'string'
+          ? item.input
+          : ''
+        : typeof item.arguments === 'string'
+        ? item.arguments
+        : '{}',
+    ...(item.type === 'custom_tool_call' ? { toolType: 'custom' as const } : {}),
+  };
 }
 
 function toCodexOutputItem(item: any): any {
   if (!item || typeof item !== 'object') throw new Error('Unsupported Codex response output item.');
-  if (item.type === 'function_call') return toCodexToolCallOutput(item);
+  if (item.type === 'function_call' || item.type === 'custom_tool_call') return toCodexToolCallOutput(item);
   if (item.type === 'message') {
     const content = Array.isArray(item.content) ? item.content : [];
     return {
@@ -767,6 +817,7 @@ const CODEX_SERVER_HISTORY_TOOL_RESULT_TYPES = new Set([
   'computer_call_output',
   'computer_call_result',
   'apply_patch_call_output',
+  'custom_tool_call_output',
 ]);
 
 type CodexServerHistoryItem = {
@@ -791,7 +842,7 @@ const normalizeCodexServerHistoryItem = (item: unknown): CodexServerHistoryItem 
     type,
     itemId,
     callId,
-    isFunctionCall: type === 'function_call' || type === 'tool_call',
+    isFunctionCall: type === 'function_call' || type === 'tool_call' || type === 'custom_tool_call',
     isToolResult:
       type === 'tool_result' || (typeof type === 'string' && CODEX_SERVER_HISTORY_TOOL_RESULT_TYPES.has(type)),
   };
@@ -2074,7 +2125,7 @@ export async function* wrapCodexStream(source: AsyncIterable<any>, logger?: Diag
     }
 
     if (
-      type === 'response.function_call_arguments.done' &&
+      (type === 'response.function_call_arguments.done' || type === 'response.custom_tool_call_input.done') &&
       typeof event.call_id === 'string' &&
       typeof event.item_id === 'string'
     ) {
@@ -2090,7 +2141,7 @@ export async function* wrapCodexStream(source: AsyncIterable<any>, logger?: Diag
       // convertToOutputItem picks up the correct identifier and the continuation
       // request sends the right call_id.
       if (
-        itemRecord?.type === 'function_call' &&
+        (itemRecord?.type === 'function_call' || itemRecord?.type === 'custom_tool_call') &&
         !stringValue(itemRecord?.call_id) &&
         typeof itemRecord?.id === 'string'
       ) {

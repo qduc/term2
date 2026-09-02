@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { readFile, writeFile, mkdir } from 'fs/promises';
+import { readFile, writeFile, mkdir, unlink } from 'fs/promises';
 import path from 'path';
 import { applyDiff } from '../../utils/apply-diff.js';
 import { isProtectedHookPath, isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../utils.js';
@@ -22,6 +22,7 @@ import { TOOL_NAME_APPLY_PATCH } from '../tool-names.js';
 import { boundToolResultText, truncateToUtf8Bytes } from '../../utils/output/bound-tool-result.js';
 import { healPatchOperation } from './patch-healing.js';
 import { resolveAncillaryModelTier } from '../../services/agent-runtime/model-resolver.js';
+import { parseUpstreamApplyPatch } from './upstream-apply-patch.js';
 
 /**
  * Error thrown when patch validation fails (malformed diff)
@@ -34,15 +35,17 @@ export class PatchValidationError extends Error {
 }
 
 const applyPatchOperationSchema = z.object({
-  type: z.enum(['create_file', 'update_file']).describe('Operation type: create_file or update_file.'),
+  type: z.enum(['create_file', 'update_file', 'delete_file']).describe('Operation type.'),
   path: z.string().min(1, 'File path cannot be empty').describe('The absolute or relative path to the file.'),
+  moveTo: z.string().min(1, 'Move destination cannot be empty').optional().describe('Optional destination for a move.'),
   diff: z.string().describe('Headerless unified diff content for create/update operations.'),
 });
 
 const applyPatchParametersSchema = z
   .object({
-    type: z.enum(['create_file', 'update_file']).optional(),
+    type: z.enum(['create_file', 'update_file', 'delete_file']).optional(),
     path: z.string().min(1, 'File path cannot be empty').optional(),
+    moveTo: z.string().min(1, 'Move destination cannot be empty').optional(),
     diff: z.string().describe('Unified diff content for create/update operations').optional(),
     operations: z.array(applyPatchOperationSchema).min(1).optional(),
   })
@@ -84,16 +87,18 @@ type ApplyPatchOutput = {
 };
 
 function getApplyPatchOperations(params: ApplyPatchToolParams): ApplyPatchOperation[] {
-  if (params.operations) {
-    return params.operations;
-  }
-  return [
+  const operations = params.operations ?? [
     {
       type: params.type!,
       path: params.path!,
+      ...(params.moveTo ? { moveTo: params.moveTo } : {}),
       diff: params.diff!,
     },
   ];
+  if (operations.length === 1 && operations[0].diff.trimStart().startsWith('*** Begin Patch')) {
+    return parseUpstreamApplyPatch(operations[0].diff).operations;
+  }
+  return operations;
 }
 
 export const formatApplyPatchCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
@@ -110,8 +115,23 @@ export const formatApplyPatchCommandMessage: FormatCommandMessage = (item, index
     item?.toolCallId ??
     item?.id;
   const argsFromMap = callId ? toolCallArgumentsById.get(callId) : undefined;
-  const normalizedArgs =
-    normalizeToolArguments(item?.arguments ?? argsFromMap ?? rawItem?.arguments ?? rawItem?.operation) ?? {};
+  const rawArguments =
+    item?.arguments ?? item?.input ?? argsFromMap ?? rawItem?.arguments ?? rawItem?.input ?? rawItem?.operation;
+  let normalizedArgs = normalizeToolArguments(rawArguments) ?? {};
+  if (
+    (!normalizedArgs ||
+      typeof normalizedArgs !== 'object' ||
+      Array.isArray(normalizedArgs) ||
+      Object.keys(normalizedArgs).length === 0) &&
+    typeof rawArguments === 'string' &&
+    rawArguments.trimStart().startsWith('*** Begin Patch')
+  ) {
+    try {
+      normalizedArgs = parseUpstreamApplyPatch(rawArguments);
+    } catch {
+      normalizedArgs = {};
+    }
+  }
   const isNativePatchResult = rawItem?.type === 'apply_patch_call_output' || item?.type === 'apply_patch_call_output';
   const rawStatus = rawItem?.status ?? item?.status;
 
@@ -238,7 +258,9 @@ export function createApplyPatchToolDefinition(deps: {
         const sshService = executionContext?.getSSHService();
         const isRemote = executionContext?.isRemote() && !!sshService;
         const operations = getApplyPatchOperations(params);
-        const resolvedOperations: Array<ApplyPatchOperation & { targetPath: string; insideCwd: boolean }> = [];
+        const resolvedOperations: Array<
+          ApplyPatchOperation & { targetPath: string; insideCwd: boolean; moveTargetPath?: string }
+        > = [];
 
         // Resolve and check every target before validation. In particular, do
         // not read an update target until all batch paths have passed the
@@ -279,12 +301,33 @@ export function createApplyPatchToolDefinition(deps: {
             }
           }
 
-          resolvedOperations.push({ ...operation, targetPath, insideCwd });
+          let moveTargetPath: string | undefined;
+          if (operation.moveTo) {
+            try {
+              moveTargetPath = resolveWorkspacePath(operation.moveTo, workspaceRoot);
+            } catch {
+              return true;
+            }
+            if (!sessionAccess?.allowsEdit(moveTargetPath, workspaceRoot)) {
+              const moveTargetInside =
+                moveTargetPath.startsWith(workspaceRoot + path.sep) ||
+                moveTargetPath === SANDBOX_TEMP_DIR ||
+                moveTargetPath.startsWith(SANDBOX_TEMP_DIR + path.sep);
+              if (!moveTargetInside || isProtectedHookPath(moveTargetPath, workspaceRoot)) return true;
+            }
+          }
+
+          resolvedOperations.push({
+            ...operation,
+            targetPath,
+            insideCwd,
+            ...(moveTargetPath ? { moveTargetPath } : {}),
+          });
         }
 
-        for (const { type, path: filePath, diff, targetPath, insideCwd } of resolvedOperations) {
+        for (const { type, path: filePath, diff, targetPath, insideCwd, moveTo } of resolvedOperations) {
           // Validate diff syntax by attempting a dry-run (before approval)
-          if (type === 'create_file' || type === 'update_file') {
+          if ((type === 'create_file' || type === 'update_file') && !(type === 'update_file' && moveTo && !diff)) {
             try {
               if (type === 'create_file') {
                 // Dry-run: apply diff to empty content for new file
@@ -334,17 +377,7 @@ export function createApplyPatchToolDefinition(deps: {
             }
           }
 
-          // Deletions ALWAYS require approval per policy
-          // if (type === 'delete_file') {
-          //     loggingService.security('apply_patch needsApproval: delete requires approval', {
-          //         mode,
-          //         type,
-          //         path: filePath,
-          //     });
-          //     return true;
-          // }
-
-          if (!insideCwd || (type !== 'create_file' && type !== 'update_file')) {
+          if (!insideCwd || type === 'delete_file' || Boolean(moveTo)) {
             loggingService.security('apply_patch needsApproval: approval required', {
               type,
               path: filePath,
@@ -388,7 +421,7 @@ export function createApplyPatchToolDefinition(deps: {
         return mkdir(p, { recursive: true });
       };
 
-      const runOperation = async ({ type, path: filePath, diff }: ApplyPatchOperation) => {
+      const runOperation = async ({ type, path: filePath, diff, moveTo }: ApplyPatchOperation) => {
         // Standard modes enforce the workspace boundary in `needsApproval`;
         // YOLO deliberately reaches execute without a permission prompt.
         const targetPath = resolveWorkspacePath(filePath, cwd, { allowOutsideWorkspace: true });
@@ -470,7 +503,7 @@ export function createApplyPatchToolDefinition(deps: {
               let patched: string | undefined;
               let usedHealing = false;
               try {
-                patched = applyDiff(original, diff);
+                patched = diff ? applyDiff(original, diff) : original;
               } catch (err: any) {
                 const errMessage = err?.message || String(err);
                 const isContextError = /^Invalid (?:EOF )?Context \d+:/.test(errMessage);
@@ -527,7 +560,15 @@ export function createApplyPatchToolDefinition(deps: {
                   };
                 }
               }
-              await writeFileFn(targetPath, patched);
+              if (moveTo) {
+                if (isRemote) throw new Error('Move operations are not supported for remote workspaces.');
+                const destinationPath = resolveWorkspacePath(moveTo, cwd, { allowOutsideWorkspace: true });
+                await mkdirFn(path.dirname(destinationPath));
+                await writeFileFn(destinationPath, patched);
+                await unlink(targetPath);
+              } else {
+                await writeFileFn(targetPath, patched);
+              }
 
               if (enableFileLogging) {
                 try {
@@ -536,6 +577,7 @@ export function createApplyPatchToolDefinition(deps: {
                     originalLength: original.length,
                     patchedLength: patched.length,
                     healed: usedHealing,
+                    ...(moveTo ? { moveTo } : {}),
                   });
                 } catch (_error) {
                   // Ignore logging errors to prevent operation failure
@@ -546,7 +588,24 @@ export function createApplyPatchToolDefinition(deps: {
                 success: true,
                 operation: 'update_file',
                 path: filePath,
-                message: usedHealing ? `Updated ${filePath} (healed)` : `Updated ${filePath}`,
+                message: moveTo
+                  ? `Updated ${filePath} and moved to ${moveTo}`
+                  : usedHealing
+                  ? `Updated ${filePath} (healed)`
+                  : `Updated ${filePath}`,
+              };
+            });
+          }
+
+          case 'delete_file': {
+            return withFileLock(targetPath, async () => {
+              if (isRemote) throw new Error('Delete operations are not supported for remote workspaces.');
+              await unlink(targetPath);
+              return {
+                success: true,
+                operation: 'delete_file',
+                path: filePath,
+                message: `Deleted ${filePath}`,
               };
             });
           }

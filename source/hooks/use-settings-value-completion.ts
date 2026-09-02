@@ -100,6 +100,21 @@ export const useSettingsValueCompletion = (
   const { selectedIndex, setSelectedIndex, moveUp, moveDown, moveHome, moveEnd, pageUp, pageDown, getSelectedItem } =
     useSelection(filteredEntries);
 
+  // Controller-owned value menus do not call the legacy `open()` initializer.
+  // Initialize them from the active setting so `/effort` starts on the value
+  // that will actually be used, rather than always highlighting the first
+  // suggestion.
+  useEffect(() => {
+    if (!isControllerOpen || !resolvedSettingKey) return;
+    try {
+      const currentValue = settingsService.getDynamic(resolvedSettingKey);
+      const currentValueIndex = filteredEntries.findIndex((item) => item.value === String(currentValue));
+      setSelectedIndex(currentValueIndex >= 0 ? currentValueIndex : 0);
+    } catch {
+      setSelectedIndex(0);
+    }
+  }, [isControllerOpen, controllerFrame?.id, resolvedSettingKey, filteredEntries, settingsService, setSelectedIndex]);
+
   const open = useCallback(
     (key: string, valueStartIndex: number) => {
       setSettingKey(key);

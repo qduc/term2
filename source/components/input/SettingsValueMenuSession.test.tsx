@@ -18,6 +18,14 @@ const settingsCommand: SlashCommand = {
   action: () => {},
 };
 
+const effortCommand: SlashCommand = {
+  name: 'effort',
+  description: 'Reasoning effort',
+  expectsArgs: true,
+  completion: { type: 'setting-value', trigger: '/effort ', settingKey: 'agent.reasoningEffort' },
+  action: () => {},
+};
+
 const ControllerHost = ({
   controller,
   settingsService,
@@ -39,11 +47,10 @@ const ControllerHost = ({
 
 const buildController = (
   intentHost: (event: { intentRequest: any }) => Promise<IntentResult> | IntentResult | void,
+  enabledRuleIds = ['settings', 'settings-value-child', 'settings-model'],
 ) => {
   const controller = new MenuControllerImpl({ intentHost });
-  controller.setTriggerRegistry(
-    createDefaultTriggerRegistry([settingsCommand], ['settings', 'settings-value-child', 'settings-model']),
-  );
+  controller.setTriggerRegistry(createDefaultTriggerRegistry([settingsCommand, effortCommand], enabledRuleIds));
   return controller;
 };
 
@@ -96,6 +103,27 @@ it('accepting a typed numeric value issues an apply-settings intent and closes t
   // restores the bare settings prefix.
   expect(controller.getSnapshot().stack).toHaveLength(0);
   expect(controller.getSnapshot().editor).toMatchObject({ text: SETTINGS_TRIGGER, cursor: SETTINGS_TRIGGER.length });
+});
+
+it('preselects the current thinking effort in the value menu', async () => {
+  const controller = buildController(vi.fn(), ['direct-setting-value']);
+  const settingsService = createMockSettingsService({ 'agent.reasoningEffort': 'high' });
+
+  const { lastFrame } = await renderInAct(
+    <InputProvider controller={controller}>
+      <ControllerHost controller={controller} settingsService={settingsService} />
+    </InputProvider>,
+  );
+
+  await act(async () => {
+    controller.applyEditorEdit({ type: 'set-text', text: '/effort ', cursor: 8 });
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  const frame = lastFrame();
+  expect(frame).toContain('▶ high');
+  expect(frame).not.toContain('▶ default');
 });
 
 it('a field-error IntentResult keeps the frame open and reports the error without reopening or reconstructing it', async () => {

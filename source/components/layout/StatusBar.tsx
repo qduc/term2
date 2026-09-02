@@ -58,6 +58,14 @@ function formatStatusBarTokens(tokens: number): string {
 // conservative doubling for content that really can be double-width.
 const STATUS_BAR_NARROW_GLYPHS = new Set([GLYPH_SEPARATOR, '↑', '↓', '·', GLYPH_WARNING, GLYPH_SELECTED, '…']);
 
+const PROFILE_MODE_LABELS: Record<string, string> = {
+  'builtin:standard': 'Standard',
+  'builtin:lite': 'Lite',
+  'builtin:plan': 'Plan',
+  'builtin:mentor': 'Mentor',
+  'builtin:orchestrator': 'Orchestrator',
+};
+
 function statusBarTextWidth(value: string): number {
   return Array.from(value).reduce(
     (columns, char) => columns + (STATUS_BAR_NARROW_GLYPHS.has(char) ? 1 : terminalTextWidth(char)),
@@ -270,10 +278,8 @@ const StatusBar: FC<StatusBarProps> = ({
   // segments is narrower than the terminal itself.
   const budget = Math.max(1, columns - 2);
 
-  const mentorMode = useSetting(settingsService, 'app.mentorMode') ?? false;
-  const liteMode = useSetting(settingsService, 'app.liteMode') ?? false;
-  const planMode = useSetting(settingsService, 'app.planMode') ?? false;
-  const orchestratorMode = useSetting(settingsService, 'app.orchestratorMode') ?? false;
+  const activeProfileId = useSetting(settingsService, 'app.activeProfileId') ?? 'builtin:standard';
+  const mentorMode = activeProfileId === 'builtin:mentor';
   const model = useSetting(settingsService, 'agent.model');
   const smartModel = useSetting(settingsService, 'agent.smartModel');
   const legacyMentorModel = useSetting(settingsService, 'agent.mentorModel');
@@ -482,13 +488,7 @@ const StatusBar: FC<StatusBarProps> = ({
     return `Static blocked: ${sender}/${status} (${staticCommitBlocker.dynamicMessageCount} msgs, ${chars}k chars)`;
   })();
 
-  const modeLabels = [
-    ...(liteMode ? ['Lite'] : []),
-    ...(mentorMode ? ['Mentor'] : []),
-    ...(planMode ? ['Plan'] : []),
-    ...(orchestratorMode ? ['Orchestrator'] : []),
-  ];
-  const modeLabel = modeLabels.length > 0 ? modeLabels.join(' · ') : 'Standard';
+  const modeLabel = PROFILE_MODE_LABELS[String(activeProfileId)] ?? 'Standard';
   // 'always' (YOLO) overrides the sandbox label so YOLO mode is always visible,
   // rendered in red below. When the sandbox is on it still confines commands,
   // but every approval is auto-granted, so the mode must not hide behind

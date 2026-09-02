@@ -11,6 +11,7 @@ import {
   type LargeUncachedInputDecision,
 } from '../large-uncached-input-guard.js';
 import { getProvider } from '../../providers/index.js';
+import { getProfileLabel } from '../profiles/labels.js';
 import { getMethod } from '../interruption-info.js';
 import { normalizeUserTurn, type UserTurn } from '../../types/user-turn.js';
 import {
@@ -391,11 +392,7 @@ export class SessionInputPlanner {
 
   #getTrafficMode(): string {
     if (!this.#settingsService) return 'standard';
-    if (this.#settingsService.get('app.orchestratorMode')) return 'orchestrator';
-    if (this.#settingsService.get('app.liteMode')) return 'lite';
-    if (this.#settingsService.get('app.planMode')) return 'plan';
-    if (this.#settingsService.get('app.mentorMode')) return 'mentor';
-    return 'standard';
+    return getProfileLabel(String(this.#settingsService.get('app.activeProfileId')));
   }
 
   #getModelForGuard(): string | null {

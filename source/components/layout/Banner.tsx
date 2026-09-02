@@ -21,6 +21,14 @@ interface BannerProps {
 
 const MAX_MODEL_LABEL = 34;
 
+const PROFILE_BASE_BADGES: Record<string, ModeBadge> = {
+  'builtin:standard': 'STANDARD',
+  'builtin:lite': 'LITE',
+  'builtin:plan': 'PLAN',
+  'builtin:mentor': 'STANDARD',
+  'builtin:orchestrator': 'ORCHESTRATOR',
+};
+
 const truncateModel = (name: string): string =>
   name.length > MAX_MODEL_LABEL ? `${name.slice(0, MAX_MODEL_LABEL - 1)}…` : name;
 
@@ -32,10 +40,7 @@ const Badge: FC<{ mode: ModeBadge }> = ({ mode }) => (
 );
 
 const Banner: FC<BannerProps> = ({ settingsService }) => {
-  const mentorMode = useSetting(settingsService, 'app.mentorMode') ?? false;
-  const liteMode = useSetting(settingsService, 'app.liteMode') ?? false;
-  const planMode = useSetting(settingsService, 'app.planMode') ?? false;
-  const orchestratorMode = useSetting(settingsService, 'app.orchestratorMode') ?? false;
+  const activeProfileId = useSetting(settingsService, 'app.activeProfileId') ?? 'builtin:standard';
   const model = useSetting(settingsService, 'agent.model');
   const smartModel = useSetting(settingsService, 'agent.smartModel');
   const legacyMentorModel = useSetting(settingsService, 'agent.mentorModel');
@@ -47,7 +52,8 @@ const Banner: FC<BannerProps> = ({ settingsService }) => {
   const providerDef = getProvider(providerKey);
   const providerLabel = providerDef?.label || providerKey;
 
-  const baseMode: ModeBadge = orchestratorMode ? 'ORCHESTRATOR' : planMode ? 'PLAN' : liteMode ? 'LITE' : 'STANDARD';
+  const baseMode = PROFILE_BASE_BADGES[String(activeProfileId)] ?? 'STANDARD';
+  const mentorMode = activeProfileId === 'builtin:mentor';
 
   // Two borderless lines, not a bordered block. The banner is the first thing
   // on screen every session; a full box around it competes with the conversation

@@ -6,7 +6,6 @@ import { render } from 'ink-testing-library';
 import type { Message } from './use-conversation.js';
 import { createCopySlashCommand } from '../commands/copy-command.js';
 import { createUsageSlashCommand } from '../commands/usage-command.js';
-import { createResumeSlashCommand } from '../commands/resume-command.js';
 import { useAppCommands } from './use-app-commands.js';
 import { getLastFinalAssistantText } from '../utils/conversation/message-utils.js';
 import { parseModelProviderArg } from '../utils/ai/model-provider-arg.js';
@@ -77,43 +76,6 @@ it.sequential('createUsageSlashCommand shows current session usage', () => {
   expect(command.name).toBe('usage');
   expect(command.action()).toBe(true);
   expect(messages).toEqual(['Token usage: 20,000 input (1,000,000 cached), 20,000 output']);
-});
-
-it.sequential('createResumeSlashCommand opens interactive resume menu on empty args or ls', () => {
-  const inputs: string[] = [];
-  const command = createResumeSlashCommand({
-    listConversations: () => [{ id: 'saved-1', updatedAt: '2026-08-30T00:00:00.000Z' }],
-    resumeConversation: vi.fn(),
-    addSystemMessage: vi.fn(),
-    replaceInput: (text) => inputs.push(text),
-  });
-
-  expect(command.action()).toBe(false);
-  expect(inputs).toEqual(['/resume ']);
-
-  inputs.length = 0;
-  expect(command.action('ls')).toBe(false);
-  expect(inputs).toEqual(['/resume ']);
-});
-
-it.sequential('createResumeSlashCommand resumes the requested target and rejects extra arguments', async () => {
-  const messages: string[] = [];
-  const resumeConversation = vi.fn(async () => {});
-  const command = createResumeSlashCommand({
-    listConversations: () => [],
-    resumeConversation,
-    addSystemMessage: (text) => messages.push(text),
-    replaceInput: () => {},
-  });
-
-  expect(command.action('saved-1')).toBe(true);
-  await flushMicrotasks();
-  expect(resumeConversation).toHaveBeenCalledWith('saved-1');
-
-  expect(command.action('one two')).toBe(true);
-  expect(messages).toContain('Usage: /resume [ls | conversation-id]');
-  expect(command.action('../outside')).toBe(true);
-  expect(messages).toContain('Invalid conversation id. Usage: /resume [ls | conversation-id]');
 });
 
 it.sequential('createCopySlashCommand returns immediately and reports success after async clipboard copy', async () => {

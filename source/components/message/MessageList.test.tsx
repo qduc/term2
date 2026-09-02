@@ -1071,6 +1071,109 @@ it.sequential('MessageList preserves order when earlier content is static and he
   expect(contentIdx < headingIdx).toBe(true);
 });
 
+// Bug: a message that changes content *after* it has already been committed
+// to <Static> (e.g. the event handler replacing a message in place at its
+// existing array index) used to be pushed into the dynamic region as a
+// "correction" duplicate, while the stale original stayed frozen in <Static>
+// forever. Because <Static> is write-once and append-only, that duplicate
+// rendered *after* whatever chronologically-later content (a tool call) had
+// since also been committed to <Static> — visually swapping a tool call in
+// front of text that should have preceded it. An extra render with no data
+// change (e.g. a terminal resize) never revisits the stale frozen copy, so
+// only the *next* real message would eventually catch the correction up,
+// matching the reported "resize collapses it into the right order" symptom
+// for content that isn't actually reordered underneath, just misrendered.
+it.sequential(
+  'MessageList does not let a post-commit correction render after later, already-static content',
+  async () => {
+    const renderer = await renderInAct(
+      <MessageList
+        messages={[
+          { id: 'botA', sender: 'bot', status: 'finalized', text: 'ORIGINAL_TEXT_A' },
+          { id: 'cmd1', sender: 'command', status: 'pending', command: 'CMD1', toolName: 'shell', output: '' },
+        ]}
+      />,
+    );
+
+    // cmd1 completes: botA is no longer a toolLeadIn, so it commits to
+    // <Static> for the first time (hasActiveMessages is true while cmd1 is
+    // still the open trailing run).
+    await rerenderInAct(
+      renderer,
+      <MessageList
+        messages={[
+          { id: 'botA', sender: 'bot', status: 'finalized', text: 'ORIGINAL_TEXT_A' },
+          {
+            id: 'cmd1',
+            sender: 'command',
+            status: 'completed',
+            success: true,
+            command: 'CMD1',
+            toolName: 'shell',
+            output: 'ok',
+          },
+        ]}
+      />,
+    );
+
+    // A new bot message closes the trailing run, so cmd1 also commits to
+    // <Static> now, chronologically after botA.
+    await rerenderInAct(
+      renderer,
+      <MessageList
+        messages={[
+          { id: 'botA', sender: 'bot', status: 'finalized', text: 'ORIGINAL_TEXT_A' },
+          {
+            id: 'cmd1',
+            sender: 'command',
+            status: 'completed',
+            success: true,
+            command: 'CMD1',
+            toolName: 'shell',
+            output: 'ok',
+          },
+          { id: 'botC', sender: 'bot', status: 'finalized', text: 'CLOSING_TEXT_C' },
+        ]}
+      />,
+    );
+
+    // botA is corrected in place (same id, same array position) well after
+    // cmd1 and botC have already frozen into <Static>.
+    await rerenderInAct(
+      renderer,
+      <MessageList
+        messages={[
+          { id: 'botA', sender: 'bot', status: 'finalized', text: 'CORRECTED_TEXT_A' },
+          {
+            id: 'cmd1',
+            sender: 'command',
+            status: 'completed',
+            success: true,
+            command: 'CMD1',
+            toolName: 'shell',
+            output: 'ok',
+          },
+          { id: 'botC', sender: 'bot', status: 'finalized', text: 'CLOSING_TEXT_C' },
+        ]}
+      />,
+    );
+
+    const output = stripAnsi(renderer.lastFrame() ?? '');
+
+    // The correction must never render after cmd1/botC — that would put a
+    // tool call visually before text that chronologically precedes it.
+    expect(output.includes('CORRECTED_TEXT_A')).toBe(false);
+    const originalIdx = output.indexOf('ORIGINAL_TEXT_A');
+    const cmdIdx = output.indexOf('CMD1');
+    const closingIdx = output.indexOf('CLOSING_TEXT_C');
+    expect(originalIdx !== -1).toBe(true);
+    expect(cmdIdx !== -1).toBe(true);
+    expect(closingIdx !== -1).toBe(true);
+    expect(originalIdx < cmdIdx).toBe(true);
+    expect(cmdIdx < closingIdx).toBe(true);
+  },
+);
+
 it.sequential(
   'MessageList keeps completed subagent updates dynamic while parallel subagents are still running',
   async () => {

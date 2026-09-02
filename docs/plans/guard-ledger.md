@@ -771,19 +771,21 @@ red proof before changing containment behavior. A total deadline is explicitly
 rejected here because both requests were actively producing frames and long
 active model work is legitimate.
 
-**Recurrence 2026-09-02 (background explorer, still under cap).** Full write-up:
-[`docs/research/subagent-explorer-luna-tool-arg-runaway.md`](../research/subagent-explorer-luna-tool-arg-runaway.md).
-Parent session `8713abd8`, child run `cardinal-tor-206`, aborted envelope
-`2026-09-02/09-02-22_8713a/09-07-38.560Z_03ccb.json`. Same Luna WebSocket
-shape: 549,205ms, 29,957 events, max gap 3,874ms, cancelled by the parent.
-The new counters now exist: `toolArgumentDeltaFrames` 29,942,
-`toolArgumentDeltaCharacters` 43,157, `toolCallStartFrames` 1. That is under
-the 100,000-character tool-argument caps, so `GenerationGuard` still must not
-abort from these numbers. What is new is packaging: `get_subagent_status`
-showed `waiting (provider), quiet` with `lastTool: read_file` and no
-`streamingTool`, because `ExecutionSubagentRunner` drops
-`tool_call_streaming_delta` events that omit `toolName`. Containment
-disposition is unchanged. The liveness hole is a separate, smaller repair.
+**Local corpus 2026-09-01 → 2026-09-02: eight Luna WS drips, still under cap.**
+Full table: [`docs/research/subagent-explorer-luna-tool-arg-runaway.md`](../research/subagent-explorer-luna-tool-arg-runaway.md).
+The original pair (`73e65e60`, `64fff2f8`) was not the last. After the argument
+counters shipped, the same `gpt-5.6-luna` `OpenAIResponsesWSModel` shape
+recurred five more times on 2026-09-01 (sessions `72a7c0c2`, `a6632777`, and
+three in `8cea3578`) ending in WS 1006, then again on 2026-09-02 as background
+explorer `cardinal-tor-206` (parent `8713abd8`, envelope
+`09-07-38.560Z_03ccb.json`) ending in parent cancel. Recorded argument growth
+ranges 8,034–83,447 characters; none crossed 100,000, so `GenerationGuard`
+still must not abort from these numbers. Max gaps stayed 1.4–5.5s (not idle).
+What is new on 2026-09-02 is packaging: `get_subagent_status` showed
+`waiting (provider), quiet` with `lastTool: read_file` and no `streamingTool`,
+because `ExecutionSubagentRunner` drops `tool_call_streaming_delta` events that
+omit `toolName`. Containment disposition is unchanged. The liveness hole is a
+separate, smaller repair.
 
 Red proof for the observability gap:
 

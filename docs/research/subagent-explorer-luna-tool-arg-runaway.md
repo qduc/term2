@@ -119,23 +119,46 @@ requiring a name would not necessarily go quiet.
 `pending:` on `get_subagent_status` is also easy to misread: it is tools since
 the last assistant text turn, not currently executing tools.
 
-## Relation to the 2026-09-01 Luna incidents
+## This is a repeated Luna WebSocket class, not a first sighting
 
-This is the recurrence `docs/plans/guard-ledger.md` asked for under "Luna
-streamed tool-argument runaway: evidence gap, observability only".
+A scan of local `provider-traffic/` for aborted Codex envelopes with long
+active tool-category streams found **eight** `gpt-5.6-luna`
+`OpenAIResponsesWSModel` requests in 26 hours. All have `text: 0`, one
+function-call start (when the counter exists), max inter-frame gap ≤ 5.5s,
+and no assembled payload. They end either by client `cancelled` or by WS
+`1006` before a terminal event.
 
-Those two root requests (`73e65e60`, `64fff2f8`) ran 454s and 785s with 25,165
-and 43,503 tool-category frames, max gaps ~2s, and ended only on client
-cancel. They lacked `toolArgumentDeltaCharacters`. This request supplies it:
-43,157 characters, under the existing 100,000-character
-`maxToolArgumentCharacters` / `maxCumulativeToolArgumentCharacters` caps in
-`DEFAULT_GENERATION_GUARD_OPTIONS`. Containment behaved as designed. A total
-request deadline remains rejected for the same reason as 2026-09-01: the
-stream was not idle.
+| when | session | file | duration | tool frames | arg chars | end |
+| --- | --- | --- | ---: | ---: | ---: | --- |
+| 2026-09-01 07:38Z | `9bff1663` | `07-38-25.017Z_73e65.json` | 455s | 25,165† | (pre-counter) | cancelled |
+| 2026-09-01 07:49Z | `9bff1663` | `07-49-14.191Z_64fff.json` | 786s | 43,503† | (pre-counter) | cancelled |
+| 2026-09-01 18:14Z | `72a7c0c2` | `18-14-04.333Z_71080.json` | 850s | 47,155 | 83,447 | 1006 |
+| 2026-09-01 19:23Z | `a6632777` | `19-23-06.784Z_5cee4.json` | 742s | 40,898 | 82,294 | 1006 |
+| 2026-09-01 20:26Z | `8cea3578` | `20-26-45.793Z_582f4.json` | 123s | 6,007 | 8,034 | 1006 |
+| 2026-09-01 20:29Z | `8cea3578` | `20-29-34.071Z_20b23.json` | 166s | 8,694 | 22,507 | 1006 |
+| 2026-09-01 20:33Z | `8cea3578` | `20-33-11.005Z_b6544.json` | 1,078s | 58,078 | 60,615 | 1006 |
+| 2026-09-02 09:07Z | `8713abd8` / explorer `cardinal-tor-206` | `09-07-38.560Z_03ccb.json` | 549s | 29,942 | 43,157 | cancelled |
 
-What is new is the *background-subagent* packaging: the parent’s only
-mid-run API (`get_subagent_status` / check-in liveness) reported a quiet
-wait while 29,942 argument frames were in flight.
+† Pre-`AbortedStreamRecorder` argument counters: the 07:38Z / 07:49Z rows are
+the original guard-ledger pair (`73e65e60`, `64fff2f8`); `tool` category count
+is the only growth signal those envelopes retained.
+
+`8cea3578` dripped **three times in 25 minutes**. `72a7c0c2` / `a6632777` /
+`8cea3578` are DeepSeek-parent sessions whose Codex/Luna requests are nested
+under the parent `sessionId` the same way today's explorer is nested under
+Grok. The generator is Luna-on-WS, not a particular parent model.
+
+Highest recorded `toolArgumentDeltaCharacters` in this set is 83,447 — still
+under the 100,000-character `maxToolArgumentCharacters` /
+`maxCumulativeToolArgumentCharacters` caps in `DEFAULT_GENERATION_GUARD_OPTIONS`.
+Containment therefore still does not fire. A total request deadline remains
+rejected for the same reason as 2026-09-01: none of these streams were idle.
+
+What is new in the 2026-09-02 row is packaging: the parent's only mid-run API
+(`get_subagent_status` / check-in liveness) reported a quiet wait while the
+child's 29,942 argument frames were in flight. The 2026-09-01 rows were
+visible as long Codex requests on the root (or as 1006 recoveries), not as a
+false "provider stall" on a background explorer.
 
 ## Harm
 
@@ -145,16 +168,17 @@ wait while 29,942 argument frames were in flight.
 - Check-ins and `waiting (provider), quiet` look like a stalled provider.
   They are indistinguishable from a true hang without opening the aborted
   traffic envelope.
-- The 100k character cap does not bound this drip: 43k characters at ~1.4
-  chars/frame can run for many minutes without tripping it.
+- The 100k character cap does not bound this drip. Local captures reach
+  83k characters over ~14 minutes at ~1.4–1.8 chars/frame and still never
+  trip it. Eight Luna WS envelopes in 26 hours ended only by cancel or 1006.
 
 ## What not to change from this report alone
 
 - Do not add a wall-clock request deadline. The 2026-09-01 ledger entry
   rejected that because long *active* Luna work is legitimate; this
   recurrence is still active (max gap 3.9s).
-- Do not lower the 100k tool-argument cap from these numbers. 43,157 did not
-  cross it.
+- Do not lower the 100k tool-argument cap from these numbers. The largest
+  local capture is 83,447 characters and still did not cross it.
 - Do not treat explorer `node` blocking or `ask_orchestrator` as the defect.
 
 ## Candidate repairs (not implemented)

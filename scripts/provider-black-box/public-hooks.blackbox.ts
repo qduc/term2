@@ -105,9 +105,10 @@ describe('public hooks through the packaged CLI', () => {
         cols: 120,
         rows: 40,
       });
-      await child.waitForIdleInput();
+      const idle = await child.waitForIdleInput();
       await writePtyTextAndSubmit(child, 'fixture prompt');
       await child.waitForVisibleOutput('hello');
+      await child.waitForIdleInput({ after: idle });
       await writePtyTextAndSubmit(child, '/quit');
       await child.waitForExit();
 

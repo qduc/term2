@@ -5,8 +5,10 @@ import { afterEach, expect, it } from 'vitest';
 import {
   HARNESS_IDLE_ENV,
   publishHarnessInputState,
+  readHarnessComposerState,
   readHarnessIdleGeneration,
   resetHarnessInputIdleForTests,
+  waitForHarnessComposerValue,
   waitForHarnessIdleGeneration,
 } from './harness-input-idle.js';
 
@@ -52,6 +54,41 @@ it('does not increment while the composer stays idle', async () => {
   publishHarnessInputState({ owner: 'input', processing: false });
   publishHarnessInputState({ owner: 'input', processing: false });
   expect(readHarnessIdleGeneration(path)).toBe(1);
+});
+
+it('publishes composer revisions while the input owner stays idle', async () => {
+  const path = await idlePath();
+  publishHarnessInputState({ owner: 'input', processing: false, inputValue: '' });
+  const initial = readHarnessComposerState(path);
+
+  publishHarnessInputState({ owner: 'input', processing: false, inputValue: 'fixture prompt' });
+
+  expect(readHarnessIdleGeneration(path)).toBe(1);
+  expect(readHarnessComposerState(path)).toEqual({ revision: (initial?.revision ?? 0) + 1, value: 'fixture prompt' });
+});
+
+it('waits for the application to acknowledge an exact composer value', async () => {
+  const path = await idlePath();
+  publishHarnessInputState({ owner: 'input', processing: false, inputValue: '' });
+  const revision = readHarnessComposerState(path)?.revision ?? 0;
+  const pending = waitForHarnessComposerValue(path, 'fixture prompt', { afterRevision: revision, timeoutMs: 1_000 });
+
+  publishHarnessInputState({ owner: 'input', processing: false, inputValue: 'fixture prompt' });
+
+  await expect(pending).resolves.toEqual({ revision: revision + 1, value: 'fixture prompt' });
+});
+
+it('acknowledges a composer value even when it opens another input surface', async () => {
+  const path = await idlePath();
+  publishHarnessInputState({ owner: 'input', processing: false, inputValue: '' });
+  const initial = readHarnessComposerState(path);
+
+  publishHarnessInputState({ owner: 'menu', processing: false, inputValue: 'fixture prompt' });
+
+  expect(readHarnessComposerState(path)).toEqual({
+    revision: (initial?.revision ?? 0) + 1,
+    value: 'fixture prompt',
+  });
 });
 
 it('increments only on a return to idle after a busy owner', async () => {

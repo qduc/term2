@@ -1,24 +1,10 @@
-import { it, expect, beforeEach, afterEach } from 'vitest';
+import { it, expect } from 'vitest';
 import {
-  TestSubagentManager,
   createMockLogger,
   createMockSettings,
   createSessionContextService,
-  createMockExecutionContext,
-  createTempDir,
-  removeTempDir,
-  registerTestProvider,
-  wrapResultAsAgentStream,
-  wrapErrorAsAgentStream,
-  getAgentTool,
-  ROLE_MENTOR,
-  ROLE_EXPLORER,
-  ROLE_WORKER,
 } from './test-helpers/subagent-manager-fixtures.js';
 import { SubagentManager as RealSubagentManager } from './subagent-manager.js';
-import { ModelBehaviorError } from '../../contracts/model-errors.js';
-import { MAX_SUBAGENT_MODEL_RETRIES } from '../retry/conversation-retry-policy.js';
-import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 
 it('run() returns failed result when createClient factory is not provided', async () => {

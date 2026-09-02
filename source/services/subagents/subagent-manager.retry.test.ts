@@ -10,37 +10,126 @@ import {
   registerTestProvider,
   wrapResultAsAgentStream,
   wrapErrorAsAgentStream,
-  getAgentTool,
-  ROLE_MENTOR,
-  ROLE_EXPLORER,
-  ROLE_WORKER,
 } from './test-helpers/subagent-manager-fixtures.js';
-import { SubagentManager as RealSubagentManager } from './subagent-manager.js';
 import { ModelBehaviorError } from '../../contracts/model-errors.js';
 import { MAX_SUBAGENT_MODEL_RETRIES } from '../retry/conversation-retry-policy.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 
-it('run() retries on recoverable model error (hallucinated tool) and succeeds on second attempt', async () => {
+interface RetryCase {
+  title: string;
+  task: string;
+  /** Error delivered when an attempt should fail; null means the attempt succeeds. */
+  error: () => Error | null;
+  /** How the model delivers the error: as a wrapped agent stream or a direct throw. */
+  delivery: 'wrapped' | 'direct';
+  /** Attempt number after which the stream succeeds; Infinity means every attempt fails. */
+  succeedsAfter: number;
+  expected: {
+    status: 'completed' | 'failed' | 'cancelled';
+    runCount: number;
+    retryEvents: number;
+    finalText?: string;
+    errorIncludes?: string;
+  };
+  /** Detail asserted on the first retry event, when one is expected. */
+  retryEvent?: { toolName: string; retryType: string; attempt: number; maxRetries: number };
+  /** Assert the retry warn log fired. */
+  expectRetryWarnLog?: boolean;
+}
+
+const hallucinatedToolError = () => new ModelBehaviorError('Tool bash not found in agent Explorer.');
+const unrelatedError = () => new ModelBehaviorError('something else unrelated to tools');
+const abortError = () => {
+  const err = new Error('The operation was aborted');
+  (err as any).name = 'AbortError';
+  return err;
+};
+
+// One table per error class: the manager/run/event plumbing is shared while
+// each row keeps its own delivery style, recovery point, and expectation so no
+// production branch (wrapped event vs direct throw, recoverable vs exhaustion,
+// non-recoverable, abort) is collapsed into another.
+const retryCases: RetryCase[] = [
+  {
+    title: 'retries a wrapped hallucinated-tool error and succeeds on the next attempt',
+    task: 'find all files',
+    error: hallucinatedToolError,
+    delivery: 'wrapped',
+    succeedsAfter: 2,
+    expected: { status: 'completed', runCount: 2, retryEvents: 1, finalText: 'Success on retry' },
+    retryEvent: { toolName: 'bash', retryType: 'hallucination', attempt: 1, maxRetries: MAX_SUBAGENT_MODEL_RETRIES },
+    expectRetryWarnLog: true,
+  },
+  {
+    title: 'exhausts retries on repeated wrapped hallucinated-tool errors',
+    task: 'find all files',
+    error: hallucinatedToolError,
+    delivery: 'wrapped',
+    succeedsAfter: Infinity,
+    expected: {
+      status: 'failed',
+      runCount: 1 + MAX_SUBAGENT_MODEL_RETRIES,
+      retryEvents: MAX_SUBAGENT_MODEL_RETRIES,
+      errorIncludes: 'bash',
+    },
+  },
+  {
+    title: 'does not retry a wrapped non-recoverable model error',
+    task: 'find all files',
+    error: unrelatedError,
+    delivery: 'wrapped',
+    succeedsAfter: Infinity,
+    expected: { status: 'failed', runCount: 1, retryEvents: 0 },
+  },
+  {
+    title: 'reports cancelled without retry on an AbortError',
+    task: 'find all files',
+    error: abortError,
+    delivery: 'direct',
+    succeedsAfter: Infinity,
+    expected: { status: 'cancelled', runCount: 1, retryEvents: 0 },
+  },
+  {
+    title: 'exhausts retries on a directly-thrown hallucinated-tool error',
+    task: 'search for something',
+    error: hallucinatedToolError,
+    delivery: 'direct',
+    succeedsAfter: Infinity,
+    expected: {
+      status: 'failed',
+      runCount: 1 + MAX_SUBAGENT_MODEL_RETRIES,
+      retryEvents: MAX_SUBAGENT_MODEL_RETRIES,
+      errorIncludes: 'bash',
+    },
+  },
+];
+
+it.each(retryCases)('$title', async (c) => {
   let runCount = 0;
   const events: any[] = [];
   const logWarnCalls: any[] = [];
 
   const providerId = registerTestProvider({
-    label: 'Mock Retry Recoverable Provider',
+    label: `Mock Retry Provider ${c.title}`,
     createStreamedModel: () =>
       ({
         stream: async function* () {
           runCount++;
-          if (runCount === 1) {
-            yield* wrapErrorAsAgentStream(new ModelBehaviorError('Tool bash not found in agent Explorer.'));
+          if (runCount < c.succeedsAfter) {
+            const error = c.error();
+            if (error === null) throw new Error('scenario error: no error factory for failing attempt');
+            if (c.delivery === 'wrapped') {
+              yield* wrapErrorAsAgentStream(error);
+            } else {
+              throw error;
+            }
           }
-          const result = {
+          yield* wrapResultAsAgentStream({
             status: 'completed',
             finalOutput: 'Success on retry',
             history: [],
             messages: [],
-          };
-          yield* wrapResultAsAgentStream(result);
+          });
         },
       } as any),
     fetchModels: async () => [{ id: 'mock-model' }],
@@ -62,160 +151,32 @@ it('run() retries on recoverable model error (hallucinated tool) and succeeds on
     onEvent: (event: ConversationEvent) => events.push(event),
   });
 
-  const result = await manager.run({ role: 'explorer', task: 'find all files' });
+  const result = await manager.run({ role: 'explorer', task: c.task });
 
-  expect(result.status).toBe('completed');
-  expect(runCount).toBe(2);
-  const retryEvent = events.find((e) => e.type === 'retry');
-  expect(retryEvent).toBeTruthy();
-  expect(retryEvent.toolName).toBe('bash');
-  expect(retryEvent.retryType).toBe('hallucination');
-  expect(retryEvent.attempt).toBe(1);
-  expect(retryEvent.maxRetries).toBe(MAX_SUBAGENT_MODEL_RETRIES);
-
-  const retryLog = logWarnCalls.find((c) => c.meta?.eventType === 'retry.model_error');
-  expect(retryLog).toBeTruthy();
-});
-
-it('run() exhausts retries on repeated recoverable model errors and returns failed result', async () => {
-  let runCount = 0;
-  const events: any[] = [];
-
-  const providerId = registerTestProvider({
-    label: 'Mock Retry Exhaust Provider',
-    createStreamedModel: () =>
-      ({
-        stream: async function* () {
-          runCount++;
-          yield* wrapErrorAsAgentStream(new ModelBehaviorError('Tool bash not found in agent Explorer.'));
-        },
-      } as any),
-    fetchModels: async () => [{ id: 'mock-model' }],
-  });
-
-  const manager = new TestSubagentManager({
-    logger: createMockLogger(),
-    settings: createMockSettings({
-      'agent.model': 'mock-model',
-      'agent.provider': providerId,
-      'agent.retryAttempts': 2,
-    }),
-    sessionContextService: createSessionContextService() as any,
-    onEvent: (event: ConversationEvent) => events.push(event),
-  });
-
-  const result = await manager.run({ role: 'explorer', task: 'find all files' });
-
-  expect(result.status).toBe('failed');
-  expect(result.error).toBeTruthy();
-  expect(result.error!.includes('bash')).toBe(true);
-  // Should have tried: initial + MAX_SUBAGENT_MODEL_RETRIES retries.
-  expect(runCount).toBe(1 + MAX_SUBAGENT_MODEL_RETRIES);
+  expect(result.status).toBe(c.expected.status);
+  if (c.expected.finalText !== undefined) {
+    expect(result.finalText).toBe(c.expected.finalText);
+  }
+  if (c.expected.errorIncludes !== undefined) {
+    expect(result.error).toBeTruthy();
+    expect(result.error!.includes(c.expected.errorIncludes)).toBe(true);
+  }
+  expect(runCount).toBe(c.expected.runCount);
   const retryEvents = events.filter((e) => e.type === 'retry');
-  expect(retryEvents.length, 'should emit one retry event per retry attempt').toBe(MAX_SUBAGENT_MODEL_RETRIES);
-});
+  expect(retryEvents.length).toBe(c.expected.retryEvents);
 
-it('run() does not retry on non-recoverable ModelBehaviorError', async () => {
-  let runCount = 0;
-  const events: any[] = [];
-
-  const providerId = registerTestProvider({
-    label: 'Mock No Retry Non-Recoverable Provider',
-    createStreamedModel: () =>
-      ({
-        stream: async function* () {
-          runCount++;
-          throw new ModelBehaviorError('something else unrelated to tools');
-        },
-      } as any),
-    fetchModels: async () => [{ id: 'mock-model' }],
-  });
-
-  const manager = new TestSubagentManager({
-    logger: createMockLogger(),
-    settings: createMockSettings({
-      'agent.model': 'mock-model',
-      'agent.provider': providerId,
-      'agent.retryAttempts': 2,
-    }),
-    sessionContextService: createSessionContextService() as any,
-    onEvent: (event: ConversationEvent) => events.push(event),
-  });
-
-  const result = await manager.run({ role: 'explorer', task: 'find all files' });
-
-  expect(result.status).toBe('failed');
-  expect(runCount, 'no retry should be attempted').toBe(1);
-  const retryEvents = events.filter((e) => e.type === 'retry');
-  expect(retryEvents.length).toBe(0);
-});
-
-it('run() aborted subagent returns cancelled status without model-error retry', async () => {
-  const events: any[] = [];
-
-  const providerId = registerTestProvider({
-    label: 'Mock Abort No Retry Provider',
-    createStreamedModel: () =>
-      ({
-        stream: async function* () {
-          const err = new Error('The operation was aborted');
-          (err as any).name = 'AbortError';
-          throw err;
-        },
-      } as any),
-    fetchModels: async () => [{ id: 'mock-model' }],
-  });
-
-  const manager = new TestSubagentManager({
-    logger: createMockLogger(),
-    settings: createMockSettings({
-      'agent.model': 'mock-model',
-      'agent.provider': providerId,
-      'agent.retryAttempts': 2,
-    }),
-    sessionContextService: createSessionContextService() as any,
-    onEvent: (event: ConversationEvent) => events.push(event),
-  });
-
-  const result = await manager.run({ role: 'explorer', task: 'find all files' });
-
-  expect(result.status).toBe('cancelled');
-  const retryEvents = events.filter((e) => e.type === 'retry');
-  expect(retryEvents.length, 'abort errors should not trigger model-error retries').toBe(0);
-});
-
-it('run() retries a direct streamed read-only subagent after a recoverable model error', async () => {
-  let runCount = 0;
-  const events: any[] = [];
-
-  const providerId = registerTestProvider({
-    label: 'Mock Explorer Read Then Crash Provider',
-    createStreamedModel: () => ({
-      async *stream() {
-        runCount++;
-        throw new ModelBehaviorError('Tool bash not found in agent Explorer.');
-      },
-    }),
-    fetchModels: async () => [{ id: 'mock-model' }],
-  });
-
-  const manager = new TestSubagentManager({
-    logger: createMockLogger(),
-    settings: createMockSettings({
-      'agent.model': 'mock-model',
-      'agent.provider': providerId,
-      'agent.retryAttempts': 2,
-    }),
-    sessionContextService: createSessionContextService() as any,
-    onEvent: (event: ConversationEvent) => events.push(event),
-  });
-
-  const result = await manager.run({ role: 'explorer', task: 'search for something' });
-
-  expect(result.status).toBe('failed');
-  expect(result.error?.includes('bash')).toBe(true);
-  expect(runCount).toBe(1 + MAX_SUBAGENT_MODEL_RETRIES);
-  expect(events.filter((event) => event.type === 'retry').length).toBe(MAX_SUBAGENT_MODEL_RETRIES);
+  if (c.retryEvent) {
+    const retryEvent = retryEvents[0];
+    expect(retryEvent).toBeTruthy();
+    expect(retryEvent.toolName).toBe(c.retryEvent.toolName);
+    expect(retryEvent.retryType).toBe(c.retryEvent.retryType);
+    expect(retryEvent.attempt).toBe(c.retryEvent.attempt);
+    expect(retryEvent.maxRetries).toBe(c.retryEvent.maxRetries);
+  }
+  if (c.expectRetryWarnLog) {
+    const retryLog = logWarnCalls.find((log) => log.meta?.eventType === 'retry.model_error');
+    expect(retryLog).toBeTruthy();
+  }
 });
 
 describe('run() aborted subagent', () => {

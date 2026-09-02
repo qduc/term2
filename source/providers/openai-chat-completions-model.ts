@@ -404,6 +404,44 @@ const isOwnOpaqueTag = (tag: unknown, providerId: string): boolean =>
 const opaqueMarkerOf = (item: any): { provider: unknown } | undefined =>
   item.providerOpaque ?? (item.type === 'provider_opaque' ? { provider: item.provider } : undefined);
 
+/** Build the chat-completions image_url for an application image reference. */
+function toChatImageUrl(image: unknown): string | undefined {
+  if (typeof image === 'string') return image;
+  if (!image || typeof image !== 'object') return undefined;
+  const record = image as { url?: unknown; id?: unknown; data?: unknown; mediaType?: unknown };
+  if (typeof record.url === 'string') return record.url;
+  if (typeof record.id === 'string') return record.id;
+  if (typeof record.data === 'string' || record.data instanceof Uint8Array) {
+    const data = typeof record.data === 'string' ? record.data : Buffer.from(record.data).toString('base64');
+    const mediaType = typeof record.mediaType === 'string' ? record.mediaType : 'application/octet-stream';
+    return `data:${mediaType};base64,${data}`;
+  }
+  return undefined;
+}
+
+/** A single chat-completions content part produced from an application part. */
+type ChatContentPart = { type: 'image_url'; image_url: { url: string | undefined } } | { type: 'text'; text: string };
+
+/** Convert one application content part to a chat-completions content part. */
+function toChatContentPart(part: any): ChatContentPart {
+  if (typeof part === 'string') return { type: 'text', text: part };
+  if (part?.type === 'image') {
+    return { type: 'image_url', image_url: { url: toChatImageUrl(part.image) } };
+  }
+  return { type: 'text', text: part?.text ?? '' };
+}
+
+/**
+ * Serialize a tool-result output for the chat-completions wire. Multimodal
+ * content-part arrays (read_file images) become content parts so the image
+ * reaches the model; a plain string or a single structured value stays text.
+ */
+function toChatToolResultContent(output: unknown): string | ChatContentPart[] {
+  if (typeof output === 'string') return output;
+  if (Array.isArray(output)) return output.map((part: any) => toChatContentPart(part));
+  return JSON.stringify(output);
+}
+
 function openAICompatibleMessages(input: StreamedModelTurnRequest['input'], providerId = 'openai-compatible'): any[] {
   const messages: any[] = [];
   // Depending on whether history came straight from the run loop or persistence,
@@ -539,11 +577,10 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input'], prov
       continue;
     }
     if (item.type === 'tool_result') {
-      messages.push({
-        role: 'tool',
-        tool_call_id: item.id,
-        content: typeof item.output === 'string' ? item.output : JSON.stringify(item.output),
-      });
+      // A multimodal content-part array (read_file images) becomes content
+      // parts so the image reaches the model; JSON-stringifying the array
+      // would deliver "[{...},{...}]" instead of the image.
+      messages.push({ role: 'tool', tool_call_id: item.id, content: toChatToolResultContent(item.output) });
     }
   }
 

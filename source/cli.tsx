@@ -45,7 +45,11 @@ import { killLiveShellChildren } from './utils/shell/execute-shell.js';
 import { createConversationLogWriter, LockConflictError } from './services/logging/conversation-log-writer.js';
 import { AGENT_AFFECTING_SETTINGS } from './services/logging/conversation-log-events.js';
 import { installPlanModeInterceptor } from './services/plan-mode-interceptor.js';
-import { LITE_PROFILE_ID, profileIdFromLegacyMode } from './services/profiles/legacy-adapter.js';
+import {
+  legacyModeFromProfileId,
+  LITE_PROFILE_ID,
+  profileIdFromLegacyMode,
+} from './services/profiles/legacy-adapter.js';
 import { createOwnedSessionClientFactory } from './services/session/session-client-factory.js';
 import os from 'os';
 import fs from 'fs';
@@ -898,17 +902,14 @@ function buildInitMeta(id: string, createdAt: string, rolloverFrom?: string) {
   const cwd = executionContext?.getCwd();
   const persistedRolloverFrom =
     rolloverFrom ?? (resumedConversation?.id === id ? resumedConversation.rolloverFrom : undefined);
+  const activeProfileId = settings.get('app.activeProfileId');
   return {
     id,
     createdAt,
     ...(cwd ? { projectPath: cwd } : {}),
     ...(sshInfo?.host ? { sshHost: sshInfo.host } : {}),
-    appMode: {
-      mentorMode: settings.get('app.mentorMode') ?? false,
-      liteMode: settings.get('app.liteMode') ?? false,
-      planMode: settings.get('app.planMode') ?? false,
-      orchestratorMode: settings.get('app.orchestratorMode') ?? false,
-    },
+    activeProfileId,
+    appMode: legacyModeFromProfileId(activeProfileId),
     ...(settings.get('agent.model') ? { model: settings.get('agent.model') } : {}),
     ...(settings.get('agent.provider') ? { provider: settings.get('agent.provider') } : {}),
     ...(settings.get('agent.reasoningEffort') ? { reasoningEffort: settings.get('agent.reasoningEffort') } : {}),

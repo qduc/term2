@@ -53,6 +53,7 @@ export interface SessionInitEvent {
   createdAt: string;
   projectPath?: string;
   sshHost?: string;
+  activeProfileId?: string;
   appMode?: SavedAppMode;
   model?: string;
   provider?: string;
@@ -399,4 +400,5 @@ export const AGENT_AFFECTING_SETTINGS = new Set<string>([
   'app.liteMode',
   'app.planMode',
   'app.orchestratorMode',
+  'app.activeProfileId',
 ]);

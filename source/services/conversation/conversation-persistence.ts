@@ -590,6 +590,7 @@ export interface ConversationListEntry {
   projectPath?: string;
   sshHost?: string;
   firstUserMessage?: string;
+  activeProfileId?: string;
   appMode?: SavedAppMode;
   model?: string;
   provider?: string;
@@ -656,6 +657,7 @@ export function listConversations(expectedProjectPath?: string, expectedSshHost?
           ...(init.projectPath ? { projectPath: init.projectPath } : {}),
           ...(init.sshHost ? { sshHost: init.sshHost } : {}),
           firstUserMessage,
+          activeProfileId: init.activeProfileId,
           appMode: init.appMode,
           model: init.model,
           provider: init.provider,

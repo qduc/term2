@@ -578,7 +578,8 @@ const App: FC<AppProps> = ({
         }
         conversationService.resetWithNewId(restored.id);
 
-        const profileId = restored.appMode ? profileIdFromLegacyMode(restored.appMode) : undefined;
+        const profileId =
+          restored.activeProfileId ?? (restored.appMode ? profileIdFromLegacyMode(restored.appMode) : undefined);
         const changes = [
           ...(restored.model ? [{ key: 'agent.model', value: restored.model, persistence: 'runtime' as const }] : []),
           ...(restored.provider

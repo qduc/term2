@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useInputContext } from '../context/InputContext.js';
 import { useSelection } from './use-selection.js';
-import type { SkillsService } from '../services/skills/skills-service.js';
+import type { SkillsService, SkillInfo } from '../services/skills/skills-service.js';
 
 export { SKILLS_TRIGGER } from '../components/input/triggers.js';
+
+/** Case-insensitive match over skill name and description. */
+export const filterSkills = (skills: SkillInfo[], query: string): SkillInfo[] => {
+  if (!query) return skills;
+  const lowerQuery = query.toLowerCase();
+  return skills.filter(
+    (s) => s.name.toLowerCase().includes(lowerQuery) || s.description.toLowerCase().includes(lowerQuery),
+  );
+};
 
 export const useSkillSelection = (deps: { skillsService: SkillsService }) => {
   const { skillsService } = deps;
@@ -24,13 +33,7 @@ export const useSkillSelection = (deps: { skillsService: SkillsService }) => {
     return input.slice(triggerIndex, end);
   }, [isOpen, isControllerOpen, controllerFrame, triggerIndex, input, cursorOffset]);
 
-  const filteredSkills = useMemo(() => {
-    if (!query) return allSkills;
-    const lowerQuery = query.toLowerCase();
-    return allSkills.filter(
-      (s) => s.name.toLowerCase().includes(lowerQuery) || s.description.toLowerCase().includes(lowerQuery),
-    );
-  }, [allSkills, query]);
+  const filteredSkills = useMemo(() => filterSkills(allSkills, query), [allSkills, query]);
 
   const { selectedIndex, setSelectedIndex, moveUp, moveDown, moveHome, moveEnd, pageUp, pageDown, getSelectedItem } =
     useSelection(filteredSkills);

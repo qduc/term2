@@ -1,4 +1,5 @@
 import { it, expect } from 'vitest';
+import { filterSkills } from './use-skill-selection.js';
 import type { SkillInfo } from '../services/skills/skills-service.js';
 
 const createMockSkill = (name: string, desc: string): SkillInfo => ({
@@ -17,19 +18,8 @@ const MOCK_SKILLS: SkillInfo[] = [
   createMockSkill('grilling', 'Interview the user about a plan'),
 ];
 
-// Since useSkillSelection requires React context (useInputContext), we test
-// the pure filtering logic by extracting the filter behavior.
-// The hook's filtering logic is: if query is non-empty, filter skills by name
-// or description containing the query (case-insensitive).
-
-const filterSkills = (skills: SkillInfo[], query: string): SkillInfo[] => {
-  if (!query) return skills;
-  const lowerQuery = query.toLowerCase();
-  return skills.filter(
-    (s) => s.name.toLowerCase().includes(lowerQuery) || s.description.toLowerCase().includes(lowerQuery),
-  );
-};
-
+// The filter lives in the hook module, so production filtering and this test
+// share one implementation; the hook adds input-context wiring around it.
 it('filterSkills - empty query returns all skills', () => {
   const result = filterSkills(MOCK_SKILLS, '');
   expect(result.length).toBe(4);

@@ -5,6 +5,19 @@ import type { ConversationListEntry } from '../services/conversation/conversatio
 
 export { RESUME_TRIGGER } from '../components/input/triggers.js';
 
+/** Case-insensitive match over id, first message, model, and SSH host. */
+export const filterConversations = (conversations: ConversationListEntry[], query: string): ConversationListEntry[] => {
+  if (!query) return conversations;
+  const lowerQuery = query.toLowerCase();
+  return conversations.filter(
+    (c) =>
+      c.id.toLowerCase().includes(lowerQuery) ||
+      (c.firstUserMessage && c.firstUserMessage.toLowerCase().includes(lowerQuery)) ||
+      (c.model && c.model.toLowerCase().includes(lowerQuery)) ||
+      (c.sshHost && c.sshHost.toLowerCase().includes(lowerQuery)),
+  );
+};
+
 export const useResumeSelection = (deps: { listConversations: () => ConversationListEntry[] }) => {
   const { listConversations } = deps;
   const { mode, input, cursorOffset, triggerIndex, controller } = useInputContext();
@@ -24,17 +37,7 @@ export const useResumeSelection = (deps: { listConversations: () => Conversation
     return input.slice(triggerIndex, end);
   }, [isOpen, isControllerOpen, controllerFrame, triggerIndex, input, cursorOffset]);
 
-  const filteredConversations = useMemo(() => {
-    if (!query) return allConversations;
-    const lowerQuery = query.toLowerCase();
-    return allConversations.filter(
-      (c) =>
-        c.id.toLowerCase().includes(lowerQuery) ||
-        (c.firstUserMessage && c.firstUserMessage.toLowerCase().includes(lowerQuery)) ||
-        (c.model && c.model.toLowerCase().includes(lowerQuery)) ||
-        (c.sshHost && c.sshHost.toLowerCase().includes(lowerQuery)),
-    );
-  }, [allConversations, query]);
+  const filteredConversations = useMemo(() => filterConversations(allConversations, query), [allConversations, query]);
 
   const { selectedIndex, setSelectedIndex, moveUp, moveDown, moveHome, moveEnd, pageUp, pageDown, getSelectedItem } =
     useSelection(filteredConversations);

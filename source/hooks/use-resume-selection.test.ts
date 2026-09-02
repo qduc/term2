@@ -1,4 +1,5 @@
 import { it, expect } from 'vitest';
+import { filterConversations } from './use-resume-selection.js';
 import type { ConversationListEntry } from '../services/conversation/conversation-persistence.js';
 
 const MOCK_CONVERSATIONS: ConversationListEntry[] = [
@@ -26,18 +27,6 @@ const MOCK_CONVERSATIONS: ConversationListEntry[] = [
     messageCount: 15,
   },
 ];
-
-const filterConversations = (conversations: ConversationListEntry[], query: string): ConversationListEntry[] => {
-  if (!query) return conversations;
-  const lowerQuery = query.toLowerCase();
-  return conversations.filter(
-    (c) =>
-      c.id.toLowerCase().includes(lowerQuery) ||
-      (c.firstUserMessage && c.firstUserMessage.toLowerCase().includes(lowerQuery)) ||
-      (c.model && c.model.toLowerCase().includes(lowerQuery)) ||
-      (c.sshHost && c.sshHost.toLowerCase().includes(lowerQuery)),
-  );
-};
 
 it('filterConversations - empty query returns all conversations', () => {
   const result = filterConversations(MOCK_CONVERSATIONS, '');

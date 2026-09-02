@@ -1312,11 +1312,21 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
         // reached the wire; the wire-state decision above still keys off the
         // error as thrown.
         const failure = asProvablyUnsent?.(error) ?? error;
-        // Bounded evidence of whatever progress the recorder observed before
-        // the failure (category/counter/timing, no raw frame payload) — a
-        // stream that fails after thousands of frames (e.g. an abrupt close)
-        // must not lose that evidence the way an unrecorded failure would.
-        logFailed(requestId, requestData, failure, receiveTiming?.(), recorder.boundedDiagnostics());
+        if (signal?.aborted && eventCount > 0) {
+          // An active request can reject from the provider as soon as the
+          // application's abort reaches the socket. Preserve the partial raw
+          // transcript in the same aborted outcome used when the consumer
+          // closes the iterator explicitly; otherwise a guard-triggered abort
+          // would be reduced to bounded counters before the recorder's
+          // finally block can retain it.
+          logClosed(requestId, requestData, 'aborted', eventCount, recorder.diagnostics());
+        } else {
+          // Bounded evidence of whatever progress the recorder observed before
+          // the failure (category/counter/timing, no raw frame payload) — a
+          // stream that fails after thousands of frames (e.g. an abrupt close)
+          // must not lose that evidence the way an unrecorded failure would.
+          logFailed(requestId, requestData, failure, receiveTiming?.(), recorder.boundedDiagnostics());
+        }
         throw failure;
       } finally {
         if (!sawTerminalEvent && !sourceExhausted && !streamFailed) {

@@ -1,7 +1,5 @@
 # Milestone 1: reconstruct built-in modes
 
-Status: specification approved; implementation has not started.
-
 ## Objective
 
 Reconstruct Standard, Lite, Plan, Mentor, and Orchestrator as built-in Profiles

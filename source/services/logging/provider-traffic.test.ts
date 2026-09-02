@@ -623,6 +623,66 @@ it('ProviderTrafficArtifactStore writes per-day per-session request files and da
   });
 });
 
+it('ProviderTrafficArtifactStore accumulates started requests and preserves failed-request index metadata', () => {
+  const rootDir = makeTempDir();
+  const store = new ProviderTrafficArtifactStore({ rootDir });
+  const session = {
+    sessionId: 'session-accumulate',
+    sessionStartedAt: '2026-05-22T10:00:00.000Z',
+  };
+
+  store.recordRequestStart({
+    ...session,
+    requestId: 'req-first',
+    timestamp: '2026-05-22T10:00:01.000Z',
+    provider: 'openai',
+    model: 'gpt-5',
+    mode: 'standard',
+    firstUserMessagePreview: 'first prompt',
+    sentBody: {},
+  });
+  store.recordRequestStart({
+    ...session,
+    requestId: 'req-failed',
+    timestamp: '2026-05-22T10:00:02.000Z',
+    provider: 'deepseek',
+    model: 'deepseek-chat',
+    mode: 'mentor',
+    firstUserMessagePreview: 'second prompt',
+    sentBody: {},
+  });
+  store.recordRequestComplete({
+    ...session,
+    requestId: 'req-failed',
+    timestamp: '2026-05-22T10:00:03.000Z',
+    provider: 'deepseek',
+    model: 'deepseek-chat',
+    mode: 'mentor',
+    error: { errorKind: 'network', message: 'connection reset', retryable: true },
+  });
+
+  const entries = fs
+    .readFileSync(path.join(rootDir, '2026-05-22', 'index.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line) as DailySessionIndexEntry);
+
+  expect(entries).toHaveLength(1);
+  expect(entries[0]).toMatchObject({
+    sessionId: session.sessionId,
+    firstRequestAt: '2026-05-22T10:00:01.000Z',
+    lastRequestAt: '2026-05-22T10:00:03.000Z',
+    requestCount: 2,
+    firstUserMessagePreview: 'first prompt',
+    latestProvider: 'deepseek',
+    latestModel: 'deepseek-chat',
+    latestMode: 'mentor',
+  });
+  expect(entries[0]?.providersSeen).toEqual(['openai', 'deepseek']);
+  expect(entries[0]?.modelsSeen).toEqual(['gpt-5', 'deepseek-chat']);
+  expect(entries[0]?.modesSeen).toEqual(['standard', 'mentor']);
+});
+
 it('ProviderTrafficArtifactStore appends received line, upserts newest-first index, records failures, and allows later-day session folders', () => {
   const rootDir = makeTempDir();
   const legacyFile = path.join(rootDir, 'traffic-2026-05-22.log');
@@ -1069,6 +1129,52 @@ it('ProviderTraffic retains the receive timing of a failed websocket request', (
       interFrameBudgetMs: 600_000,
     },
   });
+});
+
+it('ProviderTraffic records sanitized raw terminated ECONNRESET failures as terminal artifacts', () => {
+  const rootDir = makeTempDir();
+  const store = new ProviderTrafficArtifactStore({ rootDir });
+  const traffic = new ProviderTraffic(
+    { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), getCorrelationId: () => undefined },
+    NULL_SESSION_CONTEXT_SERVICE,
+    store,
+  );
+  const requestId = 'terminated-req';
+  const terminated = new TypeError('terminated', {
+    cause: Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }),
+  });
+
+  traffic.recordRequestStart({ requestId, provider: 'deepseek', model: 'deepseek-chat', sentBody: {} });
+  traffic.recordRequestFailed({
+    requestId,
+    provider: 'deepseek',
+    model: 'deepseek-chat',
+    error: terminated,
+    phase: 'response',
+  });
+
+  const dayDir = fs.readdirSync(rootDir).find((entry) => /^\d{4}-\d{2}-\d{2}$/.test(entry));
+  const sessionDir = fs.readdirSync(path.join(rootDir, dayDir!))[0];
+  const requestFile = fs.readdirSync(path.join(rootDir, dayDir!, sessionDir)).find((name) => name.endsWith('.json'))!;
+  const received = readRequestFile(path.join(rootDir, dayDir!, sessionDir, requestFile)).received as Record<
+    string,
+    unknown
+  >;
+
+  expect(received).toMatchObject({
+    direction: 'received',
+    requestId,
+    provider: 'deepseek',
+    model: 'deepseek-chat',
+    error: {
+      errorKind: 'network',
+      code: 'ECONNRESET',
+      message: 'terminated: read ECONNRESET',
+      retryable: true,
+      phase: 'response',
+    },
+  });
+  expect(received).not.toHaveProperty('body');
 });
 
 // A stream that fails after delivering frames (e.g. an abrupt WebSocket close)

@@ -209,6 +209,29 @@ export function isUndiciSocketCloseError(error: unknown): boolean {
   return false;
 }
 
+/**
+ * Detects the fetch/undici body-abort spelling used by AI SDK providers. The
+ * useful network cause can be nested under an SDK wrapper, so walk only the
+ * standard cause/errors links and keep the message match exact enough not to
+ * turn arbitrary prose containing "terminated" into a retry.
+ */
+export function isTerminatedError(error: unknown, seen = new Set<unknown>()): boolean {
+  if (!error || seen.has(error)) return false;
+  if (typeof error === 'object' || typeof error === 'function') seen.add(error);
+
+  if (typeof error === 'string') {
+    const message = error.trim().toLowerCase();
+    return message === 'terminated' || message.startsWith('terminated:');
+  }
+  if (typeof error !== 'object') return false;
+
+  const message = getMessage(error).trim().toLowerCase();
+  if (message === 'terminated' || message.startsWith('terminated:')) return true;
+  const value = error as { cause?: unknown; errors?: unknown[] };
+  if (isTerminatedError(value.cause, seen)) return true;
+  return Array.isArray(value.errors) && value.errors.some((child) => isTerminatedError(child, seen));
+}
+
 export function isNetworkProtocolError(error: unknown, seen = new Set<unknown>()): boolean {
   if (!error || error instanceof AmbiguousModelOutcomeError) return false;
 
@@ -465,13 +488,6 @@ export const isTransientRetryableError = (error: unknown, logger?: Pick<ILogging
     return false;
   }
 
-  if (typeof error === 'string') {
-    const lower = error.toLowerCase();
-    if (lower === 'terminated' || lower.startsWith('terminated:')) {
-      return true;
-    }
-  }
-
   if (error && typeof error === 'object') {
     const statusRaw = (error as any).status ?? (error as any).statusCode;
     const status = typeof statusRaw === 'number' ? statusRaw : parseInt(statusRaw, 10);
@@ -481,6 +497,13 @@ export const isTransientRetryableError = (error: unknown, logger?: Pick<ILogging
       }
       return false;
     }
+  }
+
+  // A bare fetch/undici `TypeError: terminated` has no status and reaches the
+  // shared transport policy here. Keeping this after status/provider checks
+  // preserves explicit authentication and provider rejection precedence.
+  if (isTerminatedError(error)) {
+    return true;
   }
 
   // 2. Network protocol errors
@@ -505,9 +528,7 @@ export const isTransientRetryableError = (error: unknown, logger?: Pick<ILogging
     if (
       lowerMessage.includes('rate limit') ||
       lowerMessage.includes('too many requests') ||
-      lowerMessage.includes('rate_limit') ||
-      lowerMessage === 'terminated' ||
-      lowerMessage.startsWith('terminated:')
+      lowerMessage.includes('rate_limit')
     ) {
       return true;
     }

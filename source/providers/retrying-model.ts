@@ -5,7 +5,11 @@ import type {
 } from '../contracts/streamed-model-turn.js';
 import type { ILoggingService } from '../services/service-interfaces.js';
 import { describeError, isAbortLikeError } from '../utils/error-helpers.js';
-import { isNetworkProtocolError } from '../services/retry/retry-error-classification.js';
+import {
+  isNetworkProtocolError,
+  isTerminatedError,
+  isTransientRetryableError,
+} from '../services/retry/retry-error-classification.js';
 import {
   classifyUpstreamRetryableError,
   computeUpstreamRetryDelayMs,
@@ -173,6 +177,17 @@ export class RetryingModel implements StreamedModelTurn {
   }
 
   #isRetryable(error: unknown): boolean {
-    return isNetworkProtocolError(error) || classifyUpstreamRetryableError(error).retryable;
+    // AI-SDK/undici can surface a mid-body socket reset as the
+    // otherwise-uninformative `TypeError: terminated`. The existing network
+    // classifier handles coded causes; the explicit terminated shape covers
+    // wrappers that lose those codes. Do not reuse the whole transient policy
+    // here: incomplete-stream and parse failures have separate session-level
+    // recovery semantics. `committed` is checked by stream() before this
+    // method, so this cannot replay visible model output.
+    return (
+      isNetworkProtocolError(error) ||
+      (isTerminatedError(error) && isTransientRetryableError(error)) ||
+      classifyUpstreamRetryableError(error).retryable
+    );
   }
 }

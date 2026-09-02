@@ -83,6 +83,27 @@ it('classify still recovers a transient failure when the stream carries only boo
   expect(result.kind).toBe('transient');
 });
 
+it('classifies a raw terminated ECONNRESET as retryable only before model output commits', () => {
+  const classifier = makeClassifier({}, () => 0);
+  const terminated = new TypeError('terminated', {
+    cause: new Error('read ECONNRESET'),
+  });
+
+  expect(classifier.classify(baseContext({ error: terminated })).kind).toBe('transient');
+  expect(
+    classifier.classify(
+      baseContext({
+        error: terminated,
+        stream: {
+          completed: Promise.resolve(undefined),
+          output: [{ type: 'text_delta', text: 'partial answer already shown to the user' }],
+          newItems: [],
+        } as any,
+      }),
+    ).kind,
+  ).toBe('unrecoverable');
+});
+
 // The other half: once the stream carries real streamed text, the same
 // transient failure must not replay -- the guard's actual purpose.
 it('classify refuses to replay a transient failure once the stream carries real text output', () => {

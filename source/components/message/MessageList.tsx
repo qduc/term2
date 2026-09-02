@@ -379,15 +379,20 @@ const MessageList = <T extends MessageLike = Message>({
         continue;
       }
 
+      // <Static> is write-once: Ink physically cannot un-print an already
+      // frozen line. Re-opening a committed message here by pushing its
+      // updated content into the dynamic region does not "update" the frozen
+      // copy — it leaves the stale text frozen in place *and* renders a
+      // second, corrected copy down in the dynamic area, after everything
+      // (including tool calls) that has since also been committed to
+      // <Static>. Chronologically-earlier text then visually appears after a
+      // chronologically-later tool call, which reads as misordered output
+      // that "fixes itself" on the next full re-render (e.g. a resize) once
+      // the later content's own commit finally catches the correction up.
+      // Once a message is committed, treat it — like a command-group — as
+      // immutable for display purposes, and drop any further changes to it,
+      // instead of accepting one out-of-order duplicate render.
       if (committedSignature !== undefined) {
-        if (message.sender === 'command-group') {
-          // A command group is write-once to <Static>. If already committed,
-          // do not append another copy into additions.
-          continue;
-        }
-        candidateMessageSignaturesRef.current.set(message.id, signature);
-        (isBackgroundNotification(message) ? deferredNotifications : deferred).push(message);
-        hasDeferred = true;
         continue;
       }
 

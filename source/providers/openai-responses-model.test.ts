@@ -464,6 +464,46 @@ it('getResponse (HTTP) translates tool_call and function_call_result items into 
   ]);
 });
 
+it('getResponse (HTTP) converts multimodal tool-result content parts into output parts, not a JSON string', async () => {
+  let capturedBody: any;
+  const client = {
+    responses: {
+      create: async (body: any) => {
+        capturedBody = body;
+        return { id: 'resp_1', output: [], usage: {} };
+      },
+    },
+  };
+
+  const model = new OpenAIResponsesModelWithPromptCacheKey(client, 'gpt-5.4-nano');
+  await model.getResponse({
+    input: [
+      { type: 'tool_call', id: 'call_1', name: 'read_file', arguments: '{"path":"logo.png"}' },
+      {
+        type: 'tool_result',
+        id: 'call_1',
+        output: [
+          { type: 'text', text: 'Image: logo.png (1234 bytes, image/png)' },
+          { type: 'image', image: { data: 'cG5n', mediaType: 'image/png' } },
+        ],
+      },
+    ],
+    tools: [],
+  });
+
+  expect(capturedBody.input).toEqual([
+    { type: 'function_call', call_id: 'call_1', name: 'read_file', arguments: '{"path":"logo.png"}' },
+    {
+      type: 'function_call_output',
+      call_id: 'call_1',
+      output: [
+        { type: 'input_text', text: 'Image: logo.png (1234 bytes, image/png)' },
+        { type: 'input_image', image_url: 'data:image/png;base64,cG5n' },
+      ],
+    },
+  ]);
+});
+
 it('stream (websocket) preserves typed settings, including zero values, in response.create', async () => {
   fakeResponsesWSStream = async function* () {
     yield { type: 'message', message: { type: 'response.completed', response: { id: 'resp_ws_settings' } } };

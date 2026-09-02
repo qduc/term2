@@ -396,9 +396,5 @@ export const AGENT_AFFECTING_SETTINGS = new Set<string>([
   'agent.provider',
   'agent.reasoningEffort',
   'agent.temperature',
-  'app.mentorMode',
-  'app.liteMode',
-  'app.planMode',
-  'app.orchestratorMode',
   'app.activeProfileId',
 ]);

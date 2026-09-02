@@ -1,7 +1,5 @@
 # Profile architecture specification
 
-Status: **approved design; Milestone 1 is not implemented.**
-
 This directory specifies the Profile architecture that will replace term2's
 hard-coded built-in mode composition. The first implementation milestone is a
 behavior-preserving reconstruction of Standard, Lite, Plan, Mentor, and

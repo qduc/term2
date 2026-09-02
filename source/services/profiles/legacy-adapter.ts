@@ -36,8 +36,41 @@ export function normalizeLegacyMode(mode: Partial<SavedAppMode> | undefined): Sa
   return legacyModeFromProfileId(profileIdFromLegacyMode(mode));
 }
 
+const LEGACY_MODE_SETTING_FIELDS = Object.freeze({
+  'app.orchestratorMode': 'orchestratorMode',
+  'app.liteMode': 'liteMode',
+  'app.planMode': 'planMode',
+  'app.mentorMode': 'mentorMode',
+} as const);
+
+export type LegacyModeSettingKey = keyof typeof LEGACY_MODE_SETTING_FIELDS;
+
+export function isLegacyModeSettingKey(key: string): key is LegacyModeSettingKey {
+  return Object.prototype.hasOwnProperty.call(LEGACY_MODE_SETTING_FIELDS, key);
+}
+
+/** Map one legacy setting write to the canonical Profile selected by the flags. */
+export function profileIdFromLegacyModeSetting(
+  key: string,
+  value: unknown,
+  currentProfileId: string,
+): ProfileId | undefined {
+  if (!isLegacyModeSettingKey(key) || typeof value !== 'boolean') return undefined;
+  const field = LEGACY_MODE_SETTING_FIELDS[key];
+  if (value) return profileIdFromLegacyMode({ [field]: true });
+  const activeField = Object.entries(LEGACY_MODE_SETTING_FIELDS).find(([, name]) => {
+    try {
+      return legacyModeFromProfileId(currentProfileId)[name] === true;
+    } catch {
+      return false;
+    }
+  })?.[1];
+  return activeField === field ? STANDARD_PROFILE_ID : (currentProfileId as ProfileId);
+}
+
 export const legacyModeAdapter = Object.freeze({
   profileIdFromLegacyMode,
   legacyModeFromProfileId,
   normalizeLegacyMode,
+  profileIdFromLegacyModeSetting,
 });

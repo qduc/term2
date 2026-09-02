@@ -1025,37 +1025,6 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.HOOKS_TIMEOUT_MS,
 ]);
 
-export interface AppModes {
-  orchestratorMode: boolean;
-  liteMode: boolean;
-  planMode: boolean;
-  mentorMode: boolean;
-}
-
-/**
- * Normalize app mode flags to enforce mutual exclusion.
- *
- * Precedence (first one that is true wins; all others are disabled):
- *   orchestratorMode > liteMode > planMode > mentorMode
- *
- * When none are true, all remain false (standard mode).
- */
-export function normalizeAppModes(modes: AppModes): AppModes {
-  if (modes.orchestratorMode) {
-    return { orchestratorMode: true, liteMode: false, planMode: false, mentorMode: false };
-  }
-  if (modes.liteMode) {
-    return { orchestratorMode: false, liteMode: true, planMode: false, mentorMode: false };
-  }
-  if (modes.planMode) {
-    return { orchestratorMode: false, liteMode: false, planMode: true, mentorMode: false };
-  }
-  if (modes.mentorMode) {
-    return { orchestratorMode: false, liteMode: false, planMode: false, mentorMode: true };
-  }
-  return { orchestratorMode: false, liteMode: false, planMode: false, mentorMode: false };
-}
-
 // Some settings with default values are optional to persist
 export const OPTIONAL_DEFAULT_KEYS = new Set<string>([]);
 

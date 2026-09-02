@@ -213,7 +213,13 @@ export const useAppCommands = ({
           return true;
         },
       },
-      createProfileCommand({ settingsService, transitionService, addSystemMessage }),
+      createProfileCommand({
+        settingsService,
+        transitionService,
+        addSystemMessage,
+        messages,
+        requestModeSwitchConfirm,
+      }),
       createHandoffSlashCommand({ messages, addSystemMessage, onHandoff }),
       createGuardedSettingsCommand({
         settingsService,

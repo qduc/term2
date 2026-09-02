@@ -5,7 +5,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { expect, it } from 'vitest';
 import { getAgentDefinition } from '../agent.js';
 import { createMockSettingsService } from '../services/settings/settings-service.mock.js';
-import { PLAN_MODE_ENTER_NOTICE, primePlanModeNoticeIfActive } from '../services/mode-notices.js';
+import { PLAN_MODE_ENTER_NOTICE, profileEnterNotice } from '../services/mode-notices.js';
 import { buildPromptSpec } from './prompt-constructor.js';
 import { resolveProfile } from '../services/profiles/index.js';
 
@@ -48,9 +48,11 @@ it('plan-mode stub is smaller than the full workflow and still names the live co
 
 it('primes the enter notice when a session starts already in Plan Mode', () => {
   const queued: string[] = [];
-  primePlanModeNoticeIfActive(false, (text) => queued.push(text));
+  const inactiveNotice = profileEnterNotice('builtin:standard');
+  if (inactiveNotice) queued.push(inactiveNotice);
   expect(queued).toEqual([]);
-  primePlanModeNoticeIfActive(true, (text) => queued.push(text));
+  const activeNotice = profileEnterNotice('builtin:plan');
+  if (activeNotice) queued.push(activeNotice);
   expect(queued).toEqual([PLAN_MODE_ENTER_NOTICE]);
 });
 

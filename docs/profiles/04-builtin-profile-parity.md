@@ -5,8 +5,9 @@ evidence for that migration, not the intended permanent layout.
 
 ## Shared current machinery
 
-Current mode identity is represented by four settings normalized by
-`normalizeAppModes()` and `SettingsService.normalizeExclusiveAppModes()`:
+Canonical mode identity is represented by `app.activeProfileId`. The four
+legacy settings remain accepted at settings, replay, and compatibility
+boundaries and are converted through the Profile legacy adapter:
 
 ```text
 app.orchestratorMode
@@ -18,10 +19,10 @@ app.mentorMode
 No true flag means Standard. The malformed-state precedence is Orchestrator,
 Lite, Plan, then Mentor.
 
-`buildPromptSpec()` currently keeps Plan, Mentor, and Orchestrator out of base
-prompt selection. Their workflows arrive through notices created by
-`runtimeModeNotice()` and `planModeNotice()`. This preserves a stable non-Lite
-instruction prefix for provider prompt caching and chained Responses turns.
+`buildPromptSpec()` keeps Plan, Mentor, and Orchestrator out of base prompt
+selection. Their workflows arrive through notices created by the Profile notice
+helpers and transition service. This preserves a stable non-Lite instruction
+prefix for provider prompt caching and chained Responses turns.
 
 `getAgentDefinition()` currently owns most prompt and tool differences.
 `ConversationConfigurationService.applyRuntimeSetting()` owns live mode effects.

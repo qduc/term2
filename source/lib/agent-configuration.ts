@@ -280,10 +280,7 @@ export class AgentConfiguration implements AgentSource {
     if (this.#isTransientClient || this.#isDisposed || this.#unsubscribeSettings) return;
 
     const rebuildKeys = [
-      'app.liteMode',
-      'app.orchestratorMode',
-      'app.planMode',
-      'app.mentorMode',
+      'app.activeProfileId',
       'enable_agent_workflow',
       'app.searchViaShell',
       'agent.model',

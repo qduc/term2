@@ -1,9 +1,7 @@
 import { expect, it, vi } from 'vitest';
 import {
   MENTOR_MODE_ENTER_NOTICE,
-  MENTOR_MODE_EXIT_NOTICE,
   ORCHESTRATOR_MODE_ENTER_NOTICE,
-  ORCHESTRATOR_MODE_EXIT_NOTICE,
   PLAN_MODE_ENTER_NOTICE,
   PLAN_MODE_EXIT_NOTICE,
 } from './mode-notices.js';
@@ -16,8 +14,10 @@ const makeService = (overrides: Record<string, unknown> = {}) => {
     reset: vi.fn(),
     set: vi.fn(),
     isRuntimeModifiable: vi.fn(() => true),
-    getDynamic: vi.fn(() => 'default'),
-    get: vi.fn(() => 'current-model'),
+    getDynamic: vi.fn(() => false),
+    get: vi.fn((key: string) =>
+      key === 'app.activeProfileId' ? 'builtin:standard' : key === 'agent.model' ? 'current-model' : false,
+    ),
     ...overrides,
   } as any;
   const conversationService = { switchProvider: vi.fn(), queueModeNotice: vi.fn() };
@@ -58,7 +58,7 @@ it('does not invoke runtime effects when the settings transaction rejects', () =
   expect(conversationService.switchProvider).not.toHaveBeenCalled();
 });
 
-it('queues the plan-mode enter notice when app.planMode becomes true', () => {
+it('canonicalizes a legacy Plan write before routing its transition', () => {
   const { service, conversationService } = makeService();
 
   service.apply([{ key: 'app.planMode', value: true, persistence: 'runtime' }]);
@@ -66,34 +66,29 @@ it('queues the plan-mode enter notice when app.planMode becomes true', () => {
   expect(conversationService.queueModeNotice).toHaveBeenCalledWith(PLAN_MODE_ENTER_NOTICE);
 });
 
-it('queues the plan-mode exit notice when app.planMode becomes false', () => {
+it('does not route legacy plan-mode exits', () => {
   const { service, conversationService } = makeService();
 
   service.apply([{ key: 'app.planMode', value: false, persistence: 'runtime' }]);
 
-  expect(conversationService.queueModeNotice).toHaveBeenCalledWith(PLAN_MODE_EXIT_NOTICE);
+  expect(conversationService.queueModeNotice).not.toHaveBeenCalled();
 });
 
 it.each([
-  ['app.mentorMode', true, MENTOR_MODE_ENTER_NOTICE],
-  ['app.mentorMode', false, MENTOR_MODE_EXIT_NOTICE],
-  ['app.orchestratorMode', true, ORCHESTRATOR_MODE_ENTER_NOTICE],
-  ['app.orchestratorMode', false, ORCHESTRATOR_MODE_EXIT_NOTICE],
-])('queues the %s notice when its runtime value becomes %s', (key, value, notice) => {
-  const { service, conversationService } = makeService();
+  ['app.mentorMode', true],
+  ['app.orchestratorMode', true],
+])('canonicalizes legacy %s writes before routing', (key, value) => {
+  const { service, conversationService, setModel } = makeService();
 
   service.apply([{ key, value, persistence: 'runtime' }]);
 
-  expect(conversationService.queueModeNotice).toHaveBeenCalledWith(notice);
+  expect(conversationService.queueModeNotice).toHaveBeenCalled();
+  expect(setModel).toHaveBeenCalledWith('current-model');
 });
 
-it('queues the plan-mode exit notice when another exclusive mode implicitly turns Plan Mode off', () => {
-  let planMode = true;
+it('composes the Plan exit when a legacy mode write replaces Plan', () => {
   const { service, conversationService } = makeService({
-    get: vi.fn((key: string) => (key === 'app.planMode' ? planMode : 'current-model')),
-    setDynamicTransaction: vi.fn(() => {
-      planMode = false;
-    }),
+    get: vi.fn((key: string) => (key === 'app.activeProfileId' ? 'builtin:plan' : 'current-model')),
   });
 
   service.apply([{ key: 'app.liteMode', value: true, persistence: 'runtime' }]);
@@ -123,4 +118,43 @@ it('activating the mentor profile rebuilds the agent and queues its notice', () 
   expect(setModel).toHaveBeenCalledWith('gpt-4o');
   expect(conversationService.queueModeNotice).toHaveBeenCalledWith(MENTOR_MODE_ENTER_NOTICE);
   expect(settingsService.set).toHaveBeenCalledWith('app.activeProfileId', 'builtin:mentor');
+});
+
+it('plans the profile transition before the settings transaction commits it', () => {
+  let activeProfileId = 'builtin:standard';
+  const { service, settingsService, conversationService, setModel } = makeService({
+    get: vi.fn((key: string) => (key === 'app.activeProfileId' ? activeProfileId : 'gpt-4o')),
+    setDynamicTransaction: vi.fn(() => {
+      activeProfileId = 'builtin:mentor';
+    }),
+  });
+
+  service.apply([{ key: 'app.activeProfileId', value: 'builtin:mentor', persistence: 'runtime' }]);
+
+  expect(setModel).toHaveBeenCalledWith('gpt-4o');
+  expect(conversationService.queueModeNotice).toHaveBeenCalledWith(MENTOR_MODE_ENTER_NOTICE);
+  expect(settingsService.set).not.toHaveBeenCalled();
+});
+
+it('maps legacy mode changes in transaction order', () => {
+  let activeProfileId = 'builtin:standard';
+  const { service, settingsService } = makeService({
+    get: vi.fn((key: string) => (key === 'app.activeProfileId' ? activeProfileId : 'gpt-4o')),
+    setDynamicTransaction: vi.fn((changes: readonly { key: string; value: unknown }[]) => {
+      for (const change of changes) {
+        if (change.key === 'app.activeProfileId') activeProfileId = String(change.value);
+      }
+    }),
+  });
+
+  service.apply([
+    { key: 'app.planMode', value: true, persistence: 'runtime' },
+    { key: 'app.liteMode', value: false, persistence: 'runtime' },
+  ]);
+
+  expect(activeProfileId).toBe('builtin:plan');
+  expect(settingsService.setDynamicTransaction).toHaveBeenCalledWith([
+    { key: 'app.activeProfileId', value: 'builtin:plan' },
+    { key: 'app.activeProfileId', value: 'builtin:plan' },
+  ]);
 });

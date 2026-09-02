@@ -913,7 +913,28 @@ export class ProviderTrafficArtifactStore {
     if (index === -1) {
       entries.push(entry);
     } else {
-      entries[index] = entry;
+      const current = entries[index];
+      const isNewerRequest = entry.lastRequestAt >= current.lastRequestAt;
+      entries[index] = {
+        ...current,
+        // A request is counted when its sent envelope is created. Completion
+        // is best-effort and may never run for a failed stream, so counting at
+        // completion loses exactly the requests this index is meant to find.
+        requestCount: current.requestCount + entry.requestCount,
+        firstRequestAt: entry.firstRequestAt < current.firstRequestAt ? entry.firstRequestAt : current.firstRequestAt,
+        lastRequestAt: entry.lastRequestAt > current.lastRequestAt ? entry.lastRequestAt : current.lastRequestAt,
+        firstUserMessagePreview: current.firstUserMessagePreview || entry.firstUserMessagePreview,
+        ...(isNewerRequest
+          ? {
+              latestProvider: entry.latestProvider,
+              latestModel: entry.latestModel,
+              latestMode: entry.latestMode,
+            }
+          : {}),
+        providersSeen: [...new Set([...(current.providersSeen ?? []), ...entry.providersSeen])],
+        modelsSeen: [...new Set([...(current.modelsSeen ?? []), ...entry.modelsSeen])],
+        modesSeen: [...new Set([...(current.modesSeen ?? []), ...entry.modesSeen])],
+      };
     }
     this.#writeDailyIndex(dayDir, entries);
   }
@@ -931,16 +952,20 @@ export class ProviderTrafficArtifactStore {
       return;
     }
     const current = entries[index];
+    const isNewerRequest = update.lastRequestAt >= current.lastRequestAt;
     entries[index] = {
       ...current,
-      lastRequestAt: update.lastRequestAt,
-      requestCount: current.requestCount + 1,
-      latestProvider: update.latestProvider,
-      latestModel: update.latestModel,
-      latestMode: update.latestMode,
-      providersSeen: [...new Set([...current.providersSeen, update.latestProvider])],
-      modelsSeen: [...new Set([...current.modelsSeen, update.latestModel])],
-      modesSeen: [...new Set([...current.modesSeen, update.latestMode])],
+      lastRequestAt: update.lastRequestAt > current.lastRequestAt ? update.lastRequestAt : current.lastRequestAt,
+      ...(isNewerRequest
+        ? {
+            latestProvider: update.latestProvider,
+            latestModel: update.latestModel,
+            latestMode: update.latestMode,
+          }
+        : {}),
+      providersSeen: [...new Set([...(current.providersSeen ?? []), update.latestProvider])],
+      modelsSeen: [...new Set([...(current.modelsSeen ?? []), update.latestModel])],
+      modesSeen: [...new Set([...(current.modesSeen ?? []), update.latestMode])],
     };
     this.#writeDailyIndex(dayDir, entries);
   }

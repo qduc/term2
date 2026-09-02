@@ -159,8 +159,27 @@ export function createLoggingMiddleware(options: CreateLoggingMiddlewareOptions)
           response: response.clone(),
         });
       })
-      .catch(() => {
-        // Safe catch for fire-and-forget
+      .catch((error: unknown) => {
+        // Response headers only prove that the request reached the provider;
+        // the body can still reject while the AI SDK consumes an SSE stream.
+        // Finish the same request envelope with the original sanitized failure
+        // path instead of leaving `{ received: {} }` behind. This remains
+        // fire-and-forget: diagnostic failure must never affect the provider
+        // consumer, and recordRequestFailed itself is fail-open.
+        try {
+          providerTraffic.recordRequestFailed({
+            requestId,
+            provider,
+            model: requestModel,
+            error,
+            host: hostFromRequest(ctx.url),
+            timeoutMs,
+            phase: 'response',
+            physicalAttempt: attempt,
+          });
+        } catch {
+          // Safe catch for a custom/test traffic sink that is not fail-open.
+        }
       });
 
     return response;

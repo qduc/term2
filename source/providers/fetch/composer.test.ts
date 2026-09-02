@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import { composeFetch, FetchMiddleware } from './compose.js';
 import { createLoggingMiddleware } from './logging-middleware.js';
 import { createProviderFetch } from './composer.js';
@@ -818,6 +818,60 @@ it('createLoggingMiddleware handles error in fire-and-forget logging gracefully'
   expect(logs.length >= 1).toBe(true);
   expect(logs[0]).toMatchObject({
     message: 'openai ai sdk request',
+  });
+});
+
+it('createLoggingMiddleware records a failed envelope when a response body rejects mid-stream', async () => {
+  const started: any[] = [];
+  const failures: any[] = [];
+  const received: any[] = [];
+  const terminated = new TypeError('terminated', {
+    cause: Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }),
+  });
+  const providerTraffic: IProviderTraffic = {
+    recordRequestStart(input) {
+      started.push(input);
+    },
+    async recordResponseReceived(input) {
+      received.push(input);
+      await (input.response as Response).clone().text();
+    },
+    recordResponseClosed() {},
+    recordRequestFailed(input) {
+      failures.push(input);
+    },
+  };
+  const middleware = createLoggingMiddleware({
+    provider: 'deepseek',
+    model: 'deepseek-chat',
+    providerTraffic,
+  });
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('data: {"id":"resp-1"}\n\n'));
+      queueMicrotask(() => controller.error(terminated));
+    },
+  });
+  const composed = composeFetch(
+    async () => new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } }),
+    [middleware],
+  );
+
+  const response = await composed('https://api.deepseek.com/chat/completions', {
+    method: 'POST',
+    body: JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'user', content: 'hello' }] }),
+  });
+  await expect(response.text()).rejects.toBe(terminated);
+  await vi.waitFor(() => expect(failures).toHaveLength(1));
+
+  expect(started).toHaveLength(1);
+  expect(received).toHaveLength(1);
+  expect(failures[0]).toMatchObject({
+    requestId: started[0].requestId,
+    provider: 'deepseek',
+    model: 'deepseek-chat',
+    error: terminated,
+    phase: 'response',
   });
 });
 

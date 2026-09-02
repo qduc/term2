@@ -89,6 +89,27 @@ it('stream retries only before the first event', async () => {
   expect(calls).toBe(2);
 });
 
+it('stream retries the raw undici terminated ECONNRESET failure before any event', async () => {
+  let calls = 0;
+  const terminated = new TypeError('terminated', {
+    // AI SDK can preserve the undici messages while dropping the inner code.
+    // The outer `terminated` spelling is the only retry signal in that shape.
+    cause: new Error('read ECONNRESET'),
+  });
+  const event = { type: 'text_delta', text: 'recovered' } as const;
+  const underlying: StreamedModelTurn = {
+    async *stream() {
+      calls++;
+      if (calls === 1) throw terminated;
+      yield event;
+    },
+  };
+  const model = new RetryingModel(underlying, { retryAttempts: 1, sleep: async () => {} });
+
+  await expect(collect(model.stream(request))).resolves.toEqual([event]);
+  expect(calls).toBe(2);
+});
+
 it('stream does not retry after an event commits', async () => {
   let calls = 0;
   const event = { type: 'text_delta', text: 'ok' } as const;

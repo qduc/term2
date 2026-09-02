@@ -6,6 +6,7 @@ import {
   createSessionRuntime as createProductionSessionRuntime,
 } from './session-composition.js';
 import { createConversationRuntime as createProductionConversationRuntime } from '../conversation/conversation-runtime-factory.js';
+import { MockStream } from '../test-helpers/mock-stream.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 
@@ -355,15 +356,32 @@ it('dispose() tolerates clients that cannot cancel background subagent runs', ()
   expect(() => dispose()).not.toThrow();
 });
 
-it('dispose() resets previousResponseId so next run starts fresh', () => {
-  const { dispose } = createConversationSession({
+it('dispose() clears a committed previousResponseId so a resumed run starts fresh', async () => {
+  const firstStream = new MockStream([{ type: 'text_delta', text: 'first reply' }]);
+  firstStream.finalOutput = 'first reply';
+  firstStream.lastResponseId = 'resp-1';
+
+  const { dispose, turnCoordinator, stateFacade } = createConversationSession({
     sessionId: 'prev-resp-id',
-    agentClient: makeMockClient(),
+    agentClient: makeMockClient({
+      getProvider: () => 'openai',
+      async startStream() {
+        return firstStream;
+      },
+    }),
     deps: { logger: makeLogger(), sessionContextService },
   });
 
-  // We'll just check that dispose doesn't throw
-  expect(() => dispose()).not.toThrow();
+  for await (const _ of turnCoordinator.start('first message')) {
+    // consume the committed run
+  }
+  expect(stateFacade.getCurrentSnapshot().previousResponseId).toBe('resp-1');
+
+  dispose();
+
+  // A disposed session must not leave a chain anchor behind for whatever
+  // exports or resumes its state next.
+  expect(stateFacade.getCurrentSnapshot().previousResponseId).toBeNull();
 });
 
 // ── No callback into partially-constructed session ────────────────

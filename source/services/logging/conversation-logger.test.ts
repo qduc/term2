@@ -534,29 +534,3 @@ it('dispatchEventToLog forwards text and reasoning deltas to the journal', () =>
     { kind: 'text', delta: 'hi' },
   ]);
 });
-
-it('dispatchEventToLog forwards text and reasoning deltas to the required journal', () => {
-  const { logger } = makeLoggingService();
-  const sinkEvents: any[] = [];
-  const turnAccumulator = new TurnItemAccumulator();
-  const journalDeltas: Array<{ kind: 'text' | 'reasoning'; delta: string }> = [];
-  const conversationLogger = new ConversationLogger({
-    turnAccumulator,
-    logger,
-    getAssistantTurnState: () => ({ previousResponseId: null }),
-    journal: makeJournal({
-      recordTextDelta: (delta: string) => journalDeltas.push({ kind: 'text', delta }),
-      recordReasoningDelta: (delta: string) => journalDeltas.push({ kind: 'reasoning', delta }),
-    } as any),
-  });
-  conversationLogger.setLogSink((event) => sinkEvents.push(event));
-
-  // Should not throw.
-  conversationLogger.dispatchEventToLog({ type: 'reasoning_delta', delta: 'x' });
-  conversationLogger.dispatchEventToLog({ type: 'text_delta', delta: 'y' });
-  expect(sinkEvents).toEqual([]);
-  expect(journalDeltas).toEqual([
-    { kind: 'reasoning', delta: 'x' },
-    { kind: 'text', delta: 'y' },
-  ]);
-});

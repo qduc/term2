@@ -132,13 +132,6 @@ const createTerminalStreamWithLargeToolResult = (toolResultSize: number, extraIt
     lastResponseId: `${label}-resp`,
   });
 
-const createErrorStream = (error: Error) =>
-  new MockStream({
-    interruptions: [],
-    error,
-    lastResponseId: 'resp-error',
-  });
-
 const createSessionHarness = ({
   startStreams,
   continuationStreams,
@@ -299,47 +292,6 @@ it('abandoned approval allows the next turn after a very large replacement resul
     await bundle.terminalAdapter.sendMessage('next turn after abandoned approval with huge replacement result'),
   );
   expect(followUpResult.finalText).toBe('follow-up-final');
-});
-
-it.sequential('MaxTurnsExceededError recovery keeps reconciled tool history allowed', async () => {
-  // TODO: This path is covered by the production fix, but the synthetic stream
-  // harness here does not reliably reproduce the SDK's max-turn reconciliation
-  // behavior without additional integration scaffolding.
-  const recoveredToolHistory = [
-    { role: 'assistant', type: 'function_call', callId: 'call-reconcile', name: 'apply_patch', arguments: '{}' },
-    {
-      role: 'assistant',
-      type: 'function_call_result',
-      callId: 'call-reconcile',
-      output: 'ok',
-    },
-    ...makeHistoryItems(198, 'reconciled'),
-  ];
-
-  const { bundle } = createSessionHarness({
-    startStreams: [createErrorStream(new Error('Max turns (100) exceeded')), createTerminalStream(5, 'recovered')],
-    continuationStreams: [],
-  });
-
-  seedInputSurgeBaseline(bundle, 201);
-  bundle.toolTracker.import([
-    {
-      turnId: 'turn-1',
-      callId: 'call-reconcile',
-      toolName: 'apply_patch',
-      status: 'completed',
-      startedAt: new Date().toISOString(),
-      completedAt: new Date().toISOString(),
-      historyItems: recoveredToolHistory,
-    },
-  ]);
-
-  await await expect(
-    bundle.terminalAdapter.sendMessage('run until the SDK max-turns limit is reached'),
-  ).rejects.toThrow();
-
-  const followUpResult = expectResponse(await bundle.terminalAdapter.sendMessage('next turn after reconciliation'));
-  expect(followUpResult.finalText).toBe('recovered-final');
 });
 
 it('InputSurgeGuard blocks direct terminal-adapter submissions without workflow-issued approval', async () => {

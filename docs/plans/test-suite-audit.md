@@ -1,18 +1,18 @@
 # Test suite audit
 
 Status: Milestones 1-3 complete. Calibration wave ran 2026-09-02 and PASSED its
-go/no-go (report: `docs/test-audit/calibration-report.md`). Milestone 3 (domain
-exploration) closed 2026-09-03: all 585 test files at the `d36c392a` inventory
-have validated graph records (28 reviewer artifacts + coordinator
-adjudication), and the source graph (`docs/test-audit/graph.yaml`) holds 605
-tests / 694 contracts / 1230 decisions. Milestone 4 (cleanup batches) is in
-progress: batches B1 (hooks-real-code), B2 (commands), B3 (util-fixes), B4
-(conversation-utils), and B5 (runtime-lib) landed 2026-09-03 as `audit-m4-b1`
-(`7c90b29a`), `audit-m4-b2` (`13c97871`), `audit-m4-b3` (`3f09d676`),
-`audit-m4-b4` (`8b8e8842`), and `audit-m4-b5` (`66ff03d0`); deferred decisions
-(suite-topology change, runtime-history location, mutation-testing
-proportionality) gate parts of it.
-
+  go/no-go (report: `docs/test-audit/calibration-report.md`). Milestone 3 (domain
+  exploration) closed 2026-09-03: all 585 test files at the `d36c392a` inventory
+  have validated graph records (28 reviewer artifacts + coordinator
+  adjudication), and the source graph (`docs/test-audit/graph.yaml`) holds 605
+  tests / 694 contracts / 1230 decisions. Milestone 4 (cleanup batches) is in
+  progress: batches B1 (hooks-real-code), B2 (commands), B3 (util-fixes), B4
+  (conversation-utils), B5 (runtime-lib), and B6 (session-obs) landed 2026-09-03
+  as `audit-m4-b1` (`7c90b29a`), `audit-m4-b2` (`13c97871`), `audit-m4-b3`
+  (`3f09d676`), `audit-m4-b4` (`8b8e8842`), `audit-m4-b5` (`66ff03d0`), and
+  `audit-m4-b6` (`1522a0fb`); deferred decisions
+  (suite-topology change, runtime-history location, mutation-testing
+  proportionality) gate parts of it.
 ## Resume here
 
 Start future audit work from current `main` in a dedicated worktree. The original
@@ -161,7 +161,7 @@ graph primary decisions to keep/high with a note naming the batch and commit):
   the 304-343 TODO case), session-composition (fix dispose test ~358-367),
   conversation-logger (delete the duplicate journal-forwarding test at ~538),
   large-uncached-input-guard (fold the 354-376 non-empty assertion into 167's
-  test).
+  test). **Landed in `audit-m4-b6` (`1522a0fb`).**
 - **B7 consolidations**: app.startup-banner (delete; app-helpers covers it),
   use-conversation.approval-pending-filter (fold retention cases into
   approval-presentation-policy.test.ts then delete the misnamed file),

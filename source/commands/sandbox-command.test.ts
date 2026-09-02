@@ -35,8 +35,8 @@ it.each([
     initialSandbox: false,
     expectedSandbox: true,
     initialMode: 'always',
-    expectedMode: 'advisory',
-    messageParts: ['enabled', 'secure environment', 'demoted to advisory'],
+    expectedMode: 'auto',
+    messageParts: ['enabled', 'secure environment', 'demoted to auto'],
   },
 ])(
   'action toggles sandbox.enabled from $title',
@@ -53,8 +53,10 @@ it.each([
         get: (key: string) => settings[key],
         set: (key: string, value: boolean | string) => {
           settings[key] = value;
+          // Mirrors SettingsService.normalizeSandboxAutoApproveExclusivity:
+          // enabling the sandbox while mode is 'always' demotes it to 'auto'.
           if (key === 'sandbox.enabled' && value === true && initialMode === 'always') {
-            settings['shell.autoApproveMode'] = 'advisory';
+            settings['shell.autoApproveMode'] = 'auto';
           }
         },
       } as unknown as SettingsService,

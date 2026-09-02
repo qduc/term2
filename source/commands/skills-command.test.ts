@@ -62,6 +62,7 @@ it.each([
     result: false,
     selected: undefined,
     message: undefined,
+    expectNoMessage: true,
     input: '/skills ',
   },
   {
@@ -78,14 +79,17 @@ it.each([
     selected: 'codebase-design',
     message: undefined,
   },
-])('action $title', ({ args, result, selected, message, input }) => {
+])('action $title', ({ args, result, selected, message, input, expectNoMessage }) => {
   const { command, selectedSkills, messages, inputs } = createHarness();
 
   expect(command.action(args)).toBe(result);
-  expect(selectedSkills[0]?.name).toBe(selected);
+  expect(selectedSkills).toHaveLength(selected === undefined ? 0 : 1);
+  if (selected !== undefined) {
+    expect(selectedSkills[0]!.name).toBe(selected);
+  }
   if (message) {
     expect(messages[0]).toContain(message);
-  } else if (selected === undefined) {
+  } else if (expectNoMessage) {
     expect(messages).toEqual([]);
   }
   expect(inputs).toEqual(input ? [input] : []);

@@ -3,7 +3,7 @@ import { createMessageIdFactory } from '../../utils/message-id-factory.js';
 import type { ConversationOrchestratorConfig } from './conversation-orchestrator.types.js';
 import type { ConversationEvent } from './conversation-events.js';
 import type { SubmissionMutation } from './conversation-adapter.js';
-import type { BotMessage, CommandMessage, UserMessage } from '../../types/message.js';
+import type { BotMessage, CommandMessage, Message, UserMessage } from '../../types/message.js';
 import { isCommandMessage, isUserMessage } from '../../types/message.js';
 import type { ConversationTerminal, PendingApproval } from '../../contracts/conversation.js';
 import { CHECK_IN_TOOL_NAME, isDeniedReadApproveAnswer } from '../../contracts/conversation.js';
@@ -13,6 +13,7 @@ import { createStreamingSession } from '../../utils/streaming/streaming-session-
 import { DEFAULT_CHARS_PER_TOKEN } from '../../utils/streaming/streaming-speed-tracker.js';
 import type { StreamingState } from '../../utils/conversation/conversation-utils.js';
 import { enhanceApiKeyError, isMaxTurnsError } from '../../utils/conversation/conversation-utils.js';
+import { insertBeforeStreamingTail } from '../../utils/conversation/message-buffer.js';
 import { clearStreamingBotMessage, computeNextMessages } from '../../utils/conversation/apply-conversation-result.js';
 import { trimTrailingAssistantMessages } from '../../utils/conversation/message-utils.js';
 import type { RewindTargetId } from './conversation-store.js';
@@ -1167,7 +1168,10 @@ export class ConversationOrchestrator {
       (notification): notification is Extract<BackgroundNotification, { kind: 'check_in' }> =>
         notification.kind === 'check_in',
     );
-    this.config.messages.appendMessages([
+    // Settled background rows go above the live streaming slots. Appending
+    // them puts the row under the moving text, where it visibly jumps back up
+    // once the stream finalizes.
+    this.#appendAboveStreamingTail([
       ...(subagentNotifications.length > 0
         ? [
             {
@@ -1267,6 +1271,17 @@ export class ConversationOrchestrator {
           ]
         : []),
     ]);
+  }
+
+  /**
+   * Adds already-settled rows just above any live streaming bot/reasoning
+   * slots, so the row keeps one stable position for its whole life.
+   */
+  #appendAboveStreamingTail(additions: readonly Message[]): void {
+    if (additions.length === 0) return;
+    this.config.messages.setMessages((prev) =>
+      this.config.messages.trimMessages(insertBeforeStreamingTail(prev, additions, Number.POSITIVE_INFINITY)),
+    );
   }
 
   /**

@@ -271,6 +271,23 @@ describe('ConversationOrchestrator background subagent notifications mid-turn', 
     );
   });
 
+  it('places a settled background row above the live streaming text instead of under it', async () => {
+    const h = makeHarness({ queueActive: true });
+    h.config.messages.setMessages(() => [
+      { id: 'user-1', sender: 'user', text: 'run the scan' },
+      { id: 'live-bot', sender: 'bot', status: 'streaming', text: 'Working on it' },
+    ]);
+
+    h.emit(shellCompletion());
+    await settle();
+
+    expect(h.config.messages.getMessages().map((message) => message.id)).toEqual([
+      'user-1',
+      expect.any(String),
+      'live-bot',
+    ]);
+  });
+
   it('hands a settled shell job to the running turn at its next request boundary', async () => {
     const h = makeHarness({ queueActive: true });
 

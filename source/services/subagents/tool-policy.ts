@@ -1056,10 +1056,14 @@ export class SubagentToolFactory {
             // callback closes the active-tool gate that defers steering interrupts.
             options.onToolComplete?.(definition.name, result, context, details);
           }
-          const trimmedResult = definition.preserveSerializedOutput
-            ? String(result ?? '')
-            : trimToolOutput(result, undefined, maxOutputLength ?? undefined);
-          return definition.preserveSerializedOutput ? trimmedResult : injectRunBudgetWarning(trimmedResult, context);
+          if (definition.preserveSerializedOutput) {
+            return String(result ?? '');
+          }
+          const trimmedResult = trimToolOutput(result, undefined, maxOutputLength ?? undefined);
+          // Structured content-part results (read_file images) carry no single
+          // text slot for the run-budget advisory; deliver them unmodified so
+          // the image reaches the provider converter.
+          return typeof trimmedResult === 'string' ? injectRunBudgetWarning(trimmedResult, context) : trimmedResult;
         },
       };
       return wrapToolInvoke(

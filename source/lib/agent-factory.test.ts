@@ -197,6 +197,28 @@ it.sequential('preserves self-bounded serialized tool output unchanged', async (
   expect(await tool.invoke({}, JSON.stringify({ value: 'ignored' }))).toBe(serialized);
 });
 
+it.sequential('preserves multimodal content-part tool results instead of coercing them to a string', async () => {
+  // read_file returns a content-part array for images. Coercing it via
+  // String() flattens it to "[object Object],[object Object]", destroying the
+  // image part before the provider converter can deliver it. Trimming it would
+  // truncate the base64 data.
+  const longData = Buffer.from('x'.repeat(10_000)).toString('base64');
+  const imageParts = [
+    { type: 'text', text: 'Image: logo.png (1234 bytes, image/png)' },
+    { type: 'image', image: { data: longData, mediaType: 'image/png' } },
+  ];
+  const definition = createToolDefinition({
+    execute: async () => imageParts,
+  });
+  const { deps } = createDeps({ settingsValues: { 'shell.maxOutputChars': 50 } });
+  const tool = buildTestTool(definition, deps);
+
+  const result = await tool.invoke({}, JSON.stringify({ value: 'ignored' }), { toolCall: { callId: 'call-image' } });
+
+  expect(Array.isArray(result)).toBe(true);
+  expect(result).toEqual(imageParts);
+});
+
 it.sequential('buildAgent passes the root background shell registry into the complete tool set', () => {
   const registry = new BackgroundShellRegistry<any>();
   const { deps } = createDeps({ backgroundShellRegistry: registry });

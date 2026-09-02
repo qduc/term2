@@ -8082,16 +8082,6 @@ tests:
   fixtureIds:
   - command-corpus
 - kind: case
-  id: shell-command-safety-red-yellow-policy-paths
-  file: source/utils/shell/command-safety.red-yellow-policy.test.ts
-  title: read-only risky paths are YELLOW, not hard-blocked
-  domainId: shell
-  suiteId: unit
-  contractIds:
-  - safety-path-policy
-  fixtureIds:
-  - command-corpus
-- kind: case
   id: shell-command-safety-red-yellow-policy-workspace
   file: source/utils/shell/command-safety.red-yellow-policy.test.ts
   title: workspace-scale edit commands are YELLOW instead of RED
@@ -8855,6 +8845,7 @@ tests:
   suiteId: unit
   contractIds:
   - approval-presentation-matching
+  - hooks-a-contract-approval-presentation
   fixtureIds:
   - approval-command-messages
 - kind: file
@@ -9883,15 +9874,6 @@ tests:
   fixtureIds:
   - hooks-a-fixture-conversation-service
   - hooks-a-fixture-ink-renderer
-- kind: file
-  id: hooks-use-conversation-approval-pending-filter
-  file: source/hooks/use-conversation.approval-pending-filter.test.ts
-  domainId: hooks
-  suiteId: unit
-  contractIds:
-  - hooks-a-contract-approval-presentation
-  fixtureIds:
-  - hooks-a-fixture-message-array
 - kind: file
   id: hooks-use-conversation-background-tasks
   file: source/hooks/use-conversation.background-tasks.test.tsx
@@ -12997,14 +12979,6 @@ tests:
   - entrypoints-a-cli-input-parsing
   fixtureIds: []
 - kind: file
-  id: entrypoints-app-startup-banner-test
-  file: source/app.startup-banner.test.ts
-  domainId: entrypoints
-  suiteId: unit
-  contractIds:
-  - entrypoints-a-app-submit-and-effects
-  fixtureIds: []
-- kind: file
   id: entrypoints-app-test
   file: source/app.test.tsx
   domainId: entrypoints
@@ -14221,17 +14195,19 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/calibration-report.md
-  recommendation: rewrite_candidate
-  confidence: medium
-  reason: 'Adversarial reviewer and coordinator agree (neutral keeps): 22 singleton one-assertion tests
-    express one command-family contract (git subcommand classification through the live wrapper seam)
-    that is otherwise unasserted; the last three cases actually probe a generic unknown-flag rule mislabeled
-    as git behavior. Milestone 4: one it.each table over (command, expected) pairs, including a correctly-labeled
-    unknown-flag rule case.'
+  recommendation: keep
+  confidence: high
+  reason: "M4 batch B7 (audit-m4-b7 2b2b4201) landed: the 22 singleton cases became one\
+    \ it.each table over exact (command, requiresApproval) pairs. The three flag\
+    \ cases (git log --force / git diff --hard / git status --delete) are now\
+    \ correctly labeled as the generic unknown-flag rule rather than git-specific\
+    \ behavior; the git subcommand and flag matrix is unchanged."
   evidence:
   - calibration-adversarial rewrite_candidate/medium; calibration-neutral keep/high recorded as dissent.
   - Coordinator full read verified 22 singleton its and unique content (no other file classifies git write
     subcommands).
+  - source/utils/shell/command-safety.git.test.ts now drives validateCommandSafety through one it.each
+    table of (command, requiresApproval) pairs covering every prior case.
   replacementTestIds: *id001
   status: reviewed
 - id: shell-command-safety-git-second-neutral
@@ -14390,47 +14366,6 @@ decisions:
     /dev/sda, sudo rm -rf /, and shutdown now classifyCommand() as SafetyStatus.RED.
   - source/utils/shell/command-safety.test.ts checks rm -rf / only through validateCommandSafety() true,
     so it does not assert the RED boundary or the complete destructive corpus.
-  replacementTestIds: []
-  status: proposed
-- id: shell-command-safety-red-yellow-policy-paths-primary
-  testId: shell-command-safety-red-yellow-policy-paths
-  role: primary
-  reviewer: test-audit-coordinator
-  sourceArtifact: docs/test-audit/calibration-report.md
-  recommendation: consolidation_candidate
-  confidence: medium
-  reason: 'Canonical case record "read-only risky paths are YELLOW, not hard-blocked": its three inputs
-    (/etc/passwd, /var/log/system.log, ../secrets.json) are each already asserted YELLOW by shell-command-safety-path
-    (directory-traversal and absolute-system-paths cases), so the case adds a duplicate regression surface.
-    Neutral reviewer and coordinator agree; named replacement carries the same evidence. Milestone 4 removes
-    this one case only; the file''s other cases stay.'
-  evidence:
-  - calibration-neutral consolidation_candidate/medium naming shell-command-safety-path as the sibling.
-  - Coordinator verified all three inputs appear in path.test.ts (traversal ../secrets.json; system paths
-    /etc/passwd and /var/log/system.log).
-  - calibration-adversarial returned file-level keep and did not expand cases; dissent on granularity
-    recorded.
-  replacementTestIds:
-  - shell-command-safety-path
-  status: reviewed
-- id: shell-command-safety-red-yellow-policy-paths-second-neutral
-  testId: shell-command-safety-red-yellow-policy-paths
-  role: second_opinion
-  reviewer: calibration-neutral
-  sourceArtifact: docs/test-audit/calibration-neutral.yaml
-  recommendation: consolidation_candidate
-  confidence: medium
-  reason: This case asserts the same path-level YELLOW outcome already asserted by the named shell-command-safety-path
-    file, so retaining both adds a small duplicate regression surface; the command-level cases in this
-    file remain independently valuable.
-  evidence:
-  - source/utils/shell/command-safety.red-yellow-policy.test.ts calls analyzePathRisk() for /etc/passwd,
-    /var/log/system.log, and ../secrets.json and expects SafetyStatus.YELLOW.
-  - The named sibling source/utils/shell/command-safety.path.test.ts asserts /etc/passwd and ../secrets.json
-    as YELLOW in its 'absolute system paths' and 'directory traversal' cases, while its broader corpus
-    covers the same path policy.
-  - If this case vanished, those exact path outcomes would still be asserted by shell-command-safety-path;
-    the realistic escaped defect is only a future divergence between the two path policy entry points.
   replacementTestIds: []
   status: proposed
 - id: shell-command-safety-red-yellow-policy-workspace-primary
@@ -20356,25 +20291,6 @@ decisions:
     cover different reset policy rather than this React adapter.
   replacementTestIds: []
   status: proposed
-- id: hooks-use-conversation-approval-pending-filter-hooks-a-m3
-  testId: hooks-use-conversation-approval-pending-filter
-  role: second_opinion
-  reviewer: hooks-a-m3
-  sourceArtifact: docs/test-audit/artifacts/hooks-a-m3.yaml
-  recommendation: consolidation_candidate
-  confidence: medium
-  reason: This file directly tests a service policy from a hook-named path, and its two filtering examples
-    substantially overlap the dedicated policy test; consolidate after preserving its non-command and
-    completed-row assertions.
-  evidence:
-  - source/hooks/use-conversation.approval-pending-filter.test.ts:4-36 verifies call-id matching while
-    retaining a user row and completed command row, and :38-64 verifies tool-name fallback.
-  - The dedicated sibling source/services/approval/approval-presentation-policy.test.ts:13-43 verifies
-    call-id precedence and :45-69 verifies tool-name fallback with an explicit capability resolver.
-  - The sibling does not currently assert the assigned file's retention of non-command/completed rows,
-    so consolidation should move or add that assertion rather than delete evidence outright.
-  replacementTestIds: []
-  status: proposed
 - id: hooks-use-conversation-background-tasks-hooks-a-m3
   testId: hooks-use-conversation-background-tasks
   role: second_opinion
@@ -26237,23 +26153,6 @@ decisions:
     expiration.
   replacementTestIds: []
   status: proposed
-- id: entrypoints-app-startup-banner-test-entrypoints-a-m3
-  testId: entrypoints-app-startup-banner-test
-  role: second_opinion
-  reviewer: entrypoints-a-m3
-  sourceArtifact: docs/test-audit/artifacts/entrypoints-a-m3.yaml
-  recommendation: consolidation_candidate
-  confidence: high
-  reason: The file repeats the exact stable-ID assertions already provided by entrypoints-app-helpers-test,
-    which is the broader helper boundary test.
-  evidence:
-  - source/app.startup-banner.test.ts:4-10 asserts the two stable-ID sequences for appendStartupBannerId.
-  - source/app-helpers.test.ts:27-35 asserts the same two sequences for the same exported function.
-  - Both assigned files import appendStartupBannerId from source/app-helpers.js, so the named sibling
-    can carry this contract.
-  replacementTestIds:
-  - entrypoints-app-helpers-test
-  status: proposed
 - id: entrypoints-app-test-entrypoints-a-m3
   testId: entrypoints-app-test
   role: second_opinion
@@ -28105,27 +28004,6 @@ decisions:
   - source/hooks/use-conversation-settings.test.tsx:71-102 verifies stable callbacks for the same service
     and replacement callbacks for a new service; service-layer setter tests at source/services/session/session-runtime-controller.test.ts:31-78
     cover different reset policy rather than this React adapter.
-  replacementTestIds: []
-  status: reviewed
-- id: hooks-use-conversation-approval-pending-filter-primary
-  testId: hooks-use-conversation-approval-pending-filter
-  role: primary
-  reviewer: test-audit-coordinator
-  sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: consolidation_candidate
-  confidence: medium
-  reason: Coordinator decision of record after source verification. This file directly tests a service
-    policy from a hook-named path, and its two filtering examples substantially overlap the dedicated
-    policy test; consolidate after preserving its non-command and completed-row assertions.
-  evidence:
-  - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
-    before this primary was written.'
-  - source/hooks/use-conversation.approval-pending-filter.test.ts:4-36 verifies call-id matching while
-    retaining a user row and completed command row, and :38-64 verifies tool-name fallback.
-  - The dedicated sibling source/services/approval/approval-presentation-policy.test.ts:13-43 verifies
-    call-id precedence and :45-69 verifies tool-name fallback with an explicit capability resolver.
-  - The sibling does not currently assert the assigned file's retention of non-command/completed rows,
-    so consolidation should move or add that assertion rather than delete evidence outright.
   replacementTestIds: []
   status: reviewed
 - id: hooks-use-conversation-background-tasks-primary
@@ -31522,18 +31400,21 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: consolidation_candidate
-  confidence: medium
-  reason: Coordinator decision of record after source verification. The broad unit file and security sibling
-    duplicate a substantial exact observable cluster; unique ordinary normalization, empty-scope APIs,
-    and symlink cases should be retained while duplicate cases are consolidated.
+  recommendation: keep
+  confidence: high
+  reason: "M4 batch B7 (audit-m4-b7 2b2b4201) landed: the five normalizeToolPath traversal\
+    \ cases that exactly duplicated the security sibling were deleted from this file\
+    \ (../etc/passwd, nested ../../../, absolute outside, null byte, and allowed\
+    \ in-workspace ..). The file retains ordinary path normalization, empty-scope\
+    \ APIs, scope resolution, and the pattern-normalization cases the security\
+    \ sibling does not carry."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
-  - Exact repeated traversal, src/**, extension glob, host suffix/wildcard/port, and intersection assertions
-    are in source/services/agent-runtime/scope-resolver.test.ts:24-392 and source/services/agent-runtime/scope-resolver.security.test.ts:34-216.
-  - The security sibling adds realpath defense and this file adds empty-scope APIs, so coordinator review
-    is required before moving individual cases; this is not a deletion proposal.
+  - source/services/agent-runtime/scope-resolver.security.test.ts:34-216 holds the canonical traversal,
+    glob, host, and intersection assertions.
+  - source/services/agent-runtime/scope-resolver.test.ts:24-33, 56-59 retains in-workspace resolution
+    and empty-string rejection; empty-scope and resolution APIs remain at :281-420.
   replacementTestIds: []
   status: reviewed
 - id: runtime-skill-resolver-primary
@@ -34910,25 +34791,6 @@ decisions:
     forms.
   - source/app.parseInput.test.ts:76-97 asserts multiple-space, trailing-space, and special-character
     edge cases.
-  replacementTestIds: []
-  status: reviewed
-- id: entrypoints-app-startup-banner-test-primary
-  testId: entrypoints-app-startup-banner-test
-  role: primary
-  reviewer: test-audit-coordinator
-  sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: consolidation_candidate
-  confidence: high
-  reason: Coordinator decision of record after source verification. The file repeats the exact stable-ID
-    assertions already provided by entrypoints-app-helpers-test, which is the broader helper boundary
-    test.
-  evidence:
-  - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
-    before this primary was written.'
-  - source/app.startup-banner.test.ts:4-10 asserts the two stable-ID sequences for appendStartupBannerId.
-  - source/app-helpers.test.ts:27-35 asserts the same two sequences for the same exported function.
-  - Both assigned files import appendStartupBannerId from source/app-helpers.js, so the named sibling
-    can carry this contract.
   replacementTestIds: []
   status: reviewed
 - id: entrypoints-app-test-primary

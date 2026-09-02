@@ -921,6 +921,120 @@ it('splices a trailing opaque payload onto its own turn, not an earlier assistan
   expect(assistants[1].reasoning).toBe('second turn thinking');
 });
 
+// The run loop can journal an empty continuity payload for a round with no new
+// assistant output. Positional pairing folded that surplus payload onto the
+// last assistant and erased the real reasoning already attached to that turn.
+it('does not let an unmatched opaque payload clobber an earlier turn', async () => {
+  const bodies: any[] = [];
+  const client = {
+    chat: {
+      completions: {
+        create: async (body: any) => {
+          bodies.push(body);
+          return emptyStream();
+        },
+      },
+    },
+  };
+  const model = new OpenAIChatCompletionsModel(client, 'fixture-chat', undefined, 'gateway');
+  const request = {
+    input: [
+      { type: 'message', role: 'user', content: [{ type: 'text', text: 'first' }] },
+      { type: 'tool_call', id: 'call_a', name: 'lookup', arguments: '{}' },
+      { type: 'tool_result', id: 'call_a', output: 'a' },
+      { type: 'provider_opaque', provider: 'gateway', item: { reasoning: 'first turn thinking' } },
+      { type: 'message', role: 'user', content: [{ type: 'text', text: 'second' }] },
+      { type: 'tool_call', id: 'call_b', name: 'lookup', arguments: '{}' },
+      { type: 'tool_result', id: 'call_b', output: 'b' },
+      { type: 'provider_opaque', provider: 'gateway', item: { reasoning: 'second turn thinking' } },
+      { type: 'provider_opaque', provider: 'gateway', item: {} },
+    ],
+    tools: [],
+  } as any;
+
+  for await (const _event of model.stream(request)) {
+    // drain
+  }
+
+  const assistants = bodies[0].messages.filter((message: any) => message.role === 'assistant');
+  expect(assistants).toHaveLength(2);
+  expect(assistants.map((message: any) => message.reasoning)).toEqual(['first turn thinking', 'second turn thinking']);
+});
+
+it('associates leading opaque payloads with each following assistant group', async () => {
+  let capturedBody: any;
+  const client = {
+    chat: {
+      completions: {
+        create: async (body: any) => {
+          capturedBody = body;
+          return emptyStream();
+        },
+      },
+    },
+  };
+  const model = new OpenAIChatCompletionsModel(client, 'fixture-chat', undefined, 'gateway');
+  const request = {
+    input: [
+      { type: 'message', role: 'user', content: [{ type: 'text', text: 'start' }] },
+      { type: 'provider_opaque', provider: 'gateway', item: { reasoning: 'first turn thinking' } },
+      { type: 'tool_call', id: 'call_a', name: 'lookup', arguments: '{}' },
+      { type: 'tool_result', id: 'call_a', output: 'a' },
+      { type: 'provider_opaque', provider: 'gateway', item: { reasoning: 'second turn thinking' } },
+      { type: 'tool_call', id: 'call_b', name: 'lookup', arguments: '{}' },
+      { type: 'tool_result', id: 'call_b', output: 'b' },
+    ],
+    tools: [],
+  } as any;
+
+  for await (const _event of model.stream(request)) {
+    // drain
+  }
+
+  const assistants = capturedBody.messages.filter((message: any) => message.role === 'assistant');
+  expect(assistants.map((message: any) => message.reasoning)).toEqual(['first turn thinking', 'second turn thinking']);
+});
+
+it('does not attach a later leading reasoning payload to an earlier group with no payload', async () => {
+  let capturedBody: any;
+  const client = {
+    chat: {
+      completions: {
+        create: async (body: any) => {
+          capturedBody = body;
+          return emptyStream();
+        },
+      },
+    },
+  };
+  const model = new OpenAIChatCompletionsModel(client, 'fixture-chat', undefined, 'gateway');
+  const request = {
+    input: [
+      { type: 'message', role: 'user', content: [{ type: 'text', text: 'start' }] },
+      { type: 'tool_call', id: 'call_a', name: 'lookup', arguments: '{}' },
+      { type: 'tool_result', id: 'call_a', output: 'a' },
+      {
+        type: 'reasoning',
+        text: 'second turn thinking',
+        providerMetadata: { reasoning_content: 'second turn thinking' },
+      },
+      { type: 'provider_opaque', provider: 'gateway', item: { reasoning: 'second turn thinking' } },
+      { type: 'tool_call', id: 'call_b', name: 'lookup', arguments: '{}' },
+      { type: 'tool_result', id: 'call_b', output: 'b' },
+    ],
+    tools: [],
+  } as any;
+
+  for await (const _event of model.stream(request)) {
+    // drain
+  }
+
+  const assistants = capturedBody.messages.filter((message: any) => message.role === 'assistant');
+  expect(assistants).toHaveLength(2);
+  expect(assistants[0]).not.toHaveProperty('reasoning');
+  expect(assistants[1].reasoning).toBe('second turn thinking');
+});
+
 // The payload is the same reasoning the normalized item carries, in the
 // provider's own spelling. Replaying both sends the tokens twice, in two fields.
 it('replaces reconstructed reasoning_content with the payload spelling rather than sending both', async () => {
@@ -1079,10 +1193,9 @@ it('stream() keeps assistant text that arrived alongside tool calls', async () =
   ]);
 });
 
-// One turn must stay one assistant message: `attachOpaquePayloads` pairs the
-// i-th continuity payload with the i-th assistant message, so splitting a turn
-// into a text message plus a tool-call message would hand each turn's reasoning
-// to the wrong half.
+// One turn must stay one assistant message: splitting a turn into a text
+// message plus a tool-call message would separate its continuity payload from
+// part of the output it describes.
 it('replays assistant text and its turn tool calls as one assistant message', async () => {
   const bodies: any[] = [];
   const client = {

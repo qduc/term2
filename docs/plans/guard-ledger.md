@@ -771,6 +771,20 @@ red proof before changing containment behavior. A total deadline is explicitly
 rejected here because both requests were actively producing frames and long
 active model work is legitimate.
 
+**Recurrence 2026-09-02 (background explorer, still under cap).** Full write-up:
+[`docs/research/subagent-explorer-luna-tool-arg-runaway.md`](../research/subagent-explorer-luna-tool-arg-runaway.md).
+Parent session `8713abd8`, child run `cardinal-tor-206`, aborted envelope
+`2026-09-02/09-02-22_8713a/09-07-38.560Z_03ccb.json`. Same Luna WebSocket
+shape: 549,205ms, 29,957 events, max gap 3,874ms, cancelled by the parent.
+The new counters now exist: `toolArgumentDeltaFrames` 29,942,
+`toolArgumentDeltaCharacters` 43,157, `toolCallStartFrames` 1. That is under
+the 100,000-character tool-argument caps, so `GenerationGuard` still must not
+abort from these numbers. What is new is packaging: `get_subagent_status`
+showed `waiting (provider), quiet` with `lastTool: read_file` and no
+`streamingTool`, because `ExecutionSubagentRunner` drops
+`tool_call_streaming_delta` events that omit `toolName`. Containment
+disposition is unchanged. The liveness hole is a separate, smaller repair.
+
 Red proof for the observability gap:
 
 ```text

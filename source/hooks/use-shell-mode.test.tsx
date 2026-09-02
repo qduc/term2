@@ -67,7 +67,7 @@ it('clears the composer, projects results, and returns to normal mode after a co
   expect(session.getSnapshot()).toEqual({ isShellMode: false });
 });
 
-it('flushes shell history when shell mode closes', async () => {
+it.each(['echo one', 'echo two'])('flushes shell history when shell mode closes (submitted: %s)', async (command) => {
   const session = createSession();
   await renderHarness(session);
 
@@ -76,31 +76,12 @@ it('flushes shell history when shell mode closes', async () => {
   });
 
   await act(async () => {
-    await shellApi!.handleShellSubmit('echo one');
+    await shellApi!.handleShellSubmit(command);
   });
 
   await act(async () => {
     shellApi!.exitShellMode();
   });
 
-  expect(mocks.addShellContext).toHaveBeenCalledWith(expect.stringContaining('echo one|command output|0|false'));
-});
-
-it('flushes pending history when shell mode is explicitly left', async () => {
-  const session = createSession();
-  await renderHarness(session);
-
-  await act(async () => {
-    shellApi!.enterShellMode();
-  });
-
-  await act(async () => {
-    await shellApi!.handleShellSubmit('echo two');
-  });
-
-  await act(async () => {
-    shellApi!.exitShellMode();
-  });
-
-  expect(mocks.addShellContext).toHaveBeenCalledWith(expect.stringContaining('echo two|command output|0|false'));
+  expect(mocks.addShellContext).toHaveBeenCalledWith(expect.stringContaining(`${command}|command output|0|false`));
 });

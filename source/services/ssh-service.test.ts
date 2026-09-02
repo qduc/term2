@@ -338,8 +338,7 @@ it('writeFile: writes content via heredoc', async () => {
   expect(mockClient.lastExecCommand!.includes('new content')).toBe(true);
 
   mockClient.mockStream!.simulateOutput('', '', 0);
-  await resultPromise;
-  expect(true).toBe(true);
+  await expect(resultPromise).resolves.toBeUndefined();
 });
 
 it('writeFile: throws on failure', async () => {
@@ -387,8 +386,7 @@ it('mkdir: creates directory', async () => {
   expect(mockClient.lastExecCommand ?? '').toMatch(/^mkdir\s+'\/new\/dir'$/);
 
   mockClient.mockStream!.simulateOutput('', '', 0);
-  await resultPromise;
-  expect(true).toBe(true);
+  await expect(resultPromise).resolves.toBeUndefined();
 });
 
 it('mkdir: creates directory recursively', async () => {
@@ -403,8 +401,7 @@ it('mkdir: creates directory recursively', async () => {
   expect(mockClient.lastExecCommand ?? '').toMatch(/^mkdir\s+-p\s+'\/new\/nested\/dir'$/);
 
   mockClient.mockStream!.simulateOutput('', '', 0);
-  await resultPromise;
-  expect(true).toBe(true);
+  await expect(resultPromise).resolves.toBeUndefined();
 });
 
 it('mkdir: throws on failure', async () => {

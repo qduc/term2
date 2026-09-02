@@ -7,10 +7,12 @@ Status: Milestones 1-3 complete. Calibration wave ran 2026-09-02 and PASSED its
   adjudication), and the source graph (`docs/test-audit/graph.yaml`) holds 605
   tests / 694 contracts / 1230 decisions. Milestone 4 (cleanup batches) is in
   progress: batches B1 (hooks-real-code), B2 (commands), B3 (util-fixes), B4
-  (conversation-utils), B5 (runtime-lib), B6 (session-obs), and B7
-  (consolidations) landed 2026-09-03 as `audit-m4-b1` (`7c90b29a`), `audit-m4-b2`
+  (conversation-utils), B5 (runtime-lib), B6 (session-obs), B7
+  (consolidations), and B8 (shell-tools-misc) landed 2026-09-03 as
+  `audit-m4-b1` (`7c90b29a`), `audit-m4-b2`
   (`13c97871`), `audit-m4-b3` (`3f09d676`), `audit-m4-b4` (`8b8e8842`), `audit-m4-b5`
-  (`66ff03d0`), `audit-m4-b6` (`1522a0fb`), and `audit-m4-b7` (`2b2b4201`); the graph
+  (`66ff03d0`), `audit-m4-b6` (`1522a0fb`), `audit-m4-b7` (`2b2b4201`), and
+  `audit-m4-b8` (`db3890cf`); the graph
   now holds 602 tests / 694 contracts / 1224 decisions after B7 removed two
   whole-test-file records (app.startup-banner, the misnamed hook-named
   approval-pending-filter) and one case record (red-yellow-policy paths); deferred
@@ -177,7 +179,7 @@ graph primary decisions to keep/high with a note naming the batch and commit):
 - **B8 shell-tools-misc**: tool-parameter-schema (table-ify the 7 optional-vs-
   nullable its), SettingsSelectionMenu, HandoffConfirmationPrompt,
   InputContext "multiple components" tautology case, ssh-service trailing
-  tautologies.
+  tautologies. **Landed in `audit-m4-b8` (`db3890cf`).**
 - **B9 subagents**: codename-run-id + the five subagent-manager split files
   (mega-case splits, dead imports, scenario dedupe per second-wave1 opinion).
 - **B10 eval+stream+provider**: eval-auto-approval leaderboard + report,

@@ -1,7 +1,6 @@
 import { it, expect } from 'vitest';
 import { SubagentBridge as ProductionSubagentBridge } from './subagent-bridge.js';
 import { SessionContextService } from '../services/session/session-context-service.js';
-import type { ConversationEvent } from '../services/conversation/conversation-events.js';
 import { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
 import { SubagentAsyncRegistry } from '../services/subagents/subagent-async-registry.js';
 
@@ -614,13 +613,14 @@ it('runSubagentAsync passes the bridge abort signal to startRunAsync', async () 
   expect(trackStartRunAsync.lastArgs.signal).toBeInstanceOf(AbortSignal);
 });
 
-it('runSubagentAsync keeps event sink alive until the async run completes', async () => {
+it('runSubagentAsync does not count against the foreground active-subagents lease', async () => {
   const { manager } = createMockManager();
   const bridge = makeBridge(manager);
 
-  bridge.setEventSink((_event: ConversationEvent) => {});
-  const handle = await bridge.runSubagentAsync({ role: 'explorer', task: 'find files' });
-
+  // async runs are conversation-bound and tracked by the manager, not by the
+  // bridge's foreground lease counter that createMentor/runSubagent use.
+  expect(bridge.activeSubagentsCount).toBe(0);
+  await bridge.runSubagentAsync({ role: 'explorer', task: 'find files' });
   expect(bridge.activeSubagentsCount).toBe(0);
 });
 
@@ -656,13 +656,18 @@ it('public async controls delegate non-blockingly while transient bridges reject
   expect(() => transient.cancelSubagentRun({ target: 'scan' })).toThrow(/Transient agent clients/);
 });
 
-it('cancelAsyncRuns delegates to SubagentManager.cancelAllAsyncRuns', () => {
+it('cancelAsyncRuns stays inert (deprecated) while cancelBackgroundRuns delegates', () => {
   const { manager, trackCancelAllAsyncRuns } = createMockManager();
   const bridge = makeBridge(manager);
 
+  // The Phase-1 seam is a deliberate no-op so ordinary turns do not cancel
+  // conversation-bound background runs (see subagent-bridge.ts cancelAsyncRuns).
   bridge.cancelAsyncRuns();
-
   expect(trackCancelAllAsyncRuns.callCount).toBe(0);
+
+  // The real session-bound control delegates to the manager.
+  bridge.cancelBackgroundRuns();
+  expect(trackCancelAllAsyncRuns.callCount).toBe(1);
 });
 
 it('runSubagentAsync throws when SubagentManager is null', async () => {

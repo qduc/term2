@@ -34515,20 +34515,18 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
-  confidence: medium
-  reason: Coordinator decision of record after source verification. The file protects important settings
-    observation, persistence, validation, and canonicalization contracts, but its provider-registration
-    case leaves global state behind and explicitly records missing teardown work.
+  recommendation: keep
+  confidence: high
+  reason: "M4 batch B3 (audit-m4-b3 3f09d676) landed: the provider-registration case now unregisters its\
+    \ provider in a finally block, so the file leaves no global provider-registry state behind and the\
+    \ acknowledged teardown TODO is gone."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
-  - source/utils/settings-command.test.ts:118-218 covers summaries, autocomplete, profile writes, reads,
-    and runtime updates.
-  - source/utils/settings-command.test.ts:219-279 verifies failed durable writes and persistence-disabled
-    messaging with temporary directories.
-  - source/utils/settings-command.test.ts:439-460 registers a provider with no cleanup; lines 442-443
-    contain the TODO acknowledging teardown conversion.
+  - 'source/utils/settings-command.test.ts:439-460 wraps the upserted provider in try/finally and calls
+    unregisterProvider(providerId); line 6 imports it from the providers facade.'
+  - The file's remaining cases cover summaries, autocomplete, profile writes, reads, runtime updates,
+    failed durable writes, and persistence-disabled messaging without touching the registry.
   replacementTestIds: []
   status: reviewed
 - id: utils-skill-discovery-paths-test-primary
@@ -34706,22 +34704,18 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
-  confidence: medium
-  reason: Coordinator decision of record after source verification. Core suggestion behavior is valuable,
-    but the type-check section observes SettingsSchema and Zod internals instead of the exported value-suggestion
-    API and is mislabeled as testing unimported helpers.
+  recommendation: keep
+  confidence: high
+  reason: "M4 batch B3 (audit-m4-b3 3f09d676) landed: the type-check section now imports and exercises\
+    \ the exported isNumberSetting/isStringSetting instead of re-deriving the classification from\
+    \ resolveSettingAtPath plus Zod instance checks under mislabeled titles."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
-  - Lines 38-117 and 185-286 assert meaningful curated, schema-derived, filtering, and custom-value outcomes
-    worth retaining.
-  - Lines 15-35 walk SettingsSchema through private _def fields, coupling the test to Zod representation
-    details.
-  - Lines 119-183 label cases as isNumberSetting or isStringSetting but import neither function; they
-    instead inspect resolveSettingAtPath and ZodNumber or ZodString instances.
-  - Sibling source/utils/value-suggestions.secret.test.ts:4-15 separately protects secret-key classification,
-    so this rewrite need not absorb that security contract.
+  - 'source/utils/value-suggestions.test.ts:119-183 asserts the exported isNumberSetting/isStringSetting
+    against positive and negative number/string setting keys.'
+  - The schema-walking invariant sweep (lines 69-76) still protects enum/boolean auto-suggestion
+    completeness, and curated, filtering, and custom-value cases are retained.
   replacementTestIds: []
   status: reviewed
 - id: entrypoints-build-output-e2e-test-primary

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createSettingsCommand, formatSettingsSummary, parseSettingValue } from './settings-command.js';
-import { upsertProvider } from '../providers/index.js';
+import { unregisterProvider, upsertProvider } from '../providers/index.js';
 import type { SettingsWithSources } from '../services/settings/settings-schema.js';
 import { SettingsService } from '../services/settings/settings-service.js';
 
@@ -438,23 +438,26 @@ it('setting tools.editHealingModel strips --provider flag and saves edit healing
 
 it('setting agent.model accepts provider names with spaces', () => {
   const providerId = 'opencode go settings command test';
-
-  // TODO: // TODO: t.teardown(() => unregisterProvider(providerId)) needs manual try/finally conversion;
   upsertProvider({
     id: providerId,
     label: providerId,
     fetchModels: async () => [],
   });
-  const deps = createDeps();
-  const command = createSettingsCommand(deps);
-  command.action(`agent.model deepseek-v4-flash --provider=${providerId}`);
 
-  expect(deps.setCalls).toEqual([
-    { key: 'agent.provider', value: providerId },
-    { key: 'agent.model', value: 'deepseek-v4-flash' },
-  ]);
-  expect(deps.applied).toEqual([
-    { key: 'agent.provider', value: providerId },
-    { key: 'agent.model', value: 'deepseek-v4-flash' },
-  ]);
+  try {
+    const deps = createDeps();
+    const command = createSettingsCommand(deps);
+    command.action(`agent.model deepseek-v4-flash --provider=${providerId}`);
+
+    expect(deps.setCalls).toEqual([
+      { key: 'agent.provider', value: providerId },
+      { key: 'agent.model', value: 'deepseek-v4-flash' },
+    ]);
+    expect(deps.applied).toEqual([
+      { key: 'agent.provider', value: providerId },
+      { key: 'agent.model', value: 'deepseek-v4-flash' },
+    ]);
+  } finally {
+    unregisterProvider(providerId);
+  }
 });

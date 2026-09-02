@@ -31,8 +31,18 @@ export function createSessionBrowserToolDefinitions(browser: SessionBrowser): To
     ),
     definition(
       'session_read',
-      'Read a prior local session transcript progressively by cursor. Use `id: "previous"` for the persisted rollover predecessor, or an exact/unambiguous UUID prefix. Ambiguous prefixes return candidates and are never guessed. `total` is the projected record count for the whole session; `omitted` counts records not begun in this page (a partially emitted chunk still counts as begun), so `total - omitted` records were started here.',
-      z.object({ id, cursor: z.string().optional(), limit, maxChars }).strict(),
+      'Read a prior local session transcript progressively by cursor. Use `id: "previous"` for the persisted rollover predecessor, or an exact/unambiguous UUID prefix. Ambiguous prefixes return candidates and are never guessed. Use `from: "end"` on an initial read to start at the final projected record; omit `cursor` with this option, then use the returned cursor for any continuation. `total` is the projected record count for the whole session; `omitted` counts records not begun in this page (a partially emitted chunk still counts as begun), so `total - omitted` records were started here.',
+      z
+        .object({ id, from: z.literal('end').optional(), cursor: z.string().optional(), limit, maxChars })
+        .strict()
+        .superRefine((params, ctx) => {
+          if (params.from === 'end' && params.cursor !== undefined)
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['from'],
+              message: '`from: "end"` requires an initial read without cursor.',
+            });
+        }),
       (params) => browser.read(params),
     ),
   ];

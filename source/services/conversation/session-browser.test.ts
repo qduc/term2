@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -204,6 +204,31 @@ it('detects transcript changes even when the latest persisted timestamp is uncha
   });
 });
 
+it('invalidates a cached page when the target delta sidecar changes', () => {
+  writeSession('session-a', '/project', undefined, 'x'.repeat(900));
+  const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
+  const page: any = browser.read({ id: 'session-a', maxChars: 512 });
+  fs.writeFileSync(
+    path.join(dir, 'session-a.deltas'),
+    `${JSON.stringify({
+      v: 3,
+      seq: 99,
+      ts: '2026-01-01T00:00:01.000Z',
+      event: {
+        type: 'assistant_journal_delta',
+        turnId: 'interrupted-turn',
+        seq: 1,
+        kind: 'text',
+        delta: 'changed in sidecar',
+      },
+    })}\n`,
+  );
+
+  expect(browser.read({ id: 'session-a', cursor: page.nextCursor })).toMatchObject({
+    error: { code: 'stale_cursor' },
+  });
+});
+
 it('projects every supported message kind while excluding provider and tool internals', () => {
   const id = 'all-kinds';
   const writer = createConversationLogWriter({ sessionId: id, dir, logger });
@@ -314,6 +339,64 @@ it('recovers all oversized text exactly once with advancing, bounded pages', () 
     }
   } while (cursor);
   expect(chunks.join('')).toBe(text);
+});
+
+it('reuses the resolved target snapshot across unchanged cursor pages', () => {
+  writeSession('paged', '/project', undefined, 'x'.repeat(2_000));
+  writeSession('current', '/project', undefined, 'current text', 'paged');
+  writeSession('unrelated', '/project', undefined, 'unrelated text');
+  const browser = new SessionBrowser(() => ({ projectPath: '/project', currentSessionId: 'current' }));
+  const originalReadFileSync = fs.readFileSync;
+  const jsonlReads: string[] = [];
+  const spy = vi.spyOn(fs, 'readFileSync').mockImplementation((targetPath, ...args) => {
+    if (typeof targetPath === 'string' && targetPath.endsWith('.jsonl')) jsonlReads.push(targetPath);
+    return originalReadFileSync(targetPath, ...args);
+  });
+
+  try {
+    const first: any = browser.read({ id: 'previous', maxChars: 512, limit: 1 });
+    expect(first.nextCursor).toBeTruthy();
+    expect(jsonlReads.filter((file) => path.basename(file) === 'paged.jsonl')).toHaveLength(1);
+    expect(jsonlReads.filter((file) => path.basename(file) === 'unrelated.jsonl')).toHaveLength(1);
+    const readsAfterFirstPage = [...jsonlReads];
+
+    const second: any = browser.read({ id: 'previous', cursor: first.nextCursor, maxChars: 512, limit: 1 });
+    expect(second.error).toBeUndefined();
+    expect(jsonlReads).toEqual(readsAfterFirstPage);
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+it('rechecks project authorization when context changes between cursor pages', () => {
+  writeSession('paged', '/project', undefined, 'x'.repeat(2_000));
+  let context = { projectPath: '/project' };
+  const browser = new SessionBrowser(() => context);
+  const first: any = browser.read({ id: 'paged', maxChars: 512, limit: 1 });
+
+  context = { projectPath: '/other' };
+  expect(browser.read({ id: 'paged', cursor: first.nextCursor, maxChars: 512, limit: 1 })).toMatchObject({
+    error: { code: 'not_found', message: expect.stringContaining('/other') },
+  });
+});
+
+it('re-resolves previous when the current session changes between cursor pages', () => {
+  writeSession('first-previous', '/project', undefined, 'x'.repeat(2_000));
+  writeSession('new-previous', '/project', undefined, 'replacement');
+  writeSession('current', '/project', undefined, 'current', 'first-previous');
+  const browser = new SessionBrowser(() => ({ projectPath: '/project', currentSessionId: 'current' }));
+  const first: any = browser.read({ id: 'previous', maxChars: 512, limit: 1 });
+  appendEnvelope('current', 99, {
+    type: 'session_init',
+    id: 'current',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    projectPath: '/project',
+    rolloverFrom: 'new-previous',
+  });
+
+  expect(browser.read({ id: 'previous', cursor: first.nextCursor, maxChars: 512, limit: 1 })).toMatchObject({
+    error: { code: 'invalid_cursor' },
+  });
 });
 
 it('reports list totals and counts only budget-dropped entries in omitted', () => {

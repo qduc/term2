@@ -1,0 +1,782 @@
+schemaVersion: 2
+domains:
+  - id: ui-components
+    label: Ink UI components and input/layout behavior
+suites:
+  - id: ui-components-a-unit
+    label: Focused component and pure-function tests
+  - id: ui-components-a-integration
+    label: Ink input/menu integration tests
+seams:
+  - id: ui-components-a-error-boundary
+    label: React error-boundary capture and fallback rendering
+  - id: ui-components-a-menu-trigger-parser
+    label: Input text and cursor parsing into the active menu kind
+  - id: ui-components-a-input-box
+    label: InputBox terminal editing, submission, prompts, and queue interaction
+  - id: ui-components-a-markdown-renderer
+    label: Markdown token parsing and terminal rendering
+  - id: ui-components-a-menu-container
+    label: Generic menu item rendering and inactive-item callback contract
+  - id: ui-components-a-visible-tabs
+    label: Width-bounded tab-window calculation and scroll indicators
+  - id: ui-components-a-application-input-surface
+    label: Application input/menu surface ownership and session mounting
+  - id: ui-components-a-copy-session
+    label: Copy menu selection intent and dismissal
+  - id: ui-components-a-first-run-prompt
+    label: First-run provider/model setup guidance rendering
+  - id: ui-components-a-model-session
+    label: Model menu selection, setup fallback, and apply-settings intents
+  - id: ui-components-a-provider-session
+    label: Provider management, credentials, and OAuth-account selection
+  - id: ui-components-a-rewind-session
+    label: Rewind menu intent dispatch and dismissal
+  - id: ui-components-a-settings-session
+    label: Settings menu child routing and reset behavior
+  - id: ui-components-a-settings-value-session
+    label: Settings value parsing, intent dispatch, and completion
+  - id: ui-components-a-slash-session
+    label: Slash command completion and execution interaction
+  - id: ui-components-a-input-width
+    label: Terminal-width calculation for the input editor
+  - id: ui-components-a-insertions
+    label: Completion insertion text and cursor computation
+  - id: ui-components-a-menu-controller
+    label: Menu stack, editor snapshots, frame effects, and intent routing
+  - id: ui-components-a-menu-system
+    label: Terminal-boundary integration of input, trigger, and menu sessions
+  - id: ui-components-a-trigger-registry
+    label: Trigger-rule IDs, successor graphs, and restore-point semantics
+  - id: ui-components-a-background-manager
+    label: Background-task manager navigation, details, stop, and transfer actions
+  - id: ui-components-a-background-panel
+    label: Compact background-task row rendering, liveness, and retention
+  - id: ui-components-a-bottom-area
+    label: Bottom-area routing among prompts, input, status, queue, and task surfaces
+  - id: ui-components-a-diff-view
+    label: Diff rendering with bounded unchanged-line context
+  - id: ui-components-a-status-bar
+    label: Status-bar configuration, usage, warnings, and width-budget rendering
+  - id: ui-components-a-background-clock
+    label: Background-task clock admission while work or retention is live
+  - id: ui-components-a-live-task-rows
+    label: Foreground/background task-row normalization and ordering
+risks:
+  - id: ui-components-a-error-fallback-risk
+    label: A render-time component error escapes the boundary or gives no actionable fallback.
+    severity: high
+  - id: ui-components-a-trigger-risk
+    label: Input is assigned to the wrong menu, causing incorrect completion or command behavior.
+    severity: high
+  - id: ui-components-a-editor-risk
+    label: Terminal editing loses input, cursor position, submission mode, or queue semantics.
+    severity: high
+  - id: ui-components-a-markdown-risk
+    label: Assistant markdown is rendered with lost content, malformed code, or unusable terminal layout.
+    severity: medium
+  - id: ui-components-a-menu-render-risk
+    label: A shared menu renders the wrong items or inactive-state information.
+    severity: medium
+  - id: ui-components-a-tab-window-risk
+    label: Tabs or scroll indicators omit the active item or exceed the terminal width.
+    severity: medium
+  - id: ui-components-a-input-ownership-risk
+    label: A menu and composer both consume terminal input or fail to restore ownership.
+    severity: high
+  - id: ui-components-a-copy-risk
+    label: Copy selection invokes the wrong callback or remains open after dismissal.
+    severity: medium
+  - id: ui-components-a-setup-guidance-risk
+    label: First-run users receive guidance for the wrong setup phase or provider.
+    severity: high
+  - id: ui-components-a-model-risk
+    label: Model selection applies the wrong provider/model or traps setup and validation errors.
+    severity: high
+  - id: ui-components-a-provider-risk
+    label: Provider credentials or account selection alter the wrong session or mislead the user.
+    severity: high
+  - id: ui-components-a-rewind-risk
+    label: Rewind acceptance dispatches the wrong disposition or dismissal triggers work.
+    severity: high
+  - id: ui-components-a-settings-risk
+    label: Settings navigation or reset mutates the wrong key or loses the parent editor state.
+    severity: high
+  - id: ui-components-a-setting-value-risk
+    label: A typed setting value is parsed or persisted incorrectly, or validation hides the editing frame.
+    severity: high
+  - id: ui-components-a-slash-risk
+    label: Tab completion executes a command unexpectedly or leaves the editor/menu in the wrong state.
+    severity: high
+  - id: ui-components-a-width-risk
+    label: Input width is wrong for a prompt mode, causing clipping or invalid layout.
+    severity: medium
+  - id: ui-components-a-insertion-risk
+    label: Completion replacement corrupts surrounding text, provider flags, or cursor placement.
+    severity: high
+  - id: ui-components-a-controller-risk
+    label: Stale menu effects or back policies corrupt the editor/menu stack or deliver intents to the wrong frame.
+    severity: critical
+  - id: ui-components-a-menu-system-risk
+    label: Terminal keystrokes do not reach the active session or a completed menu leaves command text behind.
+    severity: critical
+  - id: ui-components-a-registry-risk
+    label: Trigger graph changes activate incompatible successor IDs or restore the wrong prefix.
+    severity: high
+  - id: ui-components-a-background-manager-risk
+    label: Task management acts on a different task than the highlighted identity or stops work without confirmation.
+    severity: high
+  - id: ui-components-a-background-panel-risk
+    label: Live, waiting, failed, or retained work is mislabeled, clipped, or hidden at the wrong time.
+    severity: high
+  - id: ui-components-a-bottom-area-risk
+    label: A higher-priority prompt is hidden or the bottom area gives input ownership to the wrong surface.
+    severity: critical
+  - id: ui-components-a-diff-risk
+    label: Large diffs overwhelm the terminal or hide changed lines while collapsing context.
+    severity: medium
+  - id: ui-components-a-status-risk
+    label: Configuration, usage, cost, safety, quota, or warning signals are omitted or assigned to the wrong row.
+    severity: high
+  - id: ui-components-a-background-clock-risk
+    label: The task clock stops before live work/retention is visible or keeps ticking forever when idle.
+    severity: high
+  - id: ui-components-a-live-rows-risk
+    label: Foreground work is confused with adopted background work or rows appear in the wrong order.
+    severity: high
+fixtures: []
+contracts:
+  - id: ui-components-a-error-fallback-contract
+    statement: ErrorBoundary renders children normally and replaces a throwing subtree with an application-error fallback containing recovery options and the error message.
+    seamIds: [ui-components-a-error-boundary]
+    riskIds: [ui-components-a-error-fallback-risk]
+  - id: ui-components-a-trigger-contract
+    statement: Active-menu detection maps cursor-qualified input to the highest-priority applicable model, settings, setting-value, skills, resume, slash, or path menu and returns none otherwise.
+    seamIds: [ui-components-a-menu-trigger-parser]
+    riskIds: [ui-components-a-trigger-risk]
+  - id: ui-components-a-editor-contract
+    statement: InputBox preserves terminal editing state while rendering the correct prompt and routes Enter, Alt+Enter, Escape, history, shell mode, and queue interactions to their documented callbacks.
+    seamIds: [ui-components-a-input-box]
+    riskIds: [ui-components-a-editor-risk]
+  - id: ui-components-a-markdown-contract
+    statement: MarkdownRenderer preserves supported markdown content and formatting, including lists, code, tables, spacing, pre-parsed tokens, escaping, and terminal-safe table widths.
+    seamIds: [ui-components-a-markdown-renderer]
+    riskIds: [ui-components-a-markdown-risk]
+  - id: ui-components-a-menu-container-contract
+    statement: MenuContainer renders every supplied item and passes the correct inactive flag to each renderItem invocation.
+    seamIds: [ui-components-a-menu-container]
+    riskIds: [ui-components-a-menu-render-risk]
+  - id: ui-components-a-visible-tabs-contract
+    statement: computeVisibleTabs returns a width-fitting window that includes the active or fallback-first item and accurately reports left/right overflow.
+    seamIds: [ui-components-a-visible-tabs]
+    riskIds: [ui-components-a-tab-window-risk]
+  - id: ui-components-a-input-surface-contract
+    statement: ApplicationInputSurface mounts the active menu surface, routes Escape through the active session, and unmounts/restores the composer when a menu opens and closes.
+    seamIds: [ui-components-a-application-input-surface]
+    riskIds: [ui-components-a-input-ownership-risk]
+  - id: ui-components-a-copy-contract
+    statement: CopyMenuSession accepts the selected copy item through its callback and closes, while Escape closes without copying and code items display a preview.
+    seamIds: [ui-components-a-copy-session]
+    riskIds: [ui-components-a-copy-risk]
+  - id: ui-components-a-setup-guidance-contract
+    statement: FirstRunSetupPrompt distinguishes provider-credential setup from model selection and gives Codex-specific login guidance when appropriate.
+    seamIds: [ui-components-a-first-run-prompt]
+    riskIds: [ui-components-a-setup-guidance-risk]
+  - id: ui-components-a-model-contract
+    statement: ModelMenuSession routes unavailable providers to setup, applies fetched or typed model/provider selections through one intent, preserves errors in place, and inserts with Tab without submission.
+    seamIds: [ui-components-a-model-session]
+    riskIds: [ui-components-a-model-risk]
+  - id: ui-components-a-provider-contract
+    statement: ProviderMenuSession opens provider management, enters missing-provider credentials, permits logged-in Codex management, and records account selection for the next session.
+    seamIds: [ui-components-a-provider-session]
+    riskIds: [ui-components-a-provider-risk]
+  - id: ui-components-a-rewind-contract
+    statement: RewindMenuSession sends the selected rewind item and resend disposition through the intent host, while Escape closes without dispatching rewind work.
+    seamIds: [ui-components-a-rewind-session]
+    riskIds: [ui-components-a-rewind-risk]
+  - id: ui-components-a-settings-contract
+    statement: SettingsMenuSession routes plain, model-backed, and mentor-pool keys to the proper child editor, restores the parent state on Back, and performs typed resets.
+    seamIds: [ui-components-a-settings-session]
+    riskIds: [ui-components-a-settings-risk]
+  - id: ui-components-a-setting-value-contract
+    statement: SettingsValueMenuSession parses and applies typed values or reset intents, keeps field errors in the same frame, preselects current values, and uses Tab as non-submitting insertion.
+    seamIds: [ui-components-a-settings-value-session]
+    riskIds: [ui-components-a-setting-value-risk]
+  - id: ui-components-a-slash-contract
+    statement: SlashMenuSession uses Tab to insert a selected command without executing it, leaves the frame unchanged when nothing is selected, and keeps Enter as command execution.
+    seamIds: [ui-components-a-slash-session]
+    riskIds: [ui-components-a-slash-risk]
+  - id: ui-components-a-width-contract
+    statement: calculateInputWidth reserves the correct prompt and horizontal padding for normal, shell, rejection, custom-label, and absent-terminal-width modes.
+    seamIds: [ui-components-a-input-width]
+    riskIds: [ui-components-a-width-risk]
+  - id: ui-components-a-insertion-contract
+    statement: Completion insertion replaces only the active query, preserves suffix text and cursor placement, and adds a provider flag only for submit insertion.
+    seamIds: [ui-components-a-insertions]
+    riskIds: [ui-components-a-insertion-risk]
+  - id: ui-components-a-controller-contract
+    statement: MenuControllerImpl bounds editor state, reconciles trigger frames, rejects stale effects, routes active events and async results, and applies frame back policies without losing snapshots.
+    seamIds: [ui-components-a-menu-controller]
+    riskIds: [ui-components-a-controller-risk]
+  - id: ui-components-a-menu-system-contract
+    statement: The terminal input boundary opens each supported completion/menu flow, gives it exclusive keyboard ownership, and commits or cancels with the expected editor text and callback effects.
+    seamIds: [ui-components-a-menu-system]
+    riskIds: [ui-components-a-menu-system-risk]
+  - id: ui-components-a-registry-contract
+    statement: Trigger-rule IDs and successor graphs distinguish graph generations and restore the bare settings prefix for passive child activation.
+    seamIds: [ui-components-a-trigger-registry]
+    riskIds: [ui-components-a-registry-risk]
+  - id: ui-components-a-background-manager-contract
+    statement: BackgroundTaskManager opens through Ctrl+G, follows highlighted task identity across refreshes, requires confirmation for stop/transfer, renders executor details, and restores the prior owner on Escape.
+    seamIds: [ui-components-a-background-manager]
+    riskIds: [ui-components-a-background-manager-risk]
+  - id: ui-components-a-background-panel-contract
+    statement: BackgroundTasksPanel renders task identity, role, phase/liveness, tool activity, usage, width-budget truncation, terminal status, foreground placement, and linger expiry accurately.
+    seamIds: [ui-components-a-background-panel]
+    riskIds: [ui-components-a-background-panel-risk]
+  - id: ui-components-a-bottom-area-contract
+    statement: BottomArea renders the highest-priority prompt or status surface, preserves input/queue guidance, places task rows above input, and transfers manager ownership without leaking lower-priority surfaces.
+    seamIds: [ui-components-a-bottom-area]
+    riskIds: [ui-components-a-bottom-area-risk]
+  - id: ui-components-a-diff-contract
+    statement: DiffView renders small diffs fully and collapses only excess consecutive unchanged lines while retaining changed lines and reporting the skipped count.
+    seamIds: [ui-components-a-diff-view]
+    riskIds: [ui-components-a-diff-risk]
+  - id: ui-components-a-status-contract
+    statement: StatusBar presents model/configuration, token/context/cache/cost metrics, quota and provider usage, safety and budget warnings, and width-prioritized single-line output according to supplied state.
+    seamIds: [ui-components-a-status-bar]
+    riskIds: [ui-components-a-status-risk]
+  - id: ui-components-a-background-clock-contract
+    statement: needsBackgroundTaskClock ticks for live work, foreground candidates, in-flight turns, and retained rows before the grace boundary, but not for idle terminal rows without a settle time.
+    seamIds: [ui-components-a-background-clock]
+    riskIds: [ui-components-a-background-clock-risk]
+  - id: ui-components-a-live-rows-contract
+    statement: mergeLiveTaskRows emits stable foreground rows before background rows and tags each row with its placement.
+    seamIds: [ui-components-a-live-task-rows]
+    riskIds: [ui-components-a-live-rows-risk]
+tests:
+  - kind: file
+    id: ui-components-error-boundary-test
+    file: source/components/ErrorBoundary.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-a-unit
+    contractIds: [ui-components-a-error-fallback-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-inputbox-menu-logic-test
+    file: source/components/InputBox.menu-logic.test.ts
+    domainId: ui-components
+    suiteId: ui-components-a-unit
+    contractIds: [ui-components-a-trigger-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-inputbox-test
+    file: source/components/InputBox.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-a-integration
+    contractIds: [ui-components-a-editor-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-markdown-renderer-test
+    file: source/components/MarkdownRenderer.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-a-unit
+    contractIds: [ui-components-a-markdown-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-menu-container-test
+    file: source/components/common/MenuContainer.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-a-unit
+    contractIds: [ui-components-a-menu-container-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-compute-visible-tabs-test
+    file: source/components/common/compute-visible-tabs.test.ts
+    domainId: ui-components
+    suiteId: ui-components-a-unit
+    contractIds: [ui-components-a-visible-tabs-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-application-input-surface-test
+    file: source/components/input/ApplicationInputSurface.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-a-integration
+    contractIds: [ui-components-a-input-surface-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-copy-menu-session-test
+    file: source/components/input/CopyMenuSession.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-a-unit
+    contractIds: [ui-components-a-copy-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-first-run-setup-prompt-test
+    file: source/components/input/FirstRunSetupPrompt.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-a-unit
+    contractIds: [ui-components-a-setup-guidance-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-model-menu-session-test
+    file: source/components/input/ModelMenuSession.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-a-integration
+    contractIds: [ui-components-a-model-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-provider-menu-session-test
+    file: source/components/input/ProviderMenuSession.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-a-integration
+    contractIds: [ui-components-a-provider-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-rewind-menu-session-test
+    file: source/components/input/RewindMenuSession.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-a-unit
+    contractIds: [ui-components-a-rewind-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-settings-menu-session-test
+    file: source/components/input/SettingsMenuSession.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-a-integration
+    contractIds: [ui-components-a-settings-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-settings-value-menu-session-test
+    file: source/components/input/SettingsValueMenuSession.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-a-integration
+    contractIds: [ui-components-a-setting-value-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-slash-menu-session-test
+    file: source/components/input/SlashMenuSession.test.ts
+    domainId: ui-components
+    suiteId: ui-components-a-unit
+    contractIds: [ui-components-a-slash-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-input-width-test
+    file: source/components/input/input-width.test.ts
+    domainId: ui-components
+    suiteId: ui-components-a-unit
+    contractIds: [ui-components-a-width-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-insertions-test
+    file: source/components/input/insertions.test.ts
+    domainId: ui-components
+    suiteId: ui-components-a-unit
+    contractIds: [ui-components-a-insertion-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-menu-controller-test
+    file: source/components/input/menu-controller.test.ts
+    domainId: ui-components
+    suiteId: ui-components-a-unit
+    contractIds: [ui-components-a-controller-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-menu-system-integration-test
+    file: source/components/input/menu-system.integration.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-a-integration
+    contractIds: [ui-components-a-menu-system-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-triggers-test
+    file: source/components/input/triggers.test.ts
+    domainId: ui-components
+    suiteId: ui-components-a-unit
+    contractIds: [ui-components-a-registry-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-background-task-manager-test
+    file: source/components/layout/BackgroundTaskManager.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-a-integration
+    contractIds: [ui-components-a-background-manager-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-background-tasks-panel-test
+    file: source/components/layout/BackgroundTasksPanel.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-a-unit
+    contractIds: [ui-components-a-background-panel-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-bottom-area-test
+    file: source/components/layout/BottomArea.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-a-integration
+    contractIds: [ui-components-a-bottom-area-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-diff-view-test
+    file: source/components/layout/DiffView.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-a-unit
+    contractIds: [ui-components-a-diff-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-status-bar-test
+    file: source/components/layout/StatusBar.test.tsx
+    domainId: ui-components
+    suiteId: ui-components-a-unit
+    contractIds: [ui-components-a-status-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-background-task-clock-test
+    file: source/components/layout/background-task-clock.test.ts
+    domainId: ui-components
+    suiteId: ui-components-a-unit
+    contractIds: [ui-components-a-background-clock-contract]
+    fixtureIds: []
+  - kind: file
+    id: ui-components-live-task-rows-test
+    file: source/components/layout/live-task-rows.test.ts
+    domainId: ui-components
+    suiteId: ui-components-a-unit
+    contractIds: [ui-components-a-live-rows-contract]
+    fixtureIds: []
+decisions:
+  - id: ui-components-error-boundary-test-ui-components-a-m3
+    testId: ui-components-error-boundary-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The two cases protect both normal rendering and the recovery boundary's visible fallback contract.
+    evidence:
+      - source/components/ErrorBoundary.test.tsx asserts child output and the fallback title, error message, recovery label, /clear, and /quit.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-first-run-setup-prompt-test-ui-components-a-m3
+    testId: ui-components-first-run-setup-prompt-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Provider-versus-model phase text and Codex login instructions are user-facing setup guidance with high recovery value.
+    evidence:
+      - source/components/input/FirstRunSetupPrompt.test.tsx asserts provider setup, Codex login retry guidance, and post-credential model selection text.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-model-menu-session-test-ui-components-a-m3
+    testId: ui-components-model-menu-session-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Direct and settings-backed model flows protect setup fallback, atomic model/provider persistence, custom IDs, in-place validation errors, and non-submitting Tab behavior.
+    evidence:
+      - source/components/input/ModelMenuSession.test.tsx asserts unavailable-provider callbacks, apply-settings change arrays, stable error frame identity, and provider-suffix-free Tab insertion.
+      - source/components/InputBox.test.tsx exercises the broader command-backed model path, but does not replace this session's direct intent and error assertions.
+      - Out-of-assignment sibling source/components/menu/ModelSelectionMenu.test.tsx covers presentation states, not session intent routing.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-provider-menu-session-test-ui-components-a-m3
+    testId: ui-components-provider-menu-session-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Credential setup and OAuth account selection have session side effects and next-session semantics that generic provider-menu rendering cannot prove.
+    evidence:
+      - source/components/input/ProviderMenuSession.test.tsx asserts provider frame Escape, missing-provider credential entry, logged-in Codex visibility, selected-account persistence, and CLI-only account guidance.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-rewind-menu-session-test-ui-components-a-m3
+    testId: ui-components-rewind-menu-session-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Rewind acceptance is a destructive conversation mutation boundary; the test verifies exact item/disposition intent and that cancellation is side-effect free.
+    evidence:
+      - source/components/input/RewindMenuSession.test.tsx asserts resend intent payload, originating frame ID, stack close, and no intent on Escape.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-settings-menu-session-test-ui-components-a-m3
+    testId: ui-components-settings-menu-session-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This session is the typed settings navigation seam; plain, model, mentor-pool, reset, and dismissed-activation paths have independently observable stack and persistence outcomes.
+    evidence:
+      - source/components/input/SettingsMenuSession.test.tsx asserts child kind/origin/back snapshots, mentor-pool apply-settings, reset-setting intent sequencing, and no reopen after Escape.
+      - source/components/input/menu-system.integration.test.tsx covers terminal entry to settings menus, but does not assert the structured child origins and intent payloads here.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-settings-value-menu-session-test-ui-components-a-m3
+    testId: ui-components-settings-value-menu-session-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Typed value conversion, current-value selection, field-error retention, reset, and Tab insertion protect different user-visible outcomes at a high-risk settings boundary.
+    evidence:
+      - source/components/input/SettingsValueMenuSession.test.tsx asserts numeric apply-settings values, current effort preselection, unchanged frame identity on errors, reset intent, and non-submitting completion.
+      - source/components/InputBox.test.tsx also checks settings persistence through the outer editor, but not this session's field-error identity.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-slash-menu-session-test-ui-components-a-m3
+    testId: ui-components-slash-menu-session-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Tab and Enter intentionally have different effects; the no-selection case protects against mutating the editor when completion has no candidate.
+    evidence:
+      - source/components/input/SlashMenuSession.test.ts asserts exact inserted text, closed stack, non-executed action for Tab, unchanged frame for no selection, and executeSelected for Enter.
+      - source/components/input/menu-system.integration.test.tsx exercises slash behavior through stdin, but not the isolated interaction distinction between Tab and Enter.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-input-width-test-ui-components-a-m3
+    testId: ui-components-input-width-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: medium
+    reason: The compact pure-function matrix pins prompt-width branches and undefined terminal fallback; normal and shell cases are intentionally separate branch inputs despite the current equal result.
+    evidence:
+      - source/components/input/input-width.test.ts asserts normal, shell, rejection, custom-label, and undefined-column calculations against exact widths.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-insertions-test-ui-components-a-m3
+    testId: ui-components-insertions-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Completion insertion is a text-editing primitive where preserving suffixes and cursor positions prevents silent corruption; submit and non-submit provider formatting differ by contract.
+    evidence:
+      - source/components/input/insertions.test.ts asserts skill replacement in the middle of text and model insertion with/without provider flag.
+      - source/components/InputBox.test.tsx checks resulting cursor behavior through the UI, but does not replace exact insertion helper outputs.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-menu-controller-test-ui-components-a-m3
+    testId: ui-components-menu-controller-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The controller is the shared high-risk ownership seam; snapshot identity, stale-effect rejection, back policies, successor safety, and async intent delivery are not redundant cases.
+    evidence:
+      - source/components/input/menu-controller.test.ts asserts bounds, activation epochs, frame/revision guards, interaction routing, restore/clear/preserve policies, unrelated successor rejection, and originating-frame async results.
+      - source/components/input/menu-system.integration.test.tsx covers the terminal boundary around this controller, not its stale revision and policy invariants.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-menu-system-integration-test-ui-components-a-m3
+    testId: ui-components-menu-system-integration-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is the only assigned test that proves real stdin ownership across the complete slash/path/settings/model/skills/resume/copy surface and callback effects.
+    evidence:
+      - source/components/input/menu-system.integration.test.tsx drives terminal input for every supported successor flow, Escape handoff, path insertion, skill activation, copy callback, and resume callback.
+      - source/components/input/ApplicationInputSurface.test.tsx covers only slash Escape and mount/unmount, so it cannot replace this end-to-end matrix.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-triggers-test-ui-components-a-m3
+    testId: ui-components-triggers-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Rule-ID split and passive restoration are compatibility contracts for trigger graph evolution, distinct from generic active-menu classification.
+    evidence:
+      - source/components/input/triggers.test.ts asserts graph-3 versus graph-4 matching and bare-prefix restoration for settings model/value child activation.
+      - source/components/InputBox.menu-logic.test.ts checks menu priority and parsing but does not exercise enabled rule-ID graph separation.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-inputbox-menu-logic-test-ui-components-a-m3
+    testId: ui-components-inputbox-menu-logic-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This pure parser matrix covers priority, cursor qualification, direct and settings-backed triggers, and path/skills/resume boundaries.
+    evidence:
+      - source/components/InputBox.menu-logic.test.ts asserts model, settings, setting-value, slash, path, skills, and resume classifications with explicit priority and cursor cases.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-inputbox-test-ui-components-a-m3
+    testId: ui-components-inputbox-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: InputBox is the high-scrutiny terminal editing boundary; its cases cover chunked escape input, shell transitions, queue/history editing, completion cursor placement, settings persistence, and prompt priority.
+    evidence:
+      - source/components/InputBox.test.tsx drives stdin and asserts editor frames, callbacks, cursor positions, settings mutations, and steer/follow_up routing across independent flows.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-markdown-renderer-test-ui-components-a-m3
+    testId: ui-components-markdown-renderer-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The renderer has distinct syntax and terminal-layout contracts, including a joined-fence regression and bounded tables that cannot be represented by one generic snapshot.
+    evidence:
+      - source/components/MarkdownRenderer.test.tsx asserts plain/inline/block markdown, spacing, code-fence normalization, pre-parsed rerender replacement, and table line-width/border invariants.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-menu-container-test-ui-components-a-m3
+    testId: ui-components-menu-container-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: These tests cover both item preservation and the renderItem inactive-flag callback used by menu implementations.
+    evidence:
+      - source/components/common/MenuContainer.test.tsx asserts all three labels remain rendered and renderedInactiveArgs equals [false, true, false], including Box-returning items.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-compute-visible-tabs-test-ui-components-a-m3
+    testId: ui-components-compute-visible-tabs-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Boundary cases cover empty input, fitting windows, active-item centering, fallback selection, and each scroll indicator independently.
+    evidence:
+      - source/components/common/compute-visible-tabs.test.ts asserts start/end indices, visible identities, and left/right overflow at fitting and constrained widths.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-application-input-surface-test-ui-components-a-m3
+    testId: ui-components-application-input-surface-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This seam owns menu/composer mounting and terminal Escape handoff, which is not covered by direct session tests.
+    evidence:
+      - source/components/input/ApplicationInputSurface.test.tsx asserts slash Escape clears the controller and that opening rewind unmounts InputBox before close leaves the stack empty.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-copy-menu-session-test-ui-components-a-m3
+    testId: ui-components-copy-menu-session-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The session-specific callback/close behavior is distinct from the presentation helper's preview formatting.
+    evidence:
+      - source/components/input/CopyMenuSession.test.tsx asserts selected-item callback plus stack close, Escape without callback, and code-preview rendering; sibling source/components/menu/CopyMenu.test.tsx only covers CopyMenu presentation and getCodePreview.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-background-task-manager-test-ui-components-a-m3
+    testId: ui-components-background-task-manager-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Manager controls can stop or transfer live work, so identity reconciliation, confirmation, executor-specific detail, quiet-state labeling, and input restoration are meaningful safety contracts.
+    evidence:
+      - source/components/layout/BackgroundTaskManager.test.tsx drives Ctrl+G, reorder rerenders, stop/transfer confirmation, detailed diagnostics, quiet work, settled work, and Escape ownership restoration.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-background-tasks-panel-test-ui-components-a-m3
+    testId: ui-components-background-tasks-panel-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The panel combines live-task status semantics with width-sensitive truncation and retention; these cases protect both information hierarchy and terminal usability.
+    evidence:
+      - source/components/layout/BackgroundTasksPanel.test.tsx asserts active/terminal counts, liveness phases, tool previews, context telemetry, 40/71/72/103/104/120-column budgets, foreground tags, and linger expiry.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-bottom-area-test-ui-components-a-m3
+    testId: ui-components-bottom-area-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: BottomArea is the composition and priority boundary; prompt precedence, first-run blocking, queue/task placement, handoff/guard warnings, streaming indicators, and input ownership are separately observable.
+    evidence:
+      - source/components/layout/BottomArea.test.tsx asserts idle/processing/approval/ask-user/handoff/queue/mode-switch surfaces and verifies manager preemption and task rows above InputBox.
+      - source/components/InputBox.test.tsx covers InputBox internals, not BottomArea's higher-priority routing and composition.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-diff-view-test-ui-components-a-m3
+    testId: ui-components-diff-view-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The small-versus-large context boundary proves that collapsing is conditional and does not hide changed lines.
+    evidence:
+      - source/components/layout/DiffView.test.tsx asserts complete small output and exact two-line omission with retained surrounding lines for a large unchanged run.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-status-bar-test-ui-components-a-m3
+    testId: ui-components-status-bar-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: StatusBar carries operationally important model, safety, quota, cost, context, cache, budget, provider-credit, and streaming signals; its width-priority cases guard graceful degradation rather than cosmetic snapshots.
+    evidence:
+      - source/components/layout/StatusBar.test.tsx asserts exact/estimated/partial cost, cache/context formats, Codex/Grok/OpenCode/OpenRouter usage, mode and safety labels, budget warnings, warnings, and narrow/wide placement rules.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-background-task-clock-test-ui-components-a-m3
+    testId: ui-components-background-task-clock-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Clock admission is a liveness/retention guard with explicit true and false boundaries, including missing settle timestamps.
+    evidence:
+      - source/components/layout/background-task-clock.test.ts asserts ticking for live rows, foreground candidates, in-flight turns, and pre-grace retention, while rejecting idle settled/unspecified terminals.
+    replacementTestIds: []
+    status: proposed
+  - id: ui-components-live-task-rows-test-ui-components-a-m3
+    testId: ui-components-live-task-rows-test
+    role: second_opinion
+    reviewer: ui-components-a-m3
+    sourceArtifact: docs/test-audit/artifacts/ui-components-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Stable row keys and explicit placement are the identity seam consumed by both the panel and manager; the concise pure test protects ordering independently of rendering.
+    evidence:
+      - source/components/layout/live-task-rows.test.ts asserts foreground subagent and shell rows precede the background row and retain distinct stable keys and placement tags.
+      - source/components/layout/BackgroundTasksPanel.test.tsx consumes mergeLiveTaskRows for foreground tags, but does not assert the normalized row array directly.
+    replacementTestIds: []
+    status: proposed

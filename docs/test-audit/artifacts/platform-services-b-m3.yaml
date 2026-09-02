@@ -1,0 +1,695 @@
+schemaVersion: 2
+domains:
+  - id: platform-services
+    label: Service-layer seams not owned by other domains.
+suites:
+  - id: unit
+    label: Default Vitest unit suite
+seams:
+  - id: platform-services-b-openai-candidate-lifecycle
+    label: OpenAI terminal observation to provider-continuity checkpoint.
+  - id: platform-services-b-openai-lifecycle-evidence
+    label: Sanitized, frozen OpenAI checkpoint lifecycle diagnostics.
+  - id: platform-services-b-openai-identity
+    label: Retained and immutable OpenAI provider identity.
+  - id: platform-services-b-openai-selector-parity
+    label: OpenAI root selector parity eligibility and fail-closed diagnostics.
+  - id: platform-services-b-plan-enforcement
+    label: Plan-mode interceptor enforcement for tool dispatch.
+  - id: platform-services-b-profile-resolution
+    label: Typed Profile resolution, inheritance, availability, and legacy mapping.
+  - id: platform-services-b-profile-transition
+    label: Profile transition planning, persistence, rebuild, and notices.
+  - id: platform-services-b-provider-continuity
+    label: Chaining state, checkpoint lifecycle, debt, and successor proof.
+  - id: platform-services-b-rtk-installation
+    label: RTK platform assets, checksums, and installation outcomes.
+  - id: platform-services-b-rtk-command-wrapping
+    label: RTK command eligibility and shell wrapper boundaries.
+  - id: platform-services-b-runtime-settings-routing
+    label: Runtime settings transaction and conversation side-effect routing.
+  - id: platform-services-b-rollover-brief
+    label: Session rollover handoff brief content and reason normalization.
+  - id: platform-services-b-skills-discovery
+    label: Skill frontmatter discovery, precedence, filtering, and cataloging.
+  - id: platform-services-b-ssh-transport
+    label: SSH connection, command transport, cancellation, and path encoding.
+  - id: platform-services-b-stream-processing
+    label: Application stream event normalization, accounting, and lifecycle output.
+  - id: platform-services-b-stream-snapshot
+    label: Defensive extraction of replay and finalization stream snapshots.
+  - id: platform-services-b-tool-arguments
+    label: Tool argument parsing and malformed JSON diagnostics.
+  - id: platform-services-b-tool-ledger-recovery
+    label: Tool execution ledger pairing, settlement, and history recovery.
+  - id: platform-services-b-workspace-root
+    label: Published active workspace root and process-cwd fallback.
+  - id: platform-services-b-worktree-parser
+    label: Git worktree porcelain record parsing.
+  - id: platform-services-b-worktree-transition
+    label: Worktree enter, exit, and worker target transition decisions.
+risks:
+  - id: platform-services-b-risk-openai-candidate-corruption
+    label: A non-terminal or stale OpenAI observation becomes reusable continuity state.
+    severity: high
+  - id: platform-services-b-risk-openai-evidence-loss
+    label: Lifecycle diagnostics are mutable, unsanitized, or able to disrupt execution.
+    severity: medium
+  - id: platform-services-b-risk-openai-identity-drift
+    label: A stale or incomplete provider identity is reused for a later request.
+    severity: high
+  - id: platform-services-b-risk-selector-parity-bypass
+    label: Root selector parity accepts an ineligible checkpoint or fails open.
+    severity: high
+  - id: platform-services-b-risk-plan-bypass
+    label: Mutating or unknown delegated tools execute while Plan enforcement is active.
+    severity: high
+  - id: platform-services-b-risk-profile-resolution-drift
+    label: Profile inheritance, availability, or legacy compatibility resolves incorrectly.
+    severity: high
+  - id: platform-services-b-risk-profile-transition-inconsistency
+    label: A profile transition commits without required rebuild, history, or notice effects.
+    severity: high
+  - id: platform-services-b-risk-continuity-debt
+    label: Stale chaining state, unpaid tool debt, or weak successor proof causes unsafe replay.
+    severity: high
+  - id: platform-services-b-risk-rtk-install-integrity
+    label: RTK installation accepts an unsupported, unverifiable, or failed asset.
+    severity: high
+  - id: platform-services-b-risk-rtk-command-boundary
+    label: RTK rewrites an unsafe command or changes pipeline/subshell semantics.
+    severity: high
+  - id: platform-services-b-risk-settings-order
+    label: Runtime effects run before settings commit or legacy mode writes diverge.
+    severity: high
+  - id: platform-services-b-risk-rollover-information-loss
+    label: A successor session omits source, reason, retrieval discipline, or next step.
+    severity: medium
+  - id: platform-services-b-risk-skills-discovery-drift
+    label: Skill metadata, precedence, filtering, or generated catalog drifts silently.
+    severity: medium
+  - id: platform-services-b-risk-ssh-remote-effect
+    label: SSH transport hangs, misstates remote effect, or allows path metacharacter injection.
+    severity: high
+  - id: platform-services-b-risk-stream-event-loss
+    label: Provider stream events, usage, tool identity, or compaction lifecycle are corrupted.
+    severity: high
+  - id: platform-services-b-risk-snapshot-shape-crash
+    label: Malformed stream snapshot fields crash replay or finalization callers.
+    severity: medium
+  - id: platform-services-b-risk-tool-argument-diagnostic
+    label: Malformed tool arguments are silently misrepresented or lose caller identity.
+    severity: medium
+  - id: platform-services-b-risk-ledger-recovery
+    label: Tool history recovery drops valid work, duplicates pairs, or invites blind retry.
+    severity: high
+  - id: platform-services-b-risk-workspace-scope
+    label: Safety and filesystem callers use the wrong active workspace root.
+    severity: high
+  - id: platform-services-b-risk-worktree-record
+    label: Git worktree flags or branch/path fields are parsed incorrectly.
+    severity: medium
+  - id: platform-services-b-risk-worktree-transition
+    label: A transition enters an unsafe, unavailable, busy, or unintended worktree.
+    severity: high
+fixtures: []
+contracts:
+  - id: platform-services-b-contract-openai-candidate
+    statement: Only a terminal OpenAI observation with response ID and exact prefix binding may become a continuity candidate; stale observations are rejected.
+    seamIds: [platform-services-b-openai-candidate-lifecycle]
+    riskIds: [platform-services-b-risk-openai-candidate-corruption]
+  - id: platform-services-b-contract-openai-evidence
+    statement: OpenAI checkpoint lifecycle evidence is sanitized, frozen, recorded after accepted observation, and recorder failures are swallowed.
+    seamIds: [platform-services-b-openai-lifecycle-evidence]
+    riskIds: [platform-services-b-risk-openai-evidence-loss]
+  - id: platform-services-b-contract-openai-identity
+    statement: A complete observed OpenAI identity is frozen and copied; incomplete observations retain a previous complete identity or leave null.
+    seamIds: [platform-services-b-openai-identity]
+    riskIds: [platform-services-b-risk-openai-identity-drift]
+  - id: platform-services-b-contract-selector-parity
+    statement: Root selector parity is eligible only for matching accepted OpenAI checkpoint, identity, origin, revision, and history prefix; failures are explicit and fail closed.
+    seamIds: [platform-services-b-openai-selector-parity]
+    riskIds: [platform-services-b-risk-selector-parity-bypass]
+  - id: platform-services-b-contract-plan-enforcement
+    statement: Plan mode blocks mutating and unknown delegated tools while allowing read-only delegated roles and non-mutating tools; normal mode passes through.
+    seamIds: [platform-services-b-plan-enforcement]
+    riskIds: [platform-services-b-risk-plan-bypass]
+  - id: platform-services-b-contract-profile-resolution
+    statement: The Profile resolver applies typed inheritance and restrictive semantics, reports unavailable or invalid definitions, and preserves legacy adapter rules.
+    seamIds: [platform-services-b-profile-resolution]
+    riskIds: [platform-services-b-risk-profile-resolution-drift]
+  - id: platform-services-b-contract-profile-transition
+    statement: Profile transitions resolve before mutation and apply class-specific history, rebuild, persistence, and composed notice effects.
+    seamIds: [platform-services-b-profile-transition]
+    riskIds: [platform-services-b-risk-profile-transition-inconsistency]
+  - id: platform-services-b-contract-provider-continuity
+    statement: Provider continuity clears or breaks chaining and debt correctly, and accepts successor reuse only with exact binding and immutable post-commit proof.
+    seamIds: [platform-services-b-provider-continuity]
+    riskIds: [platform-services-b-risk-continuity-debt]
+  - id: platform-services-b-contract-rtk-installation
+    statement: RTK resolves supported assets and installs only after successful fetch, extraction, and SHA-256 verification, returning null on unsupported or failed setup.
+    seamIds: [platform-services-b-rtk-installation]
+    riskIds: [platform-services-b-risk-rtk-install-integrity]
+  - id: platform-services-b-contract-rtk-command-wrapping
+    statement: RTK wraps only eligible top-level commands while preserving ineligible commands and pipeline/subshell/redirection boundaries.
+    seamIds: [platform-services-b-rtk-command-wrapping]
+    riskIds: [platform-services-b-risk-rtk-command-boundary]
+  - id: platform-services-b-contract-runtime-settings
+    statement: Runtime setting changes commit through one transaction before effects, and profile/legacy mode writes route the correct notices and rebuild behavior.
+    seamIds: [platform-services-b-runtime-settings-routing]
+    riskIds: [platform-services-b-risk-settings-order]
+  - id: platform-services-b-contract-rollover-brief
+    statement: A rollover brief carries source and successor sessions, reason, handoff, retrieval constraints, and next open step without inventing an unspecified reason.
+    seamIds: [platform-services-b-rollover-brief]
+    riskIds: [platform-services-b-risk-rollover-information-loss]
+  - id: platform-services-b-contract-skills-discovery
+    statement: Skills discovery parses frontmatter and body, applies scope precedence and invocation filtering, and emits the expected catalog.
+    seamIds: [platform-services-b-skills-discovery]
+    riskIds: [platform-services-b-risk-skills-discovery-drift]
+  - id: platform-services-b-contract-ssh-transport
+    statement: SSH transport reports connection and dispatch failures, settles in-flight work with typed unknown-effect outcomes, honors opt-in timeout/abort, and quotes paths safely.
+    seamIds: [platform-services-b-ssh-transport]
+    riskIds: [platform-services-b-risk-ssh-remote-effect]
+  - id: platform-services-b-contract-stream-processing
+    statement: Stream processing enforces branded input, accumulates text/reasoning, normalizes tool and usage events, and preserves compaction lifecycle data.
+    seamIds: [platform-services-b-stream-processing]
+    riskIds: [platform-services-b-risk-stream-event-loss]
+  - id: platform-services-b-contract-stream-snapshot
+    statement: Stream snapshot extraction returns expected fields and degrades absent or non-array data to safe defaults.
+    seamIds: [platform-services-b-stream-snapshot]
+    riskIds: [platform-services-b-risk-snapshot-shape-crash]
+  - id: platform-services-b-contract-tool-arguments
+    statement: Tool argument parsing preserves valid/non-string input and emits identity-bearing diagnostics for brace-prefixed malformed JSON.
+    seamIds: [platform-services-b-tool-arguments]
+    riskIds: [platform-services-b-risk-tool-argument-diagnostic]
+  - id: platform-services-b-contract-tool-ledger
+    statement: The tool ledger pairs calls and results, preserves history, settles open calls by observed effect, and reconciles recoverable history idempotently.
+    seamIds: [platform-services-b-tool-ledger-recovery]
+    riskIds: [platform-services-b-risk-ledger-recovery]
+  - id: platform-services-b-contract-workspace-root
+    statement: Active workspace root follows a leased ExecutionContext and returns process cwd when no lease exists or entry is rejected.
+    seamIds: [platform-services-b-workspace-root]
+    riskIds: [platform-services-b-risk-workspace-scope]
+  - id: platform-services-b-contract-worktree-parser
+    statement: Git worktree list parsing preserves records, branch names, detached/bare/locked/prunable flags, and trailing records.
+    seamIds: [platform-services-b-worktree-parser]
+    riskIds: [platform-services-b-risk-worktree-record]
+  - id: platform-services-b-contract-worktree-transition
+    statement: Worktree transition resolution rejects ambiguous, unavailable, bare, home, or busy targets and reports enter/exit/worker outcomes deterministically.
+    seamIds: [platform-services-b-worktree-transition]
+    riskIds: [platform-services-b-risk-worktree-transition]
+tests:
+  - kind: file
+    id: platform-services-openai-candidate-observer-test
+    file: source/services/openai-candidate-observer.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds: [platform-services-b-contract-openai-candidate, platform-services-b-contract-openai-evidence]
+  - kind: file
+    id: platform-services-openai-root-checkpoint-lifecycle-observer-test
+    file: source/services/openai-root-checkpoint-lifecycle-observer.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds: [platform-services-b-contract-openai-evidence]
+  - kind: file
+    id: platform-services-openai-root-provider-identity-test
+    file: source/services/openai-root-provider-identity.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds: [platform-services-b-contract-openai-identity]
+  - kind: file
+    id: platform-services-openai-root-selector-parity-observer-test
+    file: source/services/openai-root-selector-parity-observer.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds: [platform-services-b-contract-selector-parity]
+  - kind: file
+    id: platform-services-plan-mode-interceptor-test
+    file: source/services/plan-mode-interceptor.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds: [platform-services-b-contract-plan-enforcement]
+  - kind: file
+    id: platform-services-profiles-active-profile-test
+    file: source/services/profiles/active-profile.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds: [platform-services-b-contract-profile-resolution]
+  - kind: file
+    id: platform-services-profiles-labels-test
+    file: source/services/profiles/labels.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds: [platform-services-b-contract-profile-resolution]
+  - kind: file
+    id: platform-services-profiles-profile-transition-test
+    file: source/services/profiles/profile-transition.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds: [platform-services-b-contract-profile-transition]
+  - kind: file
+    id: platform-services-profiles-profiles-test
+    file: source/services/profiles/profiles.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds: [platform-services-b-contract-profile-resolution]
+  - kind: file
+    id: platform-services-profiles-resolver-diagnostics-test
+    file: source/services/profiles/resolver-diagnostics.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds: [platform-services-b-contract-profile-resolution]
+  - kind: file
+    id: platform-services-provider-continuity-test
+    file: source/services/provider-continuity.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds: [platform-services-b-contract-provider-continuity]
+  - kind: file
+    id: platform-services-rtk-service-test
+    file: source/services/rtk-service.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds: [platform-services-b-contract-rtk-installation, platform-services-b-contract-rtk-command-wrapping]
+  - kind: file
+    id: platform-services-runtime-setting-router-test
+    file: source/services/runtime-setting-router.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds: [platform-services-b-contract-runtime-settings]
+  - kind: file
+    id: platform-services-session-rollover-session-rollover-brief-test
+    file: source/services/session-rollover/session-rollover-brief.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds: [platform-services-b-contract-rollover-brief]
+  - kind: file
+    id: platform-services-skills-skills-service-test
+    file: source/services/skills/skills-service.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds: [platform-services-b-contract-skills-discovery]
+  - kind: file
+    id: platform-services-ssh-service-test
+    file: source/services/ssh-service.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds: [platform-services-b-contract-ssh-transport]
+  - kind: file
+    id: platform-services-stream-event-processor-test
+    file: source/services/stream-event-processor.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds: [platform-services-b-contract-stream-processing]
+  - kind: file
+    id: platform-services-stream-snapshot-test
+    file: source/services/stream-snapshot.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds: [platform-services-b-contract-stream-snapshot]
+  - kind: file
+    id: platform-services-tool-call-arguments-test
+    file: source/services/tool-call-arguments.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds: [platform-services-b-contract-tool-arguments]
+  - kind: file
+    id: platform-services-tool-execution-ledger-test
+    file: source/services/tool-execution-ledger.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds: [platform-services-b-contract-tool-ledger]
+  - kind: file
+    id: platform-services-workspace-active-workspace-root-test
+    file: source/services/workspace/active-workspace-root.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds: [platform-services-b-contract-workspace-root]
+  - kind: file
+    id: platform-services-workspace-parse-worktree-list-test
+    file: source/services/workspace/parse-worktree-list.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds: [platform-services-b-contract-worktree-parser]
+  - kind: file
+    id: platform-services-workspace-workspace-lease-authority-test
+    file: source/services/workspace/workspace-lease-authority.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds: [platform-services-b-contract-workspace-root]
+  - kind: file
+    id: platform-services-workspace-worktree-transition-test
+    file: source/services/workspace/worktree-transition.test.ts
+    domainId: platform-services
+    suiteId: unit
+    contractIds: [platform-services-b-contract-worktree-transition]
+decisions:
+  - id: platform-services-openai-candidate-observer-test-r1
+    testId: platform-services-openai-candidate-observer-test
+    role: second_opinion
+    reviewer: platform-services-b-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The file covers candidate admission, stale/reset rejection, failure isolation, and sanitized lifecycle evidence at the observer seam.
+    evidence:
+      - Lines 19-29 assert terminal OpenAI identity, response ID, and prefix binding become a candidate.
+      - Lines 31-47 cover missing response/binding, failed or abandoned phases, and pre-reset observations staying null.
+      - Lines 66-99 assert sanitized outcomes and that accepted continuity is recorded as observed.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-openai-root-checkpoint-lifecycle-observer-test-r1
+    testId: platform-services-openai-root-checkpoint-lifecycle-observer-test
+    role: second_opinion
+    reviewer: platform-services-b-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is the narrow lifecycle evidence sink contract, distinct from candidate admission.
+    evidence:
+      - Lines 4-18 assert frozen candidate/publication records with exact stage and outcome values.
+      - Lines 20-27 assert recorder failure is swallowed rather than escaping the observer.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-openai-root-provider-identity-test-r1
+    testId: platform-services-openai-root-provider-identity-test
+    role: second_opinion
+    reviewer: platform-services-b-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Identity retention and ownership are directly asserted across complete, incomplete, mutated, and replacement observations.
+    evidence:
+      - Lines 17-25 assert complete identity is exposed frozen.
+      - Lines 27-45 assert caller mutation cannot alter retained state and incomplete observations retain the prior identity.
+      - Lines 48-71 cover null initial state and replacement by a second complete identity.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-openai-root-selector-parity-observer-test-r1
+    testId: platform-services-openai-root-selector-parity-observer-test
+    role: second_opinion
+    reviewer: platform-services-b-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The parity observer has a distinct matrix of eligibility failures and fail-closed behavior, not a duplicate of candidate lifecycle admission.
+    evidence:
+      - Lines 27-67 assert eligible equality, retained frozen observation, and frozen evidence.
+      - Lines 69-95 specifically protect resolved custom endpoint identity.
+      - Lines 97-212 cover model/origin/prefix/revision failures, unavailable model, and unresolved endpoint.
+      - Lines 214-304 cover mismatched legacy response plus recorder and eligibility exceptions.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-plan-mode-interceptor-test-r1
+    testId: platform-services-plan-mode-interceptor-test
+    role: second_opinion
+    reviewer: platform-services-b-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Despite being one broad scenario, it exercises the interceptor's blocking and allowlist boundary in both modes.
+    evidence:
+      - Lines 28-48 assert mutating tools and unknown/missing delegated roles are blocked in Plan mode.
+      - Lines 50-60 assert read-only roles and non-mutating tools pass, including stringified role arguments.
+      - Lines 62-69 assert all tested tools pass after Plan mode is disabled.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-profiles-active-profile-test-r1
+    testId: platform-services-profiles-active-profile-test
+    role: second_opinion
+    reviewer: platform-services-b-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Active enforcement is tested for fallback, Plan denials, memoization invalidation, and unknown profiles.
+    evidence:
+      - Lines 5-13 assert non-string IDs fall back to normal empty-denial enforcement.
+      - Lines 15-25 assert Plan policy, denials, and handoff restriction.
+      - Lines 27-49 assert identity-based memoization and empty unknown-profile enforcement.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-profiles-labels-test-r1
+    testId: platform-services-profiles-labels-test
+    role: second_opinion
+    reviewer: platform-services-b-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This small table test protects the user-facing label mapping and its unknown-profile fallback.
+    evidence:
+      - Lines 5-13 assert labels for all five built-in profile IDs.
+      - Lines 15-17 assert custom/unknown IDs display as standard.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-profiles-profile-transition-test-r1
+    testId: platform-services-profiles-profile-transition-test
+    role: second_opinion
+    reviewer: platform-services-b-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Transition planning and commit effects are covered across aliases, failure-before-mutation, structural, notice-only, rebuild, noop, and composed notices.
+    evidence:
+      - Lines 24-62 assert alias persistence, planned commit, and resolution failure leaves settings unchanged.
+      - Lines 64-109 assert class-specific Lite, Plan, Mentor, and Orchestrator effects.
+      - Lines 111-154 assert composed and exit notices plus same-profile noop behavior.
+      - Lines 157-169 assert planner classification from resolved Profiles.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-profiles-profiles-test-r1
+    testId: platform-services-profiles-profiles-test
+    role: second_opinion
+    reviewer: platform-services-b-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The primary resolver contract is exercised through built-ins, inheritance, merge semantics, availability, cycles, and legacy adapter compatibility.
+    evidence:
+      - Lines 23-46 assert all built-ins resolve and required integration availability fails explicitly.
+      - Lines 48-100 assert typed inheritance/digest equivalence and context/tool merge precedence.
+      - Lines 102-142 assert slot replacement, guidance operations, and stable-ID removal.
+      - Lines 144-192 assert restrictive policy handling, unavailable requirements, cycle diagnostics, and missing parents.
+      - Lines 195-220 assert malformed legacy precedence and legacy setting writes.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-profiles-resolver-diagnostics-test-r1
+    testId: platform-services-profiles-resolver-diagnostics-test
+    role: second_opinion
+    reviewer: platform-services-b-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Diagnostics file targets invalid registered references, duplicate/conflicting integrations, depth guards, and immutable side-effect-free results that are not fully covered by the resolver behavior file.
+    evidence:
+      - Lines 26-62 assert unknown policy/operation/block and kind-mismatch diagnostics.
+      - Lines 64-114 assert duplicate integration collapse, conflicting integration rejection, and parent-depth cap.
+      - Lines 116-124 assert fresh immutable results and mutation rejection.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-provider-continuity-test-r1
+    testId: platform-services-provider-continuity-test
+    role: second_opinion
+    reviewer: platform-services-b-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is the shared continuity state machine's direct contract test, including legacy IDs, tool debt, checkpoint retirement, exact binding, and successor proof.
+    evidence:
+      - Lines 4-80 assert initial/update/clear/break chaining state and outstanding debt behavior.
+      - Lines 82-145 assert candidate promotion, matching publication, immutable successor proof, and copied history.
+      - Lines 147-273 assert successor eligibility failure enums across lineage, snapshot, identity, origin, revision, and history cases.
+      - Lines 275-401 assert strict eligibility matrix and rejection without proof or after reset.
+      - Lines 421-496 assert retirement after reset/supersession, exact binding mismatch, and chaining break.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-rtk-service-test-r1
+    testId: platform-services-rtk-service-test
+    role: second_opinion
+    reviewer: platform-services-b-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-b-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: high
+    reason: The file has substantial useful RTK coverage, but contains assertions that verify nothing and should be removed or replaced with an observable postcondition.
+    evidence:
+      - Lines 289-304 assert extraction failure returns null and logs a warning with meaningful outcomes.
+      - Lines 331-354 assert successful installation creates a binary path.
+      - Lines 342, 391, and 407 contain standalone expect(true).toBe(true) statements in writeFile/mkdir success tests; these add no assertion beyond awaiting completion and are exact tautologies.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-runtime-setting-router-test-r1
+    testId: platform-services-runtime-setting-router-test
+    role: second_opinion
+    reviewer: platform-services-b-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The router's transaction-before-effects ordering and profile/legacy transition routing are directly observed with effect spies and changing settings.
+    evidence:
+      - Lines 35-59 assert one dynamic transaction, provider effect, and no effect after transaction rejection.
+      - Lines 61-97 assert legacy Plan/mentor/orchestrator routing and Plan exit composition.
+      - Lines 99-137 assert class-specific profile activation and planning before transaction commit.
+      - Lines 139-160 assert legacy mode changes are translated in transaction order.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-session-rollover-session-rollover-brief-test-r1
+    testId: platform-services-session-rollover-session-rollover-brief-test
+    role: second_opinion
+    reviewer: platform-services-b-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The formatter asserts every required handoff field and explicitly protects the unspecified-reason fallback.
+    evidence:
+      - Lines 5-23 assert source/successor IDs, reason, handoff text, retrieval instructions, and next-step instruction.
+      - Lines 25-33 assert missing reason renders as not specified rather than an invented reason.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-skills-skills-service-test-r1
+    testId: platform-services-skills-skills-service-test
+    role: second_opinion
+    reviewer: platform-services-b-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Filesystem-backed fixtures cover metadata parsing, leniency/error handling, scope precedence, filtering, collision behavior, and generated catalog output.
+    evidence:
+      - Lines 63-150 assert frontmatter/body parsing, missing-name derivation, missing-description skip, and colon/quote values.
+      - Lines 152-187 assert project scope overrides user scope.
+      - Lines 189-209 assert disabled model invocation remains available to users but absent from model catalog.
+      - Lines 211-235 assert same physical path across scopes does not create a collision warning.
+      - Lines 237-259 assert catalog XML fields and location.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-ssh-service-test-r1
+    testId: platform-services-ssh-service-test
+    role: second_opinion
+    reviewer: platform-services-b-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-b-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: high
+    reason: Core SSH transport behavior is valuable, but three success tests use tautological assertions after awaiting the operation and should be rewritten to assert a meaningful result or removed.
+    evidence:
+      - Lines 82-292 assert connection, command output, typed not-connected, and exec-failure behavior.
+      - Lines 430-605 assert each in-flight transport-drop settlement and preservation of partial output.
+      - Lines 642-765 assert opt-in timeout/abort boundaries and post-settlement stability.
+      - Lines 771-842 assert canonical quoting for hostile cwd and file/directory paths.
+      - Lines 342, 391, and 407 are standalone expect(true).toBe(true) statements in success cases, so those assertions verify nothing.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-stream-event-processor-test-r1
+    testId: platform-services-stream-event-processor-test
+    role: second_opinion
+    reviewer: platform-services-b-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-b-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: high
+    reason: The file protects an important stream boundary, but several titles claim provider-envelope extraction or deduplication that the fixtures do not exercise, and one title contradicts its assertion.
+    evidence:
+      - Lines 107-121 title the case as nested/direct model-envelope extraction, but the fixture contains only already-normalized text_delta events at lines 109-110.
+      - Lines 351-376 title the case as emitting one tool_started for duplicates, while the assertion explicitly expects two starts at lines 372-375.
+      - Lines 378-401 title the case as approval-handling interaction, but supplies only a normal function_call item and no approval state.
+      - Lines 717-802 title several cases as Responses, custom/MCP, legacy, and Chat Completions extraction, while every fixture is already a tool_call_streaming_delta event.
+      - Lines 873-890 likewise supplies normalized deltas for an AI SDK title, so the cases should be renamed or given raw source-shaped fixtures while retaining the useful normalization checks.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-stream-snapshot-test-r1
+    testId: platform-services-stream-snapshot-test
+    role: second_opinion
+    reviewer: platform-services-b-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Compact pure-function tests cover both well-formed extraction and defensive defaults for replay/finalization callers.
+    evidence:
+      - Lines 14-18 and 29-37 assert complete replay and finalization snapshots.
+      - Lines 20-27 and 40-50 assert absent/non-array fields degrade to empty arrays.
+      - Lines 52-67 assert null response-ID and history-length fallbacks.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-tool-call-arguments-test-r1
+    testId: platform-services-tool-call-arguments-test
+    role: second_opinion
+    reviewer: platform-services-b-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Argument parsing behavior is directly asserted for valid, scalar, malformed, blank, non-string, and identity-fallback inputs.
+    evidence:
+      - Lines 11-23 assert valid object and scalar JSON with no diagnostic.
+      - Lines 25-52 assert malformed brace heuristic, preserved raw argument, and complete caller identity diagnostic.
+      - Lines 54-75 assert non-brace, blank, and non-string pass-through behavior.
+      - Lines 78-83 assert empty tool name is normalized to unknown in diagnostics.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-tool-execution-ledger-test-r1
+    testId: platform-services-tool-execution-ledger-test
+    role: second_opinion
+    reviewer: platform-services-b-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The ledger file has broad direct coverage of pairing, duplicate preservation, turn scoping, malformed argument repair, and observed-versus-unknown recovery settlement.
+    evidence:
+      - Lines 11-139 assert pair export, representation normalization, wrapper preservation, and imported turn numbering.
+      - Lines 141-230 assert aborted calls and idempotent history reconciliation including reasoning items.
+      - Lines 232-388 assert duplicate-call preservation and scoped/synthetic approval outputs.
+      - Lines 390-529 assert turn scoping and provider-required aborted outputs.
+      - Lines 531-730 assert orphan filtering and malformed argument sanitization/preservation.
+      - Lines 732-821 assert dispatch marking, split aborted/unknown stream-failure settlement, unknown-pair recovery, and summary classification.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-workspace-active-workspace-root-test-r1
+    testId: platform-services-workspace-active-workspace-root-test
+    role: second_opinion
+    reviewer: platform-services-b-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The global publication seam is tested through no lease, enter, exit, and rejected relative entry states.
+    evidence:
+      - Lines 9-11 assert process cwd fallback.
+      - Lines 13-24 assert entering publishes and exiting restores the leased root.
+      - Lines 27-31 assert rejected entry does not publish a root.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-workspace-parse-worktree-list-test-r1
+    testId: platform-services-workspace-parse-worktree-list-test
+    role: second_opinion
+    reviewer: platform-services-b-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Parser cases cover normal/multiple/trailing records and every meaningful Git worktree flag plus slash-containing branches.
+    evidence:
+      - Lines 4-25 assert single and multiple records.
+      - Lines 27-61 assert detached, bare, locked, and prunable forms.
+      - Lines 63-77 assert slash-preserving branch names, empty output, and unterminated trailing records.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-workspace-workspace-lease-authority-test-r1
+    testId: platform-services-workspace-workspace-lease-authority-test
+    role: second_opinion
+    reviewer: platform-services-b-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: These tests protect the cross-layer authority that maps a lease into both sandbox writes and path-risk classification.
+    evidence:
+      - Lines 15-31 assert sandbox allowWrite follows the leased root and excludes the comparison cwd.
+      - Lines 33-47 assert path classification is green inside the lease and yellow outside it when cwd is omitted.
+    replacementTestIds: []
+    status: proposed
+  - id: platform-services-workspace-worktree-transition-test-r1
+    testId: platform-services-workspace-worktree-transition-test
+    role: second_opinion
+    reviewer: platform-services-b-m3
+    sourceArtifact: docs/test-audit/artifacts/platform-services-b-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: high
+    reason: Enter/exit behavior is well covered, but the worker cases repeat the same resolution matrix without testing the title's distinguishing no-busy-check policy.
+    evidence:
+      - Lines 31-74 cover directory/branch matching, unknown, home, ambiguity, unavailable, and bare cases for enter resolution.
+      - Lines 111-142 repeat directory/branch, unknown, ambiguity, and prunable resolution for resolveWorkerWorktree.
+      - Although line 111 says without busy checks, lines 111-142 provide no runningJobs fixture or assertion demonstrating that distinction; rewrite should remove redundant cases or add the missing policy-specific case.
+    replacementTestIds: []
+    status: proposed

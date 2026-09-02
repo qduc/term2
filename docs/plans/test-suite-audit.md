@@ -1,11 +1,13 @@
 # Test suite audit
 
-Status: Milestones 1-2 complete. Calibration wave ran 2026-09-02 and PASSED its
-go/no-go (report: `docs/test-audit/calibration-report.md`); reviewer
-discrimination is demonstrated. The source graph (`docs/test-audit/graph.yaml`)
-holds the 16 calibration files' canonical records. Milestone 3 (domain
-exploration over the remaining 569 files) is in progress; cleanup has not
-started.
+Status: Milestones 1-3 complete. Calibration wave ran 2026-09-02 and PASSED its
+go/no-go (report: `docs/test-audit/calibration-report.md`). Milestone 3 (domain
+exploration) closed 2026-09-03: all 585 test files at the `d36c392a` inventory
+have validated graph records (28 reviewer artifacts + coordinator
+adjudication), and the source graph (`docs/test-audit/graph.yaml`) holds 605
+tests / 694 contracts / 1230 decisions. Milestone 4 (cleanup batches) has not
+started; deferred decisions (suite-topology change, runtime-history location,
+mutation-testing proportionality) gate parts of it.
 
 ## Resume here
 
@@ -13,11 +15,16 @@ Start future audit work from current `main` in a dedicated worktree. The origina
 `test-suite-audit-foundation` worktree has been removed; its work is present on
 `main`.
 
-Read `docs/test-audit/calibration-report.md` for the calibration verdict and
-adjudicated decisions, and `docs/test-audit/shards.md` for the domain boundaries.
-Milestone 3 remains non-destructive (read-only exploration producing graph
-records). Do not remove, rewrite, retier, or consolidate tests until approved
-cleanup batches (Milestone 4).
+Read `docs/test-audit/calibration-report.md` for the calibration verdict, the M3
+artifacts under `docs/test-audit/artifacts/` for reviewer records, and
+`docs/test-audit/shards.md` for domain boundaries. Milestone 3 is closed;
+coordinator override decisions live in `graph.yaml` primary decisions (reviewer
+`test-audit-coordinator`) for rtk-service, worktree-transition,
+conversation-event-handler.tools, token-usage, build-output.e2e, cli.integration,
+and use-settings-completion. Milestone 4 cleanup batches are next: each in an
+isolated worktree with before/after test count + fresh full-suite runtime, and
+verification proportional to the touched area. Do not remove, rewrite, retier,
+or consolidate tests outside approved cleanup batches.
 
 The graph source of truth is `docs/test-audit/graph.yaml`. Its validator and query
 code lives under `scripts/test-audit/`; run `pnpm test-audit validate` after every

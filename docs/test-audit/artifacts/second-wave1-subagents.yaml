@@ -1,0 +1,216 @@
+schemaVersion: 2
+domains:
+  - id: subagents
+    label: Subagent execution, delegation, and policy boundaries
+suites:
+  - id: unit
+    label: Deterministic unit and seam tests
+seams:
+  - id: subagents-run-id
+    label: Boundary allocating and parsing human-readable delegated-run identities
+  - id: subagents-manager-runtime
+    label: Boundary exposing the shared application-owned agent runtime from SubagentManager
+  - id: subagents-manager-prompts
+    label: Boundary selecting subagent prompt families and excluding top-level prompt policy
+  - id: subagents-manager-retry
+    label: Boundary classifying and retrying recoverable subagent model and transport failures
+  - id: subagents-manager-tools
+    label: Boundary registering role tools and guidance from model, search, remote, and skill settings
+risks:
+  - id: subagents-state-loss
+    label: A delegated turn or handoff loses, replays, or misroutes state across a boundary.
+    severity: critical
+  - id: subagents-authority-escape
+    label: A delegated role gains authority, continuation, or execution scope outside its contract.
+    severity: critical
+  - id: subagents-policy-drift
+    label: Role, prompt, model, search, or approval policy silently changes at a production seam.
+    severity: high
+  - id: subagents-provider-failure
+    label: A provider failure is retried unsafely or hides useful partial work and usage evidence.
+    severity: high
+  - id: subagents-result-misreport
+    label: Completed, failed, cancelled, interrupted, or partial delegated work is reported with the wrong status.
+    severity: high
+  - id: subagents-run-id-collision
+    label: A delegated-run identity collides, parses incorrectly, or targets a different active run.
+    severity: high
+  - id: subagents-tool-evidence-loss
+    label: Tool usage, changed files, validation, or diff evidence is omitted or falsely attributed.
+    severity: medium
+fixtures:
+  - id: subagents-provider
+    label: Registered deterministic providers and scripted subagent streams
+  - id: subagents-stream
+    label: Scripted text, tool, retry, usage, completion, and failure stream events
+  - id: subagents-runtime
+    label: Application-owned runtime, tool ownership, session context, and role runner fixtures
+  - id: subagents-policy
+    label: Role definitions, settings, wrapped tools, filesystem scopes, and approval policy fixtures
+contracts:
+  - id: subagents-run-id-contract
+    statement: Generated run identities have the adjective-noun-number shape, remain short and parseable, provide a large identity space, and reject non-codename identifiers.
+    seamIds: [subagents-run-id]
+    riskIds: [subagents-run-id-collision]
+  - id: subagents-runtime-wiring
+    statement: SubagentManager exposes an AgentRuntime backed by its shared subagent infrastructure, creates usable handles, preserves the public handle shape, and returns fresh runtime wrappers over shared executors.
+    seamIds: [subagents-manager-runtime]
+    riskIds: [subagents-authority-escape, subagents-state-loss]
+  - id: subagents-prompt-composition
+    statement: Execution subagents receive model-family and role instructions in the required order without top-level-only prompt content, while mentor runs retain their separate mentor prompt contract.
+    seamIds: [subagents-manager-prompts]
+    riskIds: [subagents-policy-drift, subagents-authority-escape]
+  - id: subagents-retry-policy
+    statement: Recoverable hallucinated-tool and transport failures retry within policy and emit retry evidence, while non-recoverable model errors and aborts do not retry and partial tool evidence survives cancellation.
+    seamIds: [subagents-manager-retry]
+    riskIds: [subagents-provider-failure, subagents-result-misreport, subagents-tool-evidence-loss]
+  - id: subagents-tool-registration
+    statement: Manager tool registration follows model search mode, role capabilities, remote context, and available skills, exposing matching tools and guidance while omitting unavailable tools.
+    seamIds: [subagents-manager-tools]
+    riskIds: [subagents-policy-drift, subagents-authority-escape]
+tests:
+  - kind: file
+    id: subagents-codename-run-id
+    file: source/services/subagents/codename-run-id.test.ts
+    domainId: subagents
+    suiteId: unit
+    contractIds: [subagents-run-id-contract]
+    fixtureIds: []
+  - kind: file
+    id: subagents-manager-agent-runtime
+    file: source/services/subagents/subagent-manager.agent-runtime.test.ts
+    domainId: subagents
+    suiteId: unit
+    contractIds: [subagents-runtime-wiring]
+    fixtureIds: [subagents-runtime]
+  - kind: file
+    id: subagents-manager-prompts
+    file: source/services/subagents/subagent-manager.prompts.test.ts
+    domainId: subagents
+    suiteId: unit
+    contractIds: [subagents-prompt-composition]
+    fixtureIds: [subagents-provider, subagents-policy]
+  - kind: file
+    id: subagents-manager-retry
+    file: source/services/subagents/subagent-manager.retry.test.ts
+    domainId: subagents
+    suiteId: unit
+    contractIds: [subagents-retry-policy]
+    fixtureIds: [subagents-provider, subagents-runtime, subagents-stream]
+  - kind: file
+    id: subagents-manager-tools
+    file: source/services/subagents/subagent-manager.tools.test.ts
+    domainId: subagents
+    suiteId: unit
+    contractIds: [subagents-tool-registration]
+    fixtureIds: [subagents-provider, subagents-policy, subagents-runtime]
+decisions:
+  - id: subagents-codename-run-id-second-wave1-subagents
+    testId: subagents-codename-run-id
+    role: second_opinion
+    reviewer: second-wave1-subagents
+    sourceArtifact: docs/test-audit/artifacts/second-wave1-subagents.yaml
+    recommendation: rewrite_candidate
+    confidence: high
+    reason: >-
+      Agree with rewrite_candidate. The parser, rejection, and space assertions
+      are deterministic contract checks, but generation shape, length, and
+      especially uniqueness are exercised through uncontrolled random draws.
+      The rewrite should consolidate deterministic format cases without dropping
+      parsing/rejection or identity-space evidence.
+    evidence:
+      - source/services/subagents/codename-run-id.test.ts:11-15 draws 500 random ids and checks only the generated regex shape, while source/services/subagents/codename-run-id.ts:686-687 explicitly says deterministic generation is not offered.
+      - source/services/subagents/codename-run-id.test.ts:25-28 performs a second independent 500-draw random loop for the length property instead of testing a controlled representative format.
+      - source/services/subagents/codename-run-id.test.ts:53-60 asserts a probabilistic 2,000-draw Set threshold; the test comments acknowledge random collisions and cannot distinguish an unlucky draw from a defect.
+      - source/services/subagents/subagent-async-registry.test.ts:1771-1799 already verifies generated shape and deterministic collision retry with an injected factory, so the rewrite can remove repeated generator stress while retaining the parser/space contract in source/services/subagents/codename-run-id.test.ts:30-50.
+    replacementTestIds: []
+    status: proposed
+  - id: subagents-manager-agent-runtime-second-wave1-subagents
+    testId: subagents-manager-agent-runtime
+    role: second_opinion
+    reviewer: second-wave1-subagents
+    sourceArtifact: docs/test-audit/artifacts/second-wave1-subagents.yaml
+    recommendation: rewrite_candidate
+    confidence: high
+    reason: >-
+      Agree with rewrite_candidate. Most cases repeat the public AgentRuntime
+      and AgentHandle shape checks already isolated in AgentRuntime tests, while
+      the case claiming parent attenuation creates no parent and explicitly
+      asserts that requested tools are present. A focused rewrite should retain
+      the manager-specific shared-runner wiring and add a real parent attenuation
+      assertion.
+    evidence:
+      - source/services/subagents/subagent-manager.agent-runtime.test.ts:80-91 checks only that getAgentRuntime returns an object with an agent function, and :93-134 repeats handle creation, properties, and run-shape checks covered by source/services/agent-runtime/agent-runtime.test.ts:95-148.
+      - source/services/subagents/subagent-manager.agent-runtime.test.ts:136-158 is titled parent attenuation but comments that no parent can be set and asserts both requested read_file and shell permissions are present.
+      - >-
+        source/services/agent-runtime/agent-runtime.test.ts:401-425 is the actual attenuation case: a parent allowing only read_file is constructed and search_replace is asserted absent from the child.
+      - >-
+        source/services/subagents/subagent-manager.ts:98-105 builds the runtime from the manager's shared executionRunner and mentorRunner, while source/services/agent-runtime/compose-agent-runtime.ts:74-100 exposes the parent input; this is the manager-specific seam worth preserving rather than generic shape checks.
+    replacementTestIds: []
+    status: proposed
+  - id: subagents-manager-prompts-second-wave1-subagents
+    testId: subagents-manager-prompts
+    role: second_opinion
+    reviewer: second-wave1-subagents
+    sourceArtifact: docs/test-audit/artifacts/second-wave1-subagents.yaml
+    recommendation: rewrite_candidate
+    confidence: high
+    reason: >-
+      Agree with rewrite_candidate. The prompt assertions protect a real
+      production contract, but the file carries unused split-suite imports and
+      packs three model/provider setups into one long case. A compact
+      model-family/role matrix can preserve ordering, exclusion, and mentor
+      separation while reducing setup duplication. The provider-per-family
+      coverage must remain because the production selector is model-family based.
+    evidence:
+      - source/services/subagents/subagent-manager.prompts.test.ts:1-21 imports beforeEach, afterEach, createMockExecutionContext, temp-directory helpers, wrapErrorAsAgentStream, getAgentTool, role constants, RealSubagentManager, ModelBehaviorError, MAX_SUBAGENT_MODEL_RETRIES, and ConversationEvent without using them in this file.
+      - source/services/subagents/subagent-manager.prompts.test.ts:47-148 registers three providers and constructs three managers to assert Codex, Anthropic, and GPT-5 prompt prefixes plus role suffix/order; the repeated setup is a natural matrix seam.
+      - source/services/subagents/subagent-manager.prompts.test.ts:150-183 asserts five top-level-only exclusions, and :185-223 separately asserts mentor prompt isolation; these are distinct evidence that must survive the rewrite.
+      - source/services/subagents/role-loader.ts:143-154 selects base-codex, base-anthropic, base-gpt-5-modern, or base-simple by model family, while :254-265 fixes model/worktree/role/guidance ordering; this supports compact family/role cases rather than dropping the behavior.
+    replacementTestIds: []
+    status: proposed
+  - id: subagents-manager-retry-second-wave1-subagents
+    testId: subagents-manager-retry
+    role: second_opinion
+    reviewer: second-wave1-subagents
+    sourceArtifact: docs/test-audit/artifacts/second-wave1-subagents.yaml
+    recommendation: rewrite_candidate
+    confidence: high
+    reason: >-
+      Agree with rewrite_candidate, with one qualification: the direct thrown
+      error and wrapped error event are different execution branches and must not
+      be collapsed into one assertion. The repeated manager/provider setup and
+      unused imports are removable, while an error-class matrix can retain both
+      stream shapes, retry exhaustion, abort exclusion, partial evidence, and
+      the distinct transport versus incomplete-stream outcomes.
+    evidence:
+      - source/services/subagents/subagent-manager.retry.test.ts:23-78 tests a wrapped recoverable hallucinated-tool event, successful retry, retry event metadata, and retry logging; :80-116 repeats wrapped hallucination setup for exhaustion and retry counts.
+      - source/services/subagents/subagent-manager.retry.test.ts:118-151 covers a non-recoverable ModelBehaviorError with no retry, while :153-185 covers AbortError cancellation with no model-error retry; these are separate negative classes for the matrix.
+      - source/services/subagents/subagent-manager.retry.test.ts:187-219 throws the same recoverable hallucination directly from the stream and expects outer retry exhaustion, so it exercises a distinct direct-stream path rather than being safely deleted as a duplicate.
+      - source/services/subagents/subagent-manager.retry.test.ts:221-267 verifies cancelled partial toolsUsed/filesChanged evidence, and :270-366 distinguishes upstream transport retry metadata from incomplete-stream recovery with no retry event.
+      - source/services/subagents/execution-runner.ts:423-457 handles an emitted error event separately from an exception caught around the stream, while :273-277 enables bounded model retries; both branches justify preserving direct and wrapped coverage in the rewrite.
+    replacementTestIds: []
+    status: proposed
+  - id: subagents-manager-tools-second-wave1-subagents
+    testId: subagents-manager-tools
+    role: second_opinion
+    reviewer: second-wave1-subagents
+    sourceArtifact: docs/test-audit/artifacts/second-wave1-subagents.yaml
+    recommendation: rewrite_candidate
+    confidence: high
+    reason: >-
+      Agree with rewrite_candidate. Conditional registration and guidance are
+      manager-level policy evidence, but the file repeats provider/manager
+      construction across cases and its explorer surface assertion overlaps the
+      calibration-recorded roles sibling. A focused configuration matrix should
+      preserve the unique search-mode, remote, skills, and guidance outcomes;
+      it should not delete the search condition just because the broad explorer
+      surface is covered elsewhere.
+    evidence:
+      - source/services/subagents/subagent-manager.tools.test.ts:23-126 creates separate providers/managers for gpt-5 auto, gpt-4o auto, and gpt-5 off, repeating setup while checking the search tool/guidance matrix.
+      - source/services/subagents/subagent-manager.tools.test.ts:128-163 asserts explorer shell/web presence and grep/glob absence, overlapping source/services/subagents/subagent-manager.roles.test.ts:472-497, though the tools file adds search-mode guidance that must remain.
+      - source/services/subagents/subagent-manager.tools.test.ts:165-203 uniquely checks remote suppression of read_code_outline/code_context_search and matching guidance, and :205-242 uniquely checks activate_skill plus the skills catalog.
+      - source/services/subagents/tool-policy.ts:795-806 gates mentor/skills tools, :819-872 gates grep/glob and remote code-context tools, and :876-889 registers web tools; source/services/subagents/role-loader.ts:157-212 supplies the model/search decision and corresponding guidance strings.
+    replacementTestIds: []
+    status: proposed
+

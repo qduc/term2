@@ -1,0 +1,945 @@
+schemaVersion: 2
+domains:
+  - id: runtime
+    label: Agent runtime, application client, and runtime support libraries
+suites:
+  - id: unit
+    label: Default Vitest unit suite
+  - id: integration
+    label: Vitest integration coverage
+seams:
+  - id: runtime-a-seam-agent-chat-service
+    label: AgentChatService model construction, chat result extraction, and cancellation boundary
+  - id: runtime-a-seam-agent-client-continuity
+    label: AgentClient provider capability boundary for application conversation chaining
+  - id: runtime-a-seam-application-run-loop
+    label: AgentClient and ApplicationRunLoop turn, rollover, stream, tool, compaction, and steer coordination
+  - id: runtime-a-seam-agent-client-lifecycle
+    label: AgentClient ownership and lifecycle boundary for bridges, streamed models, and background work
+  - id: runtime-a-seam-agent-configuration
+    label: AgentConfiguration resolution, settings subscription, and application-agent projection boundary
+  - id: runtime-a-seam-agent-factory
+    label: Agent factory tool construction, provider model settings, and root tool invocation boundary
+  - id: runtime-a-seam-ask-answer-store
+    label: In-memory ask-user answer set, peek, and consume boundary
+  - id: runtime-a-seam-chained-input-filter
+    label: Provider chained-input correlation and safe delta filtering boundary
+  - id: runtime-a-seam-editor-impl
+    label: Editor filesystem operation and remote command execution boundary
+  - id: runtime-a-seam-harness-input-idle
+    label: Harness file protocol for composer state, revisions, and idle generations
+  - id: runtime-a-seam-input-owner
+    label: Pure precedence policy selecting the exclusive terminal input owner
+  - id: runtime-a-seam-openai-chat-client
+    label: AgentClient chat and direct application request boundary
+  - id: runtime-a-seam-flex-setting
+    label: SettingsService persistence and metadata boundary for OpenAI Flex tier
+  - id: runtime-a-seam-provider-error-retry
+    label: Provider error metadata and retry-policy input boundary
+  - id: runtime-a-seam-strict-tool-schema
+    label: Zod schema conversion boundary for OpenAI strict tool arguments
+  - id: runtime-a-seam-sdk-approval-resume
+    label: ApplicationRunLoop approval interruption and resumed tool execution boundary
+  - id: runtime-a-seam-subagent-bridge
+    label: SubagentBridge delegation, abort, lifecycle, context scoping, and async controls boundary
+  - id: runtime-a-seam-subagent-event-sinks
+    label: SubagentBridge routing and ordered delivery boundary for foreground/background event sinks
+  - id: runtime-a-seam-subagent-provider-session
+    label: SubagentBridge/async registry to OpenCode session-header integration boundary
+  - id: runtime-a-seam-tool-interceptor-registry
+    label: ToolInterceptorRegistry registration, rejection, short-circuit, and error boundary
+  - id: runtime-a-seam-tool-invoke
+    label: Model tool argument normalization, validation, execution, and error-result boundary
+  - id: runtime-a-seam-tool-selection-policy
+    label: Provider/model capability predicates selecting patch and strict-schema tools
+  - id: runtime-a-seam-agent-resolver
+    label: Agent config model, permission, limit, skill, scope, and tool resolution boundary
+risks:
+  - id: runtime-a-risk-chat-result-or-cancellation
+    label: Chat returns the wrong result or fails to stop an active provider stream
+    severity: high
+  - id: runtime-a-risk-chaining-capability-loss
+    label: An application-owned provider loses chaining support and breaks continuation semantics
+    severity: high
+  - id: runtime-a-risk-turn-state-corruption
+    label: Rollover, compaction, tool dispatch, retry, or steer state is lost or dispatched incorrectly
+    severity: critical
+  - id: runtime-a-risk-resource-lifecycle
+    label: Disposing or aborting a client leaks, prematurely closes, or reuses owned runtime resources
+    severity: critical
+  - id: runtime-a-risk-configuration-drift
+    label: Settings, overrides, or provider-specific options do not reach the effective agent consistently
+    severity: high
+  - id: runtime-a-risk-tool-construction-safety
+    label: Root tools are exposed with unsafe settings or execute malformed arguments
+    severity: critical
+  - id: runtime-a-risk-answer-leak
+    label: Ask-user answers are returned to the wrong call or remain readable after consumption
+    severity: medium
+  - id: runtime-a-risk-chained-history-corruption
+    label: Chained provider history loses required tool outputs or correlates outputs to the wrong call
+    severity: critical
+  - id: runtime-a-risk-editor-unsafe-write
+    label: Approved filesystem operations produce wrong content or unsafe remote shell commands
+    severity: critical
+  - id: runtime-a-risk-harness-state-protocol
+    label: External harness observes stale composer state or advances idle at the wrong ownership boundary
+    severity: high
+  - id: runtime-a-risk-input-double-dispatch
+    label: Keyboard input is delivered to the wrong or multiple terminal surfaces
+    severity: high
+  - id: runtime-a-risk-chat-request-shape
+    label: Chat loses structured output, fallback content, or provider-specific request shape
+    severity: high
+  - id: runtime-a-risk-flex-setting-drift
+    label: Flex setting defaults, mutability, or serialized metadata drift from the user-facing contract
+    severity: medium
+  - id: runtime-a-risk-retry-error-contract
+    label: Provider error metadata or retry classification misleads retry behavior
+    severity: high
+  - id: runtime-a-risk-strict-schema-mismatch
+    label: Optional tool fields cannot satisfy OpenAI strict-schema request validation
+    severity: high
+  - id: runtime-a-risk-approval-resume-correlation
+    label: Resumed approved calls lose call identity or completed results disappear from history
+    severity: critical
+  - id: runtime-a-risk-subagent-control
+    label: Subagent calls lose parameters, cancellation, context isolation, or async control semantics
+    severity: critical
+  - id: runtime-a-risk-event-delivery
+    label: Subagent events are duplicated, stranded, reordered, or delivered to the wrong sink
+    severity: high
+  - id: runtime-a-risk-provider-session-reuse
+    label: Nested runs reuse the parent OpenCode session or fail to preserve their own across continuation
+    severity: critical
+  - id: runtime-a-risk-interceptor-bypass
+    label: Interceptor rejection, ordering, removal, or error handling fails to control tool execution
+    severity: high
+  - id: runtime-a-risk-tool-input-execution
+    label: Malformed model arguments execute unsafely, leak sensitive diagnostics, or abort incorrectly
+    severity: critical
+  - id: runtime-a-risk-capability-routing
+    label: Unsupported providers receive native patch or strict-schema tool behavior, or supported ones do not
+    severity: high
+  - id: runtime-a-risk-agent-authority
+    label: Resolved child agents gain unauthorized tools, permissions, scopes, or resource limits
+    severity: critical
+fixtures:
+  - id: runtime-a-fixture-mock-streamed-provider
+    label: Registered provider with a scripted streamed model and captured requests
+  - id: runtime-a-fixture-agent-client-dependencies
+    label: Minimal logger, settings, ownership, and optional bridge dependencies for AgentClient
+  - id: runtime-a-fixture-scripted-run-loop
+    label: Scripted streamed responses, tools, and deferred subagent results for turn coordination
+  - id: runtime-a-fixture-agent-configuration-deps
+    label: Mock settings, provider registry, logger, editor, and bridge dependencies
+  - id: runtime-a-fixture-answer-store
+    label: Call-id keyed in-memory answer entries
+  - id: runtime-a-fixture-provider-history-items
+    label: User, function-call, and tool-result items with alternate provider correlation fields
+  - id: runtime-a-fixture-temp-files-and-remote-ssh
+    label: Temporary workspace files and captured remote SSH commands for editor operations
+  - id: runtime-a-fixture-harness-idle-file
+    label: Temporary harness idle protocol file and environment variable
+  - id: runtime-a-fixture-input-owner-state
+    label: Input-owner state combinations representing prompts, menus, queues, and processing
+  - id: runtime-a-fixture-openai-chat-provider
+    label: Scripted application provider capturing chat requests and streamed fallback content
+  - id: runtime-a-fixture-settings-service
+    label: Isolated SettingsService instances with persistence disabled
+  - id: runtime-a-fixture-provider-error
+    label: OpenRouterError instances carrying HTTP status, headers, and response body
+  - id: runtime-a-fixture-zod-tool-schema
+    label: Zod object schemas with required and optional tool fields
+  - id: runtime-a-fixture-approval-loop
+    label: Scripted ApplicationRunLoop tool calls that interrupt and resume after approval
+  - id: runtime-a-fixture-subagent-manager
+    label: SubagentManager-shaped mocks tracking foreground and async calls
+  - id: runtime-a-fixture-conversation-event-sinks
+    label: Capturing foreground and background ConversationEvent sinks
+  - id: runtime-a-fixture-opencode-injector
+    label: OpenCode session injector plus parent and nested SessionContextService contexts
+  - id: runtime-a-fixture-interceptors
+    label: Registered async tool interceptors and captured logger errors
+  - id: runtime-a-fixture-malformed-tool-input
+    label: Broken JSON, sentinel values, schema-invalid arguments, and tool outputs
+  - id: runtime-a-fixture-provider-capabilities
+    label: Provider/model identifiers with native patch and strict-schema capability declarations
+  - id: runtime-a-fixture-agent-resolution-config
+    label: AgentConfig values, parent authorities, settings, and SkillsService fixtures
+contracts:
+  - id: runtime-a-contract-chat-cache-and-results
+    statement: AgentChatService reuses a model for repeated provider/model chats until its explicit cache clear, and extracts text and accounting data from streamed completions.
+    seamIds:
+      - runtime-a-seam-agent-chat-service
+    riskIds:
+      - runtime-a-risk-chat-result-or-cancellation
+  - id: runtime-a-contract-chat-abort
+    statement: Aborting an active AgentChatService chat aborts the provider request and rejects the pending chat with an AbortError.
+    seamIds:
+      - runtime-a-seam-agent-chat-service
+    riskIds:
+      - runtime-a-risk-chat-result-or-cancellation
+  - id: runtime-a-contract-chat-overrides
+    statement: Temporary provider and structured-output options are passed to the temporary chat agent and its streamed request.
+    seamIds:
+      - runtime-a-seam-agent-chat-service
+    riskIds:
+      - runtime-a-risk-configuration-drift
+  - id: runtime-a-contract-application-chaining-capability
+    statement: An application-owned HTTP Responses provider reports conversation chaining as supported when its provider path can preserve continuation state.
+    seamIds:
+      - runtime-a-seam-agent-client-continuity
+    riskIds:
+      - runtime-a-risk-chaining-capability-loss
+  - id: runtime-a-contract-rollover-background-guard
+    statement: Session rollover is rejected or blocked when background work is live, including a recheck at rollover consumption.
+    seamIds:
+      - runtime-a-seam-application-run-loop
+    riskIds:
+      - runtime-a-risk-turn-state-corruption
+  - id: runtime-a-contract-rollover-history-and-compaction
+    statement: Accepted rollover and local compaction preserve the provider usage/reminder metadata and protect the required hot tail without dispatching an impossible request.
+    seamIds:
+      - runtime-a-seam-application-run-loop
+    riskIds:
+      - runtime-a-risk-turn-state-corruption
+  - id: runtime-a-contract-model-cache-failure-recovery
+    statement: AgentClient retains a usable streamed model across completed turns, retries after a rejected factory, and does not let an obsolete rejection evict a replacement.
+    seamIds:
+      - runtime-a-seam-application-run-loop
+    riskIds:
+      - runtime-a-risk-resource-lifecycle
+  - id: runtime-a-contract-parallel-tool-dispatch-order
+    statement: Eligible foreground explorer calls are dispatched within the configured parallelism and their tool results return to the provider in original response order.
+    seamIds:
+      - runtime-a-seam-application-run-loop
+    riskIds:
+      - runtime-a-risk-turn-state-corruption
+  - id: runtime-a-contract-agent-client-steer-settlement
+    statement: Accepted steering survives approval/retry/pre-request boundaries, enters the next request, and is released when the turn closes without another request.
+    seamIds:
+      - runtime-a-seam-application-run-loop
+    riskIds:
+      - runtime-a-risk-turn-state-corruption
+  - id: runtime-a-contract-agent-configuration-resolution
+    statement: AgentConfiguration resolves settings and overrides into the effective agent and provider-specific application options, while subscriptions rebuild only for relevant keys and clean up safely.
+    seamIds:
+      - runtime-a-seam-agent-configuration
+    riskIds:
+      - runtime-a-risk-configuration-drift
+  - id: runtime-a-contract-agent-factory-tools
+    statement: Agent factory construction exposes the intended root tools, applies provider/model capabilities and safety settings, and rejects malformed tool arguments before execution.
+    seamIds:
+      - runtime-a-seam-agent-factory
+    riskIds:
+      - runtime-a-risk-tool-construction-safety
+  - id: runtime-a-contract-answer-store
+    statement: AskUserAnswerStore isolates answers by call id, supports non-destructive peek, and removes an answer when it is consumed.
+    seamIds:
+      - runtime-a-seam-ask-answer-store
+    riskIds:
+      - runtime-a-risk-answer-leak
+  - id: runtime-a-contract-chained-history-filter
+    statement: Chained input filtering identifies user and tool items across provider encodings, correlates call and result ids with explicit precedence, and rejects missing or orphaned required outputs while preserving valid deltas.
+    seamIds:
+      - runtime-a-seam-chained-input-filter
+    riskIds:
+      - runtime-a-risk-chained-history-corruption
+  - id: runtime-a-contract-editor-operations
+    statement: Editor create, update, and delete operations apply valid diffs, report invalid or missing targets as failures, honor approved out-of-workspace operations, and safely quote remote deletion targets.
+    seamIds:
+      - runtime-a-seam-editor-impl
+    riskIds:
+      - runtime-a-risk-editor-unsafe-write
+  - id: runtime-a-contract-harness-idle-protocol
+    statement: Harness input publishing creates and updates the state file only when configured, increments idle generations only on valid return-to-idle transitions, and acknowledges exact composer revisions with bounded timeout errors.
+    seamIds:
+      - runtime-a-seam-harness-input-idle
+    riskIds:
+      - runtime-a-risk-harness-state-protocol
+  - id: runtime-a-contract-input-owner-precedence
+    statement: deriveInputOwner selects exactly one input owner according to urgent prompt, menu, queue, background-task, and editor precedence, including processing and first-run exceptions.
+    seamIds:
+      - runtime-a-seam-input-owner
+    riskIds:
+      - runtime-a-risk-input-double-dispatch
+  - id: runtime-a-contract-openai-chat-forwarding
+    statement: AgentClient chat and chatJson preserve structured output options, fallback message extraction, and usable direct request input for both tracing and non-tracing application providers.
+    seamIds:
+      - runtime-a-seam-openai-chat-client
+    riskIds:
+      - runtime-a-risk-chat-request-shape
+  - id: runtime-a-contract-flex-setting
+    statement: SettingsService exposes the OpenAI Flex service-tier setting with a false default, supports runtime enable/disable changes, and includes its value and source in getAll metadata.
+    seamIds:
+      - runtime-a-seam-flex-setting
+    riskIds:
+      - runtime-a-risk-flex-setting-drift
+  - id: runtime-a-contract-provider-error-metadata
+    statement: OpenRouterError remains throwable while preserving message, status, headers, and response body metadata needed by provider retry handling.
+    seamIds:
+      - runtime-a-seam-provider-error-retry
+    riskIds:
+      - runtime-a-risk-retry-error-contract
+  - id: runtime-a-contract-strict-tool-schema
+    statement: Optional Zod tool fields are transformed to nullable defaults for OpenAI strict schemas, while schemas with no optional fields retain identity and behavior.
+    seamIds:
+      - runtime-a-seam-strict-tool-schema
+    riskIds:
+      - runtime-a-risk-strict-schema-mismatch
+  - id: runtime-a-contract-approval-resume
+    statement: ApplicationRunLoop approval interruption resumes execution with the original tool-call id and records completed tool results in application-owned history.
+    seamIds:
+      - runtime-a-seam-sdk-approval-resume
+    riskIds:
+      - runtime-a-risk-approval-resume-correlation
+  - id: runtime-a-contract-subagent-bridge-controls
+    statement: SubagentBridge delegates mentor, foreground, and background requests with parameters and context, isolates nested provider-history keys, tracks active runs, and exposes safe abort, disposal, cache, and async controls.
+    seamIds:
+      - runtime-a-seam-subagent-bridge
+    riskIds:
+      - runtime-a-risk-subagent-control
+  - id: runtime-a-contract-subagent-event-routing
+    statement: SubagentBridge routes foreground, transferred, and background lifecycle events to the correct sinks, flushes buffered events once, keeps asynchronous delivery alive, and awaits sink completion where required.
+    seamIds:
+      - runtime-a-seam-subagent-event-sinks
+    riskIds:
+      - runtime-a-risk-event-delivery
+  - id: runtime-a-contract-subagent-provider-session
+    statement: Each foreground subagent receives a session distinct from its parent, repeated requests in one run reuse that session, and background launch/continuation requests reuse one run-owned session.
+    seamIds:
+      - runtime-a-seam-subagent-provider-session
+    riskIds:
+      - runtime-a-risk-provider-session-reuse
+  - id: runtime-a-contract-interceptor-registry
+    statement: ToolInterceptorRegistry invokes interceptors in registration order, returns the first rejection, stops after rejection, supports removal and call-id forwarding, and converts/logs thrown errors.
+    seamIds:
+      - runtime-a-seam-tool-interceptor-registry
+    riskIds:
+      - runtime-a-risk-interceptor-bypass
+  - id: runtime-a-contract-tool-input-normalization
+    statement: Tool invocation normalizes recoverable model JSON and schema coercions without applying defaults unexpectedly, returns bounded diagnostics for invalid input, preserves valid tool output, and rethrows abort/schema errors appropriately.
+    seamIds:
+      - runtime-a-seam-tool-invoke
+    riskIds:
+      - runtime-a-risk-tool-input-execution
+  - id: runtime-a-contract-tool-selection-capabilities
+    statement: Tool-selection predicates choose native patch and strict-schema behavior from provider/model capabilities, with semantic model-prefix matching and safe unsupported-provider defaults.
+    seamIds:
+      - runtime-a-seam-tool-selection-policy
+    riskIds:
+      - runtime-a-risk-capability-routing
+  - id: runtime-a-contract-agent-resolution
+    statement: resolveAgent resolves model policies, skills, tools, permissions, limits, and filesystem scopes while reporting invalid configuration and attenuating child authority by parent policy.
+    seamIds:
+      - runtime-a-seam-agent-resolver
+    riskIds:
+      - runtime-a-risk-agent-authority
+  - id: runtime-a-contract-agent-client-public-methods
+    statement: AgentClient public mutators and helpers update provider/model state, forward retry and sink controls, clear or abort conversations safely, and enforce check-in input minimums.
+    seamIds:
+      - runtime-a-seam-openai-chat-client
+      - runtime-a-seam-agent-client-lifecycle
+    riskIds:
+      - runtime-a-risk-configuration-drift
+      - runtime-a-risk-resource-lifecycle
+  - id: runtime-a-contract-application-chaining
+    statement: AgentClient forwards previous response identifiers and canonical accumulated history only for providers that support chaining, while clearing conversation state resets continuation behavior.
+    seamIds:
+      - runtime-a-seam-agent-client-continuity
+      - runtime-a-seam-openai-chat-client
+    riskIds:
+      - runtime-a-risk-chaining-capability-loss
+tests:
+  - kind: file
+    id: runtime-agent-chat-service
+    file: source/lib/agent-chat-service.test.ts
+    domainId: runtime
+    suiteId: unit
+    contractIds:
+      - runtime-a-contract-chat-cache-and-results
+      - runtime-a-contract-chat-abort
+      - runtime-a-contract-chat-overrides
+    fixtureIds:
+      - runtime-a-fixture-mock-streamed-provider
+  - kind: file
+    id: runtime-agent-client-application-continuity
+    file: source/lib/agent-client.application-continuity.test.ts
+    domainId: runtime
+    suiteId: unit
+    contractIds:
+      - runtime-a-contract-application-chaining-capability
+    fixtureIds:
+      - runtime-a-fixture-agent-client-dependencies
+  - kind: file
+    id: runtime-agent-client-application-run-loop
+    file: source/lib/agent-client.application-run-loop.test.ts
+    domainId: runtime
+    suiteId: unit
+    contractIds:
+      - runtime-a-contract-rollover-background-guard
+      - runtime-a-contract-rollover-history-and-compaction
+      - runtime-a-contract-model-cache-failure-recovery
+      - runtime-a-contract-parallel-tool-dispatch-order
+      - runtime-a-contract-agent-client-steer-settlement
+    fixtureIds:
+      - runtime-a-fixture-agent-client-dependencies
+      - runtime-a-fixture-scripted-run-loop
+  - kind: file
+    id: runtime-agent-client-dispose
+    file: source/lib/agent-client.dispose.test.ts
+    domainId: runtime
+    suiteId: unit
+    contractIds:
+      - runtime-a-contract-model-cache-failure-recovery
+    fixtureIds:
+      - runtime-a-fixture-agent-client-dependencies
+  - kind: file
+    id: runtime-agent-configuration
+    file: source/lib/agent-configuration.test.ts
+    domainId: runtime
+    suiteId: unit
+    contractIds:
+      - runtime-a-contract-agent-configuration-resolution
+    fixtureIds:
+      - runtime-a-fixture-agent-configuration-deps
+  - kind: file
+    id: runtime-agent-factory
+    file: source/lib/agent-factory.test.ts
+    domainId: runtime
+    suiteId: unit
+    contractIds:
+      - runtime-a-contract-agent-factory-tools
+    fixtureIds:
+      - runtime-a-fixture-agent-configuration-deps
+      - runtime-a-fixture-scripted-run-loop
+  - kind: file
+    id: runtime-ask-user-answer-store
+    file: source/lib/ask-user-answer-store.test.ts
+    domainId: runtime
+    suiteId: unit
+    contractIds:
+      - runtime-a-contract-answer-store
+    fixtureIds:
+      - runtime-a-fixture-answer-store
+  - kind: file
+    id: runtime-chained-input-filter
+    file: source/lib/chained-input-filter.test.ts
+    domainId: runtime
+    suiteId: unit
+    contractIds:
+      - runtime-a-contract-chained-history-filter
+    fixtureIds:
+      - runtime-a-fixture-provider-history-items
+  - kind: file
+    id: runtime-editor-impl
+    file: source/lib/editor-impl.test.ts
+    domainId: runtime
+    suiteId: unit
+    contractIds:
+      - runtime-a-contract-editor-operations
+    fixtureIds:
+      - runtime-a-fixture-temp-files-and-remote-ssh
+  - kind: file
+    id: runtime-harness-input-idle
+    file: source/lib/harness-input-idle.test.ts
+    domainId: runtime
+    suiteId: unit
+    contractIds:
+      - runtime-a-contract-harness-idle-protocol
+    fixtureIds:
+      - runtime-a-fixture-harness-idle-file
+  - kind: file
+    id: runtime-input-owner
+    file: source/lib/input-owner.test.ts
+    domainId: runtime
+    suiteId: unit
+    contractIds:
+      - runtime-a-contract-input-owner-precedence
+    fixtureIds:
+      - runtime-a-fixture-input-owner-state
+  - kind: file
+    id: runtime-openai-agent-client-chat
+    file: source/lib/openai-agent-client.chat.test.ts
+    domainId: runtime
+    suiteId: unit
+    contractIds:
+      - runtime-a-contract-openai-chat-forwarding
+    fixtureIds:
+      - runtime-a-fixture-openai-chat-provider
+  - kind: file
+    id: runtime-openai-agent-client-flex-tier
+    file: source/lib/openai-agent-client.flex-tier.test.ts
+    domainId: runtime
+    suiteId: unit
+    contractIds:
+      - runtime-a-contract-flex-setting
+    fixtureIds:
+      - runtime-a-fixture-settings-service
+  - kind: file
+    id: runtime-openai-agent-client
+    file: source/lib/openai-agent-client.test.ts
+    domainId: runtime
+    suiteId: unit
+    contractIds:
+      - runtime-a-contract-provider-error-metadata
+      - runtime-a-contract-tool-input-normalization
+    fixtureIds:
+      - runtime-a-fixture-provider-error
+      - runtime-a-fixture-zod-tool-schema
+  - kind: file
+    id: runtime-openai-agent-client-public-methods
+    file: source/lib/openai-agent-client.public-methods.test.ts
+    domainId: runtime
+    suiteId: unit
+    contractIds:
+      - runtime-a-contract-agent-client-public-methods
+      - runtime-a-contract-application-chaining
+      - runtime-a-contract-subagent-bridge-controls
+    fixtureIds:
+      - runtime-a-fixture-agent-client-dependencies
+      - runtime-a-fixture-scripted-run-loop
+  - kind: file
+    id: runtime-openai-strict-tool-schema
+    file: source/lib/openai-strict-tool-schema.test.ts
+    domainId: runtime
+    suiteId: unit
+    contractIds:
+      - runtime-a-contract-strict-tool-schema
+    fixtureIds:
+      - runtime-a-fixture-zod-tool-schema
+  - kind: file
+    id: runtime-sdk-approval-resume
+    file: source/lib/sdk-approval-resume.test.ts
+    domainId: runtime
+    suiteId: unit
+    contractIds:
+      - runtime-a-contract-approval-resume
+    fixtureIds:
+      - runtime-a-fixture-approval-loop
+  - kind: file
+    id: runtime-subagent-bridge-abort-scope
+    file: source/lib/subagent-bridge.abort-scope.test.ts
+    domainId: runtime
+    suiteId: unit
+    contractIds:
+      - runtime-a-contract-subagent-bridge-controls
+    fixtureIds:
+      - runtime-a-fixture-subagent-manager
+  - kind: file
+    id: runtime-subagent-bridge-background-sink
+    file: source/lib/subagent-bridge.background-sink.test.ts
+    domainId: runtime
+    suiteId: unit
+    contractIds:
+      - runtime-a-contract-subagent-event-routing
+    fixtureIds:
+      - runtime-a-fixture-subagent-manager
+      - runtime-a-fixture-conversation-event-sinks
+  - kind: file
+    id: runtime-subagent-bridge
+    file: source/lib/subagent-bridge.test.ts
+    domainId: runtime
+    suiteId: unit
+    contractIds:
+      - runtime-a-contract-subagent-bridge-controls
+      - runtime-a-contract-subagent-event-routing
+    fixtureIds:
+      - runtime-a-fixture-subagent-manager
+  - kind: file
+    id: runtime-subagent-provider-session
+    file: source/lib/subagent-provider-session.integration.test.ts
+    domainId: runtime
+    suiteId: integration
+    contractIds:
+      - runtime-a-contract-subagent-provider-session
+    fixtureIds:
+      - runtime-a-fixture-opencode-injector
+  - kind: file
+    id: runtime-tool-interceptor-registry
+    file: source/lib/tool-interceptor-registry.test.ts
+    domainId: runtime
+    suiteId: unit
+    contractIds:
+      - runtime-a-contract-interceptor-registry
+    fixtureIds:
+      - runtime-a-fixture-interceptors
+  - kind: file
+    id: runtime-tool-invoke
+    file: source/lib/tool-invoke.test.ts
+    domainId: runtime
+    suiteId: unit
+    contractIds:
+      - runtime-a-contract-tool-input-normalization
+      - runtime-a-contract-interceptor-registry
+    fixtureIds:
+      - runtime-a-fixture-malformed-tool-input
+      - runtime-a-fixture-interceptors
+  - kind: file
+    id: runtime-tool-selection-policy
+    file: source/lib/tool-selection-policy.test.ts
+    domainId: runtime
+    suiteId: unit
+    contractIds:
+      - runtime-a-contract-tool-selection-capabilities
+    fixtureIds:
+      - runtime-a-fixture-provider-capabilities
+  - kind: file
+    id: runtime-agent-resolver
+    file: source/services/agent-runtime/agent-resolver.test.ts
+    domainId: runtime
+    suiteId: unit
+    contractIds:
+      - runtime-a-contract-agent-resolution
+    fixtureIds:
+      - runtime-a-fixture-agent-resolution-config
+decisions:
+  - id: runtime-agent-chat-service-runtime-a-m3
+    testId: runtime-agent-chat-service
+    role: second_opinion
+    reviewer: runtime-a-m3
+    sourceArtifact: docs/test-audit/artifacts/runtime-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: >-
+      The file covers distinct public chat behaviors: model-cache invalidation, result extraction/accounting, abort propagation, temporary provider selection, and structured output forwarding.
+    evidence:
+      - source/lib/agent-chat-service.test.ts:98-155 observes cache reuse/clear and text, usage, and cost records.
+      - source/lib/agent-chat-service.test.ts:157-211 observes AbortSignal propagation and AbortError rejection from an active provider stream.
+      - source/lib/agent-chat-service.test.ts:213-320 observes temporary provider and outputType request forwarding plus finalOutput fallback.
+    replacementTestIds: []
+    status: proposed
+  - id: runtime-agent-client-application-continuity-runtime-a-m3
+    testId: runtime-agent-client-application-continuity
+    role: second_opinion
+    reviewer: runtime-a-m3
+    sourceArtifact: docs/test-audit/artifacts/runtime-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is the direct regression guard for the application-owned HTTP Responses capability predicate.
+    evidence:
+      - source/lib/agent-client.application-continuity.test.ts:30-44 asserts supportsConversationChaining() is true for the configured HTTP Responses path.
+      - The seam is AgentClient.supportsConversationChaining(), which controls whether continuation state may be retained.
+    replacementTestIds: []
+    status: proposed
+  - id: runtime-agent-client-application-run-loop-runtime-a-m3
+    testId: runtime-agent-client-application-run-loop
+    role: second_opinion
+    reviewer: runtime-a-m3
+    sourceArtifact: docs/test-audit/artifacts/runtime-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The file is a high-scrutiny integration-style unit boundary covering independent rollover, compaction, model-cache race, parallel dispatch, and steering regressions through AgentClient rather than only internal helpers.
+    evidence:
+      - source/lib/agent-client.application-run-loop.test.ts:66-144 asserts rollover admission and settlement-time background-work guards.
+      - source/lib/agent-client.application-run-loop.test.ts:146-496 asserts public history reminders, usage handoff, compaction mode selection, and hard-fit refusal before provider dispatch.
+      - source/lib/agent-client.application-run-loop.test.ts:498-700 asserts bounded parallel tool execution and changed setting application.
+      - source/lib/agent-client.application-run-loop.test.ts:758-918 asserts steer admission across approval, pre-request, retry, and turn-close boundaries.
+    replacementTestIds: []
+    status: proposed
+  - id: runtime-agent-client-dispose-runtime-a-m3
+    testId: runtime-agent-client-dispose
+    role: second_opinion
+    reviewer: runtime-a-m3
+    sourceArtifact: docs/test-audit/artifacts/runtime-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Ownership-sensitive disposal behavior has distinct borrowed, owned, synchronous, promised, rejected, and shared-model cases; the visible close counts are the contract, not incidental implementation shape.
+    evidence:
+      - source/lib/agent-client.dispose.test.ts:104-364 observes idempotent disposal, abort-vs-dispose separation, post-dispose safety, and absent-bridge safety.
+      - source/lib/agent-client.dispose.test.ts:366-594 observes shared-model borrowing versus owned-model closure.
+      - source/lib/agent-client.dispose.test.ts:596-638 observes safe cleanup when an owned model promise rejects.
+    replacementTestIds: []
+    status: proposed
+  - id: runtime-agent-configuration-runtime-a-m3
+    testId: runtime-agent-configuration
+    role: second_opinion
+    reviewer: runtime-a-m3
+    sourceArtifact: docs/test-audit/artifacts/runtime-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The file protects the configuration facade across persistent and transient agents, provider-specific application options, rebuild-key filtering, subscriptions, and dependency projection; no assigned sibling provides this combined observable coverage.
+    evidence:
+      - source/lib/agent-configuration.test.ts:121-292 observes override/settings resolution and Codex session-key projection without leaking transient keys.
+      - source/lib/agent-configuration.test.ts:327-412 observes dependency shape and idempotent subscription/disposal, including transient/no-onChange cases.
+      - source/lib/agent-configuration.test.ts:447-578 observes rebuild-key filtering, callbacks, cache invalidation hooks, and Grok adapter placement.
+    replacementTestIds: []
+    status: proposed
+  - id: runtime-agent-factory-runtime-a-m3
+    testId: runtime-agent-factory
+    role: second_opinion
+    reviewer: runtime-a-m3
+    sourceArtifact: docs/test-audit/artifacts/runtime-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The factory file guards root-tool safety and provider-specific model construction, including post-execute pauses, schema validation, native patch routing, reasoning defaults, compaction capability, and generation limits.
+    evidence:
+      - source/lib/agent-factory.test.ts:125-372 observes post-execute result policy, pause/resume, YOLO bypass, typed capability acceptance, and ambiguous-definition rejection.
+      - source/lib/agent-factory.test.ts:400-506 observes strict schemas, native patch representation, workspace approval, and YOLO behavior.
+      - source/lib/agent-factory.test.ts:508-779 observes provider/model-specific reasoning, flex, compaction, parallel, and token-limit settings.
+      - source/lib/agent-factory.test.ts:781-811 observes malformed root arguments are rejected without execution while valid arguments execute.
+    replacementTestIds: []
+    status: proposed
+  - id: runtime-ask-user-answer-store-runtime-a-m3
+    testId: runtime-ask-user-answer-store
+    role: second_opinion
+    reviewer: runtime-a-m3
+    sourceArtifact: docs/test-audit/artifacts/runtime-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This small state-store test exhaustively covers set, overwrite, independent keys, peek retention, consume deletion, and unknown-key behavior.
+    evidence:
+      - source/lib/ask-user-answer-store.test.ts:4-47 asserts both read modes and lifecycle semantics by call id.
+      - The production seam is AskUserAnswerStore's call-id map, consumed by AgentClient ask-user resumption.
+    replacementTestIds: []
+    status: proposed
+  - id: runtime-chained-input-filter-runtime-a-m3
+    testId: runtime-chained-input-filter
+    role: second_opinion
+    reviewer: runtime-a-m3
+    sourceArtifact: docs/test-audit/artifacts/runtime-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Provider-history filtering is a compact pure-function boundary but carries critical correlation and orphan-output safety; the tests cover alternate provider encodings, multi-cycle deltas, partial batches, and explicit failure modes.
+    evidence:
+      - source/lib/chained-input-filter.test.ts:17-165 observes record/type guards, call-id precedence, and delta-start selection.
+      - source/lib/chained-input-filter.test.ts:167-287 observes filtering, preservation, required-output rejection, and non-input property retention.
+      - source/lib/chained-input-filter.test.ts:290-508 observes function-call correlation, orphan detection, pre-trimmed anchors, and partial parallel completion.
+    replacementTestIds: []
+    status: proposed
+  - id: runtime-editor-impl-runtime-a-m3
+    testId: runtime-editor-impl
+    role: second_opinion
+    reviewer: runtime-a-m3
+    sourceArtifact: docs/test-audit/artifacts/runtime-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The editor tests exercise real temporary files and a captured SSH boundary, covering successful writes, failure statuses, force deletion, and shell quoting after the SDK approval seam.
+    evidence:
+      - source/lib/editor-impl.test.ts:65-145 verifies approved out-of-workspace create/update/delete behavior rather than confusing editor execution with approval policy.
+      - source/lib/editor-impl.test.ts:149-301 verifies valid and invalid create/update/delete outcomes and missing-file semantics.
+      - source/lib/editor-impl.test.ts:303-336 verifies hostile remote paths are emitted as one safely single-quoted rm target.
+    replacementTestIds: []
+    status: proposed
+  - id: runtime-harness-input-idle-runtime-a-m3
+    testId: runtime-harness-input-idle
+    role: second_opinion
+    reviewer: runtime-a-m3
+    sourceArtifact: docs/test-audit/artifacts/runtime-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The file is the sole assigned coverage of the external harness idle-file protocol and distinguishes owner transitions, composer revisions, exact acknowledgements, and timeout diagnostics.
+    evidence:
+      - source/lib/harness-input-idle.test.ts:30-68 verifies configured/unconfigured file writes, first idle generation, stable idle state, and composer revision publishing.
+      - source/lib/harness-input-idle.test.ts:70-126 verifies exact-value acknowledgement, menu ownership handling, return-to-idle generation, and effective timeout wording.
+    replacementTestIds: []
+    status: proposed
+  - id: runtime-input-owner-runtime-a-m3
+    testId: runtime-input-owner
+    role: second_opinion
+    reviewer: runtime-a-m3
+    sourceArtifact: docs/test-audit/artifacts/runtime-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This pure policy test enumerates the exclusive-owner precedence table and the negative processing/input exceptions that prevent dropped or double-delivered keystrokes.
+    evidence:
+      - source/lib/input-owner.test.ts:5-182 verifies handoff, surge, uncached, approval, rejection/answer entry, queue, and mode-switch precedence.
+      - source/lib/input-owner.test.ts:184-269 verifies background-task/menu/first-run ownership and urgent modal preemption.
+    replacementTestIds: []
+    status: proposed
+  - id: runtime-openai-agent-client-chat-runtime-a-m3
+    testId: runtime-openai-agent-client-chat
+    role: second_opinion
+    reviewer: runtime-a-m3
+    sourceArtifact: docs/test-audit/artifacts/runtime-a-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: medium
+    reason: The chat facade behavior matters, but two direct-request cases assert only truthiness and the outputType/fallback observables substantially repeat source/lib/agent-chat-service.test.ts; rewrite can retain the AgentClient-specific provider coverage while removing weak characterization.
+    evidence:
+      - source/lib/openai-agent-client.chat.test.ts:69-123 repeats the outputType forwarding and final message fallback observable covered by source/lib/agent-chat-service.test.ts:227-320.
+      - source/lib/openai-agent-client.chat.test.ts:125-155 asserts only that request.input is truthy for both provider variants, without checking provider-specific request shape.
+    replacementTestIds: []
+    status: proposed
+  - id: runtime-openai-agent-client-flex-tier-runtime-a-m3
+    testId: runtime-openai-agent-client-flex-tier
+    role: second_opinion
+    reviewer: runtime-a-m3
+    sourceArtifact: docs/test-audit/artifacts/runtime-a-m3.yaml
+    recommendation: keep
+    confidence: medium
+    reason: Although the filename suggests a client, this file directly covers SettingsService's user-facing Flex setting metadata and runtime mutability; the factory's separate propagation assertion does not replace these setting-level defaults and getAll checks.
+    evidence:
+      - source/lib/openai-agent-client.flex-tier.test.ts:22-90 observes default, set/unset, runtime-modifiable metadata, and getAll value/source.
+      - source/lib/agent-factory.test.ts:622-633 observes only downstream modelSettings service_tier propagation, not the setting contract.
+    replacementTestIds: []
+    status: proposed
+  - id: runtime-openai-agent-client-runtime-a-m3
+    testId: runtime-openai-agent-client
+    role: second_opinion
+    reviewer: runtime-a-m3
+    sourceArtifact: docs/test-audit/artifacts/runtime-a-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: high
+    reason: The file mixes real OpenRouterError metadata checks with locally recomputed retry formulas and a second broad copy of wrapNeedsApproval coverage; it should be split or rewritten around production predicates rather than preserving arithmetic that never calls production retry code.
+    evidence:
+      - source/lib/openai-agent-client.test.ts:31-234 computes exponential delays, jitter, classifications, and retry counts from local expressions, so those cases cannot fail when production retry behavior changes.
+      - source/lib/openai-agent-client.test.ts:243-420 duplicates wrapNeedsApproval observables carried more directly by source/lib/tool-invoke.test.ts:201-272 and source/lib/tool-invoke.test.ts:278-420.
+      - source/lib/openai-agent-client.test.ts:6-26 still provides a meaningful OpenRouterError metadata seam, so this is a rewrite/consolidation concern rather than a deletion claim.
+    replacementTestIds: []
+    status: proposed
+  - id: runtime-openai-agent-client-public-methods-runtime-a-m3
+    testId: runtime-openai-agent-client-public-methods
+    role: second_opinion
+    reviewer: runtime-a-m3
+    sourceArtifact: docs/test-audit/artifacts/runtime-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: >-
+      Despite its split-file name and some characterization cases, this is the broad AgentClient public contract suite: chaining, abort/clear, provider options, retry callbacks, ask-user/mentor, subagent control, direct tool looping, and check-in validation each guard distinct public effects.
+    evidence:
+      - source/lib/openai-agent-client.public-methods.test.ts:374-461 and 651-694 observe chaining/history and provider-specific cache-key placement, complementing rather than duplicating the single capability assertion in source/lib/agent-client.application-continuity.test.ts:30-44.
+      - source/lib/openai-agent-client.public-methods.test.ts:463-570 observes active abort, pre-dispatch abort, and clear-conversation reset at the public client boundary.
+      - source/lib/openai-agent-client.public-methods.test.ts:897-981 and 1102-1209 observe ask-user/mentor and bridge control forwarding; source/lib/subagent-bridge.test.ts covers bridge internals, not AgentClient delegation.
+      - source/lib/openai-agent-client.public-methods.test.ts:1241-1280 observes check-in lower-bound rejection and scheduler conversion.
+    replacementTestIds: []
+    status: proposed
+  - id: runtime-openai-strict-tool-schema-runtime-a-m3
+    testId: runtime-openai-strict-tool-schema
+    role: second_opinion
+    reviewer: runtime-a-m3
+    sourceArtifact: docs/test-audit/artifacts/runtime-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This focused pure transformation test protects both the optional-to-nullable strict-schema contract and the identity fast path for already-strict schemas.
+    evidence:
+      - source/lib/openai-strict-tool-schema.test.ts:5-30 asserts optional default-null parsing and unchanged no-optional schema identity.
+      - source/lib/agent-factory.test.ts:400-410 consumes this transformation downstream, but does not replace direct transformation coverage.
+    replacementTestIds: []
+    status: proposed
+  - id: runtime-sdk-approval-resume-runtime-a-m3
+    testId: runtime-sdk-approval-resume
+    role: second_opinion
+    reviewer: runtime-a-m3
+    sourceArtifact: docs/test-audit/artifacts/runtime-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: >-
+      These focused run-loop tests cover the cross-boundary approval resume regression: the original call id reaches execution only after approval and the resulting tool item is persisted in application history.
+    evidence:
+      - source/lib/sdk-approval-resume.test.ts:42-62 observes interruption, approval, resume, and original call-id preservation.
+      - source/lib/sdk-approval-resume.test.ts:64-76 observes completed function_call_result persistence in stream history.
+    replacementTestIds: []
+    status: proposed
+  - id: runtime-subagent-bridge-abort-scope-runtime-a-m3
+    testId: runtime-subagent-bridge-abort-scope
+    role: second_opinion
+    reviewer: runtime-a-m3
+    sourceArtifact: docs/test-audit/artifacts/runtime-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This focused split file uniquely proves the lifetime distinction between ordinary foreground aborts and explicit background cancellation, including controller reset and post-cancellation reuse.
+    evidence:
+      - source/lib/subagent-bridge.abort-scope.test.ts:76-130 contrasts background survival with foreground mentor/run_subagent cancellation.
+      - source/lib/subagent-bridge.abort-scope.test.ts:132-152 observes explicit background cancellation and creation of a later usable background run.
+      - source/lib/subagent-bridge.test.ts:456-510 covers generic foreground abort/controller replacement, not the background-versus-turn lifetime matrix.
+    replacementTestIds: []
+    status: proposed
+  - id: runtime-subagent-bridge-background-sink-runtime-a-m3
+    testId: runtime-subagent-bridge-background-sink
+    role: second_opinion
+    reviewer: runtime-a-m3
+    sourceArtifact: docs/test-audit/artifacts/runtime-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The real manager onEvent wiring and sink collectors exercise event routing, buffering, attach/clear transitions, and asynchronous acknowledgement that cannot be reduced to bridge delegation mocks.
+    evidence:
+      - source/lib/subagent-bridge.background-sink.test.ts:101-188 distinguishes foreground, transferred, and async lifecycle destinations.
+      - source/lib/subagent-bridge.background-sink.test.ts:190-260 verifies one-time buffered flushing and idle-time background delivery.
+      - source/lib/subagent-bridge.background-sink.test.ts:262-308 verifies manager emission awaits foreground sink completion, including buffered attach.
+    replacementTestIds: []
+    status: proposed
+  - id: runtime-subagent-bridge-runtime-a-m3
+    testId: runtime-subagent-bridge
+    role: second_opinion
+    reviewer: runtime-a-m3
+    sourceArtifact: docs/test-audit/artifacts/runtime-a-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: medium
+    reason: The core delegation and context-scoping coverage is valuable, but one test named as delegation asserts zero calls and another sink-lifetime test only checks an already-zero active count; rewrite those assertions while retaining the distinct manager/context contracts.
+    evidence:
+      - source/lib/subagent-bridge.test.ts:659-666 names cancelAsyncRuns delegation but expects trackCancelAllAsyncRuns.callCount to remain 0, so it cannot detect a missing delegation.
+      - source/lib/subagent-bridge.test.ts:617-625 names event-sink lifetime but only asserts activeSubagentsCount is 0; source/lib/subagent-bridge.background-sink.test.ts:262-308 contains stronger sink completion evidence.
+      - source/lib/subagent-bridge.test.ts:230-372 and 531-657 provide distinct context-key, async registry, duplicate-name, and public-control observables.
+    replacementTestIds: []
+    status: proposed
+  - id: runtime-subagent-provider-session-runtime-a-m3
+    testId: runtime-subagent-provider-session
+    role: second_opinion
+    reviewer: runtime-a-m3
+    sourceArtifact: docs/test-audit/artifacts/runtime-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This integration test is the only assigned coverage driving bridge/registry context and the OpenCode header injector together; its launch-vs-continuation session assertions protect a cross-module defect class.
+    evidence:
+      - source/lib/subagent-provider-session.integration.test.ts:75-105 verifies foreground isolation and same-run reuse.
+      - source/lib/subagent-provider-session.integration.test.ts:107-153 verifies background launch and later continuation reuse the run-owned session.
+    replacementTestIds: []
+    status: proposed
+  - id: runtime-tool-interceptor-registry-runtime-a-m3
+    testId: runtime-tool-interceptor-registry
+    role: second_opinion
+    reviewer: runtime-a-m3
+    sourceArtifact: docs/test-audit/artifacts/runtime-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This focused registry test covers ordered short-circuiting, removal, call-id propagation, and safe/logged exception conversion at the interceptor seam.
+    evidence:
+      - source/lib/tool-interceptor-registry.test.ts:16-57 observes registration/removal and null/rejection ordering with short-circuit.
+      - source/lib/tool-interceptor-registry.test.ts:59-118 observes thrown-error conversion/log metadata and call-id forwarding.
+      - source/lib/tool-invoke.test.ts:201-272 consumes interceptor outcomes through wrapNeedsApproval but does not replace registry ordering and error coverage.
+    replacementTestIds: []
+    status: proposed
+  - id: runtime-tool-invoke-runtime-a-m3
+    testId: runtime-tool-invoke
+    role: second_opinion
+    reviewer: runtime-a-m3
+    sourceArtifact: docs/test-audit/artifacts/runtime-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The file directly exercises the normalization and execution boundary with malformed JSON, schema coercions, bounded diagnostics, output preservation, and abort/error semantics; its broad matrix is the production contract rather than duplicated setup.
+    evidence:
+      - source/lib/tool-invoke.test.ts:21-199 observes repairJson and normalizeToolInput/Parameters behavior, including the 200001-character repair cap.
+      - source/lib/tool-invoke.test.ts:201-272 observes interceptor/YOLO approval routing; source/lib/tool-interceptor-registry.test.ts covers registry internals.
+      - source/lib/tool-invoke.test.ts:278-527 observes strict parsing, schema diagnostics, sensitive diff omission, verbatim output, and error classification.
+      - source/lib/tool-invoke.test.ts:533-625 observes object-parameter coercion, sentinel removal, and identity preservation.
+    replacementTestIds: []
+    status: proposed
+  - id: runtime-tool-selection-policy-runtime-a-m3
+    testId: runtime-tool-selection-policy
+    role: second_opinion
+    reviewer: runtime-a-m3
+    sourceArtifact: docs/test-audit/artifacts/runtime-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This pure policy test covers positive, negative, capability-override, case-insensitive, semantic-prefix, and unsupported-provider branches for both native patch and strict-schema selection.
+    evidence:
+      - source/lib/tool-selection-policy.test.ts:8-108 observes gpt preference and native patch provider/model/prefix decisions, including gpt-6 and gpt-5.0 boundaries.
+      - source/lib/tool-selection-policy.test.ts:110-146 observes strict-schema defaults and explicit capability overrides.
+      - source/lib/agent-factory.test.ts:400-456 consumes these decisions in tool construction but does not replace the predicate branch matrix.
+    replacementTestIds: []
+    status: proposed
+  - id: runtime-agent-resolver-runtime-a-m3
+    testId: runtime-agent-resolver
+    role: second_opinion
+    reviewer: runtime-a-m3
+    sourceArtifact: docs/test-audit/artifacts/runtime-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: resolveAgent's typed authority and configuration contract is independently exercised across model tiers, skills, permissions, limits, tools-vs-authorization, filesystem scopes, and diagnostic accumulation.
+    evidence:
+      - source/services/agent-runtime/agent-resolver.test.ts:37-183 observes defaults, exact/relative model policies, skill resolution/errors, and parent limit/permission attenuation.
+      - source/services/agent-runtime/agent-resolver.test.ts:185-218 observes tool authorization and valid/invalid filesystem scope diagnostics.
+      - source/services/agent-runtime/agent-resolver.test.ts:222-283 observes the intentional separation of config.tools from permissions.tools and parent coarse authority.
+    replacementTestIds: []
+    status: proposed

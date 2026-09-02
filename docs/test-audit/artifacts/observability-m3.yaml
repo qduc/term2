@@ -1,0 +1,657 @@
+# Domain exploration artifact for observability, Milestone 3.
+schemaVersion: 2
+domains:
+  - id: observability
+    label: Cost, logging, traffic evidence, and retry recovery
+suites:
+  - id: unit
+    label: Deterministic unit and seam tests
+seams:
+  - id: observability-cost-accounting
+    label: Boundary converting provider usage and pricing evidence into session cost records
+  - id: observability-pricing-resolution
+    label: Boundary resolving provider/model/tier identifiers to catalog or overlay prices
+  - id: observability-assistant-journal
+    label: Boundary capturing streamed assistant output and provider-backed items before turn settlement
+  - id: observability-conversation-log
+    label: Boundary persisting conversation events, replay records, sidecars, and durability state
+  - id: observability-conversation-dispatch
+    label: Boundary routing runtime events into turn accumulation, journal capture, and conversation persistence
+  - id: observability-runtime-log
+    label: Boundary normalizing runtime metadata and applying logging category, payload, and sampling policy
+  - id: observability-provider-traffic
+    label: Boundary sanitizing, summarizing, and storing provider request/response traffic
+  - id: observability-retry-classification
+    label: Boundary translating provider and model failures into retry, fallback, or terminal classifications
+  - id: observability-recovery-policy
+    label: Boundary translating classified failures into state-safe recovery instructions
+  - id: observability-recovery-execution
+    label: Boundary applying recovery instructions to history, continuity, tools, and subsequent run state
+  - id: observability-retry-budget
+    label: Boundary containing physical attempts, automatic replays, and elapsed recovery time
+  - id: observability-retry-presentation
+    label: Boundary translating retry classifications into user events and structured log fields
+risks:
+  - id: observability-cost-overcharge
+    label: Usage or provider charges are double-counted, billed in the wrong dimension, or silently reported as zero.
+    severity: high
+  - id: observability-cost-unpriced
+    label: Unknown or incomplete pricing evidence is presented as an exact cost instead of an explicit coverage state.
+    severity: medium
+  - id: observability-journal-loss
+    label: Streamed assistant items are lost, duplicated, misordered, or attributed to the wrong turn during recovery.
+    severity: critical
+  - id: observability-log-corruption
+    label: Conversation persistence cannot resume safely after malformed tails, rotation, lock contention, or write failure.
+    severity: critical
+  - id: observability-log-redaction
+    label: Opaque provider payloads or sensitive instruction data leak into an inappropriate application log.
+    severity: critical
+  - id: observability-log-contract-drift
+    label: Runtime logs omit canonical context or filtering and sampling suppress required diagnostic events.
+    severity: high
+  - id: observability-traffic-fidelity
+    label: Provider traffic artifacts lose meaningful frames, shape, timing, or failure evidence needed for diagnosis.
+    severity: high
+  - id: observability-retry-misclassification
+    label: A retryable failure is abandoned or an unsafe/intentional failure is replayed.
+    severity: critical
+  - id: observability-replay-corruption
+    label: Recovery replays a user turn or tool effect incorrectly, loses history, or carries unpaid provider state forward.
+    severity: critical
+  - id: observability-retry-runaway
+    label: Retry attempts or recovery time exceed their containment envelope, or a recovery is bounced between layers.
+    severity: high
+  - id: observability-retry-status-confusion
+    label: Retry status shown to the user or recorded in logs names the wrong cause, attempt, or retry type.
+    severity: medium
+contracts:
+  - id: observability-cost-micros
+    statement: Decimal and numeric USD charges are converted to whole microdollars deterministically, with malformed values rejected rather than coerced.
+    seamIds: [observability-cost-accounting]
+    riskIds: [observability-cost-overcharge]
+  - id: observability-cost-dimensions
+    statement: Prompt, cached-input, cache-write, and output usage are separated without billing reasoning twice, and missing dimensions remain ambiguous rather than invented.
+    seamIds: [observability-cost-accounting]
+    riskIds: [observability-cost-overcharge, observability-cost-unpriced]
+  - id: observability-cost-provenance
+    statement: A provider-reported charge takes precedence over a catalog estimate, while catalog, borrowed-provider, unknown-model, unknown-provider, and unknown-tier provenance remains explicit.
+    seamIds: [observability-cost-accounting, observability-pricing-resolution]
+    riskIds: [observability-cost-overcharge, observability-cost-unpriced]
+  - id: observability-cost-summary
+    statement: Cost summaries distinguish exact, estimated, partial, and unavailable evidence, deduplicate request records, group usage by provider/model, and render positive sub-cent values visibly.
+    seamIds: [observability-cost-accounting]
+    riskIds: [observability-cost-overcharge, observability-cost-unpriced]
+  - id: observability-pricing-match
+    statement: Pricing resolution matches provider/model aliases and case variants within the intended provider rules, borrows known model rates only with provenance, and fails closed for unknown tiers or models.
+    seamIds: [observability-pricing-resolution]
+    riskIds: [observability-cost-unpriced]
+  - id: observability-pricing-version
+    statement: Catalog and overlay pricing version identifiers are exposed so a recorded estimate can be traced to its pricing inputs.
+    seamIds: [observability-pricing-resolution]
+    riskIds: [observability-cost-unpriced]
+  - id: observability-journal-order
+    statement: Assistant text and reasoning deltas receive monotonic per-turn sequence numbers, ignore empty deltas, preserve approval continuations on one turn, and reset only for a new turn.
+    seamIds: [observability-assistant-journal]
+    riskIds: [observability-journal-loss]
+  - id: observability-journal-items
+    statement: Provider run items are normalized into persisted tool and assistant items, duplicate raw or canonical identities are suppressed as a group, and undo or clear removes only invalidated buffered evidence.
+    seamIds: [observability-assistant-journal]
+    riskIds: [observability-journal-loss, observability-replay-corruption]
+  - id: observability-journal-ledger-equivalence
+    statement: Journal-derived tool ledger state agrees with the live tool ledger for completed, incomplete, pending-approval, and rejected-tool turns, excluding separately recorded settlement metadata.
+    seamIds: [observability-assistant-journal, observability-conversation-log]
+    riskIds: [observability-journal-loss, observability-replay-corruption]
+  - id: observability-log-replay
+    statement: Conversation log writes keep streaming deltas in a recoverable sidecar policy, preserve sequence continuity across resume and rotation, and replay persisted tool output without losing retrieval references.
+    seamIds: [observability-conversation-log]
+    riskIds: [observability-log-corruption, observability-journal-loss]
+  - id: observability-log-durability
+    statement: Critical conversation events trigger the durability callback, while failures latch, preserve the original error, release locks and descriptors, and prevent an unsafe new session from starting.
+    seamIds: [observability-conversation-log]
+    riskIds: [observability-log-corruption]
+  - id: observability-log-lifecycle
+    statement: Stale dead-process locks are reclaimed, live locks conflict, post-close writes are inert, close is idempotent, and session clearing settles delta sidecars.
+    seamIds: [observability-conversation-log]
+    riskIds: [observability-log-corruption]
+  - id: observability-conversation-routing
+    statement: Conversation event dispatch routes operational and background events to the sink, accumulates assistant turn items, checkpoints them before errors, and forwards text/reasoning deltas to the required journal.
+    seamIds: [observability-conversation-dispatch, observability-assistant-journal]
+    riskIds: [observability-journal-loss, observability-replay-corruption]
+  - id: observability-log-schema
+    statement: Runtime log records contain schema-valid canonical fields, omit sentinel or null context, infer categories, and produce complete invalid-tool-call diagnostics.
+    seamIds: [observability-runtime-log]
+    riskIds: [observability-log-contract-drift]
+  - id: observability-log-policy
+    statement: Warning and error records survive category filtering and sampling, verbose payload policy is applied by level, and event categories are derived consistently from event prefixes.
+    seamIds: [observability-runtime-log]
+    riskIds: [observability-log-contract-drift, observability-log-redaction]
+  - id: observability-traffic-sanitization
+    statement: Provider traffic sanitization truncates instruction-like content and summarizes tool definitions while preserving user, tool, and readable content and replacing encrypted payloads with a visible marker.
+    seamIds: [observability-provider-traffic]
+    riskIds: [observability-log-redaction, observability-traffic-fidelity]
+  - id: observability-traffic-summary
+    statement: Received SSE and JSON traffic is recognized without a content-type when possible, merged into provider-shaped summaries, preserves malformed/error/unknown frame evidence, and avoids duplicating completed text.
+    seamIds: [observability-provider-traffic]
+    riskIds: [observability-traffic-fidelity]
+  - id: observability-traffic-artifact
+    statement: Provider request artifacts are stored under stable per-day and per-session paths with indexed metadata, correct evaluator naming, timing, completion, and cleanup behavior.
+    seamIds: [observability-provider-traffic]
+    riskIds: [observability-traffic-fidelity, observability-log-corruption]
+  - id: observability-traffic-failure
+    statement: Provider traffic records consumer-closed, aborted, terminated, and failed requests with bounded sanitized diagnostics while artifact-store failures do not escape logging calls or strand request paths.
+    seamIds: [observability-provider-traffic]
+    riskIds: [observability-traffic-fidelity, observability-log-redaction]
+  - id: observability-subagent-result
+    statement: Persisted subagent results retain status, text, file, tool, diff, and validation fields, strip nested run results, and accept older minimal results.
+    seamIds: [observability-conversation-log]
+    riskIds: [observability-log-redaction, observability-traffic-fidelity]
+  - id: observability-chain-fingerprint
+    statement: Chain-recovery fingerprints include provider, model, previous-response identity, item types, and call IDs while excluding request and tool output bodies, and distinguish chained from fresh requests.
+    seamIds: [observability-retry-classification]
+    riskIds: [observability-retry-misclassification, observability-replay-corruption]
+  - id: observability-tool-continuation
+    statement: Automatic committed-tool continuation is admitted only when completed tools and their history pairs are proven, and settled chain-recovery causes skip the automatic-replay claim.
+    seamIds: [observability-retry-classification]
+    riskIds: [observability-retry-misclassification, observability-replay-corruption]
+  - id: observability-model-retry
+    statement: Recognized model behavior failures produce bounded retry metadata, while unrelated errors and exhausted attempts terminate without retry.
+    seamIds: [observability-retry-classification]
+    riskIds: [observability-retry-misclassification, observability-retry-runaway]
+  - id: observability-in-loop-retry
+    statement: In-loop retry classifies transport and chain failures according to request chaining, output-containment, abort, progress, and attempt-limit evidence, and computes bounded jittered backoff with abortable sleep.
+    seamIds: [observability-retry-classification, observability-retry-budget]
+    riskIds: [observability-retry-misclassification, observability-retry-runaway, observability-replay-corruption]
+  - id: observability-error-classification
+    statement: Network, upstream, incomplete-stream, provider-state, and authentication errors are classified from direct and nested evidence with deliberate close/status precedence and no false-positive retries.
+    seamIds: [observability-retry-classification]
+    riskIds: [observability-retry-misclassification, observability-replay-corruption]
+  - id: observability-recovery-plan
+    statement: Classified failures map to state-safe fresh retries, replays, chain disabling, service-tier fallback, or termination, and retry counts advance or reset according to failure kind and fresh-start policy.
+    seamIds: [observability-recovery-policy]
+    riskIds: [observability-replay-corruption, observability-retry-runaway]
+  - id: observability-recovery-apply
+    statement: Recovery application preserves or rolls back the user message as planned, clears unsafe provider continuity, reconciles tool history, marks undispatched calls aborted and dispatched calls unknown, and emits recovery events.
+    seamIds: [observability-recovery-execution]
+    riskIds: [observability-replay-corruption, observability-journal-loss]
+  - id: observability-retry-budget-contract
+    statement: Physical attempts and automatic replays are independently capped, the recovery clock starts at the first retryable failure without resetting, deadlines refuse further claims, and exhaustion preserves its triggering cause.
+    seamIds: [observability-retry-budget]
+    riskIds: [observability-retry-runaway, observability-replay-corruption]
+  - id: observability-retry-presentation
+    statement: Retry classifications render the correct user-facing tool, attempt limit, retry type, source-specific cause, and nonblank error message while emitting matching structured log fields.
+    seamIds: [observability-retry-presentation]
+    riskIds: [observability-retry-status-confusion, observability-log-contract-drift]
+  - id: observability-upstream-policy
+    statement: Upstream status and rate-limit evidence determines retryability, long retry-after values are rejected, Retry-After overrides jittered backoff, and invalid headers do not create delay evidence.
+    seamIds: [observability-retry-classification, observability-retry-budget]
+    riskIds: [observability-retry-misclassification, observability-retry-runaway]
+fixtures:
+  - id: observability-fixed-prices
+    label: Fixed catalog and provider-charge pricing inputs
+  - id: observability-pricing-catalog
+    label: Vendored model catalog and tier overlay entries
+  - id: observability-journal-sink
+    label: In-memory assistant journal and log-event sinks
+  - id: observability-tool-ledger
+    label: Tool execution ledger and normalized provider tool items
+  - id: observability-conversation-files
+    label: Temporary JSONL logs, delta sidecars, locks, and replay envelopes
+  - id: observability-injected-filesystem
+    label: Deterministic filesystem failures, liveness, and durability hooks
+  - id: observability-runtime-logger
+    label: In-memory and file-backed runtime logger configurations
+  - id: observability-traffic-bodies
+    label: Sanitized request bodies and SSE/JSON provider response fixtures
+  - id: observability-traffic-store
+    label: Temporary provider-traffic artifact stores and session indexes
+  - id: observability-error-corpus
+    label: Provider, websocket, SDK, stream, and nested-cause error fixtures
+  - id: observability-recovery-state
+    label: Conversation store, provider continuity, tool tracker, and retry state fixtures
+  - id: observability-deterministic-clock
+    label: Injected clock and random-value functions for retry calculations
+tests:
+  - kind: file
+    id: observability-model-cost
+    file: source/services/cost/model-cost.test.ts
+    domainId: observability
+    suiteId: unit
+    contractIds: [observability-cost-micros, observability-cost-dimensions, observability-cost-provenance, observability-cost-summary]
+    fixtureIds: [observability-fixed-prices]
+  - kind: file
+    id: observability-pricing
+    file: source/services/cost/pricing.test.ts
+    domainId: observability
+    suiteId: unit
+    contractIds: [observability-pricing-match, observability-pricing-version]
+    fixtureIds: [observability-pricing-catalog]
+  - kind: file
+    id: observability-assistant-journal-characterization
+    file: source/services/logging/assistant-turn-journal.characterization.test.ts
+    domainId: observability
+    suiteId: unit
+    contractIds: [observability-journal-ledger-equivalence]
+    fixtureIds: [observability-journal-sink, observability-tool-ledger]
+  - kind: file
+    id: observability-assistant-journal
+    file: source/services/logging/assistant-turn-journal.test.ts
+    domainId: observability
+    suiteId: unit
+    contractIds: [observability-journal-order, observability-journal-items]
+    fixtureIds: [observability-journal-sink]
+  - kind: file
+    id: observability-conversation-log-writer
+    file: source/services/logging/conversation-log-writer.test.ts
+    domainId: observability
+    suiteId: unit
+    contractIds: [observability-log-replay, observability-log-durability, observability-log-lifecycle]
+    fixtureIds: [observability-conversation-files, observability-injected-filesystem]
+  - kind: file
+    id: observability-conversation-logger
+    file: source/services/logging/conversation-logger.test.ts
+    domainId: observability
+    suiteId: unit
+    contractIds: [observability-conversation-routing]
+    fixtureIds: [observability-journal-sink, observability-runtime-logger]
+  - kind: file
+    id: observability-logging-contract
+    file: source/services/logging/logging-contract.test.ts
+    domainId: observability
+    suiteId: unit
+    contractIds: [observability-log-schema, observability-log-policy]
+    fixtureIds: [observability-runtime-logger]
+  - kind: file
+    id: observability-logging-service
+    file: source/services/logging/logging-service.test.ts
+    domainId: observability
+    suiteId: unit
+    contractIds: [observability-log-schema, observability-log-policy, observability-traffic-artifact]
+    fixtureIds: [observability-runtime-logger, observability-traffic-store]
+  - kind: file
+    id: observability-provider-traffic
+    file: source/services/logging/provider-traffic.test.ts
+    domainId: observability
+    suiteId: unit
+    contractIds: [observability-traffic-sanitization, observability-traffic-summary, observability-traffic-artifact, observability-traffic-failure]
+    fixtureIds: [observability-traffic-bodies, observability-traffic-store, observability-injected-filesystem]
+  - kind: file
+    id: observability-subagent-result-sanitization
+    file: source/services/logging/subagent-result-sanitization.test.ts
+    domainId: observability
+    suiteId: unit
+    contractIds: [observability-subagent-result]
+    fixtureIds: [observability-runtime-logger]
+  - kind: file
+    id: observability-chain-recovery-fingerprint
+    file: source/services/retry/chain-recovery-fingerprint.test.ts
+    domainId: observability
+    suiteId: unit
+    contractIds: [observability-chain-fingerprint]
+    fixtureIds: [observability-recovery-state]
+  - kind: file
+    id: observability-committed-tool-continuation
+    file: source/services/retry/committed-tool-continuation.test.ts
+    domainId: observability
+    suiteId: unit
+    contractIds: [observability-tool-continuation]
+    fixtureIds: [observability-recovery-state]
+  - kind: file
+    id: observability-conversation-retry-policy
+    file: source/services/retry/conversation-retry-policy.test.ts
+    domainId: observability
+    suiteId: unit
+    contractIds: [observability-model-retry, observability-error-classification]
+    fixtureIds: [observability-error-corpus]
+  - kind: file
+    id: observability-in-loop-model-retry
+    file: source/services/retry/in-loop-model-retry.test.ts
+    domainId: observability
+    suiteId: unit
+    contractIds: [observability-in-loop-retry]
+    fixtureIds: [observability-error-corpus, observability-deterministic-clock]
+  - kind: file
+    id: observability-reauthentication-classification
+    file: source/services/retry/reauthentication-classification.test.ts
+    domainId: observability
+    suiteId: unit
+    contractIds: [observability-error-classification]
+    fixtureIds: [observability-error-corpus]
+  - kind: file
+    id: observability-recovery-executor
+    file: source/services/retry/recovery-executor.test.ts
+    domainId: observability
+    suiteId: unit
+    contractIds: [observability-recovery-apply]
+    fixtureIds: [observability-recovery-state, observability-tool-ledger]
+  - kind: file
+    id: observability-recovery-policy
+    file: source/services/retry/recovery-policy.test.ts
+    domainId: observability
+    suiteId: unit
+    contractIds: [observability-recovery-plan]
+    fixtureIds: [observability-recovery-state]
+  - kind: file
+    id: observability-retry-classifier
+    file: source/services/retry/retry-classifier.test.ts
+    domainId: observability
+    suiteId: unit
+    contractIds: [observability-chain-fingerprint, observability-tool-continuation, observability-model-retry, observability-error-classification, observability-in-loop-retry]
+    fixtureIds: [observability-error-corpus, observability-recovery-state, observability-deterministic-clock]
+  - kind: file
+    id: observability-retry-error-classification
+    file: source/services/retry/retry-error-classification.test.ts
+    domainId: observability
+    suiteId: unit
+    contractIds: [observability-error-classification, observability-upstream-policy]
+    fixtureIds: [observability-error-corpus, observability-runtime-logger]
+  - kind: file
+    id: observability-retry-event-presenter
+    file: source/services/retry/retry-event-presenter.test.ts
+    domainId: observability
+    suiteId: unit
+    contractIds: [observability-retry-presentation]
+    fixtureIds: [observability-error-corpus, observability-runtime-logger]
+  - kind: file
+    id: observability-retry-recovery-budget
+    file: source/services/retry/retry-recovery-budget.test.ts
+    domainId: observability
+    suiteId: unit
+    contractIds: [observability-retry-budget-contract]
+    fixtureIds: [observability-deterministic-clock, observability-error-corpus]
+  - kind: file
+    id: observability-upstream-retry-policy
+    file: source/services/retry/upstream-retry-policy.test.ts
+    domainId: observability
+    suiteId: unit
+    contractIds: [observability-upstream-policy]
+    fixtureIds: [observability-error-corpus, observability-deterministic-clock]
+decisions:
+  - id: observability-model-cost-observability-m3
+    testId: observability-model-cost
+    role: second_opinion
+    reviewer: observability-m3
+    sourceArtifact: docs/test-audit/artifacts/observability-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The file covers arithmetic, billing-dimension ambiguity, provider precedence, summary coverage states, deduplication, aggregation, and presentation in one cohesive cost seam.
+    evidence:
+      - model-cost.test.ts directly asserts integer-micro arithmetic and malformed-input rejection at parseUsdMicros.
+      - model-cost.test.ts exercises provider charge precedence and explicit missing/ambiguous/unknown pricing states; application-run-loop.cost.test.ts only reuses parseUsdMicros for one integration assertion and is not a replacement for this accounting matrix.
+    replacementTestIds: []
+    status: proposed
+  - id: observability-pricing-observability-m3
+    testId: observability-pricing
+    role: second_opinion
+    reviewer: observability-m3
+    sourceArtifact: docs/test-audit/artifacts/observability-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Pricing lookup is a narrow, high-impact fail-closed seam with alias, gateway borrowing, tier, catalog completeness, and provenance coverage.
+    evidence:
+      - pricing.test.ts checks provider/model normalization, dated and vendor-qualified aliases, borrowed-provider provenance, and unknown-tier/model/provider outcomes.
+      - pricing.test.ts pins catalog and overlay version identifiers and verifies every catalog model has a standard price; no assigned sibling asserts these lookup invariants.
+    replacementTestIds: []
+    status: proposed
+  - id: observability-assistant-journal-characterization-observability-m3
+    testId: observability-assistant-journal-characterization
+    role: second_opinion
+    reviewer: observability-m3
+    sourceArtifact: docs/test-audit/artifacts/observability-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: >-
+      This is a cross-implementation characterization, not a duplicate of the journal unit tests: it verifies that journal-derived tool state agrees with ToolExecutionLedger across settled and unsettled approval/error scenarios.
+    evidence:
+      - assistant-turn-journal.characterization.test.ts compares buildToolLedgerFromAssistantTurnItems output with ToolExecutionLedger.export() for completed, incomplete, pending, and rejected-tool turns.
+      - assistant-turn-journal.test.ts tests journal mechanics but never compares its output with the live ledger, so removing this file loses the cross-component invariant.
+    replacementTestIds: []
+    status: proposed
+  - id: observability-assistant-journal-observability-m3
+    testId: observability-assistant-journal
+    role: second_opinion
+    reviewer: observability-m3
+    sourceArtifact: docs/test-audit/artifacts/observability-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The journal is crash/recovery evidence and the tests cover sequence, turn identity, normalization, deduplication, pruning, and full clearing through its public API.
+    evidence:
+      - assistant-turn-journal.test.ts asserts monotonic sequence and approval continuation identity as well as raw-to-persisted tool item normalization.
+      - assistant-turn-journal.test.ts separately guards duplicate raw/canonical/group items and undo/clear retention rules; the characterization sibling does not cover these mechanics.
+    replacementTestIds: []
+    status: proposed
+  - id: observability-conversation-log-writer-observability-m3
+    testId: observability-conversation-log-writer
+    role: second_opinion
+    reviewer: observability-m3
+    sourceArtifact: docs/test-audit/artifacts/observability-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This file protects critical persistence and recovery behavior at a real filesystem boundary, including durability failures and stale locks where a weak unit substitute would miss corruption.
+    evidence:
+      - conversation-log-writer.test.ts verifies sidecar settlement/resume/rotation, sequence recovery through malformed tails, and replay of large tool-result references.
+      - conversation-log-writer.test.ts injects fsync/write/close/read failures and checks lock release, latching, original-error preservation, and no unsafe rotation; conversation-persistence.test.ts exercises callers but is not a replacement for these writer failure contracts.
+    replacementTestIds: []
+    status: proposed
+  - id: observability-conversation-logger-observability-m3
+    testId: observability-conversation-logger
+    role: second_opinion
+    reviewer: observability-m3
+    sourceArtifact: docs/test-audit/artifacts/observability-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: medium
+    reason: The routing seam is meaningful, but the file contains two materially identical final tests for forwarding text/reasoning deltas to the required journal; rewrite can retain one stronger case while preserving the unique dispatch and checkpoint cases.
+    evidence:
+      - conversation-logger.test.ts has both "dispatchEventToLog forwards text and reasoning deltas to the journal" and "dispatchEventToLog forwards text and reasoning deltas to the required journal", with equivalent setup and identical assertions.
+      - conversation-logger.test.ts also uniquely asserts sink replacement, sink failure handling, turn stamping, background events, checkpoint-before-error, and event-specific routing, so whole-file deletion is not supported.
+    replacementTestIds: []
+    status: proposed
+  - id: observability-logging-contract-observability-m3
+    testId: observability-logging-contract
+    role: second_opinion
+    reviewer: observability-m3
+    sourceArtifact: docs/test-audit/artifacts/observability-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: These deterministic assertions define the schema and policy primitives that downstream logging tests consume.
+    evidence:
+      - logging-contract.test.ts parses built records through RuntimeLogSchema and checks omission of sentinel/null context plus canonical diagnostics.
+      - logging-contract.test.ts independently covers category parsing, error retention, verbose-payload policy, sampling, and event-prefix inference; logging-service.test.ts covers integration output but not these pure policy boundaries.
+    replacementTestIds: []
+    status: proposed
+  - id: observability-logging-service-observability-m3
+    testId: observability-logging-service
+    role: second_opinion
+    reviewer: observability-m3
+    sourceArtifact: docs/test-audit/artifacts/observability-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The file is a service-level integration layer for asynchronous app logs, environment/configuration policy, provider artifact wiring, and accepted redaction behavior; its filesystem boundary is intentional evidence.
+    evidence:
+      - logging-service.test.ts verifies directory/disable/console/correlation/rotation behavior and reads emitted JSON records rather than mocking the service internals.
+      - logging-service.test.ts explicitly covers invalid metadata fallback, category filtering with error preservation, and the accepted verbose/evaluator payload decisions; no unit-only sibling can replace this composition coverage.
+    replacementTestIds: []
+    status: proposed
+  - id: observability-provider-traffic-observability-m3
+    testId: observability-provider-traffic
+    role: second_opinion
+    reviewer: observability-m3
+    sourceArtifact: docs/test-audit/artifacts/observability-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is a broad but cohesive diagnostic artifact contract spanning request sanitization, multi-protocol response parsing, on-disk indexing, and non-fatal failure handling.
+    evidence:
+      - provider-traffic.test.ts covers Responses and chat SSE merging, lifecycle/unknown/malformed frame accounting, JSON/content-type sniffing, encrypted-content redaction, and duplicate terminal text prevention.
+      - provider-traffic.test.ts exercises per-day/session artifact paths, evaluator names, timing, aborted/consumer-closed/terminated failures, bounded diagnostics, malformed indexes, and path cleanup after injected store failures; composer.test.ts only uses ProviderTraffic as an integration dependency and is not a replacement for this matrix.
+    replacementTestIds: []
+    status: proposed
+  - id: observability-subagent-result-sanitization-observability-m3
+    testId: observability-subagent-result-sanitization
+    role: second_opinion
+    reviewer: observability-m3
+    sourceArtifact: docs/test-audit/artifacts/observability-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The small file protects backward-compatible persisted subagent evidence and a deliberate nested-result redaction boundary.
+    evidence:
+      - subagent-result-sanitization.test.ts asserts retention of diffStat, validation, status, finalText, filesChanged, and toolsUsed while stripping nestedRunResult.
+      - subagent-result-sanitization.test.ts also checks minimal legacy result compatibility; no assigned sibling tests sanitize this payload shape.
+    replacementTestIds: []
+    status: proposed
+  - id: observability-chain-recovery-fingerprint-observability-m3
+    testId: observability-chain-recovery-fingerprint
+    role: second_opinion
+    reviewer: observability-m3
+    sourceArtifact: docs/test-audit/artifacts/observability-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Fingerprint stability is a small, security-relevant guard against repeating the same chain recovery while avoiding sensitive body material.
+    evidence:
+      - chain-recovery-fingerprint.test.ts proves body changes do not change the fingerprint and secret output is absent, while provider/model/response/item/call identity remains.
+      - chain-recovery-fingerprint.test.ts separately proves null versus present previous response IDs are distinct; retry-classifier.test.ts consumes the behavior but does not test the fingerprint construction itself.
+    replacementTestIds: []
+    status: proposed
+  - id: observability-committed-tool-continuation-observability-m3
+    testId: observability-committed-tool-continuation
+    role: second_opinion
+    reviewer: observability-m3
+    sourceArtifact: docs/test-audit/artifacts/observability-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The compact predicate is a safety gate whose false admission could replay a side effect; its boundary cases are all explicit and independently useful.
+    evidence:
+      - committed-tool-continuation.test.ts rejects absent, empty, incomplete, and history-missing evidence and admits only fully settled tool pairs.
+      - committed-tool-continuation.test.ts checks both connection_interrupted and provider_state_rejected causes plus a transient control; retry-classifier.test.ts verifies downstream scenarios but is not a replacement for the predicate truth table.
+    replacementTestIds: []
+    status: proposed
+  - id: observability-conversation-retry-policy-observability-m3
+    testId: observability-conversation-retry-policy
+    role: second_opinion
+    reviewer: observability-m3
+    sourceArtifact: docs/test-audit/artifacts/observability-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Although its exported transient-error checks overlap the dedicated classifier file, this file uniquely protects the model-behavior retry helper and the parent-facing decideRetry metadata contract.
+    evidence:
+      - conversation-retry-policy.test.ts covers hallucination/parsing/final-response recognition, tool-name extraction, retry limits, stream-aware error context, and skipUserMessage semantics.
+      - retry-error-classification.test.ts contains the shared isTransientRetryableError corpus because conversation-retry-policy.ts re-exports that function; the overlap does not replace the unique decideRetry and decideRecoverableModelRetry assertions.
+    replacementTestIds: []
+    status: proposed
+  - id: observability-in-loop-model-retry-observability-m3
+    testId: observability-in-loop-model-retry
+    role: second_opinion
+    reviewer: observability-m3
+    sourceArtifact: docs/test-audit/artifacts/observability-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: In-loop classification has distinct chained-request and output-containment safety rules that are not covered by turn-boundary classifier tests.
+    evidence:
+      - in-loop-model-retry.test.ts proves chained deltas are not retried, unchained state can recover, and retryable provider statuses are gated by chaining.
+      - in-loop-model-retry.test.ts covers abort, generation guard, no-progress, max-attempt, deterministic backoff, and abortable sleep outcomes; retry-classifier.test.ts does not exercise this in-loop API.
+    replacementTestIds: []
+    status: proposed
+  - id: observability-reauthentication-classification-observability-m3
+    testId: observability-reauthentication-classification
+    role: second_opinion
+    reviewer: observability-m3
+    sourceArtifact: docs/test-audit/artifacts/observability-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is a focused regression guard for authentication precedence through an SDK wrapper, where treating human-login failure as a network retry can multiply retries across layers.
+    evidence:
+      - reauthentication-classification.test.ts verifies the wrapped ProviderReauthenticationRequiredError is rejected by transient, transport, and network classifiers.
+      - reauthentication-classification.test.ts retains the positive control that a genuine APIConnectionError remains retryable; retry-error-classification.test.ts has no equivalent authentication-cause fixture.
+    replacementTestIds: []
+    status: proposed
+  - id: observability-recovery-executor-observability-m3
+    testId: observability-recovery-executor
+    role: second_opinion
+    reviewer: observability-m3
+    sourceArtifact: docs/test-audit/artifacts/observability-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Recovery application mutates conversation, continuity, and tool state; the matrix explicitly distinguishes known completed effects from unknown dispatched effects and never-dispatched calls.
+    evidence:
+      - recovery-executor.test.ts checks replay rollback, error-context injection, fresh retry continuity, chain disabling, service-tier flags, termination, and user-message handling.
+      - recovery-executor.test.ts asserts aborted versus unknown tool settlement and wire-valid function_call_output reconstruction; session-stream-processor.test.ts and undo-journal-recovery.test.ts are integration consumers, not replacements for this direct mutation contract.
+    replacementTestIds: []
+    status: proposed
+  - id: observability-recovery-policy-observability-m3
+    testId: observability-recovery-policy
+    role: second_opinion
+    reviewer: observability-m3
+    sourceArtifact: docs/test-audit/artifacts/observability-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The pure policy table separates classification from mutation and covers each recovery kind, fresh-start restrictions, input mode, chaining, and retry-count transitions.
+    evidence:
+      - recovery-policy.test.ts maps service-tier, transient, chain, transport, model, and unrecoverable failures to explicit plans.
+      - recovery-policy.test.ts checks the special freshStartRetriesAllowed cases and all retry-count increment/reset behavior; initial-turn-recovery-handler.test.ts and continuation-recovery-handler.test.ts exercise surrounding orchestration but not this complete decision table.
+    replacementTestIds: []
+    status: proposed
+  - id: observability-retry-classifier-observability-m3
+    testId: observability-retry-classifier
+    role: second_opinion
+    reviewer: observability-m3
+    sourceArtifact: docs/test-audit/artifacts/observability-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is the central retry decision table and contains high-severity replay-safety regressions across provider state, output commitment, tool settlement, transport, model behavior, and retry budgets.
+    evidence:
+      - retry-classifier.test.ts asserts that ambiguous outcomes, dispatched tools, committed text, incomplete settlement, and exhausted budgets do not replay unsafely.
+      - retry-classifier.test.ts covers bounded chain recovery, prior-response/tool-output error forms, connection lifetime fallback, undici/ECONNRESET/incomplete-stream/upstream cases, fingerprint repetition, and model retry; session recovery handler tests are integration-level and cannot replace this classification breadth.
+    replacementTestIds: []
+    status: proposed
+  - id: observability-retry-error-classification-observability-m3
+    testId: observability-retry-error-classification
+    role: second_opinion
+    reviewer: observability-m3
+    sourceArtifact: docs/test-audit/artifacts/observability-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This file is the canonical low-level error corpus, including recursive cause handling and false-positive guards, and supports multiple higher-level retry callers.
+    evidence:
+      - retry-error-classification.test.ts covers protocol codes, websocket close semantics, incomplete terminals, provider-state messages, status/rate-limit precedence, parsing errors, undici stack/cause forms, cycles, and Cloudflare 520.
+      - conversation-retry-policy.test.ts repeats selected isTransientRetryableError examples because it tests the re-exported public surface, but it does not cover the dedicated network/transport predicates or recursive-cause regression matrix.
+    replacementTestIds: []
+    status: proposed
+  - id: observability-retry-event-presenter-observability-m3
+    testId: observability-retry-event-presenter
+    role: second_opinion
+    reviewer: observability-m3
+    sourceArtifact: docs/test-audit/artifacts/observability-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: User-visible retry events and structured logs are a separate observability contract from classification and need exact cause/attempt/source mapping.
+    evidence:
+      - retry-event-presenter.test.ts checks initial versus continuation transient retries, service-tier and transport fallback, chain-recovery causes, and model retry presentation.
+      - retry-event-presenter.test.ts verifies custom retry events and nonblank messages for empty-message transport errors; no assigned sibling asserts this event/log projection.
+    replacementTestIds: []
+    status: proposed
+  - id: observability-retry-recovery-budget-observability-m3
+    testId: observability-retry-recovery-budget
+    role: second_opinion
+    reviewer: observability-m3
+    sourceArtifact: docs/test-audit/artifacts/observability-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The budget independently contains physical work, automatic replay, elapsed-time, and error-cause invariants; its deterministic clock tests are proportional to the runaway risk.
+    evidence:
+      - retry-recovery-budget.test.ts checks independent attempt/replay caps, delayed clock start, non-resetting failure note, deadline refusal, and exhaustion error identity.
+      - providers/retrying-model.test.ts checks one integration path through RetryRecoveryBudget, but does not replace this complete direct budget contract.
+    replacementTestIds: []
+    status: proposed
+  - id: observability-upstream-retry-policy-observability-m3
+    testId: observability-upstream-retry-policy
+    role: second_opinion
+    reviewer: observability-m3
+    sourceArtifact: docs/test-audit/artifacts/observability-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Upstream retry policy has provider-specific status/metadata and delay semantics that are easy to regress independently of generic error classification.
+    evidence:
+      - upstream-retry-policy.test.ts checks case-insensitive/generic Retry-After parsing, provider and generic status evidence, in-stream metadata, long-delay rejection, and non-retryable 400 precedence.
+      - upstream-retry-policy.test.ts pins Retry-After precedence and deterministic jitter for both attempt-index and session attempt-number APIs; retry-error-classification.test.ts consumes retryability but does not assert delay computation.
+    replacementTestIds: []
+    status: proposed
+

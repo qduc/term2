@@ -1,0 +1,597 @@
+schemaVersion: 2
+domains:
+  - id: entrypoints
+    label: App/CLI/gateway entrypoints and build-script surfaces
+suites:
+  - id: unit
+    label: Default Vitest unit suite
+  - id: integration
+    label: Vitest integration suite
+  - id: e2e
+    label: Vitest end-to-end suite
+seams:
+  - id: entrypoints-a-build-artifact-transaction
+    label: Build output replacement, backup, rollback, and restore boundary.
+  - id: entrypoints-a-candidate-gate-boundary
+    label: Candidate CLI argument, scope, bounded-output, gate, and exit-report boundary.
+  - id: entrypoints-a-release-cli-boundary
+    label: Release shell command argument validation and non-interactive policy boundary.
+  - id: entrypoints-a-audit-graph-schema
+    label: Test-audit graph parsing, merging, querying, and report boundary.
+  - id: entrypoints-a-agent-definition-composition
+    label: Agent prompt, environment, and conditional tool-surface composition boundary.
+  - id: entrypoints-a-app-interaction-routing
+    label: React App submission, approval, rollover, mode, and terminal-effect routing boundary.
+  - id: entrypoints-a-cli-process-entrypoint
+    label: CLI process startup, options, resume, safety prompts, and provider selection boundary.
+  - id: entrypoints-a-core-module-boundary
+    label: Core entry import graph and side-effect-free runtime-factory boundary.
+  - id: entrypoints-a-gateway-trust-boundary
+    label: Gateway startup, assertion authentication, RPC validation, and public projection boundary.
+  - id: entrypoints-a-workspace-admission
+    label: Workspace candidate validation, ownership, path, quota, and grant admission boundary.
+  - id: entrypoints-a-gateway-interaction-persistence
+    label: Gateway interaction resolution, durable event ordering, projection, and cursor boundary.
+  - id: entrypoints-a-gateway-runtime-lifecycle
+    label: Gateway worker isolation, provider readiness, logging, and shutdown lifecycle boundary.
+  - id: entrypoints-a-test-suite-placement
+    label: Vitest configuration and package-script separation of unit, integration, and e2e execution.
+risks:
+  - id: entrypoints-a-stale-build-or-lost-rollback
+    label: Obsolete output survives a build or a failed build destroys the last recoverable artifact.
+    severity: high
+  - id: entrypoints-a-unsafe-candidate-execution
+    label: Candidate validation accepts an unsafe path/command or emits an unbounded report.
+    severity: high
+  - id: entrypoints-a-unsafe-release-invocation
+    label: Release mode ambiguity permits an unintended push or an unsafe repository operation.
+    severity: high
+  - id: entrypoints-a-audit-reference-corruption
+    label: Invalid graph references or conflicting merged evidence silently enter audit decisions.
+    severity: medium
+  - id: entrypoints-a-agent-capability-drift
+    label: A mode, model, execution context, or prompt input exposes the wrong agent capability.
+    severity: high
+  - id: entrypoints-a-app-turn-routing-loss
+    label: User input, approval, admission, rollover, or terminal state is routed to the wrong owner.
+    severity: high
+  - id: entrypoints-a-cli-startup-regression
+    label: CLI options, resume behavior, safety confirmation, or configured provider startup regresses.
+    severity: high
+  - id: entrypoints-a-core-import-side-effect
+    label: Importing core unexpectedly reaches presentation/CLI code or mutates process/filesystem state.
+    severity: critical
+  - id: entrypoints-a-gateway-boundary-leak
+    label: Gateway trust, workspace, credential, or private implementation data crosses a public boundary.
+    severity: critical
+  - id: entrypoints-a-workspace-admission-bypass
+    label: An unowned, escaped, stale, or unauthorized workspace becomes selectable or executable.
+    severity: critical
+  - id: entrypoints-a-interaction-durability-loss
+    label: An interaction/event is published out of order, resolved incorrectly, or lost across recovery.
+    severity: critical
+  - id: entrypoints-a-gateway-resource-leak
+    label: Gateway workers, child processes, journals, or lifecycle handles survive shutdown incorrectly.
+    severity: high
+  - id: entrypoints-a-wrong-test-tier
+    label: Slow process-spawning integration/e2e evidence runs in the default unit invocation.
+    severity: medium
+fixtures: []
+contracts:
+  - id: entrypoints-a-build-rollback
+    statement: A successful build removes obsolete compiled modules, publishes fresh output, and retains the previous output for recovery unless backup is disabled; a failed build restores the previous output or reports that none existed.
+    seamIds: [entrypoints-a-build-artifact-transaction]
+    riskIds: [entrypoints-a-stale-build-or-lost-rollback]
+  - id: entrypoints-a-candidate-gates-safe-report
+    statement: Candidate-gate input accepts only supported gates and safe repository-relative arguments, executes allowed gates in order after scope checks, and returns stable classifications without invoking gates on scope or contract failure.
+    seamIds: [entrypoints-a-candidate-gate-boundary]
+    riskIds: [entrypoints-a-unsafe-candidate-execution]
+  - id: entrypoints-a-candidate-gates-bounded-output
+    statement: Candidate-gate text, files, evidence, JSON, and streamed child output remain within configured byte bounds while preserving valid UTF-8 and required classification fields.
+    seamIds: [entrypoints-a-candidate-gate-boundary]
+    riskIds: [entrypoints-a-unsafe-candidate-execution]
+  - id: entrypoints-a-release-argument-policy
+    statement: The release CLI documents its non-interactive and local-publish paths and rejects ambiguous push/version combinations before repository work begins.
+    seamIds: [entrypoints-a-release-cli-boundary]
+    riskIds: [entrypoints-a-unsafe-release-invocation]
+  - id: entrypoints-a-audit-graph-integrity
+    statement: Audit graph parsing accepts resolving typed references and rejects duplicate records, invalid granularity, unnamespaced test IDs, unsafe deletion proposals, and conflicting merged vocabulary definitions.
+    seamIds: [entrypoints-a-audit-graph-schema]
+    riskIds: [entrypoints-a-audit-reference-corruption]
+  - id: entrypoints-a-agent-definition-surface
+    statement: Agent definition exposes only the tools, prompt guidance, memory/session context, and editing/search capabilities permitted by model, mode, dependency, and execution context.
+    seamIds: [entrypoints-a-agent-definition-composition]
+    riskIds: [entrypoints-a-agent-capability-drift]
+  - id: entrypoints-a-app-submit-and-effects
+    statement: App routes submissions, approvals, command outcomes, admission confirmations, rollover, mode confirmation, and background-task title effects to the correct collaborators while preserving composer and terminal state.
+    seamIds: [entrypoints-a-app-interaction-routing]
+    riskIds: [entrypoints-a-app-turn-routing-loss]
+  - id: entrypoints-a-cli-startup-and-resume
+    statement: The CLI starts in the requested mode, documents supported options, lists or rejects conversation resume targets safely, prompts before risky home/root startup, and accepts configured providers before upstream execution.
+    seamIds: [entrypoints-a-cli-process-entrypoint]
+    riskIds: [entrypoints-a-cli-startup-regression]
+  - id: entrypoints-a-core-import-purity
+    statement: Importing the core entry exposes the runtime factory without importing CLI/presentation modules, writing output, exiting, changing listeners, or creating filesystem state.
+    seamIds: [entrypoints-a-core-module-boundary]
+    riskIds: [entrypoints-a-core-import-side-effect]
+  - id: entrypoints-a-suite-tier-separation
+    statement: Package scripts and Vitest configuration identify all test files, pin test environment setup, and provide an explicit e2e path while the default invocation currently includes e2e and integration-class files.
+    seamIds: [entrypoints-a-test-suite-placement]
+    riskIds: [entrypoints-a-wrong-test-tier]
+  - id: entrypoints-a-gateway-auth-and-public-contract
+    statement: Gateway startup fails closed without trust prerequisites; authenticated RPCs enforce route, claim, method, field, size, and transport rules and expose only safe public projections and errors.
+    seamIds: [entrypoints-a-gateway-trust-boundary]
+    riskIds: [entrypoints-a-gateway-boundary-leak]
+  - id: entrypoints-a-workspace-candidate-safety
+    statement: Workspace candidates and grants remain canonical, owner-bound, opaque, bounded, expiry-aware, path-safe, and fail closed when permissions, mounts, versions, or write policy are invalid.
+    seamIds: [entrypoints-a-workspace-admission]
+    riskIds: [entrypoints-a-workspace-admission-bypass]
+  - id: entrypoints-a-interaction-protocol-safety
+    statement: Pending interactions expose stable opaque identities and revisions, authoritative choices and answers, redacted descriptors, and fail-closed validation and resolution semantics.
+    seamIds: [entrypoints-a-gateway-interaction-persistence]
+    riskIds: [entrypoints-a-gateway-boundary-leak, entrypoints-a-interaction-durability-loss]
+  - id: entrypoints-a-durable-event-and-recovery
+    statement: Critical gateway events publish only after durable append in order, interaction outcomes and queued aborts settle exactly once, and projections/cursors report restart and compaction state accurately.
+    seamIds: [entrypoints-a-gateway-interaction-persistence]
+    riskIds: [entrypoints-a-interaction-durability-loss]
+  - id: entrypoints-a-worker-and-shutdown-safety
+    statement: Gateway worker environments exclude ambient secrets, sessions remain isolated and require provider/sandbox readiness, safe logging rejects private data, and shutdown drains resources and rejects new work.
+    seamIds: [entrypoints-a-gateway-runtime-lifecycle]
+    riskIds: [entrypoints-a-gateway-resource-leak, entrypoints-a-gateway-boundary-leak]
+  - id: entrypoints-a-cli-input-parsing
+    statement: Raw CLI input is classified as a message or slash command with the expected command name and normalized argument text, including empty and spaced arguments.
+    seamIds: [entrypoints-a-cli-process-entrypoint]
+    riskIds: [entrypoints-a-cli-startup-regression]
+  - id: entrypoints-a-retired-infrastructure-absence
+    statement: Production source contains none of the explicitly retired runner infrastructure names.
+    seamIds: [entrypoints-a-core-module-boundary]
+    riskIds: [entrypoints-a-core-import-side-effect]
+tests:
+  - kind: file
+    id: entrypoints-build-output-e2e-test
+    file: scripts/build-output.e2e.test.ts
+    domainId: entrypoints
+    suiteId: e2e
+    contractIds: [entrypoints-a-build-rollback, entrypoints-a-suite-tier-separation]
+    fixtureIds: []
+  - kind: file
+    id: entrypoints-build-output-test
+    file: scripts/build-output.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds: [entrypoints-a-build-rollback]
+    fixtureIds: []
+  - kind: file
+    id: entrypoints-candidate-gates-test
+    file: scripts/candidate-gates.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds: [entrypoints-a-candidate-gates-safe-report, entrypoints-a-candidate-gates-bounded-output]
+    fixtureIds: []
+  - kind: file
+    id: entrypoints-package-scripts-test
+    file: scripts/package-scripts.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds: [entrypoints-a-suite-tier-separation]
+    fixtureIds: []
+  - kind: file
+    id: entrypoints-release-test
+    file: scripts/release.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds: [entrypoints-a-release-argument-policy]
+    fixtureIds: []
+  - kind: file
+    id: entrypoints-graph-test
+    file: scripts/test-audit/graph.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds: [entrypoints-a-audit-graph-integrity]
+    fixtureIds: []
+  - kind: file
+    id: entrypoints-agent-test
+    file: source/agent.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds: [entrypoints-a-agent-definition-surface]
+    fixtureIds: []
+  - kind: file
+    id: entrypoints-app-helpers-test
+    file: source/app-helpers.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds: [entrypoints-a-app-submit-and-effects]
+    fixtureIds: []
+  - kind: file
+    id: entrypoints-app-navigate-question-test
+    file: source/app.navigate-question.test.tsx
+    domainId: entrypoints
+    suiteId: unit
+    contractIds: [entrypoints-a-app-submit-and-effects]
+    fixtureIds: []
+  - kind: file
+    id: entrypoints-app-parseinput-test
+    file: source/app.parseInput.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds: [entrypoints-a-cli-input-parsing]
+    fixtureIds: []
+  - kind: file
+    id: entrypoints-app-startup-banner-test
+    file: source/app.startup-banner.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds: [entrypoints-a-app-submit-and-effects]
+    fixtureIds: []
+  - kind: file
+    id: entrypoints-app-test
+    file: source/app.test.tsx
+    domainId: entrypoints
+    suiteId: unit
+    contractIds: [entrypoints-a-app-submit-and-effects]
+    fixtureIds: []
+  - kind: file
+    id: entrypoints-cli-e2e-test
+    file: source/cli.e2e.test.ts
+    domainId: entrypoints
+    suiteId: e2e
+    contractIds: [entrypoints-a-cli-startup-and-resume, entrypoints-a-suite-tier-separation]
+    fixtureIds: []
+  - kind: file
+    id: entrypoints-cli-integration-test
+    file: source/cli.integration.test.ts
+    domainId: entrypoints
+    suiteId: integration
+    contractIds: [entrypoints-a-cli-startup-and-resume, entrypoints-a-suite-tier-separation]
+    fixtureIds: []
+  - kind: file
+    id: entrypoints-compatibility-retirement-guard-test
+    file: source/compatibility-retirement.guard.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds: [entrypoints-a-retired-infrastructure-absence]
+    fixtureIds: []
+  - kind: file
+    id: entrypoints-core-boundary-test
+    file: source/core/core-boundary.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds: [entrypoints-a-core-import-purity]
+    fixtureIds: []
+  - kind: file
+    id: entrypoints-awaitable-runtime-events-test
+    file: source/gateway/awaitable-runtime-events.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds: [entrypoints-a-durable-event-and-recovery]
+    fixtureIds: []
+  - kind: file
+    id: entrypoints-dynamic-workspace-registry-test
+    file: source/gateway/dynamic-workspace-registry.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds: [entrypoints-a-workspace-candidate-safety]
+    fixtureIds: []
+  - kind: file
+    id: entrypoints-dynamic-workspace-rpc-test
+    file: source/gateway/dynamic-workspace-rpc.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds: [entrypoints-a-gateway-auth-and-public-contract, entrypoints-a-workspace-candidate-safety]
+    fixtureIds: []
+  - kind: file
+    id: entrypoints-gateway-test
+    file: source/gateway/gateway.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds: [entrypoints-a-gateway-auth-and-public-contract, entrypoints-a-workspace-candidate-safety, entrypoints-a-interaction-protocol-safety, entrypoints-a-durable-event-and-recovery, entrypoints-a-worker-and-shutdown-safety]
+    fixtureIds: []
+  - kind: file
+    id: entrypoints-interaction-protocol-test
+    file: source/gateway/interaction-protocol.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds: [entrypoints-a-interaction-protocol-safety]
+    fixtureIds: []
+decisions:
+  - id: entrypoints-build-output-e2e-test-entrypoints-a-m3
+    testId: entrypoints-build-output-e2e-test
+    role: second_opinion
+    reviewer: entrypoints-a-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-a-m3.yaml
+    recommendation: retier_candidate
+    confidence: high
+    reason: The assertion protects real build-command wiring, but the e2e-class file is included by the default Vitest glob rather than only the explicit e2e command.
+    evidence:
+      - scripts/build-output.e2e.test.ts:4-8 reads package scripts and asserts build and build:restore use rollback/restore implementations.
+      - vitest.config.ts:5-11 includes scripts/**/*.test.ts in the default configuration, so this .e2e file is eligible for the unit invocation.
+      - package.json:54-58 defines both the broad test command and a separate test:e2e suffix filter.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-dynamic-workspace-rpc-test-entrypoints-a-m3
+    testId: entrypoints-dynamic-workspace-rpc-test
+    role: second_opinion
+    reviewer: entrypoints-a-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The live Unix-socket RPC test complements registry unit coverage by pinning v1 route/DTO compatibility and HTTP error mapping across the gateway boundary.
+    evidence:
+      - source/gateway/dynamic-workspace-rpc.test.ts:28-55 constructs signed HTTP requests to the three workspace-candidate routes.
+      - source/gateway/dynamic-workspace-rpc.test.ts:89-128 asserts validate/browse/select status and public DTO redaction while preserving the binding on selection.
+      - source/gateway/dynamic-workspace-rpc.test.ts:130-160 asserts ownership, expiry, and malformed input map to safe 403/404/400 errors.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-gateway-test-entrypoints-a-m3
+    testId: entrypoints-gateway-test
+    role: second_opinion
+    reviewer: entrypoints-a-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-a-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: high
+    reason: The contracts are high-risk and well asserted, but one 2031-line file combines startup/auth, RPC/projection, workspace admission, persistence/recovery, worker isolation, logging, and lifecycle; splitting by boundary would improve failure localization without discarding evidence.
+    evidence:
+      - source/gateway/gateway.test.ts:300-1597 combines startup, transport/RPC, public projection, interaction resolution, recovery, and replay-ledger scenarios.
+      - source/gateway/gateway.test.ts:1600-1768 contains a separate workspace-admission block with ownership, path, policy, and dynamic-grant behavior.
+      - source/gateway/gateway.test.ts:1771-1887 contains a separate compaction/cursor restart scenario.
+      - source/gateway/gateway.test.ts:1890-2029 contains worker-boundary, safe-logging, and lifecycle scenarios.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-interaction-protocol-test-entrypoints-a-m3
+    testId: entrypoints-interaction-protocol-test
+    role: second_opinion
+    reviewer: entrypoints-a-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This pure protocol test is a strong focused complement to the gateway route tests, covering redaction, choice authority, revision semantics, multi-select validation, and fail-closed DTO shape.
+    evidence:
+      - source/gateway/interaction-protocol.test.ts:29-93 asserts safe ordinary projection, variant choice sets, and sensitive denied-read redaction.
+      - source/gateway/interaction-protocol.test.ts:95-137 asserts stable ask_user revisions, terminal mappings, check-in outcomes, and option validation.
+      - source/gateway/interaction-protocol.test.ts:139-174 asserts nested text redaction and rejection of malformed/private DTO data.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-compatibility-retirement-guard-test-entrypoints-a-m3
+    testId: entrypoints-compatibility-retirement-guard-test
+    role: second_opinion
+    reviewer: entrypoints-a-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This repository-wide static guard enforces absence of explicitly retired runner infrastructure, a negative contract that ordinary runtime tests cannot establish.
+    evidence:
+      - source/compatibility-retirement.guard.test.ts:5-13 defines the forbidden retired runner names.
+      - source/compatibility-retirement.guard.test.ts:15-29 recursively selects production TypeScript while excluding test files.
+      - source/compatibility-retirement.guard.test.ts:32-40 scans every selected production file and requires zero violations.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-core-boundary-test-entrypoints-a-m3
+    testId: entrypoints-core-boundary-test
+    role: second_opinion
+    reviewer: entrypoints-a-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The test protects a high-impact architectural boundary through both static dependency traversal and a side-effect probe; no assigned sibling covers core imports.
+    evidence:
+      - source/core/core-boundary.test.ts:138-177 traverses value imports from the core entry and rejects CLI/presentation modules.
+      - source/core/core-boundary.test.ts:180-241 imports core while asserting no writes, exits, listeners, or filesystem state changes.
+      - source/core/core-boundary.test.ts:243-252 pins the runtime factory's core import and excludes the CLI log writer.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-awaitable-runtime-events-test-entrypoints-a-m3
+    testId: entrypoints-awaitable-runtime-events-test
+    role: second_opinion
+    reviewer: entrypoints-a-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This focused ServerSession boundary test proves critical event publication waits for persistence, preserves order, latches failures, and reaches a real journal durability boundary.
+    evidence:
+      - source/gateway/awaitable-runtime-events.test.ts:87-108 asserts publication remains blocked until the persistence promise resolves.
+      - source/gateway/awaitable-runtime-events.test.ts:110-138 asserts ordered approval/final delivery and interrupted status after persistence rejection.
+      - source/gateway/awaitable-runtime-events.test.ts:140-190 uses createGatewayEventJournal and critical appends, then asserts subscribers observe persisted events in order.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-dynamic-workspace-registry-test-entrypoints-a-m3
+    testId: entrypoints-dynamic-workspace-registry-test
+    role: second_opinion
+    reviewer: entrypoints-a-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Registry-focused filesystem scenarios cover canonical validation, symlink escape, opaque browse tokens, owner isolation, quotas, expiration, selection, and restart-sensitive bindings without relying on RPC setup.
+    evidence:
+      - source/gateway/dynamic-workspace-registry.test.ts:29-92 asserts valid opaque validation and fail-closed missing/file/outside/permission cases.
+      - source/gateway/dynamic-workspace-registry.test.ts:94-141 asserts opaque child tokens, owner checks, symlink rejection, and token cleanup after replacement.
+      - source/gateway/dynamic-workspace-registry.test.ts:143-184 asserts candidate/token quotas and TTL expiry.
+      - source/gateway/dynamic-workspace-registry.test.ts:186-212 asserts canonical selection and candidate expiration.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-app-startup-banner-test-entrypoints-a-m3
+    testId: entrypoints-app-startup-banner-test
+    role: second_opinion
+    reviewer: entrypoints-a-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-a-m3.yaml
+    recommendation: consolidation_candidate
+    confidence: high
+    reason: The file repeats the exact stable-ID assertions already provided by entrypoints-app-helpers-test, which is the broader helper boundary test.
+    evidence:
+      - source/app.startup-banner.test.ts:4-10 asserts the two stable-ID sequences for appendStartupBannerId.
+      - source/app-helpers.test.ts:27-35 asserts the same two sequences for the same exported function.
+      - Both assigned files import appendStartupBannerId from source/app-helpers.js, so the named sibling can carry this contract.
+    replacementTestIds: [entrypoints-app-helpers-test]
+    status: proposed
+  - id: entrypoints-app-test-entrypoints-a-m3
+    testId: entrypoints-app-test
+    role: second_opinion
+    reviewer: entrypoints-a-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The App-level React scenarios exercise cross-hook routing and state transitions that are not duplicated by the focused navigation file, including rollover, approvals, admission, debouncing, mode confirmation, and StrictMode cleanup.
+    evidence:
+      - source/app.test.tsx:390-596 asserts rollover settlement, conversation remounting, approval-wait submission, StrictMode network approval, and rejection routing.
+      - source/app.test.tsx:598-827 asserts slash-command routing, skill attachment, admission intents, stale/declined confirmations, composer clearing, and error propagation.
+      - source/app.test.tsx:848-977 asserts debounced large-input advisory behavior and processing-state suppression.
+      - source/app.test.tsx:980-1063 asserts mode confirmation/decline effects and background-task terminal title rendering.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-cli-e2e-test-entrypoints-a-m3
+    testId: entrypoints-cli-e2e-test
+    role: second_opinion
+    reviewer: entrypoints-a-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-a-m3.yaml
+    recommendation: retier_candidate
+    confidence: high
+    reason: The process-level terminal smoke test is correctly classified as e2e but default Vitest discovery includes it; the repository also exposes an explicit e2e script.
+    evidence:
+      - source/cli.e2e.test.ts:8-15 documents cold-start cost and assigns a 600000ms e2e test budget.
+      - source/cli.e2e.test.ts:36-61 spawns node/tsx, waits for first paint and harness idle, sends Ctrl+C, and asserts clean exit/output.
+      - vitest.config.ts:5-11 includes source/**/*.{test,spec}.{ts,tsx} in the default invocation.
+      - package.json:54-58 defines broad test and suffix-filtered test:e2e commands.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-cli-integration-test-entrypoints-a-m3
+    testId: entrypoints-cli-integration-test
+    role: second_opinion
+    reviewer: entrypoints-a-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-a-m3.yaml
+    recommendation: retier_candidate
+    confidence: high
+    reason: The compiled-CLI subprocess and filesystem scenarios are integration evidence, yet the default Vitest glob runs them alongside unit tests; they should have an explicit integration tier or filter.
+    evidence:
+      - source/cli.integration.test.ts:13-49 compiles the CLI into a cache and launches the compiled process, rather than testing a pure function.
+      - source/cli.integration.test.ts:64-219 asserts real child-process help, conversation listing, project scoping, and missing-resume behavior.
+      - source/cli.integration.test.ts:221-335 asserts home/root safety prompts and configured custom-provider admission through the process boundary.
+      - vitest.config.ts:5-11 includes all source test files by default, while package.json:54-62 shows no dedicated integration command for this path.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-graph-test-entrypoints-a-m3
+    testId: entrypoints-graph-test
+    role: second_opinion
+    reviewer: entrypoints-a-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The graph validator is itself a meaningful correctness boundary; its cases cover typed references, merge conflicts, deletion safety, independent review, queries, and reporting.
+    evidence:
+      - scripts/test-audit/graph.test.ts:55-110 asserts resolving references, duplicate IDs, case titles, namespacing, and granularity rules.
+      - scripts/test-audit/graph.test.ts:113-189 asserts deletion replacement safety and set-level contract protection.
+      - scripts/test-audit/graph.test.ts:192-265 asserts independent decisions and conflicting merge definitions.
+      - scripts/test-audit/graph.test.ts:269-317 asserts recommendation queries and report summaries/dissent visibility.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-agent-test-entrypoints-a-m3
+    testId: entrypoints-agent-test
+    role: second_opinion
+    reviewer: entrypoints-a-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The broad file protects the product-facing agent composition contract across memory, modes, models, execution context, skills, subagents, shell jobs, prompt guidance, and environment reporting.
+    evidence:
+      - source/agent.test.ts:93-268 asserts memory/session/workflow registration, summaries, corruption handling, and configured workflow limits.
+      - source/agent.test.ts:270-386 asserts mode/model/search/editing capability surfaces and remote execution exclusions.
+      - source/agent.test.ts:469-807 asserts delegation schemas, async control completeness, background shell controls, and orchestrator invariants.
+      - source/agent.test.ts:911-1144 and 1246-1380 assert search fallback, AGENTS guidance, hygiene, skills catalog, and local/remote environment reporting.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-app-helpers-test-entrypoints-a-m3
+    testId: entrypoints-app-helpers-test
+    role: second_opinion
+    reviewer: entrypoints-a-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Small pure helper cases cover token estimation, system-message detection, redraw output, deferred exit effects, and stable banner IDs; only the banner subcase overlaps the named startup-banner sibling.
+    evidence:
+      - source/app-helpers.test.ts:12-25 asserts serialized text and image payloads affect turn-token estimates.
+      - source/app-helpers.test.ts:27-49 asserts stable banner IDs and system-only versus user/assistant content.
+      - source/app-helpers.test.ts:51-85 asserts redraw escape output and next-turn exit usage scheduling.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-app-navigate-question-test-entrypoints-a-m3
+    testId: entrypoints-app-navigate-question-test
+    role: second_opinion
+    reviewer: entrypoints-a-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This focused React wiring test verifies BottomArea navigation reaches the corresponding conversation actions without executing the much larger App orchestration suite.
+    evidence:
+      - source/app.navigate-question.test.tsx:39-166 isolates BottomArea, App hooks, and navigation collaborators with deterministic mocks.
+      - source/app.navigate-question.test.tsx:174-233 asserts prev invokes goToPreviousQuestion, next invokes goToNextQuestion, and the callback is exposed.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-app-parseinput-test-entrypoints-a-m3
+    testId: entrypoints-app-parseinput-test
+    role: second_opinion
+    reviewer: entrypoints-a-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The parser cases cover normal messages, argumentless and argument-bearing slash commands, whitespace normalization, trailing spaces, and punctuation-bearing arguments with no same-assignment substitute.
+    evidence:
+      - source/app.parseInput.test.ts:4-20 asserts ordinary text remains a message with exact text.
+      - source/app.parseInput.test.ts:22-74 asserts slash-command names and arguments for empty and populated forms.
+      - source/app.parseInput.test.ts:76-97 asserts multiple-space, trailing-space, and special-character edge cases.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-build-output-test-entrypoints-a-m3
+    testId: entrypoints-build-output-test
+    role: second_opinion
+    reviewer: entrypoints-a-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The focused filesystem scenarios cover cleanup, successful backup, rollback, sequential failure, disabled backup, and explicit restoration without a same-assignment substitute.
+    evidence:
+      - scripts/build-output.test.ts:25-39 asserts obsolete compiled modules are removed during a successful rebuild.
+      - scripts/build-output.test.ts:41-83 asserts previous output is recoverable and later steps do not run after failure.
+      - scripts/build-output.test.ts:85-131 asserts no-previous-build reporting, backup opt-out, and restorePreviousBuild outcomes.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-candidate-gates-test-entrypoints-a-m3
+    testId: entrypoints-candidate-gates-test
+    role: second_opinion
+    reviewer: entrypoints-a-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is the only assigned test exercising the candidate-gate safety and bounded-report surface, including both injected boundary cases and a real deadline probe.
+    evidence:
+      - scripts/candidate-gates.test.ts:32-176 asserts supported gate construction and rejects unsafe paths and git refs.
+      - scripts/candidate-gates.test.ts:179-312 asserts UTF-8-safe byte bounds, classification preservation, and bounded evidence/gate output.
+      - scripts/candidate-gates.test.ts:314-646 asserts worktree/branch/base admission, sequential gate failures, and no-gate scope failures.
+      - scripts/candidate-gates.test.ts:648-698 asserts child timeout/truncation and stable machine-readable exit classifications.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-package-scripts-test-entrypoints-a-m3
+    testId: entrypoints-package-scripts-test
+    role: second_opinion
+    reviewer: entrypoints-a-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It verifies the repository-wide package-script contract that test commands run under NODE_ENV=test without ambient mutation, including the explicit e2e-facing scripts.
+    evidence:
+      - scripts/package-scripts.test.ts:4-16 enumerates the Vitest-facing script names, including test:e2e and test:docker-host-control-integration.
+      - scripts/package-scripts.test.ts:18-30 compares direct Vitest discovery and asserts cross-env NODE_ENV=test with no leading environment assignment.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-release-test-entrypoints-a-m3
+    testId: entrypoints-release-test
+    role: second_opinion
+    reviewer: entrypoints-a-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-a-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Process-level checks pin release help and fail-closed argument combinations before any repository operation, with no assigned sibling covering release.sh.
+    evidence:
+      - scripts/release.test.ts:5-15 invokes the actual release shell script and captures status plus combined output.
+      - scripts/release.test.ts:18-25 asserts documented non-interactive and CI/local-publish paths.
+      - scripts/release.test.ts:27-45 asserts missing push choice, version/selector conflict, and conflicting push modes are rejected.
+    replacementTestIds: []
+    status: proposed

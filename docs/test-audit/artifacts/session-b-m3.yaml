@@ -1,0 +1,734 @@
+schemaVersion: 2
+domains:
+  - id: session
+    label: Session composition, lifecycle, runtime, and turn orchestration
+suites:
+  - id: unit
+    label: Default Vitest unit suite
+seams:
+  - id: session-b-composition-runtime-factory
+    label: Session composition factories wiring runtime capabilities and owned event sinks.
+  - id: session-b-background-event-projection
+    label: Runtime adapters that project background subagent and shell events to observers and notifications.
+  - id: session-b-session-context-storage
+    label: Async context storage and restoration around session-scoped operations.
+  - id: session-b-continuity-reset-coordinator
+    label: Coordinated clearing of provider, approval, tool, input, and persisted turn continuity.
+  - id: session-b-input-planning-boundary
+    label: Boundary deciding chained versus self-contained provider input and large-input advisory metadata.
+  - id: session-b-session-lifecycle-coordinator
+    label: Lifecycle operations that reset, import, undo, and reconcile session-owned state.
+  - id: session-b-session-manager-rewind
+    label: Session manager snapshot and rewind delegation boundary.
+  - id: session-b-runtime-settings-controller
+    label: Runtime-facing provider and generation-setting mutation boundary.
+  - id: session-b-public-runtime-boundary
+    label: Public session runtime turn, state, approval, and shutdown API boundary.
+  - id: session-b-runtime-isolation-boundary
+    label: Isolation boundary for concurrently live runtimes, execution roots, contexts, and approval state.
+  - id: session-b-stream-history-commit
+    label: Stream processing and finalization boundary between provider items, session history, continuity, and journals.
+  - id: session-b-tool-ledger-reconciliation
+    label: Session tool ledger boundary tracking calls, results, active IDs, and recovery settlement.
+  - id: session-b-terminal-event-collection
+    label: Collection boundary reducing streamed conversation events to one authoritative terminal result.
+  - id: session-b-turn-attempt-state
+    label: Per-turn attempt construction, retry snapshots, stream attachment, and abort lifecycle.
+  - id: session-b-turn-coordination-state
+    label: Foreground turn admission, status transitions, approval continuation, and stale-turn ownership boundary.
+  - id: session-b-turn-item-accumulation
+    label: Incremental reasoning, assistant text, tool item, and display-usage accumulation boundary.
+  - id: session-b-hook-outcome-projection
+    label: Turn outcome to hook lifecycle event projection boundary.
+  - id: session-b-turn-workflow-execution
+    label: Initial and continuation workflow boundary for provider calls, recovery, approvals, and modeled outcomes.
+  - id: session-b-undo-recovery-journal
+    label: Undo lifecycle and assistant journal boundary feeding retry recovery history.
+risks:
+  - id: session-b-composition-contract-drift
+    label: A composed runtime exposes the wrong capability, sink, adapter, or disposal behavior.
+    severity: high
+  - id: session-b-background-event-loss
+    label: Background work events, controls, or shutdown notifications are lost, duplicated, or delivered after disposal.
+    severity: high
+  - id: session-b-context-leak
+    label: Session context is unavailable across async work or leaks across nested session scopes.
+    severity: high
+  - id: session-b-stale-continuity
+    label: Reset or import leaves provider anchors, approvals, tool state, or persisted turn state that can affect a later turn.
+    severity: high
+  - id: session-b-invalid-provider-input
+    label: Chaining is used when a provider cannot accept the anchor, or full-history input is built incorrectly.
+    severity: critical
+  - id: session-b-lifecycle-ownership-drift
+    label: Lifecycle cleanup bypasses its owning coordinator or leaves undo/import recovery state inconsistent.
+    severity: high
+  - id: session-b-rewind-side-effect
+    label: A stale rewind mutates state or a successful rewind misses required cleanup or logging.
+    severity: medium
+  - id: session-b-setting-transition-drift
+    label: Unsupported settings mutate state, or supported provider-setting changes call in the wrong order.
+    severity: medium
+  - id: session-b-public-runtime-regression
+    label: A public turn, approval, state import/export, steering, or shutdown operation diverges from internal behavior.
+    severity: high
+  - id: session-b-runtime-cross-talk
+    label: Concurrent runtimes share state, execution roots, contexts, sinks, or approval ownership.
+    severity: critical
+  - id: session-b-history-commit-corruption
+    label: Stream processing commits stale, duplicated, reordered, or provider-incompatible history or recovery journal data.
+    severity: critical
+  - id: session-b-tool-settlement-drift
+    label: Tool calls are mis-deduplicated or continuation omits required completed, rejected, or interrupted call IDs.
+    severity: high
+  - id: session-b-terminal-outcome-loss
+    label: A stream without an authoritative terminal is accepted, or terminal payload, usage, cost, or item ordering is lost.
+    severity: high
+  - id: session-b-attempt-abort-leak
+    label: Attempt retry state is overwritten or abort callbacks remain active after an attempt closes.
+    severity: medium
+  - id: session-b-turn-state-corruption
+    label: Concurrent or stale turn operations mutate status, ownership, approval, or event delivery for another turn.
+    severity: critical
+  - id: session-b-turn-item-loss
+    label: Streamed reasoning, text, tools, or display usage is emitted or persisted in the wrong order or omitted.
+    severity: medium
+  - id: session-b-hook-lifecycle-drift
+    label: Modeled turn outcomes produce invalid hook events or split one logical approval turn across hook IDs.
+    severity: high
+  - id: session-b-workflow-recovery-drift
+    label: Initial or continuation recovery loses budget, provider options, approval semantics, live-stream reuse, or modeled outcome settlement.
+    severity: critical
+  - id: session-b-undo-journal-resurrection
+    label: Retry recovery re-injects tool items from turns removed by undo or rewind.
+    severity: critical
+fixtures: []
+contracts:
+  - id: session-b-contract-composed-runtime-surface
+    statement: The session composition factories return the documented session/runtime capability surface, including owned sinks and conversation adapter boundaries.
+    seamIds:
+      - session-b-composition-runtime-factory
+    riskIds:
+      - session-b-composition-contract-drift
+  - id: session-b-contract-background-projection-and-shutdown
+    statement: Background subagent and shell events are projected to the appropriate task or notification observer, user controls wake observers, and shutdown retains sinks until asynchronous work settles before detaching them.
+    seamIds:
+      - session-b-background-event-projection
+    riskIds:
+      - session-b-background-event-loss
+  - id: session-b-contract-async-session-context
+    statement: Session context is absent outside a scope, visible throughout synchronous and awaited work inside a scope, and restored after nested scopes complete.
+    seamIds:
+      - session-b-session-context-storage
+    riskIds:
+      - session-b-context-leak
+  - id: session-b-contract-continuity-reset
+    statement: A session continuity reset clears provider, approval, tool, cache, input, and persisted-turn state exactly once, while optionally preserving provider conversations.
+    seamIds:
+      - session-b-continuity-reset-coordinator
+    riskIds:
+      - session-b-stale-continuity
+  - id: session-b-contract-input-chain-selection
+    statement: Session input planning selects a provider-valid chained delta or self-contained full-history request based on chaining capability, tool debt, partial batches, and model lineage while preserving authoritative history snapshots.
+    seamIds:
+      - session-b-input-planning-boundary
+    riskIds:
+      - session-b-invalid-provider-input
+  - id: session-b-contract-large-input-preview
+    statement: Large-input previews estimate the same serialized payload as real input, avoid unnecessary history work, reuse finalized-history sizing by identity, and retain canonical profile context without mutating dispatch state.
+    seamIds:
+      - session-b-input-planning-boundary
+    riskIds:
+      - session-b-invalid-provider-input
+  - id: session-b-contract-lifecycle-reset-import-undo
+    statement: Session reset, import, undo, and retry-rewind operations route cleanup through owning coordinators and reconcile continuity, access, journals, tool ledgers, and status for subsequent recovery.
+    seamIds:
+      - session-b-session-lifecycle-coordinator
+      - session-b-continuity-reset-coordinator
+    riskIds:
+      - session-b-lifecycle-ownership-drift
+      - session-b-stale-continuity
+  - id: session-b-contract-rewind-delegation
+    statement: Session rewind returns the domain result and performs lifecycle cleanup and undo logging exactly once only after a valid rewind, leaving both untouched for stale or unknown targets.
+    seamIds:
+      - session-b-session-manager-rewind
+    riskIds:
+      - session-b-rewind-side-effect
+  - id: session-b-contract-runtime-setting-mutations
+    statement: >-
+      Runtime setting mutations are capability-aware: unsupported setters are
+      no-ops, while supported provider-affecting changes reset session state
+      before forwarding the exact requested value.
+    seamIds:
+      - session-b-runtime-settings-controller
+    riskIds:
+      - session-b-setting-transition-drift
+  - id: session-b-contract-public-runtime-turns
+    statement: The public runtime supports headless turns, approval and ask-user continuation, abort, steering, state transfer, and idempotent shutdown while keeping internal construction details private.
+    seamIds:
+      - session-b-public-runtime-boundary
+    riskIds:
+      - session-b-public-runtime-regression
+  - id: session-b-contract-runtime-instance-isolation
+    statement: Concurrent runtime instances keep histories, providers, execution roots, contexts, logs, sinks, controls, approval ownership, and continuation state separate, and workspace publication fails closed.
+    seamIds:
+      - session-b-runtime-isolation-boundary
+    riskIds:
+      - session-b-runtime-cross-talk
+  - id: session-b-contract-stream-process-and-commit
+    statement: Stream processing publishes and journals live items, tracks tools, honors generation invalidation, and finalization commits authoritative provider history while preserving continuity and avoiding stale or duplicate pairs.
+    seamIds:
+      - session-b-stream-history-commit
+      - session-b-tool-ledger-reconciliation
+    riskIds:
+      - session-b-history-commit-corruption
+      - session-b-tool-settlement-drift
+  - id: session-b-contract-terminal-collection
+    statement: Terminal collection requires an authoritative final or approval event and preserves terminal text, interruptions, usage, costs, callbacks, and ordered turn items using cumulative rather than double-counted values.
+    seamIds:
+      - session-b-terminal-event-collection
+    riskIds:
+      - session-b-terminal-outcome-loss
+  - id: session-b-contract-attempt-lifecycle
+    statement: A turn attempt captures normalized retry and journal state, accepts planned input and streams, updates only live retry state, and invokes abort exactly once while closed attempts ignore later signals.
+    seamIds:
+      - session-b-turn-attempt-state
+    riskIds:
+      - session-b-attempt-abort-leak
+  - id: session-b-contract-turn-coordination
+    statement: Foreground turns have exclusive admission and owned status leases; approval pauses retain scope, continuations transition correctly, stale work cannot mutate newer turns, and abort returns ownership to idle.
+    seamIds:
+      - session-b-turn-coordination-state
+    riskIds:
+      - session-b-turn-state-corruption
+  - id: session-b-contract-turn-item-accumulation
+    statement: Turn item accumulation combines deltas into ordered reasoning and assistant-text segments, flushes buffers before tool items, resets persisted state, and tracks display usage.
+    seamIds:
+      - session-b-turn-item-accumulation
+    riskIds:
+      - session-b-turn-item-loss
+  - id: session-b-contract-hook-outcome-projection
+    statement: Every modeled turn outcome emits a hook-contract-valid turn.end event, and an approval pause plus continuation retains one logical hook turn ID.
+    seamIds:
+      - session-b-hook-outcome-projection
+    riskIds:
+      - session-b-hook-lifecycle-drift
+  - id: session-b-contract-workflow-recovery
+    statement: Initial and continuation workflow execution preserves modeled outcomes, provider lineage and history snapshots, retry budgets, approval and auto-approval resolution, post-execute stream reuse, and fresh-start recovery semantics.
+    seamIds:
+      - session-b-turn-workflow-execution
+      - session-b-tool-ledger-reconciliation
+    riskIds:
+      - session-b-workflow-recovery-drift
+      - session-b-tool-settlement-drift
+  - id: session-b-contract-undo-journal-recovery
+    statement: After undo removes turns, assistant journal snapshots supplied to retry recovery contain only surviving/current-turn tool pairs and never resurrect removed calls.
+    seamIds:
+      - session-b-undo-recovery-journal
+      - session-b-session-lifecycle-coordinator
+    riskIds:
+      - session-b-undo-journal-resurrection
+tests:
+  - kind: file
+    id: session-session-composition-subagent-notifications
+    file: source/services/session/session-composition.subagent-notifications.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds:
+      - session-b-contract-background-projection-and-shutdown
+    fixtureIds: []
+  - kind: file
+    id: session-session-composition
+    file: source/services/session/session-composition.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds:
+      - session-b-contract-composed-runtime-surface
+    fixtureIds: []
+  - kind: file
+    id: session-session-context-service
+    file: source/services/session/session-context-service.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds:
+      - session-b-contract-async-session-context
+    fixtureIds: []
+  - kind: file
+    id: session-session-continuity-reset
+    file: source/services/session/session-continuity-reset.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds:
+      - session-b-contract-continuity-reset
+    fixtureIds: []
+  - kind: file
+    id: session-session-input-planner
+    file: source/services/session/session-input-planner.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds:
+      - session-b-contract-input-chain-selection
+      - session-b-contract-large-input-preview
+    fixtureIds: []
+  - kind: file
+    id: session-session-lifecycle
+    file: source/services/session/session-lifecycle.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds:
+      - session-b-contract-lifecycle-reset-import-undo
+    fixtureIds: []
+  - kind: file
+    id: session-session-manager
+    file: source/services/session/session-manager.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds:
+      - session-b-contract-rewind-delegation
+    fixtureIds: []
+  - kind: file
+    id: session-session-runtime-controller
+    file: source/services/session/session-runtime-controller.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds:
+      - session-b-contract-runtime-setting-mutations
+    fixtureIds: []
+  - kind: file
+    id: session-session-runtime-characterization
+    file: source/services/session/session-runtime.characterization.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds:
+      - session-b-contract-public-runtime-turns
+    fixtureIds: []
+  - kind: file
+    id: session-session-runtime-isolation
+    file: source/services/session/session-runtime.isolation.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds:
+      - session-b-contract-runtime-instance-isolation
+    fixtureIds: []
+  - kind: file
+    id: session-session-stream-processor
+    file: source/services/session/session-stream-processor.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds:
+      - session-b-contract-stream-process-and-commit
+    fixtureIds: []
+  - kind: file
+    id: session-session-tool-tracker
+    file: source/services/session/session-tool-tracker.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds:
+      - session-b-contract-stream-process-and-commit
+    fixtureIds: []
+  - kind: file
+    id: session-subagent-connect-close-retry
+    file: source/services/session/subagent-connect-close-retry.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds:
+      - session-b-contract-public-runtime-turns
+    fixtureIds: []
+  - kind: file
+    id: session-terminal-result-collector
+    file: source/services/session/terminal-result-collector.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds:
+      - session-b-contract-terminal-collection
+    fixtureIds: []
+  - kind: file
+    id: session-turn-attempt-factory
+    file: source/services/session/turn-attempt-factory.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds:
+      - session-b-contract-attempt-lifecycle
+    fixtureIds: []
+  - kind: file
+    id: session-turn-attempt
+    file: source/services/session/turn-attempt.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds:
+      - session-b-contract-attempt-lifecycle
+    fixtureIds: []
+  - kind: file
+    id: session-turn-coordinator
+    file: source/services/session/turn-coordinator.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds:
+      - session-b-contract-turn-coordination
+    fixtureIds: []
+  - kind: file
+    id: session-turn-item-accumulator
+    file: source/services/session/turn-item-accumulator.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds:
+      - session-b-contract-turn-item-accumulation
+    fixtureIds: []
+  - kind: file
+    id: session-turn-outcome-boundary
+    file: source/services/session/turn-outcome-boundary.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds:
+      - session-b-contract-hook-outcome-projection
+    fixtureIds: []
+  - kind: file
+    id: session-turn-status-machine
+    file: source/services/session/turn-status-machine.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds:
+      - session-b-contract-turn-coordination
+    fixtureIds: []
+  - kind: file
+    id: session-turn-workflow-call-ids
+    file: source/services/session/turn-workflow.call-ids.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds:
+      - session-b-contract-workflow-recovery
+    fixtureIds: []
+  - kind: file
+    id: session-turn-workflow-outcome-contract
+    file: source/services/session/turn-workflow.outcome-contract.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds:
+      - session-b-contract-workflow-recovery
+    fixtureIds: []
+  - kind: file
+    id: session-turn-workflow
+    file: source/services/session/turn-workflow.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds:
+      - session-b-contract-workflow-recovery
+    fixtureIds: []
+  - kind: file
+    id: session-undo-journal-recovery
+    file: source/services/session/undo-journal-recovery.test.ts
+    domainId: session
+    suiteId: unit
+    contractIds:
+      - session-b-contract-undo-journal-recovery
+    fixtureIds: []
+decisions:
+  - id: session-turn-coordinator-session-b-m3
+    testId: session-turn-coordinator
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: TurnCoordinator owns the cross-component foreground lifecycle, so its integration-level transition and stale-event cases are not replaceable by the narrower status-machine unit tests.
+    evidence:
+      - It verifies admission, turn-scope lifetime over approval, shell decision recording, modeled failure/error projection, stale completion suppression, pending generation forwarding, release for the next turn, and abort reconciliation in source/services/session/turn-coordinator.test.ts:109-525.
+      - The exact sibling source/services/session/turn-status-machine.test.ts covers state-machine transitions without workflow, approval-flow, scope, or event-stream integration; removing the coordinator file would leave those observables unprotected.
+    replacementTestIds: []
+    status: proposed
+  - id: session-turn-item-accumulator-session-b-m3
+    testId: session-turn-item-accumulator
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The accumulator's direct buffer-flush and reset contract is small, isolated, and feeds user-visible ordered turn items and usage.
+    evidence:
+      - It verifies empty flush no-ops, delta accumulation, buffer ordering before tool items, complete reset, and usage storage in source/services/session/turn-item-accumulator.test.ts:4-101.
+      - source/services/session/turn-workflow.test.ts and source/services/session/session-stream-processor.test.ts observe accumulated output indirectly, but neither replaces this direct state transition coverage.
+    replacementTestIds: []
+    status: proposed
+  - id: session-turn-outcome-boundary-session-b-m3
+    testId: session-turn-outcome-boundary
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This focused boundary test protects hook consumers from modeled-outcome omissions and verifies logical turn identity across pause/resume.
+    evidence:
+      - It captures only events emitted through HookLifecyclePort and validates turn.end for response, approval_required, stale, and failed outcomes plus one turn ID across continuation in source/services/session/turn-outcome-boundary.test.ts:125-183.
+      - The exact sibling source/services/session/turn-coordinator.test.ts tests conversation events and status, not hook-contract validity or hook ID continuity; the observables are complementary.
+    replacementTestIds: []
+    status: proposed
+  - id: session-turn-status-machine-session-b-m3
+    testId: session-turn-status-machine
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: TurnStatusMachine is a compact critical state/lease primitive; exhaustive transition, ownership, stale-lease, and outcome-emission cases provide a cheaper foundation for coordinator reasoning.
+    evidence:
+      - It covers valid and invalid phase transitions, observer notification suppression, completion versus approval outcomes, abort revocation, and stale lease non-mutation in source/services/session/turn-status-machine.test.ts:21-167.
+      - The exact sibling source/services/session/turn-coordinator.test.ts checks integration behavior but does not exercise all primitive transitions or stale lease methods directly.
+    replacementTestIds: []
+    status: proposed
+  - id: session-turn-workflow-call-ids-session-b-m3
+    testId: session-turn-workflow-call-ids
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Continuation call-ID selection is provider-validity-critical and this file isolates parallel, consumed-history, current-cycle, known-ID, snapshot, and abort-resolution cases.
+    evidence:
+      - It captures actual continueRunStream options and verifies required interrupted/completed IDs, exclusion of consumed outputs, current-cycle scoping, known IDs, frozen snapshots, and rejected/approved siblings in source/services/session/turn-workflow.call-ids.test.ts:130-266.
+      - The exact sibling source/services/session/session-input-planner.test.ts tests when to choose full history versus chaining, while this file tests the distinct call-ID payload inside a continuation; neither is a replacement for the other.
+    replacementTestIds: []
+    status: proposed
+  - id: session-turn-workflow-outcome-contract-session-b-m3
+    testId: session-turn-workflow-outcome-contract
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This focused file protects exact option and modeled-outcome contracts that are easy to break while repairing workflow internals, including the shipped post-execute auto-approval regression.
+    evidence:
+      - It verifies stopAfterApprovalResolution, zero lineage presence, hook ID forwarding, and post-execute auto-approval settlement with one stream consumption in source/services/session/turn-workflow.outcome-contract.test.ts:87-268.
+      - The exact sibling source/services/session/turn-workflow.test.ts covers broader initial/continuation behavior, but does not provide this focused option-presence and post-execute auto-approval contract evidence.
+    replacementTestIds: []
+    status: proposed
+  - id: session-turn-workflow-session-b-m3
+    testId: session-turn-workflow
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: >-
+      This is the broad high-scrutiny workflow regression suite: initial and
+      continuation execution, shared retry budgets, service-tier policy, lineage
+      parity, approval/post-execute recovery, compaction episodes, and fresh-start
+      redrives are independently meaningful.
+    evidence:
+      - It asserts provider options and snapshots at request boundaries, modeled recovery outcomes, retry-counter semantics, post-execute stream reuse, auto-approval and abort resolution, compaction-failure deduplication, and explicit no-live-run errors in source/services/session/turn-workflow.test.ts:77-1186.
+      - The exact sibling source/services/session/turn-workflow.call-ids.test.ts narrows to continuation call-ID options and source/services/session/turn-workflow.outcome-contract.test.ts narrows to option/auto-approval contracts; their focused scopes do not subsume the broad workflow matrix.
+    replacementTestIds: []
+    status: proposed
+  - id: session-undo-journal-recovery-session-b-m3
+    testId: session-undo-journal-recovery
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is explicit shipped-regression evidence for the critical undo-to-retry journal resurrection path, including the empty-history boundary.
+    evidence:
+      - It removes prior turns, invokes lifecycle afterUndo, runs DefaultRecoveryExecutor from the journal snapshot, and asserts old calls are absent while current calls appear exactly as call/result pairs; it also checks complete journal clearing in source/services/session/undo-journal-recovery.test.ts:68-153.
+      - The exact sibling source/services/session/session-lifecycle.test.ts checks that afterUndo invokes prune/cleanup, but does not execute recovery against real store/tracker/journal state and cannot replace this end-to-end regression proof.
+    replacementTestIds: []
+    status: proposed
+  - id: session-session-runtime-characterization-session-b-m3
+    testId: session-session-runtime-characterization
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This public-seam characterization covers the end-to-end turn lifecycle, approval and ask-user resumption, abort invalidation, steering, state transfer, and idempotent shutdown.
+    evidence:
+      - It uses createSessionRuntime from the public core seam and checks final events, pending approval state, continuation anchors, raw ask-user delivery, stale abort suppression, and state import/replay in source/services/session/session-runtime.characterization.test.ts:68-375.
+      - The exact out-of-assignment sibling source/services/session/conversation-session.characterization.test.ts covers the legacy conversation-session adapter, not these public runtime capabilities; the seams are related but the observable entry points differ.
+    replacementTestIds: []
+    status: proposed
+  - id: session-session-runtime-isolation-session-b-m3
+    testId: session-session-runtime-isolation
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Concurrent-session cross-talk and fail-closed workspace ownership are critical risks requiring an explicit multi-instance test.
+    evidence:
+      - It runs two runtimes concurrently and independently checks histories, providers, response IDs, execution roots, contexts, logs, sinks, steering, approvals, and workspace-root rejection in source/services/session/session-runtime.isolation.test.ts:80-240.
+      - The exact out-of-assignment sibling source/services/session/conversation-session.isolation.test.ts targets the adapter layer; it does not replace this direct public-runtime instance-isolation evidence.
+    replacementTestIds: []
+    status: proposed
+  - id: session-session-stream-processor-session-b-m3
+    testId: session-session-stream-processor
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is high-scrutiny recovery and persistence coverage for a stateful stream seam, including provider-specific compaction, stale generations, canonical history precedence, tool-pair deduplication, and journal replay.
+    evidence:
+      - The assigned file asserts processing publication and logging plus finalization of compaction, reasoning, full-history replay, wrapped/provider items, tool results, continuity checkpoints, stale streams, and invalidated journal writes across source/services/session/session-stream-processor.test.ts:77-1690.
+      - No other assigned test directly instantiates SessionStreamProcessor; source/services/retry/recovery-executor.test.ts exercises its recovery collaborator, not this stream commit boundary.
+    replacementTestIds: []
+    status: proposed
+  - id: session-session-tool-tracker-session-b-m3
+    testId: session-session-tool-tracker
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The tracker is the call-ID and settlement source for continuation safety; the file covers current-turn scoping, deduplication, completed versus open calls, aborted calls, and unknown recovery outcomes.
+    evidence:
+      - It checks per-agent deduplication, current-turn filtering across turns, reconciled-history settlement, completed/unsettled IDs, and unknown preservation after stream failure in source/services/session/session-tool-tracker.test.ts:5-127.
+      - source/services/session/session-stream-processor.test.ts and source/services/session/undo-journal-recovery.test.ts consume tracker behavior indirectly, but neither replaces these direct ledger contract assertions.
+    replacementTestIds: []
+    status: proposed
+  - id: session-subagent-connect-close-retry-session-b-m3
+    testId: session-subagent-connect-close-retry
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is a shipped regression test for a recoverable pre-stream websocket close on a subagent path where fresh-start retry is disabled.
+    evidence:
+      - It verifies the exact close classification produces one retry followed by text_delta and final, with two startStream calls, in source/services/session/subagent-connect-close-retry.test.ts:26-52.
+      - No other assigned test names this pre-stream websocket-close behavior; source/services/retry/recovery-executor.test.ts covers generic recovery mechanics rather than the composed subagent runtime.
+    replacementTestIds: []
+    status: proposed
+  - id: session-terminal-result-collector-session-b-m3
+    testId: session-terminal-result-collector
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The collector owns the terminal contract and cost/usage accounting; its cases cover authoritative exhaustion, approval payloads, cumulative replacement, callbacks, and ordered turn-item preservation.
+    evidence:
+      - It rejects empty or delta-only streams, preserves explicit empty finals and raw interruptions, carries usage/cost records through approval and continuation, and trusts authoritative turnItems in source/services/session/terminal-result-collector.test.ts:11-368.
+      - The exact out-of-assignment sibling source/services/conversation/conversation-service.test.ts also mentions collectTerminalResult, but it tests service integration and does not replace this direct collector matrix.
+    replacementTestIds: []
+    status: proposed
+  - id: session-turn-attempt-factory-session-b-m3
+    testId: session-turn-attempt-factory
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Factory construction is a narrow boundary where retry schema migration, pending notices, skipped-turn recovery, stale approval rejection, and abort wiring converge.
+    evidence:
+      - It asserts legacy-to-canonical retry normalization, journal snapshot capture, prior-user recovery, stale token handling, and signal-to-client abort wiring in source/services/session/turn-attempt-factory.test.ts:46-109.
+      - source/services/session/turn-attempt.test.ts tests the resulting value object's mutators, but does not replace factory-specific input normalization and stale-result behavior.
+    replacementTestIds: []
+    status: proposed
+  - id: session-turn-attempt-session-b-m3
+    testId: session-turn-attempt
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: TurnAttempt is a small state carrier whose retry snapshot and abort lifecycle are foundational to the workflow's recovery correctness.
+    evidence:
+      - It verifies construction defaults, planned input and stream attachment, live-versus-initial retry state, close idempotence, already-aborted signals, and later abort callbacks in source/services/session/turn-attempt.test.ts:29-207.
+      - source/services/session/turn-attempt-factory.test.ts consumes attempts through the factory, but does not duplicate these direct state and listener lifecycle assertions.
+    replacementTestIds: []
+    status: proposed
+  - id: session-session-composition-subagent-notifications-session-b-m3
+    testId: session-session-composition-subagent-notifications
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The file exercises the composition-level routing and shutdown contract across background subagents, shell jobs, controls, and check-ins.
+    evidence:
+      - It asserts distinct task projection versus notification projection, deduplication, observer wakeups, control forwarding, and delayed sink detachment in source/services/session/session-composition.subagent-notifications.test.ts.
+    replacementTestIds: []
+    status: proposed
+  - id: session-session-composition-session-b-m3
+    testId: session-session-composition
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: medium
+    reason: The factory surface matters, but several cases assert object shape or source-text import absence, and one disposal case does not verify its named previousResponseId behavior.
+    evidence:
+      - The same file mixes useful compaction and lifecycle behavior with structural assertions such as Object.getPrototypeOf(appState), property presence, and readFileSync source checks in source/services/session/session-composition.test.ts:165-274.
+      - The case named dispose() resets previousResponseId so next run starts fresh only asserts that dispose does not throw at source/services/session/session-composition.test.ts:358-367.
+    replacementTestIds: []
+    status: proposed
+  - id: session-session-context-service-session-b-m3
+    testId: session-session-context-service
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The four cases form a compact direct contract test for async-local context visibility and restoration.
+    evidence:
+      - It covers outside-scope null, synchronous scope, awaited promise continuity, and nested restoration in source/services/session/session-context-service.test.ts:4-48.
+    replacementTestIds: []
+    status: proposed
+  - id: session-session-continuity-reset-session-b-m3
+    testId: session-session-continuity-reset
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The reset coordinator is a high-risk fan-out seam and the test verifies every injected reset participant plus the preserve-conversations option.
+    evidence:
+      - The harness counts provider, approval, tool, cache, planner, accumulator, and client calls, with both clearConversations true and false paths, in source/services/session/session-continuity-reset.test.ts:4-93.
+    replacementTestIds: []
+    status: proposed
+  - id: session-session-input-planner-session-b-m3
+    testId: session-session-input-planner
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is concentrated coverage of provider-valid chaining decisions and the large-input preview's consistency and side-effect boundaries.
+    evidence:
+      - It names concrete model-switch, unpaid-debt, partial-batch, immutable-snapshot, cache-identity, serialization, and profile-context cases in source/services/session/session-input-planner.test.ts:8-383.
+    replacementTestIds: []
+    status: proposed
+  - id: session-session-lifecycle-session-b-m3
+    testId: session-session-lifecycle
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Lifecycle ownership and recovery cleanup are high-scrutiny behavior, and the cases verify coordinator selection and state reconciliation rather than only return values.
+    evidence:
+      - It distinguishes approvalFlow from legacy approvalState, checks transient capability clearing, journals, generation/status invalidation, provider continuity, and imported-state handling in source/services/session/session-lifecycle.test.ts:182-317.
+    replacementTestIds: []
+    status: proposed
+  - id: session-session-manager-session-b-m3
+    testId: session-session-manager
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The file protects the snapshot persistence seam and the important valid-versus-stale rewind side-effect boundary with minimal setup.
+    evidence:
+      - It checks persisted previousResponseId sourcing and exact-once afterUndo/log behavior only after a non-null rewind, while stale rewind leaves both untouched, in source/services/session/session-manager.test.ts:5-79.
+    replacementTestIds: []
+    status: proposed
+  - id: session-session-runtime-controller-session-b-m3
+    testId: session-session-runtime-controller
+    role: second_opinion
+    reviewer: session-b-m3
+    sourceArtifact: docs/test-audit/artifacts/session-b-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The paired capability-present and capability-absent cases directly verify the public controller's mutation policy and ordering.
+    evidence:
+      - It covers reasoning effort, temperature, provider switching, and retry callback forwarding with unsupported no-op paths and exact call order in source/services/session/session-runtime-controller.test.ts:31-132.
+    replacementTestIds: []
+    status: proposed

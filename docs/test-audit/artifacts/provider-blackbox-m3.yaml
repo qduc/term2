@@ -1,0 +1,453 @@
+schemaVersion: 2
+domains:
+  - id: provider-blackbox
+    label: Provider black-box fixture and scenario infrastructure.
+suites:
+  - id: provider-blackbox-e2e
+    label: Dedicated fake-Codex end-to-end suite.
+  - id: provider-blackbox-unit
+    label: Provider black-box unit suite under test:provider-black-box.
+fixtures:
+  - id: provider-blackbox-fake-codex-scenarios
+    label: Local fake Codex HTTP and WebSocket success, error, incomplete, stall, close, retry, and stale-chain scenarios.
+  - id: provider-blackbox-fake-provider-scenarios
+    label: Local fake provider protocol scenarios for Chat Completions, Responses, Anthropic, and Google.
+  - id: provider-blackbox-fixture-chat-success
+    label: Sanitized Chat Completions replay fixture used by HTTP replay tests.
+  - id: provider-blackbox-fixture-websocket-replay
+    label: Bidirectional WebSocket replay envelope with ordered send and receive frames.
+  - id: provider-blackbox-fixture-provider-continuations
+    label: Sanitized OpenAI, OpenRouter, OpenCode, Anthropic, and Google tool-continuation recordings.
+  - id: provider-blackbox-committed-fixture-tree
+    label: Committed provider-black-box fixture JSON corpus scanned for secrets and SDK drift.
+seams:
+  - id: provider-blackbox-fixture-envelope-boundary
+    label: Typed validation boundary for recorded provider-traffic envelopes and frame ordering.
+  - id: provider-blackbox-fixture-capture
+    label: Middleware boundary that records HTTP requests and streamed response frames without consuming responses.
+  - id: provider-blackbox-fixture-sanitization
+    label: Fixture redaction boundary for credentials, provider identifiers, reasoning, opaque signatures, and dynamic IDs.
+  - id: provider-blackbox-fixture-comparison
+    label: Semantic comparison boundary between recorded and replayed provider requests.
+  - id: provider-blackbox-http-replay
+    label: Deterministic loopback HTTP/SSE fixture server and replay cursor.
+  - id: provider-blackbox-websocket-replay
+    label: Deterministic loopback WebSocket fixture server, ordered message cursor, and terminal scenarios.
+  - id: provider-blackbox-codex-transport
+    label: Codex HTTP Responses and WebSocket transport adapters, streaming terminal events, and retry classification.
+  - id: provider-blackbox-registry-provider-contract
+    label: Application provider registry route into protocol-specific streamed models and tool continuations.
+  - id: provider-blackbox-capability-accounting
+    label: Test-owned provider route capability matrix, required lifecycle scenarios, and execution ledger.
+  - id: provider-blackbox-isolated-workspace
+    label: Isolated child-process workspace lease, environment containment, cleanup, and process-tree reaping.
+  - id: provider-blackbox-pty-input
+    label: PTY child observation, composer-idle signaling, composer acknowledgement, deadlines, and termination.
+  - id: provider-blackbox-recorder-credentials
+    label: Provider recording CLI credential selection and provider-specific credential isolation.
+risks:
+  - id: provider-blackbox-fixture-contract-corruption
+    label: Invalid, reordered, or vacuous fixture records silently enter replay and hide wire regressions.
+    severity: high
+  - id: provider-blackbox-secret-leak
+    label: Credentials, private reasoning, provider identifiers, or opaque signatures are committed in fixtures.
+    severity: critical
+  - id: provider-blackbox-replay-drift
+    label: SDK or transport churn causes false failures, or request mutations pass as valid replays.
+    severity: high
+  - id: provider-blackbox-stream-terminal-loss
+    label: Missing, incomplete, error, or abnormal terminal events become fabricated successful model turns.
+    severity: critical
+  - id: provider-blackbox-provider-route-regression
+    label: A registry route, protocol mapping, role/tool/reasoning projection, or continuation contract regresses.
+    severity: high
+  - id: provider-blackbox-capability-gap
+    label: A provider route or required lifecycle scenario disappears from executed black-box evidence.
+    severity: high
+  - id: provider-blackbox-child-contamination
+    label: Black-box children inherit host state or survive failures, leaking credentials, files, processes, or ports.
+    severity: high
+  - id: provider-blackbox-pty-readiness-flake
+    label: PTY synchronization mistakes drop input, misread readiness, hang, or terminate the wrong process tree.
+    severity: high
+  - id: provider-blackbox-recording-credential-mixup
+    label: Recording one provider with another provider's credential produces unsafe or misleading traffic evidence.
+    severity: critical
+contracts:
+  - id: provider-blackbox-envelope-validation
+    statement: Fixture envelopes accept only declared transports and frame kinds, preserve increasing unique frame sequences, and reject collisions or unmapped numeric placeholder references while allowing ordinary angle-bracketed text.
+    seamIds: [provider-blackbox-fixture-envelope-boundary]
+    riskIds: [provider-blackbox-fixture-contract-corruption]
+  - id: provider-blackbox-recording-preserves-stream
+    statement: The recording middleware captures the outbound request, response head, and logical SSE or JSON response frames while returning a readable response to its caller.
+    seamIds: [provider-blackbox-fixture-capture]
+    riskIds: [provider-blackbox-fixture-contract-corruption, provider-blackbox-replay-drift]
+  - id: provider-blackbox-sanitized-fixtures-safe
+    statement: Sanitization redacts credentials, private reasoning, provider identifiers, opaque signatures, and encrypted content while preserving protocol structure and canonicalizing dynamic identifiers; the resulting envelope scans safe.
+    seamIds: [provider-blackbox-fixture-sanitization]
+    riskIds: [provider-blackbox-secret-leak]
+  - id: provider-blackbox-request-comparison-semantic
+    statement: Recorded and replayed HTTP requests compare by semantic method, path, headers, and body, ignoring documented SDK or transport churn, honoring placeholders, and reporting canonical diffs for meaningful mutations.
+    seamIds: [provider-blackbox-fixture-comparison]
+    riskIds: [provider-blackbox-replay-drift]
+  - id: provider-blackbox-http-replay-authoritative
+    statement: A fake HTTP provider replays recorded response frames in order, validates each request against its corresponding turn, and fails validation for unexpected or missing request turns.
+    seamIds: [provider-blackbox-http-replay]
+    riskIds: [provider-blackbox-fixture-contract-corruption, provider-blackbox-replay-drift]
+  - id: provider-blackbox-websocket-replay-authoritative
+    statement: A fake WebSocket provider rejects invalid transport or mixed frames, validates ordered non-empty bidirectional exchanges, replays receives, and fails for mismatches, missing sessions, incomplete cursors, or nonterminal scenarios.
+    seamIds: [provider-blackbox-websocket-replay]
+    riskIds: [provider-blackbox-fixture-contract-corruption, provider-blackbox-stream-terminal-loss]
+  - id: provider-blackbox-codex-stream-outcomes
+    statement: Codex HTTP and WebSocket streams preserve request fields and chained history, emit completion only after authoritative terminal events, surface provider errors and stalls, and do not replay accepted ambiguous turns through retry.
+    seamIds: [provider-blackbox-codex-transport]
+    riskIds: [provider-blackbox-stream-terminal-loss, provider-blackbox-provider-route-regression]
+  - id: provider-blackbox-registry-protocol-fidelity
+    statement: Built-in and runtime providers obtained through the registry map protocol-specific roles, tools, reasoning, provider options, streamed text, tool fragments, continuations, and errors to the application-owned model contract.
+    seamIds: [provider-blackbox-registry-provider-contract]
+    riskIds: [provider-blackbox-provider-route-regression, provider-blackbox-stream-terminal-loss]
+  - id: provider-blackbox-capability-ledger-complete
+    statement: The provider capability matrix has unique routed rows with required lifecycle scenarios, and accounting rejects unknown, missing, unexecuted, or incompletely documented exclusions while accepting a complete real ledger.
+    seamIds: [provider-blackbox-capability-accounting]
+    riskIds: [provider-blackbox-capability-gap]
+  - id: provider-blackbox-isolated-process-safety
+    statement: Black-box child processes run with isolated home and state roots, do not inherit host credential or CI markers, reuse leases safely, and are reaped with bounded cleanup after normal, failed, timed-out, or interrupted runs.
+    seamIds: [provider-blackbox-isolated-workspace]
+    riskIds: [provider-blackbox-child-contamination]
+  - id: provider-blackbox-pty-synchronization
+    statement: PTY harness waits observe application-owned composer state rather than prompt glyphs, serialize text acknowledgement before Enter, diagnose exited children, and bound writes, waits, and process-tree termination.
+    seamIds: [provider-blackbox-pty-input]
+    riskIds: [provider-blackbox-pty-readiness-flake, provider-blackbox-child-contamination]
+  - id: provider-blackbox-recording-provider-credentials
+    statement: The provider recording CLI refuses to substitute a credential belonging to another provider and reports the expected missing credential without contacting the configured endpoint.
+    seamIds: [provider-blackbox-recorder-credentials]
+    riskIds: [provider-blackbox-recording-credential-mixup]
+  - id: provider-blackbox-sdk-version-drift-detected
+    statement: Committed real-traffic fixtures whose declared SDK package is installed fail loudly when the recorded and installed SDK major/minor versions differ, while fake-provider metadata is exempt from that comparison.
+    seamIds: [provider-blackbox-fixture-envelope-boundary]
+    riskIds: [provider-blackbox-replay-drift, provider-blackbox-fixture-contract-corruption]
+tests:
+  - kind: file
+    id: provider-blackbox-fake-codex-server-e2e-test
+    file: scripts/fake-codex-server.e2e.test.ts
+    domainId: provider-blackbox
+    suiteId: provider-blackbox-e2e
+    contractIds: [provider-blackbox-codex-stream-outcomes]
+    fixtureIds: [provider-blackbox-fake-codex-scenarios]
+  - kind: file
+    id: provider-blackbox-fake-provider-http-server-fixture-test
+    file: scripts/provider-black-box/fake-provider-http-server.fixture.test.ts
+    domainId: provider-blackbox
+    suiteId: provider-blackbox-unit
+    contractIds: [provider-blackbox-http-replay-authoritative, provider-blackbox-request-comparison-semantic]
+    fixtureIds: [provider-blackbox-fixture-chat-success]
+  - kind: file
+    id: provider-blackbox-fake-provider-websocket-server-test
+    file: scripts/provider-black-box/fake-provider-websocket-server.test.ts
+    domainId: provider-blackbox
+    suiteId: provider-blackbox-unit
+    contractIds: [provider-blackbox-websocket-replay-authoritative]
+    fixtureIds: [provider-blackbox-fixture-websocket-replay, provider-blackbox-fake-provider-scenarios]
+  - kind: file
+    id: provider-blackbox-fixture-comparator-test
+    file: scripts/provider-black-box/fixture-comparator.test.ts
+    domainId: provider-blackbox
+    suiteId: provider-blackbox-unit
+    contractIds: [provider-blackbox-request-comparison-semantic]
+    fixtureIds: []
+  - kind: file
+    id: provider-blackbox-fixture-drift-test
+    file: scripts/provider-black-box/fixture-drift.test.ts
+    domainId: provider-blackbox
+    suiteId: provider-blackbox-unit
+    contractIds: [provider-blackbox-sdk-version-drift-detected]
+    fixtureIds: [provider-blackbox-committed-fixture-tree]
+  - kind: file
+    id: provider-blackbox-fixture-envelope-test
+    file: scripts/provider-black-box/fixture-envelope.test.ts
+    domainId: provider-blackbox
+    suiteId: provider-blackbox-unit
+    contractIds: [provider-blackbox-envelope-validation]
+    fixtureIds: []
+  - kind: file
+    id: provider-blackbox-fixture-recorder-test
+    file: scripts/provider-black-box/fixture-recorder.test.ts
+    domainId: provider-blackbox
+    suiteId: provider-blackbox-unit
+    contractIds: [provider-blackbox-recording-preserves-stream, provider-blackbox-sanitized-fixtures-safe]
+    fixtureIds: []
+  - kind: file
+    id: provider-blackbox-fixture-sanitizer-test
+    file: scripts/provider-black-box/fixture-sanitizer.test.ts
+    domainId: provider-blackbox
+    suiteId: provider-blackbox-unit
+    contractIds: [provider-blackbox-sanitized-fixtures-safe]
+    fixtureIds: []
+  - kind: file
+    id: provider-blackbox-fixture-security-test
+    file: scripts/provider-black-box/fixture-security.test.ts
+    domainId: provider-blackbox
+    suiteId: provider-blackbox-unit
+    contractIds: [provider-blackbox-sanitized-fixtures-safe]
+    fixtureIds: [provider-blackbox-committed-fixture-tree]
+  - kind: file
+    id: provider-blackbox-fixture-self-validation-test
+    file: scripts/provider-black-box/fixture-self-validation.test.ts
+    domainId: provider-blackbox
+    suiteId: provider-blackbox-unit
+    contractIds: [provider-blackbox-envelope-validation, provider-blackbox-recording-preserves-stream, provider-blackbox-http-replay-authoritative, provider-blackbox-sanitized-fixtures-safe]
+    fixtureIds: [provider-blackbox-fake-provider-scenarios]
+  - kind: file
+    id: provider-blackbox-openai-base-url-test
+    file: scripts/provider-black-box/openai-base-url.test.ts
+    domainId: provider-blackbox
+    suiteId: provider-blackbox-unit
+    contractIds: [provider-blackbox-registry-protocol-fidelity]
+    fixtureIds: [provider-blackbox-fake-provider-scenarios]
+  - kind: file
+    id: provider-blackbox-provider-capability-matrix-test
+    file: scripts/provider-black-box/provider-capability-matrix.test.ts
+    domainId: provider-blackbox
+    suiteId: provider-blackbox-unit
+    contractIds: [provider-blackbox-capability-ledger-complete]
+    fixtureIds: []
+  - kind: file
+    id: provider-blackbox-provider-contract-test
+    file: scripts/provider-black-box/provider-contract.test.ts
+    domainId: provider-blackbox
+    suiteId: provider-blackbox-unit
+    contractIds: [provider-blackbox-registry-protocol-fidelity, provider-blackbox-codex-stream-outcomes]
+    fixtureIds: [provider-blackbox-fake-provider-scenarios, provider-blackbox-fixture-provider-continuations]
+  - kind: file
+    id: provider-blackbox-provider-record-security-test
+    file: scripts/provider-black-box/provider-record-security.test.ts
+    domainId: provider-blackbox
+    suiteId: provider-blackbox-unit
+    contractIds: [provider-blackbox-recording-provider-credentials]
+    fixtureIds: []
+  - kind: file
+    id: provider-blackbox-provider-test-harness-test
+    file: scripts/provider-black-box/provider-test-harness.test.ts
+    domainId: provider-blackbox
+    suiteId: provider-blackbox-unit
+    contractIds: [provider-blackbox-isolated-process-safety, provider-blackbox-pty-synchronization]
+    fixtureIds: [provider-blackbox-fake-codex-scenarios]
+decisions:
+  - id: provider-blackbox-fake-codex-server-e2e-test-provider-blackbox-m3
+    testId: provider-blackbox-fake-codex-server-e2e-test
+    role: second_opinion
+    reviewer: provider-blackbox-m3
+    sourceArtifact: docs/test-audit/artifacts/provider-blackbox-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Real local HTTP and WebSocket Codex transports exercise request projection, authoritative completion, stale-chain recovery, timeout, provider error, retry, and ambiguous-outcome behavior.
+    evidence:
+      - scripts/fake-codex-server.e2e.test.ts:59-134 asserts rich HTTP request mapping and rejects a missing terminal event.
+      - scripts/fake-codex-server.e2e.test.ts:136-208 asserts the real WebSocket wire and omitted unsupported temperature.
+      - scripts/fake-codex-server.e2e.test.ts:239-362 covers stalls, abnormal close, provider error, retry, and no replay after accepted ambiguity.
+    replacementTestIds: []
+    status: proposed
+  - id: provider-blackbox-fake-provider-http-server-fixture-test-provider-blackbox-m3
+    testId: provider-blackbox-fake-provider-http-server-fixture-test
+    role: second_opinion
+    reviewer: provider-blackbox-m3
+    sourceArtifact: docs/test-audit/artifacts/provider-blackbox-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It proves the fixture-backed HTTP server both replays a sanitized recorded stream and exposes a meaningful request mutation instead of silently accepting it.
+    evidence:
+      - scripts/provider-black-box/fake-provider-http-server.fixture.test.ts:11-25 validates status, SSE completion marker, and replay validity.
+      - scripts/provider-black-box/fake-provider-http-server.fixture.test.ts:26-36 sends a mutated model and asserts the canonical comparison failure.
+      - scripts/provider-black-box/fake-provider-http-server.ts:101-145 compares the request and replays response frames; this is the production fixture seam under test.
+    replacementTestIds: []
+    status: proposed
+  - id: provider-blackbox-fake-provider-websocket-server-test-provider-blackbox-m3
+    testId: provider-blackbox-fake-provider-websocket-server-test
+    role: second_opinion
+    reviewer: provider-blackbox-m3
+    sourceArtifact: docs/test-audit/artifacts/provider-blackbox-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It uniquely verifies deterministic bidirectional WebSocket replay, ordering, non-vacuous sessions, transport purity, close handling, and success/error/incomplete scenarios.
+    evidence:
+      - scripts/provider-black-box/fake-provider-websocket-server.test.ts:49-83 asserts ordered replay, reordered-send rejection, and missing-session failure.
+      - scripts/provider-black-box/fake-provider-websocket-server.test.ts:85-119 rejects non-WebSocket transport and mixed-frame turns before serving.
+      - scripts/provider-black-box/fake-provider-websocket-server.test.ts:121-176 covers incomplete cursor, terminal scenario types, and generated outbound mismatch.
+    replacementTestIds: []
+    status: proposed
+  - id: provider-blackbox-fixture-comparator-test-provider-blackbox-m3
+    testId: provider-blackbox-fixture-comparator-test
+    role: second_opinion
+    reviewer: provider-blackbox-m3
+    sourceArtifact: docs/test-audit/artifacts/provider-blackbox-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The focused semantic comparator cases protect placeholder normalization, JSON argument normalization, canonical mutation diffs, redacted-header semantics, and the distinction between volatile and meaningful headers.
+    evidence:
+      - scripts/provider-black-box/fixture-comparator.test.ts:12-41 covers churn-tolerant equality, JSON argument whitespace, and mutation diff reporting.
+      - scripts/provider-black-box/fixture-comparator.test.ts:42-53 verifies redacted expected headers still require the header to be present.
+      - scripts/provider-black-box/fixture-comparator.test.ts:55-87 distinguishes volatile SDK headers from nonvolatile package-version headers.
+    replacementTestIds: []
+    status: proposed
+  - id: provider-blackbox-fixture-drift-test-provider-blackbox-m3
+    testId: provider-blackbox-fixture-drift-test
+    role: second_opinion
+    reviewer: provider-blackbox-m3
+    sourceArtifact: docs/test-audit/artifacts/provider-blackbox-m3.yaml
+    recommendation: keep
+    confidence: medium
+    reason: The committed-fixture gate catches stale real SDK major/minor metadata before replay evidence becomes misleading; its explicit fake-provider exemption matches self-generated fixture provenance.
+    evidence:
+      - scripts/provider-black-box/fixture-drift.test.ts:5-24 reads every fixture JSON, compares declared and installed SDK major/minor versions, and names the file and versions on failure.
+      - scripts/provider-black-box/fixture-drift.test.ts:12-18 explicitly skips missing declarations and fixture-fake-provider, preserving the offline fixture contract.
+      - scripts/provider-black-box/fixture-drift.test.ts:27-40 recursively enumerates JSON fixtures and rejects malformed SDK versions.
+    replacementTestIds: []
+    status: proposed
+  - id: provider-blackbox-fixture-envelope-test-provider-blackbox-m3
+    testId: provider-blackbox-fixture-envelope-test
+    role: second_opinion
+    reviewer: provider-blackbox-m3
+    sourceArtifact: docs/test-audit/artifacts/provider-blackbox-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It is the direct contract suite for the envelope schema, all frame variants, cross-frame placeholders, sequence ordering, and the boundary between placeholder tokens and ordinary angle-bracketed content.
+    evidence:
+      - scripts/provider-black-box/fixture-envelope.test.ts:33-47 validates all frame kinds and rejects placeholder collisions or unmapped numeric references.
+      - scripts/provider-black-box/fixture-envelope.test.ts:48-60 protects ordinary angle-bracket text and increasing frame sequences.
+      - scripts/provider-black-box/fixture-envelope.ts:53-104 enforces envelope metadata, nonempty turns, unique sequences, and numeric placeholder references.
+    replacementTestIds: []
+    status: proposed
+  - id: provider-blackbox-fixture-recorder-test-provider-blackbox-m3
+    testId: provider-blackbox-fixture-recorder-test
+    role: second_opinion
+    reviewer: provider-blackbox-m3
+    sourceArtifact: docs/test-audit/artifacts/provider-blackbox-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It protects logical SSE parsing and the recorder middleware's non-consuming response capture, including sanitized request headers and ordered frame kinds.
+    evidence:
+      - scripts/provider-black-box/fixture-recorder.test.ts:20-25 asserts multiline SSE data assembly and DONE event parsing.
+      - scripts/provider-black-box/fixture-recorder.test.ts:27-51 reads the returned response, flushes the envelope, checks request/head/SSE ordering, and checks authorization redaction.
+      - scripts/provider-black-box/fixture-recorder.ts:65-116 records request, response head, SSE/JSON frames, and returns the original response.
+    replacementTestIds: []
+    status: proposed
+  - id: provider-blackbox-fixture-sanitizer-test-provider-blackbox-m3
+    testId: provider-blackbox-fixture-sanitizer-test
+    role: second_opinion
+    reviewer: provider-blackbox-m3
+    sourceArtifact: docs/test-audit/artifacts/provider-blackbox-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This broad protocol-shaped table protects distinct redaction and canonicalization rules for chat, Google, Anthropic, Responses, headers, URLs, opaque signatures, and model reasoning while preserving wire structure.
+    evidence:
+      - scripts/provider-black-box/fixture-sanitizer.test.ts:38-110 covers request secrets, IDs, plaintext reasoning, relative URLs, and opaque thought signatures.
+      - scripts/provider-black-box/fixture-sanitizer.test.ts:112-183 covers Google thought parts, Anthropic thinking deltas, chat reasoning, and provider fingerprints.
+      - scripts/provider-black-box/fixture-sanitizer.test.ts:186-251 covers response identifiers, request IDs, Responses reasoning IDs, and encrypted content removal.
+    replacementTestIds: []
+    status: proposed
+  - id: provider-blackbox-fixture-security-test-provider-blackbox-m3
+    testId: provider-blackbox-fixture-security-test
+    role: second_opinion
+    reviewer: provider-blackbox-m3
+    sourceArtifact: docs/test-audit/artifacts/provider-blackbox-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: >-
+      It is the committed-corpus security gate: secret signatures are rejected,
+      benign prose and URLs remain allowed, and every fixture JSON is scanned
+      before it can be shipped.
+    evidence:
+      - scripts/provider-black-box/fixture-security.test.ts:6-26 checks bearer, API-key, PEM, high-entropy detection and benign false-positive boundaries.
+      - scripts/provider-black-box/fixture-security.test.ts:28-34 recursively scans every committed fixture JSON and requires no findings.
+      - scripts/provider-black-box/fixture-sanitizer.ts:150-190 defines the recursive secret scanner and its safe/findings result.
+    replacementTestIds: []
+    status: proposed
+  - id: provider-blackbox-fixture-self-validation-test-provider-blackbox-m3
+    testId: provider-blackbox-fixture-self-validation-test
+    role: second_opinion
+    reviewer: provider-blackbox-m3
+    sourceArtifact: docs/test-audit/artifacts/provider-blackbox-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It proves the offline record-from-fake pipeline records, sanitizes, validates, replays to identity, labels provenance honestly, and leaves a safe envelope.
+    evidence:
+      - scripts/provider-black-box/fixture-self-validation.test.ts:9-16 establishes the self-validation scope and temporary cleanup.
+      - scripts/provider-black-box/fixture-self-validation.test.ts:16-33 checks fake-provider metadata, request/SSE frames, envelope validation, and secret safety.
+      - scripts/provider-black-box/fixture-self-validation.ts:13-22 documents zero-credential record/sanitize/replay intent and honest fake metadata; lines 31-76 implement it.
+    replacementTestIds: []
+    status: proposed
+  - id: provider-blackbox-openai-base-url-test-provider-blackbox-m3
+    testId: provider-blackbox-openai-base-url-test
+    role: second_opinion
+    reviewer: provider-blackbox-m3
+    sourceArtifact: docs/test-audit/artifacts/provider-blackbox-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It verifies both the installed SDK's native endpoint behavior and the application-owned OpenAI registry route use OPENAI_BASE_URL and produce a completed streamed response at the expected path.
+    evidence:
+      - scripts/provider-black-box/openai-base-url.test.ts:24-44 runs an isolated child and proves the SDK reaches /v1/responses without fetch rewriting.
+      - scripts/provider-black-box/openai-base-url.test.ts:46-101 obtains openai through getProvider, streams a completion, and asserts the redirected request path.
+      - scripts/provider-black-box/openai-base-url.test.ts:12-22 cleans the isolated workspace and server after each case.
+    replacementTestIds: []
+    status: proposed
+  - id: provider-blackbox-provider-capability-matrix-test-provider-blackbox-m3
+    testId: provider-blackbox-provider-capability-matrix-test
+    role: second_opinion
+    reviewer: provider-blackbox-m3
+    sourceArtifact: docs/test-audit/artifacts/provider-blackbox-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The matrix test is the direct completeness gate for unique routes, transport/lifecycle requirements, real ledger accounting, documented exclusions, and invalid execution rejection.
+    evidence:
+      - scripts/provider-black-box/provider-capability-matrix.test.ts:10-31 checks all 12 rows, routing, transport, chaining, tools, reasoning, and required scenarios.
+      - scripts/provider-black-box/provider-capability-matrix.test.ts:33-59 checks representative accounting and the real lifecycle ledger without importing scenario modules.
+      - scripts/provider-black-box/provider-capability-matrix.test.ts:61-96 checks missing rows, evidenced exclusions, unknown exclusions, and unknown executions.
+    replacementTestIds: []
+    status: proposed
+  - id: provider-blackbox-provider-contract-test-provider-blackbox-m3
+    testId: provider-blackbox-provider-contract-test
+    role: second_opinion
+    reviewer: provider-blackbox-m3
+    sourceArtifact: docs/test-audit/artifacts/provider-blackbox-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: >-
+      This is the principal registry-owned multi-protocol contract suite: it
+      covers built-in and runtime routes, real sanitized continuation captures,
+      roles/tools/reasoning/options, tool fragments, native errors, incomplete
+      outcomes, and retries.
+    evidence:
+      - scripts/provider-black-box/provider-contract.test.ts:90-117 checks registry access and a Chat Completions replay through a runtime route.
+      - scripts/provider-black-box/provider-contract.test.ts:119-247 and 249-441 cover real OpenAI, OpenRouter, OpenCode, Anthropic, and Google tool continuations.
+      - scripts/provider-black-box/provider-contract.test.ts:443-473 asserts one authoritative completion and error propagation across provider cases; lines 475-637 cover reasoning, fragments, and in-band retry.
+    replacementTestIds: []
+    status: proposed
+  - id: provider-blackbox-provider-record-security-test-provider-blackbox-m3
+    testId: provider-blackbox-provider-record-security-test
+    role: second_opinion
+    reviewer: provider-blackbox-m3
+    sourceArtifact: docs/test-audit/artifacts/provider-blackbox-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It protects the recording CLI's provider-specific credential boundary by proving an Anthropic key cannot satisfy an OpenCode recording and that the failure is explicit.
+    evidence:
+      - scripts/provider-black-box/provider-record-security.test.ts:7-14 removes the OpenCode credential, supplies only an Anthropic key, and points at an unreachable endpoint.
+      - scripts/provider-black-box/provider-record-security.test.ts:15-34 invokes provider-record and asserts exit code 2 plus the exact missing-OPENCODE_API_KEY diagnostic.
+      - scripts/provider-black-box/provider-record-security.test.ts:5 identifies the real provider recorder entrypoint exercised by the child process.
+    replacementTestIds: []
+    status: proposed
+  - id: provider-blackbox-provider-test-harness-test-provider-blackbox-m3
+    testId: provider-blackbox-provider-test-harness-test
+    role: second_opinion
+    reviewer: provider-blackbox-m3
+    sourceArtifact: docs/test-audit/artifacts/provider-blackbox-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: It directly exercises the shared harness's isolation, PTY readiness/acknowledgement, timeout and reaping, concurrent cleanup state machine, preparation failure recovery, and callback cleanup contracts.
+    evidence:
+      - scripts/provider-black-box/provider-test-harness.test.ts:19-169 covers bounded removal options, lease relaunch persistence, idle-file readiness, default timeout, dead-child diagnosis, PTY echo/submit, HOME/USERPROFILE, and CI containment.
+      - scripts/provider-black-box/provider-test-harness.test.ts:171-235 covers bounded termination and Unix process-tree/live-PTY reaping.
+      - scripts/provider-black-box/provider-test-harness.test.ts:237-380 covers concurrent cleanup, rejected work during and after failed cleanup, preparation reclamation, AggregateError preservation, and finally cleanup.
+      - scripts/provider-black-box/provider-test-harness.test.ts:382-434 checks the supporting process/owner wait helpers; scripts/provider-black-box/provider-test-harness.ts:202-340 owns the lease lifecycle under test.
+    replacementTestIds: []
+    status: proposed

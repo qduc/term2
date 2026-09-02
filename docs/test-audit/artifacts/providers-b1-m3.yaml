@@ -1,0 +1,543 @@
+schemaVersion: 2
+domains:
+  - id: providers
+    label: Provider adapters, transports, authentication, and wire fidelity
+suites:
+  - id: providers-unit
+    label: Provider unit and integration tests in the default Vitest suite
+seams:
+  - id: providers-b1-seam-oauth-pkce
+    label: oauth-pkce openInBrowser and runPkceLoopbackLogin boundaries for browser launch and callback exchange
+  - id: providers-b1-seam-chained-projection
+    label: OpenAI chained-input projection boundary between stored history and the next provider request
+  - id: providers-b1-seam-chat-model
+    label: OpenAI-compatible Chat Completions streamed-model request conversion and event normalization
+  - id: providers-b1-seam-chat-continuity
+    label: Chat Completions continuity reconstruction for reasoning, tool calls, and provider opaque items
+  - id: providers-b1-seam-chat-usage
+    label: Chat Completions terminal usage and completion handoff into application run state
+  - id: providers-b1-seam-response-normalizer
+    label: OpenAI-compatible client response middleware that removes cost trailers while preserving usage
+  - id: providers-b1-seam-compatible-provider
+    label: OpenAI-compatible provider factory, configuration lookup, request transport, and provider metadata mapping
+  - id: providers-b1-seam-opencode-routing
+    label: OpenCode model transport selection and endpoint-specific request behavior
+  - id: providers-b1-seam-compaction-normalizer
+    label: Responses event normalization of compaction output-item lifecycle frames
+  - id: providers-b1-seam-responses-model
+    label: OpenAI Responses HTTP/WebSocket request conversion, event normalization, and persistent-stream lifecycle
+  - id: providers-b1-seam-provider-registry
+    label: Provider registry public factory and retry-aware OpenAI provider boundary
+  - id: providers-b1-seam-opencode-discovery
+    label: OpenCode documentation transport parser, cache, refresh, and cancellation boundary
+  - id: providers-b1-seam-opencode-usage
+    label: OpenCode Go usage parser and authenticated usage endpoint boundary
+  - id: providers-b1-seam-openrouter-preprocessing
+    label: OpenRouter request preprocessing middleware for reasoning signatures and prompt cache metadata
+risks:
+  - id: providers-b1-risk-oauth-failure
+    label: Browser or loopback OAuth failures crash the process, accept the wrong callback, or prevent token exchange.
+    severity: high
+  - id: providers-b1-risk-history-divergence
+    label: Chained requests replay the wrong history prefix or tool outputs, causing continuation failure or incorrect context.
+    severity: high
+  - id: providers-b1-risk-wire-shape
+    label: Provider requests or streamed events use an incompatible wire shape, losing content, tools, or model settings.
+    severity: high
+  - id: providers-b1-risk-continuity-corruption
+    label: Reasoning and opaque provider continuity is dropped, duplicated, or attached to the wrong assistant turn.
+    severity: high
+  - id: providers-b1-risk-usage-loss
+    label: Terminal usage or billing metadata is lost or misreported in the completion and application status.
+    severity: medium
+  - id: providers-b1-risk-cost-trailer
+    label: Provider billing trailers corrupt streamed usage or leak into application-visible stream chunks.
+    severity: high
+  - id: providers-b1-risk-provider-routing
+    label: Stored provider configuration, credentials, or endpoint routing is wrong, preventing a configured provider from running.
+    severity: high
+  - id: providers-b1-risk-compaction-timing
+    label: Compaction lifecycle events are missing or report the wrong interval, making provider context maintenance observably wrong.
+    severity: medium
+  - id: providers-b1-risk-response-lifecycle
+    label: Responses HTTP/WebSocket streams hang, silently end, misclassify terminal states, or mishandle persistent socket ownership.
+    severity: high
+  - id: providers-b1-risk-opencode-discovery
+    label: OpenCode model discovery, cache expiry, or transport classification selects an unsafe or unusable endpoint.
+    severity: high
+  - id: providers-b1-risk-auth-usage
+    label: Provider usage/auth API parsing or authorization classification reports false data or hides credential failure.
+    severity: medium
+  - id: providers-b1-risk-openrouter-replay
+    label: OpenRouter preprocessing forwards provider-incompatible reasoning or mutates requests outside its allowlist.
+    severity: high
+fixtures:
+  - id: providers-b1-fixture-loopback-auth
+    label: Local callback server, pasted redirect input, and mocked token endpoint
+  - id: providers-b1-fixture-chained-history
+    label: Provider history snapshots with current-turn suffixes and function-call outputs
+  - id: providers-b1-fixture-chat-sse
+    label: Mock Chat Completions streams containing text, reasoning, tools, finish reasons, and usage
+  - id: providers-b1-fixture-provider-opaque
+    label: Provider-specific reasoning and opaque continuity payloads
+  - id: providers-b1-fixture-client-stream
+    label: Mock OpenAI-compatible client stream and cost trailer
+  - id: providers-b1-fixture-provider-config
+    label: Configured provider definitions, credentials, fake fetch, and captured request bodies
+  - id: providers-b1-fixture-compaction-frames
+    label: Responses compaction added/done frames with fake clock and intervening message frame
+  - id: providers-b1-fixture-responses-frames
+    label: Mock Responses HTTP/WebSocket frames, terminal states, cancellation, and request capture
+  - id: providers-b1-fixture-opencode-discovery
+    label: OpenCode documentation table, cache file, and cancellable fetch
+  - id: providers-b1-fixture-opencode-usage
+    label: OpenCode Go usage JSON payload and mocked authenticated endpoint
+  - id: providers-b1-fixture-openrouter-request
+    label: OpenRouter JSON/non-JSON request bodies and preprocessing middleware chain
+  - id: providers-b1-fixture-provider-registry
+    label: Provider registry dependencies and application-owned model factories
+contracts:
+  - id: providers-b1-contract-oauth-safe-launch
+    statement: Browser-launch failure, whether synchronous or asynchronous and including a missing opener binary, does not throw into or crash the calling process.
+    seamIds:
+      - providers-b1-seam-oauth-pkce
+    riskIds:
+      - providers-b1-risk-oauth-failure
+  - id: providers-b1-contract-oauth-callback
+    statement: A loopback login exchanges the code from a valid pasted or HTTP callback only when callback path/host and OAuth state are valid, while allowing a rejected paste to be followed by a valid callback.
+    seamIds:
+      - providers-b1-seam-oauth-pkce
+    riskIds:
+      - providers-b1-risk-oauth-failure
+  - id: providers-b1-contract-chained-prefix
+    statement: Chained OpenAI input projection records exact snapshot-prefix match or mismatch and projects only the current-turn suffix without changing the shared fallback projection.
+    seamIds:
+      - providers-b1-seam-chained-projection
+    riskIds:
+      - providers-b1-risk-history-divergence
+  - id: providers-b1-contract-chained-tools
+    statement: Chained projection retains the selected trailing tool outputs and reports missing or orphaned tool-output failures with their call ids.
+    seamIds:
+      - providers-b1-seam-chained-projection
+    riskIds:
+      - providers-b1-risk-history-divergence
+  - id: providers-b1-contract-chat-input-wire
+    statement: Chat Completions requests serialize application messages, multimodal tool results, instructions, structured output, generation settings, and tool choice into the provider's expected wire fields without leaking Responses-only fields.
+    seamIds:
+      - providers-b1-seam-chat-model
+    riskIds:
+      - providers-b1-risk-wire-shape
+  - id: providers-b1-contract-chat-stream-events
+    statement: Chat Completions streams emit text, reasoning, tool-call progress, and completion events from provider chunks, preserve finish reasons, reassemble id-less tool argument chunks, and reject in-band errors or premature EOF.
+    seamIds:
+      - providers-b1-seam-chat-model
+    riskIds:
+      - providers-b1-risk-wire-shape
+  - id: providers-b1-contract-chat-continuity
+    statement: Chat Completions completion history and subsequent requests preserve native or gateway reasoning and tool calls in one correct assistant turn, drop foreign opaque payloads, and avoid duplicate or cross-turn attachment.
+    seamIds:
+      - providers-b1-seam-chat-continuity
+    riskIds:
+      - providers-b1-risk-continuity-corruption
+  - id: providers-b1-contract-chat-usage
+    statement: Chat Completions opts into streamed usage and carries terminal token counts and provider cost into the completion and application run state.
+    seamIds:
+      - providers-b1-seam-chat-usage
+    riskIds:
+      - providers-b1-risk-usage-loss
+  - id: providers-b1-contract-normalizer
+    statement: OpenAI-compatible response normalization strips recognized cost trailers from streams, captures their billing value per request, and passes ordinary usage, reasoning content, non-streaming responses, and unrelated empty chunks through unchanged.
+    seamIds:
+      - providers-b1-seam-response-normalizer
+    riskIds:
+      - providers-b1-risk-cost-trailer
+      - providers-b1-risk-usage-loss
+  - id: providers-b1-contract-compatible-provider
+    statement: An OpenAI-compatible provider resolves stored configuration and credentials, builds an application-owned streamed model, sends authenticated requests to the configured endpoint, and forwards provider-specific settings and reasoning continuity in the expected fields.
+    seamIds:
+      - providers-b1-seam-compatible-provider
+    riskIds:
+      - providers-b1-risk-provider-routing
+      - providers-b1-risk-wire-shape
+  - id: providers-b1-contract-compaction-events
+    statement: Responses compaction added and done frames emit started and completed application events paired by output item, report the provider-frame interval, use zero for an unpaired done frame, and ignore non-compaction items.
+    seamIds:
+      - providers-b1-seam-compaction-normalizer
+    riskIds:
+      - providers-b1-risk-compaction-timing
+  - id: providers-b1-contract-responses-model
+    statement: OpenAI Responses HTTP and WebSocket models translate application input/settings and provider output into typed application events, preserve compatible opaque/reasoning data, gate compaction and include fields by capability, and reject failed, incomplete, errored, closed, or prematurely ended streams.
+    seamIds:
+      - providers-b1-seam-responses-model
+    riskIds:
+      - providers-b1-risk-wire-shape
+      - providers-b1-risk-response-lifecycle
+  - id: providers-b1-contract-responses-websocket-lifecycle
+    statement: A Responses WebSocket stream settles after terminal completion or cancellation without awaiting a hanging iterator, stops consuming after terminal output, reuses sequential sockets, and does not close a socket owned by a concurrent stream.
+    seamIds:
+      - providers-b1-seam-responses-model
+    riskIds:
+      - providers-b1-risk-response-lifecycle
+  - id: providers-b1-contract-openai-provider-boundary
+    statement: OpenAI provider public models and registry factories build the expected Responses request/stream shape, expose the application-owned model contract, reuse a session WebSocket when configured, and notify only on SDK-started retries.
+    seamIds:
+      - providers-b1-seam-provider-registry
+    riskIds:
+      - providers-b1-risk-provider-routing
+      - providers-b1-risk-response-lifecycle
+  - id: providers-b1-contract-opencode-usage
+    statement: OpenCode Go usage parsing accepts complete rolling/weekly/monthly limits, rejects incomplete data, sends the API key as bearer auth, and classifies HTTP 401 as an unauthorized-key error.
+    seamIds:
+      - providers-b1-seam-opencode-usage
+    riskIds:
+      - providers-b1-risk-auth-usage
+  - id: providers-b1-contract-opencode-discovery
+    statement: OpenCode transport discovery parses documented model endpoint families, caches successful results, refreshes expired cache data, preserves an undefined safe fallback on fetch failure, and resolves cancellation without rejecting the turn.
+    seamIds:
+      - providers-b1-seam-opencode-discovery
+    riskIds:
+      - providers-b1-risk-opencode-discovery
+  - id: providers-b1-contract-opencode-routing
+    statement: OpenCode provider detection, session injection/ID generation, prompt-cache eligibility, and model routing are deterministic, case/whitespace tolerant where specified, preserve request fields, and isolate parent, subagent, evaluator, and conversation sessions.
+    seamIds:
+      - providers-b1-seam-opencode-routing
+    riskIds:
+      - providers-b1-risk-provider-routing
+  - id: providers-b1-contract-openrouter-factory
+    statement: The OpenRouter registry exposes an application-owned streamed model factory that uses configured credentials and wraps the model in the retrying adapter without requiring a runner.
+    seamIds:
+      - providers-b1-seam-compatible-provider
+    riskIds:
+      - providers-b1-risk-provider-routing
+  - id: providers-b1-contract-openrouter-preprocessing
+    statement: OpenRouter preprocessing removes unsigned reasoning text only for signature-required provider formats, adds cache control only for the allowlisted routed model family, and passes non-JSON or unrelated requests through unchanged.
+    seamIds:
+      - providers-b1-seam-openrouter-preprocessing
+    riskIds:
+      - providers-b1-risk-openrouter-replay
+tests:
+  - kind: file
+    id: providers-oauth-pkce
+    file: source/providers/oauth-pkce.test.ts
+    domainId: providers
+    suiteId: providers-unit
+    contractIds:
+      - providers-b1-contract-oauth-safe-launch
+      - providers-b1-contract-oauth-callback
+    fixtureIds:
+      - providers-b1-fixture-loopback-auth
+  - kind: file
+    id: providers-openai-chained-input-compatibility
+    file: source/providers/openai-chained-input-compatibility.test.ts
+    domainId: providers
+    suiteId: providers-unit
+    contractIds:
+      - providers-b1-contract-chained-prefix
+      - providers-b1-contract-chained-tools
+    fixtureIds:
+      - providers-b1-fixture-chained-history
+  - kind: file
+    id: providers-openai-chat-completions-model
+    file: source/providers/openai-chat-completions-model.test.ts
+    domainId: providers
+    suiteId: providers-unit
+    contractIds:
+      - providers-b1-contract-chat-input-wire
+      - providers-b1-contract-chat-stream-events
+      - providers-b1-contract-chat-continuity
+      - providers-b1-contract-chat-usage
+    fixtureIds:
+      - providers-b1-fixture-chat-sse
+      - providers-b1-fixture-provider-opaque
+  - kind: file
+    id: providers-openai-compatible-response-normalizer
+    file: source/providers/openai-compatible-response-normalizer.test.ts
+    domainId: providers
+    suiteId: providers-unit
+    contractIds:
+      - providers-b1-contract-normalizer
+    fixtureIds:
+      - providers-b1-fixture-client-stream
+  - kind: file
+    id: providers-openai-compatible-provider
+    file: source/providers/openai-compatible.provider.test.ts
+    domainId: providers
+    suiteId: providers-unit
+    contractIds:
+      - providers-b1-contract-compatible-provider
+    fixtureIds:
+      - providers-b1-fixture-provider-config
+      - providers-b1-fixture-provider-opaque
+  - kind: file
+    id: providers-openai-responses-model-compaction-frames
+    file: source/providers/openai-responses-model.compaction-frames.test.ts
+    domainId: providers
+    suiteId: providers-unit
+    contractIds:
+      - providers-b1-contract-compaction-events
+    fixtureIds:
+      - providers-b1-fixture-compaction-frames
+  - kind: file
+    id: providers-openai-responses-model
+    file: source/providers/openai-responses-model.test.ts
+    domainId: providers
+    suiteId: providers-unit
+    contractIds:
+      - providers-b1-contract-responses-model
+      - providers-b1-contract-responses-websocket-lifecycle
+    fixtureIds:
+      - providers-b1-fixture-responses-frames
+      - providers-b1-fixture-provider-opaque
+  - kind: file
+    id: providers-openai-provider
+    file: source/providers/openai.provider.test.ts
+    domainId: providers
+    suiteId: providers-unit
+    contractIds:
+      - providers-b1-contract-openai-provider-boundary
+    fixtureIds:
+      - providers-b1-fixture-provider-registry
+      - providers-b1-fixture-responses-frames
+  - kind: file
+    id: providers-opencode-go-usage
+    file: source/providers/opencode-go-usage.test.ts
+    domainId: providers
+    suiteId: providers-unit
+    contractIds:
+      - providers-b1-contract-opencode-usage
+    fixtureIds:
+      - providers-b1-fixture-opencode-usage
+  - kind: file
+    id: providers-opencode-transport-discovery
+    file: source/providers/opencode-transport-discovery.test.ts
+    domainId: providers
+    suiteId: providers-unit
+    contractIds:
+      - providers-b1-contract-opencode-discovery
+    fixtureIds:
+      - providers-b1-fixture-opencode-discovery
+  - kind: file
+    id: providers-opencode-provider
+    file: source/providers/opencode.provider.test.ts
+    domainId: providers
+    suiteId: providers-unit
+    contractIds:
+      - providers-b1-contract-opencode-routing
+    fixtureIds:
+      - providers-b1-fixture-provider-config
+  - kind: file
+    id: providers-openrouter-provider-create-runner
+    file: source/providers/openrouter.provider.createRunner.test.ts
+    domainId: providers
+    suiteId: providers-unit
+    contractIds:
+      - providers-b1-contract-openrouter-factory
+    fixtureIds:
+      - providers-b1-fixture-provider-registry
+  - kind: file
+    id: providers-openrouter-provider-request-preprocessing
+    file: source/providers/openrouter.provider.request-preprocessing.test.ts
+    domainId: providers
+    suiteId: providers-unit
+    contractIds:
+      - providers-b1-contract-openrouter-preprocessing
+    fixtureIds:
+      - providers-b1-fixture-openrouter-request
+  - kind: file
+    id: providers-openrouter-provider
+    file: source/providers/openrouter.provider.test.ts
+    domainId: providers
+    suiteId: providers-unit
+    contractIds:
+      - providers-b1-contract-openrouter-preprocessing
+    fixtureIds:
+      - providers-b1-fixture-openrouter-request
+decisions:
+  - id: providers-oauth-pkce-providers-b1-m3
+    testId: providers-oauth-pkce
+    role: second_opinion
+    reviewer: providers-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The file protects both process-safe browser launch failure handling and state-validated loopback OAuth completion; neither contract has redundant sibling evidence in the assigned provider tests.
+    evidence:
+      - Lines 57-112 exercise asynchronous, synchronous, and real missing-opener failures at the child_process boundary and assert no throw or uncaught exception.
+      - Lines 115-213 exercise pasted and HTTP callback paths, invalid host/path rejection, state mismatch rejection, and eventual token exchange at runPkceLoopbackLogin.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-openrouter-provider-create-runner-providers-b1-m3
+    testId: providers-openrouter-provider-create-runner
+    role: second_opinion
+    reviewer: providers-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: These two assertions protect the public registry contract that OpenRouter can construct an application-owned streamed model with credentials and retry wrapping without a runner; no other assigned test asserts that factory boundary.
+    evidence:
+      - Lines 18-29 obtain the registered provider and assert createStreamedModel, stream, and wrappedModel presence with configured settings credentials.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-openrouter-provider-request-preprocessing-providers-b1-m3
+    testId: providers-openrouter-provider-request-preprocessing
+    role: second_opinion
+    reviewer: providers-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This file exercises the middleware through composeFetch with Gemini/Anthropic signature rules and a non-JSON body, complementing rather than replacing the direct middleware tests for cache-control routing.
+    evidence:
+      - Lines 5-41 assert unsigned reasoning.text removal only for the signature-required formats while retaining signed, other-format, and encrypted entries.
+      - Lines 43-59 assert a non-JSON body reaches the base fetch unchanged.
+      - 'Exact sibling comparison: source/providers/openrouter.provider.test.ts:21-67 covers direct middleware invocation plus Anthropic cache_control allowlisting; its overlapping unsigned-Anthropic case does not cover this file''s Gemini format or composeFetch boundary.'
+    replacementTestIds: []
+    status: proposed
+  - id: providers-openrouter-provider-providers-b1-m3
+    testId: providers-openrouter-provider
+    role: second_opinion
+    reviewer: providers-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The direct middleware suite protects cache-control allowlisting and Anthropic signature handling; although two behaviors overlap the neighboring preprocessing test, the cache-control contract is unique here and the remaining assertions are complementary.
+    evidence:
+      - Lines 21-39 assert unsigned Anthropic reasoning.text removal while preserving signed and summary details.
+      - Lines 41-67 assert cache_control is added to the last user message only for anthropic-routed models and messages remain unchanged outside the allowlist.
+      - 'Lines 69-80 independently assert direct middleware pass-through for a non-JSON request; source/providers/openrouter.provider.request-preprocessing.test.ts:43-59 verifies the same observable through composed fetch, so neither file wholly replaces the other''s distinct cache or composition coverage.'
+    replacementTestIds: []
+    status: proposed
+  - id: providers-openai-responses-model-providers-b1-m3
+    testId: providers-openai-responses-model
+    role: second_opinion
+    reviewer: providers-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The file directly exercises both Responses request/event fidelity and WebSocket lifecycle recovery, including hanging iterators and concurrent ownership; these are high-risk seams with no cheaper assigned replacement.
+    evidence:
+      - Lines 112-280 assert tool-progress/reasoning normalization and terminal-state success/error distinctions; lines 282-639 assert HTTP/WebSocket settings, input conversion, compaction capability gates, and opaque/reasoning replay.
+      - Lines 882-952 assert HTTP premature EOF and WebSocket error/close failures; lines 954-1028 assert terminal stop, sequential reuse, cancellation settlement, and concurrent stream ownership.
+      - 'Exact out-of-assignment sibling comparison: source/providers/grok.provider.test.ts:178-216 checks Grok''s choice of this model class and capabilities, not the Responses model''s wire/event/lifecycle behavior.'
+    replacementTestIds: []
+    status: proposed
+  - id: providers-openai-provider-providers-b1-m3
+    testId: providers-openai-provider
+    role: second_opinion
+    reviewer: providers-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The file protects the public OpenAI provider boundary and registry wiring separately from the detailed Responses implementation tests, including retry notification semantics and session model reuse.
+    evidence:
+      - Lines 8-25 assert retry-start notification counts against SDK retry headers; lines 27-70 assert public Responses request and streamed application event conversion.
+      - Lines 72-103 assert WebSocket class identity and per-session reuse; lines 105-154 assert registry factory availability and executable application-owned stream behavior.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-opencode-go-usage-providers-b1-m3
+    testId: providers-opencode-go-usage
+    role: second_opinion
+    reviewer: providers-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This four-case test is the only assigned evidence for the OpenCode Go usage endpoint and keeps complete-data, malformed-data, credential, and unauthorized outcomes distinct.
+    evidence:
+      - Lines 10-15 assert all three subscription limits are required before usage is reported.
+      - Lines 16-33 capture the exact endpoint and bearer header and distinguish HTTP 401 as OpenCodeGoUsageUnauthorizedError.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-opencode-transport-discovery-providers-b1-m3
+    testId: providers-opencode-transport-discovery
+    role: second_opinion
+    reviewer: providers-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Parser, cache, expiry refresh, failed-fetch fallback, and cancellation are independently observable discovery behaviors; removing this file would leave model-to-transport selection unguarded.
+    evidence:
+      - Lines 24-30 assert exact endpoint-family parsing; lines 32-60 assert successful cache reuse and undefined fallback on HTTP failure.
+      - Lines 62-83 assert cancellation resolves safely; lines 85-111 assert stale cache refreshes before using a discovered transport.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-opencode-provider-providers-b1-m3
+    testId: providers-opencode-provider
+    role: second_opinion
+    reviewer: providers-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This focused pure-function and injector suite verifies OpenCode identity detection, deterministic session isolation, request preservation, and transport/prompt-cache routing; the provider-factory integration sibling does not replace these branch-level assertions.
+    evidence:
+      - Lines 21-233 cover provider detection, session header injection, stable/overridden IDs, parent/subagent/evaluator isolation, and preservation of existing init fields.
+      - Lines 239-328 cover ID format/determinism, provider detection, transport routing, whitespace normalization, and Anthropic cache eligibility.
+      - 'Exact sibling comparison: source/providers/openai-compatible.provider.test.ts:705-1135 observes resulting network requests, whereas this file asserts the injector and routing functions directly.'
+    replacementTestIds: []
+    status: proposed
+  - id: providers-openai-chained-input-compatibility-providers-b1-m3
+    testId: providers-openai-chained-input-compatibility
+    role: second_opinion
+    reviewer: providers-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This focused four-case contract test compares the OpenAI projection with the shared filter while asserting exact prefix diagnostics and tool-output failures; no assigned sibling tests this projection seam.
+    evidence:
+      - Lines 15-40 assert matched and mismatched history prefixes and the current-turn fallback projection.
+      - Lines 42-64 assert selected parallel outputs plus MissingChainedToolOutputError and OrphanedChainedToolOutputError call ids.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-openai-chat-completions-model-providers-b1-m3
+    testId: providers-openai-chat-completions-model
+    role: second_opinion
+    reviewer: providers-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Although broad, this file contains direct wire and event assertions for the Chat Completions model plus continuation-history regressions; the contracts are provider-fidelity critical and no assigned sibling provides an equivalent end-to-end replacement.
+    evidence:
+      - Lines 59-145 cover whitespace buffering, materiality, reasoning/tool deltas, and in-band errors; lines 467-525 cover premature EOF and id-less tool argument reassembly.
+      - Lines 155-428 assert request conversion and settings; lines 548-888 and 894-1155 assert native/gateway continuity, provider filtering, turn grouping, and de-duplication.
+      - Lines 1253-1408 assert text-plus-tool preservation, turn separation, streamed usage opt-in, terminal usage, and cost.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-openai-compatible-response-normalizer-providers-b1-m3
+    testId: providers-openai-compatible-response-normalizer
+    role: second_opinion
+    reviewer: providers-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The middleware's trailer filtering and cost capture are distinct from ordinary usage/non-streaming passthrough, and the file is the only assigned direct seam test for this normalization decorator.
+    evidence:
+      - Lines 66-94 assert cost stripping while preserving usage and reasoning_content; lines 96-138 assert non-streaming and empty-choice passthrough.
+      - Lines 140-165 assert billing capture and reset between requests, which prevents stale cost attribution.
+    replacementTestIds: []
+    status: proposed
+  - id: providers-openai-compatible-provider-providers-b1-m3
+    testId: providers-openai-compatible-provider
+    role: second_opinion
+    reviewer: providers-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is the assigned integration boundary for configurable OpenAI-compatible and OpenCode provider construction, including credentials, endpoint transport, reasoning spelling, and model-specific routing; the apparent overlap with opencode.provider.test.ts is a different lower-level routing/session seam.
+    evidence:
+      - Lines 178-328 cover streamed-model factory, stored-name alias lookup, and optional stored credentials; lines 330-703 cover request fields, reasoning, authentication, and endpoint shape.
+      - Lines 705-894 and 941-1135 verify OpenCode endpoint-specific transports, credentials, session headers, discovery, and cross-instance isolation through the provider factory.
+      - 'Exact sibling comparison: source/providers/opencode.provider.test.ts:21-328 tests injector, ID generation, provider detection, and pure transport selection rather than this provider factory''s captured network requests.'
+    replacementTestIds: []
+    status: proposed
+  - id: providers-openai-responses-model-compaction-frames-providers-b1-m3
+    testId: providers-openai-responses-model-compaction-frames
+    role: second_opinion
+    reviewer: providers-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/providers-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This small focused file isolates compaction lifecycle pairing and timing from the larger Responses model request/stream tests; its fake-clock assertions protect a distinct provider-frame interval seam.
+    evidence:
+      - Lines 25-49 assert started/completed events and exact added-to-done duration.
+      - Lines 51-100 assert independent pairing across an intervening message, orphan fallback, and non-compaction no-op behavior.
+    replacementTestIds: []
+    status: proposed
+

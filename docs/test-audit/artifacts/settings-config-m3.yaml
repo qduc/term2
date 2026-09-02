@@ -1,0 +1,889 @@
+schemaVersion: 2
+domains:
+  - id: settings-config
+    label: Settings, environment, input context, and shared model contracts
+suites:
+  - id: unit
+    label: Deterministic unit and seam tests
+seams:
+  - id: settings-config-input-context
+    label: React input provider boundary exposing editor state and actions to Ink consumers
+  - id: settings-config-streamed-turn
+    label: Type boundary defining the application-owned streamed model turn interface
+  - id: settings-config-env-bootstrap
+    label: Process bootstrap boundary that establishes environment defaults before imports
+  - id: settings-config-settings-schema
+    label: Zod settings schema and derived key/default/modifiability catalog
+  - id: settings-config-schema-introspection
+    label: Boundary resolving a dotted setting key to its underlying Zod schema
+  - id: settings-config-env-overrides
+    label: Boundary translating process environment variables into settings overrides
+  - id: settings-config-settings-merge
+    label: Boundary merging defaults, file, environment, and CLI settings with source provenance
+  - id: settings-config-settings-path
+    label: Platform-specific boundary resolving the durable settings directory
+  - id: settings-config-settings-load
+    label: Boundary loading, validating, partially accepting, and recovering settings files
+  - id: settings-config-settings-save
+    label: Boundary validating and atomically committing settings while excluding secrets
+  - id: settings-config-settings-lock
+    label: Lock ownership boundary coordinating concurrent settings writers
+  - id: settings-config-settings-service
+    label: Public SettingsService facade coordinating settings state, mutation, and persistence
+  - id: settings-config-provider-settings
+    label: Boundary normalizing and registering provider records from settings
+  - id: settings-config-profile-settings
+    label: Boundary projecting legacy mode settings onto canonical profile selection
+  - id: settings-config-sandbox-settings
+    label: Boundary enforcing sandbox and always-auto-approval exclusivity
+  - id: settings-config-retired-model
+    label: Repository boundary preventing production consumers from using the retired model contract
+risks:
+  - id: settings-config-input-state-loss
+    label: Input consumers observe stale, missing, or non-shared editor state after updates or remounts.
+    severity: high
+  - id: settings-config-input-action-instability
+    label: Input action identities churn and cause avoidable consumer effects or missed updates.
+    severity: medium
+  - id: settings-config-contract-drift
+    label: Provider adapters and runtime consumers disagree about the streamed-turn API or media shape.
+    severity: critical
+  - id: settings-config-bootstrap-drift
+    label: Startup tracing, logging, or environment defaults are changed before dependent modules load.
+    severity: high
+  - id: settings-config-invalid-settings-accepted
+    label: Invalid settings enter runtime state or valid settings are lost when schemas evolve.
+    severity: high
+  - id: settings-config-setting-discovery-failure
+    label: A valid setting cannot be discovered or edited because its schema/key metadata is incomplete.
+    severity: high
+  - id: settings-config-wrong-override-precedence
+    label: A lower-priority settings source unexpectedly overrides a higher-priority source.
+    severity: high
+  - id: settings-config-wrong-settings-location
+    label: Settings are written to the wrong platform directory or ignore the platform override.
+    severity: medium
+  - id: settings-config-corrupt-settings-loss
+    label: A corrupt settings file destroys recoverable values or silently overwrites original bytes.
+    severity: critical
+  - id: settings-config-unsafe-settings-write
+    label: A settings write leaks secrets, leaves partial JSON, or leaves temporary artifacts behind.
+    severity: critical
+  - id: settings-config-concurrent-settings-clobber
+    label: Concurrent settings writers overwrite each other or an old owner releases a newer lock.
+    severity: high
+  - id: settings-config-service-state-drift
+    label: SettingsService state, source metadata, disk state, and public mutation outcomes disagree.
+    severity: high
+  - id: settings-config-provider-selection-drift
+    label: A configured custom provider cannot be registered, selected, or migrated consistently.
+    severity: high
+  - id: settings-config-profile-mode-drift
+    label: Legacy mode flags and canonical profile identity become inconsistent across writes or reloads.
+    severity: high
+  - id: settings-config-sandbox-approval-bypass
+    label: Always auto-approval coexists with an enabled sandbox or is resurrected by stale persistence.
+    severity: critical
+  - id: settings-config-retired-model-revival
+    label: Production code revives identifiers or imports from the retired model contract.
+    severity: critical
+contracts:
+  - id: settings-config-input-outside-provider
+    statement: useInputContext throws the documented error when called without an enclosing InputProvider.
+    seamIds: [settings-config-input-context]
+    riskIds: [settings-config-input-state-loss]
+  - id: settings-config-input-default-state
+    statement: A new InputProvider exposes empty text, text mode, a zero cursor, and no active trigger by default.
+    seamIds: [settings-config-input-context]
+    riskIds: [settings-config-input-state-loss]
+  - id: settings-config-input-setter-surface
+    statement: InputProvider consumers receive callable editor and cursor setter actions.
+    seamIds: [settings-config-input-context]
+    riskIds: [settings-config-input-state-loss]
+  - id: settings-config-input-editor-updates
+    statement: Editor actions publish ordinary, empty, special-character, and zero/positive cursor values to consumers.
+    seamIds: [settings-config-input-context]
+    riskIds: [settings-config-input-state-loss]
+  - id: settings-config-input-atomic-update
+    statement: Consecutive and atomic editor updates settle on the latest text and cursor, including the controller snapshot.
+    seamIds: [settings-config-input-context]
+    riskIds: [settings-config-input-state-loss]
+  - id: settings-config-input-shared-consumers
+    statement: Multiple mounted consumers can read the same InputProvider state.
+    seamIds: [settings-config-input-context]
+    riskIds: [settings-config-input-state-loss]
+  - id: settings-config-input-image-state
+    statement: Image state is initially empty and survives replacing the child that seeded it within one provider.
+    seamIds: [settings-config-input-context]
+    riskIds: [settings-config-input-state-loss]
+  - id: settings-config-input-stable-actions
+    statement: useInputActions returns the same action object identity across input-only state updates.
+    seamIds: [settings-config-input-context]
+    riskIds: [settings-config-input-action-instability]
+  - id: settings-config-streamed-turn-api
+    statement: StreamedModelTurn exposes stream as its streaming operation and does not expose the retired generate operation.
+    seamIds: [settings-config-streamed-turn]
+    riskIds: [settings-config-contract-drift]
+  - id: settings-config-streamed-turn-media
+    statement: User and assistant streamed messages may contain image parts while system messages contain text parts only.
+    seamIds: [settings-config-streamed-turn]
+    riskIds: [settings-config-contract-drift]
+  - id: settings-config-env-tracing-disabled
+    statement: Environment bootstrap sets OPENAI_AGENTS_DISABLE_TRACING to true before the application imports dependent modules.
+    seamIds: [settings-config-env-bootstrap]
+    riskIds: [settings-config-bootstrap-drift]
+  - id: settings-config-env-node-default
+    statement: Environment bootstrap defaults NODE_ENV to production without replacing an explicitly supplied value.
+    seamIds: [settings-config-env-bootstrap]
+    riskIds: [settings-config-bootstrap-drift]
+  - id: settings-config-schema-catalog
+    statement: Every exported setting key has exactly one matching Contract 04 consumer-inventory entry.
+    seamIds: [settings-config-settings-schema]
+    riskIds: [settings-config-setting-discovery-failure]
+  - id: settings-config-schema-defaults-and-bounds
+    statement: Settings schemas provide documented defaults and reject out-of-range or invalid values for deadlines, compaction, budgets, memory, sandbox, workflow, and related settings.
+    seamIds: [settings-config-settings-schema]
+    riskIds: [settings-config-invalid-settings-accepted]
+  - id: settings-config-schema-provider-types
+    statement: Custom provider schemas default legacy provider type, accept each known type and provider-specific optional base URLs, and reject unknown or malformed types and missing required base URLs.
+    seamIds: [settings-config-settings-schema]
+    riskIds: [settings-config-provider-selection-drift, settings-config-invalid-settings-accepted]
+  - id: settings-config-schema-runtime-flags
+    statement: Settings that are runtime-modifiable are represented in the runtime-modifiable key set and retain their documented defaults and accepted values.
+    seamIds: [settings-config-settings-schema]
+    riskIds: [settings-config-setting-discovery-failure]
+  - id: settings-config-schema-wrapper-unwrapping
+    statement: Schema introspection unwraps optional, nullable, default, effects, and pipe wrappers while leaving unwrapped schemas and nullish inputs safe.
+    seamIds: [settings-config-schema-introspection]
+    riskIds: [settings-config-setting-discovery-failure]
+  - id: settings-config-schema-path-resolution
+    statement: Schema introspection resolves known dotted setting paths, including through optional parent objects, and returns undefined for unknown or empty paths.
+    seamIds: [settings-config-schema-introspection]
+    riskIds: [settings-config-setting-discovery-failure]
+  - id: settings-config-env-boolean-parsing
+    statement: Boolean environment values recognize 1, true, and yes case-insensitively and treat other or absent values as false.
+    seamIds: [settings-config-env-overrides]
+    riskIds: [settings-config-wrong-override-precedence]
+  - id: settings-config-env-known-overrides
+    statement: Supported web-search environment variables become the corresponding provider and credential settings.
+    seamIds: [settings-config-env-overrides]
+    riskIds: [settings-config-wrong-override-precedence]
+  - id: settings-config-test-environment-detection
+    statement: TERM2_TEST_MODE=true identifies a test environment so settings persistence can be disabled safely.
+    seamIds: [settings-config-env-overrides]
+    riskIds: [settings-config-unsafe-settings-write]
+  - id: settings-config-source-precedence
+    statement: Settings merge precedence is CLI over environment over config file over defaults, with nested values merged rather than replacing unrelated fields.
+    seamIds: [settings-config-settings-merge]
+    riskIds: [settings-config-wrong-override-precedence]
+  - id: settings-config-source-provenance
+    statement: Source tracking identifies the highest-priority source for overridden keys and default for untouched keys.
+    seamIds: [settings-config-settings-merge]
+    riskIds: [settings-config-service-state-drift]
+  - id: settings-config-platform-paths
+    statement: Settings directory resolution uses the documented macOS, Linux/XDG, and Windows/LOCALAPPDATA locations.
+    seamIds: [settings-config-settings-path]
+    riskIds: [settings-config-wrong-settings-location]
+  - id: settings-config-sensitive-settings-filter
+    statement: Persisted settings omit shellPath and OpenRouter transport secrets while retaining the allowed OpenRouter apiKey.
+    seamIds: [settings-config-settings-save, settings-config-settings-service]
+    riskIds: [settings-config-unsafe-settings-write]
+  - id: settings-config-partial-invalid-sections
+    statement: Loading a settings object preserves valid top-level sections while omitting invalid sections for default fallback and reports errors.
+    seamIds: [settings-config-settings-load]
+    riskIds: [settings-config-invalid-settings-accepted, settings-config-corrupt-settings-loss]
+  - id: settings-config-invalid-file-shape
+    statement: Loading a non-object or syntactically invalid settings file reports errors without treating it as a valid configuration.
+    seamIds: [settings-config-settings-load]
+    riskIds: [settings-config-corrupt-settings-loss]
+  - id: settings-config-corrupt-file-recovery
+    statement: Loading corrupt settings can salvage a complete embedded JSON object, reports recovered sections, and leaves the original raw content available to the service boundary.
+    seamIds: [settings-config-settings-load, settings-config-settings-service]
+    riskIds: [settings-config-corrupt-settings-loss]
+  - id: settings-config-recovery-scan-bound
+    statement: Recovery scanning rejects embedded non-object values and gives up on pathological bracket input within its bounded search.
+    seamIds: [settings-config-settings-load]
+    riskIds: [settings-config-corrupt-settings-loss]
+  - id: settings-config-atomic-settings-write
+    statement: Saving settings writes a validated, secret-filtered complete document atomically and removes a temporary file when rename fails.
+    seamIds: [settings-config-settings-save]
+    riskIds: [settings-config-unsafe-settings-write]
+  - id: settings-config-lock-ownership
+    statement: Settings locks recover stale owners, prevent fresh-lock overwrites within the timeout, and prevent a stale owner from deleting its successor lock.
+    seamIds: [settings-config-settings-lock, settings-config-settings-save]
+    riskIds: [settings-config-concurrent-settings-clobber]
+  - id: settings-config-settings-service-defaults
+    statement: SettingsService initializes a complete public settings view from documented defaults and creates its settings directory when needed.
+    seamIds: [settings-config-settings-service]
+    riskIds: [settings-config-service-state-drift]
+  - id: settings-config-settings-service-precedence
+    statement: SettingsService exposes CLI, environment, config, and default values and sources using the documented precedence.
+    seamIds: [settings-config-settings-service, settings-config-settings-merge]
+    riskIds: [settings-config-wrong-override-precedence, settings-config-service-state-drift]
+  - id: settings-config-provider-registration-and-migration
+    statement: SettingsService registers configured custom providers and migrates legacy provider records and selected names to normalized durable ids.
+    seamIds: [settings-config-settings-service, settings-config-provider-settings]
+    riskIds: [settings-config-provider-selection-drift]
+  - id: settings-config-durable-mutation-settlement
+    statement: SettingsService reports saved versus disabled or failed durable mutations truthfully, and a fresh service observes only committed values.
+    seamIds: [settings-config-settings-service, settings-config-settings-save]
+    riskIds: [settings-config-service-state-drift, settings-config-unsafe-settings-write]
+  - id: settings-config-runtime-persistent-mutations
+    statement: Runtime-modifiable settings can be set, startup-only settings require persistent mutation, and invalid or sensitive mutations are rejected.
+    seamIds: [settings-config-settings-service, settings-config-settings-schema]
+    riskIds: [settings-config-invalid-settings-accepted, settings-config-unsafe-settings-write]
+  - id: settings-config-service-sources-view
+    statement: SettingsService getAll returns nested setting values paired with their individual source metadata, including optional fields.
+    seamIds: [settings-config-settings-service]
+    riskIds: [settings-config-service-state-drift]
+  - id: settings-config-service-corruption-boundary
+    statement: SettingsService refuses unrecoverable corrupt files, but quarantines recoverable originals and exposes salvaged values through the public recovery result.
+    seamIds: [settings-config-settings-service, settings-config-settings-load, settings-config-settings-save]
+    riskIds: [settings-config-corrupt-settings-loss]
+  - id: settings-config-startup-migrations
+    statement: SettingsService persists applicable missing-key, deadline, ancillary-tier, and provider migrations without rewriting an already complete equivalent file.
+    seamIds: [settings-config-settings-service, settings-config-settings-save]
+    riskIds: [settings-config-service-state-drift]
+  - id: settings-config-concurrent-service-writes
+    statement: Independently constructed SettingsService instances reconcile committed settings so distinct updates survive, stale resets do not clobber other keys, and last writes win for one key.
+    seamIds: [settings-config-settings-service, settings-config-settings-lock, settings-config-settings-save]
+    riskIds: [settings-config-concurrent-settings-clobber, settings-config-service-state-drift]
+  - id: settings-config-profile-canonicalization
+    statement: Legacy app-mode writes and transaction-order changes project to one canonical active profile and mutually exclusive legacy flags across persistence and reload.
+    seamIds: [settings-config-settings-service, settings-config-profile-settings]
+    riskIds: [settings-config-profile-mode-drift]
+  - id: settings-config-sandbox-exclusivity
+    statement: Always auto-approval disables the sandbox, enabling the sandbox demotes always to auto, and persisted conflicts are normalized without disabling explicitly disabled sandboxes.
+    seamIds: [settings-config-settings-service, settings-config-sandbox-settings]
+    riskIds: [settings-config-sandbox-approval-bypass]
+  - id: settings-config-retired-model-absent
+    statement: Production TypeScript outside the retired model contract contains neither retired model identifiers nor imports of contracts/model.js.
+    seamIds: [settings-config-retired-model]
+    riskIds: [settings-config-retired-model-revival]
+fixtures:
+  - id: settings-config-react-harness
+    label: React and Ink renderInAct harness with probe components
+  - id: settings-config-image-ref
+    label: In-memory image reference seeded through InputProvider
+  - id: settings-config-env-snapshot
+    label: Isolated process.env snapshot and module reset
+  - id: settings-config-schema-values
+    label: Representative valid and invalid settings objects
+  - id: settings-config-contract-inventory
+    label: Contract 04 consumer inventory and exported setting-key catalog
+  - id: settings-config-settings-directory
+    label: Isolated settings directory and settings.json fixture
+  - id: settings-config-corrupt-settings-file
+    label: Valid, invalid, or garbage settings.json byte fixture
+  - id: settings-config-lock-fixture
+    label: settings.json.lock and temporary-file filesystem fixture
+  - id: settings-config-provider-records
+    label: Legacy and modern custom provider records
+  - id: settings-config-model-source-tree
+    label: Production TypeScript source tree scanned for retired identifiers
+tests:
+  - kind: case
+    id: settings-config-input-context-outside-provider
+    file: source/context/InputContext.test.tsx
+    title: useInputContext throws error when used outside InputProvider
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-input-outside-provider]
+    fixtureIds: [settings-config-react-harness]
+  - kind: case
+    id: settings-config-input-context-default-state
+    file: source/context/InputContext.test.tsx
+    title: InputProvider provides context with default values
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-input-default-state]
+    fixtureIds: [settings-config-react-harness]
+  - kind: case
+    id: settings-config-input-context-setter-surface
+    file: source/context/InputContext.test.tsx
+    title: InputProvider provides all required setter functions
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-input-setter-surface]
+    fixtureIds: [settings-config-react-harness]
+  - kind: case
+    id: settings-config-input-context-set-input
+    file: source/context/InputContext.test.tsx
+    title: setInput updates input value
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-input-editor-updates]
+    fixtureIds: [settings-config-react-harness]
+  - kind: case
+    id: settings-config-input-context-empty-input
+    file: source/context/InputContext.test.tsx
+    title: setInput accepts empty strings
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-input-editor-updates]
+    fixtureIds: [settings-config-react-harness]
+  - kind: case
+    id: settings-config-input-context-special-input
+    file: source/context/InputContext.test.tsx
+    title: setInput accepts strings with special characters
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-input-editor-updates]
+    fixtureIds: [settings-config-react-harness]
+  - kind: case
+    id: settings-config-input-context-cursor-positive
+    file: source/context/InputContext.test.tsx
+    title: setCursorOffset accepts positive values
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-input-editor-updates]
+    fixtureIds: [settings-config-react-harness]
+  - kind: case
+    id: settings-config-input-context-consecutive-updates
+    file: source/context/InputContext.test.tsx
+    title: commits consecutive editor updates synchronously
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-input-atomic-update]
+    fixtureIds: [settings-config-react-harness]
+  - kind: case
+    id: settings-config-input-context-atomic-update
+    file: source/context/InputContext.test.tsx
+    title: publishes controller text and cursor after an atomic update
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-input-atomic-update]
+    fixtureIds: [settings-config-react-harness]
+  - kind: case
+    id: settings-config-input-context-cursor-zero
+    file: source/context/InputContext.test.tsx
+    title: setCursorOffset accepts zero
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-input-editor-updates]
+    fixtureIds: [settings-config-react-harness]
+  - kind: case
+    id: settings-config-input-context-multiple-consumers
+    file: source/context/InputContext.test.tsx
+    title: Multiple components can use the context
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-input-shared-consumers]
+    fixtureIds: [settings-config-react-harness]
+  - kind: case
+    id: settings-config-input-context-input-cursor
+    file: source/context/InputContext.test.tsx
+    title: setInputAndCursor updates input, cursorOffset, and cursorOverride
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-input-atomic-update]
+    fixtureIds: [settings-config-react-harness]
+  - kind: case
+    id: settings-config-input-context-replace-end
+    file: source/context/InputContext.test.tsx
+    title: replaceInput updates input and moves cursor to end
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-input-editor-updates]
+    fixtureIds: [settings-config-react-harness]
+  - kind: case
+    id: settings-config-input-context-replace-empty
+    file: source/context/InputContext.test.tsx
+    title: replaceInput with empty string sets cursor to 0
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-input-editor-updates]
+    fixtureIds: [settings-config-react-harness]
+  - kind: case
+    id: settings-config-input-context-cursor-override
+    file: source/context/InputContext.test.tsx
+    title: setCursorOverride updates cursorOverride state
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-input-editor-updates]
+    fixtureIds: [settings-config-react-harness]
+  - kind: file
+    id: settings-config-input-context-images
+    file: source/context/InputContext.images.test.tsx
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-input-image-state]
+    fixtureIds: [settings-config-react-harness, settings-config-image-ref]
+  - kind: file
+    id: settings-config-input-context-stability
+    file: source/context/InputContext.stability.test.tsx
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-input-stable-actions]
+    fixtureIds: [settings-config-react-harness]
+  - kind: file
+    id: settings-config-model-contract-retirement
+    file: source/contracts/model-contract-retirement.test.ts
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-retired-model-absent]
+    fixtureIds: [settings-config-model-source-tree]
+  - kind: file
+    id: settings-config-streamed-model-turn
+    file: source/contracts/streamed-model-turn.test.ts
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-streamed-turn-api, settings-config-streamed-turn-media]
+    fixtureIds: []
+  - kind: file
+    id: settings-config-env-setup
+    file: source/env-setup.test.ts
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-env-tracing-disabled, settings-config-env-node-default]
+    fixtureIds: [settings-config-env-snapshot]
+  - kind: file
+    id: settings-config-session-rollover-settings
+    file: source/services/settings/session-rollover-settings.test.ts
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-schema-defaults-and-bounds, settings-config-source-provenance]
+    fixtureIds: [settings-config-schema-values]
+  - kind: file
+    id: settings-config-setting-schema-utils
+    file: source/services/settings/setting-schema-utils.test.ts
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-schema-wrapper-unwrapping, settings-config-schema-path-resolution]
+    fixtureIds: [settings-config-schema-values]
+  - kind: file
+    id: settings-config-settings-env
+    file: source/services/settings/settings-env.test.ts
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-env-boolean-parsing, settings-config-env-known-overrides, settings-config-test-environment-detection]
+    fixtureIds: [settings-config-env-snapshot]
+  - kind: file
+    id: settings-config-settings-merger
+    file: source/services/settings/settings-merger.test.ts
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-source-precedence, settings-config-source-provenance]
+    fixtureIds: [settings-config-schema-values]
+  - kind: file
+    id: settings-config-settings-path
+    file: source/services/settings/settings-path.test.ts
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-platform-paths]
+    fixtureIds: []
+  - kind: file
+    id: settings-config-settings-persistence
+    file: source/services/settings/settings-persistence.test.ts
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-sensitive-settings-filter, settings-config-partial-invalid-sections, settings-config-invalid-file-shape, settings-config-corrupt-file-recovery, settings-config-recovery-scan-bound, settings-config-atomic-settings-write, settings-config-lock-ownership]
+    fixtureIds: [settings-config-settings-directory, settings-config-corrupt-settings-file, settings-config-lock-fixture, settings-config-schema-values]
+  - kind: file
+    id: settings-config-settings-schema
+    file: source/services/settings/settings-schema.test.ts
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-schema-catalog, settings-config-schema-defaults-and-bounds, settings-config-schema-provider-types, settings-config-schema-runtime-flags]
+    fixtureIds: [settings-config-schema-values, settings-config-contract-inventory, settings-config-provider-records]
+  - kind: file
+    id: settings-config-settings-service
+    file: source/services/settings/settings-service.test.ts
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-settings-service-defaults, settings-config-settings-service-precedence, settings-config-provider-registration-and-migration, settings-config-durable-mutation-settlement, settings-config-runtime-persistent-mutations, settings-config-service-sources-view, settings-config-service-corruption-boundary, settings-config-startup-migrations, settings-config-concurrent-service-writes, settings-config-profile-canonicalization, settings-config-sandbox-exclusivity, settings-config-sensitive-settings-filter]
+    fixtureIds: [settings-config-settings-directory, settings-config-corrupt-settings-file, settings-config-provider-records, settings-config-lock-fixture, settings-config-schema-values, settings-config-env-snapshot]
+  - kind: file
+    id: settings-config-settings-sources
+    file: source/services/settings/settings-sources.test.ts
+    domainId: settings-config
+    suiteId: unit
+    contractIds: [settings-config-service-sources-view]
+    fixtureIds: [settings-config-schema-values]
+decisions:
+  - id: settings-config-input-context-outside-provider-settings-config-m3
+    testId: settings-config-input-context-outside-provider
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The hook's failure boundary is explicit and no assigned sibling asserts the same outside-provider error.
+    evidence:
+      - source/context/InputContext.test.tsx:39-49 renders the hook without a provider and asserts the exact public error message.
+      - source/context/InputContext.tsx:209-215 throws only when either context is absent, guarding a consumer misuse contract.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-input-context-default-state-settings-config-m3
+    testId: settings-config-input-context-default-state
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Default editor state is a meaningful provider contract used by every input consumer.
+    evidence:
+      - source/context/InputContext.test.tsx:51-69 asserts input, mode, cursorOffset, and triggerIndex defaults through a mounted consumer.
+      - source/context/InputContext.tsx:121-131 derives mode, trigger, and cursor from the controller's initial snapshot.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-input-context-setter-surface-settings-config-m3
+    testId: settings-config-input-context-setter-surface
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Callable action exposure is a direct API shape check not duplicated by the rendering siblings.
+    evidence:
+      - source/context/InputContext.test.tsx:71-87 checks setInput and setCursorOffset are functions on the public hook result.
+      - source/context/InputContext.tsx:93-100 defines the action surface and lines 189-200 memoize it.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-input-context-set-input-settings-config-m3
+    testId: settings-config-input-context-set-input
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The render assertion verifies that a controller-backed update reaches the consumer-visible frame.
+    evidence:
+      - source/context/InputContext.test.tsx:89-111 updates through setInput and checks the rendered frame.
+      - source/context/InputContext.tsx:133-138 delegates setInput to controller.replaceText.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-input-context-empty-input-settings-config-m3
+    testId: settings-config-input-context-empty-input
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: medium
+    reason: Empty input is a boundary value for the editor state and is not covered by the ordinary text case.
+    evidence:
+      - source/context/InputContext.test.tsx:113-133 sets an empty string and asserts the EMPTY frame.
+      - source/context/InputContext.tsx:133-138 passes empty values through the controller boundary.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-input-context-special-input-settings-config-m3
+    testId: settings-config-input-context-special-input
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: medium
+    reason: Slash-command and path punctuation are realistic input content and the assertion protects lossless propagation.
+    evidence:
+      - source/context/InputContext.test.tsx:135-156 asserts a slash command, space, at-sign, and path survive the update.
+      - source/context/InputContext.tsx:133-138 sends the value without normalization.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-input-context-cursor-positive-settings-config-m3
+    testId: settings-config-input-context-cursor-positive
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: medium
+    reason: Positive cursor movement is a distinct editor operation and has a direct visible assertion.
+    evidence:
+      - source/context/InputContext.test.tsx:158-179 sets text and cursor 5, then checks the rendered cursor.
+      - source/context/InputContext.tsx:140-145 maps setCursorOffset to a move-cursor edit.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-input-context-consecutive-updates-settings-config-m3
+    testId: settings-config-input-context-consecutive-updates
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Synchronous settling of consecutive updates is a meaningful regression boundary for the controller bridge.
+    evidence:
+      - source/context/InputContext.test.tsx:181-203 issues two text updates and a cursor update and requires second:3.
+      - source/context/InputContext.tsx:121 and 131 expose controller snapshot state through useSyncExternalStore.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-input-context-atomic-update-settings-config-m3
+    testId: settings-config-input-context-atomic-update
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is the only assigned assertion tying the React projection to the controller editor snapshot after setInputAndCursor.
+    evidence:
+      - source/context/InputContext.test.tsx:205-228 checks both rendered ab:1 and controller.getSnapshot().editor.
+      - source/context/InputContext.tsx:147-153 performs the coupled controller update and override update.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-input-context-cursor-zero-settings-config-m3
+    testId: settings-config-input-context-cursor-zero
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: medium
+    reason: Zero is the lower cursor boundary and is independently asserted.
+    evidence:
+      - source/context/InputContext.test.tsx:230-250 sets cursor zero and checks the visible frame.
+      - source/context/InputContext.tsx:140-145 forwards zero as a move-cursor edit.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-input-context-multiple-consumers-settings-config-m3
+    testId: settings-config-input-context-multiple-consumers
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: high
+    reason: The intended multi-consumer contract matters, but this case only asserts truth rather than that both consumers observe their expected values.
+    evidence:
+      - source/context/InputContext.test.tsx:252-272 mounts two consumers but ends with expect(true).toBe(true), so it would pass if the rendered values were wrong.
+      - source/context/InputContext.tsx:202-205 supplies one state provider to all children; the test should assert both rendered outputs.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-input-context-input-cursor-settings-config-m3
+    testId: settings-config-input-context-input-cursor
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Coupled text, cursor, and override values are directly asserted as one public operation.
+    evidence:
+      - source/context/InputContext.test.tsx:274-298 asserts all three values after setInputAndCursor.
+      - source/context/InputContext.tsx:147-153 owns the coupled update boundary.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-input-context-replace-end-settings-config-m3
+    testId: settings-config-input-context-replace-end
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Cursor-to-end behavior is distinct from arbitrary cursor movement.
+    evidence:
+      - source/context/InputContext.test.tsx:300-324 asserts replaceInput places the cursor at text length 11.
+      - source/context/InputContext.tsx:155-160 delegates replacement to controller.replaceText.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-input-context-replace-empty-settings-config-m3
+    testId: settings-config-input-context-replace-empty
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: medium
+    reason: Empty replacement resetting the cursor to zero is a separate boundary from non-empty replacement.
+    evidence:
+      - source/context/InputContext.test.tsx:326-356 transitions from prior text to empty and asserts EMPTY:0.
+      - source/context/InputContext.tsx:155-160 uses the same controller replacement seam for this boundary value.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-input-context-cursor-override-settings-config-m3
+    testId: settings-config-input-context-cursor-override
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: medium
+    reason: Cursor override is separate state and is directly observed after the action.
+    evidence:
+      - source/context/InputContext.test.tsx:358-378 sets 42 and asserts the rendered override.
+      - source/context/InputContext.tsx:124 and 189-200 own the cursorOverride state/action.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-input-context-images-settings-config-m3
+    testId: settings-config-input-context-images
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Image state persistence across child unmounts is not covered by the ordinary input tests.
+    evidence:
+      - source/context/InputContext.images.test.tsx:16-40 asserts initial images and setter exposure; lines 42-79 seeds then replaces the child and asserts the image remains.
+      - source/context/InputContext.tsx:123-124 stores images in the provider rather than in child state.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-input-context-stability-settings-config-m3
+    testId: settings-config-input-context-stability
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Stable action identity is a distinct hook contract and is directly compared across updates.
+    evidence:
+      - source/context/InputContext.stability.test.tsx:8-35 records action objects before and after two input updates and compares identity.
+      - source/context/InputContext.tsx:189-200 memoizes actions from callback dependencies.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-model-contract-retirement-settings-config-m3
+    testId: settings-config-model-contract-retirement
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This repository-wide static guard protects a shipped contract retirement and has no same-observable sibling in the assignment.
+    evidence:
+      - source/contracts/model-contract-retirement.test.ts:24-40 scans every production TypeScript file outside the retired contract and rejects legacy identifiers/imports.
+      - source/contracts/model-contract-retirement.test.ts:26-31 defines the exact excluded file and legacy patterns, making the guard boundary explicit.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-streamed-model-turn-settings-config-m3
+    testId: settings-config-streamed-model-turn
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The type-level streamed-turn and media restrictions are high-scrutiny shared contracts; no assigned sibling can replace them.
+    evidence:
+      - source/contracts/streamed-model-turn.test.ts:4-7 checks stream and absence of generate; lines 9-25 checks role-specific media types.
+      - source/contracts/streamed-model-turn.ts:87-100 defines stream, optional unary, and compaction operations; lines 135-150 define role-specific message content.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-env-setup-settings-config-m3
+    testId: settings-config-env-setup
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Bootstrap ordering and preservation of explicit NODE_ENV are direct process contracts not duplicated by settings-env parsing tests.
+    evidence:
+      - source/env-setup.test.ts:10-30 imports the bootstrap in isolation and asserts tracing plus default and explicit NODE_ENV behavior.
+      - source/env-setup.ts:1-7 assigns NODE_ENV with ||= and tracing unconditionally at module evaluation.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-session-rollover-settings-settings-config-m3
+    testId: settings-config-session-rollover-settings
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Rollover defaults, validation, and source labeling are a focused contract not duplicated by the general schema assertions.
+    evidence:
+      - source/services/settings/session-rollover-settings.test.ts:6-14 checks defaults and rejects zero milestones; lines 16-26 checks the config source mapping.
+      - source/services/settings/settings-schema.ts:11-299 owns AgentSettingsSchema, while source/services/settings/settings-sources.ts:47-51 owns the rollover source keys used by the test.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-setting-schema-utils-settings-config-m3
+    testId: settings-config-setting-schema-utils
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Wrapper compatibility and dotted-path discovery are a small, direct utility seam with no assigned duplicate.
+    evidence:
+      - source/services/settings/setting-schema-utils.test.ts:5-44 covers wrapper families and nullish input; lines 46-118 covers representative and unknown paths.
+      - source/services/settings/setting-schema-utils.ts:10-35 unwraps schemas and lines 47-83 navigates SettingsSchema through wrappers.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-settings-env-settings-config-m3
+    testId: settings-config-settings-env
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Environment value interpretation and test-runner detection are distinct from env-setup's module bootstrap behavior.
+    evidence:
+      - source/services/settings/settings-env.test.ts:4-36 covers boolean parsing, web-search mapping, and TERM2_TEST_MODE detection.
+      - source/services/settings/settings-env.ts:15-67 builds overrides and lines 70-92 define parsing and runner detection.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-settings-merger-settings-config-m3
+    testId: settings-config-settings-merger
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Pure merge and provenance helpers are directly exercised at their owning seam; SettingsService integration does not cover flattening as precisely.
+    evidence:
+      - source/services/settings/settings-merger.test.ts:7-35 asserts flattening, CLI/env/config/default precedence, and per-key source labels.
+      - source/services/settings/settings-merger.ts:11-30 implements flattening and lines 58-78 merge precedence; lines 147-173 track sources.
+      - Assigned sibling source/services/settings/settings-service.test.ts:1125-1196 exercises the public integration but does not replace the utility-level flattening assertion.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-settings-path-settings-config-m3
+    testId: settings-config-settings-path
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Three platform branches and their environment overrides are compactly covered with deterministic inputs.
+    evidence:
+      - source/services/settings/settings-path.test.ts:5-33 asserts darwin, Linux with XDG, and win32 with LOCALAPPDATA.
+      - source/services/settings/settings-path.ts:6-22 owns all three branches.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-settings-persistence-settings-config-m3
+    testId: settings-config-settings-persistence
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: Recovery, locking, atomic-write cleanup, section fallback, and secret filtering are independent filesystem failure contracts with focused direct tests.
+    evidence:
+      - source/services/settings/settings-persistence.test.ts:32-195 covers filtering, section validation, syntax recovery, and bounded scans; lines 197-293 covers writes and lock behavior.
+      - source/services/settings/settings-persistence.ts:40-68 bounds recovery scanning; lines 82-136 own lock tokens; lines 161-260 load files; lines 280-388 save atomically.
+      - Assigned sibling source/services/settings/settings-service.test.ts:895-967 and 915-939 covers the public service boundary, not replacement of direct filesystem cases.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-settings-schema-settings-config-m3
+    testId: settings-config-settings-schema
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is the canonical schema catalog and validates many independently changing safety and compatibility bounds.
+    evidence:
+      - source/services/settings/settings-schema.test.ts:15-24 checks the complete key/inventory relation; lines 26-263 cover deadline, transport, compaction, budget, memory, sandbox, and workflow bounds; lines 265-355 cover provider schemas.
+      - source/services/settings/settings-schema.ts:11-497 declares section and provider schemas; lines 777-1029 derive keys and runtime metadata.
+      - Assigned sibling source/services/settings/settings-service.test.ts:69-92 checks a subset of defaults through the facade but not the schema catalog or bounds.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-settings-service-settings-config-m3
+    testId: settings-config-settings-service
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: >-
+      The large facade test is broad but protects distinct public outcomes:
+      precedence, provider and profile migrations, durable settlement, corruption
+      recovery, concurrency, sensitivity, and sandbox safety.
+    evidence:
+      - source/services/settings/settings-service.test.ts:69-300 covers defaults, persistence mode, source precedence, and startup persistence; lines 302-657 cover provider and ancillary migrations; lines 660-845 cover mutation APIs and source views.
+      - source/services/settings/settings-service.test.ts:895-1097 covers invalid/recovered files and concurrent persistence; lines 1125-1550 cover sources, migrations, and sensitivity; lines 1552-1730 cover profiles and sandbox exclusivity.
+      - source/services/settings/settings-service.ts:142-381 owns startup composition; lines 677-949 own public mutations; lines 1000-1127 own views and durable save reconciliation.
+    replacementTestIds: []
+    status: proposed
+  - id: settings-config-settings-sources-settings-config-m3
+    testId: settings-config-settings-sources
+    role: second_opinion
+    reviewer: settings-config-m3
+    sourceArtifact: docs/test-audit/artifacts/settings-config-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The source projection test catches omissions in nested and newly added settings fields that the facade's narrower getAll cases do not cover.
+    evidence:
+      - source/services/settings/settings-sources.test.ts:5-75 checks optional, ancillary, Codex, and nested source/value pairs; lines 77-108 explicitly guard sandbox, background-timeout, and run-budget source entries.
+      - source/services/settings/settings-sources.ts:5-128 owns the field-by-field source-key catalog and lines 145-167 build the recursive SettingsWithSources projection.
+      - Assigned sibling source/services/settings/settings-service.test.ts:801-845 checks getAll but only a narrower set of nested values, so it is complementary rather than a replacement.
+    replacementTestIds: []
+    status: proposed
+

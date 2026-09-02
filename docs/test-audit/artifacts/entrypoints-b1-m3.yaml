@@ -1,0 +1,451 @@
+schemaVersion: 2
+domains:
+  - id: entrypoints
+    label: App/CLI/gateway entrypoints and support surfaces
+suites:
+  - id: unit
+    label: Focused Vitest unit suite
+  - id: integration
+    label: Vitest integration suite with filesystem or gateway transport boundaries
+seams:
+  - id: entrypoints-b1-launcher-snapshot
+    label: Launcher settings authority to immutable session settings snapshot
+  - id: entrypoints-b1-model-list-route
+    label: Authenticated gateway model-list route to provider catalog DTOs
+  - id: entrypoints-b1-pairing-store
+    label: OTP pairing bootstrap to durable trusted-client public keys
+  - id: entrypoints-b1-persistence-journal
+    label: Gateway durable journal, checkpoints, projections, and recovery
+  - id: entrypoints-b1-runtime-factory
+    label: Session binding to isolated gateway runtime object graph
+  - id: entrypoints-b1-server-transport
+    label: Unix-socket or TLS HTTP transport to authenticated RPC handlers
+  - id: entrypoints-b1-settings-rpc
+    label: Settings authority to secret-free browser RPC projection and writes
+  - id: entrypoints-b1-workspace-probe
+    label: Canonical workspace path and OS access checks to boundary evidence
+risks:
+  - id: entrypoints-b1-risk-secret-crossing
+    label: Gateway DTOs or worker settings disclose credentials or sensitive host metadata
+    severity: critical
+  - id: entrypoints-b1-risk-unauthorized-control
+    label: An unauthenticated, unpaired, or wrong-owner client reaches gateway control operations
+    severity: critical
+  - id: entrypoints-b1-risk-pairing-replay
+    label: OTP or trusted-client state can be replayed, forged, or persisted unsafely
+    severity: high
+  - id: entrypoints-b1-risk-recovery-corruption
+    label: Restart or torn persistence loses events, reuses sequences, or republishes actionable work
+    severity: critical
+  - id: entrypoints-b1-risk-session-isolation
+    label: Sessions share mutable state or escape their admitted workspace and resource limits
+    severity: critical
+  - id: entrypoints-b1-risk-transport-protocol
+    label: Transport parsing, method/media gates, streaming, or TLS client authentication diverges from protocol
+    severity: high
+  - id: entrypoints-b1-risk-settings-mutation
+    label: Settings writes bypass allowlists, revision conflicts, atomic persistence, or environment ownership
+    severity: high
+  - id: entrypoints-b1-risk-boundary-overclaim
+    label: A symlink swap, non-directory, or OS write denial is treated as a safe writable workspace
+    severity: critical
+fixtures:
+  - id: entrypoints-b1-fixture-settings-authority
+    label: In-memory settings authority with source and persistence methods
+  - id: entrypoints-b1-fixture-assertion-keypair
+    label: RSA assertion key pair and signed gateway claims
+  - id: entrypoints-b1-fixture-temp-gateway-root
+    label: Temporary filesystem root for gateway state and Unix socket
+  - id: entrypoints-b1-fixture-provider-catalog
+    label: Registered provider returning a safe model catalog
+  - id: entrypoints-b1-fixture-tls-material
+    label: Temporary CA, server, and client certificates for mutual TLS
+  - id: entrypoints-b1-fixture-persistence-journal
+    label: Temporary durable journal, index, checkpoint, and transcript files
+  - id: entrypoints-b1-fixture-runtime-client
+    label: Fake conversation client and controllable agent streams
+  - id: entrypoints-b1-fixture-boundary-filesystem
+    label: Injectable filesystem methods for canonical and access checks
+contracts:
+  - id: entrypoints-b1-contract-session-snapshot
+    statement: A session settings snapshot contains selected non-secret settings, freezes policy data, and does not copy credentials.
+    seamIds:
+      - entrypoints-b1-launcher-snapshot
+    riskIds:
+      - entrypoints-b1-risk-secret-crossing
+      - entrypoints-b1-risk-session-isolation
+  - id: entrypoints-b1-contract-model-list-redaction
+    statement: An authenticated model-list request returns provider model metadata while omitting credential material and provider failures do not disclose secrets.
+    seamIds:
+      - entrypoints-b1-model-list-route
+    riskIds:
+      - entrypoints-b1-risk-secret-crossing
+      - entrypoints-b1-risk-unauthorized-control
+  - id: entrypoints-b1-contract-pairing-bootstrap
+    statement: Pairing accepts one valid six-digit OTP with an RSA public key, persists only normalized public-key trust, and rejects OTP reuse or invalid keys.
+    seamIds:
+      - entrypoints-b1-pairing-store
+    riskIds:
+      - entrypoints-b1-risk-pairing-replay
+      - entrypoints-b1-risk-secret-crossing
+  - id: entrypoints-b1-contract-pairing-attempt-policy
+    statement: Pairing expires OTPs, regenerates them after the configured failed-attempt limit, and fails closed on corrupt trust state.
+    seamIds:
+      - entrypoints-b1-pairing-store
+    riskIds:
+      - entrypoints-b1-risk-pairing-replay
+      - entrypoints-b1-risk-unauthorized-control
+  - id: entrypoints-b1-contract-admission-idempotency
+    statement: Gateway message admission does not persist an accepted record when runtime preparation rejects, and persisted request identities distinguish replay from body conflict.
+    seamIds:
+      - entrypoints-b1-persistence-journal
+    riskIds:
+      - entrypoints-b1-risk-recovery-corruption
+  - id: entrypoints-b1-contract-journal-durability
+    statement: Durable journal appends are persisted before publication, preserve high-water sequence across reopen, reject unsafe or foreign events, and require reload for compacted cursors.
+    seamIds:
+      - entrypoints-b1-persistence-journal
+    riskIds:
+      - entrypoints-b1-risk-recovery-corruption
+      - entrypoints-b1-risk-secret-crossing
+  - id: entrypoints-b1-contract-recovery-settlement
+    statement: Restart recovery sanitizes pending interactions, emits one non-actionable recovery fact, repairs or rejects malformed persistence, and reconciles accepted work without rerunning providers.
+    seamIds:
+      - entrypoints-b1-persistence-journal
+    riskIds:
+      - entrypoints-b1-risk-recovery-corruption
+      - entrypoints-b1-risk-secret-crossing
+  - id: entrypoints-b1-contract-projection-retention
+    statement: Session projections reconstruct bounded command statuses and interaction state while retention evicts only eligible closed sessions under its lock.
+    seamIds:
+      - entrypoints-b1-persistence-journal
+    riskIds:
+      - entrypoints-b1-risk-recovery-corruption
+  - id: entrypoints-b1-contract-runtime-isolation
+    statement: RuntimeFactory creates distinct session resources rooted at each admitted canonical workspace and passes secret-free, gateway-scoped client settings.
+    seamIds:
+      - entrypoints-b1-runtime-factory
+    riskIds:
+      - entrypoints-b1-risk-session-isolation
+      - entrypoints-b1-risk-secret-crossing
+  - id: entrypoints-b1-contract-runtime-admission-limits
+    statement: RuntimeFactory validates bindings and resource limits, separates prepare from commit, rejects duplicate or wrong-session commits, and closes admission after disposal.
+    seamIds:
+      - entrypoints-b1-runtime-factory
+    riskIds:
+      - entrypoints-b1-risk-session-isolation
+      - entrypoints-b1-risk-recovery-corruption
+  - id: entrypoints-b1-contract-runtime-lifecycle
+    statement: Cancellation that cannot be proven settles a session as interrupted, queued work advances correctly, and background task state maps to running or awaiting interaction.
+    seamIds:
+      - entrypoints-b1-runtime-factory
+    riskIds:
+      - entrypoints-b1-risk-session-isolation
+      - entrypoints-b1-risk-recovery-corruption
+  - id: entrypoints-b1-contract-transport-gates
+    statement: Gateway transport authenticates before handler routing, parses JSON, propagates methods URLs and correlation IDs, and rejects invalid methods, media, correlation IDs, and oversized requests.
+    seamIds:
+      - entrypoints-b1-server-transport
+    riskIds:
+      - entrypoints-b1-risk-unauthorized-control
+      - entrypoints-b1-risk-transport-protocol
+  - id: entrypoints-b1-contract-transport-tls-stream
+    statement: TLS transport requires configured client certificates when enabled, still verifies assertions, and streams event responses without an out-of-band DONE sentinel.
+    seamIds:
+      - entrypoints-b1-server-transport
+    riskIds:
+      - entrypoints-b1-risk-unauthorized-control
+      - entrypoints-b1-risk-transport-protocol
+  - id: entrypoints-b1-contract-settings-projection
+    statement: Settings RPC exposes safe values and metadata without credential material, reports credential status without values, and identifies session versus global scope.
+    seamIds:
+      - entrypoints-b1-settings-rpc
+    riskIds:
+      - entrypoints-b1-risk-secret-crossing
+      - entrypoints-b1-risk-settings-mutation
+  - id: entrypoints-b1-contract-settings-mutation
+    statement: Settings RPC accepts only persistable keys at the expected revision and requires one saved atomic batch result, otherwise it reports a typed failure without advancing the projection.
+    seamIds:
+      - entrypoints-b1-settings-rpc
+    riskIds:
+      - entrypoints-b1-risk-settings-mutation
+  - id: entrypoints-b1-contract-credential-ownership
+    statement: Credential set and delete are write-only, reject inherited environment credentials as non-writable, and return only secret-free status.
+    seamIds:
+      - entrypoints-b1-settings-rpc
+    riskIds:
+      - entrypoints-b1-risk-secret-crossing
+      - entrypoints-b1-risk-settings-mutation
+  - id: entrypoints-b1-contract-workspace-boundary
+    statement: Workspace probing requires the requested path to be its canonical readable directory and reports physical write capability separately from launcher write policy.
+    seamIds:
+      - entrypoints-b1-workspace-probe
+    riskIds:
+      - entrypoints-b1-risk-boundary-overclaim
+tests:
+  - kind: file
+    id: entrypoints-launcher-seam-test
+    file: source/gateway/launcher-seam.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds:
+      - entrypoints-b1-contract-session-snapshot
+    fixtureIds:
+      - entrypoints-b1-fixture-settings-authority
+  - kind: file
+    id: entrypoints-model-list-test
+    file: source/gateway/model-list.test.ts
+    domainId: entrypoints
+    suiteId: integration
+    contractIds:
+      - entrypoints-b1-contract-model-list-redaction
+    fixtureIds:
+      - entrypoints-b1-fixture-assertion-keypair
+      - entrypoints-b1-fixture-temp-gateway-root
+      - entrypoints-b1-fixture-provider-catalog
+  - kind: file
+    id: entrypoints-pairing-test
+    file: source/gateway/pairing.test.ts
+    domainId: entrypoints
+    suiteId: integration
+    contractIds:
+      - entrypoints-b1-contract-pairing-bootstrap
+      - entrypoints-b1-contract-pairing-attempt-policy
+    fixtureIds:
+      - entrypoints-b1-fixture-assertion-keypair
+      - entrypoints-b1-fixture-temp-gateway-root
+  - kind: file
+    id: entrypoints-persistence-recovery-matrix-test
+    file: source/gateway/persistence-recovery-matrix.test.ts
+    domainId: entrypoints
+    suiteId: integration
+    contractIds:
+      - entrypoints-b1-contract-recovery-settlement
+      - entrypoints-b1-contract-journal-durability
+    fixtureIds:
+      - entrypoints-b1-fixture-persistence-journal
+  - kind: file
+    id: entrypoints-persistence-test
+    file: source/gateway/persistence.test.ts
+    domainId: entrypoints
+    suiteId: integration
+    contractIds:
+      - entrypoints-b1-contract-admission-idempotency
+      - entrypoints-b1-contract-journal-durability
+      - entrypoints-b1-contract-recovery-settlement
+      - entrypoints-b1-contract-projection-retention
+    fixtureIds:
+      - entrypoints-b1-fixture-persistence-journal
+  - kind: file
+    id: entrypoints-runtime-factory-test
+    file: source/gateway/runtime-factory.test.ts
+    domainId: entrypoints
+    suiteId: integration
+    contractIds:
+      - entrypoints-b1-contract-runtime-isolation
+      - entrypoints-b1-contract-runtime-admission-limits
+      - entrypoints-b1-contract-runtime-lifecycle
+    fixtureIds:
+      - entrypoints-b1-fixture-temp-gateway-root
+      - entrypoints-b1-fixture-runtime-client
+  - kind: file
+    id: entrypoints-server-test
+    file: source/gateway/server.test.ts
+    domainId: entrypoints
+    suiteId: integration
+    contractIds:
+      - entrypoints-b1-contract-transport-gates
+      - entrypoints-b1-contract-transport-tls-stream
+    fixtureIds:
+      - entrypoints-b1-fixture-assertion-keypair
+      - entrypoints-b1-fixture-temp-gateway-root
+      - entrypoints-b1-fixture-tls-material
+  - kind: file
+    id: entrypoints-settings-gateway-rpc-test
+    file: source/gateway/settings-gateway-rpc.test.ts
+    domainId: entrypoints
+    suiteId: integration
+    contractIds:
+      - entrypoints-b1-contract-settings-projection
+      - entrypoints-b1-contract-settings-mutation
+      - entrypoints-b1-contract-credential-ownership
+    fixtureIds:
+      - entrypoints-b1-fixture-settings-authority
+      - entrypoints-b1-fixture-assertion-keypair
+      - entrypoints-b1-fixture-temp-gateway-root
+  - kind: file
+    id: entrypoints-settings-rpc-test
+    file: source/gateway/settings-rpc.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds:
+      - entrypoints-b1-contract-settings-projection
+      - entrypoints-b1-contract-settings-mutation
+      - entrypoints-b1-contract-credential-ownership
+    fixtureIds:
+      - entrypoints-b1-fixture-settings-authority
+  - kind: file
+    id: entrypoints-workspace-boundary-probe-test
+    file: source/gateway/workspace-boundary-probe.test.ts
+    domainId: entrypoints
+    suiteId: unit
+    contractIds:
+      - entrypoints-b1-contract-workspace-boundary
+    fixtureIds:
+      - entrypoints-b1-fixture-boundary-filesystem
+decisions:
+  - id: entrypoints-launcher-seam-test-entrypoints-b1-m3
+    testId: entrypoints-launcher-seam-test
+    role: second_opinion
+    reviewer: entrypoints-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The two cases directly protect the launcher boundary's secret-free snapshot and mutable-policy isolation; no assigned sibling carries this contract.
+    evidence:
+      - source/gateway/launcher-seam.test.ts:11-38 asserts selected settings, default policy fields, freezing, and credential omission.
+      - source/gateway/launcher-seam.test.ts:41-50 mutates the caller policy after capture and verifies the snapshot remains isolated.
+      - source/gateway/launcher-seam.ts:8-10 documents that credentials remain launcher-owned and are not copied across the worker/browser boundary.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-model-list-test-entrypoints-b1-m3
+    testId: entrypoints-model-list-test
+    role: second_opinion
+    reviewer: entrypoints-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is the only assigned end-to-end model-list route check, combining authenticated gateway wiring, the real settings authority, provider catalog loading, and DTO redaction.
+    evidence:
+      - source/gateway/model-list.test.ts:39-91 registers a provider, builds a manifest and real Term2Gateway, starts its Unix socket, and sends a signed model_list request.
+      - source/gateway/model-list.test.ts:101-108 asserts the returned provider/model metadata and absence of apiKey material.
+      - source/gateway/gateway.ts:490-528 constructs the redacted model DTO and omits provider failures from the response.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-pairing-test-entrypoints-b1-m3
+    testId: entrypoints-pairing-test
+    role: second_opinion
+    reviewer: entrypoints-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The file covers durable trusted-client storage, OTP lifecycle and key validation, plus assertion verification; the assigned server sibling checks only the HTTP bootstrap route.
+    evidence:
+      - source/gateway/pairing.test.ts:28-53 verifies six-digit OTP generation, public-key-only persistence, restrictive file mode, and single-use registration.
+      - source/gateway/pairing.test.ts:55-79 verifies failed-attempt regeneration and expiry with injected time.
+      - source/gateway/pairing.test.ts:81-129 verifies malformed/private/non-RSA rejection and that paired keys enter assertion verification while unpaired keys fail.
+      - source/gateway/pairing.test.ts:131-136 verifies corrupt trust state fails closed; the route-level sibling is source/gateway/server.test.ts:360-407.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-persistence-recovery-matrix-test-entrypoints-b1-m3
+    testId: entrypoints-persistence-recovery-matrix-test
+    role: second_opinion
+    reviewer: entrypoints-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-b1-m3.yaml
+    recommendation: rewrite_candidate
+    confidence: medium
+    reason: >-
+      The restart boundary and sanitization assertions are valuable, but the named no-work-rerun claim is not exercised against a provider or tool: the test increments a synthetic counter by zero. Rewrite should inject an observable runtime spy while retaining the sequence and recovery checks.
+    evidence:
+      - source/gateway/persistence-recovery-matrix.test.ts:41-89 verifies one recovered interaction fact, checkpoint clearing, and no duplicate recovery publication.
+      - source/gateway/persistence-recovery-matrix.test.ts:91-127 verifies recovery publication re-sanitizes checkpoint DTO text.
+      - source/gateway/persistence-recovery-matrix.test.ts:129-217 enumerates eight restart boundaries and checks sequence continuity, but lines 201-215 only use providerRuns.count += 0 rather than invoking a provider/tool.
+      - source/gateway/persistence.test.ts:218-244 is the named assigned sibling for pending-interaction recovery; it does not replace this matrix's boundary coverage.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-persistence-test-entrypoints-b1-m3
+    testId: entrypoints-persistence-test
+    role: second_opinion
+    reviewer: entrypoints-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This broad persistence integration suite protects admission atomicity, journal durability and sanitization, projection/replay behavior, retention, and startup reconciliation; its overlap with the matrix is complementary rather than a demonstrated duplicate.
+    evidence:
+      - source/gateway/persistence.test.ts:26-133 verifies rejected admission is not persisted, replay/body-conflict distinction, owner scoping, bounded pages, and hashed paths.
+      - source/gateway/persistence.test.ts:136-194 verifies append-before-publish, durable high-water reopen, compacted-cursor reload, and unsafe/foreign event rejection.
+      - source/gateway/persistence.test.ts:196-244 and 322-455 verify checkpoint recovery and malformed/torn/duplicate persistence handling.
+      - source/gateway/persistence.test.ts:457-645 verifies projection cursor/replay, command statuses, live interaction generation, and closed-session retention.
+      - source/gateway/persistence.test.ts:647-830 verifies binding fingerprint privacy, foreign-key conflicts, and idempotent startup admission reconciliation.
+      - source/gateway/persistence-recovery-matrix.test.ts:129-217 is the assigned sibling's boundary matrix; it does not cover this file's admission, projection, retention, and repair breadth.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-runtime-factory-test-entrypoints-b1-m3
+    testId: entrypoints-runtime-factory-test
+    role: second_opinion
+    reviewer: entrypoints-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The suite exercises the runtime factory's security and lifecycle seam through distinct sessions, injected clients, queue leases, cancellation, and background status rather than merely testing a helper.
+    evidence:
+      - source/gateway/runtime-factory.test.ts:87-115 verifies distinct resource graphs, canonical roots, immutable binding, invalid-root rejection, and policy validation.
+      - source/gateway/runtime-factory.test.ts:117-217 verifies prepare/commit/cancel separation, lease expiry, duplicate sessions, wrong-session commits, provider/shell limits, and secret-free client inputs.
+      - source/gateway/runtime-factory.test.ts:219-322 verifies unproven cancellation becomes interrupted/closed and queued turns advance while preserving session state.
+      - source/gateway/runtime-factory.test.ts:324-383 verifies background task statuses map to running, awaiting_interaction, and idle.
+      - source/gateway/runtime-factory.ts:185-189 and 220-258 define the per-session ownership and binding/composition boundary exercised by these cases.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-server-test-entrypoints-b1-m3
+    testId: entrypoints-server-test
+    role: second_opinion
+    reviewer: entrypoints-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: These real transport tests protect protocol behavior at the HTTP server boundary, including Unix sockets, mutual TLS, assertion ordering, JSON/media gates, and event streaming; pairing coverage here is route-specific.
+    evidence:
+      - source/gateway/server.test.ts:198-250 verifies GET/POST/DELETE routing, URL/body/correlation propagation, unsupported method rejection, and handler invocation.
+      - source/gateway/server.test.ts:252-314 verifies malformed correlation rejection, SSE content type and no DONE sentinel, and unsupported media rejection.
+      - source/gateway/server.test.ts:317-357 generates certificates and verifies client-certificate enforcement independently from gateway assertion verification.
+      - source/gateway/server.test.ts:360-407 verifies OTP-only pairing bootstrap bypasses assertion verification and rejects OTP reuse.
+      - source/gateway/server.ts:154-227 implements authentication-before-routing, protocol gates, bounded JSON parsing, and streaming dispatch.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-settings-gateway-rpc-test-entrypoints-b1-m3
+    testId: entrypoints-settings-gateway-rpc-test
+    role: second_opinion
+    reviewer: entrypoints-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: This is the only assigned route-level settings integration test and verifies owner authorization, projection redaction, revision conflict mapping, credential mutation, and OAuth status through Term2Gateway.
+    evidence:
+      - source/gateway/settings-gateway-rpc.test.ts:59-120 wires a real settings authority, manifest, signed assertions, and Unix-socket Term2Gateway.
+      - source/gateway/settings-gateway-rpc.test.ts:122-157 verifies wrong-owner denial, secret-free read, write conflict/allowlist outcomes, write-only credentials, and OAuth login/select responses.
+      - source/gateway/settings-gateway-rpc.test.ts:160-185 verifies missing local owner fails closed with settings_forbidden.
+      - source/gateway/gateway.ts:407-408 applies local-owner authorization before settings operations, while lines 610-640 map projection and mutation RPCs.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-settings-rpc-test-entrypoints-b1-m3
+    testId: entrypoints-settings-rpc-test
+    role: second_opinion
+    reviewer: entrypoints-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The focused unit suite exhaustively checks projection secrecy, scope metadata, revision and persistence policy, environment ownership, and atomic batch delegation; the gateway sibling provides distinct route wiring evidence.
+    evidence:
+      - source/gateway/settings-rpc.test.ts:38-58 verifies safe-key projection, credential metadata without values, and session/global scope.
+      - source/gateway/settings-rpc.test.ts:60-78 verifies stale revision rejection, persistent-key allowlisting, and secret-free credential set/delete.
+      - source/gateway/settings-rpc.test.ts:80-125 verifies environment credentials are non-writable and unsaved transactions fail closed.
+      - source/gateway/settings-rpc.test.ts:127-144 verifies one complete batch reaches one atomic settlement and an unsaved result does not advance revision.
+      - source/gateway/settings-gateway-rpc.test.ts:122-157 is the assigned route sibling; it does not replace these direct policy branches.
+    replacementTestIds: []
+    status: proposed
+  - id: entrypoints-workspace-boundary-probe-test-entrypoints-b1-m3
+    testId: entrypoints-workspace-boundary-probe-test
+    role: second_opinion
+    reviewer: entrypoints-b1-m3
+    sourceArtifact: docs/test-audit/artifacts/entrypoints-b1-m3.yaml
+    recommendation: keep
+    confidence: high
+    reason: The injectable filesystem tests directly protect canonical-path, directory, readable, physical-write, and launcher-policy decisions without requiring a host-dependent workspace.
+    evidence:
+      - source/gateway/workspace-boundary-probe.test.ts:12-20 verifies readable canonical roots and reports W_OK evidence for a read-write grant.
+      - source/gateway/workspace-boundary-probe.test.ts:22-34 verifies symlink/swapped-root rejection and read-only launcher policy despite a writable filesystem.
+      - source/gateway/workspace-boundary-probe.test.ts:36-47 verifies OS write denial reports a non-writable boundary.
+      - source/gateway/workspace-boundary-probe.ts:13-35 requires canonical directories, R_OK/X_OK, and separates physical writability from allowWrite policy.
+    replacementTestIds: []
+    status: proposed
+

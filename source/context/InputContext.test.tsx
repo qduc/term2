@@ -251,13 +251,18 @@ it.sequential('setCursorOffset accepts zero', async () => {
 
 it.sequential('Multiple components can use the context', async () => {
   const Component1 = () => {
-    const { input } = useInputContext();
+    const { input, setInput } = useInputContext();
+
+    useEffect(() => {
+      setInput('shared');
+    }, [setInput]);
+
     return <Text>{input || 'C1'}</Text>;
   };
 
   const Component2 = () => {
-    const { mode } = useInputContext();
-    return <Text>{mode || 'C2'}</Text>;
+    const { input } = useInputContext();
+    return <Text>{input || 'C2'}</Text>;
   };
 
   const { lastFrame } = await renderInAct(
@@ -267,8 +272,11 @@ it.sequential('Multiple components can use the context', async () => {
     </InputProvider>,
   );
 
-  expect(lastFrame()).toBeTruthy();
-  expect(true).toBe(true);
+  await flushReactUpdates(5);
+
+  // One provider feeds every child: both consumers render the same value.
+  const output = lastFrame() ?? '';
+  expect((output.match(/shared/g) ?? []).length).toBe(2);
 });
 
 it.sequential('setInputAndCursor updates input, cursorOffset, and cursorOverride', async () => {

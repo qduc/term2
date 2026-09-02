@@ -26,6 +26,14 @@ const baseContext = (overrides: Partial<ClassificationContext> = {}): Classifica
   ...overrides,
 });
 
+const invalidPreviousResponseError = () =>
+  Object.assign(
+    new Error(
+      'Error: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"Invalid `previous_response_id`."}}',
+    ),
+    { status: 400 },
+  );
+
 it('classify terminates an ambiguous provider outcome instead of replaying the turn', () => {
   const classifier = makeClassifier();
 
@@ -171,6 +179,53 @@ it('classify chain-recovers a flaky close after every live-turn tool completed a
   );
 
   expect(result).toMatchObject({ kind: 'chain_recovery', attempt: 1, cause: 'connection_interrupted' });
+});
+
+it('classify chain-recovers a provider state rejection after every live-turn tool completed and is in history', () => {
+  const classifier = makeClassifier({}, () => 0);
+  const stream = {
+    completed: Promise.resolve(undefined),
+    output: [
+      { type: 'tool_call_dispatched', callId: 'call-1', toolName: 'read_file' },
+      { type: 'item', item: { type: 'function_call_output', callId: 'call-1', output: 'ok' } },
+    ],
+    newItems: [],
+  } as any;
+
+  const result = classifier.classify(
+    baseContext({
+      error: invalidPreviousResponseError(),
+      stream,
+      hasCommittedOutput: true,
+      committedToolContinuation: settledReadFileContinuation,
+    }),
+  );
+
+  expect(result).toMatchObject({ kind: 'chain_recovery', attempt: 1, cause: 'provider_state_rejected' });
+});
+
+it('still refuses provider state recovery when tool settlement is not proven', () => {
+  const classifier = makeClassifier();
+  const stream = {
+    completed: Promise.resolve(undefined),
+    output: [{ type: 'tool_call_dispatched', callId: 'call-1', toolName: 'read_file' }],
+    newItems: [],
+  } as any;
+
+  const result = classifier.classify(
+    baseContext({
+      error: invalidPreviousResponseError(),
+      stream,
+      hasCommittedOutput: true,
+      committedToolContinuation: {
+        completedToolCount: 1,
+        allToolsCompleted: true,
+        completedPairsPresentInHistory: false,
+      },
+    }),
+  );
+
+  expect(result.kind).toBe('unrecoverable');
 });
 
 it('classify still refuses a flaky close when a dispatched tool has no completed result', () => {

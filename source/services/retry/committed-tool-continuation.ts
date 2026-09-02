@@ -9,13 +9,14 @@ export function isSettledCommittedToolContinuation(evidence: CommittedToolContin
   );
 }
 
+/**
+ * Chain recovery rebuilds from durable history instead of replaying committed
+ * work. Once every live-turn tool pair is settled, that is true for both a
+ * connection interruption and an explicit provider-state rejection.
+ */
 export function skipsAutomaticReplayClaim(
   failure: ClassifiedFailure,
   evidence: CommittedToolContinuation | undefined,
 ): boolean {
-  return (
-    failure.kind === 'chain_recovery' &&
-    failure.cause === 'connection_interrupted' &&
-    isSettledCommittedToolContinuation(evidence)
-  );
+  return failure.kind === 'chain_recovery' && isSettledCommittedToolContinuation(evidence);
 }

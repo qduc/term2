@@ -2,11 +2,12 @@ import { it, expect } from 'vitest';
 import {
   buildSettingValueSuggestions,
   filterSettingValueSuggestionsByQuery,
+  isNumberSetting,
+  isStringSetting,
   type SettingValueSuggestion,
 } from './value-suggestions.js';
-import { resolveSettingAtPath, unwrapSchema } from '../services/settings/setting-schema-utils.js';
+import { unwrapSchema } from '../services/settings/setting-schema-utils.js';
 import { SettingsSchema } from '../services/settings/settings-schema.js';
-import { z } from 'zod';
 
 /**
  * Walk the SettingsSchema and collect all setting keys whose leaf schema is
@@ -127,9 +128,7 @@ it('isNumberSetting returns true for number setting keys', () => {
     'ssh.port',
   ];
   for (const key of numberKeys) {
-    const schema = resolveSettingAtPath(key);
-    const unwrapped = unwrapSchema(schema);
-    expect(unwrapped).toBeInstanceOf(z.ZodNumber);
+    expect(isNumberSetting(key)).toBe(true);
   }
 });
 
@@ -142,9 +141,7 @@ it('isNumberSetting returns false for non-number setting keys', () => {
     'tools.enableEditHealing',
   ];
   for (const key of nonNumberKeys) {
-    const schema = resolveSettingAtPath(key);
-    const unwrapped = unwrapSchema(schema);
-    expect(unwrapped).not.toBeInstanceOf(z.ZodNumber);
+    expect(isNumberSetting(key)).toBe(false);
   }
 });
 
@@ -159,9 +156,7 @@ it('isStringSetting returns true for string setting keys', () => {
     'app.shellPath',
   ];
   for (const key of stringKeys) {
-    const schema = resolveSettingAtPath(key);
-    const unwrapped = unwrapSchema(schema);
-    expect(unwrapped).toBeInstanceOf(z.ZodString);
+    expect(isStringSetting(key)).toBe(true);
   }
 });
 
@@ -176,9 +171,7 @@ it('isStringSetting returns false for non-string setting keys', () => {
     'tools.enableEditHealing',
   ];
   for (const key of nonStringKeys) {
-    const schema = resolveSettingAtPath(key);
-    const unwrapped = unwrapSchema(schema);
-    expect(unwrapped).not.toBeInstanceOf(z.ZodString);
+    expect(isStringSetting(key)).toBe(false);
   }
 });
 

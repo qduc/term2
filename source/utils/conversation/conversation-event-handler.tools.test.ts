@@ -585,7 +585,7 @@ it('unknown event: is ignored without error', () => {
   expect(deps.calls.setMessagesCalls.length).toBe(0);
 });
 
-it('final: ignores corrected finalText when it is the same length as accumulated streamed text', () => {
+it('final: applies an equal-length corrected finalText over the accumulated streamed text', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   // Simulate streaming that produced a typo whose length matches the correct text
@@ -595,15 +595,14 @@ it('final: ignores corrected finalText when it is the same length as accumulated
 
   handler({ type: 'final', finalText: 'Hello world' } as any);
 
-  // The guard `finalText.length > accumulatedText.length` is false for equal-length strings.
-  // accumulatedText is never updated, so the typo is what gets flushed.
+  // finalText replaces accumulatedText whenever it is non-blank, so the same-length
+  // correction is applied and the streamed typo is not what gets flushed.
   expect(deps.calls.appendedMessages.length).toBe(1);
   const flushedMsg = deps.calls.appendedMessages[0][0];
-  // Fails: actual is 'Hello wrold' (the typo) — correction from finalText is silently lost
   expect(flushedMsg.text).toBe('Hello world');
 });
 
-it('final: flushes over-accumulated streamed content when finalText is shorter than accumulated', () => {
+it('final: applies a shorter authoritative finalText over over-accumulated streamed text', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   // Simulate streaming that over-shot the authoritative answer
@@ -613,20 +612,19 @@ it('final: flushes over-accumulated streamed content when finalText is shorter t
 
   handler({ type: 'final', finalText: 'The answer is 42.' } as any);
 
-  // The guard `finalText.length > accumulatedText.length` is false when final is shorter.
-  // accumulatedText is not corrected, so the hallucinated tail is included in the flush.
+  // finalText replaces accumulatedText whenever it is non-blank, so the shorter
+  // authoritative text drops the over-accumulated tail from the flush.
   expect(deps.calls.appendedMessages.length).toBe(1);
   const flushedMsg = deps.calls.appendedMessages[0][0];
-  // Fails: actual is the full over-accumulated string including ' Extra hallucinated sentence.'
   expect(flushedMsg.text).toBe('The answer is 42.');
 });
 
-it('command_message: leaves stale running message when no callId is present on either side', () => {
+it('command_message: replaces the no-callId pending message when both sides lack a callId', () => {
   const deps = createMockDeps();
   const state = createStreamingState();
   const handler = createConversationEventHandler(deps, state);
 
-  // tool_started with no callId appends a running message with no way to match it later
+  // tool_started without a callId appends a pending command message with no callId
   handler({
     type: 'tool_started',
     toolCallId: undefined,
@@ -638,8 +636,8 @@ it('command_message: leaves stale running message when no callId is present on e
   expect(runningMsg.status).toBe('pending');
   expect(runningMsg.callId).toBe(undefined);
 
-  // command_message also has no callId, so pendingIndex is immediately -1
-  // and the completed message is appended rather than replacing the running one
+  // The no-callId command_message matches that pending message by the absence of a
+  // callId, so it is replaced in place rather than left stale beside a duplicate.
   handler({
     type: 'command_message',
     message: {
@@ -656,8 +654,6 @@ it('command_message: leaves stale running message when no callId is present on e
   const updater = deps.calls.setMessagesCalls[0]!;
   const result = updater([runningMsg]);
 
-  // Fails: result has 2 messages — the stale 'running' + the new 'completed'
-  // Expected: 1 message, the running entry replaced by the completed one
   expect(result.length).toBe(1);
   expect(result[0].status).toBe('completed');
 });

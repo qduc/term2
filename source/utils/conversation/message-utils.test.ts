@@ -150,17 +150,19 @@ it('mergeCommandMessages keeps running messages when new command has same callId
   expect(commands[0].id).toBe('stale');
 });
 
-it('mergeCommandMessages removes stale running messages when a different new command arrives', () => {
-  // Phase 2 removes stale running/pending messages from prev when a new
-  // command with a different callId arrives, cleaning up orphaned streaming messages.
+it('mergeCommandMessages keeps a stale running message whose callId differs from the new completed command', () => {
+  // Phase 2 removes stale running/pending messages only when their callId matches a
+  // completed command that survived Phase 1; a completed command with a different
+  // callId leaves the unrelated running message in place and appends alongside it.
   const staleRunning: CommandMessage = { ...cmd('stale', 'call-1', 'running') };
   const prev: Message[] = [userMsg('u1', 'hi'), staleRunning];
-  // new command has a different callId that doesn't exist in prev
   const newCmds = [cmd('done', 'call-2', 'completed')];
   const result = mergeCommandMessages(prev, newCmds);
   const commands = result.filter((m) => m.sender === 'command');
   // stale running stays because its callId 'call-1' is not in completedCallIds ('call-2')
   expect(commands.length).toBe(2);
+  expect(commands[0].id).toBe('stale');
+  expect(commands[1].id).toBe('done');
 });
 
 it('mergeCommandMessages does not remove completed/stale messages with different callIds', () => {

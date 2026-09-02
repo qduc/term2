@@ -4,6 +4,7 @@ import { createSettingsCommand, parseSettingValue } from '../utils/settings-comm
 import type { PendingModeSwitch } from './mode-commands.js';
 import { planProfileTransition } from '../services/profiles/profile-transition.js';
 import { ProfileResolutionError } from '../services/profiles/types.js';
+import { isLegacyModeSettingKey, profileIdFromLegacyModeSetting } from '../services/profiles/legacy-adapter.js';
 
 interface CreateGuardedSettingsCommandDeps {
   settingsService: SettingsService;
@@ -35,15 +36,31 @@ export function createGuardedSettingsCommand({
       const settingParts = args?.trim().split(/\s+/) ?? [];
       const isReset = settingParts[0] === 'reset';
       const settingKey = isReset ? settingParts[1] : settingParts[0];
+      const requestedKey = settingKey ?? '';
       const hasHistory = messages.some((msg) => msg.sender !== 'system');
-      if (settingKey === 'app.liteMode' && hasHistory) {
+      const currentProfileId = String(settingsService.get('app.activeProfileId'));
+      let targetProfileId: string | undefined;
+      if (isLegacyModeSettingKey(requestedKey)) {
+        targetProfileId = profileIdFromLegacyModeSetting(
+          requestedKey,
+          isReset ? false : parseSettingValue(settingParts.slice(1).join(' ')),
+          currentProfileId,
+        );
+      } else if (!isReset && requestedKey === 'app.activeProfileId') {
+        const rawValue = settingParts.slice(1).join(' ');
+        targetProfileId = rawValue.includes(':') ? rawValue : `builtin:${rawValue}`;
+      }
+      const changesLiteShape =
+        targetProfileId !== undefined &&
+        targetProfileId !== currentProfileId &&
+        (targetProfileId === 'builtin:lite' || currentProfileId === 'builtin:lite');
+      if (changesLiteShape && hasHistory) {
+        const liteTargetProfileId = targetProfileId;
         if (requestModeSwitchConfirm) {
-          const rawVal = isReset ? false : parseSettingValue(settingParts.slice(1).join(' '));
-          const targetValue = typeof rawVal === 'boolean' ? rawVal : true;
           requestModeSwitchConfirm({
-            targetProfileId: 'builtin:lite',
+            targetProfileId: liteTargetProfileId!,
             modeLabel: 'Lite',
-            targetValue,
+            targetValue: liteTargetProfileId === 'builtin:lite',
             enabledDetail: ' - using minimal prompt, no codebase context',
           });
           return true;
@@ -55,9 +72,8 @@ export function createGuardedSettingsCommand({
         return true;
       }
 
-      if (!isReset && settingKey === 'app.activeProfileId') {
-        const rawValue = settingParts.slice(1).join(' ');
-        const canonicalId = rawValue.includes(':') ? rawValue : `builtin:${rawValue}`;
+      if (!isReset && requestedKey === 'app.activeProfileId') {
+        const canonicalId = targetProfileId!;
         try {
           planProfileTransition(settingsService, canonicalId);
         } catch (error) {

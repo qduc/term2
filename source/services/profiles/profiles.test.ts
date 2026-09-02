@@ -206,4 +206,16 @@ describe('legacyModeAdapter', () => {
       mentorMode: true,
     });
   });
+
+  it('maps a legacy setting write to a Profile without preserving sibling flags', () => {
+    expect(legacyModeAdapter.profileIdFromLegacyModeSetting('app.liteMode', true, 'builtin:orchestrator')).toBe(
+      'builtin:lite',
+    );
+    expect(legacyModeAdapter.profileIdFromLegacyModeSetting('app.planMode', false, 'builtin:plan')).toBe(
+      'builtin:standard',
+    );
+    expect(
+      legacyModeAdapter.profileIdFromLegacyModeSetting('app.planMode', 'true', 'builtin:standard'),
+    ).toBeUndefined();
+  });
 });

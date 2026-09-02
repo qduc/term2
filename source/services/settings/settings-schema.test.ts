@@ -10,7 +10,6 @@ import {
   UISettingsSchema,
   RUNTIME_MODIFIABLE_SETTINGS,
   SETTING_KEYS,
-  normalizeAppModes,
 } from './settings-schema.js';
 
 it('keeps the structured Contract 04 consumer inventory complete and duplicate-free', () => {
@@ -465,29 +464,6 @@ it('SettingsSchema preserves optional flat ancillary model tiers and their provi
   ]) {
     expect(RUNTIME_MODIFIABLE_SETTINGS.has(key)).toBe(true);
   }
-});
-
-it('startup normalization: persisted orchestratorMode=true with implicit lite (positional prompt) does not produce liteMode=true', () => {
-  // Simulate the cli.tsx startup logic:
-  // - persisted/resumed settings have orchestratorMode: true
-  // - a positional prompt is provided (hasPositionalPrompt=true, autoApprove=false)
-  //   which would naively set liteMode=true via the implicit default
-  // The normalizer must resolve this so orchestratorMode wins and liteMode stays false.
-  //
-  // Precedence: orchestratorMode > liteMode > planMode > mentorMode (first one wins).
-
-  // persisted orchestratorMode + implicit liteMode both true → orchestrator wins
-  const result = normalizeAppModes({
-    orchestratorMode: true,
-    liteMode: true, // implicit from positional prompt
-    planMode: false,
-    mentorMode: false,
-  });
-
-  expect(result.orchestratorMode).toBe(true);
-  expect(result.liteMode).toBe(false);
-  expect(result.planMode).toBe(false);
-  expect(result.mentorMode).toBe(false);
 });
 
 it('treats a zero total request deadline as "off" rather than coercing it to a default', () => {

@@ -9,6 +9,8 @@ import { SETTING_KEYS } from '../services/settings/settings-service.js';
 import { getProvider } from '../providers/index.js';
 import { parseModelProviderArg } from './ai/model-provider-arg.js';
 import { getModelSettingConfig } from './ai/model-settings.js';
+import { profileIdFromLegacyModeSetting } from '../services/profiles/legacy-adapter.js';
+import { isLegacyModeSettingKey } from '../services/profiles/legacy-adapter.js';
 
 /**
  * Render the durable settlement of a mutation truthfully. Only a `saved`
@@ -34,6 +36,16 @@ function formatDurableResetMessage(result: DurableWriteResult | undefined, key: 
     return `Reset ${key} to default (memory only - persistence is disabled).`;
   }
   return `Reset ${key} to default`;
+}
+
+function canonicalProfileSetting(
+  settingsService: SettingsService,
+  key: string,
+  value: unknown,
+): { key: string; value: unknown } {
+  if (!isLegacyModeSettingKey(key)) return { key, value };
+  const profileId = profileIdFromLegacyModeSetting(key, value, String(settingsService.get('app.activeProfileId')));
+  return profileId ? { key: 'app.activeProfileId', value: profileId } : { key, value };
 }
 
 export function parseSettingValue(raw: string): any {
@@ -325,13 +337,25 @@ export function createSettingsCommand({
 
       if (parts[0] === 'reset' && parts[1]) {
         const keyToReset = parts.slice(1).join(' ');
+        const resetCanonical =
+          keyToReset === 'app.activeProfileId'
+            ? { key: keyToReset, value: 'builtin:standard' }
+            : canonicalProfileSetting(settingsService, keyToReset, false);
+        const profileTransitionBeforeReset =
+          applyRuntimeSetting &&
+          resetCanonical.key === 'app.activeProfileId' &&
+          settingsService.get('app.activeProfileId') !== resetCanonical.value;
+        if (profileTransitionBeforeReset) applyRuntimeSetting(resetCanonical.key, resetCanonical.value);
         const durableResult = settingsService.reset(keyToReset);
         addSystemMessage(formatDurableResetMessage(durableResult, keyToReset));
 
         // Apply runtime effects if applicable after reset
         const resetValue = settingsService.getDynamic(keyToReset);
-        if (applyRuntimeSetting && settingsService.isRuntimeModifiable(keyToReset)) {
-          applyRuntimeSetting(keyToReset, resetValue);
+        if (applyRuntimeSetting && settingsService.isRuntimeModifiable(keyToReset) && !profileTransitionBeforeReset) {
+          applyRuntimeSetting(
+            resetCanonical.key,
+            resetCanonical.key === 'app.activeProfileId' ? resetCanonical.value : resetValue,
+          );
         }
         if (keyToReset === SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS) {
           addSystemMessage('agent.maxParallelToolCalls takes effect on the next request.');
@@ -422,19 +446,24 @@ export function createSettingsCommand({
         return true;
       }
 
-      const planWas = Boolean(settingsService.get(SETTING_KEYS.APP_PLAN_MODE));
-      const durableResult = settingsService.setDynamic(key, parsedValue);
-      if (applyRuntimeSetting) {
-        applyRuntimeSetting(key, parsedValue);
-      }
-      const planIs = Boolean(settingsService.get(SETTING_KEYS.APP_PLAN_MODE));
-      if (
+      const canonical = canonicalProfileSetting(settingsService, key, parsedValue);
+      let durableResult: DurableWriteResult | undefined;
+      const profileTransitionAlreadyApplied =
         applyRuntimeSetting &&
-        key !== SETTING_KEYS.APP_PLAN_MODE &&
-        key !== 'app.activeProfileId' &&
-        planWas !== planIs
-      ) {
-        applyRuntimeSetting(SETTING_KEYS.APP_PLAN_MODE, planIs);
+        canonical.key === 'app.activeProfileId' &&
+        settingsService.get('app.activeProfileId') !== canonical.value;
+      if (profileTransitionAlreadyApplied) {
+        // Profile activation owns validation, canonical publication, runtime
+        // composition, and its single coherent notice. Fall back to the
+        // ordinary setter for lightweight test adapters that do not publish.
+        applyRuntimeSetting(canonical.key, canonical.value);
+        if (settingsService.get('app.activeProfileId') === canonical.value) {
+          durableResult = settingsService.getLastDurableWrite?.();
+        }
+      }
+      if (!profileTransitionAlreadyApplied || settingsService.get('app.activeProfileId') !== canonical.value) {
+        durableResult = settingsService.setDynamic(key, parsedValue);
+        if (applyRuntimeSetting) applyRuntimeSetting(canonical.key, canonical.value);
       }
       addSystemMessage(formatDurableSetMessage(durableResult, key, parsedValue));
       if (key === SETTING_KEYS.AGENT_MAX_PARALLEL_TOOL_CALLS) {

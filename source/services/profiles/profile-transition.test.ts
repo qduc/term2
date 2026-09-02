@@ -34,6 +34,21 @@ describe('ProfileTransitionService', () => {
     expect(queueModeNotice).not.toHaveBeenCalled();
   });
 
+  it('applies a previously planned transition after canonical settings are already committed', () => {
+    const settings = makeSettings();
+    const rebuildAgent = vi.fn();
+    const queueModeNotice = vi.fn();
+    const service = new ProfileTransitionService(settings, { rebuildAgent, queueModeNotice });
+    const plan = service.plan('builtin:mentor');
+
+    settings.set('app.activeProfileId', plan.targetId);
+    service.commit(plan);
+
+    expect(rebuildAgent).toHaveBeenCalledOnce();
+    expect(queueModeNotice).toHaveBeenCalledWith(MENTOR_MODE_ENTER_NOTICE);
+    expect(settings.set).toHaveBeenCalledOnce();
+  });
+
   it('resolves before mutation and leaves the current Profile on failure', () => {
     const settings = makeSettings();
     const service = new ProfileTransitionService(settings, {

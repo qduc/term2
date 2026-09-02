@@ -66,7 +66,7 @@ The notice is prepended to the next real user turn and then consumed exactly
 once, preserving the behavior owned by the session input preparation path.
 
 Starting or restoring a conversation with a notice-driven Profile active queues
-that Profile's enter notice as current `primeActiveModeNoticeIfActive()` does.
+that Profile's enter notice as `primeActiveProfileNoticeIfActive()` does.
 
 ## Commands and UI
 

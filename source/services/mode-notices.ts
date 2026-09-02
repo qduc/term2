@@ -62,26 +62,6 @@ export const ORCHESTRATOR_MODE_EXIT_NOTICE =
   'Orchestrator Mode is now OFF. Return to the normal workflow; you may work directly when appropriate instead of following orchestrator-only delegation policy.\n' +
   '</system-notice>';
 
-export const planModeNotice = (entering: boolean): string =>
-  entering ? PLAN_MODE_ENTER_NOTICE : PLAN_MODE_EXIT_NOTICE;
-
-export type RuntimeMode = 'standard' | 'plan' | 'mentor' | 'orchestrator';
-
-export const runtimeModeNotice = (mode: Exclude<RuntimeMode, 'standard'>, entering: boolean): string => {
-  if (mode === 'plan') return planModeNotice(entering);
-  if (mode === 'mentor') return entering ? MENTOR_MODE_ENTER_NOTICE : MENTOR_MODE_EXIT_NOTICE;
-  return entering ? ORCHESTRATOR_MODE_ENTER_NOTICE : ORCHESTRATOR_MODE_EXIT_NOTICE;
-};
-
-export function primeActiveModeNoticeIfActive(
-  modes: { planMode?: boolean; mentorMode?: boolean; orchestratorMode?: boolean },
-  queue: (text: string) => void,
-): void {
-  if (modes.orchestratorMode) queue(ORCHESTRATOR_MODE_ENTER_NOTICE);
-  else if (modes.planMode) queue(PLAN_MODE_ENTER_NOTICE);
-  else if (modes.mentorMode) queue(MENTOR_MODE_ENTER_NOTICE);
-}
-
 /** Return the workflow notice associated with a canonical Profile identity. */
 export function profileEnterNotice(profileId: string): string | null {
   if (profileId === 'builtin:plan') return PLAN_MODE_ENTER_NOTICE;
@@ -111,8 +91,4 @@ export function primeActiveProfileNoticeIfActive(
     // unusable. Activation itself remains strict and reports this error.
     if (!(error instanceof ProfileResolutionError)) throw error;
   }
-}
-
-export function primePlanModeNoticeIfActive(planMode: boolean, queue: (text: string) => void): void {
-  primeActiveModeNoticeIfActive({ planMode }, queue);
 }

@@ -1549,7 +1549,7 @@ it.sequential('sensitive settings loaded from env are accessible at runtime', as
   });
 });
 
-it('set() enables target app mode and disables sibling modes', async () => {
+it('maps legacy app-mode writes to canonical Profile selection', async () => {
   const settingsDir = getTestSettingsDir();
   const service = new SettingsService({
     settingsDir,
@@ -1558,6 +1558,7 @@ it('set() enables target app mode and disables sibling modes', async () => {
 
   // Enable orchestrator mode initially
   service.set('app.orchestratorMode', true);
+  expect(service.get('app.activeProfileId')).toBe('builtin:orchestrator');
   expect(service.get('app.orchestratorMode')).toBe(true);
   expect(service.get('app.liteMode')).toBe(false);
   expect(service.get('app.planMode')).toBe(false);
@@ -1565,6 +1566,7 @@ it('set() enables target app mode and disables sibling modes', async () => {
 
   // Setting liteMode to true should disable orchestratorMode
   service.set('app.liteMode', true);
+  expect(service.get('app.activeProfileId')).toBe('builtin:lite');
   expect(service.get('app.liteMode')).toBe(true);
   expect(service.get('app.orchestratorMode')).toBe(false);
   expect(service.get('app.planMode')).toBe(false);
@@ -1572,10 +1574,25 @@ it('set() enables target app mode and disables sibling modes', async () => {
 
   // Setting planMode to true should disable liteMode
   service.set('app.planMode', true);
+  expect(service.get('app.activeProfileId')).toBe('builtin:plan');
   expect(service.get('app.planMode')).toBe(true);
   expect(service.get('app.liteMode')).toBe(false);
   expect(service.get('app.orchestratorMode')).toBe(false);
   expect(service.get('app.mentorMode')).toBe(false);
+});
+
+it('applies legacy mode writes in transaction order without stale profile mapping', () => {
+  const service = new SettingsService({
+    settingsDir: getTestSettingsDir(),
+    disableFilePersistence: true,
+  });
+
+  service.setDynamicTransaction([
+    { key: 'app.planMode', value: true },
+    { key: 'app.liteMode', value: false },
+  ]);
+
+  expect(service.get('app.activeProfileId')).toBe('builtin:plan');
 });
 
 // Sandbox / auto-approve exclusivity: 'always' auto-approval cannot coexist

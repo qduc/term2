@@ -105,6 +105,27 @@ it('replayEvents: canonical profile setting changes update the restored profile'
   expect(restored.activeProfileId).toBe('builtin:mentor');
 });
 
+it('replayEvents: legacy profile setting changes update canonical profile state', () => {
+  const restored = replayEvents([
+    env({
+      type: 'session_init',
+      id: 'legacy-session',
+      createdAt: '2026-01-01T00:00:00Z',
+      appMode: { mentorMode: false, liteMode: false, planMode: true, orchestratorMode: false },
+    }),
+    env({ type: 'settings_changed', key: 'app.liteMode', value: true }),
+    env({ type: 'settings_changed', key: 'app.liteMode', value: false }),
+  ]);
+
+  expect(restored.activeProfileId).toBe('builtin:standard');
+  expect(restored.appMode).toEqual({
+    mentorMode: false,
+    liteMode: false,
+    planMode: false,
+    orchestratorMode: false,
+  });
+});
+
 it('replayEvents: legacy-only session state remains resumable through precedence migration', () => {
   const restored = replayEvents([
     env({

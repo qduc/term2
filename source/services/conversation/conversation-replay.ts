@@ -26,6 +26,11 @@ import {
 import { formatPatchOutputItems, coerceToText } from '../../tools/format-helpers.js';
 import { projectProviderHistory } from './conversation-state-projector.js';
 import { normalizeRunItems } from './run-item-normalizer.js';
+import {
+  legacyModeFromProfileId,
+  profileIdFromLegacyMode,
+  profileIdFromLegacyModeSetting,
+} from '../profiles/legacy-adapter.js';
 
 export interface RestoredState {
   id: string;
@@ -543,15 +548,12 @@ function applyEvent(state: ReplayState, event: PersistedLogEvent, ts: string): v
         case 'app.liteMode':
         case 'app.planMode':
         case 'app.orchestratorMode': {
-          const flag = event.key.substring('app.'.length);
-          state.appMode = {
-            mentorMode: false,
-            liteMode: false,
-            planMode: false,
-            orchestratorMode: false,
-            ...(state.appMode ?? {}),
-            [flag]: Boolean(event.value),
-          };
+          const currentProfileId = state.activeProfileId ?? profileIdFromLegacyMode(state.appMode);
+          const profileId = profileIdFromLegacyModeSetting(event.key, event.value, currentProfileId);
+          if (profileId) {
+            state.activeProfileId = profileId;
+            state.appMode = legacyModeFromProfileId(profileId);
+          }
           return;
         }
         case 'app.activeProfileId':

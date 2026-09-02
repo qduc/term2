@@ -1,8 +1,9 @@
 import type { SettingsService } from './settings/settings-service.js';
 import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import { setTrimConfig } from '../utils/output/output-trim.js';
-import { planModeNotice, runtimeModeNotice } from './mode-notices.js';
-import { ProfileTransitionService } from './profiles/profile-transition.js';
+import { ProfileTransitionService, type ProfileTransitionPlan } from './profiles/profile-transition.js';
+import { profileIdFromLegacyModeSetting } from './profiles/legacy-adapter.js';
+import { isLegacyModeSettingKey } from './profiles/legacy-adapter.js';
 
 export interface RuntimeSettingRouterConversationService {
   switchProvider(provider: string): void;
@@ -38,16 +39,40 @@ export class ConversationConfigurationService {
   apply(changes: readonly ConversationSettingChange[]): { restartOnly: readonly string[] } {
     const runtime = changes.filter((change) => change.persistence === 'runtime');
     if (runtime.length > 0) {
-      const planWas = Boolean(this.#deps.settingsService.get('app.planMode'));
-      this.#deps.settingsService.setDynamicTransaction(runtime.map(({ key, value }) => ({ key, value })));
-      for (const change of runtime) {
-        this.applyRuntimeSetting(change.key, change.value);
+      let currentProfileId = String(this.#deps.settingsService.get('app.activeProfileId'));
+      const canonicalRuntime = runtime.map((change) => {
+        if (!isLegacyModeSettingKey(change.key)) {
+          if (change.key === 'app.activeProfileId' && typeof change.value === 'string') {
+            currentProfileId = change.value;
+          }
+          return change;
+        }
+        const profileId = profileIdFromLegacyModeSetting(change.key, change.value, currentProfileId);
+        if (!profileId) return change;
+        currentProfileId = profileId;
+        return { ...change, key: 'app.activeProfileId', value: profileId };
+      });
+      const activeProfileChange = [...canonicalRuntime]
+        .reverse()
+        .find((change) => change.key === 'app.activeProfileId');
+      const profileTransition = activeProfileChange
+        ? new ProfileTransitionService({
+            settingsService: this.#deps.settingsService,
+            rebuildAgent: () => this.#deps.setModel(this.#deps.settingsService.get('agent.model')),
+            queueModeNotice: (text) => this.#deps.conversationService.queueModeNotice(text),
+          })
+        : undefined;
+      // Profile planning must happen before the transaction changes the active
+      // identity. The transaction owns canonical settings publication; the
+      // prepared plan owns the corresponding runtime effects afterward.
+      const profilePlan = profileTransition?.plan(String(activeProfileChange?.value)) as
+        | ProfileTransitionPlan
+        | undefined;
+      this.#deps.settingsService.setDynamicTransaction(canonicalRuntime.map(({ key, value }) => ({ key, value })));
+      for (const change of canonicalRuntime) {
+        if (change.key !== 'app.activeProfileId') this.applyRuntimeSetting(change.key, change.value);
       }
-      const planIs = Boolean(this.#deps.settingsService.get('app.planMode'));
-      const planKeyExplicit = runtime.some((change) => change.key === 'app.planMode');
-      if (!planKeyExplicit && planWas !== planIs) {
-        this.#deps.conversationService.queueModeNotice(planModeNotice(planIs));
-      }
+      if (profileTransition && profilePlan) profileTransition.commit(profilePlan);
     }
     for (const change of changes.filter((item) => item.persistence === 'restart')) {
       this.#deps.settingsService.setPersistentDynamic(change.key, change.value);
@@ -123,24 +148,6 @@ export function applyRuntimeSettingChange(key: string, value: unknown, deps: Run
     key === 'agent.mentorReasoningEffort'
   ) {
     deps.setModel(deps.settingsService.get('agent.model'));
-    return;
-  }
-
-  if (key === 'app.mentorMode' || key === 'app.orchestratorMode') {
-    deps.setModel(deps.settingsService.get('agent.model'));
-    deps.conversationService.queueModeNotice(
-      runtimeModeNotice(key === 'app.mentorMode' ? 'mentor' : 'orchestrator', Boolean(value)),
-    );
-    return;
-  }
-
-  if (key === 'app.liteMode') {
-    deps.setModel(deps.settingsService.get('agent.model'));
-    return;
-  }
-
-  if (key === 'app.planMode') {
-    deps.conversationService.queueModeNotice(planModeNotice(Boolean(value)));
     return;
   }
 

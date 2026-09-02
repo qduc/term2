@@ -152,21 +152,22 @@ it('viewing all settings with no args prompts for autocomplete', () => {
   expect(deps.messages.length).toBe(0); // No message sent
 });
 
-it('queues an implicit Plan Mode exit when /settings enables an exclusive mode', () => {
-  let planMode = true;
+it('maps legacy mode writes to canonical Profile activation', () => {
+  let activeProfileId = 'builtin:plan';
   const applied: Array<{ key: string; value: unknown }> = [];
   const command = createSettingsCommand({
     settingsService: {
-      get: (key: string) => (key === 'app.planMode' ? planMode : false),
-      getDynamic: () => false,
+      get: (key: string) => (key === 'app.activeProfileId' ? activeProfileId : key === 'app.planMode'),
+      getDynamic: (key: string) => key === 'app.planMode',
       isRuntimeModifiable: () => true,
-      setDynamic: (key: string) => {
-        if (key === 'app.liteMode') planMode = false;
+      setDynamic: (key: string, value: unknown) => {
+        if (key === 'app.activeProfileId') activeProfileId = String(value);
         return { status: 'saved' };
       },
     } as any,
     addSystemMessage: () => {},
     applyRuntimeSetting: (key, value) => {
+      if (key === 'app.activeProfileId') activeProfileId = String(value);
       applied.push({ key, value });
     },
     replaceInput: () => {},
@@ -174,27 +175,27 @@ it('queues an implicit Plan Mode exit when /settings enables an exclusive mode',
 
   command.action('app.liteMode true');
 
-  expect(applied).toEqual([
-    { key: 'app.liteMode', value: true },
-    { key: 'app.planMode', value: false },
-  ]);
+  expect(applied).toEqual([{ key: 'app.activeProfileId', value: 'builtin:lite' }]);
 });
 
-it('does not apply the implicit Plan Mode fallback for active profile changes', () => {
-  let planMode = true;
+it('does not apply a second legacy fallback for active profile changes', () => {
+  let activeProfileId = 'builtin:standard';
   const applied: Array<{ key: string; value: unknown }> = [];
   const command = createSettingsCommand({
     settingsService: {
-      get: (key: string) => (key === 'app.planMode' ? planMode : false),
-      getDynamic: () => false,
+      get: (key: string) => (key === 'app.activeProfileId' ? activeProfileId : key === 'app.planMode'),
+      getDynamic: (key: string) => key === 'app.planMode',
       isRuntimeModifiable: () => true,
-      setDynamic: (key: string) => {
-        if (key === 'app.activeProfileId') planMode = false;
+      setDynamic: (key: string, value: unknown) => {
+        if (key === 'app.activeProfileId') activeProfileId = String(value);
         return { status: 'saved' };
       },
     } as any,
     addSystemMessage: () => {},
-    applyRuntimeSetting: (key, value) => applied.push({ key, value }),
+    applyRuntimeSetting: (key, value) => {
+      if (key === 'app.activeProfileId') activeProfileId = String(value);
+      applied.push({ key, value });
+    },
     replaceInput: () => {},
   });
 

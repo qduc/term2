@@ -649,6 +649,36 @@ it.sequential('useAppCommands enabling orchestrator disables all of: lite, plan,
   expect(settings.get('app.activeProfileId')).toBe('builtin:orchestrator');
 });
 
+it.sequential('useAppCommands /profile lite preserves history confirmation', async () => {
+  const settings = new Map<string, any>([['app.activeProfileId', 'builtin:standard']]);
+  let requestedPending: any = null;
+  let hookResult: any;
+
+  await renderInAct(
+    React.createElement(TestHookWrapper, {
+      settings,
+      messages: [{ id: 'msg-1', sender: 'user', text: 'inspect this' }],
+      requestModeSwitchConfirm: (pending) => {
+        requestedPending = pending;
+      },
+      onHookResult: (res) => {
+        hookResult = res;
+      },
+    }),
+  );
+
+  await act(async () => {
+    hookResult.slashCommands.find((command: any) => command.name === 'profile').action('lite');
+  });
+
+  expect(requestedPending).toMatchObject({
+    targetProfileId: 'builtin:lite',
+    modeLabel: 'Lite',
+    targetValue: true,
+  });
+  expect(settings.get('app.activeProfileId')).toBe('builtin:standard');
+});
+
 it.sequential('useAppCommands enabling plan disables all of: lite, orchestrator, mentor', async () => {
   const settings = new Map<string, any>([['app.activeProfileId', 'builtin:standard']]);
   let hookResult: any;

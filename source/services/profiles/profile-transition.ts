@@ -124,6 +124,17 @@ export class ProfileTransitionService {
     const plan = this.plan(targetId);
     if (plan.class === 'noop') return plan;
 
+    this.commit(plan);
+    return plan;
+  }
+
+  /**
+   * Apply the runtime effects of a plan whose canonical selection has already
+   * been committed by a surrounding settings transaction.
+   */
+  commit(plan: ProfileTransitionPlan): void {
+    if (plan.class === 'noop') return;
+
     if (plan.class === 'structural') {
       const confirmationRequired =
         typeof this.#deps.requiresHistoryConfirmation === 'function'
@@ -134,12 +145,14 @@ export class ProfileTransitionService {
 
     // SettingsService's canonical normalization updates the compatibility
     // flags and emits the active-profile change that rebuild subscribers use.
-    this.#settingsService.set('app.activeProfileId', plan.targetId);
+    // A caller using commit() has already performed that write atomically.
+    if (this.#settingsService.get('app.activeProfileId') !== plan.targetId) {
+      this.#settingsService.set('app.activeProfileId', plan.targetId);
+    }
 
     if (plan.class === 'structural' || plan.class === 'agent-rebuild') {
       this.#deps.rebuildAgent?.();
     }
     if (plan.composedNotice) this.#deps.queueModeNotice?.(plan.composedNotice);
-    return plan;
   }
 }

@@ -17,6 +17,7 @@ export const SAFE_SETTINGS_KEYS = [
   'agent.maxParallelToolCalls',
   'agent.contextCompaction.enabled',
   'agent.contextCompaction.threshold',
+  'app.activeProfileId',
   'app.mentorMode',
   'app.liteMode',
   'app.planMode',
@@ -291,6 +292,7 @@ function sessionScopedKey(key: SafeSettingsKey): boolean {
     key === 'agent.model' ||
     key === 'agent.provider' ||
     key === 'agent.reasoningEffort' ||
+    key === 'app.activeProfileId' ||
     key === 'app.mentorMode' ||
     key === 'app.liteMode' ||
     key === 'app.planMode' ||

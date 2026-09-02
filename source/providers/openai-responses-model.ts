@@ -67,10 +67,13 @@ class Lifecycle {
   }
 }
 
-/** Build the Responses image_url/file_id reference for an application image reference. */
-function toResponsesImageReference(image: unknown): Record<string, unknown> {
+/**
+ * Build the Responses image_url/file_id reference for an application image
+ * reference, or `undefined` when the reference carries nothing sendable.
+ */
+function toResponsesImageReference(image: unknown): Record<string, unknown> | undefined {
   if (typeof image === 'string') return { image_url: image };
-  if (!image || typeof image !== 'object') return {};
+  if (!image || typeof image !== 'object') return undefined;
   const record = image as { id?: unknown; fileId?: unknown; url?: unknown; data?: unknown; mediaType?: unknown };
   if (typeof record.id === 'string' || typeof record.fileId === 'string') {
     return { file_id: typeof record.fileId === 'string' ? record.fileId : record.id };
@@ -81,47 +84,65 @@ function toResponsesImageReference(image: unknown): Record<string, unknown> {
     const mediaType = typeof record.mediaType === 'string' ? record.mediaType : 'application/octet-stream';
     return { image_url: `data:${mediaType};base64,${data}` };
   }
-  return {};
+  return undefined;
 }
+
+/** Placeholder text for a content part we cannot represent on the wire. */
+const unsupportedPartText = (role: string, description: string) => ({
+  type: role === 'assistant' ? 'output_text' : 'input_text',
+  text: `[unsupported ${description} omitted]`,
+});
 
 function toResponsesApiContentPart(role: string, part: any): any {
   if (part?.type === 'image') {
-    return { type: 'input_image', ...toResponsesImageReference(part.image), detail: part.detail ?? 'auto' };
+    const reference = toResponsesImageReference(part.image);
+    // An `input_image` with neither image_url nor file_id is malformed and
+    // fails the whole request. Describe it as text rather than sending it.
+    if (!reference) return unsupportedPartText(role, 'image content');
+    return { type: 'input_image', ...reference, detail: part.detail ?? 'auto' };
   }
   return { type: role === 'assistant' ? 'output_text' : 'input_text', text: part?.text ?? '' };
 }
 
-function toResponsesFileReference(file: unknown): Record<string, unknown> {
+/**
+ * Build the Responses file reference for an application file reference, or
+ * `undefined` when the reference carries nothing sendable. Inline file data
+ * needs a filename; without one there is no valid `input_file` to build.
+ */
+function toResponsesFileReference(file: unknown): Record<string, unknown> | undefined {
   if (typeof file === 'string') return { file_id: file };
-  if (!file || typeof file !== 'object') return {};
+  if (!file || typeof file !== 'object') return undefined;
   const record = file as { id?: unknown; url?: unknown; data?: unknown; filename?: unknown };
   const filename = typeof record.filename === 'string' ? { filename: record.filename } : {};
   if (typeof record.id === 'string') return { file_id: record.id, ...filename };
   if (typeof record.url === 'string') return { file_url: record.url, ...filename };
-  if (typeof record.data === 'string' || record.data instanceof Uint8Array) {
-    if (typeof record.filename !== 'string') {
-      throw new Error('Unsupported Responses tool result file: inline data requires a filename.');
-    }
+  if ((typeof record.data === 'string' || record.data instanceof Uint8Array) && typeof record.filename === 'string') {
     return {
       file_data: typeof record.data === 'string' ? record.data : Buffer.from(record.data).toString('base64'),
       filename: record.filename,
     };
   }
-  return {};
+  return undefined;
 }
 
 /** Convert one application tool-result part to a Responses output part. */
 function toResponsesToolResultPart(part: any): any {
   if (typeof part === 'string') return { type: 'input_text', text: part };
   if (part?.type === 'image') {
+    const reference = toResponsesImageReference(part.image);
+    // Degrade to text rather than emitting a reference-less `input_image`,
+    // which the API rejects and which would fail the continuation turn.
+    if (!reference) return unsupportedPartText('tool', 'image content');
     return {
       type: 'input_image',
-      ...toResponsesImageReference(part.image),
+      ...reference,
       ...(part.detail ? { detail: part.detail } : {}),
     };
   }
   if (part?.type === 'file') {
-    return { type: 'input_file', ...toResponsesFileReference(part.file) };
+    const reference = toResponsesFileReference(part.file);
+    if (!reference) return unsupportedPartText('tool', 'file content');
+    return { type: 'input_file', ...reference };
   }
   return { type: 'input_text', text: part?.text ?? '' };
 }

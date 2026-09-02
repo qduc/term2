@@ -420,13 +420,18 @@ function toChatImageUrl(image: unknown): string | undefined {
 }
 
 /** A single chat-completions content part produced from an application part. */
-type ChatContentPart = { type: 'image_url'; image_url: { url: string | undefined } } | { type: 'text'; text: string };
+type ChatContentPart = { type: 'image_url'; image_url: { url: string } } | { type: 'text'; text: string };
 
 /** Convert one application content part to a chat-completions content part. */
 function toChatContentPart(part: any): ChatContentPart {
   if (typeof part === 'string') return { type: 'text', text: part };
   if (part?.type === 'image') {
-    return { type: 'image_url', image_url: { url: toChatImageUrl(part.image) } };
+    const url = toChatImageUrl(part.image);
+    // An unrecognized image reference has no URL to send. Emitting
+    // `image_url: { url: undefined }` would put a malformed part on the wire
+    // and fail the whole request, so describe it as text instead.
+    if (url === undefined) return { type: 'text', text: '[unsupported image content omitted]' };
+    return { type: 'image_url', image_url: { url } };
   }
   return { type: 'text', text: part?.text ?? '' };
 }

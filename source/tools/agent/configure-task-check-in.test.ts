@@ -65,4 +65,43 @@ describe('configure_task_check_in tool', () => {
     expect(messages).toHaveLength(1);
     expect(messages?.[0].command).toContain('worker-1');
   });
+
+  it('enforces minimum 300s on interval_seconds and 30s on next_check_in_seconds in schema', async () => {
+    const handler = vi.fn().mockReturnValue({ ok: true });
+    const tool = createConfigureTaskCheckInToolDefinition(handler);
+
+    // Rejects interval_seconds < 300
+    const failInterval = await tool.execute({
+      target: 'job-1',
+      interval_seconds: 299,
+    });
+    expect(JSON.parse(failInterval as string)).toMatchObject({
+      ok: false,
+    });
+    expect(JSON.parse(failInterval as string).error).toContain('300');
+
+    // Rejects next_check_in_seconds < 30
+    const failNext = await tool.execute({
+      target: 'job-1',
+      next_check_in_seconds: 29,
+    });
+    expect(JSON.parse(failNext as string)).toMatchObject({
+      ok: false,
+    });
+    expect(JSON.parse(failNext as string).error).toContain('30');
+
+    // Accepts valid minimum boundaries
+    const pass = await tool.execute({
+      target: 'job-1',
+      interval_seconds: 300,
+      next_check_in_seconds: 30,
+    });
+    expect(JSON.parse(pass as string)).toEqual({ ok: true });
+    expect(handler).toHaveBeenCalledWith({
+      target: 'job-1',
+      interval_seconds: 300,
+      next_check_in_seconds: 30,
+      enabled: undefined,
+    });
+  });
 });

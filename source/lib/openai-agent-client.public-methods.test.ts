@@ -1237,3 +1237,44 @@ it.sequential('main agent client executes tools through the direct model loop', 
   await stream.completed;
   expect(executeCount).toBe(1);
 });
+
+it('enforces minimums on configureTaskCheckIn in AgentClient', () => {
+  const settings = createMockSettings();
+  const client = new AgentClient({
+    deps: { logger: createMockLogger(), settings, sessionContextService: createSessionContextService() as any },
+  });
+
+  const mockScheduler = {
+    configureTaskCheckIn: vi.fn().mockReturnValue({ ok: true }),
+  };
+  client.setBackgroundCheckInScheduler(mockScheduler as any);
+
+  // Rejects interval_seconds < 300
+  const failInterval = client.configureTaskCheckIn({
+    target: 'job-1',
+    interval_seconds: 299,
+  });
+  expect(failInterval.ok).toBe(false);
+  expect(failInterval.error).toContain('300');
+
+  // Rejects next_check_in_seconds < 30
+  const failNext = client.configureTaskCheckIn({
+    target: 'job-1',
+    next_check_in_seconds: 29,
+  });
+  expect(failNext.ok).toBe(false);
+  expect(failNext.error).toContain('30');
+
+  // Forwards valid parameters to scheduler
+  const pass = client.configureTaskCheckIn({
+    target: 'job-1',
+    interval_seconds: 300,
+    next_check_in_seconds: 30,
+  });
+  expect(pass.ok).toBe(true);
+  expect(mockScheduler.configureTaskCheckIn).toHaveBeenCalledWith('job-1', {
+    enabled: undefined,
+    intervalMs: 300_000,
+    nextDueInMs: 30_000,
+  });
+});

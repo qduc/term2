@@ -46,6 +46,7 @@ import {
   type BackgroundShellRegistry,
 } from '../services/shell/background-shell-registry.js';
 import type { BackgroundShellExecutionResult } from '../tools/system/shell.js';
+import { MIN_CHECK_IN_INTERVAL_SECONDS, MIN_NEXT_CHECK_IN_SECONDS } from '../tools/agent/configure-task-check-in.js';
 import type { BackgroundShellOutputBundle } from '../services/shell/background-shell-watches.js';
 import type {
   SubagentCancelAcknowledgement,
@@ -961,6 +962,18 @@ export class AgentClient {
   }): { ok: boolean; message?: string; error?: string } {
     if (!this.#backgroundCheckInScheduler) {
       return { ok: false, error: 'Background check-in scheduler is not active.' };
+    }
+    if (params.interval_seconds !== undefined && params.interval_seconds < MIN_CHECK_IN_INTERVAL_SECONDS) {
+      return {
+        ok: false,
+        error: `interval_seconds must be at least ${MIN_CHECK_IN_INTERVAL_SECONDS} seconds (5 minutes).`,
+      };
+    }
+    if (params.next_check_in_seconds !== undefined && params.next_check_in_seconds < MIN_NEXT_CHECK_IN_SECONDS) {
+      return {
+        ok: false,
+        error: `next_check_in_seconds must be at least ${MIN_NEXT_CHECK_IN_SECONDS} seconds.`,
+      };
     }
     return this.#backgroundCheckInScheduler.configureTaskCheckIn(params.target, {
       enabled: params.enabled,

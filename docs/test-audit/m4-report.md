@@ -1,8 +1,8 @@
-# M4 cleanup — before/after report (B1–B10 + Topology)
+# M4 cleanup — before/after report (B1–B10 + Topology + follow-up)
 
-Date: 2026-09-04 · Scope: Milestone 4 cleanup batches B1–B10 plus the Topology
-batch (cli.e2e retier, runtime-history location, mutation-testing
-recommendation). Source of truth for counts:
+Date: 2026-09-04 · Scope: Milestone 4 cleanup batches B1–B10, the Topology batch,
+and the follow-up rewrite (`a2b56bd6`) (cli.e2e retier, runtime-history location,
+mutation-testing recommendation). Source of truth for counts:
 `docs/test-audit/baseline.md` (runtime history table), plan
 `docs/plans/test-suite-audit.md`, graph `docs/test-audit/graph.yaml`.
 
@@ -98,7 +98,7 @@ added at real seams):
 **No contract lost all covering evidence.** Three test records were deleted
 (B7): their contracts remain covered by the named replacements, and each flip
 to `keep`/`high` carries evidence citing the surviving file. Graph totals
-throughout M4: 602 tests / 694 contracts / 1224 decisions (unchanged since B7;
+throughout M4 and the follow-up: 602 tests / 694 contracts / 1224 decisions (unchanged since B7;
 Topology added no records because the three e2e files were already recorded with
 `suiteId: e2e` / `provider-blackbox-e2e`). Residual integrity note (deferred,
 unchanged): test files created after the `d36c392a` inventory — including B10's
@@ -125,14 +125,13 @@ re-run for it; the e2e-tier files it touches run under `pnpm test:e2e`
   maintainers. Recommendation stands: keep as an opt-in integration suite; do
   not admit to the default suite, and do not delete — it is the only
   end-to-end Docker grant/lease coverage and runs in environments that opt in.
-- **Remaining M4 pool rewrite candidates (never assigned to a batch):**
-  `shell-command-safety` (relabel/table-drive; stale red/green vocabulary vs
-  `SafetyStatus` semantics) and `hooks-use-settings-completion-test` (three
-  localized repairs: the line-169 tautology, the under-constrained maxResults
-  test at 412-424, the weak composition tests at 522-540). Both stay
-  `rewrite_candidate/medium` with reasons in the graph. **Recommendation:** one
-  small follow-up batch, or an explicit descope.
+- **Follow-up rewrite (completed):** `shell-command-safety` and
+  `hooks-use-settings-completion-test` landed in `a2b56bd6`. The former is now
+  table-driven for approval-required and safe commands; the latter replaces the
+  line-169 tautology, under-constrained maxResults assertions, and weak
+  composition checks with exact assertions. Both graph primaries are now
+  `keep/high`.
 - **Mutation testing:** recommendation written for user approval —
   `docs/test-audit/mutation-testing-proportionality.md`. Not a standing gate;
-  justified on demand for `shell-command-classification` (post-relabel) and
+  justified on demand for `shell-command-classification` (after `a2b56bd6`) and
   `observability-chain-fingerprint`.

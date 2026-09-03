@@ -14131,18 +14131,18 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/calibration-report.md
-  recommendation: rewrite_candidate
-  confidence: medium
-  reason: "Adversarial reviewer and coordinator agree the wrapper expresses its own live contract weakly\
-    \ (neutral keeps): the file is the only test of validateCommandSafety, which is the boolean gate shell.ts\
-    \ actually calls, and its contracts (empty-command throw, nested-substitution RED, sed GREEN family)\
-    \ are unique \u2014 but titles and comments carry stale red/green vocabulary that contradicts SafetyStatus\
-    \ semantics (\"red (now yellow-ish)\"). Milestone 4: tests-only relabel and table-drive; no production\
-    \ change and no coverage loss."
+  recommendation: keep
+  confidence: high
+  reason: "M4 follow-up rewrite landed in a2b56bd6: the file now uses table-driven approval-required and\
+    \ safe-command cases, removing stale red/green vocabulary without a production change or coverage\
+    \ loss. Keep/high because it remains the only test of validateCommandSafety, the boolean gate shell.ts\
+    \ calls, and retains the unique empty-command throw, nested-substitution RED, and sed GREEN family\
+    \ contracts."
   evidence:
   - calibration-adversarial rewrite_candidate/high; calibration-neutral keep/high recorded as dissent.
-  - Coordinator full read verified stale labels and the unique contracts; the seam under test is production-live,
-    so relabel/table, not re-seam.
+  - Coordinator review identified stale labels and unique contracts; the follow-up keeps the production-live seam
+    and changes only test organization and wording.
+  - Follow-up commit a2b56bd6 table-drives the approval-required and safe-command cases and removes the stale labels.
   replacementTestIds: *id001
   status: reviewed
 - id: shell-command-safety-second-neutral
@@ -28321,24 +28321,23 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: rewrite_candidate
-  confidence: medium
-  reason: "Coordinator DOWNGRADE from high with corrected evidence: this 540-line file imports and exercises\
-    \ the real production helpers (buildSettingsList/filterSettingsByQuery/clampIndex from use-settings-completion.js)\
-    \ \u2014 unlike the sibling reimplementation files. Defects are three localized spots: dead tautology\
-    \ expect(result.every(() => true)).toBe(true) at 169; the maxResults test (412-424) asserts only upper\
-    \ bounds and cannot catch under-truncation; two weak composition tests at 522-540 add nothing beyond\
-    \ rerunning the helpers. Localized case repairs, not a whole-file rewrite."
+  recommendation: keep
+  confidence: high
+  reason: "M4 follow-up rewrite landed in a2b56bd6: localized assertion repairs remove the line-169\
+    \ tautology, require exact maxResults lengths, and assert exact helper-composition outputs. Keep/high\
+    \ because this file imports and exercises the real production helpers\
+    \ (buildSettingsList/filterSettingsByQuery/clampIndex from use-settings-completion.js), retaining its\
+    \ settings-completion contract coverage."
   evidence:
   - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
     before this primary was written.'
-  - source/hooks/use-settings-completion.test.ts:148-171 computes expected output but line 169 asserts
-    every item against the constant predicate every(() => true), which verifies nothing.
-  - source/hooks/use-settings-completion.test.ts:412-424 checks only result.length <= maxResults for maxResults
-    2, 4, and 100; an empty or under-populated result could pass without proving the limit behavior.
-  - source/hooks/use-settings-completion.test.ts:522-540 repeats helper composition with weak some() checks,
-    indicating the rewrite should retain boundary assertions while removing tautological/underconstrained
-    checks.
+  - source/hooks/use-settings-completion.test.ts:148-183 computes expected output, asserts the exact
+    key/description list, and verifies every returned item has a description.
+  - source/hooks/use-settings-completion.test.ts:425-437 asserts exact result lengths for maxResults 2, 4, and 5.
+  - source/hooks/use-settings-completion.test.ts:535-553 asserts exact helper-composition output and both clampIndex
+    boundaries.
+  - Follow-up commit a2b56bd6 replaces the tautology and weak composition checks with exact output assertions
+    and makes the maxResults cases assert the requested lengths.
   replacementTestIds: []
   status: reviewed
 - id: hooks-use-shell-mode-test-primary

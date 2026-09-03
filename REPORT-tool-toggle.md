@@ -155,3 +155,26 @@ All sets reproduce at clean `ce7a8e32` with all my changes stashed. Worth a
 separate diagnosis: the outside-workspace approval detection appears broken in
 this environment (plausibly home/workspace path resolution), and the PBB
 early-close scenario times out instead of failing fast.
+
+## Review findings resolution (Option 1: Scope Acceptance)
+
+Following independent review in `REVIEW-tool-toggle-implementation.md`, Option 1
+was chosen and implemented:
+1. **Formal Scope Acceptance**: Phase 1 is accepted as governing the main-agent
+   surface only. Subagent tool capability inheritance is explicitly scheduled
+   for Milestone 3, and individual tool controls (e.g. `web_search` vs
+   `web_fetch`) for Milestone 2.
+2. **Warning Map Expansion**: `PROFILE_TOGGLE_CONFLICTS` in
+   `source/services/tool-toggles.ts` now accounts for base model instructions
+   (shell and file-write) across `builtin:standard`, `builtin:plan`,
+   `builtin:orchestrator`, and `builtin:mentor`. Tests in
+   `source/services/tool-toggles.test.ts` updated and verified.
+3. **Transaction Ordering Verification**: Added test in
+   `source/services/runtime-setting-router.test.ts` proving reverse application
+   order (`toggle` then `profile`) correctly queues both mode transition and
+   toggle conflict notices without loss.
+4. **Memory Context Documentation**: Corrected
+   `docs/plans/tool-toggle-setting-design.md:368-371` to distinguish `tools.memory.enabled`
+   (disabling memory tools and active guidance) from passive injected memory
+   context (governed by the profile context source).
+

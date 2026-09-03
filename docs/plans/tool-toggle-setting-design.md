@@ -365,10 +365,11 @@ enforcement is an invocation-time denial layer (`plan-mode-interceptor.ts:31-52`
 and composes with a masked surface; disabling `shell` does not remove
 background-shell control tools (gated by `background-tasks` + registry,
 `agent.ts:429-437`) — correct, since jobs launched before the toggle still
-need get/cancel; masking `memory` also drops memory context and guidance
-because `agent.ts:350` derives `memoryEnabled` from the closure;
-`run-agent-workflow`'s `parentTools` snapshot (`agent.ts:587`) automatically
-reflects the mask.
+need get/cancel; disabling `tools.memory.enabled` removes memory tools
+and active guidance (`agent.ts:350` derives `memoryEnabled` from `hasCapability('memory')`),
+while passive injected memory context remains governed by the profile's `memory`
+context source; `run-agent-workflow`'s `parentTools` snapshot (`agent.ts:587`)
+automatically reflects the mask.
 
 ### 4. Mid-session behavior: runtime-modifiable, effective next request
 

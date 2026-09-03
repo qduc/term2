@@ -236,6 +236,31 @@ it('warns on a capability toggle applied alongside a workflow-profile switch (bo
   expect(queued.some((text) => text !== queued.find((t) => t.includes('tools.fileWrite.enabled')))).toBe(true);
 });
 
+it('warns on capability toggle applied before workflow-profile switch in reverse order', () => {
+  let activeProfileId = 'builtin:standard';
+  const { service, conversationService } = makeService({
+    get: vi.fn((key: string) =>
+      key === 'app.activeProfileId' ? activeProfileId : key === 'agent.model' ? 'current-model' : false,
+    ),
+    setDynamicTransaction: vi.fn((changes: readonly { key: string; value: unknown }[]) => {
+      for (const change of changes) {
+        if (change.key === 'app.activeProfileId') activeProfileId = String(change.value);
+      }
+    }),
+    getDynamic: vi.fn((key: string) => (key === 'tools.fileWrite.enabled' ? true : false)),
+  });
+
+  service.apply([
+    { key: 'tools.fileWrite.enabled', value: false, persistence: 'runtime' },
+    { key: 'app.activeProfileId', value: 'builtin:plan', persistence: 'runtime' },
+  ]);
+
+  expect(conversationService.queueModeNotice).toHaveBeenCalledTimes(2);
+  const queued = conversationService.queueModeNotice.mock.calls.map((call) => call[0] as string);
+  expect(queued.some((text) => text.includes('tools.fileWrite.enabled'))).toBe(true);
+  expect(queued.some((text) => text !== queued.find((t) => t.includes('tools.fileWrite.enabled')))).toBe(true);
+});
+
 it('maps legacy mode changes in transaction order', () => {
   let activeProfileId = 'builtin:standard';
   const { service, settingsService } = makeService({

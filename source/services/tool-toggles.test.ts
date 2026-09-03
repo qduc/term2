@@ -84,13 +84,19 @@ describe('buildToggleConflictNotice', () => {
     expect(notice).toContain('tools.fileRead.enabled');
   });
 
-  it('warns for orchestrator/subagents, mentor/mentor, standard and plan file-write or subagents', () => {
+  it('warns for orchestrator, mentor, standard and plan shell, file-write, or role-specific tools', () => {
     const cases: Array<[string, string[], string]> = [
       ['builtin:orchestrator', ['tools.subagents.enabled'], 'Orchestrator'],
+      ['builtin:orchestrator', ['tools.shell.enabled'], 'Orchestrator'],
+      ['builtin:orchestrator', ['tools.fileWrite.enabled'], 'Orchestrator'],
       ['builtin:mentor', ['tools.mentor.enabled'], 'Mentor'],
+      ['builtin:mentor', ['tools.shell.enabled'], 'Mentor'],
+      ['builtin:mentor', ['tools.fileWrite.enabled'], 'Mentor'],
       ['builtin:standard', ['tools.fileWrite.enabled'], 'Standard'],
+      ['builtin:standard', ['tools.shell.enabled'], 'Standard'],
       ['builtin:standard', ['tools.subagents.enabled'], 'Standard'],
       ['builtin:plan', ['tools.fileWrite.enabled'], 'Plan'],
+      ['builtin:plan', ['tools.shell.enabled'], 'Plan'],
       ['builtin:plan', ['tools.subagents.enabled'], 'Plan'],
     ];
     for (const [profileId, toggles, label] of cases) {
@@ -108,7 +114,7 @@ describe('buildToggleConflictNotice', () => {
       buildToggleConflictNotice(reader({ 'app.activeProfileId': 'builtin:orchestrator' }), ['tools.web.enabled']),
     ).toBeNull();
     expect(
-      buildToggleConflictNotice(reader({ 'app.activeProfileId': 'builtin:standard' }), ['tools.shell.enabled']),
+      buildToggleConflictNotice(reader({ 'app.activeProfileId': 'builtin:standard' }), ['tools.codeContext.enabled']),
     ).toBeNull();
   });
 

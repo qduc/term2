@@ -460,7 +460,7 @@ it('CodexResponsesTransport never sends context_management on create', () => {
 it('CodexResponsesTransport.compactHistory uses the Responses compaction trigger and marks the opaque item', async () => {
   const create = vi.fn(async (body: any) => {
     expect(body).toEqual({
-      model: 'gpt-5.6-sol',
+      model: 'gpt-5.6-luna',
       input: [
         { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] },
         { type: 'compaction_trigger' },
@@ -469,6 +469,7 @@ it('CodexResponsesTransport.compactHistory uses the Responses compaction trigger
       stream: true,
       store: false,
       include: ['reasoning.encrypted_content'],
+      reasoning: { context: 'all_turns' },
     });
     return (async function* () {
       yield {
@@ -478,7 +479,7 @@ it('CodexResponsesTransport.compactHistory uses the Responses compaction trigger
       yield { type: 'response.completed', response: { id: 'resp_1' } };
     })();
   });
-  const transport = new CodexResponsesTransport({ responses: { create } } as any, 'gpt-5.6-sol', false);
+  const transport = new CodexResponsesTransport({ responses: { create } } as any, 'gpt-5.6-luna', false);
   const result = await transport.compactHistory({
     input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] }],
   });

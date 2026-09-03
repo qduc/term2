@@ -34774,19 +34774,19 @@ decisions:
   role: primary
   reviewer: test-audit-coordinator
   sourceArtifact: docs/test-audit/graph.yaml
-  recommendation: retier_candidate
+  recommendation: keep
   confidence: high
-  reason: Coordinator decision of record after source verification. The process-level terminal smoke test
-    is correctly classified as e2e but default Vitest discovery includes it; the repository also exposes
-    an explicit e2e script.
+  reason: "M4 batch Topology (audit-m4-topology f5dac241) landed: vitest.config.ts now excludes\n    \ **/*.e2e.* from the default invocation, so the process-level terminal smoke test no longer runs\n    \ inside the unit suite; it runs through vitest.e2e.config.ts via test:e2e, which CI executes as\n    \ its own job. The retier is enforced by configuration, not by a runtime skip, and the\n    \ suite-tier-separation contract now holds."
   evidence:
-  - 'Coordinator verification: the reviewer evidence was checked against the test file and named siblings
-    before this primary was written.'
-  - source/cli.e2e.test.ts:8-15 documents cold-start cost and assigns a 600000ms e2e test budget.
-  - source/cli.e2e.test.ts:36-61 spawns node/tsx, waits for first paint and harness idle, sends Ctrl+C,
-    and asserts clean exit/output.
-  - vitest.config.ts:5-11 includes source/**/*.{test,spec}.{ts,tsx} in the default invocation.
-  - package.json:54-58 defines broad test and suffix-filtered test:e2e commands.
+  - 'vitest.config.ts:5-8 keeps the unit include and adds exclude **/*.e2e.*, which removes
+    source/cli.e2e.test.ts from pnpm test discovery.'
+  - 'vitest.e2e.config.ts:13 includes source/**/*.e2e.test.ts and scripts/**/*.e2e.test.ts;
+    package.json:56 points test:e2e at that config, so the file runs only through the explicit
+    e2e path.'
+  - '.github/workflows/ci.yml:54-79 adds a dedicated e2e job running pnpm test:e2e, preserving
+    CI coverage of the retiered file.'
+  - 'source/cli.e2e.test.ts:36-63 still spawns the terminal UI and asserts clean Ctrl+C exit;
+    its 600s budget and cold-start caveat are unchanged.'
   replacementTestIds: []
   status: reviewed
 - id: entrypoints-cli-integration-test-primary

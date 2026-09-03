@@ -1,0 +1,42 @@
+{
+  "preregistered_query": "frozen window provider-traffic/2026-{08-27..08-31,09-01..09-03} + app-log term2-2026-{08-27..09-03}.log*; see docs/plans/codex-style-exec-spec-v2.md E1",
+  "query_script": "traffic: parse completed payload choices[].delta.tool_calls[] name==shell, JSON-parse arguments, dedupe by call id, unparseable counted separately; app-log: regex maxOutputLength on 'Shell command execution started' lines",
+  "traffic": {
+    "window_files": 21228,
+    "dedup_shell_calls": 9547,
+    "unparseable_arguments": 6,
+    "foreground": 9427,
+    "foreground_over_cap_requests": 638,
+    "foreground_over_cap_rate": 0.0677,
+    "over_cap_distribution": {
+      "50000": 486,
+      "60000": 104,
+      "100000": 17,
+      "80000": 11,
+      "70000": 5,
+      "90000": 5,
+      "120000": 5,
+      "45000": 3
+    },
+    "background": 120,
+    "note": "REQUEST signal only: a 50k request returning 10 chars is counted. Both root/nested wrappers already outer-trim to shell.maxOutputChars, so no escaped-volume claim is made."
+  },
+  "app_log": {
+    "executions": 8850,
+    "effective_over_40k": 571,
+    "rate": 0.0645,
+    "top_values": {
+      "40000": 4147,
+      "30000": 1272,
+      "20000": 987,
+      "10000": 669,
+      "12000": 450,
+      "50000": 423,
+      "5000": 173,
+      "60000": 101
+    },
+    "note": "Pre-E1 code: foreground effective == raw request, so these 571 executions are exactly the population E1 clamps. Post-E1 the same query must read 0 over-cap."
+  },
+  "retraction": "spec v2 commit 2fcdb902 reported 287/4728 with top buckets 50000x415+60000x67; the buckets alone exceed the numerator and neither count reproduces. That claim is withdrawn and replaced by the numbers above.",
+  "justification": "consistency fix (foreground matches background reduction-only semantics) + spool seam: over-cap foreground executions now enter formatShellExecutionOutput with a capped threshold so excess is trimmed AND spooled to a retrievable artifact, which the generic outer trim does not provide."
+}

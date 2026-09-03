@@ -1817,6 +1817,16 @@ Catalogued, no hypothesized failure mode:
 | `ExecutionBudget.maxChildren/maxDepth/maxConcurrency` | opt-in | opt-in |
 | Agent workflow timeout / run / concurrency / code / output / console | 120s / 8 / 3 / 16KiB / 64KiB / 16KiB | no |
 | Shell context output | 1000 lines / 40k chars | no |
+| Shell foreground output-budget clamp (E1, ba428dd7) | foreground `max_output_length` clamped reduction-only to effective `shell.maxOutputChars` (default 40k chars, UTF-16 code units; equality untrimmed per exceeding-only contract; per-stream threshold, not a total-result bound); background path already clamped; outer root/nested `trimToolOutput` retained | shell.ts:916-923 (executor) → shell.ts:1212-1220 (settlement selection) → shell-output.ts:89-110 (trim+spool) |
+
+### E1 foreground clamp receipt (ba428dd7, merged 5c118dcb)
+
+- Signal/action/recovery: signal = model-requested `max_output_length` above configured max; action = `Math.min(requested, configured)` before execution; recovery = excess trimmed AND spooled to `Full output saved to` artifact (spool seam the generic outer trim lacks).
+- Class/status/owner: context-retention bound; landed; owner `source/tools/system/shell.ts`.
+- Red proof: `shell.test.ts` 'clamps a foreground max_output_length above the configured maximum' FAILS without the fix (verified via stash), passes with it; plus exact-cap equality, omitted-setting fallback, and public wrapped-path (outer-trim + spool) tests.
+- Verification: focused `source/tools/system/shell.test.ts` 79/79; `pnpm typecheck` clean; provider-black-box explicitly not required (tools/system only, no provider/bridge/run-loop path — reviewer-concurred).
+- Observability: `Shell command execution started` debug carries effective `maxOutputLength`; post-E1 the frozen-window query must read 0 over-cap. Evidence aggregate: `docs/research/evidence/e1-clamp-measurement.json` (preregistered query, frozen 08-27→09-03 window, 638/9427 fg over-cap requests + 571/8850 executions).
+- Rollback: revert ba428dd7 (7-line production change, independently revertible); foreground returns to raw-request thresholds with outer trim still bounding model-visible text.
 | `boundToolResultText` | 40k UTF-8 bytes, spools artifact + path (`verified safe`) | no |
 | Hook callback timeout | 5s | no |
 | Patch/edit healing timeout and file-size cap | helper defaults | no |

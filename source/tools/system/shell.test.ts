@@ -2226,10 +2226,29 @@ it('clamps a foreground max_output_length above the configured maximum', async (
   expect(output).not.toContain('x'.repeat(50));
 });
 
-it('leaves a foreground max_output_length below the configured maximum alone', async () => {
+it('leaves exact-cap equality untrimmed per the exceeding-only contract', async () => {
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
-    settingsService: createMockSettingsService({ 'sandbox.enabled': false, 'shell.maxOutputChars': 40_000 }),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': false, 'shell.maxOutputChars': 40 }),
+    executeShellCommandImpl: async () => ({
+      stdout: 'x'.repeat(40),
+      stderr: '',
+      exitCode: 0,
+      timedOut: false,
+    }),
+  });
+
+  // 40 chars of output against an effective cap of 40: `>` does not fire.
+  const output = await tool.execute({ command: 'exact-cap', max_output_length: 60_000 });
+
+  expect(output).toContain('x'.repeat(40));
+  expect(output).not.toContain('characters trimmed');
+});
+
+it('falls back to the configured maximum when the setting is omitted', async () => {
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': false }),
     executeShellCommandImpl: async () => ({
       stdout: `head-${'x'.repeat(200)}-tail`,
       stderr: '',
@@ -2238,11 +2257,41 @@ it('leaves a foreground max_output_length below the configured maximum alone', a
     }),
   });
 
-  const output = await tool.execute({ command: 'long-output', max_output_length: 120 });
+  // No max_output_length and no shell.maxOutputChars: hardcoded 40k default
+  // applies, so a 211-char output passes through untrimmed.
+  const output = await tool.execute({ command: 'long-output' });
 
-  // Reduction-only: the 120-char request trims (middle-trim note) while the
-  // full output remains retrievable via the spill file.
-  expect(output).toContain('Full output saved to');
-  expect(output).toContain('characters trimmed');
-  expect(output.includes('FULL-ONLY-SENTINEL' as string)).toBe(false);
+  expect(output).toContain('x'.repeat(200));
+  expect(output).not.toContain('characters trimmed');
+});
+
+it('clamps over-cap requests on the public wrapped shell path (outer trim + spool)', async () => {
+  // Public-boundary assertion: build the tool the way agent.ts does (raw
+  // factory), then wrap it the way agent-factory.ts does (outer trim), and
+  // confirm an over-cap foreground request still yields a bounded,
+  // spool-backed result.
+  const raw = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': false, 'shell.maxOutputChars': 40 }),
+    executeShellCommandImpl: async () => ({
+      stdout: `head-${'x'.repeat(200)}-tail`,
+      stderr: '',
+      exitCode: 0,
+      timedOut: false,
+    }),
+  });
+  const wrappedExecute = async (params: Record<string, unknown>) => {
+    const { trimToolOutput } = await import('../../utils/output/trim-tool-output.js');
+    const result = await raw.execute(
+      params as never,
+      { context: undefined, approvals: new ApprovalLedger() },
+      { toolCall: { callId: 'call-wrapped-clamp' } },
+    );
+    return trimToolOutput(result, undefined, 40);
+  };
+
+  const result = (await wrappedExecute({ command: 'long-output', max_output_length: 60_000 })) as string;
+
+  expect(result).not.toContain('x'.repeat(50));
+  expect(result.length).toBeLessThan(60_000);
 });

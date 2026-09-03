@@ -38,6 +38,8 @@ export interface CreateSandboxRuntimeConfigOptions {
   allowReadExtra?: string[];
   allowNetworking?: boolean;
   dockerSocketPath?: string;
+  /** Unix socket the run_code tool bridge listens on, reachable from inside the sandbox. */
+  toolBridgeSocketPath?: string;
   /** Test seam for exercising home-resident credential policy without touching the real home directory. */
   home?: string;
   cwd?: string;
@@ -490,8 +492,8 @@ export function createSandboxRuntimeConfig(options: CreateSandboxRuntimeConfigOp
   const presentSecretEnvVars = Object.keys(options.env ?? process.env).filter(isSecretKey);
   const credentialEnvVars = Array.from(new Set([...defaultCredentialEnvVars, ...presentSecretEnvVars]));
   const tmuxSocketPath = (options.env ?? process.env).TMUX?.split(',', 1)[0];
-  const allowUnixSockets = [options.dockerSocketPath, tmuxSocketPath].filter((socketPath): socketPath is string =>
-    Boolean(socketPath),
+  const allowUnixSockets = [options.dockerSocketPath, tmuxSocketPath, options.toolBridgeSocketPath].filter(
+    (socketPath): socketPath is string => Boolean(socketPath),
   );
   const allowReadExtra = (options.allowReadExtra ?? []).map((filePath) => expandHomePath(filePath, home));
   const denyRead = readPolicy === 'strict' ? [home, '/etc', '/var', '/root', '/private/var'] : credentialFiles;

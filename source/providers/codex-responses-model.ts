@@ -139,6 +139,11 @@ export class CodexResponsesTransport {
         stream: true,
         store: false,
         include: ['reasoning.encrypted_content'],
+        // The Responses-Lite lane rejects compaction without an explicit
+        // reasoning context (400 `requires reasoning.context all_turns`);
+        // ordinary turns already carry this via request normalization, but
+        // the compaction call builds its own body and must set it itself.
+        ...(isCodexResponsesLiteModel(this.model) ? { reasoning: { context: 'all_turns' } } : {}),
         ...(request.instructions !== undefined ? { instructions: request.instructions } : {}),
       },
       request.signal ? { signal: request.signal } : undefined,

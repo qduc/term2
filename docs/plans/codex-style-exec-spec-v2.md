@@ -1,4 +1,7 @@
-# Resume here
+# Status: E1 LANDED (commit ba428dd7, merged 5c118dcb — user-authorized
+# autonomous completion of the spec→implement→review pipeline). E2–E4 remain
+# HELD (no implementation authorized). This section records the E1 receipt;
+# the E2/E3 gates and E4 decline below are unchanged.
 
 Codex-style exec — revised spec v2 (supersedes `codex-style-exec-spec.md` v1
 at `eac0cf28` for all normative content; v1 remains as history).
@@ -24,14 +27,22 @@ NOT recommended for build. What survives is narrower.
   never re-enters the former. V1's "capability-interposed tools.*" was
   therefore unsound as specified: any inner call needing approval either
   bypasses it (SEV-1 scenario) or cannot suspend (no protocol). Design change
-  adopted: inner calls may only invoke capabilities the RUN LOOP has already
-  admitted for non-interactive execution — i.e. the `run_agent_workflow`
-  policy (review's cheaper alternative, verified
-  `workflow-evaluator.ts:292-300`): tools requiring approval are REJECTED
-  inside programs with `approval_required`, never suspended. No nested pause
-  protocol is proposed; that protocol would be a run-loop feature, not an
-  exec feature, and is out of scope.
-- SEV-2 ACCEPTED. `execute-shell.ts:507` (stdin closed at spawn in the
+   adopted: inner calls execute ONLY through a single host-owned dispatch
+   primitive that applies, indivisibly per inner call: schema normalization
+   against the callee's schema, plan-mode and registered interceptors,
+   execution/lifecycle hooks, effect + run-budget accounting, and
+   immutable (structured-cloned) argument snapshots with stable child call
+   IDs and journaled results (no replay of completed calls). Tools whose
+   policy result requires interactive approval are REJECTED with
+   `approval_required` (the `run_agent_workflow` policy, verified
+   `workflow-evaluator.ts:292-300`) — never suspended, since no nested pause
+   protocol exists. Rationale: prior admission of a capability NAME does not
+   admit future ARGUMENTS constructed mid-program (e.g. a patch path or
+   shell string built at runtime); the check must happen at the inner call
+   boundary with the concrete arguments. No nested pause protocol is
+   proposed; that would be a run-loop feature, out of scope here. E4 remains
+   declined, so this broker is specified but NOT built; the honest
+   disposition is 'deferred to a new threat-assessed spec'.- SEV-2 ACCEPTED. `execute-shell.ts:507` (stdin closed at spawn in the
   observed path) and `BackgroundShellRegistry` surface (get/cancel/observe;
   registry holds command/controller/result, no stdin writer) confirm:
   held-stdin resume does not exist here, and arbitrary stdin is a new
@@ -66,11 +77,9 @@ NOT recommended for build. What survives is narrower.
   `max_output_length` (40k default; `shell.ts:99-131`), execution honors the
   per-call value (`shell.ts:908-918`), and real calls carry values like 12000
   (review cites replay test; background path clamps to configured max,
-  foreground does not — `shell.ts:912-918`). V1 M1 is therefore dropped in
-  full, not reframed. Foreground-clamp asymmetry is noted as a (separate,
-  minor) hardening candidate but NOT authorized here. Abandon criteria are
-  rewritten below as independent per-experiment gates with window,
-  denominator, threshold.
+  foreground did not before E1 — `shell.ts:912-918`). V1 M1 is therefore
+  dropped in full, not reframed. The foreground-clamp asymmetry became E1
+  below (now landed; see Status).
 
 Where the reviewer was NOT followed: nothing material. The review's code
 citations verified clean; disagreements would be recorded here with
@@ -78,28 +87,50 @@ citations, but there are none.
 
 ## Revised experiments (independent, unordered; each shippable or stoppable)
 
-- E1 — Foreground output-budget clamp (the surviving sliver of M1). Clamp
-  foreground `max_output_length` to `shell.maxOutputChars` like the
-  background path. MEASURED (2026-09-04, provider-traffic 08-27→09-04,
-  7,209 shell calls): 4,728 foreground, of which 287 (6.1%) request >40k
-  (top values 50000×415, 60000×67); background over-cap is already clamped
-  by code. The >1% gate FIRES — E1 is a real, implementable hardening with
-  a measured denominator. Scope: clamp reduction-only (values below max
-  pass through); no approval-path change (command-only decision untouched).
+- E1 — Foreground output-budget clamp. Clamp foreground `max_output_length`
+  to `shell.maxOutputChars` like the background path. STATUS: LANDED
+  (ba428dd7). Evidence receipt (RETRACTS AND REPLACES the 287/4728 claim
+  committed in 2fcdb902, which is withdrawn: its top buckets exceeded its
+  numerator and neither count reproduces): preregistered query over frozen
+  window provider-traffic/2026-{08-27..08-31,09-01..09-03} (21,228 files) +
+  app-log term2-2026-{08-27..09-03}. Traffic: 9,547 dedup shell calls
+  (6 unparseable args counted separately), 9,427 foreground, 638 over-cap
+  requests (6.8%; distribution 50000×486, 60000×104, 100000×17, …). App-log:
+  8,850 executions, 571 with effective maxOutputLength >40k (6.5%). Query +
+  aggregate retained at docs/research/evidence/e1-clamp-measurement.json.
+  HONEST SCOPE: the metric is a REQUEST signal — both root
+  (`agent-factory.ts:184,205`) and nested (`tool-policy.ts:1050,1059`)
+  wrappers already outer-trim to the configured max, so no escaped-volume
+  claim is made. The incremental value is the shell-specific spool seam:
+  over-cap foreground executions now enter `formatShellExecutionOutput`
+  with a capped threshold so excess is trimmed AND spooled to a retrievable
+  artifact, which the generic outer trim does not provide. Scope is
+  per-stream trim threshold (stdout/stderr trimmed independently, then
+  concatenated — a total-result bound is explicitly NOT claimed); units are
+  characters (UTF-16 code units); equality untrimmed per the exceeding-only
+  contract. Reduction-only; approval untouched.
 - E2 — Poll-only yield/resume on the existing registry (rescoped M2, no
   stdin). A foreground shell call may return early with `{jobId,…}` and a
   later poll call reads output; empty-input keepalive only. Reuses
   `BackgroundShellRegistry` + existing monitor/watch machinery; no new
-  lifecycle. Gate: 30-day window after landing; denominator: background shell
-  calls; continue toward richer resume only if ≥5% of background calls use
-  poll-resume AND user-visible stall complaints reference it, else stop.
+  lifecycle. Gate (READING A — measure existing usage BEFORE building; the
+  v2 text was ambiguous): eligible denominator = background shell calls in
+  a 30-day window; join rule = poll call referencing a live job id from an
+  earlier launch call in the same session; cancelled/failed jobs excluded;
+  telemetry source = provider-traffic tool-call records. Build E2 only if
+  ≥5% of background calls already show multi-call poll patterns; else do
+  not build. The stall-complaint conjunct is DROPPED (no collection source
+  exists). If built, enrich-resume decision after 30 days exposure needs a
+  new gate.
 - E3 — Patch-input containment (rescoped M3, containment not cure).
   Reduction-only per-call argument cap for file-write parameters, explicitly
-  NOT raising maxToolArgumentCharacters (still held). Gate: only if chained-
-  state mitigation (open question in repro doc) proves insufficient AND user
-  authorizes the file-tool change (still held). Chunked continuation is
-  REJECTED as a bypass of the total bound (review: partial-effect hazard,
-  `apply-patch.ts:622` sequential retention).
+  NOT raising maxToolArgumentCharacters (still held). Gate: a named
+  chained-state experiment must first run and show residual runaways
+  (denominator: chained Luna apply_patch calls; threshold: ≥1 runaway in a
+  14-day window after the mitigation lands); AND user authorizes the
+  file-tool change (still held; authority prerequisite, not efficacy gate).
+  Chunked continuation is REJECTED as a bypass of the total bound (review:
+  partial-effect hazard, `apply-patch.ts:622` sequential retention).
 - E4 — Full program tool (M4): NOT RECOMMENDED, no gate defined on purpose.
   Requires: hardened reuse of the workflow evaluator, inner-call broker with
   stable child IDs + journaled results + approval_required rejection policy,
@@ -119,6 +150,7 @@ containment benefit.
 
 ## NOT covered / unknown
 
-Whether E1's clamp changes any user-visible outcome. E2's Ink rendering is
-undesigned. The chained-state prime suspect (repro doc) is untouched by all
-four experiments. No implementation authorized.
+E1's clamp changes no user-visible outcome beyond the spool seam (stated
+above). E2's Ink rendering is undesigned. The chained-state prime suspect
+(repro doc) is untouched by all four experiments. E2–E4: no implementation
+authorized.

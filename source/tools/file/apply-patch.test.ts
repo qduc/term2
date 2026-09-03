@@ -3,7 +3,6 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { createApplyPatchToolDefinition } from './apply-patch.js';
-import { parseUpstreamApplyPatch } from './upstream-apply-patch.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
 import { SessionAccessState } from '../../services/session/session-access-state.js';
@@ -82,12 +81,9 @@ it.sequential('create_file: creates a new file with content', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const filePath = 'new-file.txt';
-    const diff = '@@ -0,0 +1 @@\n+Hello World';
 
     const result = await tool.execute({
-      type: 'create_file',
-      path: filePath,
-      diff,
+      patch: ['*** Begin Patch', `*** Add File: ${filePath}`, '+Hello World', '*** End Patch'].join('\n'),
     });
 
     const parsed = parsePlainResult(result);
@@ -106,12 +102,16 @@ it.sequential('update_file: updates an existing file', async () => {
     const absPath = path.join(dir, filePath);
     await fs.writeFile(absPath, 'Hello\nWorld');
 
-    const diff = '@@ -1,2 +1,2 @@\n Hello\n-World\n+Universe';
-
     const result = await tool.execute({
-      type: 'update_file',
-      path: filePath,
-      diff,
+      patch: [
+        '*** Begin Patch',
+        `*** Update File: ${filePath}`,
+        '@@',
+        ' Hello',
+        '-World',
+        '+Universe',
+        '*** End Patch',
+      ].join('\n'),
     });
 
     const parsed = parsePlainResult(result);
@@ -133,9 +133,14 @@ it.sequential('update_file: preserves parallel patches to different regions of t
     const results = await Promise.all(
       tokens.map((token, index) =>
         tool.execute({
-          type: 'update_file',
-          path: filePath,
-          diff: `@@\n-${token}\n+done_${index}`,
+          patch: [
+            '*** Begin Patch',
+            `*** Update File: ${filePath}`,
+            '@@',
+            `-${token}`,
+            `+done_${index}`,
+            '*** End Patch',
+          ].join('\n'),
         }),
       ),
     );
@@ -155,18 +160,18 @@ it.sequential('execute: applies batched patch operations in order', async () => 
     const tool = createTool();
 
     const result = await tool.execute({
-      operations: [
-        {
-          type: 'create_file',
-          path: 'batch.txt',
-          diff: '@@ -0,0 +1,2 @@\n+Hello\n+World',
-        },
-        {
-          type: 'update_file',
-          path: 'batch.txt',
-          diff: '@@\n Hello\n-World\n+Universe',
-        },
-      ],
+      patch: [
+        '*** Begin Patch',
+        '*** Add File: batch.txt',
+        '+Hello',
+        '+World',
+        '*** Update File: batch.txt',
+        '@@',
+        ' Hello',
+        '-World',
+        '+Universe',
+        '*** End Patch',
+      ].join('\n'),
     });
 
     const parsed = parsePlainResult(result);
@@ -186,19 +191,17 @@ it.sequential('execute: applies an upstream multi-file patch including move and 
     await fs.writeFile(path.join(dir, 'old.txt'), 'before\n');
     await fs.writeFile(path.join(dir, 'remove.txt'), 'remove\n');
 
-    const params = parseUpstreamApplyPatch(
-      [
-        '*** Begin Patch',
-        '*** Update File: old.txt',
-        '*** Move to: moved.txt',
-        '@@',
-        '-before',
-        '+after',
-        '*** Delete File: remove.txt',
-        '*** End Patch',
-      ].join('\n'),
-    );
-    const result = await tool.execute(params as any);
+    const patch = [
+      '*** Begin Patch',
+      '*** Update File: old.txt',
+      '*** Move to: moved.txt',
+      '@@',
+      '-before',
+      '+after',
+      '*** Delete File: remove.txt',
+      '*** End Patch',
+    ].join('\n');
+    const result = await tool.execute({ patch });
 
     expect(parsePlainResult(result).output.every((item) => item.success)).toBe(true);
     await expect(fs.readFile(path.join(dir, 'old.txt'))).rejects.toThrow();
@@ -207,17 +210,72 @@ it.sequential('execute: applies an upstream multi-file patch including move and 
   });
 });
 
-it.sequential('execute: accepts an upstream envelope in the legacy JSON diff field', async () => {
+it.sequential('execute: rejects a non-envelope patch argument', async () => {
+  await withTempDir(async () => {
+    const tool = createTool();
+    const result = await tool.execute({ patch: '@@\n Hello\n-World\n+Universe' });
+
+    const parsed = parsePlainResult(result);
+    expect(parsed.output[0].success).toBe(false);
+    expect(parsed.output[0].error).toContain('*** Begin Patch');
+  });
+});
+
+it.sequential('execute: canonical envelope creates, updates, moves, and deletes end to end', async () => {
+  await withTempDir(async (dir) => {
+    const tool = createTool();
+    await fs.writeFile(path.join(dir, 'edit.txt'), 'alpha\nbeta\n');
+    await fs.writeFile(path.join(dir, 'gone.txt'), 'bye\n');
+    await fs.writeFile(path.join(dir, 'relocate.txt'), 'old home\n');
+
+    const result = await tool.execute({
+      patch: [
+        '*** Begin Patch',
+        '*** Add File: fresh.txt',
+        '+new',
+        '+file',
+        '*** Update File: edit.txt',
+        '@@',
+        ' alpha',
+        '-beta',
+        '+BETA',
+        '*** Update File: relocate.txt',
+        '*** Move to: moved.txt',
+        '@@',
+        '-old home',
+        '+new home',
+        '*** Delete File: gone.txt',
+        '*** End Patch',
+      ].join('\n'),
+    });
+
+    const parsed = parsePlainResult(result);
+    expect(parsed.output.every((item) => item.success)).toBe(true);
+    await expect(fs.readFile(path.join(dir, 'fresh.txt'), 'utf8')).resolves.toBe('new\nfile\n');
+    await expect(fs.readFile(path.join(dir, 'edit.txt'), 'utf8')).resolves.toBe('alpha\nBETA\n');
+    await expect(fs.readFile(path.join(dir, 'moved.txt'), 'utf8')).resolves.toBe('new home\n');
+    await expect(fs.readFile(path.join(dir, 'relocate.txt'))).rejects.toThrow();
+    await expect(fs.readFile(path.join(dir, 'gone.txt'))).rejects.toThrow();
+  });
+});
+
+it.sequential('execute: canonical single-file envelope carries its own path', async () => {
   await withTempDir(async (dir) => {
     const tool = createTool();
     const result = await tool.execute({
-      type: 'update_file',
-      path: 'ignored-by-envelope.txt',
-      diff: ['*** Begin Patch', '*** Add File: nested/new.txt', '+hello', '*** End Patch'].join('\n'),
-    } as any);
+      patch: ['*** Begin Patch', '*** Add File: real.txt', '+hello', '*** End Patch'].join('\n'),
+    });
 
     expect(parsePlainResult(result).output[0].success).toBe(true);
-    await expect(fs.readFile(path.join(dir, 'nested/new.txt'), 'utf8')).resolves.toBe('hello\n');
+    await expect(fs.readFile(path.join(dir, 'real.txt'), 'utf8')).resolves.toBe('hello\n');
+  });
+});
+
+it.sequential('needsApproval: rejects a non-envelope patch without running validation', async () => {
+  await withTempDir(async () => {
+    const tool = createTool();
+    const result = await tool.needsApproval({ patch: 'garbage' });
+    expect(result).toBe(true);
   });
 });
 
@@ -255,9 +313,7 @@ it.sequential('needsApproval: requires approval for outside workspace', async ()
   await withTempDir(async () => {
     const tool = createTool();
     const result = await tool.needsApproval({
-      type: 'create_file',
-      path: '../outside.txt',
-      diff: '@@ -0,0 +1 @@\n+content',
+      patch: ['*** Begin Patch', '*** Add File: ../outside.txt', '+content', '*** End Patch'].join('\n'),
     });
     expect(result).toBe(true);
   });
@@ -267,9 +323,7 @@ it.sequential('needsApproval: yolo mode bypasses outside-workspace write approva
   await withTempDir(async () => {
     const tool = createTool(createMockSettingsService({ 'shell.autoApproveMode': 'always', 'sandbox.enabled': false }));
     const result = await tool.needsApproval({
-      type: 'create_file',
-      path: '../outside.txt',
-      diff: '@@ -0,0 +1 @@\n+content',
+      patch: ['*** Begin Patch', '*** Add File: ../outside.txt', '+content', '*** End Patch'].join('\n'),
     });
     expect(result).toBe(false);
   });
@@ -280,9 +334,7 @@ it.sequential('needsApproval: auto-approves for create/update inside cwd', async
     const tool = createTool(createMockSettingsService());
 
     const result = await tool.needsApproval({
-      type: 'create_file',
-      path: 'inside.txt',
-      diff: '@@ -0,0 +1 @@\n+content',
+      patch: ['*** Begin Patch', '*** Add File: inside.txt', '+content', '*** End Patch'].join('\n'),
     });
     expect(result).toBe(false);
   });
@@ -298,9 +350,14 @@ it.sequential('needsApproval: requires approval for a symlink target outside the
 
       const tool = createTool();
       const result = await tool.needsApproval({
-        type: 'update_file',
-        path: 'link.txt',
-        diff: '@@\n-outside content\n+should require approval',
+        patch: [
+          '*** Begin Patch',
+          '*** Update File: link.txt',
+          '@@',
+          '-outside content',
+          '+should require approval',
+          '*** End Patch',
+        ].join('\n'),
       });
 
       expect(result).toBe(true);
@@ -311,16 +368,15 @@ it.sequential('needsApproval: requires approval for a symlink target outside the
   });
 });
 
-it.sequential('needsApproval: auto-approves invalid diffs (will fail in execute)', async () => {
+it.sequential('needsApproval: requires approval for envelope parse failures (fail-closed)', async () => {
   await withTempDir(async () => {
     const tool = createTool();
-    // Invalid diffs now return false (auto-approve) to avoid breaking the stream
+    // Structural envelope failures (no operations to path-scope) require
+    // approval; execute reports the syntax error without touching the fs.
     const result = await tool.needsApproval({
-      type: 'create_file',
-      path: 'test.txt',
-      diff: 'garbage',
+      patch: '*** Begin Patch\n*** End Patch',
     });
-    expect(result).toBe(false);
+    expect(result).toBe(true);
   });
 });
 
@@ -328,9 +384,9 @@ it.sequential('needsApproval: update_file missing target requires approval', asy
   await withTempDir(async () => {
     const tool = createTool();
     const result = await tool.needsApproval({
-      type: 'update_file',
-      path: 'missing.txt',
-      diff: '@@ anything\n-old\n+new',
+      patch: ['*** Begin Patch', '*** Update File: missing.txt', '@@ anything', '-old', '+new', '*** End Patch'].join(
+        '\n',
+      ),
     });
     expect(result).toBe(true);
   });
@@ -341,25 +397,19 @@ it.sequential('needsApproval: update_file malformed diff auto-approves when file
     await fs.writeFile(path.join(dir, 'existing.txt'), 'line 1\nline 2');
     const tool = createTool();
     const result = await tool.needsApproval({
-      type: 'update_file',
-      path: 'existing.txt',
-      diff: 'garbage',
+      patch: ['*** Begin Patch', '*** Update File: existing.txt', '@@', ' garbage', '*** End Patch'].join('\n'),
     });
     expect(result).toBe(false);
   });
 });
 
-it.sequential('execute: rejects invalid diffs with proper error', async () => {
+it.sequential('execute: rejects a bare headerless diff with proper error', async () => {
   await withTempDir(async () => {
     const tool = createTool();
-    const result = await tool.execute({
-      type: 'create_file',
-      path: 'test.txt',
-      diff: 'garbage',
-    });
+    const result = await tool.execute({ patch: '@@\n Hello\n-World\n+Universe' });
     const parsed = parsePlainResult(result);
     expect(parsed.output[0].success).toBe(false);
-    expect(parsed.output[0].error.includes('Invalid patch')).toBe(true);
+    expect(parsed.output[0].error.includes('*** Begin Patch')).toBe(true);
   });
 });
 
@@ -367,9 +417,14 @@ it.sequential('execute: detailed error for unified diff headers', async () => {
   await withTempDir(async () => {
     const tool = createTool();
     const result = await tool.execute({
-      type: 'create_file',
-      path: 'test.txt',
-      diff: '--- a/test.txt\n+++ b/test.txt\n+Hello',
+      patch: [
+        '*** Begin Patch',
+        '*** Add File: test.txt',
+        '--- a/test.txt',
+        '+++ b/test.txt',
+        '+Hello',
+        '*** End Patch',
+      ].join('\n'),
     });
     const parsed = parsePlainResult(result);
     expect(parsed.output[0].success).toBe(false);
@@ -385,9 +440,16 @@ it.sequential('execute: detailed error for chunk headers with line numbers', asy
     await fs.writeFile(absPath, 'Hello\nWorld');
 
     const result = await tool.execute({
-      type: 'update_file',
-      path: filePath,
-      diff: '@@ -1,2 +1,2 @@\n Hello\n-World\n+Universe\n line missing',
+      patch: [
+        '*** Begin Patch',
+        `*** Update File: ${filePath}`,
+        '@@ -1,2 +1,2 @@',
+        ' Hello',
+        '-World',
+        '+Universe',
+        ' line missing',
+        '*** End Patch',
+      ].join('\n'),
     });
     const parsed = parsePlainResult(result);
     expect(parsed.output[0].success).toBe(false);
@@ -399,9 +461,7 @@ it.sequential('execute: detailed error for leading line numbers', async () => {
   await withTempDir(async () => {
     const tool = createTool();
     const result = await tool.execute({
-      type: 'create_file',
-      path: 'test.txt',
-      diff: '10: +Hello',
+      patch: ['*** Begin Patch', '*** Add File: test.txt', '10: +Hello', '*** End Patch'].join('\n'),
     });
     const parsed = parsePlainResult(result);
     expect(parsed.output[0].success).toBe(false);
@@ -413,9 +473,7 @@ it.sequential('execute: detailed error for invalid line prefix', async () => {
   await withTempDir(async () => {
     const tool = createTool();
     const result = await tool.execute({
-      type: 'create_file',
-      path: 'test.txt',
-      diff: 'Hello',
+      patch: ['*** Begin Patch', '*** Add File: test.txt', 'Hello', '*** End Patch'].join('\n'),
     });
     const parsed = parsePlainResult(result);
     expect(parsed.output[0].success).toBe(false);
@@ -432,9 +490,15 @@ it.sequential('execute: detailed error for context block mismatch', async () => 
 
     // Missing line mismatch
     const result1 = await tool.execute({
-      type: 'update_file',
-      path: filePath,
-      diff: '@@\n line one\n line missing\n line three',
+      patch: [
+        '*** Begin Patch',
+        `*** Update File: ${filePath}`,
+        '@@',
+        ' line one',
+        ' line missing',
+        ' line three',
+        '*** End Patch',
+      ].join('\n'),
     });
     const parsed1 = parsePlainResult(result1);
     expect(parsed1.output[0].success).toBe(false);
@@ -442,9 +506,16 @@ it.sequential('execute: detailed error for context block mismatch', async () => 
 
     // Indentation mismatch (with a missing line to force application failure)
     const result2 = await tool.execute({
-      type: 'update_file',
-      path: filePath,
-      diff: '@@\n line one\n line two\n line missing\n line three', // diff has 0 spaces for 'line two', file has 2 spaces
+      patch: [
+        '*** Begin Patch',
+        `*** Update File: ${filePath}`,
+        '@@',
+        ' line one',
+        ' line two',
+        ' line missing',
+        ' line three',
+        '*** End Patch',
+      ].join('\n'), // envelope has 0 spaces for 'line two', file has 2 spaces
     });
     const parsed2 = parsePlainResult(result2);
     expect(parsed2.output[0].success).toBe(false);
@@ -463,9 +534,16 @@ it.sequential('execute: context mismatch suggests nearby candidate blocks when i
     );
 
     const result = await tool.execute({
-      type: 'update_file',
-      path: filePath,
-      diff: '@@\n function alpha() {\n   const shared = true;\n   return 2;\n }',
+      patch: [
+        '*** Begin Patch',
+        `*** Update File: ${filePath}`,
+        '@@',
+        ' function alpha() {',
+        '   const shared = true;',
+        '   return 2;',
+        ' }',
+        '*** End Patch',
+      ].join('\n'),
     });
 
     const parsed = parsePlainResult(result);
@@ -491,9 +569,9 @@ it.sequential('execute: create_file writes outside workspace when the call has b
     await fs.rm(outsidePath, { force: true });
 
     const result = await tool.execute({
-      type: 'create_file',
-      path: '../outside-approved.txt',
-      diff: '@@ -0,0 +1 @@\n+approved content',
+      patch: ['*** Begin Patch', '*** Add File: ../outside-approved.txt', '+approved content', '*** End Patch'].join(
+        '\n',
+      ),
     });
 
     expect(result).not.toContain('outside workspace');
@@ -536,19 +614,18 @@ it.sequential('execute: heals stale context in apply_patch when enabled and patc
       'function computeTotal(items: number[]): number {\n  let sum = 0;\n  for (const item of items) {\n  }\n}\n',
     );
 
-    const staleDiff = [
+    const stalePatch = [
+      '*** Begin Patch',
+      `*** Update File: ${filePath}`,
       '@@ function calculateTotal',
       ' function calculateTotal(items: number[]): number {',
       '-  let sum = 0;',
       '+  let sum = 100;',
       '   for (const item of items) {',
+      '*** End Patch',
     ].join('\n');
 
-    const result = await tool.execute({
-      type: 'update_file',
-      path: filePath,
-      diff: staleDiff,
-    });
+    const result = await tool.execute({ patch: stalePatch });
 
     expect(mockPatchHealing).toHaveBeenCalled();
     expect(result).toContain('(healed)');
@@ -572,19 +649,18 @@ it.sequential('execute: falls back to error when tools.enableEditHealing is fals
     const absPath = path.join(dir, filePath);
     await fs.writeFile(absPath, 'function computeTotal(items: number[]): number {\n  let sum = 0;\n}\n');
 
-    const staleDiff = [
+    const stalePatch2 = [
+      '*** Begin Patch',
+      `*** Update File: ${filePath}`,
       '@@ function calculateTotal',
       ' function calculateTotal(items: number[]): number {',
       '-  let sum = 0;',
       '+  let sum = 100;',
-      '}\n',
+      '}',
+      '*** End Patch',
     ].join('\n');
 
-    const result = await tool.execute({
-      type: 'update_file',
-      path: filePath,
-      diff: staleDiff,
-    });
+    const result = await tool.execute({ patch: stalePatch2 });
 
     expect(mockPatchHealing).not.toHaveBeenCalled();
     expect(result).toContain('Error: Invalid patch:');
@@ -603,9 +679,14 @@ it.sequential('needsApproval allows applying patch in SANDBOX_TEMP_DIR without a
 
     try {
       const result = await tool.needsApproval({
-        type: 'update_file',
-        path: tempFilePath,
-        diff: '--- a/scratch-patch.txt\n+++ b/scratch-patch.txt\n@@ -1 +1 @@\n-original text\n+patched text\n',
+        patch: [
+          '*** Begin Patch',
+          `*** Update File: ${tempFilePath}`,
+          '@@',
+          '-original text',
+          '+patched text',
+          '*** End Patch',
+        ].join('\n'),
       });
 
       expect(result).toBe(false);
@@ -628,9 +709,7 @@ it.sequential('execute create_file records created file in sessionAccess', async
 
     const targetFile = 'patch-created.txt';
     const result = await tool.execute({
-      type: 'create_file',
-      path: targetFile,
-      diff: '@@ -0,0 +1 @@\n+created with patch',
+      patch: ['*** Begin Patch', `*** Add File: ${targetFile}`, '+created with patch', '*** End Patch'].join('\n'),
     });
 
     expect(result).toContain('Created patch-created.txt');

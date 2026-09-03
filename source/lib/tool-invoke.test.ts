@@ -431,15 +431,19 @@ it('wrapToolInvoke describes invalid apply_patch input without reflecting its di
       settingsService: createMockSettingsService(),
     }),
   );
-  const largeDiff = '+private patch content\n'.repeat(1_000);
+  const largeBody = '+private patch content\n'.repeat(1_000);
+  const largePatch = [
+    '*** Begin Patch',
+    '*** Add File: src/example.ts',
+    ...largeBody.trimEnd().split('\n'),
+    '*** End Patch',
+  ].join('\n');
 
   const result = await tool.execute(
     {
+      patch: largePatch,
       type: 'update_file',
-      path: 'src/example.ts',
-      diff: largeDiff,
-      operations: [{ type: 'update_file', path: 'src/example.ts', diff: largeDiff }],
-    },
+    } as unknown as { patch: string },
     undefined,
     {},
   );
@@ -447,9 +451,9 @@ it('wrapToolInvoke describes invalid apply_patch input without reflecting its di
   if (typeof result !== 'string') {
     throw new Error(`Expected validation feedback string, received ${typeof result}`);
   }
-  expect(result).toContain('Received keys: diff, operations, path, type.');
-  expect(result).toContain('Provide either operations or a single type/path/diff operation, not both.');
-  expect(result).not.toContain(largeDiff);
+  expect(result).toContain('Received keys: patch, type.');
+  expect(result).toContain('Unrecognized key');
+  expect(result).not.toContain(largeBody.trim().slice(0, 60));
   expect(result.length).toBeLessThan(1_000);
 });
 

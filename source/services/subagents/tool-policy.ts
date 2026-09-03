@@ -23,6 +23,7 @@ import {
 import { createWebSearchToolDefinition } from '../../tools/web/web-search.js';
 import { createWebFetchToolDefinition } from '../../tools/web/web-fetch.js';
 import { createApplyPatchToolDefinition } from '../../tools/file/apply-patch.js';
+import { extractPatchPaths } from '../../tools/file/upstream-apply-patch.js';
 import { createSearchReplaceToolDefinition } from '../../tools/file/search-replace.js';
 import { createCreateFileToolDefinition } from '../../tools/file/create-file.js';
 import { createShellToolDefinition } from '../../tools/system/shell.js';
@@ -924,22 +925,12 @@ export class SubagentToolFactory {
               }),
               cwd,
               filesChanged,
-              (params) => {
-                if (params.operations) {
-                  return params.operations.map((operation) => operation.path);
-                }
-                return params.path ? [params.path] : [];
-              },
+              (params) => extractPatchPaths(params.patch),
               nestedApprovals,
               diffDeltas,
             ),
             fsWriteScope,
-            (params) => {
-              if (params.operations) {
-                return params.operations.map((operation) => operation.path);
-              }
-              return params.path ? [params.path] : [];
-            },
+            (params) => extractPatchPaths(params.patch),
           ),
         );
       } else {

@@ -409,7 +409,7 @@ it.sequential('buildAgent applies strict tool schema when provider supports it',
   expect(readFileTool.parameters.required.includes('end_line')).toBe(true);
 });
 
-it.sequential('buildAgent advertises apply_patch as operations-only to strict-schema providers', () => {
+it.sequential('buildAgent advertises apply_patch as patch-only to strict-schema providers', () => {
   const { deps, logger, settings } = createDeps({ providerId: 'openai' });
   const applyPatch = createApplyPatchToolDefinition({ loggingService: logger, settingsService: settings });
 
@@ -420,14 +420,9 @@ it.sequential('buildAgent advertises apply_patch as operations-only to strict-sc
     deps,
   })[0] as any;
 
-  expect(tool.parameters.required).toEqual(['operations']);
-  expect(Object.keys(tool.parameters.properties)).toEqual(['operations']);
-  expect(Object.keys(tool.parameters.properties.operations.items.properties).sort()).toEqual([
-    'diff',
-    'moveTo',
-    'path',
-    'type',
-  ]);
+  expect(tool.parameters.required).toEqual(['patch']);
+  expect(Object.keys(tool.parameters.properties)).toEqual(['patch']);
+  expect(Object.keys(tool.parameters.properties.patch)).toContain('type');
 });
 
 it.sequential('buildAgent excludes custom apply_patch when native patch tool is enabled', () => {

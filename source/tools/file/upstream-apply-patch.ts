@@ -61,9 +61,12 @@ export function parseUpstreamApplyPatch(input: string): UpstreamApplyPatchParams
       index += 1;
       const body: string[] = [];
       while (index < lines.length - 1 && !isOperationHeader(lines[index])) body.push(lines[index++]);
-      if (body.length === 0 || body.some((line) => !line.startsWith('+'))) {
+      if (body.length === 0) {
         throw new Error(`Invalid Add File section for '${filePath}'.`);
       }
+      // Body content is validated at execution (applyDiff/formatPatchError
+      // produce actionable diagnostics); the parser only enforces structure
+      // so malformed content flows to the same error path as Update sections.
       operations.push({ type: 'create_file', path: filePath, diff: body.join('\n') });
       continue;
     }
@@ -91,6 +94,16 @@ export function parseUpstreamApplyPatch(input: string): UpstreamApplyPatchParams
 
   if (operations.length === 0) throw new Error('Invalid patch: no file operations.');
   return { operations };
+}
+
+/** Best-effort path list for approval/scope previews: never throws, yields []. */
+export function extractPatchPaths(patch: unknown): string[] {
+  if (typeof patch !== 'string' || !patch.trimStart().startsWith(BEGIN_PATCH)) return [];
+  try {
+    return parseUpstreamApplyPatch(patch).operations.map((op) => op.path);
+  } catch {
+    return [];
+  }
 }
 
 function normalizePatchLines(input: string): string[] {

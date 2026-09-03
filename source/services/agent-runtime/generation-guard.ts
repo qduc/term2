@@ -258,9 +258,16 @@ export class GenerationGuard {
 
   #assertToolArgumentLength(length: number): void {
     if (length > this.#options.maxToolArgumentCharacters) {
+      // The length and limit travel in the message because a subagent
+      // failure is re-thrown from a tool-output string: the message survives
+      // that boundary and a structured payload does not.
       throw new GenerationGuardError(
         'tool_argument_characters',
-        'Model output was stopped because a tool argument payload exceeded its limit.',
+        `Model output was stopped because a tool argument payload of ${length} characters exceeded its limit of ${
+          this.#options.maxToolArgumentCharacters
+        } characters (cumulative streamed tool arguments ${this.#observableToolArgumentCharacters} of ${
+          this.#options.maxCumulativeToolArgumentCharacters
+        } characters).`,
       );
     }
   }

@@ -69,3 +69,22 @@ traffic replayed through any live session. Harness stayed a single file.
   (long `previous_response_id` chains over an endpoint that accepts them —
   i.e. through the app's own WS lane, not the direct endpoint), not content.
   That is a bigger harness project; stopping here per the spend bound.
+
+## Addendum 2026-09-03 — canonical-only apply_patch (branch canonical-patch)
+
+Pre/post gauge note: `scripts/experiments/luna-format-repro/luna-format-repro.mjs`
+gained a `CANONICAL_DIFF=canonical` override (syntax-ok via `node --check`,
+not wired to a live run — no baseline numbers recorded yet). Pre-change arm A
+advertises/seeds the legacy headerless `{type,path,diff}` shape; post-change
+arm A advertises/seeds the `*** Begin Patch ***` envelope. To record the
+baseline, run the gauge twice (default vs `CANONICAL_DIFF=canonical`) and
+paste the `wsFire` counts here.
+
+Code change (user STEER: drop legacy JSON/headerless shape, canonical-only):
+strict single-`{patch}` Zod envelope (`.strict()`), parser accepts only the
+`*** Begin Patch ***` grammar, execute fails closed on envelope parse errors
+(`Error: Invalid patch: ...`, no fs writes), needsApproval fails closed on
+structural parse failures (no operations to path-scope) while keeping
+auto-approve-with-error-in-execute for well-formed envelopes whose diff body
+is malformed. Old-format history replays stay inert: `extractMutatedPaths`
+returns `[]` on unparsable args and replay renders stored outputs verbatim.

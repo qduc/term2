@@ -5,8 +5,8 @@ Status: Milestones 1-3 complete. Calibration wave ran 2026-09-02 and PASSED its
   exploration) closed 2026-09-03: all 585 test files at the `d36c392a` inventory
   have validated graph records (28 reviewer artifacts + coordinator
   adjudication), and the source graph (`docs/test-audit/graph.yaml`) holds 605
-  tests / 694 contracts / 1230 decisions. Milestone 4 (cleanup batches) is in
-  progress: batches B1 (hooks-real-code), B2 (commands), B3 (util-fixes), B4
+  tests / 694 contracts / 1230 decisions. Milestone 4 (cleanup batches) is
+  complete on `main`: batches B1 (hooks-real-code), B2 (commands), B3 (util-fixes), B4
   (conversation-utils), B5 (runtime-lib), B6 (session-obs), B7
   (consolidations), B8 (shell-tools-misc), B9 (subagents), and B10 (eval+stream+provider)
   landed 2026-09-03 as `audit-m4-b1` (`7c90b29a`), `audit-m4-b2`
@@ -24,9 +24,9 @@ Status: Milestones 1-3 complete. Calibration wave ran 2026-09-02 and PASSED its
   location, mutation-testing proportionality) were settled — runtime history is
   recorded as checked-in aggregates (`docs/test-audit/baseline.md`), and the
   mutation-testing recommendation (`docs/test-audit/mutation-testing-proportionality.md`)
-  awaits user approval. Two pool rewrite candidates were never assigned to a
-  batch and remain open (shell-command-safety, use-settings-completion; see
-  `docs/test-audit/m4-report.md`).
+  awaits user approval. M4 and its follow-up rewrite are complete on `main`; the
+  follow-up landed as `a2b56bd6` (shell-command-safety,
+  hooks-use-settings-completion-test; see `docs/test-audit/m4-report.md`).
 ## Resume here
 
 Start future audit work from current `main` in a dedicated worktree. The original
@@ -39,10 +39,11 @@ artifacts under `docs/test-audit/artifacts/` for reviewer records, and
 coordinator override decisions live in `graph.yaml` primary decisions (reviewer
 `test-audit-coordinator`) for rtk-service, worktree-transition,
 conversation-event-handler.tools, token-usage, build-output.e2e, cli.integration,
-and use-settings-completion. Milestone 4 cleanup batches are next: each in an
-isolated worktree with before/after test count + fresh full-suite runtime, and
-verification proportional to the touched area. Do not remove, rewrite, retier,
-or consolidate tests outside approved cleanup batches.
+and use-settings-completion. Milestone 4 cleanup batches and the follow-up rewrite
+are complete on `main` (`a2b56bd6`); each landed in an isolated worktree with
+verification proportional to the touched area. Future cleanup must retain the
+same bounded-worktree and evidence discipline: do not remove, rewrite, retier, or
+consolidate tests outside approved cleanup batches.
 
 The graph source of truth is `docs/test-audit/graph.yaml`. Its validator and query
 code lives under `scripts/test-audit/`; run `pnpm test-audit validate` after every
@@ -138,11 +139,11 @@ records, expensive retained tests, and a sample of ordinary keeps.
 Completion criterion: every in-scope test file has a validated graph record and all
 mandatory second reviews are reconciled.
 
-### 4. Cleanup batches
+### 4. Cleanup batches (complete on `main`)
 
-Approved by the milestone-3 result (main `e3d1b8b7`). Implement approved changes in
-bounded worktrees, with area-specific regression gates and before/after
-measurements. The candidate pool is the graph's non-keep primaries (44 files: 37
+Approved by the milestone-3 result (main `e3d1b8b7`). Approved changes were
+implemented in bounded worktrees, with area-specific regression gates and
+before/after measurements. The candidate pool was the graph's non-keep primaries (44 files: 37
 rewrite_candidate, 5 consolidation_candidate, 1 retier_candidate, 1
 architecture_signal).
 
@@ -213,6 +214,10 @@ graph primary decisions to keep/high with a note naming the batch and commit):
   architecture_signal: reported to owners in `docs/test-audit/m4-report.md`;
   no test change.
   **Landed in `audit-m4-topology` (`f5dac241`).**
+- **Follow-up rewrite**: shell-command-safety is now table-driven for
+  approval-required and safe commands; hooks-use-settings-completion-test now
+  uses exact assertions for settings-list output, maxResults, and helper
+  composition. **Landed on `main` in `a2b56bd6`.**
 
 Runtime baseline: `pnpm exec vitest run --reporter=json` from the worktree with no
 concurrent test processes (~50 s at d36c392a; see `docs/test-audit/baseline.md`).
@@ -309,8 +314,7 @@ assignment. Read that file before cutting a Milestone 3 assignment.
   **Closed 2026-09-04**: executed as `audit-m4-topology` — e2e-tier files run
   only through `test:e2e` under `vitest.e2e.config.ts`, CI runs the e2e job, and
   the default suite no longer discovers `**/*.e2e.*` files.
-- Remaining M4 pool rewrite candidates (never assigned to B1-B10 or Topology):
-  `shell-command-safety` (relabel/table-drive; stale red/green vocabulary) and
-  `hooks-use-settings-completion-test` (three localized case repairs). Both stay
-  `rewrite_candidate/medium` with reasons preserved in the graph; recommend a
-  small follow-up batch or an explicit descope. See `docs/test-audit/m4-report.md`.
+- Follow-up rewrite for the former M4 pool candidates
+  `shell-command-safety` and `hooks-use-settings-completion-test` **closed on
+  `main` in `a2b56bd6`**; both graph primaries are now `keep/high`. See
+  `docs/test-audit/m4-report.md`.

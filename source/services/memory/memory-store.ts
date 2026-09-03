@@ -77,6 +77,91 @@ const ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 // Keep summaries bounded enough for the injected index, but do not reject
 // useful handoff context merely because it exceeds the former 300-char limit.
 const SUMMARY_LIMIT = 1_000;
+const INDEX_HEADER = '## Persistent memory\n\n';
+const INDEX_RETRIEVAL_HINT = 'Load full memories selectively with memory_get.';
+// Rendered title cap: the full title stays in storage and tool results; only
+// the injected index line is bounded.
+const TITLE_RENDER_CAP = 120;
+
+export type MemoryIndexRender = {
+  text: string;
+  total: number;
+  summarized: number;
+  titleOnly: number;
+  notListed: number;
+};
+
+/**
+ * Renders the injected memory index for one scope as two contiguous recency
+ * prefixes: the newest `listed` memories get a title line, and the newest
+ * `summarized` of those additionally carry their full summary. Length decides
+ * where a prefix ends, never which items appear — an older entry is never
+ * summarized after a newer one was excluded. Every degradation is counted in
+ * the status line, and nothing is dropped silently: unlisted memories are
+ * counted and pointed at the retrieval tools.
+ */
+export function renderMemoryIndex(memories: MemoryMetadata[], budgetChars: number): MemoryIndexRender {
+  if (!memories.length) return { text: '', total: 0, summarized: 0, titleOnly: 0, notListed: 0 };
+  const sorted = [...memories].sort(byRecent);
+  const total = sorted.length;
+  const titleLines = sorted.map((memory) => `- \`${memory.id}\` — ${renderTitle(memory.title)}\n`);
+  // Prefix sums make every (listed, summarized) candidate's length O(1): the
+  // first `summarized` title lines grow by ' — ' + summary (their trailing
+  // newline is replaced).
+  const titlePrefix: number[] = [0];
+  const summaryPrefix: number[] = [0];
+  for (let index = 0; index < total; index += 1) {
+    titlePrefix.push(titlePrefix[index] + titleLines[index].length);
+    summaryPrefix.push(summaryPrefix[index] + SUMMARY_EXTENSION.length + sorted[index].summary.length);
+  }
+  const pointer = (count: number) =>
+    count > 0 ? `+ ${count} not listed — memory_list or memory_search for the full index.\n` : '';
+  for (let listed = total; listed >= 1; listed -= 1) {
+    const notListed = total - listed;
+    const pointerLine = pointer(notListed);
+    for (let summarized = listed; summarized >= 0; summarized -= 1) {
+      const titleOnly = listed - summarized;
+      const status =
+        `${total} memories · ${summarized} summarized · ${titleOnly} title-only · ${notListed} not listed. ` +
+        `${INDEX_RETRIEVAL_HINT}\n\n`;
+      const divider = summarized > 0 && titleOnly > 0 ? INDEX_DIVIDER : '';
+      const length =
+        INDEX_HEADER.length +
+        status.length +
+        titlePrefix[listed] +
+        summaryPrefix[summarized] +
+        divider.length +
+        pointerLine.length;
+      if (length > budgetChars) continue;
+      const body = titleLines
+        .slice(0, listed)
+        .map((line, index) =>
+          index < summarized ? `${line.slice(0, -1)}${SUMMARY_EXTENSION}${sorted[index].summary}\n` : line,
+        )
+        .join('');
+      return {
+        text: `${INDEX_HEADER}${status}${body}${divider}${pointerLine}`,
+        total,
+        summarized,
+        titleOnly,
+        notListed,
+      };
+    }
+  }
+  // No entry fits. Keep the counts visible rather than rendering nothing.
+  const notListed = total;
+  const floor = `${INDEX_HEADER}${total} memories · 0 summarized · 0 title-only · ${notListed} not listed. ${INDEX_RETRIEVAL_HINT}\n\n${pointer(
+    notListed,
+  )}`;
+  return { text: floor, total, summarized: 0, titleOnly: 0, notListed: total };
+}
+
+const SUMMARY_EXTENSION = ' — ';
+const INDEX_DIVIDER = '— older entries, titles only —\n';
+
+function renderTitle(title: string) {
+  return title.length > TITLE_RENDER_CAP ? `${title.slice(0, TITLE_RENDER_CAP)}…` : title;
+}
 const DEFAULT_SEARCH_LIMIT = 10;
 const SEARCH_READ_CONCURRENCY = 8;
 type Index = { version: 1; memories: MemoryMetadata[] };
@@ -203,20 +288,7 @@ export class FileMemoryStore implements MemoryStore {
     });
   }
   async context(budgetChars: number): Promise<string> {
-    const header =
-      '## Persistent memory\n\nThe following memories are summaries from previous sessions. Load full memories selectively with memory_get.\n\n';
-    const note = 'Additional memories are available through `memory_list` and `memory_search`.';
-    let output = header;
-    let omitted = false;
-    for (const memory of [...(await this.load()).memories].sort(byRecent)) {
-      const entry = `- \`${memory.id}\` — ${memory.summary}\n`;
-      if (output.length + entry.length + note.length > budgetChars) {
-        omitted = true;
-        continue;
-      }
-      output += entry;
-    }
-    return output === header ? '' : `${output}${omitted ? `\n${note}` : ''}`;
+    return renderMemoryIndex([...(await this.load()).memories], budgetChars).text;
   }
   contextSync(budgetChars: number): string {
     let index: Index;
@@ -226,20 +298,7 @@ export class FileMemoryStore implements MemoryStore {
       if (error?.code === 'ENOENT') return '';
       throw new MemoryStorageError('Memory index.json is corrupted or unreadable.');
     }
-    const header =
-      '## Persistent memory\n\nThe following memories are summaries from previous sessions. Load full memories selectively with memory_get.\n\n';
-    const note = 'Additional memories are available through `memory_list` and `memory_search`.';
-    let output = header;
-    let omitted = false;
-    for (const memory of [...index.memories].sort(byRecent)) {
-      const entry = `- \`${memory.id}\` — ${memory.summary}\n`;
-      if (output.length + entry.length + note.length > budgetChars) {
-        omitted = true;
-        continue;
-      }
-      output += entry;
-    }
-    return output === header ? '' : `${output}${omitted ? `\n${note}` : ''}`;
+    return renderMemoryIndex([...index.memories], budgetChars).text;
   }
   private itemPath(id: string) {
     validateId(id);

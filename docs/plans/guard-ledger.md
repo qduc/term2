@@ -1790,6 +1790,110 @@ attempts each progressed through provider contracts and most lifecycle cases,
 then hit a different pre-request PTY startup timeout; no rollover/provider
 assertion failed.
 
+### Injected memory-index silent truncation
+
+Incident 2026-09-03: the main-agent session-start index injected by
+`FileMemoryStore.contextSync` silently dropped 16 of 19 project memories. The
+greedy skip-continue loop selected by entry length, so an older short summary
+was injected while newer longer ones were dropped, and the only signal was a
+generic note with no counts. The user judged both the 3,000-character default
+and the silent drop unacceptable; mentor review converged on a two-tier
+contiguous-prefix design. This is a context/loss bound; `boundToolResultText`
+remains the reference design (bound, make the omitted material retrievable,
+say exactly what happened).
+
+```text
+Harm prevented: the agent treating memories absent from the injected index as
+  nonexistent because their omission was invisible.
+Scope and execution paths: main-agent session-start prompt injection via
+  MemoryCapabilityBuilder.build → FileMemoryStore.contextSync/context.
+Guard class: context/loss bound over the injected prompt index.
+Enforcement owner: renderMemoryIndex in memory-store.ts (shared by both
+  context paths) plus the scope floor-and-reallocate split in
+  memory-capabilities.ts.
+Recovery owner: memory_list / memory_get / memory_search tool boundary.
+Measured signal and observation boundary: rendered character count of the
+  per-scope index text at session start.
+Direct evidence or proxy: direct rendered length; no proxy.
+Legitimate work that can produce the same signal: a memory store legitimately
+  larger than any prompt budget.
+Configuration sources and precedence: memory.contextBudgetChars through the
+  ordinary settings service; persisted values win over the schema default.
+Effective default and clamping: 8,000 characters total (was 3,000), split as
+  fair halves minus the scope label, with a scope that rendered everything
+  under its share donating the unused remainder to the other scope.
+Action and why the signal justifies it: render two contiguous recency
+  prefixes (titles for every fitting memory, full summaries for the newest,
+  break at first overflow — length ends a prefix, never selects members);
+  count every degradation in a status line and point unlisted memories at
+  memory_list/memory_search. No mid-entry cuts; storage and tools unchanged.
+Partial-work settlement: whole entries only; omitted memories remain fully
+  retrievable by id and title through the tools.
+Retry, fallback, and provider-continuity semantics: none; this is startup
+  prompt assembly and does not touch provider continuity.
+Observability fields: "N memories · K summarized · T title-only · U not
+  listed." status line in the injected text itself; no omissions counter is
+  hidden from the consumer.
+Persisted-setting migration, if any: none; default change only.
+Rollback boundary: one commit on branch memory-index-redesign.
+Ledger row: memory.contextBudgetChars injected-index bound.
+```
+
+Red proof before production changes (12 failures across the four suites):
+
+```text
+NODE_ENV=test pnpm test source/services/memory/memory-store.test.ts \
+  source/services/memory/memory-capabilities.test.ts \
+  source/tools/memory/memory-tools.test.ts \
+  source/services/settings/settings-schema.test.ts
+FAIL 12 tests: golden two-tier format, contiguous-prefix regression
+  (never summarize an older entry after excluding a newer one), scope
+  donation, memory_list accounting agreement, and the 8,000 default.
+```
+
+Detection gap: the previous tests asserted the old format's note text and
+budget shape, so they encoded silent truncation as intended behavior. No test
+asserted the rendered length against the budget, prefix contiguity, or that
+injected totals agree with the tool boundary's accounting. The new suite pins
+the golden format, covers the three regimes (everything fits / tier split /
+status-only floor), caps rendered titles without mutating storage, and pins
+memory_list zero-omission agreement with the injected total.
+
+Verification:
+
+```text
+NODE_ENV=test pnpm test source/services/memory/memory-store.test.ts \
+  source/services/memory/memory-capabilities.test.ts \
+  source/tools/memory/memory-tools.test.ts \
+  source/services/settings/settings-schema.test.ts \
+  source/prompts/prompt-constructor.test.ts
+PASS 5 files, 116 tests
+
+pnpm typecheck
+PASS
+
+pnpm exec prettier --check <changed-files>
+PASS
+
+pnpm test:provider-black-box
+PASS 19 files, 176 tests; 1 skipped
+
+NODE_ENV=test pnpm test:related <changed production files>
+KNOWN BASELINE FAILURE: 194 files passed; the 6 failures were the catalogued
+worktree-boundary approval assertions in apply-patch/create-file/search-replace,
+reproduced identically on the untouched primary checkout.
+```
+
+The guidance surfaces (`MAIN_GUIDANCE`, the `memory.md` fragment,
+`SUBAGENT_GUIDANCE`) were updated in the same change: title-only entries mean
+"summary omitted for budget — read before dismissing", and subagent guidance
+no longer claims an injected index that subagents never receive. Residual
+honest limits, recorded and deliberately deferred: recency is not relevance
+(a future `pinned` flag could protect old high-value memories), titles become
+load-bearing retrieval triggers, and past roughly 100 entries per scope the
+counted tail is the contract — enforced store pruning remains a separate
+store-policy decision.
+
 ## Reference: catalogued guards
 
 Recorded so the next reader does not re-derive them. **No row here owes a test.**

@@ -108,7 +108,7 @@ describe('MemoryCapabilityBuilder', () => {
 
       expect(capability.tools.map((tool) => tool.name)).toEqual(readTools);
       expect(capability.guidance).toContain('propose it in your final report');
-      expect(capability.guidance).toContain('Only a concise index is loaded initially.');
+      expect(capability.guidance).toContain('No index is injected into your context');
       expect(capability.guidance).toContain('materially improve correctness');
       expect(capability.context).toBe('');
     },
@@ -207,6 +207,51 @@ describe('MemoryCapabilityBuilder', () => {
     expect(capability.tools.map((tool) => tool.name)).toEqual(writeTools);
     expect(capability.context).toBe('');
     expect(capability.guidance).toContain('memory librarian');
+  });
+
+  it('states the omission contract in the main guidance and the on-demand contract for subagents', () => {
+    const main = new MemoryCapabilityBuilder(createMockSettingsService()).build({ kind: 'main' });
+    const explorer = new MemoryCapabilityBuilder(createMockSettingsService()).build({
+      kind: 'subagent',
+      role: 'explorer',
+    });
+
+    expect(main.guidance).toContain('had it omitted for budget');
+    expect(main.guidance).toContain('read it with memory_get before treating it as irrelevant');
+    expect(explorer.guidance).not.toContain('concise index');
+  });
+
+  it('donates unused global scope budget to a project scope that exceeds its fair share', async () => {
+    const directory = makeTempDir();
+    const settings = createMockSettingsService({
+      'memory.directory': directory,
+      'memory.contextBudgetChars': 8000,
+    });
+    const builder = (projectPath: string) =>
+      new MemoryCapabilityBuilder(settings).build({ kind: 'main' }, { projectPath });
+    const create = builder('/workspace/donation').tools.find((tool) => tool.name === 'memory_create')!;
+    await create.execute({
+      scope: 'global',
+      id: 'global-rule',
+      title: 'Global rule',
+      summary: 'Cross-project preference.',
+      content: 'content',
+    });
+    const projectSummaries = 60;
+    for (let index = 0; index < projectSummaries; index += 1) {
+      await create.execute({
+        scope: 'project',
+        id: `project-mem-${String(index).padStart(2, '0')}`,
+        title: `Title ${index}`,
+        summary: `Project summary ${index} ${'y'.repeat(60)}`,
+        content: 'content',
+      });
+    }
+
+    const context = builder('/workspace/donation').context;
+    expect(context).toContain('Global scope:');
+    expect(context).toContain('60 memories · 60 summarized · 0 title-only · 0 not listed.');
+    expect(context).toContain('`project-mem-59`');
   });
 
   it('gives the root a broad synthesis operation without exposing it recursively to the librarian', () => {

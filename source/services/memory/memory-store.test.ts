@@ -191,7 +191,112 @@ it('serializes mutations across store instances sharing a directory', async () =
   expect(await first.list({ limit: 20 })).toHaveLength(8);
 });
 
-it('renders summary-only context within a budget', async () => {
+type Seed = { id: string; title: string; summary: string; day: number };
+function dayTimestamp(day: number) {
+  return `2026-07-${String(day).padStart(2, '0')}T12:00:00.000Z`;
+}
+async function storeWithSeeds(seeds: Seed[]) {
+  const memory = await store();
+  await writeFile(
+    join(roots[0], 'index.json'),
+    JSON.stringify({
+      version: 1,
+      memories: seeds.map((seed) => ({
+        id: seed.id,
+        title: seed.title,
+        summary: seed.summary,
+        tags: [],
+        createdAt: '2026-07-01T00:00:00.000Z',
+        updatedAt: dayTimestamp(seed.day),
+      })),
+    }),
+  );
+  return memory;
+}
+
+it('lists every memory with its summary and full counts when everything fits', async () => {
+  const memory = await storeWithSeeds([
+    { id: 'mem-1', title: 'Rules one', summary: 'First durable rule.', day: 5 },
+    { id: 'mem-2', title: 'Rules two', summary: 'Second durable rule.', day: 4 },
+  ]);
+  const text = memory.contextSync(8000);
+  expect(text).toContain(
+    '2 memories · 2 summarized · 0 title-only · 0 not listed. Load full memories selectively with memory_get.',
+  );
+  expect(text).toContain('- `mem-1` — Rules one — First durable rule.');
+  expect(text).toContain('- `mem-2` — Rules two — Second durable rule.');
+  expect(text).not.toContain('older entries, titles only');
+  expect(text).not.toContain('memory_list or memory_search for the full index');
+  expect(text.length).toBeLessThanOrEqual(8000);
+});
+
+it('degrades older entries as a contiguous recency prefix with counted omissions', async () => {
+  const memory = await storeWithSeeds([
+    { id: 'mem-1', title: `Title 1 ${'x'.repeat(70)}`, summary: 'Summary 1.', day: 5 },
+    { id: 'mem-2', title: `Title 2 ${'x'.repeat(70)}`, summary: 'Summary 2.', day: 4 },
+    { id: 'mem-3', title: `Title 3 ${'x'.repeat(70)}`, summary: 'Summary 3.', day: 3 },
+    { id: 'mem-4', title: `Title 4 ${'x'.repeat(70)}`, summary: 'Summary 4.', day: 2 },
+    { id: 'mem-5', title: `Title 5 ${'x'.repeat(70)}`, summary: 'Summary 5.', day: 1 },
+  ]);
+  const text = memory.contextSync(550);
+  expect(text).toContain(
+    '5 memories · 3 summarized · 0 title-only · 2 not listed. Load full memories selectively with memory_get.',
+  );
+  expect(text).toContain(`- \`mem-1\` — Title 1 ${'x'.repeat(70)} — Summary 1.`);
+  expect(text).toContain(`- \`mem-3\` — Title 3 ${'x'.repeat(70)} — Summary 3.`);
+  expect(text).toContain('+ 2 not listed — memory_list or memory_search for the full index.');
+  expect(text).not.toContain('- `mem-4`');
+  expect(text).not.toContain('— older entries, titles only —');
+  expect(text.length).toBeLessThanOrEqual(550);
+});
+
+it('never summarizes an older entry after excluding a newer one', async () => {
+  const memory = await storeWithSeeds([
+    { id: 'mem-new', title: 'New title', summary: 'N'.repeat(120), day: 5 },
+    { id: 'mem-old', title: 'Old title', summary: 'tiny sum', day: 4 },
+  ]);
+  const text = memory.contextSync(190);
+  expect(text).not.toContain('tiny sum');
+  expect(text).toContain('2 memories · 0 summarized · 2 title-only · 0 not listed.');
+  expect(text).toContain('- `mem-new` — New title');
+  expect(text).toContain('- `mem-old` — Old title');
+  expect(text.length).toBeLessThanOrEqual(190);
+});
+
+it('caps rendered titles without mutating stored metadata', async () => {
+  const memory = await storeWithSeeds([{ id: 'solo', title: 'A'.repeat(150), summary: 'S'.repeat(30), day: 5 }]);
+  const text = memory.contextSync(8000);
+  expect(text).toContain(`${'A'.repeat(120)}…`);
+  expect(text).not.toContain('A'.repeat(121));
+  expect((await memory.list())[0]?.title).toBe('A'.repeat(150));
+});
+
+it('renders identical text through context and contextSync', async () => {
+  const memory = await storeWithSeeds([
+    { id: 'mem-1', title: 'One', summary: 'First.', day: 5 },
+    { id: 'mem-2', title: 'Two', summary: 'Second.', day: 4 },
+    { id: 'mem-3', title: 'Three', summary: 'Third.', day: 3 },
+  ]);
+  expect(await memory.context(900)).toBe(memory.contextSync(900));
+});
+
+it('stays within its budget across regimes while keeping the status line visible', async () => {
+  const memory = await storeWithSeeds(
+    Array.from({ length: 12 }, (_, index) => ({
+      id: `mem-${String(index).padStart(2, '0')}`,
+      title: `Title ${index}`,
+      summary: `Summary ${index} ${'x'.repeat(20)}`,
+      day: 12 - index,
+    })),
+  );
+  for (const budget of [250, 500, 1000, 2000, 4000, 8000]) {
+    const text = memory.contextSync(budget);
+    expect(text).toContain('12 memories ·');
+    expect(text.length).toBeLessThanOrEqual(budget);
+  }
+});
+
+it('degrades the newest summary first and lists older entries titles-only within a tiny budget', async () => {
   const memory = await store();
   await memory.create(input);
   await memory.create({
@@ -204,9 +309,15 @@ it('renders summary-only context within a budget', async () => {
   });
   const context = await memory.context(300);
   expect(context).toContain('## Persistent memory');
-  expect(context).toContain('project-rules');
+  expect(context).toContain(
+    '2 memories · 1 summarized · 1 title-only · 0 not listed. Load full memories selectively with memory_get.',
+  );
+  expect(context).toContain('- `project-rules` — Project rules — Durable project constraints.');
+  expect(context).toContain('- `second-rule` — Second\n');
+  expect(context).toContain('— older entries, titles only —');
   expect(context).not.toContain('full secret content');
-  expect(context).toContain('Additional memories');
+  expect(context).not.toContain('A second durable constraint');
+  expect(context.length).toBeLessThanOrEqual(300);
 });
 
 it('omits initial context on a clean first run', async () => {

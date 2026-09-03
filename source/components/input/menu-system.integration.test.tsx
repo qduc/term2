@@ -87,6 +87,14 @@ const resumeCommand: SlashCommand = {
   completion: { type: 'resume', trigger: '/resume ' },
 };
 
+const profileCommand: SlashCommand = {
+  name: 'profile',
+  description: 'Profile',
+  expectsArgs: true,
+  action: () => false,
+  completion: { type: 'profile', trigger: '/profile ' },
+};
+
 const copySelections: CopySelection[] = [
   { label: 'Full response', text: 'answer\n```\ncode\n```' },
   { label: 'Code block #1', text: 'code' },
@@ -407,6 +415,28 @@ it.sequential('accepting a /auto-approve prefix opens the auto-approve value suc
     kind: 'settings_value',
     settingKey: 'shell.autoApproveMode',
   });
+});
+
+it.sequential('accepting a /profile prefix opens the profile successor menu', async () => {
+  const controller = new MenuControllerImpl();
+  const { lastFrame, stdin } = await renderSurface(controller, [...slashCommands, profileCommand]);
+
+  await writeInput(stdin, '/prof');
+  await waitFor(() => (lastFrame() ?? '').includes('/profile'));
+  await writeInput(stdin, '\r');
+  await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'profile');
+
+  expect(controller.getSnapshot().editor.text).toBe('/profile ');
+});
+
+it.sequential('typing the /profile autocomplete trigger opens the profile menu', async () => {
+  const controller = new MenuControllerImpl();
+  const { stdin } = await renderSurface(controller, [...slashCommands, profileCommand]);
+
+  await writeInput(stdin, '/profile ');
+  await waitFor(() => controller.getSnapshot().stack.at(-1)?.kind === 'profile');
+
+  expect(controller.getSnapshot().editor.text).toBe('/profile ');
 });
 
 it.sequential('accepting a /resume prefix opens the resume successor menu', async () => {

@@ -32,6 +32,12 @@ const DEFAULT_MENU_COMMANDS: SlashCommand[] = [
     action: () => {},
     completion: { type: 'skills', trigger: '/skills ' },
   },
+  {
+    name: '/profile',
+    description: 'Select a profile',
+    action: () => {},
+    completion: { type: 'profile', trigger: '/profile ' },
+  },
 ];
 
 export type InputMode =
@@ -42,6 +48,7 @@ export type InputMode =
   | 'settings_value_completion'
   | 'model_selection'
   | 'skill_selection'
+  | 'profile_selection'
   | 'resume_selection'
   | 'copy_selection'
   | 'rewind_selection'
@@ -62,6 +69,8 @@ export function frameKindToLegacyMode(kind: MenuFrame['kind'] | undefined): Inpu
       return 'model_selection';
     case 'skills':
       return 'skill_selection';
+    case 'profile':
+      return 'profile_selection';
     case 'resume':
       return 'resume_selection';
     case 'copy':

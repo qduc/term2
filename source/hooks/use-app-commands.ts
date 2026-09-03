@@ -217,6 +217,7 @@ export const useAppCommands = ({
         settingsService,
         transitionService,
         addSystemMessage,
+        replaceInput,
         messages,
         requestModeSwitchConfirm,
       }),

@@ -17,6 +17,7 @@ export type ActiveMenu =
   | { type: 'model'; startIndex: number; origin: 'settings-backed' | 'direct-trigger' }
   | { type: 'skills'; startIndex: number }
   | { type: 'resume'; startIndex: number }
+  | { type: 'profile'; startIndex: number }
   | { type: 'path'; trigger: { start: number; query: string } };
 
 const hasCompletion = (completion: SlashCommandCompletion | undefined): completion is SlashCommandCompletion =>
@@ -85,7 +86,7 @@ export const determineActiveMenu = (value: string, cursorOffset: number, command
     }
   }
 
-  // Priority 2: skills and resume selection (after settings triggers, before slash).
+  // Priority 2: skills, resume, and profile selection (after settings triggers, before slash).
   for (const completion of commandCompletions) {
     if (completion.type === 'skills') {
       if (value.startsWith(completion.trigger) && cursorOffset >= completion.trigger.length) {
@@ -94,6 +95,10 @@ export const determineActiveMenu = (value: string, cursorOffset: number, command
     } else if (completion.type === 'resume') {
       if (value.startsWith(completion.trigger) && cursorOffset >= completion.trigger.length) {
         return { type: 'resume', startIndex: completion.trigger.length };
+      }
+    } else if (completion.type === 'profile') {
+      if (value.startsWith(completion.trigger) && cursorOffset >= completion.trigger.length) {
+        return { type: 'profile', startIndex: completion.trigger.length };
       }
     }
   }

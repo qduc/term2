@@ -2,7 +2,7 @@ import { it, expect } from 'vitest';
 import { findPathTrigger } from './input/triggers.js';
 import { determineActiveMenu, type ActiveMenu } from './input/determine-active-menu.js';
 import type { SlashCommand } from '../slash-commands.js';
-import { SKILLS_TRIGGER, RESUME_TRIGGER } from './input/triggers.js';
+import { SKILLS_TRIGGER, RESUME_TRIGGER, PROFILE_TRIGGER } from './input/triggers.js';
 import { MODEL_SETTING_CONFIGS } from '../utils/ai/model-settings.js';
 
 const commandMetadata: SlashCommand[] = [
@@ -39,6 +39,13 @@ const commandMetadata: SlashCommand[] = [
     description: 'Resume conversation',
     expectsArgs: true,
     completion: { type: 'resume', trigger: RESUME_TRIGGER },
+    action: () => {},
+  },
+  {
+    name: 'profile',
+    description: 'Switch the active profile',
+    expectsArgs: true,
+    completion: { type: 'profile', trigger: PROFILE_TRIGGER },
     action: () => {},
   },
 ];
@@ -220,4 +227,16 @@ it('determineActiveMenu - resume trigger (priority 2, beats slash)', () => {
 
 it('determineActiveMenu - resume does not activate when no space after /resume', () => {
   expect(determine('/resume')).toEqual({ type: 'slash' });
+});
+
+it('determineActiveMenu - profile trigger (priority 2, beats slash)', () => {
+  expect(determine(PROFILE_TRIGGER)).toEqual({ type: 'profile', startIndex: PROFILE_TRIGGER.length });
+  expect(determine('/profile lite', 13)).toEqual({ type: 'profile', startIndex: PROFILE_TRIGGER.length });
+  // Cursor not past trigger returns none (slash is not detected because value contains a space)
+  expect(determine('/profile ', 3)).toEqual({ type: 'none' });
+});
+
+it('determineActiveMenu - profile does not activate when no space after /profile', () => {
+  // Without trailing space, it's a slash command (since no space yet)
+  expect(determine('/profile')).toEqual({ type: 'slash' });
 });

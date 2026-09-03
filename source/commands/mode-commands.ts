@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import type { SlashCommand } from '../slash-commands.js';
 import type { SettingsService } from '../services/settings/settings-service.js';
 import { ProfileTransitionService, planProfileTransition } from '../services/profiles/profile-transition.js';
+import { PROFILE_TRIGGER } from '../components/input/triggers.js';
 import { resolveActiveProfile } from '../services/profiles/active-profile.js';
 import { ProfileResolutionError } from '../services/profiles/types.js';
 
@@ -95,12 +96,14 @@ export function createProfileCommand({
   settingsService,
   transitionService,
   addSystemMessage,
+  replaceInput,
   messages,
   requestModeSwitchConfirm,
 }: {
   settingsService: SettingsService;
   transitionService: ProfileTransitionService;
   addSystemMessage: (text: string) => void;
+  replaceInput: (text: string) => void;
   messages?: { sender: string }[];
   requestModeSwitchConfirm?: (pending: PendingModeSwitch) => void;
 }): SlashCommand {
@@ -108,11 +111,12 @@ export function createProfileCommand({
     name: 'profile',
     description: 'Switch the active profile',
     expectsArgs: true,
+    completion: { type: 'profile', trigger: PROFILE_TRIGGER },
     action: (args?: string) => {
       const rawId = args?.trim();
       if (!rawId) {
-        addSystemMessage('Available profiles: standard, lite, plan, mentor, orchestrator (usage: /profile <id>)');
-        return true;
+        replaceInput(PROFILE_TRIGGER);
+        return false;
       }
       const targetId = rawId.includes(':') ? rawId : `builtin:${rawId}`;
       try {

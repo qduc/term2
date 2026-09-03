@@ -8,6 +8,7 @@ import { useSettingsCompletion } from '../../hooks/use-settings-completion.js';
 import { useSettingsValueCompletion } from '../../hooks/use-settings-value-completion.js';
 import { useModelSelection } from '../../hooks/use-model-selection.js';
 import { useSkillSelection } from '../../hooks/use-skill-selection.js';
+import { useProfileSelection } from '../../hooks/use-profile-selection.js';
 import { useResumeSelection } from '../../hooks/use-resume-selection.js';
 import { createDefaultTriggerRegistry } from './triggers.js';
 import { MenuSurface } from './MenuSurface.js';
@@ -66,6 +67,7 @@ export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props)
   const resume = useResumeSelection({
     listConversations: props.listConversations ?? (() => []),
   });
+  const profiles = useProfileSelection({ settingsService: props.settingsService });
 
   useEffect(() => {
     controller.setTriggerRegistry(
@@ -73,6 +75,7 @@ export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props)
         'slash',
         'path',
         'skills',
+        'profile',
         'resume',
         'settings',
         'settings-value-child',
@@ -114,6 +117,7 @@ export const ApplicationInputSurface: FC<ApplicationInputSurfaceProps> = (props)
     slash,
     path,
     skills,
+    profiles,
     resume,
     settings,
     settingsValue,

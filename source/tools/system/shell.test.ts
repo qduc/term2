@@ -2231,45 +2231,47 @@ it('leaves exact-cap equality untrimmed per the exceeding-only contract', async 
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService({ 'sandbox.enabled': false, 'shell.maxOutputChars': 40 }),
     executeShellCommandImpl: async () => ({
-      stdout: 'x'.repeat(40),
+      // 45 output chars: exceeds the clamped 40 (trims) but not the raw 60k
+      // request (would pass through). Fails without the clamp.
+      stdout: 'x'.repeat(45),
       stderr: '',
       exitCode: 0,
       timedOut: false,
     }),
   });
 
-  // 40 chars of output against an effective cap of 40: `>` does not fire.
-  const output = await tool.execute({ command: 'exact-cap', max_output_length: 60_000 });
+  const output = await tool.execute({ command: 'over-by-five', max_output_length: 60_000 });
 
-  expect(output).toContain('x'.repeat(40));
-  expect(output).not.toContain('characters trimmed');
+  expect(output).toContain('characters trimmed');
+  expect(output).toContain('Full output saved to');
 });
 
-it('falls back to the configured maximum when the setting is omitted', async () => {
+it('falls back to the hardcoded default when the setting is omitted', async () => {
   const tool = createShellToolDefinition({
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService({ 'sandbox.enabled': false }),
     executeShellCommandImpl: async () => ({
-      stdout: `head-${'x'.repeat(200)}-tail`,
+      // 41k output chars with no setting and no request: the hardcoded 40k
+      // default trims. Fails if the fallback regresses (e.g. to undefined).
+      stdout: 'x'.repeat(41_000),
       stderr: '',
       exitCode: 0,
       timedOut: false,
     }),
   });
 
-  // No max_output_length and no shell.maxOutputChars: hardcoded 40k default
-  // applies, so a 211-char output passes through untrimmed.
   const output = await tool.execute({ command: 'long-output' });
 
-  expect(output).toContain('x'.repeat(200));
-  expect(output).not.toContain('characters trimmed');
+  expect(output).toContain('characters trimmed');
+  expect(output).toContain('Full output saved to');
 });
 
 it('clamps over-cap requests on the public wrapped shell path (outer trim + spool)', async () => {
   // Public-boundary assertion: build the tool the way agent.ts does (raw
   // factory), then wrap it the way agent-factory.ts does (outer trim), and
   // confirm an over-cap foreground request still yields a bounded,
-  // spool-backed result.
+  // spool-backed result. Fails without the clamp: the raw 60k threshold lets
+  // the 211-char output through with no trim marker and no spool reference.
   const raw = createShellToolDefinition({
     loggingService: createNoopLogger(),
     settingsService: createMockSettingsService({ 'sandbox.enabled': false, 'shell.maxOutputChars': 40 }),
@@ -2292,6 +2294,11 @@ it('clamps over-cap requests on the public wrapped shell path (outer trim + spoo
 
   const result = (await wrappedExecute({ command: 'long-output', max_output_length: 60_000 })) as string;
 
+  // The shell spool seam writes the artifact reference naming the spooled
+  // file; the outer trim then middle-trims the whole result, so assert the
+  // trim marker plus the surviving artifact-filename tail (the middle of the
+  // reference line is eaten by construction — the tail proves spooling ran).
+  expect(result).toContain('characters trimmed');
+  expect(result).toMatch(/-[0-9a-f-]+\.txt`/);
   expect(result).not.toContain('x'.repeat(50));
-  expect(result.length).toBeLessThan(60_000);
 });

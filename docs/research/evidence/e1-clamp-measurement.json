@@ -16,10 +16,11 @@
       "70000": 5,
       "90000": 5,
       "120000": 5,
-      "45000": 3
+      "45000": 3,
+      "200000": 2
     },
     "background": 120,
-    "note": "REQUEST signal only: a 50k request returning 10 chars is counted. Both root/nested wrappers already outer-trim to shell.maxOutputChars, so no escaped-volume claim is made."
+    "note": "REQUEST signal only: a 50k request returning 10 chars is counted. Both root/nested wrappers already outer-trim to shell.maxOutputChars, so no escaped-volume claim is made. Distribution lists all 9 observed values and sums to the numerator (638)."
   },
   "app_log": {
     "executions": 8850,

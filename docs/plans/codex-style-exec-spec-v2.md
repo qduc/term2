@@ -140,9 +140,10 @@ citations, but there are none.
 
 ## Recommendation
 
-Do E1's measurement first (read-only traffic check; if the >1% condition
-fails, E1 dies with no code). Then E2 only if background-shell usage shows
-the need. E3 stays held. E4 is declined by this spec. The feature as
+E1 is DONE (landed ba428dd7; receipt in the E1 entry above and in
+`docs/research/evidence/e1-clamp-measurement.json`). Then E2 only if
+background-shell usage shows the need (Reading A gate in the E2 entry).
+E3 stays held. E4 is declined by this spec. The feature as
 originally scoped (Codex-style exec sandbox) SHOULD NOT be built on current
 evidence: the A/B is correlational, the repro falsified the content trigger,
 and the safety mechanism requires run-loop surgery out of proportion to a

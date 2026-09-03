@@ -1,7 +1,11 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { expect, it, vi } from 'vitest';
 import { registerProvider, unregisterProvider } from '../../providers/registry.js';
 import { orderedProviderIds } from './model-catalog-session.js';
 import { filterModelGroups, formatModelGroups, runListModels, type ProviderModelGroup } from './model-listing.js';
+import { clearModelCache, clearModelMemoryCacheForTest } from '../model-service.js';
 
 const group = (provider: string, modelIds: string[]): ProviderModelGroup => ({
   provider,
@@ -132,4 +136,48 @@ it('exits 1 when no provider is available', async () => {
   expect(outcome.exitCode).toBe(1);
   expect(outcome.output).toBeNull();
   expect(outcome.error).toBe('No models available.');
+});
+
+it('runListModels reuses disk cache across separate invocations without custom fetcher', async () => {
+  const customDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-list-models-cache-'));
+  const providerId = 'list-models-disk-test';
+  let networkFetches = 0;
+  registerProvider({
+    id: providerId,
+    label: 'List Models Disk Test',
+    fetchModels: async () => {
+      networkFetches++;
+      return [{ id: 'cached-cli-model' }];
+    },
+  });
+
+  try {
+    const deps = {
+      settingsService: { get: vi.fn(), getDynamic: vi.fn(() => []) } as any,
+      loggingService: { warn: vi.fn() } as any,
+      providerIds: [providerId],
+      cacheDir: customDir,
+    };
+
+    // First CLI errand: cold in-memory and cold disk
+    const first = await runListModels(deps);
+    expect(first.exitCode).toBe(0);
+    expect(first.output).toContain('cached-cli-model');
+    expect(networkFetches).toBe(1);
+
+    // Simulate process exit and new process startup: in-memory cache is wiped
+    clearModelMemoryCacheForTest();
+
+    // Second CLI errand within 1 hour: should read from disk cache, networkFetches stays 1
+    const second = await runListModels(deps);
+    expect(second.exitCode).toBe(0);
+    expect(second.output).toContain('cached-cli-model');
+    expect(networkFetches, 'Second CLI errand must hit disk cache without hitting provider API').toBe(1);
+  } finally {
+    unregisterProvider(providerId);
+    clearModelCache(providerId, { cacheDir: customDir });
+    try {
+      fs.rmSync(customDir, { recursive: true, force: true });
+    } catch {}
+  }
 });

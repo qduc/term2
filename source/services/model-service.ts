@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import envPaths from 'env-paths';
 import { scoreSubsequence } from '../utils/subsequence-filter.js';
 import { getProvider } from '../providers/index.js';
 import { getModelContextWindow } from '../providers/model-catalog/catalog.js';
@@ -13,16 +16,147 @@ export type ModelInfo = {
   contextWindow?: number;
 };
 
+export type DiskModelCacheEntry = {
+  version: 1;
+  provider: string;
+  timestamp: number;
+  models: ModelInfo[];
+};
+
+export const MODEL_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+export type FetchModelsDeps = {
+  settingsService: ISettingsService;
+  loggingService: ILoggingService;
+  signal?: AbortSignal;
+  cacheDir?: string;
+  now?: () => number;
+  ttlMs?: number;
+};
+
 type FetchFn = typeof fetch;
 
 const cache = new Map<string, ModelInfo[]>();
 
+let testCacheDir: string | null = null;
+let testClock: (() => number) | null = null;
+
+export function setModelCacheDirForTest(dir: string | null): void {
+  testCacheDir = dir;
+}
+
+export function setModelCacheClockForTest(clock: (() => number) | null): void {
+  testClock = clock;
+}
+
+export function clearModelMemoryCacheForTest(): void {
+  cache.clear();
+}
+
+export function getModelCacheDir(customDir?: string): string {
+  const baseDir = customDir || testCacheDir || process.env.TERM2_CACHE_DIR || envPaths('term2').cache;
+  return path.join(baseDir, 'models');
+}
+
+export function getModelCacheFilePath(provider: string, customDir?: string): string {
+  const safeName = provider.replace(/[^a-zA-Z0-9_-]/g, (c) => `_${c.charCodeAt(0).toString(16)}_`);
+  return path.join(getModelCacheDir(customDir), `${safeName}.json`);
+}
+
+function readDiskCache(
+  provider: string,
+  cacheDir?: string,
+  nowFn?: () => number,
+  ttlMs: number = MODEL_CACHE_TTL_MS,
+  loggingService?: ILoggingService,
+): ModelInfo[] | null {
+  try {
+    const filePath = getModelCacheFilePath(provider, cacheDir);
+    if (!fs.existsSync(filePath)) {
+      return null;
+    }
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') {
+      return null;
+    }
+    if (parsed.version !== 1) {
+      return null;
+    }
+    if (typeof parsed.timestamp !== 'number' || !Number.isFinite(parsed.timestamp)) {
+      return null;
+    }
+    const now = nowFn ?? testClock ?? Date.now;
+    const currentTime = now();
+    const age = currentTime - parsed.timestamp;
+    if (age < 0 || age >= ttlMs) {
+      return null;
+    }
+    if (!Array.isArray(parsed.models)) {
+      return null;
+    }
+    for (const m of parsed.models) {
+      if (!m || typeof m !== 'object' || typeof m.id !== 'string') {
+        return null;
+      }
+    }
+    return parsed.models as ModelInfo[];
+  } catch (error) {
+    loggingService?.debug?.('Failed to read model disk cache', { provider, error: String(error) });
+    return null;
+  }
+}
+
+function writeDiskCache(
+  provider: string,
+  models: ModelInfo[],
+  cacheDir?: string,
+  nowFn?: () => number,
+  loggingService?: ILoggingService,
+): void {
+  const dir = getModelCacheDir(cacheDir);
+  const targetFile = getModelCacheFilePath(provider, cacheDir);
+  const baseName = path.basename(targetFile, '.json');
+  const tempFile = path.join(
+    dir,
+    `.${baseName}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`,
+  );
+  let tempCreated = false;
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const now = nowFn ?? testClock ?? Date.now;
+    const payload: DiskModelCacheEntry = {
+      version: 1,
+      provider,
+      timestamp: now(),
+      models,
+    };
+    const content = JSON.stringify(payload);
+    const fd = fs.openSync(tempFile, 'wx');
+    tempCreated = true;
+    try {
+      fs.writeFileSync(fd, content, 'utf-8');
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+    fs.renameSync(tempFile, targetFile);
+    tempCreated = false;
+  } catch (error) {
+    loggingService?.warn('Failed to write model disk cache', { provider, error: String(error) });
+  } finally {
+    if (tempCreated) {
+      try {
+        fs.unlinkSync(tempFile);
+      } catch {
+        // Best-effort cleanup of temp file
+      }
+    }
+  }
+}
+
 export async function fetchModels(
-  deps: {
-    settingsService: ISettingsService;
-    loggingService: ILoggingService;
-    signal?: AbortSignal;
-  },
+  deps: FetchModelsDeps,
   providerOverride?: string,
   fetchImpl: FetchFn = fetch,
 ): Promise<ModelInfo[]> {
@@ -30,10 +164,19 @@ export async function fetchModels(
   const provider = providerOverride || settingsService.get('agent.provider');
   const cacheKey = provider;
 
+  // 1. In-memory cache hit
   if (cache.has(cacheKey)) {
     return cache.get(cacheKey) as ModelInfo[];
   }
 
+  // 2. Disk cache hit
+  const diskCached = readDiskCache(provider, deps.cacheDir, deps.now, deps.ttlMs, loggingService);
+  if (diskCached) {
+    cache.set(cacheKey, diskCached);
+    return diskCached;
+  }
+
+  // 3. Cache miss: fetch from provider
   try {
     const providerDef = getProvider(provider);
     if (!providerDef) {
@@ -51,6 +194,7 @@ export async function fetchModels(
     }));
 
     cache.set(cacheKey, models);
+    writeDiskCache(provider, models, deps.cacheDir, deps.now, loggingService);
     return models;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -75,11 +219,40 @@ export async function fetchModels(
   }
 }
 
-export function clearModelCache(provider?: string): void {
+export function clearModelCache(provider?: string, opts?: { cacheDir?: string }): void {
   if (provider) {
     cache.delete(provider);
   } else {
     cache.clear();
+  }
+
+  try {
+    const dir = getModelCacheDir(opts?.cacheDir);
+    if (provider) {
+      const targetFile = getModelCacheFilePath(provider, opts?.cacheDir);
+      if (fs.existsSync(targetFile)) {
+        try {
+          fs.unlinkSync(targetFile);
+        } catch {
+          // ignore
+        }
+      }
+    } else {
+      if (fs.existsSync(dir)) {
+        const files = fs.readdirSync(dir);
+        for (const file of files) {
+          if (file.endsWith('.json') || file.endsWith('.tmp')) {
+            try {
+              fs.unlinkSync(path.join(dir, file));
+            } catch {
+              // ignore
+            }
+          }
+        }
+      }
+    }
+  } catch {
+    // Disk cache clearing is best-effort and must not throw
   }
 }
 

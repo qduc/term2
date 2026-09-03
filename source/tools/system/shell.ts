@@ -911,7 +911,12 @@ export function createShellToolDefinition(deps: {
         const timeout = timeoutValue != null ? timeoutValue : undefined;
         const maxOutputLengthValue = max_output_length ?? settingsService.get('shell.maxOutputChars');
         const configuredMaxOutputLength = settingsService.get('shell.maxOutputChars');
-        const foregroundMaxOutputLength = maxOutputLengthValue != null ? maxOutputLengthValue : undefined;
+        // Clamp foreground requests to the configured maximum, mirroring the
+        // background path below: a model-chosen budget is reduction-only.
+        const foregroundMaxOutputLength =
+          configuredMaxOutputLength != null
+            ? Math.min(maxOutputLengthValue ?? configuredMaxOutputLength, configuredMaxOutputLength)
+            : maxOutputLengthValue ?? undefined;
         const backgroundMaxOutputLength =
           configuredMaxOutputLength != null
             ? Math.min(foregroundMaxOutputLength ?? configuredMaxOutputLength, configuredMaxOutputLength)

@@ -2206,3 +2206,43 @@ it.sequential('root shell fails closed when a denied read has no SDK call ID', a
   );
   expect(deniedReadStore.has('cat ~/.cargo/registry/cache')).toBe(false);
 });
+
+it('clamps a foreground max_output_length above the configured maximum', async () => {
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': false, 'shell.maxOutputChars': 40 }),
+    executeShellCommandImpl: async () => ({
+      stdout: `head-${'x'.repeat(200)}-tail`,
+      stderr: '',
+      exitCode: 0,
+      timedOut: false,
+    }),
+  });
+
+  const output = await tool.execute({ command: 'long-output', max_output_length: 60_000 });
+
+  // Reduction-only clamp: the 60k request is honored only up to the configured 40.
+  expect(output).toContain('characters trimmed');
+  expect(output).not.toContain('x'.repeat(50));
+});
+
+it('leaves a foreground max_output_length below the configured maximum alone', async () => {
+  const tool = createShellToolDefinition({
+    loggingService: createNoopLogger(),
+    settingsService: createMockSettingsService({ 'sandbox.enabled': false, 'shell.maxOutputChars': 40_000 }),
+    executeShellCommandImpl: async () => ({
+      stdout: `head-${'x'.repeat(200)}-tail`,
+      stderr: '',
+      exitCode: 0,
+      timedOut: false,
+    }),
+  });
+
+  const output = await tool.execute({ command: 'long-output', max_output_length: 120 });
+
+  // Reduction-only: the 120-char request trims (middle-trim note) while the
+  // full output remains retrievable via the spill file.
+  expect(output).toContain('Full output saved to');
+  expect(output).toContain('characters trimmed');
+  expect(output.includes('FULL-ONLY-SENTINEL' as string)).toBe(false);
+});

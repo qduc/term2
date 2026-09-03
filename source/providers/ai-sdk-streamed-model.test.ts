@@ -535,6 +535,42 @@ it('drops a provider_opaque item and still sends the rest of the history', async
   expect(capturedPrompt[0].role).toBe('user');
 });
 
+it('carries AI SDK outputTokens.reasoning through to completion usage', async () => {
+  const model = createAiSdkStreamedModel({
+    provider: 'openrouter',
+    modelId: 'example/reasoning-model',
+    specificationVersion: 'v3',
+    supportedUrls: {},
+    async doGenerate() {
+      return {
+        response: { id: 'unary-reasoning' },
+        text: 'visible',
+        usage: { inputTokens: { total: 90 }, outputTokens: { total: 54, text: 2, reasoning: 52 } },
+      } as unknown as Awaited<ReturnType<LanguageModelV3['doGenerate']>>;
+    },
+    async doStream() {
+      return {
+        stream: (async function* () {
+          yield { type: 'response-metadata', id: 'response-reasoning' };
+          yield { type: 'text-delta', delta: 'visible' };
+          yield {
+            type: 'finish',
+            finishReason: { unified: 'stop' },
+            usage: { inputTokens: { total: 90 }, outputTokens: { total: 54, text: 2, reasoning: 52 } },
+          };
+        })(),
+      } as unknown as Awaited<ReturnType<LanguageModelV3['doStream']>>;
+    },
+  } as unknown as LanguageModelV3);
+
+  const events = await collect(model.stream({ input: [], tools: [] }));
+  const completion = events.find((e: any) => e.type === 'completion') as any;
+  expect(completion.usage).toMatchObject({ inputTokens: 90, outputTokens: 54, reasoningTokens: 52 });
+
+  const unary = await model.getResponse!({ input: [], tools: [] });
+  expect(unary.usage).toMatchObject({ inputTokens: 90, outputTokens: 54, reasoningTokens: 52 });
+});
+
 it('extracts provider-reported cost from finish metadata and attaches costUsd to completion', async () => {
   const model = createAiSdkStreamedModel({
     provider: 'openrouter',

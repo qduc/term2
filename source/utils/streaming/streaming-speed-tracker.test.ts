@@ -91,6 +91,34 @@ describe('StreamingSpeedTracker', () => {
     expect(settled).toEqual({ tps: 100, approximate: false });
   });
 
+  it('attaches the decode window when the settled rate exceeds plausible single-sequence decode', () => {
+    const tracker = new StreamingSpeedTracker({ startTime: 0 });
+    tracker.recordDelta('visible', 0);
+
+    // 1000 visible tokens over a 0.2s tail window -> 5000 tok/s: a burst, not decode.
+    const settled = tracker.getSettledTps({ completionTokens: 1000, endTime: 200 });
+    expect(settled?.tps).toBe(5000);
+    expect(settled?.decodeWindowMs).toBe(200);
+  });
+
+  it('omits the decode window for plausible sustained rates', () => {
+    const tracker = new StreamingSpeedTracker({ startTime: 0 });
+    tracker.recordDelta('visible', 0);
+
+    const settled = tracker.getSettledTps({ completionTokens: 100, endTime: 1000 });
+    expect(settled).toEqual({ tps: 100, approximate: false });
+    expect(settled?.decodeWindowMs).toBeUndefined();
+  });
+
+  it('omits the decode window when a provider duration scopes the rate', () => {
+    const tracker = new StreamingSpeedTracker({ startTime: 0 });
+    tracker.recordDelta('visible', 0);
+
+    const settled = tracker.getSettledTps({ completionTokens: 1000, completionMs: 200, endTime: 200 });
+    expect(settled?.tps).toBe(5000);
+    expect(settled?.decodeWindowMs).toBeUndefined();
+  });
+
   it('keeps provider completion_ms paired with full completion_tokens', () => {
     const tracker = new StreamingSpeedTracker({ startTime: 0 });
     tracker.recordDelta('visible', 0);

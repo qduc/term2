@@ -22,6 +22,12 @@ export interface StreamingSpeedSnapshot {
 export interface SettledStreamingSpeed {
   tps: number;
   approximate: boolean;
+  /**
+   * Decode-window duration in ms when the settled rate exceeds what one
+   * sequence plausibly sustains (MAX_PLAUSIBLE_DECODE_TPS). Lets the footer
+   * show what fraction of the turn the rate actually describes.
+   */
+  decodeWindowMs?: number;
 }
 
 /** Average characters per token heuristic for English/code text when provider does not stream token counts. */
@@ -37,6 +43,16 @@ const MAX_CALIBRATED_CHARS_PER_TOKEN = 10;
 const MIN_CHARS_FOR_CALIBRATION = 20;
 /** Completion tokens this far above the visible char estimate imply hidden tokens in the numerator. */
 const HIDDEN_TOKEN_RATIO = 2;
+
+/**
+ * Single-sequence decode rates above this are not plausible production
+ * throughput — the numerator/denominator pair describes a burst or a tail
+ * window, not sustained decode. Calibrated against a day of OpenRouter
+ * muse-spark traffic (n=1410, honest full-request p99 ≈ 670 tok/s): a 500
+ * cutoff marks 81% of settled figures as burst-inflated while clearing
+ * genuine sustained rates (median honest ≈ 60 tok/s) by a wide margin.
+ */
+export const MAX_PLAUSIBLE_DECODE_TPS = 500;
 
 export function formatTokensPerSecond(tps: number, approximate = false): string {
   const value = tps.toFixed(1);
@@ -275,7 +291,15 @@ export class StreamingSpeedTracker {
     if (!Number.isFinite(tps) || tps <= 0) return null;
 
     const approximate = !hasProviderDuration && !subtractedReasoning && this.isHiddenReasoningInflated(rawTokens);
-    return { tps: Math.round(tps * 10) / 10, approximate };
+    const settled: SettledStreamingSpeed = { tps: Math.round(tps * 10) / 10, approximate };
+    // A settled rate no single sequence plausibly sustains describes a burst
+    // or tail window, not sustained decode. Attach the window so the footer
+    // can show what fraction of the turn it covers. Only the wall-clock path
+    // needs this: a provider duration already scopes the rate honestly.
+    if (!hasProviderDuration && settled.tps > MAX_PLAUSIBLE_DECODE_TPS) {
+      settled.decodeWindowMs = durationMs;
+    }
+    return settled;
   }
 
   private isHiddenReasoningInflated(completionTokens: number): boolean {

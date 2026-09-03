@@ -931,6 +931,49 @@ it.sequential('StatusBar prefixes estimated token speed with a tilde', async () 
   expect(output).toContain('↓450 (~48.2 tok/s)');
 });
 
+it.sequential('StatusBar annotates a burst-inflated decode rate with its turn coverage', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+  });
+
+  const { lastFrame } = await renderInAct(
+    <StatusBar
+      settingsService={settingsService}
+      lastUsage={{
+        prompt_tokens: 1200,
+        completion_tokens: 450,
+        tokens_per_second: 1040.5,
+        tokens_per_second_coverage: 0.12,
+      }}
+    />,
+  );
+  const output = lastFrame() ?? '';
+  // Compact: one short suffix, no wrap of the rest of the line.
+  expect(output).toContain('↓450 (1040.5 tok/s, 12% of turn)');
+});
+
+it.sequential('StatusBar omits coverage for a full-turn sustained rate', async () => {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'agent.provider': 'openai',
+  });
+
+  const { lastFrame } = await renderInAct(
+    <StatusBar
+      settingsService={settingsService}
+      lastUsage={{
+        prompt_tokens: 1200,
+        completion_tokens: 450,
+        tokens_per_second: 48.2,
+      }}
+    />,
+  );
+  const output = lastFrame() ?? '';
+  expect(output).toContain('↓450 (48.2 tok/s)');
+  expect(output).not.toContain('of turn');
+});
+
 it.sequential('StatusBar renders live streaming speed during in-flight generation', async () => {
   const settingsService = createMockSettingsService({
     'agent.model': 'gpt-4o',

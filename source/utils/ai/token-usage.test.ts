@@ -434,6 +434,20 @@ it('normalizeUsage recognizes camelCase reasoningTokens', () => {
   });
 });
 
+it('normalizeUsage reads AI SDK v3 outputTokens.reasoning (incl. OpenRouter)', () => {
+  expect(normalizeUsage({ inputTokens: 90, outputTokens: { total: 54, reasoning: 52 } })).toEqual({
+    prompt_tokens: 90,
+    completion_tokens: 54,
+    total_tokens: 144,
+    reasoning_tokens: 52,
+  });
+  expect(normalizeUsage({ outputTokens: 54, outputTokensDetails: { reasoningTokens: 52 } })).toEqual({
+    completion_tokens: 54,
+    total_tokens: 54,
+    reasoning_tokens: 52,
+  });
+});
+
 it('normalizeUsage recognizes camelCase cacheReadTokens', () => {
   expect(normalizeUsage({ inputTokens: 10, outputTokens: 5, cacheReadTokens: 3 })).toEqual({
     prompt_tokens: 10,

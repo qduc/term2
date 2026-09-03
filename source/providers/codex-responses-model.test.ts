@@ -334,6 +334,34 @@ it('wrapCodexStream warns with metadata when reconstructed output is suspiciousl
 // the stream through wrapCodexStream so a Codex-style terminal frame with
 // empty output gets rebuilt into a populated completion event. The owned
 // transport dependency supplies a controlled stream without a real client.
+it('CodexResponsesModel.stream carries output_tokens_details.reasoning_tokens into completion usage', async () => {
+  const reasoningTransport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
+  reasoningTransport.fetchResponse = async function () {
+    return makeStream([
+      { type: 'response.created', response: { id: 'resp_reasoning' } },
+      {
+        type: 'response.completed',
+        response: {
+          id: 'resp_reasoning',
+          output: [],
+          usage: {
+            input_tokens: 90,
+            output_tokens: 54,
+            output_tokens_details: { reasoning_tokens: 52 },
+          },
+        },
+      },
+    ]);
+  };
+
+  const reasoningModel = new CodexResponsesModel({} as any, 'gpt-5-codex', reasoningTransport);
+  const reasoningEvents = await collect(reasoningModel.stream({ input: [], tools: [] } as any));
+
+  const reasoningDone = reasoningEvents.find((e: any) => e.type === 'completion') as any;
+  expect(reasoningDone).toBeTruthy();
+  expect(reasoningDone.usage).toMatchObject({ inputTokens: 90, outputTokens: 54, reasoningTokens: 52 });
+});
+
 it('CodexResponsesModel.stream yields completion with reconstructed output', async () => {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5-codex', false);
   transport.fetchResponse = async function () {

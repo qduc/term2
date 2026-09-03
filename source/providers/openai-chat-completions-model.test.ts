@@ -360,6 +360,28 @@ it('stream() maps application structured output to native response_format', asyn
   });
 });
 
+it('stream() carries completion_tokens_details.reasoning_tokens into completion usage', async () => {
+  async function* reasoningUsageStream(): AsyncIterable<any> {
+    yield { choices: [{ delta: { content: 'visible' } }] };
+    yield {
+      choices: [{ delta: {}, finish_reason: 'stop' }],
+      usage: {
+        prompt_tokens: 90,
+        completion_tokens: 54,
+        completion_tokens_details: { reasoning_tokens: 52 },
+      },
+    };
+  }
+  const client = { chat: { completions: { create: async () => reasoningUsageStream() } } };
+  const model = new OpenAIChatCompletionsModel(client, 'fixture-chat');
+  const events: any[] = [];
+  for await (const event of model.stream({ input: [], tools: [] } as any)) events.push(event);
+
+  expect(events.find((event) => event.type === 'completion')).toMatchObject({
+    usage: { inputTokens: 90, outputTokens: 54, reasoningTokens: 52 },
+  });
+});
+
 it('stream() carries terminal Chat usage into the completion and application run state', async () => {
   async function* usageStream(): AsyncIterable<any> {
     yield { choices: [{ delta: { content: 'done' } }] };

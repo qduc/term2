@@ -1716,6 +1716,30 @@ describe('ApplicationRunLoop', () => {
     ]);
   });
 
+  it('forwards AI SDK outputTokens.reasoning onto usage_update as reasoning_tokens', async () => {
+    const model: StreamedModelTurn = {
+      async *stream() {
+        yield {
+          type: 'completion',
+          responseId: 'resp-reasoning',
+          output: [{ type: 'message', content: [{ type: 'text', text: 'done' }] }],
+          usage: { inputTokens: 90, outputTokens: 54, reasoningTokens: 52 },
+        };
+      },
+    };
+    const stream = new ApplicationRunLoop({ resolveModel: () => model }).startStream(agent, 'reason');
+
+    const events = await collect(stream);
+    const updates = events.filter((event) => (event as { type?: string }).type === 'usage_update');
+
+    expect(updates).toEqual([
+      {
+        type: 'usage_update',
+        usage: { prompt_tokens: 90, completion_tokens: 54, total_tokens: 144, reasoning_tokens: 52 },
+      },
+    ]);
+  });
+
   it('emits no usage_update for a request whose completion reports no usage', async () => {
     const model: StreamedModelTurn = {
       async *stream() {

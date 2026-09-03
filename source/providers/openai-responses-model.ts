@@ -366,11 +366,16 @@ function normalizeUsage(usage: any): StreamedModelUsage | undefined {
   const outputTokens = usage.output_tokens ?? usage.outputTokens;
   const cachedInputTokens = usage.input_tokens_details?.cached_tokens ?? usage.cachedInputTokens;
   const cacheWriteTokens = usage.input_tokens_details?.cache_creation_tokens ?? usage.cacheWriteTokens;
+  const reasoningTokens =
+    usage.output_tokens_details?.reasoning_tokens ??
+    usage.outputTokensDetails?.reasoningTokens ??
+    usage.outputTokensDetails?.reasoning_tokens;
   return {
     ...(inputTokens !== undefined ? { inputTokens } : {}),
     ...(outputTokens !== undefined ? { outputTokens } : {}),
     ...(cachedInputTokens !== undefined ? { cachedInputTokens } : {}),
     ...(cacheWriteTokens !== undefined ? { cacheWriteTokens } : {}),
+    ...(reasoningTokens !== undefined ? { reasoningTokens } : {}),
   };
 }
 

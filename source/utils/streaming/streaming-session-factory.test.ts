@@ -512,6 +512,80 @@ it('marks settled TPS estimated when hidden tokens inflate the numerator', () =>
   expect(lastUsage?.tokens_per_second_estimated).toBe(true);
 });
 
+it('pairs a burst-inflated settled rate with its coverage of the turn', () => {
+  let lastUsage: any = null;
+  let currentTime = 0;
+  const session = createStreamingSession(
+    {
+      appendMessages: () => {},
+      setMessages: () => {},
+      trimMessages: (messages) => messages,
+      annotateCommandMessage: (msg) => msg,
+      loggingService: silentLogger(),
+      setLastUsage: (usage) => {
+        lastUsage = usage;
+      },
+      reasoningThrottleMs: 200,
+      now: () => currentTime,
+      createConversationEventHandler: () => () => {},
+    },
+    'sendUserMessage',
+  );
+
+  // Tracker starts at t=0; the first visible delta lands at t=1200
+  // (TTFT 1200ms) and usage settles at t=1400 with 300 billed completion
+  // tokens: 1500 tok/s over the 200ms decode window, covering 200/1400.
+  currentTime = 1200;
+  session.applyConversationEvent({ type: 'text_delta', delta: 'a'.repeat(40), fullText: 'a'.repeat(40) } as const);
+  session.applyConversationEvent({
+    type: 'tool_call_streaming_delta',
+    toolName: 'shell',
+    argumentCharCount: 2000,
+  } as const);
+  currentTime = 1400;
+  session.applyConversationEvent({
+    type: 'usage_update',
+    usage: { completion_tokens: 300 },
+  } as const);
+
+  expect(lastUsage?.tokens_per_second).toBe(1500);
+  expect(lastUsage?.tokens_per_second_coverage).toBeCloseTo(200 / 1400, 5);
+  // 1500 × 0.143 ≈ 214: the marked rate reconstructs the effective turn rate
+  // (300 tokens ÷ 1.4s wall ≈ 214 tok/s).
+  expect(lastUsage.tokens_per_second * lastUsage.tokens_per_second_coverage).toBeCloseTo(300 / 1.4, 0);
+});
+
+it('omits coverage for a plausible sustained settled rate', () => {
+  let lastUsage: any = null;
+  let currentTime = 0;
+  const session = createStreamingSession(
+    {
+      appendMessages: () => {},
+      setMessages: () => {},
+      trimMessages: (messages) => messages,
+      annotateCommandMessage: (msg) => msg,
+      loggingService: silentLogger(),
+      setLastUsage: (usage) => {
+        lastUsage = usage;
+      },
+      reasoningThrottleMs: 200,
+      now: () => currentTime,
+      createConversationEventHandler: () => () => {},
+    },
+    'sendUserMessage',
+  );
+
+  session.applyConversationEvent({ type: 'text_delta', delta: 'visible', fullText: 'visible' } as const);
+  currentTime = 1000;
+  session.applyConversationEvent({
+    type: 'usage_update',
+    usage: { completion_tokens: 100, reasoning_tokens: 80 },
+  } as const);
+
+  expect(lastUsage?.tokens_per_second).toBe(20);
+  expect(lastUsage?.tokens_per_second_coverage).toBeUndefined();
+});
+
 it('seeds live estimates from the conversation chars-per-token ratio and reports recalibration', () => {
   const calibrated: number[] = [];
   const liveTps: number[] = [];

@@ -66,6 +66,7 @@ export function createAiSdkStreamedModel(
           ...(usage.outputTokens?.total !== undefined ? { outputTokens: usage.outputTokens.total } : {}),
           ...(usage.inputTokens?.cacheRead !== undefined ? { cachedInputTokens: usage.inputTokens.cacheRead } : {}),
           ...(usage.inputTokens?.cacheWrite !== undefined ? { cacheWriteTokens: usage.inputTokens.cacheWrite } : {}),
+          ...(usage.outputTokens?.reasoning !== undefined ? { reasoningTokens: usage.outputTokens.reasoning } : {}),
         },
         ...(costUsd !== undefined ? { costUsd } : {}),
         ...(result.providerMetadata ? { providerMetadata: result.providerMetadata } : {}),
@@ -223,6 +224,9 @@ export function createAiSdkStreamedModel(
                 : {}),
               ...(part.usage.inputTokens.cacheWrite !== undefined
                 ? { cacheWriteTokens: part.usage.inputTokens.cacheWrite }
+                : {}),
+              ...(part.usage.outputTokens.reasoning !== undefined
+                ? { reasoningTokens: part.usage.outputTokens.reasoning }
                 : {}),
             },
             ...(costUsd !== undefined ? { costUsd } : {}),

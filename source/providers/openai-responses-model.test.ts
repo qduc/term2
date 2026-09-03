@@ -659,7 +659,12 @@ it('emits direct typed completion output and usage without compatibility envelop
                     encrypted_content: 'ciphertext',
                   },
                 ],
-                usage: { input_tokens: 10, output_tokens: 4, input_tokens_details: { cached_tokens: 3 } },
+                usage: {
+                  input_tokens: 10,
+                  output_tokens: 4,
+                  input_tokens_details: { cached_tokens: 3 },
+                  output_tokens_details: { reasoning_tokens: 2 },
+                },
               },
             };
           })(),
@@ -682,7 +687,7 @@ it('emits direct typed completion output and usage without compatibility envelop
           providerMetadata: { openai: { encrypted_content: 'ciphertext' } },
         },
       ],
-      usage: { inputTokens: 10, outputTokens: 4, cachedInputTokens: 3 },
+      usage: { inputTokens: 10, outputTokens: 4, cachedInputTokens: 3, reasoningTokens: 2 },
     },
   ]);
 });

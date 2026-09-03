@@ -167,6 +167,7 @@ const cli = meow(
           --ssh-port <port>                SSH port (default: 22)
           --grok-login                     Log in to Grok in a browser (OAuth) and exit
           --codex-login                    Log in to Codex/ChatGPT in a browser (OAuth) and exit
+          --list-models [search]           Print available models grouped by provider, filtered by an optional search term
       -R, --resume [conversation-id|ls]    Resume the last conversation, a specific ID, or list recent conversations
           --fork                            Fork the resumed conversation into a new session (requires --resume)
       -h, --help                           Show help
@@ -190,6 +191,8 @@ const cli = meow(
       $ term2 --resume ls
       $ term2 --grok-login
       $ term2 --codex-login
+      $ term2 --list-models
+      $ term2 --list-models gpt-5
       $ term2 --ssh user@host --remote-dir /path/to/project
       $ term2 --ssh user@host --remote-dir /path/to/project --ssh-port 2222
   `,
@@ -257,6 +260,10 @@ const cli = meow(
         type: 'boolean',
         default: false,
       },
+      listModels: {
+        type: 'boolean',
+        default: false,
+      },
     },
   },
 );
@@ -301,6 +308,30 @@ if (cli.flags.codexLogin) {
     console.error(`Codex login failed: ${error?.message ?? error}`);
     process.exit(1);
   }
+}
+
+// Model listing is a standalone errand like the logins above: it prints and
+// exits before any Ink, session, or profile setup. It does need settings,
+// because model availability is credential-gated at the same boundary the
+// /model picker uses. The optional positional search term is consumed here,
+// ahead of the resume/prompt positional handling below.
+if (cli.flags.listModels) {
+  if (cli.input.length > 1) {
+    console.error('Error: --list-models accepts at most one search term.');
+    process.exit(1);
+  }
+  const { runListModels } = await import('./services/models/model-listing.js');
+  const listingLogger = new LoggingService({ sessionContextService: new SessionContextService() });
+  const listingSettings = new SettingsService({ env: buildEnvOverrides(), loggingService: listingLogger });
+  const outcome = await runListModels({
+    settingsService: listingSettings,
+    loggingService: listingLogger,
+    search: cli.input[0]?.trim(),
+  });
+  for (const warning of outcome.warnings) console.error(warning);
+  if (outcome.error) console.error(outcome.error);
+  if (outcome.output) console.log(outcome.output);
+  process.exit(outcome.exitCode);
 }
 
 const resumeRequested = Boolean(cli.flags.resume);

@@ -9,6 +9,8 @@ import {
   ProviderTraffic,
   TRAFFIC_TEXT_LIMIT,
   ENCRYPTED_CONTENT_REDACTION,
+  isRawTrafficCaptureEnabled,
+  rawCapturePathForRequestPath,
   type DailySessionIndexEntry,
 } from './provider-traffic.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../session/session-context-service.js';
@@ -1639,4 +1641,88 @@ it('reasoning_details encrypted data is redacted to the same visible marker', ()
   });
   const details = (sanitized.messages as any[])[0].reasoning_details;
   expect(details[0].data).toBe(ENCRYPTED_CONTENT_REDACTION);
+});
+
+// Opt-in raw capture (TERM2_RAW_TRAFFIC) writes an unsanitized sidecar so a
+// future chained-state experiment can see exactly what the Codex WS lane
+// sends: full instructions, full tool definitions, untruncated
+// apply_patch arguments. Off by default; never a git artifact (sidecars live
+// next to per-session traffic files under the state-dir log root).
+it('isRawTrafficCaptureEnabled is off unless explicitly enabled', () => {
+  expect(isRawTrafficCaptureEnabled({})).toBe(false);
+  expect(isRawTrafficCaptureEnabled({ TERM2_RAW_TRAFFIC: '' })).toBe(false);
+  expect(isRawTrafficCaptureEnabled({ TERM2_RAW_TRAFFIC: '0' })).toBe(false);
+  expect(isRawTrafficCaptureEnabled({ TERM2_RAW_TRAFFIC: 'no' })).toBe(false);
+  expect(isRawTrafficCaptureEnabled({ TERM2_RAW_TRAFFIC: '1' })).toBe(true);
+  expect(isRawTrafficCaptureEnabled({ TERM2_RAW_TRAFFIC: 'true' })).toBe(true);
+  expect(isRawTrafficCaptureEnabled({ TERM2_RAW_TRAFFIC: 'YES' })).toBe(true);
+});
+
+it('rawCapturePathForRequestPath derives a _raw.json sidecar', () => {
+  expect(rawCapturePathForRequestPath('/root/2026-09-03/09-14-31_sessi/09-14-35.044Z_req-1.json')).toBe(
+    '/root/2026-09-03/09-14-31_sessi/09-14-35.044Z_req-1_raw.json',
+  );
+});
+
+it('ProviderTrafficArtifactStore writes no raw sidecar by default', () => {
+  const rootDir = makeTempDir();
+  const store = new ProviderTrafficArtifactStore({ rootDir });
+
+  store.recordRequestStart({
+    requestId: 'req-1',
+    timestamp: '2026-09-03T09:14:35.044Z',
+    provider: 'codex',
+    model: 'gpt-5.6-luna',
+    sessionId: 'session-123',
+    sessionStartedAt: '2026-09-03T09:14:31.125Z',
+    sentBody: { instructions: 'full instructions here' },
+  });
+
+  const sessionDir = path.join(rootDir, '2026-09-03', '09-14-31_sessi');
+  const files = fs.readdirSync(sessionDir);
+  expect(files).toHaveLength(1);
+  expect(files[0].endsWith('.json') && !files[0].endsWith('_raw.json')).toBe(true);
+});
+
+it('ProviderTrafficArtifactStore writes an unsanitized raw sidecar when opted in', () => {
+  const rootDir = makeTempDir();
+  const store = new ProviderTrafficArtifactStore({ rootDir, rawCaptureEnabled: true });
+  const longInstructions = 'i'.repeat(1200);
+  const toolParameters = { type: 'object', properties: { patch: { type: 'string' } } };
+
+  store.recordRequestStart({
+    requestId: 'req-1',
+    timestamp: '2026-09-03T09:14:35.044Z',
+    provider: 'codex',
+    model: 'gpt-5.6-luna',
+    sessionId: 'session-123',
+    sessionStartedAt: '2026-09-03T09:14:31.125Z',
+    headers: { host: 'example.com' },
+    sentBody: {
+      instructions: longInstructions,
+      tools: [{ type: 'function', function: { name: 'apply_patch', parameters: toolParameters } }],
+      api_key: 'sk-secret',
+    },
+  });
+
+  const sessionDir = path.join(rootDir, '2026-09-03', '09-14-31_sessi');
+  const requestFile = path.join(sessionDir, '09-14-35.044Z_req-1.json');
+  const rawFile = path.join(sessionDir, '09-14-35.044Z_req-1_raw.json');
+  expect(fs.existsSync(rawFile)).toBe(true);
+
+  // The sanitized envelope keeps its existing shape: truncated instructions,
+  // names-only tools.
+  const sent = readRequestFile(requestFile).sent as Record<string, unknown>;
+  expect(typeof (sent.body as Record<string, unknown>).instructions === 'string').toBe(true);
+  expect(((sent.body as Record<string, unknown>).instructions as string).length < longInstructions.length).toBe(true);
+  expect((sent.body as Record<string, unknown>).tools).toEqual(['apply_patch']);
+
+  // The sidecar keeps what sanitization drops, but still redacts credentials.
+  const raw = readRequestFile(rawFile);
+  expect((raw.body as Record<string, unknown>).instructions).toBe(longInstructions);
+  expect((raw.body as Record<string, unknown>).tools).toEqual([
+    { type: 'function', function: { name: 'apply_patch', parameters: toolParameters } },
+  ]);
+  expect((raw.body as Record<string, unknown>).api_key).toBe('[REDACTED]');
+  expect(raw.headers).toEqual({ host: 'example.com' });
 });

@@ -72,6 +72,20 @@ type TrafficEnvelope = {
   received: Record<string, unknown>;
 };
 
+/**
+ * Same truth table as `parseBooleanEnv` in logging-service.ts (kept local:
+ * that module imports this one, so importing it here would be a cycle).
+ * Only consulted for the opt-in raw-traffic sidecar, which must be
+ * impossible to enable by accident — absent/unset means off.
+ */
+const parseBooleanEnvValue = (value: unknown): boolean => {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  const normalized = value.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes';
+};
+
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
@@ -140,6 +154,39 @@ const sanitizeToolDefinitions = (tools: unknown): unknown => {
  * actually round-tripping on the Responses lane.
  */
 export const ENCRYPTED_CONTENT_REDACTION = '<redacted>';
+
+/**
+ * Field-name pattern for values that may carry bearer credentials in a
+ * request body (API keys, tokens, secrets). Applied only to the opt-in raw
+ * sidecar, where the body is otherwise written unsanitized — headers arrive
+ * pre-sanitized via `sanitizeHeaders` at every call site, but nothing stands
+ * between the body and disk there. Keep in sync with the pattern in
+ * `source/utils/header-sanitizer.ts`.
+ */
+const RAW_CREDENTIAL_KEY_PATTERN = /authorization|api[_-]?key|key|cookie|token|secret|signature/i;
+
+export const isRawTrafficCaptureEnabled = (env: NodeJS.ProcessEnv = process.env): boolean =>
+  parseBooleanEnvValue(env.TERM2_RAW_TRAFFIC);
+
+const redactRawCredentialFields = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(redactRawCredentialFields);
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const [key, v] of Object.entries(record)) {
+      out[key] = RAW_CREDENTIAL_KEY_PATTERN.test(key) ? '[REDACTED]' : redactRawCredentialFields(v);
+    }
+    return out;
+  }
+  return value;
+};
+
+/**
+ * Derives the sidecar path for an opt-in raw (unsanitized) request-body
+ * capture from the sanitized artifact path: `<request>_raw.json` next to it.
+ */
+export const rawCapturePathForRequestPath = (requestPath: string): string =>
+  requestPath.replace(/\.json$/, '_raw.json');
 
 const sanitizeReasoningDetails = (reasoningDetails: unknown): unknown => {
   if (!Array.isArray(reasoningDetails)) return reasoningDetails;
@@ -774,9 +821,14 @@ type RequestCompleteInput = {
 export class ProviderTrafficArtifactStore {
   readonly #rootDir: string;
   readonly #requestPaths = new Map<string, string>();
+  readonly #rawCaptureEnabled: boolean;
 
-  constructor({ rootDir }: { rootDir: string }) {
+  constructor({ rootDir, rawCaptureEnabled }: { rootDir: string; rawCaptureEnabled?: boolean }) {
     this.#rootDir = rootDir;
+    // Resolved once at construction so a mid-process env change cannot flip
+    // capture on for a store that started with it off (and tests can inject
+    // the flag directly without touching process.env).
+    this.#rawCaptureEnabled = rawCaptureEnabled ?? isRawTrafficCaptureEnabled();
   }
 
   recordRequestStart(input: RequestStartInput): void {
@@ -797,6 +849,9 @@ export class ProviderTrafficArtifactStore {
         body: sanitizeSentTrafficBody(input.sentBody),
       };
       writeTrafficEnvelope(requestPath, { sent: sentRecord, received: emptyTrafficRecord() });
+      if (this.#rawCaptureEnabled) {
+        this.#writeRawCapture(requestPath, input);
+      }
       this.#upsertDailyIndex(dayDir, {
         sessionId: input.sessionId,
         sessionDir: sessionDirName,
@@ -856,6 +911,35 @@ export class ProviderTrafficArtifactStore {
       // an abandoned or partially-written completion cannot leak map entries
       // for the life of the process.
       this.#requestPaths.delete(input.requestId);
+    }
+  }
+
+  #writeRawCapture(requestPath: string, input: RequestStartInput): void {
+    // Best-effort by design: a raw sidecar must never fail the request it
+    // observes, nor disturb the sanitized artifact. Swallow write failures
+    // silently (the sanitized envelope + winston record remain the source of
+    // truth; ProviderTraffic's residual boundary already covers those).
+    try {
+      const rawPath = rawCapturePathForRequestPath(requestPath);
+      fs.mkdirSync(path.dirname(rawPath), { recursive: true });
+      fs.writeFileSync(
+        rawPath,
+        `${JSON.stringify(
+          {
+            requestId: input.requestId,
+            timestamp: input.timestamp,
+            provider: input.provider,
+            model: input.model,
+            ...(input.headers ? { headers: input.headers } : {}),
+            body: redactRawCredentialFields(input.sentBody),
+          },
+          null,
+          2,
+        )}\n`,
+        'utf8',
+      );
+    } catch {
+      // Intentionally silent: see above.
     }
   }
 

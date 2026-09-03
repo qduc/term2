@@ -35,6 +35,20 @@ const findMainLogFile = (logDir: string) => {
   return files.find((f) => f.endsWith('.log') && f.startsWith('term2-') && !f.includes('openrouter'));
 };
 
+const findRawTrafficSidecars = (logDir: string): string[] => {
+  const providerRoot = path.join(logDir, 'provider-traffic');
+  if (!fs.existsSync(providerRoot)) return [];
+
+  const visit = (dir: string): string[] =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const entryPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) return visit(entryPath);
+      return entry.name.endsWith('_raw.json') ? [entryPath] : [];
+    });
+
+  return visit(providerRoot);
+};
+
 const readMainLogEntries = (logDir: string): Record<string, any>[] => {
   if (!fs.existsSync(logDir)) return [];
   const mainLogFile = findMainLogFile(logDir);
@@ -243,6 +257,68 @@ it.sequential('automatically writes provider traffic artifacts for sent and rece
   expect(received.modelClass).toBe('OpenAIResponsesWSModelWithPromptCacheKey');
   expect(received.modelWrapperClass).toBe('FallbackResponsesModel');
   expect(((received.summary as Record<string, unknown>)?.payload as any)?.outputText).toBe('hi');
+});
+
+it.sequential('explicitly disables raw traffic capture even when its environment flag is enabled', () => {
+  const logDir = getTestLogDir();
+  const originalRawTraffic = process.env.TERM2_RAW_TRAFFIC;
+  process.env.TERM2_RAW_TRAFFIC = '1';
+
+  try {
+    const logger = new LoggingService({
+      logDir,
+      disableLogging: false,
+      rawTrafficCaptureEnabled: false,
+    });
+
+    logger.providerTraffic.recordRequestStart({
+      requestId: 'explicit-off',
+      provider: 'codex',
+      model: 'gpt-5.6-luna',
+      sentBody: { instructions: 'do not write this to a raw sidecar' },
+    });
+
+    expect(findRawTrafficSidecars(logDir)).toHaveLength(0);
+  } finally {
+    if (originalRawTraffic === undefined) {
+      delete process.env.TERM2_RAW_TRAFFIC;
+    } else {
+      process.env.TERM2_RAW_TRAFFIC = originalRawTraffic;
+    }
+  }
+});
+
+it.sequential('explicitly enables raw traffic capture and writes the request body sidecar', () => {
+  const logDir = getTestLogDir();
+  const originalRawTraffic = process.env.TERM2_RAW_TRAFFIC;
+  process.env.TERM2_RAW_TRAFFIC = '0';
+  const requestBody = { instructions: 'capture this exact request body', input: [{ role: 'user', content: 'hello' }] };
+
+  try {
+    const logger = new LoggingService({
+      logDir,
+      disableLogging: false,
+      rawTrafficCaptureEnabled: true,
+    });
+
+    logger.providerTraffic.recordRequestStart({
+      requestId: 'explicit-on',
+      provider: 'codex',
+      model: 'gpt-5.6-luna',
+      sentBody: requestBody,
+    });
+
+    const rawSidecars = findRawTrafficSidecars(logDir);
+    expect(rawSidecars).toHaveLength(1);
+    const rawArtifact = JSON.parse(fs.readFileSync(rawSidecars[0], 'utf8')) as Record<string, unknown>;
+    expect(rawArtifact.body).toEqual(requestBody);
+  } finally {
+    if (originalRawTraffic === undefined) {
+      delete process.env.TERM2_RAW_TRAFFIC;
+    } else {
+      process.env.TERM2_RAW_TRAFFIC = originalRawTraffic;
+    }
+  }
 });
 
 it.sequential('cleans up old provider traffic files and directories by date', async () => {

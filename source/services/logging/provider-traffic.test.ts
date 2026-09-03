@@ -1666,7 +1666,7 @@ it('rawCapturePathForRequestPath derives a _raw.json sidecar', () => {
 
 it('ProviderTrafficArtifactStore writes no raw sidecar by default', () => {
   const rootDir = makeTempDir();
-  const store = new ProviderTrafficArtifactStore({ rootDir });
+  const store = new ProviderTrafficArtifactStore({ rootDir, rawCaptureEnabled: false });
 
   store.recordRequestStart({
     requestId: 'req-1',

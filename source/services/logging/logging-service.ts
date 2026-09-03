@@ -41,6 +41,7 @@ interface LoggingServiceConfig {
   logDir?: string;
   logLevel?: string;
   disableLogging?: boolean;
+  rawTrafficCaptureEnabled?: boolean;
   console?: boolean;
   debugLogging?: boolean;
   suppressConsoleOutput?: boolean;
@@ -76,6 +77,7 @@ export class LoggingService {
       logDir,
       logLevel = process.env.LOG_LEVEL || 'info',
       disableLogging,
+      rawTrafficCaptureEnabled,
       console: enableConsole = false,
       debugLogging = false,
       suppressConsoleOutput = true,
@@ -98,7 +100,10 @@ export class LoggingService {
     const mainLogAuditFile = path.join(finalLogDir, 'term2-audit.json');
     this.providerTrafficDir = path.join(finalLogDir, 'provider-traffic');
     this.evaluatorTrafficDir = path.join(finalLogDir, 'evaluator-traffic');
-    this.providerTrafficStore = new ProviderTrafficArtifactStore({ rootDir: this.providerTrafficDir });
+    this.providerTrafficStore = new ProviderTrafficArtifactStore({
+      rootDir: this.providerTrafficDir,
+      rawCaptureEnabled: rawTrafficCaptureEnabled,
+    });
     this.providerTraffic = new ProviderTraffic(
       this,
       config.sessionContextService ?? NULL_SESSION_CONTEXT_SERVICE,

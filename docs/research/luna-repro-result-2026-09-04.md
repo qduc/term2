@@ -22,9 +22,10 @@ for interpreting the result.
 
 - ARM A (gpt-5.6-luna): **5,866 chars, 1,676 frames, completed:true in 32s.**
   A sane ~6KB `create_file` argument. No degeneration whatsoever.
-- ARM B (gpt-5.6-sol control): running at time of writing; result to be
-  appended. But B cannot rescue the hypothesis: the hypothesis predicted
-  LUNA degenerates on this shape, and Luna did not.
+- ARM B (gpt-5.6-sol control): **5,866 chars, 1,676 frames, completed:true in 33s —
+  byte-identical size to Luna.** Both models clean on the identical history.
+  (Identical counts are expected, not suspicious: same tool declaration and
+  same ~4KB synthetic history shape produce same-size completions.)
 
 ## Reading per the pre-registered frame
 

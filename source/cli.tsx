@@ -316,6 +316,19 @@ if (cli.flags.codexLogin) {
 // /model picker uses. The optional positional search term is consumed here,
 // ahead of the resume/prompt positional handling below.
 if (cli.flags.listModels) {
+  // --list-models is a standalone errand and does not start or touch a
+  // session, so it cannot coexist with flags that select or manipulate a
+  // conversation: --resume/--fork consume the same leading positional this
+  // block reads as a search term, and would otherwise be silently
+  // misinterpreted rather than honored. Flags that only affect model
+  // resolution, output shape, or session startup once a session actually
+  // begins (--model, --provider, --reasoning, --lite, --auto-approve,
+  // --quiet, --show-reasoning, --json, --ssh, --remote-dir, --ssh-port) are
+  // harmless alongside a listing and are intentionally not rejected here.
+  if (cli.flags.resume || cli.flags.fork) {
+    console.error('Error: --list-models cannot be combined with --resume or --fork.');
+    process.exit(1);
+  }
   if (cli.input.length > 1) {
     console.error('Error: --list-models accepts at most one search term.');
     process.exit(1);

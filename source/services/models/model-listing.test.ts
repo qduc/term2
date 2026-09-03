@@ -6,6 +6,8 @@ import { registerProvider, unregisterProvider } from '../../providers/registry.j
 import { orderedProviderIds } from './model-catalog-session.js';
 import { filterModelGroups, formatModelGroups, runListModels, type ProviderModelGroup } from './model-listing.js';
 import { clearModelCache, clearModelMemoryCacheForTest } from '../model-service.js';
+import { SettingsService } from '../settings/settings-service.js';
+import { LoggingService } from '../logging/logging-service.js';
 
 const group = (provider: string, modelIds: string[]): ProviderModelGroup => ({
   provider,
@@ -179,5 +181,114 @@ it('runListModels reuses disk cache across separate invocations without custom f
     try {
       fs.rmSync(customDir, { recursive: true, force: true });
     } catch {}
+  }
+});
+
+it('runListModels with providerIds omitted selects and orders providers via the real credential/order path', async () => {
+  // This exercises collectProviderModels' default branch —
+  // orderedProviderIds(deps.settingsService, getProviderIds()) — through a
+  // real SettingsService, not a stubbed one. Every other case in this file
+  // injects providerIds explicitly and never touches that path.
+  const settingsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-list-models-settings-'));
+  const loggingService = new LoggingService({ disableLogging: true });
+  // 'providers' is not runtime-modifiable (requires restart), so seed it via
+  // the on-disk settings file the constructor loads, the same way a real
+  // user's stored custom-provider credentials would be present at startup.
+  fs.mkdirSync(settingsDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(settingsDir, 'settings.json'),
+    JSON.stringify({
+      providers: [
+        {
+          id: 'findings-cred-a',
+          name: 'findings-cred-a',
+          type: 'openai-compatible',
+          baseUrl: 'https://findings-cred-a.example.test/v1',
+          apiKey: 'secret-a',
+        },
+        {
+          id: 'findings-cred-b',
+          name: 'findings-cred-b',
+          type: 'openai-compatible',
+          baseUrl: 'https://findings-cred-b.example.test/v1',
+          apiKey: 'secret-b',
+        },
+      ],
+    }),
+    'utf-8',
+  );
+  const settingsService = new SettingsService({ settingsDir, disableLogging: true, disableFilePersistence: true });
+
+  // Defensive: a previous failed run in this suite may have left these
+  // registered if it errored before reaching the try/finally below.
+  unregisterProvider('findings-cred-a');
+  unregisterProvider('findings-cred-b');
+  unregisterProvider('findings-no-cred');
+
+  try {
+    registerProvider({
+      id: 'findings-cred-a',
+      label: 'Findings Cred A',
+      isRuntimeDefined: true,
+      fetchModels: async () => [],
+    });
+    registerProvider({
+      id: 'findings-cred-b',
+      label: 'Findings Cred B',
+      isRuntimeDefined: true,
+      fetchModels: async () => [],
+    });
+    registerProvider({
+      id: 'findings-no-cred',
+      label: 'Findings No Cred',
+      isRuntimeDefined: true,
+      fetchModels: async () => [],
+    });
+
+    // Credentials live in real settings state (seeded above on disk),
+    // resolved through hasProviderCredentials -> resolveProviderCredentials
+    // -> the stored custom-provider list. findings-no-cred has no matching
+    // entry, so it stays credential-missing and must be dropped.
+    //
+    // providerOrder is the only thing that should determine ordering among
+    // the credentialed providers; put b before a to prove it isn't
+    // registration or alphabetical order leaking through.
+    settingsService.setDynamic('providerOrder', ['findings-cred-b', 'findings-cred-a']);
+
+    // The real registry also holds this host's other providers (codex,
+    // grok, openai, ...), whose actual credential state is host-dependent
+    // and would make this test flaky if it leaked into the output. Making
+    // every non-"findings-*" provider fail its fetch keeps the assertion
+    // hermetic: collectProviderModels demotes a failed fetch to an
+    // {models: [], error} group, which filterModelGroups then drops, so
+    // whether some other host provider happens to be credentialed cannot
+    // affect what shows up below. The providerIds *selection* and *order*
+    // are still driven entirely by the real orderedProviderIds/settings
+    // path — only the model data itself is stubbed via the fetcher seam.
+    const outcome = await runListModels({
+      settingsService: settingsService as any,
+      loggingService: loggingService as any,
+      fetcher: async (provider: string) => {
+        if (!provider.startsWith('findings-')) throw new Error(`unexpected provider ${provider}`);
+        return [{ id: `${provider}-model`, provider }];
+      },
+      // providerIds intentionally omitted: exercises the default
+      // orderedProviderIds(deps.settingsService, getProviderIds()) branch.
+    });
+
+    expect(outcome.exitCode).toBe(0);
+    expect(outcome.output).not.toBeNull();
+    const providerOrderInOutput = (outcome.output ?? '')
+      .split('\n')
+      .filter((line) => line.endsWith(':'))
+      .map((line) => line.replace(/:$/, '').split(' (')[0]);
+
+    expect(providerOrderInOutput).toEqual(['findings-cred-b', 'findings-cred-a']);
+    expect(outcome.output).not.toContain('findings-no-cred');
+  } finally {
+    unregisterProvider('findings-cred-a');
+    unregisterProvider('findings-cred-b');
+    unregisterProvider('findings-no-cred');
+    fs.rmSync(settingsDir, { recursive: true, force: true });
   }
 });

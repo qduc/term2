@@ -166,7 +166,20 @@ it('buildSettingsList - creates list from keys and descriptions', () => {
   ]);
   const expectedCount = Object.values(MOCK_SETTING_KEYS).filter((key) => !excludedKeys.has(key)).length;
   expect(result.length).toBe(expectedCount);
-  expect(result.every(() => true)).toBe(true);
+  expect(result.map(({ key, description }) => ({ key, description }))).toEqual([
+    { key: 'agent.model', description: MOCK_DESCRIPTIONS['agent.model'] },
+    { key: 'agent.reasoningEffort', description: MOCK_DESCRIPTIONS['agent.reasoningEffort'] },
+    { key: 'shell.maxOutputChars', description: MOCK_DESCRIPTIONS['shell.maxOutputChars'] },
+    { key: 'shell.maxOutputLines', description: MOCK_DESCRIPTIONS['shell.maxOutputLines'] },
+    { key: 'shell.timeout', description: MOCK_DESCRIPTIONS['shell.timeout'] },
+    { key: 'webSearch.provider', description: MOCK_DESCRIPTIONS['webSearch.provider'] },
+    { key: 'logging.disableLogging', description: MOCK_DESCRIPTIONS['logging.disableLogging'] },
+    { key: 'logging.logLevel', description: MOCK_DESCRIPTIONS['logging.logLevel'] },
+    { key: 'ui.historySize', description: MOCK_DESCRIPTIONS['ui.historySize'] },
+    { key: 'agent.maxParallelToolCalls', description: MOCK_DESCRIPTIONS['agent.maxParallelToolCalls'] },
+    { key: 'agent.maxTurns', description: MOCK_DESCRIPTIONS['agent.maxTurns'] },
+    { key: 'agent.retryAttempts', description: MOCK_DESCRIPTIONS['agent.retryAttempts'] },
+  ]);
   expect(result.every((item) => item.description !== undefined)).toBe(true);
 });
 
@@ -414,13 +427,13 @@ it('filterSettingsByQuery - respects maxResults parameter for search queries', (
 
   // Use a broad query that matches multiple settings
   const result1 = filterSettingsByQuery(settings, 'agent', 2);
-  expect(result1.length <= 2).toBe(true);
+  expect(result1).toHaveLength(2);
 
   const result2 = filterSettingsByQuery(settings, 'agent', 4);
-  expect(result2.length <= 4).toBe(true);
+  expect(result2).toHaveLength(4);
 
-  const result3 = filterSettingsByQuery(settings, 'agent', 100);
-  expect(result3.length <= settings.length).toBe(true);
+  const result3 = filterSettingsByQuery(settings, 'agent', 5);
+  expect(result3).toHaveLength(5);
 });
 
 it('filterSettingsByQuery - case insensitive search', () => {
@@ -524,8 +537,9 @@ it('Integration - buildSettingsList and filterSettingsByQuery work together', ()
 
   // Search for "model" should find agent.model
   const result = filterSettingsByQuery(settings, 'model', 10);
-  expect(result.some((item) => item.key === 'agent.model')).toBe(true);
-  expect(result.some((item) => item.description?.includes('model'))).toBe(true);
+  expect(result.map(({ key, description }) => ({ key, description }))).toEqual([
+    { key: 'agent.model', description: MOCK_DESCRIPTIONS['agent.model'] },
+  ]);
 });
 
 it('Integration - clampIndex with filtered results', () => {
@@ -535,6 +549,6 @@ it('Integration - clampIndex with filtered results', () => {
   const filtered = filterSettingsByQuery(settings, 'agent', 3);
 
   // Clamp selection index to filtered results
-  expect(clampIndex(0, filtered.length)).toBe(0);
-  expect(clampIndex(10, filtered.length)).toBe(filtered.length - 1);
+  expect(filtered.map((item) => item.key)).toEqual(['agent.model', 'agent.maxTurns', 'agent.retryAttempts']);
+  expect([clampIndex(0, filtered.length), clampIndex(10, filtered.length)]).toEqual([0, 2]);
 });

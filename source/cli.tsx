@@ -154,7 +154,7 @@ const cli = meow(
       $ term2 [options] --resume [conversation-id|ls]
 
     Options
-      -m, --model <model>                  Override the configured model (e.g. gpt-5.4)
+      -m, --model <model>                  Model pattern or ID, supports provider/id and optional :<thinking>
       -p, --provider <provider>            Override the configured provider (e.g. openai, openrouter)
       -r, --reasoning <effort>             Set reasoning effort (default, none, minimal, low, medium, high, xhigh)
       -l, --lite                           Start in lite mode (minimal context, session-only)
@@ -550,6 +550,34 @@ if (providerFlag && !getProviderIds().includes(providerFlag)) {
   }
   console.error('\nYou can configure custom providers in your settings.json file.');
   process.exit(1);
+}
+
+if (modelFlag) {
+  const { resolveModelFlag } = await import('./services/models/model-resolution.js');
+  const resolution = await resolveModelFlag({
+    modelFlag,
+    providerFlag,
+    settingsService: settings,
+    loggingService: logger,
+  });
+
+  if (resolution.status === 'no_match') {
+    console.error(resolution.error);
+    process.exit(1);
+  }
+
+  if (resolution.status === 'cancelled') {
+    console.error('Cancelled.');
+    process.exit(1);
+  }
+
+  settings.set('agent.model', resolution.modelId);
+  if (resolution.provider) {
+    settings.set('agent.provider', resolution.provider);
+  }
+  if (resolution.reasoningEffort && !validatedReasoningEffort) {
+    settings.set('agent.reasoningEffort', resolution.reasoningEffort);
+  }
 }
 
 // Fresh sessions honor --lite/non-interactive defaults. Resumed sessions keep

@@ -71,7 +71,9 @@ it('CLI --help documents the available command-line options', () => {
   });
 
   expect(help).toContain('$ term2 [options] [prompt...]');
-  expect(help).toContain('-m, --model <model>');
+  expect(help).toContain(
+    '-m, --model <model>                  Model pattern or ID, supports provider/id and optional :<thinking>',
+  );
   expect(help).toContain('-p, --provider <provider>');
   expect(help).toContain('-r, --reasoning <effort>');
   expect(help).toContain('-l, --lite');
@@ -332,4 +334,29 @@ it('CLI accepts a custom provider from settings.json in non-interactive mode', (
   // it should not fail the early provider validation path.
   expect(stderr.includes(`Error: Unknown provider "${providerName}".`)).toBe(false);
   expect(error).toBeTruthy();
+});
+
+it('CLI --model reports error and exits 1 when no models match pattern', () => {
+  const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+  let error: any;
+  let stderr = '';
+  try {
+    execFileSync('node', [cliPath(), '--model', 'nonexistent-xyz-pattern', 'hello'], {
+      env: createTestChildEnv({
+        HOME: tempHome,
+        TERM2_CONVERSATIONS_DIR: testDir,
+        DISABLE_LOGGING: '1',
+      }),
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } catch (err: any) {
+    error = err;
+    stderr = err.stderr?.toString?.() ?? '';
+  } finally {
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  }
+
+  expect(error).toBeTruthy();
+  expect(error.status).toBe(1);
+  expect(stderr).toContain('Error: No models match "nonexistent-xyz-pattern".');
 });

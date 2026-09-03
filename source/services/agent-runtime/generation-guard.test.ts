@@ -79,6 +79,32 @@ it('uses the approved 60-second Luna unfinished-tool-call window', () => {
   expect(new GenerationGuard().toolArgumentRunawayMs).toBe(60_000);
 });
 
+it('reports observed size and limit when a streamed tool argument exceeds its cap', () => {
+  const guard = new GenerationGuard({ maxToolArgumentCharacters: 10 });
+
+  try {
+    guard.observeToolArgumentProgress(11);
+    expect.unreachable('oversized tool argument progress must throw');
+  } catch (error) {
+    expect(error).toMatchObject({ code: 'tool_argument_characters', unsafeToReplay: true });
+    expect((error as Error).message).toContain('11');
+    expect((error as Error).message).toContain('10');
+  }
+});
+
+it('reports observed size and limit when a complete tool call exceeds its cap', () => {
+  const guard = new GenerationGuard({ maxToolArgumentCharacters: 10 });
+
+  try {
+    guard.observeToolCall('12345678901');
+    expect.unreachable('oversized tool call must throw');
+  } catch (error) {
+    expect(error).toMatchObject({ code: 'tool_argument_characters', unsafeToReplay: true });
+    expect((error as Error).message).toContain('11');
+    expect((error as Error).message).toContain('10');
+  }
+});
+
 it('aborts one continuously incomplete tiny-delta tool call at its runaway deadline', async () => {
   vi.useFakeTimers();
   const abort = vi.fn();

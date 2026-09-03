@@ -151,6 +151,12 @@ export interface BackgroundSubagentTask {
   usage?: NormalizedUsage;
   /** Absent until the run calls its first tool; dropped once the run settles. */
   lastTool?: BackgroundSubagentTaskTool;
+  /**
+   * The newest tool calls of a live run, oldest first, capped at
+   * {@link BACKGROUND_SUBAGENT_RECENT_TOOL_LIMIT}. Absent until the run calls
+   * its first tool; dropped once the run settles.
+   */
+  recentTools?: BackgroundSubagentTaskTool[];
   /** Failure reason if the subagent failed. */
   error?: string;
 }
@@ -206,6 +212,8 @@ export interface SubagentNotificationStoreDeps {
 
 const DEFAULT_DELIVERED_ID_CAP = 256;
 export const BACKGROUND_TASK_RECENT_RETENTION_MS = 5_000;
+/** How many of a live run's newest tool calls the task panel shows. */
+export const BACKGROUND_SUBAGENT_RECENT_TOOL_LIMIT = 3;
 
 /**
  * Pending notifications for background (async) subagent runs.
@@ -245,8 +253,8 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
 
   /**
    * Updates the read-only task projection for async starts, tool activity, and
-   * completions. Only the newest tool call of a live run is kept: the overview
-   * answers "what is it doing now", not "what has it done".
+   * completions. Only the newest tool calls of a live run are kept: the overview
+   * answers "what is it doing now", not its full history.
    */
   recordLifecycle(event: ConversationEvent): boolean {
     if (event.type === 'background_shell_started') {
@@ -362,7 +370,7 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
   }
 
   /**
-   * Projects the newest tool call of a live run. Tool events carry no `async`
+   * Projects the newest tool calls of a live run. Tool events carry no `async`
    * flag, so membership in the running task map is what scopes this to
    * background runs — foreground and nested activity never registers a task.
    */
@@ -382,9 +390,12 @@ export class SubagentNotificationStore implements BackgroundSubagentNotification
           };
 
     if (!lastTool.label) return false;
-    if (task.lastTool?.label === lastTool.label && task.lastTool.state === lastTool.state) return false;
+    const previous = task.recentTools ?? (task.lastTool ? [task.lastTool] : []);
+    const newest = previous[previous.length - 1];
+    if (newest?.label === lastTool.label && newest.state === lastTool.state) return false;
 
-    this.#tasks.set(event.agentId, { ...task, lastTool });
+    const recentTools = [...previous, lastTool].slice(-BACKGROUND_SUBAGENT_RECENT_TOOL_LIMIT);
+    this.#tasks.set(event.agentId, { ...task, lastTool, recentTools });
     return true;
   }
 

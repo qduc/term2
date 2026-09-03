@@ -624,6 +624,30 @@ it('replaces the projected tool so only the most recent background tool call is 
   });
 });
 
+it('keeps the last three background tool calls oldest first', () => {
+  const store = makeStore();
+  store.recordLifecycle(started());
+  store.recordLifecycle(toolStarted({ toolCallId: 'tool-1' }));
+  store.recordLifecycle(toolFinished());
+  store.recordLifecycle(toolStarted({ toolCallId: 'tool-2', toolName: 'shell', arguments: { command: 'pnpm build' } }));
+  store.recordLifecycle(
+    toolStarted({
+      toolCallId: 'tool-3',
+      toolName: 'read_file',
+      arguments: { path: 'source/app.ts' },
+    }),
+  );
+  store.recordLifecycle(toolStarted({ toolCallId: 'tool-4', toolName: 'glob', arguments: { pattern: '**/*.ts' } }));
+
+  const task = firstSubagentTask(store);
+  expect(task.recentTools).toEqual([
+    { label: 'pnpm build', state: 'running' },
+    { label: 'read_file path=source/app.ts', state: 'running' },
+    { label: 'glob pattern=**/*.ts', state: 'running' },
+  ]);
+  expect(task.lastTool).toEqual({ label: 'glob pattern=**/*.ts', state: 'running' });
+});
+
 it('ignores tool activity for runs that are unknown or already settled', () => {
   const store = makeStore();
   store.recordLifecycle(started());

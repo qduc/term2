@@ -130,8 +130,32 @@ it('formatToolCommand: ask_mentor with empty question', () => {
   expect(result).toBe('ask_mentor: ');
 });
 
-it('formatToolCommand: unknown tool returns tool name', () => {
+it('formatToolCommand: unknown tool renders scalar params', () => {
   const result = formatToolCommand('custom_tool', { foo: 'bar' });
+  expect(result).toBe('custom_tool foo=bar');
+});
+
+it('formatToolCommand: generic fallback prefers identifying keys first', () => {
+  const result = formatToolCommand('read_file', { path: 'source/app.ts', verbose: true });
+  expect(result).toBe('read_file path=source/app.ts verbose=true');
+});
+
+it('formatToolCommand: generic fallback skips objects and empty strings', () => {
+  const result = formatToolCommand('glob', { pattern: '**/*.ts', options: { dot: true }, note: '' });
+  expect(result).toBe('glob pattern=**/*.ts');
+});
+
+it('formatToolCommand: generic fallback stays a single bounded line', () => {
+  const result = formatToolCommand('custom_tool', {
+    path: 'a'.repeat(200),
+    extra: 'line1\nline2',
+  });
+  expect(result).not.toContain('\n');
+  expect(result.length).toBeLessThanOrEqual(100);
+});
+
+it('formatToolCommand: generic fallback with no scalars returns tool name', () => {
+  const result = formatToolCommand('custom_tool', { options: { dot: true } });
   expect(result).toBe('custom_tool');
 });
 

@@ -4,6 +4,7 @@ import type {
   BackgroundTask,
   BackgroundSubagentTaskTool,
 } from '../../services/subagents/subagent-notification-store.js';
+import { BACKGROUND_SUBAGENT_RECENT_TOOL_LIMIT } from '../../services/subagents/subagent-notification-store.js';
 import type {
   BackgroundTaskControlDetails,
   ForegroundTransferCandidate,
@@ -74,6 +75,15 @@ const TOOL_STATE_MARKER: Record<BackgroundSubagentTaskTool['state'], string> = {
 
 const formatToolLabel = (tool: BackgroundSubagentTaskTool): string =>
   truncate(firstLine(tool.label).replaceAll(/\s+/g, ' '), TOOL_LABEL_LIMIT);
+
+/** Newest tool calls of a running subagent task, oldest first, one line each. */
+const recentTaskTools = (task: PanelTask): BackgroundSubagentTaskTool[] => {
+  if (task.kind === 'shell' || isControlTask(task) || task.status !== 'running') return [];
+  if ('recentTools' in task && task.recentTools?.length)
+    return task.recentTools.slice(-BACKGROUND_SUBAGENT_RECENT_TOOL_LIMIT);
+  if ('lastTool' in task && task.lastTool) return [task.lastTool];
+  return [];
+};
 
 export const formatBackgroundTaskElapsed = (elapsedMs: number): string => {
   const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1_000));
@@ -300,6 +310,7 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now, columns: testColumns }) =
         const firstLine = formatFirstLine({ task, placement, columns, now, isWide, isNarrow });
         const isStalled = controlTask?.activity?.liveness.state === 'quiet';
         const toolCallCount = subagentTask ? Object.values(subagentTask.toolCounts).reduce((sum, n) => sum + n, 0) : 0;
+        const recentTools = recentTaskTools(task);
         const modelLabel = subagentTask?.model?.id;
         const shellOutputPreview = controlTask ? formatShellOutputPreview(controlTask) : undefined;
         return (
@@ -330,20 +341,16 @@ const BackgroundTasksPanel: FC<Props> = ({ tasks, now, columns: testColumns }) =
                   : ''}
               </Text>
             )}
-            {task.kind !== 'shell' &&
-              !isControlTask(task) &&
-              task.status === 'running' &&
-              'lastTool' in task &&
-              task.lastTool && (
-                <Box flexDirection="row">
-                  <Text color={COLOR_BORDER}>{'  └ '}</Text>
-                  <Box flexGrow={1} flexShrink={1} minWidth={0}>
-                    <Text color={COLOR_TEXT_SUBTLE} wrap="truncate-end">
-                      {TOOL_STATE_MARKER[task.lastTool.state]} {formatToolLabel(task.lastTool)}
-                    </Text>
-                  </Box>
+            {recentTools.map((tool, index) => (
+              <Box key={index} flexDirection="row">
+                <Text color={COLOR_BORDER}>{index < recentTools.length - 1 ? '  ├ ' : '  └ '}</Text>
+                <Box flexGrow={1} flexShrink={1} minWidth={0}>
+                  <Text color={COLOR_TEXT_SUBTLE} wrap="truncate-end">
+                    {TOOL_STATE_MARKER[tool.state]} {formatToolLabel(tool)}
+                  </Text>
                 </Box>
-              )}
+              </Box>
+            ))}
           </Box>
         );
       })}

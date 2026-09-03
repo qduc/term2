@@ -51,6 +51,31 @@ jobs:
       - name: Run full test suite
         run: pnpm test
 
+  # The process-level e2e tier (terminal UI smoke test, build/rollback round
+  # trip, fake-codex network scenarios) is excluded from the default suite
+  # (vitest.config.ts) and runs here instead. cli.e2e cold-starts the app
+  # through tsx, so this job can take minutes under runner contention.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install pnpm
+        run: npm install -g pnpm@11.7.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run e2e suite
+        run: pnpm test:e2e
+
   provider-black-box:
     runs-on: ubuntu-latest
     timeout-minutes: 20

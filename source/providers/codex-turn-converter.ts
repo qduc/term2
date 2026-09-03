@@ -18,7 +18,24 @@ export function toCodexResponsesInput(input: readonly StreamedModelTurnInput[]):
   // `provider-opaque-compatibility.ts`.
   return input
     .filter((item) => !isForeignProviderOpaque(item, OPENAI_RESPONSES_OPAQUE_TAG))
-    .map((item) => (item.type === 'provider_opaque' ? item.item : toCodexResponsesItem(item)));
+    .map((item) => (item.type === 'provider_opaque' ? item.item : toCodexResponsesItem(item)))
+    .map((item) => {
+      // Codex Responses 400s with "System messages are not allowed". The
+      // application stores synthetic items (local compaction checkpoints,
+      // recovery error context) as system so they are not attributed to the
+      // user or assistant; map them to user on the wire. The item text
+      // already marks them untrusted historical data, not instructions — do
+      // not fold them into `instructions`, which would grant instruction
+      // authority. `provider_opaque` items replay verbatim above and never
+      // reach this mapping.
+      if (isRecord(item) && item.type === 'message' && item.role === 'system') {
+        return { ...item, role: 'user' };
+      }
+      if (isRecord(item) && item.role === 'system') {
+        throw new Error('Codex Responses input must not contain system messages');
+      }
+      return item;
+    });
 }
 
 export function toCodexResponsesItem(item: StreamedModelTurnInput): unknown {

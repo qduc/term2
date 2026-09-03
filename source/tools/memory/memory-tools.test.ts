@@ -1,11 +1,20 @@
-import { expect, it } from 'vitest';
+import { expect, it, afterEach } from 'vitest';
+import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createMemoryToolDefinitions } from './memory-tools.js';
 import {
+  FileMemoryStore,
   InvalidMemoryError,
   MemoryNotFoundError,
   MemoryStorageError,
   type MemoryStore,
 } from '../../services/memory/memory-store.js';
+
+const tempDirs: string[] = [];
+afterEach(async () => {
+  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+});
 import type { MemoryScope } from './memory-tools.js';
 import { getTrimConfig, setTrimConfig } from '../../utils/output/output-trim.js';
 
@@ -534,4 +543,30 @@ it('rejects blank queries and malformed or stale memory cursors with bounded pub
     (await get.execute({ id: memory.id, cursor: first.content.nextCursor, maxChars: 512 })) as string,
   );
   expect(stale).toEqual({ error: { code: 'stale_cursor', message: 'The memory cursor is stale.' } });
+});
+
+it('reports zero omissions on memory_list when the injected index claims every memory is listed', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'term2-memory-tools-'));
+  tempDirs.push(directory);
+  const memories = Array.from({ length: 25 }, (_, index) => ({
+    id: `mem-${String(index).padStart(2, '0')}`,
+    title: `Title ${index}`,
+    summary: `Summary ${index} for accounting agreement.`,
+    tags: [],
+    createdAt: '2026-07-01T00:00:00.000Z',
+    updatedAt: `2026-07-${String((index % 28) + 1).padStart(2, '0')}T12:00:00.000Z`,
+  }));
+  const projectRoot = join(directory, 'project');
+  await mkdir(join(projectRoot, 'items'), { recursive: true });
+  await writeFile(join(projectRoot, 'index.json'), JSON.stringify({ version: 1, memories }));
+  const globalStore = new FileMemoryStore({ root: directory });
+  const projectStore = new FileMemoryStore({ root: projectRoot });
+  const tools = createMemoryToolDefinitions({ global: globalStore, project: projectStore });
+
+  const listed = JSON.parse((await readTool(tools, 'memory_list').execute({ limit: 50 })) as string);
+  expect(listed.omitted).toEqual({ global: 0, project: 0 });
+  expect(listed.project).toHaveLength(25);
+
+  const injected = projectStore.contextSync(8000);
+  expect(injected).toContain('25 memories · 25 summarized · 0 title-only · 0 not listed.');
 });

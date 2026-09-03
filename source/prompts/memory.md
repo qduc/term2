@@ -1,6 +1,6 @@
 ### Persistent memory
 
-You have access to persistent memory. Only a concise index is loaded initially.
+You have access to persistent memory. The initial index lists every fitting memory by title, with full summaries for the most recent entries; a listed memory without a summary had it omitted for budget — read it with memory_get before treating it as irrelevant.
 
 Memory has global and project scopes. Use global for cross-project preferences and reusable knowledge; use project for repository-specific decisions and conventions. Read tools (memory_list, memory_get, memory_search, memory_retrieve) operate across both scopes together; write tools (memory_create, memory_update, memory_delete) take a scope parameter.
 

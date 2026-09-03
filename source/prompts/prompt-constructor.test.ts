@@ -1,4 +1,6 @@
 import { it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { buildPromptSpec } from './prompt-constructor.js';
 import { resolveProfile } from '../services/profiles/index.js';
 
@@ -203,6 +205,14 @@ it('adds persistent-memory guidance only when memory tools are enabled', () => {
   expect(
     buildPromptSpec({ model: 'gpt-4o', profile: profile('builtin:standard'), memoryEnabled: false }).fragmentFiles,
   ).not.toContain('memory.md');
+});
+
+it('memory.md fragment keeps the index omission contract', () => {
+  const fragment = readFileSync(join(import.meta.dirname, 'memory.md'), 'utf8');
+
+  expect(fragment).toContain('a listed memory without a summary had it omitted for budget');
+  expect(fragment).toContain('read it with memory_get before treating it as irrelevant');
+  expect(fragment).not.toContain('Only a concise index is loaded initially');
 });
 
 it('buildPromptSpec includes unified background delegation guidance when background execution is enabled', () => {

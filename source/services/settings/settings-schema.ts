@@ -450,7 +450,7 @@ export const MemorySettingsSchema = z
       .string()
       .min(1)
       .default(path.join(envPaths('term2').data, 'memory')),
-    contextBudgetChars: z.number().int().positive().default(3000),
+    contextBudgetChars: z.number().int().positive().default(8000),
     searchDefaultLimit: z.number().int().positive().default(10),
     searchMaxLimit: z.number().int().positive().default(50),
   })
@@ -1196,7 +1196,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   memory: {
     enabled: true,
     directory: path.join(envPaths('term2').data, 'memory'),
-    contextBudgetChars: 3000,
+    contextBudgetChars: 8000,
     searchDefaultLimit: 10,
     searchMaxLimit: 50,
   },

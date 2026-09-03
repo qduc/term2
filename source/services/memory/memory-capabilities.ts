@@ -29,7 +29,7 @@ const READ_TOOL_COUNT = 4;
 
 const MAIN_GUIDANCE = `### Persistent memory
 
-You have access to persistent memory. Only a concise index is loaded initially. Read each summary as a retrieval trigger describing the conditions under which its memory applies — load a memory when the current task plausibly matches what its summary describes.
+You have access to persistent memory. Only a bounded index is loaded initially: it lists every memory that fits by title, with full summaries for the most recent entries. Read each summary as a retrieval trigger describing the conditions under which its memory applies — load a memory when the current task plausibly matches what its summary describes. A listed memory without a summary had it omitted for budget — read it with memory_get before treating it as irrelevant.
 
 Memory has two scopes: global for cross-project preferences and reusable knowledge, and project for repository-specific decisions and conventions. Read tools (memory_list, memory_get, memory_search, memory_retrieve) operate across both scopes together. Only the write tools (memory_create, memory_update, memory_delete) take a scope parameter and require it, so explicitly pass scope: "project" when writing project memory.
 
@@ -45,7 +45,7 @@ Validate any memory proposals from subagents before acting on them. Persist only
 
 const SUBAGENT_GUIDANCE = `### Persistent memory
 
-You can read persistent memory from previous sessions, but cannot change it. Only a concise index is loaded initially.
+You can read persistent memory from previous sessions, but cannot change it. No index is injected into your context; use memory_search and memory_get on demand.
 
 Memory has global and project scopes. Use global for cross-project preferences and reusable knowledge; use project for repository-specific decisions and conventions. Read tools (memory_list, memory_get, memory_search, memory_retrieve) operate across both scopes together.
 
@@ -102,9 +102,21 @@ export class MemoryCapabilityBuilder {
     let context = '';
     if (subject.kind === 'main' && access === 'write') {
       try {
-        const scopeBudget = Math.max(1, Math.floor(settings.contextBudgetChars / 2));
-        const globalContext = stores.global.contextSync(scopeBudget);
-        const projectContext = stores.project.contextSync(scopeBudget);
+        // Floor-and-reallocate: each scope gets half the budget. A scope that
+        // rendered everything it has under its share donates the unused
+        // remainder to the other scope instead of stranding it while the
+        // other scope truncates.
+        const fairShare = Math.max(1, Math.floor(settings.contextBudgetChars / 2));
+        const globalLabel = 'Global scope:\n';
+        const projectLabel = 'Project scope:\n';
+        const budgetAfterLabel = (label: string) => Math.max(1, fairShare - label.length);
+        const globalBudget = budgetAfterLabel(globalLabel);
+        const projectBudget = budgetAfterLabel(projectLabel);
+        const globalFirst = stores.global.contextSync(globalBudget);
+        const projectFirst = stores.project.contextSync(projectBudget);
+        const slack = (text: string, budget: number) => (text.length < budget ? budget - text.length : 0);
+        const globalContext = stores.global.contextSync(globalBudget + slack(projectFirst, projectBudget));
+        const projectContext = stores.project.contextSync(projectBudget + slack(globalFirst, globalBudget));
         context = [
           globalContext && `Global scope:\n${globalContext}`,
           projectContext && `Project scope:\n${projectContext}`,

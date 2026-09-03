@@ -178,7 +178,7 @@ it('memory settings default to enabled local storage with bounded retrieval and 
   const parsed = SettingsSchema.parse({});
   expect(parsed.memory).toMatchObject({
     enabled: true,
-    contextBudgetChars: 3000,
+    contextBudgetChars: 8000,
     searchDefaultLimit: 10,
     searchMaxLimit: 50,
   });

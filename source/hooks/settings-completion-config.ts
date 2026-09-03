@@ -141,7 +141,7 @@ export const SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.SANDBOX_ALLOW_NETWORKING]: 'Allow sandboxed commands to access the network (true|false)',
   [SETTING_KEYS.MEMORY_ENABLED]: 'Enable persistent memory across sessions (true|false)',
   [SETTING_KEYS.MEMORY_DIRECTORY]: 'Directory where memory files are stored (path)',
-  [SETTING_KEYS.MEMORY_CONTEXT_BUDGET_CHARS]: 'Character budget for memory summaries in initial context (number)',
+  [SETTING_KEYS.MEMORY_CONTEXT_BUDGET_CHARS]: 'Character budget for the injected memory index (number)',
   [SETTING_KEYS.MEMORY_SEARCH_DEFAULT_LIMIT]: 'Default number of search results to return (number)',
   [SETTING_KEYS.MEMORY_SEARCH_MAX_LIMIT]: 'Maximum number of search results to return (number)',
   [SETTING_KEYS.HOOKS_USER_ENABLED]: 'Load trusted user hooks from ~/.term2/hooks (true|false)',

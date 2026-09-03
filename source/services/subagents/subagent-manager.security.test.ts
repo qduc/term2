@@ -126,9 +126,7 @@ describe('write boundary enforcement', () => {
     // Call with a path inside the boundary — should NOT be rejected for boundary violation
     const insideResult = await applyPatch.execute(
       JSON.stringify({
-        type: 'create_file',
-        path: 'newfile.ts',
-        diff: '+hello\n',
+        patch: ['*** Begin Patch', '*** Add File: newfile.ts', '+hello', '*** End Patch'].join('\n'),
       }),
       {},
       {},
@@ -139,9 +137,7 @@ describe('write boundary enforcement', () => {
     // Call with a path outside the boundary — should be rejected
     const outsideResult = await applyPatch.execute(
       JSON.stringify({
-        type: 'create_file',
-        path: '../outside/file.ts',
-        diff: '+hello\n',
+        patch: ['*** Begin Patch', '*** Add File: ../outside/file.ts', '+hello', '*** End Patch'].join('\n'),
       }),
       {},
       {},
@@ -150,12 +146,10 @@ describe('write boundary enforcement', () => {
     expect(outsideResult.startsWith('Error:')).toBe(true);
 
     const outsideNeedsApproval = await applyPatch.needsApproval(
+      JSON.stringify({
+        patch: ['*** Begin Patch', '*** Add File: ../outside/file.ts', '+hello', '*** End Patch'].join('\n'),
+      }),
       {},
-      {
-        type: 'create_file',
-        path: '../outside/file.ts',
-        diff: '+hello\n',
-      },
     );
     expect(outsideNeedsApproval).toBe(false);
 
@@ -272,10 +266,16 @@ describe('write boundary enforcement', () => {
             if (applyPatch) {
               await applyPatch.execute(
                 JSON.stringify({
-                  operations: [
-                    { type: 'create_file', path: 'a.txt', diff: '+hello\n' },
-                    { type: 'update_file', path: 'missing.txt', diff: '-x\n+y\n' },
-                  ],
+                  patch: [
+                    '*** Begin Patch',
+                    '*** Add File: a.txt',
+                    '+hello',
+                    '*** Update File: missing.txt',
+                    '@@',
+                    '-x',
+                    '+y',
+                    '*** End Patch',
+                  ].join('\n'),
                 }),
                 {},
                 {},

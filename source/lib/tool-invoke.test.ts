@@ -443,7 +443,7 @@ it('wrapToolInvoke describes invalid apply_patch input without reflecting its di
     {
       patch: largePatch,
       type: 'update_file',
-    },
+    } as unknown as { patch: string },
     undefined,
     {},
   );
@@ -452,7 +452,7 @@ it('wrapToolInvoke describes invalid apply_patch input without reflecting its di
     throw new Error(`Expected validation feedback string, received ${typeof result}`);
   }
   expect(result).toContain('Received keys: patch, type.');
-  expect(result).toContain('patch: Unrecognized key');
+  expect(result).toContain('Unrecognized key');
   expect(result).not.toContain(largeBody.trim().slice(0, 60));
   expect(result.length).toBeLessThan(1_000);
 });

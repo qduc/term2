@@ -38,12 +38,14 @@ export class PatchValidationError extends Error {
 // {type,path,diff} / operations[] JSON shape is deleted, not deprecated —
 // keeping two accepted formats lets the model drift back into the shape
 // suspected of causing whitespace degeneration.
-const applyPatchParametersSchema = z.object({
-  patch: z
-    .string()
-    .min(1, 'Patch cannot be empty')
-    .describe('Complete patch script starting with *** Begin Patch and ending with *** End Patch.'),
-});
+const applyPatchParametersSchema = z
+  .object({
+    patch: z
+      .string()
+      .min(1, 'Patch cannot be empty')
+      .describe('Complete patch script starting with *** Begin Patch and ending with *** End Patch.'),
+  })
+  .strict();
 
 // Strict-schema providers receive the identical single-string shape.
 const applyPatchStrictParametersSchema = z.object({
@@ -212,11 +214,18 @@ export function createApplyPatchToolDefinition(deps: {
         });
         return false;
       }
+      let operations: ApplyPatchOperation[];
+      try {
+        operations = getApplyPatchOperations(params);
+      } catch {
+        // Envelope parse failures cannot be path-scoped, so require
+        // approval and let execute report the syntax error.
+        return true;
+      }
       try {
         const workspaceRoot = executionContext?.getCwd() || process.cwd();
         const sshService = executionContext?.getSSHService();
         const isRemote = executionContext?.isRemote() && !!sshService;
-        const operations = getApplyPatchOperations(params);
         const resolvedOperations: Array<
           ApplyPatchOperation & { targetPath: string; insideCwd: boolean; moveTargetPath?: string }
         > = [];
@@ -364,6 +373,13 @@ export function createApplyPatchToolDefinition(deps: {
       const cwd = executionContext?.getCwd() || process.cwd();
       const sshService = executionContext?.getSSHService();
       const isRemote = executionContext?.isRemote() && !!sshService;
+      let operations: ApplyPatchOperation[];
+      try {
+        operations = getApplyPatchOperations(params);
+      } catch (error: any) {
+        const message = `Error: Invalid patch: ${error?.message || String(error)}`;
+        return (await boundToolResultText({ fullText: message })).text;
+      }
 
       const readFileFn = async (p: string) => {
         if (isRemote && sshService) return sshService.readFile(p);
@@ -580,7 +596,7 @@ export function createApplyPatchToolDefinition(deps: {
 
       try {
         const output: ApplyPatchOutput[] = [];
-        for (const operation of getApplyPatchOperations(params)) {
+        for (const operation of operations) {
           try {
             output.push(await runOperation(operation));
           } catch (operationError: any) {

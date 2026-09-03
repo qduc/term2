@@ -3,7 +3,6 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { createApplyPatchToolDefinition } from './apply-patch.js';
-import { parseUpstreamApplyPatch } from './upstream-apply-patch.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import { SANDBOX_TEMP_DIR } from '../../utils/shell/temp-dir.js';
 import { SessionAccessState } from '../../services/session/session-access-state.js';
@@ -369,14 +368,15 @@ it.sequential('needsApproval: requires approval for a symlink target outside the
   });
 });
 
-it.sequential('needsApproval: auto-approves envelope parse failures (will fail in execute)', async () => {
+it.sequential('needsApproval: requires approval for envelope parse failures (fail-closed)', async () => {
   await withTempDir(async () => {
     const tool = createTool();
-    // Envelope parse failures now return false (auto-approve) to avoid breaking the stream
+    // Structural envelope failures (no operations to path-scope) require
+    // approval; execute reports the syntax error without touching the fs.
     const result = await tool.needsApproval({
-      patch: '*** Begin Patch\n*** Add File: test.txt\nno-plus-prefix\n*** End Patch',
+      patch: '*** Begin Patch\n*** End Patch',
     });
-    expect(result).toBe(false);
+    expect(result).toBe(true);
   });
 });
 

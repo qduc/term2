@@ -969,3 +969,87 @@ describe('AgentClient application-run-loop execution', () => {
     instance.dispose();
   });
 });
+
+describe('AgentClient codex session-history compaction', () => {
+  const compactProvider = (compactHistory: () => Promise<{ history: unknown[] }>) => {
+    const provider = `codex-compact-${Math.random().toString(36).slice(2)}`;
+    providers.add(provider);
+    registerProvider(
+      {
+        id: 'codex',
+        label: 'Codex compaction test provider',
+        createStreamedModel: () => ({ compactHistory } as any),
+        fetchModels: async () => [],
+      },
+      { allowOverride: true },
+    );
+    return provider;
+  };
+
+  const codexClient = (provider: string) =>
+    client(provider, {
+      providerOverride: 'codex',
+      agentOverride: { name: 'override', model: 'gpt-test', instructions: 'test', tools: [] },
+    });
+
+  it('merges a well-formed compaction response as the whole history', async () => {
+    const logged: unknown[] = [];
+    const loggingLogger: ILoggingService = {
+      debug: () => {},
+      info: () => {},
+      warn: (...args: unknown[]) => void logged.push(args),
+      error: () => {},
+      security: () => {},
+      setCorrelationId: () => {},
+      clearCorrelationId: () => {},
+      getCorrelationId: () => undefined,
+      log: () => {},
+    } as ILoggingService;
+    const provider = compactProvider(async () => ({
+      history: [{ type: 'compaction', id: 'cmp_1', encrypted_content: 'cipher' }],
+    }));
+    const instance = new AgentClient({
+      providerOverride: 'codex',
+      agentOverride: { name: 'override', model: 'gpt-test', instructions: 'test', tools: [] },
+      deps: { logger: loggingLogger, settings: makeSettings(provider), sessionContextService },
+      toolOwnership: new ToolOwnershipRegistry(),
+    } as any);
+    const history = [
+      { role: 'user', type: 'message', content: 'old work' },
+      { type: 'function_call', callId: 'call-1', name: 'shell', arguments: '{}' },
+    ];
+
+    const outcome = await instance.compactCodexSessionHistory(history as any);
+
+    expect({ outcome, logged }).toEqual({
+      outcome: {
+        kind: 'compacted',
+        history: [{ type: 'compaction', id: 'cmp_1', encrypted_content: 'cipher' }],
+      },
+      logged: [],
+    });
+    instance.dispose();
+  });
+
+  it('rejects an empty compaction response instead of wiping history', async () => {
+    const provider = compactProvider(async () => ({ history: [] }));
+    const instance = codexClient(provider);
+
+    const outcome = await instance.compactCodexSessionHistory([{ role: 'user', type: 'message', content: 'x' }] as any);
+
+    expect(outcome).toMatchObject({ kind: 'failed', provider: 'codex' });
+    instance.dispose();
+  });
+
+  it('surfaces a transport failure without discarding history', async () => {
+    const provider = compactProvider(async () => {
+      throw new Error('Codex compaction failed');
+    });
+    const instance = codexClient(provider);
+
+    const outcome = await instance.compactCodexSessionHistory([{ role: 'user', type: 'message', content: 'x' }] as any);
+
+    expect(outcome).toMatchObject({ kind: 'failed', provider: 'codex' });
+    instance.dispose();
+  });
+});

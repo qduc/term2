@@ -59,7 +59,7 @@ export function getModelCacheDir(customDir?: string): string {
 }
 
 export function getModelCacheFilePath(provider: string, customDir?: string): string {
-  const safeName = provider.replace(/[^a-zA-Z0-9_-]/g, (c) => `_${c.charCodeAt(0).toString(16)}_`);
+  const safeName = provider.replace(/[^a-zA-Z0-9-]/g, (c) => `_${c.charCodeAt(0).toString(16).padStart(2, '0')}_`);
   return path.join(getModelCacheDir(customDir), `${safeName}.json`);
 }
 
@@ -81,6 +81,9 @@ function readDiskCache(
       return null;
     }
     if (parsed.version !== 1) {
+      return null;
+    }
+    if (parsed.provider !== provider) {
       return null;
     }
     if (typeof parsed.timestamp !== 'number' || !Number.isFinite(parsed.timestamp)) {

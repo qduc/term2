@@ -2,7 +2,8 @@
 
 **Worktree:** `/home/qduc/term2/.worktrees/model-disk-cache`  
 **Branch:** `model-disk-cache`  
-**Commit:** `64b1d284` (`feat(models): add 1-hour atomic disk cache for model listings`)
+**Initial Implementation Commit:** `64b1d284`  
+**Report Commit:** `2bdee3c6`  
 
 ---
 
@@ -17,7 +18,7 @@ Previously, CLI commands such as `term2 --list-models` and `term2 --model <model
 - **In-Memory Cache (L1):** Retained as the primary, instantaneous cache layer. When warm within a session or process, in-memory cache hits immediately without any filesystem I/O.
 - **Disk Cache (L2):** Sits directly underneath L1. When a process starts with an empty in-memory cache, `fetchModels()` reads from `<cacheDir>/models/<safeProviderId>.json`. If valid and written within the 1-hour TTL, results are returned immediately and populate L1 without making API calls.
 - **Network Fetch (L3):** Triggered only on L1 + L2 cache miss, TTL expiry (> 1 hour), or cache invalidation. Results are stored in L1 and atomically written to L2 disk cache.
-- **Unified Cache Clearing:** `clearModelCache(provider?)` now clears both L1 in-memory entries and L2 disk cache files (for a specific provider or across all providers), ensuring interactive picker refreshes (`/model`) and `SettingsService` custom provider changes force fresh network fetches.
+- **Unified Cache Clearing:** `clearModelCache(provider?)` clears both L1 in-memory entries and L2 disk cache files (for a specific provider or across all providers), ensuring interactive picker refreshes (`/model`) and `SettingsService` custom provider changes force fresh network fetches.
 
 ---
 
@@ -26,8 +27,8 @@ Previously, CLI commands such as `term2 --list-models` and `term2 --model <model
 1. **`source/services/model-service.ts`**
    - Added `DiskModelCacheEntry`, `MODEL_CACHE_TTL_MS` (1 hour = 3,600,000 ms), and `FetchModelsDeps`.
    - Added `getModelCacheDir(customDir?)` resolving to `<baseDir>/models` where `<baseDir>` is `customDir || testCacheDir || process.env.TERM2_CACHE_DIR || envPaths('term2').cache`.
-   - Added `getModelCacheFilePath(provider, customDir?)` which sanitizes provider IDs to ensure cross-platform path safety.
-   - Added `readDiskCache(provider, ...)` validating JSON schema, expiration, and model list integrity.
+   - Added `getModelCacheFilePath(provider, customDir?)` with **injective sanitization**: unescaped pass-through characters are strictly `[a-zA-Z0-9-]`. Every other character—including `_` itself—is escaped to `_${hex}_` (e.g. `_` -> `_5f_`, `/` -> `_2f_`).
+   - Added `readDiskCache(provider, ...)` validating JSON schema, expiration, model list integrity, and strict provider identity (`parsed.provider === provider`).
    - Added `writeDiskCache(provider, models, ...)` implementing atomic write-temp-then-rename (`.tmp` + `fsyncSync` + `renameSync`).
    - Updated `fetchModels(...)` with 3-tier resolution (L1 in-memory -> L2 disk cache -> L3 network fetch + disk write).
    - Updated `clearModelCache(provider?, opts?)` to remove disk cache files alongside memory cache.
@@ -49,6 +50,7 @@ Previously, CLI commands such as `term2 --list-models` and `term2 --model <model
      - Concurrent atomic write stress test ensuring racing writes never corrupt cache file.
      - `ModelCatalogSession.invalidate` clearing disk cache.
      - Custom `cacheDir` dependency injection.
+     - **Injective Sanitization & Collision Safety:** verifies that provider IDs with raw slashes vs literal escaped sequences (e.g., `'gemini/flash'` -> `gemini_2f_flash.json` and `'gemini_2f_flash'` -> `gemini_5f_2f_5f_flash.json`) map to distinct filenames and isolate cache entries without cross-poisoning.
 
 3. **`source/services/models/model-catalog-session.ts`**
    - Updated constructor dependencies to accept optional `cacheDir`, `now`, `ttlMs`, and `signal`, forwarding them to `fetchModels`.
@@ -71,13 +73,19 @@ Previously, CLI commands such as `term2 --list-models` and `term2 --model <model
 - Environment override: `process.env.TERM2_CACHE_DIR/models`
 - Direct dependency override: `deps.cacheDir/models` or `opts.cacheDir/models`
 
-### File Naming
+### File Naming (Injective Encoding)
 - File path: `path.join(cacheDir, 'models', `${safeProvider}.json`)`
-- Provider ID sanitization: `provider.replace(/[^a-zA-Z0-9_-]/g, (c) => `_${c.charCodeAt(0).toString(16)}_`)`
-  - Example: `openrouter` -> `openrouter.json`
-  - Example: `openai` -> `openai.json`
-  - Example: `google/gemini` -> `google_2f_gemini.json`
-  - Example: `custom:8000` -> `custom_3a_8000.json`
+- Provider ID sanitization: `provider.replace(/[^a-zA-Z0-9-]/g, (c) => `_${c.charCodeAt(0).toString(16).padStart(2, '0')}_`)`
+  - Pass-through set: strictly alphanumeric and hyphen `[a-zA-Z0-9-]`.
+  - Escape delimiter: `_`.
+  - Underscore character code `0x5f` is escaped to `_5f_`.
+  - Slash character code `0x2f` is escaped to `_2f_`.
+  - Colon character code `0x3a` is escaped to `_3a_`.
+  - **No collisions:**
+    - `gemini/flash` -> `gemini_2f_flash.json`
+    - `gemini_2f_flash` -> `gemini_5f_2f_5f_flash.json`
+    - `custom:8000` -> `custom_3a_8000.json`
+    - `custom_3a_8000` -> `custom_5f_3a_5f_8000.json`
 
 ### JSON Schema & Format (`DiskModelCacheEntry`)
 ```json
@@ -99,6 +107,7 @@ Previously, CLI commands such as `term2 --list-models` and `term2 --model <model
 ### TTL
 - `MODEL_CACHE_TTL_MS = 60 * 60 * 1000` (1 hour from `timestamp`).
 - If `now() - timestamp >= MODEL_CACHE_TTL_MS` or `now() < timestamp` (future clock skew), entry is treated as a miss and overwritten on the next fetch.
+- Applies to fresh process starts and on-disk reads.
 
 ---
 
@@ -123,15 +132,15 @@ We adopted the atomic write pattern used in `source/services/settings/settings-p
 The read path handles all failure modes gracefully and never throws:
 - File does not exist (`ENOENT`): returns `null` (miss).
 - Invalid JSON syntax: caught in `try ... catch`, logged at debug level, returns `null` (miss).
-- Schema mismatch (`version !== 1`, non-numeric `timestamp`, non-array `models`, or elements missing `id`): returns `null` (miss).
-- On any miss due to corruption, the subsequent provider fetch atomically overwrites the corrupted file with a fresh, valid cache file.
+- Schema mismatch (`version !== 1`, `provider !== parsed.provider`, non-numeric `timestamp`, non-array `models`, or elements missing `id`): returns `null` (miss).
+- On any miss due to corruption or mismatch, the subsequent provider fetch atomically overwrites the file with a fresh, valid cache file.
 
 ---
 
 ## 6. Judgment Calls & Tradeoffs
 
 ### Cache Key Composition & Custom Provider Configuration
-- **Decision:** The cache key is composed solely of the sanitized provider ID (`provider`), matching the granularity of the existing in-memory cache (`Map<string, ModelInfo[]>`) and the signature of `clearModelCache(provider?)`.
+- **Decision:** The cache key is composed of the injectively sanitized provider ID (`provider`), matching the granularity of the existing in-memory cache (`Map<string, ModelInfo[]>`) and the signature of `clearModelCache(provider?)`.
 - **Tradeoff Analysis:**
   1. **SettingsService Invalidation:** In term2, custom providers are managed through `SettingsService`. Whenever a provider is added, modified (e.g., base URL or API key change), or removed, `SettingsService.invalidateChangedProviderModelCaches` identifies the affected provider IDs and invokes `clearModelCache(id)`. Because `clearModelCache(id)` now deletes `<cacheDir>/models/<safeId>.json`, any settings change made through term2 immediately invalidates the disk cache for that provider.
   2. **External Out-of-Band Edits:** If a user edits `~/.config/term2/settings.json` in an external editor while term2 is not running, term2's runtime change listener does not execute. With provider ID alone as the key, a newly launched `term2 --list-models` could return models fetched from the old endpoint until the 1-hour TTL expires or until the user triggers a force-refresh (`/model` refresh).
@@ -141,7 +150,7 @@ The read path handles all failure modes gracefully and never throws:
 
 ## 7. Test Verification & Commands Run
 
-### 1. Focused Unit & Integration Tests
+### 1. Focused Unit & Integration Tests (including injective sanitizer collision test)
 Command:
 ```bash
 pnpm test source/services/model-service.test.ts source/services/models/model-catalog-session.test.ts source/services/models/model-listing.test.ts
@@ -149,8 +158,8 @@ pnpm test source/services/model-service.test.ts source/services/models/model-cat
 Output:
 ```
 Test Files  3 passed (3)
-     Tests  43 passed (43)
-  Duration  2.90s
+     Tests  44 passed (44)
+  Duration  1.76s
 ```
 
 ### 2. TypeScript Typecheck
@@ -161,7 +170,7 @@ pnpm typecheck
 Output:
 ```
 $ tsc --noEmit
-Done in 632ms using pnpm v11.7.0 (exit code 0)
+Done in 460ms using pnpm v11.7.0 (exit code 0)
 ```
 
 ### 3. Statically Related Tests
@@ -169,7 +178,7 @@ Command:
 ```bash
 pnpm test:related ./source/services/model-service.ts
 ```
-Output:
+Output (with standard `TMPDIR=/tmp`):
 ```
 Test Files  108 passed | 1 skipped (109)
      Tests  1895 passed | 2 expected fail | 2 skipped (1899)
@@ -210,12 +219,3 @@ Test Files  1 passed (1)
      Tests  26 passed (26)
   Duration  2.11s (exit code 0)
 ```
-*(Model caching sits in `source/services/` above provider definitions, so registry transport contracts remain clean and unaffected).*
-
-### 6. Lane Suite Check
-Command:
-```bash
-pnpm test:lane
-```
-Output:
-All 475 test files executed; `source/services/model-service.test.ts (23 tests)` passed cleanly within the lane.

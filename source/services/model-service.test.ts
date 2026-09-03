@@ -975,4 +975,53 @@ describe.sequential('model disk cache', () => {
       } catch {}
     }
   });
+
+  it('sanitizes provider IDs injectively so distinct IDs with underscores and escaped characters do not collide', async () => {
+    const p1 = 'gemini/flash';
+    const p2 = 'gemini_2f_flash';
+
+    const p1Path = getModelCacheFilePath(p1);
+    const p2Path = getModelCacheFilePath(p2);
+
+    // Filenames must be strictly distinct
+    expect(p1Path).not.toBe(p2Path);
+    expect(p1Path).toContain('gemini_2f_flash.json');
+    expect(p2Path).toContain('gemini_5f_2f_5f_flash.json');
+
+    // Verify end-to-end cache isolation between both providers
+    registerProvider({ id: p1, label: p1, fetchModels: async () => [{ id: 'model-slash' }] });
+    registerProvider({ id: p2, label: p2, fetchModels: async () => [{ id: 'model-escaped' }] });
+
+    try {
+      await fetchModels(
+        { settingsService: createMockSettingsService(), loggingService: { warn: () => {} } as any },
+        p1,
+      );
+      await fetchModels(
+        { settingsService: createMockSettingsService(), loggingService: { warn: () => {} } as any },
+        p2,
+      );
+
+      expect(fs.existsSync(p1Path)).toBe(true);
+      expect(fs.existsSync(p2Path)).toBe(true);
+
+      // Clear memory cache to force disk read
+      clearModelMemoryCacheForTest();
+
+      const p1Loaded = await fetchModels(
+        { settingsService: createMockSettingsService(), loggingService: { warn: () => {} } as any },
+        p1,
+      );
+      const p2Loaded = await fetchModels(
+        { settingsService: createMockSettingsService(), loggingService: { warn: () => {} } as any },
+        p2,
+      );
+
+      expect(p1Loaded[0].id).toBe('model-slash');
+      expect(p2Loaded[0].id).toBe('model-escaped');
+    } finally {
+      unregisterProvider(p1);
+      unregisterProvider(p2);
+    }
+  });
 });

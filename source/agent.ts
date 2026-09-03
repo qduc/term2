@@ -62,6 +62,7 @@ import { SkillsService } from './services/skills/skills-service.js';
 import { createActivateSkillToolDefinition } from './tools/agent/activate-skill.js';
 import { createRunAgentWorkflowToolDefinition } from './tools/run-agent-workflow.js';
 import { createWorktreeToolDefinitions } from './tools/system/worktree.js';
+import { createRunCodeToolDefinition } from './tools/system/run-code/index.js';
 import type { AgentRuntime } from './services/agent-runtime/agent-runtime.js';
 import type { WorkflowLimits } from './services/agent-runtime/workflow/workflow-types.js';
 import { getProjectTreeForPrompt } from './utils/project-tree.js';
@@ -599,6 +600,20 @@ export const getAgentDefinition = (
         runtime: agentRuntime,
         parentTools: tools.map((tool) => tool.name),
         limits: settingsService.getDynamic('agentWorkflow') as WorkflowLimits,
+      }),
+    );
+  }
+
+  // Registered last so its bridge exposes every other tool this profile
+  // resolved. It filters itself out of that registry, so a script cannot
+  // recurse into another sandboxed run.
+  if (hasCapability('shell')) {
+    tools.push(
+      createRunCodeToolDefinition({
+        settingsService,
+        loggingService,
+        getToolRegistry: () => tools,
+        getCwd: () => executionContext?.getCwd() || process.cwd(),
       }),
     );
   }

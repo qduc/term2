@@ -96,3 +96,69 @@ stat -c '%y %n' dist/services/agent-runtime/generation-guard.js dist/services/ag
    only in a new process). Look for `tool_argument_runaway` trips and absence of
    >60 s drips after restart. If a drip recurs post-restart, pull that request's
    `isLunaChainedRequest` inputs — that means gate mismatch, not staleness.
+
+## 7. Root cause: wire-side model degeneration, not harness accumulation
+
+Key question was whether the runaway exists on the wire or only in our
+buffer. Evidence puts it on the wire. No fix shipped (deliberately).
+
+Primary artifact (all paths relative to
+`~/.local/state/term2-nodejs/logs/`):
+`provider-traffic/2026-09-02/16-51-27_8b49b/17-23-29.028Z_ed40e.json`
+(aborted, requestId `ed40ed7e-…`, session `8b49b1ea`, `codex/gpt-5.6-luna`,
+chained single-`function_call_output` + `previous_response_id`). The same
+session directory holds 8 more aborted Luna artifacts with the same shape
+(`17-44-42`, `17-51-20`, `17-56-15`, `18-17-24`, `18-18-40`, `18-19-48`,
+`18-50-36`, `18-51-41`); the 3 `network`/`1006` error artifacts
+(`18-16-43`, `18-17-53`, `18-22-17`) are the server-closed siblings.
+
+Byte counts that prove it (primary artifact):
+
+- 54,836 `response.function_call_arguments.delta` frames; `sequence_number`
+  37→54872 strictly +1 contiguous — no gaps, no duplicates, no replay.
+- Exactly one `(item_id, output_index)` pair across all deltas — single
+  accumulation slot, so index-vs-id mis-keying cannot explain growth.
+- Joined raw `delta` strings = exactly 100,000 chars = the guard trip point.
+  Sum of raw wire bytes == accumulated buffer. There is no harness-side
+  inflation to find.
+- Content: coherent `create_file …/approval-m3.yaml` JSON head → degeneration
+  at char ~55,892 into multilingual word salad with `to=functions.*`
+  chain-of-thought leakage → 40,593-char whitespace tail. 6 of the 9 aborted
+  artifacts show the same `to=functions` leakage; the other two cut off inside
+  still-coherent JSON; `18-50-36` is a brace collapse (1 `{`, 48,863 `}`).
+
+Code checks (read, not recalled):
+
+1. **No output cap on this path.** Sampled Luna sent bodies have no
+   `max_output_tokens` key (`buildResponsesCreateRequest` omits it when
+   `request.maxTokens` is undefined; the explorer role defines no `maxTokens`
+   and `nested-runner` only forwards it when set). The DeepSeek SSE analog
+   sends `max_tokens: 32000`. Luna Responses-Lite chained requests are the
+   only path with no output cap plus server-held chain state and
+   `reasoning: {effort high}`.
+2. **Merge is correct.** `convertCodexRawStream` (`codex-responses-model.ts`)
+   keys `toolArgumentLengthsByIndex` on `output_index` else `item_id` and adds
+   `delta.length`. One slot, contiguous sequence numbers — each chunk applied
+   exactly once.
+3. **No retry replays into the same buffer.** `GenerationGuard` is constructed
+   per request; in-loop retry of a chained delta is refused
+   (`chained_delta_not_self_contained`) and recovery rebuilds full history as
+   a new request.
+4. **Asymmetry confirmed.** Luna goes through Responses-Lite WebSocket +
+   `previous_response_id` chaining (modelClass `OpenAIResponsesWSModel` /
+   `CodexResponsesWSModel`); DeepSeek/Qwen go through SSE/chat_completions
+   with explicit token caps. Only the Luna path drips.
+
+Corroborating signal: even *successful* Luna `apply_patch` calls carry stray
+multilingual garbage *inside* the diff string (e.g. `18-18-35.913Z_7882a.json`
+arg tail `…End Patch\\n}ҳәараjson? Do correct.} 白小姐?…`), so the stray-token
+behavior is continuous with the drip, not a separate mode.
+
+Context-before-drip does not finger a single trigger: the three 1006 drips
+answer ordinary `read_file` results (3.6k/9.6k/2k chars, clean file text);
+the Sep-2 cancelled drip answers a 38k-char shell result. Prior tool
+(`read_file` vs `apply_patch` vs `shell`) and result size vary.
+
+Verdict: model-side degeneration on uncapped chained Luna requests. The
+60 s runaway guard (§2) contains the duration; nothing in the harness
+manufactures the bytes.

@@ -154,7 +154,7 @@ const cli = meow(
       $ term2 [options] --resume [conversation-id|ls]
 
     Options
-      -m, --model <model>                  Override the configured model (e.g. gpt-5.4)
+      -m, --model <model>                  Model pattern or ID, supports provider/id and optional :<thinking>
       -p, --provider <provider>            Override the configured provider (e.g. openai, openrouter)
       -r, --reasoning <effort>             Set reasoning effort (default, none, minimal, low, medium, high, xhigh)
       -l, --lite                           Start in lite mode (minimal context, session-only)
@@ -550,6 +550,44 @@ if (providerFlag && !getProviderIds().includes(providerFlag)) {
   }
   console.error('\nYou can configure custom providers in your settings.json file.');
   process.exit(1);
+}
+
+if (modelFlag) {
+  const { resolveModelFlag } = await import('./services/models/model-resolution.js');
+  const resolution = await resolveModelFlag({
+    modelFlag,
+    providerFlag,
+    settingsService: settings,
+    loggingService: logger,
+  });
+
+  if (resolution.status === 'no_match') {
+    console.error(resolution.error);
+    process.exit(1);
+  }
+
+  if (resolution.status === 'cancelled') {
+    console.error('Cancelled.');
+    process.exit(1);
+  }
+
+  // Surfaces provider catalogs that failed to load while resolution still
+  // proceeded, so a partial outage never silently narrows what was matched.
+  if ('warnings' in resolution && resolution.warnings) {
+    for (const warning of resolution.warnings) {
+      console.error(warning);
+    }
+  }
+
+  // --model is a per-session override like every other CLI flag; it must not
+  // rewrite the user's persisted defaults (set() persists by default).
+  settings.set('agent.model', resolution.modelId, { persist: false });
+  if (resolution.provider) {
+    settings.set('agent.provider', resolution.provider, { persist: false });
+  }
+  if (resolution.reasoningEffort && !validatedReasoningEffort) {
+    settings.set('agent.reasoningEffort', resolution.reasoningEffort, { persist: false });
+  }
 }
 
 // Fresh sessions honor --lite/non-interactive defaults. Resumed sessions keep

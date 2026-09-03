@@ -15,21 +15,21 @@ adoption starts with tooling.
 
 - **The suite is healthy but not mutation-empty.** 389 risks are recorded (101
   critical, 220 high) across 694 contracts, but only **48 tests** remain where a
-  second opinion disagrees with the primary decision, and after the Topology
-  batch only **three** non-`keep` primaries remain: two `rewrite_candidate`
-  (shell-command-safety relabel/table; use-settings-completion localized
-  repairs) and one `architecture_signal` (docker-host-control.integration,
-  report-only). The audit's own triage already located the weak tests more
-  cheaply than a mutation campaign would.
+  second opinion disagrees with the primary decision. After the follow-up rewrite
+  landed in `a2b56bd6`, one non-`keep` primary remains: the
+  `architecture_signal` for docker-host-control.integration (report-only). The
+  audit's own triage already located the weak tests more cheaply than a mutation
+  campaign would.
 - **The cost driver is wide harness files.** A mutation pass re-runs a file's
   covering tests once per mutant. Contracts whose coverage is a small, fast test
   file are cheap to mutate; contracts covered only by multi-file integration
   harnesses are not.
-- **Mutation testing finds what the audit already flagged.** The two remaining
-  `rewrite_candidate` files are cases where tests exist but are weak (tautology
-  assertions, stale vocabulary, under-constrained boundaries). Mutation testing
-  detects *missing* assertions on covered lines; the audit detected these with
-  read-through review. Paying for both on the same seams is double-spend.
+- **Mutation testing finds what the audit already flagged.** The two former
+  `rewrite_candidate` files were cases where tests existed but were weak (tautology
+  assertions, stale vocabulary, under-constrained boundaries); their follow-up
+  repairs landed in `a2b56bd6`. Mutation testing detects *missing* assertions on
+  covered lines; the audit detected these with read-through review. Paying for both
+  on the same seams is double-spend.
 
 ## Where it IS proportional (named contracts)
 
@@ -46,9 +46,8 @@ Mutation testing is justified only where all of: (a) severity is critical,
    ~1 per 4 covered LOC; each mutant re-runs the command-safety test set
    (~8 files, a few seconds isolated) → **roughly 20-40 CI-minutes per full
    pass**, run on demand.
-   **Gate:** do not run this before the pending `shell-command-safety` relabel /
-   table-drive batch lands (still `rewrite_candidate/medium`); mutating a test
-   file mid-rewrite wastes the pass. Revisit after that batch.
+   The command-safety relabel/table-drive rewrite landed in `a2b56bd6`; if
+   mutation testing is run, this seam is ready for an optional on-demand pass.
 2. **`observability-chain-fingerprint`** (critical ×2) — the chain-recovery
    fingerprint builder (`source/services/retry/chain-recovery-fingerprint.ts`,
    34 LOC) whose statement enumerates inclusions (provider, model,
@@ -78,15 +77,15 @@ Mutation testing is justified only where all of: (a) severity is critical,
 | Option | Cost |
 | --- | --- |
 | Tooling: introduce a Vitest-compatible mutation runner (e.g. Stryker) | new devDependency + lockfile/security review + config + CI job template: ~1 dev-day, on the repo owner |
-| One full pass, `shell-command-classification` (post-relabel) | ~150-250 mutants, ~20-40 CI-minutes per pass |
+| One full pass, `shell-command-classification` (after `a2b56bd6`) | ~150-250 mutants, ~20-40 CI-minutes per pass |
 | One full pass, `observability-chain-fingerprint` | ~10-20 mutants, a few minutes |
 | Both as an on-demand CI workflow | ~30-60 minutes per manual run; do **not** gate PRs |
 
 ## Recommendation
 
 Do not adopt mutation testing as a standing gate. Approve it as an **optional,
-on-demand, single-seam exercise** for the two named contracts above, run after
-the pending command-safety relabel batch lands. Expected value: independent
+on-demand, single-seam exercise** for the two named contracts above, now that the
+command-safety rewrite has landed in `a2b56bd6`. Expected value: independent
 confirmation that the classifier's severity flips and the fingerprint's
 field set are each caught; expected cost: roughly one dev-day of tooling plus
 ~1 CI-hour total per full round. Everything else the audit data shows as

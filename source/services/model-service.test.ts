@@ -1,9 +1,46 @@
-import { it, expect, beforeEach, afterEach } from 'vitest';
-import { fetchModels, clearModelCache, filterModels } from './model-service.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { it, expect, beforeEach, afterEach, describe, beforeAll, afterAll } from 'vitest';
+import {
+  fetchModels,
+  clearModelCache,
+  filterModels,
+  MODEL_CACHE_TTL_MS,
+  getModelCacheDir,
+  getModelCacheFilePath,
+  clearModelMemoryCacheForTest,
+  setModelCacheDirForTest,
+  setModelCacheClockForTest,
+} from './model-service.js';
 import { createMockSettingsService } from './settings/settings-service.mock.js';
 import { registerProvider, unregisterProvider } from '../providers/index.js';
+import { ModelCatalogSession } from './models/model-catalog-session.js';
 
 const originalApiKey = process.env.OPENAI_API_KEY;
+let fileLevelCacheDir: string;
+let originalEnvCacheDir: string | undefined;
+
+beforeAll(() => {
+  fileLevelCacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-model-service-top-'));
+  originalEnvCacheDir = process.env.TERM2_CACHE_DIR;
+  process.env.TERM2_CACHE_DIR = fileLevelCacheDir;
+  setModelCacheDirForTest?.(fileLevelCacheDir);
+});
+
+afterAll(() => {
+  if (originalEnvCacheDir !== undefined) {
+    process.env.TERM2_CACHE_DIR = originalEnvCacheDir;
+  } else {
+    delete process.env.TERM2_CACHE_DIR;
+  }
+  setModelCacheDirForTest?.(null);
+  try {
+    fs.rmSync(fileLevelCacheDir, { recursive: true, force: true });
+  } catch {
+    // ignore
+  }
+});
 
 beforeEach(() => {
   clearModelCache();
@@ -386,4 +423,605 @@ it.sequential('a providers config change evicts only the changed provider cache 
     unregisterProvider(keptId);
     clearModelCache();
   }
+});
+
+describe.sequential('model disk cache', () => {
+  let testDir: string;
+  let prevEnvCacheDir: string | undefined;
+
+  beforeAll(() => {
+    testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-model-disk-cache-suite-'));
+    prevEnvCacheDir = process.env.TERM2_CACHE_DIR;
+    process.env.TERM2_CACHE_DIR = testDir;
+    setModelCacheDirForTest(testDir);
+  });
+
+  afterAll(() => {
+    if (prevEnvCacheDir !== undefined) {
+      process.env.TERM2_CACHE_DIR = prevEnvCacheDir;
+    } else {
+      delete process.env.TERM2_CACHE_DIR;
+    }
+    setModelCacheDirForTest(fileLevelCacheDir);
+    try {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    } catch {
+      // ignore
+    }
+  });
+
+  beforeEach(() => {
+    clearModelCache();
+    setModelCacheClockForTest(null);
+  });
+
+  afterEach(() => {
+    clearModelCache();
+    setModelCacheClockForTest(null);
+  });
+
+  it('writes models to disk cache on initial fetch with version, timestamp, and models', async () => {
+    const providerId = 'openrouter';
+    let fetchCount = 0;
+    const fakeFetch = async () => {
+      fetchCount++;
+      return {
+        ok: true,
+        json: async () => ({
+          data: [{ id: 'openrouter/test-model', supported_parameters: ['tools'] }],
+        }),
+      };
+    };
+
+    const models = await fetchModels(
+      {
+        settingsService: createMockSettingsService(),
+        loggingService: { warn: () => {} } as any,
+      },
+      providerId,
+      fakeFetch as any,
+    );
+
+    expect(models).toHaveLength(1);
+    expect(models[0].id).toBe('openrouter/test-model');
+    expect(fetchCount).toBe(1);
+
+    const cacheFilePath = getModelCacheFilePath(providerId);
+    expect(fs.existsSync(cacheFilePath)).toBe(true);
+
+    const content = JSON.parse(fs.readFileSync(cacheFilePath, 'utf-8'));
+    expect(content.version).toBe(1);
+    expect(content.provider).toBe(providerId);
+    expect(typeof content.timestamp).toBe('number');
+    expect(Array.isArray(content.models)).toBe(true);
+    expect(content.models[0].id).toBe('openrouter/test-model');
+  });
+
+  it('serves models from disk cache when in-memory cache is empty without re-fetching', async () => {
+    const providerId = 'disk-hit-provider';
+    let fetchCount = 0;
+    registerProvider({
+      id: providerId,
+      label: providerId,
+      fetchModels: async () => {
+        fetchCount++;
+        return [{ id: 'disk-hit-model' }];
+      },
+    });
+
+    try {
+      // 1. First fetch populates disk and in-memory cache
+      const first = await fetchModels(
+        {
+          settingsService: createMockSettingsService(),
+          loggingService: { warn: () => {} } as any,
+        },
+        providerId,
+      );
+      expect(first).toEqual([{ id: 'disk-hit-model', provider: providerId }]);
+      expect(fetchCount).toBe(1);
+
+      // 2. Clear ONLY in-memory cache to simulate a fresh process invocation
+      clearModelMemoryCacheForTest();
+
+      // 3. Second fetch should hit disk cache without invoking provider fetchModels
+      const second = await fetchModels(
+        {
+          settingsService: createMockSettingsService(),
+          loggingService: { warn: () => {} } as any,
+        },
+        providerId,
+      );
+      expect(second).toEqual([{ id: 'disk-hit-model', provider: providerId }]);
+      expect(fetchCount, 'Provider fetch should not be called on disk cache hit').toBe(1);
+    } finally {
+      unregisterProvider(providerId);
+    }
+  });
+
+  it('in-memory cache takes precedence over disk when warm without re-reading disk', async () => {
+    const providerId = 'in-memory-precedence';
+    let fetchCount = 0;
+    registerProvider({
+      id: providerId,
+      label: providerId,
+      fetchModels: async () => {
+        fetchCount++;
+        return [{ id: 'initial-model' }];
+      },
+    });
+
+    try {
+      await fetchModels(
+        {
+          settingsService: createMockSettingsService(),
+          loggingService: { warn: () => {} } as any,
+        },
+        providerId,
+      );
+      expect(fetchCount).toBe(1);
+
+      // Mutate or delete disk cache file
+      const cacheFilePath = getModelCacheFilePath(providerId);
+      fs.writeFileSync(
+        cacheFilePath,
+        JSON.stringify({ version: 1, provider: providerId, timestamp: Date.now(), models: [{ id: 'disk-altered' }] }),
+      );
+
+      // Fetch again while in-memory cache is warm
+      const result = await fetchModels(
+        {
+          settingsService: createMockSettingsService(),
+          loggingService: { warn: () => {} } as any,
+        },
+        providerId,
+      );
+
+      // Should return the in-memory models, not the altered disk models
+      expect(result[0].id).toBe('initial-model');
+      expect(fetchCount).toBe(1);
+    } finally {
+      unregisterProvider(providerId);
+    }
+  });
+
+  it('serves models from disk within TTL (e.g. 59 minutes elapsed)', async () => {
+    const providerId = 'ttl-hit-provider';
+    let fetchCount = 0;
+    registerProvider({
+      id: providerId,
+      label: providerId,
+      fetchModels: async () => {
+        fetchCount++;
+        return [{ id: 'ttl-model' }];
+      },
+    });
+
+    try {
+      let now = 10_000_000;
+      const clock = () => now;
+
+      await fetchModels(
+        {
+          settingsService: createMockSettingsService(),
+          loggingService: { warn: () => {} } as any,
+          now: clock,
+        },
+        providerId,
+      );
+      expect(fetchCount).toBe(1);
+
+      // Clear memory cache, advance time by 59 minutes (3540 seconds)
+      clearModelMemoryCacheForTest();
+      now += 59 * 60 * 1000;
+
+      const cached = await fetchModels(
+        {
+          settingsService: createMockSettingsService(),
+          loggingService: { warn: () => {} } as any,
+          now: clock,
+        },
+        providerId,
+      );
+      expect(cached[0].id).toBe('ttl-model');
+      expect(fetchCount).toBe(1);
+    } finally {
+      unregisterProvider(providerId);
+    }
+  });
+
+  it('treats disk cache older than 1 hour as expired (miss), re-fetches and overwrites', async () => {
+    const providerId = 'ttl-expire-provider';
+    let fetchCount = 0;
+    registerProvider({
+      id: providerId,
+      label: providerId,
+      fetchModels: async () => {
+        fetchCount++;
+        return [{ id: `ttl-model-${fetchCount}` }];
+      },
+    });
+
+    try {
+      let now = 20_000_000;
+      const clock = () => now;
+
+      const first = await fetchModels(
+        {
+          settingsService: createMockSettingsService(),
+          loggingService: { warn: () => {} } as any,
+          now: clock,
+        },
+        providerId,
+      );
+      expect(first[0].id).toBe('ttl-model-1');
+      expect(fetchCount).toBe(1);
+
+      // Clear memory cache, advance time by 60 minutes + 1 second (> 1 hour)
+      clearModelMemoryCacheForTest();
+      now += MODEL_CACHE_TTL_MS + 1000;
+
+      const second = await fetchModels(
+        {
+          settingsService: createMockSettingsService(),
+          loggingService: { warn: () => {} } as any,
+          now: clock,
+        },
+        providerId,
+      );
+      expect(second[0].id).toBe('ttl-model-2');
+      expect(fetchCount).toBe(2);
+
+      // Verify disk cache file timestamp was updated to the new now
+      const cacheFilePath = getModelCacheFilePath(providerId);
+      const content = JSON.parse(fs.readFileSync(cacheFilePath, 'utf-8'));
+      expect(content.timestamp).toBe(now);
+      expect(content.models[0].id).toBe('ttl-model-2');
+    } finally {
+      unregisterProvider(providerId);
+    }
+  });
+
+  it('tolerates corrupted JSON in disk cache file by treating as miss and overwriting', async () => {
+    const providerId = 'corrupt-json-provider';
+    let fetchCount = 0;
+    registerProvider({
+      id: providerId,
+      label: providerId,
+      fetchModels: async () => {
+        fetchCount++;
+        return [{ id: 'fresh-model' }];
+      },
+    });
+
+    try {
+      const cacheFilePath = getModelCacheFilePath(providerId);
+      fs.mkdirSync(path.dirname(cacheFilePath), { recursive: true });
+      fs.writeFileSync(cacheFilePath, '{{{not valid json!!!');
+
+      clearModelMemoryCacheForTest();
+
+      const models = await fetchModels(
+        {
+          settingsService: createMockSettingsService(),
+          loggingService: { warn: () => {}, debug: () => {} } as any,
+        },
+        providerId,
+      );
+
+      expect(models[0].id).toBe('fresh-model');
+      expect(fetchCount).toBe(1);
+
+      // File should have been overwritten with valid cache data
+      const parsed = JSON.parse(fs.readFileSync(cacheFilePath, 'utf-8'));
+      expect(parsed.version).toBe(1);
+      expect(parsed.models[0].id).toBe('fresh-model');
+    } finally {
+      unregisterProvider(providerId);
+    }
+  });
+
+  it('tolerates malformed schema in disk cache file (invalid version, missing models, non-array)', async () => {
+    const providerId = 'malformed-schema-provider';
+    let fetchCount = 0;
+    registerProvider({
+      id: providerId,
+      label: providerId,
+      fetchModels: async () => {
+        fetchCount++;
+        return [{ id: 'recovered-model' }];
+      },
+    });
+
+    try {
+      const cacheFilePath = getModelCacheFilePath(providerId);
+      fs.mkdirSync(path.dirname(cacheFilePath), { recursive: true });
+
+      // Case 1: Wrong version
+      fs.writeFileSync(cacheFilePath, JSON.stringify({ version: 99, timestamp: Date.now(), models: [{ id: 'bad' }] }));
+      clearModelMemoryCacheForTest();
+      let models = await fetchModels(
+        { settingsService: createMockSettingsService(), loggingService: { warn: () => {} } as any },
+        providerId,
+      );
+      expect(models[0].id).toBe('recovered-model');
+      expect(fetchCount).toBe(1);
+
+      // Case 2: Models is not an array
+      fs.writeFileSync(cacheFilePath, JSON.stringify({ version: 1, timestamp: Date.now(), models: 'not an array' }));
+      clearModelMemoryCacheForTest();
+      models = await fetchModels(
+        { settingsService: createMockSettingsService(), loggingService: { warn: () => {} } as any },
+        providerId,
+      );
+      expect(fetchCount).toBe(2);
+
+      // Case 3: Timestamp is invalid
+      fs.writeFileSync(cacheFilePath, JSON.stringify({ version: 1, timestamp: 'never', models: [] }));
+      clearModelMemoryCacheForTest();
+      models = await fetchModels(
+        { settingsService: createMockSettingsService(), loggingService: { warn: () => {} } as any },
+        providerId,
+      );
+      expect(fetchCount).toBe(3);
+    } finally {
+      unregisterProvider(providerId);
+    }
+  });
+
+  it('tolerates invalid model elements in disk cache file by treating as miss', async () => {
+    const providerId = 'invalid-model-elements-provider';
+    let fetchCount = 0;
+    registerProvider({
+      id: providerId,
+      label: providerId,
+      fetchModels: async () => {
+        fetchCount++;
+        return [{ id: 'valid-recovered' }];
+      },
+    });
+
+    try {
+      const cacheFilePath = getModelCacheFilePath(providerId);
+      fs.mkdirSync(path.dirname(cacheFilePath), { recursive: true });
+      fs.writeFileSync(
+        cacheFilePath,
+        JSON.stringify({ version: 1, timestamp: Date.now(), models: [null, { noId: 123 }] }),
+      );
+      clearModelMemoryCacheForTest();
+
+      const models = await fetchModels(
+        { settingsService: createMockSettingsService(), loggingService: { warn: () => {} } as any },
+        providerId,
+      );
+      expect(models[0].id).toBe('valid-recovered');
+      expect(fetchCount).toBe(1);
+    } finally {
+      unregisterProvider(providerId);
+    }
+  });
+
+  it('clearModelCache(provider) removes only that provider disk cache file', async () => {
+    const p1 = 'clear-p1';
+    const p2 = 'clear-p2';
+    registerProvider({ id: p1, label: p1, fetchModels: async () => [{ id: 'm1' }] });
+    registerProvider({ id: p2, label: p2, fetchModels: async () => [{ id: 'm2' }] });
+
+    try {
+      await fetchModels(
+        { settingsService: createMockSettingsService(), loggingService: { warn: () => {} } as any },
+        p1,
+      );
+      await fetchModels(
+        { settingsService: createMockSettingsService(), loggingService: { warn: () => {} } as any },
+        p2,
+      );
+
+      const p1Path = getModelCacheFilePath(p1);
+      const p2Path = getModelCacheFilePath(p2);
+      expect(fs.existsSync(p1Path)).toBe(true);
+      expect(fs.existsSync(p2Path)).toBe(true);
+
+      // Clear only p1
+      clearModelCache(p1);
+      expect(fs.existsSync(p1Path), 'p1 disk cache should be deleted').toBe(false);
+      expect(fs.existsSync(p2Path), 'p2 disk cache should remain intact').toBe(true);
+    } finally {
+      unregisterProvider(p1);
+      unregisterProvider(p2);
+    }
+  });
+
+  it('clearModelCache() removes all provider disk cache files', async () => {
+    const p1 = 'all-p1';
+    const p2 = 'all-p2';
+    registerProvider({ id: p1, label: p1, fetchModels: async () => [{ id: 'm1' }] });
+    registerProvider({ id: p2, label: p2, fetchModels: async () => [{ id: 'm2' }] });
+
+    try {
+      await fetchModels(
+        { settingsService: createMockSettingsService(), loggingService: { warn: () => {} } as any },
+        p1,
+      );
+      await fetchModels(
+        { settingsService: createMockSettingsService(), loggingService: { warn: () => {} } as any },
+        p2,
+      );
+
+      const p1Path = getModelCacheFilePath(p1);
+      const p2Path = getModelCacheFilePath(p2);
+      expect(fs.existsSync(p1Path)).toBe(true);
+      expect(fs.existsSync(p2Path)).toBe(true);
+
+      // Clear all
+      clearModelCache();
+      expect(fs.existsSync(p1Path)).toBe(false);
+      expect(fs.existsSync(p2Path)).toBe(false);
+    } finally {
+      unregisterProvider(p1);
+      unregisterProvider(p2);
+    }
+  });
+
+  it('concurrent atomic writes to the same provider cache file do not corrupt the file', async () => {
+    const providerId = 'concurrent-provider';
+    registerProvider({
+      id: providerId,
+      label: providerId,
+      fetchModels: async () => [{ id: 'conc-model' }],
+    });
+
+    try {
+      // Fire 10 parallel fetches
+      const promises = Array.from({ length: 10 }, (_, i) => {
+        // Clear memory cache between each call to force disk writes
+        clearModelMemoryCacheForTest();
+        return fetchModels(
+          {
+            settingsService: createMockSettingsService(),
+            loggingService: { warn: () => {} } as any,
+          },
+          providerId,
+        );
+      });
+
+      const results = await Promise.all(promises);
+      for (const res of results) {
+        expect(res[0].id).toBe('conc-model');
+      }
+
+      // Assert that the final file is valid JSON and parses cleanly
+      const cacheFilePath = getModelCacheFilePath(providerId);
+      expect(fs.existsSync(cacheFilePath)).toBe(true);
+      const parsed = JSON.parse(fs.readFileSync(cacheFilePath, 'utf-8'));
+      expect(parsed.version).toBe(1);
+      expect(parsed.provider).toBe(providerId);
+      expect(parsed.models[0].id).toBe('conc-model');
+    } finally {
+      unregisterProvider(providerId);
+    }
+  });
+
+  it('ModelCatalogSession.invalidate removes disk cache file for that provider', async () => {
+    const providerId = 'session-invalidate-provider';
+    let fetchCount = 0;
+    registerProvider({
+      id: providerId,
+      label: providerId,
+      fetchModels: async () => {
+        fetchCount++;
+        return [{ id: 'sess-model' }];
+      },
+    });
+
+    try {
+      const session = new ModelCatalogSession({
+        settingsService: createMockSettingsService(),
+        loggingService: { warn: () => {} } as any,
+      });
+
+      await session.load(providerId);
+      expect(fetchCount).toBe(1);
+
+      const cacheFilePath = getModelCacheFilePath(providerId);
+      expect(fs.existsSync(cacheFilePath)).toBe(true);
+
+      // Invalidate provider in session
+      session.invalidate(providerId);
+
+      // Disk cache file must be removed
+      expect(fs.existsSync(cacheFilePath)).toBe(false);
+
+      // Loading again should hit the fetcher fresh
+      await session.load(providerId);
+      expect(fetchCount).toBe(2);
+    } finally {
+      unregisterProvider(providerId);
+    }
+  });
+
+  it('respects custom cacheDir passed in deps', async () => {
+    const customDir = fs.mkdtempSync(path.join(os.tmpdir(), 'custom-cache-dir-'));
+    const providerId = 'custom-dir-provider';
+    registerProvider({
+      id: providerId,
+      label: providerId,
+      fetchModels: async () => [{ id: 'custom-dir-model' }],
+    });
+
+    try {
+      await fetchModels(
+        {
+          settingsService: createMockSettingsService(),
+          loggingService: { warn: () => {} } as any,
+          cacheDir: customDir,
+        },
+        providerId,
+      );
+
+      const customCacheFile = getModelCacheFilePath(providerId, customDir);
+      expect(fs.existsSync(customCacheFile)).toBe(true);
+
+      // Default suite cache dir should NOT have this file
+      expect(fs.existsSync(getModelCacheFilePath(providerId))).toBe(false);
+
+      // clearModelCache with opts.cacheDir cleans up
+      clearModelCache(providerId, { cacheDir: customDir });
+      expect(fs.existsSync(customCacheFile)).toBe(false);
+    } finally {
+      unregisterProvider(providerId);
+      try {
+        fs.rmSync(customDir, { recursive: true, force: true });
+      } catch {}
+    }
+  });
+
+  it('sanitizes provider IDs injectively so distinct IDs with underscores and escaped characters do not collide', async () => {
+    const p1 = 'gemini/flash';
+    const p2 = 'gemini_2f_flash';
+
+    const p1Path = getModelCacheFilePath(p1);
+    const p2Path = getModelCacheFilePath(p2);
+
+    // Filenames must be strictly distinct
+    expect(p1Path).not.toBe(p2Path);
+    expect(p1Path).toContain('gemini_2f_flash.json');
+    expect(p2Path).toContain('gemini_5f_2f_5f_flash.json');
+
+    // Verify end-to-end cache isolation between both providers
+    registerProvider({ id: p1, label: p1, fetchModels: async () => [{ id: 'model-slash' }] });
+    registerProvider({ id: p2, label: p2, fetchModels: async () => [{ id: 'model-escaped' }] });
+
+    try {
+      await fetchModels(
+        { settingsService: createMockSettingsService(), loggingService: { warn: () => {} } as any },
+        p1,
+      );
+      await fetchModels(
+        { settingsService: createMockSettingsService(), loggingService: { warn: () => {} } as any },
+        p2,
+      );
+
+      expect(fs.existsSync(p1Path)).toBe(true);
+      expect(fs.existsSync(p2Path)).toBe(true);
+
+      // Clear memory cache to force disk read
+      clearModelMemoryCacheForTest();
+
+      const p1Loaded = await fetchModels(
+        { settingsService: createMockSettingsService(), loggingService: { warn: () => {} } as any },
+        p1,
+      );
+      const p2Loaded = await fetchModels(
+        { settingsService: createMockSettingsService(), loggingService: { warn: () => {} } as any },
+        p2,
+      );
+
+      expect(p1Loaded[0].id).toBe('model-slash');
+      expect(p2Loaded[0].id).toBe('model-escaped');
+    } finally {
+      unregisterProvider(p1);
+      unregisterProvider(p2);
+    }
+  });
 });

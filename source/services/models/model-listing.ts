@@ -25,6 +25,10 @@ export async function collectProviderModels(
     settingsService: ISettingsService;
     loggingService: ILoggingService;
     fetcher?: ModelFetcher;
+    signal?: AbortSignal;
+    cacheDir?: string;
+    now?: () => number;
+    ttlMs?: number;
   },
   providerIds?: string[],
 ): Promise<ProviderModelGroup[]> {
@@ -32,6 +36,10 @@ export async function collectProviderModels(
     settingsService: deps.settingsService,
     loggingService: deps.loggingService,
     fetcher: deps.fetcher,
+    signal: deps.signal,
+    cacheDir: deps.cacheDir,
+    now: deps.now,
+    ttlMs: deps.ttlMs,
   });
   const ids = providerIds ?? orderedProviderIds(deps.settingsService, getProviderIds());
   session.begin();
@@ -98,9 +106,21 @@ export async function runListModels(deps: {
   search?: string;
   fetcher?: ModelFetcher;
   providerIds?: string[];
+  signal?: AbortSignal;
+  cacheDir?: string;
+  now?: () => number;
+  ttlMs?: number;
 }): Promise<ListModelsOutcome> {
   const groups = await collectProviderModels(
-    { settingsService: deps.settingsService, loggingService: deps.loggingService, fetcher: deps.fetcher },
+    {
+      settingsService: deps.settingsService,
+      loggingService: deps.loggingService,
+      fetcher: deps.fetcher,
+      signal: deps.signal,
+      cacheDir: deps.cacheDir,
+      now: deps.now,
+      ttlMs: deps.ttlMs,
+    },
     deps.providerIds,
   );
   const warnings = groups

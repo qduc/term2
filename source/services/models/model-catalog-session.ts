@@ -21,7 +21,15 @@ export class ModelCatalogSession {
   readonly #failedProviders = new Set<string>();
   #requestId = 0;
 
-  constructor(deps: { settingsService: ISettingsService; loggingService: ILoggingService; fetcher?: ModelFetcher }) {
+  constructor(deps: {
+    settingsService: ISettingsService;
+    loggingService: ILoggingService;
+    fetcher?: ModelFetcher;
+    signal?: AbortSignal;
+    cacheDir?: string;
+    now?: () => number;
+    ttlMs?: number;
+  }) {
     this.#settingsService = deps.settingsService;
     this.#loggingService = deps.loggingService;
     this.#fetcher = deps.fetcher ?? ((provider) => fetchModels(deps, provider));

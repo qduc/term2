@@ -1,3 +1,30 @@
+## [0.21.0] - 2026-09-03
+
+### Features
+- Added Profile architecture (Milestone 1) supporting typed profiles, capability-gated tools, active profile enforcement, and an interactive `/profile` picker menu.
+- Added per-capability tool toggle settings (`tools.<capability>.enabled`) to granularly enable or disable specific agent capabilities.
+- Added 1-hour atomic disk caching for provider model listings to eliminate redundant network fetches across CLI invocations.
+- Added model flag improvements: `--list-models` CLI flag to inspect available models, plus partial and fuzzy matching with interactive disambiguation for `--model`.
+- Added backward transcript tail reads (`from: "end"`) and pagination snapshot caching to session retrieval.
+- Added last-3 subagent tool calls with formatted parameters into the task panel for improved execution visibility.
+- Enabled auto-approval for safe file read and mutation tools when operating within workspace boundaries.
+- Added opt-in raw provider traffic logging sidecar (`TERM2_RAW_TRAFFIC`).
+
+### Bug Fixes
+- Hardened `apply_patch` with canonical patch envelope enforcement and fail-closed syntax guards.
+- Clamped foreground shell `max_output_length` to configured budget limits to prevent output flood.
+- Fixed footer token rate calculations by subtracting hidden reasoning tokens and marking burst decodes.
+- Fixed historical provider-traffic index timestamps and corrupt index recovery.
+- Prevented conflict between `--list-models` and `--resume`/`--fork`.
+- Fixed `--model` flag override to remain strictly session-scoped and avoid mutating persisted settings.
+- Restored proper chronological interleaving of background shell firings and assistant replay turns.
+- Maintained DeepSeek reasoning stream continuity and recovered settled-tool provider state rejections.
+
+### Improvements
+- Redesigned injected memory index with a two-tier counted layout and explicit omission reporting.
+- Raised background check-in minimum interval to 300s and next check-in delay to 30s.
+- Formatted generic tool command fallbacks in task summaries to display identifying scalar parameters.
+
 ## [0.20.0] - 2026-09-01
 
 ### Features

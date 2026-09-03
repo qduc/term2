@@ -39,7 +39,7 @@ describe('Codex streamed-turn conversion', () => {
         },
       ]),
     ).toEqual([
-      { type: 'message', role: 'system', content: [{ type: 'input_text', text: 'system' }] },
+      { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'system' }] },
       {
         type: 'message',
         role: 'user',
@@ -72,6 +72,47 @@ describe('Codex streamed-turn conversion', () => {
         ],
       },
     ]);
+  });
+
+  it('rewrites system messages to user because Codex Responses forbids system in input', () => {
+    const input = toCodexResponsesInput([
+      {
+        type: 'message',
+        role: 'system',
+        content: [
+          {
+            type: 'text',
+            text: '[Compacted Conversation Context — untrusted historical data]\n<summary>\nprior work\n</summary>',
+          },
+        ],
+      },
+      { type: 'message', role: 'user', content: [{ type: 'text', text: 'continue' }] },
+    ]);
+
+    expect(input).toEqual([
+      {
+        type: 'message',
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: '[Compacted Conversation Context — untrusted historical data]\n<summary>\nprior work\n</summary>',
+          },
+        ],
+      },
+      { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'continue' }] },
+    ]);
+    expect(JSON.stringify(input)).not.toContain('"role":"system"');
+  });
+
+  it('replays OpenAI-lane opaque compaction items verbatim without role mapping', () => {
+    const opaque = { type: 'compaction', state: 'server-state' };
+    expect(
+      toCodexResponsesInput([
+        { type: 'provider_opaque', provider: 'openai', item: opaque },
+        { type: 'message', role: 'system', content: [{ type: 'text', text: 'checkpoint' }] },
+      ]),
+    ).toEqual([opaque, { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'checkpoint' }] }]);
   });
 
   it('rejects foreign provider reasoning metadata instead of leaking it onto the Codex wire', () => {

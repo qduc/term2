@@ -340,6 +340,36 @@ it.sequential('nests the most recent tool call under its running task', async ()
   expect(toolLine.indexOf('└')).toBeGreaterThan(lines[taskLine]!.indexOf('•'));
 });
 
+it.sequential('nests the last three tool calls under its running task, one line each', async () => {
+  const renderer = await renderInAct(
+    <BackgroundTasksPanel
+      tasks={[
+        runningTask({
+          lastTool: { label: 'glob pattern=**/*.ts', state: 'running' },
+          recentTools: [
+            { label: 'grep "TODO" src/', state: 'success' },
+            { label: 'read_file path=source/app.ts', state: 'success' },
+            { label: 'glob pattern=**/*.ts', state: 'running' },
+          ],
+        }),
+      ]}
+      now={1_000}
+    />,
+  );
+
+  const lines = (renderer.lastFrame() ?? '').split('\n');
+  const taskLine = lines.findIndex((line) => line.includes('Explorer'));
+  const toolLines = lines.slice(taskLine + 1, taskLine + 4);
+
+  expect(toolLines).toHaveLength(3);
+  expect(toolLines[0]).toContain('✔');
+  expect(toolLines[0]).toContain('grep "TODO" src/');
+  expect(toolLines[1]).toContain('read_file path=source/app.ts');
+  expect(toolLines[2]).toContain('▶');
+  expect(toolLines[2]).toContain('glob pattern=**/*.ts');
+  expect(toolLines[2]).toContain('└');
+});
+
 it.sequential('marks a settled tool call with its outcome', async () => {
   const renderer = await renderInAct(
     <BackgroundTasksPanel tasks={[runningTask({ lastTool: { label: 'pnpm test', state: 'success' } })]} now={1_000} />,

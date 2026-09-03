@@ -85,7 +85,45 @@ export function formatToolCommand(toolName: string, args: Record<string, unknown
     return `ask_mentor: ${args.question ?? ''}`;
   }
 
-  return toolName;
+  return formatGenericToolCommand(toolName, args);
+}
+
+/** Preferred argument keys for the generic tool label, most identifying first. */
+const GENERIC_PARAM_KEY_ORDER = ['path', 'pattern', 'command', 'query', 'url', 'file', 'symbol', 'question'];
+
+const MAX_GENERIC_PARAMS = 3;
+const MAX_GENERIC_LABEL_LENGTH = 100;
+
+const formatScalarParam = (value: unknown): string | undefined => {
+  if (typeof value === 'string') {
+    const singleLine = value.replaceAll(/\s+/g, ' ').trim();
+    if (!singleLine) return undefined;
+    return /\s/.test(singleLine) ? `"${singleLine}"` : singleLine;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return undefined;
+};
+
+/**
+ * Fallback label for tools without a dedicated formatter: the tool name plus
+ * up to three scalar `key=value` parameters. Always a single bounded line so
+ * it is safe for the task panel and pending tool messages.
+ */
+function formatGenericToolCommand(toolName: string, args: Record<string, unknown>): string {
+  const orderedKeys = [
+    ...GENERIC_PARAM_KEY_ORDER.filter((key) => key in args),
+    ...Object.keys(args).filter((key) => !GENERIC_PARAM_KEY_ORDER.includes(key)),
+  ];
+  const params: string[] = [];
+  for (const key of orderedKeys) {
+    if (params.length >= MAX_GENERIC_PARAMS) break;
+    const formatted = formatScalarParam(args[key]);
+    if (formatted === undefined) continue;
+    params.push(`${key}=${formatted}`);
+  }
+  if (params.length === 0) return toolName;
+  const label = `${toolName} ${params.join(' ')}`;
+  return label.length > MAX_GENERIC_LABEL_LENGTH ? `${label.slice(0, MAX_GENERIC_LABEL_LENGTH - 1)}…` : label;
 }
 
 /**

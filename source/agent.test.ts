@@ -1416,3 +1416,188 @@ it('getEnvInfo omits the home directory for remote sessions, whose home this pro
     spy.mockRestore();
   }
 });
+
+// ── Tool capability toggles (tools.<group>.enabled) ──────────────────────────
+// Phase 1 contract from docs/plans/tool-toggle-setting-design.md: disabling a
+// group must remove every tool whose registration consults it — including the
+// ask_mentor and run_subagent/async paths that read the capability set
+// directly, not through hasCapability — and drop its capability-gated prompt
+// fragments, without touching any other group's surface. The table test runs
+// against the standard profile with a gpt-4o model (non-apply-patch branch, so
+// create_file/search_replace/grep/glob all register) and
+// app.searchViaShell=off.
+
+const toggleTestSkillsService = {
+  getAvailableSkillsForModel: () => [
+    {
+      name: 'test-skill',
+      description: 'Test skill description',
+      location: '/path/to/SKILL.md',
+      isProjectLevel: true,
+      body: 'Body',
+      rawContent: 'Raw',
+    },
+  ],
+  getSkillCatalog: () => '<available_skills>Mock Catalog</available_skills>',
+} as any;
+
+const toggleTestDeps = {
+  loggingService: mockLogger,
+  askMentor: async () => 'mentor answer',
+  runSubagent: async () => makeSubagentResult('subagent'),
+  ...orchestratorSubagentDeps,
+  getAskUserAnswer: () => 'user answer',
+  sessionBrowser: new SessionBrowser(() => ({ projectPath: '/project' })),
+  requestSessionRollover: () => ({ ok: true, status: 'rollover_requested', rolloverId: 'rollover-1' } as const),
+  backgroundShellRegistry: new BackgroundShellRegistry<any>(),
+  configureTaskCheckIn: () => ({ ok: true }),
+  setTaskCheckInPolicy: () => {},
+  skillsService: toggleTestSkillsService,
+};
+
+const toggleTestSettings = {
+  'agent.model': 'gpt-4o',
+  'app.searchViaShell': 'off',
+  'agent.smartModel': 'gpt-4o-mini',
+};
+
+it('tools.<group>.enabled toggles remove exactly their own tools and prompt fragments', () => {
+  const baseline = getAgentDefinition({
+    settingsService: createMockSettingsService(toggleTestSettings),
+    ...toggleTestDeps,
+  });
+  const baselineNames = baseline.tools.map((tool) => tool.name);
+
+  const rows: Array<{ key: string; absent: string[]; markers?: string[] }> = [
+    { key: 'tools.shell.enabled', absent: ['shell'] },
+    { key: 'tools.web.enabled', absent: ['web_search', 'web_fetch'] },
+    // read_file goes via the read branch; grep/glob additionally consult the
+    // effective read capability inside their registration condition.
+    { key: 'tools.fileRead.enabled', absent: ['read_file', 'grep', 'glob'] },
+    // Known coupling, recorded not fixed (design doc rule: deviations observed
+    // during implementation get follow-ups, not silent rewrites): for standard
+    // non-gpt5 models grep/glob register INSIDE the write branch (agent.ts
+    // standard else-branch), so disabling fileWrite also removes the search
+    // pair. Decoupling search registration from the write branch is the filed
+    // follow-up, not Phase 1 scope.
+    { key: 'tools.fileWrite.enabled', absent: ['create_file', 'search_replace', 'grep', 'glob'] },
+    {
+      key: 'tools.memory.enabled',
+      absent: baselineNames.filter((name) => name.startsWith('memory_')),
+      // Sentence unique to the memory.md fragment (heading levels also appear
+      // in some base prompts).
+      markers: ['Use global for cross-project preferences and reusable knowledge'],
+    },
+    {
+      key: 'tools.sessions.enabled',
+      absent: ['session_list', 'session_search', 'session_read', 'session_rollover'],
+      markers: ['Prior-session transcripts'],
+    },
+    { key: 'tools.skills.enabled', absent: ['activate_skill'], markers: ['<available_skills>'] },
+    { key: 'tools.mentor.enabled', absent: ['ask_mentor'] },
+    {
+      key: 'tools.subagents.enabled',
+      // run_subagent_async (createRunSubagentAsyncToolDefinition) is never
+      // registered by the composition root — async launches ride on
+      // run_subagent's execution parameter — so it is absent from both builds.
+      // configure_task_check_in stays registered here because its OR-condition
+      // has a background-tasks branch that is still satisfied in this fixture;
+      // the backgroundTasks row below is the toggle that removes it.
+      absent: ['run_subagent', 'get_subagent_result', 'get_subagent_status', 'send_message', 'cancel_run'],
+      markers: ['A subagent runs in its own context and returns only a summary'],
+    },
+    {
+      key: 'tools.backgroundTasks.enabled',
+      absent: ['get_shell_job', 'cancel_shell_job', 'configure_task_check_in'],
+      markers: ['### Background shell jobs'],
+    },
+    { key: 'tools.userInteraction.enabled', absent: ['ask_user'] },
+    { key: 'tools.codeContext.enabled', absent: ['read_code_outline', 'code_context_search'] },
+  ];
+
+  for (const row of rows) {
+    // Precondition: the group's tools exist while the toggle is at its default.
+    for (const name of row.absent) {
+      expect(baselineNames, `${row.key} baseline should contain ${name}`).toContain(name);
+    }
+
+    const toggled = getAgentDefinition({
+      settingsService: createMockSettingsService({ ...toggleTestSettings, [row.key]: false }),
+      ...toggleTestDeps,
+    });
+    const toggledNames = toggled.tools.map((tool) => tool.name);
+
+    // Exact list equality: the group's tools are gone and nothing else moved.
+    expect(toggledNames, `${row.key}=false must remove exactly [${row.absent.join(', ')}]`).toEqual(
+      baselineNames.filter((name) => !row.absent.includes(name)),
+    );
+
+    if (row.markers?.length) {
+      for (const marker of row.markers) {
+        expect(baseline.instructions, `${row.key} baseline should contain "${marker}"`).toContain(marker);
+        expect(toggled.instructions, `${row.key}=false must drop prompt marker "${marker}"`).not.toContain(marker);
+      }
+    } else {
+      // Groups without a capability-gated prompt fragment leave the prompt untouched.
+      expect(toggled.instructions, `${row.key}=false must not change the prompt`).toBe(baseline.instructions);
+    }
+  }
+});
+
+it('tool capability toggles default to enabled so the default tool surface is unchanged', () => {
+  const withDefaults = getAgentDefinition({
+    settingsService: createMockSettingsService(toggleTestSettings),
+    ...toggleTestDeps,
+  });
+  const allExplicitlyEnabled = getAgentDefinition({
+    settingsService: createMockSettingsService({
+      ...toggleTestSettings,
+      'tools.shell.enabled': true,
+      'tools.web.enabled': true,
+      'tools.fileRead.enabled': true,
+      'tools.fileWrite.enabled': true,
+      'tools.memory.enabled': true,
+      'tools.sessions.enabled': true,
+      'tools.skills.enabled': true,
+      'tools.mentor.enabled': true,
+      'tools.subagents.enabled': true,
+      'tools.backgroundTasks.enabled': true,
+      'tools.userInteraction.enabled': true,
+      'tools.codeContext.enabled': true,
+    }),
+    ...toggleTestDeps,
+  });
+
+  expect(allExplicitlyEnabled.tools.map((tool) => tool.name)).toEqual(withDefaults.tools.map((tool) => tool.name));
+  expect(allExplicitlyEnabled.instructions).toBe(withDefaults.instructions);
+});
+
+it('tools.fileRead.enabled removes the lite file tools entirely (Lite outside-workspace authority is liteMode-keyed and out of Phase 1 scope)', () => {
+  const liteSettings = { 'app.liteMode': true, 'app.searchViaShell': 'off' };
+  const enabled = getAgentDefinition({
+    settingsService: createMockSettingsService(liteSettings),
+    ...toggleTestDeps,
+  });
+  const enabledNames = enabled.tools.map((tool) => tool.name);
+  expect(enabledNames).toContain('read_file');
+  expect(enabledNames).toContain('grep');
+  expect(enabledNames).toContain('glob');
+
+  const disabled = getAgentDefinition({
+    settingsService: createMockSettingsService({ ...liteSettings, 'tools.fileRead.enabled': false }),
+    ...toggleTestDeps,
+  });
+  const disabledNames = disabled.tools.map((tool) => tool.name);
+  expect(disabledNames).not.toContain('read_file');
+  expect(disabledNames).not.toContain('grep');
+  expect(disabledNames).not.toContain('glob');
+
+  // Documented Phase 1 limitation (design doc, Acknowledged gaps #3): with the
+  // toggle ON, Lite still reads outside the workspace because liteMode — not a
+  // capability — grants that authority. Lite's allowOutsideWorkspace is set at
+  // factory time from the liteMode branch (agent.ts lite branch), so no setting
+  // can express workspace-only reads until outside-workspace eligibility is
+  // re-derived from the effective external-read capability. The assertions
+  // above pin the part Phase 1 does control: the toggle removes the lite file
+  // tools entirely when off and leaves Lite's surface unchanged otherwise.
+});

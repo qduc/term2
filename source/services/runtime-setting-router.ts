@@ -4,6 +4,7 @@ import { setTrimConfig } from '../utils/output/output-trim.js';
 import { ProfileTransitionService, type ProfileTransitionPlan } from './profiles/profile-transition.js';
 import { profileIdFromLegacyModeSetting } from './profiles/legacy-adapter.js';
 import { isLegacyModeSettingKey } from './profiles/legacy-adapter.js';
+import { buildToggleConflictNotice, isToolToggleKey } from './tool-toggles.js';
 
 export interface RuntimeSettingRouterConversationService {
   switchProvider(provider: string): void;
@@ -68,11 +69,19 @@ export class ConversationConfigurationService {
       const profilePlan = profileTransition?.plan(String(activeProfileChange?.value)) as
         | ProfileTransitionPlan
         | undefined;
+      // Previous toggle values must be read before the transaction publishes
+      // the new ones, so only true→false flips count as newly disabled.
+      const previousToggleValues = new Map(
+        canonicalRuntime
+          .filter((change) => isToolToggleKey(change.key))
+          .map((change) => [change.key, this.#deps.settingsService.getDynamic(change.key)]),
+      );
       this.#deps.settingsService.setDynamicTransaction(canonicalRuntime.map(({ key, value }) => ({ key, value })));
       for (const change of canonicalRuntime) {
         if (change.key !== 'app.activeProfileId') this.applyRuntimeSetting(change.key, change.value);
       }
       if (profileTransition && profilePlan) profileTransition.commit(profilePlan);
+      this.#queueToolToggleConflictNotice(canonicalRuntime, previousToggleValues);
     }
     for (const change of changes.filter((item) => item.persistence === 'restart')) {
       this.#deps.settingsService.setPersistentDynamic(change.key, change.value);
@@ -84,6 +93,26 @@ export class ConversationConfigurationService {
     this.#deps.settingsService.reset(key);
     if (this.#deps.settingsService.isRuntimeModifiable(key)) {
       this.applyRuntimeSetting(key, this.#deps.settingsService.getDynamic(key));
+    }
+  }
+
+  /**
+   * Warns once per batch when a newly disabled toggle conflicts with the
+   * now-active profile's guidance (tool-toggles.ts). Profiles keep declaring
+   * their tools regardless of toggles, so without this the model only finds
+   * out mid-run that a referenced tool does not exist.
+   */
+  #queueToolToggleConflictNotice(
+    canonicalRuntime: readonly ConversationSettingChange[],
+    previousToggleValues: ReadonlyMap<string, unknown>,
+  ): void {
+    const newlyDisabled = canonicalRuntime
+      .filter((change) => isToolToggleKey(change.key))
+      .filter((change) => change.value === false && previousToggleValues.get(change.key) !== false)
+      .map((change) => change.key);
+    const notice = buildToggleConflictNotice(this.#deps.settingsService, newlyDisabled);
+    if (notice) {
+      this.#deps.conversationService.queueModeNotice(notice);
     }
   }
 
@@ -105,6 +134,14 @@ export function applyRuntimeSettingChange(key: string, value: unknown, deps: Run
 
   if (key === 'agent.model') {
     deps.setModel(String(value));
+    return;
+  }
+
+  if (isToolToggleKey(key)) {
+    // A capability toggle changes which tools the next request may use, so the
+    // agent rebuilds exactly like a model change. The settings transaction has
+    // already been applied by the caller.
+    deps.setModel(deps.settingsService.get('agent.model'));
     return;
   }
 

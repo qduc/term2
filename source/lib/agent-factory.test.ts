@@ -57,6 +57,9 @@ const createMockSettings = (values: Record<string, any> = {}): ISettingsService 
 
   return {
     get: <T>(key: string) => store[key] as T,
+    // getDynamic is part of ISettingsService and is now read unconditionally
+    // by the tool-capability mask in getAgentDefinition.
+    getDynamic: (key: string) => store[key],
     set: (key: string, value: any) => {
       store[key] = value;
     },

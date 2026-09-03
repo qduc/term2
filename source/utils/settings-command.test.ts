@@ -74,6 +74,20 @@ const baseSettings = {
     asyncSessionTtlMs: { value: 30 * 60 * 1000, source: 'default' },
     asyncMessageCap: { value: 50, source: 'default' },
   },
+  tools: {
+    shell: { enabled: { value: true, source: 'default' } },
+    web: { enabled: { value: true, source: 'default' } },
+    fileRead: { enabled: { value: true, source: 'default' } },
+    fileWrite: { enabled: { value: true, source: 'default' } },
+    memory: { enabled: { value: true, source: 'default' } },
+    sessions: { enabled: { value: true, source: 'default' } },
+    skills: { enabled: { value: true, source: 'default' } },
+    mentor: { enabled: { value: true, source: 'default' } },
+    subagents: { enabled: { value: true, source: 'default' } },
+    backgroundTasks: { enabled: { value: true, source: 'default' } },
+    userInteraction: { enabled: { value: true, source: 'default' } },
+    codeContext: { enabled: { value: true, source: 'default' } },
+  },
 } as unknown as SettingsWithSources;
 
 const createDeps = (
@@ -135,6 +149,8 @@ it('formatSettingsSummary renders values with sources', () => {
   expect(summary.includes('agent.backgroundCheckIn.enabled: true (default)')).toBe(true);
   expect(summary.includes('agent.backgroundCheckIn.intervalMs: 300000 (default)')).toBe(true);
   expect(summary.includes('memory.enabled: true (default)')).toBe(true);
+  expect(summary.includes('tools.shell.enabled: true (default)')).toBe(true);
+  expect(summary.includes('tools.subagents.enabled: true (default)')).toBe(true);
 });
 
 it('viewing all settings with no args prompts for autocomplete', () => {

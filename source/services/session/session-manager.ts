@@ -164,7 +164,10 @@ export class SessionManager {
   }
 
   queueModeNotice(text: string): void {
-    this.#state.pendingModeNotice = text;
+    // Compose instead of overwrite: a profile transition and tool-toggle
+    // warnings (or several toggles in one batch) must all reach the next turn.
+    const existing = this.#state.pendingModeNotice;
+    this.#state.pendingModeNotice = existing ? `${existing}\n\n${text}` : text;
   }
 
   previewLargeUncachedInput(input: string | UserTurn, now = Date.now()) {

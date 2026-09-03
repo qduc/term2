@@ -7,6 +7,7 @@ import {
   KNOWN_CUSTOM_PROVIDER_TYPES,
   isKnownCustomProviderType,
   SettingsSchema,
+  ToolsSettingsSchema,
   UISettingsSchema,
   RUNTIME_MODIFIABLE_SETTINGS,
   SETTING_KEYS,
@@ -16,8 +17,8 @@ it('keeps the structured Contract 04 consumer inventory complete and duplicate-f
   const inventoryKeys = Object.values(CONTRACT_04_CONSUMER_INVENTORY).flat();
   const exportedKeys = Object.values(SETTING_KEYS);
 
-  expect(exportedKeys).toHaveLength(134);
-  expect(new Set(exportedKeys).size).toBe(134);
+  expect(exportedKeys).toHaveLength(146);
+  expect(new Set(exportedKeys).size).toBe(146);
   expect(inventoryKeys).toHaveLength(exportedKeys.length);
   expect(new Set(inventoryKeys).size).toBe(inventoryKeys.length);
   expect([...inventoryKeys].sort()).toEqual([...exportedKeys].sort());
@@ -260,6 +261,40 @@ it('workflow limits have bounded defaults and accept workspace configuration', (
   });
   expect(() => SettingsSchema.parse({ agentWorkflow: { maxConcurrency: 0 } })).toThrow();
   expect(() => SettingsSchema.parse({ agentWorkflow: { maxConsoleBytes: 0 } })).toThrow();
+});
+
+it('tool capability toggles default to enabled, are runtime-modifiable, and round-trip', () => {
+  const toggleKeys = [
+    'tools.shell.enabled',
+    'tools.web.enabled',
+    'tools.fileRead.enabled',
+    'tools.fileWrite.enabled',
+    'tools.memory.enabled',
+    'tools.sessions.enabled',
+    'tools.skills.enabled',
+    'tools.mentor.enabled',
+    'tools.subagents.enabled',
+    'tools.backgroundTasks.enabled',
+    'tools.userInteraction.enabled',
+    'tools.codeContext.enabled',
+  ];
+
+  const parsedDefaults = ToolsSettingsSchema.parse({});
+  for (const key of toggleKeys) {
+    const group = key.split('.')[1] as keyof typeof parsedDefaults;
+    expect(parsedDefaults[group], key).toEqual({ enabled: true });
+    expect(DEFAULT_SETTINGS.tools[group], key).toEqual({ enabled: true });
+    expect(RUNTIME_MODIFIABLE_SETTINGS.has(key), `${key} must be runtime-modifiable`).toBe(true);
+  }
+
+  const configured = SettingsSchema.parse({
+    tools: { shell: { enabled: false }, fileRead: { enabled: false } },
+  });
+  expect(configured.tools?.shell?.enabled).toBe(false);
+  expect(configured.tools?.fileRead?.enabled).toBe(false);
+  // Untouched groups keep their enabled default; fileRead masks both read
+  // capabilities (filesystem-read-external has no separate toggle by design).
+  expect(configured.tools?.web?.enabled).toBe(true);
 });
 
 it('CustomProviderSchema defaults provider type for legacy configs', () => {

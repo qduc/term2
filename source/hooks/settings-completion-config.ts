@@ -118,6 +118,30 @@ export const SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.TOOLS_ENABLE_EDIT_HEALING]: 'Use AI to automatically correct failed search_replace operations',
   [SETTING_KEYS.TOOLS_EDIT_HEALING_MODEL]: 'Model to use for edit healing (fast/cheap)',
   [SETTING_KEYS.TOOLS_EDIT_HEALING_PROVIDER]: 'Provider for the edit-healing model (optional)',
+  [SETTING_KEYS.TOOLS_SHELL_ENABLED]:
+    'Enable shell tools for the main agent (true|false). Does not restrict subagents; applies on the next model request.',
+  [SETTING_KEYS.TOOLS_WEB_ENABLED]:
+    'Enable web_search and web_fetch tools for the main agent (true|false). Does not restrict subagents; applies on the next model request.',
+  [SETTING_KEYS.TOOLS_FILE_READ_ENABLED]:
+    'Enable file read tools for the main agent (true|false). In Lite, outside-workspace reads follow Lite mode, not this toggle; applies on the next model request.',
+  [SETTING_KEYS.TOOLS_FILE_WRITE_ENABLED]:
+    'Enable file edit tools for the main agent (true|false). Does not restrict subagents; applies on the next model request.',
+  [SETTING_KEYS.TOOLS_MEMORY_ENABLED]:
+    'Enable memory tools for the main agent (true|false). Does not restrict subagents; applies on the next model request.',
+  [SETTING_KEYS.TOOLS_SESSIONS_ENABLED]:
+    'Enable prior-session tools for the main agent (true|false). Applies on the next model request.',
+  [SETTING_KEYS.TOOLS_SKILLS_ENABLED]:
+    'Enable the activate_skill tool and skill catalog for the main agent (true|false). Applies on the next model request.',
+  [SETTING_KEYS.TOOLS_MENTOR_ENABLED]:
+    'Enable the ask_mentor tool for the main agent (true|false). Also requires a configured mentor model; applies on the next model request.',
+  [SETTING_KEYS.TOOLS_SUBAGENTS_ENABLED]:
+    'Enable subagent delegation tools for the main agent (true|false). Does not restrict the subagents themselves; applies on the next model request.',
+  [SETTING_KEYS.TOOLS_BACKGROUND_TASKS_ENABLED]:
+    'Enable background task tools for the main agent (true|false). Applies on the next model request.',
+  [SETTING_KEYS.TOOLS_USER_INTERACTION_ENABLED]:
+    'Enable the ask_user tool for the main agent (true|false). Applies on the next model request.',
+  [SETTING_KEYS.TOOLS_CODE_CONTEXT_ENABLED]:
+    'Enable code-context tools for the main agent (true|false). Applies on the next model request.',
   [SETTING_KEYS.SHELL_AUTO_APPROVE_MODE]: 'Shell command auto-approval mode (off|advisory|auto)',
   [SETTING_KEYS.AGENT_AUTO_APPROVE_MODEL]: 'Model to use for auto-approval evaluation (fast/cheap)',
   [SETTING_KEYS.AGENT_AUTO_APPROVE_PROVIDER]: 'Provider for the auto-approval model (optional)',
@@ -293,6 +317,18 @@ export const CATEGORY_KEYS = {
     SETTING_KEYS.TOOLS_EDIT_HEALING_MODEL,
     SETTING_KEYS.SUBAGENT_ASYNC_SESSION_TTL_MS,
     SETTING_KEYS.SUBAGENT_ASYNC_MESSAGE_CAP,
+    SETTING_KEYS.TOOLS_SHELL_ENABLED,
+    SETTING_KEYS.TOOLS_WEB_ENABLED,
+    SETTING_KEYS.TOOLS_FILE_READ_ENABLED,
+    SETTING_KEYS.TOOLS_FILE_WRITE_ENABLED,
+    SETTING_KEYS.TOOLS_MEMORY_ENABLED,
+    SETTING_KEYS.TOOLS_SESSIONS_ENABLED,
+    SETTING_KEYS.TOOLS_SKILLS_ENABLED,
+    SETTING_KEYS.TOOLS_MENTOR_ENABLED,
+    SETTING_KEYS.TOOLS_SUBAGENTS_ENABLED,
+    SETTING_KEYS.TOOLS_BACKGROUND_TASKS_ENABLED,
+    SETTING_KEYS.TOOLS_USER_INTERACTION_ENABLED,
+    SETTING_KEYS.TOOLS_CODE_CONTEXT_ENABLED,
   ]),
   ui: new Set<string>([
     SETTING_KEYS.UI_HISTORY_SIZE,

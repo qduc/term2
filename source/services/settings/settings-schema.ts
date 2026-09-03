@@ -415,6 +415,95 @@ export const ToolsSettingsSchema = z.object({
     .min(1)
     .optional()
     .describe('Provider to use for the edit-healing model (defaults to agent.provider when unset)'),
+  // Per-tool-group kill switches for the main agent. Each masks exactly one
+  // capability group from the profile's tool capabilities (tool-toggles.ts),
+  // removing that group's tools and capability-gated prompt fragments on the
+  // next model request. They never restrict subagents, which resolve their own
+  // capabilities. tools.fileRead.enabled masks both filesystem read
+  // capabilities; filesystem-read-external has no separate toggle (Lite keeps
+  // its outside-workspace authority, which is liteMode-keyed).
+  shell: z
+    .object({ enabled: z.boolean().optional().default(true) })
+    .optional()
+    .default({ enabled: true })
+    .describe(
+      'Enable shell tools for the main agent (true|false). Does not restrict subagents; applies on the next model request.',
+    ),
+  web: z
+    .object({ enabled: z.boolean().optional().default(true) })
+    .optional()
+    .default({ enabled: true })
+    .describe(
+      'Enable web_search and web_fetch tools for the main agent (true|false). Does not restrict subagents; applies on the next model request.',
+    ),
+  fileRead: z
+    .object({ enabled: z.boolean().optional().default(true) })
+    .optional()
+    .default({ enabled: true })
+    .describe(
+      'Enable file read tools (read_file, grep, glob) for the main agent (true|false). In Lite, outside-workspace reads follow Lite mode, not this toggle; applies on the next model request.',
+    ),
+  fileWrite: z
+    .object({ enabled: z.boolean().optional().default(true) })
+    .optional()
+    .default({ enabled: true })
+    .describe(
+      'Enable file edit tools (apply_patch / create_file / search_replace) for the main agent (true|false). Does not restrict subagents; applies on the next model request.',
+    ),
+  memory: z
+    .object({ enabled: z.boolean().optional().default(true) })
+    .optional()
+    .default({ enabled: true })
+    .describe(
+      'Enable memory tools (memory_*) for the main agent (true|false). Does not restrict subagents; applies on the next model request.',
+    ),
+  sessions: z
+    .object({ enabled: z.boolean().optional().default(true) })
+    .optional()
+    .default({ enabled: true })
+    .describe(
+      'Enable prior-session tools (session_list, session_search, session_read, session_rollover) for the main agent (true|false). Applies on the next model request.',
+    ),
+  skills: z
+    .object({ enabled: z.boolean().optional().default(true) })
+    .optional()
+    .default({ enabled: true })
+    .describe(
+      'Enable the activate_skill tool and skill catalog for the main agent (true|false). Applies on the next model request.',
+    ),
+  mentor: z
+    .object({ enabled: z.boolean().optional().default(true) })
+    .optional()
+    .default({ enabled: true })
+    .describe(
+      'Enable the ask_mentor tool for the main agent (true|false). Also requires a configured mentor model; applies on the next model request.',
+    ),
+  subagents: z
+    .object({ enabled: z.boolean().optional().default(true) })
+    .optional()
+    .default({ enabled: true })
+    .describe(
+      'Enable subagent delegation tools (run_subagent and its async controls) for the main agent (true|false). Does not restrict the subagents themselves; applies on the next model request.',
+    ),
+  backgroundTasks: z
+    .object({ enabled: z.boolean().optional().default(true) })
+    .optional()
+    .default({ enabled: true })
+    .describe(
+      'Enable background task tools (get_shell_job, cancel_shell_job, configure_task_check_in) for the main agent (true|false). Applies on the next model request.',
+    ),
+  userInteraction: z
+    .object({ enabled: z.boolean().optional().default(true) })
+    .optional()
+    .default({ enabled: true })
+    .describe('Enable the ask_user tool for the main agent (true|false). Applies on the next model request.'),
+  codeContext: z
+    .object({ enabled: z.boolean().optional().default(true) })
+    .optional()
+    .default({ enabled: true })
+    .describe(
+      'Enable code-context tools (read_code_outline, code_context_search) for the main agent (true|false). Applies on the next model request.',
+    ),
 });
 
 export const DebugSettingsSchema = z.object({
@@ -736,6 +825,18 @@ export interface SettingsWithSources {
     enableEditHealing: SettingWithSource<boolean>;
     editHealingModel: SettingWithSource<string>;
     editHealingProvider: SettingWithSource<string | undefined>;
+    shell: { enabled: SettingWithSource<boolean> };
+    web: { enabled: SettingWithSource<boolean> };
+    fileRead: { enabled: SettingWithSource<boolean> };
+    fileWrite: { enabled: SettingWithSource<boolean> };
+    memory: { enabled: SettingWithSource<boolean> };
+    sessions: { enabled: SettingWithSource<boolean> };
+    skills: { enabled: SettingWithSource<boolean> };
+    mentor: { enabled: SettingWithSource<boolean> };
+    subagents: { enabled: SettingWithSource<boolean> };
+    backgroundTasks: { enabled: SettingWithSource<boolean> };
+    userInteraction: { enabled: SettingWithSource<boolean> };
+    codeContext: { enabled: SettingWithSource<boolean> };
   };
   debug: {
     debugBashTool: SettingWithSource<boolean>;
@@ -887,6 +988,18 @@ export const SETTING_KEYS = {
   TOOLS_ENABLE_EDIT_HEALING: 'tools.enableEditHealing',
   TOOLS_EDIT_HEALING_MODEL: 'tools.editHealingModel',
   TOOLS_EDIT_HEALING_PROVIDER: 'tools.editHealingProvider',
+  TOOLS_SHELL_ENABLED: 'tools.shell.enabled',
+  TOOLS_WEB_ENABLED: 'tools.web.enabled',
+  TOOLS_FILE_READ_ENABLED: 'tools.fileRead.enabled',
+  TOOLS_FILE_WRITE_ENABLED: 'tools.fileWrite.enabled',
+  TOOLS_MEMORY_ENABLED: 'tools.memory.enabled',
+  TOOLS_SESSIONS_ENABLED: 'tools.sessions.enabled',
+  TOOLS_SKILLS_ENABLED: 'tools.skills.enabled',
+  TOOLS_MENTOR_ENABLED: 'tools.mentor.enabled',
+  TOOLS_SUBAGENTS_ENABLED: 'tools.subagents.enabled',
+  TOOLS_BACKGROUND_TASKS_ENABLED: 'tools.backgroundTasks.enabled',
+  TOOLS_USER_INTERACTION_ENABLED: 'tools.userInteraction.enabled',
+  TOOLS_CODE_CONTEXT_ENABLED: 'tools.codeContext.enabled',
   DEBUG_BASH_TOOL: 'debug.debugBashTool',
   SSH_ENABLED: 'ssh.enabled',
   SSH_HOST: 'ssh.host',
@@ -1009,6 +1122,18 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.SUBAGENT_ASYNC_MESSAGE_CAP,
   SETTING_KEYS.TOOLS_EDIT_HEALING_MODEL,
   SETTING_KEYS.TOOLS_EDIT_HEALING_PROVIDER,
+  SETTING_KEYS.TOOLS_SHELL_ENABLED,
+  SETTING_KEYS.TOOLS_WEB_ENABLED,
+  SETTING_KEYS.TOOLS_FILE_READ_ENABLED,
+  SETTING_KEYS.TOOLS_FILE_WRITE_ENABLED,
+  SETTING_KEYS.TOOLS_MEMORY_ENABLED,
+  SETTING_KEYS.TOOLS_SESSIONS_ENABLED,
+  SETTING_KEYS.TOOLS_SKILLS_ENABLED,
+  SETTING_KEYS.TOOLS_MENTOR_ENABLED,
+  SETTING_KEYS.TOOLS_SUBAGENTS_ENABLED,
+  SETTING_KEYS.TOOLS_BACKGROUND_TASKS_ENABLED,
+  SETTING_KEYS.TOOLS_USER_INTERACTION_ENABLED,
+  SETTING_KEYS.TOOLS_CODE_CONTEXT_ENABLED,
   SETTING_KEYS.WEB_SEARCH_PROVIDER,
   SETTING_KEYS.WEB_SEARCH_TAVILY_API_KEY,
   SETTING_KEYS.WEB_SEARCH_EXA_API_KEY,
@@ -1180,6 +1305,18 @@ export const DEFAULT_SETTINGS: SettingsData = {
     enableEditHealing: true,
     editHealingModel: 'gpt-4o-mini',
     editHealingProvider: undefined,
+    shell: { enabled: true },
+    web: { enabled: true },
+    fileRead: { enabled: true },
+    fileWrite: { enabled: true },
+    memory: { enabled: true },
+    sessions: { enabled: true },
+    skills: { enabled: true },
+    mentor: { enabled: true },
+    subagents: { enabled: true },
+    backgroundTasks: { enabled: true },
+    userInteraction: { enabled: true },
+    codeContext: { enabled: true },
   },
   debug: {
     debugBashTool: false,

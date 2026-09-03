@@ -1,5 +1,5 @@
 import { it, expect } from 'vitest';
-import { SETTINGS_CATEGORIES } from './settings-completion-config.js';
+import { SETTINGS_CATEGORIES, SETTING_DESCRIPTIONS } from './settings-completion-config.js';
 import { clampIndex, filterSettingsByCategory, getSettingCategory } from './settings-completion-logic.js';
 import { SETTING_KEYS } from '../services/settings/settings-service.js';
 
@@ -69,6 +69,28 @@ it('filterSettingsByCategory returns memory entries for the memory category', ()
     { key: 'memory.searchDefaultLimit' },
     { key: 'memory.searchMaxLimit' },
   ]);
+});
+
+it('tool capability toggles sit in the tools category with descriptions', () => {
+  const toggleKeys = [
+    'tools.shell.enabled',
+    'tools.web.enabled',
+    'tools.fileRead.enabled',
+    'tools.fileWrite.enabled',
+    'tools.memory.enabled',
+    'tools.sessions.enabled',
+    'tools.skills.enabled',
+    'tools.mentor.enabled',
+    'tools.subagents.enabled',
+    'tools.backgroundTasks.enabled',
+    'tools.userInteraction.enabled',
+    'tools.codeContext.enabled',
+  ];
+
+  for (const key of toggleKeys) {
+    expect(getSettingCategory(key).id, key).toBe('tools');
+    expect(SETTING_DESCRIPTIONS[key], key).toBeTruthy();
+  }
 });
 
 it('clampIndex keeps the index in range', () => {

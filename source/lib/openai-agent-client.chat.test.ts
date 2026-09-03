@@ -33,6 +33,9 @@ const createMockSettings = (providerId: string): ISettingsService =>
       if (key === 'agent.model') return 'mock-model';
       return undefined;
     },
+    // ISettingsService.getDynamic is read unconditionally by the
+    // tool-capability mask in getAgentDefinition.
+    getDynamic: (key: string) => undefined,
     set: () => {},
     onChange: () => {},
   } as any);

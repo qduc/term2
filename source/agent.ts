@@ -66,6 +66,7 @@ import type { AgentRuntime } from './services/agent-runtime/agent-runtime.js';
 import type { WorkflowLimits } from './services/agent-runtime/workflow/workflow-types.js';
 import { getProjectTreeForPrompt } from './utils/project-tree.js';
 import { MemoryCapabilityBuilder } from './services/memory/memory-capabilities.js';
+import { resolveDisabledCapabilities } from './services/tool-toggles.js';
 import type { ShellChildRegistry } from './utils/shell/shell-child-registry.js';
 import { createSessionBrowserToolDefinitions } from './tools/session-browser/session-browser-tools.js';
 import type { SessionBrowser } from './services/conversation/session-browser.js';
@@ -322,7 +323,19 @@ export const getAgentDefinition = (
   }
   const liteMode = isLiteProfile(profile);
   const capabilities = profile.tools.capabilities;
-  const hasCapability = (capability: string): boolean => capabilities.has(capability);
+  // Per-group kill switches (tools.<group>.enabled): mask the resolved set so
+  // every registration below consults the effective capabilities, and a
+  // disabled group's capability-gated prompt fragments drop with it. Toggles
+  // never restrict subagents, which resolve their own capabilities.
+  const disabledCapabilities = resolveDisabledCapabilities(settingsService);
+  const effectiveCapabilities =
+    disabledCapabilities.size === 0
+      ? capabilities
+      : new Set([...capabilities].filter((capability) => !disabledCapabilities.has(capability)));
+  if (disabledCapabilities.size > 0) {
+    loggingService.debug('Tool capability toggles applied', { disabled: [...disabledCapabilities].sort() });
+  }
+  const hasCapability = (capability: string): boolean => effectiveCapabilities.has(capability);
   const filesystemReadEnabled = hasCapability('filesystem-read-workspace') || hasCapability('filesystem-read-external');
   const filesystemWriteEnabled = hasCapability('filesystem-write');
   const backgroundTasksEnabled = hasCapability('background-tasks');
@@ -545,13 +558,13 @@ export const getAgentDefinition = (
 
   // Add mentor tool if the smart tier or its legacy mentor override is configured.
   const mentorModel = settingsService.get('agent.smartModel') ?? settingsService.get('agent.mentorModel');
-  if (capabilities.has('mentor') && mentorModel && askMentor) {
+  if (hasCapability('mentor') && mentorModel && askMentor) {
     tools.push(createAskMentorToolDefinition(askMentor));
   }
 
   // One model-facing delegation tool selects the existing foreground nested
   // runner or background registry callback; lifecycle ownership stays split.
-  if (capabilities.has('subagents') && (runSubagent || asyncSubagentEnabled)) {
+  if (hasCapability('subagents') && (runSubagent || asyncSubagentEnabled)) {
     tools.push(
       createRunSubagentToolDefinition({
         runSubagent: runSubagent
@@ -568,7 +581,7 @@ export const getAgentDefinition = (
   // out so the callbacks narrow: registering any of these without the rest would
   // advertise delegation the prompt never explains.
   if (
-    capabilities.has('subagents') &&
+    hasCapability('subagents') &&
     runSubagentAsync &&
     getSubagentResult &&
     getSubagentStatus &&

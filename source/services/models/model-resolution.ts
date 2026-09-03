@@ -29,6 +29,8 @@ export type ModelResolutionResult =
       modelId: string;
       provider?: string;
       reasoningEffort?: ModelSettingsReasoningEffort;
+      /** Provider catalogs that failed to load while resolution still proceeded. */
+      warnings?: string[];
     }
   | {
       status: 'no_match';
@@ -43,6 +45,8 @@ export type ModelResolutionResult =
       modelId: string;
       provider?: string;
       reasoningEffort?: ModelSettingsReasoningEffort;
+      /** Provider catalogs that failed to load while resolution still proceeded. */
+      warnings?: string[];
     };
 
 /**
@@ -104,7 +108,11 @@ export function parseModelFlag(
 
 /**
  * Match parsed model pattern against loaded provider model groups.
- * Exact matches take strict precedence over partial/fuzzy matches.
+ * Exact matches take strict precedence over partial/fuzzy matches, and an
+ * exact match of the flag exactly as typed (including any provider-style
+ * prefix) takes precedence over the split provider+pattern reading, so a
+ * literal aggregator id like `anthropic/claude-3.5-sonnet` is never
+ * reinterpreted when the vendor name collides with a provider id.
  */
 export function matchModels(
   groups: ProviderModelGroup[],
@@ -113,7 +121,21 @@ export function matchModels(
   const patternLower = parsed.pattern.toLowerCase();
   const rawPatternLower = parsed.rawPattern.toLowerCase();
 
-  // Stage 1: Exact matches
+  // Stage 0: The id exactly as typed. When the raw flag (prefix included) is a
+  // real model id somewhere, use it verbatim instead of the split reading.
+  const asTypedMatches: ModelMatch[] = [];
+  for (const group of groups) {
+    for (const model of group.models) {
+      if (model.id.toLowerCase() === rawPatternLower) {
+        asTypedMatches.push({ provider: group.provider, model });
+      }
+    }
+  }
+  if (asTypedMatches.length > 0) {
+    return { exact: true, matches: asTypedMatches };
+  }
+
+  // Stage 1: Exact matches on the stripped pattern
   const exactMatches: ModelMatch[] = [];
   for (const group of groups) {
     if (parsed.provider && group.provider.toLowerCase() !== parsed.provider.toLowerCase()) {
@@ -229,7 +251,9 @@ export async function promptForDisambiguation(
   }
 
   const input = streams?.input ?? process.stdin;
-  const output = streams?.output ?? process.stdout;
+  // Prompts go to stderr by default: stdout carries structured output (--json
+  // NDJSON, pipes) and must stay machine-readable.
+  const output = streams?.output ?? process.stderr;
   const rl = createInterface({ input, output });
   try {
     output.write(`Multiple models match "${pattern}":\n\n${formatted}\n\n`);
@@ -276,13 +300,17 @@ export async function resolveModelFlag(deps: {
   if (process.env[HARNESS_IDLE_ENV] && deps.prompter === undefined) {
     return {
       status: 'passthrough',
-      modelId: parsed.pattern,
+      modelId: parsed.rawPattern,
       provider: parsed.provider,
       reasoningEffort: parsed.reasoningEffort,
     };
   }
 
-  const providerIds = deps.providerIds ?? (parsed.provider ? [parsed.provider] : undefined);
+  // Narrow the catalog load only when the user explicitly scoped it with
+  // --provider. A provider prefix parsed out of the flag itself (e.g. the
+  // `anthropic/` in `anthropic/claude-3.5-sonnet` on an aggregator) must not
+  // narrow: the full id may be a literal model id on a different provider.
+  const providerIds = deps.providerIds ?? (deps.providerFlag && parsed.provider ? [parsed.provider] : undefined);
   const groups = await collectProviderModels(
     {
       settingsService: deps.settingsService,
@@ -291,6 +319,9 @@ export async function resolveModelFlag(deps: {
     },
     providerIds,
   );
+  const warnings = groups
+    .filter((group) => group.error !== undefined)
+    .map((group) => `warning: ${group.provider}: ${group.error}`);
 
   const totalLoadedModels = groups.reduce((acc, g) => acc + g.models.length, 0);
   const hasFetchErrors = groups.some((g) => g.error !== undefined);
@@ -299,9 +330,11 @@ export async function resolveModelFlag(deps: {
   if (totalLoadedModels === 0 && hasFetchErrors) {
     return {
       status: 'passthrough',
-      modelId: parsed.pattern,
+      // Fail open with the flag as typed, matching pre-resolution behavior.
+      modelId: parsed.rawPattern,
       provider: parsed.provider,
       reasoningEffort: parsed.reasoningEffort,
+      ...(warnings.length > 0 ? { warnings } : {}),
     };
   }
 
@@ -314,9 +347,10 @@ export async function resolveModelFlag(deps: {
       if (targetGroup?.error) {
         return {
           status: 'passthrough',
-          modelId: parsed.pattern,
+          modelId: parsed.rawPattern,
           provider: parsed.provider,
           reasoningEffort: parsed.reasoningEffort,
+          ...(warnings.length > 0 ? { warnings } : {}),
         };
       }
     }
@@ -333,6 +367,7 @@ export async function resolveModelFlag(deps: {
       modelId: matches[0].model.id,
       provider: matches[0].provider,
       reasoningEffort: parsed.reasoningEffort,
+      ...(warnings.length > 0 ? { warnings } : {}),
     };
   }
 
@@ -351,5 +386,6 @@ export async function resolveModelFlag(deps: {
     modelId: selected.model.id,
     provider: selected.provider,
     reasoningEffort: parsed.reasoningEffort,
+    ...(warnings.length > 0 ? { warnings } : {}),
   };
 }

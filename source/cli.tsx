@@ -571,12 +571,22 @@ if (modelFlag) {
     process.exit(1);
   }
 
-  settings.set('agent.model', resolution.modelId);
+  // Surfaces provider catalogs that failed to load while resolution still
+  // proceeded, so a partial outage never silently narrows what was matched.
+  if ('warnings' in resolution && resolution.warnings) {
+    for (const warning of resolution.warnings) {
+      console.error(warning);
+    }
+  }
+
+  // --model is a per-session override like every other CLI flag; it must not
+  // rewrite the user's persisted defaults (set() persists by default).
+  settings.set('agent.model', resolution.modelId, { persist: false });
   if (resolution.provider) {
-    settings.set('agent.provider', resolution.provider);
+    settings.set('agent.provider', resolution.provider, { persist: false });
   }
   if (resolution.reasoningEffort && !validatedReasoningEffort) {
-    settings.set('agent.reasoningEffort', resolution.reasoningEffort);
+    settings.set('agent.reasoningEffort', resolution.reasoningEffort, { persist: false });
   }
 }
 

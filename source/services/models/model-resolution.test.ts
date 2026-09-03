@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { registerProvider, unregisterProvider } from '../../providers/registry.js';
 import type { ModelInfo } from '../model-service.js';
 import type { ProviderModelGroup } from './model-listing.js';
 import {
@@ -191,6 +192,22 @@ describe('matchModels', () => {
     expect(result.matches).toHaveLength(1);
     expect(result.matches[0].provider).toBe('openrouter');
     expect(result.matches[0].model.id).toBe('anthropic/claude-3.5-sonnet');
+  });
+
+  it('prefers the id exactly as typed over the split provider+pattern reading', () => {
+    // `openai/gpt-5.4` is a literal id on openrouter AND splits into provider
+    // `openai` + pattern `gpt-5.4` which is an exact openai id. The as-typed
+    // id must win so bare `-m vendor/model` keeps its pre-fuzzing meaning.
+    const conflictingGroups: ProviderModelGroup[] = [
+      makeGroup('openai', [{ id: 'gpt-5.4' }]),
+      makeGroup('openrouter', [{ id: 'openai/gpt-5.4' }]),
+    ];
+    const parsed = parseModelFlag('openai/gpt-5.4', { knownProviders: ['openai', 'openrouter'] });
+    const result = matchModels(conflictingGroups, parsed);
+    expect(result.exact).toBe(true);
+    expect(result.matches).toHaveLength(1);
+    expect(result.matches[0].provider).toBe('openrouter');
+    expect(result.matches[0].model.id).toBe('openai/gpt-5.4');
   });
 
   it('falls back to fuzzy matching when no exact match exists', () => {
@@ -412,7 +429,96 @@ describe('resolveModelFlag', () => {
       modelId: 'some-model',
       provider: 'failed-prov',
       reasoningEffort: 'high',
+      warnings: ['warning: failed-prov: Connection refused'],
     });
+  });
+
+  it('resolves a vendor-slash id on the serving provider even when the vendor name is also a provider id', async () => {
+    // Regression: `resolveModelFlag` used to narrow the catalog load to the
+    // prefix-derived provider, so `anthropic/claude-3.5-sonnet` (a literal id
+    // on openrouter) could never see openrouter's catalog and falsely
+    // reported no_match or switched providers. Mirrors the cli.tsx call site:
+    // no providerIds, no knownProviders overrides.
+    registerProvider({ id: 'fake-anthropic', label: 'Fake Anthropic', fetchModels: async () => [] });
+    registerProvider({ id: 'fake-openrouter', label: 'Fake OpenRouter', fetchModels: async () => [] });
+    try {
+      const fetcher = vi.fn(async (provider: string) => {
+        if (provider === 'fake-anthropic') return [{ id: 'claude-3-5-sonnet-20241022', provider }];
+        if (provider === 'fake-openrouter') return [{ id: 'fake-anthropic/claude-3.5-sonnet', provider }];
+        return [];
+      });
+      const result = await resolveModelFlag({
+        modelFlag: 'fake-anthropic/claude-3.5-sonnet',
+        settingsService: { get: vi.fn(), getDynamic: vi.fn(() => []) } as any,
+        loggingService: { warn: vi.fn() } as any,
+        fetcher,
+      });
+
+      expect(fetcher).toHaveBeenCalledWith('fake-openrouter');
+      expect(result).toEqual<ModelResolutionResult>({
+        status: 'resolved',
+        modelId: 'fake-anthropic/claude-3.5-sonnet',
+        provider: 'fake-openrouter',
+        reasoningEffort: undefined,
+      });
+    } finally {
+      unregisterProvider('fake-anthropic');
+      unregisterProvider('fake-openrouter');
+    }
+  });
+
+  it('resolves a provider-prefixed pattern within that provider when the stripped pattern is an exact id', async () => {
+    registerProvider({ id: 'fake-openai', label: 'Fake OpenAI', fetchModels: async () => [] });
+    try {
+      const fetcher = vi.fn(async (provider: string) => {
+        if (provider === 'fake-openai') return [{ id: 'gpt-x', provider }];
+        return [];
+      });
+      const result = await resolveModelFlag({
+        modelFlag: 'fake-openai/gpt-x',
+        settingsService: { get: vi.fn(), getDynamic: vi.fn(() => []) } as any,
+        loggingService: { warn: vi.fn() } as any,
+        fetcher,
+      });
+
+      expect(result).toEqual<ModelResolutionResult>({
+        status: 'resolved',
+        modelId: 'gpt-x',
+        provider: 'fake-openai',
+        reasoningEffort: undefined,
+      });
+    } finally {
+      unregisterProvider('fake-openai');
+    }
+  });
+
+  it('surfaces fetch warnings when resolution proceeds despite a failed provider catalog', async () => {
+    registerProvider({ id: 'fake-healthy', label: 'Fake Healthy', fetchModels: async () => [] });
+    registerProvider({ id: 'fake-broken', label: 'Fake Broken', fetchModels: async () => [] });
+    try {
+      const fetcher = vi.fn(async (provider: string) => {
+        if (provider === 'fake-healthy') return [{ id: 'alpha-1', provider }];
+        if (provider === 'fake-broken') throw new Error('Connection refused');
+        return [];
+      });
+      const result = await resolveModelFlag({
+        modelFlag: 'alpha-1',
+        settingsService: { get: vi.fn(), getDynamic: vi.fn(() => []) } as any,
+        loggingService: { warn: vi.fn() } as any,
+        fetcher,
+      });
+
+      expect(result).toEqual<ModelResolutionResult>({
+        status: 'resolved',
+        modelId: 'alpha-1',
+        provider: 'fake-healthy',
+        reasoningEffort: undefined,
+        warnings: ['warning: fake-broken: Connection refused'],
+      });
+    } finally {
+      unregisterProvider('fake-healthy');
+      unregisterProvider('fake-broken');
+    }
   });
 
   it('returns cancelled when user aborts selection prompt', async () => {

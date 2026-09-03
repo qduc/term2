@@ -38,8 +38,8 @@ request body keys and the reasoning settings:
 {effort: high, context: all_turns}
 ```
 
-Raw sidecars are outside the repository and do not include payload excerpts.
-This note likewise does not reproduce credentials, full prompts, tool
+Raw sidecars remain outside the repository. This committed note does not
+reproduce payload excerpts; it still excludes credentials, full prompts, tool
 arguments, or raw IDs beyond the truncated lineage prefix above.
 
 ## Interpretation and limitations

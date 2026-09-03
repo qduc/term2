@@ -6,6 +6,7 @@ import type { SubagentResult, SubagentRunHandle, SubagentRunStatus } from './ser
 import os from 'os';
 import { BackgroundShellRegistry } from './services/shell/background-shell-registry.js';
 import { SessionBrowser } from './services/conversation/session-browser.js';
+import { builtinProfileRegistry, type ProfileDefinition } from './services/profiles/index.js';
 
 // search-via-shell probes `rg` availability with spawnSync while assembling
 // the prompt. Tests below pin that probe instead of inheriting whichever
@@ -317,6 +318,43 @@ it('gates mentor and subagent tools on resolved capabilities while retaining ask
   expect(lite).toContain('ask_user');
   expect(lite).not.toEqual(expect.arrayContaining(delegatedTools));
   expect(standard.filter((name) => !delegatedTools.includes(name)).sort()).toEqual([...lite].sort());
+});
+
+it('exposes only the tool groups selected by the resolved Profile', () => {
+  const profileId = 'builtin:agent-tools-test';
+  const profile: ProfileDefinition = {
+    schemaVersion: 1,
+    id: 'agent-tools-test',
+    version: '1.0.0',
+    name: 'Agent tools test',
+    blocks: { tools: { kind: 'tools', include: ['shell'] } },
+  };
+  const profiles = builtinProfileRegistry.profiles as Map<string, ProfileDefinition>;
+  const previous = profiles.get(profileId);
+  profiles.set(profileId, profile);
+
+  try {
+    const names = getToolNames(
+      {
+        'agent.model': 'gpt-4o',
+        'app.activeProfileId': profileId,
+        enable_agent_workflow: true,
+      },
+      {
+        askMentor: async () => 'mentor',
+        getAskUserAnswer: () => 'answer',
+        agentRuntime: { agent: () => ({}) },
+        backgroundShellRegistry: new BackgroundShellRegistry<any>(),
+        sessionBrowser: new SessionBrowser(() => ({ projectPath: '/project' })),
+        ...orchestratorSubagentDeps,
+      },
+    );
+
+    expect(names).toEqual(['shell']);
+  } finally {
+    if (previous) profiles.set(profileId, previous);
+    else profiles.delete(profileId);
+  }
 });
 
 it('uses the patch editing surface for gpt-5 in standard and lite modes', () => {

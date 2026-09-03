@@ -83,8 +83,8 @@ export function planProfileTransition(
   const current = resolveActiveProfile(settingsService, options);
   const target = resolveProfile(targetId, options);
   const transitionClass = classifyProfileTransition(current, target);
-  const exitNotice = transitionClass === 'noop' ? null : profileExitNotice(current.identity.id);
-  const enterNotice = transitionClass === 'noop' ? null : profileEnterNotice(target.identity.id);
+  const exitNotice = transitionClass === 'noop' ? null : profileExitNotice(current);
+  const enterNotice = transitionClass === 'noop' ? null : profileEnterNotice(target);
 
   return {
     targetId: target.identity.id,

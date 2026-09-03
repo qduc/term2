@@ -136,6 +136,106 @@ it('plans the profile transition before the settings transaction commits it', ()
   expect(settingsService.set).not.toHaveBeenCalled();
 });
 
+it('rebuilds the agent when a tool capability toggle changes at runtime', () => {
+  const { service, setModel } = makeService();
+
+  service.apply([{ key: 'tools.shell.enabled', value: false, persistence: 'runtime' }]);
+
+  expect(setModel).toHaveBeenCalledWith('current-model');
+});
+
+it('does not rebuild the agent for restart-persisted tool capability toggles', () => {
+  const { service, setModel, settingsService } = makeService();
+
+  service.apply([{ key: 'tools.shell.enabled', value: false, persistence: 'restart' }]);
+
+  expect(settingsService.setPersistentDynamic).toHaveBeenCalledWith('tools.shell.enabled', false);
+  expect(setModel).not.toHaveBeenCalled();
+});
+
+it('warns when a disabled tool toggle conflicts with the active built-in profile', () => {
+  const { service, conversationService } = makeService({
+    get: vi.fn((key: string) =>
+      key === 'app.activeProfileId' ? 'builtin:lite' : key === 'agent.model' ? 'current-model' : false,
+    ),
+    getDynamic: vi.fn((key: string) => (key === 'tools.shell.enabled' ? true : false)),
+  });
+
+  service.apply([{ key: 'tools.shell.enabled', value: false, persistence: 'runtime' }]);
+
+  expect(conversationService.queueModeNotice).toHaveBeenCalledTimes(1);
+  const notice = conversationService.queueModeNotice.mock.calls[0][0] as string;
+  expect(notice).toContain('tools.shell.enabled');
+  expect(notice).toContain('Lite');
+});
+
+it('composes every conflicting toggle from one batch into a single notice', () => {
+  const { service, conversationService } = makeService({
+    get: vi.fn((key: string) =>
+      key === 'app.activeProfileId' ? 'builtin:lite' : key === 'agent.model' ? 'current-model' : false,
+    ),
+    getDynamic: vi.fn((key: string) => key === 'tools.shell.enabled' || key === 'tools.web.enabled'),
+  });
+
+  service.apply([
+    { key: 'tools.shell.enabled', value: false, persistence: 'runtime' },
+    { key: 'tools.web.enabled', value: false, persistence: 'runtime' },
+  ]);
+
+  expect(conversationService.queueModeNotice).toHaveBeenCalledTimes(1);
+  const notice = conversationService.queueModeNotice.mock.calls[0][0] as string;
+  expect(notice).toContain('tools.shell.enabled');
+  expect(notice).toContain('tools.web.enabled');
+});
+
+it('does not warn when a toggle is enabled or was already disabled', () => {
+  const { service, conversationService } = makeService({
+    get: vi.fn((key: string) =>
+      key === 'app.activeProfileId' ? 'builtin:lite' : key === 'agent.model' ? 'current-model' : false,
+    ),
+    // tools.shell.enabled reads false before the change: disabling it again is
+    // not news, and enabling it never conflicts.
+    getDynamic: vi.fn(() => false),
+  });
+
+  service.apply([
+    { key: 'tools.shell.enabled', value: false, persistence: 'runtime' },
+    { key: 'tools.web.enabled', value: true, persistence: 'runtime' },
+  ]);
+
+  expect(conversationService.queueModeNotice).not.toHaveBeenCalled();
+});
+
+it('warns on a capability toggle applied alongside a workflow-profile switch (both notices queue)', () => {
+  // standard→plan carries an enter notice; standard→lite would queue no
+  // transition notice at all (lite has no workflow text), so plan exercises
+  // both notice producers in one batch.
+  let activeProfileId = 'builtin:standard';
+  const { service, conversationService } = makeService({
+    get: vi.fn((key: string) =>
+      key === 'app.activeProfileId' ? activeProfileId : key === 'agent.model' ? 'current-model' : false,
+    ),
+    setDynamicTransaction: vi.fn((changes: readonly { key: string; value: unknown }[]) => {
+      for (const change of changes) {
+        if (change.key === 'app.activeProfileId') activeProfileId = String(change.value);
+      }
+    }),
+    getDynamic: vi.fn((key: string) => (key === 'tools.fileWrite.enabled' ? true : false)),
+  });
+
+  service.apply([
+    { key: 'app.activeProfileId', value: 'builtin:plan', persistence: 'runtime' },
+    { key: 'tools.fileWrite.enabled', value: false, persistence: 'runtime' },
+  ]);
+
+  // The profile transition queues its own notice; the toggle warning must be a
+  // separate composed call, not a replacement for the transition notice.
+  expect(conversationService.queueModeNotice).toHaveBeenCalledTimes(2);
+  const queued = conversationService.queueModeNotice.mock.calls.map((call) => call[0] as string);
+  expect(queued.some((text) => text.includes('tools.fileWrite.enabled'))).toBe(true);
+  expect(queued.some((text) => text !== queued.find((t) => t.includes('tools.fileWrite.enabled')))).toBe(true);
+});
+
 it('maps legacy mode changes in transaction order', () => {
   let activeProfileId = 'builtin:standard';
   const { service, settingsService } = makeService({

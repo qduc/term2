@@ -6,6 +6,20 @@
 export const CONTRACT_04_CONSUMER_INVENTORY = {
   'Workflow admission — next workflow invocation': ['enable_agent_workflow'],
   'Root model selection and request construction — live-effect router or next request': [
+    // Tool capability toggles rebuild the agent through the live-effect router
+    // (like a model change), masking one capability group on the next request.
+    'tools.shell.enabled',
+    'tools.web.enabled',
+    'tools.fileRead.enabled',
+    'tools.fileWrite.enabled',
+    'tools.memory.enabled',
+    'tools.sessions.enabled',
+    'tools.skills.enabled',
+    'tools.mentor.enabled',
+    'tools.subagents.enabled',
+    'tools.backgroundTasks.enabled',
+    'tools.userInteraction.enabled',
+    'tools.codeContext.enabled',
     'agent.model',
     'agent.efficientModel',
     'agent.capableModel',

@@ -11,6 +11,11 @@ const settings = {
       'agent.retryAttempts': 0,
     }[key];
   },
+  // ISettingsService.getDynamic is read unconditionally by the tool-capability
+  // mask in getAgentDefinition.
+  getDynamic(key: string): unknown {
+    return this.get(key);
+  },
 } as any;
 
 const logger = {

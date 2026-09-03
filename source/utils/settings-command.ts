@@ -286,6 +286,66 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
       source: settings.subagent.asyncMessageCap.source,
     },
     {
+      key: SETTING_KEYS.TOOLS_SHELL_ENABLED,
+      value: settings.tools.shell.enabled.value,
+      source: settings.tools.shell.enabled.source,
+    },
+    {
+      key: SETTING_KEYS.TOOLS_WEB_ENABLED,
+      value: settings.tools.web.enabled.value,
+      source: settings.tools.web.enabled.source,
+    },
+    {
+      key: SETTING_KEYS.TOOLS_FILE_READ_ENABLED,
+      value: settings.tools.fileRead.enabled.value,
+      source: settings.tools.fileRead.enabled.source,
+    },
+    {
+      key: SETTING_KEYS.TOOLS_FILE_WRITE_ENABLED,
+      value: settings.tools.fileWrite.enabled.value,
+      source: settings.tools.fileWrite.enabled.source,
+    },
+    {
+      key: SETTING_KEYS.TOOLS_MEMORY_ENABLED,
+      value: settings.tools.memory.enabled.value,
+      source: settings.tools.memory.enabled.source,
+    },
+    {
+      key: SETTING_KEYS.TOOLS_SESSIONS_ENABLED,
+      value: settings.tools.sessions.enabled.value,
+      source: settings.tools.sessions.enabled.source,
+    },
+    {
+      key: SETTING_KEYS.TOOLS_SKILLS_ENABLED,
+      value: settings.tools.skills.enabled.value,
+      source: settings.tools.skills.enabled.source,
+    },
+    {
+      key: SETTING_KEYS.TOOLS_MENTOR_ENABLED,
+      value: settings.tools.mentor.enabled.value,
+      source: settings.tools.mentor.enabled.source,
+    },
+    {
+      key: SETTING_KEYS.TOOLS_SUBAGENTS_ENABLED,
+      value: settings.tools.subagents.enabled.value,
+      source: settings.tools.subagents.enabled.source,
+    },
+    {
+      key: SETTING_KEYS.TOOLS_BACKGROUND_TASKS_ENABLED,
+      value: settings.tools.backgroundTasks.enabled.value,
+      source: settings.tools.backgroundTasks.enabled.source,
+    },
+    {
+      key: SETTING_KEYS.TOOLS_USER_INTERACTION_ENABLED,
+      value: settings.tools.userInteraction.enabled.value,
+      source: settings.tools.userInteraction.enabled.source,
+    },
+    {
+      key: SETTING_KEYS.TOOLS_CODE_CONTEXT_ENABLED,
+      value: settings.tools.codeContext.enabled.value,
+      source: settings.tools.codeContext.enabled.source,
+    },
+    {
       key: SETTING_KEYS.MEMORY_ENABLED,
       value: settings.memory.enabled.value,
       source: settings.memory.enabled.source,

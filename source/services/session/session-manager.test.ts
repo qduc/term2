@@ -77,3 +77,37 @@ it('rewindToTarget leaves lifecycle and logs untouched when the target is stale 
   expect(afterUndo).not.toHaveBeenCalled();
   expect(log).not.toHaveBeenCalled();
 });
+
+it('queueModeNotice composes with a pending notice instead of overwriting it', () => {
+  const state = { pendingModeNotice: 'first notice' as string | null };
+  const manager = new SessionManager({
+    conversationStore: {},
+    toolTracker: {},
+    state,
+    conversationLogger: {},
+    agentClient: {},
+    inputPlanner: {},
+  } as any);
+
+  manager.queueModeNotice('second notice');
+
+  // A profile switch followed by a tool-toggle warning (or several toggles)
+  // must all surface on the next turn, not just the last writer.
+  expect(state.pendingModeNotice).toBe('first notice\n\nsecond notice');
+});
+
+it('queueModeNotice sets the slot directly when nothing is pending', () => {
+  const state = { pendingModeNotice: null as string | null };
+  const manager = new SessionManager({
+    conversationStore: {},
+    toolTracker: {},
+    state,
+    conversationLogger: {},
+    agentClient: {},
+    inputPlanner: {},
+  } as any);
+
+  manager.queueModeNotice('only notice');
+
+  expect(state.pendingModeNotice).toBe('only notice');
+});

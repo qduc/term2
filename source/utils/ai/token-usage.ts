@@ -14,6 +14,13 @@ export interface NormalizedUsage {
   tokens_per_second?: number;
   /** True when tokens_per_second is a hedge (hidden tokens likely in the numerator). */
   tokens_per_second_estimated?: boolean;
+  /**
+   * Fraction of the turn wall-clock the decode window covered, set only when
+   * the settled rate exceeded MAX_PLAUSIBLE_DECODE_TPS (burst-inflated).
+   * Shown as `, N% of turn` next to the rate; `shown × coverage ≈ effective
+   * turn throughput`. Carried like tokens_per_second (latest wins, never summed).
+   */
+  tokens_per_second_coverage?: number;
   ttft_ms?: number;
   upstream_provider?: string;
 }
@@ -79,7 +86,7 @@ export function normalizeUsage(usage: any): NormalizedUsage | undefined {
     usage.completion_token_count,
     usage.candidatesTokenCount,
     usage.outputTokenCount,
-    usage.outputTokens,
+    usage.outputTokens?.total ?? usage.outputTokens,
     usage.predicted_n,
   );
 
@@ -120,6 +127,9 @@ export function normalizeUsage(usage: any): NormalizedUsage | undefined {
     usage.reasoning_token_count,
     usage?.completion_tokens_details?.reasoning_tokens,
     usage?.output_tokens_details?.reasoning_tokens,
+    usage?.outputTokensDetails?.reasoning_tokens,
+    usage?.outputTokensDetails?.reasoningTokens,
+    usage?.outputTokens?.reasoning,
     usage.thoughtsTokenCount,
     usage.thoughts_token_count,
     usage.reasoningTokens,
@@ -401,6 +411,8 @@ export function addTokenUsage(
     result.tokens_per_second = next.tokens_per_second;
     if (next.tokens_per_second_estimated) result.tokens_per_second_estimated = true;
     else delete result.tokens_per_second_estimated;
+    if (next.tokens_per_second_coverage != null) result.tokens_per_second_coverage = next.tokens_per_second_coverage;
+    else delete result.tokens_per_second_coverage;
   }
   if (next.ttft_ms != null) result.ttft_ms = next.ttft_ms;
   if (next.upstream_provider != null) result.upstream_provider = next.upstream_provider;

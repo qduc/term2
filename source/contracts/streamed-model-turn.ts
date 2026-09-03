@@ -261,4 +261,6 @@ export interface StreamedModelUsage {
   readonly outputTokens?: number;
   readonly cachedInputTokens?: number;
   readonly cacheWriteTokens?: number;
+  /** Hidden reasoning tokens billed inside outputTokens (OpenRouter completion_tokens_details, Responses output_tokens_details). */
+  readonly reasoningTokens?: number;
 }

@@ -29,6 +29,17 @@ function attachSettledSpeed(usage: NormalizedUsage, tracker: StreamingSpeedTrack
     usage.tokens_per_second = settled.tps;
     if (settled.approximate) usage.tokens_per_second_estimated = true;
     else delete usage.tokens_per_second_estimated;
+    // Burst-inflated decode rate: pair it with its coverage fraction (decode
+    // window ÷ turn wall-clock). Wall-clock is TTFT + decode window, both
+    // measured from request start by the same tracker clock. Without TTFT
+    // there is no wall to cover, so the window is dropped rather than shown
+    // against nothing.
+    const ttftMs = tracker.getTtftMs();
+    if (settled.decodeWindowMs != null && ttftMs != null && ttftMs > 0) {
+      usage.tokens_per_second_coverage = settled.decodeWindowMs / (ttftMs + settled.decodeWindowMs);
+    } else {
+      delete usage.tokens_per_second_coverage;
+    }
   }
   const ttftMs = tracker.getTtftMs();
   if (ttftMs != null) {

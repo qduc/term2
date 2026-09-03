@@ -274,6 +274,8 @@ function normalizeChatUsage(usage: any): StreamedModelUsage {
   const inputTokens = usage?.prompt_tokens ?? usage?.input_tokens ?? usage?.inputTokens;
   const outputTokens = usage?.completion_tokens ?? usage?.output_tokens ?? usage?.outputTokens;
   const details = usage?.prompt_tokens_details ?? usage?.input_tokens_details ?? usage?.inputTokensDetails;
+  const completionDetails =
+    usage?.completion_tokens_details ?? usage?.output_tokens_details ?? usage?.outputTokensDetails;
   const cachedInputTokens =
     usage?.cached_tokens ?? usage?.cachedTokens ?? details?.cached_tokens ?? details?.cachedTokens;
   const cacheWriteTokens =
@@ -283,11 +285,17 @@ function normalizeChatUsage(usage: any): StreamedModelUsage {
     usage?.cache_creation_tokens ??
     details?.cache_write_tokens ??
     details?.cacheWriteTokens;
+  const reasoningTokens =
+    usage?.reasoning_tokens ??
+    usage?.reasoningTokens ??
+    completionDetails?.reasoning_tokens ??
+    completionDetails?.reasoningTokens;
   return {
     ...(inputTokens !== undefined ? { inputTokens } : {}),
     ...(outputTokens !== undefined ? { outputTokens } : {}),
     ...(cachedInputTokens !== undefined ? { cachedInputTokens } : {}),
     ...(cacheWriteTokens !== undefined ? { cacheWriteTokens } : {}),
+    ...(reasoningTokens !== undefined ? { reasoningTokens } : {}),
   };
 }
 

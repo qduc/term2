@@ -45,6 +45,20 @@ function formatStatusBarTokens(tokens: number): string {
   return tokens > 1_000 ? `${(tokens / 1_000).toFixed(1)}k` : tokens.toLocaleString();
 }
 
+/**
+ * Coverage annotation for a burst-inflated decode rate: `, 12% of turn`.
+ * Present only when the settled rate exceeded MAX_PLAUSIBLE_DECODE_TPS and
+ * the decode window covered part of the turn wall-clock. Lets a reader
+ * reconstruct the effective rate: `shown × coverage ≈ turn throughput`.
+ * Compact by design: the footer is narrow and this must not wrap or push
+ * other segments out.
+ */
+function formatDecodeCoverage(lastUsage: NormalizedUsage | undefined): string {
+  const coverage = lastUsage?.tokens_per_second_coverage;
+  if (coverage == null || !Number.isFinite(coverage) || coverage <= 0 || coverage >= 1) return '';
+  return `, ${Math.round(coverage * 100)}% of turn`;
+}
+
 // terminalTextWidth counts every codepoint above U+007F as 2 columns, which is
 // the right conservative default for CJK/emoji text but wildly overcounts the
 // narrow box-drawing and arrow glyphs this bar is built from (│ ↑ ↓ · ▲ ❯ …).
@@ -323,7 +337,7 @@ const StatusBar: FC<StatusBarProps> = ({
     const speed = lastUsage.tokens_per_second ?? liveStreamingSpeed?.tps;
     if (speed != null && speed > 0) {
       const approximate = lastUsage.tokens_per_second != null && Boolean(lastUsage.tokens_per_second_estimated);
-      completionPiece += ` (${formatTokensPerSecond(speed, approximate)})`;
+      completionPiece += ` (${formatTokensPerSecond(speed, approximate)}${formatDecodeCoverage(lastUsage)})`;
     }
     tokenPieces.push(completionPiece);
   } else if (liveStreamingSpeed?.tps != null && liveStreamingSpeed.tps > 0) {

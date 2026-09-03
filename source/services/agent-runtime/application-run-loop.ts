@@ -1942,6 +1942,11 @@ function normalizeModelUsage(usage: unknown) {
     ...rawUsage,
     cacheReadTokens: rawUsage.cachedInputTokens ?? rawUsage.cacheReadTokens,
     cacheCreationTokens: rawUsage.cacheWriteTokens ?? rawUsage.cacheCreationTokens,
+    // AI SDK v3 `outputTokens.reasoning` (incl. OpenRouter) has no
+    // snake_case twin in `normalizeUsage`; forward it explicitly so hidden
+    // reasoning is subtracted from settled tok/s.
+    reasoningTokens:
+      (rawUsage as { outputTokens?: { reasoning?: unknown } }).outputTokens?.reasoning ?? rawUsage.reasoningTokens,
   });
 }
 

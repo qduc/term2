@@ -578,11 +578,16 @@ function toCodexUsage(rawUsage: any): Extract<StreamedModelTurnEvent, { type: 'c
   const cachedInputTokens = rawUsage.input_tokens_details?.cached_tokens ?? rawUsage.inputTokensDetails?.cachedTokens;
   const cacheWriteTokens =
     rawUsage.input_tokens_details?.cache_write_tokens ?? rawUsage.inputTokensDetails?.cacheWriteTokens;
+  const reasoningTokens =
+    rawUsage.output_tokens_details?.reasoning_tokens ??
+    rawUsage.outputTokensDetails?.reasoningTokens ??
+    rawUsage.outputTokensDetails?.reasoning_tokens;
   return {
     ...(inputTokens !== undefined ? { inputTokens } : {}),
     ...(outputTokens !== undefined ? { outputTokens } : {}),
     ...(cachedInputTokens !== undefined ? { cachedInputTokens } : {}),
     ...(cacheWriteTokens !== undefined ? { cacheWriteTokens } : {}),
+    ...(reasoningTokens !== undefined ? { reasoningTokens } : {}),
   };
 }
 

@@ -163,11 +163,26 @@ const APPLY_PATCH_DESCRIPTION =
   '*** Delete File: <path>  — delete a file\n' +
   '*** End Patch\n' +
   '```\n\n' +
-  '## Line rules (inside Add/Update sections):\n' +
+  '## Rules:\n' +
   '1. Every line starts with exactly one of: space (unchanged context), + (added), - (removed)\n' +
-  '2. Context lines start with a SPACE character; match the file indentation exactly\n' +
-  '3. Use @@ markers (e.g. @@ function calculate) to anchor where the change applies\n' +
-  '4. Include 2-3 context lines before and after each change\n\n' +
+  '2. Prefix every new line with + — including when creating a new file, where EVERY line is a + line\n' +
+  '3. Use paths relative to the workspace root, never absolute paths\n' +
+  '4. Context lines start with a SPACE character; match the file indentation exactly\n' +
+  '5. Use @@ markers (e.g. @@ function calculate) to anchor where the change applies\n' +
+  '6. Include 2-3 context lines before and after each change\n\n' +
+  '## Grammar:\n' +
+  '```\n' +
+  'Patch := Begin { FileOp } End\n' +
+  'Begin := "*** Begin Patch" NEWLINE\n' +
+  'End := "*** End Patch" NEWLINE\n' +
+  'FileOp := AddFile | DeleteFile | UpdateFile\n' +
+  'AddFile := "*** Add File: " path NEWLINE { "+" line NEWLINE }\n' +
+  'DeleteFile := "*** Delete File: " path NEWLINE\n' +
+  'UpdateFile := "*** Update File: " path NEWLINE [ MoveTo ] { Hunk }\n' +
+  'MoveTo := "*** Move to: " newPath NEWLINE\n' +
+  'Hunk := "@@" [ header ] NEWLINE { HunkLine }\n' +
+  'HunkLine := (" " | "-" | "+") text NEWLINE\n' +
+  '```\n\n' +
   '## Examples:\n' +
   'Create:\n' +
   '```\n' +
@@ -188,7 +203,20 @@ const APPLY_PATCH_DESCRIPTION =
   ' }\n' +
   '*** End Patch\n' +
   '```\n\n' +
-  'Multiple files: add one section per file between the same Begin/End markers.\n' +
+  'Combined (add + update-with-move + delete between one Begin/End pair):\n' +
+  '```\n' +
+  '*** Begin Patch\n' +
+  '*** Add File: hello.txt\n' +
+  '+Hello world\n' +
+  '*** Update File: src/app.py\n' +
+  '*** Move to: src/main.py\n' +
+  '@@ def greet():\n' +
+  '-print("Hi")\n' +
+  '+print("Hello, world!")\n' +
+  '*** Delete File: obsolete.txt\n' +
+  '*** End Patch\n' +
+  '```\n\n' +
+  'On failure, earlier operations in the same patch may already be applied — check the per-operation result lines and re-read files before retrying.\n' +
   'Put the whole script in the single patch argument.\n' +
   'Returns a plain-text summary with one line per operation: Created <path>, Updated <path>, or Error: <reason>.';
 

@@ -99,6 +99,24 @@ be whole-prefix fresh, and these are not.
 - Neither mechanism made the model detectably dumber; the saving is real in
   both cases, and rollover's is nearly free.
 
+## Addendum 2026-09-04: Luna native compaction now can fire — verdict unchanged, untested
+
+The `reasoning.context` fix (main `7b64704c`) repaired a path that 400'd on
+every attempt, so no production session has ever run with working Luna native
+compaction. Success-path merge tests landed (`6d947f2f`: well-formed merge,
+empty-history refusal, transport-failure preservation — plus pre-existing
+round-trip coverage in `codex-turn-converter`/`conversation-state-projector`
+tests). What the fix changes about this doc: nothing measurable yet. Native
+compaction, if it works server-side, replaces a ~$0.018 same-model
+summarizer call with a server-side operation of unknown price and unknown
+fidelity — the per-success cost row above is for *local* compaction and
+still stands. Whether native compactions preserve task-relevant detail as
+well as the 10x-cut rollover briefs cannot be known until a Luna session
+runs with both live; watch the first native `context_compaction_completed`
+for a `codex` provider and compare the post-compaction request trajectory
+against the R1–R4 rollover rows. Rollover-positive verdict stands; native
+compaction is an unpriced, untested alternative until that session exists.
+
 Evidence commands (traffic dirs `provider-traffic/2026-09-02/<dir>/`):
 
 ```bash

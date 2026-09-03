@@ -322,6 +322,10 @@ export const getAgentDefinition = (
   }
   const liteMode = isLiteProfile(profile);
   const capabilities = profile.tools.capabilities;
+  const hasCapability = (capability: string): boolean => capabilities.has(capability);
+  const filesystemReadEnabled = hasCapability('filesystem-read-workspace') || hasCapability('filesystem-read-external');
+  const filesystemWriteEnabled = hasCapability('filesystem-write');
+  const backgroundTasksEnabled = hasCapability('background-tasks');
   const isContextSourceEnabled = (source: string): boolean =>
     profile.context.sources.some((item) => item.source === source && item.enabled);
   const environmentEnabled = isContextSourceEnabled('environment');
@@ -336,16 +340,16 @@ export const getAgentDefinition = (
     model: resolvedModel,
     profile,
     searchViaShell,
-    codeContextEnabled,
-    runSubagentEnabled: Boolean(runSubagent) || asyncSubagentEnabled,
-    runSubagentForegroundEnabled,
-    runSubagentAsyncEnabled: asyncSubagentEnabled,
-    asyncSubagentControlsEnabled: asyncSubagentEnabled,
-    backgroundShellEnabled: allowBackgroundShell && Boolean(backgroundShellRegistry),
+    codeContextEnabled: codeContextEnabled && hasCapability('code-context'),
+    runSubagentEnabled: hasCapability('subagents') && (Boolean(runSubagent) || asyncSubagentEnabled),
+    runSubagentForegroundEnabled: hasCapability('subagents') && runSubagentForegroundEnabled,
+    runSubagentAsyncEnabled: hasCapability('subagents') && asyncSubagentEnabled,
+    asyncSubagentControlsEnabled: hasCapability('subagents') && asyncSubagentEnabled,
+    backgroundShellEnabled: backgroundTasksEnabled && allowBackgroundShell && Boolean(backgroundShellRegistry),
     sandboxEnabled,
-    memoryEnabled: memoryContextEnabled && memoryCapability.access !== 'none',
+    memoryEnabled: hasCapability('memory') && memoryContextEnabled && memoryCapability.access !== 'none',
     memoryGuidance: memoryCapability.guidance,
-    sessionBrowserEnabled: sessionBrowserContextEnabled && Boolean(sessionBrowser),
+    sessionBrowserEnabled: hasCapability('sessions') && sessionBrowserContextEnabled && Boolean(sessionBrowser),
     executionContext,
   });
   let prompt = promptSpec.basePromptContent ?? resolvePrompt(path.join(BASE_PROMPT_PATH, promptSpec.basePromptFile!));
@@ -377,15 +381,16 @@ export const getAgentDefinition = (
   const agentsInstructions = skipAgentsMd ? '' : getAgentsInstructions(cwd);
 
   let skillsInstructions = '';
-  if (skillsCatalogEnabled && skillsService) {
+  if (hasCapability('skills') && skillsCatalogEnabled && skillsService) {
     const catalog = skillsService.getSkillCatalog();
     if (catalog) {
       skillsInstructions = `\n\n${catalog}`;
     }
   }
 
-  const rootBackgroundShellRegistry = allowBackgroundShell ? backgroundShellRegistry : undefined;
-  const rootBackgroundShellOutput = allowBackgroundShell ? backgroundShellOutput : undefined;
+  const rootBackgroundShellRegistry =
+    backgroundTasksEnabled && allowBackgroundShell ? backgroundShellRegistry : undefined;
+  const rootBackgroundShellOutput = backgroundTasksEnabled && allowBackgroundShell ? backgroundShellOutput : undefined;
   const shellTool = createShellToolDefinition({
     settingsService,
     loggingService,
@@ -398,19 +403,26 @@ export const getAgentDefinition = (
     configureCheckIn: setTaskCheckInPolicy,
     shellChildRegistry,
   });
-  const tools: AnyToolDefinition[] = [
-    shellTool,
-    createWebSearchToolDefinition({
-      settingsService,
-      loggingService,
-    }),
-    createWebFetchToolDefinition({
-      settingsService,
-      loggingService,
-    }),
-  ];
+  const tools: AnyToolDefinition[] = [];
+  if (hasCapability('shell')) tools.push(shellTool);
+  if (hasCapability('web')) {
+    tools.push(
+      createWebSearchToolDefinition({
+        settingsService,
+        loggingService,
+      }),
+      createWebFetchToolDefinition({
+        settingsService,
+        loggingService,
+      }),
+    );
+  }
 
-  if (configureTaskCheckIn && (rootBackgroundShellRegistry || asyncSubagentEnabled)) {
+  if (
+    backgroundTasksEnabled &&
+    configureTaskCheckIn &&
+    (rootBackgroundShellRegistry || (hasCapability('subagents') && asyncSubagentEnabled))
+  ) {
     tools.push(createConfigureTaskCheckInToolDefinition(configureTaskCheckIn));
   }
 
@@ -426,7 +438,7 @@ export const getAgentDefinition = (
 
   // Worktree switching re-roots the local filesystem; in remote mode the remote
   // directory owns the execution root, so the tools have nothing to lease.
-  if (executionContext && !executionContext.isRemote()) {
+  if ((filesystemReadEnabled || filesystemWriteEnabled) && executionContext && !executionContext.isRemote()) {
     const worktreeTools = createWorktreeToolDefinitions({
       executionContext,
       getRunningJobs: () =>
@@ -437,15 +449,16 @@ export const getAgentDefinition = (
     tools.push(worktreeTools.enter, worktreeTools.exit);
   }
 
-  tools.push(...memoryCapability.tools);
-  if (sessionBrowser) tools.push(...createSessionBrowserToolDefinitions(sessionBrowser));
-  if (requestSessionRollover) tools.push(createSessionRolloverToolDefinition(requestSessionRollover));
+  if (hasCapability('memory')) tools.push(...memoryCapability.tools);
+  if (hasCapability('sessions') && sessionBrowser) tools.push(...createSessionBrowserToolDefinitions(sessionBrowser));
+  if (hasCapability('sessions') && requestSessionRollover)
+    tools.push(createSessionRolloverToolDefinition(requestSessionRollover));
 
-  if (skillsService && skillsService.getAvailableSkillsForModel().length > 0) {
+  if (hasCapability('skills') && skillsService && skillsService.getAvailableSkillsForModel().length > 0) {
     tools.push(createActivateSkillToolDefinition(skillsService));
   }
 
-  if (getAskUserAnswer && allowAskUser) {
+  if (hasCapability('user-interaction') && getAskUserAnswer && allowAskUser) {
     const askUserTool = createAskUserToolDefinition(getAskUserAnswer);
     if (askUserTool.name !== TOOL_NAME_ASK_USER) {
       throw new Error(`Unexpected ask_user tool name: ${askUserTool.name}`);
@@ -453,7 +466,7 @@ export const getAgentDefinition = (
     tools.push(askUserTool);
   }
 
-  if (codeContextEnabled) {
+  if (codeContextEnabled && hasCapability('code-context')) {
     tools.push(
       createReadCodeOutlineToolDefinition({ executionContext, settingsService }),
       createCodeContextSearchToolDefinition({ executionContext, globAvailable, settingsService }),
@@ -464,7 +477,7 @@ export const getAgentDefinition = (
     // Lite mode keeps lightweight context and delegation policy, but still allows file edits.
     // Keep workspace scope keyed to lite identity, not filesystem-read eligibility,
     // so capability resolution cannot widen standard mode's read scope.
-    if (!searchViaShell) {
+    if (filesystemReadEnabled && !searchViaShell) {
       tools.push(
         createGrepToolDefinition({ executionContext, globAvailable, allowOutsideWorkspace: true, settingsService }),
         createFindFilesToolDefinition({
@@ -474,47 +487,59 @@ export const getAgentDefinition = (
         }),
       );
     }
-    tools.push(
-      createReadFileToolDefinition({
-        executionContext,
-        allowOutsideWorkspace: true,
-        settingsService,
-      }),
-    );
-    if (isGpt5) {
-      tools.push(createApplyPatchToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }));
-    } else {
+    if (filesystemReadEnabled) {
       tools.push(
-        createCreateFileToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }),
-        createSearchReplaceToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }),
+        createReadFileToolDefinition({
+          executionContext,
+          allowOutsideWorkspace: true,
+          settingsService,
+        }),
       );
+    }
+    if (filesystemWriteEnabled) {
+      if (isGpt5) {
+        tools.push(
+          createApplyPatchToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }),
+        );
+      } else {
+        tools.push(
+          createCreateFileToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }),
+          createSearchReplaceToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }),
+        );
+      }
     }
   } else {
     // Full mode: all tools based on model
-    tools.push(createReadFileToolDefinition({ executionContext, sessionAccess, settingsService }));
-    if (isGpt5) {
-      tools.push(createApplyPatchToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }));
-    } else {
-      if (!searchViaShell) {
+    if (filesystemReadEnabled) {
+      tools.push(createReadFileToolDefinition({ executionContext, sessionAccess, settingsService }));
+    }
+    if (filesystemWriteEnabled) {
+      if (isGpt5) {
         tools.push(
-          createGrepToolDefinition({ executionContext, globAvailable, sessionAccess, settingsService }),
-          createFindFilesToolDefinition({ executionContext, sessionAccess, settingsService }),
+          createApplyPatchToolDefinition({ settingsService, loggingService, executionContext, sessionAccess }),
+        );
+      } else {
+        if (filesystemReadEnabled && !searchViaShell) {
+          tools.push(
+            createGrepToolDefinition({ executionContext, globAvailable, sessionAccess, settingsService }),
+            createFindFilesToolDefinition({ executionContext, sessionAccess, settingsService }),
+          );
+        }
+        tools.push(
+          createCreateFileToolDefinition({
+            settingsService,
+            loggingService,
+            executionContext,
+            sessionAccess,
+          }),
+          createSearchReplaceToolDefinition({
+            settingsService,
+            loggingService,
+            executionContext,
+            sessionAccess,
+          }),
         );
       }
-      tools.push(
-        createCreateFileToolDefinition({
-          settingsService,
-          loggingService,
-          executionContext,
-          sessionAccess,
-        }),
-        createSearchReplaceToolDefinition({
-          settingsService,
-          loggingService,
-          executionContext,
-          sessionAccess,
-        }),
-      );
     }
   }
 
@@ -555,7 +580,7 @@ export const getAgentDefinition = (
     tools.push(createSendMessageToolDefinition(sendSubagentMessage), createCancelRunToolDefinition(cancelSubagentRun));
   }
 
-  if (settingsService.get('enable_agent_workflow') && agentRuntime) {
+  if (hasCapability('subagents') && settingsService.get('enable_agent_workflow') && agentRuntime) {
     tools.push(
       createRunAgentWorkflowToolDefinition({
         runtime: agentRuntime,

@@ -1,6 +1,7 @@
 import { it, expect, beforeEach, afterEach } from 'vitest';
-import { execFileSync } from 'child_process';
+import { execFileSync, spawn, type SpawnOptions } from 'child_process';
 import fs from 'fs';
+import http from 'http';
 import { createRequire } from 'module';
 import os from 'os';
 import path from 'path';
@@ -49,7 +50,93 @@ function cliPath(): string {
   return compiledCliPath;
 }
 
+/**
+ * Spawn the CLI and collect its streams as a promise. Async on purpose: the
+ * mock provider server lives in this process, so a synchronous spawn would
+ * block the event loop the server needs to answer the child's /models request.
+ * stdin is always 'ignore' (immediate EOF): these invocations must never wait
+ * on interactive input.
+ */
+function spawnCli(
+  args: string[],
+  env: NodeJS.ProcessEnv,
+): Promise<{ status: number | null; stdout: string; stderr: string }> {
+  const child = spawn('node', args, { env, stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000 });
+  return new Promise((resolve, reject) => {
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
+    child.on('error', reject);
+    child.on('close', (status) => resolve({ status, stdout, stderr }));
+  });
+}
+
 let testDir = '';
+
+/**
+ * Minimal OpenAI-compatible provider double: `/models` serves a fixed list,
+ * chat completions get a one-frame SSE answer, and every chat request's
+ * `model` field is recorded so tests can assert which model id actually
+ * reached the wire.
+ */
+async function startModelMock(modelIds: string[]): Promise<{
+  baseUrl: string;
+  close: () => Promise<void>;
+  capturedModels: () => string[];
+}> {
+  const requestedModels: string[] = [];
+  const server = http.createServer((req, res) => {
+    if (req.method === 'GET' && req.url?.includes('/models')) {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ object: 'list', data: modelIds.map((id) => ({ id })) }));
+      return;
+    }
+    let body = '';
+    req.on('data', (chunk) => {
+      body += chunk;
+    });
+    req.on('end', () => {
+      try {
+        requestedModels.push(String(JSON.parse(body).model));
+      } catch {
+        // Non-chat POSTs are recorded as unknown and ignored.
+        requestedModels.push('<unparseable>');
+      }
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.end(
+        [
+          'data: {"id":"chatcmpl-mock","choices":[{"delta":{"role":"assistant","content":"ok"}}]}',
+          '',
+          'data: {"id":"chatcmpl-mock","choices":[{"delta":{},"finish_reason":"stop"}]}',
+          '',
+          'data: [DONE]',
+          '',
+        ].join('\n'),
+      );
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  const port = typeof address === 'object' && address ? address.port : 0;
+  return {
+    baseUrl: `http://127.0.0.1:${port}/v1`,
+    close: () => new Promise((resolve) => server.close(() => resolve())),
+    capturedModels: () => [...requestedModels],
+  };
+}
+
+function writeSettings(homeDir: string, settings: Record<string, unknown>): string {
+  const settingsDir = resolveSettingsDirectory({ homeDir });
+  fs.mkdirSync(settingsDir, { recursive: true });
+  const settingsFile = path.join(settingsDir, 'settings.json');
+  fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2), 'utf-8');
+  return settingsFile;
+}
 
 beforeEach(() => {
   testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-cli-test-'));
@@ -71,7 +158,9 @@ it('CLI --help documents the available command-line options', () => {
   });
 
   expect(help).toContain('$ term2 [options] [prompt...]');
-  expect(help).toContain('-m, --model <model>');
+  expect(help).toContain(
+    '-m, --model <model>                  Model pattern or ID, supports provider/id and optional :<thinking>',
+  );
   expect(help).toContain('-p, --provider <provider>');
   expect(help).toContain('-r, --reasoning <effort>');
   expect(help).toContain('-l, --lite');
@@ -332,4 +421,147 @@ it('CLI accepts a custom provider from settings.json in non-interactive mode', (
   // it should not fail the early provider validation path.
   expect(stderr.includes(`Error: Unknown provider "${providerName}".`)).toBe(false);
   expect(error).toBeTruthy();
+});
+
+it('CLI --model reports error and exits 1 when no models match pattern', () => {
+  const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+  let error: any;
+  let stderr = '';
+  try {
+    execFileSync('node', [cliPath(), '--model', 'nonexistent-xyz-pattern', 'hello'], {
+      env: createTestChildEnv({
+        HOME: tempHome,
+        TERM2_CONVERSATIONS_DIR: testDir,
+        DISABLE_LOGGING: '1',
+      }),
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } catch (err: any) {
+    error = err;
+    stderr = err.stderr?.toString?.() ?? '';
+  } finally {
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  }
+
+  expect(error).toBeTruthy();
+  expect(error.status).toBe(1);
+  expect(stderr).toContain('Error: No models match "nonexistent-xyz-pattern".');
+});
+
+it('CLI --model keeps settings.json session-only when resolution passes through an unreachable catalog', async () => {
+  // Regression: the resolution block used settings.set() without
+  // { persist: false }, so a one-off --model run rewrote the user's persisted
+  // agent.model (and provider). Passthrough (all catalogs fail to load) also
+  // reaches those set() calls, so an unreachable provider is enough to
+  // exercise the persistence boundary.
+  const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+  const settingsFile = writeSettings(tempHome, {
+    agent: { retryAttempts: 0, model: 'keep-session-model' },
+    providers: [
+      { name: 'mockprov', type: 'openai-compatible', baseUrl: 'http://127.0.0.1:65535/v1', apiKey: 'test-key' },
+    ],
+  });
+
+  try {
+    const childEnv = createTestChildEnv({
+      HOME: tempHome,
+      TERM2_CONVERSATIONS_DIR: testDir,
+      DISABLE_LOGGING: '1',
+    });
+    const { status, stderr } = await spawnCli([cliPath(), '--model', 'some-brand-new-model', 'hello'], childEnv);
+
+    // The chat turn itself fails against the unreachable provider, but the
+    // settings file must be byte-identical to what we wrote.
+    expect(status).not.toBe(0);
+    expect(stderr.toLowerCase()).toContain('econnrefused');
+    const persisted = fs.readFileSync(settingsFile, 'utf-8');
+    expect(persisted).toContain('keep-session-model');
+    expect(persisted).not.toContain('some-brand-new-model');
+  } finally {
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  }
+});
+
+it('CLI --json routes the ambiguous --model disambiguation prompt to stderr, keeping stdout machine-readable', async () => {
+  // Regression: the prompt defaulted to process.stdout, corrupting the NDJSON
+  // event channel whenever an ambiguous pattern needed disambiguation.
+  const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+  const mock = await startModelMock(['mock-alpha', 'mock-beta']);
+  writeSettings(tempHome, {
+    agent: { retryAttempts: 0, provider: 'mockprov' },
+    providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
+  });
+
+  try {
+    const childEnv = createTestChildEnv({
+      HOME: tempHome,
+      TERM2_CONVERSATIONS_DIR: testDir,
+      DISABLE_LOGGING: '1',
+    });
+    const { status, stdout, stderr } = await spawnCli([cliPath(), '--json', '--model', 'mock', 'hello'], childEnv);
+
+    // EOF on stdin cancels the selection.
+    expect(status).toBe(1);
+    expect(stderr).toContain('Multiple models match "mock"');
+    expect(stdout).not.toContain('Multiple models match');
+    expect(stdout).not.toContain('Select a model');
+    for (const line of stdout.split('\n')) {
+      if (line.trim().length > 0) expect(() => JSON.parse(line)).not.toThrow();
+    }
+  } finally {
+    await mock.close();
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  }
+});
+
+it('CLI --model vendor/id resolves the literal id on the serving provider, warns about failed catalogs, and persists nothing', async () => {
+  // Regression: a vendor prefix that collides with a built-in provider id
+  // (openai/...) used to narrow the catalog load to that provider, so a
+  // literal aggregator id was reported as no_match or silently switched and
+  // persisted the wrong provider/model.
+  const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+  const mock = await startModelMock(['openai/gpt-test', 'mock-alpha']);
+  const settingsFile = writeSettings(tempHome, {
+    agent: { retryAttempts: 0, model: 'original-default', provider: 'mockprov' },
+    providers: [
+      { name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' },
+      { name: 'brokenprov', type: 'openai-compatible', baseUrl: 'http://127.0.0.1:65535/v1', apiKey: 'test-key' },
+    ],
+  });
+
+  try {
+    const childEnv = createTestChildEnv({
+      HOME: tempHome,
+      TERM2_CONVERSATIONS_DIR: testDir,
+      DISABLE_LOGGING: '1',
+    });
+    const { status, stdout, stderr } = await spawnCli(
+      [cliPath(), '--json', '--model', 'openai/gpt-test', 'hello'],
+      childEnv,
+    );
+
+    // The turn completes against the mock.
+    expect(status).toBe(0);
+
+    // The literal as-typed id reached the wire on the provider that serves it.
+    expect(mock.capturedModels().length).toBeGreaterThan(0);
+    expect(mock.capturedModels()[0]).toBe('openai/gpt-test');
+
+    // The unreachable catalog is surfaced, not silently dropped.
+    expect(stderr).toContain('warning: brokenprov:');
+
+    // Session-only override: persisted defaults untouched.
+    const persisted = JSON.parse(fs.readFileSync(settingsFile, 'utf-8'));
+    expect(persisted.agent.model).toBe('original-default');
+    expect(persisted.agent.provider).toBe('mockprov');
+
+    // stdout stays machine-readable.
+    expect(stdout).not.toContain('Multiple models match');
+    for (const line of stdout.split('\n')) {
+      if (line.trim().length > 0) expect(() => JSON.parse(line)).not.toThrow();
+    }
+  } finally {
+    await mock.close();
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  }
 });

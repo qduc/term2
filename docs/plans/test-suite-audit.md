@@ -16,10 +16,17 @@ Status: Milestones 1-3 complete. Calibration wave ran 2026-09-02 and PASSED its
   (`01c4a0d3`); the graph
   now holds 602 tests / 694 contracts / 1224 decisions after B7 removed two
   whole-test-file records (app.startup-banner, the misnamed hook-named
-  approval-pending-filter) and one case record (red-yellow-policy paths); deferred
-  decisions
-  (suite-topology change, runtime-history location, mutation-testing
-  proportionality) gate parts of it.
+  approval-pending-filter) and one case record (red-yellow-policy paths). The
+  Topology batch landed 2026-09-04 as `audit-m4-topology` (code `f5dac241`;
+  docs and graph flips in the branch's second commit): cli.e2e retiered out of
+  the default vitest include into `test:e2e`,
+  and the three deferred decisions (suite-topology change, runtime-history
+  location, mutation-testing proportionality) were settled — runtime history is
+  recorded as checked-in aggregates (`docs/test-audit/baseline.md`), and the
+  mutation-testing recommendation (`docs/test-audit/mutation-testing-proportionality.md`)
+  awaits user approval. Two pool rewrite candidates were never assigned to a
+  batch and remain open (shell-command-safety, use-settings-completion; see
+  `docs/test-audit/m4-report.md`).
 ## Resume here
 
 Start future audit work from current `main` in a dedicated worktree. The original
@@ -197,10 +204,15 @@ graph primary decisions to keep/high with a note naming the batch and commit):
   mocked provider-service), gateway.test (split into its five seam files),
   persistence-recovery-matrix (dropped the dead no-work-rerun counter, retitled).
   **Landed in `audit-m4-b10` (`01c4a0d3`).**
-- **Topology (needs user decision, do not execute blind)**: cli.e2e retier out of
-  the default vitest include into test:e2e (requires config exclude + CI change);
-  docker-host-control.integration architecture_signal (report to owners, no test
-  change).
+- **Topology (decided 2026-09-04)**: cli.e2e retiered out of the default vitest
+  include into test:e2e — `vitest.config.ts` excludes `**/*.e2e.*` from the
+  default invocation, `vitest.e2e.config.ts` owns the e2e tier,
+  package.json routes `test:e2e` and `test:codex-network` through it, and
+  ci.yml runs a dedicated e2e job. Default suite: 7538 → 7521 (−17 relocated
+  to the e2e tier, not deleted). docker-host-control.integration
+  architecture_signal: reported to owners in `docs/test-audit/m4-report.md`;
+  no test change.
+  **Landed in `audit-m4-topology` (`f5dac241`).**
 
 Runtime baseline: `pnpm exec vitest run --reporter=json` from the worktree with no
 concurrent test processes (~50 s at d36c392a; see `docs/test-audit/baseline.md`).
@@ -278,9 +290,27 @@ assignment. Read that file before cutting a Milestone 3 assignment.
   usable at all.
 - Whether runtime history belongs in checked-in artifacts or CI. *(Open; gates
   nothing before M4 batch execution.)*
+  **Decided 2026-09-04: checked-in aggregates, ephemeral raw data.** The audit's
+  own runtime/result history (commit → default-suite count → runtime → env
+  caveats) is recorded in the repository (`docs/test-audit/baseline.md` and
+  `docs/test-audit/m4-report.md`) because the audit's evidence must be diffable
+  and survive; raw vitest JSON per run stays out of git per the baseline method,
+  and CI logs stay ephemeral. See `docs/test-audit/baseline.md`.
 - Whether mutation testing is proportional for disputed high-value contracts.
   *(Open; gates nothing before M4 batch execution.)*
+  **Recommendation written 2026-09-04** in
+  `docs/test-audit/mutation-testing-proportionality.md`: not proportional as a
+  standing gate; justified only for a small named set of critical-risk contracts.
+  No implementation; awaiting user approval.
 - Whether the default/CI suite topology should change. *(Open; gates the M4
   topology batch only — cli.e2e out of the default vitest include into
   `test:e2e`, which needs a config exclude plus a CI run of `test:e2e`. Ask the
   user before executing.)*
+  **Closed 2026-09-04**: executed as `audit-m4-topology` — e2e-tier files run
+  only through `test:e2e` under `vitest.e2e.config.ts`, CI runs the e2e job, and
+  the default suite no longer discovers `**/*.e2e.*` files.
+- Remaining M4 pool rewrite candidates (never assigned to B1-B10 or Topology):
+  `shell-command-safety` (relabel/table-drive; stale red/green vocabulary) and
+  `hooks-use-settings-completion-test` (three localized case repairs). Both stay
+  `rewrite_candidate/medium` with reasons preserved in the graph; recommend a
+  small follow-up batch or an explicit descope. See `docs/test-audit/m4-report.md`.

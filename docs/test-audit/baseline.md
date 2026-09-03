@@ -73,3 +73,38 @@ This run establishes suite topology and candidate areas for semantic inspection.
 does not establish that any listed test is redundant or low value. Repeat the
 measurement before claiming a cleanup changed runtime, preferably with the same
 build state and no competing test processes.
+
+## Runtime history (decided 2026-09-04)
+
+**Policy: checked-in aggregates, ephemeral raw data.** The audit's runtime/result
+history is recorded here as checked-in aggregates because it must be diffable and
+survive; raw vitest JSON per run stays out of the repository (Baseline method
+above), and CI logs stay ephemeral. Each row is one full default-suite
+measurement (`pnpm exec vitest run --reporter=json`, no concurrent test
+processes) at a known commit. Counts are comparable; wall-clock runtimes are
+only weakly comparable across hosts and load (see Interpretation boundary).
+
+| Commit (main) | Batch | Default-suite tests | Note |
+| --- | --- | ---: | --- |
+| `d36c392a` | M3 inventory | 5,809 (+1 skip) | original baseline, 2026-08-09, 49.9 s isolated |
+| pre-B1 `main` | M4 start | 7,558 | |
+| `06dafa96` | B1 hooks-real-code | 7,557 | −1 |
+| `876eb4b3` | B2 commands | 7,557 | 0 |
+| `3e8bfe13` | B3 util-fixes | 7,557 | 0 |
+| `9388adb0` | B4 conversation-utils | 7,543 | −14 |
+| `fe6aba76` | B5 runtime-lib | 7,543 | 0 |
+| `85f9943b` | B6 session-obs | 7,540 | −3 |
+| `8bf8d2ed` | B7 consolidations | 7,532 | −8 |
+| `edf840cd` | B8 shell-tools-misc | 7,537 | +5 (table-ified matrices) |
+| `5510ba8f` | B9 subagents | 7,535 | −2 |
+| `02031587` | B10 eval+stream+provider | 7,538 | +3 |
+| Topology | cli.e2e retier | 7,521 | −17 relocated to `test:e2e`, not deleted |
+
+All post-B6 rows carry the same 6 environment-class failures
+(`needsApproval` outside-workspace / symlink-escape cases in
+apply-patch/create-file/search-replace) and 2 skipped tests; B9-B10 full-suite
+runs measured ~166-168 s on the shared dev host. The e2e tier (17 tests:
+`cli.e2e.test.ts`, `scripts/build-output.e2e.test.ts`,
+`scripts/fake-codex-server.e2e.test.ts`) moved out of the default suite in the
+Topology batch and is covered by the CI e2e job (`pnpm test:e2e`,
+`vitest.e2e.config.ts`).

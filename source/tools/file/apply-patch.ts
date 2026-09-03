@@ -34,50 +34,32 @@ export class PatchValidationError extends Error {
   }
 }
 
-const applyPatchOperationSchema = z.object({
-  type: z.enum(['create_file', 'update_file', 'delete_file']).describe('Operation type.'),
-  path: z.string().min(1, 'File path cannot be empty').describe('The absolute or relative path to the file.'),
-  moveTo: z.string().min(1, 'Move destination cannot be empty').optional().describe('Optional destination for a move.'),
-  diff: z.string().describe('Headerless unified diff content for create/update operations.'),
+// Canonical-only schema: the patch envelope IS the argument. The legacy
+// {type,path,diff} / operations[] JSON shape is deleted, not deprecated —
+// keeping two accepted formats lets the model drift back into the shape
+// suspected of causing whitespace degeneration.
+const applyPatchParametersSchema = z.object({
+  patch: z
+    .string()
+    .min(1, 'Patch cannot be empty')
+    .describe('Complete patch script starting with *** Begin Patch and ending with *** End Patch.'),
 });
 
-const applyPatchParametersSchema = z
-  .object({
-    type: z.enum(['create_file', 'update_file', 'delete_file']).optional(),
-    path: z.string().min(1, 'File path cannot be empty').optional(),
-    moveTo: z.string().min(1, 'Move destination cannot be empty').optional(),
-    diff: z.string().describe('Unified diff content for create/update operations').optional(),
-    operations: z.array(applyPatchOperationSchema).min(1).optional(),
-  })
-  .superRefine((params, ctx) => {
-    const hasBatch = Array.isArray(params.operations);
-    const hasSingle = params.type !== undefined || params.path !== undefined || params.diff !== undefined;
-
-    if (hasBatch && hasSingle) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Provide either operations or a single type/path/diff operation, not both.',
-      });
-      return;
-    }
-
-    if (!hasBatch && (params.type === undefined || params.path === undefined || params.diff === undefined)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Provide operations or all single operation fields: type, path, and diff.',
-      });
-    }
-  });
-
-// Strict tool-schema providers cannot represent the legacy single-operation
-// form's mutual exclusion with `operations`. Advertise one unambiguous shape
-// while retaining the legacy parser for existing runtime callers.
+// Strict-schema providers receive the identical single-string shape.
 const applyPatchStrictParametersSchema = z.object({
-  operations: z.array(applyPatchOperationSchema).min(1),
+  patch: z
+    .string()
+    .min(1, 'Patch cannot be empty')
+    .describe('Complete patch script starting with *** Begin Patch and ending with *** End Patch.'),
 });
 
 export type ApplyPatchToolParams = z.infer<typeof applyPatchParametersSchema>;
-type ApplyPatchOperation = z.infer<typeof applyPatchOperationSchema>;
+type ApplyPatchOperation = {
+  type: 'create_file' | 'update_file' | 'delete_file';
+  path: string;
+  diff: string;
+  moveTo?: string;
+};
 type ApplyPatchOutput = {
   success: boolean;
   operation?: string;
@@ -87,18 +69,7 @@ type ApplyPatchOutput = {
 };
 
 function getApplyPatchOperations(params: ApplyPatchToolParams): ApplyPatchOperation[] {
-  const operations = params.operations ?? [
-    {
-      type: params.type!,
-      path: params.path!,
-      ...(params.moveTo ? { moveTo: params.moveTo } : {}),
-      diff: params.diff!,
-    },
-  ];
-  if (operations.length === 1 && operations[0].diff.trimStart().startsWith('*** Begin Patch')) {
-    return parseUpstreamApplyPatch(operations[0].diff).operations;
-  }
-  return operations;
+  return parseUpstreamApplyPatch(params.patch).operations;
 }
 
 export const formatApplyPatchCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
@@ -118,14 +89,10 @@ export const formatApplyPatchCommandMessage: FormatCommandMessage = (item, index
   const rawArguments =
     item?.arguments ?? item?.input ?? argsFromMap ?? rawItem?.arguments ?? rawItem?.input ?? rawItem?.operation;
   let normalizedArgs = normalizeToolArguments(rawArguments) ?? {};
-  if (
-    (!normalizedArgs ||
-      typeof normalizedArgs !== 'object' ||
-      Array.isArray(normalizedArgs) ||
-      Object.keys(normalizedArgs).length === 0) &&
-    typeof rawArguments === 'string' &&
-    rawArguments.trimStart().startsWith('*** Begin Patch')
-  ) {
+  // Canonical-only arguments: a raw envelope string parses to parsed
+  // operations; the legacy {type,path,diff} / operations[] object shape is
+  // no longer accepted, only displayed from inert history records.
+  if (typeof rawArguments === 'string' && rawArguments.trimStart().startsWith('*** Begin Patch')) {
     try {
       normalizedArgs = parseUpstreamApplyPatch(rawArguments);
     } catch {
@@ -186,49 +153,41 @@ export const formatApplyPatchCommandMessage: FormatCommandMessage = (item, index
 };
 
 const APPLY_PATCH_DESCRIPTION =
-  'Apply file changes using headerless V4A diff format. Supports creating, updating files.\n\n' +
-  '## CRITICAL RULES:\n' +
-  '1. Each line MUST start with exactly one character: space, +, or - (followed by the line content)\n' +
-  '2. Use @@ markers to provide context anchors when needed\n' +
-  '3. Context lines (unchanged) start with a SPACE character\n' +
-  '4. Added lines start with + character\n' +
-  '5. Removed lines start with - character\n' +
-  '6. DO NOT include line numbers or @@ -n,m +n,m @@ headers (headerless format)\n\n' +
-  '## CREATE_FILE:\n' +
-  'Every line must start with + (no context or - lines):\n' +
+  'Apply file changes with a patch script. Write the patch directly — no JSON escaping of the body.\n\n' +
   '```\n' +
+  '*** Begin Patch\n' +
+  '*** Add File: <path>     — create a file; every following line is a + line\n' +
+  '*** Update File: <path>  — edit a file (add *** Move to: <new-path> directly after to move)\n' +
+  '*** Delete File: <path>  — delete a file\n' +
+  '*** End Patch\n' +
+  '```\n\n' +
+  '## Line rules (inside Add/Update sections):\n' +
+  '1. Every line starts with exactly one of: space (unchanged context), + (added), - (removed)\n' +
+  '2. Context lines start with a SPACE character; match the file indentation exactly\n' +
+  '3. Use @@ markers (e.g. @@ function calculate) to anchor where the change applies\n' +
+  '4. Include 2-3 context lines before and after each change\n\n' +
+  '## Examples:\n' +
+  'Create:\n' +
+  '```\n' +
+  '*** Begin Patch\n' +
+  '*** Add File: notes.txt\n' +
   '+line 1\n' +
   '+line 2\n' +
-  '+line 3\n' +
-  '```\n\n' +
-  '## UPDATE_FILE:\n' +
-  'Provide context (space-prefixed lines) around changes. Include 2-3 lines of context before and after:\n' +
+  '*** End Patch\n' +
   '```\n' +
+  'Update:\n' +
+  '```\n' +
+  '*** Begin Patch\n' +
+  '*** Update File: calc.js\n' +
   '@@ function calculate\n' +
   ' function calculate(x) {\n' +
   '-  return x * 2;\n' +
   '+  return x * 3;\n' +
   ' }\n' +
+  '*** End Patch\n' +
   '```\n\n' +
-  '## Context Anchors:\n' +
-  'Use @@ markers to help locate code in the file:\n' +
-  '- For classes: @@ class ClassName\n' +
-  '- For functions: @@ function functionName\n' +
-  '- For unique lines: @@ distinctive text from the line\n' +
-  'Stack multiple @@ for nested structures:\n' +
-  '```\n' +
-  '@@ class MyClass\n' +
-  '@@ method doSomething\n' +
-  ' def doSomething(self):\n' +
-  '-    old code\n' +
-  '+    new code\n' +
-  '```\n\n' +
-  '## Common Mistakes to Avoid:\n' +
-  '- Missing space/+/- prefix on lines\n' +
-  '- Including line numbers like "@@ -1,3 +1,4 @@"\n' +
-  '- Not providing enough context (need 2-3 lines before/after)\n' +
-  '- Context lines not starting with space character\n' +
-  '- Using tabs instead of spaces for indentation matching\n\n' +
+  'Multiple files: add one section per file between the same Begin/End markers.\n' +
+  'Put the whole script in the single patch argument.\n' +
   'Returns a plain-text summary with one line per operation: Created <path>, Updated <path>, or Error: <reason>.';
 
 export function createApplyPatchToolDefinition(deps: {
@@ -642,7 +601,7 @@ export function createApplyPatchToolDefinition(deps: {
         const joined = output
           .map((item) =>
             item.success
-              ? item.message || `Updated ${item.path ?? params.path}`
+              ? item.message || `Updated ${item.path ?? 'unknown'}`
               : `Error: ${(item.error || 'unknown error').replace(/\n/g, ' ')}`,
           )
           .join('\n');
@@ -650,8 +609,8 @@ export function createApplyPatchToolDefinition(deps: {
       } catch (error: any) {
         if (enableFileLogging) {
           loggingService.error('File operation failed', {
-            type: params.type ?? 'batch',
-            path: params.path ?? 'multiple',
+            type: 'apply_patch',
+            path: 'multiple',
             error: error instanceof Error ? error.message : String(error),
           });
         }
@@ -708,7 +667,7 @@ export function diagnoseContextMismatch(contextText: string, original: string): 
   const originalLines = original.split(/\r?\n/);
 
   if (originalLines.length === 0 || (originalLines.length === 1 && originalLines[0] === '')) {
-    return 'The target file is empty. If you want to create a new file, use type: "create_file" or provide a diff that starts from an empty file.';
+    return 'The target file is empty. To create a new file, use a *** Add File: <path> *** section with + lines.';
   }
 
   const reports: string[] = [];
@@ -797,11 +756,12 @@ export function formatPatchError(error: Error, diff: string, original?: string):
 
   // 1. Check for standard unified diff headers: "--- a/file" or "+++ b/file"
   if (diff.includes('--- ') || diff.includes('+++ ')) {
-    formatted = 'Remove standard file headers. Use headerless anchors with context, + lines, and - lines only.';
+    formatted =
+      'Remove standard file headers. Use *** Update File: <path> with @@ anchors, context, + lines, and - lines.';
   }
   // 2. Check for unified diff chunk headers with line numbers: "@@ -1,5 +1,6 @@"
   else if (/@@\s+-\d+(?:,\d+)?\s+\+\d+(?:,\d+)?\s+@@/.test(diff)) {
-    formatted = 'Remove line numbers from "@@" headers. Use headerless anchors like "@@ functionName" or a bare "@@".';
+    formatted = 'Remove line numbers from "@@" headers. Use plain anchors like "@@ functionName" or a bare "@@".';
   }
   // 3. Check for leading line numbers like "10: const x = 1;" or "10  const x = 1;"
   else if (

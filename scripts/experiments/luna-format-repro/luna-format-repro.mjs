@@ -11,7 +11,9 @@
 // automatically by wsStats, never eyeballed). Size is downstream of that.
 //
 // Usage:
-//   node scripts/experiments/luna-format-repro/luna-format-repro.mjs [nProbes] [outPath]
+//   node scripts/experiments/luna-format-repro/luna-format-repro.mjs [nProbes] [outPath] [wsFireThreshold]
+//   FORMAT_N_HISTORY=10  history turns per arm (default 10)
+//   CANONICAL_DIFF=canonical  arm A advertises/seeds the canonical envelope (post-change); default legacy (baseline)
 //   FORMAT_N_HISTORY=10  history turns per arm (default 10)
 //   CODEX_TOKEN=...      bearer token (default: read-only from ~/.codex/auth.json)
 //   CODEX_BASE_URL=...   endpoint override (default: chatgpt.com codex backend)
@@ -99,9 +101,17 @@ function execProgram(i, target) {
 const TARGET = 'source/services/background-task-activity.ts';
 
 // Our apply_patch schema: patch body is a direct JSON string parameter.
+// CANONICAL-DIFF is a CLI override for the before/after gauge: when set to
+// 'canonical', arm A advertises and seeds the canonical *** Begin Patch ***
+// envelope (the post-change shape); otherwise it uses the legacy headerless
+// diff (the pre-change baseline). Arm B (exec program) is unchanged in both.
+const CANONICAL_DIFF = (process.env.CANONICAL_DIFF || '').toLowerCase() === 'canonical';
+const APPLY_PATCH_DESCRIPTION = CANONICAL_DIFF
+  ? 'Apply file changes with a patch script. Write the patch directly — no JSON escaping of the body. Format: *** Begin Patch, then one section per file (*** Add File: <path> with + lines; *** Update File: <path> with space/+/- lines and @@ anchors, *** Move to: <new-path> to move; *** Delete File: <path>), then *** End Patch. Context lines start with a SPACE; match indentation exactly.'
+  : 'Apply file changes using headerless V4A diff format. Each line MUST start with exactly one character: space (context), + (added), or - (removed). Context lines start with a SPACE character and indentation must match the target file exactly.';
 const APPLY_PATCH_DECL = {
   type: 'function', name: 'apply_patch',
-  description: 'Apply file changes using headerless V4A diff format. Each line MUST start with exactly one character: space (context), + (added), or - (removed). Context lines start with a SPACE character and indentation must match the target file exactly.',
+  description: APPLY_PATCH_DESCRIPTION,
   parameters: { type: 'object', properties: {
     type: { type: 'string' }, path: { type: 'string' },
     moveTo: { type: ['string', 'null'] }, diff: { type: 'string' },
@@ -122,11 +132,19 @@ const BIG_ASK_B = `Via exec, in THIS SINGLE call with no prior reads: build a **
 
 const FORMATS = {
   A: { decl: APPLY_PATCH_DECL, toolName: 'apply_patch',
-    argFor: (i) => JSON.stringify({ type: 'update_file', path: TARGET, moveTo: null, diff: tsDiff(i) }),
+    argFor: (i) => CANONICAL_DIFF
+      ? JSON.stringify({ type: 'update_file', path: TARGET, moveTo: null, diff: patchScript(i, TARGET) })
+      : JSON.stringify({ type: 'update_file', path: TARGET, moveTo: null, diff: tsDiff(i) }),
     outputFor: (i) => `Updated background-task-activity.ts (hunk ${i})`,
-    seedAsk: (i) => `Apply an update_file patch to ${TARGET} (hunk ${i}: thread taskKind${i} through assessBackgroundTaskLiveness, keep context lines space-prefixed and indentation exact).`,
-    intro: 'Apply update_file patches to source/services/background-task-activity.ts via apply_patch, one hunk per turn. Context lines start with a space; indentation must match exactly.',
-    finalAsk: BIG_ASK_A },
+    seedAsk: (i) => CANONICAL_DIFF
+      ? `Apply a *** Update File: ${TARGET} *** patch section (hunk ${i}: thread taskKind${i} through assessBackgroundTaskLiveness, keep context lines space-prefixed and indentation exact) inside a *** Begin Patch *** / *** End Patch *** envelope.`
+      : `Apply an update_file patch to ${TARGET} (hunk ${i}: thread taskKind${i} through assessBackgroundTaskLiveness, keep context lines space-prefixed and indentation exact).`,
+    intro: CANONICAL_DIFF
+      ? 'Apply *** Update File *** patch sections to source/services/background-task-activity.ts via apply_patch inside a *** Begin Patch *** envelope, one hunk per turn. Context lines start with a space; indentation must match exactly.'
+      : 'Apply update_file patches to source/services/background-task-activity.ts via apply_patch, one hunk per turn. Context lines start with a space; indentation must match exactly.',
+    finalAsk: CANONICAL_DIFF
+      ? `Apply a *** Begin Patch *** envelope to ${TARGET}: a *** Update File *** section refactoring assessBackgroundTaskLiveness and describeStatus plus the five neighbouring helpers (isStale, heartbeatAge, watchThreshold, pruneCancelled, summarizeLiveness) to thread a new LivenessOptions parameter through every signature, keeping all existing context lines space-prefixed and every indentation level exact. Emit the full multi-hunk envelope in one apply_patch call.`
+      : BIG_ASK_A },
   B: { decl: EXEC_DECL, toolName: 'exec',
     argFor: (i) => JSON.stringify({ program: execProgram(i, TARGET) }),
     outputFor: (i) => `Applied patch hunk ${i} to background-task-activity.ts`,
@@ -254,7 +272,7 @@ async function runProbe(fmtKey, hist) {
     ...ws, head: arg.slice(0, 200), tailSample: arg.slice(-80) };
 }
 
-const out = { config: { model: MODEL, nHistory: N_HISTORY, nProbes: N_PROBES, maxArgChars: MAX_ARG_CHARS }, fireThreshold: WS_FIRE_THRESHOLD, arms: {} };
+const out = { config: { model: MODEL, nHistory: N_HISTORY, nProbes: N_PROBES, maxArgChars: MAX_ARG_CHARS, canonicalDiff: CANONICAL_DIFF }, fireThreshold: WS_FIRE_THRESHOLD, arms: {} };
 let anyFired = false;
 let errored = false;
 try {

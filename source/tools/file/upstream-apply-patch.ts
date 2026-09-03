@@ -93,6 +93,16 @@ export function parseUpstreamApplyPatch(input: string): UpstreamApplyPatchParams
   return { operations };
 }
 
+/** Best-effort path list for approval/scope previews: never throws, yields []. */
+export function extractPatchPaths(patch: unknown): string[] {
+  if (typeof patch !== 'string' || !patch.trimStart().startsWith(BEGIN_PATCH)) return [];
+  try {
+    return parseUpstreamApplyPatch(patch).operations.map((op) => op.path);
+  } catch {
+    return [];
+  }
+}
+
 function normalizePatchLines(input: string): string[] {
   const normalized = input.replace(/\r\n?/g, '\n').trim();
   const lines = normalized.split('\n');

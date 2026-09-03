@@ -5,6 +5,13 @@ import { getAvailableProviderIds } from '../../utils/ai/provider-credentials.js'
 
 export type ModelFetcher = (provider: string) => Promise<ModelInfo[]>;
 
+/** Provider ids that have credentials, ordered by providerOrder (then registry order). */
+export const orderedProviderIds = (settingsService: ISettingsService, providerIds: string[]): string[] => {
+  const ids = getAvailableProviderIds(settingsService, providerIds);
+  const order = (settingsService.getDynamic('providerOrder') as string[] | undefined) ?? [];
+  return order.length > 0 ? sortProvidersByOrder(ids, order) : ids;
+};
+
 /** Owns model-catalog traversal, per-open caching, failed-provider suppression, and stale loads. */
 export class ModelCatalogSession {
   readonly #settingsService: ISettingsService;
@@ -64,9 +71,7 @@ export class ModelCatalogSession {
   }
 
   nextProvider(current: string | null, direction: 'next' | 'prev'): string | undefined {
-    const ids = getAvailableProviderIds(this.#settingsService, getProviderIds());
-    const order = (this.#settingsService.getDynamic('providerOrder') as string[] | undefined) ?? [];
-    const ordered = order.length > 0 ? sortProvidersByOrder(ids, order) : ids;
+    const ordered = orderedProviderIds(this.#settingsService, getProviderIds());
     if (ordered.length === 0) return undefined;
     const currentIndex = ordered.indexOf(current ?? '');
     if (currentIndex < 0) return direction === 'prev' ? ordered.at(-1) : ordered[0];

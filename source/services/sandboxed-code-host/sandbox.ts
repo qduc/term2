@@ -6,6 +6,8 @@ export interface SandboxOptions {
   syncTimeoutMs: number;
   maxConsoleBytes?: number;
   subject?: string;
+  /** When set, a script that returns nothing completes with `null` instead of failing. */
+  allowVoidOutput?: boolean;
   capabilities: readonly CapabilityBinding[];
 }
 
@@ -21,6 +23,7 @@ export function createSandbox(code: string, options: SandboxOptions): Worker {
       syncTimeoutMs: options.syncTimeoutMs,
       maxConsoleBytes: options.maxConsoleBytes,
       subject: options.subject,
+      allowVoidOutput: options.allowVoidOutput,
     },
   });
 }

@@ -1,31 +1,62 @@
 import { z } from 'zod';
-import path from 'node:path';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { relaxedNumber } from '../../utils.js';
-import { executeShellCommand } from '../../../utils/shell/execute-shell.js';
-import { ensureSandboxTempDir, SANDBOX_TEMP_DIR } from '../../../utils/shell/temp-dir.js';
+import { normalizeToolParameters } from '../../../lib/tool-invoke.js';
+import { SandboxedCodeHostImpl } from '../../../services/sandboxed-code-host/sandboxed-code-host.js';
+import type {
+  CapabilityHandler,
+  CapabilityOutcome,
+  JsonValue,
+} from '../../../services/sandboxed-code-host/host-types.js';
 import type { ILoggingService } from '../../../services/service-interfaces.js';
 import type { ToolInvocationContext } from '../../../services/agent-runtime/tool-invocation-context.js';
-import type { AnyToolDefinition, FormatCommandMessage, SchemaToolDefinition, ToolRegistry } from '../../types.js';
+import {
+  isZodToolParameterSchema,
+  type AnyToolDefinition,
+  type FormatCommandMessage,
+  type SchemaToolDefinition,
+  type ToolRegistry,
+} from '../../types.js';
 import { createBaseMessage, getCallIdFromItem, getOutputText, normalizeToolArguments } from '../../format-helpers.js';
-import { ToolBridgeServer, type ToolBridgeCallRecord } from './tool-bridge.js';
-import { buildRunnerSource, generateRuntime } from './runtime-module.js';
+import { renderToolsHeader } from './tools-header.js';
 
 export const TOOL_NAME_RUN_CODE = 'run_code';
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_OUTPUT_CHARS = 30_000;
 
+/**
+ * Script-shaped limits. They are deliberately not the workflow's: a workflow
+ * spawns a handful of agents, while a script's whole point is looping over many
+ * cheap tool calls.
+ */
+export const RUN_CODE_LIMITS = {
+  /** Total `tools.*` calls one script may make. */
+  maxCalls: 200,
+  /** Parallel-safe calls that may overlap; others take a serial lane of one. */
+  maxConcurrency: 8,
+  /** Per-result cap. A larger result is truncated with an explicit marker. */
+  maxResultChars: 100_000,
+  maxCodeBytes: 65_536,
+  maxOutputBytes: 262_144,
+  maxConsoleBytes: 262_144,
+} as const;
+
+/**
+ * Tools a script may never call. `run_code` excludes itself because each run
+ * owns its own call budget, and nesting would let one run spend many.
+ */
+export const RUN_CODE_PROHIBITED_TOOLS: ReadonlySet<string> = new Set([TOOL_NAME_RUN_CODE]);
+
 export const runCodeParametersSchema = z.object({
   code: z
     .string()
     .min(1)
     .describe(
-      'TypeScript source executed as the body of an async function. Top-level await is available. ' +
+      'JavaScript (not TypeScript) executed as the body of an async function. Top-level await is available. ' +
         'Use `return` only inside your own functions; print results with console.log.',
     ),
   // A non-positive timeout disables the timer downstream, which would leave the
-  // script, its bridge, and its temp directory alive forever.
+  // script running with no deadline.
   timeout_ms: relaxedNumber
     .int()
     .positive()
@@ -37,13 +68,22 @@ export const runCodeParametersSchema = z.object({
 export type RunCodeParams = z.infer<typeof runCodeParametersSchema>;
 
 const RUN_CODE_DESCRIPTION =
-  'Write a TypeScript program and execute it. Every tool you already have is available inside the script as ' +
-  "`tools.<tool_name>(params)`, returning a promise that resolves to that tool's normal result. Prefer this over " +
-  'many separate tool calls when the work is a loop, a fan-out over many files, or a multi-step computation whose ' +
-  'intermediate values you do not need to see — only what you print reaches the conversation. Print results with ' +
-  'console.log. Types are stripped, not checked, so use erasable syntax only: no enums, namespaces, or parameter ' +
-  'properties. The script runs with the same privileges as this session, and each tools.* call is still subject to ' +
-  "the tool's own approval and policy checks.";
+  'Write a JavaScript program and execute it. Most tools you already have are available inside the script as ' +
+  "`tools.<tool_name>(params)`, returning a promise that resolves to that tool's normal result and rejecting when " +
+  'the call fails, so you can try/catch it. Parameters are exactly the parameters documented for that tool; they are ' +
+  'validated against the real schema before the tool runs. Prefer this over many separate tool calls when the work ' +
+  'is a loop, a fan-out over many files, or a multi-step computation whose intermediate values you do not need to ' +
+  'see — only what you print reaches the conversation. Print results with console.log. The code runs in an isolated ' +
+  'context with no filesystem, network, timers, require, or eval: `tools.*` is the only way out. Each tools.* call ' +
+  'is still ' +
+  "subject to the tool's own approval and policy checks.";
+
+/** One `tools.*` call observed during a run, for the user-facing summary. */
+export interface RunCodeCallRecord {
+  tool: string;
+  outcome: 'ok' | 'error' | 'approval_required' | 'unknown_tool' | 'invalid_params' | 'prohibited';
+  durationMs: number;
+}
 
 export interface CreateRunCodeToolOptions {
   loggingService: ILoggingService;
@@ -54,8 +94,6 @@ export interface CreateRunCodeToolOptions {
    */
   getToolRegistry?: () => ToolRegistry;
   getCwd?: () => string;
-  /** Overrides the interpreter. Defaults to the Node binary running this process. */
-  nodePath?: string;
 }
 
 /**
@@ -63,8 +101,8 @@ export interface CreateRunCodeToolOptions {
  *
  * `run_code` is built in `agent.ts` from raw definitions, but the policy layer
  * (plan-mode interceptors, approval wrapping, post-execute hooks) is added
- * afterwards in `agent-factory.ts`. Handing the bridge the raw array would let a
- * script reach an implementation the harness had deliberately wrapped, so the
+ * afterwards in `agent-factory.ts`. Handing the script the raw array would let
+ * it reach an implementation the harness had deliberately wrapped, so the
  * registry is injected after wrapping instead.
  */
 const REGISTRY_BINDER = Symbol.for('term2.run_code.bindRegistry');
@@ -78,7 +116,7 @@ export function bindRunCodeRegistry(tools: ToolRegistry): void {
   }
 }
 
-const summarizeCalls = (calls: readonly ToolBridgeCallRecord[]): string => {
+const summarizeCalls = (calls: readonly RunCodeCallRecord[]): string => {
   if (calls.length === 0) return 'no tool calls';
   const counts = new Map<string, number>();
   for (const call of calls) counts.set(call.tool, (counts.get(call.tool) ?? 0) + 1);
@@ -91,7 +129,29 @@ const clip = (text: string): string =>
     ? text
     : `${text.slice(0, MAX_OUTPUT_CHARS)}\n[truncated: output exceeded ${MAX_OUTPUT_CHARS} characters]`;
 
-const FAILURE_PREFIXES = ['Error:', 'Script exited with code', 'Script timed out'];
+const FAILURE_PREFIXES = ['Error:', 'Script failed', 'Script timed out'];
+
+/**
+ * Truncation is a display concern, but a script may branch on the result, so
+ * the marker has to be unmistakable rather than a silent cut.
+ */
+const truncate = (text: string, limit: number): string =>
+  text.length <= limit ? text : `${text.slice(0, limit)}\n[truncated: result exceeded ${limit} characters]`;
+
+const serializeResult = (result: unknown, limit: number): JsonValue => {
+  if (typeof result === 'string') return truncate(result, limit);
+  try {
+    const encoded = JSON.stringify(result);
+    if (encoded === undefined) return null;
+    return encoded.length <= limit ? (result as JsonValue) : truncate(encoded, limit);
+  } catch {
+    return truncate(String(result), limit);
+  }
+};
+
+/** Renders one console.log's arguments the way a terminal would. */
+const renderConsoleValues = (values: JsonValue[]): string =>
+  values.map((value) => (typeof value === 'string' ? value : JSON.stringify(value))).join(' ');
 
 export const formatRunCodeCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
   const callId = getCallIdFromItem(item);
@@ -113,76 +173,147 @@ export const formatRunCodeCommandMessage: FormatCommandMessage = (item, index, t
   ];
 };
 
+interface PreparedCall {
+  tool: AnyToolDefinition;
+  params: unknown;
+  parallelSafe: boolean;
+}
+
 export function createRunCodeToolDefinition(
   options: CreateRunCodeToolOptions,
 ): SchemaToolDefinition<typeof runCodeParametersSchema> {
-  const { loggingService, getCwd = () => process.cwd(), nodePath = process.execPath } = options;
+  const { loggingService, getCwd = () => process.cwd() } = options;
 
   // Set by bindRunCodeRegistry once the policy layer has wrapped every tool.
   let boundRegistry: ToolRegistry | undefined;
-  const resolveRegistry = (): ToolRegistry => options.getToolRegistry?.() ?? boundRegistry ?? [];
+  const exposedTools = (): ToolRegistry =>
+    (options.getToolRegistry?.() ?? boundRegistry ?? []).filter((tool) => !RUN_CODE_PROHIBITED_TOOLS.has(tool.name));
 
   const definition: SchemaToolDefinition<typeof runCodeParametersSchema> = {
     name: TOOL_NAME_RUN_CODE,
-    description: RUN_CODE_DESCRIPTION,
+    // Read late, after bindRunCodeRegistry, so the model is told which tools
+    // the script can actually reach rather than a guess made before wrapping.
+    get description() {
+      const header = renderToolsHeader(exposedTools());
+      return header ? `${RUN_CODE_DESCRIPTION}\n\n${header}` : RUN_CODE_DESCRIPTION;
+    },
     parameters: runCodeParametersSchema,
     effect: 'mutating',
     needsApproval: () => false,
     execute: async (params, context) => {
       const { code, timeout_ms, description } = params;
-      const cwd = getCwd();
       const timeout = timeout_ms ?? DEFAULT_TIMEOUT_MS;
       const callerSignal = (context as ToolInvocationContext | undefined)?.signal;
+      const registry = exposedTools();
+      const calls: RunCodeCallRecord[] = [];
+      const output: string[] = [];
 
-      // A script must not start another script: each run owns a bridge and a
-      // call budget, and nesting them would let one run spend many budgets.
-      const registry = resolveRegistry().filter((tool) => tool.name !== TOOL_NAME_RUN_CODE);
-      const calls: ToolBridgeCallRecord[] = [];
-      const bridge = new ToolBridgeServer({
-        registry,
-        toolContext: context,
-        onCall: (record) => calls.push(record),
+      const record = (tool: string, outcome: RunCodeCallRecord['outcome'], started: number) =>
+        calls.push({ tool, outcome, durationMs: Date.now() - started });
+      const failed = (message: string): CapabilityOutcome => ({
+        kind: 'result',
+        result: { ok: false, error: message } as JsonValue,
       });
 
-      ensureSandboxTempDir();
-      const runDir = await mkdtemp(path.join(SANDBOX_TEMP_DIR, 'run-code-'));
+      const tools: CapabilityHandler<PreparedCall> = {
+        binding: { name: 'tools', kind: 'namespace', members: registry.map((tool) => tool.name) },
+        limits: {
+          maxCalls: RUN_CODE_LIMITS.maxCalls,
+          maxConcurrency: RUN_CODE_LIMITS.maxConcurrency,
+          limitExceededMessage: `Tool call limit reached (${RUN_CODE_LIMITS.maxCalls} calls per script run).`,
+        },
+        // A budget-exhausted call is the script's problem, not a reason to
+        // discard the work it has already printed.
+        overBudget: () => failed(`Tool call limit reached (${RUN_CODE_LIMITS.maxCalls} calls per script run).`),
+        prepare: async (payload) => {
+          const started = Date.now();
+          const name = typeof payload.member === 'string' ? payload.member : '';
+          const tool = registry.find((candidate) => candidate.name === name);
+          if (!tool) {
+            record(name || '(unnamed)', 'unknown_tool', started);
+            return failed(`Unknown tool "${name}". Available: ${registry.map((entry) => entry.name).join(', ')}`);
+          }
 
-      try {
-        const socketPath = await bridge.start();
-        const runtime = generateRuntime({ registry, socketPath });
-        const runnerPath = path.join(runDir, 'main.ts');
-        // The run directory sits outside any package, so Node would treat the
-        // script as CommonJS and reject the top-level await the runner needs.
-        await writeFile(path.join(runDir, 'package.json'), '{"type":"module"}\n', 'utf8');
-        await writeFile(path.join(runDir, 'tools.ts'), runtime.toolsModule, 'utf8');
-        await writeFile(runnerPath, buildRunnerSource(runtime.runnerModule, code), 'utf8');
+          let normalized: unknown;
+          try {
+            normalized = normalizeToolParameters(payload.params ?? {}, tool.parameters);
+          } catch {
+            normalized = payload.params ?? {};
+          }
+          if (isZodToolParameterSchema(tool.parameters)) {
+            const parsed = tool.parameters.safeParse(normalized);
+            if (!parsed.success) {
+              record(name, 'invalid_params', started);
+              const issues = parsed.error.issues
+                .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
+                .join('; ');
+              return failed(`Invalid parameters for "${name}": ${issues}`);
+            }
+            normalized = parsed.data;
+          }
 
-        loggingService.debug('run_code execution started', {
-          cwd,
-          runDir,
-          timeout,
-          exposedTools: registry.length,
-          description,
-        });
+          // Approval cannot be resolved from here yet: `run_code` is not on the
+          // run loop's stack, and the wrapped `needsApproval` returns a sentinel
+          // meaning "ask the approval coordinator", not "prompt the user". Until
+          // that seam exists the call is refused, and says so plainly.
+          if (await needsApproval(tool, normalized, context)) {
+            record(name, 'approval_required', started);
+            return failed(
+              `"${name}" needs user approval, and a script cannot raise an approval prompt. ` +
+                `Call ${name} directly as a tool instead, or narrow the arguments so it no longer requires approval.`,
+            );
+          }
 
-        const command = `${JSON.stringify(nodePath)} ${JSON.stringify(runnerPath)}`;
-        const result = await executeShellCommand(command, { cwd, timeout, signal: callerSignal });
+          return { tool, params: normalized, parallelSafe: await isParallelSafe(tool, normalized, context) };
+        },
+        // Mirrors the run loop: only a definition that declares itself
+        // parallel-safe may overlap another call, because tools such as
+        // enter_worktree mutate shared execution context.
+        lane: (prepared) => (prepared.parallelSafe ? 'default' : 'serial'),
+        invoke: async (prepared): Promise<CapabilityOutcome> => {
+          const started = Date.now();
+          try {
+            const result = await prepared.tool.execute(prepared.params, context);
+            record(prepared.tool.name, 'ok', started);
+            return {
+              kind: 'result',
+              result: { ok: true, result: serializeResult(result, RUN_CODE_LIMITS.maxResultChars) } as JsonValue,
+            };
+          } catch (error) {
+            record(prepared.tool.name, 'error', started);
+            return failed(error instanceof Error ? error.message : String(error));
+          }
+        },
+      };
 
-        loggingService.debug('run_code execution finished', {
-          exitCode: result.exitCode,
-          timedOut: result.timedOut,
-          toolCalls: calls.length,
-        });
+      loggingService.debug('run_code execution started', {
+        cwd: getCwd(),
+        timeout,
+        exposedTools: registry.length,
+        description,
+      });
 
-        return renderResult(result, calls, timeout);
-      } catch (error) {
-        return `Error: ${error instanceof Error ? error.message : String(error)}`;
-      } finally {
-        // Settles every host-side call still running for a script that is
-        // already gone, so nothing outlives the reported result.
-        await bridge.stop();
-        await rm(runDir, { recursive: true, force: true }).catch(() => {});
-      }
+      const result = await new SandboxedCodeHostImpl().run({
+        code,
+        capabilities: { tools },
+        limits: {
+          timeoutMs: timeout,
+          maxCodeBytes: RUN_CODE_LIMITS.maxCodeBytes,
+          maxOutputBytes: RUN_CODE_LIMITS.maxOutputBytes,
+          maxConsoleBytes: RUN_CODE_LIMITS.maxConsoleBytes,
+        },
+        subject: 'Script',
+        allowVoidOutput: true,
+        signal: callerSignal,
+        onConsole: (values) => output.push(renderConsoleValues(values)),
+      });
+
+      loggingService.debug('run_code execution finished', {
+        ok: result.ok,
+        toolCalls: calls.length,
+      });
+
+      return renderResult(result, output, calls);
     },
     formatCommandMessage: formatRunCodeCommandMessage,
   };
@@ -194,20 +325,46 @@ export function createRunCodeToolDefinition(
   return definition;
 }
 
+/**
+ * Treats a predicate that throws as "would prompt": refusing an uncertain call
+ * is the safe direction at this boundary.
+ */
+async function needsApproval(tool: AnyToolDefinition, params: unknown, context: unknown): Promise<boolean> {
+  try {
+    return (await tool.needsApproval(params, context)) === true;
+  } catch {
+    return true;
+  }
+}
+
+async function isParallelSafe(tool: AnyToolDefinition, params: unknown, context: unknown): Promise<boolean> {
+  const declared = tool.parallelSafe;
+  if (declared === undefined || declared === false) return false;
+  if (declared === true) return true;
+  try {
+    return (await (declared as (p: unknown, c?: unknown) => boolean | Promise<boolean>)(params, context)) === true;
+  } catch {
+    return false;
+  }
+}
+
 function renderResult(
-  result: { stdout: string; stderr: string; exitCode: number | null; timedOut: boolean },
-  calls: readonly ToolBridgeCallRecord[],
-  timeout: number,
+  result: { ok: boolean; error?: { code: string; message: string } },
+  output: readonly string[],
+  calls: readonly RunCodeCallRecord[],
 ): string {
   const sections: string[] = [];
-  if (result.timedOut) sections.push(`Script timed out after ${timeout}ms.`);
-  else if (result.exitCode !== 0) sections.push(`Script exited with code ${result.exitCode}.`);
+  if (!result.ok && result.error) {
+    sections.push(
+      result.error.code === 'timeout'
+        ? `Script timed out. ${result.error.message}`
+        : `Script failed: ${result.error.message}`,
+    );
+  }
 
-  const stdout = result.stdout.trim();
-  const stderr = result.stderr.trim();
-  if (stdout) sections.push(stdout);
-  if (stderr) sections.push(`stderr:\n${stderr}`);
-  if (!stdout && !stderr) sections.push('Script produced no output.');
+  const printed = output.join('\n').trim();
+  if (printed) sections.push(printed);
+  else if (result.ok) sections.push('Script produced no output.');
 
   const refused = calls.filter((call) => call.outcome === 'approval_required');
   if (refused.length > 0) {

@@ -29,7 +29,9 @@ export type HostResult = { ok: true; output: JsonValue } | { ok: false; error: H
  * How a capability appears to the script.
  *
  * - `factory`: `name(config).run(input)` — the shape `run_agent_workflow` uses.
- * - `namespace`: `name.<member>(params)` — the shape `run_code` uses.
+ * - `namespace`: `name.<member>(params)` — the shape `run_code` uses. A member
+ *   speaks an `{ ok, result | error }` envelope: a failed call rejects inside
+ *   the script rather than resolving to an error value.
  *
  * Only these two shapes exist, and both live verbatim in the worker template;
  * generating a capability injects its *name* (and member names), never code.
@@ -60,11 +62,9 @@ export type CapabilityOutcome =
 export interface CapabilityLimits {
   /** Total calls one run may admit for this capability. */
   maxCalls: number;
-  /** How many admitted calls may be in flight at once. */
+  /** How many admitted calls may be in flight at once in the default lane. */
   maxConcurrency: number;
-  /** Whether exceeding {@link maxCalls} kills the run or just fails the call. */
-  onLimitExceeded: 'fail-run' | 'error-result';
-  /** Message used when the budget is exhausted. */
+  /** Message used when the budget is exhausted and the run is aborted. */
   limitExceededMessage: string;
 }
 
@@ -81,6 +81,20 @@ export interface CapabilityHandler<Prepared = unknown> {
   invoke(prepared: Prepared, context: CapabilityCallContext): Promise<CapabilityOutcome>;
   /** Fires when a call is admitted, before it runs. Used for run bookkeeping. */
   onAdmitted?(prepared: Prepared, context: CapabilityCallContext): void;
+  /**
+   * Which permit pool the call takes. `serial` is a strict FIFO lane of one,
+   * for calls that mutate shared state (the run loop's non-`parallelSafe`
+   * rule); `default` is bounded by {@link CapabilityLimits.maxConcurrency}.
+   * Omitted means every call is in the default lane.
+   */
+  lane?(prepared: Prepared): 'serial' | 'default';
+  /**
+   * What to do with a call that exceeds {@link CapabilityLimits.maxCalls}.
+   * Omitting it aborts the run with `limit_exceeded`; a capability that would
+   * rather let the script keep the work it has already done returns a result
+   * in its own envelope instead.
+   */
+  overBudget?(): CapabilityOutcome;
 }
 
 export interface HostLimits {
@@ -97,6 +111,8 @@ export interface HostRunInput {
   signal?: AbortSignal;
   /** Noun used in host-generated messages, e.g. 'Workflow' or 'Script'. */
   subject: string;
+  /** When set, code that returns nothing completes with `null` rather than failing. */
+  allowVoidOutput?: boolean;
   onConsole?: (values: JsonValue[]) => void;
   /** Test seam; defaults to a worker built from `capabilities`. */
   workerFactory?: (code: string, syncTimeoutMs: number) => import('node:worker_threads').Worker;

@@ -81,7 +81,6 @@ export class WorkflowEvaluatorImpl implements WorkflowEvaluator {
       limits: {
         maxCalls: this.#limits.maxRuns,
         maxConcurrency: this.#limits.maxConcurrency,
-        onLimitExceeded: 'fail-run',
         limitExceededMessage: 'Workflow exceeded its maximum number of agent runs',
       },
       prepare: (payload) => {

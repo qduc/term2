@@ -39,7 +39,13 @@ function factoryBinding(name) {
 }
 function namespaceBinding(name, members) {
   const namespace = Object.create(null);
-  for (const member of members) namespace[member] = (params) => call(name, { member, params });
+  for (const member of members) namespace[member] = (params) => call(name, { member, params }).then((response) => {
+    // Namespace members speak an { ok, result | error } envelope so a refused or
+    // failed call is catchable inside the script instead of a silent value.
+    if (!response || typeof response !== 'object') return response;
+    if (response.ok === false) throw new Error(String(response.error));
+    return response.result;
+  });
   return Object.freeze(namespace);
 }
 const sandbox = Object.create(null);
@@ -69,6 +75,7 @@ parentPort.on('message', (message) => {
   try {
     const script = new vm.Script('(async () => { "use strict";\n' + workerData.code + '\n})()', { filename: 'workflow.js' });
     const output = await script.runInContext(context, { timeout: workerData.syncTimeoutMs });
+    if (output === undefined && workerData.allowVoidOutput) { send('workflow.complete', { output: null }); return; }
     if (!json(output)) throw new Error((workerData.subject || 'Script') + ' return value must be JSON-safe');
     send('workflow.complete', { output });
   } catch (err) {

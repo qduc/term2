@@ -49,6 +49,7 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
           syncTimeoutMs: limits.timeoutMs,
           maxConsoleBytes: limits.maxConsoleBytes,
           subject,
+          allowVoidOutput: input.allowVoidOutput,
           capabilities: entries.map(([, handler]) => handler.binding),
         });
     } catch (error) {
@@ -146,15 +147,16 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
 
         const admitted = ledger.admit();
         if (!admitted.ok) {
-          if (handler.limits.onLimitExceeded === 'fail-run')
-            fail('limit_exceeded', handler.limits.limitExceededMessage);
-          else reply({ ok: false, error: { code: 'limit_exceeded', message: handler.limits.limitExceededMessage } });
+          const outcome = handler.overBudget?.();
+          if (!outcome || outcome.kind === 'fail')
+            fail(outcome?.code ?? 'limit_exceeded', outcome?.message ?? handler.limits.limitExceededMessage);
+          else reply(outcome.result);
           return;
         }
         const callContext = { callId: admitted.callId, signal: controller.signal };
         handler.onAdmitted?.(prepared, callContext);
 
-        const releasePermit = await ledger.acquire();
+        const releasePermit = await ledger.acquire(handler.lane?.(prepared) ?? 'default');
         if (!releasePermit) return;
         if (settled || controller.signal.aborted) {
           releasePermit();
@@ -184,9 +186,16 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
   }
 }
 
+type Waiter = (release: (() => void) | undefined) => void;
+interface Pool {
+  active: number;
+  limit: number;
+  waiting: Waiter[];
+}
+
 interface Ledger {
   admit(): { ok: true; callId: number } | { ok: false };
-  acquire(): Promise<(() => void) | undefined>;
+  acquire(lane: 'serial' | 'default'): Promise<(() => void) | undefined>;
   cancelWaiting(): void;
 }
 
@@ -196,17 +205,21 @@ interface Ledger {
  */
 function createLedger(handler: CapabilityHandler<any>, isDone: () => boolean): Ledger {
   let admissions = 0;
-  let active = 0;
-  const waiting: Array<(release: (() => void) | undefined) => void> = [];
-  const grantPermit = (): (() => void) => {
-    active++;
+  const pools = {
+    default: { active: 0, limit: handler.limits.maxConcurrency, waiting: [] as Waiter[] },
+    // A lane of one: the run loop's rule that a tool which is not declared
+    // parallel-safe never overlaps another such call.
+    serial: { active: 0, limit: 1, waiting: [] as Waiter[] },
+  };
+  const grantPermit = (pool: Pool): (() => void) => {
+    pool.active++;
     let released = false;
     return () => {
       if (released) return;
       released = true;
-      active--;
-      const waiter = waiting.shift();
-      if (waiter) waiter(grantPermit());
+      pool.active--;
+      const waiter = pool.waiting.shift();
+      if (waiter) waiter(grantPermit(pool));
     };
   };
   return {
@@ -215,13 +228,14 @@ function createLedger(handler: CapabilityHandler<any>, isDone: () => boolean): L
       if (admissions > handler.limits.maxCalls) return { ok: false };
       return { ok: true, callId: admissions };
     },
-    async acquire() {
+    async acquire(lane) {
       if (isDone()) return undefined;
-      if (active < handler.limits.maxConcurrency) return grantPermit();
-      return new Promise<(() => void) | undefined>((resolve) => waiting.push(resolve));
+      const pool = pools[lane];
+      if (pool.active < pool.limit) return grantPermit(pool);
+      return new Promise<(() => void) | undefined>((resolve) => pool.waiting.push(resolve));
     },
     cancelWaiting() {
-      for (const waiter of waiting.splice(0)) waiter(undefined);
+      for (const pool of Object.values(pools)) for (const waiter of pool.waiting.splice(0)) waiter(undefined);
     },
   };
 }

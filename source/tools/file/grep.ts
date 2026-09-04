@@ -194,6 +194,7 @@ export const createGrepToolDefinition = (
     name: 'grep',
     description: buildGrepDescription(globAvailable, orchestratorMode),
     parameters: searchParametersSchema,
+    canRequireApproval: true,
     parallelSafe: true,
     argumentParsing: 'strict',
     // Read-only, but not necessarily in-bounds: `path` is passed through to a

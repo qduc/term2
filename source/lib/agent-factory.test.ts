@@ -20,6 +20,8 @@ import { PostExecutePauseCapability } from '../services/session/post-execute-pau
 import { createReadFileToolDefinition } from '../tools/file/read-file.js';
 import { createApplyPatchToolDefinition } from '../tools/file/apply-patch.js';
 import { BackgroundShellRegistry } from '../services/shell/background-shell-registry.js';
+import { getAgentDefinition } from '../agent.js';
+import { isDirectlyCallable, RUN_CODE_PROHIBITED_TOOLS } from '../tools/system/run-code/run-code.js';
 
 type MockLogger = ILoggingService & { debugCalls: any[][] };
 
@@ -111,6 +113,7 @@ const createToolDefinition = (
   name: 'post_execute_test',
   description: 'Exercises the application-owned post-execute seam.',
   parameters: postExecuteTestParameters,
+  canRequireApproval: true,
   needsApproval: () => false,
   execute: async ({ value }) => `original:${value}`,
   formatCommandMessage: () => [],
@@ -124,6 +127,47 @@ const buildTestTool = (definition: ToolDefinition<typeof postExecuteTestParamete
     shouldUseNativePatchTool: false,
     deps,
   })[0] as any;
+
+it.sequential('keeps every registered tool reachable across direct and script paths', async () => {
+  const { deps } = createDeps({ settingsValues: { 'app.searchViaShell': 'off' } });
+  const raw = getAgentDefinition(
+    {
+      settingsService: deps.settings,
+      loggingService: deps.logger,
+    },
+    'gpt-4o',
+  );
+  const built = buildAgentTools({
+    toolDefinitions: raw.tools,
+    resolvedModel: 'gpt-4o',
+    shouldUseNativePatchTool: false,
+    deps,
+  });
+  const runCode = built.find((tool) => tool.name === 'run_code');
+  expect(runCode).toBeDefined();
+
+  const rendered = String(
+    await runCode!.execute({ code: 'return Object.keys(tools).sort().join("|");', timeout_ms: 60_000 } as never),
+  );
+  const exposed =
+    rendered
+      .match(/Result:\n([^\n]*)/)?.[1]
+      ?.split('|')
+      .filter(Boolean) ?? [];
+  const direct = built.map((tool) => tool.name);
+  const rawNames = raw.tools.map((tool) => tool.name);
+  const exposedToolNames = exposed.filter((name) => name !== 'describe');
+
+  expect(runCode!.description).toContain('Other tools (names only; schemas are available on demand)');
+  expect(new Set([...direct, ...exposedToolNames])).toEqual(new Set(rawNames));
+  expect(new Set(direct.filter((name) => exposedToolNames.includes(name)))).toEqual(
+    new Set(raw.tools.filter((tool) => tool.canRequireApproval === true).map((tool) => tool.name)),
+  );
+  for (const tool of raw.tools) {
+    expect(direct.includes(tool.name)).toBe(isDirectlyCallable(tool));
+    expect(exposedToolNames.includes(tool.name)).toBe(!RUN_CODE_PROHIBITED_TOOLS.has(tool.name));
+  }
+});
 
 it.sequential('post-execute policy can reject by returning the original result', async () => {
   const executions: string[] = [];
@@ -222,15 +266,15 @@ it.sequential('preserves multimodal content-part tool results instead of coercin
   expect(result).toEqual(imageParts);
 });
 
-it.sequential('buildAgent passes the root background shell registry into the complete tool set', () => {
+it.sequential('buildAgent keeps root background shell controls reachable through run_code', () => {
   const registry = new BackgroundShellRegistry<any>();
   const { deps } = createDeps({ backgroundShellRegistry: registry });
 
   const { agent } = buildAgent({}, deps);
 
-  expect(agent.tools?.map((tool) => tool.name)).toEqual(
-    expect.arrayContaining(['shell', 'get_shell_job', 'cancel_shell_job']),
-  );
+  expect(agent.tools?.map((tool) => tool.name)).toEqual(expect.arrayContaining(['shell', 'run_code']));
+  expect(agent.tools?.map((tool) => tool.name)).not.toContain('get_shell_job');
+  expect(agent.tools?.map((tool) => tool.name)).not.toContain('cancel_shell_job');
 });
 
 it.sequential('application run loop pauses an opted-in root tool pending approval', async () => {

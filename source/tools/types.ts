@@ -101,6 +101,8 @@ export interface SchemaToolDefinition<TSchema extends ZodTypeAny> {
   parameters: TSchema;
   /** Opt-in capability for independent, auto-approved calls in one model response. */
   parallelSafe?: boolean | ((params: z.infer<TSchema>, context?: unknown) => Promise<boolean> | boolean);
+  /** True when some valid parameter values can require interactive approval. */
+  canRequireApproval?: boolean;
   /** Declares a successful call as an observable mutation for stall detection. */
   effect?: 'mutating';
   /** Result is already serialized and bounded; generic string trimming would corrupt its contract. */
@@ -164,6 +166,8 @@ export interface AnyToolDefinition {
   /** Opt-in capability for independent, auto-approved calls in one model response. */
   /** `never` keeps heterogeneous schema-derived predicates assignable at the erased boundary. */
   parallelSafe?: boolean | ((params: never, context?: unknown) => Promise<boolean> | boolean);
+  /** True when some valid parameter values can require interactive approval. */
+  canRequireApproval?: boolean;
   /** Declares a successful call as an observable mutation for stall detection. */
   effect?: 'mutating';
   /** Result is already serialized and bounded; generic string trimming would corrupt its contract. */

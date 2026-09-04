@@ -127,6 +127,7 @@ export const createReadCodeOutlineToolDefinition = (
     name: 'read_code_outline',
     description: READ_CODE_OUTLINE_DESCRIPTION,
     parameters: readCodeOutlineParametersSchema,
+    canRequireApproval: true,
     parallelSafe: true,
     needsApproval: async ({ path: filePath }) => {
       // YOLO mode ('always') approves read-only operations without a prompt,
@@ -182,6 +183,7 @@ export const createCodeContextSearchToolDefinition = (
     name: 'code_context_search',
     description: buildCodeContextSearchDescription(globAvailable),
     parameters: codeContextSearchParametersSchema,
+    canRequireApproval: true,
     parallelSafe: true,
     needsApproval: async (params) => {
       // YOLO mode ('always') approves read-only operations without a prompt,

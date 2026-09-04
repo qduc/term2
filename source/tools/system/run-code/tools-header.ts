@@ -15,6 +15,17 @@ interface JsonSchemaNode {
 
 const MAX_DESCRIPTION_CHARS = 140;
 
+export const RUN_CODE_ESSENTIAL_TOOLS = new Set([
+  'read_file',
+  'grep',
+  'glob',
+  'read_code_outline',
+  'code_context_search',
+  'apply_patch',
+  'create_file',
+  'search_replace',
+]);
+
 function renderType(node: JsonSchemaNode | undefined): string {
   if (!node) return 'unknown';
   if (node.const !== undefined) return JSON.stringify(node.const);
@@ -70,7 +81,7 @@ const oneLine = (text: string): string => {
  */
 export function renderToolsHeader(registry: ToolRegistry): string {
   if (registry.length === 0) return '';
-  const lines = registry.map((tool) => {
+  const renderDetailed = (tool: ToolRegistry[number]): string => {
     const schema = schemaFor(tool.parameters);
     const required = new Set(schema.required ?? []);
     const fields = Object.entries(schema.properties ?? {}).map(
@@ -80,9 +91,20 @@ export function renderToolsHeader(registry: ToolRegistry): string {
     const description =
       typeof tool.description === 'string' && tool.description ? ` — ${oneLine(tool.description)}` : '';
     return `- ${signature}${description}`;
-  });
-  return [
+  };
+  const essential = registry.filter((tool) => RUN_CODE_ESSENTIAL_TOOLS.has(tool.name));
+  const other = registry.filter((tool) => !RUN_CODE_ESSENTIAL_TOOLS.has(tool.name));
+  const lines = [
     'Available inside the script (parameter shapes are approximate; each call is validated against the tool’s real schema):',
-    ...lines,
-  ].join('\n');
+    'Use tools.describe(name) when you need the full schema and description for a tool.',
+    ...(essential.length > 0 ? ['Essential tools:', ...essential.map(renderDetailed)] : []),
+    ...(other.length > 0
+      ? [
+          '',
+          'Other tools (names only; schemas are available on demand):',
+          ...other.map((tool) => `- tools.${tool.name}`),
+        ]
+      : []),
+  ];
+  return lines.join('\n');
 }

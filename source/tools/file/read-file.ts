@@ -163,6 +163,7 @@ export const createReadFileToolDefinition = (
       ? READ_FILE_DESCRIPTION_OUTSIDE
       : READ_FILE_DESCRIPTION,
     parameters: readFileParametersSchema,
+    canRequireApproval: true,
     parallelSafe: true,
     needsApproval: async (params, context) => {
       if (allowOutsideWorkspace) {

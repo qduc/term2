@@ -233,6 +233,7 @@ export function createApplyPatchToolDefinition(deps: {
     name: 'apply_patch',
     description: APPLY_PATCH_DESCRIPTION,
     effect: 'mutating',
+    canRequireApproval: true,
     parameters: applyPatchParametersSchema,
     strictParameters: applyPatchStrictParametersSchema,
     needsApproval: async (params) => {

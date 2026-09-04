@@ -108,6 +108,7 @@ export function createCreateFileToolDefinition(deps: {
     name: TOOL_NAME_CREATE_FILE,
     description: CREATE_FILE_DESCRIPTION,
     effect: 'mutating',
+    canRequireApproval: true,
     parameters: createFileParametersSchema,
     needsApproval: async (params) => {
       if (settingsService.get('shell.autoApproveMode') === 'always') {

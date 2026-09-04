@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
@@ -6,6 +6,7 @@ import { createFindFilesToolDefinition } from './glob.js';
 import { SessionAccessState } from '../../services/session/session-access-state.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import { ExecutionContext } from '../../services/execution-context.js';
+import type { ILoggingService } from '../../services/service-interfaces.js';
 import { wrapToolInvoke } from '../../lib/tool-invoke.js';
 import type { ToolDefinition } from '../../tools/types.js';
 
@@ -407,3 +408,47 @@ it.sequential(
     });
   },
 );
+
+describe('glob result cap for scripted calls', () => {
+  const make = () =>
+    createFindFilesToolDefinition({
+      loggingService: {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        security: vi.fn(),
+      } as unknown as ILoggingService,
+      executionContext: {
+        getCwd: () => process.cwd(),
+        isRemote: () => false,
+        getSSHService: () => undefined,
+      } as never,
+    }) as any;
+
+  it('caps a direct call at 50 and says so', async () => {
+    const text = String(await make().execute({ pattern: 'source/tools/**/*.ts' }, {}));
+
+    expect(text.split('\n').filter((line) => line.endsWith('.ts')).length).toBe(50);
+    expect(text).toContain('Results limited to 50 files');
+  });
+
+  it('gives a script the whole match set instead', async () => {
+    const direct = String(await make().execute({ pattern: 'source/tools/**/*.ts' }, {}));
+    const total = Number(/Found (\d+) total matches/.exec(direct)?.[1]);
+    const scripted = String(await make().execute({ pattern: 'source/tools/**/*.ts' }, { scripted: true }));
+
+    // A short list makes whatever the script computes from it wrong, and the
+    // "Results limited to" note is prose a script splitting on newlines reads
+    // as another path.
+    expect(total).toBeGreaterThan(50);
+    expect(scripted.split('\n').filter((line) => line.endsWith('.ts')).length).toBe(total);
+    expect(scripted).not.toContain('Results limited to');
+  });
+
+  it('still honours an explicit max_results from a script', async () => {
+    const text = String(await make().execute({ pattern: 'source/tools/**/*.ts', max_results: 5 }, { scripted: true }));
+
+    expect(text.split('\n').filter((line) => line.endsWith('.ts')).length).toBe(5);
+  });
+});

@@ -348,13 +348,50 @@ describe('read_file scripted cap (real file)', () => {
     const tool = createReadFileToolDefinition({}) as any;
 
     const direct = String(await tool.execute({ path }, {}));
-    const scripted = String(await tool.execute({ path }, { scripted: true }));
+    const scripted = await tool.execute({ path }, { scripted: true });
     const lastLine = `${raw.split('\n').length}: `;
 
     expect(raw.length).toBeGreaterThan(50_000);
     expect(direct.length).toBeLessThan(41_000);
     expect(direct).not.toContain(lastLine);
-    expect(scripted.length).toBeGreaterThan(60_000);
-    expect(scripted).toContain(lastLine);
+    // The script gets raw lines and a count field rather than a banner.
+    expect(scripted.content.length).toBeGreaterThan(50_000);
+    expect(scripted.truncated).toBe(false);
+    expect(scripted.totalLines).toBe(raw.split('\n').length);
+  });
+});
+
+describe('read_file scripted return shape', () => {
+  it('returns fields and raw lines to a script, banner text to a direct call', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'read-file-shape-'));
+    const target = path.join(dir, 'sample.ts');
+    const body = Array.from({ length: 40 }, (_, i) => `const v${i} = ${i};`).join('\n');
+    await fs.writeFile(target, `${body}\n`);
+    const tool = createReadFileToolDefinition({}) as any;
+
+    const direct = String(await tool.execute({ path: target }, {}));
+    const scripted = await tool.execute({ path: target }, { scripted: true });
+
+    expect(direct).toContain('File: ');
+    expect(direct).toContain('1: const v0 = 0;');
+
+    // No banner, no "N: " prefixes: every observed script stripped those by hand.
+    expect(typeof scripted).toBe('object');
+    expect(scripted.content.split('\n')[0]).toBe('const v0 = 0;');
+    expect(scripted.content).not.toContain('File: ');
+    expect(scripted.totalLines).toBe(41);
+    expect(scripted.truncated).toBe(false);
+  });
+
+  it('reports truncation as a field with a retrievable path', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'read-file-shape-big-'));
+    const target = path.join(dir, 'big.ts');
+    await fs.writeFile(target, Array.from({ length: 8000 }, (_, i) => `const v${i} = ${i};`).join('\n'));
+    const tool = createReadFileToolDefinition({ maxResultBytes: 5_000 }) as any;
+
+    const scripted = await tool.execute({ path: target }, { scripted: true });
+
+    expect(scripted.truncated).toBe(true);
+    expect(typeof scripted.fullOutputPath).toBe('string');
   });
 });

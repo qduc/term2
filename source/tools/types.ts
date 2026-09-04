@@ -107,6 +107,15 @@ export interface SchemaToolDefinition<TSchema extends ZodTypeAny> {
   effect?: 'mutating';
   /** Result is already serialized and bounded; generic string trimming would corrupt its contract. */
   preserveSerializedOutput?: boolean;
+  /**
+   * Shape this tool returns to a `run_code` script, when it differs from the
+   * text a direct call returns.
+   *
+   * Rendered in the script tool header. Without it a script must discover the
+   * shape by probing, which cost observed runs several turns each.
+   */
+  scriptedReturnShape?: string;
+
   /** End the run after execution without sending this tool result to the model. */
   terminateAfterExecution?: boolean | ((result: unknown) => boolean);
   /** Optional provider-facing schema when a strict transport cannot express the runtime contract. */
@@ -172,6 +181,15 @@ export interface AnyToolDefinition {
   effect?: 'mutating';
   /** Result is already serialized and bounded; generic string trimming would corrupt its contract. */
   preserveSerializedOutput?: boolean;
+  /**
+   * Shape this tool returns to a `run_code` script, when it differs from the
+   * text a direct call returns.
+   *
+   * Rendered in the script tool header. Without it a script must discover the
+   * shape by probing, which cost observed runs several turns each.
+   */
+  scriptedReturnShape?: string;
+
   /** End the run after execution without sending this tool result to the model. */
   terminateAfterExecution?: boolean | ((result: unknown) => boolean);
   strictParameters?: ZodTypeAny;

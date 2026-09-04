@@ -432,22 +432,57 @@ it.sequential('glob caps a direct call at 50 and says so', async () => {
 
 it.sequential('glob gives a script the whole match set instead', async () => {
   await withManyFiles(60, async () => {
-    const text = String(await findFilesToolDefinition.execute({ pattern: '*.ts' }, { scripted: true } as never));
+    const scripted: any = await findFilesToolDefinition.execute({ pattern: '*.ts' }, { scripted: true } as never);
 
-    // A short list makes whatever the script computes from it wrong, and the
-    // "Results limited to" note is prose a script splitting on newlines reads
-    // as another path.
-    expect(globHits(text)).toBe(60);
-    expect(text).not.toContain('Results limited to');
+    // A short list makes whatever the script computes from it wrong.
+    expect(scripted.paths).toHaveLength(60);
+    expect(scripted.truncated).toBe(false);
   });
 });
 
 it.sequential('glob still honours an explicit max_results from a script', async () => {
   await withManyFiles(60, async () => {
-    const text = String(
-      await findFilesToolDefinition.execute({ pattern: '*.ts', max_results: 5 }, { scripted: true } as never),
-    );
+    const scripted: any = await findFilesToolDefinition.execute({ pattern: '*.ts', max_results: 5 }, {
+      scripted: true,
+    } as never);
 
-    expect(globHits(text)).toBe(5);
+    expect(scripted.paths).toHaveLength(5);
+  });
+});
+
+it.sequential('glob returns fields to a script and text to a direct call', async () => {
+  await withManyFiles(60, async () => {
+    const direct = await findFilesToolDefinition.execute({ pattern: '*.ts' }, {} as never);
+    const scripted: any = await findFilesToolDefinition.execute({ pattern: '*.ts' }, { scripted: true } as never);
+
+    expect(typeof direct).toBe('string');
+    expect(Array.isArray(scripted.paths)).toBe(true);
+    expect(scripted.paths).toHaveLength(60);
+    expect(scripted.total).toBe(60);
+    expect(scripted.truncated).toBe(false);
+  });
+});
+
+it.sequential('glob reports truncation as a field, not a sentence in the path list', async () => {
+  await withManyFiles(60, async () => {
+    const scripted: any = await findFilesToolDefinition.execute({ pattern: '*.ts', max_results: 10 }, {
+      scripted: true,
+    } as never);
+
+    expect(scripted.paths).toHaveLength(10);
+    expect(scripted.total).toBe(60);
+    expect(scripted.truncated).toBe(true);
+    // The prose note is what a script mistook for another path.
+    expect(scripted.paths.every((p: string) => p.endsWith('.ts'))).toBe(true);
+  });
+});
+
+it.sequential('glob gives a script an empty list rather than a "no files found" sentence', async () => {
+  await withTempDir(async () => {
+    const scripted: any = await findFilesToolDefinition.execute({ pattern: '*.nomatch' }, { scripted: true } as never);
+
+    expect(scripted.paths).toEqual([]);
+    expect(scripted.total).toBe(0);
+    expect(scripted.truncated).toBe(false);
   });
 });

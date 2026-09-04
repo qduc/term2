@@ -90,7 +90,13 @@ export function renderToolsHeader(registry: ToolRegistry): string {
     const signature = `tools.${tool.name}({ ${fields.join(', ')} })`.replace('({  })', '()');
     const description =
       typeof tool.description === 'string' && tool.description ? ` — ${oneLine(tool.description)}` : '';
-    return `- ${signature}${description}`;
+    // Declared return shapes only: without one, a script has to probe for the
+    // shape, which cost observed runs several turns each.
+    const returns =
+      typeof tool.scriptedReturnShape === 'string' && tool.scriptedReturnShape
+        ? `\n    returns ${tool.scriptedReturnShape}`
+        : '';
+    return `- ${signature}${description}${returns}`;
   };
   const essential = registry.filter((tool) => RUN_CODE_ESSENTIAL_TOOLS.has(tool.name));
   const other = registry.filter((tool) => !RUN_CODE_ESSENTIAL_TOOLS.has(tool.name));

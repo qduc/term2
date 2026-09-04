@@ -150,6 +150,7 @@ export const createFindFilesToolDefinition = (
   } = deps;
   return {
     name: 'glob',
+    scriptedReturnShape: '{ paths: string[], total: number, truncated: boolean }',
     description: allowOutsideWorkspace ? GLOB_DESCRIPTION_OUTSIDE : GLOB_DESCRIPTION,
     parameters: findFilesParametersSchema,
     canRequireApproval: true,
@@ -257,14 +258,29 @@ export const createFindFilesToolDefinition = (
       }
 
       const trimmed = result.stdout.trim();
+      const cleanedLines = trimmed
+        ? trimmed
+            .split('\n')
+            .filter(Boolean)
+            .map((line) => toRelative(line, absolutePath))
+        : [];
+
+      // A script gets fields, not prose. The text form signals "no matches" and
+      // "results were capped" in sentences, which a script splitting on
+      // newlines reads as more paths — the failure that made a model examine 33
+      // of 51 files and miss the one it was asked for
+      // (docs/plans/code-mode-field-test.md).
+      if (isScriptedToolCall(context)) {
+        return {
+          paths: cleanedLines.slice(0, limit),
+          total: cleanedLines.length,
+          truncated: cleanedLines.length > limit,
+        };
+      }
+
       if (!trimmed) {
         return `No files found matching pattern: ${pattern}`;
       }
-
-      const cleanedLines = trimmed
-        .split('\n')
-        .filter(Boolean)
-        .map((line) => toRelative(line, absolutePath));
 
       let resultText = cleanedLines.slice(0, limit).join('\n');
       if (cleanedLines.length > limit) {

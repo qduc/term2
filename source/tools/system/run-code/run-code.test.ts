@@ -136,6 +136,26 @@ describe('run_code', () => {
     expect(output).toContain('undefined');
   });
 
+  it.each([...RUN_CODE_PROHIBITED_TOOLS])('never exposes the prohibited tool %s', async (name) => {
+    const execute = vi.fn(() => 'must not run');
+    const output = await run(
+      [tool({ name, execute }), tool({ name: 'echo' })],
+      `console.log("exposed:", typeof tools[${JSON.stringify(name)}]);
+       console.log("names:", Object.keys(tools).join(","));`,
+    );
+
+    expect(output).toContain('exposed: undefined');
+    expect(output).toContain('names: echo');
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('omits prohibited tools from the description it advertises', () => {
+    const description = build([tool({ name: 'run_subagent' }), tool({ name: 'echo' })]).description;
+
+    expect(description).toContain('tools.echo(');
+    expect(description).not.toContain('run_subagent');
+  });
+
   it('reports a script that throws', async () => {
     const output = await run([], 'throw new Error("script failed on purpose");');
 

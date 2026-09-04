@@ -17,6 +17,7 @@ import {
   type ToolRegistry,
 } from '../../types.js';
 import { createBaseMessage, getCallIdFromItem, getOutputText, normalizeToolArguments } from '../../format-helpers.js';
+import { WORKFLOW_PROHIBITED_TOOLS } from '../../../services/agent-runtime/workflow/workflow-evaluator.js';
 import { renderToolsHeader } from './tools-header.js';
 
 export const TOOL_NAME_RUN_CODE = 'run_code';
@@ -42,10 +43,17 @@ export const RUN_CODE_LIMITS = {
 } as const;
 
 /**
- * Tools a script may never call. `run_code` excludes itself because each run
- * owns its own call budget, and nesting would let one run spend many.
+ * Tools a script may never call.
+ *
+ * `run_code` excludes itself because each run owns its own call budget, and
+ * nesting would let one run spend many. The rest are the workflow's prohibited
+ * set: `run_subagent` in particular spawns agents outside any run budget, so a
+ * script could loop on it indefinitely.
  */
-export const RUN_CODE_PROHIBITED_TOOLS: ReadonlySet<string> = new Set([TOOL_NAME_RUN_CODE]);
+export const RUN_CODE_PROHIBITED_TOOLS: ReadonlySet<string> = new Set([
+  ...WORKFLOW_PROHIBITED_TOOLS,
+  TOOL_NAME_RUN_CODE,
+]);
 
 export const runCodeParametersSchema = z.object({
   code: z

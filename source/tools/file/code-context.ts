@@ -184,6 +184,8 @@ export const createCodeContextSearchToolDefinition = (
   const { executionContext, globAvailable = true, settingsService, hasRipgrep } = deps;
   return {
     name: 'code_context_search',
+    scriptedReturnShape:
+      "{ queryType: 'symbol'|'related', matches|results: object[], truncated: boolean, partial: boolean }",
     description: buildCodeContextSearchDescription(globAvailable),
     parameters: codeContextSearchParametersSchema,
     canRequireApproval: true,
@@ -238,6 +240,12 @@ export const createCodeContextSearchToolDefinition = (
             absolutePath,
             maxResults,
           });
+          // Scripted callers get the warnings as fields: withWarnings prepends
+          // "WARNING result_limit_reached" as a text line, which a script
+          // computing from the list will not notice.
+          if (isScriptedToolCall(context)) {
+            return { queryType: 'related', path: targetPath, results, truncated, partial };
+          }
           return withWarnings(
             formatRelatedResults(targetPath, results),
             partial ? ['partial_search'] : [],
@@ -251,6 +259,9 @@ export const createCodeContextSearchToolDefinition = (
         }
 
         const { matches, truncated, partial } = await findSymbolDeclarations({ root: cwd, symbol, maxResults });
+        if (isScriptedToolCall(context)) {
+          return { queryType: 'symbol', symbol, matches, truncated, partial };
+        }
         return withWarnings(
           formatSymbolResults(symbol, matches),
           partial ? ['partial_search'] : [],

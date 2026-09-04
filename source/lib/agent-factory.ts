@@ -10,6 +10,7 @@ import { normalizeToolParameters, wrapNeedsApproval, wrapToolInvoke } from './to
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { ExecutionContext } from '../services/execution-context.js';
 import { trimToolOutput } from '../utils/output/trim-tool-output.js';
+import { isScriptedToolCall } from '../utils/output/bound-tool-result.js';
 import { SkillsService } from '../services/skills/skills-service.js';
 import { injectRunBudgetWarning } from '../utils/inject-warning-into-tool-output.js';
 import { toOpenAIStrictToolSchema } from './openai-strict-tool-schema.js';
@@ -202,6 +203,13 @@ export function buildAgentTools({
             : result;
           if (definition.preserveSerializedOutput) {
             return String(finalResult ?? '');
+          }
+          // A scripted call's result goes to the script, not into model
+          // context, so neither the trim nor its String() coercion applies.
+          // Without this a tool returning fields reaches the script as the
+          // literal "[object Object]".
+          if (isScriptedToolCall(_context)) {
+            return finalResult;
           }
           const trimmedResult = trimToolOutput(finalResult, undefined, maxOutputLengthValue ?? undefined);
           // Structured content-part results (read_file images) carry no single

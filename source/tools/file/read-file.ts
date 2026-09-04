@@ -15,6 +15,7 @@ import {
 } from '../format-helpers.js';
 import {
   boundToolResultText,
+  isScriptedToolCall,
   looksLikeBinary,
   resolveResultMaxBytesForCall,
 } from '../../utils/output/bound-tool-result.js';
@@ -157,6 +158,8 @@ export const createReadFileToolDefinition = (
   } = deps;
   return {
     name: 'read_file',
+    scriptedReturnShape:
+      '{ path: string, totalLines: number, fromLine: number, toLine: number, content: string, truncated: boolean, fullOutputPath?: string }',
     description: orchestratorMode
       ? READ_FILE_DESCRIPTION_ORCHESTRATOR
       : allowOutsideWorkspace
@@ -265,6 +268,26 @@ export const createReadFileToolDefinition = (
 
         const fileContent = numberedLines.join('\n');
         const fullResult = header + fileContent;
+
+        // A script gets the raw text and the counts as fields. The text form
+        // prepends a "File: … (N lines)" banner and an "N: " prefix per line,
+        // which every observed script had to strip by hand, and it reports
+        // truncation as a trailing sentence a script will not branch on.
+        if (isScriptedToolCall(context)) {
+          const scriptedBound = await boundToolResultText({
+            fullText: filteredLines.join('\n'),
+            maxBytes: resolveResultMaxBytesForCall(context, maxResultBytes),
+          });
+          return {
+            path: filePath,
+            totalLines,
+            fromLine,
+            toLine,
+            content: scriptedBound.text,
+            truncated: scriptedBound.truncated,
+            ...(scriptedBound.artifactPath ? { fullOutputPath: scriptedBound.artifactPath } : {}),
+          };
+        }
 
         const bounded = await boundToolResultText({
           fullText: fullResult,

@@ -868,21 +868,23 @@ describe('code_context_search result cap for scripted calls', () => {
   it('caps a direct search at 20 and flags it, but gives a script the full set', async () => {
     await withFixture(async (tool) => {
       const direct = String(await tool.execute({ symbol: 'uniqueFixtureSymbol' }, {}));
-      const scripted = String(await tool.execute({ symbol: 'uniqueFixtureSymbol' }, { scripted: true }));
+      const scripted: any = await tool.execute({ symbol: 'uniqueFixtureSymbol' }, { scripted: true });
 
-      // WARNING result_limit_reached is a text line; a script that computes
-      // from a short list will not notice it before drawing a conclusion.
+      // WARNING result_limit_reached is a text line a script will not branch
+      // on; the scripted form carries it as a field instead.
       expect(direct).toContain('result_limit_reached');
       expect(hits(direct)).toBe(20);
-      expect(scripted).not.toContain('result_limit_reached');
-      expect(hits(scripted)).toBe(30);
+      expect(scripted.matches).toHaveLength(30);
+      expect(scripted.truncated).toBe(false);
+      expect(scripted.queryType).toBe('symbol');
     });
   });
 
   it('still honours an explicit max_results from a script', async () => {
     await withFixture(async (tool) => {
-      const text = String(await tool.execute({ symbol: 'uniqueFixtureSymbol', max_results: 3 }, { scripted: true }));
-      expect(hits(text)).toBe(3);
+      const scripted: any = await tool.execute({ symbol: 'uniqueFixtureSymbol', max_results: 3 }, { scripted: true });
+      expect(scripted.matches).toHaveLength(3);
+      expect(scripted.truncated).toBe(true);
     });
   });
 });

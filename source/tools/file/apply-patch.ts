@@ -19,7 +19,11 @@ import {
 import { ExecutionContext } from '../../services/execution-context.js';
 import { withFileLock } from './file-locks.js';
 import { TOOL_NAME_APPLY_PATCH } from '../tool-names.js';
-import { boundToolResultText, truncateToUtf8Bytes } from '../../utils/output/bound-tool-result.js';
+import {
+  boundToolResultText,
+  resolveResultMaxBytesForCall,
+  truncateToUtf8Bytes,
+} from '../../utils/output/bound-tool-result.js';
 import { healPatchOperation } from './patch-healing.js';
 import { resolveAncillaryModelTier } from '../../services/agent-runtime/model-resolver.js';
 import { parseUpstreamApplyPatch } from './upstream-apply-patch.js';
@@ -397,7 +401,7 @@ export function createApplyPatchToolDefinition(deps: {
         return true;
       }
     },
-    execute: async (params) => {
+    execute: async (params, context) => {
       const enableFileLogging = settingsService.get('tools.logFileOperations');
       const cwd = executionContext?.getCwd() || process.cwd();
       const sshService = executionContext?.getSSHService();
@@ -407,7 +411,7 @@ export function createApplyPatchToolDefinition(deps: {
         operations = getApplyPatchOperations(params);
       } catch (error: any) {
         const message = `Error: Invalid patch: ${error?.message || String(error)}`;
-        return (await boundToolResultText({ fullText: message })).text;
+        return (await boundToolResultText({ fullText: message, maxBytes: resolveResultMaxBytesForCall(context) })).text;
       }
 
       const readFileFn = async (p: string) => {
@@ -650,7 +654,7 @@ export function createApplyPatchToolDefinition(deps: {
               : `Error: ${(item.error || 'unknown error').replace(/\n/g, ' ')}`,
           )
           .join('\n');
-        return (await boundToolResultText({ fullText: joined })).text;
+        return (await boundToolResultText({ fullText: joined, maxBytes: resolveResultMaxBytesForCall(context) })).text;
       } catch (error: any) {
         if (enableFileLogging) {
           loggingService.error('File operation failed', {
@@ -660,7 +664,7 @@ export function createApplyPatchToolDefinition(deps: {
           });
         }
         const message = `Error: ${(error.message || String(error)).replace(/\n/g, ' ')}`;
-        return (await boundToolResultText({ fullText: message })).text;
+        return (await boundToolResultText({ fullText: message, maxBytes: resolveResultMaxBytesForCall(context) })).text;
       }
     },
     formatCommandMessage: formatApplyPatchCommandMessage,

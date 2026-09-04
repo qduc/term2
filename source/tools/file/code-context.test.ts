@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
@@ -841,5 +841,48 @@ it.sequential('outline: PHP files extract imports and declarations', async () =>
     expect(result).toMatch(/function index line=5 exported/);
     expect(result).toMatch(/interface Service line=7 exported/);
     expect(result).toMatch(/function global_func line=8 exported/);
+  });
+});
+
+describe('code_context_search result cap for scripted calls', () => {
+  // A fixture rather than the real tree: this file is in the no-isolate lane
+  // manifest, so a repo-wide ripgrep here perturbs unrelated tests' timing,
+  // and the match count would drift as the repo changes.
+  const withFixture = async (run: (tool: any) => Promise<void>) => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'code-context-cap-'));
+    try {
+      for (let i = 0; i < 30; i++) {
+        await fs.writeFile(path.join(dir, `f${i}.ts`), `export const uniqueFixtureSymbol = ${i};\n`);
+      }
+      const tool = createCodeContextSearchToolDefinition({
+        executionContext: { getCwd: () => dir, isRemote: () => false } as never,
+      }) as any;
+      await run(tool);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  };
+
+  const hits = (text: string) => text.split('\n').filter((line) => /^[\w./-]+:\d+ /.test(line)).length;
+
+  it('caps a direct search at 20 and flags it, but gives a script the full set', async () => {
+    await withFixture(async (tool) => {
+      const direct = String(await tool.execute({ symbol: 'uniqueFixtureSymbol' }, {}));
+      const scripted = String(await tool.execute({ symbol: 'uniqueFixtureSymbol' }, { scripted: true }));
+
+      // WARNING result_limit_reached is a text line; a script that computes
+      // from a short list will not notice it before drawing a conclusion.
+      expect(direct).toContain('result_limit_reached');
+      expect(hits(direct)).toBe(20);
+      expect(scripted).not.toContain('result_limit_reached');
+      expect(hits(scripted)).toBe(30);
+    });
+  });
+
+  it('still honours an explicit max_results from a script', async () => {
+    await withFixture(async (tool) => {
+      const text = String(await tool.execute({ symbol: 'uniqueFixtureSymbol', max_results: 3 }, { scripted: true }));
+      expect(hits(text)).toBe(3);
+    });
   });
 });

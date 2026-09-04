@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { it, expect } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
@@ -6,7 +6,6 @@ import { createFindFilesToolDefinition } from './glob.js';
 import { SessionAccessState } from '../../services/session/session-access-state.js';
 import { createMockSettingsService } from '../../services/settings/settings-service.mock.js';
 import { ExecutionContext } from '../../services/execution-context.js';
-import type { ILoggingService } from '../../services/service-interfaces.js';
 import { wrapToolInvoke } from '../../lib/tool-invoke.js';
 import type { ToolDefinition } from '../../tools/types.js';
 
@@ -409,46 +408,46 @@ it.sequential(
   },
 );
 
-describe('glob result cap for scripted calls', () => {
-  const make = () =>
-    createFindFilesToolDefinition({
-      loggingService: {
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        security: vi.fn(),
-      } as unknown as ILoggingService,
-      executionContext: {
-        getCwd: () => process.cwd(),
-        isRemote: () => false,
-        getSSHService: () => undefined,
-      } as never,
-    }) as any;
+// Uses this file's withTempDir helper and it.sequential, like the tests above:
+// the file mocks process.cwd, so these cannot run concurrently with each other.
+const globHits = (text: string) => text.split('\n').filter((line) => line.endsWith('.ts')).length;
 
-  it('caps a direct call at 50 and says so', async () => {
-    const text = String(await make().execute({ pattern: 'source/tools/**/*.ts' }, {}));
+async function withManyFiles(count: number, run: () => Promise<void>) {
+  await withTempDir(async (dir) => {
+    for (let i = 0; i < count; i++) {
+      await fs.writeFile(path.join(dir, `file${String(i).padStart(3, '0')}.ts`), 'export const x = 1;\n');
+    }
+    await run();
+  });
+}
 
-    expect(text.split('\n').filter((line) => line.endsWith('.ts')).length).toBe(50);
+it.sequential('glob caps a direct call at 50 and says so', async () => {
+  await withManyFiles(60, async () => {
+    const text = String(await findFilesToolDefinition.execute({ pattern: '*.ts' }, {} as never));
+
+    expect(globHits(text)).toBe(50);
     expect(text).toContain('Results limited to 50 files');
   });
+});
 
-  it('gives a script the whole match set instead', async () => {
-    const direct = String(await make().execute({ pattern: 'source/tools/**/*.ts' }, {}));
-    const total = Number(/Found (\d+) total matches/.exec(direct)?.[1]);
-    const scripted = String(await make().execute({ pattern: 'source/tools/**/*.ts' }, { scripted: true }));
+it.sequential('glob gives a script the whole match set instead', async () => {
+  await withManyFiles(60, async () => {
+    const text = String(await findFilesToolDefinition.execute({ pattern: '*.ts' }, { scripted: true } as never));
 
     // A short list makes whatever the script computes from it wrong, and the
     // "Results limited to" note is prose a script splitting on newlines reads
     // as another path.
-    expect(total).toBeGreaterThan(50);
-    expect(scripted.split('\n').filter((line) => line.endsWith('.ts')).length).toBe(total);
-    expect(scripted).not.toContain('Results limited to');
+    expect(globHits(text)).toBe(60);
+    expect(text).not.toContain('Results limited to');
   });
+});
 
-  it('still honours an explicit max_results from a script', async () => {
-    const text = String(await make().execute({ pattern: 'source/tools/**/*.ts', max_results: 5 }, { scripted: true }));
+it.sequential('glob still honours an explicit max_results from a script', async () => {
+  await withManyFiles(60, async () => {
+    const text = String(
+      await findFilesToolDefinition.execute({ pattern: '*.ts', max_results: 5 }, { scripted: true } as never),
+    );
 
-    expect(text.split('\n').filter((line) => line.endsWith('.ts')).length).toBe(5);
+    expect(globHits(text)).toBe(5);
   });
 });

@@ -44,14 +44,10 @@ export type FindFilesToolParams = z.infer<typeof findFilesParametersSchema>;
 
 import { ExecutionContext } from '../../services/execution-context.js';
 import { executeShellCommand } from '../../utils/shell/execute-shell.js';
+import { isScriptedToolCall } from '../../utils/output/bound-tool-result.js';
 
 let hasFd: boolean | null = null;
 let hasFdRemote: boolean | null = null;
-
-/** True when `run_code` made this call from inside a script. */
-function isScriptedCall(context: unknown): boolean {
-  return !!context && typeof context === 'object' && (context as { scripted?: unknown }).scripted === true;
-}
 
 /**
  * Result cap for a glob issued from inside a script.
@@ -198,7 +194,7 @@ export const createFindFilesToolDefinition = (
       // field test: a script asked for every file under source/tools, received
       // 50 of 86, and reported the wrong longest file
       // (docs/plans/code-mode-field-test.md).
-      const limit = max_results ?? (isScriptedCall(context) ? SCRIPTED_GLOB_MAX_RESULTS : 50);
+      const limit = max_results ?? (isScriptedToolCall(context) ? SCRIPTED_GLOB_MAX_RESULTS : 50);
       const cwd = executionContext?.getCwd() || process.cwd();
 
       // When the pattern itself is an absolute path (e.g. "/data/llamacpp/models/run_*.sh"),

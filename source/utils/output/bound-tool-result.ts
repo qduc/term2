@@ -5,6 +5,29 @@ import { formatFullOutputSavedNote, saveOutputArtifact } from '../shell/shell-ou
 export const DEFAULT_TOOL_RESULT_MAX_BYTES = 40_000;
 
 /**
+ * True when `run_code` made this call from inside a script.
+ *
+ * `run_code` sets `scripted` on the invocation context it passes to nested
+ * tools. Tools consult it to decide whether a context-protection cap applies:
+ * a scripted result goes to the script, not into model context.
+ */
+export function isScriptedToolCall(context: unknown): boolean {
+  return !!context && typeof context === 'object' && (context as { scripted?: unknown }).scripted === true;
+}
+
+/**
+ * Resolves the result byte cap for a call, honouring the scripted boundary.
+ *
+ * An explicit override always wins; otherwise a scripted call gets the larger
+ * scripted cap and a direct call gets the context default.
+ */
+export function resolveResultMaxBytesForCall(context: unknown, override?: number): number {
+  return resolveToolResultMaxBytes(
+    override ?? (isScriptedToolCall(context) ? SCRIPTED_TOOL_RESULT_MAX_BYTES : undefined),
+  );
+}
+
+/**
  * Byte cap for a result delivered to a script instead of to model context.
  *
  * Matches `RUN_CODE_LIMITS.maxResultChars`, which bounds the same value one

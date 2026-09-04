@@ -57,9 +57,21 @@ export { setTrimConfig, getTrimConfig, DEFAULT_TRIM_CONFIG, type OutputTrimConfi
 
 import { ExecutionContext } from '../../services/execution-context.js';
 import { executeShellCommand } from '../../utils/shell/execute-shell.js';
+import { isScriptedToolCall, resolveResultMaxBytesForCall } from '../../utils/output/bound-tool-result.js';
 
 let hasRg: boolean | null = null;
 let hasRgRemote: boolean | null = null;
+
+/**
+ * Result cap for a grep issued from inside a script.
+ *
+ * Mirrors `SCRIPTED_GLOB_MAX_RESULTS`: the match list goes to the script, not
+ * into model context, and a silently short list (or the mid-list "lines
+ * trimmed" / trailing "lines exceed" prose) makes whatever the script
+ * computes from it wrong. Same starting cap (50) as glob, so the same 100x
+ * headroom applies.
+ */
+const SCRIPTED_GREP_MAX_RESULTS = 5_000;
 
 function shellQuoteArg(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
@@ -154,7 +166,7 @@ const buildGrepDescription = (globAvailable: boolean, orchestratorMode: boolean)
     `Do NOT use this to list files by name (inside run_code, use ${
       fileListTool === 'glob' ? 'tools.glob(...)' : 'shell'
     }) or to explore relationships between files (inside run_code, use tools.code_context_search(...)). ` +
-    'Returns up to 50 matches as path:line:matched_text, or a note if results are truncated.';
+    'Returns up to 50 matches as path:line:matched_text (more from inside run_code), or a note if results are truncated.';
   if (!orchestratorMode) {
     return base;
   }
@@ -164,7 +176,7 @@ const buildGrepDescription = (globAvailable: boolean, orchestratorMode: boolean)
     `Do NOT use this to list files by name (inside run_code, use ${
       fileListTool === 'glob' ? 'tools.glob(...)' : 'shell'
     }) or to explore relationships between files (inside run_code, use tools.code_context_search(...)). ` +
-    'Returns up to 50 matches as path:line:matched_text, or a note if results are truncated.'
+    'Returns up to 50 matches as path:line:matched_text (more from inside run_code), or a note if results are truncated.'
   );
 };
 
@@ -230,7 +242,7 @@ export const createGrepToolDefinition = (
         return true;
       }
     },
-    execute: async (params) => {
+    execute: async (params, context) => {
       const {
         pattern,
         path: searchPath,
@@ -246,12 +258,22 @@ export const createGrepToolDefinition = (
         throw new Error('Search pattern cannot be empty. Please provide a valid search term.');
       }
 
-      const max_results = 50; // Lowered to reduce output size
-
       const useRg = hasRipgrep ? await hasRipgrep() : await checkRgAvailability(executionContext);
       let command = '';
 
-      const limit = max_results;
+      // A scripted call is not protected by the 50-line default: the match
+      // list goes to the script, not into model context, and a silently
+      // short list (plus prose a script splitting on newlines would read as
+      // another match) makes whatever the script computes from it wrong.
+      // Same defect class as read_file/glob/code_context_search.
+      const scripted = isScriptedToolCall(context);
+      const limit = scripted ? SCRIPTED_GREP_MAX_RESULTS : 50;
+      // trimOutput also applies its own character cap independent of the
+      // line count; a scripted call must not trip that secondary cap either,
+      // so it gets the same larger byte budget the script's return value is
+      // bound to one layer out. A direct call passes `undefined` here so it
+      // falls back to the module trim config exactly as before this fix.
+      const maxCharacters = scripted ? resolveResultMaxBytesForCall(context) : undefined;
 
       if (useRg) {
         const args = ['rg', '--line-number', '--no-heading', '--color=never'];
@@ -324,7 +346,7 @@ export const createGrepToolDefinition = (
       const filteredStdout = result.stdout;
       const trimmed = filteredStdout.trim();
       const lineCount = trimmed ? trimmed.split('\n').length : 0;
-      const outputTrimmed = trimOutput(trimmed, limit);
+      const outputTrimmed = trimOutput(trimmed, limit, maxCharacters);
 
       if (lineCount > limit) {
         return `${outputTrimmed}\n\nNote: ${lineCount} lines exceed the ${limit}-line limit. Narrow your search (pattern, path, or include).`;

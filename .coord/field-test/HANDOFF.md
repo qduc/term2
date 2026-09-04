@@ -210,3 +210,32 @@ new cells.
 ~33 worktrees under `.worktrees/`: `r2-*` (9), `e1-*` (4), `e5-*` (13),
 `e2-glob`, `e3-caps`, `e4-shape`, `field-test`, `codemode-task`. Branches
 match. `main` is clean and carries only the three merges above.
+
+## Trap: the codex model list degrades and is cached for an hour
+
+`term2 -p codex -m gpt-5.6-luna` intermittently fails with
+`Error: No models match "gpt-5.6-luna"`. **That error is local, from the
+cached listing — it is not the API saying the model is missing.** Remedy:
+
+    rm ~/.cache/term2-nodejs/models/codex.json   # forces a refetch
+
+Root cause (full diagnosis: `.coord/orch/deliver/w9-codex-degrade.md`):
+upstream occasionally answers `200 OK` with a legacy one-model body
+(`gpt-5.3-codex`). There is no local fallback list and no filter —
+`fetchCodexModels` maps `body.models` 1:1 — so the short list is genuine, and
+`model-service.ts:199-200` caches it to disk for a full hour with no
+minimum-count check, no diff against the previous list, and no log line.
+`model-service.ts:170` gives the L1 memory cache no TTL at all, so a poisoned
+list can outlive even the disk expiry inside a long-running process.
+
+**Why it appeared on 2026-09-04 and never before:** the disk cache
+(`64b1d284`) and local `--model` validation (`164b8b69`, `b2ff91f6`,
+`ad47f856`) both shipped in v0.21.0 on **2026-09-03**. Before them a degraded
+response died with the process and `-m` passed through unvalidated, so the
+blip was invisible. The upstream behaviour is probably old; only its
+persistence and visibility are new.
+
+Not reproducible on demand: 0 of 25 controlled refetches degraded. Do not
+expect to trigger it deliberately. `.coord/orch/dispatch.sh` carries a
+preflight that detects the degraded list and clears the cache before spending
+a worker slot.

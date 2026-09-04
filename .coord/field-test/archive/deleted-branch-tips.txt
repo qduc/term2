@@ -1,0 +1,16 @@
+# Branch tips at deletion, 2026-09-04. Recover with: git branch <name> <sha>
+# Content is archived under .coord/field-test/archive/<name>/
+9d3c321df89c0b786f19f0042cf6ebfba7b62ad2  codemode-task
+c9e07135d8533c2bf88af7b6adb885028c28b93e  e1-ds
+c9e07135d8533c2bf88af7b6adb885028c28b93e  e1-glm
+5e0e0023743be124b9e6b811f0f8ff87449e3f04  e5-c-ds
+443ed580f4fbf490b98676d1f4aab2e1108e329a  luna-chained
+6bc0dc825780d50d7f3cf1b64e10975a5c22bc2c  r2-a-ds
+5615ab2675e22d23a4f8487851bec993520cabdd  r2-a-glm
+c9e07135d8533c2bf88af7b6adb885028c28b93e  r2-a-muse
+49299b0e780a5796a5e500e4f1ea60fcc8a0370b  r2-b-ds
+c9e07135d8533c2bf88af7b6adb885028c28b93e  r2-b-glm
+c9e07135d8533c2bf88af7b6adb885028c28b93e  r2-b-muse
+8561f47082a0176c72415dd9d3cce4e914176513  r2-c-ds
+44755ae04b7a49da9cef5cc20a92b74cd529e2b0  r2-c-glm
+a67acc3b3ddecb42fca81d150c6ed581d14e533b  r2-c-muse

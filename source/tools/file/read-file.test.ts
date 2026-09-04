@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
@@ -338,5 +338,23 @@ it.sequential('execute: handles line range beyond file length', async () => {
     expect(result.includes('Line 1')).toBe(true);
     expect(result.includes('Line 2')).toBe(true);
     expect(result.includes('2 lines')).toBe(true);
+  });
+});
+
+describe('read_file scripted cap (real file)', () => {
+  it('gives a script the whole file while still truncating for the model', async () => {
+    const path = 'source/tools/system/shell.ts';
+    const raw = await fs.readFile(path, 'utf8');
+    const tool = createReadFileToolDefinition({}) as any;
+
+    const direct = String(await tool.execute({ path }, {}));
+    const scripted = String(await tool.execute({ path }, { scripted: true }));
+    const lastLine = `${raw.split('\n').length}: `;
+
+    expect(raw.length).toBeGreaterThan(50_000);
+    expect(direct.length).toBeLessThan(41_000);
+    expect(direct).not.toContain(lastLine);
+    expect(scripted.length).toBeGreaterThan(60_000);
+    expect(scripted).toContain(lastLine);
   });
 });

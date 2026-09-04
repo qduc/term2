@@ -374,7 +374,11 @@ export function createRunCodeToolDefinition(
           const started = Date.now();
           const callId = `${bridgeRunId}:${callContext.callId}`;
           try {
-            const nestedContext = withAbortSignal(context, mergeAbortSignals(callerSignal, callContext.signal));
+            // Marks the call as originating inside a script: the result goes to the
+            // script, not into model context, so context-protection caps do not apply.
+            const nestedContext = withAbortSignal(context, mergeAbortSignals(callerSignal, callContext.signal), {
+              scripted: true,
+            });
             const result = await prepared.tool.execute(prepared.params, nestedContext, { toolCall: { callId } });
             record(prepared.tool.name, 'ok', started);
             return {
@@ -427,8 +431,10 @@ export function createRunCodeToolDefinition(
   return definition;
 }
 
-function withAbortSignal(context: unknown, signal: AbortSignal): unknown {
-  return context && typeof context === 'object' ? { ...(context as Record<string, unknown>), signal } : { signal };
+function withAbortSignal(context: unknown, signal: AbortSignal, extra: Record<string, unknown> = {}): unknown {
+  return context && typeof context === 'object'
+    ? { ...(context as Record<string, unknown>), signal, ...extra }
+    : { signal, ...extra };
 }
 
 function mergeAbortSignals(callerSignal: AbortSignal | undefined, hostSignal: AbortSignal): AbortSignal {

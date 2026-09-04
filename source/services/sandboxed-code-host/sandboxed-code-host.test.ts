@@ -48,3 +48,33 @@ describe('SandboxedCodeHostImpl isolation', () => {
     ]);
   });
 });
+
+describe('SandboxedCodeHostImpl output rejection messages', () => {
+  const run = (code: string, overrides: Partial<typeof limits> = {}) =>
+    new SandboxedCodeHostImpl().run({
+      code,
+      capabilities: { tools: echoCapability },
+      limits: { ...limits, ...overrides },
+      subject: 'Script',
+    });
+
+  it('reports the actual size and the limit when output is too large', async () => {
+    const result = await run(`return { blob: 'x'.repeat(5000) };`, { maxOutputBytes: 1_000 });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('invalid_output');
+    // The model can only choose between shrinking and chunking if it is told
+    // how far over it went.
+    expect(result.error.message).toMatch(/returned \d+ bytes, over the 1000-byte limit/);
+    expect(result.error.message).toMatch(/batches/);
+  });
+
+  it('still accepts JSON-safe output inside the limit', async () => {
+    const result = await run(`return { rows: [1, 2, 3] };`);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.output).toEqual({ rows: [1, 2, 3] });
+  });
+});

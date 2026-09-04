@@ -1,10 +1,19 @@
 # One sandboxed code host for `run_agent_workflow` and `run_code`
 
-Status: **M1, M2 and M4 implemented on branch `sandboxed-code-host` (2026-09-04),
-not yet merged. M3 is open and blocking.** `run_code` now runs on the shared host,
-but until M3 lands it is still non-functional in normal mode: with the wrapped
-registry bound, every `tools.*` call is refused, and it says so explicitly rather
-than failing silently.
+Status: **M1–M4 complete, reviewed and merged (2026-09-04).** `run_code` runs on
+the shared host and resolves nested approval through the policy registry, so
+auto-approved tools now execute from inside a script.
+
+Two independent reviews of the finished branch found a **critical vm escape that
+predated this work**: host-realm `console` and capability functions were installed
+on the sandbox object before `vm.createContext`, so `console.log.constructor("return
+process")()` recovered the real `process` while `typeof process` was `undefined` and
+`eval` correctly threw. It was reachable on `main` through auto-approved
+`run_agent_workflow`. Fixed in `1cf886a6` by constructing exposed bindings and
+promises inside the context and serializing capability results. The rule this
+establishes: **an exposed value must belong to the vm realm or cross as JSON.** The
+old test asserted `typeof process === 'undefined'`, which passed throughout — realm
+ownership needs its own assertion.
 
 ## Resume here
 

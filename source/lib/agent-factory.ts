@@ -5,6 +5,7 @@ import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import { getAgentDefinition } from '../agent.js';
 import { getProvider } from '../providers/index.js';
 import { createEditorImpl } from './editor-impl.js';
+import { bindRunCodeRegistry } from '../tools/system/run-code/index.js';
 import { normalizeToolParameters, wrapNeedsApproval, wrapToolInvoke } from './tool-invoke.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { ExecutionContext } from '../services/execution-context.js';
@@ -295,6 +296,11 @@ export function buildAgentTools({
       provider: deps.providerId,
     });
   }
+
+  // run_code executes tools itself, out of band of the run loop. Binding the
+  // wrapped list here is what subjects a script's calls to the same approval
+  // wrapping, plan-mode interceptors, and post-execute policy as a direct call.
+  bindRunCodeRegistry(tools);
 
   return tools;
 }

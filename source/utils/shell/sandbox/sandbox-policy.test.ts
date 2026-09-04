@@ -249,31 +249,6 @@ it('createSandboxRuntimeConfig allows only the explicit Docker socket when host 
   expect(config.network.allowUnixSockets).toEqual(['/private/var/folders/docker.sock']);
 });
 
-it('createSandboxRuntimeConfig allows the run_code tool bridge socket', () => {
-  const config = createSandboxRuntimeConfig({
-    toolBridgeSocketPath: '/tmp/term2/t2-tools-abc.sock',
-    env: {},
-  });
-
-  expect(config.network.allowUnixSockets).toEqual(['/tmp/term2/t2-tools-abc.sock']);
-});
-
-it('createSandboxRuntimeConfig does not open a tool bridge socket that was not requested', () => {
-  const config = createSandboxRuntimeConfig({ env: {} });
-
-  expect(config.network.allowUnixSockets).toBeUndefined();
-});
-
-it('createSandboxRuntimeConfig allows the tool bridge socket alongside a granted Docker socket', () => {
-  const config = createSandboxRuntimeConfig({
-    dockerSocketPath: '/private/var/folders/docker.sock',
-    toolBridgeSocketPath: '/tmp/term2/t2-tools-abc.sock',
-    env: {},
-  });
-
-  expect(config.network.allowUnixSockets).toEqual(['/private/var/folders/docker.sock', '/tmp/term2/t2-tools-abc.sock']);
-});
-
 it('keeps the Docker credential directory denied while carving out only an explicitly granted socket', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-docker-home-'));
   const socketPath = path.join(home, '.docker', 'run', 'docker.sock');

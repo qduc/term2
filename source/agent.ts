@@ -605,14 +605,12 @@ export const getAgentDefinition = (
   }
 
   // Registered last so its bridge exposes every other tool this profile
-  // resolved. It filters itself out of that registry, so a script cannot
-  // recurse into another sandboxed run.
+  // resolved. The registry it actually calls is injected later by
+  // bindRunCodeRegistry, once the policy layer has wrapped these definitions.
   if (hasCapability('shell')) {
     tools.push(
       createRunCodeToolDefinition({
-        settingsService,
         loggingService,
-        getToolRegistry: () => tools,
         getCwd: () => executionContext?.getCwd() || process.cwd(),
       }),
     );

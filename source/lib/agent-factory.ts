@@ -5,7 +5,7 @@ import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import { getAgentDefinition } from '../agent.js';
 import { getProvider } from '../providers/index.js';
 import { createEditorImpl } from './editor-impl.js';
-import { bindRunCodeRegistry, isDirectlyCallable } from '../tools/system/run-code/index.js';
+import { bindRunCodeRegistry, isDirectlyCallable, TOOL_NAME_RUN_CODE } from '../tools/system/run-code/index.js';
 import { normalizeToolParameters, wrapNeedsApproval, wrapToolInvoke } from './tool-invoke.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { ExecutionContext } from '../services/execution-context.js';
@@ -307,6 +307,11 @@ export function buildAgentTools({
   // wrapped list here is what subjects a script's calls to the same approval
   // wrapping, plan-mode interceptors, and post-execute policy as a direct call.
   bindRunCodeRegistry(tools);
+
+  // Profiles without shell do not register run_code. Keep their existing
+  // direct surface intact; only reduce the model-facing list when run_code is
+  // available as the script path.
+  if (!tools.some((tool) => tool.name === TOOL_NAME_RUN_CODE)) return tools;
 
   // Keep the complete wrapped registry bound above, but make run_code the
   // primary model-facing path for tools that can execute without an

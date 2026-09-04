@@ -3,6 +3,90 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildPromptSpec } from './prompt-constructor.js';
 import { resolveProfile } from '../services/profiles/index.js';
+import { getAgentDefinition } from '../agent.js';
+import { createMockSettingsService } from '../services/settings/settings-service.mock.js';
+import { ExecutionContext } from '../services/execution-context.js';
+import { BackgroundShellRegistry } from '../services/shell/background-shell-registry.js';
+import { BackgroundShellOutputStore } from '../services/shell/background-shell-output-store.js';
+import { BackgroundShellWatches } from '../services/shell/background-shell-watches.js';
+import { SessionBrowser } from '../services/conversation/session-browser.js';
+import { RUN_CODE_PROHIBITED_TOOLS } from '../tools/system/run-code/run-code.js';
+import { getBackgroundShellAddendum } from './background-shell.js';
+import { getSubagentDelegationAddendum } from './subagent-delegation.js';
+
+const fullCapabilityLogging = {
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+  security: () => {},
+  setCorrelationId: () => {},
+  clearCorrelationId: () => {},
+  getCorrelationId: () => undefined,
+} as any;
+
+function fullCapabilityTools() {
+  const settingsService = createMockSettingsService({
+    'agent.model': 'gpt-4o',
+    'agent.smartModel': 'gpt-4o',
+    'app.searchViaShell': 'off',
+    enable_agent_workflow: true,
+    'sandbox.enabled': true,
+  });
+  const executionContext = new ExecutionContext();
+  const backgroundShellRegistry = new BackgroundShellRegistry();
+  const store = new BackgroundShellOutputStore();
+  const backgroundShellOutput = {
+    store,
+    watches: new BackgroundShellWatches({ store, scheduler: { schedule: () => 0, cancel: () => {} } }),
+  };
+  const skillsService = {
+    getAvailableSkillsForModel: () => [{ name: 'measurement', location: '/tmp/measurement', body: '' }],
+    getSkillCatalog: () => '',
+  } as any;
+  const sessionBrowser = new SessionBrowser(() => ({ projectPath: process.cwd() }));
+  const status = {
+    runId: 'measurement',
+    role: 'worker',
+    status: 'completed',
+    task: 'measurement',
+    taskPreview: 'measurement',
+    startedAt: 0,
+    elapsedMs: 0,
+    toolCounts: {},
+  } as any;
+  return getAgentDefinition(
+    {
+      settingsService,
+      loggingService: fullCapabilityLogging,
+      executionContext,
+      askMentor: async () => 'mentor',
+      runSubagent: async () => ({ finalText: 'subagent' }),
+      runSubagentAsync: async () => ({ runId: 'measurement', role: 'worker', status: 'running', task: 'measurement' }),
+      getSubagentResult: async () => ({
+        agentId: 'measurement',
+        role: 'worker',
+        status: 'completed',
+        finalText: 'subagent',
+        filesChanged: [],
+        toolsUsed: [],
+      }),
+      getSubagentStatus: () => status,
+      sendSubagentMessage: () => ({ ok: true, runId: 'measurement', status: 'running', delivery: 'queued' }),
+      cancelSubagentRun: () => ({ ok: true, runId: 'measurement', status: 'cancelling' }),
+      getAskUserAnswer: () => 'answer',
+      skillsService,
+      agentRuntime: { agent: () => ({} as any) },
+      backgroundShellRegistry: backgroundShellRegistry as any,
+      backgroundShellOutput,
+      sessionBrowser,
+      requestSessionRollover: () => ({} as any),
+      configureTaskCheckIn: () => ({} as any),
+      setTaskCheckInPolicy: () => {},
+    },
+    'gpt-4o',
+  ).tools;
+}
 
 const profile = (id: string) => resolveProfile(id);
 
@@ -91,6 +175,27 @@ it('buildPromptSpec composes file fragments in stable order', () => {
   ]);
 
   expect(spec.inlineSections).toContainEqual(expect.stringContaining('## Shell Sandbox'));
+});
+
+it('does not teach root prompt surfaces to call script-only tools directly', () => {
+  const tools = fullCapabilityTools();
+  const scriptOnly = tools.filter((tool) => !RUN_CODE_PROHIBITED_TOOLS.has(tool.name)).map((tool) => tool.name);
+  const surfaces = ['lite.md', 'memory.md', 'session-browser.md', 'orchestrator.md'].map((file) =>
+    readFileSync(join(import.meta.dirname, file), 'utf8'),
+  );
+  surfaces.push(
+    getBackgroundShellAddendum(),
+    getSubagentDelegationAddendum({ backgroundEnabled: true, controlsEnabled: true, foregroundEnabled: false }),
+    ...tools.filter((tool) => scriptOnly.includes(tool.name)).map((tool) => tool.description),
+  );
+
+  const directReferences = scriptOnly.flatMap((name) => {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(`(?<![A-Za-z0-9_.])${escaped}(?![A-Za-z0-9_])`);
+    return surfaces.some((surface) => pattern.test(surface)) ? [name] : [];
+  });
+
+  expect(directReferences).toEqual([]);
 });
 
 it('buildPromptSpec ships the approval mechanism to every non-lite profile', () => {
@@ -193,7 +298,7 @@ it('buildPromptSpec tells the model to wait for background shell completion inst
 
   expect(guidance).toContain('Background shell jobs');
   expect(guidance).toContain('`background: true`');
-  expect(guidance).toContain('Do NOT call `get_shell_job` as a polling loop');
+  expect(guidance).toContain('do NOT call `tools.get_shell_job(...)` as a polling loop');
   expect(guidance.toLowerCase()).toContain('end the current turn and wait for the automatic completion notification');
   expect(guidance.toLowerCase()).toContain('do not run `sleep` merely to wait');
 });
@@ -211,7 +316,7 @@ it('memory.md fragment keeps the index omission contract', () => {
   const fragment = readFileSync(join(import.meta.dirname, 'memory.md'), 'utf8');
 
   expect(fragment).toContain('a listed memory without a summary had it omitted for budget');
-  expect(fragment).toContain('read it with memory_get before treating it as irrelevant');
+  expect(fragment).toContain('read it with `tools.memory_get(...)` before treating it as irrelevant');
   expect(fragment).not.toContain('Only a concise index is loaded initially');
 });
 
@@ -244,7 +349,7 @@ it('buildPromptSpec tells orchestrators to trust successful delegation and wait 
   expect(guidance).toContain('Do not duplicate or independently perform the delegated unit');
   expect(guidance.toLowerCase()).toContain('end the current turn and wait for the completion notification');
   expect(guidance).toContain('inlines the full result so you can continue directly');
-  expect(guidance).toContain('Do NOT call `get_subagent_result` immediately');
+  expect(guidance).toContain('do NOT call `tools.get_subagent_result(...)` immediately');
   expect(guidance).toContain('Active runs are refused rather than awaited');
   expect(guidance).not.toContain('Use `run_subagent` only');
 });

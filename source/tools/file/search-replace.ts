@@ -266,7 +266,7 @@ export const formatSearchReplaceCommandMessage: FormatCommandMessage = (item, in
 const SEARCH_REPLACE_DESCRIPTION =
   'Replace text in a file using layered, deterministic matching. Exact matching is preferred; conservative fallbacks tolerate line-ending, indentation, whitespace, escaped-text, and minor anchored multi-line differences. Matches must be unique unless match_all is true, and oversized fuzzy spans are rejected.\n' +
   'Gap matching: When rewriting large chunks of text, put <...> on its own line in search_content to match an unchanged region between a head anchor and a tail anchor. The entire span—both anchors and everything between them—is replaced, so a misplaced anchor silently deletes a large region. Choose distinctive, unambiguous anchors: prefer a few lines of real, unique code. Never anchor on a single generic line like }, return, or a blank line. Use this to edit or delete a large block without reproducing it: Delete the block including anchors: omit them from replace_content. Delete only the middle: repeat the anchors in replace_content.\n' +
-  'Do NOT use this to create files from scratch; use create_file. Returns a plain-text summary with one line per replacement: Updated <path> or Error: <reason>.';
+  'Do NOT use this to create files from scratch; inside run_code, use tools.create_file(...). Returns a plain-text summary with one line per replacement: Updated <path> or Error: <reason>.';
 
 export function createSearchReplaceToolDefinition(deps: {
   loggingService: ILoggingService;

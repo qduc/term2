@@ -13,8 +13,8 @@ import { formatFullOutputSavedNote, saveOutputArtifact } from '../../utils/shell
 
 const WEB_FETCH_DESCRIPTION =
   'Fetch a web page and convert its HTML content to Markdown. ' +
-  'Use this when you need the full content of a specific URL referenced by web_search or the user. ' +
-  'Do NOT use this for broad queries; use web_search. ' +
+  'Use this when you need the full content of a specific URL referenced by tools.web_search(...) inside run_code or by the user. ' +
+  'Do NOT use this for broad queries; inside run_code, use tools.web_search(...) instead. ' +
   'Returns the page title, URL, table of contents, and extracted Markdown. ' +
   'Initial fetches are truncated to max_chars; the full content is saved to a temporary file when exceeded ' +
   '(look for "Full output saved to" and read that path when you need more).';

@@ -189,9 +189,9 @@ describe('SubagentToolFactory search tool descriptions', () => {
 
     const grepTool = tools.find((tool) => tool.name === 'grep');
     const codeContextTool = tools.find((tool) => tool.name === 'code_context_search');
-    expect(grepTool?.description).toContain('use glob');
+    expect(grepTool?.description).toContain('use tools.glob(...)');
     expect(grepTool?.description).not.toContain('use shell');
-    expect(codeContextTool?.description).toContain('use glob');
+    expect(codeContextTool?.description).toContain('use tools.glob(...)');
     expect(codeContextTool?.description).not.toContain('use shell');
   });
 });

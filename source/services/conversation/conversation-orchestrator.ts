@@ -105,7 +105,7 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
         '',
         ...entries,
         '',
-        'The full result is inlined above; you do not need to call get_subagent_result. Assess it against the task before you accept it, then continue through the next necessary steps yourself rather than stopping at the fact that a run finished. Tell the user concisely, in your own words, what you concluded — the report is input to your judgement, not a message to relay.',
+        'The full result is inlined above; you do not need to call tools.get_subagent_result(...) inside run_code. Assess it against the task before you accept it, then continue through the next necessary steps yourself rather than stopping at the fact that a run finished. Tell the user concisely, in your own words, what you concluded — the report is input to your judgement, not a message to relay.',
       ].join('\n'),
     );
   }
@@ -126,7 +126,7 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
         '',
         ...entries,
         '',
-        'Decide the answer, investigate it yourself, or escalate to the user if needed. To answer a specific waiting subagent, call send_message({ target, reply_to: messageId, message }). The subagent has no direct user channel; an answer resumes only its waiting tool call.',
+        'Decide the answer, investigate it yourself, or escalate to the user if needed. To answer a specific waiting subagent, use run_code with tools.send_message({ target, reply_to: messageId, message }). The subagent has no direct user channel; an answer resumes only its waiting tool call.',
       ].join('\n'),
     );
   }
@@ -148,7 +148,7 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
         // exists, so the run keeps going inside its own envelope regardless.
         // Promising an action the parent cannot take produces confident,
         // ineffective replies and teaches it to ignore this lane.
-        'Judge the evidence and act only if the run is going wrong: steer it with specific corrective guidance via send_message({ target, message }), or stop it with the background task controls. Doing nothing is a valid judgement — the run continues within its own budget and, at critical, ends itself with a summary of what it completed.',
+        'Judge the evidence and act only if the run is going wrong: steer it with specific corrective guidance via run_code with tools.send_message({ target, message }), or stop it with the background task controls. Doing nothing is a valid judgement — the run continues within its own budget and, at critical, ends itself with a summary of what it completed.',
       ].join('\n'),
     );
   }
@@ -265,7 +265,7 @@ function formatBackgroundSubagentNotifications(notifications: readonly Backgroun
         '',
         ...entries,
         '',
-        'Decide freely: doing nothing and letting it keep running is a valid choice. To adjust check-in frequency or silence future check-ins for a task, call configure_task_check_in. Only report to the user or intervene (steer or stop the task) if the elapsed time or task nature makes that the right call.',
+        'Decide freely: doing nothing and letting it keep running is a valid choice. To adjust check-in frequency or silence future check-ins for a task, use run_code with tools.configure_task_check_in(...). Only report to the user or intervene (steer or stop the task) if the elapsed time or task nature makes that the right call.',
       ].join('\n'),
     );
   }
@@ -996,7 +996,7 @@ export class ConversationOrchestrator {
     // Steer is part of the judge's vocabulary, but no human surface produces it
     // here: the prompt offers Continue and Stop only, and collecting corrective
     // text would need an input surface this prompt does not own. A human steers
-    // by continuing and then typing. Parent agents steer with send_message.
+    // by continuing and then typing. Parent agents steer with run_code and tools.send_message(...).
     if (runBudgetEvent && answer === 'y') {
       // Take the grant here rather than leaving it to the resume, because a
       // refusal has to be shown to the human instead of silently stopping.

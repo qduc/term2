@@ -92,13 +92,13 @@ it('does not advertise the librarian when persistent memory is disabled', () => 
 it('async control guidance distinguishes steering, cancellation, answers, and fresh-turn limits honestly', () => {
   const result = getAsyncSubagentDelegationAddendum({ orchestratorMode: true, controlsEnabled: true });
 
-  expect(result).toContain('`send_message`');
-  expect(result).toContain('`cancel_run`');
+  expect(result).toContain('`tools.send_message(...)`');
+  expect(result).toContain('`tools.cancel_run(...)`');
   expect(result).toContain('name or runId');
   expect(result).toContain('`reply_to`');
   expect(result).toContain('fresh session turn');
   expect(result).toContain('maximum of three continuation segments');
   expect(result).toContain('not SDK live injection');
   expect(result).toContain('single point of contact');
-  expect(result).toContain('Do NOT call `get_subagent_result` immediately');
+  expect(result).toContain('do NOT call `tools.get_subagent_result(...)` immediately');
 });

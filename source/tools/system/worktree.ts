@@ -16,10 +16,10 @@ const ENTER_WORKTREE_DESCRIPTION =
   "Switch this session into one of the repository's existing git worktrees. Every subsequent shell command, file read, and file edit resolves against that worktree instead of the main checkout, and the shell sandbox only permits writes there. " +
   'Use this immediately after creating a worktree for a task, before making any edits — creating a worktree with `git worktree add` does NOT move you into it, and edits made without this tool land in the main checkout. ' +
   'Identify the worktree by its directory name or its branch name; call with an unknown name to see the available list. ' +
-  'Use exit_worktree to return to the main checkout. Approvals granted in one worktree do not carry over to another.';
+  'Inside run_code, use tools.exit_worktree(...) to return to the main checkout. Approvals granted in one worktree do not carry over to another.';
 
 const EXIT_WORKTREE_DESCRIPTION =
-  'Return this session to the main checkout it started in, undoing enter_worktree. Subsequent commands, reads, and edits resolve against the main checkout again. ' +
+  'Return this session to the main checkout it started in, undoing tools.enter_worktree(...). Subsequent commands, reads, and edits resolve against the main checkout again. ' +
   'Use this when work in the worktree is committed and you need to merge it back, or when the task that owned the worktree is finished.';
 
 const enterWorktreeSchema = z.object({

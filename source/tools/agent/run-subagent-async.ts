@@ -198,10 +198,10 @@ export function createRunSubagentAsyncToolDefinition(
     name: 'run_subagent_async',
     description:
       'Start a subagent that runs asynchronously in the background and returns a runId immediately — the call does NOT block. ' +
-      'After a successful launch, do NOT immediately call get_subagent_result; active runs are refused and must settle through their completion notification. ' +
+      'After a successful launch, do NOT immediately call tools.get_subagent_result(...) inside run_code; active runs are refused and must settle through their completion notification. ' +
       'Instead, end your turn and wait for the harness completion notification, which inlines the full result so you can continue without a second tool call. ' +
       'A returned handle with status: "running" means the launch succeeded; do not duplicate the delegated task. ' +
-      'Only call get_subagent_result inline if, after honest assessment, you truly cannot take any other useful action or reply to the user without the result at all. ' +
+      'Only call tools.get_subagent_result(...) inside run_code if, after honest assessment, you truly cannot take any other useful action or reply to the user without the result at all. ' +
       'Fresh runs support explorer, worker, and mentor. ' +
       'Only completed non-worker runs can be continued across turns; worker continuation is blocked.',
     parameters: runSubagentAsyncSchema,
@@ -223,7 +223,7 @@ export function createRunSubagentAsyncToolDefinition(
         if (handle.name) handleOutput.name = handle.name;
         if (handle.status === 'running') {
           handleOutput.hint =
-            'Background run launched — do NOT call get_subagent_result now. End your turn; the completion notification will inline the full result.';
+            'Background run launched — do NOT call tools.get_subagent_result(...) inside run_code now. End your turn; the completion notification will inline the full result.';
         }
         return JSON.stringify(handleOutput);
       } catch (error: any) {
@@ -269,7 +269,7 @@ export function createGetSubagentResultToolDefinition(
             status: 'background_run_waiting_for_answer',
             runId: params.runId,
             message:
-              'This background subagent is waiting for your answer. Use send_message with its messageId to resume it; do not call get_subagent_result.',
+              'This background subagent is waiting for your answer. Inside run_code, use tools.send_message(...) with its messageId to resume it; do not call tools.get_subagent_result(...).',
           });
         }
         if (!Array.isArray(status) && (status.status === 'running' || status.status === 'cancelling')) {
@@ -277,7 +277,7 @@ export function createGetSubagentResultToolDefinition(
             status: 'background_run_active',
             runId: params.runId,
             message:
-              'This background subagent is still running. End the current turn and wait for its automatic completion notification; do not call get_subagent_result again.',
+              'This background subagent is still running. End the current turn and wait for its automatic completion notification; do not call tools.get_subagent_result(...) again inside run_code.',
           });
         }
         const result = await getSubagentResult(params, context, details);
@@ -371,7 +371,7 @@ function formatSubagentStatus(status: SubagentRunStatus | SubagentRunStatus[], n
   }
   return `${formatOne(
     status,
-  )}\n\nThis run has finished. The completion notification inlined its full result; call get_subagent_result only to re-fetch it.`;
+  )}\n\nThis run has finished. The completion notification inlined its full result; inside run_code, call tools.get_subagent_result(...) only to re-fetch it.`;
 }
 
 export const formatGetSubagentStatusCommandMessage: FormatCommandMessage = (item, index, toolCallArgumentsById) => {
@@ -411,7 +411,7 @@ export function createGetSubagentStatusToolDefinition(
       'Non-blocking status of one async subagent run (runId provided) or all runs (runId omitted). ' +
       'Use this to answer a mid-run "what is it doing" question without blocking your turn. ' +
       'Returns status, elapsed, liveness evidence, last tool, and tool counts only — never the final report or diff evidence. ' +
-      'For a finished or settled run, the completion notification inlines the full result; use get_subagent_result only to re-fetch one you already saw. ' +
+      'For a finished or settled run, the completion notification inlines the full result; inside run_code, use tools.get_subagent_result(...) only to re-fetch one you already saw. ' +
       'This call never blocks and never awaits a run.',
     parameters: getSubagentStatusSchema,
     parallelSafe: true,
@@ -500,10 +500,10 @@ export function createSendMessageToolDefinition(
       'Queue non-blocking steering for an active async execution run addressed by its active name or canonical runId; this does NOT wait for a result. ' +
       'Steering is delivered by safely ending the current model stream (never an active tool) and starting a bounded fresh session turn; it is not live SDK input injection. ' +
       'Each continuation mailbox admits at most four messages totaling 4,000 characters; a full mailbox returns mailbox_full without delivering the new message. ' +
-      'A logical run permits at most three steering continuation segments. Do not immediately call get_subagent_result after this acknowledgement; the completion notification inlines the full result. ' +
+      'A logical run permits at most three steering continuation segments. Do not immediately call tools.get_subagent_result(...) inside run_code after this acknowledgement; the completion notification inlines the full result. ' +
       'To answer a waiting ask_orchestrator question, provide its messageId as reply_to; the message then answers that exact question and its tool call continues. ' +
-      'While a question is waiting, steering without reply_to is refused with question_pending, because only an answer can resume the blocked tool call: answer it or cancel_run. ' +
-      'The mentor role does not support steering. Use cancel_run to stop a run instead of sending a correction that must not continue.',
+      'While a question is waiting, steering without reply_to is refused with question_pending, because only an answer can resume the blocked tool call: inside run_code, answer it with tools.send_message(...) or use tools.cancel_run(...). ' +
+      'The mentor role does not support steering. Inside run_code, use tools.cancel_run(...) to stop a run instead of sending a correction that must not continue.',
     parameters: sendMessageSchema,
     needsApproval: () => false,
     execute: (params) => JSON.stringify(sendMessage(params)),
@@ -520,8 +520,8 @@ export function createCancelRunToolDefinition(
     description:
       'Request non-blocking two-phase cancellation of an active async run by active name or canonical runId. This does NOT wait for the result. ' +
       'It returns cancelling immediately; the runner later settles through the normal completion path with truthful partial work, tool, diff, and validation evidence. ' +
-      'Do not immediately call get_subagent_result after this acknowledgement; the completion notification inlines the full result. ' +
-      'Use send_message to steer productive execution; use cancel_run when the run should stop.',
+      'Do not immediately call tools.get_subagent_result(...) inside run_code after this acknowledgement; the completion notification inlines the full result. ' +
+      'Inside run_code, use tools.send_message(...) to steer productive execution; use tools.cancel_run(...) when the run should stop.',
     parameters: cancelRunSchema,
     needsApproval: () => false,
     execute: (params) => JSON.stringify(cancelRun(params)),

@@ -151,7 +151,9 @@ const buildGrepDescription = (globAvailable: boolean, orchestratorMode: boolean)
   const base =
     'Search for text in the codebase. Uses normal JSON escaping. Regex mode is the default; use literal mode for exact fixed-string matching. ' +
     'Use this to find where a symbol, string, or pattern appears in files. ' +
-    `Do NOT use this to list files by name (use ${fileListTool}) or to explore relationships between files (use code_context_search). ` +
+    `Do NOT use this to list files by name (inside run_code, use ${
+      fileListTool === 'glob' ? 'tools.glob(...)' : 'shell'
+    }) or to explore relationships between files (inside run_code, use tools.code_context_search(...)). ` +
     'Returns up to 50 matches as path:line:matched_text, or a note if results are truncated.';
   if (!orchestratorMode) {
     return base;
@@ -159,7 +161,9 @@ const buildGrepDescription = (globAvailable: boolean, orchestratorMode: boolean)
   return (
     'Search directly for a symbol, string, or pattern in the codebase. Uses normal JSON escaping. Regex mode is the default; use literal mode for exact fixed-string matching. ' +
     'Delegate broad or separable investigation when it provides meaningful context compression or specialization. ' +
-    `Do NOT use this to list files by name (use ${fileListTool}) or to explore relationships between files (use code_context_search). ` +
+    `Do NOT use this to list files by name (inside run_code, use ${
+      fileListTool === 'glob' ? 'tools.glob(...)' : 'shell'
+    }) or to explore relationships between files (inside run_code, use tools.code_context_search(...)). ` +
     'Returns up to 50 matches as path:line:matched_text, or a note if results are truncated.'
   );
 };

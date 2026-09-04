@@ -162,7 +162,7 @@ it('registers prior-session browser tools only when the root composition explici
     expect.arrayContaining(['session_list', 'session_search', 'session_read']),
   );
   expect(present.instructions).toContain('Prior-session transcripts');
-  expect(present.instructions).toContain('`id: "previous"` directly');
+  expect(present.instructions).toContain('tools.session_read({ id: "previous" })');
   expect(present.instructions).not.toContain('session transcript text');
   expect(present.instructions).not.toContain('HISTORICAL_TRANSCRIPT_SENTINEL');
   expect(list).not.toHaveBeenCalled();
@@ -825,9 +825,9 @@ it('getAgentDefinition keeps search tools stable in orchestrator mode', () => {
 
   const grepTool = definition.tools.find((tool) => tool.name === 'grep');
   const codeContextTool = definition.tools.find((tool) => tool.name === 'code_context_search');
-  expect(grepTool?.description).toContain('use glob');
+  expect(grepTool?.description).toContain('use tools.glob(...)');
   expect(grepTool?.description).not.toContain('use shell');
-  expect(codeContextTool?.description).toContain('use glob');
+  expect(codeContextTool?.description).toContain('use tools.glob(...)');
   expect(codeContextTool?.description).not.toContain('use shell');
 });
 

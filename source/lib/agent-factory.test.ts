@@ -169,6 +169,50 @@ it.sequential('keeps every registered tool reachable across direct and script pa
   }
 });
 
+it.sequential('keeps the complete wrapped registry when run_code is unavailable', () => {
+  const { deps } = createDeps({
+    settingsValues: { 'tools.shell.enabled': false, 'app.searchViaShell': 'off' },
+  });
+  const raw = getAgentDefinition(
+    {
+      settingsService: deps.settings,
+      loggingService: deps.logger,
+    },
+    'gpt-4o',
+  );
+
+  expect(raw.tools.map((tool) => tool.name)).toContain('web_search');
+  expect(raw.tools.map((tool) => tool.name)).not.toContain('run_code');
+
+  const built = buildAgentTools({
+    toolDefinitions: raw.tools,
+    resolvedModel: 'gpt-4o',
+    shouldUseNativePatchTool: false,
+    deps,
+  });
+
+  expect(built.map((tool) => tool.name)).toEqual(raw.tools.map((tool) => tool.name));
+});
+
+it.sequential('requires non-constant approval predicates to declare a direct fallback', () => {
+  const { deps } = createDeps({ settingsValues: { 'app.searchViaShell': 'off' } });
+  const raw = getAgentDefinition(
+    {
+      settingsService: deps.settings,
+      loggingService: deps.logger,
+    },
+    'gpt-4o',
+  );
+
+  for (const tool of raw.tools) {
+    const compactPredicate = Function.prototype.toString.call(tool.needsApproval).replace(/\s/g, '').replace(/;$/, '');
+    const isConstantPredicate = compactPredicate.endsWith('=>false') || compactPredicate.endsWith('=>true');
+    if (!isConstantPredicate && !RUN_CODE_PROHIBITED_TOOLS.has(tool.name)) {
+      expect(tool.canRequireApproval, `${tool.name} needs an explicit approval fallback`).toBe(true);
+    }
+  }
+});
+
 it.sequential('post-execute policy can reject by returning the original result', async () => {
   const executions: string[] = [];
   let policyInput: unknown;

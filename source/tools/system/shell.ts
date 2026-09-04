@@ -432,7 +432,7 @@ export function createBackgroundShellJobToolDefinitions(
     definitions.monitor = {
       name: 'monitor_shell_job',
       description:
-        "Attach a watch to a running background shell job. The watch replays the job's retained output, and each time a complete line in the selected stream matches `pattern` (or any line arrives when `pattern` is absent) and the output has been quiet for `idle_ms`, a `shell_output` notification carrying the matched lines is delivered through the conversation; the job keeps running. Returns a watchId; stop the watch with cancel_shell_monitor. Each notification includes the number of distinct lines coalesced into it (`coalescedCount`) and the inclusive seq range (`seqRange`), so bursts hidden by `idle_ms` are visible.",
+        "Attach a watch to a running background shell job. The watch replays the job's retained output, and each time a complete line in the selected stream matches `pattern` (or any line arrives when `pattern` is absent) and the output has been quiet for `idle_ms`, a `shell_output` notification carrying the matched lines is delivered through the conversation; the job keeps running. Returns a watchId; inside run_code, stop the watch with tools.cancel_shell_monitor(...). Each notification includes the number of distinct lines coalesced into it (`coalescedCount`) and the inclusive seq range (`seqRange`), so bursts hidden by `idle_ms` are visible.",
       parameters: monitorShellJobParameters,
       needsApproval: () => false,
       execute: ({ job_id, pattern, stream, idle_ms, notify_limit, once }) => {

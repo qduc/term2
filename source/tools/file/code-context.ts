@@ -83,14 +83,14 @@ const IMPORTER_EXTENSIONS = [...TS_EXTENSIONS, ...JS_EXTENSIONS];
 const READ_CODE_OUTLINE_DESCRIPTION =
   'Compact outline of one file: imports, exports, declarations. No bodies. ' +
   'Use this to orient yourself before reading a file in full. ' +
-  'Do NOT use this when you need the full file content; use read_file. ' +
+  'Do NOT use this when you need the full file content; inside run_code, use tools.read_file(...). ' +
   'Returns the compact outline.';
 const buildCodeContextSearchDescription = (globAvailable: boolean): string =>
   'Find related files for a given path or declarations for a symbol name. ' +
   'Use this to discover code that depends on or is related to a file, or to locate where a symbol is declared. ' +
   'Note: symbol must be a valid identifier-safe name (letters, numbers, underscores, and dollar signs, and cannot start with a number). ' +
-  `Do NOT use this for plain text search across files (use grep) or for listing files by name (use ${
-    globAvailable ? 'glob' : 'shell'
+  `Do NOT use this for plain text search across files (inside run_code, use tools.grep(...)) or for listing files by name (use ${
+    globAvailable ? 'tools.glob(...)' : 'shell'
   }). ` +
   'Returns up to max_results related files or symbol declarations with relation tokens.';
 

@@ -104,14 +104,16 @@ const RUN_CODE_DESCRIPTION =
   'see. `console.log` is a debugging trace: it is suppressed on successful runs unless you set `include_console: true`, ' +
   'but it is included when the script fails or times out. The code runs in an isolated ' +
   'context with no filesystem, network, timers, require, or eval: `tools.*` is the only way out. Auto-approved tools ' +
-  'run normally. A tool that requires user approval is unavailable from inside a script; call it directly as a tool ' +
-  'instead.';
+  'run normally. A tool that requires user approval is unavailable from inside a script. If it is directly callable in ' +
+  'this model configuration, call it directly as a tool; otherwise use an auto-approved alternative or narrow the ' +
+  'arguments so approval is not required.';
 
 /** One `tools.*` call observed during a run, for the user-facing summary. */
 export interface RunCodeCallRecord {
   tool: string;
   outcome: 'ok' | 'error' | 'approval_required' | 'unknown_policy' | 'unknown_tool' | 'invalid_params' | 'prohibited';
   durationMs: number;
+  directlyCallable?: boolean;
 }
 
 export interface CreateRunCodeToolOptions {
@@ -275,8 +277,12 @@ export function createRunCodeToolDefinition(
       const calls: RunCodeCallRecord[] = [];
       const output: string[] = [];
 
-      const record = (tool: string, outcome: RunCodeCallRecord['outcome'], started: number) =>
-        calls.push({ tool, outcome, durationMs: Date.now() - started });
+      const record = (
+        tool: string,
+        outcome: RunCodeCallRecord['outcome'],
+        started: number,
+        directlyCallable?: boolean,
+      ) => calls.push({ tool, outcome, durationMs: Date.now() - started, directlyCallable });
       const failed = (message: string): CapabilityOutcome => ({
         kind: 'result',
         result: { ok: false, error: message } as JsonValue,
@@ -350,13 +356,18 @@ export function createRunCodeToolDefinition(
           });
           if (decision.kind !== 'auto_approve') {
             const outcome = decision.kind === 'unknown' ? 'unknown_policy' : 'approval_required';
-            record(prepared.tool.name, outcome, prepared.started);
+            const directlyCallable = isDirectlyCallable(prepared.tool);
+            record(prepared.tool.name, outcome, prepared.started, directlyCallable);
             return failed(
               decision.kind === 'unknown'
                 ? `"${prepared.tool.name}" has no registered approval policy and is unavailable from inside a script. ` +
-                    `Call a tool with a registered approval policy directly instead.`
+                    (directlyCallable
+                      ? 'Call a tool with a registered approval policy directly instead.'
+                      : 'It is not directly callable in this model configuration; use an auto-approved alternative.')
                 : `"${prepared.tool.name}" requires approval and is unavailable from inside a script. ` +
-                    `Call ${prepared.tool.name} directly as a tool instead, or narrow the arguments so it no longer requires approval.`,
+                    (directlyCallable
+                      ? `Call ${prepared.tool.name} directly as a tool instead, or narrow the arguments so it no longer requires approval.`
+                      : 'It is not directly callable in this model configuration; use an auto-approved alternative or narrow the arguments so it no longer requires approval.'),
             );
           }
 
@@ -474,15 +485,29 @@ function renderResult(
   if (printed && (!result.ok || includeConsole)) sections.push(`Console trace (debug):\n${printed}`);
 
   const refused = calls.filter((call) => call.outcome === 'approval_required');
-  if (refused.length > 0) {
-    const names = [...new Set(refused.map((call) => call.tool))].join(', ');
+  const directlyRefused = refused.filter((call) => call.directlyCallable === true);
+  const indirectlyRefused = refused.filter((call) => call.directlyCallable === false);
+  if (directlyRefused.length > 0) {
+    const names = [...new Set(directlyRefused.map((call) => call.tool))].join(', ');
     sections.push(`Refused (needs user approval, call these directly instead): ${names}`);
   }
+  if (indirectlyRefused.length > 0) {
+    const names = [...new Set(indirectlyRefused.map((call) => call.tool))].join(', ');
+    sections.push(`Refused (needs user approval; not directly callable in this model configuration): ${names}`);
+  }
   const unknownPolicy = calls.filter((call) => call.outcome === 'unknown_policy');
-  if (unknownPolicy.length > 0) {
-    const names = [...new Set(unknownPolicy.map((call) => call.tool))].join(', ');
+  const directlyUnknown = unknownPolicy.filter((call) => call.directlyCallable === true);
+  const indirectlyUnknown = unknownPolicy.filter((call) => call.directlyCallable === false);
+  if (directlyUnknown.length > 0) {
+    const names = [...new Set(directlyUnknown.map((call) => call.tool))].join(', ');
     sections.push(
       `Unavailable (no registered approval policy, call a tool with a registered policy directly instead): ${names}`,
+    );
+  }
+  if (indirectlyUnknown.length > 0) {
+    const names = [...new Set(indirectlyUnknown.map((call) => call.tool))].join(', ');
+    sections.push(
+      `Unavailable (no registered approval policy; not directly callable in this model configuration): ${names}`,
     );
   }
   sections.push(`[${summarizeCalls(calls)}]`);

@@ -207,7 +207,9 @@ describe('run_code', () => {
 
     expect(output).toContain('caught:');
     expect(output).toContain('requires approval and is unavailable from inside a script');
-    expect(output).toContain('Refused (needs user approval, call these directly instead): locked');
+    expect(output).toContain(
+      'Refused (needs user approval; not directly callable in this model configuration): locked',
+    );
   });
 
   it('denies a tool with no registered approval policy', async () => {
@@ -320,6 +322,17 @@ describe('run_code', () => {
 
     expect(output).toContain('Unknown tool "shell". Available: echo');
     expect(output).toContain('Unknown tool "missing". Available: echo');
+  });
+
+  it('does not advise a non-direct conditional tool to be called directly', async () => {
+    const output = await run(
+      [tool({ name: 'conditional', needsApproval: ({ value }) => value === 'outside' })],
+      `try { await tools.conditional({ value: "outside" }); } catch (error) { return error.message; }`,
+    );
+
+    expect(output).toContain('not directly callable in this model configuration');
+    expect(output).not.toContain('Call conditional directly as a tool instead');
+    expect(output).not.toContain('call these directly instead: conditional');
   });
 
   it('reports a script that throws', async () => {

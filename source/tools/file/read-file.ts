@@ -24,7 +24,7 @@ const READ_FILE_DESCRIPTION =
   'Image files are returned as image content for visual models. ' +
   'Use this to inspect a known file or verify a specific claim about a location. ' +
   'Avoid reading tiny repeated chunks (e.g. 50 lines at a time); read the full file if it is under 1000 lines or use a larger window. ' +
-  'Do NOT use this to search for text across files (use grep). ' +
+  'Do NOT use this to search for text across files (inside run_code, use tools.grep(...) instead). ' +
   'Returns the file path, total line count, and the requested lines. ' +
   'Large results are truncated and the full payload is saved to a file; look for "Full output saved to" and read that path when you need more.';
 const READ_FILE_DESCRIPTION_OUTSIDE =

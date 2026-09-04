@@ -18,7 +18,7 @@ import type { ISettingsService, ILoggingService } from '../../services/service-i
 const WEB_SEARCH_DESCRIPTION =
   'Search the web for current information. ' +
   'Use this when you need up-to-date information that may not be in your training data, such as recent news, current events, documentation updates, or any time-sensitive information. ' +
-  'Do NOT use this to read a specific known page; use web_fetch. ' +
+  'Do NOT use this to read a specific known page; inside run_code, use tools.web_fetch(...) instead. ' +
   'Returns a markdown summary with an answer box (when available) and a numbered list of results.';
 
 const webSearchSchema = z.object({

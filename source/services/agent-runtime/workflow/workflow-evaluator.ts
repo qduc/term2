@@ -1,13 +1,13 @@
-import { Worker } from 'node:worker_threads';
+import type { Worker } from 'node:worker_threads';
 import type { AgentRuntime } from '../agent-runtime.js';
 import type { AgentConfig, RunResult } from '../types.js';
-import { createWorkflowSandbox } from './workflow-sandbox.js';
+import { SandboxedCodeHostImpl } from '../../sandboxed-code-host/sandboxed-code-host.js';
+import type { CapabilityHandler, CapabilityOutcome } from '../../sandboxed-code-host/host-types.js';
 import {
   DEFAULT_WORKFLOW_LIMITS,
   isJsonValue,
   type JsonValue,
   type WorkflowAgentConfig,
-  type WorkflowError,
   type WorkflowEvaluator,
   type WorkflowInput,
   type WorkflowLimits,
@@ -30,7 +30,7 @@ const WORKFLOW_READ_INTERFACES = new Set([
 ]);
 const WORKFLOW_EDITOR_TOOLS = new Set(['apply_patch', 'search_replace', 'create_file']);
 const WORKFLOW_WEB_TOOLS = new Set(['web_search', 'web_fetch']);
-const WORKFLOW_PROHIBITED_TOOLS = new Set(['ask_user', 'run_subagent', 'run_agent_workflow']);
+export const WORKFLOW_PROHIBITED_TOOLS = new Set(['ask_user', 'run_subagent', 'run_agent_workflow']);
 
 export interface WorkflowEvaluatorDeps {
   runtime: Pick<AgentRuntime, 'agent'>;
@@ -39,10 +39,6 @@ export interface WorkflowEvaluatorDeps {
   /** Allows callers/tests to report captured workflow console output without exposing it to code. */
   onConsole?: (values: JsonValue[]) => void;
   workerFactory?: (code: string, syncTimeoutMs: number) => Worker;
-}
-
-function bytes(value: unknown): number {
-  return Buffer.byteLength(JSON.stringify(value), 'utf8');
 }
 
 function isJsonObject(value: unknown): value is Record<string, JsonValue> {
@@ -58,6 +54,17 @@ function safeMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+interface PreparedRun {
+  config: AgentConfig;
+  input: WorkflowRunInput;
+  requestedName?: string;
+}
+
+/**
+ * The `agent` capability of the shared sandboxed code host: it validates a run
+ * request against the parent's capabilities, spawns the child agent, and keeps
+ * the admission-ordered run log the tool reports.
+ */
 export class WorkflowEvaluatorImpl implements WorkflowEvaluator {
   readonly #deps: WorkflowEvaluatorDeps;
   readonly #limits: WorkflowLimits;
@@ -69,179 +76,84 @@ export class WorkflowEvaluatorImpl implements WorkflowEvaluator {
 
   async evaluate(input: WorkflowInput): Promise<WorkflowResult> {
     const runs: WorkflowRunSummary[] = [];
-    if (typeof input.code !== 'string') return this.#failure('runtime_error', 'Workflow code must be a string', runs);
-    if (Buffer.byteLength(input.code, 'utf8') > this.#limits.maxCodeBytes) {
-      return this.#failure('code_too_large', 'Workflow code exceeds the configured size limit', runs);
-    }
-
-    let worker: Worker;
-    try {
-      worker =
-        this.#deps.workerFactory?.(input.code, this.#limits.timeoutMs) ??
-        createWorkflowSandbox(input.code, this.#limits.timeoutMs, this.#limits.maxConsoleBytes);
-    } catch (error) {
-      return this.#failure('sandbox_unavailable', `Workflow sandbox is unavailable: ${safeMessage(error)}`, runs);
-    }
-
-    const controller = new AbortController();
-    const onAbort = () => {
-      controller.abort();
-      failFromParentAbort?.();
-    };
-    let failFromParentAbort: (() => void) | undefined;
-    let admissions = 0;
-    let active = 0;
-    const waiting: Array<(release: (() => void) | undefined) => void> = [];
-    let settled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const cancelWaiting = () => {
-      for (const waiter of waiting.splice(0)) waiter(undefined);
-    };
-    const grantPermit = (): (() => void) => {
-      active++;
-      let released = false;
-      return () => {
-        if (released) return;
-        released = true;
-        active--;
-        const waiter = waiting.shift();
-        if (waiter) waiter(grantPermit());
-      };
-    };
-    const acquire = async (): Promise<(() => void) | undefined> => {
-      if (settled || controller.signal.aborted) return undefined;
-      if (active < this.#limits.maxConcurrency) {
-        return grantPermit();
-      }
-      return new Promise<(() => void) | undefined>((resolve) => waiting.push(resolve));
-    };
-
-    const result = await new Promise<WorkflowResult>((resolve) => {
-      const finish = (value: WorkflowResult) => {
-        if (settled) return;
-        settled = true;
-        cancelWaiting();
-        resolve(value);
-      };
-      const fail = (code: WorkflowError['code'], message: string) => finish(this.#failure(code, message, runs));
-      const timeout = () => {
-        controller.abort();
-        fail('timeout', 'Workflow exceeded its configured timeout');
-      };
-      failFromParentAbort = () => fail('timeout', 'Workflow was cancelled by its parent');
-      timer = setTimeout(timeout, this.#limits.timeoutMs);
-      if (input.signal?.aborted) {
-        onAbort();
-      }
-      input.signal?.addEventListener('abort', onAbort, { once: true });
-
-      let consoleBytes = 0;
-      worker.on('message', async (message: any) => {
-        if (settled) return;
-        if (message?.type === 'console.log') {
-          if (Array.isArray(message.values) && message.values.every((value: unknown) => isJsonValue(value))) {
-            const size = bytes(message.values);
-            if (size <= this.#limits.maxConsoleBytes && consoleBytes + size <= this.#limits.maxConsoleBytes) {
-              consoleBytes += size;
-              this.#deps.onConsole?.(message.values);
-            }
-          }
-          return;
+    const agent: CapabilityHandler<PreparedRun> = {
+      binding: { name: 'agent', kind: 'factory' },
+      limits: {
+        maxCalls: this.#limits.maxRuns,
+        maxConcurrency: this.#limits.maxConcurrency,
+        limitExceededMessage: 'Workflow exceeded its maximum number of agent runs',
+      },
+      prepare: (payload) => {
+        const request = this.#validateRequest(payload.config, payload.input);
+        if ('error' in request) {
+          if (request.error.code === 'approval_required')
+            return { kind: 'fail', code: 'approval_required', message: request.error.message };
+          return { kind: 'result', result: { ok: false, error: request.error } as JsonValue };
         }
-        if (message?.type === 'workflow.complete') {
-          if (!isJsonValue(message.output) || bytes(message.output) > this.#limits.maxOutputBytes) {
-            fail('invalid_output', 'Workflow output must be JSON-safe and within the configured size limit');
-          } else finish({ ok: true, output: message.output, runs });
-          return;
-        }
-        if (message?.type === 'workflow.error') {
-          const errorMessage = safeMessage(message.error?.message ?? 'Workflow failed');
-          fail(
-            message.syntax ? 'syntax_error' : /timed out/i.test(errorMessage) ? 'timeout' : 'runtime_error',
-            errorMessage,
-          );
-          return;
-        }
-        if (message?.type === 'agent.run') {
-          const request = this.#validateRequest(message.config, message.input);
-          if ('error' in request) {
-            if (request.error.code === 'approval_required') fail('approval_required', request.error.message);
-            else
-              worker.postMessage({
-                type: 'agent.result',
-                requestId: message.requestId,
-                result: { ok: false, error: request.error },
-              });
-            return;
-          }
-          admissions++;
-          const runId = admissions;
-          if (runId > this.#limits.maxRuns) {
-            fail('limit_exceeded', 'Workflow exceeded its maximum number of agent runs');
-            return;
-          }
-          runs[runId - 1] = {
-            runId,
-            requestedName: request.config.name,
-            name: request.config.name,
-            ok: false,
-            durationMs: 0,
-            errorCode: 'cancelled',
+        return { ...request, requestedName: request.config.name };
+      },
+      onAdmitted: (prepared, { callId }) => {
+        runs[callId - 1] = {
+          runId: callId,
+          requestedName: prepared.requestedName,
+          name: prepared.requestedName,
+          ok: false,
+          durationMs: 0,
+          errorCode: 'cancelled',
+        };
+      },
+      invoke: async (prepared, { callId, signal }): Promise<CapabilityOutcome> => {
+        const started = Date.now();
+        try {
+          const handle = this.#deps.runtime.agent(prepared.config);
+          const child = await handle.run({ ...prepared.input, signal });
+          const normalized = this.#normalizeRun(child);
+          const resolved = handle as Partial<typeof handle>;
+          runs[callId - 1] = {
+            runId: callId,
+            requestedName: prepared.requestedName,
+            name: resolved.name ?? prepared.requestedName,
+            ...(resolved.model ? { provider: resolved.model.provider, model: resolved.model.model } : {}),
+            ok: normalized.ok,
+            durationMs: Date.now() - started,
+            usage: normalized.usage,
+            errorCode: normalized.errorCode,
           };
-          const releasePermit = await acquire();
-          if (!releasePermit) return;
-          if (settled || controller.signal.aborted) {
-            releasePermit();
-            return;
-          }
-          const started = Date.now();
-          try {
-            const handle = this.#deps.runtime.agent(request.config);
-            const child = await handle.run({ ...request.input, signal: controller.signal });
-            const normalized = this.#normalizeRun(child);
-            const resolved = handle as Partial<typeof handle>;
-            runs[runId - 1] = {
-              runId,
-              requestedName: request.config.name,
-              name: resolved.name ?? request.config.name,
-              ...(resolved.model ? { provider: resolved.model.provider, model: resolved.model.model } : {}),
-              ok: normalized.ok,
-              durationMs: Date.now() - started,
-              usage: normalized.usage,
-              errorCode: normalized.errorCode,
-            };
-            worker.postMessage({ type: 'agent.result', requestId: message.requestId, result: normalized.result });
-          } catch (error) {
-            const messageText = safeMessage(error);
-            runs[runId - 1] = {
-              runId,
-              requestedName: request.config.name,
-              name: request.config.name,
-              ok: false,
-              durationMs: Date.now() - started,
-              errorCode: 'agent_error',
-            };
-            worker.postMessage({
-              type: 'agent.result',
-              requestId: message.requestId,
-              result: { ok: false, error: { code: 'agent_error', message: messageText } },
-            });
-          } finally {
-            releasePermit();
-          }
+          return { kind: 'result', result: normalized.result };
+        } catch (error) {
+          const messageText = safeMessage(error);
+          runs[callId - 1] = {
+            runId: callId,
+            requestedName: prepared.requestedName,
+            name: prepared.requestedName,
+            ok: false,
+            durationMs: Date.now() - started,
+            errorCode: 'agent_error',
+          };
+          return {
+            kind: 'result',
+            result: { ok: false, error: { code: 'agent_error', message: messageText } } as JsonValue,
+          };
         }
-      });
-      worker.once('error', (error) => fail('sandbox_unavailable', `Workflow sandbox failed: ${safeMessage(error)}`));
-      worker.once('exit', (code) => {
-        if (!settled) fail('sandbox_unavailable', `Workflow sandbox exited unexpectedly (${code})`);
-      });
+      },
+    };
+
+    const result = await new SandboxedCodeHostImpl().run({
+      code: input.code,
+      capabilities: { agent },
+      limits: {
+        timeoutMs: this.#limits.timeoutMs,
+        maxCodeBytes: this.#limits.maxCodeBytes,
+        maxOutputBytes: this.#limits.maxOutputBytes,
+        maxConsoleBytes: this.#limits.maxConsoleBytes,
+      },
+      subject: 'Workflow',
+      signal: input.signal,
+      onConsole: this.#deps.onConsole,
+      workerFactory: this.#deps.workerFactory,
     });
 
-    if (timer) clearTimeout(timer);
-    input.signal?.removeEventListener('abort', onAbort);
-    controller.abort();
-    await worker.terminate().catch(() => undefined);
-    return result;
+    return result.ok ? { ok: true, output: result.output, runs } : { ok: false, error: result.error, runs };
   }
 
   #validateRequest(
@@ -334,9 +246,5 @@ export class WorkflowEvaluatorImpl implements WorkflowEvaluator {
     };
     if (run.usage !== undefined) result.usage = run.usage;
     return { ok: false, usage: run.usage, errorCode: code, result };
-  }
-
-  #failure(code: WorkflowError['code'], message: string, runs: WorkflowRunSummary[]): WorkflowResult {
-    return { ok: false, error: { code, message }, runs };
   }
 }

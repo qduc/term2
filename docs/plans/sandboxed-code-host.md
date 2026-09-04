@@ -1,9 +1,19 @@
 # One sandboxed code host for `run_agent_workflow` and `run_code`
 
-Status: **proposed, not started.** Nothing in this plan is implemented. It exists
-because `run_code` shipped on `main` (`9df91d20`) and is currently non-functional
-in normal mode; before patching it further we should decide whether it belongs on
-its own execution engine at all.
+Status: **M1–M4 complete, reviewed and merged (2026-09-04).** `run_code` runs on
+the shared host and resolves nested approval through the policy registry, so
+auto-approved tools now execute from inside a script.
+
+Two independent reviews of the finished branch found a **critical vm escape that
+predated this work**: host-realm `console` and capability functions were installed
+on the sandbox object before `vm.createContext`, so `console.log.constructor("return
+process")()` recovered the real `process` while `typeof process` was `undefined` and
+`eval` correctly threw. It was reachable on `main` through auto-approved
+`run_agent_workflow`. Fixed in `1cf886a6` by constructing exposed bindings and
+promises inside the context and serializing capability results. The rule this
+establishes: **an exposed value must belong to the vm realm or cross as JSON.** The
+old test asserted `typeof process === 'undefined'`, which passed throughout — realm
+ownership needs its own assertion.
 
 ## Resume here
 
@@ -124,6 +134,25 @@ per exposed tool name.
 Limits must be per-capability, not shared constants: workflow caps runs at 8 with
 concurrency 3, which is right for spawning agents and absurd for reading 200 files.
 
+## What the implementation added that this plan did not anticipate
+
+- **Scripts have no timers.** The vm context exposes only the capabilities and
+  `console`, so `setTimeout` is absent — the plan listed `fs`, `net`, `require`,
+  and `eval` but not this. Adding host timers would widen the sandbox surface for
+  both tools, so the tool description states the limitation instead.
+- **Two binding shapes, not one.** `factory` (`agent(config).run(input)`) and
+  `namespace` (`tools.<name>(params)`) both live verbatim in the fixed template;
+  only names are generated. A `namespace` member speaks an `{ ok, result | error }`
+  envelope so a refused call *rejects* inside the script rather than resolving to
+  an error value, which is what makes `try/catch` work there.
+- **Per-capability lanes, not one concurrency number.** The run loop's rule that a
+  non-`parallelSafe` tool never overlaps another needed a serial lane of one
+  alongside the bounded default lane. The workflow uses only the default lane, so
+  its behaviour is unchanged.
+- **Budget exhaustion is per-capability policy.** A workflow over its run budget
+  fails the whole run; a script over its call budget gets a failed call and keeps
+  what it already printed.
+
 ## Costs, stated plainly
 
 **The typed `tools` namespace is lost.** `vm.Script` runs JavaScript; workflow code
@@ -149,19 +178,24 @@ Nothing depends on this yet; `run_code` has never worked in normal mode.
 
 ## Milestones
 
-**M1 — Extract the host, no behaviour change.** Move the lifecycle out of
+**M1 — Extract the host, no behaviour change. Done (`fe476f82`).** The host lives
+in `source/services/sandboxed-code-host/`; `workflow-evaluator.ts` is now the
+`agent` capability adapter and `workflow-worker.ts` is gone, replaced by the
+generated `host-worker.ts` template. `workflow-evaluator.test.ts` and
+`run-agent-workflow.test.ts` pass unmodified. Move the lifecycle out of
 `WorkflowEvaluatorImpl` into the host; re-point `run_agent_workflow` at it with
 `capabilities: { agent }`. The existing 428-line `workflow-evaluator.test.ts` and
 `run-agent-workflow.test.ts` are the safety net and must pass unmodified. If they
 need edits, the extraction changed behaviour and is wrong.
 
-**M2 — Rebuild `run_code` on the host.** Replace the socket bridge and generated
+**M2 — Rebuild `run_code` on the host. Done (`3949b6d1`).** Replace the socket bridge and generated
 TypeScript module with a `tools` capability. Delete `tool-bridge.ts`,
 `runtime-module.ts`, and their tests. Port the tests that still describe real
 contracts: schema validation, unknown tool, result truncation, call budget,
 self-exclusion, per-call approval refusal.
 
-**M3 — Fix approval resolution properly.** The blocking correctness question, and
+**M3 — Fix approval resolution properly. Open — the only thing standing between
+`run_code` and working.** The blocking correctness question, and
 the reason it gets its own milestone rather than being folded into M2. The host
 must ask the same authority the run loop asks — the approval-policy registry — not
 the wrapped `needsApproval`. Requires reading how `toolApprovalPolicyRegistry` and
@@ -169,7 +203,9 @@ the batch approval coordinator resolve a decision, and exposing that as a seam a
 non-run-loop caller can use. Until this lands, `run_code` stays refused-by-default
 and is honest about it.
 
-**M4 — Align prohibited tools.** Apply `WORKFLOW_PROHIBITED_TOOLS` to `run_code`
+**M4 — Align prohibited tools. Done (`4610162e`).** Prohibited names are never
+bound into the script's namespace and never appear in the generated header, so
+the refusal is structural rather than a check a call could miss. Apply `WORKFLOW_PROHIBITED_TOOLS` to `run_code`
 too. Both external reviews flagged that a script can currently loop on
 `tools.run_subagent`, spawning agents outside any run budget.
 
@@ -183,9 +219,13 @@ too. Both external reviews flagged that a script can currently loop on
    shell denied-read path, which currently throw `HarnessInvariantError` when it is
    absent. A bridge-issued ID may be acceptable, or these paths may need to be
    genuinely unavailable from inside a script.
-3. **Is losing the typed namespace acceptable?** If not, the alternative is
-   type-stripping the user's code on the host before handing JavaScript to `vm` —
-   which reintroduces a transpiler dependency, though an in-process one.
+3. ~~**Is losing the typed namespace acceptable?**~~ **Decided (2026-09-04): yes,
+   option (a).** Scripts are plain JavaScript; a generated header documents the
+   exposed names, one-line descriptions, and *approximate* parameter shapes, and
+   the host's Zod `safeParse` is the authority. Type stripping is not type
+   checking, so option (b) would have bought no runtime validation while adding a
+   transformation phase. Reasoning:
+   `.coord/sandboxed-code-host/FINDINGS-typed-namespace.md`.
 
 ## Provenance
 

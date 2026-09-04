@@ -1,4 +1,5 @@
 export {
+  bindRunCodeRegistry,
   createRunCodeToolDefinition,
   formatRunCodeCommandMessage,
   runCodeParametersSchema,

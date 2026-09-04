@@ -18,11 +18,17 @@ export interface ToolBridgeLimits {
   maxCalls: number;
   /** Per-result cap. A larger result is truncated with an explicit marker. */
   maxResultChars: number;
+  /**
+   * Cap on a single unterminated request frame. Without it a script could make
+   * the host buffer unbounded bytes before the first newline arrives.
+   */
+  maxRequestBytes: number;
 }
 
 export const DEFAULT_TOOL_BRIDGE_LIMITS: ToolBridgeLimits = {
   maxCalls: 200,
   maxResultChars: 100_000,
+  maxRequestBytes: 4_000_000,
 };
 
 export interface ToolBridgeOptions {
@@ -78,6 +84,8 @@ export class ToolBridgeServer {
   #server: net.Server | undefined;
   #socketPath: string | undefined;
   #callCount = 0;
+  #queue: Promise<void> = Promise.resolve();
+  #stopped = false;
 
   constructor(options: ToolBridgeOptions) {
     this.#registry = options.registry;
@@ -125,6 +133,11 @@ export class ToolBridgeServer {
   }
 
   async stop(): Promise<void> {
+    this.#stopped = true;
+    // Destroying the client socket does not cancel a host tool already running.
+    // Waiting for the queue keeps a finished run from reporting its result while
+    // one of its own tool calls is still mutating the workspace.
+    await this.#queue.catch(() => {});
     for (const socket of this.#sockets) socket.destroy();
     this.#sockets.clear();
     const server = this.#server;
@@ -150,6 +163,13 @@ export class ToolBridgeServer {
         if (line.trim()) void this.#handleLine(socket, line);
         newline = buffer.indexOf('\n');
       }
+      if (buffer.length > this.#limits.maxRequestBytes) {
+        // The peer is mid-frame and already over budget. Nothing useful can be
+        // parsed, and the id is unknown, so drop the connection: the client's
+        // close handler fails every in-flight call rather than hanging.
+        buffer = '';
+        socket.destroy(new Error('tool bridge request exceeded the maximum frame size'));
+      }
     });
   }
 
@@ -158,11 +178,36 @@ export class ToolBridgeServer {
     try {
       request = JSON.parse(line) as BridgeRequest;
     } catch {
+      // Answering with a null id cannot settle the caller's promise, so close
+      // instead; a silent drop would hang the script until its timeout.
+      socket.destroy(new Error('tool bridge received a malformed request frame'));
       return;
     }
     const id = request.id;
     const response = await this.#dispatch(request);
     if (!socket.destroyed) socket.write(`${JSON.stringify({ id, ...response })}\n`);
+  }
+
+  /**
+   * Runs an operation after every earlier serialized one has settled.
+   *
+   * A script can fire many calls concurrently with `Promise.all`, but tools such
+   * as `enter_worktree` mutate shared execution context: two overlapping calls
+   * would leave the session pointing at whichever finished last. Only tools that
+   * opt into `parallelSafe` skip this queue.
+   */
+  async #serialize<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = this.#queue;
+    let release!: () => void;
+    this.#queue = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+    }
   }
 
   async #dispatch(request: BridgeRequest): Promise<{ ok: boolean; result?: unknown; error?: string }> {
@@ -208,13 +253,37 @@ export class ToolBridgeServer {
       return { ok: false, error: approvalError };
     }
 
+    const run = async () => {
+      if (this.#stopped) throw new Error('the script that made this call has already finished');
+      return tool.execute(normalized, this.#toolContext);
+    };
+
     try {
-      const result = await tool.execute(normalized, this.#toolContext);
+      const result = (await this.#isParallelSafe(tool, normalized)) ? await run() : await this.#serialize(run);
       record('ok');
       return { ok: true, result: serializeResult(result, this.#limits.maxResultChars) };
     } catch (error) {
       record('error');
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  /**
+   * Mirrors the run loop's rule: only a definition that declares itself
+   * parallel-safe may overlap with another call. A predicate that throws is
+   * treated as unsafe.
+   */
+  async #isParallelSafe(tool: AnyToolDefinition, params: unknown): Promise<boolean> {
+    const declared = tool.parallelSafe;
+    if (declared === undefined || declared === false) return false;
+    if (declared === true) return true;
+    try {
+      return (
+        (await (declared as (p: unknown, c?: unknown) => boolean | Promise<boolean>)(params, this.#toolContext)) ===
+        true
+      );
+    } catch {
+      return false;
     }
   }
 

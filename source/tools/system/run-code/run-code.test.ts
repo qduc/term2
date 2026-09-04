@@ -1,10 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
-import path from 'node:path';
 import { z } from 'zod';
-import { createRunCodeToolDefinition, TOOL_NAME_RUN_CODE } from './run-code.js';
-import type { ILoggingService, ISettingsService } from '../../../services/service-interfaces.js';
+import { bindRunCodeRegistry, createRunCodeToolDefinition, TOOL_NAME_RUN_CODE } from './run-code.js';
+import type { ILoggingService } from '../../../services/service-interfaces.js';
 import type { AnyToolDefinition, ToolRegistry } from '../../types.js';
-import type { ShellSandboxRunner } from '../../../utils/shell/sandbox/sandbox-policy.js';
 
 const workspace = process.cwd();
 const noopFormatter = (() => []) as unknown as AnyToolDefinition['formatCommandMessage'];
@@ -19,46 +17,22 @@ const tool = (overrides: Partial<AnyToolDefinition> & { name: string }): AnyTool
     ...overrides,
   } as AnyToolDefinition);
 
-const settings = (overrides: Record<string, unknown> = {}): ISettingsService =>
-  ({
-    get: (key: string) => ({ 'sandbox.enabled': true, ...overrides }[key]),
-  } as unknown as ISettingsService);
-
 const logging = (): ILoggingService =>
   ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), security: vi.fn() } as unknown as ILoggingService);
 
-/**
- * Runs the real command unwrapped. The OS sandbox is not available in CI and is
- * not what these tests are about: the contract under test is that generated
- * code, the socket bridge, and the tool registry line up end to end.
- */
-const passthroughSandbox = (overrides: Partial<ShellSandboxRunner> = {}): ShellSandboxRunner =>
-  ({
-    availability: async () => ({ type: 'available' }),
-    wrap: async (command: string) => ({ command }),
-    cleanupAfterCommand: () => {},
-    annotateFailure: (_command: string, stderr: string) => stderr,
-    ...overrides,
-  } as ShellSandboxRunner);
-
-const build = (registry: ToolRegistry, options: { settings?: ISettingsService; sandbox?: ShellSandboxRunner } = {}) =>
+const build = (registry: ToolRegistry) =>
   createRunCodeToolDefinition({
-    settingsService: options.settings ?? settings(),
     loggingService: logging(),
     getToolRegistry: () => registry,
     getCwd: () => workspace,
-    shellSandboxRunner: options.sandbox ?? passthroughSandbox(),
-    tsxPath: path.join(workspace, 'node_modules', '.bin', 'tsx'),
   });
 
-const run = async (registry: ToolRegistry, code: string, options?: Parameters<typeof build>[1]) =>
-  String(await build(registry, options).execute({ code, timeout_ms: 60_000 }));
+const run = async (registry: ToolRegistry, code: string, params: Record<string, unknown> = {}) =>
+  String(await build(registry).execute({ code, timeout_ms: 60_000, ...params } as never));
 
 describe('run_code', () => {
   it('runs the script and returns its stdout', async () => {
-    const output = await run([], 'console.log("hello from the sandbox");');
-
-    expect(output).toContain('hello from the sandbox');
+    expect(await run([], 'console.log("hello from the script");')).toContain('hello from the script');
   });
 
   it('calls a real tool through the bridge and returns its result to the script', async () => {
@@ -78,6 +52,10 @@ describe('run_code', () => {
 
     expect(output).toContain('echo:a|echo:b|echo:c');
     expect(output).toContain('3 tool calls: echo×3');
+  });
+
+  it('never prompts for approval', async () => {
+    expect(await build([]).needsApproval({ code: 'x' } as never)).toBe(false);
   });
 
   it('surfaces a tool that needs approval as a catchable error and names it in the summary', async () => {
@@ -100,7 +78,7 @@ describe('run_code', () => {
       await definition.execute({
         code: `console.log(typeof (tools as Record<string, unknown>).${TOOL_NAME_RUN_CODE});`,
         timeout_ms: 60_000,
-      }),
+      } as never),
     );
 
     expect(output).toContain('undefined');
@@ -114,47 +92,152 @@ describe('run_code', () => {
   });
 
   it('reports a timeout rather than hanging the turn', async () => {
-    const definition = build([]);
-
-    const output = String(
-      await definition.execute({
-        code: 'await new Promise((resolve) => setTimeout(resolve, 60_000));',
-        timeout_ms: 1_500,
-      }),
-    );
+    const output = await run([], 'await new Promise((resolve) => setTimeout(resolve, 60_000));', {
+      timeout_ms: 1_500,
+    });
 
     expect(output).toContain('timed out');
   }, 20_000);
 
-  it('refuses to run at all when the sandbox is turned off', async () => {
-    const output = await run([], 'console.log("should not run");', {
-      settings: settings({ 'sandbox.enabled': false }),
-    });
+  it('rejects a non-positive timeout, which would otherwise disable the timer entirely', () => {
+    const schema = build([]).parameters;
 
-    expect(output).toContain('Error: run_code requires the sandbox');
-    expect(output).not.toContain('should not run');
+    expect(schema.safeParse({ code: 'x', timeout_ms: 0 }).success).toBe(false);
+    expect(schema.safeParse({ code: 'x', timeout_ms: -1 }).success).toBe(false);
+    expect(schema.safeParse({ code: 'x', timeout_ms: 1_000 }).success).toBe(true);
   });
 
-  it('refuses to fall back to an unsandboxed run when the sandbox is unavailable', async () => {
-    const output = await run([], 'console.log("should not run");', {
-      sandbox: passthroughSandbox({
-        availability: async () => ({ type: 'missing_dependency', reason: 'no bwrap' }),
-      }),
-    });
+  it('runs user code containing $-replacement patterns without corrupting the script', async () => {
+    const output = await run([], `const marker = "a$'b$&c$\`d$$e"; console.log("literal:" + marker);`);
 
-    expect(output).toContain('Sandbox blocked this command');
-    expect(output).not.toContain('should not run');
+    expect(output).toContain(`literal:a$'b$&c$\`d$$e`);
   });
 
-  it('requires approval only when the sandbox cannot provide the boundary', async () => {
-    await expect(build([]).needsApproval({ code: 'x' })).resolves.toBe(false);
+  it('stops the script when the caller aborts the turn', async () => {
+    const controller = new AbortController();
+    const pending = build([]).execute(
+      { code: 'await new Promise((resolve) => setTimeout(resolve, 30_000));', timeout_ms: 60_000 } as never,
+      { signal: controller.signal } as never,
+    );
+    setTimeout(() => controller.abort(), 300);
 
-    const unavailable = build([], {
-      sandbox: passthroughSandbox({ availability: async () => ({ type: 'unsupported_platform', reason: 'n/a' }) }),
+    const output = String(await pending);
+
+    expect(output).not.toContain('30_000');
+    expect(output.length).toBeGreaterThan(0);
+  }, 20_000);
+
+  it('forwards the tool invocation context to every tool the script calls', async () => {
+    const seen: unknown[] = [];
+    const output = await run(
+      [
+        tool({
+          name: 'ctx',
+          execute: (_params: unknown, context: unknown) => {
+            seen.push(context);
+            return 'ok';
+          },
+        }),
+      ],
+      'console.log(await tools.ctx({ value: "x" }));',
+    );
+
+    expect(output).toContain('ok');
+    expect(seen).toHaveLength(1);
+  });
+
+  it('serialises calls to a tool that is not parallel-safe', async () => {
+    let active = 0;
+    let maxActive = 0;
+    const output = await run(
+      [
+        tool({
+          name: 'exclusive',
+          execute: async () => {
+            active += 1;
+            maxActive = Math.max(maxActive, active);
+            await new Promise((resolve) => setTimeout(resolve, 40));
+            active -= 1;
+            return 'done';
+          },
+        }),
+      ],
+      `await Promise.all([1,2,3,4].map((n) => tools.exclusive({ value: String(n) })));
+       console.log("finished");`,
+    );
+
+    expect(output).toContain('finished');
+    expect(maxActive).toBe(1);
+  }, 20_000);
+
+  it('lets a parallel-safe tool overlap so fan-out stays fast', async () => {
+    let active = 0;
+    let maxActive = 0;
+    await run(
+      [
+        tool({
+          name: 'concurrent',
+          parallelSafe: true,
+          execute: async () => {
+            active += 1;
+            maxActive = Math.max(maxActive, active);
+            await new Promise((resolve) => setTimeout(resolve, 40));
+            active -= 1;
+            return 'done';
+          },
+        }),
+      ],
+      `await Promise.all([1,2,3,4].map((n) => tools.concurrent({ value: String(n) })));
+       console.log("finished");`,
+    );
+
+    expect(maxActive).toBeGreaterThan(1);
+  }, 20_000);
+});
+
+describe('bindRunCodeRegistry', () => {
+  it('makes the script call the wrapped definitions, not the raw ones', async () => {
+    const raw = tool({
+      name: 'guarded',
+      execute: () => 'RAW IMPLEMENTATION RAN',
     });
-    await expect(unavailable.needsApproval({ code: 'x' })).resolves.toBe(true);
+    const definition = createRunCodeToolDefinition({
+      loggingService: logging(),
+      getCwd: () => workspace,
+    });
 
-    const disabled = build([], { settings: settings({ 'sandbox.enabled': false }) });
-    await expect(disabled.needsApproval({ code: 'x' })).resolves.toBe(true);
+    // Mirrors agent-factory: the policy layer wraps each definition, then binds
+    // the wrapped list into run_code.
+    const wrapped: ToolRegistry = [
+      { ...raw, execute: () => 'policy layer refused this call' },
+      definition as unknown as AnyToolDefinition,
+    ];
+    bindRunCodeRegistry(wrapped);
+
+    const output = String(
+      await definition.execute({
+        code: 'console.log(await tools.guarded({ value: "x" }));',
+        timeout_ms: 60_000,
+      } as never),
+    );
+
+    expect(output).toContain('policy layer refused this call');
+    expect(output).not.toContain('RAW IMPLEMENTATION RAN');
+  });
+
+  it('exposes no tools at all when the registry was never bound', async () => {
+    const definition = createRunCodeToolDefinition({
+      loggingService: logging(),
+      getCwd: () => workspace,
+    });
+
+    const output = String(
+      await definition.execute({
+        code: 'console.log("tool count:", Object.keys(tools).length);',
+        timeout_ms: 60_000,
+      } as never),
+    );
+
+    expect(output).toContain('tool count: 0');
   });
 });

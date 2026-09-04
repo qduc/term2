@@ -114,7 +114,10 @@ export function generateRuntime(options: GenerateRuntimeOptions): GeneratedRunti
     const schema = schemaFor(tool.parameters);
     const paramsType = renderType(schema, '  ');
     const doc = tool.description ? `  /** ${escapeComment(tool.description)} */\n` : '';
-    return `${doc}  ${quoteKey(tool.name)}: (params: ${paramsType}) => Promise<unknown>;`;
+    // The bridge defaults a missing payload to {}, so a tool that requires
+    // nothing must also be callable as `tools.name()`.
+    const optional = (schema.required?.length ?? 0) === 0 ? '?' : '';
+    return `${doc}  ${quoteKey(tool.name)}: (params${optional}: ${paramsType}) => Promise<unknown>;`;
   });
 
   const bindings = registry
@@ -170,11 +173,21 @@ function connect(): Promise<net.Socket> {
       for (const [, waiter] of pending) waiter.reject(error);
       pending.clear();
     };
+    // Clearing both handles matters: a settled rejected \`connecting\` promise or a
+    // dead socket would otherwise be reused, failing every later call instantly.
+    const forget = () => {
+      socket = undefined;
+      connecting = undefined;
+    };
     created.on('error', (error: Error) => {
+      forget();
       failAll(error);
       reject(error);
     });
-    created.on('close', () => failAll(new Error('tool bridge connection closed')));
+    created.on('close', () => {
+      forget();
+      failAll(new Error('tool bridge connection closed'));
+    });
     created.on('connect', () => {
       socket = created;
       resolve(created);
@@ -209,7 +222,7 @@ export function __disconnect(): void {
 `;
 
   const runnerModule = `// Generated for a single run_code execution. Do not edit.
-import { tools, __disconnect } from './${toolsModuleName.replace(/\.ts$/, '.js')}';
+import { tools, __disconnect } from './${toolsModuleName}';
 
 // Also exposed globally so a script can use \`tools\` without an import.
 (globalThis as Record<string, unknown>).tools = tools;
@@ -229,7 +242,14 @@ try {
   return { toolsModule, runnerModule };
 }
 
-/** Splices user code into the generated runner without touching its own braces. */
+/**
+ * Splices user code into the generated runner.
+ *
+ * The replacement must be a function: with a string replacement, `$'`, `$&`,
+ * `` $` `` and `$$` inside the user's own source are expanded as replacement
+ * patterns, which duplicates parts of the runner into the middle of the script
+ * and corrupts it.
+ */
 export function buildRunnerSource(runnerModule: string, userCode: string): string {
-  return runnerModule.replace('__USER_CODE__', userCode);
+  return runnerModule.replace('__USER_CODE__', () => userCode);
 }

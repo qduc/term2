@@ -225,6 +225,116 @@ describe('ToolBridgeServer', () => {
     ]);
   });
 
+  it('closes the connection on a malformed frame instead of leaving the caller hanging', async () => {
+    const server = new ToolBridgeServer({ registry: [tool({ name: 'echo' })] });
+    bridge = server;
+    const socketPath = await server.start();
+    const raw = await new Promise<net.Socket>((resolve, reject) => {
+      const created = net.createConnection(socketPath);
+      created.once('error', reject);
+      created.once('connect', () => resolve(created));
+    });
+
+    const closed = new Promise<void>((resolve) => raw.once('close', () => resolve()));
+    raw.write('{not json at all}\n');
+
+    await expect(closed).resolves.toBeUndefined();
+  });
+
+  it('drops a connection whose single request frame exceeds the byte cap', async () => {
+    const server = new ToolBridgeServer({
+      registry: [tool({ name: 'echo' })],
+      limits: { maxRequestBytes: 1_000 },
+    });
+    bridge = server;
+    const socketPath = await server.start();
+    const raw = await new Promise<net.Socket>((resolve, reject) => {
+      const created = net.createConnection(socketPath);
+      created.once('error', reject);
+      created.once('connect', () => resolve(created));
+    });
+
+    const closed = new Promise<void>((resolve) => raw.once('close', () => resolve()));
+    // No newline: the bridge must not buffer this indefinitely.
+    raw.write('x'.repeat(5_000));
+
+    await expect(closed).resolves.toBeUndefined();
+  });
+
+  it('waits for an in-flight tool call before stop resolves', async () => {
+    let finished = false;
+    const server = new ToolBridgeServer({
+      registry: [
+        tool({
+          name: 'slow',
+          execute: async () => {
+            await new Promise((resolve) => setTimeout(resolve, 200));
+            finished = true;
+            return 'done';
+          },
+        }),
+      ],
+    });
+    const connection = await start(server);
+
+    void connection.call(1, 'slow', { value: 'x' });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await server.stop();
+
+    expect(finished).toBe(true);
+  });
+
+  it('runs calls to a non-parallel-safe tool one at a time', async () => {
+    let active = 0;
+    let maxActive = 0;
+    const connection = await start(
+      new ToolBridgeServer({
+        registry: [
+          tool({
+            name: 'exclusive',
+            execute: async () => {
+              active += 1;
+              maxActive = Math.max(maxActive, active);
+              await new Promise((resolve) => setTimeout(resolve, 30));
+              active -= 1;
+              return 'done';
+            },
+          }),
+        ],
+      }),
+    );
+
+    await Promise.all([1, 2, 3].map((id) => connection.call(id, 'exclusive', { value: 'x' })));
+
+    expect(maxActive).toBe(1);
+  });
+
+  it('lets a parallel-safe tool overlap', async () => {
+    let active = 0;
+    let maxActive = 0;
+    const connection = await start(
+      new ToolBridgeServer({
+        registry: [
+          tool({
+            name: 'concurrent',
+            parallelSafe: true,
+            execute: async () => {
+              active += 1;
+              maxActive = Math.max(maxActive, active);
+              await new Promise((resolve) => setTimeout(resolve, 30));
+              active -= 1;
+              return 'done';
+            },
+          }),
+        ],
+      }),
+    );
+
+    await Promise.all([1, 2, 3].map((id) => connection.call(id, 'concurrent', { value: 'x' })));
+
+    expect(maxActive).toBeGreaterThan(1);
+  });
+
   it('removes the socket file on stop so runs do not accumulate dead sockets', async () => {
     const server = new ToolBridgeServer({ registry: [tool({ name: 'echo' })] });
     const socketPath = await server.start();

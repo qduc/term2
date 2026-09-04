@@ -1,0 +1,128 @@
+diff --git a/source/lib/agent-factory.test.ts b/source/lib/agent-factory.test.ts
+index b2bc03f5..e54265bc 100644
+--- a/source/lib/agent-factory.test.ts
++++ b/source/lib/agent-factory.test.ts
+@@ -6,6 +6,8 @@ import type {
+ } from '../contracts/streamed-model-turn.js';
+ import { it, expect } from 'vitest';
+ import { z } from 'zod';
++import { mkdtempSync, rmSync } from 'node:fs';
++import { tmpdir } from 'node:os';
+ import path from 'path';
+ import { SANDBOX_TEMP_DIR } from '../utils/shell/temp-dir.js';
+ import { buildAgent, buildAgentTools } from './agent-factory.js';
+@@ -213,6 +215,68 @@ it.sequential('requires non-constant approval predicates to declare a direct fal
+   }
+ });
+ 
++it.sequential('requires every approval-capable tool in the full registry to declare a direct fallback', () => {
++  // The minimal config above leaves memory, sessions, worktree, and delegation
++  // tools unregistered, so settings-gated predicates there (e.g. memory
++  // mutations that require approval outside auto mode) escape the drift check.
++  // Register everything and re-apply the same invariant.
++  const memoryDir = mkdtempSync(path.join(tmpdir(), 'term2-approval-flag-'));
++  try {
++    const logger = createMockLogger();
++    const settings = createMockSettings({
++      'app.searchViaShell': 'off',
++      'memory.enabled': true,
++      'memory.directory': memoryDir,
++      'memory.contextBudgetChars': 12_000,
++      'memory.searchDefaultLimit': 10,
++      'memory.searchMaxLimit': 50,
++      'agent.smartModel': 'test-mentor',
++    });
++    const raw = getAgentDefinition(
++      {
++        settingsService: settings,
++        loggingService: logger,
++        executionContext: { getCwd: () => process.cwd(), isRemote: () => false } as any,
++        askMentor: async () => 'mentor-response',
++        runSubagent: async () => ({ finalText: 'subagent-response' } as any),
++        runSubagentAsync: async () => ({ runId: 'run-1', status: 'running' } as any),
++        getSubagentResult: async () => ({ status: 'completed', finalText: '' } as any),
++        getSubagentStatus: (() => ({ status: 'running' } as any)) as any,
++        sendSubagentMessage: (() =>
++          ({ ok: true, runId: 'run-1', status: 'running', delivery: 'queued' } as any)) as any,
++        cancelSubagentRun: (() => ({ ok: true, runId: 'run-1', status: 'cancelling' } as any)) as any,
++        getAskUserAnswer: () => undefined,
++        skillsService: {
++          getAvailableSkillsForModel: () => [{ name: 'test-skill' }],
++          getSkillCatalog: () => '',
++        } as any,
++        backgroundShellRegistry: new BackgroundShellRegistry<any>(),
++        sessionBrowser: {} as any,
++        requestSessionRollover: () => ({ outcome: 'accepted' } as any),
++        configureTaskCheckIn: (() => ({ ok: true } as any)) as any,
++        setTaskCheckInPolicy: () => {},
++      },
++      'gpt-4o',
++    );
++
++    expect(raw.tools.map((tool) => tool.name)).toEqual(
++      expect.arrayContaining(['memory_update', 'memory_delete', 'ask_user', 'enter_worktree']),
++    );
++    for (const tool of raw.tools) {
++      const compactPredicate = Function.prototype.toString
++        .call(tool.needsApproval)
++        .replace(/\s/g, '')
++        .replace(/;$/, '');
++      const isConstantPredicate = compactPredicate.endsWith('=>false') || compactPredicate.endsWith('=>true');
++      if (!isConstantPredicate && !RUN_CODE_PROHIBITED_TOOLS.has(tool.name)) {
++        expect(tool.canRequireApproval, `${tool.name} needs an explicit approval fallback`).toBe(true);
++      }
++    }
++  } finally {
++    rmSync(memoryDir, { recursive: true, force: true });
++  }
++});
++
+ it.sequential('post-execute policy can reject by returning the original result', async () => {
+   const executions: string[] = [];
+   let policyInput: unknown;
+diff --git a/source/tools/memory/memory-tools.ts b/source/tools/memory/memory-tools.ts
+index a5d8071e..069da30d 100644
+--- a/source/tools/memory/memory-tools.ts
++++ b/source/tools/memory/memory-tools.ts
+@@ -130,11 +130,13 @@ function definition<S extends z.ZodObject<any>>(
+   parameters: S,
+   execute: (params: z.infer<S>) => Promise<unknown>,
+   needsApproval: boolean | (() => boolean) = false,
++  canRequireApproval = false,
+ ): SchemaToolDefinition<S> {
+   return {
+     name,
+     description,
+     parameters,
++    ...(canRequireApproval ? { canRequireApproval: true as const } : null),
+     preserveSerializedOutput: [
+       'memory_list',
+       'memory_get',
+@@ -142,7 +144,10 @@ function definition<S extends z.ZodObject<any>>(
+       'memory_retrieve',
+       'memory_synthesize',
+     ].includes(name),
+-    needsApproval: typeof needsApproval === 'function' ? needsApproval : () => needsApproval,
++    // Keep constant predicates literal: the approval-drift check distinguishes
++    // `() => false` from a closure over a boolean, and only the former honestly
++    // reveals that no parameter value can require approval.
++    needsApproval: typeof needsApproval === 'function' ? needsApproval : needsApproval ? () => true : () => false,
+     execute: (params: z.infer<S>) =>
+       safe(() => execute(params), (params as { maxChars?: number }).maxChars ?? DEFAULT_DOCUMENT_OUTPUT_CHARS),
+     formatCommandMessage: makeFormat(name),
+@@ -525,6 +530,7 @@ export function createMemoryToolDefinitions(
+         const mode = options?.settingsService?.get('shell.autoApproveMode');
+         return mode !== 'auto' && mode !== 'always';
+       },
++      true,
+     ),
+     definition(
+       'memory_delete',
+@@ -538,6 +544,7 @@ export function createMemoryToolDefinitions(
+         const mode = options?.settingsService?.get('shell.autoApproveMode');
+         return mode !== 'auto' && mode !== 'always';
+       },
++      true,
+     ),
+   ];
+ }

@@ -1,0 +1,1 @@
+5615ab26 fix(tools): declare canRequireApproval for memory_update/memory_delete

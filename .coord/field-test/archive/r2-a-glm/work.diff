@@ -1,0 +1,112 @@
+diff --git a/source/lib/agent-factory.test.ts b/source/lib/agent-factory.test.ts
+index b2bc03f5..67692ccd 100644
+--- a/source/lib/agent-factory.test.ts
++++ b/source/lib/agent-factory.test.ts
+@@ -22,6 +22,23 @@ import { createApplyPatchToolDefinition } from '../tools/file/apply-patch.js';
+ import { BackgroundShellRegistry } from '../services/shell/background-shell-registry.js';
+ import { getAgentDefinition } from '../agent.js';
+ import { isDirectlyCallable, RUN_CODE_PROHIBITED_TOOLS } from '../tools/system/run-code/run-code.js';
++import { createMemoryToolDefinitions } from '../tools/memory/memory-tools.js';
++import type { MemoryStore } from '../services/memory/memory-store.js';
++
++// Approval predicates never touch the store, so an empty stub is enough to
++// construct the definitions for the predicate/flag invariant check.
++const memoryStoreStub = {
++  list: async () => [],
++  get: async () => null,
++  search: async () => [],
++  create: async () => {
++    throw new Error('not implemented');
++  },
++  update: async () => {
++    throw new Error('not implemented');
++  },
++  remove: async () => true,
++} satisfies MemoryStore;
+ 
+ type MockLogger = ILoggingService & { debugCalls: any[][] };
+ 
+@@ -204,7 +221,13 @@ it.sequential('requires non-constant approval predicates to declare a direct fal
+     'gpt-4o',
+   );
+ 
+-  for (const tool of raw.tools) {
++  // getAgentDefinition registers the memory capability only under profile
++  // settings this minimal mock does not provide, so its definitions are added
++  // here explicitly — memory_update/memory_delete ship non-constant approval
++  // predicates and must not escape the invariant below.
++  const checkedTools = [...raw.tools, ...createMemoryToolDefinitions(memoryStoreStub)];
++
++  for (const tool of checkedTools) {
+     const compactPredicate = Function.prototype.toString.call(tool.needsApproval).replace(/\s/g, '').replace(/;$/, '');
+     const isConstantPredicate = compactPredicate.endsWith('=>false') || compactPredicate.endsWith('=>true');
+     if (!isConstantPredicate && !RUN_CODE_PROHIBITED_TOOLS.has(tool.name)) {
+diff --git a/source/tools/memory/memory-tools.test.ts b/source/tools/memory/memory-tools.test.ts
+index 7d238a0f..74c3f5dc 100644
+--- a/source/tools/memory/memory-tools.test.ts
++++ b/source/tools/memory/memory-tools.test.ts
+@@ -219,6 +219,15 @@ it('requires approval for destructive memory mutations', async () => {
+ 
+   expect(await update.needsApproval({ scope: 'global', id: memory.id, summary: 'Updated' })).toBe(true);
+   expect(await remove.needsApproval({ scope: 'global', id: memory.id })).toBe(true);
++
++  // Non-constant approval predicates must declare canRequireApproval, or the
++  // run_code primary-path filter drops the tool from the direct surface and
++  // standard-mode writes become unreachable. Read tools keep a constant
++  // predicate and must not declare the flag.
++  for (const tool of tools) {
++    const shouldDeclare = tool.name === 'memory_update' || tool.name === 'memory_delete';
++    expect(tool.canRequireApproval, tool.name).toBe(shouldDeclare ? true : undefined);
++  }
+ });
+ 
+ it('auto-approves memory mutations when shell.autoApproveMode is auto or always', async () => {
+diff --git a/source/tools/memory/memory-tools.ts b/source/tools/memory/memory-tools.ts
+index a5d8071e..8c7be221 100644
+--- a/source/tools/memory/memory-tools.ts
++++ b/source/tools/memory/memory-tools.ts
+@@ -142,7 +142,17 @@ function definition<S extends z.ZodObject<any>>(
+       'memory_retrieve',
+       'memory_synthesize',
+     ].includes(name),
+-    needsApproval: typeof needsApproval === 'function' ? needsApproval : () => needsApproval,
++    // Boolean predicates are emitted as literal constants (not closures over
++    // this parameter) so that the shape-based guard in agent-factory.test.ts
++    // can tell constant-auto-approval from a parameter-dependent predicate.
++    needsApproval: typeof needsApproval === 'function' ? needsApproval : needsApproval ? () => true : () => false,
++    // A function predicate can deny auto-approval based on state the definition
++    // does not control (settings mode, parameters), so some calls can require
++    // interactive approval. Declaring the flag keeps the tool on the direct
++    // model surface when run_code becomes the primary path; without it the
++    // run_code primary-path filter silently drops the tool and a script call
++    // is refused with no callable alternative.
++    ...(typeof needsApproval === 'function' ? { canRequireApproval: true } : {}),
+     execute: (params: z.infer<S>) =>
+       safe(() => execute(params), (params as { maxChars?: number }).maxChars ?? DEFAULT_DOCUMENT_OUTPUT_CHARS),
+     formatCommandMessage: makeFormat(name),
+diff --git a/source/tools/types.ts b/source/tools/types.ts
+index 64dfba72..7cb64e3d 100644
+--- a/source/tools/types.ts
++++ b/source/tools/types.ts
+@@ -101,7 +101,11 @@ export interface SchemaToolDefinition<TSchema extends ZodTypeAny> {
+   parameters: TSchema;
+   /** Opt-in capability for independent, auto-approved calls in one model response. */
+   parallelSafe?: boolean | ((params: z.infer<TSchema>, context?: unknown) => Promise<boolean> | boolean);
+-  /** True when some valid parameter values can require interactive approval. */
++  /**
++   * True when some calls — per parameter values or runtime state such as
++   * settings mode — can require interactive approval. Keeps the tool on the
++   * direct model surface when run_code is the primary path.
++   */
+   canRequireApproval?: boolean;
+   /** Declares a successful call as an observable mutation for stall detection. */
+   effect?: 'mutating';
+@@ -166,7 +170,7 @@ export interface AnyToolDefinition {
+   /** Opt-in capability for independent, auto-approved calls in one model response. */
+   /** `never` keeps heterogeneous schema-derived predicates assignable at the erased boundary. */
+   parallelSafe?: boolean | ((params: never, context?: unknown) => Promise<boolean> | boolean);
+-  /** True when some valid parameter values can require interactive approval. */
++  /** Same contract as {@link SchemaToolDefinition.canRequireApproval}. */
+   canRequireApproval?: boolean;
+   /** Declares a successful call as an observable mutation for stall detection. */
+   effect?: 'mutating';

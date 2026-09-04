@@ -1,0 +1,1 @@
+c6591618 test(output-trim): regression for first tail character dropped by character trimming

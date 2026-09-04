@@ -1,0 +1,25 @@
+diff --git a/source/utils/output/output-trim.test.ts b/source/utils/output/output-trim.test.ts
+index 1b1a6023..131e185e 100644
+--- a/source/utils/output/output-trim.test.ts
++++ b/source/utils/output/output-trim.test.ts
+@@ -225,6 +225,20 @@ it('handles single line', () => {
+   expect(result).toBe('single line');
+ });
+ 
++it('preserves the first character of the tail section when trimming by characters', () => {
++  const maxCharacters = 100;
++  const keepChars = Math.floor(maxCharacters * 0.4);
++  // Single line with a distinct character at every position so an off-by-one is detectable.
++  const output = Array.from({ length: 200 }, (_, i) => String.fromCharCode(33 + (i % 94))).join('');
++  const result = trimOutput(output, undefined, maxCharacters);
++
++  const expectedHead = output.slice(0, keepChars);
++  const expectedTail = output.slice(-keepChars);
++  expect(result.startsWith(expectedHead)).toBe(true);
++  expect(result.endsWith(expectedTail)).toBe(true);
++  expect(result.includes(`[${output.length - keepChars * 2} characters trimmed]`)).toBe(true);
++});
++
+ it('preserves newlines in trimmed output', () => {
+   const lines = Array<string>();
+   for (let i = 1; i <= 100; i++) {

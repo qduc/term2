@@ -1,0 +1,22 @@
+diff --git a/source/utils/output/output-trim.test.ts b/source/utils/output/output-trim.test.ts
+index 1b1a6023..82b84a9b 100644
+--- a/source/utils/output/output-trim.test.ts
++++ b/source/utils/output/output-trim.test.ts
+@@ -28,6 +28,17 @@ it('trims output when exceeding line limit', () => {
+   expect(result.includes('line 600')).toBe(false);
+ });
+ 
++it('keeps the first character of the preserved tail section', () => {
++  // Single-line output with distinct positional characters so the first
++  // character of the tail section is identifiable. With maxCharacters=10,
++  // keepChars=4, so the tail must be the last 4 characters ('6789...').
++  const output = '0123456789'.repeat(10);
++  const result = trimOutput(output, undefined, 10);
++
++  const tailLine = result.slice(result.lastIndexOf('\n') + 1);
++  expect(tailLine).toBe(output.slice(-4));
++});
++
+ it('trims output when exceeding character limit', () => {
+   // Create output that exceeds character limit but not line limit
+   const output = 'a'.repeat(50000);

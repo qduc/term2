@@ -1,0 +1,23 @@
+diff --git a/source/utils/output/output-trim.test.ts b/source/utils/output/output-trim.test.ts
+index 1b1a6023..7dd1c794 100644
+--- a/source/utils/output/output-trim.test.ts
++++ b/source/utils/output/output-trim.test.ts
+@@ -37,6 +37,18 @@ it('trims output when exceeding character limit', () => {
+   expect(result.length < output.length).toBe(true);
+ });
+ 
++it('preserves the tail section intact, including its first character (regression: resumed text started mid-token)', () => {
++  // 120 chars with maxCharacters 100 → keepChars = 40. The last 40 chars
++  // must survive byte-for-byte; a previous off-by-one kept only 39,
++  // dropping the tail's first character.
++  const tailSegment = Array.from({ length: 40 }, (_, i) => 'abcdefghij'[i % 10]).join('');
++  const output = `${'M'.repeat(80)}${tailSegment}`;
++  const result = trimOutput(output, undefined, 100);
++
++  expect(result.endsWith(tailSegment)).toBe(true);
++  expect(result).toContain('[40 characters trimmed]');
++});
++
+ it('trims few-line output with one very long line by character limit', () => {
+   const lines = Array.from({ length: 21 }, (_, index) =>
+     index === 18 ? `huge:${'a'.repeat(15000)}` : `line ${index + 1}`,

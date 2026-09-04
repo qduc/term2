@@ -1,0 +1,1 @@
+5e0e0023 refactor(tools): extract shell command approval decision into shell-approval module

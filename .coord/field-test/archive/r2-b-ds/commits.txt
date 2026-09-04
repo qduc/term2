@@ -1,0 +1,1 @@
+49299b0e fix(output-trim): preserve first character of trimmed tail

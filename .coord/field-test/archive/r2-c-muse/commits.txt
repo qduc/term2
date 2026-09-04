@@ -1,0 +1,1 @@
+a67acc3b Extract shell approval decision into source/tools/system/shell-approval.ts

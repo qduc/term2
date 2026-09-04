@@ -1,0 +1,45 @@
+diff --git a/source/utils/output/output-trim.test.ts b/source/utils/output/output-trim.test.ts
+index 1b1a6023..de83c43c 100644
+--- a/source/utils/output/output-trim.test.ts
++++ b/source/utils/output/output-trim.test.ts
+@@ -37,6 +37,27 @@ it('trims output when exceeding character limit', () => {
+   expect(result.length < output.length).toBe(true);
+ });
+ 
++it('preserves the tail section intact when trimming by characters', () => {
++  // Regression: trimByCharacters used slice(-keepChars + 1), dropping the
++  // tail's first character so the resumed text started mid-token.
++  const output = `${'x'.repeat(100)}tail-start${'y'.repeat(100)}`;
++  const result = trimOutput(output, undefined, 50);
++
++  const keepChars = Math.floor(50 * 0.4);
++  expect(result.endsWith(output.slice(-keepChars))).toBe(true);
++});
++
++it('preserves both head and tail sections intact when trimming by characters', () => {
++  const head = 'HEAD' + 'a'.repeat(96);
++  const tail = 'b'.repeat(96) + 'TAIL';
++  const output = head + tail;
++  const result = trimOutput(output, undefined, 50);
++
++  const keepChars = Math.floor(50 * 0.4);
++  expect(result.startsWith(head.slice(0, keepChars))).toBe(true);
++  expect(result.endsWith(output.slice(-keepChars))).toBe(true);
++});
++
+ it('trims few-line output with one very long line by character limit', () => {
+   const lines = Array.from({ length: 21 }, (_, index) =>
+     index === 18 ? `huge:${'a'.repeat(15000)}` : `line ${index + 1}`,
+diff --git a/source/utils/output/output-trim.ts b/source/utils/output/output-trim.ts
+index aa11c003..9c341fa2 100644
+--- a/source/utils/output/output-trim.ts
++++ b/source/utils/output/output-trim.ts
+@@ -21,6 +21,8 @@ let trimConfig: OutputTrimConfig = { ...DEFAULT_TRIM_CONFIG };
+ function trimByCharacters(output: string, maxCharacters: number, note?: string): string {
+   const keepChars = Math.max(0, Math.floor(maxCharacters * 0.4));
+   const head = output.slice(0, keepChars);
++  // slice(-keepChars), not slice(-keepChars + 1): the latter drops the tail's
++  // first character. The keepChars > 0 guard already rules out slice(-0).
+   const tail = keepChars > 0 ? output.slice(-keepChars) : '';
+   const trimmedChars = output.length - keepChars * 2;
+   const noteSuffix = note ? `; ${note}` : '';

@@ -1,0 +1,327 @@
+diff --git a/source/tools/system/shell-approval.ts b/source/tools/system/shell-approval.ts
+new file mode 100644
+index 00000000..c2afa076
+--- /dev/null
++++ b/source/tools/system/shell-approval.ts
+@@ -0,0 +1,154 @@
++import path from 'path';
++import process from 'process';
++import type { ExecutionContext } from '../../services/execution-context.js';
++import type { ILoggingService, ISettingsService } from '../../services/service-interfaces.js';
++import type { SessionAccessState } from '../../services/session/session-access-state.js';
++import type { NestedToolCompatibilityState } from '../../services/session/nested-tool-compatibility-state.js';
++import { logValidationError as logValidationErrorUtil } from '../../utils/shell/command-logger.js';
++import { validateCommandSafety } from '../../utils/shell/command-safety/index.js';
++import type { ShellSandboxRunner } from '../../utils/shell/sandbox/sandbox-policy.js';
++
++/**
++ * The fields of the shell tool's parameters the approval decision consults.
++ * `ShellToolParams` satisfies this structurally; the decision must stay
++ * honest about what it actually reads.
++ */
++export interface ShellApprovalParams {
++  command: string;
++  sandbox?: 'default' | 'unsandboxed';
++}
++
++export function getConversationSessionId(context: unknown): string | undefined {
++  if (!context || typeof context !== 'object') return undefined;
++  const runContext = (context as { context?: unknown }).context;
++  if (!runContext || typeof runContext !== 'object') return undefined;
++  const sessionId = (runContext as { sessionId?: unknown }).sessionId;
++  return typeof sessionId === 'string' && sessionId.length > 0 ? sessionId : undefined;
++}
++
++/**
++ * Strip redundant 'cd <path> &&' prefix if it targets the current working directory
++ */
++export function stripRedundantCd(command: string, cwd: string): string {
++  const cdPattern = /^cd\s+([^\s&]+)\s+&&\s+(.+)$/;
++  const match = command.match(cdPattern);
++
++  if (match) {
++    const [, targetPath, restOfCommand] = match;
++    // Resolve the target path to absolute
++    const absoluteTargetPath = path.resolve(cwd, targetPath);
++
++    // If target path is same as cwd, strip the cd part
++    if (absoluteTargetPath === cwd) {
++      return restOfCommand;
++    }
++  }
++
++  return command;
++}
++
++export function isMutatingCommand(command: string, cwd: string, log: ILoggingService): boolean {
++  return validateCommandSafety(stripRedundantCd(command, cwd), log); // true = YELLOW/RED
++}
++
++export interface ShellApprovalDeciderDeps {
++  loggingService: ILoggingService;
++  settingsService: ISettingsService;
++  executionContext?: ExecutionContext;
++  shellSandboxRunner: ShellSandboxRunner;
++  /** Root-only: denied reads pause post-execute instead of gating needsApproval. */
++  postExecuteDeniedRead: boolean;
++  sessionAccess?: SessionAccessState;
++  nestedCompatibility?: NestedToolCompatibilityState;
++}
++
++/**
++ * The shell tool's approval decision: everything `needsApproval` consults to
++ * decide whether a shell command requires user approval. The shell tool owns
++ * the wiring; this module owns the policy.
++ */
++export function createShellApprovalDecider(deps: ShellApprovalDeciderDeps) {
++  const {
++    loggingService,
++    settingsService,
++    executionContext,
++    shellSandboxRunner,
++    postExecuteDeniedRead,
++    sessionAccess,
++    nestedCompatibility,
++  } = deps;
++  const logValidationError = (message: string) => logValidationErrorUtil(settingsService, message);
++  // Read per call: the sandbox can be toggled while a session is running, and a
++  // stale value would let needsApproval and execute disagree about Docker.
++  const isSandboxEnabled = () => settingsService.get('sandbox.enabled') !== false;
++
++  return {
++    needsApproval: async (params: ShellApprovalParams, context?: unknown): Promise<boolean> => {
++      if (settingsService.get('shell.autoApproveMode') === 'always') {
++        loggingService.security('Shell tool needsApproval: auto-approved in YOLO mode', {
++          command: typeof params?.command === 'string' ? params.command.substring(0, 100) : String(params?.command),
++        });
++        return false;
++      }
++      try {
++        if (params.sandbox === 'unsandboxed') {
++          return true;
++        }
++
++        const cwd = executionContext?.getCwd() || process.cwd();
++        const sessionId = getConversationSessionId(context);
++        const sandboxEnabled = isSandboxEnabled();
++        const dockerHostControlRequested =
++          sandboxEnabled &&
++          (sessionAccess?.requiresDockerApproval(params.command) ??
++            nestedCompatibility?.docker.requiresApproval(sessionId, params.command) ??
++            false);
++        if (
++          dockerHostControlRequested &&
++          !(sessionAccess?.hasDockerProject(cwd) ?? nestedCompatibility?.docker.hasProject(cwd) ?? false) &&
++          !(
++            sessionAccess?.hasDockerSessionGrant(cwd) ??
++            (sessionId ? nestedCompatibility?.docker.hasSession(sessionId, cwd) : false) ??
++            false
++          )
++        ) {
++          return true;
++        }
++        const sshService = executionContext?.getSSHService();
++        if (!sshService && sandboxEnabled) {
++          // If a previous sandboxed run denied a read for this command, require
++          // approval so the user can allow/remember the path or escape unsandboxed.
++          if (!postExecuteDeniedRead && nestedCompatibility?.deniedReads.peek(params.command)) {
++            return true;
++          }
++          const availability = await shellSandboxRunner.availability();
++          if (availability.type === 'available') {
++            return false;
++          }
++          return true;
++        }
++
++        const isDangerous = isMutatingCommand(params.command, cwd, loggingService);
++
++        // Log security event for all shell commands with dangerous flag
++        loggingService.security('Shell tool needsApproval check', {
++          commands: [params.command.substring(0, 100)], // Truncate for safety
++          optimizedCommand: stripRedundantCd(params.command, cwd).substring(0, 100),
++          isDangerous,
++        });
++
++        return isDangerous;
++      } catch (error) {
++        const errorMessage = error instanceof Error ? error.message : String(error);
++        logValidationError(`Validation failed: ${errorMessage}`);
++        loggingService.error('Shell tool validation error', {
++          error: errorMessage,
++          // params.command may itself be why we're in this catch (e.g. undefined
++          // after a malformed tool call), so don't re-dereference it unguarded.
++          commands: [typeof params.command === 'string' ? params.command.substring(0, 100) : String(params.command)],
++        });
++        return true; // fail-safe: require approval on validation errors
++      }
++    },
++  };
++}
+diff --git a/source/tools/system/shell.ts b/source/tools/system/shell.ts
+index 5c564507..4d4291b8 100644
+--- a/source/tools/system/shell.ts
++++ b/source/tools/system/shell.ts
+@@ -1,11 +1,14 @@
+ import { z } from 'zod';
+ import process from 'process';
+-import path from 'path';
+ import { randomUUID } from 'node:crypto';
+ import { relaxedNumber } from '../utils.js';
+-import { validateCommandSafety } from '../../utils/shell/command-safety/index.js';
+-import { logValidationError as logValidationErrorUtil } from '../../utils/shell/command-logger.js';
+ import { executeShellCommand } from '../../utils/shell/execute-shell.js';
++import {
++  createShellApprovalDecider,
++  getConversationSessionId,
++  isMutatingCommand,
++  stripRedundantCd,
++} from './shell-approval.js';
+ import type { ShellChildRegistry } from '../../utils/shell/shell-child-registry.js';
+ import {
+   setTrimConfig,
+@@ -485,27 +488,6 @@ export function createBackgroundShellJobToolDefinitions(
+   return definitions;
+ }
+ 
+-/**
+- * Strip redundant 'cd <path> &&' prefix if it targets the current working directory
+- */
+-function stripRedundantCd(command: string, cwd: string): string {
+-  const cdPattern = /^cd\s+([^\s&]+)\s+&&\s+(.+)$/;
+-  const match = command.match(cdPattern);
+-
+-  if (match) {
+-    const [, targetPath, restOfCommand] = match;
+-    // Resolve the target path to absolute
+-    const absoluteTargetPath = path.resolve(cwd, targetPath);
+-
+-    // If target path is same as cwd, strip the cd part
+-    if (absoluteTargetPath === cwd) {
+-      return restOfCommand;
+-    }
+-  }
+-
+-  return command;
+-}
+-
+ /**
+  * Strip RTK's "No hook installed" warning from stderr output.
+  * The rtk binary prints this banner to stderr when its git hook is not installed.
+@@ -518,18 +500,6 @@ function stripRtkWarning(text: string): string {
+     .join('\n');
+ }
+ 
+-function isMutatingCommand(command: string, cwd: string, log: ILoggingService): boolean {
+-  return validateCommandSafety(stripRedundantCd(command, cwd), log); // true = YELLOW/RED
+-}
+-
+-function getConversationSessionId(context: unknown): string | undefined {
+-  if (!context || typeof context !== 'object') return undefined;
+-  const runContext = (context as { context?: unknown }).context;
+-  if (!runContext || typeof runContext !== 'object') return undefined;
+-  const sessionId = (runContext as { sessionId?: unknown }).sessionId;
+-  return typeof sessionId === 'string' && sessionId.length > 0 ? sessionId : undefined;
+-}
+-
+ const coerceCommandText = (value: unknown): string => {
+   if (typeof value === 'string') {
+     return value;
+@@ -721,8 +691,6 @@ export function createShellToolDefinition(deps: {
+   } = deps;
+   const deniedReadByCallId = new Map<string, DeniedReadInfo>();
+   const overrideByCallId = new Map<string, { extraAllowRead?: string[]; forceUnsandboxed?: boolean }>();
+-  // Create command logger function with dependencies
+-  const logValidationError = (message: string) => logValidationErrorUtil(settingsService, message);
+ 
+   const searchViaShellSetting = settingsService.get('app.searchViaShell') ?? 'auto';
+   const resolvedSearchViaShell =
+@@ -741,77 +709,22 @@ export function createShellToolDefinition(deps: {
+   // stale value would let needsApproval and execute disagree about Docker.
+   const isSandboxEnabled = () => settingsService.get('sandbox.enabled') !== false;
+ 
++  const approvalDecider = createShellApprovalDecider({
++    loggingService,
++    settingsService,
++    executionContext,
++    shellSandboxRunner,
++    postExecuteDeniedRead,
++    sessionAccess,
++    nestedCompatibility,
++  });
++
+   return {
+     name: 'shell',
+     description: shellDescription,
+     parameters: shellParametersSchema,
+-    needsApproval: async (params, context) => {
+-      if (settingsService.get('shell.autoApproveMode') === 'always') {
+-        loggingService.security('Shell tool needsApproval: auto-approved in YOLO mode', {
+-          command: typeof params?.command === 'string' ? params.command.substring(0, 100) : String(params?.command),
+-        });
+-        return false;
+-      }
+-      try {
+-        if (params.sandbox === 'unsandboxed') {
+-          return true;
+-        }
++    needsApproval: approvalDecider.needsApproval,
+ 
+-        const cwd = executionContext?.getCwd() || process.cwd();
+-        const sessionId = getConversationSessionId(context);
+-        const sandboxEnabled = isSandboxEnabled();
+-        const dockerHostControlRequested =
+-          sandboxEnabled &&
+-          (sessionAccess?.requiresDockerApproval(params.command) ??
+-            nestedCompatibility?.docker.requiresApproval(sessionId, params.command) ??
+-            false);
+-        if (
+-          dockerHostControlRequested &&
+-          !(sessionAccess?.hasDockerProject(cwd) ?? nestedCompatibility?.docker.hasProject(cwd) ?? false) &&
+-          !(
+-            sessionAccess?.hasDockerSessionGrant(cwd) ??
+-            (sessionId ? nestedCompatibility?.docker.hasSession(sessionId, cwd) : false) ??
+-            false
+-          )
+-        ) {
+-          return true;
+-        }
+-        const sshService = executionContext?.getSSHService();
+-        if (!sshService && sandboxEnabled) {
+-          // If a previous sandboxed run denied a read for this command, require
+-          // approval so the user can allow/remember the path or escape unsandboxed.
+-          if (!postExecuteDeniedRead && nestedCompatibility?.deniedReads.peek(params.command)) {
+-            return true;
+-          }
+-          const availability = await shellSandboxRunner.availability();
+-          if (availability.type === 'available') {
+-            return false;
+-          }
+-          return true;
+-        }
+-
+-        const isDangerous = isMutatingCommand(params.command, cwd, loggingService);
+-
+-        // Log security event for all shell commands with dangerous flag
+-        loggingService.security('Shell tool needsApproval check', {
+-          commands: [params.command.substring(0, 100)], // Truncate for safety
+-          optimizedCommand: stripRedundantCd(params.command, cwd).substring(0, 100),
+-          isDangerous,
+-        });
+-
+-        return isDangerous;
+-      } catch (error) {
+-        const errorMessage = error instanceof Error ? error.message : String(error);
+-        logValidationError(`Validation failed: ${errorMessage}`);
+-        loggingService.error('Shell tool validation error', {
+-          error: errorMessage,
+-          // params.command may itself be why we're in this catch (e.g. undefined
+-          // after a malformed tool call), so don't re-dereference it unguarded.
+-          commands: [typeof params.command === 'string' ? params.command.substring(0, 100) : String(params.command)],
+-        });
+-        return true; // fail-safe: require approval on validation errors
+-      }
+-    },
+     execute: async (
+       { command, timeout_ms, max_output_length, sandbox = 'default', background = false, monitor, check_in },
+       _context,

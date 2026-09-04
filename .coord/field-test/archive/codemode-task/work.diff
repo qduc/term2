@@ -1,0 +1,228 @@
+diff --git a/source/lib/agent-factory.test.ts b/source/lib/agent-factory.test.ts
+index b2bc03f5..f6f6b647 100644
+--- a/source/lib/agent-factory.test.ts
++++ b/source/lib/agent-factory.test.ts
+@@ -161,7 +161,11 @@ it.sequential('keeps every registered tool reachable across direct and script pa
+   expect(runCode!.description).toContain('Other tools (names only; schemas are available on demand)');
+   expect(new Set([...direct, ...exposedToolNames])).toEqual(new Set(rawNames));
+   expect(new Set(direct.filter((name) => exposedToolNames.includes(name)))).toEqual(
+-    new Set(raw.tools.filter((tool) => tool.canRequireApproval === true).map((tool) => tool.name)),
++    new Set(
++      raw.tools
++        .filter((tool) => tool.canRequireApproval === true && !RUN_CODE_PROHIBITED_TOOLS.has(tool.name))
++        .map((tool) => tool.name),
++    ),
+   );
+   for (const tool of raw.tools) {
+     expect(direct.includes(tool.name)).toBe(isDirectlyCallable(tool));
+@@ -194,7 +198,7 @@ it.sequential('keeps the complete wrapped registry when run_code is unavailable'
+   expect(built.map((tool) => tool.name)).toEqual(raw.tools.map((tool) => tool.name));
+ });
+ 
+-it.sequential('requires non-constant approval predicates to declare a direct fallback', () => {
++it.sequential('requires approval-capable tools to declare a direct fallback', () => {
+   const { deps } = createDeps({ settingsValues: { 'app.searchViaShell': 'off' } });
+   const raw = getAgentDefinition(
+     {
+@@ -206,8 +210,8 @@ it.sequential('requires non-constant approval predicates to declare a direct fal
+ 
+   for (const tool of raw.tools) {
+     const compactPredicate = Function.prototype.toString.call(tool.needsApproval).replace(/\s/g, '').replace(/;$/, '');
+-    const isConstantPredicate = compactPredicate.endsWith('=>false') || compactPredicate.endsWith('=>true');
+-    if (!isConstantPredicate && !RUN_CODE_PROHIBITED_TOOLS.has(tool.name)) {
++    const isAlwaysApproved = compactPredicate.endsWith('=>false');
++    if (!isAlwaysApproved) {
+       expect(tool.canRequireApproval, `${tool.name} needs an explicit approval fallback`).toBe(true);
+     }
+   }
+diff --git a/source/tools/agent/ask-user.test.ts b/source/tools/agent/ask-user.test.ts
+index 3341034f..a3201cf6 100644
+--- a/source/tools/agent/ask-user.test.ts
++++ b/source/tools/agent/ask-user.test.ts
+@@ -25,6 +25,7 @@ it('createAskUserToolDefinition defines the tool correctly', () => {
+ 
+   expect(tool.name).toBe('ask_user');
+   expect(tool.description.includes('clarifying questions')).toBe(true);
++  expect(tool.canRequireApproval).toBe(true);
+   expect(tool.needsApproval({ questions: [{ question: 'test' }] }, undefined)).toBe(true);
+ });
+ 
+diff --git a/source/tools/agent/ask-user.ts b/source/tools/agent/ask-user.ts
+index fd7fc2fc..befca5d5 100644
+--- a/source/tools/agent/ask-user.ts
++++ b/source/tools/agent/ask-user.ts
+@@ -54,6 +54,7 @@ export const createAskUserToolDefinition = (
+   name: TOOL_NAME_ASK_USER,
+   description: ASK_USER_DESCRIPTION,
+   parameters: askUserSchema,
++  canRequireApproval: true,
+   needsApproval: () => true,
+   execute: async (_params, _context, details) => {
+     const callId = (details as any)?.toolCall?.callId;
+diff --git a/source/tools/file/glob.test.ts b/source/tools/file/glob.test.ts
+index ba8c55fe..ba494709 100644
+--- a/source/tools/file/glob.test.ts
++++ b/source/tools/file/glob.test.ts
+@@ -21,6 +21,10 @@ const findFilesToolDefinitionAllowOutsideFindFallback = createFindFilesToolDefin
+   forceFindFallback: true,
+ });
+ 
++it('does not advertise approval for an explicitly outside-workspace glob definition', () => {
++  expect(findFilesToolDefinitionAllowOutside.canRequireApproval).toBe(false);
++});
++
+ function createWrappedFindFilesTool() {
+   const definition = createFindFilesToolDefinition();
+   return wrapToolInvoke(definition, definition.parameters, {
+diff --git a/source/tools/file/glob.ts b/source/tools/file/glob.ts
+index e84e57ce..f3a97d3b 100644
+--- a/source/tools/file/glob.ts
++++ b/source/tools/file/glob.ts
+@@ -143,7 +143,7 @@ export const createFindFilesToolDefinition = (
+     name: 'glob',
+     description: allowOutsideWorkspace ? GLOB_DESCRIPTION_OUTSIDE : GLOB_DESCRIPTION,
+     parameters: findFilesParametersSchema,
+-    canRequireApproval: true,
++    canRequireApproval: !allowOutsideWorkspace,
+     parallelSafe: true,
+     argumentParsing: 'strict',
+     needsApproval: async (params, context) => {
+diff --git a/source/tools/file/grep.test.ts b/source/tools/file/grep.test.ts
+index a67ab972..19e9df31 100644
+--- a/source/tools/file/grep.test.ts
++++ b/source/tools/file/grep.test.ts
+@@ -438,5 +438,6 @@ it('grep skips the workspace boundary check in lite mode (allowOutsideWorkspace)
+     allowOutsideWorkspace: true,
+   });
+ 
++  expect(definition.canRequireApproval).toBe(false);
+   expect(await definition.needsApproval!({ pattern: 'x', path: '/etc' } as any, {} as any)).toBe(false);
+ });
+diff --git a/source/tools/file/grep.ts b/source/tools/file/grep.ts
+index 4c1338f3..cd0d0297 100644
+--- a/source/tools/file/grep.ts
++++ b/source/tools/file/grep.ts
+@@ -198,7 +198,7 @@ export const createGrepToolDefinition = (
+     name: 'grep',
+     description: buildGrepDescription(globAvailable, orchestratorMode),
+     parameters: searchParametersSchema,
+-    canRequireApproval: true,
++    canRequireApproval: !allowOutsideWorkspace,
+     parallelSafe: true,
+     argumentParsing: 'strict',
+     // Read-only, but not necessarily in-bounds: `path` is passed through to a
+diff --git a/source/tools/file/read-file.test.ts b/source/tools/file/read-file.test.ts
+index 4be93c83..ce7bed82 100644
+--- a/source/tools/file/read-file.test.ts
++++ b/source/tools/file/read-file.test.ts
+@@ -144,6 +144,10 @@ it.sequential('needsApproval: yolo mode bypasses the workspace boundary for read
+   });
+ });
+ 
++it('does not advertise approval for an explicitly outside-workspace read definition', () => {
++  expect(readFileToolDefinitionAllowOutside.canRequireApproval).toBe(false);
++});
++
+ it.sequential('needsApproval: does not prompt for descendants of a folder allowed for the session', async () => {
+   await withTempDir(async (workspaceDir) => {
+     const sessionId = 'read-folder-session';
+diff --git a/source/tools/file/read-file.ts b/source/tools/file/read-file.ts
+index 6023f5b3..4444ae91 100644
+--- a/source/tools/file/read-file.ts
++++ b/source/tools/file/read-file.ts
+@@ -163,7 +163,7 @@ export const createReadFileToolDefinition = (
+       ? READ_FILE_DESCRIPTION_OUTSIDE
+       : READ_FILE_DESCRIPTION,
+     parameters: readFileParametersSchema,
+-    canRequireApproval: true,
++    canRequireApproval: !allowOutsideWorkspace,
+     parallelSafe: true,
+     needsApproval: async (params, context) => {
+       if (allowOutsideWorkspace) {
+diff --git a/source/tools/memory/memory-tools.test.ts b/source/tools/memory/memory-tools.test.ts
+index 7d238a0f..42aa4d7d 100644
+--- a/source/tools/memory/memory-tools.test.ts
++++ b/source/tools/memory/memory-tools.test.ts
+@@ -217,6 +217,8 @@ it('requires approval for destructive memory mutations', async () => {
+   const update = tools.find((tool) => tool.name === 'memory_update')!;
+   const remove = tools.find((tool) => tool.name === 'memory_delete')!;
+ 
++  expect(update.canRequireApproval).toBe(true);
++  expect(remove.canRequireApproval).toBe(true);
+   expect(await update.needsApproval({ scope: 'global', id: memory.id, summary: 'Updated' })).toBe(true);
+   expect(await remove.needsApproval({ scope: 'global', id: memory.id })).toBe(true);
+ });
+diff --git a/source/tools/memory/memory-tools.ts b/source/tools/memory/memory-tools.ts
+index a5d8071e..83cd3110 100644
+--- a/source/tools/memory/memory-tools.ts
++++ b/source/tools/memory/memory-tools.ts
+@@ -135,6 +135,7 @@ function definition<S extends z.ZodObject<any>>(
+     name,
+     description,
+     parameters,
++    ...(needsApproval === false ? {} : { canRequireApproval: true }),
+     preserveSerializedOutput: [
+       'memory_list',
+       'memory_get',
+diff --git a/source/tools/system/run-code/run-code.ts b/source/tools/system/run-code/run-code.ts
+index 4f119358..9f0c494c 100644
+--- a/source/tools/system/run-code/run-code.ts
++++ b/source/tools/system/run-code/run-code.ts
+@@ -151,9 +151,9 @@ export function bindRunCodeRegistry(tools: ToolRegistry): void {
+ 
+ /**
+  * Direct calls are the union of tools that scripts structurally cannot reach
+- * and tools whose parameter-dependent approval policy may refuse a script call.
++ * and tools whose approval policy may refuse a script call.
+  * The latter is explicit metadata on the definition because a function cannot
+- * honestly reveal whether every possible parameter value is auto-approved.
++ * honestly reveal whether every possible invocation is auto-approved.
+  */
+ export function isDirectlyCallable(tool: Pick<AnyToolDefinition, 'name' | 'canRequireApproval'>): boolean {
+   return RUN_CODE_PROHIBITED_TOOLS.has(tool.name) || tool.canRequireApproval === true;
+diff --git a/source/tools/system/shell.test.ts b/source/tools/system/shell.test.ts
+index c61b909a..5215d7fa 100644
+--- a/source/tools/system/shell.test.ts
++++ b/source/tools/system/shell.test.ts
+@@ -772,6 +772,7 @@ it('retains the schema sandbox default while accepting raw invocations that omit
+ 
+   expect(tool.parameters.parse({ command: 'pwd' }).sandbox).toBe('default');
+   expect(tool.parameters.parse({ command: 'pwd' }).background).toBe(false);
++  expect(tool.canRequireApproval).toBe(true);
+   await expect(tool.needsApproval({ command: 'pwd' })).resolves.toBeTypeOf('boolean');
+ });
+ 
+diff --git a/source/tools/system/shell.ts b/source/tools/system/shell.ts
+index 5c564507..c2505ff7 100644
+--- a/source/tools/system/shell.ts
++++ b/source/tools/system/shell.ts
+@@ -745,6 +745,7 @@ export function createShellToolDefinition(deps: {
+     name: 'shell',
+     description: shellDescription,
+     parameters: shellParametersSchema,
++    canRequireApproval: true,
+     needsApproval: async (params, context) => {
+       if (settingsService.get('shell.autoApproveMode') === 'always') {
+         loggingService.security('Shell tool needsApproval: auto-approved in YOLO mode', {
+diff --git a/source/tools/types.ts b/source/tools/types.ts
+index 64dfba72..53e8a8af 100644
+--- a/source/tools/types.ts
++++ b/source/tools/types.ts
+@@ -101,7 +101,7 @@ export interface SchemaToolDefinition<TSchema extends ZodTypeAny> {
+   parameters: TSchema;
+   /** Opt-in capability for independent, auto-approved calls in one model response. */
+   parallelSafe?: boolean | ((params: z.infer<TSchema>, context?: unknown) => Promise<boolean> | boolean);
+-  /** True when some valid parameter values can require interactive approval. */
++  /** True when a valid invocation may require interactive approval based on params, context, or runtime state. */
+   canRequireApproval?: boolean;
+   /** Declares a successful call as an observable mutation for stall detection. */
+   effect?: 'mutating';
+@@ -166,7 +166,7 @@ export interface AnyToolDefinition {
+   /** Opt-in capability for independent, auto-approved calls in one model response. */
+   /** `never` keeps heterogeneous schema-derived predicates assignable at the erased boundary. */
+   parallelSafe?: boolean | ((params: never, context?: unknown) => Promise<boolean> | boolean);
+-  /** True when some valid parameter values can require interactive approval. */
++  /** True when a valid invocation may require interactive approval based on params, context, or runtime state. */
+   canRequireApproval?: boolean;
+   /** Declares a successful call as an observable mutation for stall detection. */
+   effect?: 'mutating';

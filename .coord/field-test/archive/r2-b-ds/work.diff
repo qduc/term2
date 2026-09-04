@@ -1,0 +1,26 @@
+diff --git a/source/utils/output/output-trim.test.ts b/source/utils/output/output-trim.test.ts
+index 1b1a6023..7e4f1dcb 100644
+--- a/source/utils/output/output-trim.test.ts
++++ b/source/utils/output/output-trim.test.ts
+@@ -64,6 +64,21 @@ it('trims output with very few lines (e.g. 5 lines) exceeding character limit',
+   expect(result.length).toBeLessThan(6000);
+ });
+ 
++it('preserves the first character of the tail when trimming by characters', () => {
++  // keepChars = floor(1000 * 0.4) = 400; the tail must be the last 400 chars
++  // of the output, starting with the seam token. A slice that skips the first
++  // character of the tail makes the resumed text start mid-token.
++  const maxCharacters = 1000;
++  const keepChars = Math.floor(maxCharacters * 0.4);
++  const seamToken = 'Z';
++  const tailBody = 't'.repeat(keepChars - 1);
++  const output = 'H'.repeat(keepChars) + 'x'.repeat(2000) + seamToken + tailBody;
++  const result = trimOutput(output, undefined, maxCharacters);
++
++  expect(result.includes('characters trimmed')).toBe(true);
++  expect(result.endsWith(seamToken + tailBody)).toBe(true);
++});
++
+ it('handles very small maxCharacters without string repetition quirk', () => {
+   const output = 'abcdefghij';
+   const result = trimOutput(output, undefined, 2);

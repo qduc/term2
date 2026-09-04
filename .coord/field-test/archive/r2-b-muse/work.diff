@@ -1,0 +1,28 @@
+diff --git a/source/utils/output/output-trim.test.ts b/source/utils/output/output-trim.test.ts
+index 1b1a6023..0ab3fb09 100644
+--- a/source/utils/output/output-trim.test.ts
++++ b/source/utils/output/output-trim.test.ts
+@@ -215,6 +215,23 @@ it('trimOutput uses updated config after setTrimConfig', () => {
+   }
+ });
+ 
++it('preserves the full tail section when trimming by characters', () => {
++  const maxCharacters = 100;
++  const keepChars = Math.floor(maxCharacters * 0.4);
++  const headPart = 'H'.repeat(keepChars);
++  const tailPart = 'T'.repeat(keepChars);
++  const output = `${headPart}${'m'.repeat(200)}${tailPart}`;
++  const result = trimOutput(output, undefined, maxCharacters);
++
++  const expectedHead = output.slice(0, keepChars);
++  const expectedTail = output.slice(-keepChars);
++  expect(result.startsWith(expectedHead)).toBe(true);
++  expect(result.endsWith(expectedTail)).toBe(true);
++  expect(expectedTail[0]).toBe('T');
++  expect(result.endsWith(tailPart)).toBe(true);
++  expect(result.includes(`[${output.length - keepChars * 2} characters trimmed]`)).toBe(true);
++});
++
+ it('handles empty string', () => {
+   const result = trimOutput('');
+   expect(result).toBe('');

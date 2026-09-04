@@ -1,8 +1,10 @@
-/** JavaScript evaluated in a disposable worker thread. It deliberately exposes
- * only the context globals below; Node's worker globals never enter vm context. */
-export const WORKFLOW_WORKER_SOURCE = String.raw`
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildWorkerSource > injects capability names into a fixed template and nothing else 1`] = `
+"
 const { parentPort, workerData } = require('node:worker_threads');
 const vm = require('node:vm');
+const capabilities = [{"name":"agent","kind":"factory"},{"name":"tools","kind":"namespace","members":["read_file","grep"]}];
 let sequence = 0;
 const pending = new Map();
 function send(type, payload) { parentPort.postMessage({ type, ...payload }); }
@@ -17,17 +19,27 @@ function json(value, ancestors = new Set()) {
   ancestors.delete(value);
   return valid;
 }
-function agent(config) {
-  return Object.freeze({ run(input) {
-    const requestId = String(++sequence);
-    return new Promise((resolve) => {
-      pending.set(requestId, resolve);
-      send('agent.run', { requestId, config, input });
-    });
-  }});
+function call(name, payload) {
+  const requestId = String(++sequence);
+  return new Promise((resolve) => {
+    pending.set(requestId, resolve);
+    send(name + '.run', Object.assign({ requestId }, payload));
+  });
+}
+function factoryBinding(name) {
+  return (config) => Object.freeze({ run(input) { return call(name, { config, input }); } });
+}
+function namespaceBinding(name, members) {
+  const namespace = Object.create(null);
+  for (const member of members) namespace[member] = (params) => call(name, { member, params });
+  return Object.freeze(namespace);
 }
 const sandbox = Object.create(null);
-sandbox.agent = agent;
+for (const capability of capabilities) {
+  sandbox[capability.name] = capability.kind === 'namespace'
+    ? namespaceBinding(capability.name, capability.members)
+    : factoryBinding(capability.name);
+}
 // A transport guard only: the host independently validates console data and
 // applies the cumulative budget before forwarding it to observers.
 sandbox.console = Object.freeze({ log: (...values) => {
@@ -39,16 +51,21 @@ sandbox.console = Object.freeze({ log: (...values) => {
 } });
 const context = vm.createContext(sandbox, { codeGeneration: { strings: false, wasm: false } });
 parentPort.on('message', (message) => {
-  if (message.type === 'agent.result') { const resolve = pending.get(message.requestId); pending.delete(message.requestId); if (resolve) resolve(message.result); }
+  if (typeof message.type === 'string' && message.type.endsWith('.result')) {
+    const resolve = pending.get(message.requestId);
+    pending.delete(message.requestId);
+    if (resolve) resolve(message.result);
+  }
 });
 (async () => {
   try {
-    const script = new vm.Script('(async () => { "use strict";\n' + workerData.code + '\n})()', { filename: 'workflow.js' });
+    const script = new vm.Script('(async () => { "use strict";\\n' + workerData.code + '\\n})()', { filename: 'workflow.js' });
     const output = await script.runInContext(context, { timeout: workerData.syncTimeoutMs });
-    if (!json(output)) throw new Error('Workflow return value must be JSON-safe');
+    if (!json(output)) throw new Error((workerData.subject || 'Script') + ' return value must be JSON-safe');
     send('workflow.complete', { output });
   } catch (err) {
     send('workflow.error', { error: error(err), syntax: err instanceof SyntaxError });
   }
 })();
+"
 `;

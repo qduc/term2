@@ -48,6 +48,19 @@ import { executeShellCommand } from '../../utils/shell/execute-shell.js';
 let hasFd: boolean | null = null;
 let hasFdRemote: boolean | null = null;
 
+/** True when `run_code` made this call from inside a script. */
+function isScriptedCall(context: unknown): boolean {
+  return !!context && typeof context === 'object' && (context as { scripted?: unknown }).scripted === true;
+}
+
+/**
+ * Result cap for a glob issued from inside a script.
+ *
+ * High enough that a script enumerating a source tree gets the whole tree,
+ * while still bounding a pathological pattern.
+ */
+const SCRIPTED_GLOB_MAX_RESULTS = 5_000;
+
 async function checkFdAvailability(executionContext?: ExecutionContext): Promise<boolean> {
   const isRemote = executionContext?.isRemote() ?? false;
 
@@ -172,14 +185,20 @@ export const createFindFilesToolDefinition = (
         return true;
       }
     },
-    execute: async (params) => {
+    execute: async (params, context) => {
       const { pattern: rawPattern, path: searchPath, max_results, no_ignore } = params;
 
       if (!rawPattern || rawPattern.trim() === '') {
         return 'Error: Search pattern cannot be empty. Please provide a valid file name or glob pattern.';
       }
 
-      const limit = max_results ?? 50;
+      // A scripted call is not protected by the 50-result default: the list
+      // goes to the script, not into model context, and a silently short list
+      // makes whatever the script computes from it wrong. Observed in the
+      // field test: a script asked for every file under source/tools, received
+      // 50 of 86, and reported the wrong longest file
+      // (docs/plans/code-mode-field-test.md).
+      const limit = max_results ?? (isScriptedCall(context) ? SCRIPTED_GLOB_MAX_RESULTS : 50);
       const cwd = executionContext?.getCwd() || process.cwd();
 
       // When the pattern itself is an absolute path (e.g. "/data/llamacpp/models/run_*.sh"),

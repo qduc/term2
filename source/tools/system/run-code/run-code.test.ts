@@ -160,7 +160,9 @@ describe('run_code', () => {
       new ToolApprovalPolicyRegistry(),
     );
 
-    expect(output).toContain('requires approval and is unavailable from inside a script');
+    expect(output).toContain('has no registered approval policy and is unavailable from inside a script');
+    expect(output).toContain('Unavailable (no registered approval policy');
+    expect(output).not.toContain('requires approval');
     expect(execute).not.toHaveBeenCalled();
   });
 

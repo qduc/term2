@@ -103,7 +103,7 @@ const RUN_CODE_DESCRIPTION =
 /** One `tools.*` call observed during a run, for the user-facing summary. */
 export interface RunCodeCallRecord {
   tool: string;
-  outcome: 'ok' | 'error' | 'approval_required' | 'unknown_tool' | 'invalid_params' | 'prohibited';
+  outcome: 'ok' | 'error' | 'approval_required' | 'unknown_policy' | 'unknown_tool' | 'invalid_params' | 'prohibited';
   durationMs: number;
 }
 
@@ -291,16 +291,20 @@ export function createRunCodeToolDefinition(
         // enter_worktree mutate shared execution context.
         lane: (prepared) => (prepared.parallelSafe ? 'default' : 'serial'),
         invoke: async (prepared, callContext): Promise<CapabilityOutcome> => {
-          const decision = await approvalRegistry.decide({
+          const decision = await approvalRegistry.evaluate({
             toolName: prepared.tool.name,
             args: prepared.params,
             context,
           });
-          if (decision !== 'allow') {
-            record(prepared.tool.name, 'approval_required', prepared.started);
+          if (decision.kind !== 'auto_approve') {
+            const outcome = decision.kind === 'unknown' ? 'unknown_policy' : 'approval_required';
+            record(prepared.tool.name, outcome, prepared.started);
             return failed(
-              `"${prepared.tool.name}" requires approval and is unavailable from inside a script. ` +
-                `Call ${prepared.tool.name} directly as a tool instead, or narrow the arguments so it no longer requires approval.`,
+              decision.kind === 'unknown'
+                ? `"${prepared.tool.name}" has no registered approval policy and is unavailable from inside a script. ` +
+                    `Call a tool with a registered approval policy directly instead.`
+                : `"${prepared.tool.name}" requires approval and is unavailable from inside a script. ` +
+                    `Call ${prepared.tool.name} directly as a tool instead, or narrow the arguments so it no longer requires approval.`,
             );
           }
 
@@ -416,6 +420,13 @@ function renderResult(
   if (refused.length > 0) {
     const names = [...new Set(refused.map((call) => call.tool))].join(', ');
     sections.push(`Refused (needs user approval, call these directly instead): ${names}`);
+  }
+  const unknownPolicy = calls.filter((call) => call.outcome === 'unknown_policy');
+  if (unknownPolicy.length > 0) {
+    const names = [...new Set(unknownPolicy.map((call) => call.tool))].join(', ');
+    sections.push(
+      `Unavailable (no registered approval policy, call a tool with a registered policy directly instead): ${names}`,
+    );
   }
   sections.push(`[${summarizeCalls(calls)}]`);
 

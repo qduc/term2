@@ -179,7 +179,11 @@ it('buildPromptSpec composes file fragments in stable order', () => {
 
 it('does not teach root prompt surfaces to call script-only tools directly', () => {
   const tools = fullCapabilityTools();
-  const scriptOnly = tools.filter((tool) => !RUN_CODE_PROHIBITED_TOOLS.has(tool.name)).map((tool) => tool.name);
+  const scriptOnly = tools
+    .filter((tool) => !RUN_CODE_PROHIBITED_TOOLS.has(tool.name) && tool.canRequireApproval !== true)
+    .map((tool) => tool.name);
+  const approvalCapableTool = tools.find((tool) => tool.name === 'read_file' && tool.canRequireApproval === true);
+  expect(approvalCapableTool).toBeDefined();
   const surfaces = ['lite.md', 'memory.md', 'session-browser.md', 'orchestrator.md'].map((file) =>
     readFileSync(join(import.meta.dirname, file), 'utf8'),
   );
@@ -187,10 +191,13 @@ it('does not teach root prompt surfaces to call script-only tools directly', () 
     getBackgroundShellAddendum(),
     getSubagentDelegationAddendum({ backgroundEnabled: true, controlsEnabled: true, foregroundEnabled: false }),
     ...tools.filter((tool) => scriptOnly.includes(tool.name)).map((tool) => tool.description),
+    `A direct prompt may name ${approvalCapableTool!.name} when that tool is available.`,
   );
 
   const directReferences = scriptOnly.flatMap((name) => {
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // This preceding-dot exclusion is load-bearing: tools.<name> is the valid
+    // script reference form and must not count as a bare direct-tool reference.
     const pattern = new RegExp(`(?<![A-Za-z0-9_.])${escaped}(?![A-Za-z0-9_])`);
     return surfaces.some((surface) => pattern.test(surface)) ? [name] : [];
   });

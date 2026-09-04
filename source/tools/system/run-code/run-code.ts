@@ -61,6 +61,7 @@ export const RUN_CODE_LIMITS = {
 export const RUN_CODE_PROHIBITED_TOOLS: ReadonlySet<string> = new Set([
   ...WORKFLOW_PROHIBITED_TOOLS,
   TOOL_NAME_RUN_CODE,
+  'ask_mentor',
   'session_rollover',
   // Shell approval also depends on coordinator-owned Docker/session state that
   // the raw policy registry cannot express for an out-of-band script call.

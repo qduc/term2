@@ -8,6 +8,8 @@ import {
   TOOL_NAME_RUN_CODE,
 } from './run-code.js';
 import type { ILoggingService } from '../../../services/service-interfaces.js';
+import { ToolApprovalPolicyRegistry } from '../../../services/approval/tool-approval-policy-registry.js';
+import { wrapNeedsApproval } from '../../../lib/tool-invoke.js';
 import type { AnyToolDefinition, ToolRegistry } from '../../types.js';
 
 const workspace = process.cwd();
@@ -26,15 +28,32 @@ const tool = (overrides: Partial<AnyToolDefinition> & { name: string }): AnyTool
 const logging = (): ILoggingService =>
   ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), security: vi.fn() } as unknown as ILoggingService);
 
-const build = (registry: ToolRegistry) =>
+const makeApprovalRegistry = (registry: ToolRegistry): ToolApprovalPolicyRegistry => {
+  const approvalRegistry = new ToolApprovalPolicyRegistry();
+  for (const candidate of registry) {
+    approvalRegistry.register({
+      toolName: candidate.name,
+      parameters: candidate.parameters,
+      needsApproval: candidate.needsApproval,
+    });
+  }
+  return approvalRegistry;
+};
+
+const build = (registry: ToolRegistry, approvalPolicyRegistry = makeApprovalRegistry(registry)) =>
   createRunCodeToolDefinition({
     loggingService: logging(),
     getToolRegistry: () => registry,
     getCwd: () => workspace,
+    approvalPolicyRegistry,
   });
 
-const run = async (registry: ToolRegistry, code: string, params: Record<string, unknown> = {}) =>
-  String(await build(registry).execute({ code, timeout_ms: 60_000, ...params } as never));
+const run = async (
+  registry: ToolRegistry,
+  code: string,
+  params: Record<string, unknown> = {},
+  approvalPolicyRegistry = makeApprovalRegistry(registry),
+) => String(await build(registry, approvalPolicyRegistry).execute({ code, timeout_ms: 60_000, ...params } as never));
 
 describe('run_code', () => {
   it('runs the script and returns what it printed', async () => {
@@ -46,6 +65,17 @@ describe('run_code', () => {
 
     expect(output).toContain('echo:round-trip');
     expect(output).toContain('1 tool call: echo');
+  });
+
+  it('executes a genuinely auto-approved tool from inside a script', async () => {
+    const execute = vi.fn(() => 'auto-approved result');
+    const output = await run(
+      [tool({ name: 'auto', execute, needsApproval: () => false })],
+      'console.log(await tools.auto({ value: "x" }));',
+    );
+
+    expect(output).toContain('auto-approved result');
+    expect(execute).toHaveBeenCalledOnce();
   });
 
   it('lets a script loop over many tool calls in one execution', async () => {
@@ -117,8 +147,21 @@ describe('run_code', () => {
     );
 
     expect(output).toContain('caught:');
-    expect(output).toContain('needs user approval');
+    expect(output).toContain('requires approval and is unavailable from inside a script');
     expect(output).toContain('Refused (needs user approval, call these directly instead): locked');
+  });
+
+  it('denies a tool with no registered approval policy', async () => {
+    const execute = vi.fn(() => 'must not run');
+    const output = await run(
+      [tool({ name: 'unknown-policy', execute })],
+      'try { await tools["unknown-policy"]({ value: "x" }); } catch (error) { console.log(error.message); }',
+      {},
+      new ToolApprovalPolicyRegistry(),
+    );
+
+    expect(output).toContain('requires approval and is unavailable from inside a script');
+    expect(execute).not.toHaveBeenCalled();
   });
 
   it('never exposes run_code to the script, so a run cannot recurse', async () => {
@@ -150,10 +193,17 @@ describe('run_code', () => {
   });
 
   it('omits prohibited tools from the description it advertises', () => {
-    const description = build([tool({ name: 'run_subagent' }), tool({ name: 'echo' })]).description;
+    const description = build([
+      tool({ name: 'run_subagent' }),
+      tool({ name: 'shell' }),
+      tool({ name: 'echo' }),
+    ]).description;
 
     expect(description).toContain('tools.echo(');
     expect(description).not.toContain('run_subagent');
+    expect(description).not.toContain('tools.shell(');
+    expect(description).toContain('Auto-approved tools run normally');
+    expect(description).toContain('requires user approval is unavailable from inside a script');
   });
 
   it('reports a script that throws', async () => {
@@ -220,6 +270,30 @@ describe('run_code', () => {
     expect(seen).toEqual([marker]);
   });
 
+  it('passes a unique namespaced bridge call ID to each tool execution', async () => {
+    const details: unknown[] = [];
+    const output = await run(
+      [
+        tool({
+          name: 'ids',
+          execute: (_params: unknown, _context: unknown, callDetails: unknown) => {
+            details.push(callDetails);
+            return 'ok';
+          },
+        }),
+      ],
+      `await Promise.all([
+        tools.ids({ value: "one" }),
+        tools.ids({ value: "two" }),
+      ]);`,
+    );
+
+    expect(output).toContain('2 tool calls: ids×2');
+    const callIds = details.map((value) => (value as { toolCall: { callId: string } }).toolCall.callId);
+    expect(new Set(callIds).size).toBe(2);
+    expect(callIds.every((callId) => /^run_code_bridge_\d+:\d+$/.test(callId))).toBe(true);
+  });
+
   it('serialises calls to a tool that is not parallel-safe', async () => {
     let active = 0;
     let maxActive = 0;
@@ -275,15 +349,21 @@ describe('bindRunCodeRegistry', () => {
       name: 'guarded',
       execute: () => 'RAW IMPLEMENTATION RAN',
     });
+    const approvalPolicyRegistry = new ToolApprovalPolicyRegistry();
     const definition = createRunCodeToolDefinition({
       loggingService: logging(),
       getCwd: () => workspace,
+      approvalPolicyRegistry,
     });
 
     // Mirrors agent-factory: the policy layer wraps each definition, then binds
     // the wrapped list into run_code.
+    const wrappedNeedsApproval = wrapNeedsApproval(raw, {
+      toolName: raw.name,
+      registry: approvalPolicyRegistry,
+    });
     const wrapped: ToolRegistry = [
-      { ...raw, execute: () => 'policy layer refused this call' },
+      { ...raw, needsApproval: wrappedNeedsApproval, execute: () => 'policy layer refused this call' },
       definition as unknown as AnyToolDefinition,
     ];
     bindRunCodeRegistry(wrapped);

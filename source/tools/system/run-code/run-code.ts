@@ -10,6 +10,10 @@ import type {
 import type { ILoggingService } from '../../../services/service-interfaces.js';
 import type { ToolInvocationContext } from '../../../services/agent-runtime/tool-invocation-context.js';
 import {
+  toolApprovalPolicyRegistry,
+  type ToolApprovalPolicyRegistry,
+} from '../../../services/approval/tool-approval-policy-registry.js';
+import {
   isZodToolParameterSchema,
   type AnyToolDefinition,
   type FormatCommandMessage,
@@ -24,6 +28,9 @@ export const TOOL_NAME_RUN_CODE = 'run_code';
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_OUTPUT_CHARS = 30_000;
+let nextBridgeRunId = 0;
+
+const createBridgeRunId = (): string => `run_code_bridge_${++nextBridgeRunId}`;
 
 /**
  * Script-shaped limits. They are deliberately not the workflow's: a workflow
@@ -48,11 +55,16 @@ export const RUN_CODE_LIMITS = {
  * `run_code` excludes itself because each run owns its own call budget, and
  * nesting would let one run spend many. The rest are the workflow's prohibited
  * set: `run_subagent` in particular spawns agents outside any run budget, so a
- * script could loop on it indefinitely.
+ * script could loop on it indefinitely. Shell tools are excluded because their
+ * complete approval state also lives in the interactive batch coordinator.
  */
 export const RUN_CODE_PROHIBITED_TOOLS: ReadonlySet<string> = new Set([
   ...WORKFLOW_PROHIBITED_TOOLS,
   TOOL_NAME_RUN_CODE,
+  // Shell approval also depends on coordinator-owned Docker/session state that
+  // the raw policy registry cannot express for an out-of-band script call.
+  'shell',
+  'bash',
 ]);
 
 export const runCodeParametersSchema = z.object({
@@ -82,9 +94,9 @@ const RUN_CODE_DESCRIPTION =
   'validated against the real schema before the tool runs. Prefer this over many separate tool calls when the work ' +
   'is a loop, a fan-out over many files, or a multi-step computation whose intermediate values you do not need to ' +
   'see — only what you print reaches the conversation. Print results with console.log. The code runs in an isolated ' +
-  'context with no filesystem, network, timers, require, or eval: `tools.*` is the only way out. Each tools.* call ' +
-  'is still ' +
-  "subject to the tool's own approval and policy checks.";
+  'context with no filesystem, network, timers, require, or eval: `tools.*` is the only way out. Auto-approved tools ' +
+  'run normally. A tool that requires user approval is unavailable from inside a script; call it directly as a tool ' +
+  'instead.';
 
 /** One `tools.*` call observed during a run, for the user-facing summary. */
 export interface RunCodeCallRecord {
@@ -101,6 +113,8 @@ export interface CreateRunCodeToolOptions {
    * registry, so scripts go through the same policy layer as a direct call.
    */
   getToolRegistry?: () => ToolRegistry;
+  /** Policy authority used for out-of-band script calls. */
+  approvalPolicyRegistry?: ToolApprovalPolicyRegistry;
   getCwd?: () => string;
 }
 
@@ -185,12 +199,14 @@ interface PreparedCall {
   tool: AnyToolDefinition;
   params: unknown;
   parallelSafe: boolean;
+  started: number;
 }
 
 export function createRunCodeToolDefinition(
   options: CreateRunCodeToolOptions,
 ): SchemaToolDefinition<typeof runCodeParametersSchema> {
   const { loggingService, getCwd = () => process.cwd() } = options;
+  const approvalRegistry = options.approvalPolicyRegistry ?? toolApprovalPolicyRegistry;
 
   // Set by bindRunCodeRegistry once the policy layer has wrapped every tool.
   let boundRegistry: ToolRegistry | undefined;
@@ -213,6 +229,7 @@ export function createRunCodeToolDefinition(
       const timeout = timeout_ms ?? DEFAULT_TIMEOUT_MS;
       const callerSignal = (context as ToolInvocationContext | undefined)?.signal;
       const registry = exposedTools();
+      const bridgeRunId = createBridgeRunId();
       const calls: RunCodeCallRecord[] = [];
       const output: string[] = [];
 
@@ -260,28 +277,35 @@ export function createRunCodeToolDefinition(
             normalized = parsed.data;
           }
 
-          // Approval cannot be resolved from here yet: `run_code` is not on the
-          // run loop's stack, and the wrapped `needsApproval` returns a sentinel
-          // meaning "ask the approval coordinator", not "prompt the user". Until
-          // that seam exists the call is refused, and says so plainly.
-          if (await needsApproval(tool, normalized, context)) {
-            record(name, 'approval_required', started);
-            return failed(
-              `"${name}" needs user approval, and a script cannot raise an approval prompt. ` +
-                `Call ${name} directly as a tool instead, or narrow the arguments so it no longer requires approval.`,
-            );
-          }
-
-          return { tool, params: normalized, parallelSafe: await isParallelSafe(tool, normalized, context) };
+          return {
+            tool,
+            params: normalized,
+            parallelSafe: await isParallelSafe(tool, normalized, context),
+            started,
+          };
         },
         // Mirrors the run loop: only a definition that declares itself
         // parallel-safe may overlap another call, because tools such as
         // enter_worktree mutate shared execution context.
         lane: (prepared) => (prepared.parallelSafe ? 'default' : 'serial'),
-        invoke: async (prepared): Promise<CapabilityOutcome> => {
+        invoke: async (prepared, callContext): Promise<CapabilityOutcome> => {
+          const decision = await approvalRegistry.decide({
+            toolName: prepared.tool.name,
+            args: prepared.params,
+            context,
+          });
+          if (decision !== 'allow') {
+            record(prepared.tool.name, 'approval_required', prepared.started);
+            return failed(
+              `"${prepared.tool.name}" requires approval and is unavailable from inside a script. ` +
+                `Call ${prepared.tool.name} directly as a tool instead, or narrow the arguments so it no longer requires approval.`,
+            );
+          }
+
           const started = Date.now();
+          const callId = `${bridgeRunId}:${callContext.callId}`;
           try {
-            const result = await prepared.tool.execute(prepared.params, context);
+            const result = await prepared.tool.execute(prepared.params, context, { toolCall: { callId } });
             record(prepared.tool.name, 'ok', started);
             return {
               kind: 'result',
@@ -331,18 +355,6 @@ export function createRunCodeToolDefinition(
   };
 
   return definition;
-}
-
-/**
- * Treats a predicate that throws as "would prompt": refusing an uncertain call
- * is the safe direction at this boundary.
- */
-async function needsApproval(tool: AnyToolDefinition, params: unknown, context: unknown): Promise<boolean> {
-  try {
-    return (await tool.needsApproval(params, context)) === true;
-  } catch {
-    return true;
-  }
 }
 
 async function isParallelSafe(tool: AnyToolDefinition, params: unknown, context: unknown): Promise<boolean> {

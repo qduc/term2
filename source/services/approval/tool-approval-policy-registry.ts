@@ -14,6 +14,8 @@ export interface ToolApprovalPolicyEvaluation {
   context?: unknown;
 }
 
+export type ToolApprovalDecision = 'allow' | 'deny';
+
 export class ToolApprovalPolicyRegistry {
   readonly #policies = new Map<string, ToolApprovalPolicyRegistration>();
 
@@ -38,6 +40,15 @@ export class ToolApprovalPolicyRegistry {
     } catch {
       return { kind: 'prompt' };
     }
+  }
+
+  /**
+   * Resolves the raw policy for a caller that cannot suspend for interactive
+   * approval. Only an explicit auto-approval is executable out of band.
+   */
+  async decide(evaluation: ToolApprovalPolicyEvaluation): Promise<ToolApprovalDecision> {
+    const result = await this.evaluate(evaluation);
+    return result.kind === 'auto_approve' ? 'allow' : 'deny';
   }
 }
 

@@ -160,6 +160,38 @@ Three opinions in `.coord/field-test/panel/OPINION-{claude,grok,codex}.md`
 fourth opinion. All three said: do not revert, finish the cap audit first,
 do not touch prompts until a task actually requires a script-only tool.
 
+## Variance: the thing that invalidated most of E5
+
+**A single run per cell measures nothing here.** Repeats on glm:
+
+| cell | repeats | spread |
+| --- | --- | --- |
+| task D, one arm | 5 | input tokens 1.91x, wall 3.9x |
+| task B, per arm | 4 each | stdev ~99k on a ~440k mean (22% CV) |
+
+E5's headline glm regression (`b glm` +69% input tokens) **reversed under
+repeats to 0.86x** - it had paired that arm's worst run against the other
+arm's best. The model-level pattern E5 reported (muse improves 3/3, ds 2/3,
+glm 0/3) is not distinguishable from chance.
+
+Detecting a 15% effect at this variance needs roughly 8-10 runs per cell.
+**Design future rounds as few cells with many repeats, not many cells with
+one.** Report the aggregate across pairs, never a single cell.
+
+## Provider routing for future tests
+
+Use direct providers, not the `opencode` gateway:
+
+- glm: `-p zai -m glm-5.3-flash`
+- deepseek: `-p DeepSeek -m deepseek-v4-flash` (**case-sensitive**; `-p
+  deepseek` fails)
+- muse: no direct provider configured, stays on `-p opencode`
+
+Both verified 2026-09-04 with a real tool-calling prompt. **Every number in
+this document was collected through `-p opencode`, so results on the new
+routing are not comparable to these baselines** - re-run both arms, not just
+new cells.
+
 ## Open questions
 
 - **Fan-out amortisation has never been demonstrated.** No task in any round

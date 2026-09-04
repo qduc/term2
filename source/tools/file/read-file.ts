@@ -16,8 +16,7 @@ import {
 import {
   boundToolResultText,
   looksLikeBinary,
-  resolveToolResultMaxBytes,
-  SCRIPTED_TOOL_RESULT_MAX_BYTES,
+  resolveResultMaxBytesForCall,
 } from '../../utils/output/bound-tool-result.js';
 
 const READ_FILE_DESCRIPTION =
@@ -42,11 +41,6 @@ const READ_FILE_DESCRIPTION_ORCHESTRATOR =
   'Supports line ranges — read the smallest relevant range. ' +
   'Returns the file path, total line count, and the requested lines. ' +
   'Large results are truncated and the full payload is saved to a file; look for "Full output saved to" and read that path when you need more.';
-
-/** True when `run_code` made this call from inside a script. */
-function isScriptedCall(context: unknown): boolean {
-  return !!context && typeof context === 'object' && (context as { scripted?: unknown }).scripted === true;
-}
 
 /** Detect image formats that the model adapters can send as image content. */
 function detectImageMediaType(buffer: Buffer, filePath: string): string | undefined {
@@ -277,9 +271,7 @@ export const createReadFileToolDefinition = (
           // A scripted read is not bound by the context cap: the script sees
           // this value, not the model, and a silent partial read makes
           // whatever the script computes from it wrong.
-          maxBytes: resolveToolResultMaxBytes(
-            maxResultBytes ?? (isScriptedCall(context) ? SCRIPTED_TOOL_RESULT_MAX_BYTES : undefined),
-          ),
+          maxBytes: resolveResultMaxBytesForCall(context, maxResultBytes),
           artifactContents: [
             `File: ${filePath}`,
             `Absolute path: ${absolutePath}`,

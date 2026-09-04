@@ -8,7 +8,7 @@ import {
   isSuccessOutput,
 } from '../format-helpers.js';
 import type { ISettingsService, ILoggingService } from '../../services/service-interfaces.js';
-import { boundToolResultText } from '../../utils/output/bound-tool-result.js';
+import { boundToolResultText, resolveResultMaxBytesForCall } from '../../utils/output/bound-tool-result.js';
 import { formatFullOutputSavedNote, saveOutputArtifact } from '../../utils/shell/shell-output.js';
 
 const WEB_FETCH_DESCRIPTION =
@@ -81,7 +81,7 @@ export const createWebFetchToolDefinition = (deps: {
     parameters: webFetchSchema,
     parallelSafe: true,
     needsApproval: () => false,
-    execute: async (params) => {
+    execute: async (params, context) => {
       const { url, max_chars = DEFAULT_MAX_CHARS, heading: targetHeadings, continuation_token } = params;
 
       try {
@@ -124,8 +124,15 @@ export const createWebFetchToolDefinition = (deps: {
           output += `\n${formatFullOutputSavedNote(tempFilePath)}`;
         }
 
-        // Final hard bound so even max_chars near the upper limit cannot blow context alone.
-        const bounded = await boundToolResultText({ fullText: output });
+        // Final hard bound so even max_chars near the upper limit cannot blow
+        // context alone. A scripted call is exempt: the page goes to the
+        // script, which reduces it, and only the script's return value reaches
+        // context. Truncating here hands the script a partial page whose own
+        // continuation note it is unlikely to act on.
+        const bounded = await boundToolResultText({
+          fullText: output,
+          maxBytes: resolveResultMaxBytesForCall(context),
+        });
         return bounded.text;
       } catch (error: any) {
         loggingService.error('Web fetch failed', {

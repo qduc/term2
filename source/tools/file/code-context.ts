@@ -15,6 +15,7 @@ import {
 } from '../format-helpers.js';
 import { ExecutionContext } from '../../services/execution-context.js';
 import type { ISettingsService } from '../../services/service-interfaces.js';
+import { isScriptedToolCall } from '../../utils/output/bound-tool-result.js';
 import {
   DeclEntry,
   ImportEntry,
@@ -98,6 +99,8 @@ const SKIP_DIRS = ['.git', 'node_modules', 'dist', 'build', 'coverage', '.next',
 const MAX_TARGET_BYTES = 512 * 1024;
 const MAX_FILES_SEARCHED = 10_000;
 const DEFAULT_MAX_RESULTS = 20;
+/** Result cap for a search issued from inside a script. */
+const SCRIPTED_MAX_RESULTS = 1_000;
 const RELATED_RANK: RelationToken[] = [
   'likely_test',
   'likely_source_for_test',
@@ -205,9 +208,14 @@ export const createCodeContextSearchToolDefinition = (
         return true;
       }
     },
-    execute: async (params) => {
+    execute: async (params, context) => {
       const cwd = executionContext?.getCwd() || process.cwd();
-      const maxResults = params.max_results ?? DEFAULT_MAX_RESULTS;
+      // A scripted call is not bound by the 20-result context default: the
+      // list goes to the script, not into model context, and the
+      // result_limit_reached warning is a text line a script is unlikely to
+      // branch on before computing from a short list.
+      const maxResults =
+        params.max_results ?? (isScriptedToolCall(context) ? SCRIPTED_MAX_RESULTS : DEFAULT_MAX_RESULTS);
 
       try {
         if (!(await (hasRipgrep ? hasRipgrep() : isRipgrepAvailable()))) {

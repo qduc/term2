@@ -307,7 +307,8 @@ export function createRunCodeToolDefinition(
           const started = Date.now();
           const callId = `${bridgeRunId}:${callContext.callId}`;
           try {
-            const result = await prepared.tool.execute(prepared.params, context, { toolCall: { callId } });
+            const nestedContext = withAbortSignal(context, mergeAbortSignals(callerSignal, callContext.signal));
+            const result = await prepared.tool.execute(prepared.params, nestedContext, { toolCall: { callId } });
             record(prepared.tool.name, 'ok', started);
             return {
               kind: 'result',
@@ -357,6 +358,29 @@ export function createRunCodeToolDefinition(
   };
 
   return definition;
+}
+
+function withAbortSignal(context: unknown, signal: AbortSignal): unknown {
+  return context && typeof context === 'object' ? { ...(context as Record<string, unknown>), signal } : { signal };
+}
+
+function mergeAbortSignals(callerSignal: AbortSignal | undefined, hostSignal: AbortSignal): AbortSignal {
+  if (!callerSignal || callerSignal === hostSignal) return callerSignal ?? hostSignal;
+
+  const controller = new AbortController();
+  const abort = () => {
+    callerSignal.removeEventListener('abort', abort);
+    hostSignal.removeEventListener('abort', abort);
+    controller.abort();
+  };
+
+  if (callerSignal.aborted || hostSignal.aborted) {
+    controller.abort();
+    return controller.signal;
+  }
+  callerSignal.addEventListener('abort', abort, { once: true });
+  hostSignal.addEventListener('abort', abort, { once: true });
+  return controller.signal;
 }
 
 async function isParallelSafe(tool: AnyToolDefinition, params: unknown, context: unknown): Promise<boolean> {

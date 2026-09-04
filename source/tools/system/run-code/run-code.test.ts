@@ -249,6 +249,75 @@ describe('run_code', () => {
     expect(output).toContain('cancelled by its parent');
   }, 20_000);
 
+  it('aborts an in-flight nested tool when the script deadline fires', async () => {
+    const nestedAborted = vi.fn();
+    const definition = build([
+      tool({
+        name: 'slow',
+        execute: async (_params: unknown, context: unknown) => {
+          const signal = (context as { signal?: AbortSignal } | undefined)?.signal;
+          await new Promise<void>((resolve) => {
+            if (signal?.aborted) {
+              nestedAborted();
+              resolve();
+              return;
+            }
+            signal?.addEventListener(
+              'abort',
+              () => {
+                nestedAborted();
+                resolve();
+              },
+              { once: true },
+            );
+          });
+          return 'aborted';
+        },
+      }),
+    ]);
+
+    const output = String(
+      await definition.execute({ code: 'await tools.slow({ value: "x" });', timeout_ms: 50 } as never),
+    );
+
+    expect(output).toContain('timed out');
+    await vi.waitFor(() => expect(nestedAborted).toHaveBeenCalledOnce());
+  }, 20_000);
+
+  it('passes caller cancellation to an in-flight nested tool', async () => {
+    const nestedAborted = vi.fn();
+    const definition = build([
+      tool({
+        name: 'slow',
+        execute: async (_params: unknown, context: unknown) => {
+          const signal = (context as { signal?: AbortSignal } | undefined)?.signal;
+          await new Promise<void>((resolve) =>
+            signal?.addEventListener(
+              'abort',
+              () => {
+                nestedAborted();
+                resolve();
+              },
+              { once: true },
+            ),
+          );
+          return 'aborted';
+        },
+      }),
+    ]);
+    const controller = new AbortController();
+    const pending = definition.execute(
+      { code: 'await tools.slow({ value: "x" });', timeout_ms: 60_000 } as never,
+      { signal: controller.signal } as never,
+    );
+    setTimeout(() => controller.abort(), 50);
+
+    const output = String(await pending);
+
+    expect(output).toContain('cancelled by its parent');
+    await vi.waitFor(() => expect(nestedAborted).toHaveBeenCalledOnce());
+  }, 20_000);
+
   it('forwards the tool invocation context to every tool the script calls', async () => {
     const seen: unknown[] = [];
     const definition = build([
@@ -267,7 +336,9 @@ describe('run_code', () => {
       marker as never,
     );
 
-    expect(seen).toEqual([marker]);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toEqual(expect.objectContaining({ marker: 'caller-context' }));
+    expect((seen[0] as { signal?: unknown }).signal).toBeInstanceOf(AbortSignal);
   });
 
   it('passes a unique namespaced bridge call ID to each tool execution', async () => {

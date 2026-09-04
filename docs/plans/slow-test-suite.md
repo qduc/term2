@@ -192,6 +192,44 @@ class from the attribution experiments.
   manifest only after passing a fresh shuffled seed (`pnpm test:lane:seed
   <new-seed>`).
 
+## Manifest has drifted: three order-fragile files (found 2026-09-04)
+
+The manifest is now 567 files, up from the 476 verified on 2026-08-29, and it
+has admitted files that fail under seeds outside the two defaults. Found while
+gating an unrelated merge; **reproduced on `cb73db64`, so this is manifest
+drift, not a regression from that merge.**
+
+Observed on the pre-merge tree (`pnpm test:lane:seed <n>`):
+
+| seed | result |
+| --- | --- |
+| 1 | clean |
+| 7 | clean |
+| 42 | `conversation-session.isolation.test.ts` — abandoned approval follow-up |
+| 1234 | `provider-management-session.test.ts` — 3 forwarding assertions |
+
+Also seen once each, on other trees/seeds: `BottomArea.test.tsx` (first-run
+provider menu) and `conversation-session.provider.test.ts` (Codex websocket
+chaining). **`pnpm test:lane`'s two default seeds (20260829, 314159) pass**,
+which is why this has gone unnoticed — the gate is green on exactly the seeds
+it always runs.
+
+What the `provider-management-session` failures look like: the three tests
+that assert on `vi.mock`ed functions fail; the one test in the same file that
+asserts on a plain object passes. That is the shared-module-registry class
+this doc already catalogues, not a new one.
+
+It does not reproduce pairwise — not with the file's own real-module importers
+(`provider-service.test.ts`, `use-provider-selection.test.ts`) in either
+order, and not with any single other file. It needs a particular multi-file
+worker distribution, which is why seed choice decides it.
+
+**The admission rule was "verified against at least two shuffled seeds."** Two
+seeds is evidently not enough for a 567-file non-isolated run, and the rule as
+written lets a file pass on the two defaults forever. Before trusting the lane
+as a gate again: re-verify the 91 files added since 2026-08-29 against a wider
+seed set, and raise the admission bar above two seeds.
+
 ## Acceptance criteria
 
 - A documented unit command runs without provider/network/process side effects

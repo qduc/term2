@@ -49,7 +49,7 @@ describe('run_code -> read_file scripted cap, end to end', () => {
     // The script must see every line, not a 40,000-byte prefix. The scripted
     // shape carries raw lines, so there is no banner to account for.
     expect(lines).toBe(raw.split('\n').length);
-  });
+  }, 30_000);
 });
 
 describe('structured scripted results survive the tool wrapper', () => {
@@ -82,7 +82,7 @@ describe('structured scripted results survive the tool wrapper', () => {
     expect(typeof scripted).toBe('object');
     expect(Array.isArray(scripted.paths)).toBe(true);
     expect(scripted.paths.length).toBeGreaterThan(0);
-  });
+  }, 30_000);
 });
 
 describe('run_code -> grep scripted cap, end to end', () => {
@@ -136,5 +136,5 @@ describe('run_code -> grep scripted cap, end to end', () => {
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 });

@@ -598,3 +598,29 @@ describe('bindRunCodeRegistry', () => {
     expect(output).toContain('describe');
   });
 });
+
+describe('run_code nested result cap', () => {
+  const capturing = () => {
+    const seen: unknown[] = [];
+    const definition = tool({
+      name: 'reader',
+      parameters: z.object({ path: z.string() }),
+      execute: (_params: unknown, context: unknown) => {
+        seen.push((context as { scripted?: unknown } | undefined)?.scripted);
+        return 'contents';
+      },
+    });
+    return { seen, registry: [definition] as ToolRegistry };
+  };
+
+  it('marks a call made from inside a script as scripted', async () => {
+    const { seen, registry } = capturing();
+
+    await run(registry, `return await tools.reader({ path: 'a.ts' });`);
+
+    // read_file reads this to skip the 40,000-byte context cap: the value goes
+    // to the script, not into model context, and a silent partial read makes
+    // whatever the script computes from it wrong.
+    expect(seen).toEqual([true]);
+  });
+});

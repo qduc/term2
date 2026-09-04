@@ -4,6 +4,15 @@ import { formatFullOutputSavedNote, saveOutputArtifact } from '../shell/shell-ou
 /** Default byte cap for tool results that enter model context. */
 export const DEFAULT_TOOL_RESULT_MAX_BYTES = 40_000;
 
+/**
+ * Byte cap for a result delivered to a script instead of to model context.
+ *
+ * Matches `RUN_CODE_LIMITS.maxResultChars`, which bounds the same value one
+ * layer out; duplicated as a literal to keep this module free of a dependency
+ * on the tool layer.
+ */
+export const SCRIPTED_TOOL_RESULT_MAX_BYTES = 100_000;
+
 export function utf8ByteLength(text: string): number {
   return Buffer.byteLength(text, 'utf8');
 }

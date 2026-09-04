@@ -108,8 +108,21 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
           return;
         }
         if (message?.type === 'workflow.complete') {
-          if (!isJsonValue(message.output) || bytes(message.output) > limits.maxOutputBytes) {
-            fail('invalid_output', `${subject} output must be JSON-safe and within the configured size limit`);
+          // Size and JSON-safety are reported separately: a model told only
+          // "must be JSON-safe and within the size limit" cannot tell whether
+          // to change the shape of its result or the amount of it. Only the
+          // size branch is reachable in practice — host-worker.ts rejects
+          // non-JSON output before it is sent — but conflating them cost a
+          // real run its fan-out (docs/plans/code-mode-field-test.md).
+          if (!isJsonValue(message.output)) {
+            fail('invalid_output', `${subject} return value is not JSON-safe`);
+          } else if (bytes(message.output) > limits.maxOutputBytes) {
+            fail(
+              'invalid_output',
+              `${subject} returned ${bytes(message.output)} bytes, over the ${limits.maxOutputBytes}-byte limit. ` +
+                `Return less per call: select the fields you need, summarise instead of returning full contents, ` +
+                `or process the input in batches across several calls.`,
+            );
           } else
             finish({ ok: true, output: message.output, ...(message.voidOutput === true ? { voidOutput: true } : {}) });
           return;

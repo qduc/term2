@@ -192,45 +192,52 @@ class from the attribution experiments.
   manifest only after passing a fresh shuffled seed (`pnpm test:lane:seed
   <new-seed>`).
 
-## Manifest has drifted: three order-fragile files (found 2026-09-04)
+## Manifest has drifted: the lane is not a reliable gate (found 2026-09-04)
 
 The manifest is now 567 files, up from the 476 verified on 2026-08-29, and it
-has admitted files that fail under seeds outside the two defaults. Found while
-gating an unrelated merge; **reproduced on `cb73db64`, so this is manifest
-drift, not a regression from that merge.**
+no longer passes reliably. **The two default seeds fail too**, so this is not
+a matter of unlucky seed choice — an earlier version of this section claimed
+the defaults were green and that seed choice decided the outcome. Both claims
+were wrong; repeated runs of the same seeds give different victims, so the
+failures are load- and timing-sensitive, not seed-determined.
 
-Observed on the pre-merge tree (`pnpm test:lane:seed <n>`) — **two of four
-non-default seeds fail**:
+Files observed failing, across `cb73db64` (pre-merge) and current main:
 
-| seed | result |
+| file | failing assertion |
 | --- | --- |
-| 1 | clean |
-| 7 | clean |
-| 42 | `conversation-session.isolation.test.ts` — abandoned approval follow-up |
-| 1234 | `provider-management-session.test.ts` — 3 forwarding assertions |
-| 99 | `provider-management-session.test.ts` — 3 forwarding assertions |
+| `provider-management-session.test.ts` | 3 `vi.mock` forwarding assertions |
+| `conversation-session.isolation.test.ts` | abandoned approval follow-up |
+| `conversation-session.characterization.test.ts` | auto-approve continuation |
+| `conversation-session.provider.test.ts` | Codex websocket chaining |
+| `BottomArea.test.tsx` | first-run provider menu handoff |
+| `search-replace.test.ts` | relaxed-mode substring match |
 
-Also seen once each, on other trees/seeds: `BottomArea.test.tsx` (first-run
-provider menu) and `conversation-session.provider.test.ts` (Codex websocket
-chaining). **`pnpm test:lane`'s two default seeds (20260829, 314159) pass**,
-which is why this has gone unnoticed — the gate is green on exactly the seeds
-it always runs.
+Most reproduce on `cb73db64`, so the bulk of this is drift rather than any one
+merge. **One was ours and is fixed:** `read-file.test.ts`'s scripted-cap test
+read the real `source/tools/system/shell.ts` through a *relative* path and
+asserted it stayed over 50,000 bytes. A relative path resolves through
+`process.cwd()`, and several lane files (`glob.test.ts`, `read-file.test.ts`
+itself) monkey-patch `process.cwd` globally in their `withTempDir` helper —
+under `--isolate=false` those share a worker. It now uses a temp fixture.
 
-What the `provider-management-session` failures look like: the three tests
-that assert on `vi.mock`ed functions fail; the one test in the same file that
-asserts on a plain object passes. That is the shared-module-registry class
-this doc already catalogues, not a new one.
+That helper is the thing to fix next: **a global mutated inside a
+non-isolated file is a hazard for every other file in its worker**, and it is
+currently duplicated across at least two lane files.
 
-It does not reproduce pairwise — not with the file's own real-module importers
+For `provider-management-session`, the three tests asserting on `vi.mock`ed
+functions fail while the one asserting on a plain object passes — the
+shared-module-registry class this doc already catalogues. It does not
+reproduce pairwise: not with its own real-module importers
 (`provider-service.test.ts`, `use-provider-selection.test.ts`) in either
-order, and not with any single other file. It needs a particular multi-file
-worker distribution, which is why seed choice decides it.
+order, nor with any single other file. It needs a particular multi-file worker
+distribution.
 
-**The admission rule was "verified against at least two shuffled seeds."** Two
-seeds is evidently not enough for a 567-file non-isolated run, and the rule as
-written lets a file pass on the two defaults forever. Before trusting the lane
-as a gate again: re-verify the 91 files added since 2026-08-29 against a wider
-seed set, and raise the admission bar above two seeds.
+**The admission rule — "verified against at least two shuffled seeds" — is too
+weak for a 567-file non-isolated run**, and it cannot catch a load-sensitive
+failure at all. Until the 91 files added since 2026-08-29 are re-verified
+against a wider seed set *and* under contention, treat a green
+`pnpm test:lane` as weak evidence. The isolated full suite remains the
+authority.
 
 ## Acceptance criteria
 

@@ -341,23 +341,37 @@ it.sequential('execute: handles line range beyond file length', async () => {
   });
 });
 
-describe('read_file scripted cap (real file)', () => {
+describe('read_file scripted cap (file over the byte cap)', () => {
+  // A temp fixture, not a real repo file read through a relative path. The
+  // earlier version read source/tools/system/shell.ts and asserted it stayed
+  // over 50,000 bytes, which coupled this test both to unrelated source size
+  // and — because a relative path resolves through process.cwd() — to any
+  // other lane file that patches process.cwd while sharing a worker under
+  // --isolate=false. It failed in the lane for exactly that reason.
   it('gives a script the whole file while still truncating for the model', async () => {
-    const path = 'source/tools/system/shell.ts';
-    const raw = await fs.readFile(path, 'utf8');
-    const tool = createReadFileToolDefinition({}) as any;
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'read-file-cap-'));
+    try {
+      const target = path.join(dir, 'big.ts');
+      // Comfortably over the 40,000-byte context cap.
+      const body = Array.from({ length: 1_200 }, (_, i) => `const value${i} = ${'x'.repeat(40)};`).join('\n');
+      await fs.writeFile(target, `${body}\n`);
+      const raw = await fs.readFile(target, 'utf8');
+      const tool = createReadFileToolDefinition({}) as any;
 
-    const direct = String(await tool.execute({ path }, {}));
-    const scripted = await tool.execute({ path }, { scripted: true });
-    const lastLine = `${raw.split('\n').length}: `;
+      const direct = String(await tool.execute({ path: target }, {}));
+      const scripted = await tool.execute({ path: target }, { scripted: true });
+      const lastLine = `${raw.split('\n').length}: `;
 
-    expect(raw.length).toBeGreaterThan(50_000);
-    expect(direct.length).toBeLessThan(41_000);
-    expect(direct).not.toContain(lastLine);
-    // The script gets raw lines and a count field rather than a banner.
-    expect(scripted.content.length).toBeGreaterThan(50_000);
-    expect(scripted.truncated).toBe(false);
-    expect(scripted.totalLines).toBe(raw.split('\n').length);
+      expect(raw.length).toBeGreaterThan(50_000);
+      expect(direct.length).toBeLessThan(41_000);
+      expect(direct).not.toContain(lastLine);
+      // The script gets raw lines and a count field rather than a banner.
+      expect(scripted.content.length).toBeGreaterThan(50_000);
+      expect(scripted.truncated).toBe(false);
+      expect(scripted.totalLines).toBe(raw.split('\n').length);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
   });
 });
 

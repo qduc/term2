@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
@@ -439,4 +439,39 @@ it('grep skips the workspace boundary check in lite mode (allowOutsideWorkspace)
   });
 
   expect(await definition.needsApproval!({ pattern: 'x', path: '/etc' } as any, {} as any)).toBe(false);
+});
+
+describe('grep result cap for scripted calls', () => {
+  it.sequential('caps a direct call at the 50-line limit and says so', async () => {
+    await withTempDir(async (dir) => {
+      const lines = Array.from({ length: 120 }, (_, i) => `needle line ${i}`).join('\n');
+      await fs.writeFile(path.join(dir, 'haystack.txt'), `${lines}\n`);
+
+      const tool = createGrepToolDefinition();
+      const direct = String(await tool.execute({ pattern: 'needle', path: '.' }, {}));
+
+      // trimOutput's head/tail trim keeps 40% + 40% of the 50-line cap (20 + 20
+      // = 40 visible matches) and marks the gap; this shape is pre-existing and
+      // must stay identical for a direct call.
+      expect(direct.split('\n').filter((line) => line.includes('needle')).length).toBe(40);
+      expect(direct).toContain('lines trimmed');
+      expect(direct).toContain('lines exceed the 50-line limit');
+    });
+  });
+
+  it.sequential('gives a script every match instead of the 50-line default', async () => {
+    await withTempDir(async (dir) => {
+      const lines = Array.from({ length: 120 }, (_, i) => `needle line ${i}`).join('\n');
+      await fs.writeFile(path.join(dir, 'haystack.txt'), `${lines}\n`);
+
+      const tool = createGrepToolDefinition();
+      // A short list makes whatever the script computes from it wrong, and the
+      // "lines exceed" note is prose a script splitting on newlines reads as
+      // another match.
+      const scripted = String(await tool.execute({ pattern: 'needle', path: '.' }, { scripted: true }));
+
+      expect(scripted.split('\n').filter((line) => line.includes('needle')).length).toBe(120);
+      expect(scripted).not.toContain('lines exceed');
+    });
+  });
 });

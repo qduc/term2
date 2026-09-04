@@ -25,6 +25,7 @@ import { WORKFLOW_PROHIBITED_TOOLS } from '../../../services/agent-runtime/workf
 import { renderToolsHeader } from './tools-header.js';
 
 export const TOOL_NAME_RUN_CODE = 'run_code';
+export const TOOL_NAME_DESCRIBE = 'describe';
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_OUTPUT_CHARS = 30_000;
@@ -75,8 +76,12 @@ export const runCodeParametersSchema = z.object({
     .min(1)
     .describe(
       'JavaScript (not TypeScript) executed as the body of an async function. Top-level await is available. ' +
-        'Use `return` only inside your own functions; print results with console.log.',
+        'Return the value you want the model to receive. Use console.log only for debugging.',
     ),
+  include_console: z
+    .boolean()
+    .optional()
+    .describe('Include console.log debugging trace in the successful result. Defaults to false.'),
   // A non-positive timeout disables the timer downstream, which would leave the
   // script running with no deadline.
   timeout_ms: relaxedNumber
@@ -90,21 +95,25 @@ export const runCodeParametersSchema = z.object({
 export type RunCodeParams = z.infer<typeof runCodeParametersSchema>;
 
 const RUN_CODE_DESCRIPTION =
-  'Write a JavaScript program and execute it. Most tools you already have are available inside the script as ' +
+  'Write a JavaScript program and execute it. Return the value you want the model to receive; that completion value is ' +
+  'the result of the run. Most tools you already have are available inside the script as ' +
   "`tools.<tool_name>(params)`, returning a promise that resolves to that tool's normal result and rejecting when " +
   'the call fails, so you can try/catch it. Parameters are exactly the parameters documented for that tool; they are ' +
   'validated against the real schema before the tool runs. Prefer this over many separate tool calls when the work ' +
   'is a loop, a fan-out over many files, or a multi-step computation whose intermediate values you do not need to ' +
-  'see — only what you print reaches the conversation. Print results with console.log. The code runs in an isolated ' +
+  'see. `console.log` is a debugging trace: it is suppressed on successful runs unless you set `include_console: true`, ' +
+  'but it is included when the script fails or times out. The code runs in an isolated ' +
   'context with no filesystem, network, timers, require, or eval: `tools.*` is the only way out. Auto-approved tools ' +
-  'run normally. A tool that requires user approval is unavailable from inside a script; call it directly as a tool ' +
-  'instead.';
+  'run normally. A tool that requires user approval is unavailable from inside a script. If it is directly callable in ' +
+  'this model configuration, call it directly as a tool; otherwise use an auto-approved alternative or narrow the ' +
+  'arguments so approval is not required.';
 
 /** One `tools.*` call observed during a run, for the user-facing summary. */
 export interface RunCodeCallRecord {
   tool: string;
   outcome: 'ok' | 'error' | 'approval_required' | 'unknown_policy' | 'unknown_tool' | 'invalid_params' | 'prohibited';
   durationMs: number;
+  directlyCallable?: boolean;
 }
 
 export interface CreateRunCodeToolOptions {
@@ -140,6 +149,38 @@ export function bindRunCodeRegistry(tools: ToolRegistry): void {
   }
 }
 
+/**
+ * Direct calls are the union of tools that scripts structurally cannot reach
+ * and tools whose parameter-dependent approval policy may refuse a script call.
+ * The latter is explicit metadata on the definition because a function cannot
+ * honestly reveal whether every possible parameter value is auto-approved.
+ */
+export function isDirectlyCallable(tool: Pick<AnyToolDefinition, 'name' | 'canRequireApproval'>): boolean {
+  return RUN_CODE_PROHIBITED_TOOLS.has(tool.name) || tool.canRequireApproval === true;
+}
+
+function unknownToolMessage(name: string, registry: ToolRegistry): string {
+  return `Unknown tool "${name}". Available: ${registry.map((entry) => entry.name).join(', ')}`;
+}
+
+function describeTool(tool: AnyToolDefinition): JsonValue {
+  let parameters: JsonValue;
+  if (isZodToolParameterSchema(tool.parameters)) {
+    try {
+      parameters = z.toJSONSchema(tool.parameters, { io: 'input' }) as JsonValue;
+    } catch {
+      parameters = {};
+    }
+  } else {
+    parameters = tool.parameters as JsonValue;
+  }
+  return {
+    name: tool.name,
+    description: tool.description,
+    parameters,
+  } as JsonValue;
+}
+
 const summarizeCalls = (calls: readonly RunCodeCallRecord[]): string => {
   if (calls.length === 0) return 'no tool calls';
   const counts = new Map<string, number>();
@@ -148,10 +189,11 @@ const summarizeCalls = (calls: readonly RunCodeCallRecord[]): string => {
   return `${calls.length} tool call${calls.length === 1 ? '' : 's'}: ${parts.join(', ')}`;
 };
 
-const clip = (text: string): string =>
-  text.length <= MAX_OUTPUT_CHARS
-    ? text
-    : `${text.slice(0, MAX_OUTPUT_CHARS)}\n[truncated: output exceeded ${MAX_OUTPUT_CHARS} characters]`;
+const clip = (text: string): string => {
+  if (text.length <= MAX_OUTPUT_CHARS) return text;
+  const marker = `\n[truncated: output exceeded ${MAX_OUTPUT_CHARS} characters]`;
+  return `${text.slice(0, Math.max(0, MAX_OUTPUT_CHARS - marker.length))}${marker}`;
+};
 
 const FAILURE_PREFIXES = ['Error:', 'Script failed', 'Script timed out'];
 
@@ -227,7 +269,7 @@ export function createRunCodeToolDefinition(
     effect: 'mutating',
     needsApproval: () => false,
     execute: async (params, context) => {
-      const { code, timeout_ms, description } = params;
+      const { code, timeout_ms, description, include_console = false } = params;
       const timeout = timeout_ms ?? DEFAULT_TIMEOUT_MS;
       const callerSignal = (context as ToolInvocationContext | undefined)?.signal;
       const registry = exposedTools();
@@ -235,15 +277,23 @@ export function createRunCodeToolDefinition(
       const calls: RunCodeCallRecord[] = [];
       const output: string[] = [];
 
-      const record = (tool: string, outcome: RunCodeCallRecord['outcome'], started: number) =>
-        calls.push({ tool, outcome, durationMs: Date.now() - started });
+      const record = (
+        tool: string,
+        outcome: RunCodeCallRecord['outcome'],
+        started: number,
+        directlyCallable?: boolean,
+      ) => calls.push({ tool, outcome, durationMs: Date.now() - started, directlyCallable });
       const failed = (message: string): CapabilityOutcome => ({
         kind: 'result',
         result: { ok: false, error: message } as JsonValue,
       });
 
       const tools: CapabilityHandler<PreparedCall> = {
-        binding: { name: 'tools', kind: 'namespace', members: registry.map((tool) => tool.name) },
+        binding: {
+          name: 'tools',
+          kind: 'namespace',
+          members: [...new Set([...registry.map((tool) => tool.name), TOOL_NAME_DESCRIBE])],
+        },
         limits: {
           maxCalls: RUN_CODE_LIMITS.maxCalls,
           maxConcurrency: RUN_CODE_LIMITS.maxConcurrency,
@@ -256,9 +306,17 @@ export function createRunCodeToolDefinition(
           const started = Date.now();
           const name = typeof payload.member === 'string' ? payload.member : '';
           const tool = registry.find((candidate) => candidate.name === name);
+          if (name === TOOL_NAME_DESCRIBE && typeof payload.params === 'string') {
+            const described = registry.find((candidate) => candidate.name === payload.params);
+            if (!described) return failed(unknownToolMessage(payload.params, registry));
+            return {
+              kind: 'result',
+              result: { ok: true, result: describeTool(described) } as JsonValue,
+            };
+          }
           if (!tool) {
             record(name || '(unnamed)', 'unknown_tool', started);
-            return failed(`Unknown tool "${name}". Available: ${registry.map((entry) => entry.name).join(', ')}`);
+            return failed(unknownToolMessage(name, registry));
           }
 
           let normalized: unknown;
@@ -298,13 +356,18 @@ export function createRunCodeToolDefinition(
           });
           if (decision.kind !== 'auto_approve') {
             const outcome = decision.kind === 'unknown' ? 'unknown_policy' : 'approval_required';
-            record(prepared.tool.name, outcome, prepared.started);
+            const directlyCallable = isDirectlyCallable(prepared.tool);
+            record(prepared.tool.name, outcome, prepared.started, directlyCallable);
             return failed(
               decision.kind === 'unknown'
                 ? `"${prepared.tool.name}" has no registered approval policy and is unavailable from inside a script. ` +
-                    `Call a tool with a registered approval policy directly instead.`
+                    (directlyCallable
+                      ? 'Call a tool with a registered approval policy directly instead.'
+                      : 'It is not directly callable in this model configuration; use an auto-approved alternative.')
                 : `"${prepared.tool.name}" requires approval and is unavailable from inside a script. ` +
-                    `Call ${prepared.tool.name} directly as a tool instead, or narrow the arguments so it no longer requires approval.`,
+                    (directlyCallable
+                      ? `Call ${prepared.tool.name} directly as a tool instead, or narrow the arguments so it no longer requires approval.`
+                      : 'It is not directly callable in this model configuration; use an auto-approved alternative or narrow the arguments so it no longer requires approval.'),
             );
           }
 
@@ -352,7 +415,7 @@ export function createRunCodeToolDefinition(
         toolCalls: calls.length,
       });
 
-      return renderResult(result, output, calls);
+      return renderResult(result, output, calls, include_console);
     },
     formatCommandMessage: formatRunCodeCommandMessage,
   };
@@ -399,9 +462,10 @@ async function isParallelSafe(tool: AnyToolDefinition, params: unknown, context:
 }
 
 function renderResult(
-  result: { ok: boolean; error?: { code: string; message: string } },
+  result: { ok: boolean; output?: JsonValue; voidOutput?: boolean; error?: { code: string; message: string } },
   output: readonly string[],
   calls: readonly RunCodeCallRecord[],
+  includeConsole: boolean,
 ): string {
   const sections: string[] = [];
   if (!result.ok && result.error) {
@@ -410,22 +474,40 @@ function renderResult(
         ? `Script timed out. ${result.error.message}`
         : `Script failed: ${result.error.message}`,
     );
+  } else if (result.voidOutput === true) {
+    sections.push('Script returned no result. Return a value from the script to send it to the model.');
+  } else {
+    const rendered = typeof result.output === 'string' ? result.output : JSON.stringify(result.output);
+    sections.push(`Result:\n${rendered}`);
   }
 
   const printed = output.join('\n').trim();
-  if (printed) sections.push(printed);
-  else if (result.ok) sections.push('Script produced no output.');
+  if (printed && (!result.ok || includeConsole)) sections.push(`Console trace (debug):\n${printed}`);
 
   const refused = calls.filter((call) => call.outcome === 'approval_required');
-  if (refused.length > 0) {
-    const names = [...new Set(refused.map((call) => call.tool))].join(', ');
+  const directlyRefused = refused.filter((call) => call.directlyCallable === true);
+  const indirectlyRefused = refused.filter((call) => call.directlyCallable === false);
+  if (directlyRefused.length > 0) {
+    const names = [...new Set(directlyRefused.map((call) => call.tool))].join(', ');
     sections.push(`Refused (needs user approval, call these directly instead): ${names}`);
   }
+  if (indirectlyRefused.length > 0) {
+    const names = [...new Set(indirectlyRefused.map((call) => call.tool))].join(', ');
+    sections.push(`Refused (needs user approval; not directly callable in this model configuration): ${names}`);
+  }
   const unknownPolicy = calls.filter((call) => call.outcome === 'unknown_policy');
-  if (unknownPolicy.length > 0) {
-    const names = [...new Set(unknownPolicy.map((call) => call.tool))].join(', ');
+  const directlyUnknown = unknownPolicy.filter((call) => call.directlyCallable === true);
+  const indirectlyUnknown = unknownPolicy.filter((call) => call.directlyCallable === false);
+  if (directlyUnknown.length > 0) {
+    const names = [...new Set(directlyUnknown.map((call) => call.tool))].join(', ');
     sections.push(
       `Unavailable (no registered approval policy, call a tool with a registered policy directly instead): ${names}`,
+    );
+  }
+  if (indirectlyUnknown.length > 0) {
+    const names = [...new Set(indirectlyUnknown.map((call) => call.tool))].join(', ');
+    sections.push(
+      `Unavailable (no registered approval policy; not directly callable in this model configuration): ${names}`,
     );
   }
   sections.push(`[${summarizeCalls(calls)}]`);

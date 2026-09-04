@@ -58,7 +58,7 @@ it('run_subagent_async tool guidance treats a running handle as successful non-d
   expect(tool.description).toContain('status: "running"');
   expect(tool.description).toContain('do not duplicate the delegated task');
   expect(tool.description).toContain('completion notification');
-  expect(tool.description).toContain('do NOT immediately call get_subagent_result');
+  expect(tool.description).toContain('do NOT immediately call tools.get_subagent_result(...)');
 });
 
 it('run_subagent_async schema accepts supported roles', () => {
@@ -147,7 +147,7 @@ it('get_subagent_result refuses an active background run without awaiting its re
       status: 'background_run_active',
       runId: 'run-123',
       message:
-        'This background subagent is still running. End the current turn and wait for its automatic completion notification; do not call get_subagent_result again.',
+        'This background subagent is still running. End the current turn and wait for its automatic completion notification; do not call tools.get_subagent_result(...) again inside run_code.',
     }),
   );
   expect(getResult).not.toHaveBeenCalled();
@@ -162,7 +162,7 @@ it('get_subagent_result directs an answer-blocked subagent to send_message inste
       status: 'background_run_waiting_for_answer',
       runId: 'run-123',
       message:
-        'This background subagent is waiting for your answer. Use send_message with its messageId to resume it; do not call get_subagent_result.',
+        'This background subagent is waiting for your answer. Inside run_code, use tools.send_message(...) with its messageId to resume it; do not call tools.get_subagent_result(...).',
     }),
   );
   expect(getResult).not.toHaveBeenCalled();
@@ -478,7 +478,7 @@ describe('async run control tools', () => {
     expect(tool.description).toContain('fresh session turn');
     expect(tool.description).toContain('reply_to');
     expect(tool.description).toContain('mentor');
-    expect(tool.description).toContain('Do not immediately call get_subagent_result');
+    expect(tool.description).toContain('Do not immediately call tools.get_subagent_result(...)');
   });
 
   it('cancel_run returns only a compact cancellation acknowledgement or typed inactive error', () => {
@@ -499,7 +499,7 @@ describe('async run control tools', () => {
     );
     expect(tool.description).toContain('does NOT wait');
     expect(tool.description).toContain('partial');
-    expect(tool.description).toContain('Do not immediately call get_subagent_result');
+    expect(tool.description).toContain('Do not immediately call tools.get_subagent_result(...)');
   });
 
   it('formats control acknowledgements with target and status without exposing a full result', () => {

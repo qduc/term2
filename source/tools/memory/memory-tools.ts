@@ -359,7 +359,7 @@ export function createMemoryToolDefinitions(
       ? [
           definition(
             'memory_synthesize',
-            'Retrieve one de-duplicated evidence packet for a broad memory objective. Use when the task depends on several memories, terminology may vary, or prior decisions may conflict or be stale. Supply 2-5 distinct search angles; the result traces every memory to the queries that found it. For one focused lookup, use memory_retrieve instead.',
+            'Retrieve one de-duplicated evidence packet for a broad memory objective. Use when the task depends on several memories, terminology may vary, or prior decisions may conflict or be stale. Supply 2-5 distinct search angles; the result traces every memory to the queries that found it. For one focused lookup, inside run_code use tools.memory_retrieve(...) instead.',
             z
               .object({
                 objective: z.string().refine((value) => /\S/.test(value)),

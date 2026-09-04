@@ -5,7 +5,7 @@ import type { ReasoningEffortSetting } from '../contracts/conversation.js';
 import { getAgentDefinition } from '../agent.js';
 import { getProvider } from '../providers/index.js';
 import { createEditorImpl } from './editor-impl.js';
-import { bindRunCodeRegistry } from '../tools/system/run-code/index.js';
+import { bindRunCodeRegistry, isDirectlyCallable, TOOL_NAME_RUN_CODE } from '../tools/system/run-code/index.js';
 import { normalizeToolParameters, wrapNeedsApproval, wrapToolInvoke } from './tool-invoke.js';
 import type { ILoggingService, ISettingsService } from '../services/service-interfaces.js';
 import { ExecutionContext } from '../services/execution-context.js';
@@ -228,7 +228,13 @@ export function buildAgentTools({
           return validatedDefinition.execute(parsed, context, details);
         },
       };
-      return { ...validatedDefinition, ...shim };
+      const result = { ...validatedDefinition, ...shim };
+      // Object spread evaluates accessors. Preserve run_code's late-bound
+      // description accessor so the model receives the generated namespace
+      // header after the complete wrapped registry is bound below.
+      const description = Object.getOwnPropertyDescriptor(definition, 'description');
+      if (description?.get) Object.defineProperty(result, 'description', description);
+      return result;
     });
 
   // The application-owned executor remains in the tool list, but capable
@@ -302,7 +308,16 @@ export function buildAgentTools({
   // wrapping, plan-mode interceptors, and post-execute policy as a direct call.
   bindRunCodeRegistry(tools);
 
-  return tools;
+  // Profiles without shell do not register run_code. Keep their existing
+  // direct surface intact; only reduce the model-facing list when run_code is
+  // available as the script path.
+  if (!tools.some((tool) => tool.name === TOOL_NAME_RUN_CODE)) return tools;
+
+  // Keep the complete wrapped registry bound above, but make run_code the
+  // primary model-facing path for tools that can execute without an
+  // interactive boundary. Direct tools are either prohibited inside scripts
+  // or may require approval for some parameter values.
+  return tools.filter(isDirectlyCallable);
 }
 
 function buildModelSettings({

@@ -110,7 +110,8 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
         if (message?.type === 'workflow.complete') {
           if (!isJsonValue(message.output) || bytes(message.output) > limits.maxOutputBytes) {
             fail('invalid_output', `${subject} output must be JSON-safe and within the configured size limit`);
-          } else finish({ ok: true, output: message.output });
+          } else
+            finish({ ok: true, output: message.output, ...(message.voidOutput === true ? { voidOutput: true } : {}) });
           return;
         }
         if (message?.type === 'workflow.error') {

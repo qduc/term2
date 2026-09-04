@@ -20,7 +20,7 @@ it('orchestrator grep description permits direct targeted investigation', () => 
 
 it('description references glob when glob is available and shell when it is not', () => {
   const defaultTool = createGrepToolDefinition();
-  expect(defaultTool.description).toContain('use glob');
+  expect(defaultTool.description).toContain('use tools.glob(...)');
   expect(defaultTool.description).not.toContain('use shell');
 
   const shellTool = createGrepToolDefinition({ globAvailable: false });

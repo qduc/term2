@@ -616,7 +616,7 @@ describe('ConversationOrchestrator background subagent notifications', () => {
     expect(text).toContain('explorer');
     expect(text).toContain('completed');
     expect(text).toContain('found the bug');
-    expect(text).toContain('do not need to call get_subagent_result');
+    expect(text).toContain('do not need to call tools.get_subagent_result(...) inside run_code');
     expect(text).toContain('concise');
     expect(h.store.pendingCount).toBe(0);
     expect(h.config.ui.onTurnStart).toHaveBeenCalledTimes(1);

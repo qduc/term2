@@ -174,7 +174,8 @@ in tests.
 **Behaviour change for `run_code` scripts.** A script loses `fs`, `net`, `require`,
 and `eval`. That is the point, and it matches the security rationale given when the
 sandbox was removed — but any script that reached the host directly will now fail.
-Nothing depends on this yet; `run_code` has never worked in normal mode.
+Nothing depended on this at the time of the M2 rebuild; scripts that reached the
+host directly were intentionally migrated to the shared isolated context.
 
 ## Milestones
 
@@ -194,14 +195,10 @@ TypeScript module with a `tools` capability. Delete `tool-bridge.ts`,
 contracts: schema validation, unknown tool, result truncation, call budget,
 self-exclusion, per-call approval refusal.
 
-**M3 — Fix approval resolution properly. Open — the only thing standing between
-`run_code` and working.** The blocking correctness question, and
-the reason it gets its own milestone rather than being folded into M2. The host
-must ask the same authority the run loop asks — the approval-policy registry — not
-the wrapped `needsApproval`. Requires reading how `toolApprovalPolicyRegistry` and
-the batch approval coordinator resolve a decision, and exposing that as a seam a
-non-run-loop caller can use. Until this lands, `run_code` stays refused-by-default
-and is honest about it.
+**M3 — Fix approval resolution properly. Done (`c78cd53c`).** The host asks the
+same approval-policy registry authority used by the run loop rather than reading
+the wrapped `needsApproval` sentinel. Only an explicit `auto_approve` decision
+executes from a script; `prompt` and `unknown` remain unavailable out of band.
 
 **M4 — Align prohibited tools. Done (`4610162e`).** Prohibited names are never
 bound into the script's namespace and never appear in the generated header, so

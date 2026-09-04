@@ -42,7 +42,7 @@ describe('SandboxedCodeHostImpl isolation', () => {
       onConsole: (values) => consoleOutput.push(values),
     });
 
-    expect(result).toEqual({ ok: true, output: null });
+    expect(result).toEqual({ ok: true, output: null, voidOutput: true });
     expect(consoleOutput).toEqual([
       [{ consoleEscaped: false, capabilityEscaped: false, promiseEscaped: false, resultEscaped: false }],
     ]);

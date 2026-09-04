@@ -56,12 +56,67 @@ const run = async (
 ) => String(await build(registry, approvalPolicyRegistry).execute({ code, timeout_ms: 60_000, ...params } as never));
 
 describe('run_code', () => {
-  it('runs the script and returns what it printed', async () => {
-    expect(await run([], 'console.log("hello from the script");')).toContain('hello from the script');
+  it('returns an explicitly requested debugging trace', async () => {
+    expect(await run([], 'console.log("hello from the script");', { include_console: true })).toContain(
+      'hello from the script',
+    );
+  });
+
+  it('returns the script completion value and suppresses console trace on success', async () => {
+    const output = await run([], 'console.log("debug trace"); return { answer: "the result" };');
+
+    expect(output).toContain('Result:\n{"answer":"the result"}');
+    expect(output).not.toContain('debug trace');
+  });
+
+  it('includes console trace on failure so the error remains actionable', async () => {
+    const output = await run([], 'console.log("debug trace"); throw new Error("broken");');
+
+    expect(output).toContain('Script failed');
+    expect(output).toContain('debug trace');
+  });
+
+  it('includes console trace on success only when explicitly requested', async () => {
+    const output = await run([], 'console.log("debug trace"); return "the result";', { include_console: true });
+
+    expect(output).toContain('Result:\nthe result');
+    expect(output).toContain('debug trace');
+  });
+
+  it('clips an opted-in console trace without clipping the completion value away', async () => {
+    const output = await run([], `console.log("trace ".repeat(10_000)); return "answer";`, {
+      include_console: true,
+    });
+
+    expect(output).toContain('Result:\nanswer');
+    expect(output).toContain('[truncated: output exceeded');
+    expect(output.length).toBeLessThanOrEqual(30_000);
+  });
+
+  it('explains that a successful script with no return value produces no result', async () => {
+    const output = await run([], 'console.log("debug trace only");');
+
+    expect(output).toContain('Script returned no result. Return a value from the script');
+    expect(output).not.toContain('debug trace only');
+  });
+
+  it('preserves null as an explicit completion value', async () => {
+    expect(await run([], 'return null;')).toContain('Result:\nnull');
+  });
+
+  it('does not let a real describe tool shadow metadata lookup', async () => {
+    const execute = vi.fn(() => 'real describe result');
+    const toolDefinition = tool({ name: 'describe', execute });
+
+    expect(await run([toolDefinition], 'return await tools.describe({ value: "x" });')).toContain(
+      'real describe result',
+    );
+    expect(await run([toolDefinition], 'return await tools.describe("describe");')).toContain('"name":"describe"');
+    expect(execute).toHaveBeenCalledOnce();
   });
 
   it('calls a real tool and returns its result to the script', async () => {
-    const output = await run([tool({ name: 'echo' })], 'console.log(await tools.echo({ value: "round-trip" }));');
+    const output = await run([tool({ name: 'echo' })], 'return await tools.echo({ value: "round-trip" });');
 
     expect(output).toContain('echo:round-trip');
     expect(output).toContain('1 tool call: echo');
@@ -71,7 +126,7 @@ describe('run_code', () => {
     const execute = vi.fn(() => 'auto-approved result');
     const output = await run(
       [tool({ name: 'auto', execute, needsApproval: () => false })],
-      'console.log(await tools.auto({ value: "x" }));',
+      'return await tools.auto({ value: "x" });',
     );
 
     expect(output).toContain('auto-approved result');
@@ -83,7 +138,7 @@ describe('run_code', () => {
       [tool({ name: 'echo' })],
       `const out = [];
        for (const value of ["a", "b", "c"]) out.push(await tools.echo({ value }));
-       console.log(out.join("|"));`,
+       return out.join("|");`,
     );
 
     expect(output).toContain('echo:a|echo:b|echo:c');
@@ -99,6 +154,7 @@ describe('run_code', () => {
     const output = await run(
       [tool({ name: 'strict', execute })],
       `try { await tools.strict({ value: 42 }); } catch (error) { console.log("caught:", error.message); }`,
+      { include_console: true },
     );
 
     expect(execute).not.toHaveBeenCalled();
@@ -109,9 +165,10 @@ describe('run_code', () => {
     const output = await run(
       [tool({ name: 'echo' })],
       `console.log("names:", Object.keys(tools).join(","), "missing:", typeof tools.missing);`,
+      { include_console: true },
     );
 
-    expect(output).toContain('names: echo missing: undefined');
+    expect(output).toContain('names: echo,describe missing: undefined');
   });
 
   it('truncates an oversized tool result with an explicit marker', async () => {
@@ -121,6 +178,7 @@ describe('run_code', () => {
        console.log("truncated:", result.includes("[truncated: result exceeded"), result.length < ${
          RUN_CODE_LIMITS.maxResultChars + 100
        });`,
+      { include_console: true },
     );
 
     expect(output).toContain('truncated: true true');
@@ -133,7 +191,7 @@ describe('run_code', () => {
        try {
          for (let i = 0; i < ${RUN_CODE_LIMITS.maxCalls + 5}; i++) { await tools.echo({ value: "x" }); calls++; }
        } catch (error) { console.log("stopped after", calls, error.message); }`,
-      { timeout_ms: 30_000 },
+      { timeout_ms: 30_000, include_console: true },
     );
 
     expect(output).toContain(`stopped after ${RUN_CODE_LIMITS.maxCalls}`);
@@ -144,11 +202,14 @@ describe('run_code', () => {
     const output = await run(
       [tool({ name: 'locked', needsApproval: () => true })],
       `try { await tools.locked({ value: "x" }); } catch (error) { console.log("caught:", error.message); }`,
+      { include_console: true },
     );
 
     expect(output).toContain('caught:');
     expect(output).toContain('requires approval and is unavailable from inside a script');
-    expect(output).toContain('Refused (needs user approval, call these directly instead): locked');
+    expect(output).toContain(
+      'Refused (needs user approval; not directly callable in this model configuration): locked',
+    );
   });
 
   it('denies a tool with no registered approval policy', async () => {
@@ -156,7 +217,7 @@ describe('run_code', () => {
     const output = await run(
       [tool({ name: 'unknown-policy', execute })],
       'try { await tools["unknown-policy"]({ value: "x" }); } catch (error) { console.log(error.message); }',
-      {},
+      { include_console: true },
       new ToolApprovalPolicyRegistry(),
     );
 
@@ -175,6 +236,7 @@ describe('run_code', () => {
       await definition.execute({
         code: `console.log(typeof tools.${TOOL_NAME_RUN_CODE});`,
         timeout_ms: 60_000,
+        include_console: true,
       } as never),
     );
 
@@ -187,6 +249,7 @@ describe('run_code', () => {
       [tool({ name, execute }), tool({ name: 'echo' })],
       `console.log("exposed:", typeof tools[${JSON.stringify(name)}]);
        console.log("names:", Object.keys(tools).join(","));`,
+      { include_console: true },
     );
 
     expect(output).toContain('exposed: undefined');
@@ -201,11 +264,75 @@ describe('run_code', () => {
       tool({ name: 'echo' }),
     ]).description;
 
-    expect(description).toContain('tools.echo(');
+    expect(description).toContain('tools.echo');
     expect(description).not.toContain('run_subagent');
     expect(description).not.toContain('tools.shell(');
     expect(description).toContain('Auto-approved tools run normally');
     expect(description).toContain('requires user approval is unavailable from inside a script');
+  });
+
+  it('teaches the model to return a value and describes the console opt-in', () => {
+    const description = build([]).description;
+
+    expect(description).toContain('Return the value you want the model to receive');
+    expect(description).toContain('`console.log` is a debugging trace');
+    expect(description).toContain('include_console');
+    expect(description).not.toContain('print results with console.log');
+    expect(description).not.toContain('return only inside your own functions');
+  });
+
+  it('describes an exposed tool with its full schema and description', async () => {
+    const output = await run(
+      [
+        tool({
+          name: 'inspect',
+          description: 'Inspect a target.',
+          parameters: z.object({ target: z.string(), deep: z.boolean().optional() }),
+        }),
+      ],
+      'return await tools.describe("inspect");',
+    );
+
+    expect(output).toContain('"name":"inspect"');
+    expect(output).toContain('"description":"Inspect a target."');
+    expect(output).toContain('"target"');
+    expect(output).toContain('"deep"');
+  });
+
+  it('does not charge metadata lookup against the tool-call budget', async () => {
+    const output = await run(
+      [tool({ name: 'inspect' })],
+      `for (let i = 0; i < ${RUN_CODE_LIMITS.maxCalls + 1}; i++) await tools.describe("inspect");
+       return await tools.inspect({ value: "ok" });`,
+    );
+
+    expect(output).toContain('Result:\necho:ok');
+    expect(output).toContain('1 tool call: inspect');
+    expect(output).not.toContain('Tool call limit reached');
+  });
+
+  it('uses the namespace unknown-tool wording for prohibited and absent descriptions', async () => {
+    const output = await run(
+      [tool({ name: 'echo' })],
+      `for (const name of ["shell", "missing"]) {
+        try { await tools.describe(name); } catch (error) { console.log(error.message); }
+      }`,
+      { include_console: true },
+    );
+
+    expect(output).toContain('Unknown tool "shell". Available: echo');
+    expect(output).toContain('Unknown tool "missing". Available: echo');
+  });
+
+  it('does not advise a non-direct conditional tool to be called directly', async () => {
+    const output = await run(
+      [tool({ name: 'conditional', needsApproval: ({ value }) => value === 'outside' })],
+      `try { await tools.conditional({ value: "outside" }); } catch (error) { return error.message; }`,
+    );
+
+    expect(output).toContain('not directly callable in this model configuration');
+    expect(output).not.toContain('Call conditional directly as a tool instead');
+    expect(output).not.toContain('call these directly instead: conditional');
   });
 
   it('reports a script that throws', async () => {
@@ -233,6 +360,7 @@ describe('run_code', () => {
     const output = await run(
       [],
       `console.log([typeof process, typeof require, typeof Buffer, typeof globalThis.fetch].join(","));`,
+      { include_console: true },
     );
 
     expect(output).toContain('undefined,undefined,undefined,undefined');
@@ -384,7 +512,7 @@ describe('run_code', () => {
         }),
       ],
       `await Promise.all([1,2,3,4].map((n) => tools.exclusive({ value: String(n) })));
-       console.log("finished");`,
+       return "finished";`,
     );
 
     expect(output).toContain('finished');
@@ -409,7 +537,7 @@ describe('run_code', () => {
         }),
       ],
       `await Promise.all([1,2,3,4].map((n) => tools.concurrent({ value: String(n) })));
-       console.log("finished");`,
+       return "finished";`,
     );
 
     expect(maxActive).toBeGreaterThan(1);
@@ -443,7 +571,7 @@ describe('bindRunCodeRegistry', () => {
 
     const output = String(
       await definition.execute({
-        code: 'console.log(await tools.guarded({ value: "x" }));',
+        code: 'return await tools.guarded({ value: "x" });',
         timeout_ms: 60_000,
       } as never),
     );
@@ -460,11 +588,13 @@ describe('bindRunCodeRegistry', () => {
 
     const output = String(
       await definition.execute({
-        code: 'console.log("tool count:", Object.keys(tools).length);',
+        code: 'console.log("tool count:", Object.keys(tools).length, Object.keys(tools).join(","));',
         timeout_ms: 60_000,
+        include_console: true,
       } as never),
     );
 
-    expect(output).toContain('tool count: 0');
+    expect(output).toContain('tool count: 1');
+    expect(output).toContain('describe');
   });
 });

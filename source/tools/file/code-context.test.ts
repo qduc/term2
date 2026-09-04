@@ -57,7 +57,7 @@ it.sequential('degrades to rg_unavailable for symbol queries when ripgrep is mis
 });
 
 it('description references glob when glob is available and shell when it is not', () => {
-  expect(codeContextSearchToolDefinition.description).toContain('use glob');
+  expect(codeContextSearchToolDefinition.description).toContain('use tools.glob(...)');
   expect(codeContextSearchToolDefinition.description).not.toContain('use shell');
 
   const shellDescription = createCodeContextSearchToolDefinition({ globAvailable: false }).description;

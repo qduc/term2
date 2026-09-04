@@ -113,7 +113,10 @@ parentPort.on('message', (message) => {
   try {
     const script = new vm.Script('(async () => { "use strict";\n' + workerData.code + '\n})()', { filename: 'workflow.js' });
     const output = await script.runInContext(context, { timeout: workerData.syncTimeoutMs });
-    if (output === undefined && workerData.allowVoidOutput) { send('workflow.complete', { output: null }); return; }
+    if (output === undefined && workerData.allowVoidOutput) {
+      send('workflow.complete', { output: null, voidOutput: true });
+      return;
+    }
     if (!json(output)) throw new Error((workerData.subject || 'Script') + ' return value must be JSON-safe');
     send('workflow.complete', { output });
   } catch (err) {

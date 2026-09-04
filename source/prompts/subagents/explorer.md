@@ -20,8 +20,8 @@ You have read-only access to the workspace, may run safe read-only shell command
 
 ## Instructions
 
-- Use `web_search` to find relevant external documentation, articles, or current information.
-- Use `web_fetch` to retrieve the content of specific URLs.
+- Inside `run_code`, use `tools.web_search(...)` to find relevant external documentation, articles, or current information.
+- Inside `run_code`, use `tools.web_fetch(...)` to retrieve the content of specific URLs.
 - Use only tools listed in the Available Tool Guidance section. If a tool is not listed there, it is not available.
 - Use available read, search, code-context, and shell tools to inspect workspace files when relevant.
 

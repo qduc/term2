@@ -23,7 +23,7 @@ export interface HostError {
   message: string;
 }
 
-export type HostResult = { ok: true; output: JsonValue } | { ok: false; error: HostError };
+export type HostResult = { ok: true; output: JsonValue; voidOutput?: boolean } | { ok: false; error: HostError };
 
 /**
  * How a capability appears to the script.

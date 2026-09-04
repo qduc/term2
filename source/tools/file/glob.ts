@@ -110,12 +110,12 @@ export const formatFindFilesCommandMessage: FormatCommandMessage = (item, index,
 const GLOB_DESCRIPTION =
   'Search for files by name in the workspace. Useful for finding files by pattern, exploring project structure, or locating specific files. ' +
   'Use this when you know the file name or extension. ' +
-  'Do NOT use this to search file contents (use grep) or to find related code from a symbol (use code_context_search). ' +
+  'Do NOT use this to search file contents (inside run_code, use tools.grep(...)) or to find related code from a symbol (use tools.code_context_search(...) inside run_code). ' +
   'Returns up to max_results matching file paths, one per line, or a note if truncated.';
 const GLOB_DESCRIPTION_OUTSIDE =
   'Search for files by name on the filesystem. Useful for finding files by pattern, exploring directory structure, or locating specific files. ' +
   'Use this when you know the file name or extension. ' +
-  'Do NOT use this to search file contents (use grep). ' +
+  'Do NOT use this to search file contents (inside run_code, use tools.grep(...)). ' +
   'Returns up to max_results matching file paths, one per line, or a note if truncated.';
 
 export const createFindFilesToolDefinition = (
@@ -143,6 +143,7 @@ export const createFindFilesToolDefinition = (
     name: 'glob',
     description: allowOutsideWorkspace ? GLOB_DESCRIPTION_OUTSIDE : GLOB_DESCRIPTION,
     parameters: findFilesParametersSchema,
+    canRequireApproval: true,
     parallelSafe: true,
     argumentParsing: 'strict',
     needsApproval: async (params, context) => {

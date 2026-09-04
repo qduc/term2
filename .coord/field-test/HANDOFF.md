@@ -15,9 +15,12 @@ confidently wrong answer with no error.
 
 This class was found **four** times: `read_file` byte cap, `glob` result cap,
 `code_context_search` result cap, and `trimToolOutput`'s `String()` coercion.
-Enforcement now lives in `isScriptedToolCall` / `resolveResultMaxBytesForCall`
-(`source/utils/output/bound-tool-result.ts`), with the marker set by
-`run_code` at nested dispatch. **Assume a fifth instance exists.**
+It was then found a **fifth** time: `grep`'s 50-match cap (branch `e6-grep`,
+see below). Enforcement lives in `isScriptedToolCall` /
+`resolveResultMaxBytesForCall` (`source/utils/output/bound-tool-result.ts`),
+with the marker set by `run_code` at nested dispatch. A full sweep of the
+remaining script-reachable tools found no sixth instance, but the class has
+now been wrong five times — **check any new cap against it.**
 
 ## Merged to main
 
@@ -31,17 +34,44 @@ Enforcement now lives in `isScriptedToolCall` / `resolveResultMaxBytesForCall`
 they fail loudly with `{"error":{"code":"output_budget_exceeded"}}` rather than
 returning a plausible partial. A machine-readable failure is correct.
 
-## Not merged
+## Not merged (both ready; held only for E5)
+
+Both branches below are validated and merge-ready. They are held because
+`e5/run.sh` resets each cell worktree to `main` before running, so merging
+either one mid-E5 would change the baseline under the remaining cells.
+**Merge both once the E5 grid is complete.**
 
 - **`e4-shape` (`6fa27d36`)** — structured scripted returns for `glob`,
   `read_file`, `code_context_search`, plus `scriptedReturnShape` in the tools
   header, plus the `trimToolOutput` scripted bypass.
-  **Blocked on:** a clean real run. The E4 after-cells ran against the broken
-  (`[object Object]`) build and are quarantined as
-  `.coord/field-test/e4/out/*-broken.out`. Baseline is intact:
-  `.coord/field-test/e4/out/before-*.out`, timings in `summary-round1.tsv`
-  (ds 89s, muse 29s, glm 146s). Metric is **shape-discovery turns**, not wall
-  time. Re-run: `.coord/field-test/e4/run.sh <build> after <mkey> <model>`.
+  **Unblocked 2026-09-04:** the clean re-run landed. Requests per run
+  (shape-discovery proxy) went **7/5/12 (before) -> 2/3/3 (after)** for
+  ds/muse/glm; the broken build had been 13/46/18. All three models returned
+  the same correct table and cited the structured fields directly. Full
+  write-up and session ids: `.coord/field-test/e4/RESULTS.md`. The
+  quarantined `*-broken.out` cells predate the fixed 16:37 dist.
+
+- **`e6-grep` (`e70794ad`)** — the fifth cap instance. `grep`'s `execute` did
+  not accept `context` at all, so it could not see the scripted marker;
+  every call got the flat 50. Scripts also received two layers of *prose*
+  inside the match list (`trimOutput`'s mid-list "[N lines trimmed]" and the
+  trailing "Note: N lines exceed...") that a script splitting on newlines
+  reads as data — so the fix lifts the character cap for scripted calls too,
+  not just the line count. Regression test drives the real
+  `run_code` -> sandboxed-host -> `grep.execute()` path in
+  `scripted-e2e.test.ts`. 28/28 pass, typecheck clean, verified independently.
+
+  Surfaced while fixing: **`trimOutput` keeps 40% head + 40% tail, so the
+  "50-line limit" actually delivered 40 lines.** Pre-existing behavior, not
+  introduced by the fix, but the tool description has been overstating it.
+
+  Audit of remaining script-reachable tools found **no sixth instance**.
+  `web_search`, `worktree`, `create_file`, `search_replace`,
+  `session_rollover` carry no result caps; `memory` / `session-browser` fail
+  loudly and are correct as-is. One deferred: `apply-patch.ts:705,779`
+  (`slice(0, 3)` / `slice(0, 5)` in diagnostic prose) is self-announcing and
+  advisory — not this class unless a script ever parses apply_patch
+  diagnostics for correctness.
 
 ## In flight (leave running)
 

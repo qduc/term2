@@ -199,7 +199,8 @@ has admitted files that fail under seeds outside the two defaults. Found while
 gating an unrelated merge; **reproduced on `cb73db64`, so this is manifest
 drift, not a regression from that merge.**
 
-Observed on the pre-merge tree (`pnpm test:lane:seed <n>`):
+Observed on the pre-merge tree (`pnpm test:lane:seed <n>`) — **two of four
+non-default seeds fail**:
 
 | seed | result |
 | --- | --- |
@@ -207,6 +208,7 @@ Observed on the pre-merge tree (`pnpm test:lane:seed <n>`):
 | 7 | clean |
 | 42 | `conversation-session.isolation.test.ts` — abandoned approval follow-up |
 | 1234 | `provider-management-session.test.ts` — 3 forwarding assertions |
+| 99 | `provider-management-session.test.ts` — 3 forwarding assertions |
 
 Also seen once each, on other trees/seeds: `BottomArea.test.tsx` (first-run
 provider menu) and `conversation-session.provider.test.ts` (Codex websocket

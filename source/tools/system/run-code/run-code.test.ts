@@ -279,7 +279,7 @@ describe('run_code', () => {
     ]);
 
     const output = String(
-      await definition.execute({ code: 'await tools.slow({ value: "x" });', timeout_ms: 50 } as never),
+      await definition.execute({ code: 'await tools.slow({ value: "x" });', timeout_ms: 500 } as never),
     );
 
     expect(output).toContain('timed out');

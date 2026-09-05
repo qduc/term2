@@ -78,7 +78,7 @@ const formatToolLabel = (tool: BackgroundSubagentTaskTool): string =>
 
 /** Newest tool calls of a running subagent task, oldest first, one line each. */
 const recentTaskTools = (task: PanelTask): BackgroundSubagentTaskTool[] => {
-  if (task.kind === 'shell' || isControlTask(task) || task.status !== 'running') return [];
+  if (task.kind === 'shell' || task.status !== 'running') return [];
   if ('recentTools' in task && task.recentTools?.length)
     return task.recentTools.slice(-BACKGROUND_SUBAGENT_RECENT_TOOL_LIMIT);
   if ('lastTool' in task && task.lastTool) return [task.lastTool];

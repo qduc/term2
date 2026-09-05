@@ -245,6 +245,33 @@ it.sequential('BottomArea places active background tasks directly above the inpu
   });
 });
 
+it.sequential('BottomArea renders recent tools from backgroundTaskDetails', async () => {
+  const details = {
+    kind: 'subagent' as const,
+    id: 'run-worker',
+    role: 'worker',
+    task: 'implement the background overview',
+    taskPreview: 'implement the background overview',
+    status: 'running' as const,
+    startedAt: Date.now(),
+    elapsedMs: 0,
+    toolCounts: {},
+    lastTool: { label: 'read_file path=source/app.ts', state: 'running' as const },
+    recentTools: [{ label: 'read_file path=source/app.ts', state: 'running' as const }],
+  };
+  const { lastFrame, unmount } = await renderBottomArea({
+    ...baseProps,
+    backgroundTaskDetails: [details],
+    backgroundTaskDetailsNow: Date.now(),
+  });
+  const output = lastFrame() ?? '';
+  expect(output).toContain('Tasks · 1 active');
+  expect(output).toContain('read_file path=source/app.ts');
+  act(() => {
+    unmount();
+  });
+});
+
 it.sequential('BottomArea gives the background task manager exclusive input ownership after Ctrl+G', async () => {
   const details = {
     kind: 'subagent' as const,

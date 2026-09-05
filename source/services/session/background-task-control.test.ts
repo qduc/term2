@@ -132,6 +132,48 @@ describe('BackgroundTaskControl', () => {
     );
   });
 
+  it('projects recentTools and lastTool for live subagents from notifications', () => {
+    const notifications = new SubagentNotificationStore();
+    notifications.recordLifecycle({
+      type: 'subagent_started',
+      agentId: 'run-tools',
+      role: 'worker',
+      task: 'do task',
+      async: true,
+    } as any);
+    notifications.recordLifecycle({
+      type: 'subagent_tool_started',
+      agentId: 'run-tools',
+      toolCallId: 'call-1',
+      toolName: 'read_file',
+      arguments: { path: 'source/app.ts' },
+    } as any);
+
+    const control = new BackgroundTaskControl({
+      client: {
+        listBackgroundSubagentStatuses: () => [subagentStatus({ runId: 'run-tools' })],
+        getBackgroundSubagentStatus: () => subagentStatus({ runId: 'run-tools' }),
+      },
+      notifications,
+    });
+
+    const details = control.getDetails({ kind: 'subagent', id: 'run-tools' });
+    expect(details).toEqual(
+      expect.objectContaining({
+        id: 'run-tools',
+        lastTool: { label: 'read_file path=source/app.ts', state: 'running' },
+        recentTools: [{ label: 'read_file path=source/app.ts', state: 'running' }],
+      }),
+    );
+    expect(control.listDetails()[0]).toEqual(
+      expect.objectContaining({
+        id: 'run-tools',
+        lastTool: { label: 'read_file path=source/app.ts', state: 'running' },
+        recentTools: [{ label: 'read_file path=source/app.ts', state: 'running' }],
+      }),
+    );
+  });
+
   it('lists live work before retained terminal work and returns executor-specific details', () => {
     const control = new BackgroundTaskControl({
       client: {

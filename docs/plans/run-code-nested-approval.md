@@ -8,12 +8,19 @@ original proposal and appended corrections with one authoritative sequence.
 **Milestone 1 is merged** (`82a756a7`, with `08a71cf7` and `96e65d4e`). Do not
 re-implement it.
 
+**M4 hide-direct evidence is on branch `m4-hide-direct`.** Surface+copy is
+`c9ae6a49`. P1 lives in `scripts/provider-black-box/nested-hide.blackbox.ts`
+(scripted adapter + production `buildAgentTools` hide + result-chain identity).
+K1 lives in `source/app.nested-approval-hide.test.tsx` (Ink `useConversation` +
+`BottomArea` Enter on a hidden nested `create_file`). Do not re-implement M1–M3
+or the surface+copy predicate.
+
 **Milestone 2b is merged to main as `1f18293f` (2026-09-05).** Branch was
 `m2b-scripted-adapter`; worktree `.worktrees/m2b-scripted-adapter`.
 
-**M2 is complete** — both M2a and M2b are merged to main. The current
-instruction is to stop after M2; M3/M4 are out of scope. Do not re-implement
-M2b.
+**M2 is complete** — both M2a and M2b are merged to main. Do not re-implement
+M2b. **M3 Fork C is merged** (`114acd70`). **M4 hide is implemented** on
+`m4-hide-direct` (`c9ae6a49` plus the P1/K1 evidence commit).
 
 ### M2b gate evidence (coordinator-verified at `3377be81`, merged as `1f18293f`)
 

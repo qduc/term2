@@ -348,6 +348,45 @@ it.sequential('BottomArea shows approval prompt when waiting for approval', asyn
   });
 });
 
+it.sequential('BottomArea routes nested approval keys without reopening the composer', async () => {
+  const onApprove = vi.fn();
+  const onCancel = vi.fn();
+  const view = await renderBottomArea({
+    pendingApproval: {
+      agentName: 'Nested run_code',
+      toolName: 'read_file',
+      argumentsText: JSON.stringify({ path: '/workspace/file.txt' }),
+      rawInterruption: null,
+      callId: 'nested:1',
+    },
+    waitingForApproval: true,
+    isProcessing: false,
+    onApprove,
+    onCancel,
+  });
+  await act(async () => view.stdin.write('\r'));
+  expect(onApprove).toHaveBeenCalledWith();
+  expect(onCancel).not.toHaveBeenCalled();
+  act(() => view.unmount());
+});
+
+it.sequential('BottomArea routes Escape from a nested approval to cancellation', async () => {
+  const onCancel = vi.fn();
+  const view = await renderBottomArea({
+    pendingApproval: {
+      agentName: 'Nested run_code',
+      toolName: 'read_file',
+      argumentsText: JSON.stringify({ path: '/workspace/file.txt' }),
+      rawInterruption: null,
+    },
+    waitingForApproval: true,
+    onCancel,
+  });
+  await act(async () => view.stdin.write('\u001b'));
+  await vi.waitFor(() => expect(onCancel).toHaveBeenCalledOnce());
+  act(() => view.unmount());
+});
+
 it.sequential('BottomArea keeps the ask_user question visible while collecting a custom answer', async () => {
   const { lastFrame, unmount } = await renderBottomArea({
     ...baseProps,

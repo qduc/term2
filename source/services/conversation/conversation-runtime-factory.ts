@@ -51,6 +51,7 @@ export type CreateConversationRuntimeOptions = {
   hookLifecycle?: HookLifecyclePort;
   hookEvents?: HookEventFactory;
   toolCallMarkers?: ToolCallMarkerStore;
+  enableNestedApproval?: boolean;
   deps: {
     logger: ILoggingService;
     settingsService?: ISettingsService;

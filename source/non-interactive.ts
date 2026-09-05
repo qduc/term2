@@ -517,6 +517,7 @@ export async function runNonInteractive(
   try {
     const createdRuntime = createConversationRuntime({
       sessionId,
+      enableNestedApproval: false,
       agentClient: clientHandle.agentClient,
       toolOwnership: clientHandle.toolOwnership,
       deps: {

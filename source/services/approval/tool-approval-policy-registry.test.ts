@@ -18,4 +18,25 @@ describe('ToolApprovalPolicyRegistry.decide', () => {
   it('denies an unknown tool policy', async () => {
     await expect(new ToolApprovalPolicyRegistry().decide({ toolName: 'missing', args: {} })).resolves.toBe('deny');
   });
+
+  it('distinguishes policy errors from a valid prompt', async () => {
+    const registry = new ToolApprovalPolicyRegistry();
+    registry.register({
+      toolName: 'broken',
+      needsApproval: () => {
+        throw new Error('broken policy');
+      },
+    });
+    await expect(registry.evaluate({ toolName: 'broken', args: {} })).resolves.toEqual({ kind: 'error' });
+  });
+
+  it('suppresses prompts when an interceptor rejects a call', async () => {
+    const registry = new ToolApprovalPolicyRegistry();
+    registry.register({
+      toolName: 'blocked',
+      needsApproval: () => true,
+      checkInterceptors: async () => 'blocked by plan mode',
+    });
+    await expect(registry.evaluate({ toolName: 'blocked', args: {} })).resolves.toEqual({ kind: 'interceptor_denied' });
+  });
 });

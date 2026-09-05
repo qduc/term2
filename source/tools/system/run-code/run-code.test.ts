@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import {
   bindRunCodeRegistry,
+  bindRunCodeNestedApprovalOwner,
   createRunCodeToolDefinition,
   RUN_CODE_LIMITS,
   RUN_CODE_PROHIBITED_TOOLS,
@@ -14,6 +15,7 @@ import type { ILoggingService } from '../../../services/service-interfaces.js';
 import { ToolApprovalPolicyRegistry } from '../../../services/approval/tool-approval-policy-registry.js';
 import { wrapNeedsApproval } from '../../../lib/tool-invoke.js';
 import type { AnyToolDefinition, ToolRegistry } from '../../types.js';
+import { NestedApprovalOwner } from '../../../services/approval/nested-approval-owner.js';
 
 const workspace = process.cwd();
 const noopFormatter = (() => []) as unknown as AnyToolDefinition['formatCommandMessage'];
@@ -59,6 +61,125 @@ const run = async (
 ) => String(await build(registry, approvalPolicyRegistry).execute({ code, timeout_ms: 60_000, ...params } as never));
 
 describe('run_code', () => {
+  it('waits on the real nested owner, approves once, and resumes the same script', async () => {
+    const effects: string[] = [];
+    const approvalRegistry = new ToolApprovalPolicyRegistry();
+    const protectedTool = tool({
+      name: 'protected',
+      needsApproval: () => true,
+      execute: vi.fn(() => {
+        effects.push('effect');
+        return 'approved';
+      }),
+    });
+    approvalRegistry.register({
+      toolName: protectedTool.name,
+      parameters: protectedTool.parameters,
+      needsApproval: protectedTool.needsApproval,
+    });
+    const owner = new NestedApprovalOwner();
+    let tools: ToolRegistry = [protectedTool];
+    const runCode = createRunCodeToolDefinition({
+      loggingService: logging(),
+      getToolRegistry: () => tools,
+      approvalPolicyRegistry: approvalRegistry,
+    });
+    tools = [protectedTool, runCode];
+    bindRunCodeRegistry(tools);
+    bindRunCodeNestedApprovalOwner(tools, owner);
+    const result = runCode.execute(
+      { code: 'return await tools.protected({ value: "x" });' },
+      { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
+    );
+    await vi.waitFor(() => expect(owner.getSnapshot()?.toolName).toBe('protected'));
+    await owner.decide(owner.getSnapshot()!.requestId, { answer: 'y' });
+    await expect(result).resolves.toContain('approved');
+    expect(effects).toEqual(['effect']);
+  });
+
+  it('makes a denied nested call catchable without replaying earlier effects', async () => {
+    const effects: string[] = [];
+    const approvalRegistry = new ToolApprovalPolicyRegistry();
+    const beforeTool = tool({
+      name: 'before',
+      execute: vi.fn(() => {
+        effects.push('before');
+        return 'before';
+      }),
+    });
+    const protectedTool = tool({
+      name: 'protected',
+      needsApproval: () => true,
+      execute: vi.fn(() => {
+        effects.push('bad');
+        return 'bad';
+      }),
+    });
+    approvalRegistry.register({
+      toolName: protectedTool.name,
+      parameters: protectedTool.parameters,
+      needsApproval: protectedTool.needsApproval,
+    });
+    approvalRegistry.register({
+      toolName: beforeTool.name,
+      parameters: beforeTool.parameters,
+      needsApproval: beforeTool.needsApproval,
+    });
+    const owner = new NestedApprovalOwner();
+    let tools: ToolRegistry = [beforeTool, protectedTool];
+    const runCode = createRunCodeToolDefinition({
+      loggingService: logging(),
+      getToolRegistry: () => tools,
+      approvalPolicyRegistry: approvalRegistry,
+    });
+    tools = [beforeTool, protectedTool, runCode];
+    bindRunCodeRegistry(tools);
+    bindRunCodeNestedApprovalOwner(tools, owner);
+    const result = runCode.execute(
+      {
+        code: 'await tools.before({ value: "x" }); try { await tools.protected({ value: "x" }); } catch (e) { return "caught"; }',
+      },
+      { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
+    );
+    await vi.waitFor(() => expect(owner.getSnapshot()?.toolName).toBe('protected'));
+    await owner.decide(owner.getSnapshot()!.requestId, { answer: 'n', rejectionReason: 'not this time' });
+    await expect(result).resolves.toContain('caught');
+    expect(effects).toEqual(['before']);
+  });
+
+  it('permits a still-prompt decision after revalidation becomes auto approval', async () => {
+    let evaluations = 0;
+    const approvalRegistry = new ToolApprovalPolicyRegistry();
+    const protectedTool = tool({
+      name: 'protected',
+      needsApproval: () => evaluations++ === 0,
+      execute: () => 'approved',
+    });
+    approvalRegistry.register({
+      toolName: protectedTool.name,
+      parameters: protectedTool.parameters,
+      needsApproval: protectedTool.needsApproval,
+    });
+    const owner = new NestedApprovalOwner();
+    let tools: ToolRegistry = [protectedTool];
+    const runCode = createRunCodeToolDefinition({
+      loggingService: logging(),
+      getToolRegistry: () => tools,
+      approvalPolicyRegistry: approvalRegistry,
+    });
+    tools = [protectedTool, runCode];
+    bindRunCodeRegistry(tools);
+    bindRunCodeNestedApprovalOwner(tools, owner);
+    const result = runCode.execute(
+      { code: 'return await tools.protected({ value: "x" });' },
+      { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
+    );
+    await vi.waitFor(() => expect(owner.getSnapshot()).not.toBeNull());
+    await owner.decide(owner.getSnapshot()!.requestId, { answer: 'y' });
+    await expect(result).resolves.toContain('approved');
+    expect(evaluations).toBe(2);
+  });
+
   it('returns an explicitly requested debugging trace', async () => {
     expect(await run([], 'console.log("hello from the script");', { include_console: true })).toContain(
       'hello from the script',

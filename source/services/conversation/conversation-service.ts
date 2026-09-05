@@ -44,6 +44,11 @@ import type {
   PendingInteractionSnapshot,
   ResolvePendingInteractionRequest,
 } from '../session/pending-interaction-state.js';
+import type {
+  NestedApprovalSnapshot,
+  NestedApprovalDecision,
+  NestedApprovalDecisionResult,
+} from '../approval/nested-approval-owner.js';
 import { isAbortLikeError } from '../../utils/error-helpers.js';
 import type { SessionRolloverConsumption } from '../../contracts/session-rollover.js';
 import type { SessionRolloverEvent } from '../logging/conversation-log-events.js';
@@ -68,6 +73,7 @@ export class ConversationService {
   readonly #discardOnFailure: boolean;
   #eventSink: ConversationEventSink | null = null;
   #pendingInteractionObserver: ((snapshot: PendingInteractionSnapshot | null) => void) | null = null;
+  #nestedApprovalObserver: ((snapshot: NestedApprovalSnapshot | null) => void) | null = null;
   readonly #deps: {
     logger: ILoggingService;
     settingsService?: ISettingsService;
@@ -147,6 +153,7 @@ export class ConversationService {
       discardOnFailure: this.#discardOnFailure,
       sessionId: sessionId ?? 'default',
       sessionStartedAt,
+      enableNestedApproval: true,
     });
     this.#runtime = runtime;
     this.#adapter = adapter;
@@ -237,6 +244,7 @@ export class ConversationService {
       activeCancelTimeoutMs: this.#activeCancelTimeoutMs,
       discardOnFailure: this.#discardOnFailure,
       sessionId: newId,
+      enableNestedApproval: true,
     });
     this.#runtime = runtime;
     this.#adapter = adapter;
@@ -251,6 +259,7 @@ export class ConversationService {
     this.#runtime.backgroundSubagentNotifications.setObserver(this.#backgroundSubagentNotificationObserver);
     this.#runtime.backgroundSubagentTasks.setObserver(this.#backgroundSubagentTaskObserver);
     this.#runtime.pendingInteraction.setObserver(this.#pendingInteractionObserver);
+    this.#runtime.nestedApproval.subscribe(this.#nestedApprovalObserver);
     // The new adapter starts with no observers; re-attach the queue lifecycle
     // observers so queued submissions still notify their UI after a reset.
     if (this.#queueStateObserver) {
@@ -381,6 +390,7 @@ export class ConversationService {
       this.#runtime.approval.getPending() !== null ||
       this.#runtime.approval.getPostExecutePending().entries.length > 0 ||
       this.#runtime.backgroundSubagentApprovals.getSnapshot().pendingCount > 0 ||
+      this.#runtime.nestedApproval.getSnapshot() !== null ||
       this.#adapter.queuedSubmissionCount() > 0;
     if (!interactionPending) return consumption;
 
@@ -608,6 +618,19 @@ export class ConversationService {
 
   goToNextPendingInteractionQuestion(): void {
     this.#runtime.pendingInteraction.goToNextQuestion();
+  }
+
+  getNestedApprovalSnapshot(): NestedApprovalSnapshot | null {
+    return this.#runtime.nestedApproval.getSnapshot();
+  }
+
+  setNestedApprovalObserver(observer: ((snapshot: NestedApprovalSnapshot | null) => void) | null): void {
+    this.#nestedApprovalObserver = observer;
+    this.#runtime.nestedApproval.subscribe(observer);
+  }
+
+  decideNestedApproval(requestId: string, decision: NestedApprovalDecision): Promise<NestedApprovalDecisionResult> {
+    return this.#runtime.nestedApproval.decide(requestId, decision);
   }
 
   /**

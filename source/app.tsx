@@ -193,6 +193,8 @@ const App: FC<AppProps> = ({
     lastCodexRateLimit,
     runBudgetNotice,
     pendingApproval,
+    nestedApproval,
+    resolveNestedApproval,
     waitingForApproval,
     waitingForRejectionReason,
     setWaitingForRejectionReason,
@@ -847,12 +849,19 @@ const App: FC<AppProps> = ({
         });
         return;
       }
+      if (nestedApproval && !pendingApproval) {
+        await resolveNestedApproval({ answer: answer ?? 'y' });
+        return;
+      }
       await submitApprovalDecision(answer);
     },
     [
       backgroundApprovalEntry,
       backgroundApprovalState.revision,
       resolveBackgroundSubagentApproval,
+      nestedApproval,
+      pendingApproval,
+      resolveNestedApproval,
       sandboxPromptRequest,
       submitApprovalDecision,
     ],
@@ -864,6 +873,10 @@ const App: FC<AppProps> = ({
       return;
     }
     if (backgroundApprovalEntry) {
+      setWaitingForRejectionReason(true);
+      return;
+    }
+    if (nestedApproval && !pendingApproval) {
       setWaitingForRejectionReason(true);
       return;
     }
@@ -883,6 +896,7 @@ const App: FC<AppProps> = ({
     resolveBackgroundSubagentApproval,
     sandboxPromptRequest,
     setWaitingForRejectionReason,
+    nestedApproval,
   ]);
 
   const handleCancelApproval = useCallback(() => {
@@ -896,6 +910,10 @@ const App: FC<AppProps> = ({
         entry: backgroundApprovalEntry,
         decision: { answer: 'no', rejectionReason: undefined },
       });
+      return;
+    }
+    if (nestedApproval && !pendingApproval) {
+      stopProcessing();
       return;
     }
     if (pendingApproval?.toolName === 'ask_user') {
@@ -914,6 +932,7 @@ const App: FC<AppProps> = ({
     resolveBackgroundSubagentApproval,
     cancelAskUser,
     pendingApproval,
+    nestedApproval,
     stopProcessing,
   ]);
 
@@ -928,6 +947,11 @@ const App: FC<AppProps> = ({
         setWaitingForRejectionReason(false);
         return;
       }
+      if (nestedApproval && !pendingApproval) {
+        await resolveNestedApproval({ answer: 'n', rejectionReason: reason });
+        setWaitingForRejectionReason(false);
+        return;
+      }
       await handleApprovalDecision('n', reason);
     },
     [
@@ -936,6 +960,9 @@ const App: FC<AppProps> = ({
       handleApprovalDecision,
       resolveBackgroundSubagentApproval,
       setWaitingForRejectionReason,
+      nestedApproval,
+      resolveNestedApproval,
+      pendingApproval,
     ],
   );
 
@@ -951,7 +978,7 @@ const App: FC<AppProps> = ({
       : null;
   const effectivePendingApproval =
     sandboxPromptRequest === null
-      ? backgroundPendingApproval ?? pendingApproval
+      ? backgroundPendingApproval ?? pendingApproval ?? nestedApproval?.approval ?? null
       : {
           agentName: 'Sandbox',
           toolName: 'sandbox_network_access',
@@ -960,10 +987,12 @@ const App: FC<AppProps> = ({
           }?`,
           rawInterruption: sandboxPromptRequest,
         };
-  const effectiveWaitingForApproval = sandboxPromptRequest || backgroundPendingApproval ? true : waitingForApproval;
+  const effectiveWaitingForApproval =
+    sandboxPromptRequest || backgroundPendingApproval || nestedApproval ? true : waitingForApproval;
   const effectiveWaitingForRejectionReason = sandboxPromptRequest ? false : waitingForRejectionReason;
   const effectiveWaitingForAskUserAnswer = sandboxPromptRequest ? false : waitingForAskUserAnswer;
-  const effectiveIsProcessing = sandboxPromptRequest || backgroundPendingApproval ? false : isProcessing;
+  const effectiveIsProcessing =
+    sandboxPromptRequest || backgroundPendingApproval || nestedApproval ? false : isProcessing;
 
   // Single source of truth for "which surface owns keyboard input right now."
   // Computed from the same effective state passed to BottomArea so the app
@@ -1039,6 +1068,11 @@ const App: FC<AppProps> = ({
         entry: backgroundApprovalEntry,
         decision: { answer: 'no', rejectionReason: turn.text },
       });
+      setWaitingForRejectionReason(false);
+      return;
+    }
+    if (nestedApproval && !pendingApproval && waitingForRejectionReason) {
+      await resolveNestedApproval({ answer: 'n', rejectionReason: turn.text });
       setWaitingForRejectionReason(false);
       return;
     }

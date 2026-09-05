@@ -617,6 +617,7 @@ export const getAgentDefinition = (
         loggingService,
         getCwd: () => executionContext?.getCwd() || process.cwd(),
         approvalPolicyRegistry: resolvedApprovalPolicyRegistry,
+        sessionAccess,
       }),
     );
   }

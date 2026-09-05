@@ -184,6 +184,7 @@ export const useConversation = ({
     [conversationService],
   );
   const [backgroundSubagentApproval, setBackgroundSubagentApproval] = useState(readBackgroundApproval);
+  const [nestedApproval, setNestedApproval] = useState(() => conversationService.getNestedApprovalSnapshot?.() ?? null);
 
   const refreshBackgroundSubagentTasks = useCallback(() => {
     setBackgroundSubagentTaskState(readBackgroundSubagentTasks());
@@ -366,6 +367,22 @@ export const useConversation = ({
     return () => conversationService.setPendingInteractionObserver(null);
   }, [conversationService]);
 
+  useEffect(() => {
+    if (typeof conversationService.setNestedApprovalObserver !== 'function') return;
+    conversationService.setNestedApprovalObserver((snapshot) => setNestedApproval(snapshot));
+    return () => conversationService.setNestedApprovalObserver(null);
+  }, [conversationService]);
+
+  const resolveNestedApproval = useCallback(
+    (decision: import('../services/approval/nested-approval-owner.js').NestedApprovalDecision) => {
+      const requestId = nestedApproval?.requestId;
+      return requestId === undefined
+        ? Promise.resolve({ kind: 'stale' as const })
+        : conversationService.decideNestedApproval(requestId, decision);
+    },
+    [conversationService, nestedApproval?.requestId],
+  );
+
   // ── Public API — all orchestration delegates to the orchestrator ─────────
   const sendThroughOrchestrator = useCallback(
     (input: string | UserTurn, options?: ConversationTransportOptions) => orchestrator.sendUserMessage(input, options),
@@ -547,6 +564,8 @@ export const useConversation = ({
     lastCodexRateLimit,
     runBudgetNotice,
     pendingApproval,
+    nestedApproval,
+    resolveNestedApproval,
     waitingForApproval,
     waitingForRejectionReason,
     waitingForAskUserAnswer,

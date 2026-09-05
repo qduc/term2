@@ -11,6 +11,8 @@ import type {
 import type { ILoggingService } from '../../../services/service-interfaces.js';
 import type { ToolInvocationContext } from '../../../services/agent-runtime/tool-invocation-context.js';
 import type { ToolApprovalPolicyRegistry } from '../../../services/approval/tool-approval-policy-registry.js';
+import type { NestedApprovalOwner } from '../../../services/approval/nested-approval-owner.js';
+import { applyApprovalGrant } from '../../../services/approval/approval-grant-executor.js';
 import {
   isZodToolParameterSchema,
   type AnyToolDefinition,
@@ -125,6 +127,9 @@ export interface CreateRunCodeToolOptions {
   /** Policy authority used for out-of-band script calls. */
   approvalPolicyRegistry: ToolApprovalPolicyRegistry;
   getCwd?: () => string;
+  nestedApprovalOwner?: NestedApprovalOwner;
+  sessionAccess?: import('../../../services/session/session-access-state.js').SessionAccessState;
+  nestedCompatibility?: import('../../../services/session/nested-tool-compatibility-state.js').NestedToolCompatibilityState;
 }
 
 /**
@@ -139,11 +144,19 @@ export interface CreateRunCodeToolOptions {
 const REGISTRY_BINDER = Symbol.for('term2.run_code.bindRegistry');
 
 type RegistryBindable = { [REGISTRY_BINDER]?: (registry: ToolRegistry) => void };
+const NESTED_OWNER_BINDER = Symbol.for('term2.run_code.bindNestedApprovalOwner');
+type NestedOwnerBindable = { [NESTED_OWNER_BINDER]?: (owner: NestedApprovalOwner, graph: object) => void };
 
 /** Installs the wrapped registry into any `run_code` definition in `tools`. */
 export function bindRunCodeRegistry(tools: ToolRegistry): void {
   for (const tool of tools) {
     (tool as RegistryBindable)[REGISTRY_BINDER]?.(tools);
+  }
+}
+
+export function bindRunCodeNestedApprovalOwner(tools: ToolRegistry, owner: NestedApprovalOwner): void {
+  for (const tool of tools) {
+    (tool as AnyToolDefinition as NestedOwnerBindable)[NESTED_OWNER_BINDER]?.(owner, tools);
   }
 }
 
@@ -276,6 +289,7 @@ export function createRunCodeToolDefinition(
 
   // Set by bindRunCodeRegistry once the policy layer has wrapped every tool.
   let boundRegistry: ToolRegistry | undefined;
+  let nestedApprovalOwner = options.nestedApprovalOwner;
   const exposedTools = (): ToolRegistry =>
     (options.getToolRegistry?.() ?? boundRegistry ?? []).filter((tool) => !RUN_CODE_PROHIBITED_TOOLS.has(tool.name));
 
@@ -385,6 +399,69 @@ export function createRunCodeToolDefinition(
             context,
           });
           if (decision.kind !== 'auto_approve') {
+            if (decision.kind === 'prompt' && nestedApprovalOwner) {
+              const nestedCallId = bridgeRunId + ':' + callContext.callId;
+              const nestedContext = withAbortSignal(context, mergeAbortSignals(callerSignal, callContext.signal), {
+                scripted: true,
+              }) as ToolInvocationContext;
+              const resolution = await nestedApprovalOwner.request({
+                requestId: nestedCallId,
+                sessionId: sessionId ?? 'unknown',
+                graphIdentity: boundRegistry ?? registry,
+                outerRunId: bridgeRunId,
+                nestedCallId,
+                toolName: prepared.tool.name,
+                preparedArguments: prepared.params,
+                authorityContext: context,
+                approval: {
+                  agentName: 'Nested run_code',
+                  toolName: prepared.tool.name,
+                  argumentsText: JSON.stringify(prepared.params),
+                  rawInterruption: null,
+                  callId: nestedCallId,
+                },
+                signal: nestedContext.signal as AbortSignal,
+                revalidate: async () => {
+                  const latest = await approvalRegistry.evaluate({
+                    toolName: prepared.tool.name,
+                    args: prepared.params,
+                    context,
+                  });
+                  return latest.kind;
+                },
+                grant: (nestedDecision) => {
+                  const applied = applyApprovalGrant(
+                    {
+                      sessionId: sessionId ?? 'unknown',
+                      sessionAccess: options.sessionAccess,
+                      nestedCompatibility: options.nestedCompatibility,
+                      logger: loggingService,
+                    },
+                    {
+                      answer: nestedDecision.answer,
+                      toolName: prepared.tool.name,
+                      rawArguments: prepared.params,
+                      callId: nestedCallId,
+                    },
+                  );
+                  if (!applied.isApproved) throw new Error('Tool execution was not approved.');
+                },
+                dispatch: async () =>
+                  prepared.tool.execute(prepared.params, nestedContext, { toolCall: { callId: nestedCallId } }),
+              });
+              if (resolution.kind === 'approved') {
+                record(prepared.tool.name, 'ok', prepared.started);
+                return {
+                  kind: 'result',
+                  result: {
+                    ok: true,
+                    result: serializeResult(resolution.result, RUN_CODE_LIMITS.maxResultChars),
+                  } as JsonValue,
+                };
+              }
+              record(prepared.tool.name, 'approval_required', prepared.started, isDirectlyCallable(prepared.tool));
+              return failed(resolution.message);
+            }
             const outcome = decision.kind === 'unknown' ? 'unknown_policy' : 'approval_required';
             const directlyCallable = isDirectlyCallable(prepared.tool);
             record(prepared.tool.name, outcome, prepared.started, directlyCallable);
@@ -456,6 +533,12 @@ export function createRunCodeToolDefinition(
 
   (definition as AnyToolDefinition as RegistryBindable)[REGISTRY_BINDER] = (registry) => {
     boundRegistry = registry;
+  };
+  (definition as AnyToolDefinition as NestedOwnerBindable)[NESTED_OWNER_BINDER] = (owner, graph) => {
+    nestedApprovalOwner = owner;
+    // The factory binds run_code before hiding non-direct definitions. Use the
+    // complete bound graph as identity, not the later filtered model surface.
+    owner.bindGraph(boundRegistry ?? graph);
   };
 
   return definition;

@@ -13,6 +13,7 @@ import type { BackgroundSubagentApprovalPauseSink } from './subagents/foreground
 import type { ForegroundSubagentCandidate } from './subagents/nested-runner.js';
 import type { NestedToolCompatibilityState } from './session/nested-tool-compatibility-state.js';
 import type { ToolApprovalPolicyRegistry } from './approval/tool-approval-policy-registry.js';
+import type { NestedApprovalOwner } from './approval/nested-approval-owner.js';
 import type { NormalizedUsage } from '../utils/ai/token-usage.js';
 import type { ModelRequestCost } from './cost/model-cost.js';
 import type { RunBudgetEvent } from './agent-runtime/run-budget.js';
@@ -147,6 +148,7 @@ export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
   /** Exact compatibility state shared with nested execution. */
   getNestedToolCompatibilityState?(): NestedToolCompatibilityState | undefined;
   getApprovalPolicyRegistry?(): ToolApprovalPolicyRegistry;
+  setNestedApprovalOwner?(owner: NestedApprovalOwner | undefined): void;
   /** Cancel and await adopted leases before detaching background sinks. */
   disposeBackgroundSubagents?(): Promise<void>;
   getBackgroundShellJob?(jobId: string): BackgroundShellJob<unknown> | undefined;

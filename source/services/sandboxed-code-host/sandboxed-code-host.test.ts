@@ -111,6 +111,90 @@ describe('SandboxedCodeHostImpl output rejection messages', () => {
     });
   });
 
+  it('applies Date and custom toJSON values before serializing', async () => {
+    const result = await run(`
+      return {
+        date: new Date('2026-01-02T03:04:05.000Z'),
+        custom: { toJSON() { return { serialized: true }; } },
+      };
+    `);
+
+    expect(result).toEqual({
+      ok: true,
+      output: {
+        date: '2026-01-02T03:04:05.000Z',
+        custom: { serialized: true },
+      },
+    });
+  });
+
+  it('reports a throwing getter with its JSON path and completed effects', async () => {
+    const result = await run(`
+      await tools.echo({});
+      const output = {};
+      Object.defineProperty(output, 'bad', { enumerable: true, get() { throw new Error('getter failed'); } });
+      return { output };
+    `);
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'runtime_error',
+        message:
+          'Script return value is not JSON-safe: $.output.bad is a property that threw when read.\n' +
+          '1 nested tool calls already completed — inspect state before retrying.',
+      },
+    });
+  });
+
+  it('uses bracket notation for non-identifier property names in JSON paths', async () => {
+    const result = await run(`return { 'not-an-identifier': { fn: () => undefined } };`);
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'runtime_error',
+        message:
+          'Script return value is not JSON-safe: $["not-an-identifier"].fn is a function.\n' +
+          '0 nested tool calls already completed — inspect state before retrying.',
+      },
+    });
+  });
+
+  it('preserves an own __proto__ property without changing the returned object prototype', async () => {
+    const result = await run(`
+      const output = {};
+      Object.defineProperty(output, '__proto__', { value: { safe: true }, enumerable: true });
+      return output;
+    `);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const output = result.output as Record<string, unknown>;
+    expect(Object.getOwnPropertyDescriptor(output, '__proto__')?.value).toEqual({ safe: true });
+    expect(Object.getPrototypeOf(output)).toBe(Object.prototype);
+  });
+
+  it('excludes non-enumerable properties from the serialized return value', async () => {
+    const result = await run(`
+      const output = { visible: true };
+      Object.defineProperty(output, 'hidden', { value: 'secret', enumerable: false });
+      return output;
+    `);
+
+    expect(result).toEqual({ ok: true, output: { visible: true } });
+  });
+
+  it('drops symbol-keyed function properties without rejecting the return value', async () => {
+    const result = await run(`
+      const output = { visible: true };
+      output[Symbol('function')] = () => undefined;
+      return output;
+    `);
+
+    expect(result).toEqual({ ok: true, output: { visible: true } });
+  });
+
   it.each([
     ['a cycle', `const value = {}; value.self = value; return value;`, '$.self'],
     ['a BigInt', `return { bad: 1n };`, '$.bad'],

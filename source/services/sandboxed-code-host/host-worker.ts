@@ -31,7 +31,7 @@ function jsonPathProperty(path, key) {
 function jsonFailure(path, reason) {
   return { ok: false, path, reason };
 }
-function serializeJson(value, path = '$', ancestors = new Set()) {
+function serializeJson(value, path = '$', ancestors = new Set(), propertyKey = '', skipToJSON = false) {
   if (value === undefined) return jsonFailure(path, 'undefined');
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return { ok: true, value };
   if (typeof value === 'number') return Number.isFinite(value) ? { ok: true, value } : jsonFailure(path, 'a non-finite number');
@@ -39,37 +39,92 @@ function serializeJson(value, path = '$', ancestors = new Set()) {
   if (typeof value === 'symbol') return jsonFailure(path, 'a symbol');
   if (typeof value === 'bigint') return jsonFailure(path, 'a BigInt');
   if (typeof value !== 'object') return jsonFailure(path, 'an unsupported value');
+
+  if (!skipToJSON) {
+    let toJSON;
+    try {
+      toJSON = value.toJSON;
+    } catch (_) {
+      return jsonFailure(path, 'a property that threw when read');
+    }
+    if (typeof toJSON === 'function') {
+      let replacement;
+      try {
+        replacement = Reflect.apply(toJSON, value, [propertyKey]);
+      } catch (_) {
+        return jsonFailure(path, 'a toJSON method that threw when called');
+      }
+      if (replacement === undefined)
+        return path === '$' && propertyKey === '' ? jsonFailure(path, 'undefined') : { ok: true, value: undefined };
+      return serializeJson(replacement, path, ancestors, propertyKey, true);
+    }
+  }
+
   if (ancestors.has(value)) return jsonFailure(path, 'a cycle');
 
   ancestors.add(value);
-  if (Array.isArray(value)) {
-    const output = new Array(value.length);
-    for (let index = 0; index < value.length; index++) {
-      const item = value[index];
+  let isArray;
+  try {
+    isArray = Array.isArray(value);
+  } catch (_) {
+    ancestors.delete(value);
+    return jsonFailure(path, 'a property that threw when read');
+  }
+  if (isArray) {
+    let length;
+    try {
+      length = value.length;
+    } catch (_) {
+      ancestors.delete(value);
+      return jsonFailure(path, 'a property that threw when read');
+    }
+    const output = new Array(length);
+    for (let index = 0; index < length; index++) {
+      let item;
+      try {
+        item = value[index];
+      } catch (_) {
+        ancestors.delete(value);
+        return jsonFailure(path + '[' + index + ']', 'a property that threw when read');
+      }
       if (item === undefined) {
         output[index] = null;
         continue;
       }
-      const serialized = serializeJson(item, path + '[' + index + ']', ancestors);
+      const serialized = serializeJson(item, path + '[' + index + ']', ancestors, String(index));
       if (!serialized.ok) {
         ancestors.delete(value);
         return serialized;
       }
-      output[index] = serialized.value;
+      output[index] = serialized.value === undefined ? null : serialized.value;
     }
     ancestors.delete(value);
     return { ok: true, value: output };
   }
 
   const output = {};
-  for (const key of Object.keys(value)) {
-    const item = value[key];
+  let keys;
+  try {
+    keys = Object.keys(value);
+  } catch (_) {
+    ancestors.delete(value);
+    return jsonFailure(path, 'a property that threw when read');
+  }
+  for (const key of keys) {
+    let item;
+    try {
+      item = value[key];
+    } catch (_) {
+      ancestors.delete(value);
+      return jsonFailure(jsonPathProperty(path, key), 'a property that threw when read');
+    }
     if (item === undefined) continue;
-    const serialized = serializeJson(item, jsonPathProperty(path, key), ancestors);
+    const serialized = serializeJson(item, jsonPathProperty(path, key), ancestors, key);
     if (!serialized.ok) {
       ancestors.delete(value);
       return serialized;
     }
+    if (serialized.value === undefined) continue;
     Object.defineProperty(output, key, {
       value: serialized.value,
       enumerable: true,

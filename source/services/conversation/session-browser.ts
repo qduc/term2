@@ -49,11 +49,19 @@ type CursorState = {
   nextIndex: number;
   nextTextOffset: number;
 };
+type ReadSnapshotSession = {
+  id: string;
+  createdAt: string;
+  updatedAt?: string;
+  model?: string;
+  provider?: string;
+  rolloverFrom?: string;
+};
 type ReadSnapshot = {
   contextKey: string;
   directoryVersion: string;
   sourceVersion: string;
-  conversation: RestoredState;
+  conversation: RestoredState | ReadSnapshotSession;
   projection: { records: ProjectedMessage[]; skipped: number };
   shortRef: string;
   revision: string;
@@ -265,8 +273,8 @@ export class SessionBrowser {
       return boundedError('invalid_cursor', 'The `from: "end"` anchor is only valid on an initial read.', budget);
     const context = this.getContext();
     const cached = input.cursor ? this.#snapshotForContinuation(input.cursor, input.id, context) : null;
-    let conversation: RestoredState;
-    let projection: NonNullable<ReturnType<typeof project>>;
+    let conversation: RestoredState | ReadSnapshotSession;
+    let projection: { records: ProjectedMessage[]; skipped: number };
     let resolvedId: string;
     let shortRef: string;
     let currentRevision: string;
@@ -303,12 +311,13 @@ export class SessionBrowser {
       const indexedConversation = browsed.conversations.find((candidate) => candidate.id === resolvedId);
       const indexedSourceVersion = browsed.sourceVersions.get(resolvedId);
       let sourceVersion: string | undefined;
+      let canonicalConversation: RestoredState;
       if (
         indexedConversation &&
         indexedSourceVersion &&
         getConversationSourceVersionReadOnly(resolvedId) === indexedSourceVersion
       ) {
-        conversation = indexedConversation;
+        canonicalConversation = indexedConversation;
         sourceVersion = indexedSourceVersion;
       } else {
         const loaded = loadConversationForProjectReadOnly(resolvedId, context.projectPath, context.sshHost);
@@ -322,15 +331,17 @@ export class SessionBrowser {
           );
         if (loaded.status !== 'loaded' || loaded.conversation.id !== resolvedId || !loaded.conversation.createdAt)
           return boundedError('session_unavailable', 'Session transcript is unavailable.', budget);
-        conversation = loaded.conversation;
+        canonicalConversation = loaded.conversation;
         sourceVersion = loaded.sourceVersion;
       }
-      const projected = project(conversation);
-      if (!projected || !isBrowsableSession(conversation))
+      const projected = project(canonicalConversation);
+      if (!projected || !isBrowsableSession(canonicalConversation))
         return boundedError('session_unavailable', 'Session transcript is unavailable.', budget);
+      conversation = canonicalConversation;
       projection = projected;
-      shortRef = uniqueConversationShortRefs(browsed.conversations).get(conversation.id) ?? conversation.id;
-      currentRevision = revision(conversation, projection);
+      shortRef =
+        uniqueConversationShortRefs(browsed.conversations).get(canonicalConversation.id) ?? canonicalConversation.id;
+      currentRevision = revision(canonicalConversation, projection);
       if (sourceVersion && browsed.directoryVersion) {
         const previousDependency =
           input.id === 'previous' && context.currentSessionId
@@ -408,29 +419,49 @@ export class SessionBrowser {
     }
 
     const resolvedId = resolution.id;
-    const loaded = loadConversationForProjectReadOnly(resolvedId, context.projectPath, context.sshHost);
-    if (loaded.status === 'not_found')
+    const sessionResult = await service.readSession(resolvedId, context);
+    if (!sessionResult) {
+      return this.#readCanonical(input);
+    }
+
+    if (sessionResult.kind === 'not_found') {
       return boundedError('not_found', `Session was not found in scope ${context.projectPath}.`, budget);
-    if (loaded.status === 'project_mismatch')
+    }
+
+    if (sessionResult.kind === 'project_mismatch') {
       return boundedError(
         'not_found',
-        `Session exists but belongs to project ${loaded.conversation.projectPath}, which does not match the current scope (${context.projectPath}); it cannot be read from the current scope.`,
+        `Session exists but belongs to project ${
+          sessionResult.projectPath ?? 'undefined'
+        }, which does not match the current scope (${context.projectPath}); it cannot be read from the current scope.`,
         budget,
       );
-    if (loaded.status !== 'loaded' || loaded.conversation.id !== resolvedId || !loaded.conversation.createdAt)
-      return boundedError('session_unavailable', 'Session transcript is unavailable.', budget);
+    }
 
-    const conversation = loaded.conversation;
-    const sourceVersion = loaded.sourceVersion;
-    const projection = project(conversation);
-    if (!projection || !isBrowsableSession(conversation))
+    if (sessionResult.kind === 'unavailable') {
       return boundedError('session_unavailable', 'Session transcript is unavailable.', budget);
+    }
+
+    const sessionData = sessionResult.session;
+    const conversation: ReadSnapshotSession = {
+      id: sessionData.id,
+      createdAt: sessionData.createdAt,
+      updatedAt: sessionData.updatedAt,
+      model: sessionData.model ?? undefined,
+      provider: sessionData.provider ?? undefined,
+      rolloverFrom: sessionData.predecessorId ?? undefined,
+    };
+
+    const projection = {
+      records: sessionData.records,
+      skipped: sessionData.skippedCount,
+    };
 
     const shortRef = resolution.shortRef ?? conversation.id;
-    const indexedRevision = await service.getRevision(resolvedId);
-    const currentRevision = indexedRevision ?? revision(conversation, projection);
+    const currentRevision = sessionData.projectionRevision;
 
     const dirVersion = getConversationsDirectoryVersionReadOnly();
+    const sourceVersion = sessionData.sourceVersion;
     if (sourceVersion && dirVersion) {
       const previousDependency =
         input.id === 'previous' && context.currentSessionId
@@ -458,8 +489,8 @@ export class SessionBrowser {
   #pageReadResult(
     input: SessionReadInput,
     context: SessionBrowserContext,
-    conversation: RestoredState,
-    projection: NonNullable<ReturnType<typeof project>>,
+    conversation: RestoredState | ReadSnapshotSession,
+    projection: { records: ProjectedMessage[]; skipped: number },
     shortRef: string,
     resolvedId: string,
     currentRevision: string,
@@ -699,7 +730,7 @@ function project(conversation: RestoredState) {
   return { records, skipped };
 }
 
-function updatedAt(conversation: RestoredState) {
+function updatedAt(conversation: RestoredState | ReadSnapshotSession) {
   return conversation.updatedAt ?? conversation.createdAt;
 }
 function contextKey(context: SessionBrowserContext) {

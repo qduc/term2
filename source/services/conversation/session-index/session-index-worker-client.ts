@@ -3,7 +3,12 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { ProbeCapabilityResult } from './session-index-schema.js';
-import type { IndexedListResult, IndexedResolveResult, ReconcileResult } from './session-index-database.js';
+import type {
+  IndexedListResult,
+  IndexedReadSessionResult,
+  IndexedResolveResult,
+  ReconcileResult,
+} from './session-index-database.js';
 import type { WorkerRequest, WorkerRequestPayload, WorkerResponse } from './session-index-worker.js';
 
 export interface SessionIndexWorkerClientOptions {
@@ -129,6 +134,13 @@ export class SessionIndexWorkerClient {
 
   async getRevision(sessionId: string): Promise<string | null> {
     return this.#send<string | null>({ type: 'get_revision', sessionId });
+  }
+
+  async readSession(
+    sessionId: string,
+    options: { projectPath: string; sshHost?: string },
+  ): Promise<IndexedReadSessionResult> {
+    return this.#send<IndexedReadSessionResult>({ type: 'read_session', sessionId, options });
   }
 
   async close(): Promise<void> {

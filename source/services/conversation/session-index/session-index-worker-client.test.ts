@@ -80,6 +80,24 @@ describe('SessionIndexWorkerClient', () => {
       // Revision
       const revision = await client.getRevision('session-1');
       expect(typeof revision).toBe('string');
+
+      // Read session
+      const readResult = await client.readSession('session-1', { projectPath: '/project' });
+      expect(readResult.kind).toBe('loaded');
+      if (readResult.kind === 'loaded') {
+        expect(readResult.session.id).toBe('session-1');
+        expect(readResult.session.records).toHaveLength(2);
+        expect(readResult.session.records[0]).toMatchObject({
+          index: 0,
+          kind: 'user',
+          text: 'first message',
+        });
+        expect(readResult.session.records[1]).toMatchObject({
+          index: 1,
+          kind: 'assistant',
+          text: 'response',
+        });
+      }
     } finally {
       await client.close();
     }

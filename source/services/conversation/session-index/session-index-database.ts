@@ -23,6 +23,7 @@ import {
   projectMessages,
   sessionRevision,
   sessionUpdatedAt,
+  type Kind,
 } from '../session-browser.js';
 
 const SAFE_SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
@@ -58,6 +59,34 @@ export type IndexedResolveResult =
   | { kind: 'resolved'; id: string; shortRef?: string }
   | { kind: 'not_found'; message: string }
   | { kind: 'ambiguous'; candidates: Array<{ id: string; shortRef: string }> };
+
+export type IndexedReadRecord = {
+  index: number;
+  kind: Kind;
+  text: string;
+};
+
+export type IndexedReadSessionData = {
+  id: string;
+  projectPath: string | null;
+  sshHost: string | null;
+  createdAt: string;
+  updatedAt: string;
+  predecessorId: string | null;
+  model: string | null;
+  provider: string | null;
+  projectedCount: number;
+  skippedCount: number;
+  projectionRevision: string;
+  sourceVersion: string;
+  records: IndexedReadRecord[];
+};
+
+export type IndexedReadSessionResult =
+  | { kind: 'loaded'; session: IndexedReadSessionData }
+  | { kind: 'not_found' }
+  | { kind: 'project_mismatch'; projectPath: string | null }
+  | { kind: 'unavailable' };
 
 export class SessionIndexDatabase {
   readonly #db: Database.Database;
@@ -545,6 +574,133 @@ export class SessionIndexDatabase {
       kind: 'resolved',
       id: resolution.id,
       shortRef: shortRefs.get(resolution.id) ?? resolution.id,
+    };
+  }
+
+  readSession(sessionId: string, options: { projectPath: string; sshHost?: string }): IndexedReadSessionResult {
+    this.initialize();
+
+    const inv = this.#db
+      .prepare(
+        `SELECT session_id, source_version, classification, project_path, ssh_host
+        FROM source_inventory
+        WHERE session_id = ?`,
+      )
+      .get(sessionId) as
+      | {
+          session_id: string;
+          source_version: string;
+          classification: 'loaded' | 'unreadable' | 'invalid';
+          project_path: string | null;
+          ssh_host: string | null;
+        }
+      | undefined;
+
+    if (!inv) {
+      return { kind: 'not_found' };
+    }
+
+    const normalizedProject = normalizeProjectPath(options.projectPath);
+    const normalizedHost = options.sshHost ? normalizeSshHost(options.sshHost) : null;
+
+    if (inv.classification === 'unreadable') {
+      return { kind: 'unavailable' };
+    }
+
+    // For invalid and loaded rows, check project / SSH scope if project_path is recorded
+    if (inv.project_path !== null) {
+      const scopeMatches =
+        inv.project_path === normalizedProject &&
+        ((normalizedHost === null && inv.ssh_host === null) ||
+          (normalizedHost !== null && inv.ssh_host === normalizedHost));
+      if (!scopeMatches) {
+        return { kind: 'project_mismatch', projectPath: inv.project_path };
+      }
+    } else if (inv.classification === 'invalid') {
+      // Scope-less invalid file (e.g. malformed JSON with no projectPath):
+      // Canonical returns project_mismatch against any requested scope.
+      return { kind: 'project_mismatch', projectPath: null };
+    }
+
+    if (inv.classification === 'invalid') {
+      return { kind: 'unavailable' };
+    }
+
+    const sess = this.#db
+      .prepare(
+        `SELECT
+          id, project_path, ssh_host, created_at, updated_at, predecessor_id,
+          model, provider, projected_count, skipped_count, projection_revision
+        FROM sessions
+        WHERE id = ?`,
+      )
+      .get(sessionId) as
+      | {
+          id: string;
+          project_path: string | null;
+          ssh_host: string | null;
+          created_at: string;
+          updated_at: string;
+          predecessor_id: string | null;
+          model: string | null;
+          provider: string | null;
+          projected_count: number;
+          skipped_count: number;
+          projection_revision: string;
+        }
+      | undefined;
+
+    if (!sess) {
+      return { kind: 'unavailable' };
+    }
+
+    if (sess.project_path !== null) {
+      const scopeMatches =
+        sess.project_path === normalizedProject &&
+        ((normalizedHost === null && sess.ssh_host === null) ||
+          (normalizedHost !== null && sess.ssh_host === normalizedHost));
+      if (!scopeMatches) {
+        return { kind: 'project_mismatch', projectPath: sess.project_path };
+      }
+    }
+
+    const messageRows = this.#db
+      .prepare(
+        `SELECT projected_ordinal, original_message_index, kind, original_text
+        FROM messages
+        WHERE session_id = ?
+        ORDER BY projected_ordinal ASC`,
+      )
+      .all(sessionId) as Array<{
+      projected_ordinal: number;
+      original_message_index: number;
+      kind: string;
+      original_text: string;
+    }>;
+
+    const records: IndexedReadRecord[] = messageRows.map((m) => ({
+      index: m.original_message_index,
+      kind: m.kind as Kind,
+      text: m.original_text,
+    }));
+
+    return {
+      kind: 'loaded',
+      session: {
+        id: sess.id,
+        projectPath: sess.project_path,
+        sshHost: sess.ssh_host,
+        createdAt: sess.created_at,
+        updatedAt: sess.updated_at,
+        predecessorId: sess.predecessor_id,
+        model: sess.model,
+        provider: sess.provider,
+        projectedCount: sess.projected_count,
+        skippedCount: sess.skipped_count,
+        projectionRevision: sess.projection_revision,
+        sourceVersion: inv.source_version,
+        records,
+      },
     };
   }
 

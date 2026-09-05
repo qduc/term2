@@ -658,4 +658,75 @@ describe('SessionIndexDatabase', () => {
       index.close();
     }
   });
+
+  it('serves readSession with loaded metadata, correct project scoping, and original index gaps', () => {
+    writeSession('session-scope-a', '/project-a', undefined, 'msg-a', 'pred-1');
+    writeSession('session-scope-b', '/project-b', undefined, 'msg-b');
+
+    // Create an unreadable file and a malformed session
+    fs.mkdirSync(path.join(convDir, 'unreadable-sess.jsonl'));
+    fs.writeFileSync(path.join(convDir, 'corrupt-sess.jsonl'), 'CORRUPTED\n');
+
+    const index = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      index.reconcile();
+
+      // 1. In-scope load
+      const readA = index.readSession('session-scope-a', { projectPath: '/project-a' });
+      expect(readA.kind).toBe('loaded');
+      if (readA.kind === 'loaded') {
+        expect(readA.session.id).toBe('session-scope-a');
+        expect(readA.session.projectPath).toBe('/project-a');
+        expect(readA.session.predecessorId).toBe('pred-1');
+        expect(readA.session.records).toHaveLength(2);
+        expect(readA.session.records[0].kind).toBe('user');
+        expect(readA.session.records[0].text).toBe('msg-a');
+      }
+
+      // 2. Project mismatch
+      const mismatch = index.readSession('session-scope-a', { projectPath: '/project-b' });
+      expect(mismatch.kind).toBe('project_mismatch');
+      if (mismatch.kind === 'project_mismatch') {
+        expect(mismatch.projectPath).toBe('/project-a');
+      }
+
+      // 3. Not found
+      const notFound = index.readSession('non-existent', { projectPath: '/project-a' });
+      expect(notFound.kind).toBe('not_found');
+
+      // 4. Truly unreadable file
+      const unreadable = index.readSession('unreadable-sess', { projectPath: '/project-a' });
+      expect(unreadable.kind).toBe('unavailable');
+
+      // 5. Corrupt file without projectPath
+      const corrupt = index.readSession('corrupt-sess', { projectPath: '/project-a' });
+      expect(corrupt.kind).toBe('project_mismatch');
+    } finally {
+      index.close();
+    }
+  });
+
+  it('measures retrieval cost of exceptionally large single messages in readSession', () => {
+    const largeText = 'A'.repeat(1_000_000); // 1 MB message
+    writeSession('session-large', '/project-large', undefined, largeText);
+
+    const index = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      index.reconcile();
+
+      const start = performance.now();
+      const res = index.readSession('session-large', { projectPath: '/project-large' });
+      const elapsedMs = performance.now() - start;
+
+      expect(res.kind).toBe('loaded');
+      if (res.kind === 'loaded') {
+        expect(res.session.records[0].text.length).toBe(1_000_000);
+        expect(res.session.records[0].text).toBe(largeText);
+      }
+      // Bounded retrieval time: 1MB message should be retrieved in < 100ms
+      expect(elapsedMs).toBeLessThan(500);
+    } finally {
+      index.close();
+    }
+  });
 });

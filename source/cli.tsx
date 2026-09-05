@@ -99,6 +99,7 @@ const printUsageOnce = () => {
 
 type WriterHandle = ReturnType<typeof createConversationLogWriter> | null;
 let activeLogWriter: WriterHandle = null;
+let activeSessionBrowser: SessionBrowser | null = null;
 let effectiveSessionId: string | undefined;
 
 // Global Ctrl+C handler for immediate exit paths outside Ink's input handling.
@@ -106,7 +107,10 @@ process.on('SIGINT', () => {
   if (process.stdout.isTTY) {
     process.stdout.write('\x1b[?1004l');
   }
-  void (activeLogWriter ? activeLogWriter.flush() : Promise.resolve()).finally(() => {
+  void Promise.all([
+    activeLogWriter ? activeLogWriter.flush() : Promise.resolve(),
+    activeSessionBrowser ? activeSessionBrowser.close() : Promise.resolve(),
+  ]).finally(() => {
     printUsageOnce();
     process.exit(130);
   });
@@ -116,7 +120,10 @@ process.on('SIGTERM', () => {
   if (process.stdout.isTTY) {
     process.stdout.write('\x1b[?1004l');
   }
-  void (activeLogWriter ? activeLogWriter.flush() : Promise.resolve()).finally(() => {
+  void Promise.all([
+    activeLogWriter ? activeLogWriter.flush() : Promise.resolve(),
+    activeSessionBrowser ? activeSessionBrowser.close() : Promise.resolve(),
+  ]).finally(() => {
     process.exit(143);
   });
 });
@@ -134,6 +141,13 @@ process.on('exit', () => {
     try {
       // Synchronous close path: the writer's close() does sync work and unlinks the lock.
       void activeLogWriter.close();
+    } catch {
+      /* ignore */
+    }
+  }
+  if (activeSessionBrowser) {
+    try {
+      void activeSessionBrowser.close();
     } catch {
       /* ignore */
     }
@@ -752,6 +766,7 @@ const sessionBrowser = new SessionBrowser(() => ({
   ...(sshInfo?.host ? { sshHost: sshInfo.host } : {}),
   ...(effectiveSessionId ? { currentSessionId: effectiveSessionId } : {}),
 }));
+activeSessionBrowser = sessionBrowser;
 
 const skillsService = new SkillsService(logger, executionContext.getCwd());
 skillsService.discoverSkills();
@@ -1064,6 +1079,8 @@ if (conversationService.hookEvents) {
   );
 }
 await conversationService.shutdown();
+await sessionBrowser.close();
+activeSessionBrowser = null;
 await logWriter.close();
 activeLogWriter = null;
 const resumeCmd = getResumeCommand(effectiveSessionId, sshFlag, sshInfo?.remoteDir, cli.flags.sshPort);

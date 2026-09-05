@@ -61,7 +61,7 @@ function definition<S extends z.ZodTypeAny>(
     preserveSerializedOutput: true,
     needsApproval: () => false,
     execute: async (params) => {
-      const result = JSON.stringify(execute(params));
+      const result = JSON.stringify(await execute(params));
       const budget = (params as { maxChars?: number }).maxChars ?? 12_000;
       return fitsSerializedText(result, { maxChars: budget, maxBytes: resolveToolResultMaxBytes() })
         ? result

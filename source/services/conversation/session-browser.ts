@@ -15,6 +15,7 @@ import {
 } from '../../utils/output/bounded-json.js';
 import { matchCenteredSnippet } from '../../utils/output/text-snippet.js';
 import { createHash } from 'node:crypto';
+import { SessionIndexService } from './session-index/session-index-service.js';
 
 export const MIN_SESSION_BROWSER_CHARS = 512;
 export const MAX_SESSION_BROWSER_CHARS = 12_000;
@@ -26,8 +27,8 @@ const SNIPPET_CHARS = 240;
 const SAFE_SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
 export type SessionBrowserContext = { projectPath: string; sshHost?: string; currentSessionId?: string };
-type Kind = 'user' | 'assistant' | 'reasoning' | 'system' | 'tool' | 'subagent';
-type ProjectedMessage = { index: number; kind: Kind; text: string };
+export type Kind = 'user' | 'assistant' | 'reasoning' | 'system' | 'tool' | 'subagent';
+export type ProjectedMessage = { index: number; kind: Kind; text: string };
 type BrowserError = {
   error: {
     code:
@@ -55,6 +56,7 @@ type ReadSnapshot = {
   conversation: RestoredState;
   projection: { records: ProjectedMessage[]; skipped: number };
   shortRef: string;
+  revision: string;
   previousDependency?: { sessionId: string; sourceVersion: string };
 };
 
@@ -62,51 +64,118 @@ export type SessionListInput = { limit?: number; maxChars?: number };
 export type SessionSearchInput = { query: string; limit?: number; maxChars?: number };
 export type SessionReadInput = { id: string; cursor?: string; from?: 'end'; limit?: number; maxChars?: number };
 
+export interface SessionBrowserOptions {
+  backend?: 'canonical' | 'indexed';
+  indexService?: SessionIndexService;
+}
+
 export class SessionBrowser {
   readonly #cursorStates = new Map<string, CursorState>();
   readonly #cursorHandles = new Map<string, string>();
   #readSnapshot: ReadSnapshot | null = null;
   #nextCursorId = 1;
+  readonly #backend: 'canonical' | 'indexed';
+  readonly #indexService?: SessionIndexService;
+  #lazyIndexService: SessionIndexService | null = null;
 
-  constructor(private readonly getContext: () => SessionBrowserContext) {}
+  constructor(private readonly getContext: () => SessionBrowserContext, options?: SessionBrowserOptions) {
+    this.#backend =
+      options?.backend ?? (process.env['TERM2_SESSION_BROWSER_BACKEND'] === 'indexed' ? 'indexed' : 'canonical');
+    this.#indexService = options?.indexService;
+  }
 
-  list(input: SessionListInput) {
-    const budget = input.maxChars ?? DEFAULT_INDEX_CHARS;
-    const browsed = this.conversations();
-    let unavailable = browsed.unavailable;
-    const conversations = browsed.conversations;
-    const shortRefs = uniqueConversationShortRefs(conversations);
-    const candidates: Array<{ conversation: RestoredState; projection: NonNullable<ReturnType<typeof project>> }> = [];
-    for (const conversation of conversations) {
-      const projection = project(conversation);
-      if (!projection || !isBrowsableSession(conversation)) unavailable++;
-      else candidates.push({ conversation, projection });
+  async close(): Promise<void> {
+    if (this.#indexService) {
+      await this.#indexService.close();
     }
-    const selected = candidates.slice(0, clamp(input.limit, DEFAULT_LIMIT));
+    if (this.#lazyIndexService) {
+      await this.#lazyIndexService.close();
+      this.#lazyIndexService = null;
+    }
+  }
+
+  #getIndexService(): SessionIndexService {
+    if (this.#indexService) return this.#indexService;
+    if (!this.#lazyIndexService) {
+      this.#lazyIndexService = new SessionIndexService();
+    }
+    return this.#lazyIndexService;
+  }
+
+  list(input: SessionListInput): unknown | Promise<unknown> {
+    if (this.#backend === 'indexed') {
+      return this.#listIndexed(input);
+    }
+    return this.#listCanonical(input);
+  }
+
+  #pageListResult(
+    scope: string,
+    items: Array<Record<string, unknown>>,
+    total: number,
+    unavailable: number,
+    limit: number | undefined,
+    maxChars: number | undefined,
+  ): unknown {
+    const budget = maxChars ?? DEFAULT_INDEX_CHARS;
+    const selected = items.slice(0, clamp(limit, DEFAULT_LIMIT));
     const result = {
       sessions: [] as Array<Record<string, unknown>>,
-      scope: browsed.scope,
-      total: candidates.length,
+      scope,
+      total,
       omitted: 0,
       unavailable,
     };
-    for (const { conversation, projection } of selected) {
-      const firstUser = projection.records.find((record) => record.kind === 'user' && record.text);
-      const item = {
-        id: conversation.id,
-        shortRef: shortRefs.get(conversation.id) ?? conversation.id,
-        createdAt: conversation.createdAt,
-        updatedAt: updatedAt(conversation),
-        ...(firstUser ? { firstUserMessage: prefixSnippet(firstUser.text) } : {}),
-        ...(conversation.model ? { model: conversation.model } : {}),
-        ...(conversation.provider ? { provider: conversation.provider } : {}),
-        messageCount: projection.records.length,
-      };
+    for (const item of selected) {
       const candidate = fitted({ ...result, sessions: [...result.sessions, item], omitted: selected.length }, budget);
       if (candidate) result.sessions = candidate.sessions;
       else result.omitted++;
     }
     return fitted(result, budget) ?? outputBudgetError(budget);
+  }
+
+  #listCanonical(input: SessionListInput) {
+    const browsed = this.conversations();
+    let unavailable = browsed.unavailable;
+    const conversations = browsed.conversations;
+    const shortRefs = uniqueConversationShortRefs(conversations);
+    const candidates: Array<Record<string, unknown>> = [];
+    for (const conversation of conversations) {
+      const projection = project(conversation);
+      if (!projection || !isBrowsableSession(conversation)) {
+        unavailable++;
+      } else {
+        const firstUser = projection.records.find((record) => record.kind === 'user' && record.text);
+        candidates.push({
+          id: conversation.id,
+          shortRef: shortRefs.get(conversation.id) ?? conversation.id,
+          createdAt: conversation.createdAt,
+          updatedAt: updatedAt(conversation),
+          ...(firstUser ? { firstUserMessage: prefixSnippet(firstUser.text) } : {}),
+          ...(conversation.model ? { model: conversation.model } : {}),
+          ...(conversation.provider ? { provider: conversation.provider } : {}),
+          messageCount: projection.records.length,
+        });
+      }
+    }
+    return this.#pageListResult(browsed.scope, candidates, candidates.length, unavailable, input.limit, input.maxChars);
+  }
+
+  async #listIndexed(input: SessionListInput): Promise<unknown> {
+    const service = this.#getIndexService();
+    const context = this.getContext();
+    const indexed = await service.list(context);
+    if (indexed !== null) {
+      return this.#pageListResult(
+        indexed.scope,
+        indexed.sessions,
+        indexed.total,
+        indexed.unavailable,
+        input.limit,
+        input.maxChars,
+      );
+    }
+    return this.#listCanonical(input);
   }
 
   search(input: SessionSearchInput) {
@@ -182,7 +251,14 @@ export class SessionBrowser {
     return fitted(result, budget) ?? outputBudgetError(budget);
   }
 
-  read(input: SessionReadInput): unknown {
+  read(input: SessionReadInput): unknown | Promise<unknown> {
+    if (this.#backend === 'indexed') {
+      return this.#readIndexed(input);
+    }
+    return this.#readCanonical(input);
+  }
+
+  #readCanonical(input: SessionReadInput): unknown {
     const budget = input.maxChars ?? DEFAULT_READ_CHARS;
     if (!SAFE_SESSION_ID.test(input.id)) return boundedError('not_found', 'Session was not found.', budget);
     if (input.cursor !== undefined && input.from === 'end')
@@ -193,9 +269,10 @@ export class SessionBrowser {
     let projection: NonNullable<ReturnType<typeof project>>;
     let resolvedId: string;
     let shortRef: string;
+    let currentRevision: string;
 
     if (cached) {
-      ({ conversation, projection, shortRef } = cached);
+      ({ conversation, projection, shortRef, revision: currentRevision } = cached);
       resolvedId = conversation.id;
     } else {
       const browsed = this.conversations();
@@ -253,6 +330,7 @@ export class SessionBrowser {
         return boundedError('session_unavailable', 'Session transcript is unavailable.', budget);
       projection = projected;
       shortRef = uniqueConversationShortRefs(browsed.conversations).get(conversation.id) ?? conversation.id;
+      currentRevision = revision(conversation, projection);
       if (sourceVersion && browsed.directoryVersion) {
         const previousDependency =
           input.id === 'previous' && context.currentSessionId
@@ -265,6 +343,7 @@ export class SessionBrowser {
           conversation,
           projection,
           shortRef,
+          revision: currentRevision,
           ...(context.currentSessionId && previousDependency
             ? { previousDependency: { sessionId: context.currentSessionId, sourceVersion: previousDependency } }
             : {}),
@@ -273,8 +352,120 @@ export class SessionBrowser {
         this.#readSnapshot = null;
       }
     }
+
+    return this.#pageReadResult(input, context, conversation, projection, shortRef, resolvedId, currentRevision);
+  }
+
+  async #readIndexed(input: SessionReadInput): Promise<unknown> {
+    const budget = input.maxChars ?? DEFAULT_READ_CHARS;
+    if (!SAFE_SESSION_ID.test(input.id)) return boundedError('not_found', 'Session was not found.', budget);
+    if (input.cursor !== undefined && input.from === 'end')
+      return boundedError('invalid_cursor', 'The `from: "end"` anchor is only valid on an initial read.', budget);
+    const context = this.getContext();
+    const cached = input.cursor ? this.#snapshotForContinuation(input.cursor, input.id, context) : null;
+    if (cached) {
+      return this.#pageReadResult(
+        input,
+        context,
+        cached.conversation,
+        cached.projection,
+        cached.shortRef,
+        cached.conversation.id,
+        cached.revision,
+      );
+    }
+
+    const service = this.#getIndexService();
+    const resolution = await service.resolveReference(input.id, context);
+    if (!resolution) {
+      return this.#readCanonical(input);
+    }
+
+    if (resolution.kind === 'ambiguous') {
+      return (
+        fitted(
+          {
+            error: {
+              code: 'ambiguous_reference',
+              message: 'Session reference is ambiguous; use a longer prefix or an exact ID.',
+              candidates: resolution.candidates,
+            },
+          },
+          budget,
+        ) ??
+        boundedError(
+          'ambiguous_reference',
+          `Session reference is ambiguous. Candidates: ${resolution.candidates
+            .map((candidate) => candidate.shortRef)
+            .join(', ')}.`,
+          budget,
+        )
+      );
+    }
+
+    if (resolution.kind === 'not_found') {
+      return boundedError('not_found', resolution.message, budget);
+    }
+
+    const resolvedId = resolution.id;
+    const loaded = loadConversationForProjectReadOnly(resolvedId, context.projectPath, context.sshHost);
+    if (loaded.status === 'not_found')
+      return boundedError('not_found', `Session was not found in scope ${context.projectPath}.`, budget);
+    if (loaded.status === 'project_mismatch')
+      return boundedError(
+        'not_found',
+        `Session exists but belongs to project ${loaded.conversation.projectPath}, which does not match the current scope (${context.projectPath}); it cannot be read from the current scope.`,
+        budget,
+      );
+    if (loaded.status !== 'loaded' || loaded.conversation.id !== resolvedId || !loaded.conversation.createdAt)
+      return boundedError('session_unavailable', 'Session transcript is unavailable.', budget);
+
+    const conversation = loaded.conversation;
+    const sourceVersion = loaded.sourceVersion;
+    const projection = project(conversation);
+    if (!projection || !isBrowsableSession(conversation))
+      return boundedError('session_unavailable', 'Session transcript is unavailable.', budget);
+
+    const shortRef = resolution.shortRef ?? conversation.id;
+    const indexedRevision = await service.getRevision(resolvedId);
+    const currentRevision = indexedRevision ?? revision(conversation, projection);
+
+    const dirVersion = getConversationsDirectoryVersionReadOnly();
+    if (sourceVersion && dirVersion) {
+      const previousDependency =
+        input.id === 'previous' && context.currentSessionId
+          ? getConversationSourceVersionReadOnly(context.currentSessionId) ?? undefined
+          : undefined;
+      this.#readSnapshot = {
+        contextKey: contextKey(context),
+        directoryVersion: dirVersion,
+        sourceVersion,
+        conversation,
+        projection,
+        shortRef,
+        revision: currentRevision,
+        ...(context.currentSessionId && previousDependency
+          ? { previousDependency: { sessionId: context.currentSessionId, sourceVersion: previousDependency } }
+          : {}),
+      };
+    } else {
+      this.#readSnapshot = null;
+    }
+
+    return this.#pageReadResult(input, context, conversation, projection, shortRef, resolvedId, currentRevision);
+  }
+
+  #pageReadResult(
+    input: SessionReadInput,
+    context: SessionBrowserContext,
+    conversation: RestoredState,
+    projection: NonNullable<ReturnType<typeof project>>,
+    shortRef: string,
+    resolvedId: string,
+    currentRevision: string,
+  ): unknown {
+    const budget = input.maxChars ?? DEFAULT_READ_CHARS;
     const currentUpdatedAt = updatedAt(conversation);
-    const currentRevision = revision(conversation, projection);
     const cursor: CursorState | null = input.cursor
       ? this.#decodeCursor(input.cursor, resolvedId)
       : {
@@ -619,3 +810,11 @@ function isHighSurrogate(value: number) {
 function isLowSurrogate(value: number) {
   return value >= 0xdc00 && value <= 0xdfff;
 }
+
+export {
+  project as projectMessages,
+  updatedAt as sessionUpdatedAt,
+  revision as sessionRevision,
+  isBrowsableSession,
+  prefixSnippet,
+};

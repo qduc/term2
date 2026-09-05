@@ -226,7 +226,13 @@ const clip = (text: string): string => {
   return `${text.slice(0, Math.max(0, MAX_OUTPUT_CHARS - marker.length))}${marker}`;
 };
 
-const FAILURE_PREFIXES = ['Error:', 'Script failed', 'Script timed out'];
+const FAILURE_PREFIXES = [
+  'Error:',
+  'Script failed',
+  'Script timed out',
+  'Script was cancelled',
+  'Script exceeded its deadline',
+];
 
 /**
  * Truncation is a display concern, but a script may branch on the result, so
@@ -436,87 +442,94 @@ export function createRunCodeToolDefinition(
               const nestedContext = withAbortSignal(context, mergeAbortSignals(callerSignal, callContext.signal), {
                 scripted: true,
               }) as ToolInvocationContext;
-              const resolution = await nestedApprovalOwner.request({
-                requestId: nestedCallId,
-                sessionId: sessionId ?? 'unknown',
-                graphIdentity: boundRegistry ?? registry,
-                outerRunId: bridgeRunId,
-                nestedCallId,
-                toolName: prepared.tool.name,
-                preparedArguments: prepared.params,
-                authorityContext: context,
-                approval: {
-                  agentName: 'Nested run_code',
+              tools.onWaiting?.(callContext);
+              try {
+                const resolution = await nestedApprovalOwner.request({
+                  requestId: nestedCallId,
+                  sessionId: sessionId ?? 'unknown',
+                  graphIdentity: boundRegistry ?? registry,
+                  outerRunId: bridgeRunId,
+                  nestedCallId,
                   toolName: prepared.tool.name,
-                  argumentsText: JSON.stringify(prepared.params),
-                  rawInterruption: null,
-                  callId: nestedCallId,
-                  outsideWorkspaceEdit: resolveOutsideWorkspaceEdit(
-                    prepared.tool.name,
-                    prepared.params,
-                    prepared.authorityRoot,
-                  ),
-                },
-                signal: nestedContext.signal as AbortSignal,
-                revalidateAuthority: async () => {
-                  const currentRoot = getCwd();
-                  const authority = await bindPreparedAuthority(
-                    prepared.tool.name,
-                    prepared.originalParams,
-                    currentRoot,
-                    options.executionContext,
-                  );
-                  return (
-                    authority.kind === 'bound' &&
-                    currentRoot === prepared.authorityRoot &&
-                    fingerprint(authority) === prepared.authorityMeaning
-                  );
-                },
-                revalidate: async () => {
-                  const latest = await approvalRegistry.evaluate({
+                  preparedArguments: prepared.params,
+                  authorityContext: context,
+                  approval: {
+                    agentName: 'Nested run_code',
                     toolName: prepared.tool.name,
-                    args: prepared.params,
-                    context,
-                  });
-                  return latest.kind;
-                },
-                grant: (nestedDecision) => {
-                  if (callContext.signal.aborted) throw new Error('Tool execution was not approved.');
-                  const applied = applyApprovalGrant(
-                    {
-                      sessionId: sessionId ?? 'unknown',
-                      sessionAccess: options.sessionAccess,
-                      nestedCompatibility: options.nestedCompatibility,
-                      logger: loggingService,
-                    },
-                    {
-                      answer: nestedDecision.answer,
+                    argumentsText: JSON.stringify(prepared.params),
+                    rawInterruption: null,
+                    callId: nestedCallId,
+                    outsideWorkspaceEdit: resolveOutsideWorkspaceEdit(
+                      prepared.tool.name,
+                      prepared.params,
+                      prepared.authorityRoot,
+                    ),
+                  },
+                  signal: nestedContext.signal as AbortSignal,
+                  revalidateAuthority: async () => {
+                    const currentRoot = getCwd();
+                    const authority = await bindPreparedAuthority(
+                      prepared.tool.name,
+                      prepared.originalParams,
+                      currentRoot,
+                      options.executionContext,
+                    );
+                    return (
+                      authority.kind === 'bound' &&
+                      currentRoot === prepared.authorityRoot &&
+                      fingerprint(authority) === prepared.authorityMeaning
+                    );
+                  },
+                  revalidate: async () => {
+                    const latest = await approvalRegistry.evaluate({
                       toolName: prepared.tool.name,
-                      rawArguments: prepared.params,
-                      callId: nestedCallId,
-                    },
+                      args: prepared.params,
+                      context,
+                    });
+                    return latest.kind;
+                  },
+                  grant: (nestedDecision) => {
+                    if (callContext.signal.aborted) throw new Error('Tool execution was not approved.');
+                    const applied = applyApprovalGrant(
+                      {
+                        sessionId: sessionId ?? 'unknown',
+                        sessionAccess: options.sessionAccess,
+                        nestedCompatibility: options.nestedCompatibility,
+                        logger: loggingService,
+                      },
+                      {
+                        answer: nestedDecision.answer,
+                        toolName: prepared.tool.name,
+                        rawArguments: prepared.params,
+                        callId: nestedCallId,
+                      },
+                    );
+                    if (!applied.isApproved) throw new Error('Tool execution was not approved.');
+                  },
+                  dispatch: async () =>
+                    prepared.tool.execute(prepared.params, nestedContext, { toolCall: { callId: nestedCallId } }),
+                });
+                if (resolution.kind === 'approved') {
+                  record(prepared.tool.name, 'ok', prepared.started);
+                  return {
+                    kind: 'result',
+                    result: {
+                      ok: true,
+                      result: serializeResult(resolution.result, RUN_CODE_LIMITS.maxResultChars),
+                    } as JsonValue,
+                  };
+                }
+                if (resolution.kind === 'failed') {
+                  record(prepared.tool.name, 'error', prepared.started);
+                  return failed(
+                    resolution.error instanceof Error ? resolution.error.message : String(resolution.error),
                   );
-                  if (!applied.isApproved) throw new Error('Tool execution was not approved.');
-                },
-                dispatch: async () =>
-                  prepared.tool.execute(prepared.params, nestedContext, { toolCall: { callId: nestedCallId } }),
-              });
-              if (resolution.kind === 'approved') {
-                record(prepared.tool.name, 'ok', prepared.started);
-                return {
-                  kind: 'result',
-                  result: {
-                    ok: true,
-                    result: serializeResult(resolution.result, RUN_CODE_LIMITS.maxResultChars),
-                  } as JsonValue,
-                };
+                }
+                record(prepared.tool.name, 'approval_required', prepared.started, isDirectlyCallable(prepared.tool));
+                return failed(resolution.message);
+              } finally {
+                tools.onResumed?.(callContext);
               }
-              if (resolution.kind === 'failed') {
-                record(prepared.tool.name, 'error', prepared.started);
-                return failed(resolution.error instanceof Error ? resolution.error.message : String(resolution.error));
-              }
-              record(prepared.tool.name, 'approval_required', prepared.started, isDirectlyCallable(prepared.tool));
-              return failed(resolution.message);
             }
             const outcome =
               decision.kind === 'unknown'
@@ -755,6 +768,10 @@ function renderResult(
     sections.push(
       result.error.code === 'timeout'
         ? `Script timed out. ${result.error.message}`
+        : result.error.code === 'deadline'
+        ? `Script exceeded its deadline. ${result.error.message}`
+        : result.error.code === 'cancelled'
+        ? `Script was cancelled. ${result.error.message}`
         : `Script failed: ${result.error.message}`,
     );
   } else if (result.voidOutput === true) {

@@ -12,6 +12,8 @@ export type HostErrorCode =
   | 'syntax_error'
   | 'runtime_error'
   | 'timeout'
+  | 'deadline'
+  | 'cancelled'
   | 'limit_exceeded'
   | 'approval_required'
   | 'sandbox_unavailable'
@@ -47,6 +49,8 @@ export type CapabilityBinding =
 export interface CapabilityCallContext {
   /** One-based admission order, stable across concurrency. */
   readonly callId: number;
+  /** Worker-local request id from the inbound `.run` message. Not `callId`. */
+  readonly requestId: string;
   readonly signal: AbortSignal;
 }
 
@@ -81,6 +85,13 @@ export interface CapabilityHandler<Prepared = unknown> {
   invoke(prepared: Prepared, context: CapabilityCallContext): Promise<CapabilityOutcome>;
   /** Fires when a call is admitted, before it runs. Used for run bookkeeping. */
   onAdmitted?(prepared: Prepared, context: CapabilityCallContext): void;
+  /**
+   * Nested-approval wait started. The host keys its waiting-set by
+   * {@link CapabilityCallContext.requestId}. Missing {@link onResumed} is work.
+   */
+  onWaiting?(context: CapabilityCallContext): void;
+  /** Nested-approval wait ended. Pair with {@link onWaiting}. */
+  onResumed?(context: CapabilityCallContext): void;
   /**
    * Which permit pool the call takes. `serial` is a strict FIFO lane of one,
    * for calls that mutate shared state (the run loop's non-`parallelSafe`

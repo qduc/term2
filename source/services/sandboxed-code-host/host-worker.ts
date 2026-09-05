@@ -26,6 +26,34 @@ function json(value, ancestors = new Set()) {
   return valid;
 }
 const context = vm.createContext(Object.create(null), { codeGeneration: { strings: false, wasm: false } });
+const inflight = new Set();
+let resultsConsumed = 0;
+let finished = false;
+let lastWasIdle = false;
+let idleScheduled = false;
+function emitBusy() {
+  if (!lastWasIdle) return;
+  lastWasIdle = false;
+  send('workflow.busy', { resultsConsumed });
+}
+function emitIdle() {
+  if (finished) return;
+  lastWasIdle = true;
+  send('workflow.idle', { pending: Array.from(inflight), resultsConsumed });
+}
+function scheduleIdle() {
+  if (finished || idleScheduled) return;
+  idleScheduled = true;
+  setImmediate(() => {
+    idleScheduled = false;
+    emitIdle();
+  });
+}
+function finishSend(type, payload) {
+  emitBusy();
+  finished = true;
+  send(type, payload);
+}
 // This is the only host-realm callable made available during context setup.
 // Its prototype is severed, it returns no host value, and it is deleted from
 // the global object before user code runs. The context-created wrappers retain
@@ -36,8 +64,16 @@ const bridge = (type, payload) => {
       const values = payload && payload.values;
       if (!Array.isArray(values) || !values.every(value => json(value))) return;
       if (workerData.maxConsoleBytes !== undefined && Buffer.byteLength(JSON.stringify(values), 'utf8') > workerData.maxConsoleBytes) return;
+      emitBusy();
       parentPort.postMessage({ type, values });
     } catch (_) {}
+    return;
+  }
+  if (typeof type === 'string' && type.endsWith('.run')) {
+    emitBusy();
+    if (payload && payload.requestId !== undefined) inflight.add(String(payload.requestId));
+    parentPort.postMessage({ type, ...(payload || {}) });
+    scheduleIdle();
     return;
   }
   parentPort.postMessage({ type, ...(payload || {}) });
@@ -106,7 +142,11 @@ const resolveResponse = vm.runInContext('(' + installContextBindings.toString() 
 if (typeof resolveResponse !== 'function') throw new Error('Failed to install sandbox bindings');
 parentPort.on('message', (message) => {
   if (typeof message.type === 'string' && message.type.endsWith('.result')) {
+    resultsConsumed++;
+    inflight.delete(String(message.requestId));
     resolveResponse(message.requestId, message.result);
+    emitBusy();
+    scheduleIdle();
   }
 });
 (async () => {
@@ -114,13 +154,13 @@ parentPort.on('message', (message) => {
     const script = new vm.Script('(async () => { "use strict";\n' + workerData.code + '\n})()', { filename: 'workflow.js' });
     const output = await script.runInContext(context, { timeout: workerData.syncTimeoutMs });
     if (output === undefined && workerData.allowVoidOutput) {
-      send('workflow.complete', { output: null, voidOutput: true });
+      finishSend('workflow.complete', { output: null, voidOutput: true });
       return;
     }
     if (!json(output)) throw new Error((workerData.subject || 'Script') + ' return value must be JSON-safe');
-    send('workflow.complete', { output });
+    finishSend('workflow.complete', { output });
   } catch (err) {
-    send('workflow.error', { error: error(err), syntax: err instanceof SyntaxError });
+    finishSend('workflow.error', { error: error(err), syntax: err instanceof SyntaxError });
   }
 })();
 `;

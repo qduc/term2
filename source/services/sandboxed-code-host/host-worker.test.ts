@@ -28,4 +28,20 @@ describe('buildWorkerSource', () => {
     // reaches the template as source.
     expect(lines).toEqual([`const capabilities = ${JSON.stringify([{ name, kind: 'factory' }])};`]);
   });
+
+  it('reports idle from the template bridge, not the vm pending map, without relaxing codeGeneration', () => {
+    const source = buildWorkerSource([{ name: 'tools', kind: 'namespace', members: ['echo'] }]);
+    const installStart = source.indexOf('function installContextBindings');
+    const installEnd = source.indexOf('const resolveResponse');
+    const inContext = source.slice(installStart, installEnd);
+    const template = source.slice(0, installStart) + source.slice(installEnd);
+
+    expect(source).toContain('codeGeneration: { strings: false, wasm: false }');
+    expect(inContext).not.toContain('workflow.idle');
+    expect(inContext).not.toContain('workflow.busy');
+    expect(template).toContain("send('workflow.idle'");
+    expect(template).toContain("send('workflow.busy'");
+    expect(template).toMatch(/endsWith\('\.run'\)/);
+    expect(template).toMatch(/endsWith\('\.result'\)/);
+  });
 });

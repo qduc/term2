@@ -384,11 +384,13 @@ describe('SessionIndexDatabase', () => {
 
       // Exact ID
       const exact = index.resolveReference(parentId, { projectPath: '/project' });
-      expect(exact).toEqual({ kind: 'resolved', id: parentId });
+      expect(exact).toMatchObject({ kind: 'resolved', id: parentId });
+      expect((exact as any).shortRef).toBeDefined();
 
       // Unique prefix
       const prefix = index.resolveReference('bbbbbbbb', { projectPath: '/project' });
-      expect(prefix).toEqual({ kind: 'resolved', id: childId });
+      expect(prefix).toMatchObject({ kind: 'resolved', id: childId });
+      expect((prefix as any).shortRef).toBeDefined();
 
       // Ambiguous prefix
       const ambiguous = index.resolveReference('cccc', { projectPath: '/project' });
@@ -399,7 +401,7 @@ describe('SessionIndexDatabase', () => {
 
       // Previous reference
       const prev = index.resolveReference('previous', { projectPath: '/project', currentSessionId: childId });
-      expect(prev).toEqual({ kind: 'resolved', id: parentId });
+      expect(prev).toMatchObject({ kind: 'resolved', id: parentId });
 
       // Previous on session with no predecessor
       const noPrev = index.resolveReference('previous', { projectPath: '/project', currentSessionId: parentId });

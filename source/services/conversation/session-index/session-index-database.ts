@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import fs from 'node:fs';
+import path from 'node:path';
 import {
   createSchema,
   dropSchema,
@@ -9,13 +10,13 @@ import {
   type ProbeCapabilityResult,
 } from './session-index-schema.js';
 import {
-  getConversationSourceVersionReadOnly,
   loadConversationForProjectReadOnly,
   normalizeProjectPath,
   normalizeSshHost,
   resolveConversationReference,
   uniqueConversationShortRefs,
 } from '../conversation-persistence.js';
+import { deltaSidecarPathFor } from '../../logging/conversation-log-events.js';
 import {
   isBrowsableSession,
   prefixSnippet,
@@ -54,7 +55,7 @@ export type IndexedListResult = {
 };
 
 export type IndexedResolveResult =
-  | { kind: 'resolved'; id: string }
+  | { kind: 'resolved'; id: string; shortRef?: string }
   | { kind: 'not_found'; message: string }
   | { kind: 'ambiguous'; candidates: Array<{ id: string; shortRef: string }> };
 
@@ -91,6 +92,26 @@ export class SessionIndexDatabase {
     return probeFts5TrigramCapability(this.#db);
   }
 
+  #statVersion(filePath: string): string | null {
+    try {
+      const stat = fs.statSync(filePath);
+      return JSON.stringify([stat.dev, stat.ino, stat.mode, stat.size, stat.mtimeMs, stat.ctimeMs]);
+    } catch {
+      return null;
+    }
+  }
+
+  #getSourceVersion(id: string): string | null {
+    if (!SAFE_SESSION_ID.test(id)) return null;
+    const filePath = path.join(this.#sourceDirectory, `${id}.jsonl`);
+    const fileVersion = this.#statVersion(filePath);
+    if (!fileVersion) return null;
+    const sidecarPath = deltaSidecarPathFor(filePath);
+    const sidecarVersion = fs.existsSync(sidecarPath) ? this.#statVersion(sidecarPath) : 'absent';
+    if (!sidecarVersion) return null;
+    return JSON.stringify([fileVersion, sidecarVersion]);
+  }
+
   initialize(): void {
     if (!isSchemaCurrent(this.#db, this.#sourceDirectory)) {
       dropSchema(this.#db);
@@ -101,6 +122,9 @@ export class SessionIndexDatabase {
 
   reconcile(): ReconcileResult {
     this.initialize();
+    if (process.env['TERM2_CONVERSATIONS_DIR'] !== this.#sourceDirectory) {
+      process.env['TERM2_CONVERSATIONS_DIR'] = this.#sourceDirectory;
+    }
 
     let files: string[] = [];
     try {
@@ -161,7 +185,7 @@ export class SessionIndexDatabase {
     // 2. Identify sessions requiring refresh
     const toRefreshIds: string[] = [];
     for (const id of liveIds) {
-      const currentVersion = getConversationSourceVersionReadOnly(id);
+      const currentVersion = this.#getSourceVersion(id);
       if (currentVersion === null) continue;
       if (existingVersionMap.get(id) !== currentVersion) {
         toRefreshIds.push(id);
@@ -196,7 +220,7 @@ export class SessionIndexDatabase {
 
     // Refresh each changed session
     for (const id of toRefreshIds) {
-      const sourceVersionBefore = getConversationSourceVersionReadOnly(id);
+      const sourceVersionBefore = this.#getSourceVersion(id);
       if (sourceVersionBefore === null) continue;
 
       replayedCount++;
@@ -274,7 +298,7 @@ export class SessionIndexDatabase {
       }
 
       // Stable publication check: ensure source did not change during replay
-      const sourceVersionAfter = getConversationSourceVersionReadOnly(id);
+      const sourceVersionAfter = this.#getSourceVersion(id);
       if (sourceVersionBefore !== sourceVersionAfter) {
         changedDuringReplay.push(id);
         continue;
@@ -408,20 +432,6 @@ export class SessionIndexDatabase {
   ): IndexedResolveResult {
     this.initialize();
 
-    if (reference === 'previous') {
-      if (!options.currentSessionId) {
-        return { kind: 'not_found', message: 'This session has no persisted rollover predecessor.' };
-      }
-      const current = this.#db
-        .prepare('SELECT predecessor_id FROM sessions WHERE id = ?')
-        .get(options.currentSessionId) as { predecessor_id: string | null } | undefined;
-
-      if (!current?.predecessor_id) {
-        return { kind: 'not_found', message: 'This session has no persisted rollover predecessor.' };
-      }
-      return { kind: 'resolved', id: current.predecessor_id };
-    }
-
     const normalizedProject = normalizeProjectPath(options.projectPath);
     const normalizedHost = options.sshHost ? normalizeSshHost(options.sshHost) : null;
 
@@ -440,6 +450,26 @@ export class SessionIndexDatabase {
       )
       .all(normalizedProject, normalizedHost, normalizedHost) as Array<{ id: string }>;
 
+    const shortRefs = uniqueConversationShortRefs(rows);
+
+    if (reference === 'previous') {
+      if (!options.currentSessionId) {
+        return { kind: 'not_found', message: 'This session has no persisted rollover predecessor.' };
+      }
+      const current = this.#db
+        .prepare('SELECT predecessor_id FROM sessions WHERE id = ?')
+        .get(options.currentSessionId) as { predecessor_id: string | null } | undefined;
+
+      if (!current?.predecessor_id) {
+        return { kind: 'not_found', message: 'This session has no persisted rollover predecessor.' };
+      }
+      return {
+        kind: 'resolved',
+        id: current.predecessor_id,
+        shortRef: shortRefs.get(current.predecessor_id) ?? current.predecessor_id,
+      };
+    }
+
     const resolution = resolveConversationReference(reference, rows);
     if (resolution.kind === 'ambiguous') {
       return { kind: 'ambiguous', candidates: resolution.candidates };
@@ -451,7 +481,11 @@ export class SessionIndexDatabase {
       return { kind: 'not_found', message: `Session was not found in scope ${options.projectPath}.` };
     }
 
-    return { kind: 'resolved', id: resolution.id };
+    return {
+      kind: 'resolved',
+      id: resolution.id,
+      shortRef: shortRefs.get(resolution.id) ?? resolution.id,
+    };
   }
 
   getRevision(sessionId: string): string | null {

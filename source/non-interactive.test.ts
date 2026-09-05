@@ -6,6 +6,7 @@ import { ToolOwnershipRegistry } from './services/approval/tool-ownership-regist
 import { AgentClient } from './lib/agent-client.js';
 import { registerProvider, unregisterProvider } from './providers/registry.js';
 import { z } from 'zod';
+import type { BackgroundNotification } from './services/subagents/subagent-notification-store.js';
 
 const createStringWritable = () => {
   let output = '';
@@ -34,6 +35,54 @@ const createNoopLogger = () => ({
   setCorrelationId() {},
   clearCorrelationId() {},
 });
+
+const createBackgroundWorkHarness = ({
+  outstanding = ['child-1'],
+  completions = [],
+}: {
+  outstanding?: string[];
+  completions?: BackgroundNotification[];
+} = {}) => {
+  let active = [...outstanding];
+  let pending = [...completions];
+  let observer: (() => void) | null = null;
+  let cancelCalls = 0;
+  return {
+    work: {
+      notifications: {
+        get pendingCount() {
+          return pending.length;
+        },
+        drain() {
+          const drained = pending;
+          pending = [];
+          return drained;
+        },
+        retain(notifications: readonly BackgroundNotification[]) {
+          pending = [...notifications, ...pending];
+        },
+        enqueueUserControl() {
+          return false;
+        },
+        setObserver(next: (() => void) | null) {
+          observer = next;
+        },
+      },
+      getOutstanding() {
+        return active.map((id) => ({ id, kind: 'subagent', status: 'running' }));
+      },
+      cancel() {
+        cancelCalls += 1;
+      },
+    },
+    complete(ids: string[], notifications: BackgroundNotification[]) {
+      active = active.filter((id) => !ids.includes(id));
+      pending.push(...notifications);
+      observer?.();
+    },
+    getCancelCalls: () => cancelCalls,
+  };
+};
 
 it('streams text_delta events to stdout and appends newline', async () => {
   const stdout = createStringWritable();
@@ -498,6 +547,187 @@ it('emits NDJSON approval_rejected event in json mode when unapproved', async ()
     reason: 'Heuristic validation failed: command is RED (dangerous) and cannot be executed automatically: rm -rf /',
   });
   expect(lines).toContainEqual({ type: 'completed', finalText: 'done' });
+});
+
+it('waits for a background subagent completion instead of exiting after the launch turn', async () => {
+  const stdout = createStringWritable();
+  const stderr = createStringWritable();
+  const harness = createBackgroundWorkHarness();
+  const prompts: string[] = [];
+  const session: any = {
+    async sendMessage(input: string, { onEvent }: any) {
+      prompts.push(input);
+      if (prompts.length === 1) {
+        queueMicrotask(() =>
+          harness.complete(
+            ['child-1'],
+            [
+              {
+                kind: 'completion',
+                messageId: 'completion:child-1',
+                runId: 'child-1',
+                role: 'explorer',
+                status: 'completed',
+                preview: 'child result',
+                formattedResult: 'child result',
+                completedAt: Date.now(),
+              },
+            ],
+          ),
+        );
+        onEvent?.({ type: 'text_delta', delta: 'launched' });
+        return { type: 'response', finalText: 'launched', commandMessages: [] };
+      }
+      onEvent?.({ type: 'text_delta', delta: 'Final answer includes child result.' });
+      return { type: 'response', finalText: 'Final answer includes child result.', commandMessages: [] };
+    },
+    async handleApprovalDecision() {
+      return null;
+    },
+  };
+
+  const exitCode = await runWithSession(session, {
+    prompt: 'launch a background review',
+    autoApprove: true,
+    json: true,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+    backgroundWork: harness.work,
+  });
+
+  expect(exitCode).toBe(0);
+  expect(prompts).toHaveLength(2);
+  expect(prompts[1]).toContain('child result');
+  const lines = stdout
+    .getOutput()
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  expect(lines.at(-1)).toEqual({ type: 'completed', finalText: 'Final answer includes child result.' });
+});
+
+it('delivers all concurrent background subagent completions before completing', async () => {
+  const stdout = createStringWritable();
+  const stderr = createStringWritable();
+  const harness = createBackgroundWorkHarness({ outstanding: ['child-1', 'child-2', 'child-3'] });
+  const prompts: string[] = [];
+  const session: any = {
+    async sendMessage(input: string) {
+      prompts.push(input);
+      if (prompts.length === 1) {
+        queueMicrotask(() =>
+          harness.complete(
+            ['child-1', 'child-2', 'child-3'],
+            ['child-1', 'child-2', 'child-3'].map((runId) => ({
+              kind: 'completion' as const,
+              messageId: 'completion:' + runId,
+              runId,
+              role: 'explorer',
+              status: 'completed' as const,
+              preview: runId,
+              formattedResult: 'result for ' + runId,
+              completedAt: Date.now(),
+            })),
+          ),
+        );
+        return { type: 'response', finalText: 'launched', commandMessages: [] };
+      }
+      return { type: 'response', finalText: 'all results received', commandMessages: [] };
+    },
+    async handleApprovalDecision() {
+      return null;
+    },
+  };
+
+  const exitCode = await runWithSession(session, {
+    prompt: 'launch three reviews',
+    autoApprove: true,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+    backgroundWork: harness.work,
+  });
+
+  expect(exitCode).toBe(0);
+  expect(prompts).toHaveLength(2);
+  expect(prompts[1]).toContain('result for child-1');
+  expect(prompts[1]).toContain('result for child-2');
+  expect(prompts[1]).toContain('result for child-3');
+});
+
+it('cancels and reports outstanding background work when the wait bound expires', async () => {
+  const stdout = createStringWritable();
+  const stderr = createStringWritable();
+  const harness = createBackgroundWorkHarness({ outstanding: ['stuck-child'] });
+  const session: any = {
+    async sendMessage() {
+      return { type: 'response', finalText: 'launched', commandMessages: [] };
+    },
+    async handleApprovalDecision() {
+      return null;
+    },
+  };
+
+  const exitCode = await runWithSession(session, {
+    prompt: 'launch a stuck review',
+    autoApprove: true,
+    json: true,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+    backgroundWork: harness.work,
+    backgroundWaitTimeoutMs: 10,
+  });
+
+  expect(exitCode).toBe(1);
+  expect(harness.getCancelCalls()).toBe(1);
+  const lines = stdout
+    .getOutput()
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  expect(lines.at(-1)).toMatchObject({
+    type: 'error',
+    code: 'background_work_timeout',
+    outstanding: [{ id: 'stuck-child', kind: 'subagent', status: 'running' }],
+  });
+});
+
+it('cancels children and reports an interrupted background wait on SIGINT', async () => {
+  const stdout = createStringWritable();
+  const stderr = createStringWritable();
+  const harness = createBackgroundWorkHarness({ outstanding: ['interrupted-child'] });
+  const session: any = {
+    async sendMessage() {
+      setTimeout(() => process.emit('SIGINT'), 0);
+      return { type: 'response', finalText: 'launched', commandMessages: [] };
+    },
+    async handleApprovalDecision() {
+      return null;
+    },
+  };
+
+  const exitCode = await runWithSession(session, {
+    prompt: 'launch a review',
+    autoApprove: true,
+    json: true,
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+    backgroundWork: harness.work,
+    backgroundWaitTimeoutMs: 1000,
+  });
+
+  expect(exitCode).toBe(1);
+  expect(harness.getCancelCalls()).toBe(1);
+  const lines = stdout
+    .getOutput()
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  expect(lines.at(-1)).toMatchObject({
+    type: 'error',
+    code: 'background_work_interrupted',
+    signal: 'SIGINT',
+    outstanding: [{ id: 'interrupted-child', kind: 'subagent', status: 'running' }],
+  });
 });
 
 it('handles multiple consecutive approval rounds', async () => {
@@ -1013,6 +1243,9 @@ it('runNonInteractive() blocks background shell and ask_user execution for calle
   expect(await toolInterceptors[0]?.('run_subagent_async', { role: 'explorer', task: 'search' })).toBe(
     'Error: Asynchronous subagent execution is unavailable in non-interactive mode. Use synchronous run_subagent instead.',
   );
+  expect(
+    await toolInterceptors[0]?.('run_subagent', { execution: 'background', role: 'explorer', task: 'search' }),
+  ).toBeNull();
   expect(await toolInterceptors[0]?.('ask_user', { questions: [{ question: 'why?' }] })).toBe(
     'Error: ask_user is unavailable in non-interactive mode.',
   );

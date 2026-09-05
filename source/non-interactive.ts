@@ -21,6 +21,28 @@ import type { HookLifecyclePort } from './services/hooks/hook-service.js';
 import type { HookEventFactory } from './services/hooks/hook-event-factory.js';
 import { pruneStaleTempArtifacts } from './utils/shell/temp-sweep.js';
 import { primeActiveProfileNoticeIfActive } from './services/mode-notices.js';
+import { formatBackgroundSubagentNotifications } from './services/conversation/conversation-orchestrator.js';
+import type { BackgroundSubagentNotificationPort } from './services/subagents/subagent-notification-store.js';
+
+export const DEFAULT_NON_INTERACTIVE_BACKGROUND_WAIT_MS = 5 * 60 * 1000;
+const MAX_NON_INTERACTIVE_BACKGROUND_WAIT_MS = 24 * 60 * 60 * 1000;
+
+export interface NonInteractiveOutstandingWork {
+  id: string;
+  kind: string;
+  status: string;
+  name?: string;
+  role?: string;
+  task?: string;
+}
+
+export interface NonInteractiveBackgroundWork {
+  notifications: BackgroundSubagentNotificationPort & {
+    setObserver?: (observer: (() => void) | null) => void;
+  };
+  getOutstanding: () => readonly NonInteractiveOutstandingWork[];
+  cancel: () => void;
+}
 
 export interface NonInteractiveConfig {
   prompt: string;
@@ -41,6 +63,12 @@ export interface NonInteractiveConfig {
   sessionContextService?: ISessionContextService;
   hookLifecycle?: HookLifecyclePort;
   hookEvents?: HookEventFactory;
+  /** Internal/runtime seam for draining work that outlives the launch turn. */
+  backgroundWork?: NonInteractiveBackgroundWork;
+  /** Overall bound for waiting on background work; defaults to five minutes. */
+  backgroundWaitTimeoutMs?: number;
+  /** Abort the active foreground turn when the process receives a signal. */
+  abort?: () => void;
 }
 
 export { NON_INTERACTIVE_REJECTION_REASON } from './services/approval/non-interactive-approval-policy.js';
@@ -57,6 +85,12 @@ export interface ConversationSessionLike {
   setEventSink?: (sink: ((event: ConversationEvent) => void) | null) => void;
   exportState?(): { history: unknown[]; previousResponseId: string | null; toolLedger: SavedToolExecution[] };
 }
+
+const normalizeBackgroundWaitTimeout = (value: number | undefined): number => {
+  if (value === undefined) return DEFAULT_NON_INTERACTIVE_BACKGROUND_WAIT_MS;
+  if (!Number.isFinite(value)) return DEFAULT_NON_INTERACTIVE_BACKGROUND_WAIT_MS;
+  return Math.min(MAX_NON_INTERACTIVE_BACKGROUND_WAIT_MS, Math.max(1, Math.floor(value)));
+};
 
 const safePreview = (value: unknown, maxLen = 500): string => {
   try {
@@ -193,6 +227,62 @@ export async function runWithSession(session: ConversationSessionLike, config: N
     }
   };
 
+  const backgroundWork = config.backgroundWork;
+  const backgroundWaitTimeoutMs = normalizeBackgroundWaitTimeout(config.backgroundWaitTimeoutMs);
+  let receivedSignal: NodeJS.Signals | null = null;
+  let backgroundCancellationRequested = false;
+  let wakeBackgroundWaiter: (() => void) | null = null;
+  const cancelBackgroundWork = (): void => {
+    config.abort?.();
+    if (backgroundWork && !backgroundCancellationRequested) {
+      backgroundCancellationRequested = true;
+      backgroundWork.cancel();
+    }
+  };
+  const onSignal = (signal: NodeJS.Signals): void => {
+    if (receivedSignal) return;
+    receivedSignal = signal;
+    cancelBackgroundWork();
+    wakeBackgroundWaiter?.();
+  };
+  const onSigint = (): void => onSignal('SIGINT');
+  const onSigterm = (): void => onSignal('SIGTERM');
+  if (backgroundWork) {
+    process.once('SIGINT', onSigint);
+    process.once('SIGTERM', onSigterm);
+    backgroundWork.notifications.setObserver?.(() => wakeBackgroundWaiter?.());
+  }
+
+  const reportBackgroundFailure = (
+    code: 'background_work_timeout' | 'background_work_interrupted',
+    outstanding: readonly NonInteractiveOutstandingWork[],
+  ): number => {
+    const signal = receivedSignal ?? undefined;
+    const message = signal
+      ? 'Background work interrupted by ' + signal + '; unfinished work was cancelled.'
+      : 'Background work did not finish within ' + backgroundWaitTimeoutMs + 'ms; unfinished work was cancelled.';
+    const payload = {
+      type: 'error',
+      code,
+      error: message,
+      ...(signal ? { signal } : {}),
+      outstanding,
+      pendingNotifications: backgroundWork?.notifications.pendingCount ?? 0,
+    };
+    config.logger?.warn('Non-interactive background work did not finish', {
+      eventType: code,
+      category: 'subagent',
+      ...payload,
+    });
+    if (config.json) {
+      stdout.write(JSON.stringify(payload) + '\n');
+    } else {
+      const details = outstanding.map((work) => work.kind + ' ' + work.id + ' (' + work.status + ')').join(', ');
+      stderr.write('error ' + message + ' Outstanding: ' + (details || 'none') + '\n');
+    }
+    return 1;
+  };
+
   try {
     type SendResult = Awaited<ReturnType<ConversationSessionLike['sendMessage']>>;
     type ApprovalResult = Awaited<ReturnType<ConversationSessionLike['handleApprovalDecision']>>;
@@ -202,45 +292,135 @@ export async function runWithSession(session: ConversationSessionLike, config: N
       session.setEventSink!(onEvent);
     }
 
-    let result: SendResult | ApprovalResult;
-    result = supportsPersistentEventSink
-      ? await session.sendMessage(config.prompt)
-      : await session.sendMessage(config.prompt, { onEvent } as any);
+    const sendTurn = async (
+      input: string,
+      suppressUserMessageDisplay = false,
+    ): Promise<SendResult | ApprovalResult> => {
+      streamedTextLength = 0;
+      return supportsPersistentEventSink
+        ? await session.sendMessage(input, suppressUserMessageDisplay ? { suppressUserMessageDisplay } : undefined)
+        : await session.sendMessage(input, { onEvent, suppressUserMessageDisplay } as any);
+    };
 
-    while (result?.type === 'approval_required') {
-      const decision = await approvalPolicy.decide({
-        autoApprove: config.autoApprove,
-        approval: result.approval,
-        getHistory: () => session.exportState?.().history ?? [],
-      });
-      const rejectionReason = decision.answer === 'n' ? decision.rejectionReason : undefined;
-      if (decision.answer === 'n' && decision.reportRejection) {
-        if (config.json) {
-          stdout.write(JSON.stringify({ type: 'approval_rejected', reason: rejectionReason }) + '\n');
-        } else {
-          stderr.write(`Approval Rejected: ${rejectionReason}\n`);
+    const sendTurnAndResolveApprovals = async (
+      input: string,
+      suppressUserMessageDisplay = false,
+    ): Promise<SendResult | ApprovalResult | null> => {
+      let result: SendResult | ApprovalResult = await sendTurn(input, suppressUserMessageDisplay);
+      while (result?.type === 'approval_required') {
+        const decision = await approvalPolicy.decide({
+          autoApprove: config.autoApprove,
+          approval: result.approval,
+          getHistory: () => session.exportState?.().history ?? [],
+        });
+        const rejectionReason = decision.answer === 'n' ? decision.rejectionReason : undefined;
+        if (decision.answer === 'n' && decision.reportRejection) {
+          if (config.json) {
+            stdout.write(JSON.stringify({ type: 'approval_rejected', reason: rejectionReason }) + '\n');
+          } else {
+            stderr.write('Approval Rejected: ' + rejectionReason + '\n');
+          }
+        }
+        result = supportsPersistentEventSink
+          ? await session.handleApprovalDecision(decision.answer, rejectionReason)
+          : await session.handleApprovalDecision(decision.answer, rejectionReason, { onEvent } as any);
+
+        if (result === null) {
+          if (config.json) {
+            stdout.write(
+              JSON.stringify({
+                type: 'error',
+                error: 'No pending approval context (unexpected in non-interactive mode).',
+              }) + '\n',
+            );
+          } else {
+            stderr.write('error No pending approval context (unexpected in non-interactive mode).\n');
+          }
+          return null;
         }
       }
-      result = supportsPersistentEventSink
-        ? await session.handleApprovalDecision(decision.answer, rejectionReason)
-        : await session.handleApprovalDecision(decision.answer, rejectionReason, { onEvent } as any);
+      return result;
+    };
 
-      if (result === null) {
-        if (config.json) {
-          stdout.write(
-            JSON.stringify({
-              type: 'error',
-              error: 'No pending approval context (unexpected in non-interactive mode).',
-            }) + '\n',
-          );
-        } else {
-          stderr.write('error No pending approval context (unexpected in non-interactive mode).\n');
-        }
-        return 1;
-      }
-    }
+    let result = await sendTurnAndResolveApprovals(config.prompt);
+    if (result === null) return 1;
 
     if (result?.type === 'response') {
+      if (backgroundWork) {
+        const deadline = Date.now() + backgroundWaitTimeoutMs;
+        while (true) {
+          if (receivedSignal) {
+            const outstanding = backgroundWork.getOutstanding();
+            cancelBackgroundWork();
+            return reportBackgroundFailure('background_work_interrupted', outstanding);
+          }
+
+          const outstanding = backgroundWork.getOutstanding();
+          if (backgroundWork.notifications.pendingCount > 0) {
+            const notifications = backgroundWork.notifications.drain();
+            if (notifications.length > 0) {
+              const remainingForTurn = deadline - Date.now();
+              if (remainingForTurn <= 0) {
+                cancelBackgroundWork();
+                return reportBackgroundFailure('background_work_timeout', outstanding);
+              }
+              let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+              const notificationResult = await Promise.race([
+                sendTurnAndResolveApprovals(formatBackgroundSubagentNotifications(notifications), true).then(
+                  (value) => ({ timedOut: false as const, value }),
+                ),
+                new Promise<{ timedOut: true }>((resolve) => {
+                  timeoutHandle = setTimeout(() => resolve({ timedOut: true }), remainingForTurn);
+                }),
+              ]);
+              if (timeoutHandle) clearTimeout(timeoutHandle);
+              if (notificationResult.timedOut) {
+                cancelBackgroundWork();
+                return reportBackgroundFailure('background_work_timeout', backgroundWork.getOutstanding());
+              }
+              result = notificationResult.value;
+              if (result === null) return 1;
+              if (result?.type !== 'response') {
+                if (config.json) {
+                  stdout.write(JSON.stringify({ type: 'error', error: 'Unexpected conversation result.' }) + '\n');
+                } else {
+                  stderr.write('error Unexpected conversation result.\n');
+                }
+                return 1;
+              }
+              continue;
+            }
+          }
+          if (outstanding.length === 0) break;
+          const remainingMs = deadline - Date.now();
+          if (remainingMs <= 0) {
+            cancelBackgroundWork();
+            return reportBackgroundFailure('background_work_timeout', outstanding);
+          }
+
+          const woke = await new Promise<'woke' | 'deadline'>((resolve) => {
+            let settled = false;
+            const timer = setTimeout(() => {
+              if (settled) return;
+              settled = true;
+              wakeBackgroundWaiter = null;
+              resolve('deadline');
+            }, remainingMs);
+            wakeBackgroundWaiter = () => {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timer);
+              wakeBackgroundWaiter = null;
+              resolve('woke');
+            };
+          });
+          if (woke === 'deadline') {
+            const stillOutstanding = backgroundWork.getOutstanding();
+            cancelBackgroundWork();
+            return reportBackgroundFailure('background_work_timeout', stillOutstanding);
+          }
+        }
+      }
       if (config.json) {
         stdout.write(JSON.stringify({ type: 'completed', finalText: result.finalText }) + '\n');
       } else {
@@ -256,6 +436,9 @@ export async function runWithSession(session: ConversationSessionLike, config: N
     }
     return 1;
   } catch (error) {
+    if (receivedSignal && backgroundWork) {
+      return reportBackgroundFailure('background_work_interrupted', backgroundWork.getOutstanding());
+    }
     const message = error instanceof Error ? error.message : String(error);
     if (config.json) {
       stdout.write(JSON.stringify({ type: 'error', error: message }) + '\n');
@@ -264,6 +447,11 @@ export async function runWithSession(session: ConversationSessionLike, config: N
     }
     return 1;
   } finally {
+    if (backgroundWork) {
+      backgroundWork.notifications.setObserver?.(null);
+      process.removeListener('SIGINT', onSigint);
+      process.removeListener('SIGTERM', onSigterm);
+    }
     if (typeof session.setEventSink === 'function') {
       session.setEventSink(null);
     }
@@ -300,6 +488,21 @@ export async function runNonInteractive(
     ) {
       return 'Error: Background shell execution is unavailable in non-interactive mode.';
     }
+    // run_subagent expresses the supported background capability through its
+    // execution parameter. It is deliberately allowed here; runWithSession
+    // owns the wait/notification lifecycle instead of rejecting the launch.
+    if (name === 'run_subagent') {
+      const execution =
+        params !== null && typeof params === 'object' && !Array.isArray(params)
+          ? (params as { execution?: unknown }).execution
+          : undefined;
+      if (execution === 'background') return null;
+      // Foreground is also governed by the tool schema/capability; neither
+      // parameterized execution mode is rejected by this lifecycle guard.
+      return null;
+    }
+    // This is the legacy standalone async tool name, not the parameterized
+    // run_subagent capability above, and remains unavailable headlessly.
     if (name === 'run_subagent_async') {
       return 'Error: Asynchronous subagent execution is unavailable in non-interactive mode. Use synchronous run_subagent instead.';
     }
@@ -344,6 +547,30 @@ export async function runNonInteractive(
       ...config,
       agentClient: clientHandle.agentClient,
       sessionContextService,
+      abort: () => clientHandle.agentClient.abort(),
+      backgroundWork: {
+        notifications: createdRuntime.runtime.backgroundSubagentNotifications,
+        getOutstanding: () =>
+          createdRuntime.runtime.backgroundTaskControl
+            .listDetails()
+            .filter((details) => details.status === 'running' || details.status === 'cancelling')
+            .map((details) =>
+              details.kind === 'subagent'
+                ? {
+                    id: details.id,
+                    kind: details.kind,
+                    status: details.status,
+                    ...(details.name === undefined ? {} : { name: details.name }),
+                    role: details.role,
+                    task: details.task,
+                  }
+                : { id: details.id, kind: details.kind, status: details.status },
+            ),
+        cancel: () => {
+          clientHandle.agentClient.cancelBackgroundRuns?.();
+          clientHandle.agentClient.cancelBackgroundShellJobs?.();
+        },
+      },
     });
   } catch (error) {
     fatal = true;

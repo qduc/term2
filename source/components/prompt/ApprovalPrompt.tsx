@@ -8,6 +8,7 @@ import {
 } from '../../contracts/conversation.js';
 import { resolveSessionReadFolder } from '../../services/approval/session-read-grant-target.js';
 import { generateDiff } from '../../utils/output/diff.js';
+import { asDisplayArray } from '../../utils/tool-args-display.js';
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_ASK_USER, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
 import { ASK_USER_CUSTOM_ANSWER_LABEL, ASK_USER_SUBMIT_LABEL } from '../../tools/agent/ask-user-constants.js';
 import DiffView from '../layout/DiffView.js';
@@ -191,11 +192,11 @@ const SearchReplacePrompt: FC<{ args: SearchReplaceArgs }> = ({ args }) => {
         </Text>
         <Text> {args.path}</Text>
       </Box>
-      {(args.replacements || []).map((rep, idx) => {
-        const diff = generateDiff(rep.search_content, rep.replace_content);
+      {asDisplayArray<SearchReplaceArgs['replacements'][number]>(args.replacements).map((rep, idx, all) => {
+        const diff = generateDiff(rep?.search_content, rep?.replace_content);
         return (
           <Box key={idx} flexDirection="column" marginTop={idx > 0 ? 1 : 0}>
-            {args.replacements.length > 1 && <Text color={COLOR_TEXT_SUBTLE}>Replacement #{idx + 1}:</Text>}
+            {all.length > 1 && <Text color={COLOR_TEXT_SUBTLE}>Replacement #{idx + 1}:</Text>}
             <DiffView diff={diff} />
           </Box>
         );

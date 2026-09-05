@@ -1,6 +1,7 @@
 import React, { FC, useEffect, useMemo, useState } from 'react';
 import { Box, Text } from 'ink';
 import { generateDiff } from '../../utils/output/diff.js';
+import { asDisplayArray, asDisplayString } from '../../utils/tool-args-display.js';
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
 import type { CommandMessage as CommandMessageData } from '../../tools/types.js';
 import {
@@ -148,8 +149,8 @@ const CommandMessage: FC<Props> = ({
   const diff = useMemo(() => {
     if (toolName !== TOOL_NAME_SEARCH_REPLACE || !toolArgs) return '';
     if (toolArgs.replacements) {
-      return (toolArgs.replacements || [])
-        .map((rep: any) => generateDiff(rep.search_content, rep.replace_content))
+      return asDisplayArray<any>(toolArgs.replacements)
+        .map((rep: any) => generateDiff(rep?.search_content, rep?.replace_content))
         .join('\n');
     }
     return generateDiff(toolArgs.search_content, toolArgs.replace_content);
@@ -158,7 +159,7 @@ const CommandMessage: FC<Props> = ({
   const createFileDiffLines = useMemo(
     () =>
       toolName === TOOL_NAME_CREATE_FILE && toolArgs
-        ? (toolArgs.content ?? '')
+        ? asDisplayString(toolArgs.content)
             .split('\n')
             .map((line: string) => `+${line}`)
             .join('\n')

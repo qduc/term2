@@ -25,13 +25,13 @@ export function createSessionBrowserToolDefinitions(browser: SessionBrowser): To
     ),
     definition(
       'session_search',
-      'Search prior locally persisted session transcripts for the current project. `total` is the number of ranked matches before `limit` is applied; `omitted` counts matches dropped only because the output budget could not fit them. Matches from the currently active session sort last, because searching indexes tool outputs and the query echoes in the live transcript.',
+      "Search prior locally persisted session transcripts for the current project. `total` is the number of ranked matches before `limit` is applied; `omitted` counts matches dropped only because the output budget could not fit them. Matches from the currently active session sort last, because searching indexes tool outputs and the query echoes in the live transcript. Each match's `updatedAt` is the session's last-write timestamp, not per-message time.",
       z.object({ query: z.string().refine((value) => /\S/.test(value)), limit, maxChars }).strict(),
       (params) => browser.search(params),
     ),
     definition(
       'session_read',
-      'Read a prior local session transcript progressively by cursor. Use `id: "previous"` for the persisted rollover predecessor, or an exact/unambiguous UUID prefix. Ambiguous prefixes return candidates and are never guessed. Use `from: "end"` on an initial read to start at the final projected record; omit `cursor` with this option, then use the returned cursor for any continuation. `total` is the projected record count for the whole session; `omitted` counts records not begun in this page (a partially emitted chunk still counts as begun), so `total - omitted` records were started here.',
+      'Read a prior local session transcript progressively by cursor. Use `id: "previous"` for the persisted rollover predecessor, or an exact/unambiguous UUID prefix. Ambiguous prefixes return candidates and are never guessed. On an initial read, `from: "end"` starts at the last `limit` projected records in chronological order (`limit` selects the tail region; without `from: "end"` the read starts at the first record); omit `cursor` with this option, then continue with the returned cursor and no `from`. `maxChars` may require continuation pages; `nextCursor` is returned only while forward content remains, so its absence after a tail read says nothing about earlier records. `total` is the projected record count for the whole session; `omitted` counts whole-session records not represented on this page for any reason — before the tail anchor, beyond `limit`, or awaiting continuation — unlike `session_list`/`session_search`, whose `omitted` counts only budget-dropped entries; a partial or resumed chunk still represents its record, so `total - omitted` records are represented here.',
       z
         .object({ id, from: z.literal('end').optional(), cursor: z.string().optional(), limit, maxChars })
         .strict()

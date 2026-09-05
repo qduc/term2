@@ -1,6 +1,6 @@
 # Bug: `session_read` cannot read the tail of a transcript, and its `from: "end"` contract promises a cursor it never returns
 
-**Status:** open (2026-09-05).
+**Status:** partially resolved (2026-09-05). The tail/page contract findings are fixed by the M2a repair in commit `569f9e3b` (see Resolution below); the rollover successor/brief delivery finding remains open.
 **Severity:** medium — no data loss, but it breaks the tool's primary purpose
 ("continue from previous session") for long transcripts, and the description
 actively instructs the model down a path that dead-ends. Workarounds exist but
@@ -10,6 +10,19 @@ cost a full forward walk or a fallback to `session_search` + durable files.
 (`session_read` description).
 **Observed:** 2026-09-05, resuming session `64982f3b` (290 records). All
 probes below were run against the live tool in this session, not inferred.
+
+## Resolution (2026-09-05, M2a)
+
+Fixed for the canonical browser (`SessionBrowser.read` in `source/services/conversation/session-browser.ts`, branch `sqi-m2a`, commit `569f9e3b`; contract in `docs/plans/session-query-index.md`, "Tail and page contract repair"):
+
+- **Tail anchor (symptom 1 and the `tail`-shape finding's core need).** An initial `from: "end"` read now starts at projected ordinal `max(0, total - effectiveLimit)` and returns that region chronologically; the existing forward cursor pages through the region (chunk continuations included) and disappears once it is consumed. Last-N access needs no new parameter. The report's "no cursor is ever returned" claim was too broad — an oversized final record already returned chunk cursors — but the final-record anchor still made every other tail record unreachable, which was the real defect.
+- **`omitted` accounting (symptom 3).** `read` now reports page-local counts: `omitted = total - items.length`, so `total - omitted` equals records represented on the page on every page shape, including partial and resumed chunks. The old calculation measured cumulative remaining records and disagreed with the description on continuation pages.
+- **Description alignment.** The `session_read` description, its test pins, and the `session-browser.md` prompt fragment now state the region anchor, `maxChars`-driven continuations, cursor-only-while-forward-content-remains, and that read `omitted` covers records absent for any reason (before the anchor, beyond `limit`, awaiting continuation) — unlike `session_list`/`session_search`, where `omitted` still counts only budget-dropped entries.
+
+Still tracked in this report, not addressed by the tail repair:
+
+- **Rollover successor/brief delivery** remains unobservable. The plan scopes brief persistence, projection, and successor delivery outside the index and tail contract, so a full tail read still proves nothing about a missing successor; this finding stays open here.
+- **Per-message time filtering** (the session-level `updatedAt` finding) is out of the current API scope; M2a only documented the session-level meaning in the `session_search` description.
 
 ## Symptom
 

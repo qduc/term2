@@ -4,6 +4,7 @@ import type { SessionBrowserContext } from '../session-browser.js';
 import {
   SessionIndexDatabase,
   type IndexedListResult,
+  type IndexedReadSessionResult,
   type IndexedResolveResult,
   type ReconcileResult,
 } from './session-index-database.js';
@@ -186,6 +187,31 @@ export class SessionIndexService {
         return this.#directDb.getRevision(sessionId);
       }
       return await this.#workerClient!.getRevision(sessionId);
+    } catch {
+      return null;
+    }
+  }
+
+  async readSession(sessionId: string, context: SessionBrowserContext): Promise<IndexedReadSessionResult | null> {
+    const ready = await this.ensureReady();
+    if (!ready) return null;
+
+    const reconcileResult = await this.reconcile();
+    if (!reconcileResult.ok || !reconcileResult.stable) {
+      return null; // Fall back to canonical on mid-replay change or error
+    }
+
+    try {
+      if (this.#backend === 'direct' && this.#directDb) {
+        return this.#directDb.readSession(sessionId, {
+          projectPath: context.projectPath,
+          sshHost: context.sshHost,
+        });
+      }
+      return await this.#workerClient!.readSession(sessionId, {
+        projectPath: context.projectPath,
+        sshHost: context.sshHost,
+      });
     } catch {
       return null;
     }

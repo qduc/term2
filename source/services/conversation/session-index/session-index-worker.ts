@@ -12,6 +12,11 @@ export type WorkerRequestPayload =
       options: { projectPath: string; sshHost?: string; currentSessionId?: string };
     }
   | { type: 'get_revision'; sessionId: string }
+  | {
+      type: 'read_session';
+      sessionId: string;
+      options: { projectPath: string; sshHost?: string };
+    }
   | { type: 'close' };
 
 export type WorkerRequest = { id: number } & WorkerRequestPayload;
@@ -68,6 +73,13 @@ export function runSessionIndexWorker(): void {
         case 'get_revision': {
           if (!db) throw new Error('Database not initialized');
           const result = db.getRevision(msg.sessionId);
+          parentPort!.postMessage({ id: msg.id, ok: true, result } satisfies WorkerResponse);
+          break;
+        }
+
+        case 'read_session': {
+          if (!db) throw new Error('Database not initialized');
+          const result = db.readSession(msg.sessionId, msg.options);
           parentPort!.postMessage({ id: msg.id, ok: true, result } satisfies WorkerResponse);
           break;
         }

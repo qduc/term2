@@ -51,6 +51,38 @@ function writeSession(
   void writer.close();
 }
 
+function writeComplexSession(id: string, projectPath: string, rolloverFrom?: string) {
+  const writer = createConversationLogWriter({ sessionId: id, dir, logger });
+  writer.init({
+    id,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    projectPath,
+    model: 'test-model',
+    provider: 'test-provider',
+    rolloverFrom,
+  });
+  writer.append({ type: 'user_message', message: { id: `${id}-u1`, sender: 'user', text: 'turn 1' } });
+  writer.append({
+    type: 'assistant_turn',
+    turn: { items: [{ type: 'assistant_text', text: 'assistant reply 1' }] },
+    state: { previousResponseId: null },
+  });
+  const oversized = `Start of large message. 😀🚀 ${'chunk_payload_data '.repeat(120)} End of large message.`;
+  writer.append({
+    type: 'assistant_turn',
+    turn: { items: [{ type: 'assistant_text', text: oversized }] },
+    state: { previousResponseId: null },
+  });
+  writer.append({ type: 'user_message', message: { id: `${id}-u2`, sender: 'user', text: 'turn 2' } });
+  writer.append({
+    type: 'assistant_turn',
+    turn: { items: [{ type: 'assistant_text', text: 'final reply' }] },
+    state: { previousResponseId: null },
+  });
+  void writer.close();
+  return { oversized };
+}
+
 describe('SessionBrowser Indexed Backend', () => {
   describe.each(['direct', 'worker'] as const)('acceptance parity across backend (%s)', (backend) => {
     it('achieves exact result parity with canonical browser for list and read', async () => {
@@ -208,14 +240,7 @@ describe('SessionBrowser Indexed Backend', () => {
       expect((notFoundRes as any).error.code).toBe('not_found');
       expect(jsonlReadCount).toBe(0);
 
-      // 4. Initial read of id1: loads id1 ONLY (1 jsonl read)
-      jsonlReadCount = 0;
-      const initialRead = (await indexedBrowser.read({ id: id1, limit: 1 })) as any;
-      expect(initialRead.session.id).toBe(id1);
-      expect(initialRead.nextCursor).toBeDefined();
-      expect(jsonlReadCount).toBe(1);
-
-      // 5. Continuation read with cursor: 0 jsonl reads, 0 rehashes (reusing cached snapshot and revision)
+      // 4. Initial read of id1: served directly from messages table (0 jsonl reads, 0 rehashes)
       const realCreateHash = crypto.createHash;
       let sha256Calls = 0;
       const hashSpy = vi.spyOn(crypto, 'createHash').mockImplementation((algo: string, options?: any) => {
@@ -223,6 +248,15 @@ describe('SessionBrowser Indexed Backend', () => {
         return realCreateHash(algo, options);
       });
 
+      jsonlReadCount = 0;
+      sha256Calls = 0;
+      const initialRead = (await indexedBrowser.read({ id: id1, limit: 1 })) as any;
+      expect(initialRead.session.id).toBe(id1);
+      expect(initialRead.nextCursor).toBeDefined();
+      expect(jsonlReadCount).toBe(0);
+      expect(sha256Calls).toBe(0);
+
+      // 5. Continuation read with cursor: 0 jsonl reads, 0 rehashes (reusing cached snapshot and revision)
       jsonlReadCount = 0;
       sha256Calls = 0;
       const contRead = (await indexedBrowser.read({
@@ -356,6 +390,287 @@ describe('SessionBrowser Indexed Backend', () => {
     } finally {
       await browser.close();
       await indexService.close();
+    }
+  });
+
+  describe.each(['direct', 'worker'] as const)(
+    'complete forward and tail page walks matching canonical (%s backend)',
+    (backend) => {
+      it('reproduces complete forward page walk with chunked oversized records', async () => {
+        const id = `session-complex-forward-${backend}`;
+        const { oversized } = writeComplexSession(id, '/project');
+
+        const getContext = (): SessionBrowserContext => ({ projectPath: '/project' });
+        const indexService = new SessionIndexService({ conversationsDir: dir, dbPath, backend });
+        const canonicalBrowser = new SessionBrowser(getContext, { backend: 'canonical' });
+        const indexedBrowser = new SessionBrowser(getContext, { backend: 'indexed', indexService });
+
+        try {
+          // Walk canonical
+          const canonicalPages: any[] = [];
+          let curCanonical: any = canonicalBrowser.read({ id, maxChars: 800, limit: 2 });
+          canonicalPages.push(curCanonical);
+          while (curCanonical.nextCursor) {
+            curCanonical = canonicalBrowser.read({ id, cursor: curCanonical.nextCursor, maxChars: 800, limit: 2 });
+            canonicalPages.push(curCanonical);
+          }
+
+          // Walk indexed
+          const indexedPages: any[] = [];
+          let curIndexed: any = await indexedBrowser.read({ id, maxChars: 800, limit: 2 });
+          indexedPages.push(curIndexed);
+          while (curIndexed.nextCursor) {
+            curIndexed = await indexedBrowser.read({ id, cursor: curIndexed.nextCursor, maxChars: 800, limit: 2 });
+            indexedPages.push(curIndexed);
+          }
+
+          // Both walks must produce the same number of pages (> 1 due to chunking)
+          expect(indexedPages.length).toBeGreaterThan(1);
+          expect(indexedPages.length).toBe(canonicalPages.length);
+
+          // Page-by-page comparison
+          for (let i = 0; i < canonicalPages.length; i++) {
+            const cPage = canonicalPages[i];
+            const iPage = indexedPages[i];
+
+            expect(iPage.scope).toBe(cPage.scope);
+            expect(iPage.total).toBe(cPage.total);
+            expect(iPage.omitted).toBe(cPage.omitted);
+            expect(iPage.skippedMessageCount).toBe(cPage.skippedMessageCount);
+            expect(Boolean(iPage.nextCursor)).toBe(Boolean(cPage.nextCursor));
+            expect(iPage.items).toEqual(cPage.items);
+            // Invariant: total - omitted === items.length
+            expect(iPage.total - iPage.omitted).toBe(iPage.items.length);
+          }
+
+          // Reconstructed chunked text must match original
+          const chunkedItems = indexedPages.flatMap((p) => p.items).filter((item: any) => item.index === 2);
+          const reconstructed = chunkedItems.map((item: any) => item.text).join('');
+          expect(reconstructed).toBe(oversized);
+        } finally {
+          await indexedBrowser.close();
+          await canonicalBrowser.close();
+          await indexService.close();
+        }
+      });
+
+      it('reproduces complete tail page walk with from: "end" and continuation', async () => {
+        const id = `session-complex-tail-${backend}`;
+        writeComplexSession(id, '/project');
+
+        const getContext = (): SessionBrowserContext => ({ projectPath: '/project' });
+        const indexService = new SessionIndexService({ conversationsDir: dir, dbPath, backend });
+        const canonicalBrowser = new SessionBrowser(getContext, { backend: 'canonical' });
+        const indexedBrowser = new SessionBrowser(getContext, { backend: 'indexed', indexService });
+
+        try {
+          // Walk canonical tail
+          const canonicalPages: any[] = [];
+          let curCanonical: any = canonicalBrowser.read({ id, from: 'end', limit: 4, maxChars: 600 });
+          canonicalPages.push(curCanonical);
+          while (curCanonical.nextCursor) {
+            curCanonical = canonicalBrowser.read({ id, cursor: curCanonical.nextCursor, limit: 4, maxChars: 600 });
+            canonicalPages.push(curCanonical);
+          }
+
+          // Walk indexed tail
+          const indexedPages: any[] = [];
+          let curIndexed: any = await indexedBrowser.read({ id, from: 'end', limit: 4, maxChars: 600 });
+          indexedPages.push(curIndexed);
+          while (curIndexed.nextCursor) {
+            curIndexed = await indexedBrowser.read({ id, cursor: curIndexed.nextCursor, limit: 4, maxChars: 600 });
+            indexedPages.push(curIndexed);
+          }
+
+          expect(indexedPages.length).toBeGreaterThan(1);
+          expect(indexedPages.length).toBe(canonicalPages.length);
+
+          for (let i = 0; i < canonicalPages.length; i++) {
+            const cPage = canonicalPages[i];
+            const iPage = indexedPages[i];
+
+            expect(iPage.scope).toBe(cPage.scope);
+            expect(iPage.total).toBe(cPage.total);
+            expect(iPage.omitted).toBe(cPage.omitted);
+            expect(iPage.skippedMessageCount).toBe(cPage.skippedMessageCount);
+            expect(Boolean(iPage.nextCursor)).toBe(Boolean(cPage.nextCursor));
+            expect(iPage.items).toEqual(cPage.items);
+            expect(iPage.total - iPage.omitted).toBe(iPage.items.length);
+          }
+        } finally {
+          await indexedBrowser.close();
+          await canonicalBrowser.close();
+          await indexService.close();
+        }
+      });
+    },
+  );
+
+  describe.each(['direct', 'worker'] as const)(
+    'cursor outcomes on source, scope, predecessor, revision, and position changes (%s backend)',
+    (backend) => {
+      it('returns stale_cursor when source is modified on disk', async () => {
+        const id = `session-cursor-stale-source-${backend}`;
+        writeSession(id, '/project', undefined, 'initial message');
+
+        const getContext = (): SessionBrowserContext => ({ projectPath: '/project' });
+        const indexService = new SessionIndexService({ conversationsDir: dir, dbPath, backend });
+        const browser = new SessionBrowser(getContext, { backend: 'indexed', indexService });
+
+        try {
+          const initial = (await browser.read({ id, limit: 1 })) as any;
+          expect(initial.nextCursor).toBeDefined();
+
+          // Append to source file to change source version
+          const userLine = JSON.stringify({
+            v: 3,
+            seq: 4,
+            ts: '2026-01-01T00:05:00.000Z',
+            event: { type: 'user_message', message: { id: `${id}-u2`, sender: 'user', text: 'append' } },
+          });
+          fs.appendFileSync(path.join(dir, `${id}.jsonl`), `${userLine}\n`);
+
+          // Continuation read must return stale_cursor
+          const cont = (await browser.read({ id, cursor: initial.nextCursor })) as any;
+          expect(cont.error?.code).toBe('stale_cursor');
+        } finally {
+          await browser.close();
+          await indexService.close();
+        }
+      });
+
+      it('returns not_found when scope is changed between initial read and continuation', async () => {
+        const id = `session-cursor-scope-change-${backend}`;
+        writeSession(id, '/project-alpha', undefined, 'message alpha');
+
+        let currentProject = '/project-alpha';
+        const getContext = (): SessionBrowserContext => ({ projectPath: currentProject });
+        const indexService = new SessionIndexService({ conversationsDir: dir, dbPath, backend });
+        const browser = new SessionBrowser(getContext, { backend: 'indexed', indexService });
+
+        try {
+          const initial = (await browser.read({ id, limit: 1 })) as any;
+          expect(initial.nextCursor).toBeDefined();
+
+          // Switch context to project-beta
+          currentProject = '/project-beta';
+
+          const cont = (await browser.read({ id, cursor: initial.nextCursor })) as any;
+          expect(cont.error?.code).toBe('not_found');
+        } finally {
+          await browser.close();
+          await indexService.close();
+        }
+      });
+
+      it('returns stale_cursor when previous dependency changes', async () => {
+        const id1 = `session-cursor-pred-1-${backend}`;
+        const id2 = `session-cursor-pred-2-${backend}`;
+        writeSession(id1, '/project', undefined, 'first');
+        writeSession(id2, '/project', undefined, 'second', id1);
+
+        const getContext = (): SessionBrowserContext => ({ projectPath: '/project', currentSessionId: id2 });
+        const indexService = new SessionIndexService({ conversationsDir: dir, dbPath, backend });
+        const browser = new SessionBrowser(getContext, { backend: 'indexed', indexService });
+
+        try {
+          const initial = (await browser.read({ id: 'previous', limit: 1 })) as any;
+          expect(initial.nextCursor).toBeDefined();
+          expect(initial.session.id).toBe(id1);
+
+          // Mutate the predecessor source on disk
+          const appendLine = JSON.stringify({
+            v: 3,
+            seq: 4,
+            ts: '2026-01-01T00:05:00.000Z',
+            event: { type: 'user_message', message: { id: `${id1}-new`, sender: 'user', text: 'new msg' } },
+          });
+          fs.appendFileSync(path.join(dir, `${id1}.jsonl`), `${appendLine}\n`);
+
+          const cont = (await browser.read({ id: 'previous', cursor: initial.nextCursor })) as any;
+          expect(cont.error?.code).toBe('stale_cursor');
+        } finally {
+          await browser.close();
+          await indexService.close();
+        }
+      });
+
+      it('returns invalid_cursor for unknown handle or invalid from: "end" with cursor', async () => {
+        const id = `session-cursor-invalid-${backend}`;
+        writeSession(id, '/project', undefined, 'msg');
+
+        const getContext = (): SessionBrowserContext => ({ projectPath: '/project' });
+        const indexService = new SessionIndexService({ conversationsDir: dir, dbPath, backend });
+        const browser = new SessionBrowser(getContext, { backend: 'indexed', indexService });
+
+        try {
+          const unknownCursor = (await browser.read({ id, cursor: 'c999999' })) as any;
+          expect(unknownCursor.error?.code).toBe('invalid_cursor');
+
+          const fromEndWithCursor = (await browser.read({ id, from: 'end', cursor: 'c0' })) as any;
+          expect(fromEndWithCursor.error?.code).toBe('invalid_cursor');
+        } finally {
+          await browser.close();
+          await indexService.close();
+        }
+      });
+    },
+  );
+
+  it('replays zero logs and zero hashes on initial read and continuations after restart with existing index', async () => {
+    const id = 'session-restart-zero-replay';
+    writeSession(id, '/project', undefined, 'session before restart');
+
+    // Build the index initially
+    const initService = new SessionIndexService({ conversationsDir: dir, dbPath, backend: 'direct' });
+    const res = await initService.reconcile();
+    expect(res.ok).toBe(true);
+    expect(res.replayedCount).toBe(1);
+    await initService.close();
+
+    // Now simulate restart: create completely fresh SessionIndexService and SessionBrowser instances
+    const restartService = new SessionIndexService({ conversationsDir: dir, dbPath, backend: 'direct' });
+    const getContext = (): SessionBrowserContext => ({ projectPath: '/project' });
+    const restartBrowser = new SessionBrowser(getContext, { backend: 'indexed', indexService: restartService });
+
+    const realReadFileSync = fs.readFileSync;
+    let jsonlReadCount = 0;
+    const readSpy = vi.spyOn(fs, 'readFileSync').mockImplementation((filePath: any, options: any) => {
+      if (typeof filePath === 'string' && filePath.endsWith('.jsonl')) {
+        jsonlReadCount++;
+      }
+      return realReadFileSync(filePath, options);
+    });
+
+    const realCreateHash = crypto.createHash;
+    let sha256Calls = 0;
+    const hashSpy = vi.spyOn(crypto, 'createHash').mockImplementation((algo: string, options?: any) => {
+      if (algo === 'sha256') sha256Calls++;
+      return realCreateHash(algo, options);
+    });
+
+    try {
+      // Initial read after restart: must NOT read any .jsonl files and must NOT call sha256!
+      jsonlReadCount = 0;
+      sha256Calls = 0;
+      const initial = (await restartBrowser.read({ id, limit: 1 })) as any;
+      expect(initial.session.id).toBe(id);
+      expect(initial.nextCursor).toBeDefined();
+      expect(jsonlReadCount).toBe(0);
+      expect(sha256Calls).toBe(0);
+
+      // Continuation read: must also NOT read .jsonl and NOT call sha256!
+      jsonlReadCount = 0;
+      sha256Calls = 0;
+      const cont = (await restartBrowser.read({ id, cursor: initial.nextCursor })) as any;
+      expect(cont.session.id).toBe(id);
+      expect(jsonlReadCount).toBe(0);
+      expect(sha256Calls).toBe(0);
+    } finally {
+      readSpy.mockRestore();
+      hashSpy.mockRestore();
+      await restartBrowser.close();
+      await restartService.close();
     }
   });
 });

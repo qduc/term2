@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 
-export const SCHEMA_VERSION = '2';
+export const SCHEMA_VERSION = '3';
 export const PROJECTION_VERSION = '1';
 
 export type ProbeCapabilityResult = { ok: true } | { ok: false; reason: string };
@@ -31,9 +31,10 @@ export function probeFts5TrigramCapability(db: Database.Database): ProbeCapabili
 }
 
 /**
- * Creates schema v1 tables and indexes.
+ * Creates schema tables, virtual tables, triggers, and indexes.
  * Foreign keys with CASCADE are used to cleanly delete sessions and messages
- * when an inventory entry is removed.
+ * when an inventory entry is removed. Triggers keep messages_fts atomically
+ * in sync with messages table.
  */
 export function createSchema(db: Database.Database): void {
   db.exec(`
@@ -92,6 +93,21 @@ export function createSchema(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_messages_session_ordinal
       ON messages(session_id, projected_ordinal ASC);
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+      normalized_text,
+      content='messages',
+      content_rowid='id',
+      tokenize='trigram'
+    );
+
+    CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
+      INSERT INTO messages_fts(rowid, normalized_text) VALUES (new.id, new.normalized_text);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
+      INSERT INTO messages_fts(messages_fts, rowid, normalized_text) VALUES('delete', old.id, old.normalized_text);
+    END;
   `);
 }
 
@@ -143,6 +159,9 @@ export function writeMetadata(db: Database.Database, sourceDirectory: string): v
  */
 export function dropSchema(db: Database.Database): void {
   db.exec(`
+    DROP TRIGGER IF EXISTS messages_ai;
+    DROP TRIGGER IF EXISTS messages_ad;
+    DROP TABLE IF EXISTS messages_fts;
     DROP TABLE IF EXISTS messages;
     DROP TABLE IF EXISTS sessions;
     DROP TABLE IF EXISTS source_inventory;

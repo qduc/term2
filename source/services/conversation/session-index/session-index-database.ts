@@ -25,8 +25,33 @@ import {
   sessionUpdatedAt,
   type Kind,
 } from '../session-browser.js';
+import { SNIPPET_CHARS, scoreText, termsFor } from '../session-search-helpers.js';
+import { matchCenteredSnippet } from '../../../utils/output/text-snippet.js';
 
 const SAFE_SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+
+export type IndexedSearchMatch = {
+  sessionId: string;
+  shortRef: string;
+  kind: Kind;
+  messageIndex: number;
+  snippet: { text: string; truncated: boolean };
+  updatedAt: string;
+  score: number;
+};
+
+export type IndexedSearchResult = {
+  matches: IndexedSearchMatch[];
+  scope: string;
+  unavailable: number;
+  skippedMessageCount: number;
+};
+
+export type SessionIndexSearchOptions = {
+  query: string;
+  projectPath: string;
+  sshHost?: string;
+};
 
 export type ReconcileResult = {
   ok: boolean;
@@ -702,6 +727,252 @@ export class SessionIndexDatabase {
         records,
       },
     };
+  }
+
+  search(options: SessionIndexSearchOptions): IndexedSearchResult {
+    this.initialize();
+    const normalizedProject = normalizeProjectPath(options.projectPath);
+    const normalizedHost = options.sshHost ? normalizeSshHost(options.sshHost) : null;
+
+    // 1. Directory-wide unreadable files
+    const unreadableRow = this.#db
+      .prepare(
+        `
+        SELECT COUNT(*) as count
+        FROM source_inventory
+        WHERE classification = 'unreadable'
+      `,
+      )
+      .get() as { count: number } | undefined;
+
+    // 2. Invalid sessions scoped to current project/SSH context
+    const invalidInScopeRow = this.#db
+      .prepare(
+        `
+        SELECT COUNT(*) as count
+        FROM source_inventory
+        WHERE classification = 'invalid'
+          AND (project_path IS NOT NULL AND project_path = ?)
+          AND (
+            (? IS NULL AND ssh_host IS NULL)
+            OR
+            (ssh_host IS NOT NULL AND ssh_host = ?)
+          )
+      `,
+      )
+      .get(normalizedProject, normalizedHost, normalizedHost) as { count: number } | undefined;
+
+    const unavailable = (unreadableRow?.count ?? 0) + (invalidInScopeRow?.count ?? 0);
+
+    // 3. Skipped message count for all sessions in scope
+    const skippedRow = this.#db
+      .prepare(
+        `
+        SELECT COALESCE(SUM(skipped_count), 0) as total
+        FROM sessions
+        WHERE (project_path IS NOT NULL AND project_path = ?)
+          AND (
+            (? IS NULL AND ssh_host IS NULL)
+            OR
+            (ssh_host IS NOT NULL AND ssh_host = ?)
+          )
+      `,
+      )
+      .get(normalizedProject, normalizedHost, normalizedHost) as { total: number } | undefined;
+    const skippedMessageCount = skippedRow?.total ?? 0;
+
+    // 4. Session rows in scope to compute shortRefs
+    const sessionRows = this.#db
+      .prepare(
+        `
+        SELECT id
+        FROM sessions
+        WHERE (project_path IS NOT NULL AND project_path = ?)
+          AND (
+            (? IS NULL AND ssh_host IS NULL)
+            OR
+            (ssh_host IS NOT NULL AND ssh_host = ?)
+          )
+        ORDER BY updated_at DESC, id ASC
+      `,
+      )
+      .all(normalizedProject, normalizedHost, normalizedHost) as Array<{ id: string }>;
+    const shortRefs = uniqueConversationShortRefs(sessionRows);
+
+    // 5. Parse search query into terms
+    const terms = termsFor(options.query);
+    if (terms.length === 0) {
+      return {
+        matches: [],
+        scope: options.projectPath,
+        unavailable,
+        skippedMessageCount,
+      };
+    }
+
+    // 6. Check if FTS5 trigram can be used
+    const canUseFts = terms.every((t) => t.length >= 3);
+    let candidateRows: Array<{
+      session_id: string;
+      updated_at: string;
+      kind: string;
+      original_message_index: number;
+      original_text: string;
+    }> = [];
+
+    if (canUseFts) {
+      try {
+        const escapeFtsTerm = (term: string) => '"' + term.replace(/"/g, '""') + '"';
+        const ftsQuery = terms.map(escapeFtsTerm).join(' OR ');
+
+        candidateRows = this.#db
+          .prepare(
+            `
+            SELECT m.session_id, s.updated_at, m.kind, m.original_message_index, m.original_text
+            FROM messages_fts f
+            JOIN messages m ON m.id = f.rowid
+            JOIN sessions s ON s.id = m.session_id
+            WHERE messages_fts MATCH ?
+              AND (s.project_path IS NOT NULL AND s.project_path = ?)
+              AND (
+                (? IS NULL AND s.ssh_host IS NULL)
+                OR
+                (s.ssh_host IS NOT NULL AND s.ssh_host = ?)
+              )
+          `,
+          )
+          .all(ftsQuery, normalizedProject, normalizedHost, normalizedHost) as typeof candidateRows;
+      } catch {
+        candidateRows = this.#scopedTextCandidateQuery(terms, normalizedProject, normalizedHost);
+      }
+    } else {
+      candidateRows = this.#scopedTextCandidateQuery(terms, normalizedProject, normalizedHost);
+    }
+
+    // 7. Exact scoring and snippet generation on top of candidates
+    const matches: IndexedSearchMatch[] = [];
+    for (const row of candidateRows) {
+      if (!row.original_text) continue;
+      const score = scoreText(row.original_text, terms);
+      if (score > 0) {
+        matches.push({
+          sessionId: row.session_id,
+          shortRef: shortRefs.get(row.session_id) ?? row.session_id,
+          kind: row.kind as Kind,
+          messageIndex: row.original_message_index,
+          snippet: matchCenteredSnippet(row.original_text, terms, SNIPPET_CHARS),
+          updatedAt: row.updated_at,
+          score,
+        });
+      }
+    }
+
+    return {
+      matches,
+      scope: options.projectPath,
+      unavailable,
+      skippedMessageCount,
+    };
+  }
+
+  #scopedTextCandidateQuery(
+    terms: string[],
+    normalizedProject: string,
+    normalizedHost: string | null,
+  ): Array<{
+    session_id: string;
+    updated_at: string;
+    kind: string;
+    original_message_index: number;
+    original_text: string;
+  }> {
+    const instrConditions = terms.map(() => 'instr(m.normalized_text, ?) > 0').join(' OR ');
+    return this.#db
+      .prepare(
+        `
+        SELECT m.session_id, s.updated_at, m.kind, m.original_message_index, m.original_text
+        FROM messages m
+        JOIN sessions s ON s.id = m.session_id
+        WHERE (s.project_path IS NOT NULL AND s.project_path = ?)
+          AND (
+            (? IS NULL AND s.ssh_host IS NULL)
+            OR
+            (s.ssh_host IS NOT NULL AND s.ssh_host = ?)
+          )
+          AND (${instrConditions})
+      `,
+      )
+      .all(normalizedProject, normalizedHost, normalizedHost, ...terms) as Array<{
+      session_id: string;
+      updated_at: string;
+      kind: string;
+      original_message_index: number;
+      original_text: string;
+    }>;
+  }
+
+  explainQueryPlan(
+    query: string,
+    options: { projectPath: string; sshHost?: string },
+  ): { strategy: 'fts5' | 'scoped_text'; plan: Array<{ id: number; parent: number; detail: string }> } {
+    this.initialize();
+    const normalizedProject = normalizeProjectPath(options.projectPath);
+    const normalizedHost = options.sshHost ? normalizeSshHost(options.sshHost) : null;
+    const terms = termsFor(query);
+    const canUseFts = terms.length > 0 && terms.every((t) => t.length >= 3);
+
+    if (canUseFts) {
+      const escapeFtsTerm = (term: string) => '"' + term.replace(/"/g, '""') + '"';
+      const ftsQuery = terms.map(escapeFtsTerm).join(' OR ');
+      const plan = this.#db
+        .prepare(
+          `
+          EXPLAIN QUERY PLAN
+          SELECT m.session_id, s.updated_at, m.kind, m.original_message_index, m.original_text
+          FROM messages_fts f
+          JOIN messages m ON m.id = f.rowid
+          JOIN sessions s ON s.id = m.session_id
+          WHERE messages_fts MATCH ?
+            AND (s.project_path IS NOT NULL AND s.project_path = ?)
+            AND (
+              (? IS NULL AND s.ssh_host IS NULL)
+              OR
+              (s.ssh_host IS NOT NULL AND s.ssh_host = ?)
+            )
+        `,
+        )
+        .all(ftsQuery, normalizedProject, normalizedHost, normalizedHost) as Array<{
+        id: number;
+        parent: number;
+        detail: string;
+      }>;
+      return { strategy: 'fts5', plan };
+    }
+
+    const instrConditions =
+      terms.length > 0 ? terms.map(() => 'instr(m.normalized_text, ?) > 0').join(' OR ') : '1 = 0';
+    const plan = this.#db
+      .prepare(
+        `
+        EXPLAIN QUERY PLAN
+        SELECT m.session_id, s.updated_at, m.kind, m.original_message_index, m.original_text
+        FROM messages m
+        JOIN sessions s ON s.id = m.session_id
+        WHERE (s.project_path IS NOT NULL AND s.project_path = ?)
+          AND (
+            (? IS NULL AND s.ssh_host IS NULL)
+            OR
+            (s.ssh_host IS NOT NULL AND s.ssh_host = ?)
+          )
+          AND (${instrConditions})
+      `,
+      )
+      .all(normalizedProject, normalizedHost, normalizedHost, ...terms) as Array<{
+      id: number;
+      parent: number;
+      detail: string;
+    }>;
+    return { strategy: 'scoped_text', plan };
   }
 
   getRevision(sessionId: string): string | null {

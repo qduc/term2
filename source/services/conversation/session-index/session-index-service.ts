@@ -6,6 +6,7 @@ import {
   type IndexedListResult,
   type IndexedReadSessionResult,
   type IndexedResolveResult,
+  type IndexedSearchResult,
   type ReconcileResult,
 } from './session-index-database.js';
 import { SessionIndexWorkerClient } from './session-index-worker-client.js';
@@ -209,6 +210,33 @@ export class SessionIndexService {
         });
       }
       return await this.#workerClient!.readSession(sessionId, {
+        projectPath: context.projectPath,
+        sshHost: context.sshHost,
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  async search(query: string, context: SessionBrowserContext): Promise<IndexedSearchResult | null> {
+    const ready = await this.ensureReady();
+    if (!ready) return null;
+
+    const reconcileResult = await this.reconcile();
+    if (!reconcileResult.ok || !reconcileResult.stable) {
+      return null; // Fall back to canonical on mid-replay change or error
+    }
+
+    try {
+      if (this.#backend === 'direct' && this.#directDb) {
+        return this.#directDb.search({
+          query,
+          projectPath: context.projectPath,
+          sshHost: context.sshHost,
+        });
+      }
+      return await this.#workerClient!.search({
+        query,
         projectPath: context.projectPath,
         sshHost: context.sshHost,
       });

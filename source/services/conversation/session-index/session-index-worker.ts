@@ -17,6 +17,10 @@ export type WorkerRequestPayload =
       sessionId: string;
       options: { projectPath: string; sshHost?: string };
     }
+  | {
+      type: 'search';
+      options: { query: string; projectPath: string; sshHost?: string };
+    }
   | { type: 'close' };
 
 export type WorkerRequest = { id: number } & WorkerRequestPayload;
@@ -80,6 +84,13 @@ export function runSessionIndexWorker(): void {
         case 'read_session': {
           if (!db) throw new Error('Database not initialized');
           const result = db.readSession(msg.sessionId, msg.options);
+          parentPort!.postMessage({ id: msg.id, ok: true, result } satisfies WorkerResponse);
+          break;
+        }
+
+        case 'search': {
+          if (!db) throw new Error('Database not initialized');
+          const result = db.search(msg.options);
           parentPort!.postMessage({ id: msg.id, ok: true, result } satisfies WorkerResponse);
           break;
         }

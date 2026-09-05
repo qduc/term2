@@ -7,6 +7,7 @@ import type {
   IndexedListResult,
   IndexedReadSessionResult,
   IndexedResolveResult,
+  IndexedSearchResult,
   ReconcileResult,
 } from './session-index-database.js';
 import type { WorkerRequest, WorkerRequestPayload, WorkerResponse } from './session-index-worker.js';
@@ -141,6 +142,10 @@ export class SessionIndexWorkerClient {
     options: { projectPath: string; sshHost?: string },
   ): Promise<IndexedReadSessionResult> {
     return this.#send<IndexedReadSessionResult>({ type: 'read_session', sessionId, options });
+  }
+
+  async search(options: { query: string; projectPath: string; sshHost?: string }): Promise<IndexedSearchResult> {
+    return this.#send<IndexedSearchResult>({ type: 'search', options });
   }
 
   async close(): Promise<void> {

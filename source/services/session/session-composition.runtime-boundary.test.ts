@@ -3,6 +3,7 @@ import { createSessionRuntime } from './session-composition.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { createMockStream } from '../test-helpers/mock-stream.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 
 const mockLogger = {
   info: () => {},
@@ -36,6 +37,7 @@ it('createSessionRuntime omits composition internals while retaining its closed 
     sessionId: 'runtime-boundary',
     agentClient: partialClient(),
     toolOwnership: new ToolOwnershipRegistry(),
+    approvalPolicyRegistry: new ToolApprovalPolicyRegistry(),
     deps: { logger: mockLogger, sessionContextService },
   });
 

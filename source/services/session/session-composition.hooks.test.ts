@@ -3,6 +3,7 @@ import { createSessionRuntime as createProductionSessionRuntime } from './sessio
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 import type { BackgroundSubagentApprovalPauseSink } from '../subagents/foreground-subagent-lease.js';
 import { HookEventFactory } from '../hooks/hook-event-factory.js';
 import type { HookLifecyclePort } from '../hooks/hook-service.js';
@@ -12,7 +13,11 @@ import type { BackgroundShellJob } from '../shell/background-shell-registry.js';
 import { MockStream } from '../test-helpers/mock-stream.js';
 
 const createSessionRuntime = (options: Omit<Parameters<typeof createProductionSessionRuntime>[0], 'toolOwnership'>) =>
-  createProductionSessionRuntime({ ...options, toolOwnership: new ToolOwnershipRegistry() });
+  createProductionSessionRuntime({
+    ...options,
+    toolOwnership: new ToolOwnershipRegistry(),
+    approvalPolicyRegistry: new ToolApprovalPolicyRegistry(),
+  });
 
 const noop = () => {};
 

@@ -192,11 +192,12 @@ export class TestSubagentManager extends RealSubagentManager {
       toolOwnership,
       createClient:
         deps.createClient ??
-        (({ agent, provider, maxTurns, retryAttempts }: any) =>
+        (({ agent, provider, maxTurns, retryAttempts, approvalPolicyRegistry }: any) =>
           new AgentClient({
             model: agent.model,
             maxTurns,
             retryAttempts,
+            approvalPolicyRegistry,
             deps: {
               logger,
               settings: deps.settings,

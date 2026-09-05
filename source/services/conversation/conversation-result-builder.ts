@@ -34,7 +34,7 @@ import { parseToolCallArguments } from '../tool-call-arguments.js';
 import { buildPersistedAssistantTurnItems } from './conversation-turn-items.js';
 import { type GenerationToken } from '../generation-guard.js';
 import { type CommandMessage } from '../../tools/types.js';
-import { toolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
+import type { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 import { isRunBudgetInteraction } from '../agent-runtime/run-budget.js';
 import {
   isDockerHostControlShellApproval,
@@ -60,6 +60,8 @@ export interface ResultBuilderDeps {
   shellAutoApproval: ShellAutoApprovalResolver;
   logger: ILoggingService;
   sessionId: string;
+  /** Policy authority owned by the active tool graph. */
+  approvalPolicyRegistry: ToolApprovalPolicyRegistry;
   /** Handle-owned root capability; omitted only by nested compatibility callers. */
   sessionAccess?: SessionAccessState;
   /** Explicit nested/test-only legacy approval state. */
@@ -137,7 +139,15 @@ export async function buildConversationResult(
 ): Promise<BuildResultOutcome> {
   const { result, finalOutputOverride, reasoningOutputOverride, emittedCommandIds, usage, toolCallArgumentsById } =
     input;
-  const { approvalFlow, shellAutoApproval, logger, sessionId, sessionAccess, nestedCompatibility } = deps;
+  const {
+    approvalFlow,
+    shellAutoApproval,
+    logger,
+    sessionId,
+    approvalPolicyRegistry,
+    sessionAccess,
+    nestedCompatibility,
+  } = deps;
 
   const runBudgetInteraction = result.interruptions?.find(isRunBudgetInteraction);
   if (runBudgetInteraction) {
@@ -261,7 +271,7 @@ export async function buildConversationResult(
       };
     }
 
-    const registryDecision = await toolApprovalPolicyRegistry.evaluate({
+    const registryDecision = await approvalPolicyRegistry.evaluate({
       toolName,
       args: parseResult.arguments,
       context: runContext,

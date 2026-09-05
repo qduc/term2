@@ -33,6 +33,7 @@ import { AcquiredChildSlot } from '../agent-runtime/execution-budget.js';
 import type { SkillsService } from '../skills/skills-service.js';
 import type { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
 import { pinWorkerWorktree } from './worker-worktree.js';
+import { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 
 const MAX_PEEK_TEXT_LENGTH = 200;
 const STREAMING_TOOL_PROGRESS_STEP = 1_024;
@@ -191,8 +192,14 @@ export class ExecutionSubagentRunner {
     );
 
     const providerId = definition.provider;
+    // The subagent graph owns this registry: wrapped tool policies register
+    // here, and the transient client below exposes the same instance so the
+    // subagent session resolves its own graph's policies (never an empty
+    // registry, never the root graph's via the old singleton echo).
+    const approvalPolicyRegistry = new ToolApprovalPolicyRegistry();
     const tools = this.#toolFactory.buildAgentTools(toolDefinitions, {
       providerId,
+      approvalPolicyRegistry,
       onToolStart: (name) => {
         toolCounts.set(name, (toolCounts.get(name) ?? 0) + 1);
         segmentControl?.onToolStart();
@@ -235,6 +242,7 @@ export class ExecutionSubagentRunner {
       provider: providerId,
       maxTurns: definition.maxTurns,
       retryAttempts: this.#settings.get('agent.retryAttempts') ?? 2,
+      approvalPolicyRegistry,
     });
 
     const runtime = createSessionRuntime({

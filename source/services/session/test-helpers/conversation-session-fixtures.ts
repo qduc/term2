@@ -1,6 +1,7 @@
 import { MockStream } from '../../test-helpers/mock-stream.js';
 import type { ILoggingService, ISessionContextService, ISettingsService } from '../../service-interfaces.js';
 import type { ConversationAgentClient } from '../../conversation-agent-client.js';
+import { ToolApprovalPolicyRegistry } from '../../approval/tool-approval-policy-registry.js';
 
 export const mockLogger: ILoggingService = {
   info: () => {},
@@ -32,13 +33,16 @@ export const createMockSettingsService = (entries: [string, unknown][] = []): IS
   };
 };
 
-export const createMockAgentClient = (overrides: Record<string, unknown> = {}): ConversationAgentClient =>
-  ({
+export const createMockAgentClient = (overrides: Record<string, unknown> = {}): ConversationAgentClient => {
+  const approvalPolicyRegistry = new ToolApprovalPolicyRegistry();
+  return {
     startStream: async () => new MockStream([]),
     continueRunStream: async () => new MockStream([]),
     abort: () => {},
     setModel: () => {},
     addToolInterceptor: () => () => {},
     chat: async () => '',
+    getApprovalPolicyRegistry: () => approvalPolicyRegistry,
     ...overrides,
-  } as unknown as ConversationAgentClient);
+  } as unknown as ConversationAgentClient;
+};

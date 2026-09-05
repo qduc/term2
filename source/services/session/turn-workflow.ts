@@ -85,6 +85,7 @@ import type { OpenAIRootFreshTurnSelectorParityObserver } from '../openai-root-s
 import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
 import type { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
+import type { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 
 export interface TurnWorkflowDeps {
   agentClient: ConversationAgentClient;
@@ -110,6 +111,7 @@ export interface TurnWorkflowDeps {
   openAIRootFreshTurnSelectorParityObserver?: OpenAIRootFreshTurnSelectorParityObserver;
   /** Handle-owned root capability; omitted only by nested compatibility callers. */
   sessionAccess?: SessionAccessState;
+  approvalPolicyRegistry: ToolApprovalPolicyRegistry;
   batchCoordinator?: ToolApprovalBatchCoordinator;
   postExecutePending: PostExecutePendingRegistry;
   setActivePostExecuteRunId?: (runId: string | null) => void;
@@ -119,6 +121,13 @@ export interface TurnWorkflowDeps {
 }
 
 export class TurnWorkflow {
+  /**
+   * Graph registry pinned for the active turn. Re-resolved from the client at
+   * each fresh-turn boundary so post-rebuild turns follow the rebuilt graph,
+   * while in-flight turns and pending-approval continuations keep the graph
+   * that produced their interruptions and tools.
+   */
+  #activePolicyRegistry: ToolApprovalPolicyRegistry;
   readonly #batchCoordinator: ToolApprovalBatchCoordinator;
   readonly #toolCallMarkers: ToolCallMarkerStore;
   readonly #liveAttemptOwners = new WeakSet<TurnAttempt>();
@@ -144,7 +153,17 @@ export class TurnWorkflow {
    */
   #compactionFailureNotified = false;
 
+  /** Pull the client's current graph registry when it has rotated (rebuild). */
+  #syncPolicyRegistry(): void {
+    const current = this.deps.agentClient?.getApprovalPolicyRegistry?.();
+    if (current && current !== this.#activePolicyRegistry) {
+      this.#activePolicyRegistry = current;
+      this.#batchCoordinator.updatePolicyRegistry(current);
+    }
+  }
+
   constructor(private readonly deps: TurnWorkflowDeps) {
+    this.#activePolicyRegistry = deps.approvalPolicyRegistry;
     this.#toolCallMarkers = deps.toolCallMarkers ?? new ToolCallMarkerStore();
     this.#batchCoordinator =
       deps.batchCoordinator ??
@@ -155,6 +174,7 @@ export class TurnWorkflow {
         logger: deps.logger,
         sessionId: deps.sessionId,
         sessionAccess: deps.sessionAccess,
+        policyRegistry: deps.approvalPolicyRegistry,
         isCurrent: (token) => deps.generationGuard.isCurrent(token),
         hookLifecycle: deps.hookLifecycle,
         hookEvents: deps.hookEvents,
@@ -215,6 +235,10 @@ export class TurnWorkflow {
     attemptOrInput: TurnAttempt | string | UserTurn,
     options: InitialTurnRunOptions = {},
   ): AsyncGenerator<ConversationEvent, TurnOutcome, void> {
+    // Fresh-turn boundary: follow a mid-session rebuild. Continuations
+    // deliberately do not re-sync — a pending approval resolves against the
+    // graph that produced its interruption.
+    this.#syncPolicyRegistry();
     try {
       const outcome = yield* this.#executeInitialBody(attemptOrInput, options);
       // A returned outcome ends the failure episode even when the turn itself
@@ -671,6 +695,7 @@ export class TurnWorkflow {
         logger: this.deps.logger,
         sessionId: this.deps.sessionId,
         sessionAccess: this.deps.sessionAccess,
+        approvalPolicyRegistry: this.#activePolicyRegistry,
         toolCallMarkers: this.#toolCallMarkers,
       },
     );
@@ -1253,6 +1278,7 @@ export class TurnWorkflow {
         logger: this.deps.logger,
         sessionId: this.deps.sessionId,
         sessionAccess: this.deps.sessionAccess,
+        approvalPolicyRegistry: this.#activePolicyRegistry,
         toolCallMarkers: this.#toolCallMarkers,
       },
     );

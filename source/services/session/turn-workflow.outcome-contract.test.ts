@@ -5,6 +5,7 @@ import { MockStream } from '../test-helpers/mock-stream.js';
 import { TurnAttempt } from './turn-attempt.js';
 import type { RetryCounts } from '../retry/retry-contracts.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 import { createPostExecutePausePolicy } from './post-execute-pause-policy.js';
 import {
   DelegatingShellAutoApprovalResolver,
@@ -13,7 +14,12 @@ import {
 
 const createSessionRuntimeInternals = (
   options: Omit<Parameters<typeof createProductionSessionRuntimeInternals>[0], 'toolOwnership'>,
-) => createProductionSessionRuntimeInternals({ ...options, toolOwnership: new ToolOwnershipRegistry() });
+) =>
+  createProductionSessionRuntimeInternals({
+    ...options,
+    toolOwnership: new ToolOwnershipRegistry(),
+    approvalPolicyRegistry: new ToolApprovalPolicyRegistry(),
+  });
 
 const mockLogger = {
   info: () => {},

@@ -1,6 +1,7 @@
 import { afterEach, it, expect, vi } from 'vitest';
 import { ToolApprovalBatchCoordinator } from './tool-approval-batch-coordinator.js';
 import { toolApprovalPolicyRegistry } from './tool-approval-policy-registry.js';
+import { ToolApprovalPolicyRegistry } from './tool-approval-policy-registry.js';
 import { SessionAccessState } from '../session/session-access-state.js';
 import { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
 import { createMockSettingsService } from '../settings/settings-service.mock.js';
@@ -53,6 +54,7 @@ it('prompts for unsandboxed shell even when the registry would auto-approve', as
     } as any,
     logger: { getCorrelationId: () => undefined } as any,
     sessionId: 's1',
+    policyRegistry: toolApprovalPolicyRegistry,
     nestedCompatibility: makeNestedCompatibility(),
   });
 
@@ -77,6 +79,59 @@ it('prompts for unsandboxed shell even when the registry would auto-approve', as
   }
   expect(appliedPlan).toBe(false);
   toolApprovalPolicyRegistry.clear();
+});
+
+it('uses the active graph registry instead of the exported singleton', async () => {
+  const graphRegistry = new ToolApprovalPolicyRegistry();
+  graphRegistry.register({ toolName: 'read_file', needsApproval: () => false });
+  const interruption = {
+    name: 'read_file',
+    callId: 'graph-read-1',
+    arguments: { path: 'README.md' },
+    agent: { name: 'TestAgent' },
+  };
+  const pending = {
+    interruption,
+    interruptions: [interruption],
+    decisionsByCallId: new Map(),
+    promptedCallId: 'graph-read-1',
+  };
+  let appliedPlan = false;
+  const coordinator = new ToolApprovalBatchCoordinator({
+    approvalFlow: {
+      getPending: () => pending,
+      retargetPendingInterruption: () => {},
+      prepareContinuation: () => ({ pendingApprovalContext: pending }),
+    } as any,
+    planApplier: {
+      recordPendingApproval: () => {},
+      applyNextPlan: async function* () {
+        appliedPlan = true;
+        yield;
+      },
+    } as any,
+    shellAutoApproval: {
+      resolveAdvisoryForInterruption: async () => ({ approved: false }),
+      isUnsandboxedApprovalEligible: () => false,
+    } as any,
+    logger: { getCorrelationId: () => undefined } as any,
+    sessionId: 'graph-session',
+    policyRegistry: graphRegistry,
+    nestedCompatibility: makeNestedCompatibility(),
+  });
+
+  const result = await drain(
+    coordinator.stageBatch({
+      state: { currentState: { _context: {} }, cumulativeUsage: undefined, previouslyEmittedIds: new Set() } as any,
+      interruptions: [interruption],
+      policy: { decide: async () => 'prompt' } as any,
+      token: 1,
+    }),
+  );
+
+  expect(result.kind).toBe('ready');
+  expect(appliedPlan).toBe(true);
+  expect(pending.decisionsByCallId.get('graph-read-1')).toBe('approved');
 });
 
 it('does not auto-approve an explicit Docker host-control request', async () => {
@@ -114,6 +169,7 @@ it('does not auto-approve an explicit Docker host-control request', async () => 
     } as any,
     logger: { getCorrelationId: () => undefined } as any,
     sessionId: 's1',
+    policyRegistry: toolApprovalPolicyRegistry,
     nestedCompatibility: makeNestedCompatibility(),
   });
 
@@ -154,6 +210,7 @@ it('prompts for an indirect Docker denial recorded in its injected access state'
     } as any,
     logger: { getCorrelationId: () => undefined } as any,
     sessionId: 'root-session',
+    policyRegistry: toolApprovalPolicyRegistry,
     sessionAccess: access,
     nestedCompatibility: makeNestedCompatibility(),
   });
@@ -228,6 +285,7 @@ const runBatch = async (
     } as any,
     logger: { getCorrelationId: () => undefined } as any,
     sessionId: 's1',
+    policyRegistry: toolApprovalPolicyRegistry,
     sessionAccess: opts.sessionAccess,
     nestedCompatibility: makeNestedCompatibility(),
   });
@@ -325,6 +383,7 @@ it('mixed batch: sandboxed shell auto-approves while unsandboxed shell prompts',
     } as any,
     logger: { getCorrelationId: () => undefined } as any,
     sessionId: 's1',
+    policyRegistry: toolApprovalPolicyRegistry,
     nestedCompatibility: makeNestedCompatibility(),
   });
 

@@ -7,10 +7,16 @@ import { TurnItemAccumulator } from './turn-item-accumulator.js';
 import type { ILoggingService, ISessionContextService } from '../service-interfaces.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 
 const createSessionRuntimeInternals = (
   options: Omit<Parameters<typeof createProductionSessionRuntimeInternals>[0], 'toolOwnership'>,
-) => createProductionSessionRuntimeInternals({ ...options, toolOwnership: new ToolOwnershipRegistry() });
+) =>
+  createProductionSessionRuntimeInternals({
+    ...options,
+    toolOwnership: new ToolOwnershipRegistry(),
+    approvalPolicyRegistry: new ToolApprovalPolicyRegistry(),
+  });
 
 // ── Shared mocks ───────────────────────────────────────────────────────────
 

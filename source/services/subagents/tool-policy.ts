@@ -38,6 +38,7 @@ import { classifyCommand, SafetyStatus } from '../../utils/shell/command-safety/
 import { evaluateShellAutoApprovalAdvisories } from '../approval/shell-auto-approval-evaluator.js';
 import { shouldBypassToolApproval } from '../approval/shell-auto-approval-resolver.js';
 import type { ISubagentClient } from './subagent-client-types.js';
+import type { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 import { MemoryCapabilityBuilder } from '../memory/memory-capabilities.js';
 import type { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
 
@@ -1000,6 +1001,12 @@ export class SubagentToolFactory {
     toolDefinitions: ToolRegistry,
     options: {
       providerId: string;
+      /**
+       * Graph-owned policy authority for this subagent run. When supplied,
+       * wrapped tool policies register here so the subagent session resolves
+       * interruptions against its own graph instead of an empty registry.
+       */
+      approvalPolicyRegistry?: ToolApprovalPolicyRegistry;
       onToolStart?: (
         toolName: string,
         params: unknown,
@@ -1029,6 +1036,7 @@ export class SubagentToolFactory {
             : definition.parameters,
         needsApproval: wrapNeedsApproval(definition, {
           bypassApproval: () => shouldBypassToolApproval(definition.name, this.#settings.get('shell.autoApproveMode')),
+          registry: options.approvalPolicyRegistry,
         }),
         execute: async (params, context, details) => {
           options.onToolStart?.(

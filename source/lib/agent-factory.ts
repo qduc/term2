@@ -19,7 +19,7 @@ import {
   shouldUseStrictToolSchema,
 } from './tool-selection-policy.js';
 import { getModelDefaultReasoningLevel, getProviderDefaultReasoningLevel } from '../services/model-service.js';
-import { toolApprovalPolicyRegistry } from '../services/approval/tool-approval-policy-registry.js';
+import type { ToolApprovalPolicyRegistry } from '../services/approval/tool-approval-policy-registry.js';
 import { shouldBypassToolApproval } from '../services/approval/shell-auto-approval-resolver.js';
 import type { AgentRuntime } from '../services/agent-runtime/agent-runtime.js';
 import {
@@ -62,6 +62,8 @@ export interface AgentFactoryDeps {
   getAgentRuntime?: () => Pick<AgentRuntime, 'agent'> | null;
   /** Root-session-only policy capability for explicitly opted-in definitions. */
   postExecutePauseCapability?: PostExecutePauseCapability;
+  /** Policy authority owned by this tool graph. */
+  approvalPolicyRegistry: ToolApprovalPolicyRegistry;
   /** Handle-owned state for root read and Docker capabilities. */
   sessionAccess?: SessionAccessState;
   /** Root-session-owned background shell capability. */
@@ -161,7 +163,7 @@ export function buildAgentTools({
           checkInterceptors: (params) => deps.checkToolInterceptors(definition.name, params),
           toolName: definition.name,
           bypassApproval: () => shouldBypassToolApproval(definition.name, deps.settings.get('shell.autoApproveMode')),
-          registry: toolApprovalPolicyRegistry,
+          registry: deps.approvalPolicyRegistry,
         }),
         execute: async (params, _context: unknown, details: unknown) => {
           const normalizedParams = normalizeToolParameters(params, definition.parameters);
@@ -299,6 +301,14 @@ export function buildAgentTools({
         }
         return false;
       };
+      // The native declaration replaces the wrapped custom definition after
+      // the initial registration above. Re-register the final policy so the
+      // batch coordinator and run_code consult the definition that is bound.
+      deps.approvalPolicyRegistry.register({
+        toolName: nativeApplyPatch.name,
+        parameters: nativeApplyPatch.parameters,
+        needsApproval: nativeApplyPatch.needsApproval,
+      });
     }
     deps.logger.debug('Using native applyPatchTool from SDK', {
       model: resolvedModel,
@@ -440,6 +450,7 @@ export function buildAgent(
       settingsService: deps.settings,
       loggingService: deps.logger,
       executionContext: deps.executionContext,
+      approvalPolicyRegistry: deps.approvalPolicyRegistry,
       askMentor: deps.createMentor,
       runSubagent: deps.runSubagent,
       runSubagentAsync: deps.runSubagentAsync,

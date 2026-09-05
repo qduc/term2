@@ -196,6 +196,52 @@ it.sequential('rebuildAgent updates agent and model after setModel', () => {
   expect(newModel, 'model was updated').toBe('gpt-4o-mini');
 });
 
+it.sequential('rebuildAgent gives the new graph a policy registry without mutating the old graph', async () => {
+  ensureProviderRegistered();
+  const { deps } = createDeps();
+  const config = new AgentConfiguration({ model: 'mock-model' }, deps);
+  const oldRegistry = config.approvalPolicyRegistry;
+  oldRegistry.register({ toolName: 'old-graph-only', needsApproval: () => true });
+
+  config.rebuildAgent();
+
+  const newRegistry = config.approvalPolicyRegistry;
+  expect(newRegistry).not.toBe(oldRegistry);
+  await expect(oldRegistry.evaluate({ toolName: 'old-graph-only', args: {} })).resolves.toEqual({ kind: 'prompt' });
+  await expect(newRegistry.evaluate({ toolName: 'old-graph-only', args: {} })).resolves.toEqual({ kind: 'unknown' });
+
+  // The new registry must be repopulated with the rebuilt graph's own tool
+  // policies: every tool bound by the rebuilt graph evaluates to a real
+  // verdict here. A rebuild that forgot to re-register would leave them all
+  // `unknown` and still pass the assertions above.
+  const rebuiltToolNames = (config.getAgent().tools ?? []).map((tool: any) => tool.name);
+  expect(rebuiltToolNames.length, 'rebuilt graph binds tools').toBeGreaterThan(0);
+  for (const toolName of rebuiltToolNames) {
+    const verdict = await newRegistry.evaluate({ toolName, args: {} });
+    expect(verdict.kind, `rebuilt registry holds a policy for ${toolName}`).not.toBe('unknown');
+  }
+});
+
+it.sequential('transient client adopts a supplied subagent graph registry', () => {
+  ensureProviderRegistered();
+
+  const { deps } = createDeps();
+  const overrideAgent = {
+    name: 'OverrideAgent',
+    model: 'override-model',
+    clone: () => overrideAgent,
+  } as any;
+  const subagentRegistry = { size: 1 } as any;
+
+  const config = new AgentConfiguration(
+    { agentOverride: overrideAgent, model: 'override-model', approvalPolicyRegistry: subagentRegistry },
+    deps,
+  );
+
+  expect(config.approvalPolicyRegistry, 'transient client exposes the subagent graph registry').toBe(subagentRegistry);
+  expect(config.getAgent(), 'agent still returns the override').toBe(overrideAgent);
+});
+
 it.sequential('rebuildAgent is no-op for transient client', () => {
   ensureProviderRegistered();
 

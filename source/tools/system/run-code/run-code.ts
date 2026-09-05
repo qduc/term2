@@ -10,10 +10,7 @@ import type {
 } from '../../../services/sandboxed-code-host/host-types.js';
 import type { ILoggingService } from '../../../services/service-interfaces.js';
 import type { ToolInvocationContext } from '../../../services/agent-runtime/tool-invocation-context.js';
-import {
-  toolApprovalPolicyRegistry,
-  type ToolApprovalPolicyRegistry,
-} from '../../../services/approval/tool-approval-policy-registry.js';
+import type { ToolApprovalPolicyRegistry } from '../../../services/approval/tool-approval-policy-registry.js';
 import {
   isZodToolParameterSchema,
   type AnyToolDefinition,
@@ -126,7 +123,7 @@ export interface CreateRunCodeToolOptions {
    */
   getToolRegistry?: () => ToolRegistry;
   /** Policy authority used for out-of-band script calls. */
-  approvalPolicyRegistry?: ToolApprovalPolicyRegistry;
+  approvalPolicyRegistry: ToolApprovalPolicyRegistry;
   getCwd?: () => string;
 }
 
@@ -275,7 +272,7 @@ export function createRunCodeToolDefinition(
   options: CreateRunCodeToolOptions,
 ): SchemaToolDefinition<typeof runCodeParametersSchema> {
   const { loggingService, getCwd = () => process.cwd() } = options;
-  const approvalRegistry = options.approvalPolicyRegistry ?? toolApprovalPolicyRegistry;
+  const approvalRegistry = options.approvalPolicyRegistry;
 
   // Set by bindRunCodeRegistry once the policy layer has wrapped every tool.
   let boundRegistry: ToolRegistry | undefined;

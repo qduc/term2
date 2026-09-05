@@ -6,13 +6,19 @@ import { TurnAttempt } from './turn-attempt.js';
 import type { RetryCounts } from '../retry/retry-contracts.js';
 import type { AbortedApprovalContext } from '../approval/approval-state.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 import { createPostExecutePausePolicy } from './post-execute-pause-policy.js';
 import { PostExecutePauseCapability } from './post-execute-pause-capability.js';
 import { PostExecutePendingRegistry } from './post-execute-pending-registry.js';
 
 const createSessionRuntimeInternals = (
   options: Omit<Parameters<typeof createProductionSessionRuntimeInternals>[0], 'toolOwnership'>,
-) => createProductionSessionRuntimeInternals({ ...options, toolOwnership: new ToolOwnershipRegistry() });
+) =>
+  createProductionSessionRuntimeInternals({
+    ...options,
+    toolOwnership: new ToolOwnershipRegistry(),
+    approvalPolicyRegistry: new ToolApprovalPolicyRegistry(),
+  });
 
 const mockLogger = {
   info: () => {},

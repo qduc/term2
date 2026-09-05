@@ -22,6 +22,7 @@ import { createApplyPatchToolDefinition } from '../tools/file/apply-patch.js';
 import { BackgroundShellRegistry } from '../services/shell/background-shell-registry.js';
 import { getAgentDefinition } from '../agent.js';
 import { isDirectlyCallable, RUN_CODE_PROHIBITED_TOOLS } from '../tools/system/run-code/run-code.js';
+import { ToolApprovalPolicyRegistry } from '../services/approval/tool-approval-policy-registry.js';
 
 type MockLogger = ILoggingService & { debugCalls: any[][] };
 
@@ -88,6 +89,7 @@ const createDeps = (
       editor,
       providerId: overrides.providerId ?? 'openai',
       serviceTierOverrideForNextRequest: overrides.serviceTierOverrideForNextRequest ?? null,
+      approvalPolicyRegistry: overrides.approvalPolicyRegistry ?? new ToolApprovalPolicyRegistry(),
       executionContext: overrides.executionContext,
       createMentor: overrides.createMentor ?? (async () => 'mentor-response'),
       runSubagent: overrides.runSubagent ?? (async () => ({ finalText: 'subagent-response' })),
@@ -573,6 +575,102 @@ it.sequential('native apply_patch needsApproval requires approval for paths outs
     diff: '@@ -0,0 +1 @@\n+x',
   });
   expect(tempResult).toBe(false);
+});
+
+it.sequential('registers the final native apply_patch policy for nested consumers', async () => {
+  const { deps } = createDeps({ providerId: 'openai' });
+
+  buildAgent({ model: 'gpt-5.1' }, deps);
+
+  await expect(
+    deps.approvalPolicyRegistry.evaluate({
+      toolName: 'apply_patch',
+      args: { type: 'create_file', path: 'inside.txt', diff: '' },
+    }),
+  ).resolves.toEqual({ kind: 'auto_approve' });
+  await expect(
+    deps.approvalPolicyRegistry.evaluate({
+      toolName: 'apply_patch',
+      args: { type: 'delete_file', path: 'inside.txt', diff: '' },
+    }),
+  ).resolves.toEqual({ kind: 'prompt' });
+});
+
+it.sequential(
+  'native apply_patch registry evaluation prompts on the raw freeform string production passes',
+  async () => {
+    // Production registry consumers (batch coordinator, result builder) receive
+    // the run loop's raw model arguments — the freeform patch string for native
+    // apply_patch (application-run-loop.ts interrupts with event.arguments;
+    // parseToolCallArguments is JSON-only) — not the parsed object shape above.
+    // The native closure prompts on any non-object operation, so this documents
+    // the real production outcome. Plumbing parsed args to the registry is an
+    // M2+ follow-up; production arg handling is deliberately unchanged in M1.
+    const { deps } = createDeps({ providerId: 'openai' });
+
+    buildAgent({ model: 'gpt-5.1' }, deps);
+
+    await expect(
+      deps.approvalPolicyRegistry.evaluate({
+        toolName: 'apply_patch',
+        args: '*** Begin Patch\n*** Add File: inside.txt\n@@ -0,0 +1 @@\n+x\n*** End Patch',
+      }),
+    ).resolves.toEqual({ kind: 'prompt' });
+  },
+);
+
+it.sequential('keeps approval policies isolated between coexisting tool graphs', async () => {
+  // Each graph's grant state genuinely differs: the policy reads its own
+  // graph's auto-approve mode at call time, mirroring production policies.
+  const createGrantTool = (mode: string): ToolDefinition<any> => ({
+    name: 'graph_policy_test',
+    description: 'graph policy test',
+    parameters: z.object({}),
+    canRequireApproval: true,
+    needsApproval: () => mode !== 'auto',
+    execute: async () => 'ok',
+    formatCommandMessage: () => [],
+  });
+  const first = createDeps({
+    approvalPolicyRegistry: new ToolApprovalPolicyRegistry(),
+    settingsValues: { 'shell.autoApproveMode': 'auto' },
+  });
+  const second = createDeps({
+    approvalPolicyRegistry: new ToolApprovalPolicyRegistry(),
+    settingsValues: { 'shell.autoApproveMode': 'off' },
+  });
+
+  // Reverse construction order: the denying graph registers first, so a
+  // shared registry would leave the auto-approving registration last and
+  // both evaluations would agree. They must not.
+  buildAgentTools({
+    toolDefinitions: [createGrantTool('off')],
+    resolvedModel: 'gpt-4o',
+    shouldUseNativePatchTool: false,
+    deps: second.deps,
+  });
+  buildAgentTools({
+    toolDefinitions: [createGrantTool('auto')],
+    resolvedModel: 'gpt-4o',
+    shouldUseNativePatchTool: false,
+    deps: first.deps,
+  });
+
+  // Interleaved decisions after both graphs exist: alternating evaluations
+  // must each follow their own graph's grant state, not the last writer's.
+  const evaluateBoth = () =>
+    Promise.all([
+      first.deps.approvalPolicyRegistry.evaluate({ toolName: 'graph_policy_test', args: {} }),
+      second.deps.approvalPolicyRegistry.evaluate({ toolName: 'graph_policy_test', args: {} }),
+    ]);
+  for (let round = 0; round < 3; round++) {
+    const [firstVerdict, secondVerdict] = await evaluateBoth();
+    expect(firstVerdict, `round ${round}: granting graph auto-approves`).toEqual({ kind: 'auto_approve' });
+    expect(secondVerdict, `round ${round}: denying graph prompts`).toEqual({ kind: 'prompt' });
+    const [firstAgain, secondAgain] = await evaluateBoth();
+    expect(firstAgain, `round ${round}: granting graph still auto-approves`).toEqual({ kind: 'auto_approve' });
+    expect(secondAgain, `round ${round}: denying graph still prompts`).toEqual({ kind: 'prompt' });
+  }
 });
 
 it.sequential('YOLO bypasses native apply_patch approval for paths outside the workspace', async () => {

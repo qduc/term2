@@ -210,7 +210,7 @@ it.sequential(
   },
 );
 
-it.sequential('MessageList does not let a background notification bisect a streamed answer', async () => {
+it.sequential('MessageList hides a background notification until active messages settle', async () => {
   const renderer = await renderInAct(
     <MessageList
       messages={[{ id: 'answer-prefix', sender: 'bot', status: 'finalized', text: 'Answer before the boundary.' }]}
@@ -238,11 +238,29 @@ it.sequential('MessageList does not let a background notification bisect a strea
   const output = stripAnsi(renderer.lastFrame() ?? '');
   const prefixIndex = output.indexOf('Answer before the boundary.');
   const tailIndex = output.indexOf('Answer after the boundary.');
-  const notificationIndex = output.indexOf('Background shell completed: pnpm test');
-
   expect(prefixIndex >= 0).toBe(true);
   expect(tailIndex > prefixIndex).toBe(true);
-  expect(notificationIndex > tailIndex).toBe(true);
+  expect(output).not.toContain('Background shell completed: pnpm test');
+
+  await rerenderInAct(
+    renderer,
+    <MessageList
+      messages={[
+        { id: 'answer-prefix', sender: 'bot', status: 'finalized', text: 'Answer before the boundary.' },
+        {
+          id: 'background-notification',
+          sender: 'command',
+          status: 'completed',
+          command: 'background_shell_notification',
+          toolName: 'background_shell_notification',
+          toolArgs: { jobs: [{ jobId: 'job-1', command: 'pnpm test', status: 'completed' }] },
+        },
+        { id: 'answer-tail', sender: 'bot', status: 'finalized', text: 'Answer after the boundary.' },
+      ]}
+    />,
+  );
+
+  expect(countOccurrences(stripAnsi(renderer.lastFrame() ?? ''), 'Background shell completed: pnpm test')).toBe(1);
 });
 
 it.sequential(

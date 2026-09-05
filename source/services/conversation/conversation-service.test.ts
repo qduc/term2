@@ -1,4 +1,4 @@
-import { it, expect, beforeAll } from 'vitest';
+import { it, expect, beforeAll, vi } from 'vitest';
 import { ConversationService as ProductionConversationService } from './conversation-service.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { createAgentStream } from '../agent-stream.js';
@@ -8,6 +8,13 @@ import { ToolCallMarkerStore } from '../../utils/streaming/extract-command-messa
 import { registerToolFormatters } from '../../tools/command-message-formatters.js';
 import { formatShellCommandMessage } from '../../tools/system/shell.js';
 import { ToolOwnershipRegistry } from '../approval/tool-ownership-registry.js';
+import { z } from 'zod';
+import { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
+import {
+  bindRunCodeNestedApprovalOwner,
+  bindRunCodeRegistry,
+  createRunCodeToolDefinition,
+} from '../../tools/system/run-code/run-code.js';
 
 class ConversationService extends ProductionConversationService {
   constructor(
@@ -91,6 +98,81 @@ class GatedStream {
     return;
   }
 }
+
+it('does not install a nested approval owner unless explicitly enabled', async () => {
+  const setNestedApprovalOwner = vi.fn();
+  const service = new ConversationService({
+    agentClient: partialClient({ setNestedApprovalOwner }),
+    deps: { logger: mockLogger, sessionContextService },
+  });
+  expect(setNestedApprovalOwner).not.toHaveBeenCalled();
+  service.resetWithNewId('replacement');
+  expect(setNestedApprovalOwner).not.toHaveBeenCalled();
+  await service.shutdown();
+});
+
+it('settles a real scripted worker through ConversationService approval and abort', async () => {
+  let owner: import('../approval/nested-approval-owner.js').NestedApprovalOwner | undefined;
+  let activeSignal: AbortController | undefined;
+  const effects: string[] = [];
+  const protectedTool = {
+    name: 'protected',
+    description: 'protected test tool',
+    parameters: z.object({ value: z.string() }),
+    needsApproval: () => true,
+    execute: () => {
+      effects.push('effect');
+      return 'effect';
+    },
+    formatCommandMessage: () => [],
+  } as any;
+  const policyRegistry = new ToolApprovalPolicyRegistry();
+  policyRegistry.register({
+    toolName: 'protected',
+    parameters: protectedTool.parameters,
+    needsApproval: protectedTool.needsApproval,
+  });
+  const client = partialClient({
+    setNestedApprovalOwner: (next: typeof owner) => {
+      owner = next;
+    },
+    abort: () => activeSignal?.abort(),
+  });
+  const service = new ConversationService({
+    agentClient: client,
+    enableNestedApproval: true,
+    deps: { logger: mockLogger, sessionContextService },
+  });
+  const tools: any[] = [protectedTool];
+  const runCode = createRunCodeToolDefinition({
+    loggingService: mockLogger as any,
+    getToolRegistry: () => tools,
+    approvalPolicyRegistry: policyRegistry,
+  });
+  tools.push(runCode);
+  bindRunCodeRegistry(tools);
+  bindRunCodeNestedApprovalOwner(tools, owner!);
+  const approveSignal = new AbortController();
+  activeSignal = approveSignal;
+  const approved = runCode.execute(
+    { code: "return await tools.protected({ value: 'x' });" },
+    { context: { sessionId: service.sessionId }, signal: approveSignal.signal },
+  );
+  await vi.waitFor(() => expect(owner?.getSnapshot()).not.toBeNull());
+  await owner!.decide(owner!.getSnapshot()!.requestId, { answer: 'y' });
+  await expect(approved).resolves.toContain('effect');
+  const abortSignal = new AbortController();
+  activeSignal = abortSignal;
+  const aborted = runCode.execute(
+    { code: "return await tools.protected({ value: 'x' });" },
+    { context: { sessionId: service.sessionId }, signal: abortSignal.signal },
+  );
+  await vi.waitFor(() => expect(owner?.getSnapshot()).not.toBeNull());
+  service.abort();
+  await expect(aborted).resolves.toContain('Script timed out');
+  expect(effects).toEqual(['effect']);
+  await service.shutdown();
+});
 
 it('queues foreground messages FIFO, returns each item terminal, and executes each input once', async () => {
   let releaseFirst!: () => void;

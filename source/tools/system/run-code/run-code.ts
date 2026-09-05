@@ -1,4 +1,6 @@
 import { appendFileSync } from 'node:fs';
+import { lstat } from 'node:fs/promises';
+import type { ExecutionContext } from '../../../services/execution-context.js';
 import { z } from 'zod';
 import { relaxedNumber } from '../../utils.js';
 import { normalizeToolParameters } from '../../../lib/tool-invoke.js';
@@ -11,6 +13,8 @@ import type {
 import type { ILoggingService } from '../../../services/service-interfaces.js';
 import type { ToolInvocationContext } from '../../../services/agent-runtime/tool-invocation-context.js';
 import type { ToolApprovalPolicyRegistry } from '../../../services/approval/tool-approval-policy-registry.js';
+import type { NestedApprovalOwner } from '../../../services/approval/nested-approval-owner.js';
+import { applyApprovalGrant } from '../../../services/approval/approval-grant-executor.js';
 import {
   isZodToolParameterSchema,
   type AnyToolDefinition,
@@ -21,6 +25,9 @@ import {
 import { createBaseMessage, getCallIdFromItem, getOutputText, normalizeToolArguments } from '../../format-helpers.js';
 import { WORKFLOW_PROHIBITED_TOOLS } from '../../../services/agent-runtime/workflow/workflow-evaluator.js';
 import { renderToolsHeader } from './tools-header.js';
+import { resolveWorkspacePath, resolveWorkspacePathPhysically } from '../../utils.js';
+import { resolveOutsideWorkspaceEdit } from '../../../services/approval/approval-descriptor.js';
+import { parseUpstreamApplyPatch } from '../../file/upstream-apply-patch.js';
 
 export const TOOL_NAME_RUN_CODE = 'run_code';
 export const TOOL_NAME_DESCRIBE = 'describe';
@@ -66,6 +73,8 @@ export const RUN_CODE_PROHIBITED_TOOLS: ReadonlySet<string> = new Set([
   // the raw policy registry cannot express for an out-of-band script call.
   'shell',
   'bash',
+  'enter_worktree',
+  'exit_worktree',
 ]);
 
 export const runCodeParametersSchema = z.object({
@@ -109,7 +118,16 @@ const RUN_CODE_DESCRIPTION =
 /** One `tools.*` call observed during a run, for the user-facing summary. */
 export interface RunCodeCallRecord {
   tool: string;
-  outcome: 'ok' | 'error' | 'approval_required' | 'unknown_policy' | 'unknown_tool' | 'invalid_params' | 'prohibited';
+  outcome:
+    | 'ok'
+    | 'error'
+    | 'approval_required'
+    | 'unknown_policy'
+    | 'policy_error'
+    | 'interceptor_denied'
+    | 'unknown_tool'
+    | 'invalid_params'
+    | 'prohibited';
   durationMs: number;
   directlyCallable?: boolean;
 }
@@ -125,6 +143,10 @@ export interface CreateRunCodeToolOptions {
   /** Policy authority used for out-of-band script calls. */
   approvalPolicyRegistry: ToolApprovalPolicyRegistry;
   getCwd?: () => string;
+  executionContext?: ExecutionContext;
+  nestedApprovalOwner?: NestedApprovalOwner;
+  sessionAccess?: import('../../../services/session/session-access-state.js').SessionAccessState;
+  nestedCompatibility?: import('../../../services/session/nested-tool-compatibility-state.js').NestedToolCompatibilityState;
 }
 
 /**
@@ -139,11 +161,19 @@ export interface CreateRunCodeToolOptions {
 const REGISTRY_BINDER = Symbol.for('term2.run_code.bindRegistry');
 
 type RegistryBindable = { [REGISTRY_BINDER]?: (registry: ToolRegistry) => void };
+const NESTED_OWNER_BINDER = Symbol.for('term2.run_code.bindNestedApprovalOwner');
+type NestedOwnerBindable = { [NESTED_OWNER_BINDER]?: (owner: NestedApprovalOwner, graph: object) => void };
 
 /** Installs the wrapped registry into any `run_code` definition in `tools`. */
 export function bindRunCodeRegistry(tools: ToolRegistry): void {
   for (const tool of tools) {
     (tool as RegistryBindable)[REGISTRY_BINDER]?.(tools);
+  }
+}
+
+export function bindRunCodeNestedApprovalOwner(tools: ToolRegistry, owner: NestedApprovalOwner): void {
+  for (const tool of tools) {
+    (tool as AnyToolDefinition as NestedOwnerBindable)[NESTED_OWNER_BINDER]?.(owner, tools);
   }
 }
 
@@ -264,6 +294,9 @@ function writeNestedCallRecord(tool: string, sessionId: string | undefined, outc
 interface PreparedCall {
   tool: AnyToolDefinition;
   params: unknown;
+  originalParams: unknown;
+  authorityRoot: string;
+  authorityMeaning: string;
   parallelSafe: boolean;
   started: number;
 }
@@ -271,11 +304,12 @@ interface PreparedCall {
 export function createRunCodeToolDefinition(
   options: CreateRunCodeToolOptions,
 ): SchemaToolDefinition<typeof runCodeParametersSchema> {
-  const { loggingService, getCwd = () => process.cwd() } = options;
+  const { loggingService, getCwd = () => options.executionContext?.getCwd() || process.cwd() } = options;
   const approvalRegistry = options.approvalPolicyRegistry;
 
   // Set by bindRunCodeRegistry once the policy layer has wrapped every tool.
   let boundRegistry: ToolRegistry | undefined;
+  let nestedApprovalOwner = options.nestedApprovalOwner;
   const exposedTools = (): ToolRegistry =>
     (options.getToolRegistry?.() ?? boundRegistry ?? []).filter((tool) => !RUN_CODE_PROHIBITED_TOOLS.has(tool.name));
 
@@ -367,9 +401,18 @@ export function createRunCodeToolDefinition(
             normalized = parsed.data;
           }
 
+          const authorityRoot = getCwd();
+          const authority = await bindPreparedAuthority(name, normalized, authorityRoot, options.executionContext);
+          if (authority.kind === 'denied') {
+            record(name, 'approval_required', started, isDirectlyCallable(tool));
+            return failed(authority.message);
+          }
           return {
             tool,
-            params: normalized,
+            params: authority.params,
+            originalParams: normalized,
+            authorityRoot,
+            authorityMeaning: fingerprint(authority),
             parallelSafe: await isParallelSafe(tool, normalized, context),
             started,
           };
@@ -385,7 +428,100 @@ export function createRunCodeToolDefinition(
             context,
           });
           if (decision.kind !== 'auto_approve') {
-            const outcome = decision.kind === 'unknown' ? 'unknown_policy' : 'approval_required';
+            if (decision.kind === 'prompt' && nestedApprovalOwner) {
+              const nestedCallId = bridgeRunId + ':' + callContext.callId;
+              const nestedContext = withAbortSignal(context, mergeAbortSignals(callerSignal, callContext.signal), {
+                scripted: true,
+              }) as ToolInvocationContext;
+              const resolution = await nestedApprovalOwner.request({
+                requestId: nestedCallId,
+                sessionId: sessionId ?? 'unknown',
+                graphIdentity: boundRegistry ?? registry,
+                outerRunId: bridgeRunId,
+                nestedCallId,
+                toolName: prepared.tool.name,
+                preparedArguments: prepared.params,
+                authorityContext: context,
+                approval: {
+                  agentName: 'Nested run_code',
+                  toolName: prepared.tool.name,
+                  argumentsText: JSON.stringify(prepared.params),
+                  rawInterruption: null,
+                  callId: nestedCallId,
+                  outsideWorkspaceEdit: resolveOutsideWorkspaceEdit(
+                    prepared.tool.name,
+                    prepared.params,
+                    prepared.authorityRoot,
+                  ),
+                },
+                signal: nestedContext.signal as AbortSignal,
+                revalidateAuthority: async () => {
+                  const currentRoot = getCwd();
+                  const authority = await bindPreparedAuthority(
+                    prepared.tool.name,
+                    prepared.originalParams,
+                    currentRoot,
+                    options.executionContext,
+                  );
+                  return (
+                    authority.kind === 'bound' &&
+                    currentRoot === prepared.authorityRoot &&
+                    fingerprint(authority) === prepared.authorityMeaning
+                  );
+                },
+                revalidate: async () => {
+                  const latest = await approvalRegistry.evaluate({
+                    toolName: prepared.tool.name,
+                    args: prepared.params,
+                    context,
+                  });
+                  return latest.kind;
+                },
+                grant: (nestedDecision) => {
+                  const applied = applyApprovalGrant(
+                    {
+                      sessionId: sessionId ?? 'unknown',
+                      sessionAccess: options.sessionAccess,
+                      nestedCompatibility: options.nestedCompatibility,
+                      logger: loggingService,
+                    },
+                    {
+                      answer: nestedDecision.answer,
+                      toolName: prepared.tool.name,
+                      rawArguments: prepared.params,
+                      callId: nestedCallId,
+                    },
+                  );
+                  if (!applied.isApproved) throw new Error('Tool execution was not approved.');
+                },
+                dispatch: async () =>
+                  prepared.tool.execute(prepared.params, nestedContext, { toolCall: { callId: nestedCallId } }),
+              });
+              if (resolution.kind === 'approved') {
+                record(prepared.tool.name, 'ok', prepared.started);
+                return {
+                  kind: 'result',
+                  result: {
+                    ok: true,
+                    result: serializeResult(resolution.result, RUN_CODE_LIMITS.maxResultChars),
+                  } as JsonValue,
+                };
+              }
+              if (resolution.kind === 'failed') {
+                record(prepared.tool.name, 'error', prepared.started);
+                return failed(resolution.error instanceof Error ? resolution.error.message : String(resolution.error));
+              }
+              record(prepared.tool.name, 'approval_required', prepared.started, isDirectlyCallable(prepared.tool));
+              return failed(resolution.message);
+            }
+            const outcome =
+              decision.kind === 'unknown'
+                ? 'unknown_policy'
+                : decision.kind === 'error'
+                ? 'policy_error'
+                : decision.kind === 'interceptor_denied'
+                ? 'interceptor_denied'
+                : 'approval_required';
             const directlyCallable = isDirectlyCallable(prepared.tool);
             record(prepared.tool.name, outcome, prepared.started, directlyCallable);
             return failed(
@@ -394,10 +530,14 @@ export function createRunCodeToolDefinition(
                     (directlyCallable
                       ? 'Call a tool with a registered approval policy directly instead.'
                       : 'It is not directly callable in this model configuration; use an auto-approved alternative.')
+                : decision.kind === 'interceptor_denied'
+                ? `"${prepared.tool.name}" was refused by an approval interceptor and is unavailable from inside a script.`
+                : decision.kind === 'error'
+                ? `"${prepared.tool.name}" approval policy failed and is unavailable from inside a script.`
                 : `"${prepared.tool.name}" requires approval and is unavailable from inside a script. ` +
-                    (directlyCallable
-                      ? `Call ${prepared.tool.name} directly as a tool instead, or narrow the arguments so it no longer requires approval.`
-                      : 'It is not directly callable in this model configuration; use an auto-approved alternative or narrow the arguments so it no longer requires approval.'),
+                  (directlyCallable
+                    ? `Call ${prepared.tool.name} directly as a tool instead, or narrow the arguments so it no longer requires approval.`
+                    : 'It is not directly callable in this model configuration; use an auto-approved alternative or narrow the arguments so it no longer requires approval.'),
             );
           }
 
@@ -457,8 +597,111 @@ export function createRunCodeToolDefinition(
   (definition as AnyToolDefinition as RegistryBindable)[REGISTRY_BINDER] = (registry) => {
     boundRegistry = registry;
   };
+  (definition as AnyToolDefinition as NestedOwnerBindable)[NESTED_OWNER_BINDER] = (owner, graph) => {
+    nestedApprovalOwner = owner;
+    // The factory binds run_code before hiding non-direct definitions. Use the
+    // complete bound graph as identity, not the later filtered model surface.
+    owner.bindGraph(boundRegistry ?? graph);
+  };
 
   return definition;
+}
+
+const PATH_TOOLS = new Set([
+  'read_file',
+  'create_file',
+  'search_replace',
+  'apply_patch',
+  'grep',
+  'glob',
+  'read_code_outline',
+  'code_context_search',
+]);
+
+type BoundAuthority = { kind: 'bound'; physicalRoot: string; params: unknown } | { kind: 'denied'; message: string };
+
+type PathSemantics = 'referent' | 'unlink-source';
+
+async function bindPreparedAuthority(
+  toolName: string,
+  params: unknown,
+  cwd: string,
+  executionContext?: ExecutionContext,
+): Promise<BoundAuthority> {
+  const isRemote = executionContext?.isRemote() ?? false;
+  if (isRemote && PATH_TOOLS.has(toolName)) {
+    return { kind: 'denied', message: 'Cannot establish remote physical path authority for a nested tool call.' };
+  }
+  try {
+    const physicalRoot = isRemote ? cwd : await requirePhysicalPath(cwd, cwd);
+    return { kind: 'bound', physicalRoot, params: await bindPreparedArguments(toolName, params, cwd) };
+  } catch (error) {
+    return {
+      kind: 'denied',
+      message: `Cannot establish physical path authority: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+async function requirePhysicalPath(value: string, cwd: string, semantics: PathSemantics = 'referent'): Promise<string> {
+  const physicalPath = await resolveWorkspacePathPhysically(value, cwd);
+  if (physicalPath === undefined) throw new Error(`Unresolved path: ${value}`);
+  if (semantics === 'unlink-source') {
+    // Move sources are both read and unlinked. Following a leaf symlink would
+    // preserve the read but delete its referent; reject rather than change meaning.
+    const lexicalPath = resolveWorkspacePath(value, cwd, { allowOutsideWorkspace: true });
+    const stats = await lstat(lexicalPath);
+    if (stats.isSymbolicLink()) throw new Error(`Symlink unlink source is unsupported: ${value}`);
+  }
+  return physicalPath;
+}
+
+async function bindPreparedArguments(toolName: string, params: unknown, cwd: string): Promise<unknown> {
+  if (!params || typeof params !== 'object' || Array.isArray(params) || !PATH_TOOLS.has(toolName)) return params;
+  const record = params as Record<string, unknown>;
+  const bindPath = async (value: unknown, semantics: PathSemantics = 'referent'): Promise<unknown> =>
+    typeof value === 'string' ? requirePhysicalPath(value, cwd, semantics) : value;
+  if (toolName === 'apply_patch' && typeof record.patch === 'string') {
+    return { ...record, patch: await bindPatchPaths(record.patch, bindPath) };
+  }
+  return 'path' in record ? { ...record, path: await bindPath(record.path) } : params;
+}
+
+async function bindPatchPaths(
+  patch: string,
+  bindPath: (value: unknown, semantics: PathSemantics) => Promise<unknown>,
+): Promise<string> {
+  let parsed;
+  try {
+    parsed = parseUpstreamApplyPatch(patch);
+  } catch {
+    return patch;
+  }
+
+  const targets = parsed.operations.flatMap((operation) => {
+    const moveTo = 'moveTo' in operation ? operation.moveTo : undefined;
+    const semantics: PathSemantics = operation.type === 'delete_file' || moveTo ? 'unlink-source' : 'referent';
+    return [{ path: operation.path, semantics }, ...(moveTo ? [{ path: moveTo, semantics: 'referent' as const }] : [])];
+  });
+  let targetIndex = 0;
+  const lines = patch.replace(/\r\n?/g, '\n').split('\n');
+  const prefixes = ['*** Add File: ', '*** Update File: ', '*** Delete File: ', '*** Move to: '];
+  for (let index = 0; index < lines.length; index += 1) {
+    const prefix = prefixes.find((candidate) => lines[index].startsWith(candidate));
+    if (!prefix) continue;
+    const target = targets[targetIndex++];
+    const bound = await bindPath(target.path, target.semantics);
+    lines[index] = prefix + String(bound);
+  }
+  return lines.join('\n');
+}
+
+function fingerprint(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
 }
 
 function withAbortSignal(context: unknown, signal: AbortSignal, extra: Record<string, unknown> = {}): unknown {
@@ -530,6 +773,13 @@ function renderResult(
   if (indirectlyRefused.length > 0) {
     const names = [...new Set(indirectlyRefused.map((call) => call.tool))].join(', ');
     sections.push(`Refused (needs user approval; not directly callable in this model configuration): ${names}`);
+  }
+  const policyFailures = calls.filter(
+    (call) => call.outcome === 'policy_error' || call.outcome === 'interceptor_denied',
+  );
+  if (policyFailures.length > 0) {
+    const names = [...new Set(policyFailures.map((call) => call.tool))].join(', ');
+    sections.push(`Unavailable (approval policy refused or failed; no user approval was requested): ${names}`);
   }
   const unknownPolicy = calls.filter((call) => call.outcome === 'unknown_policy');
   const directlyUnknown = unknownPolicy.filter((call) => call.directlyCallable === true);

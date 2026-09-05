@@ -1,4 +1,3 @@
-import path from 'node:path';
 import type { ConversationEvent } from './conversation-events.js';
 import { ModelBehaviorError } from '../../contracts/model-errors.js';
 import type {
@@ -12,7 +11,6 @@ import type { ILoggingService } from '../service-interfaces.js';
 import type { NormalizedUsage } from '../../utils/ai/token-usage.js';
 import type { ModelRequestCost } from '../../services/cost/model-cost.js';
 import { extractUsage } from '../../utils/ai/token-usage.js';
-import { getActiveWorkspaceRoot } from '../workspace/active-workspace-root.js';
 import { extractCommandMessages } from '../../utils/streaming/extract-command-messages.js';
 import type { ToolCallMarkerStore } from '../../utils/streaming/extract-command-messages.js';
 import { attachCachedArguments } from '../command-message-streaming.js';
@@ -44,6 +42,7 @@ import {
 import type { DeniedReadMetadata, PostExecuteApprovalToken } from '../../contracts/conversation.js';
 import type { SessionAccessState } from '../session/session-access-state.js';
 import type { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
+import { resolveOutsideWorkspaceEdit } from '../approval/approval-descriptor.js';
 
 export type BuildResultOutcome =
   | { kind: 'response'; result: Extract<ConversationTerminal, { type: 'response' }> }
@@ -277,6 +276,36 @@ export async function buildConversationResult(
       context: runContext,
     });
 
+    if (registryDecision.kind === 'error' || registryDecision.kind === 'interceptor_denied') {
+      logger.warn('Tool approval policy refused a direct call', {
+        eventType: 'approval.policy_denied',
+        category: 'approval',
+        phase: 'approval',
+        sessionId,
+        callId,
+        toolName,
+        policy: registryDecision.kind,
+      });
+      approvalFlow.clearPending();
+      throw new ModelBehaviorError(
+        `Tool approval policy ${registryDecision.kind} refused ${
+          toolName ?? 'the requested tool'
+        }; execution was not allowed.`,
+      );
+    }
+
+    const unknownPolicy = registryDecision.kind === 'unknown';
+    if (unknownPolicy) {
+      logger.debug('Tool approval policy was unknown; using advisory/manual resolution', {
+        eventType: 'approval.policy_unknown',
+        category: 'approval',
+        phase: 'approval',
+        sessionId,
+        callId,
+        toolName,
+      });
+    }
+
     if (
       !forceHumanApproval &&
       !isUnsandboxedShell(toolName, parseResult.arguments) &&
@@ -415,25 +444,6 @@ function formatRunBudgetInteraction(event: import('../agent-runtime/run-budget.j
   }
   const { evidence } = event;
   return `Run budget ${event.stage} check-in\n${evidence.dimension}: ${evidence.used}/${evidence.limit} (headroom ${evidence.headroom})`;
-}
-
-function resolveOutsideWorkspaceEdit(
-  toolName: string | undefined,
-  args: unknown,
-): { path: string; folder: string } | undefined {
-  if (toolName !== 'apply_patch' && toolName !== 'create_file' && toolName !== 'search_replace') return undefined;
-  const record = args && typeof args === 'object' ? (args as Record<string, unknown>) : undefined;
-  const operation = Array.isArray(record?.operations) ? record.operations[0] : record;
-  const rawPath = operation && typeof operation === 'object' ? (operation as Record<string, unknown>).path : undefined;
-  if (typeof rawPath !== 'string') return undefined;
-  // Both the relative-path resolution and the membership test must use the
-  // leased root: resolving against the process cwd would place a worktree-
-  // relative edit in the main checkout and mis-detect it as outside the
-  // workspace.
-  const workspace = path.resolve(getActiveWorkspaceRoot());
-  const target = path.resolve(workspace, rawPath);
-  if (target === workspace || target.startsWith(`${workspace}${path.sep}`)) return undefined;
-  return { path: target, folder: path.dirname(target) };
 }
 
 export const toTerminalEvent = (result: ConversationTerminal): ConversationEvent => {

@@ -57,6 +57,7 @@ import type {
 import type { BackgroundSubagentApprovalPauseSink } from '../services/subagents/foreground-subagent-lease.js';
 import type { ForegroundSubagentCandidate } from '../services/subagents/nested-runner.js';
 import type { NestedToolCompatibilityState } from '../services/session/nested-tool-compatibility-state.js';
+import type { NestedApprovalOwner } from '../services/approval/nested-approval-owner.js';
 import {
   ContextCompactionHardFitError,
   LocalContextCompactor,
@@ -921,6 +922,10 @@ export class AgentClient {
 
   getApprovalPolicyRegistry(): ToolApprovalPolicyRegistry {
     return this.#agentConfig.approvalPolicyRegistry;
+  }
+
+  setNestedApprovalOwner(owner: NestedApprovalOwner | undefined): void {
+    this.#agentConfig.setNestedApprovalOwner(owner);
   }
 
   listBackgroundSubagentStatuses(): SubagentRunStatus[] {

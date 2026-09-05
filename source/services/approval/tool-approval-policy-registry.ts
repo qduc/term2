@@ -1,11 +1,17 @@
 import { normalizeObjectParams } from '../../lib/tool-invoke.js';
 
-export type ToolApprovalPolicyResult = { kind: 'auto_approve' } | { kind: 'prompt' } | { kind: 'unknown' };
+export type ToolApprovalPolicyResult =
+  | { kind: 'auto_approve' }
+  | { kind: 'prompt' }
+  | { kind: 'unknown' }
+  | { kind: 'error' }
+  | { kind: 'interceptor_denied' };
 
 export interface ToolApprovalPolicyRegistration {
   toolName: string;
   parameters?: unknown;
   needsApproval: (params: unknown, context?: unknown) => Promise<boolean> | boolean;
+  checkInterceptors?: (params: unknown, context?: unknown) => Promise<string | null>;
 }
 
 export interface ToolApprovalPolicyEvaluation {
@@ -40,10 +46,13 @@ export class ToolApprovalPolicyRegistry {
 
     try {
       const normalized = normalizeObjectParams(evaluation.args, policy.parameters as any);
+      if (policy.checkInterceptors && (await policy.checkInterceptors(normalized, evaluation.context))) {
+        return { kind: 'interceptor_denied' };
+      }
       const requiresApproval = await policy.needsApproval(normalized, evaluation.context);
       return requiresApproval ? { kind: 'prompt' } : { kind: 'auto_approve' };
     } catch {
-      return { kind: 'prompt' };
+      return { kind: 'error' };
     }
   }
 

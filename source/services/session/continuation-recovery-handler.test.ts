@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import { ContinuationRecoveryHandler } from './continuation-recovery-handler.js';
 import { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
 import { DefaultRetryClassifier } from '../retry/retry-classifier.js';
@@ -36,6 +36,7 @@ function invalidPreviousResponseError(): Error {
 }
 
 it('returns terminated for unrecoverable error', async () => {
+  const apply = vi.fn(() => ({ kind: 'terminated', events: [] }));
   const handler = new ContinuationRecoveryHandler({
     logger: { warn: () => {}, getCorrelationId: () => undefined, error: () => {}, debug: () => {} } as any,
     sessionId: 'test',
@@ -44,7 +45,9 @@ it('returns terminated for unrecoverable error', async () => {
       classify: () => ({ kind: 'unrecoverable' }),
     } as any,
     recoveryPolicy: {} as any,
-    recoveryExecutor: {} as any,
+    recoveryExecutor: {
+      apply,
+    } as any,
     retryEventPresenter: {} as any,
     resolveRetryLimit: () => 2,
     toolTracker: { activeCallIdsForCurrentTurn: () => [] } as any,
@@ -61,6 +64,9 @@ it('returns terminated for unrecoverable error', async () => {
 
   expect(events.length).toBe(0);
   expect((next.value as any).kind).toBe('terminated');
+  expect(apply).toHaveBeenCalledWith(
+    expect.objectContaining({ plan: { kind: 'terminate', events: [] }, retryCounts: state.retryCounts }),
+  );
 });
 
 it('returns stale when generation guard is not current after presentation', async () => {

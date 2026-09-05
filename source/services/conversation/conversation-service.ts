@@ -44,6 +44,11 @@ import type {
   PendingInteractionSnapshot,
   ResolvePendingInteractionRequest,
 } from '../session/pending-interaction-state.js';
+import type {
+  NestedApprovalSnapshot,
+  NestedApprovalDecision,
+  NestedApprovalDecisionResult,
+} from '../approval/nested-approval-owner.js';
 import { isAbortLikeError } from '../../utils/error-helpers.js';
 import type { SessionRolloverConsumption } from '../../contracts/session-rollover.js';
 import type { SessionRolloverEvent } from '../logging/conversation-log-events.js';
@@ -66,8 +71,10 @@ export class ConversationService {
   readonly #preparedLeaseTtlMs?: number;
   readonly #activeCancelTimeoutMs?: number;
   readonly #discardOnFailure: boolean;
+  readonly #enableNestedApproval: boolean;
   #eventSink: ConversationEventSink | null = null;
   #pendingInteractionObserver: ((snapshot: PendingInteractionSnapshot | null) => void) | null = null;
+  #nestedApprovalObserver: ((snapshot: NestedApprovalSnapshot | null) => void) | null = null;
   readonly #deps: {
     logger: ILoggingService;
     settingsService?: ISettingsService;
@@ -87,6 +94,7 @@ export class ConversationService {
     preparedLeaseTtlMs,
     activeCancelTimeoutMs,
     discardOnFailure,
+    enableNestedApproval,
   }: {
     /** Compatibility seam: caller retains ownership of a prebuilt client. */
     agentClient?: ConversationAgentClient;
@@ -112,6 +120,8 @@ export class ConversationService {
     activeCancelTimeoutMs?: number;
     /** Gateway-only failure policy: discard retained work rather than pause it. */
     discardOnFailure?: boolean;
+    /** Interactive-only capability; gateway and headless services default to fail closed. */
+    enableNestedApproval?: boolean;
   }) {
     if (!sessionClientFactory && !agentClient) {
       throw new Error('ConversationService requires an agentClient or sessionClientFactory');
@@ -124,6 +134,7 @@ export class ConversationService {
     this.#preparedLeaseTtlMs = preparedLeaseTtlMs;
     this.#activeCancelTimeoutMs = activeCancelTimeoutMs;
     this.#discardOnFailure = discardOnFailure === true;
+    this.#enableNestedApproval = enableNestedApproval === true;
     this.#clientHandle = this.#clientFactory.create(sessionId ?? 'default');
     this.#toolCallMarkers = toolCallMarkers ?? new ToolCallMarkerStore();
     this.#deps = deps;
@@ -147,6 +158,7 @@ export class ConversationService {
       discardOnFailure: this.#discardOnFailure,
       sessionId: sessionId ?? 'default',
       sessionStartedAt,
+      enableNestedApproval: this.#enableNestedApproval,
     });
     this.#runtime = runtime;
     this.#adapter = adapter;
@@ -237,6 +249,7 @@ export class ConversationService {
       activeCancelTimeoutMs: this.#activeCancelTimeoutMs,
       discardOnFailure: this.#discardOnFailure,
       sessionId: newId,
+      enableNestedApproval: this.#enableNestedApproval,
     });
     this.#runtime = runtime;
     this.#adapter = adapter;
@@ -251,6 +264,7 @@ export class ConversationService {
     this.#runtime.backgroundSubagentNotifications.setObserver(this.#backgroundSubagentNotificationObserver);
     this.#runtime.backgroundSubagentTasks.setObserver(this.#backgroundSubagentTaskObserver);
     this.#runtime.pendingInteraction.setObserver(this.#pendingInteractionObserver);
+    this.#runtime.nestedApproval.subscribe(this.#nestedApprovalObserver);
     // The new adapter starts with no observers; re-attach the queue lifecycle
     // observers so queued submissions still notify their UI after a reset.
     if (this.#queueStateObserver) {
@@ -381,6 +395,7 @@ export class ConversationService {
       this.#runtime.approval.getPending() !== null ||
       this.#runtime.approval.getPostExecutePending().entries.length > 0 ||
       this.#runtime.backgroundSubagentApprovals.getSnapshot().pendingCount > 0 ||
+      this.#runtime.nestedApproval.getSnapshot() !== null ||
       this.#adapter.queuedSubmissionCount() > 0;
     if (!interactionPending) return consumption;
 
@@ -608,6 +623,19 @@ export class ConversationService {
 
   goToNextPendingInteractionQuestion(): void {
     this.#runtime.pendingInteraction.goToNextQuestion();
+  }
+
+  getNestedApprovalSnapshot(): NestedApprovalSnapshot | null {
+    return this.#runtime.nestedApproval.getSnapshot();
+  }
+
+  setNestedApprovalObserver(observer: ((snapshot: NestedApprovalSnapshot | null) => void) | null): void {
+    this.#nestedApprovalObserver = observer;
+    this.#runtime.nestedApproval.subscribe(observer);
+  }
+
+  decideNestedApproval(requestId: string, decision: NestedApprovalDecision): Promise<NestedApprovalDecisionResult> {
+    return this.#runtime.nestedApproval.decide(requestId, decision);
   }
 
   /**

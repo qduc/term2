@@ -308,6 +308,7 @@ export function buildAgentTools({
         toolName: nativeApplyPatch.name,
         parameters: nativeApplyPatch.parameters,
         needsApproval: nativeApplyPatch.needsApproval,
+        checkInterceptors: (params) => deps.checkToolInterceptors(nativeApplyPatch.name, params),
       });
     }
     deps.logger.debug('Using native applyPatchTool from SDK', {

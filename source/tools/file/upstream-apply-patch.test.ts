@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseUpstreamApplyPatch, UPSTREAM_APPLY_PATCH_GRAMMAR } from './upstream-apply-patch.js';
+import { extractPatchPaths, parseUpstreamApplyPatch, UPSTREAM_APPLY_PATCH_GRAMMAR } from './upstream-apply-patch.js';
 
 describe('upstream apply_patch contract', () => {
   it('parses add, update, delete, move, and environment-id operations', () => {
@@ -26,6 +26,19 @@ describe('upstream apply_patch contract', () => {
         { type: 'delete_file', path: 'remove.txt', diff: '' },
       ],
     });
+    expect(
+      extractPatchPaths(
+        [
+          '*** Begin Patch',
+          '*** Update File: old.txt',
+          '*** Move to: moved.txt',
+          '@@',
+          '-before',
+          '+after',
+          '*** End Patch',
+        ].join('\n'),
+      ),
+    ).toEqual(['old.txt', 'moved.txt']);
   });
 
   it('accepts the lenient heredoc wrapper used by upstream compatibility parsing', () => {

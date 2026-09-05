@@ -20,6 +20,7 @@ import type { BackgroundTask } from '../services/subagents/subagent-notification
 import type { BackgroundTaskControlDetails } from '../services/session/background-task-control.js';
 import { needsBackgroundTaskClock } from '../components/layout/background-task-clock.js';
 import type {
+  BackgroundSubagentApprovalEntry,
   BackgroundSubagentApprovalSnapshot,
   BackgroundSubagentApprovalResolutionRequest,
 } from '../services/approval/background-subagent-approval-queue.js';
@@ -64,6 +65,19 @@ const getInitialLastUsage = (messages: Message[]): NormalizedUsage | null => {
   }
   return null;
 };
+
+function sameBackgroundApprovalIdentity(
+  left: BackgroundSubagentApprovalEntry,
+  right: BackgroundSubagentApprovalEntry,
+): boolean {
+  return (
+    left.runId === right.runId &&
+    left.generation === right.generation &&
+    left.toolCallId === right.toolCallId &&
+    left.toolName === right.toolName &&
+    left.argumentsText === right.argumentsText
+  );
+}
 
 const dummySettingsService = {
   get: () => 'openai',
@@ -142,7 +156,7 @@ export const useConversation = ({
     isProcessing,
     pendingInteractionId,
     waitingForApproval,
-    waitingForRejectionReason,
+    waitingForRejectionReason: uiWaitingForRejectionReason,
     waitingForAskUserAnswer,
     currentAskUserQuestionIndex,
     pendingApproval,
@@ -184,6 +198,17 @@ export const useConversation = ({
     [conversationService],
   );
   const [backgroundSubagentApproval, setBackgroundSubagentApproval] = useState(readBackgroundApproval);
+  const [nestedApproval, setNestedApproval] = useState(() => conversationService.getNestedApprovalSnapshot?.() ?? null);
+  const [nestedRejectionRequestId, setNestedRejectionRequestId] = useState<string | null>(null);
+  const [backgroundRejectionEntry, setBackgroundRejectionEntry] = useState<BackgroundSubagentApprovalEntry | null>(
+    null,
+  );
+  const waitingForRejectionReason =
+    uiWaitingForRejectionReason ||
+    nestedApproval?.requestId === nestedRejectionRequestId ||
+    (backgroundRejectionEntry !== null &&
+      backgroundSubagentApproval.current !== null &&
+      sameBackgroundApprovalIdentity(backgroundRejectionEntry, backgroundSubagentApproval.current));
 
   const refreshBackgroundSubagentTasks = useCallback(() => {
     setBackgroundSubagentTaskState(readBackgroundSubagentTasks());
@@ -247,11 +272,33 @@ export const useConversation = ({
     return conversationService.backgroundSubagentApprovals.subscribe(() => {
       const snapshot = readBackgroundApproval();
       setBackgroundSubagentApproval(snapshot);
+      if (snapshot.current === null) {
+        // A synchronous queue settlement can publish an empty snapshot before
+        // the caller returns from resolve(). Retire the source identity from
+        // every empty/closed snapshot so it cannot keep owning the composer.
+        setBackgroundRejectionEntry(null);
+      } else {
+        // A background approval takes prompt ownership even when the nested
+        // composer was already open. Keep the composer active, but retarget
+        // it to the effective background source instead of leaking the nested
+        // request's rejection reason into that source.
+        if (nestedRejectionRequestId !== null) {
+          setNestedRejectionRequestId(null);
+          setBackgroundRejectionEntry(snapshot.current);
+        } else if (
+          backgroundRejectionEntry &&
+          !sameBackgroundApprovalIdentity(backgroundRejectionEntry, snapshot.current)
+        ) {
+          // A replacement head is a new prompt, not the source of the reason
+          // being composed. Do not transfer the stored reason to it.
+          setBackgroundRejectionEntry(null);
+        }
+      }
       if (snapshot.pendingCount > 0) {
         notifier?.approvalNeeded();
       }
     });
-  }, [conversationService, readBackgroundApproval, notifier]);
+  }, [conversationService, readBackgroundApproval, notifier, nestedRejectionRequestId, backgroundRejectionEntry]);
 
   const resolveBackgroundSubagentApproval = useCallback(
     (request: BackgroundSubagentApprovalResolutionRequest) =>
@@ -362,9 +409,31 @@ export const useConversation = ({
     if (typeof conversationService.setPendingInteractionObserver !== 'function') return;
     conversationService.setPendingInteractionObserver((snapshot) => {
       dispatch({ type: 'interaction/snapshot', snapshot });
+      if (snapshot !== null) setNestedRejectionRequestId(null);
     });
     return () => conversationService.setPendingInteractionObserver(null);
   }, [conversationService]);
+
+  useEffect(() => {
+    if (typeof conversationService.setNestedApprovalObserver !== 'function') return;
+    conversationService.setNestedApprovalObserver((snapshot) => {
+      setNestedApproval(snapshot);
+      setNestedRejectionRequestId((requestId) =>
+        requestId !== null && snapshot?.requestId !== requestId ? null : requestId,
+      );
+    });
+    return () => conversationService.setNestedApprovalObserver(null);
+  }, [conversationService]);
+
+  const resolveNestedApproval = useCallback(
+    (decision: import('../services/approval/nested-approval-owner.js').NestedApprovalDecision) => {
+      const requestId = nestedApproval?.requestId;
+      return requestId === undefined
+        ? Promise.resolve({ kind: 'stale' as const })
+        : conversationService.decideNestedApproval(requestId, decision);
+    },
+    [conversationService, nestedApproval?.requestId],
+  );
 
   // ── Public API — all orchestration delegates to the orchestrator ─────────
   const sendThroughOrchestrator = useCallback(
@@ -530,9 +599,28 @@ export const useConversation = ({
     dispatch({ type: 'interaction/composer_entry', mode: 'ask_user_answer' });
   }, []);
 
-  const setWaitingForRejectionReason = useCallback((value: boolean) => {
-    dispatch({ type: 'interaction/composer_entry', mode: value ? 'rejection_reason' : 'none' });
-  }, []);
+  const setWaitingForRejectionReason = useCallback(
+    (value: boolean) => {
+      if (!value) {
+        setBackgroundRejectionEntry(null);
+        setNestedRejectionRequestId(null);
+        dispatch({ type: 'interaction/composer_entry', mode: 'none' });
+        return;
+      }
+      const backgroundEntry = readBackgroundApproval().current;
+      if (backgroundEntry && pendingApproval === null) {
+        setBackgroundRejectionEntry(backgroundEntry);
+        setNestedRejectionRequestId(null);
+        return;
+      }
+      if (nestedApproval && pendingApproval === null) {
+        setNestedRejectionRequestId(nestedApproval.requestId);
+        return;
+      }
+      dispatch({ type: 'interaction/composer_entry', mode: 'rejection_reason' });
+    },
+    [nestedApproval, pendingApproval, readBackgroundApproval, setBackgroundRejectionEntry, setNestedRejectionRequestId],
+  );
 
   const setWaitingForAskUserAnswer = useCallback((value: boolean) => {
     dispatch({ type: 'interaction/composer_entry', mode: value ? 'ask_user_answer' : 'none' });
@@ -547,6 +635,8 @@ export const useConversation = ({
     lastCodexRateLimit,
     runBudgetNotice,
     pendingApproval,
+    nestedApproval,
+    resolveNestedApproval,
     waitingForApproval,
     waitingForRejectionReason,
     waitingForAskUserAnswer,

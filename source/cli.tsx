@@ -923,6 +923,7 @@ const conversationService = new ConversationService({
     sessionContextService,
     skillsService,
   },
+  enableNestedApproval: true,
 });
 
 if (conversationService.hookEvents) {

@@ -484,6 +484,7 @@ export function wrapNeedsApproval(
         toolName: string;
         parameters?: unknown;
         needsApproval: (params: unknown, context?: unknown) => Promise<boolean> | boolean;
+        checkInterceptors?: (params: unknown, context?: unknown) => Promise<string | null>;
       }) => void;
     };
   },
@@ -494,6 +495,7 @@ export function wrapNeedsApproval(
       toolName: registeredToolName,
       parameters: definition.parameters,
       needsApproval: definition.needsApproval,
+      ...(options.checkInterceptors ? { checkInterceptors: options.checkInterceptors } : {}),
     });
   }
 

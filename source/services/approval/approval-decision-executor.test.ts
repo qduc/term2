@@ -98,6 +98,29 @@ describe('ApprovalDecisionExecutor', () => {
     });
   });
 
+  it('does not install a denied-read override for a rejected Docker decision', () => {
+    const nestedCompatibility = makeNestedCompatibility();
+    const command = 'docker build .';
+    nestedCompatibility.deniedReads.stageForDescriptor(command, {
+      path: '/tmp/blocked/file',
+      suggestedParent: '/tmp/blocked',
+      sensitive: false,
+    });
+    nestedCompatibility.docker.recordDenial(sessionId, command);
+    const pending = makePending({
+      name: 'shell',
+      callId: 'docker-denied-read',
+      arguments: JSON.stringify({ command }),
+    });
+    const result = createExecutor({ nestedCompatibility }).resolve({
+      pendingApprovalContext: pending,
+      answer: 'unsandboxed-once',
+    });
+    expect(result.isApproved).toBe(false);
+    expect(nestedCompatibility.executionOverrides.consume(command)).toBeNull();
+    expect(getProjectAllowReadStore(process.cwd()).load()).toEqual([]);
+  });
+
   it('rejects the exact continuation with the user reason and records no grants', () => {
     const rejected: Array<{ interruption: unknown; message?: string }> = [];
     const nestedCompatibility = makeNestedCompatibility();

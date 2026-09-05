@@ -116,6 +116,36 @@ const makeDeps = (
   };
 };
 
+const registeredPromptPolicy = (toolName: string) => {
+  const registry = new ToolApprovalPolicyRegistry();
+  registry.register({ toolName, needsApproval: () => true });
+  return registry;
+};
+
+it('does not let an interceptor denial reach the positive advisory grant path', async () => {
+  const registry = new ToolApprovalPolicyRegistry();
+  registry.register({
+    toolName: 'read_file',
+    checkInterceptors: async () => 'blocked',
+    needsApproval: () => true,
+  });
+  const allowReadFolder = vi.fn();
+  const sessionAccess = { allowReadFolder } as unknown as SessionAccessState;
+  const chat = vi.fn(async () => JSON.stringify({ approved: true, reasoning: 'positive fixture', model: 'fixture' }));
+  const stream = makeStream({
+    interruptions: [{ name: 'read_file', callId: 'blocked', arguments: { path: '/fixture/read.txt' }, agent: {} }],
+    state: {},
+  });
+  await expect(
+    buildConversationResult(
+      { result: stream, toolCallArgumentsById: new Map() },
+      { ...makeDeps('advisory', undefined, true, chat, registry), sessionAccess },
+    ),
+  ).rejects.toThrow('execution was not allowed');
+  expect(chat).not.toHaveBeenCalled();
+  expect(allowReadFolder).not.toHaveBeenCalled();
+});
+
 it('turns a parked main-run budget interaction into a resumable pending terminal', async () => {
   const stream = makeStream({
     interruptions: [
@@ -663,7 +693,7 @@ it('auto_approve outcome when LLM advises approval and mode=auto', async () => {
       shellAutoApproval,
       logger,
       sessionId: 's1',
-      approvalPolicyRegistry: toolApprovalPolicyRegistry,
+      approvalPolicyRegistry: registeredPromptPolicy('shell'),
       nestedCompatibility,
     },
   );
@@ -694,6 +724,7 @@ it('unsandboxed shell auto-approves via LLM when sandbox enabled and mode auto',
     async () =>
       '{"results":[{"id":"c-unsandboxed","reasoning":"safe","riskLevel":"low","authorization":"implied","confidence":"high"}]}',
   );
+  deps.approvalPolicyRegistry = registeredPromptPolicy('shell');
 
   const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
 
@@ -726,6 +757,7 @@ it('read_file outside workspace auto-approves via LLM in auto mode and grants fo
       async () =>
         '{"results":[{"reasoning":"safe external read","riskLevel":"low","authorization":"implied","confidence":"high"}]}',
     ),
+    approvalPolicyRegistry: registeredPromptPolicy('read_file'),
     sessionAccess,
   };
 
@@ -758,6 +790,7 @@ it('unsandboxed shell with RED command is never auto-approved even in auto mode'
     async () =>
       '{"results":[{"id":"c-red","reasoning":"safe","riskLevel":"high","authorization":"implied","confidence":"high"}]}',
   );
+  deps.approvalPolicyRegistry = registeredPromptPolicy('shell');
 
   const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
 
@@ -787,6 +820,7 @@ it('unsandboxed shell with sandbox enabled and mode advisory prompts with the LL
     async () =>
       '{"results":[{"id":"c-unsandboxed-advisory","reasoning":"safe","riskLevel":"low","authorization":"implied","confidence":"high"}]}',
   );
+  deps.approvalPolicyRegistry = registeredPromptPolicy('shell');
 
   const outcome = await buildConversationResult({ result: stream, toolCallArgumentsById: new Map() }, deps);
 

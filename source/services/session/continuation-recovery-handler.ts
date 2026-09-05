@@ -62,6 +62,21 @@ export class ContinuationRecoveryHandler {
     }
 
     if (classified.kind === 'unrecoverable') {
+      // Even an unrecoverable host error must settle the stream before the
+      // continuation returns to idle. Otherwise an interrupted tool remains
+      // started and provider continuity still points at unpaid work.
+      const terminateResult = this.deps.recoveryExecutor.apply({
+        plan: { kind: 'terminate', events: [] },
+        state: {
+          journalSnapshot: state.journalSnapshot,
+          addedUserMessage: false,
+          stream: retryStream,
+        },
+        retryCounts: state.retryCounts,
+      });
+      if (terminateResult.kind === 'terminated') {
+        for (const event of terminateResult.events) yield event;
+      }
       return { kind: 'terminated' };
     }
 

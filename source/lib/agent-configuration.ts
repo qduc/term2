@@ -19,6 +19,8 @@ import type { ShellChildRegistry } from '../utils/shell/shell-child-registry.js'
 import type { SessionBrowser } from '../services/conversation/session-browser.js';
 import type { SessionRolloverRequest, SessionRolloverRequestOutcome } from '../contracts/session-rollover.js';
 import { ToolApprovalPolicyRegistry } from '../services/approval/tool-approval-policy-registry.js';
+import type { NestedApprovalOwner } from '../services/approval/nested-approval-owner.js';
+import { bindRunCodeNestedApprovalOwner } from '../tools/system/run-code/run-code.js';
 
 /** Narrow capability interface consumed by chat/session clients. */
 export interface AgentSource {
@@ -69,6 +71,7 @@ export class AgentConfiguration implements AgentSource {
   #isTransientClient: boolean;
   #editor: ReturnType<typeof createEditorImpl>;
   #approvalPolicyRegistry: ToolApprovalPolicyRegistry;
+  #nestedApprovalOwner?: NestedApprovalOwner;
 
   // Service references (for #buildFactoryDeps)
   // Callback for side effects before rebuild
@@ -273,6 +276,11 @@ export class AgentConfiguration implements AgentSource {
     return this.#approvalPolicyRegistry;
   }
 
+  setNestedApprovalOwner(owner: NestedApprovalOwner | undefined): void {
+    this.#nestedApprovalOwner = owner;
+    if (owner) bindRunCodeNestedApprovalOwner(this.#agent.tools, owner);
+  }
+
   // Rebuild the agent with current config
   rebuildAgent(): void {
     if (this.#isTransientClient) return;
@@ -288,6 +296,7 @@ export class AgentConfiguration implements AgentSource {
     this.#agent = buildResult.agent;
     this.#model = buildResult.resolvedModel;
     this.#approvalPolicyRegistry = approvalPolicyRegistry;
+    if (this.#nestedApprovalOwner) bindRunCodeNestedApprovalOwner(this.#agent.tools, this.#nestedApprovalOwner);
   }
 
   /** Subscribe to settings changes that affect agent definition and rebuild automatically. */

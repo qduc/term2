@@ -9,6 +9,7 @@ import {
 import { getCallIdFromObject, getToolInfoFromInterruption } from '../interruption-info.js';
 import type { ShellAutoApprovalAgentClient } from '../conversation-agent-client.js';
 import { TOOL_NAME_ASK_USER } from '../../tools/tool-names.js';
+import { extractPatchPaths } from '../../tools/file/upstream-apply-patch.js';
 
 export type AutoApproveMode = 'off' | 'advisory' | 'auto' | 'always';
 
@@ -47,6 +48,9 @@ export function extractToolTargetPaths(toolName: string, rawArgs: unknown): stri
   }
   if (!rawArgs || typeof rawArgs !== 'object') return [];
   const rec = rawArgs as Record<string, any>;
+  if (toolName === 'apply_patch') {
+    return extractPatchPaths(rec.patch);
+  }
   if (typeof rec.path === 'string') {
     return [rec.path];
   }

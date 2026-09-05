@@ -615,8 +615,10 @@ export const getAgentDefinition = (
     tools.push(
       createRunCodeToolDefinition({
         loggingService,
+        executionContext,
         getCwd: () => executionContext?.getCwd() || process.cwd(),
         approvalPolicyRegistry: resolvedApprovalPolicyRegistry,
+        sessionAccess,
       }),
     );
   }

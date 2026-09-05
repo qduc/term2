@@ -74,6 +74,7 @@ import { PendingInteractionState } from './pending-interaction-state.js';
 import { BackgroundSubagentApprovalController } from '../approval/background-subagent-approval-controller.js';
 import { ToolCallMarkerStore } from '../../utils/streaming/extract-command-messages.js';
 import { registerSessionRuntime } from '../workspace/active-workspace-root.js';
+import { NestedApprovalOwner, type NestedApprovalSnapshot } from '../approval/nested-approval-owner.js';
 
 const asAskUserAnswerSink = (value: unknown): AskUserAnswerSink | null =>
   value && typeof (value as AskUserAnswerSink).setAskUserAnswer === 'function' ? (value as AskUserAnswerSink) : null;
@@ -159,6 +160,7 @@ export type SessionRuntimeInternals = {
   postExecutePending: PostExecutePendingRegistry;
   /** Authoritative pending approval and ask_user protocol state. */
   pendingInteraction: PendingInteractionState;
+  nestedApprovalOwner: NestedApprovalOwner;
 };
 
 // ── Options for the composition factory ──────────────────────────
@@ -194,6 +196,8 @@ export type CreateSessionRuntimeInternalsOptions = {
   hookLifecycle?: HookLifecyclePort;
   hookEvents?: HookEventFactory;
   toolCallMarkers?: ToolCallMarkerStore;
+  /** Install the interactive nested owner; headless callers retain fail-closed fallback behavior. */
+  enableNestedApproval?: boolean;
 };
 
 export type CreateConversationSessionOptions = Omit<CreateSessionRuntimeInternalsOptions, 'turnAccumulator'>;
@@ -220,6 +224,13 @@ export type SessionApprovalQuery = {
   getPostExecutePending(): PostExecutePendingSnapshot;
   /** Atomically settle selected post-execute entries from the displayed revision. */
   decidePostExecutePending(request: PostExecuteDecisionRequest): PostExecuteDecisionResult;
+};
+
+export type SessionNestedApproval = {
+  getSnapshot: () => NestedApprovalSnapshot | null;
+  subscribe: (observer: ((snapshot: NestedApprovalSnapshot | null) => void) | null) => () => void;
+  decide: NestedApprovalOwner['decide'];
+  close: () => void;
 };
 
 export type SessionLogs = {
@@ -286,6 +297,8 @@ export type SessionRuntime = {
   compactContext: (options?: { signal?: AbortSignal }) => Promise<LocalCompactionOutcome | { kind: 'busy' | 'stale' }>;
   logs: SessionLogs;
   approval: SessionApprovalQuery;
+  /** Session-owned live nested approval protocol. */
+  nestedApproval: SessionNestedApproval;
   /** Pending approval protocol projected by presentation layers. */
   pendingInteraction: PendingInteractionState;
   sinks: SessionSinks;
@@ -328,6 +341,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     hookLifecycle,
     hookEvents: suppliedHookEvents,
     toolCallMarkers: suppliedToolCallMarkers,
+    enableNestedApproval = false,
   } = options;
   const { logger, settingsService, sessionContextService } = deps;
   const startedAt = sessionStartedAt ?? new Date().toISOString();
@@ -437,6 +451,8 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
   const conversationStore = new ConversationStore();
   const approvalState = new ApprovalState();
   const pendingInteraction = new PendingInteractionState();
+  const nestedApprovalOwner = new NestedApprovalOwner(id);
+  if (enableNestedApproval) agentClient?.setNestedApprovalOwner?.(nestedApprovalOwner);
   const toolTracker = new SessionToolTracker(conversationStore);
 
   // Mark ledger dispatch when the run loop enters a tool body so stream recovery
@@ -857,6 +873,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
       : Promise.resolve().then(() => resolvedBackgroundShellEventSinkHost?.setBackgroundShellEventSink?.(null));
     providerContinuity.clear();
     pendingInteraction.clear();
+    nestedApprovalOwner.close();
   };
 
   let shutdownPromise: Promise<void> | undefined;
@@ -1062,6 +1079,7 @@ export function createSessionRuntimeInternals(options: CreateSessionRuntimeInter
     backgroundTaskControl,
     postExecutePending,
     pendingInteraction,
+    nestedApprovalOwner,
   };
 }
 
@@ -1089,6 +1107,7 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
     backgroundTaskControl,
     postExecutePending,
     pendingInteraction,
+    nestedApprovalOwner,
   } = internals;
 
   return {
@@ -1135,6 +1154,12 @@ export function buildSessionRuntime(internals: SessionRuntimeInternals): Session
       decidePostExecutePending: postExecutePending.decide.bind(postExecutePending),
     },
     pendingInteraction,
+    nestedApproval: {
+      getSnapshot: nestedApprovalOwner.getSnapshot.bind(nestedApprovalOwner),
+      subscribe: nestedApprovalOwner.subscribe.bind(nestedApprovalOwner),
+      decide: nestedApprovalOwner.decide.bind(nestedApprovalOwner),
+      close: nestedApprovalOwner.close.bind(nestedApprovalOwner),
+    },
     sinks: {
       askUserAnswer: resolvedAskUserAnswerSink,
       subagentEvents: resolvedSubagentEventSinkHost,

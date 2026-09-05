@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { NestedApprovalSnapshot } from '../../source/services/approval/nested-approval-owner.js';
+import {
+  NestedApprovalOwner,
+  type NestedApprovalSnapshot,
+} from '../../source/services/approval/nested-approval-owner.js';
 import { createScriptedNestedApprovalAdapter, type NestedApprovalDecisionPort } from './scripted-decision-adapter.js';
 
 const baseSnapshot = (): NestedApprovalSnapshot => ({
@@ -21,9 +24,10 @@ const baseSnapshot = (): NestedApprovalSnapshot => ({
 
 function makePort(snapshot: NestedApprovalSnapshot, result: 'accepted' | 'stale' = 'accepted') {
   let observer: ((next: NestedApprovalSnapshot | null) => void) | null = null;
+  let currentSnapshot: NestedApprovalSnapshot | null = snapshot;
   const decisions: { requestId: string; answer: string; rejectionReason?: string }[] = [];
   const port: NestedApprovalDecisionPort = {
-    getSnapshot: () => snapshot,
+    getSnapshot: () => currentSnapshot,
     subscribe: (next) => {
       observer = next;
       next?.(snapshot);
@@ -33,6 +37,7 @@ function makePort(snapshot: NestedApprovalSnapshot, result: 'accepted' | 'stale'
     },
     decide: async (requestId, decision) => {
       decisions.push({ requestId, ...decision });
+      currentSnapshot = null;
       observer?.(null);
       return { kind: result };
     },
@@ -43,6 +48,37 @@ function makePort(snapshot: NestedApprovalSnapshot, result: 'accepted' | 'stale'
 async function flush(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+function realRequest(
+  id: string,
+  options: {
+    revalidate?: () => Promise<'prompt' | 'auto_approve'>;
+    dispatch?: () => Promise<string>;
+  } = {},
+) {
+  const controller = new AbortController();
+  return {
+    requestId: id,
+    sessionId: 'session-1',
+    graphIdentity: {},
+    outerRunId: 'outer-1',
+    nestedCallId: 'outer-1:' + id,
+    toolName: 'create_file',
+    preparedArguments: { path: '/tmp/' + id, content: id, overwrite: false },
+    authorityContext: null,
+    approval: {
+      agentName: 'Nested run_code',
+      toolName: 'create_file',
+      argumentsText: '{}',
+      rawInterruption: null,
+      callId: 'outer-1:' + id,
+    },
+    signal: controller.signal,
+    revalidate: options.revalidate ?? (async () => 'prompt' as const),
+    grant: () => {},
+    dispatch: options.dispatch ?? (async () => id),
+  };
 }
 
 describe('scripted nested approval adapter', () => {
@@ -71,7 +107,7 @@ describe('scripted nested approval adapter', () => {
     expect(decisions).toEqual([
       { requestId: 'request-1', answer: 'n', rejectionReason: 'Scripted nested approval denied.' },
     ]);
-    adapter.dispose();
+    await adapter.dispose();
   });
 
   it('denies when the responder fails', async () => {
@@ -91,7 +127,7 @@ describe('scripted nested approval adapter', () => {
 
     await flush();
     expect(decisions[0]?.answer).toBe('n');
-    adapter.dispose();
+    await adapter.dispose();
   });
 
   it('does not grant a stale answer and disposes its subscription', async () => {
@@ -113,15 +149,16 @@ describe('scripted nested approval adapter', () => {
     await flush();
     expect(onRequest).toHaveBeenCalledTimes(1);
     expect(decisions[0]?.answer).toBe('allow-edit-file-session');
-    adapter.dispose();
+    await adapter.dispose();
   });
 
   it('denies a pending request when disposed', async () => {
     let observer: ((snapshot: NestedApprovalSnapshot | null) => void) | null = null;
     const decisions: string[] = [];
     const snapshot = baseSnapshot();
+    let currentSnapshot: NestedApprovalSnapshot | null = snapshot;
     const port: NestedApprovalDecisionPort = {
-      getSnapshot: () => snapshot,
+      getSnapshot: () => currentSnapshot,
       subscribe: (next) => {
         observer = next;
         return () => {
@@ -130,12 +167,14 @@ describe('scripted nested approval adapter', () => {
       },
       decide: async (_requestId, decision) => {
         decisions.push(decision.answer);
+        currentSnapshot = null;
+        observer?.(null);
         return { kind: 'accepted' };
       },
     };
     const adapter = createScriptedNestedApprovalAdapter(port, []);
 
-    adapter.dispose();
+    await adapter.dispose();
     expect(decisions).toEqual(['n']);
     expect(observer).toBeNull();
   });
@@ -170,10 +209,162 @@ describe('scripted nested approval adapter', () => {
     );
 
     await Promise.resolve();
-    adapter.dispose();
+    await adapter.dispose();
     resolveResponder({ answer: 'allow-edit-file-session' });
     await flush();
 
     expect(decisions.every((answer) => answer === 'n')).toBe(true);
+  });
+
+  it('answers a queued real-owner request after denying the displayed request', async () => {
+    const owner = new NestedApprovalOwner('session-1');
+    const a = owner.request(realRequest('a'));
+    const b = owner.request(realRequest('b'));
+    const seen: string[] = [];
+    const adapter = createScriptedNestedApprovalAdapter(
+      owner,
+      [
+        {
+          sessionId: 'session-1',
+          toolName: 'create_file',
+          preparedArguments: { path: '/tmp/a', content: 'a', overwrite: false },
+          answer: 'n',
+        },
+        {
+          sessionId: 'session-1',
+          toolName: 'create_file',
+          preparedArguments: { path: '/tmp/b', content: 'b', overwrite: false },
+          answer: 'y',
+        },
+      ],
+      { onRequest: (snapshot) => seen.push(snapshot.requestId) },
+    );
+
+    await expect(Promise.all([a, b])).resolves.toEqual([
+      { kind: 'denied', message: 'Tool execution was not approved.' },
+      { kind: 'approved', result: 'b' },
+    ]);
+    expect(seen).toEqual(['a', 'b']);
+    await adapter.dispose();
+  });
+
+  it('does not re-answer the deciding real-owner head before answering the queued next request', async () => {
+    const owner = new NestedApprovalOwner('session-1');
+    let releaseRevalidation!: () => void;
+    const revalidation = new Promise<'prompt' | 'auto_approve'>((resolve) => {
+      releaseRevalidation = () => resolve('prompt');
+    });
+    const effects: string[] = [];
+    const a = owner.request(
+      realRequest('a', {
+        revalidate: async () => revalidation,
+        dispatch: async () => {
+          effects.push('a');
+          return 'a';
+        },
+      }),
+    );
+    const b = owner.request(
+      realRequest('b', {
+        dispatch: async () => {
+          effects.push('b');
+          return 'b';
+        },
+      }),
+    );
+    const decisions: string[] = [];
+    const adapter = createScriptedNestedApprovalAdapter(
+      owner,
+      [
+        {
+          sessionId: 'session-1',
+          toolName: 'create_file',
+          preparedArguments: { path: '/tmp/a', content: 'a', overwrite: false },
+          answer: 'y',
+        },
+        {
+          sessionId: 'session-1',
+          toolName: 'create_file',
+          preparedArguments: { path: '/tmp/b', content: 'b', overwrite: false },
+          answer: 'y',
+        },
+      ],
+      { onRequest: (snapshot) => decisions.push(snapshot.requestId) },
+    );
+
+    await flush();
+    releaseRevalidation();
+    await expect(Promise.all([a, b])).resolves.toEqual([
+      { kind: 'approved', result: 'a' },
+      { kind: 'approved', result: 'b' },
+    ]);
+    expect(decisions).toEqual(['a', 'b']);
+    expect(effects).toEqual(['a', 'b']);
+    await adapter.dispose();
+  });
+
+  it('denies every queued real-owner request before detaching on disposal', async () => {
+    const owner = new NestedApprovalOwner('session-1');
+    let releaseResponder!: () => void;
+    const responder = new Promise<never>((resolve) => {
+      releaseResponder = () => resolve();
+    });
+    const a = owner.request(realRequest('a'));
+    const b = owner.request(realRequest('b'));
+    const adapter = createScriptedNestedApprovalAdapter(
+      owner,
+      [
+        {
+          sessionId: 'session-1',
+          toolName: 'create_file',
+          preparedArguments: { path: '/tmp/a', content: 'a', overwrite: false },
+          answer: 'y',
+        },
+      ],
+      { responder: async () => responder },
+    );
+
+    const disposal = adapter.dispose();
+    await expect(disposal).resolves.toBeUndefined();
+    await expect(Promise.all([a, b])).resolves.toEqual([
+      { kind: 'denied', message: "Tool execution was not approved. User's reason: Scripted nested approval denied." },
+      { kind: 'denied', message: "Tool execution was not approved. User's reason: Scripted nested approval denied." },
+    ]);
+    expect(owner.getSnapshot()).toBeNull();
+    releaseResponder();
+  });
+
+  it('retries the queued head after disposal waits for an already-deciding allow', async () => {
+    const owner = new NestedApprovalOwner('session-1');
+    let releaseRevalidation!: () => void;
+    const revalidation = new Promise<'prompt' | 'auto_approve'>((resolve) => {
+      releaseRevalidation = () => resolve('prompt');
+    });
+    const a = owner.request(realRequest('a', { revalidate: async () => revalidation }));
+    const b = owner.request(realRequest('b'));
+    const adapter = createScriptedNestedApprovalAdapter(owner, [
+      {
+        sessionId: 'session-1',
+        toolName: 'create_file',
+        preparedArguments: { path: '/tmp/a', content: 'a', overwrite: false },
+        answer: 'y',
+      },
+      {
+        sessionId: 'session-1',
+        toolName: 'create_file',
+        preparedArguments: { path: '/tmp/b', content: 'b', overwrite: false },
+        answer: 'y',
+      },
+    ]);
+
+    await flush();
+    const disposal = adapter.dispose();
+    releaseRevalidation();
+
+    await expect(disposal).resolves.toBeUndefined();
+    await expect(Promise.all([a, b])).resolves.toEqual([
+      { kind: 'approved', result: 'a' },
+      { kind: 'denied', message: "Tool execution was not approved. User's reason: Scripted nested approval denied." },
+    ]);
   });
 });

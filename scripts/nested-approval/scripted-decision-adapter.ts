@@ -34,7 +34,7 @@ export type ScriptedNestedApprovalAdapterOptions = {
 };
 
 export type ScriptedNestedApprovalAdapter = {
-  dispose: () => void;
+  dispose: () => Promise<void>;
 };
 
 const denial: NestedApprovalDecision = { answer: 'n', rejectionReason: 'Scripted nested approval denied.' };
@@ -83,7 +83,16 @@ export function createScriptedNestedApprovalAdapter(
   let disposed = false;
   let failed = false;
   let nextExpected = 0;
-  const responding = new Set<string>();
+  let processing: Promise<void> | null = null;
+  let drain: Promise<void> | null = null;
+  let resolveDrain: (() => void) | null = null;
+  let releaseResponder: (() => void) | null = null;
+  const disposal = new Promise<void>((resolve) => {
+    releaseResponder = resolve;
+  });
+  const queue: NestedApprovalSnapshot[] = [];
+  const queued = new Set<string>();
+  const answered = new Set<string>();
 
   const deny = (requestId: string): void => {
     void port.decide(requestId, denial).catch(() => {
@@ -92,57 +101,94 @@ export function createScriptedNestedApprovalAdapter(
     });
   };
 
-  const respond = async (snapshot: NestedApprovalSnapshot): Promise<void> => {
-    if (disposed || responding.has(snapshot.requestId)) return;
-    responding.add(snapshot.requestId);
-    try {
+  const maybeFinishDrain = (): void => {
+    if (!disposed || !resolveDrain || processing || queue.length > 0 || port.getSnapshot() !== null) return;
+    const resolve = resolveDrain;
+    resolveDrain = null;
+    unsubscribe();
+    resolve();
+  };
+
+  const processQueue = async (): Promise<void> => {
+    while (queue.length > 0) {
+      const snapshot = queue.shift()!;
+      queued.delete(snapshot.requestId);
+      if (answered.has(snapshot.requestId)) continue;
+      answered.add(snapshot.requestId);
+
       const expected = expectedCalls[nextExpected];
       let decision: NestedApprovalDecision = denial;
       const matchedExpected =
-        !failed && expected && hasOrdinaryNestedIdentity(snapshot) && matchesExpected(snapshot, expected);
+        !disposed && !failed && expected && hasOrdinaryNestedIdentity(snapshot) && matchesExpected(snapshot, expected);
       if (matchedExpected) {
         try {
           options.onRequest?.(snapshot, expected);
-          decision = options.responder
-            ? await options.responder(snapshot, expected)
+          const supplied = options.responder
+            ? options.responder(snapshot, expected)
             : {
                 answer: expected.answer,
                 ...(expected.rejectionReason ? { rejectionReason: expected.rejectionReason } : {}),
               };
+          decision = await Promise.race([Promise.resolve(supplied), disposal.then(() => denial)]);
         } catch {
           failed = true;
           decision = denial;
         }
-      } else {
+      } else if (!disposed) {
         failed = true;
       }
 
-      // Disposal wins over a responder that was still awaiting its answer.
-      // Never let a late host callback turn disposal into authority.
+      // Reserve the expected answer before decide(). The real owner can publish
+      // its next synchronous head from inside decide(), before the acknowledgement
+      // promise returns. Processing remains serialized, so that publication waits
+      // behind this decision and sees the reserved cursor.
+      if (matchedExpected && !failed && !disposed) nextExpected += 1;
       if (disposed) decision = denial;
 
-      const result = await port.decide(snapshot.requestId, decision);
-      if (result.kind === 'accepted' && matchedExpected && !failed) nextExpected += 1;
-      if (result.kind === 'stale') failed = true;
-    } catch {
-      failed = true;
-      deny(snapshot.requestId);
-    } finally {
-      responding.delete(snapshot.requestId);
+      try {
+        const result = await port.decide(snapshot.requestId, decision);
+        if (result.kind === 'stale') failed = true;
+      } catch {
+        failed = true;
+        deny(snapshot.requestId);
+      }
     }
   };
 
-  const unsubscribe = port.subscribe((snapshot) => {
-    if (snapshot) void respond(snapshot);
-  });
+  const schedule = (): void => {
+    if (processing) return;
+    processing = processQueue().finally(() => {
+      processing = null;
+      maybeFinishDrain();
+      if (queue.length > 0) schedule();
+    });
+  };
+
+  const enqueue = (snapshot: NestedApprovalSnapshot | null): void => {
+    if (!snapshot) {
+      maybeFinishDrain();
+      return;
+    }
+    if (answered.has(snapshot.requestId) || queued.has(snapshot.requestId)) return;
+    queued.add(snapshot.requestId);
+    queue.push(snapshot);
+    schedule();
+  };
+
+  const unsubscribe = port.subscribe(enqueue);
 
   return {
-    dispose: () => {
-      if (disposed) return;
+    dispose: async () => {
+      if (drain) return drain;
       disposed = true;
-      const snapshot = port.getSnapshot();
-      if (snapshot) deny(snapshot.requestId);
-      unsubscribe();
+      drain = new Promise<void>((resolve) => {
+        resolveDrain = resolve;
+      });
+      releaseResponder?.();
+      enqueue(port.getSnapshot());
+      schedule();
+      maybeFinishDrain();
+      return drain;
     },
   };
 }

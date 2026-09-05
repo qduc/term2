@@ -15,6 +15,7 @@ import type { ILoggingService } from '../service-interfaces.js';
 import { getToolInfoFromInterruption } from '../interruption-info.js';
 import { parseToolCallArguments } from '../tool-call-arguments.js';
 import { extractToolTargetPaths } from './shell-auto-approval-resolver.js';
+import { resolveOutsideWorkspaceEdit } from './approval-descriptor.js';
 
 export type ApprovalGrantExecutorDeps = {
   sessionId: string;
@@ -111,6 +112,15 @@ function getEditSessionGrants(
   args: Record<string, unknown> | null,
 ): Array<{ kind: 'file' | 'folder'; path: string }> {
   if (answer !== 'allow-edit-file-session' && answer !== 'allow-edit-folder-session') return [];
+  // Persistent grants must match the singular scope the descriptor/prompt discloses.
+  // One-time approval of the current call is independent: isApproved is true as
+  // long as this returns at least one grant.
+  const disclosed = resolveOutsideWorkspaceEdit(toolName, args);
+  if (disclosed) {
+    return answer === 'allow-edit-file-session'
+      ? [{ kind: 'file', path: disclosed.path }]
+      : [{ kind: 'folder', path: disclosed.folder }];
+  }
   return extractToolTargetPaths(toolName ?? '', args).map((rawPath) => {
     const target = path.resolve(getActiveWorkspaceRoot(), rawPath);
     return answer === 'allow-edit-file-session'

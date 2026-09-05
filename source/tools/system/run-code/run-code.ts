@@ -33,6 +33,8 @@ export const TOOL_NAME_RUN_CODE = 'run_code';
 export const TOOL_NAME_DESCRIBE = 'describe';
 
 const DEFAULT_TIMEOUT_MS = 120_000;
+/** Node `setTimeout` wraps delays above `2**31-1` to ~1 ms. */
+const MAX_TIMEOUT_MS = 2_147_483_647;
 const MAX_OUTPUT_CHARS = 30_000;
 let nextBridgeRunId = 0;
 
@@ -89,11 +91,12 @@ export const runCodeParametersSchema = z.object({
     .boolean()
     .optional()
     .describe('Include console.log debugging trace in the successful result. Defaults to false.'),
-  // A non-positive timeout disables the timer downstream, which would leave the
-  // script running with no deadline.
+  // Non-positive is rejected because `setTimeout(fn, 0)` fires promptly; it
+  // does not disable the timer. Values above 2**31-1 wrap to ~1 ms in Node.
   timeout_ms: relaxedNumber
     .int()
     .positive()
+    .max(MAX_TIMEOUT_MS)
     .optional()
     .describe(`Wall-clock limit for the script. Defaults to ${DEFAULT_TIMEOUT_MS}.`),
   description: z.string().optional().describe('One short line describing what the script does, shown to the user.'),

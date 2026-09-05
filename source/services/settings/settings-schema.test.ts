@@ -261,6 +261,11 @@ it('workflow limits have bounded defaults and accept workspace configuration', (
   });
   expect(() => SettingsSchema.parse({ agentWorkflow: { maxConcurrency: 0 } })).toThrow();
   expect(() => SettingsSchema.parse({ agentWorkflow: { maxConsoleBytes: 0 } })).toThrow();
+  expect(SettingsSchema.parse({ agentWorkflow: { timeoutMs: 2_147_483_647 } }).agentWorkflow.timeoutMs).toBe(
+    2_147_483_647,
+  );
+  expect(() => SettingsSchema.parse({ agentWorkflow: { timeoutMs: 2_147_483_648 } })).toThrow();
+  expect(() => SettingsSchema.parse({ agentWorkflow: { timeoutMs: 3_000_000_000 } })).toThrow();
 });
 
 it('tool capability toggles default to enabled, are runtime-modifiable, and round-trip', () => {

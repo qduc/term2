@@ -371,6 +371,96 @@ describe('run_code', () => {
     expect(effects).toEqual(['before']);
   });
 
+  it('lets a default-lane sibling run while a serial nested approval waits', async () => {
+    const effects: string[] = [];
+    const approvalRegistry = new ToolApprovalPolicyRegistry();
+    const protectedTool = tool({
+      name: 'protected',
+      needsApproval: () => true,
+      execute: () => {
+        effects.push('serial');
+        return 'serial';
+      },
+    });
+    const fastTool = tool({
+      name: 'fast',
+      parallelSafe: true,
+      execute: () => {
+        effects.push('fast');
+        return 'fast';
+      },
+    });
+    approvalRegistry.register({
+      toolName: protectedTool.name,
+      parameters: protectedTool.parameters,
+      needsApproval: protectedTool.needsApproval,
+    });
+    approvalRegistry.register({
+      toolName: fastTool.name,
+      parameters: fastTool.parameters,
+      needsApproval: fastTool.needsApproval,
+    });
+    const owner = new NestedApprovalOwner();
+    let tools: ToolRegistry = [protectedTool, fastTool];
+    const runCode = createRunCodeToolDefinition({
+      loggingService: logging(),
+      getToolRegistry: () => tools,
+      approvalPolicyRegistry: approvalRegistry,
+    });
+    tools = [protectedTool, fastTool, runCode];
+    bindRunCodeRegistry(tools);
+    bindRunCodeNestedApprovalOwner(tools, owner);
+    const result = runCode.execute(
+      {
+        code: 'const serial = tools.protected({ value: "x" }); const fast = await tools.fast({ value: "y" }); return { fast, serial: await serial };',
+      },
+      { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
+    );
+    await vi.waitFor(() => expect(owner.getSnapshot()?.toolName).toBe('protected'));
+    await vi.waitFor(() => expect(effects).toEqual(['fast']));
+    await owner.decide(owner.getSnapshot()!.requestId, { answer: 'y' });
+    await expect(result).resolves.toContain('"fast":"fast"');
+    expect(effects).toEqual(['fast', 'serial']);
+  });
+
+  it('does not grant or dispatch a late approval after the host timeout aborts the waiter', async () => {
+    const effects: string[] = [];
+    const approvalRegistry = new ToolApprovalPolicyRegistry();
+    const protectedTool = tool({
+      name: 'protected',
+      needsApproval: () => true,
+      execute: () => {
+        effects.push('effect');
+        return 'effect';
+      },
+    });
+    approvalRegistry.register({
+      toolName: protectedTool.name,
+      parameters: protectedTool.parameters,
+      needsApproval: protectedTool.needsApproval,
+    });
+    const owner = new NestedApprovalOwner();
+    let tools: ToolRegistry = [protectedTool];
+    const runCode = createRunCodeToolDefinition({
+      loggingService: logging(),
+      getToolRegistry: () => tools,
+      approvalPolicyRegistry: approvalRegistry,
+    });
+    tools = [protectedTool, runCode];
+    bindRunCodeRegistry(tools);
+    bindRunCodeNestedApprovalOwner(tools, owner);
+    const pending = runCode.execute(
+      { code: 'return await tools.protected({ value: "x" });', timeout_ms: 500 },
+      { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
+    );
+    await vi.waitFor(() => expect(owner.getSnapshot()?.toolName).toBe('protected'));
+    const requestId = owner.getSnapshot()!.requestId;
+    await expect(pending).resolves.toContain('timed out');
+    await expect(owner.decide(requestId, { answer: 'y' })).resolves.toEqual({ kind: 'stale' });
+    expect(effects).toEqual([]);
+    expect(owner.getSnapshot()).toBeNull();
+  }, 20_000);
+
   it('permits a still-prompt decision after revalidation becomes auto approval', async () => {
     let evaluations = 0;
     const approvalRegistry = new ToolApprovalPolicyRegistry();
@@ -696,12 +786,21 @@ describe('run_code', () => {
     expect(output).toContain('timed out');
   }, 20_000);
 
-  it('rejects a non-positive timeout, which would otherwise disable the timer entirely', () => {
+  it('rejects a non-positive timeout because setTimeout(fn, 0) fires promptly', () => {
     const schema = build([]).parameters;
 
     expect(schema.safeParse({ code: 'x', timeout_ms: 0 }).success).toBe(false);
     expect(schema.safeParse({ code: 'x', timeout_ms: -1 }).success).toBe(false);
     expect(schema.safeParse({ code: 'x', timeout_ms: 1_000 }).success).toBe(true);
+  });
+
+  it('rejects a timeout above 2**31-1, which Node would wrap to ~1ms', () => {
+    const schema = build([]).parameters;
+
+    expect(schema.safeParse({ code: 'x', timeout_ms: 2_147_483_646 }).success).toBe(true);
+    expect(schema.safeParse({ code: 'x', timeout_ms: 2_147_483_647 }).success).toBe(true);
+    expect(schema.safeParse({ code: 'x', timeout_ms: 2_147_483_648 }).success).toBe(false);
+    expect(schema.safeParse({ code: 'x', timeout_ms: 3_000_000_000 }).success).toBe(false);
   });
 
   it('gives the script no filesystem, network, or ambient host globals', async () => {

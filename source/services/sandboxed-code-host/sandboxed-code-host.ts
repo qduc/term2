@@ -63,7 +63,22 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
     };
     let failFromParentAbort: (() => void) | undefined;
     let settled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    let workTimer: ReturnType<typeof setTimeout> | undefined;
+    let longStopTimer: ReturnType<typeof setTimeout> | undefined;
+    const LONG_STOP_FLOOR_MS = 1_800_000;
+    const MAX_TIMER_DELAY_MS = 2_147_483_647;
+    const waitingSet = new Set<string>();
+    let idleLatch: { pending: string[]; resultsConsumed: number } | null = null;
+    let resultsSent = 0;
+    let workPaused = false;
+    let workRemainingMs = limits.timeoutMs;
+    let workDeadline = Date.now() + workRemainingMs;
+    const delayUntil = (deadline: number) => Math.max(0, Math.min(deadline - Date.now(), MAX_TIMER_DELAY_MS));
+    const originals = entries.map(([, handler]) => ({
+      handler,
+      onWaiting: handler.onWaiting,
+      onResumed: handler.onResumed,
+    }));
 
     // One admission ledger per capability: a script reading 200 files and a
     // workflow spawning 8 agents want different budgets, so they never share.
@@ -81,22 +96,85 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
       const finish = (value: HostResult) => {
         if (settled) return;
         settled = true;
+        if (workTimer) clearTimeout(workTimer);
+        if (longStopTimer) clearTimeout(longStopTimer);
         cancelWaiting();
         resolve(value);
       };
       const fail = (code: HostErrorCode, message: string) => finish(failure(code, message) as HostResult);
-      const timeout = () => {
-        controller.abort();
-        fail('timeout', `${subject} exceeded its configured timeout`);
+      const armWorkClock = () => {
+        if (workTimer) clearTimeout(workTimer);
+        workTimer = undefined;
+        if (workPaused) return;
+        workTimer = setTimeout(() => {
+          controller.abort();
+          fail('timeout', `${subject} exceeded its configured timeout`);
+        }, delayUntil(workDeadline));
       };
-      failFromParentAbort = () => fail('timeout', `${subject} was cancelled by its parent`);
-      timer = setTimeout(timeout, limits.timeoutMs);
+      const pauseWorkClock = () => {
+        if (workPaused) return;
+        workPaused = true;
+        workRemainingMs = Math.max(0, workDeadline - Date.now());
+        if (workTimer) clearTimeout(workTimer);
+        workTimer = undefined;
+      };
+      const resumeWorkClock = () => {
+        if (!workPaused) return;
+        workPaused = false;
+        workDeadline = Date.now() + workRemainingMs;
+        armWorkClock();
+      };
+      const pausePredicate = () => {
+        if (!idleLatch) return false;
+        if (idleLatch.pending.length === 0) return false;
+        if (idleLatch.resultsConsumed !== resultsSent) return false;
+        return idleLatch.pending.every((id) => waitingSet.has(id));
+      };
+      const reevaluatePause = () => {
+        if (pausePredicate()) pauseWorkClock();
+        else resumeWorkClock();
+      };
+      for (const { handler, onWaiting, onResumed } of originals) {
+        handler.onWaiting = (context) => {
+          waitingSet.add(context.requestId);
+          onWaiting?.(context);
+          reevaluatePause();
+        };
+        handler.onResumed = (context) => {
+          waitingSet.delete(context.requestId);
+          onResumed?.(context);
+          reevaluatePause();
+        };
+      }
+      failFromParentAbort = () => fail('cancelled', `${subject} was cancelled by its parent`);
+      armWorkClock();
+      longStopTimer = setTimeout(() => {
+        controller.abort();
+        fail('deadline', `${subject} exceeded its deadline`);
+      }, delayUntil(Date.now() + Math.max(limits.timeoutMs, LONG_STOP_FLOOR_MS)));
       if (input.signal?.aborted) onAbort();
       input.signal?.addEventListener('abort', onAbort, { once: true });
 
       let consoleBytes = 0;
       worker.on('message', async (message: any) => {
         if (settled) return;
+        if (message?.type === 'workflow.idle') {
+          if (
+            Array.isArray(message.pending) &&
+            message.pending.every((id: unknown) => typeof id === 'string') &&
+            typeof message.resultsConsumed === 'number' &&
+            Number.isFinite(message.resultsConsumed)
+          ) {
+            idleLatch = { pending: message.pending, resultsConsumed: message.resultsConsumed };
+            reevaluatePause();
+          }
+          return;
+        }
+        if (message?.type === 'workflow.busy') {
+          idleLatch = null;
+          reevaluatePause();
+          return;
+        }
         if (message?.type === 'console.log') {
           if (Array.isArray(message.values) && message.values.every((value: unknown) => isJsonValue(value))) {
             const size = bytes(message.values);
@@ -141,8 +219,12 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
         const ledger = ledgers.get(name);
         if (!handler || !ledger) return;
 
-        const reply = (result: JsonValue) =>
+        const reply = (result: JsonValue) => {
+          resultsSent++;
+          idleLatch = null;
+          reevaluatePause();
           worker.postMessage({ type: `${name}.result`, requestId: message.requestId, result });
+        };
 
         const { type: _type, requestId: _requestId, ...payload } = message as Record<string, unknown>;
         let prepared: unknown;
@@ -167,7 +249,11 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
           else reply(outcome.result);
           return;
         }
-        const callContext = { callId: admitted.callId, signal: controller.signal };
+        const callContext = {
+          callId: admitted.callId,
+          requestId: String(message.requestId),
+          signal: controller.signal,
+        };
         handler.onAdmitted?.(prepared, callContext);
 
         const releasePermit = await ledger.acquire(handler.lane?.(prepared) ?? 'default');
@@ -192,7 +278,12 @@ export class SandboxedCodeHostImpl implements SandboxedCodeHost {
       });
     });
 
-    if (timer) clearTimeout(timer);
+    if (workTimer) clearTimeout(workTimer);
+    if (longStopTimer) clearTimeout(longStopTimer);
+    for (const { handler, onWaiting, onResumed } of originals) {
+      handler.onWaiting = onWaiting;
+      handler.onResumed = onResumed;
+    }
     input.signal?.removeEventListener('abort', onAbort);
     controller.abort();
     await worker.terminate().catch(() => undefined);

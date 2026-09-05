@@ -423,7 +423,122 @@ describe('run_code', () => {
     expect(effects).toEqual(['fast', 'serial']);
   });
 
-  it('does not grant or dispatch a late approval after the host timeout aborts the waiter', async () => {
+  it('does not consume the work-clock across a nested approval wait longer than timeout_ms', async () => {
+    const approvalRegistry = new ToolApprovalPolicyRegistry();
+    const protectedTool = tool({
+      name: 'protected',
+      needsApproval: () => true,
+      execute: () => 'ok',
+    });
+    approvalRegistry.register({
+      toolName: protectedTool.name,
+      parameters: protectedTool.parameters,
+      needsApproval: protectedTool.needsApproval,
+    });
+    const owner = new NestedApprovalOwner();
+    let tools: ToolRegistry = [protectedTool];
+    const runCode = createRunCodeToolDefinition({
+      loggingService: logging(),
+      getToolRegistry: () => tools,
+      approvalPolicyRegistry: approvalRegistry,
+    });
+    tools = [protectedTool, runCode];
+    bindRunCodeRegistry(tools);
+    bindRunCodeNestedApprovalOwner(tools, owner);
+    const pending = runCode.execute(
+      { code: 'return await tools.protected({ value: "x" });', timeout_ms: 500 },
+      { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
+    );
+    await vi.waitFor(() => expect(owner.getSnapshot()?.toolName).toBe('protected'));
+    await new Promise((resolve) => setTimeout(resolve, 1_200));
+    await owner.decide(owner.getSnapshot()!.requestId, { answer: 'y' });
+    await expect(pending).resolves.toContain('Result:');
+    await expect(pending).resolves.not.toContain('Script timed out.');
+  }, 20_000);
+
+  it('consumes the work-clock while a default-lane sibling runs during a nested wait', async () => {
+    const approvalRegistry = new ToolApprovalPolicyRegistry();
+    const protectedTool = tool({
+      name: 'protected',
+      needsApproval: () => true,
+      execute: () => 'serial',
+    });
+    const slowTool = tool({
+      name: 'slow',
+      parallelSafe: true,
+      execute: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1_200));
+        return 'slow';
+      },
+    });
+    approvalRegistry.register({
+      toolName: protectedTool.name,
+      parameters: protectedTool.parameters,
+      needsApproval: protectedTool.needsApproval,
+    });
+    approvalRegistry.register({
+      toolName: slowTool.name,
+      parameters: slowTool.parameters,
+      needsApproval: slowTool.needsApproval,
+    });
+    const owner = new NestedApprovalOwner();
+    let tools: ToolRegistry = [protectedTool, slowTool];
+    const runCode = createRunCodeToolDefinition({
+      loggingService: logging(),
+      getToolRegistry: () => tools,
+      approvalPolicyRegistry: approvalRegistry,
+    });
+    tools = [protectedTool, slowTool, runCode];
+    bindRunCodeRegistry(tools);
+    bindRunCodeNestedApprovalOwner(tools, owner);
+    const pending = runCode.execute(
+      {
+        code: 'const serial = tools.protected({ value: "x" }); const slow = tools.slow({ value: "y" }); return { slow: await slow, serial: await serial };',
+        timeout_ms: 500,
+      },
+      { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
+    );
+    await vi.waitFor(() => expect(owner.getSnapshot()?.toolName).toBe('protected'));
+    await expect(pending).resolves.toContain('Script timed out.');
+  }, 20_000);
+
+  it('pauses a prompting call after describe, keyed by worker requestId not callId', async () => {
+    const approvalRegistry = new ToolApprovalPolicyRegistry();
+    const protectedTool = tool({
+      name: 'protected',
+      needsApproval: () => true,
+      execute: () => 'ok',
+    });
+    approvalRegistry.register({
+      toolName: protectedTool.name,
+      parameters: protectedTool.parameters,
+      needsApproval: protectedTool.needsApproval,
+    });
+    const owner = new NestedApprovalOwner();
+    let tools: ToolRegistry = [protectedTool];
+    const runCode = createRunCodeToolDefinition({
+      loggingService: logging(),
+      getToolRegistry: () => tools,
+      approvalPolicyRegistry: approvalRegistry,
+    });
+    tools = [protectedTool, runCode];
+    bindRunCodeRegistry(tools);
+    bindRunCodeNestedApprovalOwner(tools, owner);
+    const pending = runCode.execute(
+      {
+        code: 'await tools.describe("protected"); return await tools.protected({ value: "x" });',
+        timeout_ms: 500,
+      },
+      { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
+    );
+    await vi.waitFor(() => expect(owner.getSnapshot()?.toolName).toBe('protected'));
+    await new Promise((resolve) => setTimeout(resolve, 1_200));
+    await owner.decide(owner.getSnapshot()!.requestId, { answer: 'y' });
+    await expect(pending).resolves.toContain('Result:');
+    await expect(pending).resolves.not.toContain('Script timed out.');
+  }, 20_000);
+
+  it('does not grant or dispatch a late approval after the host run aborts the waiter', async () => {
     const effects: string[] = [];
     const approvalRegistry = new ToolApprovalPolicyRegistry();
     const protectedTool = tool({
@@ -449,13 +564,15 @@ describe('run_code', () => {
     tools = [protectedTool, runCode];
     bindRunCodeRegistry(tools);
     bindRunCodeNestedApprovalOwner(tools, owner);
+    const controller = new AbortController();
     const pending = runCode.execute(
-      { code: 'return await tools.protected({ value: "x" });', timeout_ms: 500 },
-      { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
+      { code: 'return await tools.protected({ value: "x" });', timeout_ms: 60_000 },
+      { context: { sessionId: 'session-1' }, signal: controller.signal },
     );
     await vi.waitFor(() => expect(owner.getSnapshot()?.toolName).toBe('protected'));
     const requestId = owner.getSnapshot()!.requestId;
-    await expect(pending).resolves.toContain('timed out');
+    controller.abort();
+    await expect(pending).resolves.toContain('Script was cancelled');
     await expect(owner.decide(requestId, { answer: 'y' })).resolves.toEqual({ kind: 'stale' });
     expect(effects).toEqual([]);
     expect(owner.getSnapshot()).toBeNull();
@@ -480,7 +597,7 @@ describe('run_code', () => {
         parameters: createFile.parameters,
         needsApproval: createFile.needsApproval as AnyToolDefinition['needsApproval'],
       });
-      // Host timeout aborts callContext.signal and would normally settle the
+      // Parent abort aborts callContext.signal and would normally settle the
       // owner waiter first. Isolate the owner's abort listener so decide still
       // reaches the production grant closure — the residual approve-wins window.
       class Owner extends NestedApprovalOwner {
@@ -500,16 +617,18 @@ describe('run_code', () => {
       tools = [createFile, runCode];
       bindRunCodeRegistry(tools);
       bindRunCodeNestedApprovalOwner(tools, owner);
+      const controller = new AbortController();
       const pending = runCode.execute(
         {
           code: 'return await tools.create_file({ path: ' + JSON.stringify(targetPath) + ", content: 'x' });",
-          timeout_ms: 500,
+          timeout_ms: 60_000,
         },
-        { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
+        { context: { sessionId: 'session-1' }, signal: controller.signal },
       );
       await vi.waitFor(() => expect(owner.getSnapshot()?.toolName).toBe('create_file'));
       const requestId = owner.getSnapshot()!.requestId;
-      await expect(pending).resolves.toContain('timed out');
+      controller.abort();
+      await expect(pending).resolves.toContain('Script was cancelled');
       await owner.decide(requestId, { answer: 'allow-edit-file-session' });
       await vi.waitFor(() => expect(owner.getSnapshot()).toBeNull());
       expect(editGrant).not.toHaveBeenCalled();
@@ -842,7 +961,7 @@ describe('run_code', () => {
   it('reports a timeout rather than hanging the turn', async () => {
     const output = await run([], 'while (true) {}', { timeout_ms: 1_500 });
 
-    expect(output).toContain('timed out');
+    expect(output).toContain('Script timed out.');
   }, 20_000);
 
   it('rejects a non-positive timeout because setTimeout(fn, 0) fires promptly', () => {
@@ -882,7 +1001,9 @@ describe('run_code', () => {
 
     const output = String(await pending);
 
+    expect(output).toContain('Script was cancelled.');
     expect(output).toContain('cancelled by its parent');
+    expect(output).not.toContain('Script timed out.');
   }, 20_000);
 
   it('aborts an in-flight nested tool when the script deadline fires', async () => {
@@ -922,12 +1043,22 @@ describe('run_code', () => {
 
   it('passes caller cancellation to an in-flight nested tool', async () => {
     const nestedAborted = vi.fn();
+    let started!: () => void;
+    const inFlight = new Promise<void>((resolve) => {
+      started = resolve;
+    });
     const definition = build([
       tool({
         name: 'slow',
         execute: async (_params: unknown, context: unknown) => {
           const signal = (context as { signal?: AbortSignal } | undefined)?.signal;
-          await new Promise<void>((resolve) =>
+          started();
+          await new Promise<void>((resolve) => {
+            if (signal?.aborted) {
+              nestedAborted();
+              resolve();
+              return;
+            }
             signal?.addEventListener(
               'abort',
               () => {
@@ -935,8 +1066,8 @@ describe('run_code', () => {
                 resolve();
               },
               { once: true },
-            ),
-          );
+            );
+          });
           return 'aborted';
         },
       }),
@@ -946,10 +1077,12 @@ describe('run_code', () => {
       { code: 'await tools.slow({ value: "x" });', timeout_ms: 60_000 } as never,
       { signal: controller.signal } as never,
     );
-    setTimeout(() => controller.abort(), 50);
+    await inFlight;
+    controller.abort();
 
     const output = String(await pending);
 
+    expect(output).toContain('Script was cancelled.');
     expect(output).toContain('cancelled by its parent');
     await vi.waitFor(() => expect(nestedAborted).toHaveBeenCalledOnce());
   }, 20_000);

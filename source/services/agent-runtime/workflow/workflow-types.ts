@@ -43,6 +43,8 @@ export interface WorkflowError {
     | 'syntax_error'
     | 'runtime_error'
     | 'timeout'
+    | 'deadline'
+    | 'cancelled'
     | 'limit_exceeded'
     | 'approval_required'
     | 'sandbox_unavailable'

@@ -169,7 +169,7 @@ it('settles a real scripted worker through ConversationService approval and abor
   );
   await vi.waitFor(() => expect(owner?.getSnapshot()).not.toBeNull());
   service.abort();
-  await expect(aborted).resolves.toContain('Script timed out');
+  await expect(aborted).resolves.toContain('Script was cancelled');
   expect(effects).toEqual(['effect']);
   await service.shutdown();
 });

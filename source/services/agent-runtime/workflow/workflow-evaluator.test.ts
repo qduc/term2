@@ -100,7 +100,7 @@ describe('WorkflowEvaluator', () => {
     });
     await started;
     controller.abort();
-    await expect(pending).resolves.toMatchObject({ ok: false, error: { code: 'timeout' } });
+    await expect(pending).resolves.toMatchObject({ ok: false, error: { code: 'cancelled' } });
     expect(childAborted).toBe(true);
   });
 
@@ -379,7 +379,7 @@ describe('WorkflowEvaluator', () => {
     });
     await firstStarted;
     controller.abort();
-    await expect(pending).resolves.toMatchObject({ ok: false, error: { code: 'timeout' } });
+    await expect(pending).resolves.toMatchObject({ ok: false, error: { code: 'cancelled' } });
     expect(created).toBe(1);
   });
 

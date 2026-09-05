@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { EventEmitter } from 'node:events';
+import type { Worker } from 'node:worker_threads';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SandboxedCodeHostImpl } from './sandboxed-code-host.js';
-import type { CapabilityHandler } from './host-types.js';
+import type { CapabilityHandler, CapabilityOutcome, HostResult } from './host-types.js';
 
 const limits = {
   timeoutMs: 5_000,
@@ -76,5 +78,290 @@ describe('SandboxedCodeHostImpl output rejection messages', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.output).toEqual({ rows: [1, 2, 3] });
+  });
+});
+
+function createFakeWorker() {
+  const posted: unknown[] = [];
+  const worker = new EventEmitter() as EventEmitter & {
+    postMessage: (message: unknown) => void;
+    terminate: () => Promise<number>;
+    posted: unknown[];
+  };
+  worker.posted = posted;
+  worker.postMessage = (message: unknown) => {
+    posted.push(message);
+  };
+  worker.terminate = async () => 0;
+  return worker;
+}
+
+const protocolLimits = {
+  timeoutMs: 1_000,
+  maxCodeBytes: 65_536,
+  maxOutputBytes: 65_536,
+  maxConsoleBytes: 65_536,
+};
+
+const runWithFakeWorker = (
+  handler: CapabilityHandler,
+  worker: ReturnType<typeof createFakeWorker>,
+  overrides: { timeoutMs?: number; signal?: AbortSignal } = {},
+) =>
+  new SandboxedCodeHostImpl().run({
+    code: 'return 1;',
+    capabilities: { tools: handler },
+    limits: { ...protocolLimits, timeoutMs: overrides.timeoutMs ?? protocolLimits.timeoutMs },
+    subject: 'Script',
+    allowVoidOutput: true,
+    signal: overrides.signal,
+    workerFactory: () => worker as unknown as Worker,
+  });
+
+const stillRunning = async (pending: Promise<HostResult>) => {
+  const marker = Symbol('running');
+  expect(await Promise.race([pending, Promise.resolve(marker)])).toBe(marker);
+};
+
+describe('SandboxedCodeHostImpl Fork C clocks', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('does not advance the work-clock across a human wait when idle arrives before onWaiting', async () => {
+    vi.useFakeTimers();
+    const worker = createFakeWorker();
+    let entered!: () => void;
+    const inInvoke = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let resume!: () => void;
+    const wait = new Promise<void>((resolve) => {
+      resume = resolve;
+    });
+    const handler: CapabilityHandler = {
+      binding: { name: 'tools', kind: 'namespace', members: ['prompt'] },
+      limits: { maxCalls: 4, maxConcurrency: 1, limitExceededMessage: 'too many calls' },
+      prepare: () => ({}),
+      invoke: async (_prepared, context) => {
+        entered();
+        handler.onWaiting?.(context);
+        try {
+          await wait;
+        } finally {
+          handler.onResumed?.(context);
+        }
+        return { kind: 'result', result: { ok: true } };
+      },
+    };
+    const pending = runWithFakeWorker(handler, worker);
+    worker.emit('message', { type: 'tools.run', requestId: '1', member: 'prompt', params: {} });
+    worker.emit('message', { type: 'workflow.idle', pending: ['1'], resultsConsumed: 0 });
+    await inInvoke;
+    await vi.advanceTimersByTimeAsync(5_000);
+    await stillRunning(pending);
+    resume();
+    await vi.waitFor(() => expect(worker.posted.length).toBeGreaterThan(0));
+    worker.emit('message', { type: 'workflow.complete', output: { done: true } });
+    await expect(pending).resolves.toEqual({ ok: true, output: { done: true } });
+  });
+
+  it('advances the work-clock while a default-lane sibling runs during a wait', async () => {
+    vi.useFakeTimers();
+    const worker = createFakeWorker();
+    let promptEntered!: () => void;
+    const inPrompt = new Promise<void>((resolve) => {
+      promptEntered = resolve;
+    });
+    const handler: CapabilityHandler = {
+      binding: { name: 'tools', kind: 'namespace', members: ['prompt', 'fast'] },
+      limits: { maxCalls: 8, maxConcurrency: 8, limitExceededMessage: 'too many calls' },
+      prepare: (payload) => ({ member: payload.member }),
+      lane: (prepared) => ((prepared as { member: string }).member === 'fast' ? 'default' : 'serial'),
+      invoke: async (prepared, context) => {
+        if ((prepared as { member: string }).member === 'prompt') {
+          promptEntered();
+          handler.onWaiting?.(context);
+          await new Promise(() => undefined);
+        }
+        await new Promise(() => undefined);
+        return { kind: 'result', result: { ok: true } };
+      },
+    };
+    const pending = runWithFakeWorker(handler, worker);
+    worker.emit('message', { type: 'tools.run', requestId: '1', member: 'prompt', params: {} });
+    worker.emit('message', { type: 'workflow.idle', pending: ['1'], resultsConsumed: 0 });
+    await inPrompt;
+    worker.emit('message', { type: 'tools.run', requestId: '2', member: 'fast', params: {} });
+    worker.emit('message', { type: 'workflow.busy', resultsConsumed: 0 });
+    worker.emit('message', { type: 'workflow.idle', pending: ['1', '2'], resultsConsumed: 0 });
+    await vi.advanceTimersByTimeAsync(1_000);
+    await expect(pending).resolves.toMatchObject({ ok: false, error: { code: 'timeout' } });
+  });
+
+  it('does not pause on a stale idle racing a dispatched .result', async () => {
+    vi.useFakeTimers();
+    const worker = createFakeWorker();
+    let promptEntered!: () => void;
+    const inPrompt = new Promise<void>((resolve) => {
+      promptEntered = resolve;
+    });
+    let workEntered!: () => void;
+    const inWork = new Promise<void>((resolve) => {
+      workEntered = resolve;
+    });
+    const handler: CapabilityHandler = {
+      binding: { name: 'tools', kind: 'namespace', members: ['prompt', 'describe', 'work'] },
+      limits: { maxCalls: 8, maxConcurrency: 8, limitExceededMessage: 'too many calls' },
+      prepare: (payload): CapabilityOutcome | { member: unknown } => {
+        if (payload.member === 'describe') return { kind: 'result', result: { ok: true } };
+        return { member: payload.member };
+      },
+      invoke: async (prepared, context) => {
+        if ((prepared as { member: string }).member === 'prompt') {
+          promptEntered();
+          handler.onWaiting?.(context);
+          await new Promise(() => undefined);
+        }
+        workEntered();
+        await new Promise(() => undefined);
+        return { kind: 'result', result: { ok: true } };
+      },
+    };
+    const pending = runWithFakeWorker(handler, worker);
+    worker.emit('message', { type: 'tools.run', requestId: '1', member: 'prompt', params: {} });
+    worker.emit('message', { type: 'workflow.idle', pending: ['1'], resultsConsumed: 0 });
+    await inPrompt;
+    worker.emit('message', { type: 'tools.run', requestId: '2', member: 'describe', params: 'work' });
+    await vi.waitFor(() =>
+      expect(worker.posted).toContainEqual({ type: 'tools.result', requestId: '2', result: { ok: true } }),
+    );
+    worker.emit('message', { type: 'tools.run', requestId: '3', member: 'work', params: {} });
+    worker.emit('message', { type: 'workflow.busy', resultsConsumed: 1 });
+    await inWork;
+    worker.emit('message', { type: 'workflow.idle', pending: ['1'], resultsConsumed: 0 });
+    await vi.advanceTimersByTimeAsync(1_000);
+    await expect(pending).resolves.toMatchObject({ ok: false, error: { code: 'timeout' } });
+  });
+
+  it('fires long-stop on a paused wait at max(timeoutMs, 1_800_000)', async () => {
+    vi.useFakeTimers();
+    const worker = createFakeWorker();
+    let entered!: () => void;
+    const inInvoke = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const handler: CapabilityHandler = {
+      binding: { name: 'tools', kind: 'namespace', members: ['prompt'] },
+      limits: { maxCalls: 4, maxConcurrency: 1, limitExceededMessage: 'too many calls' },
+      prepare: () => ({}),
+      invoke: async (_prepared, context) => {
+        entered();
+        handler.onWaiting?.(context);
+        await new Promise(() => undefined);
+        return { kind: 'result', result: { ok: true } };
+      },
+    };
+    const pending = runWithFakeWorker(handler, worker);
+    worker.emit('message', { type: 'tools.run', requestId: '1', member: 'prompt', params: {} });
+    worker.emit('message', { type: 'workflow.idle', pending: ['1'], resultsConsumed: 0 });
+    await inInvoke;
+    await vi.advanceTimersByTimeAsync(1_799_999);
+    await stillRunning(pending);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(pending).resolves.toMatchObject({ ok: false, error: { code: 'deadline' } });
+  });
+
+  it('still bounds a never-idle loop with the work-clock', async () => {
+    vi.useFakeTimers();
+    const worker = createFakeWorker();
+    const handler: CapabilityHandler = {
+      binding: { name: 'tools', kind: 'namespace', members: ['work'] },
+      limits: { maxCalls: 4, maxConcurrency: 1, limitExceededMessage: 'too many calls' },
+      prepare: () => ({}),
+      invoke: async () => {
+        await new Promise(() => undefined);
+        return { kind: 'result', result: { ok: true } };
+      },
+    };
+    const pending = runWithFakeWorker(handler, worker);
+    worker.emit('message', { type: 'tools.run', requestId: '1', member: 'work', params: {} });
+    await vi.advanceTimersByTimeAsync(1_000);
+    await expect(pending).resolves.toMatchObject({ ok: false, error: { code: 'timeout' } });
+  });
+
+  it('keys the waiting-set by worker requestId after a describe short-circuit, not callId', async () => {
+    vi.useFakeTimers();
+    const worker = createFakeWorker();
+    let seenRequestId: string | undefined;
+    let seenCallId: number | undefined;
+    let entered!: () => void;
+    const inInvoke = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let resume!: () => void;
+    const wait = new Promise<void>((resolve) => {
+      resume = resolve;
+    });
+    const handler: CapabilityHandler = {
+      binding: { name: 'tools', kind: 'namespace', members: ['describe', 'prompt'] },
+      limits: { maxCalls: 4, maxConcurrency: 1, limitExceededMessage: 'too many calls' },
+      prepare: (payload): CapabilityOutcome | Record<string, never> => {
+        if (payload.member === 'describe') return { kind: 'result', result: { ok: true } };
+        return {};
+      },
+      invoke: async (_prepared, context) => {
+        seenRequestId = context.requestId;
+        seenCallId = context.callId;
+        entered();
+        handler.onWaiting?.(context);
+        try {
+          await wait;
+        } finally {
+          handler.onResumed?.(context);
+        }
+        return { kind: 'result', result: { ok: true } };
+      },
+    };
+    const pending = runWithFakeWorker(handler, worker);
+    worker.emit('message', { type: 'tools.run', requestId: '1', member: 'describe', params: 'prompt' });
+    await vi.waitFor(() =>
+      expect(worker.posted).toContainEqual({ type: 'tools.result', requestId: '1', result: { ok: true } }),
+    );
+    worker.emit('message', { type: 'tools.run', requestId: '2', member: 'prompt', params: {} });
+    worker.emit('message', { type: 'workflow.idle', pending: ['2'], resultsConsumed: 1 });
+    await inInvoke;
+    expect(seenRequestId).toBe('2');
+    expect(seenCallId).toBe(1);
+    await vi.advanceTimersByTimeAsync(5_000);
+    await stillRunning(pending);
+    resume();
+    await vi.waitFor(() =>
+      expect(worker.posted).toContainEqual({ type: 'tools.result', requestId: '2', result: { ok: true } }),
+    );
+    worker.emit('message', { type: 'workflow.complete', output: { done: true } });
+    await expect(pending).resolves.toEqual({ ok: true, output: { done: true } });
+  });
+
+  it('fails parent abort as cancelled rather than timeout', async () => {
+    vi.useFakeTimers();
+    const worker = createFakeWorker();
+    const controller = new AbortController();
+    const handler: CapabilityHandler = {
+      binding: { name: 'tools', kind: 'namespace', members: ['work'] },
+      limits: { maxCalls: 4, maxConcurrency: 1, limitExceededMessage: 'too many calls' },
+      prepare: () => ({}),
+      invoke: async () => {
+        await new Promise(() => undefined);
+        return { kind: 'result', result: { ok: true } };
+      },
+    };
+    const pending = runWithFakeWorker(handler, worker, { signal: controller.signal });
+    worker.emit('message', { type: 'tools.run', requestId: '1', member: 'work', params: {} });
+    controller.abort();
+    await expect(pending).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'cancelled', message: 'Script was cancelled by its parent' },
+    });
   });
 });

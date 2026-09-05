@@ -22,7 +22,13 @@ import {
   type SchemaToolDefinition,
   type ToolRegistry,
 } from '../../types.js';
-import { createBaseMessage, getCallIdFromItem, getOutputText, normalizeToolArguments } from '../../format-helpers.js';
+import {
+  createBaseMessage,
+  getCallIdFromItem,
+  getOutputText,
+  isSuccessOutput,
+  normalizeToolArguments,
+} from '../../format-helpers.js';
 import { WORKFLOW_PROHIBITED_TOOLS } from '../../../services/agent-runtime/workflow/workflow-evaluator.js';
 import { renderCompactSignature, renderToolsHeader } from './tools-header.js';
 import { resolveWorkspacePath, resolveWorkspacePathPhysically } from '../../utils.js';
@@ -256,6 +262,28 @@ const FAILURE_PREFIXES = [
 ];
 
 /**
+ * Whether a rendered run_code result reads as unsuccessful. Script-level
+ * failures start with a known prefix; a script can also complete at the JS
+ * level while its nested result is an error string (status-string tools such as
+ * apply_patch), which the renderer places under a `Result:` heading. Lifecycle
+ * status stays 'completed' in both cases — this is the call-level success bit,
+ * kept separate from script success (visible in the text) and task success
+ * (conversation-level).
+ */
+const isUnsuccessfulRunCodeOutput = (output: string): boolean => {
+  if (FAILURE_PREFIXES.some((prefix) => output.startsWith(prefix))) return true;
+  if (output.startsWith('Result:')) {
+    // The renderer joins the rendered value and the trailing tool-call summary
+    // with a blank line. Evaluate only the value block, using the shared
+    // success heuristic: an 'Error:' text prefix or a JSON value carrying an
+    // 'error' key (string or structured envelope) both read as unsuccessful.
+    const valueBlock = output.slice('Result:'.length).trimStart().split('\n\n')[0];
+    return !isSuccessOutput(valueBlock);
+  }
+  return false;
+};
+
+/**
  * Truncation is a display concern, but a script may branch on the result, so
  * the marker has to be unmistakable rather than a silent cut.
  */
@@ -290,7 +318,7 @@ export const formatRunCodeCommandMessage: FormatCommandMessage = (item, index, t
     createBaseMessage(item, index, 0, false, {
       command: description ? `run_code — ${description}` : 'run_code',
       output,
-      success: !FAILURE_PREFIXES.some((prefix) => output.startsWith(prefix)),
+      success: !isUnsuccessfulRunCodeOutput(output),
       toolName: TOOL_NAME_RUN_CODE,
       toolArgs: { ...args, code },
     }),

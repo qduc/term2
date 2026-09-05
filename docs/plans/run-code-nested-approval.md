@@ -11,9 +11,15 @@ re-implement it.
 **Milestone 2b is merged to main as `1f18293f` (2026-09-05).** Branch was
 `m2b-scripted-adapter`; worktree `.worktrees/m2b-scripted-adapter`.
 
-**M2 is complete** — both M2a and M2b are merged to main. The current
-instruction is to stop after M2; M3/M4 are out of scope. Do not re-implement
+**M2 is complete** — both M2a and M2b are merged to main. Do not re-implement
 M2b.
+
+**M3 Fork C implemented and merged `114acd70` (2026-09-05).** Work-clock pauses
+iff worker `pending ⊆ waitingSet` and idle epoch matches; long-stop never
+pauses. M3-safe `7d1f49ca`. **M4 contract drafted and review-folded**
+(`.coord/nested-approval/deliver/m4-contract.md`; review
+`m4-contract-review.md`). Not implemented. Live:
+`.coord/nested-approval/STATE.md`.
 
 ### M2b gate evidence (coordinator-verified at `3377be81`, merged as `1f18293f`)
 
@@ -83,16 +89,14 @@ divergence for relative nested paths; the LLM auto-approve seam in
    `source/components/input/SettingsMenuSession.test.tsx` owned by another
    session; preserve it.
 3. Use an implementation worktree under `.worktrees/` and install with pnpm,
-   following AGENTS.md. Both plan documents are untracked in main; fresh
-   worktrees will not contain them automatically. Read them from the primary
-   checkout.
-4. Implement Milestone 2b test-first per the amended scope-change section
-   below (brief at `.coord/nested-approval/brief-m2b.md`; worktree
-   `.worktrees/m2b-scripted-adapter` may already exist). Keep direct fallbacks
-   until Milestone 4.
+    following AGENTS.md. Both plan documents are untracked in main; fresh
+    worktrees will not contain them automatically. Read them from the primary
+    checkout.
+4. Do not implement M3 until the guard contract exists and is reviewed.
+    Current work is evidence collection only (briefs under
+    `.coord/nested-approval/briefs/`). Keep direct fallbacks until Milestone 4.
 5. Update this section and milestone evidence at handoff: actual commits/checks,
-   unresolved gates, and exact deliverable locations.
-
+    unresolved gates, and exact deliverable locations.
 ### Existing experiment
 
 - Worktree: `/home/qduc/term2/.worktrees/nested-approval-preflight`.

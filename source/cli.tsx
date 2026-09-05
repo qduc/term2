@@ -754,7 +754,7 @@ const sessionBrowser = new SessionBrowser(
     ...(effectiveSessionId ? { currentSessionId: effectiveSessionId } : {}),
   }),
   {
-    backend: process.env['TERM2_SESSION_BROWSER_BACKEND'] === 'canonical' ? 'canonical' : 'indexed',
+    backend: process.env['TERM2_SESSION_BROWSER_BACKEND'] === 'indexed' ? 'indexed' : 'canonical',
   },
 );
 

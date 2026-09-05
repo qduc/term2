@@ -192,31 +192,43 @@ export const useAppKeyboardShortcuts = ({
       // the buffered rejection reason.
       if (!mayConsumeRejectionReasonBridge(current.inputOwner)) return;
 
-      if (key.escape) {
+      if (!current.waitingForRejectionReason) {
+        // The bridge is only live while the rejection composition it belongs
+        // to is live. If that approval settled or was replaced (head change
+        // while the user was typing), the buffered reason is orphaned: drop it
+        // and fall through so `y`/`n` reach the replacement approval instead
+        // of the reason being buffered or submitted against it. The consumed
+        // `n` round ends with the composition it started.
         rejectionReasonBridgeRef.current = null;
-        current.setWaitingForRejectionReason(false);
+        approvalDecisionConsumedRef.current = false;
         current.replaceInput('');
+      } else {
+        if (key.escape) {
+          rejectionReasonBridgeRef.current = null;
+          current.setWaitingForRejectionReason(false);
+          current.replaceInput('');
+          return;
+        }
+        if (key.return) {
+          const reason = rejectionReasonBridgeRef.current;
+          rejectionReasonBridgeRef.current = null;
+          current.replaceInput('');
+          void current.submitRejectionReason(reason);
+          return;
+        }
+        if (key.backspace || key.delete) {
+          const next = rejectionReasonBridgeRef.current.slice(0, -1);
+          rejectionReasonBridgeRef.current = next;
+          current.replaceInput(next);
+          return;
+        }
+        if (input && !key.ctrl && !key.meta) {
+          const next = rejectionReasonBridgeRef.current + input;
+          rejectionReasonBridgeRef.current = next;
+          current.replaceInput(next);
+        }
         return;
       }
-      if (key.return) {
-        const reason = rejectionReasonBridgeRef.current;
-        rejectionReasonBridgeRef.current = null;
-        current.replaceInput('');
-        void current.submitRejectionReason(reason);
-        return;
-      }
-      if (key.backspace || key.delete) {
-        const next = rejectionReasonBridgeRef.current.slice(0, -1);
-        rejectionReasonBridgeRef.current = next;
-        current.replaceInput(next);
-        return;
-      }
-      if (input && !key.ctrl && !key.meta) {
-        const next = rejectionReasonBridgeRef.current + input;
-        rejectionReasonBridgeRef.current = next;
-        current.replaceInput(next);
-      }
-      return;
     }
 
     if (

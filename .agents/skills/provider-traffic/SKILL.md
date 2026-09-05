@@ -1,262 +1,106 @@
 ---
 name: provider-traffic
-description: Read provider traffic logs (the JSON artifacts under provider-traffic/) efficiently with jq to debug LLM requests, errors, tool calls, and model responses. Use when the user is debugging a provider/model issue, an API error, wrong tool-call arguments, a streaming/transport problem, malformed SSE frames, or wants to inspect what was sent to / received from a provider. Use to find the right session and request fast without dumping huge files.
+description: Inspect provider-traffic JSON artifacts with jq when debugging provider/model requests, responses, errors, tool calls, streaming, usage, or compaction reuse. Use targeted projections and branch on the recorded transport shape.
 ---
 
-# Provider Traffic Log Reading
+# Provider traffic
 
-The provider/traffic log is the single source of truth for *what was actually sent to and received from a model provider*. Use it to debug HTTP errors, malformed streaming, wrong/missing tool calls, transport mismatches, and finish-reason surprises — instead of guessing from app logs.
+Provider traffic is the record of the sanitized body sent to a provider and the
+assembled response recorded by the logger. It is the right evidence for the
+wire exchange, not for the full prompt or the application's later effect.
 
-## Rule 0 — never dump the whole file
+## Files and identity
 
-Traffic files are large. **Always select specific fields with `jq`.** Never `cat` a request `.json` file. Target the one field you need, then expand only if it is insufficient.
+Linux traffic is under `~/.local/state/term2-nodejs/logs/provider-traffic/`;
+macOS uses `~/Library/Logs/term2-nodejs/logs/provider-traffic/`. Each day has
+an `index.jsonl` and session directories:
 
-## Layout
-
-Log root by platform:
-
-- **Linux**: `~/.local/state/term2-nodejs/logs/provider-traffic/`
-- **macOS**: `~/Library/Logs/term2-nodejs/logs/provider-traffic/`
-
-Structure:
-
-```
-`<root>/<YYYY-MM-DD>/index.jsonl                                  # daily index (ONE object per line — genuine JSONL)
-<root>/<YYYY-MM-DD>/<HH-MM-SS_ssid>/                            # one dir per session (no per-session index)
-<root>/<YYYY-MM-DD>/<HH-MM-SS_ssid>/<HH-MM-SS.mmmZ_rid>.json      # one request envelope per file
+```text
+<root>/<YYYY-MM-DD>/index.jsonl
+<root>/<YYYY-MM-DD>/<HH-MM-SS_first5-session-id>/<HH-MM-SS.mmmZ_first5-request-id>.json
 ```
 
-- A **request envelope file** (`.json`) holds a *single JSON object*, pretty-printed (2-space indent). It is **not** line-oriented. Parse the whole file: `jq '.sent' <file>`. Do **not** iterate lines. The extension is `.json` (single JSON value), **not** `.jsonl` — only `<day>/index.jsonl` is genuine JSON Lines.
-- `index.jsonl` **is** true JSONL — one `DailySessionIndexEntry` per line.
-
-### Critical parsing note
-
-Per-request `.json` files are pretty-printed JSON objects. `jq -c '.field' file` works because jq parses the entire file as one value. They are **not** streamable line-by-line. If you see `jq: parse error: Unfinished JSON term at EOF at line 2`, you (or a tool) tried to parse one line — instead pipe the whole file to `jq`.
-
-## Envelope schema
-
-Each request file is `{ "sent": {...}, "received": {...} }`.
-
-### `sent` (request sent to provider)
-
-| field | meaning |
-|---|---|
-| `direction` | `"sent"` |
-| `requestId` | full request UUID (filename suffix is its first 5 chars) |
-| `timestamp` | ISO `2026-06-18T12:40:12.528Z` |
-| `provider` / `model` | provider name + model |
-| `modelClass?` / `modelWrapperClass?` | present only when classified |
-| `sessionId` | conversation session; the session directory name is `<time>_<first 5 of sessionId>` |
-| `mode` | e.g. `shell`, `default`; defaults to `unknown` |
-| `headers?` | present only when captured |
-| `body` | **sanitized** copy of the request body (see Limitations) |
-
-### `received` (response summary recorded on completion)
-
-| field | meaning |
-|---|---|
-| `direction` | `"received"` |
-| `requestId`, `timestamp`, `provider`, `model`, `sessionId`, `mode` | mirror `sent` |
-| `summary?` | parsed transport summary (absent only if logging failed) |
-| `error?` | present when an unrecoverable logging/runtime error occurred |
-
-### `received.summary`
-
-| field | meaning |
-|---|---|
-| `transport` | `"json"` \| `"sse"` \| `"websocket"` \| `"text"` \| `"unknown"` — how the response was parsed |
-| `status` | HTTP status code |
-| `errorFrames[]` | provider error objects embedded in the stream/body |
-| `malformedFrames[]` | `{raw,error}` — frames that failed to parse as JSON |
-| `unknownFrames[]` | `{signature,count,firstRaw,lastRaw}` — SSE frames the parser didn't recognize |
-| `payload?` | **normalized** representation of the assembled response (see below); absent when nothing was extracted |
-| `wireShape?` | `"responses"` \| `"chat_completions"` \| `"unknown"` — which shape `payload` is rendered in. Set on the SSE and non-streaming-JSON paths (`provider-traffic.ts:693`, `:411`). **Absent on `transport: "websocket"`** — the Codex lane — so do not filter on it |
-| `fallbackBody?` | raw body when extraction produced nothing parseable (text transport, etc.) |
-
-### `received.summary.payload` — the normalized response
-
-The logger reassembles streaming chunks into one object so JSON and SSE look
-identical. **It renders that object in two different shapes**, selected by
-`summary.wireShape`, so check the shape before writing a `jq` path or you will
-silently get `null`.
-
-`wireShape: "chat_completions"` — Chat Completions shape:
-
-```jsonc
-{
-  "id": "resp_…",                 // optional, assembled from the stream
-  "usage": { … },                 // optional, from the last usage frame
-  "choices": [{
-    "finish_reason": "tool_calls", // optional: tool_calls | stop | length | …
-    "delta": {
-      "content": "assembled text",
-      "reasoning": "assembled reasoning",
-      "tool_calls": [ { "id": "call_…", "type": "function",
-                        "function": { "name": "shell", "arguments": "<full args string>" } } ]
-    }
-  }]
-}
-```
-
-`wireShape: "responses"` — Responses shape, produced by SSE lanes speaking the
-Responses API (there is no `choices` key at all). Note this is *not* what the
-Codex WebSocket lane writes: `summarizeWebsocketResponse` emits a
-`{choices,id,usage}` payload and sets no `wireShape` at all, so Codex artifacts
-read with the Chat Completions recipes below:
-
-```jsonc
-{
-  "id": "resp_…",                  // optional, assembled from the stream
-  "status": "in_progress",         // optional; the last status seen in the stream, not a final state
-  "usage": { … },                  // optional, from the last usage frame
-  "output": [
-    { "type": "reasoning", "encrypted_content": "<redacted>", "summary": [] },
-    { "type": "message", "role": "assistant",
-      "content": [ { "type": "output_text", "text": "assembled text" } ] },
-    { "type": "function_call", "call_id": "call_…", "name": "shell",
-      "arguments": "<full args string>" }
-  ]
-}
-```
-
-Tool-call arguments are the **fully reassembled** argument string (chunks concatenated) — read the assembled value here, not individual SSE lines.
-
-### `DailySessionIndexEntry` (one per line in `<day>/index.jsonl`)
-
-```jsonc
-{
-  "sessionId": "…",
-  "sessionDir": "12-39-39_e3e68",     // ← the directory name under the date folder
-  "firstRequestAt": "…", "lastRequestAt": "…",
-  "requestCount": 6,
-  "firstUserMessagePreview": "…",    // ≤160 chars of the first user turn — great for locating a session
-  "latestProvider": "…", "latestModel": "…", "latestMode": "…",
-  "providersSeen": […], "modelsSeen": […], "modesSeen": […]
-}
-```
-
-## Workflow — find the right request fast
-
-1. **Locate the session.** The day is usually today. Find by first user message:
-   ```bash
-   jq -c 'select(.firstUserMessagePreview | test("keyword")) | {sessionDir,requestCount,latestModel,firstUserMessagePreview}' \
-     ~/.local/state/term2-nodejs/logs/provider-traffic/2026-06-18/index.jsonl
-   ```
-   At minimum grab the date dir and the `sessionDir`.
-
-2. **List that session's requests** (newest last). Just sizes to see how big each is:
-   ```bash
-   ls -la ~/.local/state/term2-nodejs/logs/provider-traffic/2026-06-18/<sessionDir>/
-   ```
-   Filenames are `<HH-MM-SS.mmmZ>_<first5-of-requestId>.json`. `evaluator_*` files come from the auto-approval/evaluator path.
-
-3. **Scan all requests in the session for trouble** in one shot:
-   ```bash
-   for f in ~/.local/state/term2-nodejs/logs/provider-traffic/2026-06-18/<sessionDir>/*.json; do
-     jq -rc '
-       "\(.sent.timestamp) \(.sent.model) status=\(.received.summary.status)
-        finish=\(.received.summary.payload.choices[0].finish_reason // "-")
-        errs=\(.received.summary.errorFrames|length)
-        tools=\((.received.summary.payload.choices[0].delta.tool_calls // [])|map(.function.name)|join(","))"' \
-       "$f"
-   done
-   ```
-   This prints one compact line per request — read the timeline, then zoom in.
-
-## Common jq recipes
-
-Set `F` to one request file, `D` to the date dir, `S` to the session dir.
-
-The `payload` recipes below are written for `wireShape: "chat_completions"`.
-On the Responses lane substitute the `output[]` paths: text is
-`.received.summary.payload.output[] | select(.type=="message") | .content[].text`,
-reasoning is `select(.type=="reasoning")`, tool calls are
-`select(.type=="function_call")` with `.name` / `.arguments`, and the finish
-reason is `.received.summary.payload.status` (in practice `in_progress`, since
-the artifact is written from the assembled stream). Reasoning items on this lane
-normally carry `encrypted_content: "<redacted>"` with an empty `summary`.
-
-```bash
-F=~/.local/state/term2-nodejs/logs/provider-traffic/2026-06-18/12-39-39_e3e68/12-40-12.528Z_c1089.json
-
-# What model/provider/mode for this request
-jq -c '{provider,model,mode,modelClass,modelWrapperClass}' <<< "$(jq -c '.sent' "$F")"
-
-# HTTP status + transport + finish reason
-jq -c '.received.summary | {transport,status,finish:(.payload.choices[0].finish_reason // null)}' "$F"
-
-# Provider error frames (non-empty ⇒ provider returned an error object)
-jq -c '.received.summary.errorFrames' "$F"
-
-# Malformed / unknown stream frames (non-empty ⇒ transport parsing problem)
-jq -c '.received.summary | {malformed: .malformedFrames, unknown: .unknownFrames}' "$F"
-
-# Assembled text content the model produced
-jq -rc '.received.summary.payload.choices[0].delta.content // ""' "$F"
-
-# Reasoning/thinking the model produced
-jq -rc '.received.summary.payload.choices[0].delta.reasoning // ""' "$F"
-
-# Tool calls the model requested (name + full arguments)
-jq -rc '.received.summary.payload.choices[0].delta.tool_calls // []
-       | map({name:.function.name, args:.function.arguments})' "$F"
-
-# Token usage from the final frame
-jq -c '.received.summary.payload.usage' "$F"
-
-# Sent body shape: roles + tool names + presence of instructions/system/tools
-jq -c '{hasInstructions: (.sent.body.instructions!=null), hasSystem: (.sent.body.system!=null),
-        msgs:(.sent.body.messages // .sent.body.input // [])|map(.role),
-        tools:(.sent.body.tools // [])|map(.function.name)}' "$F"
-
-# Unrecoverable logging error for this request
-jq -c '.received.error' "$F"
-
-# What was the request timestamp / requestId (for correlating with app logs)
-jq -c '{requestId:.sent.requestId, sentAt:.sent.timestamp, recvAt:.received.timestamp}' "$F"
-```
-
-### Cross-session searches
+`index.jsonl` is one index object per line. A request `.json` is one
+pretty-printed `{sent,received}` object; parse the whole file with `jq`, never
+line-by-line and never with `cat`. Find the session from
+`firstUserMessagePreview`, then use the request's full `sent.requestId` and
+`sent.sessionId` for correlation. The index is a locator, not a second copy of
+each request to count.
 
 ```bash
 D=~/.local/state/term2-nodejs/logs/provider-traffic
-
-# Every erroring request today: file -> status + error count
-for f in $D/2026-06-18/*/*.json; do
-  jq -rc 'select((.received.summary.errorFrames|length>0) or (.received.error!=null) or (.received.summary.status>=400))
-          | "\(.sent.requestId) status=\(.received.summary.status) errs=\(.received.summary.errorFrames|length)"' \
-          "$f" 2>/dev/null
-done
-
-# All tool calls of a given name across a session (find where the model did the wrong thing)
-for f in $D/2026-06-18/<sessionDir>/*.json; do
-  jq -rc --arg n "shell" \
-    '(.received.summary.payload.choices[0].delta.tool_calls // []) | .[] | select(.function.name==$n)
-     | "\(.id) \(.function.arguments)"' "$f"
-done
-
-# Search the daily index by provider/model/mode
-jq -c 'select(.latestProvider=="codex") | {sessionDir,requestCount,latestModel,firstUserMessagePreview}' \
-  $D/2026-06-18/index.jsonl
+jq -c 'select(.firstUserMessagePreview | test("keyword"; "i"))
+  | {sessionDir,requestCount,latestModel,firstUserMessagePreview}' \
+  "$D/2026-09-05/index.jsonl"
+F="$D/2026-09-05/<sessionDir>/<request-file>.json"
+jq -c '{sent:(.sent|{requestId,sessionId,timestamp,provider,model,mode}),
+  received:(.received|{requestId,sessionId,timestamp,summary:(.summary|{transport,status,wireShape})})}' "$F"
 ```
 
-## Limitations — what this log will NOT give you
+## Choose the payload shape first
 
-The sent body is **sanitized/truncated** (`sanitizeSentTrafficBody`), so do not use traffic logs as a verbatim record of prompt or tool content:
+Inspect `.received.summary.transport` and `.received.summary.wireShape` before
+choosing a path. A missing `jq` path exits successfully and prints `null`.
 
-- Text parts in messages are truncated to `TRAFFIC_TEXT_LIMIT` (**100 chars**, with `[omitted N chars]`).
-- `instructions` / `system` string values are truncated to 100 chars.
-- Tool *definitions* (the schema sent to the model) are truncated.
+- `transport: "websocket"` (the Codex lane) has no `wireShape`; its normalized
+  payload uses Chat Completions-style `choices[0].delta`.
+- `wireShape: "chat_completions"` uses `choices[0].delta`.
+- `wireShape: "responses"` uses `output[]` items (`message`, `reasoning`, and
+  `function_call`) and has no `choices` key.
+- `transport: "json"` can carry either recorded wire shape; inspect it rather
+  than assuming.
 
-Consequences for debugging:
+Use the assembled tool arguments and response text in the summary. Individual
+chunks from a completed normalized summary are not retained there. Aborted or
+failed recordings may contain only partial data or no payload. Shape-specific
+timelines and bounded projections are in [`references/recipes.md`](references/recipes.md).
 
-- **Wrong/missing/empty tool-call arguments:** read them from `received.summary.payload.choices[0].delta.tool_calls[].function.arguments` — that is the **assembled, full** argument string (not truncated). Good for debugging arg-parsing or wrong-command bugs.
-- **Full prompt / system prompt content:** NOT here. For verbatim prompt content, read the app log or the prompt-construction code path, not the traffic log.
-- **Streaming ordering / individual chunks:** the log reassembles chunks; if you need exact SSE framing order, the raw stream is not retained — inspect `unknownFrames`/`malformedFrames` for parsing issues instead.
-- **The model's text is stored assembled** under `.received.summary.payload.choices[0].delta.content` (truncation does not apply to received content — only sent text is truncated).
+## Evidence boundaries
 
-When the traffic log lacks the detail you need, say so explicitly and point to the app log (JSONL under `logs/`) or the relevant service (`source/services/logging/provider-traffic.ts` for the schema, `source/scripts/extract-provider-traffic.ts` for a batch extractor).
+Inspect these fields for a bounded diagnosis:
 
-## When to use this skill
+```bash
+jq -c '.received | {error:(.error // null),summary:(.summary // {})
+  | {transport,status,
+     providerErrorCount:(.errorFrames // [] | length),
+     providerErrorSignatures:(.errorFrames // []
+       | map((.code // .type // .detail // .message // .error.message // "unknown" | tostring)[0:160])[:8]),
+     malformedCount:(.malformedFrames // [] | length),
+     unknownCount:(.unknownFrames // [] | length),
+     unknownSignatures:(.unknownFrames // []
+       | map((.signature // "unknown" | tostring)[0:160])[:8])}}' "$F"
+jq -c '.received.summary.payload.usage
+  | {input:(.input_tokens // .prompt_tokens // null),
+     output:(.output_tokens // .completion_tokens // null),
+     cached:(.input_tokens_details.cached_tokens // .prompt_tokens_details.cached_tokens // null),
+     total:(.total_tokens // null)}' "$F"
+```
 
-Reach for the traffic log when the bug is about *the model/provider exchange itself*: HTTP errors, `errorFrames`, malformed/unknown frames, finish reason `length`/`null`, missing or malformed tool calls, wrong transport classification, or "what did we actually send / get back". For app-logic bugs not involving the provider exchange, prefer app logs or code paths over this log.
+Usage attribution can contain a very large per-item map. Select scalar totals
+and cache fields; do not dump `.usage.attribution` unless one item is needed.
+HTTP status, `errorFrames`, malformed/unknown frames, and a missing `.received`
+summary are separate failure signals.
+
+Traffic bodies are sanitized: sent text, instructions/system strings, and tool
+definitions are truncated. Received assembled content and function arguments
+are retained for this log's purpose. Full runtime prompt text or individual
+stream ordering may be unavailable. App logs may retain some request or abort
+evidence; source describes logging policy but cannot recover dropped content or
+frames. Treat app debug logs as potentially containing raw encrypted reasoning.
+Provider traffic replaces `encrypted_content` and Chat Completions
+`reasoning_details[].data` with `<redacted>`; that marker proves the field was
+present, while a missing field does not.
+
+For compaction, an HTTP 200 trigger is insufficient evidence. Capture the
+trigger request's session and timestamp, then verify a later request in the
+same session sends a `type: "compaction"` input item. If an artifact ID is
+recorded, match that ID; a same-session item without an ID link only proves
+that some later compaction occurred. The item is opaque and commonly contains
+`encrypted_content: "<redacted>"`; reuse proves transport/lifecycle, not
+semantic fidelity. Local app timestamps and persisted/wire UTC still need
+conversion when joining this evidence.
+
+Do not infer one session from an app `correlationId`: it may span multiple
+model/client activities. Join on request/session IDs and nearby converted
+timestamps, then inspect the exact envelope. Do not turn snapshot counts from a
+log audit into permanent constants.

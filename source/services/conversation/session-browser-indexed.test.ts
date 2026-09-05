@@ -58,6 +58,38 @@ describe('SessionBrowser Indexed Backend', () => {
       writeSession('session-22222222', '/workspace/project-a', undefined, 'second question', 'session-11111111');
       writeSession('session-33333333', '/workspace/project-b', undefined, 'other project question');
 
+      // Add malformed scope-less log, invalid sessions, and unreadable file to verify differential list parity
+      fs.writeFileSync(path.join(dir, 'corrupt-malformed.jsonl'), 'CORRUPTED_NOT_JSON\n');
+      fs.writeFileSync(
+        path.join(dir, 'invalid-other-scope.jsonl'),
+        JSON.stringify({
+          v: 3,
+          seq: 1,
+          ts: '2026-01-01T00:00:00.000Z',
+          event: {
+            type: 'session_init',
+            id: 'invalid-other-scope',
+            createdAt: 'invalid-date',
+            projectPath: '/workspace/project-b',
+          },
+        }) + '\n',
+      );
+      fs.writeFileSync(
+        path.join(dir, 'invalid-in-scope.jsonl'),
+        JSON.stringify({
+          v: 3,
+          seq: 1,
+          ts: '2026-01-01T00:00:00.000Z',
+          event: {
+            type: 'session_init',
+            id: 'invalid-in-scope',
+            createdAt: 'invalid-date',
+            projectPath: '/workspace/project-a',
+          },
+        }) + '\n',
+      );
+      fs.mkdirSync(path.join(dir, 'unreadable-file.jsonl'));
+
       const currentSessionId: string | undefined = 'session-22222222';
       const getContext = (): SessionBrowserContext => ({
         projectPath: '/workspace/project-a',
@@ -121,6 +153,7 @@ describe('SessionBrowser Indexed Backend', () => {
     });
   });
 
+  // Direct backend is used because fs.readFileSync and crypto.createHash spies cannot observe calls across the worker thread boundary.
   it('replays zero logs on unchanged list and reference resolution, and zero rehash on continuations', async () => {
     const id1 = '11111111-1111-4111-8111-111111111111';
     const id2 = '11111111-2222-4222-8222-222222222222';

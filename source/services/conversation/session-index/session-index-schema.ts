@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 
-export const SCHEMA_VERSION = '1';
+export const SCHEMA_VERSION = '2';
 export const PROJECTION_VERSION = '1';
 
 export type ProbeCapabilityResult = { ok: true } | { ok: false; reason: string };

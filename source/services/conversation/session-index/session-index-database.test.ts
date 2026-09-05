@@ -5,6 +5,7 @@ import path from 'node:path';
 import { SessionIndexDatabase } from './session-index-database.js';
 import { createConversationLogWriter } from '../../logging/conversation-log-writer.js';
 import { setConversationsDirForTest } from '../conversation-persistence.js';
+import { SessionBrowser } from '../session-browser.js';
 
 let tempDir = '';
 let convDir = '';
@@ -103,7 +104,7 @@ describe('SessionIndexDatabase', () => {
 
       const meta = index.database.prepare('SELECT key, value FROM index_metadata').all() as any[];
       const metaMap = new Map(meta.map((m) => [m.key, m.value]));
-      expect(metaMap.get('schema_version')).toBe('1');
+      expect(metaMap.get('schema_version')).toBe('2');
       expect(metaMap.get('projection_version')).toBe('1');
       expect(metaMap.get('source_directory')).toBe(convDir);
 
@@ -111,6 +112,40 @@ describe('SessionIndexDatabase', () => {
       expect(() => index.initialize()).not.toThrow();
     } finally {
       index.close();
+    }
+  });
+
+  it('triggers a clean rebuild when schema_version is mismatched or outdated', () => {
+    const index1 = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      index1.initialize();
+      // Manually set an outdated schema_version in metadata
+      index1.database.prepare("UPDATE index_metadata SET value = '1' WHERE key = 'schema_version'").run();
+      // Insert a dummy row into source_inventory
+      index1.database
+        .prepare(
+          "INSERT INTO source_inventory (session_id, source_version, classification, updated_at) VALUES ('old', '1', 'loaded', 0)",
+        )
+        .run();
+    } finally {
+      index1.close();
+    }
+
+    // Now re-open with current database class: initialize() must detect schema mismatch, drop, and rebuild
+    const index2 = new SessionIndexDatabase(dbPath, convDir);
+    try {
+      index2.initialize();
+      const meta = index2.database.prepare("SELECT value FROM index_metadata WHERE key = 'schema_version'").get() as {
+        value: string;
+      };
+      expect(meta.value).toBe('2');
+      // The dummy row should be dropped during rebuild
+      const rowCount = index2.database.prepare('SELECT COUNT(*) as count FROM source_inventory').get() as {
+        count: number;
+      };
+      expect(rowCount.count).toBe(0);
+    } finally {
+      index2.close();
     }
   });
 
@@ -267,8 +302,8 @@ describe('SessionIndexDatabase', () => {
   it('records unreadable files in inventory without exposing guessed scope, and accounts for unavailable', () => {
     writeSession('valid-1', '/project', undefined, 'valid');
 
-    // Create an unreadable / corrupt jsonl file
-    fs.writeFileSync(path.join(convDir, 'corrupt-1.jsonl'), 'NOT_VALID_JSON\n{{{');
+    // Create an unreadable file (e.g. a directory in place of a .jsonl file that throws EISDIR on read)
+    fs.mkdirSync(path.join(convDir, 'corrupt-1.jsonl'));
 
     const index = new SessionIndexDatabase(dbPath, convDir);
     try {
@@ -490,19 +525,18 @@ describe('SessionIndexDatabase', () => {
       const rec = index.reconcile();
       expect(rec.ok).toBe(true);
 
-      // List /project-a:
-      // total = 1 (session-valid-a)
-      // unavailable = 1 (only the directory-wide corrupt file; invalid session in /project-b is excluded!)
-      const listA = index.list({ projectPath: '/project-a' });
-      expect(listA.total).toBe(1);
-      expect(listA.unavailable).toBe(1);
+      // Compare indexed and canonical list envelopes directly across scopes
+      const canonicalBrowserA = new SessionBrowser(() => ({ projectPath: '/project-a' }), { backend: 'canonical' });
+      const canonicalListA = canonicalBrowserA.list({}) as Record<string, unknown>;
+      const indexedListA = index.list({ projectPath: '/project-a' });
+      expect(indexedListA.total).toBe(canonicalListA['total']);
+      expect(indexedListA.unavailable).toBe(canonicalListA['unavailable']);
 
-      // List /project-b:
-      // total = 0
-      // unavailable = 2 (1 dir-wide corrupt file + 1 invalid session in /project-b)
-      const listB = index.list({ projectPath: '/project-b' });
-      expect(listB.total).toBe(0);
-      expect(listB.unavailable).toBe(2);
+      const canonicalBrowserB = new SessionBrowser(() => ({ projectPath: '/project-b' }), { backend: 'canonical' });
+      const canonicalListB = canonicalBrowserB.list({}) as Record<string, unknown>;
+      const indexedListB = index.list({ projectPath: '/project-b' });
+      expect(indexedListB.total).toBe(canonicalListB['total']);
+      expect(indexedListB.unavailable).toBe(canonicalListB['unavailable']);
     } finally {
       index.close();
     }

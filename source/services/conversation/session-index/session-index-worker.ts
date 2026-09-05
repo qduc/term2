@@ -32,7 +32,6 @@ export function runSessionIndexWorker(): void {
       switch (msg.type) {
         case 'init': {
           if (db) db.close();
-          process.env['TERM2_CONVERSATIONS_DIR'] = msg.sourceDirectory;
           db = new SessionIndexDatabase(msg.dbPath, msg.sourceDirectory);
           parentPort!.postMessage({ id: msg.id, ok: true, result: { initialized: true } } satisfies WorkerResponse);
           break;

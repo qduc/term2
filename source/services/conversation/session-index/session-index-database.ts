@@ -259,7 +259,24 @@ export class SessionIndexDatabase {
       }> = [];
 
       if (loaded.status !== 'loaded' || !loaded.conversation.createdAt || loaded.conversation.id !== id) {
-        classification = 'unreadable';
+        if (loaded.status === 'loaded' && !loaded.conversation.projectPath) {
+          // A malformed/scope-less log that replayed without throwing but has no projectPath.
+          // In canonical loadConversationForProjectReadOnly, project check fails and returns 'project_mismatch',
+          // which canonical does NOT count in unavailable for any scope.
+          // Classifying as 'invalid' with project_path = NULL ensures it is never counted dir-wide.
+          classification = 'invalid';
+        } else if (loaded.status === 'loaded' && loaded.conversation.projectPath) {
+          // Replayed with a projectPath, but invalid id or createdAt:
+          // Scoped invalid session for that specific projectPath/sshHost.
+          sessionProjectPath = normalizeProjectPath(loaded.conversation.projectPath);
+          if (loaded.conversation.sshHost) {
+            sessionSshHost = normalizeSshHost(loaded.conversation.sshHost);
+          }
+          classification = 'invalid';
+        } else {
+          // Throwing/unreadable file on disk -> dir-wide unreadable
+          classification = 'unreadable';
+        }
       } else {
         const conversation = loaded.conversation;
         if (conversation.projectPath) {

@@ -39,6 +39,21 @@ function writeSession(id: string, projectPath: string, sshHost?: string, text = 
   void writer.close();
 }
 
+function writeRecordSequence(id: string, texts: string[]) {
+  const writer = createConversationLogWriter({ sessionId: id, dir, logger });
+  writer.init({ id, createdAt: '2026-01-01T00:00:00.000Z', projectPath: '/project' });
+  texts.forEach((text, i) => {
+    if (i % 2 === 0) writer.append({ type: 'user_message', message: { id: `${id}-u${i}`, sender: 'user', text } });
+    else
+      writer.append({
+        type: 'assistant_turn',
+        turn: { items: [{ type: 'assistant_text', text }] },
+        state: { previousResponseId: null },
+      });
+  });
+  void writer.close();
+}
+
 it('exposes unique UUID short refs and resolves exact, prefix, ambiguous, and previous references', () => {
   const previous = '12345678-1234-4abc-8def-1234567890ab';
   const colliding = '12345678-abcd-4abc-8def-1234567890ab';
@@ -440,7 +455,7 @@ it('reports search totals before the limit is applied', () => {
   expect(result.omitted).toBe(0);
 });
 
-it('reports read totals and per-page remaining record counts', () => {
+it('reports page-local omitted counts so total - omitted equals represented records', () => {
   const id = 'paged-total';
   const writer = createConversationLogWriter({ sessionId: id, dir, logger });
   writer.init({ id, createdAt: '2026-01-01T00:00:00.000Z', projectPath: '/project' });
@@ -455,39 +470,187 @@ it('reports read totals and per-page remaining record counts', () => {
   expect(first.total).toBe(5);
   expect(first.items).toHaveLength(2);
   expect(first.omitted).toBe(3);
+  expect(first.total - first.omitted).toBe(first.items.length);
   expect(first.nextCursor).toBeTruthy();
 
   const second: any = browser.read({ id, limit: 2, cursor: first.nextCursor });
   expect(second.items).toHaveLength(2);
-  expect(second.omitted).toBe(1);
+  // Page-local: only this page's two represented records count, not the
+  // cumulative remaining tail (the superseded cumulative value here was 1).
+  expect(second.omitted).toBe(3);
+  expect(second.total - second.omitted).toBe(second.items.length);
   expect(second.nextCursor).toBeTruthy();
 
   const third: any = browser.read({ id, limit: 2, cursor: second.nextCursor });
   expect(third.items).toHaveLength(1);
-  expect(third.omitted).toBe(0);
+  expect(third.omitted).toBe(4);
+  expect(third.total - third.omitted).toBe(third.items.length);
   expect(third.nextCursor).toBeUndefined();
 });
 
-it('starts an initial read at the final projected record with from end', () => {
-  const id = 'tail-session';
-  const writer = createConversationLogWriter({ sessionId: id, dir, logger });
-  writer.init({ id, createdAt: '2026-01-01T00:00:00.000Z', projectPath: '/project' });
-  for (let i = 0; i < 30; i++) {
-    writer.append({ type: 'user_message', message: { id: `u${i}`, sender: 'user', text: `old record ${i}` } });
-    writer.append({
-      type: 'assistant_turn',
-      turn: { items: [{ type: 'assistant_text', text: i === 29 ? 'final record' : `old answer ${i}` }] },
-      state: { previousResponseId: null },
-    });
+it('anchors an initial from-end read on the last limit projected records in chronological order', () => {
+  const id = 'tail-region';
+  writeRecordSequence(
+    id,
+    Array.from({ length: 290 }, (_, i) => `record ${i}`),
+  );
+  const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
+
+  for (const limit of [5, 10, 20]) {
+    const tail: any = browser.read({ id, from: 'end', limit });
+    expect(tail.total).toBe(290);
+    expect(tail.items).toHaveLength(limit);
+    expect(tail.items.map((item: any) => item.index)).toEqual(
+      Array.from({ length: limit }, (_, offset) => 290 - limit + offset),
+    );
+    expect(tail.items.every((item: any) => item.complete)).toBe(true);
+    expect(tail.items.at(-1)).toMatchObject({ index: 289, kind: 'assistant', text: 'record 289' });
+    expect(tail.omitted).toBe(290 - limit);
+    expect(tail.total - tail.omitted).toBe(tail.items.length);
+    // The selected tail is consumed: no cursor, and its absence says nothing
+    // about the 290 - limit records before the tail anchor.
+    expect(tail.nextCursor).toBeUndefined();
   }
+});
+
+it('clamps the from-end anchor to the first record on short sessions', () => {
+  writeSession('short-tail', '/project', undefined, 'only user text');
+  const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
+
+  const tail: any = browser.read({ id: 'short-tail', from: 'end', limit: 50 });
+  expect(tail.total).toBe(2);
+  expect(tail.items.map((item: any) => item.index)).toEqual([0, 1]);
+  expect(tail.omitted).toBe(0);
+  expect(tail.nextCursor).toBeUndefined();
+});
+
+it('returns an empty bounded page for an empty session', () => {
+  const writer = createConversationLogWriter({ sessionId: 'empty-session', dir, logger });
+  writer.init({ id: 'empty-session', createdAt: '2026-01-01T00:00:00.000Z', projectPath: '/project' });
   void writer.close();
   const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
 
-  const tail: any = browser.read({ id, from: 'end', limit: 1 });
-  expect(tail.items).toEqual([expect.objectContaining({ kind: 'assistant', text: 'final record', complete: true })]);
-  expect(tail.items[0].index).toBeGreaterThan(0);
-  expect(tail.omitted).toBe(0);
-  expect(tail.nextCursor).toBeUndefined();
+  const result: any = browser.read({ id: 'empty-session', from: 'end' });
+  expect(result.total).toBe(0);
+  expect(result.items).toEqual([]);
+  expect(result.omitted).toBe(0);
+  expect(result.nextCursor).toBeUndefined();
+});
+
+it('pages a constrained-budget tail through its region without loss, duplication, or reverse ordering', () => {
+  const id = 'tail-walk';
+  const texts = Array.from({ length: 290 }, (_, i) =>
+    i < 285 ? `record ${i}` : `record ${i} 😀${'x'.repeat(900)}😀${'y'.repeat(900)}😀 tail-${i}`,
+  );
+  writeRecordSequence(id, texts);
+  const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
+
+  const first: any = browser.read({ id, from: 'end', limit: 10, maxChars: 512 });
+  expect(first.error).toBeUndefined();
+  expect(first.items[0]!.index).toBe(280);
+  expect(first.total).toBe(290);
+
+  const reassembled = new Map<number, string>();
+  const completed = new Set<number>();
+  let previousIndex = -1;
+  const collect = (page: any) => {
+    expect(page.total - page.omitted).toBe(page.items.length);
+    for (const item of page.items) {
+      expect(item.index).toBeGreaterThanOrEqual(previousIndex);
+      previousIndex = item.index;
+      const prior = reassembled.get(item.index) ?? '';
+      expect(item.textOffset).toBe(prior.length);
+      reassembled.set(item.index, prior + item.text);
+      if (item.complete) expect(completed.has(item.index)).toBe(false);
+      if (item.complete) completed.add(item.index);
+    }
+  };
+  collect(first);
+  let cursor: string | undefined = first.nextCursor;
+  let pages = 1;
+  while (cursor) {
+    const page: any = browser.read({ id, cursor, maxChars: 512 });
+    expect(page.error).toBeUndefined();
+    collect(page);
+    pages++;
+    expect(pages).toBeLessThan(200);
+    cursor = page.nextCursor;
+  }
+
+  expect(completed.size).toBe(10);
+  for (let i = 280; i < 290; i++) expect(reassembled.get(i)).toBe(texts[i]);
+  // Tail consumed: no cursor remains even though records 0..279 were never shown.
+  expect(cursor).toBeUndefined();
+});
+
+it('chunks an oversized final record and drops the cursor only when the tail is consumed', () => {
+  const id = 'tail-final';
+  const finalText = `fin😀${'x'.repeat(1500)}😀ish`;
+  writeRecordSequence(id, ['lead one', 'lead two', 'lead three', finalText]);
+  const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
+
+  const first: any = browser.read({ id, from: 'end', limit: 1, maxChars: 512 });
+  expect(first.items).toHaveLength(1);
+  expect(first.items[0]).toMatchObject({ index: 3, kind: 'assistant', complete: false, textOffset: 0 });
+  expect(first.total).toBe(4);
+  expect(first.total - first.omitted).toBe(1);
+  expect(first.nextCursor).toBeTruthy();
+
+  const chunks = [first.items[0].text];
+  const completeness = [first.items[0].complete];
+  let cursor: string | undefined = first.nextCursor;
+  while (cursor) {
+    const page: any = browser.read({ id, cursor, maxChars: 512 });
+    expect(page.error).toBeUndefined();
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0].index).toBe(3);
+    expect(page.total - page.omitted).toBe(1);
+    chunks.push(page.items[0].text);
+    completeness.push(page.items[0].complete);
+    cursor = page.nextCursor;
+  }
+  // Only the final chunk is complete; UTF-16 surrogate pairs survive chunking.
+  expect(completeness.slice(0, -1)).toEqual(completeness.slice(0, -1).map(() => false));
+  expect(completeness.at(-1)).toBe(true);
+  expect(chunks.join('')).toBe(finalText);
+  expect(cursor).toBeUndefined();
+});
+
+it('anchors skipped-record projections by projected ordinal while keeping original indexes', () => {
+  const id = 'skipped-records';
+  const events: Array<Record<string, unknown>> = [
+    { type: 'session_init', id, createdAt: '2026-01-01T00:00:00.000Z', projectPath: '/project' },
+  ];
+  for (let i = 0; i < 12; i++) {
+    events.push({ type: 'user_message', message: { id: `u${i}`, sender: 'user', text: `record ${i}` } });
+    if (i % 4 === 0)
+      events.push({
+        type: 'user_message',
+        message: { id: `future-${i}`, sender: 'future-telemetry', text: 'internal only' },
+      });
+  }
+  events.push({
+    type: 'assistant_turn',
+    turn: { items: [{ type: 'assistant_text', text: 'closing answer' }] },
+    state: { previousResponseId: null },
+  });
+  fs.writeFileSync(
+    path.join(dir, `${id}.jsonl`),
+    events.map((event, seq) => JSON.stringify({ v: 3, seq, ts: '2026-01-01T00:00:01.000Z', event })).join('\n') + '\n',
+  );
+  const browser = new SessionBrowser(() => ({ projectPath: '/project' }));
+
+  const tail: any = browser.read({ id, from: 'end', limit: 5 });
+  expect(tail.total).toBe(13);
+  expect(tail.skippedMessageCount).toBe(3);
+  expect(tail.items).toHaveLength(5);
+  // Projected ordinals 8..12 map to original message indexes 10, 12, 13, 14,
+  // and 15: the three skipped records at original indexes 1, 6, and 11 stay
+  // excluded from the projection but keep the surviving records' original
+  // indexes intact.
+  expect(tail.items.map((item: any) => item.index)).toEqual([10, 12, 13, 14, 15]);
+  expect(tail.omitted).toBe(8);
+  expect(tail.total - tail.omitted).toBe(tail.items.length);
 });
 
 it('rejects combining a tail anchor with a cursor continuation', () => {
@@ -500,13 +663,16 @@ it('rejects combining a tail anchor with a cursor continuation', () => {
   });
 });
 
-it('counts a chunked record as begun when the budget forces a partial page', () => {
+it('counts a chunked record as represented on its partial page', () => {
   writeSession('chunky', '/project', undefined, 'x'.repeat(900));
   const page: any = new SessionBrowser(() => ({ projectPath: '/project' })).read({ id: 'chunky', maxChars: 512 });
   expect(page.total).toBe(2);
   expect(page.items).toHaveLength(1);
   expect(page.items[0]!.complete).toBe(false);
+  // Page-local: the partial chunk represents its record, so exactly one of the
+  // two whole-session records is represented here.
   expect(page.omitted).toBe(1);
+  expect(page.total - page.omitted).toBe(page.items.length);
 });
 
 it('returns a coherent bounded failure when the runtime byte cap is tiny', () => {

@@ -29,8 +29,12 @@ it('exposes read-only browser tools with strict bounded parameter schemas', asyn
   expect(tools[0]!.description).toContain('`total` is the number of browsable sessions in scope');
   expect(tools[1]!.description).toContain('`total` is the number of ranked matches before `limit` is applied');
   expect(tools[1]!.description).toContain('Matches from the currently active session sort last');
-  expect(tools[2]!.description).toContain('`total - omitted` records were started here');
-  expect(tools[2]!.description).toContain('`from: "end"`');
+  expect(tools[2]!.description).toContain('`from: "end"` starts at the last `limit` projected records');
+  expect(tools[2]!.description).toContain('without `from: "end"` the read starts at the first record');
+  expect(tools[2]!.description).toContain('`nextCursor` is returned only while forward content remains');
+  expect(tools[2]!.description).toContain('`total - omitted` records are represented here');
+  // Search hits carry the session's last-write time, not per-message times.
+  expect(tools[1]!.description).toContain("`updatedAt` is the session's last-write timestamp");
   expect(tools[2]!.parameters.safeParse({ id: 'a', from: 'end' }).success).toBe(true);
   expect(tools[2]!.parameters.safeParse({ id: 'a', from: 'start' }).success).toBe(false);
   expect(tools[2]!.parameters.safeParse({ id: 'a', from: 'end', cursor: 'c1' }).success).toBe(false);

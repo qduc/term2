@@ -281,7 +281,11 @@ export class SessionBrowser {
           sessionId: resolvedId,
           updatedAt: currentUpdatedAt,
           revision: currentRevision,
-          nextIndex: input.from === 'end' ? Math.max(0, projection.records.length - 1) : 0,
+          // The tail anchor is a region, not a record: start at the last
+          // `limit` projected records so last-N access works through the
+          // existing forward cursor.
+          nextIndex:
+            input.from === 'end' ? Math.max(0, projection.records.length - clamp(input.limit, DEFAULT_READ_LIMIT)) : 0,
           nextTextOffset: 0,
         };
     if (!cursor) return boundedError('invalid_cursor', 'The session cursor is invalid.', budget);
@@ -356,10 +360,10 @@ export class SessionBrowser {
     }
     const nextCursor =
       index < total ? this.#cursorFor(resolvedId, currentUpdatedAt, currentRevision, index, offset) : undefined;
-    // Records begun in this page are total - omitted. A mid-record chunk (the
-    // cursor offset is nonzero) began its own record, so it is not counted as
-    // omitted; every later record is.
-    const omitted = total - index - (offset > 0 ? 1 : 0);
+    // Page-local counts: every record represented on this page counts once,
+    // whether complete or a partial/resumed chunk, so on every page shape
+    // `total - omitted === items.length`.
+    const omitted = total - items.length;
     return (
       fitted(
         {

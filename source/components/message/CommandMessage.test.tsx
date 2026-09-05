@@ -1828,3 +1828,44 @@ it('CommandMessage falls through to generic output when a standard renderer cann
 
   expect(output.includes('UNPARSEABLE_SENTINEL_TEXT')).toBe(true);
 });
+
+// Regression: model-supplied toolArgs are unvalidated JSON. A non-array
+// `replacements` (or a non-string `content`) used to reach `.map`/`.split`
+// inside a useMemo and take down the whole render via the error boundary,
+// wedging the running app. Observed in production: grok emitted
+// `replacements` as a JSON string.
+// TypeError: (toolArgs.replacements || []).map is not a function
+it('CommandMessage renders search_replace when replacements is not an array', async () => {
+  const { lastFrame, unmount } = await renderInAct(
+    <CommandMessage
+      command="search_replace"
+      toolName={TOOL_NAME_SEARCH_REPLACE}
+      status="completed"
+      success={true}
+      toolArgs={{
+        path: 'source/a.ts',
+        replacements: '[{"search_content":"a","replace_content":"b"}]',
+      }}
+      output=""
+    />,
+  );
+
+  expect(stripAnsi(lastFrame() ?? '')).toContain('source/a.ts');
+  unmount();
+});
+
+it('CommandMessage renders create_file when content is not a string', async () => {
+  const { lastFrame, unmount } = await renderInAct(
+    <CommandMessage
+      command="create_file"
+      toolName={TOOL_NAME_CREATE_FILE}
+      status="completed"
+      success={true}
+      toolArgs={{ path: 'source/b.ts', content: { unexpected: 'object' } }}
+      output=""
+    />,
+  );
+
+  expect(stripAnsi(lastFrame() ?? '')).toContain('source/b.ts');
+  unmount();
+});

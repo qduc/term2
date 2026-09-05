@@ -481,6 +481,7 @@ export function createRunCodeToolDefinition(
                   return latest.kind;
                 },
                 grant: (nestedDecision) => {
+                  if (callContext.signal.aborted) throw new Error('Tool execution was not approved.');
                   const applied = applyApprovalGrant(
                     {
                       sessionId: sessionId ?? 'unknown',

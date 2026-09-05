@@ -15,7 +15,7 @@ import type { ILoggingService } from '../../../services/service-interfaces.js';
 import { ToolApprovalPolicyRegistry } from '../../../services/approval/tool-approval-policy-registry.js';
 import { wrapNeedsApproval } from '../../../lib/tool-invoke.js';
 import type { AnyToolDefinition, ToolRegistry } from '../../types.js';
-import { NestedApprovalOwner } from '../../../services/approval/nested-approval-owner.js';
+import { NestedApprovalOwner, type NestedApprovalRequest } from '../../../services/approval/nested-approval-owner.js';
 import { SessionAccessState } from '../../../services/session/session-access-state.js';
 import { createMockSettingsService } from '../../../services/settings/settings-service.mock.js';
 import { createCreateFileToolDefinition } from '../../file/create-file.js';
@@ -459,6 +459,65 @@ describe('run_code', () => {
     await expect(owner.decide(requestId, { answer: 'y' })).resolves.toEqual({ kind: 'stale' });
     expect(effects).toEqual([]);
     expect(owner.getSnapshot()).toBeNull();
+  }, 20_000);
+
+  it('does not persist an allow-* grant after the host call signal has aborted', async () => {
+    const workspaceDir = mkdtempSync(join(tmpdir(), 'term2-run-code-d6-workspace-'));
+    const outsideDir = mkdtempSync(join('/tmp', 'term2-run-code-d6-outside-'));
+    const targetPath = join(outsideDir, 'granted.txt');
+    try {
+      const access = new SessionAccessState(createMockSettingsService({}));
+      const editGrant = vi.spyOn(access, 'allowEditFile');
+      const createFile = createCreateFileToolDefinition({
+        loggingService: logging(),
+        settingsService: createMockSettingsService({}),
+        executionContext: ExecutionContext.pin(workspaceDir),
+        sessionAccess: access,
+      });
+      const approvalRegistry = new ToolApprovalPolicyRegistry();
+      approvalRegistry.register({
+        toolName: createFile.name,
+        parameters: createFile.parameters,
+        needsApproval: createFile.needsApproval as AnyToolDefinition['needsApproval'],
+      });
+      // Host timeout aborts callContext.signal and would normally settle the
+      // owner waiter first. Isolate the owner's abort listener so decide still
+      // reaches the production grant closure — the residual approve-wins window.
+      class Owner extends NestedApprovalOwner {
+        override request(request: NestedApprovalRequest) {
+          return super.request({ ...request, signal: new AbortController().signal });
+        }
+      }
+      const owner = new Owner();
+      let tools: ToolRegistry = [createFile];
+      const runCode = createRunCodeToolDefinition({
+        loggingService: logging(),
+        getToolRegistry: () => tools,
+        getCwd: () => workspaceDir,
+        approvalPolicyRegistry: approvalRegistry,
+        sessionAccess: access,
+      });
+      tools = [createFile, runCode];
+      bindRunCodeRegistry(tools);
+      bindRunCodeNestedApprovalOwner(tools, owner);
+      const pending = runCode.execute(
+        {
+          code: 'return await tools.create_file({ path: ' + JSON.stringify(targetPath) + ", content: 'x' });",
+          timeout_ms: 500,
+        },
+        { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
+      );
+      await vi.waitFor(() => expect(owner.getSnapshot()?.toolName).toBe('create_file'));
+      const requestId = owner.getSnapshot()!.requestId;
+      await expect(pending).resolves.toContain('timed out');
+      await owner.decide(requestId, { answer: 'allow-edit-file-session' });
+      await vi.waitFor(() => expect(owner.getSnapshot()).toBeNull());
+      expect(editGrant).not.toHaveBeenCalled();
+      expect(existsSync(targetPath)).toBe(false);
+    } finally {
+      rmSync(workspaceDir, { recursive: true, force: true });
+      rmSync(outsideDir, { recursive: true, force: true });
+    }
   }, 20_000);
 
   it('permits a still-prompt decision after revalidation becomes auto approval', async () => {

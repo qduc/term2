@@ -90,6 +90,30 @@ function fullCapabilityTools() {
 
 const profile = (id: string) => resolveProfile(id);
 
+it.each(['gpt-6-astra', 'openai/gpt-6-astra', ' GPT-6-ASTRA-2026-09-05 '])(
+  'buildPromptSpec gives %s the shared coding base and Astra guidance',
+  (model) => {
+    const spec = buildPromptSpec({ model, profile: profile('builtin:standard') });
+    expect(spec.basePromptFile).toBe('gpt-5.6.md');
+    expect(spec.fragmentFiles).toContain('fragments/gpt-6-astra.md');
+    expect(spec.fragmentFiles).toContain('approval-model.md');
+    for (const mode of ['plan', 'mentor', 'orchestrator']) {
+      expect(buildPromptSpec({ model, profile: profile(`builtin:${mode}`) })).toEqual(spec);
+    }
+  },
+);
+
+it('buildPromptSpec confines Astra guidance to non-lite Astra prompts', () => {
+  const lite = buildPromptSpec({ model: 'gpt-6-astra', profile: profile('builtin:lite') });
+  expect(lite.basePromptContent).toBeTruthy();
+  expect(lite.fragmentFiles).not.toContain('fragments/gpt-6-astra.md');
+  for (const model of ['gpt-5.6-sol', 'gpt-5.5', 'unknown-model']) {
+    expect(buildPromptSpec({ model, profile: profile('builtin:standard') }).fragmentFiles).not.toContain(
+      'fragments/gpt-6-astra.md',
+    );
+  }
+});
+
 it('buildPromptSpec selects the profile identity and model-family base prompt', () => {
   expect(buildPromptSpec({ model: 'gpt-5.5', profile: profile('builtin:lite') }).basePromptContent).toBeTruthy();
   expect(buildPromptSpec({ model: 'gpt-5.5', profile: profile('builtin:standard') }).basePromptFile).toBe('gpt-5.5.md');

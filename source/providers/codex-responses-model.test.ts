@@ -485,42 +485,48 @@ it('CodexResponsesTransport never sends context_management on create', () => {
   expect(built.requestData).not.toHaveProperty('contextCompaction');
 });
 
-it('CodexResponsesTransport.compactHistory uses the Responses compaction trigger and marks the opaque item', async () => {
-  const create = vi.fn(async (body: any) => {
-    expect(body).toEqual({
-      model: 'gpt-5.6-luna',
-      input: [
-        { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] },
-        { type: 'compaction_trigger' },
-      ],
-      parallel_tool_calls: true,
-      stream: true,
-      store: false,
-      include: ['reasoning.encrypted_content'],
-      reasoning: { context: 'all_turns' },
+it.each([
+  { model: 'gpt-5.6-luna', parallelToolCalls: false, reasoning: { context: 'all_turns' } },
+  { model: 'gpt-5.6-sol', parallelToolCalls: true, reasoning: undefined },
+])(
+  'CodexResponsesTransport.compactHistory uses the Responses compaction trigger and marks the opaque item for $model',
+  async ({ model, parallelToolCalls, reasoning }) => {
+    const create = vi.fn(async (body: any) => {
+      expect(body).toEqual({
+        model,
+        input: [
+          { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] },
+          { type: 'compaction_trigger' },
+        ],
+        parallel_tool_calls: parallelToolCalls,
+        stream: true,
+        store: false,
+        include: ['reasoning.encrypted_content'],
+        ...(reasoning ? { reasoning } : {}),
+      });
+      return (async function* () {
+        yield {
+          type: 'response.output_item.done',
+          item: { type: 'compaction', id: 'cmp_1', encrypted_content: 'cipher' },
+        };
+        yield { type: 'response.completed', response: { id: 'resp_1' } };
+      })();
     });
-    return (async function* () {
-      yield {
-        type: 'response.output_item.done',
-        item: { type: 'compaction', id: 'cmp_1', encrypted_content: 'cipher' },
-      };
-      yield { type: 'response.completed', response: { id: 'resp_1' } };
-    })();
-  });
-  const transport = new CodexResponsesTransport({ responses: { create } } as any, 'gpt-5.6-luna', false);
-  const result = await transport.compactHistory({
-    input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] }],
-  });
-  expect(create).toHaveBeenCalledTimes(1);
-  expect(result.history).toEqual([
-    {
-      type: 'compaction',
-      id: 'cmp_1',
-      encrypted_content: 'cipher',
-      providerOpaque: { provider: 'openai' },
-    },
-  ]);
-});
+    const transport = new CodexResponsesTransport({ responses: { create } } as any, model, false);
+    const result = await transport.compactHistory({
+      input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] }],
+    });
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(result.history).toEqual([
+      {
+        type: 'compaction',
+        id: 'cmp_1',
+        encrypted_content: 'cipher',
+        providerOpaque: { provider: 'openai' },
+      },
+    ]);
+  },
+);
 
 it('CodexResponsesTransport does not send context_management for Responses-Lite models', () => {
   const transport = new CodexResponsesTransport({} as any, 'gpt-5.6-luna', false, {

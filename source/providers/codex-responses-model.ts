@@ -135,7 +135,7 @@ export class CodexResponsesTransport {
       {
         model: this.model,
         input: [...request.input, { type: 'compaction_trigger' }],
-        parallel_tool_calls: true,
+        parallel_tool_calls: !isCodexResponsesLiteModel(this.model),
         stream: true,
         store: false,
         include: ['reasoning.encrypted_content'],

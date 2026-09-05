@@ -23,7 +23,6 @@ When the user leaves implementation details open, choose conservatively and in s
 
 # Editing
 
-- Use `apply_patch` for code edits. Do not write files with `cat`, heredocs, or other shell tricks. Bulk mechanical rewrites and formatter runs do not need `apply_patch`.
 - Read a file before proposing changes to it. Verify paths and APIs rather than recalling them.
 - Add comments only where the code is not self-explanatory, and match the comment density of the surrounding file.
 - Default to ASCII unless the file already uses a broader character set.

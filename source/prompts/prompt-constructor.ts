@@ -5,6 +5,7 @@ import { getSearchViaShellAddendum } from './search-via-shell.js';
 import { getSubagentDelegationAddendum } from './subagent-delegation.js';
 import { getShellSandboxAddendum } from './shell-sandbox.js';
 import { getBackgroundShellAddendum } from './background-shell.js';
+import { getDirectEditorToolsAddendum, getScriptPrimaryToolsAddendum } from './tool-surface-guidance.js';
 
 export type PromptConstructorOptions = {
   model: string;
@@ -21,6 +22,8 @@ export type PromptConstructorOptions = {
   memoryGuidance?: string;
   sessionBrowserEnabled?: boolean;
   executionContext?: ExecutionContext;
+  /** Same effective-shell gate that registers run_code. */
+  runCodeEnabled?: boolean;
 };
 
 export type PromptSpec = {
@@ -49,6 +52,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     memoryGuidance = '',
     sessionBrowserEnabled = false,
     executionContext,
+    runCodeEnabled = false,
   } = options;
 
   const liteMode = isLiteProfile(profile);
@@ -119,6 +123,8 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
   if (memoryGuidance) {
     inlineSections.push(memoryGuidance);
   }
+
+  inlineSections.push(runCodeEnabled ? getScriptPrimaryToolsAddendum() : getDirectEditorToolsAddendum());
 
   return {
     ...(liteMode

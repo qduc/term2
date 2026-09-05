@@ -1469,7 +1469,11 @@ it('tools.<group>.enabled toggles remove exactly their own tools and prompt frag
   const baselineNames = baseline.tools.map((tool) => tool.name);
 
   const rows: Array<{ key: string; absent: string[]; markers?: string[] }> = [
-    { key: 'tools.shell.enabled', absent: ['shell', 'run_code'] },
+    {
+      key: 'tools.shell.enabled',
+      absent: ['shell', 'run_code'],
+      markers: ['Call them as `tools.<name>(params)` inside `run_code`'],
+    },
     { key: 'tools.web.enabled', absent: ['web_search', 'web_fetch'] },
     // read_file goes via the read branch; grep/glob additionally consult the
     // effective read capability inside their registration condition.

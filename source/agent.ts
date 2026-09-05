@@ -369,6 +369,7 @@ export const getAgentDefinition = (
     memoryGuidance: memoryCapability.guidance,
     sessionBrowserEnabled: hasCapability('sessions') && sessionBrowserContextEnabled && Boolean(sessionBrowser),
     executionContext,
+    runCodeEnabled: hasCapability('shell'),
   });
   let prompt = promptSpec.basePromptContent ?? resolvePrompt(path.join(BASE_PROMPT_PATH, promptSpec.basePromptFile!));
 

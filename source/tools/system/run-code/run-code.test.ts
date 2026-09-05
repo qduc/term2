@@ -792,12 +792,13 @@ describe('run_code', () => {
     }
   });
 
-  it('guides bounded batches and direct literal patches before scripting', () => {
+  it('guides bounded batches and scripted patches without a hidden direct fallback', () => {
     const description = build([]).description;
     expect(description).toContain('Promise.allSettled');
     expect(description).toContain('30,000');
-    expect(description).toContain('apply_patch directly');
     expect(description).toContain('template literal');
+    expect(description).not.toContain('apply_patch directly');
+    expect(description).not.toContain('call it directly as a tool');
   });
 
   it('explains that a successful script with no return value produces no result', async () => {
@@ -915,8 +916,9 @@ describe('run_code', () => {
     expect(output).toContain('caught:');
     expect(output).toContain('requires approval and is unavailable from inside a script');
     expect(output).toContain(
-      'Refused (needs user approval; not directly callable in this model configuration): locked',
+      'Refused (needs user approval and could not be completed from inside this script): locked',
     );
+    expect(output).not.toContain('call these directly instead');
   });
 
   it('denies a tool with no registered approval policy', async () => {
@@ -974,8 +976,9 @@ describe('run_code', () => {
     expect(description).toContain('tools.echo');
     expect(description).not.toContain('run_subagent');
     expect(description).not.toContain('tools.shell(');
-    expect(description).toContain('Auto-approved tools run normally');
-    expect(description).toContain('requires user approval is unavailable from inside a script');
+    expect(description).toContain('Auto-approved tools run immediately');
+    expect(description).toContain('present the existing approval prompt and resume this script');
+    expect(description).not.toContain('requires user approval is unavailable from inside a script');
   });
 
   it('teaches the model to return a value and describes the console opt-in', () => {
@@ -1037,9 +1040,9 @@ describe('run_code', () => {
       `try { await tools.conditional({ value: "outside" }); } catch (error) { return error.message; }`,
     );
 
-    expect(output).toContain('not directly callable in this model configuration');
+    expect(output).toContain('requires approval and is unavailable from inside a script');
     expect(output).not.toContain('Call conditional directly as a tool instead');
-    expect(output).not.toContain('call these directly instead: conditional');
+    expect(output).not.toContain('call these directly instead');
   });
 
   it('reports a script that throws', async () => {

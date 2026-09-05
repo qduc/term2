@@ -8,18 +8,27 @@ original proposal and appended corrections with one authoritative sequence.
 **Milestone 1 is merged** (`82a756a7`, with `08a71cf7` and `96e65d4e`). Do not
 re-implement it.
 
+**M4 hide-direct is merged to main** (surface+copy `c9ae6a49`; P1/K1 evidence
+`56e7fd88`). Predicate: `isDirectlyCallable` is `RUN_CODE_PROHIBITED_TOOLS`
+only; scriptable tools stay bound in the wrapped registry and are called as
+`tools.*` from scripts. P1 lives in
+`scripts/provider-black-box/nested-hide.blackbox.ts` (scripted adapter +
+production `buildAgentTools` hide + result-chain identity). K1 lives in
+`source/app.nested-approval-hide.test.tsx` (Ink `useConversation` +
+`BottomArea` Enter on a hidden nested `create_file`). Do not re-implement M1–M4
+or the surface+copy predicate. Contract and review:
+`.coord/nested-approval/deliver/m4-contract.md`, `m4-contract-review.md`.
+Live: `.coord/nested-approval/STATE.md`.
+
 **Milestone 2b is merged to main as `1f18293f` (2026-09-05).** Branch was
 `m2b-scripted-adapter`; worktree `.worktrees/m2b-scripted-adapter`.
 
 **M2 is complete** — both M2a and M2b are merged to main. Do not re-implement
-M2b.
+M2b. **M3 Fork C is merged** (`114acd70`).
 
 **M3 Fork C implemented and merged `114acd70` (2026-09-05).** Work-clock pauses
 iff worker `pending ⊆ waitingSet` and idle epoch matches; long-stop never
-pauses. M3-safe `7d1f49ca`. **M4 contract drafted and review-folded**
-(`.coord/nested-approval/deliver/m4-contract.md`; review
-`m4-contract-review.md`). Not implemented. Live:
-`.coord/nested-approval/STATE.md`.
+pauses. M3-safe `7d1f49ca`.
 
 ### M2b gate evidence (coordinator-verified at `3377be81`, merged as `1f18293f`)
 

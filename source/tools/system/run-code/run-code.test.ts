@@ -872,6 +872,41 @@ describe('run_code', () => {
 
     expect(execute).not.toHaveBeenCalled();
     expect(output).toContain('Invalid parameters for "strict"');
+    expect(output).toContain('Signature: tools.strict({ value: string })');
+  });
+
+  it('appends a compact signature with short enums and nested shapes to schema failures', async () => {
+    const output = await run(
+      [
+        tool({
+          name: 'scan',
+          parameters: z.object({
+            mode: z.enum(['fast', 'deep']),
+            targets: z.array(z.object({ path: z.string(), recursive: z.boolean().optional() })).optional(),
+          }),
+        }),
+      ],
+      `try { await tools.scan({ mode: 'speedy' }); } catch (error) { console.log('fail:', error.message); }`,
+      { include_console: true },
+    );
+
+    expect(output).toContain('Invalid parameters for "scan"');
+    expect(output).toContain('mode: "fast"|"deep"');
+    expect(output).toContain('targets?: { path: string, recursive?: boolean }[]');
+  });
+
+  it('keeps the success-path envelope free of failure-time signature expansion', async () => {
+    const execute = vi.fn((params: unknown) => `doubled:${(params as { value: string }).value}`);
+    const output = await run(
+      [tool({ name: 'calc', execute }), tool({ name: 'strict', execute: vi.fn() })],
+      `try { await tools.strict({ value: 42 }); } catch { /* expected schema rejection */ }
+       return await tools.calc({ value: '21' });`,
+    );
+
+    expect(execute).toHaveBeenCalledOnce();
+    expect(output).toContain('doubled:21');
+    expect(output).not.toContain('Invalid parameters');
+    expect(output).not.toContain('Signature:');
   });
 
   it('exposes exactly the registry, so an unknown tool name is simply absent', async () => {

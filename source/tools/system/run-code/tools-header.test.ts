@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { renderToolsHeader } from './tools-header.js';
+import { renderCompactSignature, renderToolsHeader } from './tools-header.js';
 import type { AnyToolDefinition, ToolRegistry } from '../../types.js';
 
 const tool = (overrides: Partial<AnyToolDefinition> & { name: string }): AnyToolDefinition =>
@@ -70,6 +70,68 @@ describe('renderToolsHeader', () => {
 
   it('is empty when nothing is exposed', () => {
     expect(header([])).toBe('');
+  });
+});
+
+describe('renderCompactSignature (shared with the invalid-parameters site)', () => {
+  it('renders the compact call shape a failure message appends', () => {
+    expect(renderCompactSignature(tool({ name: 'strict', parameters: z.object({ value: z.string() }) }))).toBe(
+      'tools.strict({ value: string })',
+    );
+  });
+
+  it('expands nested object shapes for tools that carry them', () => {
+    const signature = renderCompactSignature(
+      tool({
+        name: 'search_replace',
+        parameters: z.object({
+          path: z.string(),
+          replacements: z
+            .array(
+              z.object({
+                search_content: z.string(),
+                replace_content: z.string(),
+                match_all: z.boolean().optional(),
+              }),
+            )
+            .min(1),
+        }),
+      }),
+    );
+
+    expect(signature).toBe(
+      'tools.search_replace({ path: string, replacements: { search_content: string, replace_content: string, match_all?: boolean }[] })',
+    );
+  });
+
+  it('inlines a short enum and degrades a long enum to its base type', () => {
+    const many = Array.from({ length: 30 }, (_, index) => `skill_${String(index).padStart(2, '0')}`);
+    const signature = renderCompactSignature(
+      tool({
+        name: 'activate_skill',
+        parameters: z.object({ name: z.enum(many as [string, ...string[]]) }),
+      }),
+    );
+
+    expect(signature).toBe('tools.activate_skill({ name: string })');
+    expect(signature).not.toContain('skill_00');
+  });
+
+  it('shows expanded nested shapes in the header listing for an essential tool that carries them', () => {
+    const text = header([
+      tool({
+        name: 'search_replace',
+        parameters: z.object({
+          path: z.string(),
+          replacements: z.array(z.object({ search_content: z.string(), replace_content: z.string() })),
+        }),
+      }),
+    ]);
+
+    expect(text).toContain(
+      'tools.search_replace({ path: string, replacements: { search_content: string, replace_content: string }[] })',
+    );
+    expect(text).not.toContain('replacements: object[]');
   });
 });
 

@@ -56,7 +56,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
   // Their full workflows ride on the next user turn so rebuilding the agent does
   // not invalidate the provider's instruction prefix.
   const promptProfile = selectPromptProfile({ model, liteMode: false });
-  const fragmentFiles = [...(promptProfile.fragmentFiles ?? [])];
+  const fragmentFiles = liteMode ? [] : [...(promptProfile.fragmentFiles ?? [])];
   const inlineSections: string[] = [];
 
   const isRegularMode = !liteMode;

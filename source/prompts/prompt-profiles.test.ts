@@ -5,10 +5,12 @@ import { PROMPT_PROFILES, selectPromptProfile } from './prompt-profiles.js';
 
 const PROMPTS_DIR = import.meta.dirname;
 
-it('every prompt profile points at a base prompt file that exists on disk', () => {
-  const missing = PROMPT_PROFILES.filter(
-    (profile) => !fs.existsSync(path.join(PROMPTS_DIR, profile.basePromptFile)),
-  ).map((profile) => `${profile.id} -> ${profile.basePromptFile}`);
+it('every prompt profile points at base and fragment files that exist on disk', () => {
+  const missing = PROMPT_PROFILES.flatMap((profile) =>
+    [profile.basePromptFile, ...(profile.fragmentFiles ?? [])]
+      .filter((file) => !fs.existsSync(path.join(PROMPTS_DIR, file)))
+      .map((file) => `${profile.id} -> ${file}`),
+  );
 
   expect(missing).toEqual([]);
 });

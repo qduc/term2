@@ -12,6 +12,12 @@ export const PROMPT_PROFILES: PromptProfile[] = [
     matches: ({ liteMode }) => liteMode,
   },
   {
+    id: 'gpt-6-astra',
+    basePromptFile: 'gpt-5.6.md',
+    fragmentFiles: ['fragments/gpt-6-astra.md'],
+    matches: ({ normalizedModel }) => normalizedModel.includes('gpt-6-astra'),
+  },
+  {
     id: 'anthropic',
     basePromptFile: 'anthropic.md',
     matches: ({ normalizedModel }) => normalizedModel.includes('sonnet') || normalizedModel.includes('haiku'),

@@ -1,4 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { z } from 'zod';
 import {
   bindRunCodeRegistry,
@@ -623,5 +626,111 @@ describe('run_code nested result cap', () => {
     // to the script, not into model context, and a silent partial read makes
     // whatever the script computes from it wrong.
     expect(seen).toEqual([true]);
+  });
+});
+
+// The nested-call logger ships on main (08a71cf7) but is only ever enabled by
+// an env var, so nothing in the normal suite exercises it. It was validated by
+// three experiment builds behaving identically, which is not a floor anyone can
+// rely on later: M2 of the nested-approval work plans to read acceptance
+// evidence off these records. These tests pin the two properties that make it
+// safe to ship — inert when unset, and incapable of breaking a script when the
+// write fails.
+describe('run_code nested-call instrumentation', () => {
+  const withSession = (sessionId: string) => ({ context: { sessionId } });
+  let dir: string | undefined;
+
+  afterEach(() => {
+    delete process.env.TERM2_NESTED_CALL_LOG;
+    if (dir) rmSync(dir, { recursive: true, force: true });
+    dir = undefined;
+  });
+
+  const runWithContext = async (registry: ToolRegistry, code: string, context: unknown) =>
+    String(await build(registry).execute({ code, timeout_ms: 60_000 } as never, context as never));
+
+  it('writes nothing when TERM2_NESTED_CALL_LOG is unset', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'nested-log-'));
+    const logPath = join(dir, 'calls.jsonl');
+    delete process.env.TERM2_NESTED_CALL_LOG;
+
+    const output = await runWithContext(
+      [tool({ name: 'echo' })],
+      'return await tools.echo({ value: "x" });',
+      withSession('session-a'),
+    );
+
+    expect(output).toContain('echo:x');
+    expect(existsSync(logPath)).toBe(false);
+  });
+
+  it('writes one record per nested dispatch when enabled', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'nested-log-'));
+    const logPath = join(dir, 'calls.jsonl');
+    process.env.TERM2_NESTED_CALL_LOG = logPath;
+
+    await runWithContext(
+      [tool({ name: 'echo' })],
+      'for (const value of ["a", "b"]) await tools.echo({ value });',
+      withSession('session-b'),
+    );
+
+    const records = readFileSync(logPath, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+
+    expect(records).toHaveLength(2);
+    for (const record of records) {
+      expect(record.tool).toBe('echo');
+      expect(record.sessionId).toBe('session-b');
+      expect(record.outcome).toBe('success');
+      expect(typeof record.timestamp).toBe('string');
+    }
+  });
+
+  it('records a denied nested call as denied-by-approval, not as a failure', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'nested-log-'));
+    const logPath = join(dir, 'calls.jsonl');
+    process.env.TERM2_NESTED_CALL_LOG = logPath;
+
+    // A tool that requires approval cannot be resolved from inside a script,
+    // because a script cannot prompt. That is a denial, and conflating it with
+    // a failure is what hides an unshippable configuration.
+    await runWithContext(
+      [tool({ name: 'strict', needsApproval: () => true })],
+      'try { await tools.strict({ value: "x" }); } catch {}',
+      withSession('session-c'),
+    );
+
+    const outcomes = readFileSync(logPath, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line).outcome);
+
+    expect(outcomes).toContain('denied-by-approval');
+    expect(outcomes).not.toContain('failure');
+  });
+
+  it('does not disturb script execution when the log path cannot be written', async () => {
+    process.env.TERM2_NESTED_CALL_LOG = join(tmpdir(), 'nested-log-missing-dir', 'calls.jsonl');
+
+    const output = await runWithContext(
+      [tool({ name: 'echo' })],
+      'return await tools.echo({ value: "survives" });',
+      withSession('session-d'),
+    );
+
+    expect(output).toContain('echo:survives');
+  });
+
+  it('writes nothing when the session id is absent', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'nested-log-'));
+    const logPath = join(dir, 'calls.jsonl');
+    process.env.TERM2_NESTED_CALL_LOG = logPath;
+
+    await runWithContext([tool({ name: 'echo' })], 'return await tools.echo({ value: "x" });', {});
+
+    expect(existsSync(logPath)).toBe(false);
   });
 });

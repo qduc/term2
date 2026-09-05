@@ -101,7 +101,7 @@ export interface ApplicationBoundaryCompaction {
     signal?: AbortSignal;
     onStarted: (provider: string) => void;
   }) => Promise<
-    | { kind: 'unchanged' }
+    | { kind: 'unchanged'; notice?: string }
     | { kind: 'failed'; provider: string }
     | {
         kind: 'compacted';
@@ -273,6 +273,8 @@ type RunState = {
   turnCount: number;
   /** Local automatic compactions already paid for in this run. */
   automaticCompactionsThisRun?: number;
+  /** Eligibility advice is admitted once across this run's tool/approval continuations. */
+  compactionNotice?: string;
   /** Turn budget for the run; undefined means unbounded. */
   maxTurns?: number;
   /** Per-run staged budget and deterministic stall sensor, retained across approval continuation. */
@@ -943,6 +945,9 @@ export class ApplicationRunLoop {
               strategy: 'local',
               durationMs: Math.max(0, Date.now() - compactionStartedAt),
             });
+          } else if (compaction.notice && compaction.notice !== state.compactionNotice) {
+            state.compactionNotice = compaction.notice;
+            this.#queuePendingSystemNotice(compaction.notice);
           }
 
           // Summarization is an asynchronous part of this same request

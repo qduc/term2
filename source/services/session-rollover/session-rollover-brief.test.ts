@@ -20,6 +20,8 @@ describe('composeSessionRolloverBrief', () => {
     expect(brief).toContain('Use `session_search` only when');
     expect(brief).toContain('Do not replay the entire previous transcript');
     expect(brief).toContain('Continue from the next open step');
+    expect(brief).toContain('session-owned');
+    expect(brief).toContain('durable artifacts');
   });
 
   it('labels an unspecified reason without inventing one', () => {

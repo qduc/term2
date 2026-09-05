@@ -1488,3 +1488,57 @@ it.sequential('MessageList merges command runs across empty/whitespace bot messa
   expect(countOccurrences(output, 'Read 1 file, ran 1 shell command')).toBe(1);
   expect(output.includes('Finished.')).toBe(true);
 });
+
+it.sequential(
+  'MessageList does not reprint a growing command group when a text-free continuation step ends',
+  async () => {
+    // Regression: a continuation step that emits only tool calls produces a bot
+    // message that is briefly `streaming` with no text and is then finalized
+    // empty. While it streams it is a non-groupable separator, so the tool run
+    // before it closes, groups, and commits to <Static>. When it finalizes
+    // empty and concise mode drops it, the two runs merge into one group whose
+    // first member — and therefore whose id — is earlier, so the guard against
+    // re-committing an id does not catch it and the same run reprints, once per
+    // continuation step, each line a superset of the last.
+    const settingsService = createMockSettingsService({ 'ui.displayMode': 'concise' });
+    const cmd = (n: number) => ({
+      id: `cmd-${n}`,
+      sender: 'command',
+      status: 'completed',
+      toolName: 'shell',
+      command: `echo ${n}`,
+    });
+    const streamingBot = (n: number) => ({ id: `bot-${n}`, sender: 'bot', status: 'streaming', text: '' });
+    const finalizedEmptyBot = (n: number) => ({ id: `bot-${n}`, sender: 'bot', status: 'finalized', text: '' });
+
+    let messages: any[] = [cmd(1), cmd(2)];
+    const renderer = await renderInAct(<MessageList settingsService={settingsService} messages={messages} />);
+
+    // Three continuation steps, each: tools settle -> empty bot streams ->
+    // bot finalizes empty -> next step's tools land.
+    for (let step = 1; step <= 3; step += 1) {
+      messages = [...messages, streamingBot(step)];
+      await rerenderInAct(renderer, <MessageList settingsService={settingsService} messages={messages} />);
+
+      messages = [...messages.slice(0, -1), finalizedEmptyBot(step)];
+      await rerenderInAct(renderer, <MessageList settingsService={settingsService} messages={messages} />);
+
+      messages = [...messages, cmd(step * 2 + 1), cmd(step * 2 + 2)];
+      await rerenderInAct(renderer, <MessageList settingsService={settingsService} messages={messages} />);
+    }
+
+    messages = [...messages, { id: 'bot-done', sender: 'bot', status: 'finalized', text: 'All done.' }];
+    await rerenderInAct(renderer, <MessageList settingsService={settingsService} messages={messages} />);
+
+    const output = stripAnsi(renderer.lastFrame() ?? '');
+    expect(output.split('\n').filter((line) => line.includes('shell command'))).toHaveLength(1);
+    expect(countOccurrences(output, 'Ran 8 shell commands')).toBe(1);
+    expect(output.includes('All done.')).toBe(true);
+
+    // Nothing intermediate was ever frozen: the run counted up in place.
+    const printed = renderer.frames.map(stripAnsi).join('\n');
+    expect(countOccurrences(printed, 'Ran 2 shell commands')).toBe(0);
+    expect(countOccurrences(printed, 'Ran 4 shell commands')).toBe(0);
+    expect(countOccurrences(printed, 'Ran 6 shell commands')).toBe(0);
+  },
+);

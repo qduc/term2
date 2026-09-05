@@ -298,7 +298,17 @@ const MessageList = <T extends MessageLike = Message>({
         if (message.sender === 'reasoning') {
           return false;
         }
-        if (message.sender === 'bot' && message.status !== 'streaming' && (!message.text || !message.text.trim())) {
+        // Drop text-free bot messages whatever their status. A continuation
+        // step that emits only tool calls produces a bot message that streams
+        // empty and then finalizes empty. Keeping it while it streams makes it
+        // a non-groupable separator that closes the tool run before it — the
+        // run then groups, commits to <Static>, and when the empty bot is
+        // finally dropped the two runs merge into one group with an earlier
+        // first member, and so a different id. The id guard below cannot see
+        // that as the same group, so the run reprints instead of updating in
+        // place, once per continuation step. An empty bot message renders
+        // nothing either way, so never admitting it is the cheaper fix.
+        if (message.sender === 'bot' && (!message.text || !message.text.trim())) {
           return false;
         }
         return true;

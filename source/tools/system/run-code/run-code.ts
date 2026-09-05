@@ -1,4 +1,6 @@
 import { appendFileSync } from 'node:fs';
+import { lstat } from 'node:fs/promises';
+import type { ExecutionContext } from '../../../services/execution-context.js';
 import { z } from 'zod';
 import { relaxedNumber } from '../../utils.js';
 import { normalizeToolParameters } from '../../../lib/tool-invoke.js';
@@ -141,6 +143,7 @@ export interface CreateRunCodeToolOptions {
   /** Policy authority used for out-of-band script calls. */
   approvalPolicyRegistry: ToolApprovalPolicyRegistry;
   getCwd?: () => string;
+  executionContext?: ExecutionContext;
   nestedApprovalOwner?: NestedApprovalOwner;
   sessionAccess?: import('../../../services/session/session-access-state.js').SessionAccessState;
   nestedCompatibility?: import('../../../services/session/nested-tool-compatibility-state.js').NestedToolCompatibilityState;
@@ -301,7 +304,7 @@ interface PreparedCall {
 export function createRunCodeToolDefinition(
   options: CreateRunCodeToolOptions,
 ): SchemaToolDefinition<typeof runCodeParametersSchema> {
-  const { loggingService, getCwd = () => process.cwd() } = options;
+  const { loggingService, getCwd = () => options.executionContext?.getCwd() || process.cwd() } = options;
   const approvalRegistry = options.approvalPolicyRegistry;
 
   // Set by bindRunCodeRegistry once the policy layer has wrapped every tool.
@@ -399,14 +402,17 @@ export function createRunCodeToolDefinition(
           }
 
           const authorityRoot = getCwd();
-          const preparedParams = await bindPreparedArguments(name, normalized, authorityRoot);
-          const physicalRoot = await resolveWorkspacePathPhysically(authorityRoot, authorityRoot);
+          const authority = await bindPreparedAuthority(name, normalized, authorityRoot, options.executionContext);
+          if (authority.kind === 'denied') {
+            record(name, 'approval_required', started, isDirectlyCallable(tool));
+            return failed(authority.message);
+          }
           return {
             tool,
-            params: preparedParams,
+            params: authority.params,
             originalParams: normalized,
             authorityRoot,
-            authorityMeaning: fingerprint({ physicalRoot, params: preparedParams }),
+            authorityMeaning: fingerprint(authority),
             parallelSafe: await isParallelSafe(tool, normalized, context),
             started,
           };
@@ -451,16 +457,16 @@ export function createRunCodeToolDefinition(
                 signal: nestedContext.signal as AbortSignal,
                 revalidateAuthority: async () => {
                   const currentRoot = getCwd();
-                  const currentMeaning = await bindPreparedArguments(
+                  const authority = await bindPreparedAuthority(
                     prepared.tool.name,
                     prepared.originalParams,
                     currentRoot,
+                    options.executionContext,
                   );
-                  const currentPhysicalRoot = await resolveWorkspacePathPhysically(currentRoot, currentRoot);
                   return (
+                    authority.kind === 'bound' &&
                     currentRoot === prepared.authorityRoot &&
-                    fingerprint({ physicalRoot: currentPhysicalRoot, params: currentMeaning }) ===
-                      prepared.authorityMeaning
+                    fingerprint(authority) === prepared.authorityMeaning
                   );
                 },
                 revalidate: async () => {
@@ -601,32 +607,70 @@ export function createRunCodeToolDefinition(
   return definition;
 }
 
-async function bindPreparedArguments(toolName: string, params: unknown, cwd: string): Promise<unknown> {
-  if (!params || typeof params !== 'object' || Array.isArray(params)) return params;
-  const record = params as Record<string, unknown>;
-  const bindPath = async (value: unknown): Promise<unknown> => {
-    if (typeof value !== 'string') return value;
+const PATH_TOOLS = new Set([
+  'read_file',
+  'create_file',
+  'search_replace',
+  'apply_patch',
+  'grep',
+  'glob',
+  'read_code_outline',
+  'code_context_search',
+]);
+
+type BoundAuthority = { kind: 'bound'; physicalRoot: string; params: unknown } | { kind: 'denied'; message: string };
+
+type PathSemantics = 'referent' | 'unlink-source';
+
+async function bindPreparedAuthority(
+  toolName: string,
+  params: unknown,
+  cwd: string,
+  executionContext?: ExecutionContext,
+): Promise<BoundAuthority> {
+  const isRemote = executionContext?.isRemote() ?? false;
+  if (isRemote && PATH_TOOLS.has(toolName)) {
+    return { kind: 'denied', message: 'Cannot establish remote physical path authority for a nested tool call.' };
+  }
+  try {
+    const physicalRoot = isRemote ? cwd : await requirePhysicalPath(cwd, cwd);
+    return { kind: 'bound', physicalRoot, params: await bindPreparedArguments(toolName, params, cwd) };
+  } catch (error) {
+    return {
+      kind: 'denied',
+      message: `Cannot establish physical path authority: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+async function requirePhysicalPath(value: string, cwd: string, semantics: PathSemantics = 'referent'): Promise<string> {
+  const physicalPath = await resolveWorkspacePathPhysically(value, cwd);
+  if (physicalPath === undefined) throw new Error(`Unresolved path: ${value}`);
+  if (semantics === 'unlink-source') {
+    // Move sources are both read and unlinked. Following a leaf symlink would
+    // preserve the read but delete its referent; reject rather than change meaning.
     const lexicalPath = resolveWorkspacePath(value, cwd, { allowOutsideWorkspace: true });
-    return (await resolveWorkspacePathPhysically(value, cwd)) ?? lexicalPath;
-  };
-  const pathTools = new Set([
-    'read_file',
-    'create_file',
-    'search_replace',
-    'apply_patch',
-    'grep',
-    'glob',
-    'read_code_outline',
-    'code_context_search',
-  ]);
-  if (!pathTools.has(toolName)) return params;
+    const stats = await lstat(lexicalPath);
+    if (stats.isSymbolicLink()) throw new Error(`Symlink unlink source is unsupported: ${value}`);
+  }
+  return physicalPath;
+}
+
+async function bindPreparedArguments(toolName: string, params: unknown, cwd: string): Promise<unknown> {
+  if (!params || typeof params !== 'object' || Array.isArray(params) || !PATH_TOOLS.has(toolName)) return params;
+  const record = params as Record<string, unknown>;
+  const bindPath = async (value: unknown, semantics: PathSemantics = 'referent'): Promise<unknown> =>
+    typeof value === 'string' ? requirePhysicalPath(value, cwd, semantics) : value;
   if (toolName === 'apply_patch' && typeof record.patch === 'string') {
     return { ...record, patch: await bindPatchPaths(record.patch, bindPath) };
   }
   return 'path' in record ? { ...record, path: await bindPath(record.path) } : params;
 }
 
-async function bindPatchPaths(patch: string, bindPath: (value: unknown) => Promise<unknown>): Promise<string> {
+async function bindPatchPaths(
+  patch: string,
+  bindPath: (value: unknown, semantics: PathSemantics) => Promise<unknown>,
+): Promise<string> {
   let parsed;
   try {
     parsed = parseUpstreamApplyPatch(patch);
@@ -634,17 +678,19 @@ async function bindPatchPaths(patch: string, bindPath: (value: unknown) => Promi
     return patch;
   }
 
-  const targetPaths = parsed.operations.flatMap((operation) => [
-    operation.path,
-    ...('moveTo' in operation && operation.moveTo ? [operation.moveTo] : []),
-  ]);
+  const targets = parsed.operations.flatMap((operation) => {
+    const moveTo = 'moveTo' in operation ? operation.moveTo : undefined;
+    const semantics: PathSemantics = operation.type === 'delete_file' || moveTo ? 'unlink-source' : 'referent';
+    return [{ path: operation.path, semantics }, ...(moveTo ? [{ path: moveTo, semantics: 'referent' as const }] : [])];
+  });
   let targetIndex = 0;
   const lines = patch.replace(/\r\n?/g, '\n').split('\n');
   const prefixes = ['*** Add File: ', '*** Update File: ', '*** Delete File: ', '*** Move to: '];
   for (let index = 0; index < lines.length; index += 1) {
     const prefix = prefixes.find((candidate) => lines[index].startsWith(candidate));
     if (!prefix) continue;
-    const bound = await bindPath(targetPaths[targetIndex++]);
+    const target = targets[targetIndex++];
+    const bound = await bindPath(target.path, target.semantics);
     lines[index] = prefix + String(bound);
   }
   return lines.join('\n');

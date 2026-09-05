@@ -139,6 +139,7 @@ describe('run_code', () => {
         getToolRegistry: () => tools,
         getCwd: () => workspaceDir,
         approvalPolicyRegistry: approvalRegistry,
+        sessionAccess: access,
       });
       const grant = vi.spyOn(access, 'allowEditFile');
       tools = [createFile, runCode];
@@ -149,6 +150,8 @@ describe('run_code', () => {
         { context: { sessionId: 'session-1' }, signal: new AbortController().signal },
       );
       await vi.waitFor(() => expect(owner.getSnapshot()).not.toBeNull());
+      const displayed = owner.getSnapshot()!;
+      expect(displayed.approval.outsideWorkspaceEdit).toEqual({ path: targetA, folder: targetADir });
       unlinkSync(linkPath);
       symlinkSync(targetBDir, linkPath);
       await owner.decide(owner.getSnapshot()!.requestId, { answer: 'allow-edit-file-session' });
@@ -157,6 +160,10 @@ describe('run_code', () => {
       expect(grant).not.toHaveBeenCalled();
       expect(readFileSync(targetA, 'utf8')).toBe('a');
       expect(readFileSync(targetB, 'utf8')).toBe('b');
+      expect(owner.getSnapshot()).toBeNull();
+      await expect(owner.decide(displayed.requestId, { answer: 'allow-edit-file-session' })).resolves.toEqual({
+        kind: 'stale',
+      });
     } finally {
       rmSync(workspaceDir, { recursive: true, force: true });
       rmSync(targetADir, { recursive: true, force: true });

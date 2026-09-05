@@ -54,7 +54,7 @@ function formatRunBudgetEvidence(event: RunBudgetEvent): string {
  * are already capped by the notification store, so the full output is offered
  * by reference rather than inlined.
  */
-function formatBackgroundSubagentNotifications(notifications: readonly BackgroundNotification[]): string {
+export function formatBackgroundSubagentNotifications(notifications: readonly BackgroundNotification[]): string {
   const completions = notifications.filter(
     (notification): notification is Extract<BackgroundSubagentNotification, { kind: 'completion' }> =>
       notification.kind === 'completion',

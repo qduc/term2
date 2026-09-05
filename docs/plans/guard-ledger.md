@@ -74,6 +74,70 @@ Open work, in order:
 
 ## Guard classes
 
+### Non-interactive background-work drain bound
+
+Harm prevented: a one-shot non-interactive process exiting successfully while
+admitted background subagents are still running, losing their results.
+
+Scope and execution paths: non-interactive sessions using the parameterized
+run_subagent tool with execution: background; legacy run_subagent_async,
+ask_user, and background shell execution remain blocked.
+
+Guard class: containment budget with an information-loss consequence.
+Enforcement owner: runWithSession in source/non-interactive.ts.
+Recovery owner: NonInteractiveBackgroundWork.cancel, wired to the session's
+background registries; the existing notification store and formatter deliver
+settled results to a further model turn.
+
+Measured signal and observation boundary: after each model turn settles, the
+runtime's background-task control port is queried for active running or
+cancelling tasks and the durable notification queue is checked. Completion
+notifications are drained and sent through the same model-only notification
+turn content used by the interactive orchestrator.
+
+Direct evidence or proxy: active registry status and queued completion events
+are direct lifecycle evidence. Wall-clock time is only a finite containment
+proxy for a child that never settles; ordinary progress does not reset or waive
+the bound.
+
+Legitimate work that can produce the same signal: a slow but productive review,
+provider retry, approval wait, or child waiting on another child. Such work is
+allowed up to the finite bound and receives every completion notification that
+arrives before it. A child that remains active at the deadline is cancelled and
+reported as unfinished rather than reported as success.
+
+Configuration sources and precedence: the internal backgroundWaitTimeoutMs
+runtime seam is used by tests and callers; absent, non-finite, or omitted values
+use the five-minute default. Effective values are floored to at least 1ms and
+capped at 24 hours. No persisted setting is changed.
+
+Action and why the signal justifies it: wait and wake on lifecycle notification
+until no active work and no pending notification remain. At the deadline or a
+SIGINT/SIGTERM, cancel the background registries, abort the active parent turn,
+emit a structured non-zero terminal error, and do not emit completed.
+
+Partial-work settlement: completed work is delivered and can produce the final
+answer. Cut-off work is named with its id, kind, and status in human output and
+in the structured JSON error's outstanding field; pending undelivered
+notifications are counted. NDJSON remains one JSON object per line.
+
+Retry, fallback, and provider-continuity semantics: no provider wire format or
+retry policy changes; notification turns use the existing session and provider
+continuity path. run_subagent_async and background shell rejection remain
+separate capability guards.
+
+Observability fields: background_work_timeout or
+background_work_interrupted, error text, signal when applicable, outstanding
+task descriptors, and pending-notification count are emitted to JSON and the
+logger; human mode prints the same ids/statuses to stderr.
+
+Persisted-setting migration, if any: none.
+Rollback boundary: revert the non-interactive drain and its focused tests; the
+interactive orchestrator and background registries remain unchanged apart from
+exporting their existing notification formatter for reuse.
+
+Ledger row: confirmed defect — non-interactive background subagent work loss.
+
 | Class | Examples | Correct contract |
 | --- | --- | --- |
 | Inactivity watchdog | WebSocket first/inter-frame silence | Reset only on activity that proves the watched transport is alive; expire into a typed, recoverable transport failure. |

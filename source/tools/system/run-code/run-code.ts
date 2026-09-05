@@ -1,3 +1,4 @@
+import { appendFileSync } from 'node:fs';
 import { z } from 'zod';
 import { relaxedNumber } from '../../utils.js';
 import { normalizeToolParameters } from '../../../lib/tool-invoke.js';
@@ -239,6 +240,30 @@ export const formatRunCodeCommandMessage: FormatCommandMessage = (item, index, t
   ];
 };
 
+type NestedCallOutcome = 'success' | 'failure' | 'denied-by-approval';
+
+function getConversationSessionId(context: unknown): string | undefined {
+  if (!context || typeof context !== 'object') return undefined;
+  const runContext = (context as { context?: unknown }).context;
+  if (!runContext || typeof runContext !== 'object') return undefined;
+  const sessionId = (runContext as { sessionId?: unknown }).sessionId;
+  return typeof sessionId === 'string' && sessionId.length > 0 ? sessionId : undefined;
+}
+
+function writeNestedCallRecord(tool: string, sessionId: string | undefined, outcome: NestedCallOutcome): void {
+  const logPath = process.env.TERM2_NESTED_CALL_LOG;
+  if (!logPath || !sessionId) return;
+  try {
+    appendFileSync(
+      logPath,
+      `${JSON.stringify({ tool, sessionId, timestamp: new Date().toISOString(), outcome })}\n`,
+      'utf8',
+    );
+  } catch {
+    // Experiment-only logging must never affect tool execution.
+  }
+}
+
 interface PreparedCall {
   tool: AnyToolDefinition;
   params: unknown;
@@ -276,13 +301,21 @@ export function createRunCodeToolDefinition(
       const bridgeRunId = createBridgeRunId();
       const calls: RunCodeCallRecord[] = [];
       const output: string[] = [];
+      const sessionId = getConversationSessionId(context);
 
       const record = (
         tool: string,
         outcome: RunCodeCallRecord['outcome'],
         started: number,
         directlyCallable?: boolean,
-      ) => calls.push({ tool, outcome, durationMs: Date.now() - started, directlyCallable });
+      ) => {
+        calls.push({ tool, outcome, durationMs: Date.now() - started, directlyCallable });
+        writeNestedCallRecord(
+          tool,
+          sessionId,
+          outcome === 'ok' ? 'success' : outcome === 'approval_required' ? 'denied-by-approval' : 'failure',
+        );
+      };
       const failed = (message: string): CapabilityOutcome => ({
         kind: 'result',
         result: { ok: false, error: message } as JsonValue,

@@ -12,6 +12,7 @@ import {
   clearModelMemoryCacheForTest,
   setModelCacheDirForTest,
   setModelCacheClockForTest,
+  isStrictSubsetModels,
 } from './model-service.js';
 import { createMockSettingsService } from './settings/settings-service.mock.js';
 import { registerProvider, unregisterProvider } from '../providers/index.js';
@@ -1023,5 +1024,272 @@ describe.sequential('model disk cache', () => {
       unregisterProvider(p1);
       unregisterProvider(p2);
     }
+  });
+
+  it('preserves last-known-good cache when provider returns a strict subset (degraded list)', async () => {
+    const providerId = 'degraded-subset-provider';
+    let fetchCount = 0;
+    const healthyList = [{ id: 'm1' }, { id: 'm2' }, { id: 'm3' }];
+    const degradedList = [{ id: 'm1' }];
+
+    registerProvider({
+      id: providerId,
+      label: providerId,
+      fetchModels: async () => {
+        fetchCount++;
+        return fetchCount === 1 ? healthyList : degradedList;
+      },
+    });
+
+    try {
+      let now = 50_000_000;
+      const clock = () => now;
+
+      // 1. Initial healthy fetch
+      const first = await fetchModels(
+        {
+          settingsService: createMockSettingsService(),
+          loggingService: { warn: () => {}, debug: () => {} } as any,
+          now: clock,
+        },
+        providerId,
+      );
+      expect(first.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
+      expect(fetchCount).toBe(1);
+
+      // 2. Advance time past TTL (cache expires on disk)
+      clearModelMemoryCacheForTest();
+      now += MODEL_CACHE_TTL_MS + 1000;
+
+      // 3. Second fetch receives degraded strict subset and retry also returns degraded
+      const second = await fetchModels(
+        {
+          settingsService: createMockSettingsService(),
+          loggingService: { warn: () => {}, debug: () => {} } as any,
+          now: clock,
+        },
+        providerId,
+      );
+
+      // Should preserve the healthy list rather than poisoning with the degraded one
+      expect(second.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
+      // 1 initial + 1 degraded + 1 immediate retry = 3
+      expect(fetchCount).toBe(3);
+
+      // Verify disk cache was NOT overwritten with degraded list
+      const cacheFilePath = getModelCacheFilePath(providerId);
+      const diskContent = JSON.parse(fs.readFileSync(cacheFilePath, 'utf-8'));
+      expect(diskContent.models.map((m: any) => m.id)).toEqual(['m1', 'm2', 'm3']);
+    } finally {
+      unregisterProvider(providerId);
+    }
+  });
+
+  it('recovers on immediate retry when initial fetch returns a degraded strict subset', async () => {
+    const providerId = 'recover-retry-provider';
+    let fetchCount = 0;
+    const healthyList = [{ id: 'm1' }, { id: 'm2' }];
+    const degradedList = [{ id: 'm1' }];
+    const recoveredList = [{ id: 'm1' }, { id: 'm2' }, { id: 'm3' }];
+
+    registerProvider({
+      id: providerId,
+      label: providerId,
+      fetchModels: async () => {
+        fetchCount++;
+        if (fetchCount === 1) return healthyList;
+        if (fetchCount === 2) return degradedList;
+        return recoveredList;
+      },
+    });
+
+    try {
+      let now = 60_000_000;
+      const clock = () => now;
+
+      // Initial healthy fetch
+      await fetchModels(
+        {
+          settingsService: createMockSettingsService(),
+          loggingService: { warn: () => {}, debug: () => {} } as any,
+          now: clock,
+        },
+        providerId,
+      );
+
+      // Cache expires on disk
+      clearModelMemoryCacheForTest();
+      now += MODEL_CACHE_TTL_MS + 1000;
+
+      // Second fetch: call 2 returns degraded, call 3 (retry) returns recovered list
+      const result = await fetchModels(
+        {
+          settingsService: createMockSettingsService(),
+          loggingService: { warn: () => {}, debug: () => {}, info: () => {} } as any,
+          now: clock,
+        },
+        providerId,
+      );
+
+      expect(result.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
+      expect(fetchCount).toBe(3);
+
+      // Disk cache should have the recovered list
+      const cacheFilePath = getModelCacheFilePath(providerId);
+      const diskContent = JSON.parse(fs.readFileSync(cacheFilePath, 'utf-8'));
+      expect(diskContent.models.map((m: any) => m.id)).toEqual(['m1', 'm2', 'm3']);
+    } finally {
+      unregisterProvider(providerId);
+    }
+  });
+
+  it('never treats empty catalog [] as a disk cache hit', async () => {
+    const providerId = 'empty-cache-disk-provider';
+    const cacheFilePath = getModelCacheFilePath(providerId);
+    fs.mkdirSync(path.dirname(cacheFilePath), { recursive: true });
+    fs.writeFileSync(
+      cacheFilePath,
+      JSON.stringify({ version: 1, provider: providerId, timestamp: Date.now(), models: [] }),
+    );
+
+    let fetchCount = 0;
+    registerProvider({
+      id: providerId,
+      label: providerId,
+      fetchModels: async () => {
+        fetchCount++;
+        return [{ id: 'non-empty-model' }];
+      },
+    });
+
+    try {
+      clearModelMemoryCacheForTest();
+      const models = await fetchModels(
+        {
+          settingsService: createMockSettingsService(),
+          loggingService: { warn: () => {}, debug: () => {} } as any,
+        },
+        providerId,
+      );
+
+      expect(models.map((m) => m.id)).toEqual(['non-empty-model']);
+      expect(fetchCount).toBe(1);
+    } finally {
+      unregisterProvider(providerId);
+    }
+  });
+
+  it('evicts in-memory cache when TTL expires', async () => {
+    const providerId = 'mem-ttl-provider';
+    let fetchCount = 0;
+    registerProvider({
+      id: providerId,
+      label: providerId,
+      fetchModels: async () => {
+        fetchCount++;
+        return [{ id: `model-${fetchCount}` }];
+      },
+    });
+
+    try {
+      let now = 70_000_000;
+      const clock = () => now;
+
+      const first = await fetchModels(
+        {
+          settingsService: createMockSettingsService(),
+          loggingService: { warn: () => {}, debug: () => {} } as any,
+          now: clock,
+        },
+        providerId,
+      );
+      expect(first[0].id).toBe('model-1');
+      expect(fetchCount).toBe(1);
+
+      // Advance time beyond TTL, but do NOT clear memory cache manually
+      now += MODEL_CACHE_TTL_MS + 5000;
+
+      // Disk cache also deleted to verify it attempts fresh fetch
+      const cacheFilePath = getModelCacheFilePath(providerId);
+      if (fs.existsSync(cacheFilePath)) {
+        fs.unlinkSync(cacheFilePath);
+      }
+
+      const second = await fetchModels(
+        {
+          settingsService: createMockSettingsService(),
+          loggingService: { warn: () => {}, debug: () => {} } as any,
+          now: clock,
+        },
+        providerId,
+      );
+      expect(second[0].id).toBe('model-2');
+      expect(fetchCount).toBe(2);
+    } finally {
+      unregisterProvider(providerId);
+    }
+  });
+});
+
+describe('isStrictSubsetModels', () => {
+  it('returns false when previous list is empty', () => {
+    expect(isStrictSubsetModels([{ id: 'm1', provider: 'p' }], [])).toBe(false);
+    expect(isStrictSubsetModels([], [])).toBe(false);
+  });
+
+  it('returns true when candidate list is empty and previous list is non-empty', () => {
+    expect(isStrictSubsetModels([], [{ id: 'm1', provider: 'p' }])).toBe(true);
+  });
+
+  it('returns true when candidate list is a non-empty strict subset of previous', () => {
+    const prev = [
+      { id: 'm1', provider: 'p' },
+      { id: 'm2', provider: 'p' },
+      { id: 'm3', provider: 'p' },
+    ];
+    expect(isStrictSubsetModels([{ id: 'm1', provider: 'p' }], prev)).toBe(true);
+    expect(
+      isStrictSubsetModels(
+        [
+          { id: 'm2', provider: 'p' },
+          { id: 'm3', provider: 'p' },
+        ],
+        prev,
+      ),
+    ).toBe(true);
+  });
+
+  it('returns false when candidate list has same length as previous', () => {
+    const prev = [
+      { id: 'm1', provider: 'p' },
+      { id: 'm2', provider: 'p' },
+    ];
+    expect(
+      isStrictSubsetModels(
+        [
+          { id: 'm1', provider: 'p' },
+          { id: 'm2', provider: 'p' },
+        ],
+        prev,
+      ),
+    ).toBe(false);
+  });
+
+  it('returns false when candidate list contains new models not in previous', () => {
+    const prev = [
+      { id: 'm1', provider: 'p' },
+      { id: 'm2', provider: 'p' },
+    ];
+    // Shorter or same length, but has a new model
+    expect(isStrictSubsetModels([{ id: 'm3', provider: 'p' }], prev)).toBe(false);
+    expect(
+      isStrictSubsetModels(
+        [
+          { id: 'm1', provider: 'p' },
+          { id: 'm3', provider: 'p' },
+        ],
+        prev,
+      ),
+    ).toBe(false);
   });
 });

@@ -597,4 +597,66 @@ describe('resolveModelFlag', () => {
       reasoningEffort: 'medium',
     });
   });
+
+  it('passes through when target provider catalog has 0 models', async () => {
+    const emptyGroups = [makeGroup('empty-prov', [])];
+    const deps = mockDeps(emptyGroups);
+    const result = await resolveModelFlag({
+      modelFlag: 'some-model',
+      providerFlag: 'empty-prov',
+      settingsService: deps.settingsService,
+      loggingService: deps.loggingService,
+      fetcher: deps.fetcher,
+      providerIds: deps.providerIds,
+      knownProviders: ['empty-prov'],
+    });
+
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'passthrough',
+      modelId: 'some-model',
+      provider: 'empty-prov',
+      reasoningEffort: undefined,
+    });
+  });
+
+  it('passes through when all providers yield 0 loaded models without explicit error', async () => {
+    const emptyGroups = [makeGroup('prov-a', []), makeGroup('prov-b', [])];
+    const deps = mockDeps(emptyGroups);
+    const result = await resolveModelFlag({
+      modelFlag: 'fallback-model',
+      settingsService: deps.settingsService,
+      loggingService: deps.loggingService,
+      fetcher: deps.fetcher,
+      providerIds: deps.providerIds,
+      knownProviders: ['prov-a', 'prov-b'],
+    });
+
+    expect(result).toEqual<ModelResolutionResult>({
+      status: 'passthrough',
+      modelId: 'fallback-model',
+      provider: undefined,
+      reasoningEffort: undefined,
+    });
+  });
+
+  it('reports cached catalog path in error message when target provider does not match', async () => {
+    const targetGroups = [makeGroup('codex', [{ id: 'gpt-5.3-codex' }])];
+    const deps = mockDeps(targetGroups);
+    const result = await resolveModelFlag({
+      modelFlag: 'gpt-6-astra',
+      providerFlag: 'codex',
+      settingsService: deps.settingsService,
+      loggingService: deps.loggingService,
+      fetcher: deps.fetcher,
+      providerIds: deps.providerIds,
+      knownProviders: ['codex'],
+    });
+
+    expect(result.status).toBe('no_match');
+    if (result.status === 'no_match') {
+      expect(result.error).toContain('Error: No models match "gpt-6-astra".');
+      expect(result.error).toContain('The cached catalog for codex may be stale');
+      expect(result.error).toContain('codex.json');
+    }
+  });
 });

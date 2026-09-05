@@ -1,6 +1,6 @@
 import { createInterface } from 'node:readline';
 import { getProvider, getProviderIds } from '../../providers/index.js';
-import { filterModels, type ModelInfo } from '../model-service.js';
+import { filterModels, getModelCacheFilePath, type ModelInfo } from '../model-service.js';
 import type { ILoggingService, ISettingsService } from '../service-interfaces.js';
 import { scoreSubsequence } from '../../utils/subsequence-filter.js';
 import { collectProviderModels, type ProviderModelGroup } from './model-listing.js';
@@ -324,10 +324,9 @@ export async function resolveModelFlag(deps: {
     .map((group) => `warning: ${group.provider}: ${group.error}`);
 
   const totalLoadedModels = groups.reduce((acc, g) => acc + g.models.length, 0);
-  const hasFetchErrors = groups.some((g) => g.error !== undefined);
 
-  // If providers had errors and yielded 0 models, pass through rather than blocking startup
-  if (totalLoadedModels === 0 && hasFetchErrors) {
+  // If providers yielded 0 models, pass through rather than blocking startup
+  if (totalLoadedModels === 0) {
     return {
       status: 'passthrough',
       // Fail open with the flag as typed, matching pre-resolution behavior.
@@ -341,16 +340,24 @@ export async function resolveModelFlag(deps: {
   const { matches } = matchModels(groups, parsed);
 
   if (matches.length === 0) {
-    // If the target provider failed to fetch its catalog, allow passthrough
+    // If the target provider failed to fetch its catalog or yielded 0 models, allow passthrough
     if (parsed.provider) {
       const targetGroup = groups.find((g) => g.provider.toLowerCase() === parsed.provider!.toLowerCase());
-      if (targetGroup?.error) {
+      if (targetGroup?.error || targetGroup?.models.length === 0) {
         return {
           status: 'passthrough',
           modelId: parsed.rawPattern,
           provider: parsed.provider,
           reasoningEffort: parsed.reasoningEffort,
           ...(warnings.length > 0 ? { warnings } : {}),
+        };
+      }
+
+      if (targetGroup) {
+        const cacheFilePath = getModelCacheFilePath(targetGroup.provider);
+        return {
+          status: 'no_match',
+          error: `Error: No models match "${deps.modelFlag}". The cached catalog for ${targetGroup.provider} may be stale — delete ${cacheFilePath} to refetch.`,
         };
       }
     }

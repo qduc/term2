@@ -747,11 +747,16 @@ const history = new HistoryService({
 // stays distinguishable. currentSessionId is read lazily because it is
 // assigned after composition, and session_search uses it to demote the live
 // session's self-referential matches below all other sessions.
-const sessionBrowser = new SessionBrowser(() => ({
-  projectPath: executionContext.getHomeWorkspace(),
-  ...(sshInfo?.host ? { sshHost: sshInfo.host } : {}),
-  ...(effectiveSessionId ? { currentSessionId: effectiveSessionId } : {}),
-}));
+const sessionBrowser = new SessionBrowser(
+  () => ({
+    projectPath: executionContext.getHomeWorkspace(),
+    ...(sshInfo?.host ? { sshHost: sshInfo.host } : {}),
+    ...(effectiveSessionId ? { currentSessionId: effectiveSessionId } : {}),
+  }),
+  {
+    backend: process.env['TERM2_SESSION_BROWSER_BACKEND'] === 'canonical' ? 'canonical' : 'indexed',
+  },
+);
 
 const skillsService = new SkillsService(logger, executionContext.getCwd());
 skillsService.discoverSkills();

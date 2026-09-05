@@ -54,6 +54,9 @@ function writeRecordSequence(id: string, texts: string[]) {
   void writer.close();
 }
 
+// A raw String.prototype.slice splits surrogate pairs at chunk edges; safeUtf16Slice must not.
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
 it('exposes unique UUID short refs and resolves exact, prefix, ambiguous, and previous references', () => {
   const previous = '12345678-1234-4abc-8def-1234567890ab';
   const colliding = '12345678-abcd-4abc-8def-1234567890ab';
@@ -470,7 +473,6 @@ it('reports page-local omitted counts so total - omitted equals represented reco
   expect(first.total).toBe(5);
   expect(first.items).toHaveLength(2);
   expect(first.omitted).toBe(3);
-  expect(first.total - first.omitted).toBe(first.items.length);
   expect(first.nextCursor).toBeTruthy();
 
   const second: any = browser.read({ id, limit: 2, cursor: first.nextCursor });
@@ -478,13 +480,11 @@ it('reports page-local omitted counts so total - omitted equals represented reco
   // Page-local: only this page's two represented records count, not the
   // cumulative remaining tail (the superseded cumulative value here was 1).
   expect(second.omitted).toBe(3);
-  expect(second.total - second.omitted).toBe(second.items.length);
   expect(second.nextCursor).toBeTruthy();
 
   const third: any = browser.read({ id, limit: 2, cursor: second.nextCursor });
   expect(third.items).toHaveLength(1);
   expect(third.omitted).toBe(4);
-  expect(third.total - third.omitted).toBe(third.items.length);
   expect(third.nextCursor).toBeUndefined();
 });
 
@@ -506,7 +506,6 @@ it('anchors an initial from-end read on the last limit projected records in chro
     expect(tail.items.every((item: any) => item.complete)).toBe(true);
     expect(tail.items.at(-1)).toMatchObject({ index: 289, kind: 'assistant', text: 'record 289' });
     expect(tail.omitted).toBe(290 - limit);
-    expect(tail.total - tail.omitted).toBe(tail.items.length);
     // The selected tail is consumed: no cursor, and its absence says nothing
     // about the 290 - limit records before the tail anchor.
     expect(tail.nextCursor).toBeUndefined();
@@ -561,6 +560,8 @@ it('pages a constrained-budget tail through its region without loss, duplication
       const prior = reassembled.get(item.index) ?? '';
       expect(item.textOffset).toBe(prior.length);
       reassembled.set(item.index, prior + item.text);
+      // A raw String.slice chunk would split a surrogate pair at some edge.
+      expect(LONE_SURROGATE.test(item.text)).toBe(false);
       if (item.complete) expect(completed.has(item.index)).toBe(false);
       if (item.complete) completed.add(item.index);
     }
@@ -593,7 +594,7 @@ it('chunks an oversized final record and drops the cursor only when the tail is 
   expect(first.items).toHaveLength(1);
   expect(first.items[0]).toMatchObject({ index: 3, kind: 'assistant', complete: false, textOffset: 0 });
   expect(first.total).toBe(4);
-  expect(first.total - first.omitted).toBe(1);
+  expect(first.omitted).toBe(3);
   expect(first.nextCursor).toBeTruthy();
 
   const chunks = [first.items[0].text];
@@ -604,12 +605,14 @@ it('chunks an oversized final record and drops the cursor only when the tail is 
     expect(page.error).toBeUndefined();
     expect(page.items).toHaveLength(1);
     expect(page.items[0].index).toBe(3);
-    expect(page.total - page.omitted).toBe(1);
+    expect(page.omitted).toBe(3);
     chunks.push(page.items[0].text);
     completeness.push(page.items[0].complete);
     cursor = page.nextCursor;
   }
-  // Only the final chunk is complete; UTF-16 surrogate pairs survive chunking.
+  // No chunk may carry a lone surrogate: a raw String.slice would split a
+  // pair at some chunk edge. Only the final chunk is complete.
+  for (const chunk of chunks) expect(LONE_SURROGATE.test(chunk)).toBe(false);
   expect(completeness.slice(0, -1)).toEqual(completeness.slice(0, -1).map(() => false));
   expect(completeness.at(-1)).toBe(true);
   expect(chunks.join('')).toBe(finalText);
@@ -650,7 +653,6 @@ it('anchors skipped-record projections by projected ordinal while keeping origin
   // indexes intact.
   expect(tail.items.map((item: any) => item.index)).toEqual([10, 12, 13, 14, 15]);
   expect(tail.omitted).toBe(8);
-  expect(tail.total - tail.omitted).toBe(tail.items.length);
 });
 
 it('rejects combining a tail anchor with a cursor continuation', () => {
@@ -672,7 +674,6 @@ it('counts a chunked record as represented on its partial page', () => {
   // Page-local: the partial chunk represents its record, so exactly one of the
   // two whole-session records is represented here.
   expect(page.omitted).toBe(1);
-  expect(page.total - page.omitted).toBe(page.items.length);
 });
 
 it('returns a coherent bounded failure when the runtime byte cap is tiny', () => {

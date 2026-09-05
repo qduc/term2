@@ -22,14 +22,14 @@ export function createSessionBrowserToolDefinitions(browser: SessionBrowser): To
       'List prior locally persisted sessions for the current project. `total` is the number of browsable sessions in scope; `omitted` counts list entries dropped only because the output budget could not fit them (entries beyond `limit` are excluded by `total`).',
       z.object({ limit, maxChars }).strict(),
       (params) => browser.list(params),
-      '{ sessions: { id: string, shortRef: string, createdAt: string, updatedAt: string, firstUserMessage?: string, model?: string, provider?: string, messageCount: number }[], scope: string, total: number, omitted: number, unavailable: number, charsUsed: number } | { error: { code: string, message: string } }',
+      '{ sessions: { id: string, shortRef: string, createdAt: string, updatedAt: string, firstUserMessage?: string, model?: string, provider?: string, messageCount: number }[], scope: string, total: number, omitted: number, unavailable: number, charsUsed: number } | { error: { code: string, message: string, candidates?: { id: string, shortRef: string }[] } }',
     ),
     definition(
       'session_search',
       "Search prior locally persisted session transcripts for the current project. `total` is the number of ranked matches before `limit` is applied; `omitted` counts matches dropped only because the output budget could not fit them. Matches from the currently active session sort last, because searching indexes tool outputs and the query echoes in the live transcript. Each match's `updatedAt` is the session's last-write timestamp, not per-message time.",
       z.object({ query: z.string().refine((value) => /\S/.test(value)), limit, maxChars }).strict(),
       (params) => browser.search(params),
-      '{ results: { sessionId: string, shortRef: string, kind: string, messageIndex: number, snippet: { text: string, truncated: boolean }, updatedAt: string }[], scope: string, total: number, omitted: number, unavailable: number, skippedMessageCount: number, charsUsed: number } | { error: { code: string, message: string } }',
+      '{ results: { sessionId: string, shortRef: string, kind: string, messageIndex: number, snippet: { text: string, truncated: boolean }, updatedAt: string }[], scope: string, total: number, omitted: number, unavailable: number, skippedMessageCount: number, charsUsed: number } | { error: { code: string, message: string, candidates?: { id: string, shortRef: string }[] } }',
     ),
     definition(
       'session_read',
@@ -46,7 +46,7 @@ export function createSessionBrowserToolDefinitions(browser: SessionBrowser): To
             });
         }),
       (params) => browser.read(params),
-      '{ scope: string, session: { id: string, shortRef: string, createdAt: string, updatedAt: string, model?: string, provider?: string }, items: { index: number, kind: string, text: string, textOffset: number, totalTextChars: number, complete: boolean }[], nextCursor?: string, total: number, omitted: number, skippedMessageCount: number, charsUsed: number } | { error: { code: string, message: string } }',
+      '{ scope: string, session: { id: string, shortRef: string, createdAt: string, updatedAt: string, model?: string, provider?: string }, items: { index: number, kind: string, text: string, textOffset: number, totalTextChars: number, complete: boolean }[], nextCursor?: string, total: number, omitted: number, skippedMessageCount: number, charsUsed: number } | { error: { code: string, message: string, candidates?: { id: string, shortRef: string }[] } }',
     ),
   ];
 }

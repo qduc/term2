@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import * as fs from 'fs/promises';
+import * as os from 'os';
 import * as path from 'path';
 import { createRunCodeToolDefinition } from './run-code.js';
 import { createReadFileToolDefinition } from '../../file/read-file.js';
@@ -9,6 +10,9 @@ import type { ILoggingService } from '../../../services/service-interfaces.js';
 import type { ToolRegistry } from '../../types.js';
 import { createFindFilesToolDefinition } from '../../file/glob.js';
 import { createSessionBrowserToolDefinitions } from '../../session-browser/session-browser-tools.js';
+import { SessionBrowser } from '../../../services/conversation/session-browser.js';
+import { setConversationsDirForTest } from '../../../services/conversation/conversation-persistence.js';
+import { createConversationLogWriter } from '../../../services/logging/conversation-log-writer.js';
 import { trimToolOutput } from '../../../utils/output/trim-tool-output.js';
 import { isScriptedToolCall } from '../../../utils/output/bound-tool-result.js';
 
@@ -233,4 +237,102 @@ describe('run_code -> session tools return structured values on the scripted pat
     const direct = String(await list.execute({ limit: 5 }, {}, undefined));
     expect(JSON.parse(direct)).toEqual(browserEnvelope);
   });
+
+  it('declares the ambiguous-reference candidates field in the session_read scripted shape', async () => {
+    const { runCode } = buildRunCode();
+    const output = String(
+      await runCode.execute({
+        code: `const d = await tools.describe("session_read");
+               return { shape: d.scriptedReturnShape ?? null };`,
+        timeout_ms: 60_000,
+      } as never),
+    );
+    expect(output).not.toContain('Script failed');
+    expect(output).toContain('"shape"');
+    expect(output).toContain('candidates');
+    expect(output).toContain('shortRef');
+  }, 30_000);
+
+  it('delivers structured ambiguous-reference candidates to a scripted session_read', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'term2-scripted-session-ambig-'));
+    const projectPath = process.cwd();
+    const first = '11111111-1111-4111-8111-111111111111';
+    const second = '11111111-1111-4111-8111-111111111112';
+    try {
+      setConversationsDirForTest(dir);
+      const logger = {
+        error() {},
+        warn() {},
+        info() {},
+        debug() {},
+        trace() {},
+        getCorrelationId: () => undefined,
+      } as never;
+      for (const sessionId of [first, second]) {
+        const writer = createConversationLogWriter({ sessionId, dir, logger });
+        writer.init({ id: sessionId, createdAt: '2026-01-01T00:00:00.000Z', projectPath });
+        writer.append({ type: 'user_message', message: { id: 'u0', sender: 'user', text: 'record 0' } });
+        writer.append({
+          type: 'assistant_turn',
+          turn: { items: [{ type: 'assistant_text', text: 'answer 0' }] },
+          state: { previousResponseId: null },
+        });
+        void writer.close();
+      }
+      const sessionDefs = createSessionBrowserToolDefinitions(new SessionBrowser(() => ({ projectPath })));
+      const read = sessionDefs.find((tool) => tool.name === 'session_read')!;
+      const approvalPolicyRegistry = new ToolApprovalPolicyRegistry();
+      approvalPolicyRegistry.register({
+        toolName: read.name,
+        parameters: read.parameters,
+        needsApproval: read.needsApproval,
+      });
+      const runCode = createRunCodeToolDefinition({
+        loggingService: {
+          debug: vi.fn(),
+          info: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          security: vi.fn(),
+        } as unknown as ILoggingService,
+        getToolRegistry: () => [read] as ToolRegistry,
+        getCwd: () => process.cwd(),
+        approvalPolicyRegistry,
+      });
+
+      const direct = String(await read.execute({ id: '11111111', maxChars: 1024 }, {}, undefined));
+      const parsed = JSON.parse(direct) as {
+        error: { code: string; message: string; candidates?: Array<{ id: string; shortRef: string }> };
+      };
+      expect(parsed.error.code).toBe('ambiguous_reference');
+      expect(parsed.error.candidates).toHaveLength(2);
+      const candidateIds = parsed.error.candidates!.map((candidate) => candidate.id).sort();
+      expect(candidateIds).toEqual([first, second].sort());
+      for (const candidate of parsed.error.candidates!) {
+        expect(typeof candidate.id).toBe('string');
+        expect(typeof candidate.shortRef).toBe('string');
+      }
+
+      const output = String(
+        await runCode.execute({
+          code: `const r = await tools.session_read({ id: '11111111', maxChars: 1024 });
+                 return {
+                   isString: typeof r === 'string',
+                   code: r?.error?.code ?? null,
+                   hasCandidates: Array.isArray(r?.error?.candidates),
+                   candidateCount: r?.error?.candidates?.length ?? 0,
+                 };`,
+          timeout_ms: 60_000,
+        } as never),
+      );
+      expect(output).not.toContain('Script failed');
+      expect(output).toContain('"isString":false');
+      expect(output).toContain('"code":"ambiguous_reference"');
+      expect(output).toContain('"hasCandidates":true');
+      expect(output).toContain('"candidateCount":2');
+    } finally {
+      setConversationsDirForTest(null);
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
 });

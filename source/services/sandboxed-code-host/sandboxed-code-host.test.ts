@@ -79,6 +79,99 @@ describe('SandboxedCodeHostImpl output rejection messages', () => {
     if (!result.ok) return;
     expect(result.output).toEqual({ rows: [1, 2, 3] });
   });
+
+  it('drops undefined object fields instead of rejecting the return value', async () => {
+    const result = await run(
+      `return { kept: true, omitted: undefined, nested: { alsoOmitted: undefined, value: 1 } };`,
+    );
+
+    expect(result).toEqual({ ok: true, output: { kept: true, nested: { value: 1 } } });
+  });
+
+  it('encodes undefined array elements and holes as null', async () => {
+    const result = await run(`return [1, undefined, , 2];`);
+
+    expect(result).toEqual({ ok: true, output: [1, null, null, 2] });
+  });
+
+  it('reports the first unserializable function with its JSON path and completed effects', async () => {
+    const result = await run(`
+      const results = [await tools.echo({}), await tools.echo({}), { fn: () => undefined }];
+      return { results, later: Symbol('later') };
+    `);
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'runtime_error',
+        message:
+          'Script return value is not JSON-safe: $.results[2].fn is a function.\n' +
+          '2 nested tool calls already completed — inspect state before retrying.',
+      },
+    });
+  });
+
+  it.each([
+    ['a cycle', `const value = {}; value.self = value; return value;`, '$.self'],
+    ['a BigInt', `return { bad: 1n };`, '$.bad'],
+    ['a symbol', `return { bad: Symbol('bad') };`, '$.bad'],
+    ['a non-finite number', `return { bad: Number.NaN };`, '$.bad'],
+  ])('reports %s with its JSON path', async (description, code, path) => {
+    const result = await run(code);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('runtime_error');
+    expect(result.error.message).toContain(`Script return value is not JSON-safe: ${path} is ${description}.`);
+    expect(result.error.message).toContain('0 nested tool calls already completed — inspect state before retrying.');
+  });
+
+  it('keeps completed nested effects when an optional return field is undefined', async () => {
+    const created: string[] = [];
+    const createCapability: CapabilityHandler = {
+      binding: { name: 'tools', kind: 'namespace', members: ['create'] },
+      limits: { maxCalls: 4, maxConcurrency: 4, limitExceededMessage: 'too many calls' },
+      prepare: (payload) => ({ path: (payload.params as { path: string }).path }),
+      invoke: async (prepared) => {
+        const path = (prepared as { path: string }).path;
+        created.push(path);
+        return { kind: 'result', result: { ok: true, result: { path } } };
+      },
+    };
+    const host = new SandboxedCodeHostImpl();
+
+    const result = await host.run({
+      code: `
+        const results = await Promise.all([
+          tools.create({ path: 'one.txt' }),
+          tools.create({ path: 'two.txt' }),
+          tools.create({ path: 'three.txt' }),
+        ]);
+        return { results, selectedPath: undefined };
+      `,
+      capabilities: { tools: createCapability },
+      limits,
+      subject: 'Script',
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      output: {
+        results: [{ path: 'one.txt' }, { path: 'two.txt' }, { path: 'three.txt' }],
+      },
+    });
+    expect(created).toEqual(['one.txt', 'two.txt', 'three.txt']);
+  });
+
+  it('serializes undefined fields on objects created in the vm realm', async () => {
+    const result = await run(`
+      const vmObject = { keep: 'yes', omit: undefined };
+      const vmArray = [undefined, , 'last'];
+      return { vmObject, vmArray };
+    `);
+
+    expect(result).toEqual({ ok: true, output: { vmObject: { keep: 'yes' }, vmArray: [null, null, 'last'] } });
+  });
 });
 
 function createFakeWorker() {

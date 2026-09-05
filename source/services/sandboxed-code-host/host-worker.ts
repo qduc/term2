@@ -25,6 +25,61 @@ function json(value, ancestors = new Set()) {
   ancestors.delete(value);
   return valid;
 }
+function jsonPathProperty(path, key) {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) ? path + '.' + key : path + '[' + JSON.stringify(key) + ']';
+}
+function jsonFailure(path, reason) {
+  return { ok: false, path, reason };
+}
+function serializeJson(value, path = '$', ancestors = new Set()) {
+  if (value === undefined) return jsonFailure(path, 'undefined');
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return { ok: true, value };
+  if (typeof value === 'number') return Number.isFinite(value) ? { ok: true, value } : jsonFailure(path, 'a non-finite number');
+  if (typeof value === 'function') return jsonFailure(path, 'a function');
+  if (typeof value === 'symbol') return jsonFailure(path, 'a symbol');
+  if (typeof value === 'bigint') return jsonFailure(path, 'a BigInt');
+  if (typeof value !== 'object') return jsonFailure(path, 'an unsupported value');
+  if (ancestors.has(value)) return jsonFailure(path, 'a cycle');
+
+  ancestors.add(value);
+  if (Array.isArray(value)) {
+    const output = new Array(value.length);
+    for (let index = 0; index < value.length; index++) {
+      const item = value[index];
+      if (item === undefined) {
+        output[index] = null;
+        continue;
+      }
+      const serialized = serializeJson(item, path + '[' + index + ']', ancestors);
+      if (!serialized.ok) {
+        ancestors.delete(value);
+        return serialized;
+      }
+      output[index] = serialized.value;
+    }
+    ancestors.delete(value);
+    return { ok: true, value: output };
+  }
+
+  const output = {};
+  for (const key of Object.keys(value)) {
+    const item = value[key];
+    if (item === undefined) continue;
+    const serialized = serializeJson(item, jsonPathProperty(path, key), ancestors);
+    if (!serialized.ok) {
+      ancestors.delete(value);
+      return serialized;
+    }
+    Object.defineProperty(output, key, {
+      value: serialized.value,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+  }
+  ancestors.delete(value);
+  return { ok: true, value: output };
+}
 const context = vm.createContext(Object.create(null), { codeGeneration: { strings: false, wasm: false } });
 const inflight = new Set();
 let resultsConsumed = 0;
@@ -157,8 +212,19 @@ parentPort.on('message', (message) => {
       finishSend('workflow.complete', { output: null, voidOutput: true });
       return;
     }
-    if (!json(output)) throw new Error((workerData.subject || 'Script') + ' return value must be JSON-safe');
-    finishSend('workflow.complete', { output });
+    const serialized = serializeJson(output);
+    if (!serialized.ok)
+      throw new Error(
+        (workerData.subject || 'Script') +
+          ' return value is not JSON-safe: ' +
+          serialized.path +
+          ' is ' +
+          serialized.reason +
+          '.\n' +
+          resultsConsumed +
+          ' nested tool calls already completed — inspect state before retrying.',
+      );
+    finishSend('workflow.complete', { output: serialized.value });
   } catch (err) {
     finishSend('workflow.error', { error: error(err), syntax: err instanceof SyntaxError });
   }

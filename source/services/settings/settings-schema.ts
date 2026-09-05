@@ -323,7 +323,8 @@ export const SandboxSettingsSchema = z.object({
 });
 
 export const AgentWorkflowSettingsSchema = z.object({
-  timeoutMs: z.number().int().positive().default(120_000),
+  // Node `setTimeout` wraps delays above 2**31-1 to ~1 ms.
+  timeoutMs: z.number().int().positive().max(2_147_483_647).default(120_000),
   maxRuns: z.number().int().positive().default(8),
   maxConcurrency: z.number().int().positive().default(3),
   maxCodeBytes: z.number().int().positive().default(16_384),

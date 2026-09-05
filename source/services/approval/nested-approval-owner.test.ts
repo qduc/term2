@@ -178,6 +178,21 @@ describe('NestedApprovalOwner', () => {
     expect(dispatch).not.toHaveBeenCalled();
   });
 
+  it('denies a still-pending waiter when request.signal aborts, without close()', async () => {
+    // Production abort listener on request.signal. Escape on a nested prompt
+    // calls stopProcessing() (outer cancel), not close(); close() is session
+    // disposal. This does not exercise Ink or prove Escape.
+    const owner = new NestedApprovalOwner();
+    const waiting = request(owner, 'call-1');
+    expect(owner.getSnapshot()?.requestId).toBe('call-1');
+    waiting.controller!.abort();
+    await expect(waiting.promise).resolves.toMatchObject({ kind: 'denied' });
+    expect(owner.getSnapshot()).toBeNull();
+    await expect(owner.decide('call-1', { answer: 'y' })).resolves.toEqual({ kind: 'stale' });
+    expect(waiting.grant).not.toHaveBeenCalled();
+    expect(waiting.dispatch).not.toHaveBeenCalled();
+  });
+
   it('cancels waiters and ignores a late approval', async () => {
     const owner = new NestedApprovalOwner();
     const waiting = request(owner, 'call-1');

@@ -247,9 +247,11 @@ export function buildAgentTools({
       return result;
     });
 
-  // The application-owned executor remains in the tool list, but capable
-  // Responses providers receive its upstream custom/freeform declaration.
-  if (shouldUseNativePatchTool) {
+  // Native freeform apply_patch is a model-facing grammar. Scripts can only
+  // pass JSON, so a graph that also exposes run_code keeps the custom JSON
+  // definition bound into the script registry and never installs native.
+  const hasRunCode = tools.some((tool) => tool.name === TOOL_NAME_RUN_CODE);
+  if (shouldUseNativePatchTool && !hasRunCode) {
     const applyPatchIndex = tools.findIndex((tool) => tool.name === 'apply_patch');
     const applyPatch = applyPatchIndex >= 0 ? tools[applyPatchIndex] : undefined;
     if (applyPatch) {
@@ -327,15 +329,10 @@ export function buildAgentTools({
   // wrapping, plan-mode interceptors, and post-execute policy as a direct call.
   bindRunCodeRegistry(tools);
 
-  // Profiles without shell do not register run_code. Keep their existing
-  // direct surface intact; only reduce the model-facing list when run_code is
-  // available as the script path.
-  if (!tools.some((tool) => tool.name === TOOL_NAME_RUN_CODE)) return tools;
-
-  // Keep the complete wrapped registry bound above, but make run_code the
-  // primary model-facing path for tools that can execute without an
-  // interactive boundary. Direct tools are either prohibited inside scripts
-  // or may require approval for some parameter values.
+  // Profiles without run_code keep their existing direct surface. When the
+  // script path exists, the model-facing list is only run_code plus tools
+  // structurally prohibited inside scripts.
+  if (!hasRunCode) return tools;
   return tools.filter(isDirectlyCallable);
 }
 

@@ -13,6 +13,7 @@ import { SessionBrowser } from '../services/conversation/session-browser.js';
 import { RUN_CODE_PROHIBITED_TOOLS } from '../tools/system/run-code/run-code.js';
 import { getBackgroundShellAddendum } from './background-shell.js';
 import { getSubagentDelegationAddendum } from './subagent-delegation.js';
+import { getDirectEditorToolsAddendum, getScriptPrimaryToolsAddendum } from './tool-surface-guidance.js';
 
 const fullCapabilityLogging = {
   debug: () => {},
@@ -201,21 +202,24 @@ it('buildPromptSpec composes file fragments in stable order', () => {
   expect(spec.inlineSections).toContainEqual(expect.stringContaining('## Shell Sandbox'));
 });
 
-it('does not teach root prompt surfaces to call script-only tools directly', () => {
+it('does not teach loaded run_code instruction surfaces to call script-only tools directly', () => {
   const tools = fullCapabilityTools();
-  const scriptOnly = tools
-    .filter((tool) => !RUN_CODE_PROHIBITED_TOOLS.has(tool.name) && tool.canRequireApproval !== true)
-    .map((tool) => tool.name);
-  const approvalCapableTool = tools.find((tool) => tool.name === 'read_file' && tool.canRequireApproval === true);
-  expect(approvalCapableTool).toBeDefined();
-  const surfaces = ['lite.md', 'memory.md', 'session-browser.md', 'orchestrator.md'].map((file) =>
-    readFileSync(join(import.meta.dirname, file), 'utf8'),
-  );
+  const scriptOnly = tools.filter((tool) => !RUN_CODE_PROHIBITED_TOOLS.has(tool.name)).map((tool) => tool.name);
+  const surfaces = [
+    'lite.md',
+    'memory.md',
+    'session-browser.md',
+    'orchestrator.md',
+    'gpt-5-modern.md',
+    'gpt-5.4-mini.md',
+    'gpt-5.5.md',
+    'gpt-5.6.md',
+    'codex.md',
+  ].map((file) => readFileSync(join(import.meta.dirname, file), 'utf8'));
   surfaces.push(
+    getScriptPrimaryToolsAddendum(),
     getBackgroundShellAddendum(),
     getSubagentDelegationAddendum({ backgroundEnabled: true, controlsEnabled: true, foregroundEnabled: false }),
-    ...tools.filter((tool) => scriptOnly.includes(tool.name)).map((tool) => tool.description),
-    `A direct prompt may name ${approvalCapableTool!.name} when that tool is available.`,
   );
 
   const directReferences = scriptOnly.flatMap((name) => {
@@ -227,6 +231,23 @@ it('does not teach root prompt surfaces to call script-only tools directly', () 
   });
 
   expect(directReferences).toEqual([]);
+});
+
+it('selects script-primary vs direct-editor guidance from runCodeEnabled', () => {
+  const enabled = buildPromptSpec({
+    model: 'gpt-5.6',
+    profile: profile('builtin:standard'),
+    runCodeEnabled: true,
+  });
+  const disabled = buildPromptSpec({
+    model: 'gpt-5.6',
+    profile: profile('builtin:standard'),
+    runCodeEnabled: false,
+  });
+  expect(enabled.inlineSections.join('\n')).toContain(getScriptPrimaryToolsAddendum());
+  expect(enabled.inlineSections.join('\n')).not.toContain(getDirectEditorToolsAddendum());
+  expect(disabled.inlineSections.join('\n')).toContain(getDirectEditorToolsAddendum());
+  expect(disabled.inlineSections.join('\n')).not.toContain(getScriptPrimaryToolsAddendum());
 });
 
 it('buildPromptSpec ships the approval mechanism to every non-lite profile', () => {
@@ -304,9 +325,10 @@ it('buildPromptSpec uses lite base and skips worktree-hygiene fragment in lite m
   expect(lite.basePromptFile).toBeUndefined();
   expect(lite.basePromptContent).toBeTruthy();
   expect(lite.fragmentFiles.includes('worktree-hygiene.md')).toBe(false);
-  // Shell sandbox is added inline in lite mode (sandbox enabled by default).
-  expect(lite.inlineSections.length).toBe(1);
+  // Shell sandbox plus tool-surface routing are added inline in lite mode.
+  expect(lite.inlineSections.length).toBe(2);
   expect(lite.inlineSections[0]).toContain('## Shell Sandbox');
+  expect(lite.inlineSections[1]).toContain('## File, search, and edit tools');
 });
 
 it('buildPromptSpec excludes shell-sandbox when sandbox is disabled', () => {

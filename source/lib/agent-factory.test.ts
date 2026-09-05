@@ -162,13 +162,14 @@ it.sequential('keeps every registered tool reachable across direct and script pa
 
   expect(runCode!.description).toContain('Other tools (names only; schemas are available on demand)');
   expect(new Set([...direct, ...exposedToolNames])).toEqual(new Set(rawNames));
-  expect(new Set(direct.filter((name) => exposedToolNames.includes(name)))).toEqual(
-    new Set(raw.tools.filter((tool) => tool.canRequireApproval === true).map((tool) => tool.name)),
-  );
+  expect(direct.filter((name) => exposedToolNames.includes(name))).toEqual([]);
   for (const tool of raw.tools) {
-    expect(direct.includes(tool.name)).toBe(isDirectlyCallable(tool));
+    expect(direct.includes(tool.name)).toBe(RUN_CODE_PROHIBITED_TOOLS.has(tool.name));
     expect(exposedToolNames.includes(tool.name)).toBe(!RUN_CODE_PROHIBITED_TOOLS.has(tool.name));
+    expect(direct.includes(tool.name)).toBe(isDirectlyCallable(tool));
   }
+  expect(direct).toContain('run_code');
+  expect(exposedToolNames).not.toContain('run_code');
 });
 
 it.sequential('keeps the complete wrapped registry when run_code is unavailable', () => {
@@ -196,7 +197,7 @@ it.sequential('keeps the complete wrapped registry when run_code is unavailable'
   expect(built.map((tool) => tool.name)).toEqual(raw.tools.map((tool) => tool.name));
 });
 
-it.sequential('requires non-constant approval predicates to declare a direct fallback', () => {
+it.sequential('hides approval-capable editors from the direct list when run_code exists', () => {
   const { deps } = createDeps({ settingsValues: { 'app.searchViaShell': 'off' } });
   const raw = getAgentDefinition(
     {
@@ -205,13 +206,17 @@ it.sequential('requires non-constant approval predicates to declare a direct fal
     },
     'gpt-4o',
   );
-
-  for (const tool of raw.tools) {
-    const compactPredicate = Function.prototype.toString.call(tool.needsApproval).replace(/\s/g, '').replace(/;$/, '');
-    const isConstantPredicate = compactPredicate.endsWith('=>false') || compactPredicate.endsWith('=>true');
-    if (!isConstantPredicate && !RUN_CODE_PROHIBITED_TOOLS.has(tool.name)) {
-      expect(tool.canRequireApproval, `${tool.name} needs an explicit approval fallback`).toBe(true);
-    }
+  const built = buildAgentTools({
+    toolDefinitions: raw.tools,
+    resolvedModel: 'gpt-4o',
+    shouldUseNativePatchTool: false,
+    deps,
+  });
+  const direct = new Set(built.map((tool) => tool.name));
+  for (const name of ['read_file', 'create_file', 'search_replace', 'web_search']) {
+    expect(raw.tools.some((tool) => tool.name === name)).toBe(true);
+    expect(direct.has(name)).toBe(false);
+    expect(isDirectlyCallable({ name })).toBe(false);
   }
 });
 
@@ -491,7 +496,10 @@ it.sequential('buildAgent returns resolvedModel', () => {
 });
 
 it.sequential('buildAgent applies strict tool schema when provider supports it', () => {
-  const { deps } = createDeps({ providerId: 'openai', settingsValues: { 'agent.model': 'gpt-4o' } });
+  const { deps } = createDeps({
+    providerId: 'openai',
+    settingsValues: { 'agent.model': 'gpt-4o', 'tools.shell.enabled': false },
+  });
 
   const result = buildAgent({ model: 'gpt-4o' }, deps);
   const readFileTool = result.agent.tools.find((tool: any) => tool.name === 'read_file') as any;
@@ -518,22 +526,43 @@ it.sequential('buildAgent advertises apply_patch as patch-only to strict-schema 
   expect(Object.keys(tool.parameters.properties.patch)).toContain('type');
 });
 
-it.sequential('buildAgent excludes custom apply_patch when native patch tool is enabled', () => {
+it.sequential('buildAgent hides apply_patch from the direct list when run_code exists', () => {
   const { deps } = createDeps({ providerId: 'openai' });
 
   const result = buildAgent({ model: 'gpt-5.1' }, deps);
   const toolNames = result.agent.tools.map((tool: any) => tool.name);
 
-  expect(toolNames.filter((name: string) => name === 'apply_patch').length).toBe(1);
-  expect(toolNames.includes('apply_patch')).toBe(true);
+  expect(toolNames).toContain('run_code');
+  expect(toolNames).not.toContain('apply_patch');
 });
 
-it.sequential('buildAgent includes native applyPatchTool for supported models', () => {
+it.sequential('binds JSON apply_patch into run_code instead of native freeform when run_code exists', async () => {
   const { deps, logger } = createDeps({ providerId: 'openai' });
 
   const result = buildAgent({ model: 'gpt-5.1' }, deps);
+  const runCode = result.agent.tools.find((tool: any) => tool.name === 'run_code') as any;
+  expect(runCode).toBeTruthy();
+  expect(String(runCode.description)).toContain('tools.apply_patch');
+  expect(String(runCode.description)).not.toContain('FREEFORM');
+  expect(logger.debugCalls.some(([message]) => message === 'Using native applyPatchTool from SDK')).toBe(false);
 
+  const described = String(
+    await runCode.execute({ code: 'return await tools.describe("apply_patch");', timeout_ms: 60_000 } as never),
+  );
+  expect(described).toContain('"name":"apply_patch"');
+  expect(described).not.toContain('FREEFORM');
+  expect(described).not.toContain('do not wrap the patch in JSON');
+});
+
+it.sequential('keeps native apply_patch on the direct list when run_code is unavailable', () => {
+  const { deps, logger } = createDeps({
+    providerId: 'openai',
+    settingsValues: { 'tools.shell.enabled': false },
+  });
+
+  const result = buildAgent({ model: 'gpt-5.1' }, deps);
   const applyPatch = result.agent.tools.find((tool: any) => tool.name === 'apply_patch') as any;
+  expect(result.agent.tools.map((tool: any) => tool.name)).not.toContain('run_code');
   expect(applyPatch).toBeTruthy();
   expect(applyPatch.modelTool).toMatchObject({ type: 'custom', format: { type: 'grammar', syntax: 'lark' } });
   expect(applyPatch.modelTool.format.definition).toContain('start: begin_patch hunk+ end_patch');
@@ -544,7 +573,10 @@ it.sequential('buildAgent includes native applyPatchTool for supported models', 
 });
 
 it.sequential('native apply_patch needsApproval requires approval for paths outside the workspace', async () => {
-  const { deps } = createDeps({ providerId: 'openai' });
+  const { deps } = createDeps({
+    providerId: 'openai',
+    settingsValues: { 'tools.shell.enabled': false },
+  });
 
   const result = buildAgent({ model: 'gpt-5.1' }, deps);
   const applyPatch = result.agent.tools.find((tool: any) => tool.name === 'apply_patch') as any;
@@ -578,7 +610,10 @@ it.sequential('native apply_patch needsApproval requires approval for paths outs
 });
 
 it.sequential('registers the final native apply_patch policy for nested consumers', async () => {
-  const { deps } = createDeps({ providerId: 'openai' });
+  const { deps } = createDeps({
+    providerId: 'openai',
+    settingsValues: { 'tools.shell.enabled': false },
+  });
 
   buildAgent({ model: 'gpt-5.1' }, deps);
 
@@ -606,7 +641,10 @@ it.sequential(
     // The native closure prompts on any non-object operation, so this documents
     // the real production outcome. Plumbing parsed args to the registry is an
     // M2+ follow-up; production arg handling is deliberately unchanged in M1.
-    const { deps } = createDeps({ providerId: 'openai' });
+    const { deps } = createDeps({
+      providerId: 'openai',
+      settingsValues: { 'tools.shell.enabled': false },
+    });
 
     buildAgent({ model: 'gpt-5.1' }, deps);
 
@@ -674,7 +712,10 @@ it.sequential('keeps approval policies isolated between coexisting tool graphs',
 });
 
 it.sequential('YOLO bypasses native apply_patch approval for paths outside the workspace', async () => {
-  const { deps } = createDeps({ providerId: 'openai', settingsValues: { 'shell.autoApproveMode': 'always' } });
+  const { deps } = createDeps({
+    providerId: 'openai',
+    settingsValues: { 'shell.autoApproveMode': 'always', 'tools.shell.enabled': false },
+  });
 
   const result = buildAgent({ model: 'gpt-5.1' }, deps);
   const applyPatch = result.agent.tools.find((tool: any) => tool.name === 'apply_patch') as any;

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AgentClient } from './agent-client.js';
 import { registerProvider, unregisterProvider } from '../providers/registry.js';
 import { ToolOwnershipRegistry } from '../services/approval/tool-ownership-registry.js';
@@ -9,6 +9,7 @@ import { toOpenAIStrictToolSchema } from './openai-strict-tool-schema.js';
 import type { NestedSubagentResult } from '../services/subagents/types.js';
 import type { StreamedModelTurn } from '../contracts/streamed-model-turn.js';
 import type { AnyToolDefinition } from '../tools/types.js';
+import { projectConversationMessage } from '../services/conversation/conversation-message-projection.js';
 
 const providers = new Set<string>();
 const makeSettings = (provider: string, overrides: Record<string, unknown> = {}): ISettingsService => {
@@ -971,6 +972,225 @@ describe('AgentClient application-run-loop execution', () => {
 });
 
 describe('AgentClient codex session-history compaction', () => {
+  const coldHistory = [
+    { role: 'user', type: 'message', content: `cold-${'x'.repeat(5_000)}` },
+    { role: 'assistant', type: 'message', content: 'cold answer' },
+    { role: 'user', type: 'message', content: 'hot one' },
+    { role: 'assistant', type: 'message', content: 'hot answer' },
+    { role: 'user', type: 'message', content: 'hot two' },
+  ] as const;
+
+  const automaticClient = (compactHistory: StreamedModelTurn['compactHistory'], mode = 'native') => {
+    const requests: any[] = [];
+    let ordinaryRequests = 0;
+    providers.add('codex');
+    registerProvider(
+      {
+        id: 'codex',
+        label: 'Codex compaction recovery fixture',
+        fetchModels: async () => [],
+        createStreamedModel: () => ({
+          compactHistory,
+          async *stream(request: any) {
+            requests.push(request);
+            if (request.instructions?.includes('You compact historical conversation data')) {
+              yield {
+                type: 'completion' as const,
+                responseId: 'summary',
+                output: [
+                  { type: 'message' as const, content: [{ type: 'text' as const, text: 'safe local summary' }] },
+                ],
+              };
+            } else if (++ordinaryRequests % 3 !== 0) {
+              yield {
+                type: 'completion' as const,
+                responseId: `response-${ordinaryRequests}`,
+                output: [
+                  {
+                    type: 'tool_call' as const,
+                    id: `call-${ordinaryRequests}`,
+                    name: 'echo',
+                    arguments: '{"value":"done"}',
+                  },
+                ],
+              };
+            } else {
+              yield {
+                type: 'completion' as const,
+                responseId: `response-${ordinaryRequests}`,
+                output: [{ type: 'message' as const, content: [{ type: 'text' as const, text: 'finished' }] }],
+              };
+            }
+          },
+        }),
+      },
+      { allowOverride: true },
+    );
+    const instance = client(
+      'codex',
+      {
+        agentOverride: {
+          name: 'override',
+          model: 'gpt-test',
+          instructions: 'test',
+          tools: [
+            {
+              name: 'echo',
+              description: 'echo',
+              parameters: z.object({ value: z.string() }),
+              needsApproval: () => false,
+              execute: ({ value }: { value: string }) => value,
+            },
+          ],
+        },
+      },
+      {
+        'agent.contextCompaction.enabled': true,
+        'agent.contextCompaction.mode': mode,
+        'agent.contextCompaction.compactThresholdTokens': 1_000,
+      },
+    );
+    return { instance, requests };
+  };
+
+  it.each([
+    [400, 'X-OpenAI-Internal-Codex-Responses-Lite requires `parallel_tool_calls` to be false.'],
+    [400, 'X-OpenAI-Internal-Codex-Responses-Lite requires `reasoning.context` to be `all_turns`.'],
+    [404, 'Not found'],
+  ])('does not repeat a deterministic compact rejection (%s) across tool continuations', async (status, message) => {
+    const compact = vi.fn().mockRejectedValue(Object.assign(new Error(message), { status }));
+    const { instance, requests } = automaticClient(compact);
+    try {
+      const stream = await instance.startStream(coldHistory as any);
+      await stream.completed;
+      expect(compact).toHaveBeenCalledTimes(1);
+      expect(requests).toHaveLength(3);
+      expect(JSON.stringify(stream.history)).toContain('cold-');
+      expect(requests.every((r) => !r.instructions?.includes('You compact historical conversation data'))).toBe(true);
+      expect(stream.history.filter((item: any) => item.type === 'function_call_result')).toHaveLength(2);
+    } finally {
+      instance.dispose();
+    }
+  });
+
+  it.each([
+    [503, 'temporary server failure'],
+    [429, 'rate limited'],
+    [400, 'Invalid tool history'],
+  ])('does not disable automatic compaction for unrelated or temporary failures (%s)', async (status, message) => {
+    const compact = vi.fn().mockRejectedValue(Object.assign(new Error(message), { status }));
+    const { instance } = automaticClient(compact);
+    try {
+      await (
+        await instance.startStream(coldHistory as any)
+      ).completed;
+      expect(compact).toHaveBeenCalledTimes(3);
+    } finally {
+      instance.dispose();
+    }
+  });
+
+  it('uses the safe local fallback after native incompatibility only in auto mode', async () => {
+    const compact = vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error('Unsupported compaction_trigger'), { status: 400 }));
+    const { instance, requests } = automaticClient(compact, 'auto');
+    try {
+      await (
+        await instance.startStream(coldHistory as any)
+      ).completed;
+      expect(compact).toHaveBeenCalledTimes(1);
+      expect(requests.filter((r) => r.instructions?.includes('You compact historical conversation data'))).toHaveLength(
+        1,
+      );
+      const normal = requests.filter((r) => !r.instructions?.includes('You compact historical conversation data'));
+      expect(normal).toHaveLength(3);
+      expect(JSON.stringify(normal[0].input)).toContain('safe local summary');
+      expect(JSON.stringify(normal[0].input)).not.toContain('cold-');
+    } finally {
+      instance.dispose();
+    }
+  });
+
+  it('lets an explicit successful retry re-enable automatic compaction', async () => {
+    const compact = vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error('Unsupported compaction_trigger'), { status: 400 }));
+    const { instance } = automaticClient(compact);
+    try {
+      await (
+        await instance.startStream(coldHistory as any)
+      ).completed;
+      expect(compact).toHaveBeenCalledTimes(1);
+      compact.mockResolvedValue({ history: [{ type: 'message', role: 'user', content: 'compacted' }] });
+      expect(await instance.compactCodexSessionHistory(coldHistory as any)).toMatchObject({ kind: 'compacted' });
+      await (
+        await instance.startStream(coldHistory as any)
+      ).completed;
+      expect(compact).toHaveBeenCalledTimes(3);
+    } finally {
+      instance.dispose();
+    }
+  });
+
+  it('propagates cancellation without disabling the next automatic attempt', async () => {
+    const controller = new AbortController();
+    const failure = Object.assign(new Error('Unsupported compaction_trigger'), { status: 400 });
+    const compact = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        controller.abort();
+        throw failure;
+      })
+      .mockRejectedValue(failure);
+    const { instance } = automaticClient(compact);
+    try {
+      await expect(instance.compactCodexSessionHistory(coldHistory as any, controller.signal)).rejects.toBe(failure);
+      await (
+        await instance.startStream(coldHistory as any)
+      ).completed;
+      expect(compact).toHaveBeenCalledTimes(2);
+    } finally {
+      instance.dispose();
+    }
+  });
+
+  it('does not carry native incompatibility into a different resolved model', async () => {
+    const compact = vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error('Unsupported compaction_trigger'), { status: 400 }));
+    const { instance } = automaticClient(compact);
+    try {
+      await (
+        await instance.startStream(coldHistory as any)
+      ).completed;
+      expect(compact).toHaveBeenCalledTimes(1);
+      instance.setModel('gpt-other');
+      await (
+        await instance.startStream(coldHistory as any)
+      ).completed;
+      expect(compact).toHaveBeenCalledTimes(2);
+    } finally {
+      instance.dispose();
+    }
+  });
+
+  it('explains the no-cold-turn limitation once without manufacturing genuine user turns', async () => {
+    const compact = vi.fn();
+    const { instance, requests } = automaticClient(compact, 'local');
+    try {
+      const stream = await instance.startStream([{ type: 'message', role: 'user', content: 'x'.repeat(6_000) }] as any);
+      await stream.completed;
+      const messages = stream.history.map(projectConversationMessage).filter((m) => m !== null);
+      expect(messages.filter((m) => m.text.includes('Local compaction cannot shorten'))).toHaveLength(1);
+      expect(messages.filter((m) => m.role === 'user' && !m.isSynthetic)).toHaveLength(1);
+      expect(requests).toHaveLength(3);
+      expect(compact).not.toHaveBeenCalled();
+    } finally {
+      instance.dispose();
+    }
+  });
+
   const compactProvider = (compactHistory: () => Promise<{ history: unknown[] }>) => {
     const provider = `codex-compact-${Math.random().toString(36).slice(2)}`;
     providers.add(provider);

@@ -28,6 +28,7 @@ import { renderToolsHeader } from './tools-header.js';
 import { resolveWorkspacePath, resolveWorkspacePathPhysically } from '../../utils.js';
 import { resolveOutsideWorkspaceEdit } from '../../../services/approval/approval-descriptor.js';
 import { parseUpstreamApplyPatch } from '../../file/upstream-apply-patch.js';
+import { saveOutputArtifact, formatFullOutputSavedNote } from '../../../utils/shell/shell-output.js';
 
 export const TOOL_NAME_RUN_CODE = 'run_code';
 export const TOOL_NAME_DESCRIBE = 'describe';
@@ -116,7 +117,15 @@ const RUN_CODE_DESCRIPTION =
   'context with no filesystem, network, timers, require, or eval: `tools.*` is the only way out. Auto-approved tools ' +
   'run normally. A tool that requires user approval is unavailable from inside a script. If it is directly callable in ' +
   'this model configuration, call it directly as a tool; otherwise use an auto-approved alternative or narrow the ' +
-  'arguments so approval is not required.';
+  'arguments so approval is not required.\n\n' +
+  'Return only the fields, line ranges, or summaries you need: model-visible output is limited to 30,000 characters, ' +
+  'and larger host results can fail before rendering. For independent reads, preserve successful siblings with ' +
+  '`Promise.allSettled`, mapping rejections to `{error: r.reason.message}` before returning. ' +
+  'Use `tools.describe` before guessing parameters or returned fields. When available, use apply_patch directly ' +
+  'for a literal patch instead of wrapping it in JavaScript. If a patch must be scripted, escape backticks and ' +
+  '${...} inside a template literal, or use ordinary quoted strings with escaped newlines. ' +
+  'Example: `const r = await Promise.allSettled([tools.read_file({path:"a.ts"}), tools.read_file({path:"b.ts"})]); ' +
+  'return r.map(x => x.status === "fulfilled" ? {content:(typeof x.value === "string" ? x.value : x.value.content).slice(0,2000)} : {error:x.reason.message});`';
 
 /** One `tools.*` call observed during a run, for the user-facing summary. */
 export interface RunCodeCallRecord {
@@ -220,10 +229,20 @@ const summarizeCalls = (calls: readonly RunCodeCallRecord[]): string => {
   return `${calls.length} tool call${calls.length === 1 ? '' : 's'}: ${parts.join(', ')}`;
 };
 
-const clip = (text: string): string => {
+const clip = async (text: string): Promise<string> => {
   if (text.length <= MAX_OUTPUT_CHARS) return text;
-  const marker = `\n[truncated: output exceeded ${MAX_OUTPUT_CHARS} characters]`;
-  return `${text.slice(0, Math.max(0, MAX_OUTPUT_CHARS - marker.length))}${marker}`;
+  let retrieval: string;
+  try {
+    retrieval = formatFullOutputSavedNote(await saveOutputArtifact(text, { filenamePrefix: 'run-code' }));
+  } catch {
+    // Effects have already settled. A disk failure must not invite their replay.
+    retrieval =
+      'Full output could not be saved; the omitted text is unavailable. Do not repeat completed tool effects.';
+  }
+  const marker = `\n[truncated: output exceeded ${MAX_OUTPUT_CHARS} characters]\n${retrieval}`;
+  let prefix = text.slice(0, Math.max(0, MAX_OUTPUT_CHARS - marker.length));
+  if (/[\uD800-\uDBFF]$/.test(prefix)) prefix = prefix.slice(0, -1);
+  return `${prefix}${marker}`;
 };
 
 const FAILURE_PREFIXES = [
@@ -762,7 +781,7 @@ function renderResult(
   output: readonly string[],
   calls: readonly RunCodeCallRecord[],
   includeConsole: boolean,
-): string {
+): Promise<string> {
   const sections: string[] = [];
   if (!result.ok && result.error) {
     sections.push(

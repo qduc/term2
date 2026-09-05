@@ -2140,3 +2140,20 @@ failures. Never call a guard safe solely because its termination test passes.
    completed list in `AGENTS.md`.
 
 The reference tables above do not gate completion.
+
+## September 5 tool-performance follow-up
+
+Evidence and implementation status: [tool-performance-followup.md](./tool-performance-followup.md).
+The observed incidents were repeated deterministic native-compaction rejection
+and run_code display clipping without a retrieval path.
+
+| Guard | Signal and scope | Action and recovery | Preservation evidence |
+| --- | --- | --- | --- |
+| Codex automatic native compaction admission (`AgentClient`) | Compact endpoint 404/405, or 400/422 naming an incompatible compaction/request option; resolved model instance only | Suppress unchanged automatic attempts; manual retry bypasses suppression, success clears it; `auto` may use the existing safe local compactor, `native` retains history | Boundary tests preserve tool results and cold history in native mode; unrelated 400, 429 and 503 remain retryable; model switch and cancellation do not poison a new attempt |
+| run_code final display bound | Rendered result exceeds the existing 30,000-character budget | Save full rendered text through the existing output artifact owner, include its path within the budget; on storage failure disclose unavailable tail | Real host execution returns readable tail evidence without repeating the tool effect; storage failure remains successful execution; short output creates no artifact |
+
+No new size or time limits, concurrency restrictions, or protected-history cuts.
+Local `no_complete_cold_turn` advice is admitted once per run as synthetic context;
+it does not manufacture a genuine user turn or authorize discarding active work.
+The host byte caps still apply before final rendering. Artifact lifetime remains
+that of the existing temporary tool-output store, not permanent archival.

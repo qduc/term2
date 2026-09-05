@@ -476,7 +476,8 @@ const MessageList = <T extends MessageLike = Message>({
       }
     }
     const filteredActive = committedActiveIds.size > 0 ? active.filter((m) => !committedActiveIds.has(m.id)) : active;
-    return [...deferredHistory, ...filteredActive, ...deferredNotifications];
+    // Keep deferred notifications out of the live region until active rows settle.
+    return [...deferredHistory, ...filteredActive, ...(active.length === 0 ? deferredNotifications : [])];
   }, [deferredHistory, deferredNotifications, active]);
 
   const renderMessage = (
